@@ -1,0 +1,7 @@
+# aaashare — A股数据层 依赖
+# pip install -e .  会自动安装以下全部依赖
+
+requests>=2.28.0       # HTTP请求（核心）
+mootdx>=0.10.0         # 通达信协议数据（券商级行情）
+efinance>=0.5.0        # 东方财富封装（辅助数据源）
+pandas>=1.5.0          # DataFrame 输出
