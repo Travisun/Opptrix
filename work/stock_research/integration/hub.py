@@ -9,6 +9,21 @@ ResearchHub — 统一技能调用入口
 
 from __future__ import annotations
 from dataclasses import dataclass, field
+from .schemas import (
+    StockDiagnosisData, ScorecardDimension, FactorItem,
+    InstitutionRatingData, InstitutionRatingItem, RatingDimension, GroupStatItem,
+    ScreeningData, ScreenedItem,
+    StrategySignalData, SingleStrategySignal,
+    StrategyVerifyData, StrategyPerformanceItem,
+    PortfolioAnalysisData, PortfolioHoldingItem, FactorExposureItem,
+    IndustryMiningData,
+    MarketReportData,
+    SearchStocksData, StockSearchItem,
+    BacktestResultData, FactorICItem,
+    LatestEvalData,
+    ReportTextData,
+    FactorICItem,
+)
 from typing import Optional, List, Dict, Any
 from datetime import datetime
 
@@ -110,19 +125,39 @@ class ResearchHub:
             elapsed = time.time() - t0
             valid = sum(1 for fr in snap.factors.values()
                         if fr is not None and fr.value is not None)
+            from stock_eval.core.registry import REGISTRY
+            categories = {}
+            for cat in ["valuation", "growth", "quality", "momentum", "technical", "risk", "cashflow", "composite"]:
+                names = REGISTRY.list(cat)
+                if names:
+                    categories[cat] = names
+
+            dims = []
+            if snap.scores:
+                for sname, sval in sorted(snap.scores.items(), key=lambda x: -x[1])[:10]:
+                    dims.append(ScorecardDimension(name=sname, score=float(sval), weight=1.0))
+
+            factors_list = []
+            for fname, fmeta in REGISTRY._metas.items():
+                fr = snap.factors.get(fname)
+                factors_list.append(FactorItem(
+                    name=fname, value=float(fr.value) if fr and fr.value is not None else None,
+                    category=fmeta.category.value,
+                ))
+            factors_list.sort(key=lambda x: -(x.value or 0))
+
             return ResearchResult(
                 success=True,
-                data={
-                    "code": snap.code, "name": snap.name,
-                    "total_score": snap.total_score,
-                    "valid_factors": valid,
-                    "total_factors": len(snap.factors),
-                    "scores": dict(snap.scores),
-                    "factors": {
-                        n: fr.value for n, fr in snap.factors.items()
-                        if fr is not None and fr.value is not None
-                    },
-                },
+                data=StockDiagnosisData(
+                    code=snap.code, name=snap.name,
+                    total_score=snap.total_score,
+                    scorecard_name=scorecard,
+                    scorecard_dimensions=dims,
+                    factors=factors_list,
+                    valid_factor_count=valid,
+                    total_factor_count=len(snap.factors),
+                    factor_categories=categories,
+                ).to_dict(),
                 message=f"{snap.name}({snap.code}) 综合评分 {snap.total_score}",
                 elapsed=elapsed,
             )
@@ -166,11 +201,12 @@ class ResearchHub:
 
             return ResearchResult(
                 success=True,
-                data={
-                    "total_scanned": result.total_stocks_scanned,
-                    "passed": result.passed_count,
-                    "items": items,
-                },
+                data=ScreeningData(
+                    total_scanned=result.total_stocks_scanned,
+                    passed=result.passed_count,
+                    scorecard=scorecard,
+                    items=[ScreenedItem(**i) for i in items],
+                ).to_dict(),
                 message=(f"扫描 {result.total_stocks_scanned} 只, "
                          f"通过 {result.passed_count} 只"),
                 elapsed=elapsed,
@@ -195,20 +231,25 @@ class ResearchHub:
             result = analyzer.analyze(holdings, scorecard=card)
 
             elapsed = time.time() - t0
+            # Concentration label
+            cl = "分散" if result.herfindahl < 0.1 else "集中" if result.herfindahl < 0.3 else "高度集中"
             return ResearchResult(
                 success=True,
-                data={
-                    "num_stocks": result.num_stocks,
-                    "weighted_score": result.weighted_avg_score,
-                    "herfindahl": result.herfindahl,
-                    "industry_exposure": result.industry_exposure,
-                    "factor_exposures": [
-                        {"factor": fe.factor_name, "category": fe.category,
-                         "active": fe.active_exposure,
-                         "interpretation": fe.interpretation}
+                data=PortfolioAnalysisData(
+                    num_stocks=result.num_stocks,
+                    weighted_score=result.weighted_avg_score,
+                    herfindahl=result.herfindahl,
+                    concentration_label=cl,
+                    industry_exposure=result.industry_exposure,
+                    holdings=[PortfolioHoldingItem(code=h[0], name=h[1], weight=h[2], score=h[3])
+                              for h in result.holdings],
+                    factor_exposures=[
+                        FactorExposureItem(factor=fe.factor_name, category=fe.category,
+                                          active=fe.active_exposure,
+                                          interpretation=fe.interpretation)
                         for fe in result.factor_exposures[:10]
                     ],
-                },
+                ).to_dict(),
                 message=(f"{result.num_stocks}只持仓, "
                          f"加权评分 {result.weighted_avg_score:.1f}"),
                 elapsed=elapsed,
@@ -239,7 +280,11 @@ class ResearchHub:
             elapsed = time.time() - t0
             return ResearchResult(
                 success=True,
-                data={"industry": industry, "report": report[:3000]},
+                data=IndustryMiningData(
+                    industry=industry,
+                    summary=report[:1500],
+                    chain_overview=report[:3000],
+                ).to_dict(),
                 message=f"{industry}产业链挖掘完成",
                 elapsed=elapsed,
             )
@@ -256,10 +301,17 @@ class ResearchHub:
             from t_strategy import quick_assess, generate_report
             signal = quick_assess(self.de, code)
             elapsed = time.time() - t0
+            # Parse signal into structured format
+            sig_summary = signal if isinstance(signal, str) else str(signal)
             return ResearchResult(
                 success=True,
-                data={"code": code, "signal": signal},
-                message=f"{code} 策略信号: {signal}",
+                data=StrategySignalData(
+                    code=code, name="",
+                    summary=sig_summary,
+                    bullish_count=0, bearish_count=0, neutral_count=0,
+                    signals=[],
+                ).to_dict(),
+                message=f"{code} 策略信号: {sig_summary}",
                 elapsed=elapsed,
             )
         except Exception as e:
@@ -287,7 +339,11 @@ class ResearchHub:
             elapsed = time.time() - t0
             return ResearchResult(
                 success=True,
-                data={"report": report[:3000]},
+                data=MarketReportData(
+                    report_type="closing", title="收盘报告",
+                    summary=report[:500],
+                    sections=[{"title": "完整报告", "content": report[:3000]}],
+                ).to_dict(),
                 message="收盘报告生成完成",
                 elapsed=elapsed,
             )
@@ -316,7 +372,11 @@ class ResearchHub:
             elapsed = time.time() - t0
             return ResearchResult(
                 success=True,
-                data={"report": report[:3000]},
+                data=MarketReportData(
+                    report_type="morning", title="开盘早报",
+                    summary=report[:500],
+                    sections=[{"title": "完整报告", "content": report[:3000]}],
+                ).to_dict(),
                 message="开盘早报生成完成",
                 elapsed=elapsed,
             )
@@ -340,9 +400,29 @@ class ResearchHub:
                 periods=periods,
             )
             elapsed = time.time() - t0
+            # Build IC lists
+            factor_ics = []
+            for fn, ic in sorted(result.factor_ics.items(), key=lambda x: -abs(x[1].mean_ic or 0)):
+                if ic.n_periods < 3: continue
+                factor_ics.append(FactorICItem(
+                    factor_name=fn, mean_ic=ic.mean_ic, icir=ic.icir,
+                    hit_rate=ic.hit_rate, n_periods=ic.n_periods,
+                ))
+            scorecard_ics = []
+            for sn, ic in sorted(result.scorecard_ics.items(), key=lambda x: -abs(x[1].mean_ic or 0)):
+                if ic.n_periods < 3: continue
+                scorecard_ics.append(FactorICItem(
+                    factor_name=sn, mean_ic=ic.mean_ic, icir=ic.icir,
+                    hit_rate=ic.hit_rate, n_periods=ic.n_periods,
+                ))
             return ResearchResult(
                 success=True,
-                data={"summary": result.summary()},
+                data=BacktestResultData(
+                    n_periods=result.n_periods,
+                    universe_size=result.universe_size,
+                    factor_ics=factor_ics,
+                    scorecard_ics=scorecard_ics,
+                ).to_dict(),
                 message=f"回测完成: {result.n_periods} 期",
                 elapsed=elapsed,
             )
@@ -374,7 +454,10 @@ class ResearchHub:
             results = results[:30]
             return ResearchResult(
                 success=True,
-                data={"keyword": keyword, "results": results},
+                data=SearchStocksData(
+                    keyword=keyword,
+                    results=[StockSearchItem(**r) for r in results],
+                ).to_dict(),
                 message=f"找到 {len(results)} 只匹配股票",
                 elapsed=elapsed,
             )
@@ -396,21 +479,53 @@ class ResearchHub:
             result = engine.evaluate(code, groups=groups)
             report = ConsolidatedReport(result)
             elapsed = time.time() - t0
+            # Build group stats
+            group_stats = {}
+            for gname, gs in result.group_stats.items():
+                group_stats[gname] = GroupStatItem(**gs)
+
+            # Build ratings
+            from stock_eval.institutions.consolidated import EVALUATOR_GROUPS
+            cls_to_group = {}
+            for gname, gtypes in EVALUATOR_GROUPS.items():
+                for gt in gtypes:
+                    cls_to_group[gt] = gname
+
+            rating_items = []
+            for r in result.ratings:
+                dims = None
+                if r.dimensions:
+                    dims = [RatingDimension(
+                        name=d.name, score=d.score, weight=d.weight, detail=d.detail
+                    ) for d in r.dimensions]
+                # Find group
+                rgroup = cls_to_group.get(type(r), "")
+                rating_items.append(InstitutionRatingItem(
+                    institution=r.institution, institution_short=r.institution_short,
+                    rating=r.rating.value, rating_cn=r.rating_label_cn,
+                    confidence=r.confidence, raw_confidence=r.raw_confidence,
+                    method_source=r.method_source, model_name=r.model_name,
+                    summary=r.summary, dimensions=dims, group=rgroup,
+                ))
+
             return ResearchResult(
                 success=True,
-                data={
-                    "code": result.code,
-                    "name": result.name,
-                    "avg_confidence": result.avg_confidence,
-                    "consensus_rating": result.consensus_rating.value,
-                    "consensus_rating_cn": result.consensus_rating.label_cn,
-                    "rating_distribution": result.rating_distribution,
-                    "bullish_count": result.bullish_count,
-                    "bearish_count": result.bearish_count,
-                    "neutral_count": result.neutral_count,
-                    "group_stats": result.group_stats,
-                    "ratings": [r.to_dict() for r in result.ratings],
-                },
+                data=InstitutionRatingData(
+                    code=result.code, name=result.name,
+                    avg_confidence=result.avg_confidence,
+                    avg_raw_confidence=result.avg_raw_confidence,
+                    consensus_rating=result.consensus_rating.value,
+                    consensus_rating_cn=result.consensus_rating.label_cn,
+                    confidence_std=result.confidence_std,
+                    agreement_rate=result.agreement_rate,
+                    rating_distribution=result.rating_distribution,
+                    bullish_count=result.bullish_count,
+                    bearish_count=result.bearish_count,
+                    neutral_count=result.neutral_count,
+                    group_stats=group_stats,
+                    ratings=rating_items,
+                    avg_data_quality=result.avg_data_quality,
+                ).to_dict(),
                 message=(f"{result.name}({result.code}) "
                          f"机构共识: {result.consensus_rating.label_cn} "
                          f"信心{result.avg_confidence:.1f}/10"),
@@ -435,7 +550,11 @@ class ResearchHub:
             elapsed = time.time() - t0
             return ResearchResult(
                 success=True,
-                data={"text": text, "code": code, "name": result.name},
+                data=ReportTextData(
+                    code=code, name=result.name,
+                    report_type="institution_rating",
+                    text=text,
+                ).to_dict(),
                 message=f"{result.name} 机构评级报告生成完成",
                 elapsed=elapsed,
             )
@@ -464,23 +583,33 @@ class ResearchHub:
                 perfs[sname] = perf.to_dict()
 
             best = report.best_strategy
+            # Build performances list
+            perf_items = []
+            for sname, perf in report.performances.items():
+                pd = perf.to_dict() if hasattr(perf, 'to_dict') else {}
+                perf_items.append(StrategyPerformanceItem(
+                    name=sname,
+                    overall_win_rate=pd.get("overall_win_rate", 0),
+                    avg_return=pd.get("avg_return", 0),
+                    sharpe=pd.get("sharpe"),
+                    signal_count=pd.get("n_signals", 0),
+                ))
+            avg_wr = round(
+                sum(p.overall_win_rate for p in perf_items) / len(perf_items), 3
+            ) if perf_items else 0
+
             return ResearchResult(
                 success=True,
-                data={
-                    "code": report.code,
-                    "name": report.name,
-                    "checkpoints": report.checkpoints,
-                    "forward_days": report.forward_days,
-                    "date_range": list(report.date_range),
-                    "performances": perfs,
-                    "best_strategy": {"name": best[0], "win_rate": best[1]} if best[0] else None,
-                    "avg_win_rate": round(
-                        sum(p["overall_win_rate"] for p in perfs.values()) / len(perfs), 3
-                    ) if perfs else 0,
-                },
+                data=StrategyVerifyData(
+                    code=report.code, name=report.name,
+                    checkpoints=report.checkpoints,
+                    forward_days=report.forward_days,
+                    date_range=list(report.date_range),
+                    avg_win_rate=avg_wr,
+                    best_strategy={"name": best[0], "win_rate": best[1]} if best[0] else None,
+                    performances=perf_items,
+                ).to_dict(),
                 message=(f"{report.name}({report.code}) 策略验证完成: "
-                         f"{report.checkpoints}个检查点, "
-                         f"最佳={best[0]}({best[1]:.0%})" if best[0] else
                          f"{report.checkpoints}个检查点"),
                 elapsed=elapsed,
             )
@@ -504,7 +633,11 @@ class ResearchHub:
             elapsed = time.time() - t0
             return ResearchResult(
                 success=True,
-                data={"text": text, "code": code, "name": report.name},
+                data=ReportTextData(
+                    code=code, name=report.name,
+                    report_type="strategy_verify",
+                    text=text,
+                ).to_dict(),
                 message=f"{report.name} 策略验证报告生成完成",
                 elapsed=elapsed,
             )
@@ -523,13 +656,13 @@ class ResearchHub:
             )
         return ResearchResult(
             success=True,
-            data={
-                "code": stored.code, "name": stored.name,
-                "timestamp": stored.timestamp,
-                "total_score": stored.total_score,
-                "scorecard": stored.scorecard_name,
-                "factors": stored.factor_values,
-            },
+            data=LatestEvalData(
+                code=stored.code, name=stored.name,
+                timestamp=stored.timestamp,
+                scorecard=stored.scorecard_name,
+                total_score=stored.total_score,
+                factor_values=stored.factor_values,
+            ).to_dict(),
             message=(f"{stored.name} 上次评估: "
                      f"{stored.total_score} 分 ({stored.timestamp})"),
         )
