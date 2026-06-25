@@ -39,6 +39,17 @@ from .national_team import (
 from .northbound import NorthboundFundEvaluator
 from .technical import TechnicalIndicatorEvaluator
 
+from .additional import (
+    BofAEvaluator,
+    NomuraEvaluator,
+    BernsteinEvaluator,
+    EFundEvaluator,
+    OrientAMEvaluator,
+    HillhouseEvaluator,
+    HotMoneySentimentEvaluator,
+    BridgewaterEvaluator,
+)
+
 from .consolidated import (
     ConsolidatedRating,
     ConsolidatedReport,

@@ -33,6 +33,16 @@ from .national_team import (
 )
 from .northbound import NorthboundFundEvaluator
 from .technical import TechnicalIndicatorEvaluator
+from .additional import (
+    BofAEvaluator,
+    NomuraEvaluator,
+    BernsteinEvaluator,
+    EFundEvaluator,
+    OrientAMEvaluator,
+    HillhouseEvaluator,
+    HotMoneySentimentEvaluator,
+    BridgewaterEvaluator,
+)
 
 
 # ── 全部评估器注册 ────────────────────────────────────────────────
@@ -63,6 +73,15 @@ ALL_EVALUATORS: List[Type[InstitutionEvaluator]] = [
     NorthboundFundEvaluator,
     # 技术面
     TechnicalIndicatorEvaluator,
+    # 补充机构 (8)
+    BofAEvaluator,
+    NomuraEvaluator,
+    BernsteinEvaluator,
+    EFundEvaluator,
+    OrientAMEvaluator,
+    HillhouseEvaluator,
+    HotMoneySentimentEvaluator,
+    BridgewaterEvaluator,
 ]
 
 # ── 分组 ──────────────────────────────────────────────────────────
@@ -84,6 +103,16 @@ EVALUATOR_GROUPS: Dict[str, List[Type[InstitutionEvaluator]]] = {
     "其他": [
         NorthboundFundEvaluator,
         TechnicalIndicatorEvaluator,
+    ],
+    "补充机构": [
+        BofAEvaluator,
+        NomuraEvaluator,
+        BernsteinEvaluator,
+        EFundEvaluator,
+        OrientAMEvaluator,
+        HillhouseEvaluator,
+        HotMoneySentimentEvaluator,
+        BridgewaterEvaluator,
     ],
 }
 
