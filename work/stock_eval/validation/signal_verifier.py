@@ -270,11 +270,8 @@ class SignalVerifier:
 
     def _lazy_init(self):
         if self._t_strategy is None:
-            from t_strategy.signal_engine import SignalEngine
-            from t_strategy import list_strategies, get_strategy
-            self._engine = SignalEngine(self._de)
-            self._list_strategies = list_strategies
-            self._get_strategy = get_strategy
+            from stock_eval.institutions.consolidated import ConsolidatedEngine
+            self._engine = ConsolidatedEngine(self._de)
             self._t_strategy = True
 
     def verify_strategies(self,
@@ -343,16 +340,23 @@ class SignalVerifier:
             current_kline = kline[:idx + 1]
             current_close = closes[idx]
 
-            # 对每个策略运行验证
+            # 对每个策略运行验证 — 使用机构评估器综合评级
             for sname, slabel in self.STRATEGY_LABELS.items():
                 perf = performances[sname]
                 perf.total_checks += 1
 
                 try:
-                    # 使用 t_strategy 分析
-                    result = self._engine.analyze(code, strategies=[sname])
-                    signal = result.verdict if result else "HOLD"
-                    strength = result.confidence if result else 0.0
+                    result = self._engine.evaluate(code)
+                    signal = "HOLD"
+                    strength = 5.0
+                    if result and result.ratings:
+                        avg_conf = result.avg_confidence
+                        if avg_conf >= 6.5:
+                            signal = "BUY"
+                            strength = (avg_conf - 5.0) / 5.0
+                        elif avg_conf <= 3.5:
+                            signal = "SELL"
+                            strength = (5.0 - avg_conf) / 5.0
                 except Exception:
                     signal = "HOLD"
                     strength = 0.0

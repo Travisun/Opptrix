@@ -3,7 +3,7 @@
 
 核心数据模型:
   InstitutionRating — 统一评级输出
-  RatingLevel      — 四档评级: Buy / Watch / Hold / Sell
+  RatingLevel      — 六档评级: StrongSell/Sell/Hold/Watch/Buy/StrongBuy
   EvalDimension    — 单个评估维度（含评分、权重、说明）
 
 评估基类:
@@ -14,6 +14,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 from typing import Optional, List, Dict, Any
+import numpy as np
 
 
 class RatingLevel(Enum):
@@ -59,7 +60,7 @@ class RatingLevel(Enum):
 
 
 class MethodSource(Enum):
-    """方法论来源的可靠性等级"""
+    """方法论来源可靠性等级 — 影响信心评分的权重"""
     DOCUMENTED = "documented"          # 有公开文档可查证的官方框架
     PARTIALLY_DOCUMENTED = "partial"   # 部分可查证 (概念真实但整合方式为构造)
     RESEARCH_STYLE = "research_style"  # 基于公开研报风格方向构建
@@ -76,7 +77,13 @@ class MethodSource(Enum):
 
     @property
     def confidence_weight(self) -> float:
-        """方法论可靠性对信心评分的权重"""
+        """
+        方法论可靠性权重
+        在 _make_rating 中使用平滑公式:
+          final = raw * (0.4 + 0.6 * weight)
+        这样 behavioral(0.65) => min multiplier 0.79
+        而 documented(1.0) => multiplier 1.0
+        """
         return {
             "documented": 1.0,
             "partial": 0.85,
@@ -89,10 +96,6 @@ class MethodSource(Enum):
 class EvalDimension:
     """
     单个评估维度
-
-    例如:
-      name="估值吸引力", score=7.5, weight=0.25,
-      detail="PE处于5年15%百分位, 低于行业均值"
     """
     name: str                    # 维度名称（中文）
     score: float                 # 评分 0-10
@@ -108,17 +111,6 @@ class EvalDimension:
 class EvalQuality:
     """
     数据质量评估 — 该评估的数据支撑度
-
-    Metrics:
-      data_completeness  — 数据完整性 0.0-1.0 (实际用到多少数据)
-      data_timeliness    — 数据时效性 0.0-1.0 (数据是否够新)
-      dimensions_planned — 计划评估的维度数
-      dimensions_actual  — 实际完成的维度数
-      has_realtime       — 是否有实时行情
-      has_kline          — 是否有K线
-      has_financials     — 是否有财报
-      kline_days         — K线天数
-      financial_periods  — 财报期数
     """
     data_completeness: float = 0.0
     data_timeliness: float = 0.0
@@ -132,7 +124,6 @@ class EvalQuality:
 
     @property
     def quality_label(self) -> str:
-        """数据质量标签"""
         if self.data_completeness >= 0.85:
             return "优质-A"
         elif self.data_completeness >= 0.65:
@@ -144,44 +135,27 @@ class EvalQuality:
 
     @property
     def confidence_multiplier(self) -> float:
-        """信心乘数 — 用于下调信心评分"""
-        if self.data_completeness >= 0.85:
-            return 1.0
-        elif self.data_completeness >= 0.65:
-            return 0.85
-        elif self.data_completeness >= 0.40:
-            return 0.65
-        else:
-            return 0.40
+        """
+        信心乘数 — 平滑公式: 0.5 + 0.5 * completeness
+        确保无数据时仍保留0.5，完美数据=1.0
+        """
+        return 0.5 + 0.5 * self.data_completeness
 
 
 @dataclass
 class InstitutionRating:
     """
     统一评级输出 — 一个机构对一个股票的评估结果
-
-    Fields:
-      institution      — 机构名称(中文+英文)
-      code             — 股票代码
-      rating           — 评级等级
-      confidence       — 信心评分 0.1-10.0
-      raw_confidence   — 未校准的原始信心评分
-      dimensions       — 各评估维度详情
-      summary          — 一句话总结
-      model_name       — 使用的评估模型名
-      factors          — 关键参考因子值
-      data_quality     — 数据质量评估
     """
-
-    institution: str                # 例如 "高盛 Goldman Sachs"
-    institution_short: str          # 例如 "Goldman Sachs"
-    code: str                       # 股票代码
-    rating: RatingLevel             # 评级
-    confidence: float               # 信心评分 0.1-10.0
+    institution: str
+    institution_short: str
+    code: str
+    rating: RatingLevel
+    confidence: float
     dimensions: List[EvalDimension] = field(default_factory=list)
-    summary: str = ""               # 一句话总结
-    model_name: str = ""            # 使用的评估模型名
-    factors: Dict[str, float] = field(default_factory=dict)  # 关键因子值
+    summary: str = ""
+    model_name: str = ""
+    factors: Dict[str, float] = field(default_factory=dict)
     errors: List[str] = field(default_factory=list)
 
     data_quality: Optional[EvalQuality] = None
@@ -195,7 +169,6 @@ class InstitutionRating:
 
     @property
     def quality_gap(self) -> float:
-        """原始信心 vs 校准后信心的差距, 越大说明数据支撑越弱"""
         return round(self.raw_confidence - self.confidence, 2)
 
     @property
@@ -245,12 +218,6 @@ class InstitutionEvaluator:
 
     每个具体的机构评分器继承此类，实现:
       compute(code) -> InstitutionRating
-
-    子类可覆盖:
-      - institution       : 机构全称
-      - institution_short : 机构简称
-      - model_name        : 评估模型名称
-      - dimension_weights : 默认维度权重配置
     """
 
     institution: str = "未命名机构"
@@ -260,21 +227,20 @@ class InstitutionEvaluator:
     method_source_note: str = ""
     description: str = ""
 
-    # 维度权重 {维度名称: 权重}
+    # 计划评估的维度数 (被 eval quality 使用)
+    _planned_dimensions: int = 0
+
     dimension_weights: Dict[str, float] = field(default_factory=dict)
 
     def __init__(self, data_engine):
         self._de = data_engine
 
     def compute(self, code: str) -> InstitutionRating:
-        """
-        对一个股票执行机构评估
-
-        子类必须实现此方法
-        """
         raise NotImplementedError(
             f"{type(self).__name__} 必须实现 compute()"
         )
+
+    # ── 评分校准核心方法 ──────────────────────────────────────
 
     def _make_rating(self, code: str,
                      dimensions: List[EvalDimension],
@@ -284,13 +250,13 @@ class InstitutionEvaluator:
                      quality: Optional[EvalQuality] = None,
                      ) -> InstitutionRating:
         """
-        工具方法: 从评估维度列表自动计算加权信心评分, 并进行数据质量校准
-
-        计算逻辑:
+        修复后的信心校准逻辑 (避免乘法杀伤效应):
           1. 各维度评分 * 权重 加权平均 -> 原始综合评分(0-10)
-          2. 数据质量校准 -> 根据EvalQuality计算信心乘数
-          3. 校准后信心评分 = 原始评分 * 信心乘数
-          4. 校准后信心评分映射到 RatingLevel
+          2. 方法论平滑:  method_smoothed = raw * (0.4 + 0.6 * method_weight)
+             — 确保 behavioral(0.65) 最低乘数 0.79, documented(1.0) 乘数 1.0
+          3. 数据质量平滑:  quality_mult = 0.5 + 0.5 * completeness
+             — 无数据=0.5, 完美数据=1.0
+          4. 最终评分 = method_smoothed * quality_mult
         """
         if not dimensions:
             return InstitutionRating(
@@ -306,7 +272,6 @@ class InstitutionEvaluator:
                 errors=errors or ["无有效评估维度"],
             )
 
-        # 计算加权得分
         total_weight = 0.0
         weighted_sum = 0.0
         for d in dimensions:
@@ -319,16 +284,16 @@ class InstitutionEvaluator:
         else:
             raw_confidence = 5.0
 
-        # 方法论可靠性校准
+        # 方法论可靠性 — 平滑公式，避免乘法杀伤
         method_weight = self.method_source.confidence_weight
+        method_smoothed = raw_confidence * (0.4 + 0.6 * method_weight)
 
-        # 数据质量校准
+        # 数据质量 — 平滑乘数
         quality_mult = quality.confidence_multiplier if quality is not None else 1.0
 
-        # 最终校准 = 原始评分 * 方法论可靠性 * 数据质量
-        calibrated = raw_confidence * method_weight * quality_mult
+        # 最终校准
+        calibrated = method_smoothed * quality_mult
 
-        # 综合评分 -> 评级
         rating = RatingLevel.from_confidence(calibrated)
 
         return InstitutionRating(
@@ -348,20 +313,95 @@ class InstitutionEvaluator:
             data_quality=quality or EvalQuality(),
         )
 
+    # ── 构建 EvalQuality ────────────────────────────────────
+
+    def _build_quality(self,
+                       has_realtime: bool = False,
+                       has_kline: bool = False,
+                       has_financials: bool = False,
+                       kline_days: int = 0,
+                       financial_periods: int = 0,
+                       actual_dimensions: int = 0,
+                       ) -> EvalQuality:
+        """
+        自动计算 data_completeness:
+          - 实时行情: 20%
+          - K线数据: 30% (>=250天30%, >=60天20%, <60天10%)
+          - 财报数据: 35% (>=4期35%, >=2期25%, <2期15%)
+          - 维度完整性: 15% (actual/planned)
+        """
+        completeness = 0.0
+        if has_realtime:
+            completeness += 20.0
+        if has_kline and kline_days >= 250:
+            completeness += 30.0
+        elif has_kline and kline_days >= 60:
+            completeness += 20.0
+        elif has_kline:
+            completeness += 10.0
+        if has_financials and financial_periods >= 4:
+            completeness += 35.0
+        elif has_financials and financial_periods >= 2:
+            completeness += 25.0
+        elif has_financials:
+            completeness += 15.0
+        planned = self._planned_dimensions
+        if planned > 0:
+            dim_pct = min(1.0, actual_dimensions / planned)
+            completeness += 15.0 * dim_pct
+
+        timeliness = 1.0 if has_realtime else (0.7 if has_kline else 0.3)
+
+        return EvalQuality(
+            data_completeness=round(completeness / 100.0, 2),
+            data_timeliness=round(timeliness, 2),
+            dimensions_planned=planned,
+            dimensions_actual=actual_dimensions,
+            has_realtime=has_realtime,
+            has_kline=has_kline,
+            has_financials=has_financials,
+            kline_days=kline_days,
+            financial_periods=financial_periods,
+        )
+
+    # ── 行业相对评分方法 ────────────────────────────────────
+
+    def _z_score(self, value: float, mean: float, std: float) -> float:
+        """z-score转0-10评分, z=0=>5.0, z=+1=>6.5, z=-1=>3.5"""
+        if std == 0:
+            return 5.0
+        z = (value - mean) / std
+        mapped = 5.0 + z * 1.5
+        return max(1.0, min(9.0, mapped))
+
+    def _percentile_score(self, value: float,
+                          p10: float, p50: float, p90: float) -> float:
+        """基于百分位数的评分: <=p10=>2, p50=>5, >=p90=>8, 线性插值"""
+        if value <= p10:
+            return 2.0
+        if value >= p90:
+            return 8.0
+        if value <= p50:
+            ratio = (value - p10) / (p50 - p10) if p50 != p10 else 0.5
+            return 2.0 + ratio * 3.0
+        else:
+            ratio = (value - p50) / (p90 - p50) if p90 != p50 else 0.5
+            return 5.0 + ratio * 3.0
+
+    # ── 数据获取安全方法 ──────────────────────────────────────
+
     def _safe_float(self, val, default=None) -> Optional[float]:
-        """安全转换浮点数"""
         if val is None:
             return default
         try:
             v = float(val)
-            if not (v != v):  # 排除 NaN
+            if not (v != v):
                 return v
         except (ValueError, TypeError):
             pass
         return default
 
     def _get_realtime(self, code: str):
-        """获取实时行情，处理错误"""
         try:
             r = self._de.realtime(code)
             if r and r.success and r.data:
@@ -371,7 +411,6 @@ class InstitutionEvaluator:
         return None
 
     def _get_kline(self, code: str, period: str = "daily", count: int = 250):
-        """获取K线数据，处理错误"""
         try:
             k = self._de.kline(code, period=period, count=count)
             if k and k.success and k.data:
@@ -381,7 +420,6 @@ class InstitutionEvaluator:
         return None
 
     def _get_financials(self, code: str):
-        """获取财报摘要"""
         try:
             f = self._de.financials(code)
             if f and f.success and f.data:

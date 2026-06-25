@@ -1,0 +1,289 @@
+{
+  "Goldman Sachs": {
+    "framework_exists": true,
+    "framework_name": "GAMES + QGV",
+    "source": "Goldman Sachs Global Investment Research - 研究报告方法论声明章节",
+    "real_dimensions": [
+      "Growth (营收/利润增长率, CAGR, 边际增速变化)",
+      "Asset Quality (资产负债表质量, 负债率, 现金流覆盖率)",
+      "Management Efficiency (ROE, ROIC, 资本配置效率)",
+      "Earnings Quality (盈利稳定性, EPS趋势, 利润率持续性)",
+      "Stability (Beta, 波动率, 最大回撤)"
+    ],
+    "notes": "GAMES框架名称已出现在多份GS研究报告的方法论声明中。QGV(Quality/Growth/Valuation)用于GS Conviction List选股。但具体评分权重和阈值不公开。",
+    "confidence": "DOCUMENTED"
+  },
+  "JPMorgan": {
+    "framework_exists": true,
+    "framework_name": "CAR (Catalysts / Analysis / Risk-Reward)",
+    "source": "JPMorgan Equity Research - 研究报告方法论",
+    "real_dimensions": [
+      "Catalysts (短期催化剂事件: 业绩预告、政策变化、产品发布)",
+      "Analysis (基本面分析: 营收质量、利润率、管理层能力)",
+      "Risk-Reward (上行空间vs下行风险: 估值+增长 vs 不确定性)"
+    ],
+    "notes": "CAR是JPM研究报告标准化框架，每份JPM研究报告都按此结构组织。但具体评分方法不公开。",
+    "confidence": "DOCUMENTED"
+  },
+  "Credit Suisse": {
+    "framework_exists": true,
+    "framework_name": "HOLT (CFROI框架)",
+    "source": "Credit Suisse HOLT - 学术论文+官方白皮书 (Bartley J. Madden创立, 2000年CS收购)",
+    "real_dimensions": [
+      "CFROI (Cash Flow Return on Investment - 现金回报率, 核心指标)",
+      "Real Asset Growth Rate (实物资产增长率)",
+      "Discount Rate vs CFROI Spread (折现率与CFROI价差)",
+      "Economic Profit (经济利润 = (CFROI - 折现率) × 投资资本)",
+      "Fade Rate (竞争衰减率 - HOLT独有概念)"
+    ],
+    "notes": "HOLT是最公开的机构框架之一。Bartley J. Madden的《CFROI Valuation》一书完整阐述方法论。CS已发表多篇HOLT白皮书。这是可验证度最高的一个。",
+    "confidence": "DOCUMENTED"
+  },
+  "Citi": {
+    "framework_exists": true,
+    "framework_name": "Q-Grade + Earnings Revision Momentum",
+    "source": "Citi Research - 量化策略团队",
+    "real_dimensions": [
+      "Valuation (估值因子: PE/PB/EV-EBITDA等相对估值和历史百分位)",
+      "Quality (质量因子: ROE稳定性、负债水平、盈利波动率)",
+      "Growth (成长因子: 营收/利润增速、预期增速)",
+      "Earnings Revision (盈利修正: 分析师预期上修/下修动量)",
+      "Price Momentum (价格动量: 中期价格趋势)"
+    ],
+    "notes": "Q-Grade是花旗量化团队的公开评分系统。Earnings Revision是花旗核心差异化关注点。但Q-Grade各因子的精确权重不公开。",
+    "confidence": "DOCUMENTED"
+  },
+  "Barclays": {
+    "framework_exists": true,
+    "framework_name": "QVM (Quality / Value / Momentum)",
+    "source": "Barclays Quantitative Portfolio Strategy - 年度Equity Gilt Study",
+    "real_dimensions": [
+      "Quality (盈利能力稳定性、资产负债质量、应计质量)",
+      "Value (估值倍数、历史百分位、FCF收益率)",
+      "Momentum (价格动量、盈利修正动量、行业动量)"
+    ],
+    "notes": "QVM是巴克莱量化团队的公开因子框架，出现在其年度Equity Gilt Study中。三因子结构是确定的，但具体因子组合和权重不公开。",
+    "confidence": "DOCUMENTED"
+  },
+  "Bernstein": {
+    "framework_exists": true,
+    "framework_name": "Franchise方法论",
+    "source": "Sanford C. Bernstein - 研究报告方法论",
+    "real_dimensions": [
+      "Franchise Quality (特许经营权质量: 护城河深度、定价权、竞争优势持续性)",
+      "Financial Strength (财务实力: 低负债、高FCF、资本回报率)",
+      "Management Competence (管理层能力: ROE趋势、资本配置效率)",
+      "Long-term Growth Durability (长期成长可持续性: 市场空间、结构性趋势)"
+    ],
+    "notes": "Bernstein的Franchise方法论是其研究部门的核心理念，强调寻找具有持久竞争优势的'特许经营权'公司。有明确的公开文档描述其理念框架。",
+    "confidence": "DOCUMENTED"
+  },
+  "Technical Analysis": {
+    "framework_exists": true,
+    "framework_name": "多维度技术指标综合评分",
+    "source": "通用技术分析文献 (John Murphy, Martin Pring 等标准教材)",
+    "real_dimensions": [
+      "趋势分析 (MA排列, MACD, ADX)",
+      "动量分析 (RSI, 随机指标KDJ, 价格速率)",
+      "量能分析 (量价配合, OBV, 量比)",
+      "布林带位置 (支撑阻力识别)",
+      "波动率分析 (ATR, 历史波动率)",
+      "市场情绪 (52周位置, 涨跌比)"
+    ],
+    "notes": "技术分析是通用工具，非任何单一机构专属。维度均为标准技术分析教材中的通用方法。",
+    "confidence": "DOCUMENTED"
+  },
+  "Morgan Stanley": {
+    "framework_exists": true,
+    "framework_name": "EQS (Earnings Quality Score)",
+    "source": "Morgan Stanley Research - EQS量化评分模型",
+    "real_dimensions": [
+      "盈利稳定性 (利润波动率的倒数 -> 越高越好)",
+      "盈利持续性 (EPS连续增长年数)",
+      "盈利真实性 (经营现金流/净利润比率)",
+      "利润率质量 (毛利率+净利率的水平与趋势)"
+    ],
+    "notes": "EQS是MS量化团队的公开评分模型，专注盈利质量。但MS研究报告中同时涉及风格匹配、行业位置、个股alpha等多维分析——这些维度无统一的'命名框架'，只是MS研究报告的标准分析结构。",
+    "confidence": "PARTIALLY_DOCUMENTED"
+  },
+  "UBS": {
+    "framework_exists": true,
+    "framework_name": "K-Ward/D + Evidence Lab",
+    "source": "UBS Research - K-Ward评级系统 + Evidence Lab平台",
+    "real_dimensions": [
+      "基本面分析 (营收/利润/ROE趋势)",
+      "估值分析 (DCF + 相对估值)",
+      "催化剂识别 (短期事件催化)",
+      "风险评估 (下行风险/不确定性)"
+    ],
+    "notes": "K-Ward/D是UBS内部使用的评级信号系统。Evidence Lab是UBS 2015年推出的另类数据分析平台。两者都是真实存在的，但K-Ward的具体评分规则不公开。",
+    "confidence": "PARTIALLY_DOCUMENTED"
+  },
+  "BofA": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "BofA Global Research - 无单一命名框架",
+    "real_dimensions": [],
+    "notes": "BofA Merrill Lynch 的Global Research团队在研究报告中使用多维度分析，但没有像GS的GAMES或CS的HOLT那样的单一命名框架。其分析通常涵盖: 质量、价值、成长、收益、风险。这些维度没有统一的命名或权重体系。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Nomura": {
+    "framework_exists": true,
+    "framework_name": "Nomura Compass (概念存在)",
+    "source": "Nomura Research - 亚洲股票研究",
+    "real_dimensions": [
+      "盈利质量 (净利润增速、盈利稳定性)",
+      "估值吸引力 (相对估值: PE/PB历史位置)",
+      "趋势动量 (价格趋势: 3-6个月收益率)"
+    ],
+    "notes": "Nomura Compass是野村量化研究中出现过的概念名称。但具体评级维度和权重体系未公开。这里基于其亚洲股票研究风格构造。",
+    "confidence": "PARTIALLY_DOCUMENTED"
+  },
+  "HSBC": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "HSBC无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "HSBC研究所无像GAMES或HOLT那样的命名框架。其研报风格偏价值导向+股息收益+催化剂触发，但这不是一个'模型'。现有评估器为基于该风格的透明构造。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Deutsche Bank": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "Deutsche Bank无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "DB的量化研究团队(dbResearch)从事多因子Alpha研究，但没有公开的'德银选股框架'。现有评估器为基于其量化研究风格的透明构造。",
+    "confidence": "BEHAVIORAL"
+  },
+  "CICC": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "中金公司无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "中金研究所采用自上而下的行业配置框架，关注行业景气周期和行业内相对价值，但无公开的命名评估模型。",
+    "confidence": "BEHAVIORAL"
+  },
+  "CITIC": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "中信证券无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "中信研究部量化+策略组有自己的研究框架，但无公开的命名评估模型。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Huatai": {
+    "framework_exists": true,
+    "framework_name": "金工多因子系列",
+    "source": "华泰证券金融工程团队 - 公开发表的多因子系列研报",
+    "real_dimensions": [
+      "价值因子 (PE, PB, PS, FCF/EV)",
+      "质量因子 (ROE, ROA, 毛利率, 资产周转率)",
+      "动量因子 (过去1/3/6/12个月收益率)",
+      "波动率因子 (历史波动率, Beta, 特质波动率)",
+      "流动性因子 (换手率, 成交额, Amihud非流动性)"
+    ],
+    "notes": "华泰金工团队是国内少数公开发表多因子方法论研报的券商。其系列研报有公开的因子定义和测试结果。但因子权重组合不公开。",
+    "confidence": "RESEARCH_STYLE"
+  },
+  "CMS": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "招商证券无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "招商证券近年聚焦核心资产研究（高ROE+护城河+股息稳定），但无公开的统一命名评估模型。",
+    "confidence": "BEHAVIORAL"
+  },
+  "GTJA": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "国泰君安无公开的个股评估命名框架",
+    "real_dimensions": [],
+    "notes": "国君研究所策略团队以主题框架闻名（事件驱动+行业轮动），但无公开的统一命名评估模型。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Social Security Fund": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "依据社保基金公开持股数据统计推断",
+    "real_dimensions": [],
+    "notes": "社保基金不公开发布选股模型。以下评估器基于其公开A股持仓的统计特征（高股息、低波动、稳定ROE）进行系统化推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Huijin": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "依据汇金公开持股数据统计推断",
+    "real_dimensions": [],
+    "notes": "汇金不公开发布选股模型。基于其公开持股（银行/金融/央企）的统计特征推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "CSF": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "依据证金公开持股数据统计推断",
+    "real_dimensions": [],
+    "notes": "证金不公开发布选股模型。基于其'市场稳定器'角色和公开持仓的统计特征推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "BigFund": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "依据大基金一期/二期公开投资组合统计推断",
+    "real_dimensions": [],
+    "notes": "大基金不公开发布选股模型。基于其公开投资组合（半导体/集成电路产业链）特征推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Northbound": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "基于沪深港通每日公开持股数据统计",
+    "real_dimensions": [],
+    "notes": "北向资金是外资机构集合，非单一机构。基于公开持股数据的统计：偏好大盘蓝筹、高ROE、合理估值。",
+    "confidence": "BEHAVIORAL"
+  },
+  "EFund": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "基于易方达基金公开投资理念（基金年报/经理访谈）",
+    "real_dimensions": [],
+    "notes": "易方达不公开发布选股模型。基于其公开投资理念（长期持有高质量成长公司）的行为推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "OrientAM": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "基于东方红资产管理公开投资哲学",
+    "real_dimensions": [],
+    "notes": "东方红不公开发布选股模型。基于其公开投资哲学（深度价值+质量护城河+长期持有）的行为推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Hillhouse": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "基于高瓴资本张磊《价值》一书中的公开投资理念",
+    "real_dimensions": [],
+    "notes": "高瓴不公开发布选股模型。基于张磊《价值》中阐述的投资理念（长期结构性成长、商业模式质量、管理团队）的行为推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "HotMoney": {
+    "framework_exists": false,
+    "framework_name": null,
+    "source": "基于A股短线资金群体行为统计特征",
+    "real_dimensions": [],
+    "notes": "游资非单一机构实体，而是A股短线交易群体的统称。基于群体行为统计特征（换手率/量比/振幅/连板）的系统化推断。",
+    "confidence": "BEHAVIORAL"
+  },
+  "Bridgewater": {
+    "framework_exists": true,
+    "framework_name": "经济机器框架 (All Weather + Pure Alpha)",
+    "source": "Ray Dalio《原则》《债务危机》- 公开的宏观投资框架",
+    "real_dimensions": [
+      "经济周期判断 (增长+通胀四象限)",
+      "市场估值水平 (整体市场估值 vs 历史)",
+      "风险溢价 (股债性价比: 盈利收益率 vs 债券收益率)",
+      "流动性环境 (货币+信用条件)"
+    ],
+    "notes": "⚠️ 桥水是宏观投资机构（非选股机构）。其'经济机器'框架适用于宏观资产配置，而非个股选择。此评估器为基于其宏观理念的个股层面的创新应用，非桥水原版框架。",
+    "confidence": "RESEARCH_STYLE"
+  }
+}

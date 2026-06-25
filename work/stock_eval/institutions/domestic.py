@@ -40,13 +40,14 @@ from .base import (
 # 四维: 成长性(30%) / 盈利能力(25%) / 估值(25%) / 质量(20%)
 
 class CICCEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """中金公司 — 多维评分 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "中金确实使用多维评分框架, 但'四维评分'非官方命名; 维度划分基于其研报风格构造"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 中金内部选股方法论未公开。此评估器基于中金研报风格的行为推断构造"
 
     institution = "中金公司 CICC"
     institution_short = "CICC"
-    model_name = "四维评分"
+    model_name = "行业配置代理(行为推断)"
     description = "中金研究所四维框架: 成长性(30%)/盈利能力(25%)/估值水平(25%)/资产质量(20%)"
 
     def compute(self, code: str) -> InstitutionRating:
@@ -64,7 +65,19 @@ class CICCEvaluator(InstitutionEvaluator):
             if q: dims.append(q)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception as e:
             errors.append(f"CICC评估异常: {e}")
             return self._make_rating(code, dims, "评估出错", factors, errors)
@@ -174,13 +187,14 @@ class CICCEvaluator(InstitutionEvaluator):
 # 中信: 综合评分 = 基本面(30%)+估值(25%)+动量(20%)+市场情绪(15%)+风险(10%)
 
 class CITICEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """中信证券 — 多维量化评分 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "中信证券研究部量化组使用多因子评分框架, 具体维度为基于其公开发表方向构造"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 中信内部选股方法论未公开。此评估器基于其研报风格的行为推断构造"
 
     institution = "中信证券 CITIC"
     institution_short = "CITIC"
-    model_name = "多维量化评分"
+    model_name = "市场情绪代理(行为推断)"
     description = "中信研究所多维框架: 基本面(30%)/估值(25%)/动量(20%)/市场情绪(15%)/风险(10%)"
 
     def compute(self, code: str) -> InstitutionRating:
@@ -205,7 +219,19 @@ class CITICEvaluator(InstitutionEvaluator):
             if risk: dims.append(risk)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception as e:
             errors.append(f"CITIC评估异常: {e}")
             return self._make_rating(code, dims, "评估出错", factors, errors)
@@ -317,9 +343,10 @@ class CITICEvaluator(InstitutionEvaluator):
 # 华泰: 综合Alpha = 0.3*价值 + 0.25*质量 + 0.20*成长 + 0.15*一致预期 + 0.10*技术
 
 class HuataiEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 5
     """华泰证券 — 多因子模型 [来源: 研报风格]"""
     method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "华泰金工组是国内量化标杆, 公开发表过多因子系列研报; 框架基于其公开方法论"
+    method_source_note = "华泰金工组公开发表过多因子系列研报(方向真实); 具体维度划分和权重为此处工程构造"
 
     institution = "华泰证券 Huatai"
     institution_short = "Huatai"
@@ -343,7 +370,19 @@ class HuataiEvaluator(InstitutionEvaluator):
             if tech: dims.append(tech)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             errors.append("华泰评估异常")
             return self._make_rating(code, dims, "评估出错", factors, errors)
@@ -439,13 +478,14 @@ class HuataiEvaluator(InstitutionEvaluator):
 # 招商: 护城河(30%)+成长(25%)+财务健康(25%)+估值(20%)
 
 class CMSEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """招商证券 — 核心资产评分 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "招商证券近年聚焦核心资产研究, '核心资产评分'非官方命名"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 招商内部选股方法论未公开。此评估器基于其核心资产研报风格的行为推断构造"
 
     institution = "招商证券 CMS"
     institution_short = "CMS"
-    model_name = "核心资产评分"
+    model_name = "核心资产代理(行为推断)"
     description = "招商核心资产框架: 护城河(30%)/成长(25%)/财务健康(25%)/估值(20%)"
 
     def compute(self, code: str) -> InstitutionRating:
@@ -463,7 +503,19 @@ class CMSEvaluator(InstitutionEvaluator):
             if v: dims.append(v)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估出错", factors, errors)
 
@@ -558,13 +610,14 @@ class CMSEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class GuotaiJunanEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """国泰君安 — CAPM+多因子 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "国君研究所公开发表过CAPM和多因子相关研报, 框架为基于其研究方向的合理构造"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 国君内部选股方法论未公开。此评估器基于其研报风格的行为推断构造"
 
     institution = "国泰君安 Guotai Junan"
     institution_short = "Guotai Junan"
-    model_name = "CAPM+多因子"
+    model_name = "主题策略代理(行为推断)"
     description = "国君模型: 超额收益(40%)/估值(20%)/质量(20%)/技术(20%)"
 
     def compute(self, code: str) -> InstitutionRating:
@@ -582,7 +635,19 @@ class GuotaiJunanEvaluator(InstitutionEvaluator):
             if tech: dims.append(tech)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估出错", factors, errors)
 

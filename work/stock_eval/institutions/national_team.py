@@ -43,9 +43,10 @@ from .base import (
 # 核心逻辑: 低风险偏好(权益≤40%) / 高股息 / 低波动 / 长期ROE稳定 / 国家队/央企偏好
 
 class SocialSecurityEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 5
     """社保基金 — 长期价值投资 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
-    method_source_note = "社保无公开评估模型, 基于其公开持股数据(高股息/低波/稳定ROE)统计特征构建"
+    method_source_note = "社保基金无公开选股评估模型。此评估器基于其公开A股持仓数据(高股息/低波/稳定ROE)的统计特征推断"
 
     institution = "社保基金 Social Security"
     institution_short = "社保基金"
@@ -70,7 +71,19 @@ class SocialSecurityEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception as e:
             errors.append(f"社保评估异常: {e}")
             return self._make_rating(code, dims, "评估出错", factors, errors)
@@ -210,9 +223,10 @@ class SocialSecurityEvaluator(InstitutionEvaluator):
 # 偏好: 金融权重/央企控股/高分红/系统重要性/超大市值
 
 class HuijinEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """中央汇金 — 国家金融稳定 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
-    method_source_note = "基于汇金公开持股数据(银行/金融/央企)特征构建"
+    method_source_note = "汇金无公开选股模型。此评估器基于其公开持股(银行/金融/央企)统计特征推断"
 
     institution = "中央汇金 Central Huijin"
     institution_short = "中央汇金"
@@ -234,7 +248,19 @@ class HuijinEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估出错", factors, errors)
 
@@ -331,9 +357,10 @@ class HuijinEvaluator(InstitutionEvaluator):
 # 偏好: 超低估值/超大市值/金融蓝筹/高流动性/低波动
 
 class CSFEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """证金公司 — 市场稳定器 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
-    method_source_note = "基于证金作为'市场稳定器'角色的实际持仓特征构建"
+    method_source_note = "证金无公开选股模型。此评估器基于其'市场稳定器'角色的公开持仓特征推断"
 
     institution = "证金公司 CSF"
     institution_short = "证金"
@@ -355,7 +382,19 @@ class CSFEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估出错", factors, errors)
 
@@ -441,9 +480,10 @@ class CSFEvaluator(InstitutionEvaluator):
 # 偏好: 半导体产业链/高研发投入/高毛利/技术壁垒/国产替代
 
 class BigFundEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """国家大基金 — 战略投资 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
-    method_source_note = "基于大基金一期/二期公开投资组合(半导体/集成电路)特征构建"
+    method_source_note = "大基金无公开选股模型。此评估器基于其一期/二期公开投资组合(半导体/集成电路)特征推断"
 
     institution = "国家大基金 Big Fund"
     institution_short = "国家大基金"
@@ -466,7 +506,19 @@ class BigFundEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = "大基金偏好评估完成 (数据引擎不支持研发投入明细，使用毛利率+营收增速代理)"
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估出错", factors, errors)
 

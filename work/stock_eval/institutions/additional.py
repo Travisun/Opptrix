@@ -41,9 +41,10 @@ from .base import (
 #   - ESG/风险: 治理结构, 财务健康
 
 class BofAEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """美银美林 — 质量/价值/动量 [来源: 官方框架]"""
-    method_source = MethodSource.DOCUMENTED
-    method_source_note = "BofA Global Research使用质量/价值/动量三维评分体系, 结合盈利修正模型和收益因子; 已有公开方法论声明"
+    method_source = MethodSource.PARTIALLY_DOCUMENTED
+    method_source_note = "BofA Global Research使用质量/价值/动量因子框架(非单一命名模型), 结合盈利修正模型和收益因子; 具体维度权重为构造"
 
     institution = "美银美林 BofA Merrill Lynch"
     institution_short = "BofA"
@@ -68,7 +69,19 @@ class BofAEvaluator(InstitutionEvaluator):
             if y: dims.append(y)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception as e:
             errors.append(str(e))
             return self._make_rating(code, dims, "评估异常", factors, errors)
@@ -159,6 +172,7 @@ class BofAEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class NomuraEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """野村证券 — Nomura Compass [来源: 部分可查证]"""
     method_source = MethodSource.PARTIALLY_DOCUMENTED
     method_source_note = "Nomura Compass是野村公开的量化框架概念; 具体维度权重为基于其亚洲股票研究风格构造"
@@ -181,7 +195,19 @@ class NomuraEvaluator(InstitutionEvaluator):
             if sec: dims.append(sec)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -257,6 +283,7 @@ class NomuraEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class BernsteinEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """伯恩斯坦 — Franchise方法论 [来源: 官方框架]"""
     method_source = MethodSource.DOCUMENTED
     method_source_note = "Bernstein的Franchise方法论是其核心框架, 聚焦具有持久竞争优势的'特许经营权'公司; 有公开研究文档"
@@ -281,7 +308,19 @@ class BernsteinEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -362,9 +401,10 @@ class BernsteinEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class EFundEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 3
     """易方达基金 — 质量成长 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "基于易方达公开投资理念(基金年报/经理访谈): 长期持有高质量成长公司, 注重ROE/现金流/管理层"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 易方达内部选股方法论未公开。此评估器基于其公开投资理念(基金年报/经理访谈)的行为推断构造"
 
     institution = "易方达基金 E Fund"
     institution_short = "易方达"
@@ -382,7 +422,19 @@ class EFundEvaluator(InstitutionEvaluator):
             if v: dims.append(v)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -447,9 +499,10 @@ class EFundEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class OrientAMEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """东方红资管 — 价值投资 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "基于东方红公开的投资哲学: 深度价值+质量护城河+长期持有, 是国内公募基金中价值投资的旗帜"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 东方红内部选股方法论未公开。此评估器基于其公开投资哲学(深度价值+质量护城河)的行为推断构造"
 
     institution = "东方红资管 Orient AM"
     institution_short = "东方红"
@@ -472,7 +525,19 @@ class OrientAMEvaluator(InstitutionEvaluator):
             if mgmt: dims.append(mgmt)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -549,9 +614,10 @@ class OrientAMEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class HillhouseEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """高瓴资本 — 长期结构性成长 [来源: 研报风格]"""
-    method_source = MethodSource.RESEARCH_STYLE
-    method_source_note = "基于张磊《价值》一书及高瓴公开投资哲学" + ": \"长期结构性成长\"、\"至少退后\"的研究方法"
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "⚠️ 高瓴内部选股方法论未公开。此评估器基于其公开投资哲学(张磊《价值》一书)的行为推断构造"
 
     institution = "高瓴资本 Hillhouse"
     institution_short = "高瓴"
@@ -574,7 +640,19 @@ class HillhouseEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -659,6 +737,7 @@ class HillhouseEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class HotMoneySentimentEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """游资情绪模型 — 短线博弈视角 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "基于A股短线资金(游资)行为模式统计: 换手率/量比/涨停/振幅/连板等; 非单一交易员模型而是群体行为"
@@ -684,7 +763,19 @@ class HotMoneySentimentEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
@@ -810,9 +901,10 @@ class HotMoneySentimentEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class BridgewaterEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 4
     """桥水基金 — 宏观周期视角 [来源: 官方方法论]"""
-    method_source = MethodSource.DOCUMENTED
-    method_source_note = "基于Ray Dalio《原则》《债务危机》公开的'经济机器'框架和'全天候'方法论"
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "桥水是宏观投资机构, '经济机器'框架适用于宏观而非个股; 此处为基于其宏观理念的个股应用构造"
 
     institution = "桥水基金 Bridgewater"
     institution_short = "Bridgewater"
@@ -835,7 +927,19 @@ class BridgewaterEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._make_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception:
             return self._make_rating(code, dims, "评估异常", factors, errors)
 

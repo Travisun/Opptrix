@@ -23,6 +23,7 @@ from .base import (
 
 
 class TechnicalIndicatorEvaluator(InstitutionEvaluator):
+    _planned_dimensions = 6
     """技术指标评级 [来源: 标准技术分析]"""
     method_source = MethodSource.DOCUMENTED
     method_source_note = "基于通用技术指标(MA/MACD/RSI/布林/OBV/ATR等), 非任何机构专属"
@@ -59,7 +60,19 @@ class TechnicalIndicatorEvaluator(InstitutionEvaluator):
             if sentiment: dims.append(sentiment)
 
             summary = self._generate_summary(dims)
-            return self._make_rating(code, dims, summary, factors, errors)
+            # 数据质量评估
+            _has_k = bool(self._get_kline(code, count=250))
+            _has_f = bool(self._get_financials(code))
+            _has_r = bool(self._get_realtime(code))
+            _quality = self._build_quality(
+                has_realtime=_has_r,
+                has_kline=_has_k,
+                has_financials=_has_f,
+                kline_days=250 if _has_k else 0,
+                financial_periods=len(self._get_financials(code)) if _has_f else 0,
+                actual_dimensions=len(dims),
+            )
+            return self._make_rating(code, dims, summary, factors, errors, quality=_quality)
         except Exception as e:
             errors.append(f"技术指标评估异常: {e}")
             return self._make_rating(code, dims, "评估出错", factors, errors)
