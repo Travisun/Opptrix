@@ -78,6 +78,57 @@ class EvalDimension:
 
 
 @dataclass
+class EvalQuality:
+    """
+    数据质量评估 — 该评估的数据支撑度
+
+    Metrics:
+      data_completeness  — 数据完整性 0.0-1.0 (实际用到多少数据)
+      data_timeliness    — 数据时效性 0.0-1.0 (数据是否够新)
+      dimensions_planned — 计划评估的维度数
+      dimensions_actual  — 实际完成的维度数
+      has_realtime       — 是否有实时行情
+      has_kline          — 是否有K线
+      has_financials     — 是否有财报
+      kline_days         — K线天数
+      financial_periods  — 财报期数
+    """
+    data_completeness: float = 0.0
+    data_timeliness: float = 0.0
+    dimensions_planned: int = 0
+    dimensions_actual: int = 0
+    has_realtime: bool = False
+    has_kline: bool = False
+    has_financials: bool = False
+    kline_days: int = 0
+    financial_periods: int = 0
+
+    @property
+    def quality_label(self) -> str:
+        """数据质量标签"""
+        if self.data_completeness >= 0.85:
+            return "优质-A"
+        elif self.data_completeness >= 0.65:
+            return "良好-B"
+        elif self.data_completeness >= 0.40:
+            return "一般-C"
+        else:
+            return "不足-D"
+
+    @property
+    def confidence_multiplier(self) -> float:
+        """信心乘数 — 用于下调信心评分"""
+        if self.data_completeness >= 0.85:
+            return 1.0
+        elif self.data_completeness >= 0.65:
+            return 0.85
+        elif self.data_completeness >= 0.40:
+            return 0.65
+        else:
+            return 0.40
+
+
+@dataclass
 class InstitutionRating:
     """
     统一评级输出 — 一个机构对一个股票的评估结果
@@ -87,10 +138,12 @@ class InstitutionRating:
       code             — 股票代码
       rating           — 评级等级
       confidence       — 信心评分 0.1-10.0
+      raw_confidence   — 未校准的原始信心评分
       dimensions       — 各评估维度详情
       summary          — 一句话总结
       model_name       — 使用的评估模型名
       factors          — 关键参考因子值
+      data_quality     — 数据质量评估
     """
 
     institution: str                # 例如 "高盛 Goldman Sachs"
@@ -104,8 +157,17 @@ class InstitutionRating:
     factors: Dict[str, float] = field(default_factory=dict)  # 关键因子值
     errors: List[str] = field(default_factory=list)
 
+    data_quality: Optional[EvalQuality] = None
+    raw_confidence: float = 0.0
+
     def __post_init__(self):
         self.confidence = max(0.1, min(10.0, self.confidence))
+        self.raw_confidence = max(0.0, min(10.0, self.raw_confidence))
+
+    @property
+    def quality_gap(self) -> float:
+        """原始信心 vs 校准后信心的差距, 越大说明数据支撑越弱"""
+        return round(self.raw_confidence - self.confidence, 2)
 
     @property
     def rating_label_cn(self) -> str:
@@ -116,6 +178,7 @@ class InstitutionRating:
         return self.rating.label_en
 
     def to_dict(self) -> dict:
+        dq = self.data_quality
         return {
             "institution": self.institution,
             "institution_short": self.institution_short,
@@ -123,6 +186,8 @@ class InstitutionRating:
             "rating": self.rating.value,
             "rating_cn": self.rating_label_cn,
             "confidence": self.confidence,
+            "raw_confidence": self.raw_confidence,
+            "quality_gap": self.quality_gap,
             "model_name": self.model_name,
             "summary": self.summary,
             "dimensions": [
@@ -131,6 +196,15 @@ class InstitutionRating:
             ],
             "factors": self.factors,
             "errors": self.errors,
+            "data_quality": {
+                "completeness": dq.data_completeness if dq else 0,
+                "label": dq.quality_label if dq else "N/A",
+                "dimensions_planned": dq.dimensions_planned if dq else 0,
+                "dimensions_actual": dq.dimensions_actual if dq else 0,
+                "has_realtime": dq.has_realtime if dq else False,
+                "has_kline": dq.has_kline if dq else False,
+                "has_financials": dq.has_financials if dq else False,
+            } if dq else None,
         }
 
 
@@ -174,13 +248,16 @@ class InstitutionEvaluator:
                      summary: str = "",
                      extra_factors: Optional[Dict[str, float]] = None,
                      errors: Optional[List[str]] = None,
+                     quality: Optional[EvalQuality] = None,
                      ) -> InstitutionRating:
         """
-        工具方法: 从评估维度列表自动计算加权信心评分
+        工具方法: 从评估维度列表自动计算加权信心评分, 并进行数据质量校准
 
         计算逻辑:
-          1. 各维度评分 * 权重 加权平均 -> 综合评分(0-10)
-          2. 综合评分映射到 RatingLevel
+          1. 各维度评分 * 权重 加权平均 -> 原始综合评分(0-10)
+          2. 数据质量校准 -> 根据EvalQuality计算信心乘数
+          3. 校准后信心评分 = 原始评分 * 信心乘数
+          4. 校准后信心评分映射到 RatingLevel
         """
         if not dimensions:
             return InstitutionRating(
@@ -189,6 +266,7 @@ class InstitutionEvaluator:
                 code=code,
                 rating=RatingLevel.HOLD,
                 confidence=5.0,
+                raw_confidence=5.0,
                 dimensions=[],
                 summary="数据不足，无法评估",
                 model_name=self.model_name,
@@ -204,24 +282,32 @@ class InstitutionEvaluator:
             weighted_sum += d.score * w
 
         if total_weight > 0:
-            confidence = weighted_sum / total_weight
+            raw_confidence = weighted_sum / total_weight
         else:
-            confidence = 5.0
+            raw_confidence = 5.0
+
+        # 数据质量校准
+        if quality is not None:
+            calibrated = raw_confidence * quality.confidence_multiplier
+        else:
+            calibrated = raw_confidence
 
         # 综合评分 -> 评级
-        rating = RatingLevel.from_confidence(confidence)
+        rating = RatingLevel.from_confidence(calibrated)
 
         return InstitutionRating(
             institution=self.institution,
             institution_short=self.institution_short,
             code=code,
             rating=rating,
-            confidence=round(confidence, 2),
+            confidence=round(calibrated, 2),
+            raw_confidence=round(raw_confidence, 2),
             dimensions=dimensions,
             summary=summary,
             model_name=self.model_name,
             factors=extra_factors or {},
             errors=errors or [],
+            data_quality=quality or EvalQuality(),
         )
 
     def _safe_float(self, val, default=None) -> Optional[float]:

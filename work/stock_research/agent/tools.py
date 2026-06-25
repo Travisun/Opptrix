@@ -158,6 +158,35 @@ class ToolRegistry:
                     h.run_backtest(codes, scorecard, periods),
                 category="策略",
             ),
+            ToolDef(
+                name="strategy_verify",
+                description="策略历史信号验证：回验9个策略(趋势/均值回归/动量/量价/市态/行为/异象/价值/轮动)在过去N个检查点的准确率、胜率、夏普比",
+                parameters=[
+                    {"name": "code", "type": "string", "required": True,
+                     "description": "股票代码，如 600519"},
+                    {"name": "checkpoints", "type": "int", "required": False,
+                     "description": "历史检查点数量，默认30"},
+                    {"name": "forward_days", "type": "int", "required": False,
+                     "description": "信号验证窗口(交易日)，默认5"},
+                ],
+                handler=lambda code, checkpoints=30, forward_days=5:
+                    h.strategy_verify(code, checkpoints, forward_days),
+                category="策略",
+            ),
+            ToolDef(
+                name="strategy_report",
+                description="生成完备的策略历史验证报告文本：包含9个策略的准确率/胜率/夏普/频率对比表",
+                parameters=[
+                    {"name": "code", "type": "string", "required": True,
+                     "description": "股票代码"},
+                    {"name": "checkpoints", "type": "int", "required": False},
+                    {"name": "forward_days", "type": "int", "required": False},
+                ],
+                handler=lambda code, checkpoints=30, forward_days=5:
+                    h.strategy_verify_report(code, checkpoints, forward_days),
+                category="报告",
+            ),
+
         ]
 
         for t in tools:

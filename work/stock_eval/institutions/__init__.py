@@ -6,7 +6,7 @@ from .base import (
     InstitutionEvaluator,
     InstitutionRating,
     RatingLevel,
-    EvalDimension,
+    EvalDimension, EvalQuality,
 )
 
 from .international import (

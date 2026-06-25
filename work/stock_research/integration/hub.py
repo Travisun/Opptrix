@@ -444,6 +444,75 @@ class ResearchHub:
                 success=False, message=f"机构评级报告失败: {e}"
             )
 
+
+    def strategy_verify(self, code: str,
+                       checkpoints: int = 30,
+                       forward_days: int = 5
+                       ) -> ResearchResult:
+        """策略历史信号验证 — 回验9个策略的历史准确率"""
+        import time
+        t0 = time.time()
+        try:
+            from stock_eval.validation import SignalVerifier
+            verifier = SignalVerifier(self.de)
+            report = verifier.verify_strategies(code, checkpoints, forward_days)
+            elapsed = time.time() - t0
+
+            # 转换为可序列化数据
+            perfs = {}
+            for sname, perf in report.performances.items():
+                perfs[sname] = perf.to_dict()
+
+            best = report.best_strategy
+            return ResearchResult(
+                success=True,
+                data={
+                    "code": report.code,
+                    "name": report.name,
+                    "checkpoints": report.checkpoints,
+                    "forward_days": report.forward_days,
+                    "date_range": list(report.date_range),
+                    "performances": perfs,
+                    "best_strategy": {"name": best[0], "win_rate": best[1]} if best[0] else None,
+                    "avg_win_rate": round(
+                        sum(p["overall_win_rate"] for p in perfs.values()) / len(perfs), 3
+                    ) if perfs else 0,
+                },
+                message=(f"{report.name}({report.code}) 策略验证完成: "
+                         f"{report.checkpoints}个检查点, "
+                         f"最佳={best[0]}({best[1]:.0%})" if best[0] else
+                         f"{report.checkpoints}个检查点"),
+                elapsed=elapsed,
+            )
+        except Exception as e:
+            return ResearchResult(
+                success=False, message=f"策略验证失败: {e}"
+            )
+
+    def strategy_verify_report(self, code: str,
+                              checkpoints: int = 30,
+                              forward_days: int = 5
+                              ) -> ResearchResult:
+        """策略历史信号验证 — 返回文本报告"""
+        import time
+        t0 = time.time()
+        try:
+            from stock_eval.validation import SignalVerifier
+            verifier = SignalVerifier(self.de)
+            report = verifier.verify_strategies(code, checkpoints, forward_days)
+            text = report.format_text()
+            elapsed = time.time() - t0
+            return ResearchResult(
+                success=True,
+                data={"text": text, "code": code, "name": report.name},
+                message=f"{report.name} 策略验证报告生成完成",
+                elapsed=elapsed,
+            )
+        except Exception as e:
+            return ResearchResult(
+                success=False, message=f"策略验证报告失败: {e}"
+            )
+
     def get_latest_evaluation(self, code: str) -> ResearchResult:
         """查看最近的评估记录"""
         stored = self.store.get_latest(code)

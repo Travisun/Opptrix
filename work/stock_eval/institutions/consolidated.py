@@ -99,10 +99,11 @@ class ConsolidatedRating:
       institution | rating | confidence | summary
 
     综合统计:
-      平均信心评分
+      平均信心评分 (已校准)
       评级分布 (Buy/Watch/Hold/Sell 计数)
       分歧度 (标准差)
       一致性最高的机构组
+      数据质量分布
     """
     code: str
     name: str = ""
@@ -113,12 +114,21 @@ class ConsolidatedRating:
 
     # 聚合统计
     avg_confidence: float = 0.0
+    avg_raw_confidence: float = 0.0
     consensus_rating: RatingLevel = RatingLevel.HOLD
     rating_distribution: Dict[str, int] = field(default_factory=dict)
     confidence_std: float = 0.0
     bullish_count: int = 0
     bearish_count: int = 0
     neutral_count: int = 0
+
+    # 数据质量
+    avg_data_quality: float = 0.0
+    quality_labels: Dict[str, int] = field(default_factory=dict)
+    evaluators_with_poor_data: List[str] = field(default_factory=list)
+
+    # 交叉一致性
+    agreement_rate: float = 0.0
 
     # 各组统计
     group_stats: Dict[str, dict] = field(default_factory=dict)
@@ -167,27 +177,35 @@ class ConsolidatedReport:
     consolidated: ConsolidatedRating
 
     def format_text(self) -> str:
-        """生成格式化的文本报告"""
+        """生成格式化的文本报告 (含数据质量和交叉一致性)"""
         c = self.consolidated
         lines = []
-        sep = "─" * 72
+        sep = "-" * 72
 
-        lines.append(f"\n{'=' * 72}")
+        lines.append(f"{'=' * 72}")
         lines.append(f"  多机构综合评级报告")
         lines.append(f"{'=' * 72}")
         lines.append(f"  股票: {c.name} ({c.code})")
         lines.append(f"  时间: {c.timestamp}")
-        lines.append(f"  扫描机构: {c.total_evaluators}家")
+        lines.append(f"  扫描机构: {c.total_evaluators}家 (成功{c.success_count})")
         lines.append(f"{sep}")
 
         # 综合统计
         lines.append(f"  综合信心评分: {c.avg_confidence:.2f} / 10.0")
+        lines.append(f"  原始评分: {c.avg_raw_confidence:.2f} | 数据质量信心乘数: {c.avg_data_quality:.2f}")
         lines.append(f"  共识评级: {c.consensus_rating.label_cn} ({c.consensus_rating.label_en})")
         lines.append(f"  评级分布: 买入{c.bullish_count} | 观望{c.neutral_count} | "
                       f"持有/卖出{c.bearish_count}")
+        lines.append(f"  机构一致性: {c.agreement_rate:.0%} | 分歧度(σ): {c.confidence_std:.2f}")
         lines.append(f"  {c.rating_summary}")
-        if len(c.ratings) > 1:
-            lines.append(f"  机构分歧度(σ): {c.confidence_std:.2f}")
+        lines.append(f"{sep}")
+
+        # 数据质量分布
+        if c.quality_labels:
+            ql = " | ".join(f"{k}:{v}" for k,v in c.quality_labels.items())
+            lines.append(f"  数据质量分布: {ql}")
+            if c.evaluators_with_poor_data:
+                lines.append(f"  数据不足: {', '.join(c.evaluators_with_poor_data)}")
         lines.append(f"{sep}")
 
         # 各组统计
@@ -203,32 +221,32 @@ class ConsolidatedReport:
         lines.append(f"  各机构评级明细:")
         lines.append(f"{sep}")
 
-        # 表头
-        header = f"  {'机构':<22} {'评级':<8} {'信心':<6} {'模型':<16} {'要点'}"
+        header = f"  {'机构':<22} {'评级':<8} {'信心':<6} {'原始':<6} {'质量':<6} {'模型':<14} {'要点'}"
         lines.append(header)
-        lines.append(f"  {'─' * 68}")
+        lines.append(f"  {'-' * 74}")
 
         for r in c.ratings:
             inst = r.institution_short[:20]
-            rating_s = f"{r.rating_label_cn}/{r.rating_label_en[:5]}"
+            rating_s = f"{r.rating_label_cn[:2]}/{r.rating_label_en[:4]}"
             conf = f"{r.confidence:.1f}"
+            raw_c = f"{r.raw_confidence:.1f}"
+            ql = r.data_quality.quality_label if r.data_quality else "-"
             model = r.model_name[:14]
-            summary = r.summary[:25] if r.summary else ""
-            lines.append(f"  {inst:<22} {rating_s:<8} {conf:<6} {model:<16} {summary}")
+            summary = r.summary[:20] if r.summary else ""
+            lines.append(f"  {inst:<22} {rating_s:<8} {conf:<6} {raw_c:<6} {ql:<6} {model:<14} {summary}")
 
         lines.append(f"{sep}")
-        # 底部指引
         buy_count = c.bullish_count
         total = len(c.ratings)
         buy_ratio = buy_count / total * 100 if total > 0 else 0
         if buy_ratio >= 60:
-            lines.append(f"  → 机构看多一致性强 ({buy_ratio:.0f}%看多)")
+            lines.append(f"  -> 机构看多一致性强 ({buy_ratio:.0f}%看多)")
         elif buy_ratio >= 40:
-            lines.append(f"  → 机构偏多但存在分歧 ({buy_ratio:.0f}%看多)")
+            lines.append(f"  -> 机构偏多但存在分歧 ({buy_ratio:.0f}%看多)")
         elif buy_ratio >= 20:
-            lines.append(f"  → 机构偏谨慎 ({buy_ratio:.0f}%看多)")
+            lines.append(f"  -> 机构偏谨慎 ({buy_ratio:.0f}%看多)")
         else:
-            lines.append(f"  → 机构普遍谨慎 ({buy_ratio:.0f}%看多)")
+            lines.append(f"  -> 机构普遍谨慎 ({buy_ratio:.0f}%看多)")
 
         lines.append(f"{'=' * 72}\n")
         return "\n".join(lines)
@@ -306,10 +324,24 @@ class ConsolidatedEngine:
                 total_evaluators=len(types),
             )
 
-        # 平均信心
+        # 平均信心 (原始 + 校准后)
         confidences = [r.confidence for r in valid_ratings]
+        raw_confidences = [r.raw_confidence for r in valid_ratings]
         avg_conf = float(np.mean(confidences))
+        avg_raw = float(np.mean(raw_confidences))
         conf_std = float(np.std(confidences)) if len(confidences) > 1 else 0
+
+        # 数据质量统计
+        qualities = [r.data_quality.data_completeness for r in valid_ratings if r.data_quality]
+        avg_quality = float(np.mean(qualities)) if qualities else 0
+        quality_labels = {}
+        poor_data = []
+        for r in valid_ratings:
+            if r.data_quality:
+                lbl = r.data_quality.quality_label
+                quality_labels[lbl] = quality_labels.get(lbl, 0) + 1
+                if lbl == "不足-D":
+                    poor_data.append(r.institution_short)
 
         # 评级分布
         dist: Dict[str, int] = {}
@@ -350,16 +382,26 @@ class ConsolidatedEngine:
                     "sell": g_sell,
                 }
 
+        # 交叉一致性: 评级中属于同一方向的比例
+        n_total = len(valid_ratings)
+        n_agree = max(bullish, bearish)  # 最多的方向
+        agreement = n_agree / n_total if n_total > 0 else 0
+
         return ConsolidatedRating(
             code=code, name=name,
             ratings=valid_ratings,
             avg_confidence=round(avg_conf, 2),
+            avg_raw_confidence=round(avg_raw, 2),
             consensus_rating=consensus,
             rating_distribution=dist,
             confidence_std=round(conf_std, 2),
             bullish_count=bullish,
             bearish_count=bearish,
             neutral_count=neutral,
+            avg_data_quality=round(avg_quality, 2),
+            quality_labels=quality_labels,
+            evaluators_with_poor_data=poor_data,
+            agreement_rate=round(agreement, 2),
             group_stats=group_stats,
             success_count=success_count,
             error_count=errors,
