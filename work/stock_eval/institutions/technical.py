@@ -18,12 +18,14 @@ import numpy as np
 
 from .base import (
     InstitutionEvaluator, InstitutionRating,
-    RatingLevel, EvalDimension,
+    RatingLevel, EvalDimension, MethodSource,
 )
 
 
 class TechnicalIndicatorEvaluator(InstitutionEvaluator):
-    """通用技术指标评级 — 11维度技术面综合分析"""
+    """技术指标评级 [来源: 标准技术分析]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "基于通用技术指标(MA/MACD/RSI/布林/OBV/ATR等), 非任何机构专属"
 
     institution = "技术指标 Technical"
     institution_short = "技术分析"

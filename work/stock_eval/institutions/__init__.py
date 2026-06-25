@@ -6,7 +6,7 @@ from .base import (
     InstitutionEvaluator,
     InstitutionRating,
     RatingLevel,
-    EvalDimension, EvalQuality,
+    EvalDimension, EvalQuality, MethodSource,
 )
 
 from .international import (
@@ -48,7 +48,7 @@ from .consolidated import (
 )
 
 __all__ = [
-    "InstitutionEvaluator", "InstitutionRating", "RatingLevel", "EvalDimension",
+    "InstitutionEvaluator", "InstitutionRating", "RatingLevel", "EvalDimension", "MethodSource",
     "GoldmanSachsEvaluator", "MorganStanleyEvaluator", "JPMorganEvaluator",
     "UBSEvaluator", "CitiEvaluator", "CreditSuisseEvaluator",
     "BarclaysEvaluator", "HSBCEvaluator", "DeutscheBankEvaluator",

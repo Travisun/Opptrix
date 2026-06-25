@@ -221,19 +221,20 @@ class ConsolidatedReport:
         lines.append(f"  各机构评级明细:")
         lines.append(f"{sep}")
 
-        header = f"  {'机构':<22} {'评级':<8} {'信心':<6} {'原始':<6} {'质量':<6} {'模型':<14} {'要点'}"
+        header = f"  {'机构':<20} {'评级':<8} {'信心':<6} {'原始':<6} {'质量':<5} {'来源':<8} {'模型':<12} {'要点'}"
         lines.append(header)
-        lines.append(f"  {'-' * 74}")
+        lines.append(f"  {'-' * 76}")
 
         for r in c.ratings:
-            inst = r.institution_short[:20]
+            inst = r.institution_short[:18]
             rating_s = f"{r.rating_label_cn[:2]}/{r.rating_label_en[:4]}"
             conf = f"{r.confidence:.1f}"
             raw_c = f"{r.raw_confidence:.1f}"
-            ql = r.data_quality.quality_label if r.data_quality else "-"
-            model = r.model_name[:14]
-            summary = r.summary[:20] if r.summary else ""
-            lines.append(f"  {inst:<22} {rating_s:<8} {conf:<6} {raw_c:<6} {ql:<6} {model:<14} {summary}")
+            ql = r.data_quality.quality_label[:1] if r.data_quality else "-"
+            src = r.method_label[:6] if r.method_label else "-"
+            model = r.model_name[:12]
+            summary = r.summary[:16] if r.summary else ""
+            lines.append(f"  {inst:<20} {rating_s:<8} {conf:<6} {raw_c:<6} {ql:<5} {src:<8} {model:<12} {summary}")
 
         lines.append(f"{sep}")
         buy_count = c.bullish_count

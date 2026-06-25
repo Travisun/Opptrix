@@ -45,7 +45,7 @@ from .analysis.portfolio import PortfolioAnalyzer
 # 机构评估模块顶层导出
 from .institutions import (
     # Base
-    InstitutionEvaluator, InstitutionRating, RatingLevel, EvalDimension,
+    InstitutionEvaluator, InstitutionRating, RatingLevel, EvalDimension, MethodSource,
     # International
     GoldmanSachsEvaluator, MorganStanleyEvaluator, JPMorganEvaluator,
     UBSEvaluator, CitiEvaluator, CreditSuisseEvaluator,
@@ -72,7 +72,7 @@ __all__ = [
     "MarketRegimeDetector", "RegimeWeightAdjuster", "MarketRegime",
     "PortfolioAnalyzer",
     # Institutions
-    "InstitutionEvaluator", "InstitutionRating", "RatingLevel", "EvalDimension",
+    "InstitutionEvaluator", "InstitutionRating", "RatingLevel", "EvalDimension", "MethodSource",
     "GoldmanSachsEvaluator", "MorganStanleyEvaluator", "JPMorganEvaluator",
     "UBSEvaluator", "CitiEvaluator", "CreditSuisseEvaluator",
     "BarclaysEvaluator", "HSBCEvaluator", "DeutscheBankEvaluator",

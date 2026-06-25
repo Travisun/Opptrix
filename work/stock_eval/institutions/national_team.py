@@ -33,7 +33,7 @@ import numpy as np
 
 from .base import (
     InstitutionEvaluator, InstitutionRating,
-    RatingLevel, EvalDimension,
+    RatingLevel, EvalDimension, MethodSource,
 )
 
 
@@ -43,7 +43,9 @@ from .base import (
 # 核心逻辑: 低风险偏好(权益≤40%) / 高股息 / 低波动 / 长期ROE稳定 / 国家队/央企偏好
 
 class SocialSecurityEvaluator(InstitutionEvaluator):
-    """社保基金 — 长期价值投资评估"""
+    """社保基金 — 长期价值投资 [来源: 行为推断]"""
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "社保无公开评估模型, 基于其公开持股数据(高股息/低波/稳定ROE)统计特征构建"
 
     institution = "社保基金 Social Security"
     institution_short = "社保基金"
@@ -208,7 +210,9 @@ class SocialSecurityEvaluator(InstitutionEvaluator):
 # 偏好: 金融权重/央企控股/高分红/系统重要性/超大市值
 
 class HuijinEvaluator(InstitutionEvaluator):
-    """中央汇金 — 国家金融稳定评估"""
+    """中央汇金 — 国家金融稳定 [来源: 行为推断]"""
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "基于汇金公开持股数据(银行/金融/央企)特征构建"
 
     institution = "中央汇金 Central Huijin"
     institution_short = "中央汇金"
@@ -327,7 +331,9 @@ class HuijinEvaluator(InstitutionEvaluator):
 # 偏好: 超低估值/超大市值/金融蓝筹/高流动性/低波动
 
 class CSFEvaluator(InstitutionEvaluator):
-    """证金公司 — 市场稳定器"""
+    """证金公司 — 市场稳定器 [来源: 行为推断]"""
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "基于证金作为'市场稳定器'角色的实际持仓特征构建"
 
     institution = "证金公司 CSF"
     institution_short = "证金"
@@ -435,7 +441,9 @@ class CSFEvaluator(InstitutionEvaluator):
 # 偏好: 半导体产业链/高研发投入/高毛利/技术壁垒/国产替代
 
 class BigFundEvaluator(InstitutionEvaluator):
-    """国家大基金 — 半导体/集成电路战略投资评估"""
+    """国家大基金 — 战略投资 [来源: 行为推断]"""
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "基于大基金一期/二期公开投资组合(半导体/集成电路)特征构建"
 
     institution = "国家大基金 Big Fund"
     institution_short = "国家大基金"

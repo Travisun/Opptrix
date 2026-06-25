@@ -30,7 +30,7 @@ import numpy as np
 
 from .base import (
     InstitutionEvaluator, InstitutionRating,
-    RatingLevel, EvalDimension,
+    RatingLevel, EvalDimension, MethodSource,
 )
 
 
@@ -40,7 +40,9 @@ from .base import (
 # 四维: 成长性(30%) / 盈利能力(25%) / 估值(25%) / 质量(20%)
 
 class CICCEvaluator(InstitutionEvaluator):
-    """中金公司 — 四维评分体系"""
+    """中金公司 — 多维评分 [来源: 研报风格]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "中金确实使用多维评分框架, 但'四维评分'非官方命名; 维度划分基于其研报风格构造"
 
     institution = "中金公司 CICC"
     institution_short = "CICC"
@@ -172,7 +174,9 @@ class CICCEvaluator(InstitutionEvaluator):
 # 中信: 综合评分 = 基本面(30%)+估值(25%)+动量(20%)+市场情绪(15%)+风险(10%)
 
 class CITICEvaluator(InstitutionEvaluator):
-    """中信证券 — 多维量化评分"""
+    """中信证券 — 多维量化评分 [来源: 研报风格]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "中信证券研究部量化组使用多因子评分框架, 具体维度为基于其公开发表方向构造"
 
     institution = "中信证券 CITIC"
     institution_short = "CITIC"
@@ -313,7 +317,9 @@ class CITICEvaluator(InstitutionEvaluator):
 # 华泰: 综合Alpha = 0.3*价值 + 0.25*质量 + 0.20*成长 + 0.15*一致预期 + 0.10*技术
 
 class HuataiEvaluator(InstitutionEvaluator):
-    """华泰证券 — 多因子评分模型"""
+    """华泰证券 — 多因子模型 [来源: 研报风格]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "华泰金工组是国内量化标杆, 公开发表过多因子系列研报; 框架基于其公开方法论"
 
     institution = "华泰证券 Huatai"
     institution_short = "Huatai"
@@ -433,7 +439,9 @@ class HuataiEvaluator(InstitutionEvaluator):
 # 招商: 护城河(30%)+成长(25%)+财务健康(25%)+估值(20%)
 
 class CMSEvaluator(InstitutionEvaluator):
-    """招商证券 — 核心资产评分体系"""
+    """招商证券 — 核心资产评分 [来源: 研报风格]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "招商证券近年聚焦核心资产研究, '核心资产评分'非官方命名"
 
     institution = "招商证券 CMS"
     institution_short = "CMS"
@@ -550,7 +558,9 @@ class CMSEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class GuotaiJunanEvaluator(InstitutionEvaluator):
-    """国泰君安 — CAPM+多因子模型"""
+    """国泰君安 — CAPM+多因子 [来源: 研报风格]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "国君研究所公开发表过CAPM和多因子相关研报, 框架为基于其研究方向的合理构造"
 
     institution = "国泰君安 Guotai Junan"
     institution_short = "Guotai Junan"

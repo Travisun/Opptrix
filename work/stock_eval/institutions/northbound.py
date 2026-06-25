@@ -36,12 +36,14 @@ import numpy as np
 
 from .base import (
     InstitutionEvaluator, InstitutionRating,
-    RatingLevel, EvalDimension,
+    RatingLevel, EvalDimension, MethodSource,
 )
 
 
 class NorthboundFundEvaluator(InstitutionEvaluator):
-    """北向资金 — 外资机构投资偏好评估"""
+    """北向资金 — 外资投资偏好 [来源: 行为推断]"""
+    method_source = MethodSource.BEHAVIORAL
+    method_source_note = "基于沪深港通公开持股数据(每日披露)的统计归纳; 非单一机构框架"
 
     institution = "北向资金 Northbound"
     institution_short = "北向资金"

@@ -58,6 +58,33 @@ class RatingLevel(Enum):
         }[self.value]
 
 
+class MethodSource(Enum):
+    """方法论来源的可靠性等级"""
+    DOCUMENTED = "documented"          # 有公开文档可查证的官方框架
+    PARTIALLY_DOCUMENTED = "partial"   # 部分可查证 (概念真实但整合方式为构造)
+    RESEARCH_STYLE = "research_style"  # 基于公开研报风格方向构建
+    BEHAVIORAL = "behavioral"          # 基于行为/持仓数据推断
+
+    @property
+    def label_cn(self) -> str:
+        return {
+            "documented": "官方框架",
+            "partial": "部分可查证",
+            "research_style": "研报风格",
+            "behavioral": "行为推断",
+        }[self.value]
+
+    @property
+    def confidence_weight(self) -> float:
+        """方法论可靠性对信心评分的权重"""
+        return {
+            "documented": 1.0,
+            "partial": 0.85,
+            "research_style": 0.70,
+            "behavioral": 0.65,
+        }[self.value]
+
+
 @dataclass
 class EvalDimension:
     """
@@ -159,6 +186,8 @@ class InstitutionRating:
 
     data_quality: Optional[EvalQuality] = None
     raw_confidence: float = 0.0
+    method_source: str = ""
+    method_label: str = ""
 
     def __post_init__(self):
         self.confidence = max(0.1, min(10.0, self.confidence))
@@ -188,6 +217,8 @@ class InstitutionRating:
             "confidence": self.confidence,
             "raw_confidence": self.raw_confidence,
             "quality_gap": self.quality_gap,
+            "method_source": self.method_source,
+            "method_label": self.method_label,
             "model_name": self.model_name,
             "summary": self.summary,
             "dimensions": [
@@ -225,6 +256,8 @@ class InstitutionEvaluator:
     institution: str = "未命名机构"
     institution_short: str = "unknown"
     model_name: str = "通用模型"
+    method_source: MethodSource = MethodSource.RESEARCH_STYLE
+    method_source_note: str = ""
     description: str = ""
 
     # 维度权重 {维度名称: 权重}
@@ -286,11 +319,14 @@ class InstitutionEvaluator:
         else:
             raw_confidence = 5.0
 
+        # 方法论可靠性校准
+        method_weight = self.method_source.confidence_weight
+
         # 数据质量校准
-        if quality is not None:
-            calibrated = raw_confidence * quality.confidence_multiplier
-        else:
-            calibrated = raw_confidence
+        quality_mult = quality.confidence_multiplier if quality is not None else 1.0
+
+        # 最终校准 = 原始评分 * 方法论可靠性 * 数据质量
+        calibrated = raw_confidence * method_weight * quality_mult
 
         # 综合评分 -> 评级
         rating = RatingLevel.from_confidence(calibrated)
@@ -305,6 +341,8 @@ class InstitutionEvaluator:
             dimensions=dimensions,
             summary=summary,
             model_name=self.model_name,
+            method_source=self.method_source.value,
+            method_label=self.method_source.label_cn,
             factors=extra_factors or {},
             errors=errors or [],
             data_quality=quality or EvalQuality(),

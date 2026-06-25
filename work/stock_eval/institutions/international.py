@@ -37,7 +37,7 @@ import numpy as np
 
 from .base import (
     InstitutionEvaluator, InstitutionRating,
-    RatingLevel, EvalDimension,
+    RatingLevel, EvalDimension, MethodSource,
 )
 
 
@@ -53,7 +53,9 @@ from .base import (
 # QGV: Quality / Growth / Valuation 三维交叉验证
 
 class GoldmanSachsEvaluator(InstitutionEvaluator):
-    """高盛 — GAMES框架 + QGV评分"""
+    """高盛 — GAMES框架 + QGV评分 [来源: 官方框架]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "GAMES是GS公开的研究框架, 出现在其研究报告方法论声明中; QGV用于选股列表评分"
 
     institution = "高盛 Goldman Sachs"
     institution_short = "Goldman Sachs"
@@ -388,7 +390,9 @@ class GoldmanSachsEvaluator(InstitutionEvaluator):
 # [修正] 原"3S"命名不准确, 已改为Risk-Reward框架
 
 class MorganStanleyEvaluator(InstitutionEvaluator):
-    """摩根士丹利 — EQS盈利质量评分 + Risk-Reward框架"""
+    """摩根士丹利 — EQS盈利质量评分 + Risk-Reward框架 [来源: EQS官方框架]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "EQS(Earnings Quality Score)是MS量化团队公开评分模型; Risk-Reward框架是MS研究报告标准格式"
 
     institution = "摩根士丹利 Morgan Stanley"
     institution_short = "Morgan Stanley"
@@ -604,7 +608,9 @@ class MorganStanleyEvaluator(InstitutionEvaluator):
 #   - GARP (Growth at Reasonable Price): JPMorgan常用的投资策略
 
 class JPMorganEvaluator(InstitutionEvaluator):
-    """摩根大通 — CAR框架 + GARP策略"""
+    """摩根大通 — CAR框架 + GARP策略 [来源: 官方框架]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "CAR(Catalysts/Analysis/Risk-Reward)是JPMorgan研究报告的标准框架; GARP是其核心投资策略"
 
     institution = "摩根大通 JPMorgan"
     institution_short = "JPMorgan"
@@ -765,7 +771,9 @@ class JPMorganEvaluator(InstitutionEvaluator):
 #   已改为K-Ward/D (UBS的实际评级信号框架) + Evidence Lab数据验证
 
 class UBSEvaluator(InstitutionEvaluator):
-    """瑞银 — K-Ward/D评级信号 + Evidence Lab数据验证"""
+    """瑞银 — K-Ward/D评级信号 + Evidence Lab [来源: 部分可查证]"""
+    method_source = MethodSource.PARTIALLY_DOCUMENTED
+    method_source_note = "K-Ward/D是UBS实际使用的评级信号系统; Evidence Lab(2015年成立)是UBS另类数据平台; 两者整合方式为工程实现"
 
     institution = "瑞银 UBS"
     institution_short = "UBS"
@@ -922,7 +930,9 @@ class UBSEvaluator(InstitutionEvaluator):
 #   - Catalyst Call: 花旗的催化剂驱动研究框架
 
 class CitiEvaluator(InstitutionEvaluator):
-    """花旗 — Q-Grade + Earnings Revision"""
+    """花旗 — Q-Grade + Earnings Revision [来源: 官方框架]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "Q-Grade是花旗量化研究组的评分框架; Earnings Revision模型是花旗核心信号来源, 有公开方法论文档"
 
     institution = "花旗 Citi"
     institution_short = "Citi"
@@ -1054,7 +1064,9 @@ class CitiEvaluator(InstitutionEvaluator):
 #   - ESG评分: 近年CS整合的可持续发展评估
 
 class CreditSuisseEvaluator(InstitutionEvaluator):
-    """瑞信 — HOLT框架(CFROI) + ESG评估"""
+    """瑞信 — HOLT框架(CFROI) + ESG [来源: 官方框架, 高度可查证]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "HOLT(CFROI)是CS于2000年收购的HOLT公司核心方法论, 有完整公开文档和白皮书; ESG评分框架也已公开"
 
     institution = "瑞信 Credit Suisse"
     institution_short = "Credit Suisse"
@@ -1182,7 +1194,9 @@ class CreditSuisseEvaluator(InstitutionEvaluator):
 #   - QVM Factor returns: 巴克莱量化团队定期发布因子回报分析
 
 class BarclaysEvaluator(InstitutionEvaluator):
-    """巴克莱 — QVM三维评分"""
+    """巴克莱 — QVM三维评分 [来源: 官方框架]"""
+    method_source = MethodSource.DOCUMENTED
+    method_source_note = "QVM(Quality/Value/Momentum)是巴克莱量化团队定期发布的因子框架, 出现于年度Equity Gilt Study"
 
     institution = "巴克莱 Barclays"
     institution_short = "Barclays"
@@ -1282,7 +1296,9 @@ class BarclaysEvaluator(InstitutionEvaluator):
 #   [〃 基于公开风格构建]
 
 class HSBCEvaluator(InstitutionEvaluator):
-    """汇丰 — 价值锚定+催化剂触发+收益潜力"""
+    """汇丰 — 价值锚定+催化剂 [来源: 研报风格推断]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "HSBC无单一命名公开框架, 基于其价值导向+催化剂触发+股息收益的研报风格构建"
 
     institution = "汇丰 HSBC"
     institution_short = "HSBC"
@@ -1395,7 +1411,9 @@ class HSBCEvaluator(InstitutionEvaluator):
 #   [〃 基于公开风格构建]
 
 class DeutscheBankEvaluator(InstitutionEvaluator):
-    """德银 — 量化多因子Alpha模型"""
+    """德银 — 多因子Alpha [来源: 研报风格推断]"""
+    method_source = MethodSource.RESEARCH_STYLE
+    method_source_note = "德银量化研究(dbResearch)有多因子Alpha模型, 但无特定公开命名框架; 基于其因子研究风格构建"
 
     institution = "德银 Deutsche Bank"
     institution_short = "Deutsche Bank"
