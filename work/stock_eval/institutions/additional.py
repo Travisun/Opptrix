@@ -41,7 +41,7 @@ from .base import (
 #   - ESG/风险: 治理结构, 财务健康
 
 class BofAEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """美银美林 — 质量/价值/动量 [来源: 官方框架]"""
     method_source = MethodSource.PARTIALLY_DOCUMENTED
     method_source_note = "BofA Global Research使用质量/价值/动量因子框架(非单一命名模型), 结合盈利修正模型和收益因子; 具体维度权重为构造"
@@ -69,6 +69,12 @@ class BofAEvaluator(InstitutionEvaluator):
             if y: dims.append(y)
 
             summary = self._make_summary(dims)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -172,7 +178,7 @@ class BofAEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class NomuraEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 6
     """野村证券 — Nomura Compass [来源: 部分可查证]"""
     method_source = MethodSource.PARTIALLY_DOCUMENTED
     method_source_note = "Nomura Compass是野村公开的量化框架概念; 具体维度权重为基于其亚洲股票研究风格构造"
@@ -195,6 +201,10 @@ class NomuraEvaluator(InstitutionEvaluator):
             if sec: dims.append(sec)
 
             summary = self._make_summary(dims)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_macro_con = self._eval_macro_context(code, weight=0.05)
+            if __sig_macro_con: dims.append(__sig_macro_con)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -283,7 +293,7 @@ class NomuraEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class BernsteinEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 6
     """伯恩斯坦 — Franchise方法论 [来源: 官方框架]"""
     method_source = MethodSource.DOCUMENTED
     method_source_note = "Bernstein的Franchise方法论是其核心框架, 聚焦具有持久竞争优势的'特许经营权'公司; 有公开研究文档"
@@ -308,6 +318,10 @@ class BernsteinEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = self._make_summary(dims)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -325,7 +339,7 @@ class BernsteinEvaluator(InstitutionEvaluator):
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
     def _eval_moat(self, code, errors, factors) -> Optional[EvalDimension]:
-        """护城河: 高毛利率+高ROE+稳定性"""
+        """护城河: 高毛利率+高ROE+稳定性+研发壁垒"""
         try:
             fin = self._get_financials(code)
             if not fin: return None
@@ -338,7 +352,28 @@ class BernsteinEvaluator(InstitutionEvaluator):
             elif gm and gm < 20: score -= 1.5; details.append("低毛利无护城河")
             if roe and roe > 20: score += 1.5; details.append(f"ROE{roe:.1f}%优秀")
             elif roe and roe < 8: score -= 1.0; details.append("ROE不足")
-            return EvalDimension("特许经营权", min(10,max(0,score)), 0.30, "; ".join(details))
+            # 研发投入: Bernstein Franchise关注护城河可持续性
+            rd = self._get_rd_investment(code)
+            if rd:
+                try:
+                    rd_ratio = self._safe_float(getattr(rd[0], 'rd_ratio', None))
+                    if rd_ratio is not None:
+                        factors["bern_rd_ratio"] = rd_ratio
+                        if rd_ratio > 10: score += 2.0; details.append(f"高研发{rd_ratio:.1f}%护城河稳固")
+                        elif rd_ratio > 5: score += 1.0
+                        elif rd_ratio < 1: score -= 1.0
+                except Exception:
+                    pass
+            # 主营业务集中度: 专注型公司更有护城河
+            biz = self._get_main_business(code)
+            if biz:
+                try:
+                    top_ratio = self._safe_float(getattr(biz[0], 'revenue_ratio', None))
+                    if top_ratio and top_ratio > 50:
+                        score += 1.0; details.append(f"核心业务占比{top_ratio:.0f}%专注")
+                except Exception:
+                    pass
+            return EvalDimension("特许经营权+研发壁垒", min(10,max(0,score)), 0.30, "; ".join(details))
         except Exception:
             return None
 
@@ -401,7 +436,7 @@ class BernsteinEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class EFundEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 3
+    _planned_dimensions = 6
     """易方达基金 — 质量成长 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 易方达内部选股方法论未公开。此评估器基于其公开投资理念(基金年报/经理访谈)的行为推断构造"
@@ -422,6 +457,12 @@ class EFundEvaluator(InstitutionEvaluator):
             if v: dims.append(v)
 
             summary = self._make_summary(dims)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.08)
+            if __sig_instituti: dims.append(__sig_instituti)
+            __sig_dividend_ = self._eval_dividend_quality(code, weight=0.05)
+            if __sig_dividend_: dims.append(__sig_dividend_)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -499,7 +540,7 @@ class EFundEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class OrientAMEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """东方红资管 — 价值投资 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 东方红内部选股方法论未公开。此评估器基于其公开投资哲学(深度价值+质量护城河)的行为推断构造"
@@ -525,6 +566,12 @@ class OrientAMEvaluator(InstitutionEvaluator):
             if mgmt: dims.append(mgmt)
 
             summary = self._make_summary(dims)
+            __sig_dividend_ = self._eval_dividend_quality(code, weight=0.08)
+            if __sig_dividend_: dims.append(__sig_dividend_)
+            __sig_buyback_s = self._eval_buyback_signal(code, weight=0.05)
+            if __sig_buyback_s: dims.append(__sig_buyback_s)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -614,7 +661,7 @@ class OrientAMEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class HillhouseEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 6
     """高瓴资本 — 长期结构性成长 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 高瓴内部选股方法论未公开。此评估器基于其公开投资哲学(张磊《价值》一书)的行为推断构造"
@@ -640,6 +687,10 @@ class HillhouseEvaluator(InstitutionEvaluator):
             if val: dims.append(val)
 
             summary = self._make_summary(dims)
+            __sig_rd_streng = self._eval_rd_strength(code, weight=0.08)
+            if __sig_rd_streng: dims.append(__sig_rd_streng)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -737,7 +788,7 @@ class HillhouseEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class HotMoneySentimentEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 6
     """游资情绪模型 — 短线博弈视角 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "基于A股短线资金(游资)行为模式统计: 换手率/量比/涨停/振幅/连板等; 非单一交易员模型而是群体行为"
@@ -763,6 +814,10 @@ class HotMoneySentimentEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._make_summary(dims)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -886,6 +941,30 @@ class HotMoneySentimentEvaluator(InstitutionEvaluator):
                     score += 1.5; details.append("小盘活跃 游资偏好")
                 else:
                     score += 0.5
+            # 资金流向: 游资关注主力净流入
+            mf = self._get_money_flow(code)
+            if mf:
+                try:
+                    main_net = self._safe_float(getattr(mf[0], 'main_net_inflow', None))
+                    if main_net is not None:
+                        factors["hot_main_flow"] = main_net
+                        if main_net > 5e6: score += 2.0; details.append("主力净流入 游资跟风")
+                        elif main_net < -5e6: score -= 1.0; details.append("主力净流出")
+                except Exception:
+                    pass
+            # 龙虎榜: 游资交易活跃度
+            dt = self._get_dragon_tiger()
+            if dt:
+                # Check if this stock appears in today's dragon tiger list
+                for entry in dt:
+                    stock_code = getattr(entry, 'code', '') or getattr(entry, 'stock_code', '')
+                    if stock_code == code:
+                        score += 2.0; details.append("龙虎榜上榜 游资活跃")
+                        buy_amt = self._safe_float(getattr(entry, 'buy_amount', None))
+                        sell_amt = self._safe_float(getattr(entry, 'sell_amount', None))
+                        if buy_amt and sell_amt and buy_amt > sell_amt:
+                            score += 1.0; details.append("买入>卖出 游资做多")
+                        break
             return EvalDimension("流动性博弈", min(10,max(0,score)), 0.20, "; ".join(details) or "")
         except Exception:
             return None
@@ -901,7 +980,7 @@ class HotMoneySentimentEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class BridgewaterEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """桥水基金 — 宏观周期视角 [来源: 官方方法论]"""
     method_source = MethodSource.RESEARCH_STYLE
     method_source_note = "桥水是宏观投资机构, '经济机器'框架适用于宏观而非个股; 此处为基于其宏观理念的个股应用构造"
@@ -927,6 +1006,12 @@ class BridgewaterEvaluator(InstitutionEvaluator):
             if liq: dims.append(liq)
 
             summary = self._make_summary(dims)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -944,7 +1029,7 @@ class BridgewaterEvaluator(InstitutionEvaluator):
             return self._make_rating(code, dims, "评估异常", factors, errors)
 
     def _eval_economic_cycle(self, code, errors, factors) -> Optional[EvalDimension]:
-        """经济周期: 用营收增速作为行业景气代理"""
+        """经济周期: 宏观指标+营收增速双重判定 (桥水核心方法论)"""
         try:
             fin = self._get_financials(code)
             if not fin: return None
@@ -960,13 +1045,35 @@ class BridgewaterEvaluator(InstitutionEvaluator):
                 score += 1.0; details.append("行业景气扩张")
             elif rev and rev < -10:
                 score -= 1.5; details.append("行业收缩期")
-
             if pr and pr > 30:
                 score += 1.5; details.append("盈利高增长")
             elif pr and pr < -20:
                 score -= 1.5; details.append("盈利恶化")
 
-            return EvalDimension("经济周期位置", min(10,max(0,score)), 0.35, "; ".join(details) or "")
+            # 宏观指标: CPI/PMI 作为经济周期验证 (桥水核心)
+            cpi = self._get_macro_indicator("CPI")
+            if cpi:
+                try:
+                    cpi_val = self._safe_float(getattr(cpi[0], 'value', None))
+                    if cpi_val:
+                        factors["bw_cpi"] = cpi_val
+                        # 温和通胀=利好，恶性通胀/通缩=利空
+                        if cpi_val < 1: score += 1.0; details.append("低通胀环境利好成长")
+                        elif cpi_val > 5: score -= 1.5; details.append("高通胀环境不利")
+                except Exception:
+                    pass
+            pmi = self._get_macro_indicator("PMI")
+            if pmi:
+                try:
+                    pmi_val = self._safe_float(getattr(pmi[0], 'value', None))
+                    if pmi_val:
+                        factors["bw_pmi"] = pmi_val
+                        if pmi_val > 52: score += 1.5; details.append(f"PMI{pmi_val:.1f}经济扩张")
+                        elif pmi_val < 48: score -= 1.5; details.append(f"PMI{pmi_val:.1f}经济收缩")
+                except Exception:
+                    pass
+
+            return EvalDimension("经济周期+宏观指标", min(10,max(0,score)), 0.35, "; ".join(details) or "")
         except Exception:
             return None
 

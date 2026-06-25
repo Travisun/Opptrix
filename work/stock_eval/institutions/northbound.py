@@ -41,7 +41,7 @@ from .base import (
 
 
 class NorthboundFundEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 5
+    _planned_dimensions = 8
     """北向资金 — 外资投资偏好 [来源: 行为推断]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "基于沪深港通公开持股数据(每日披露)的统计归纳; 非单一机构框架"
@@ -75,6 +75,12 @@ class NorthboundFundEvaluator(InstitutionEvaluator):
             if flow: dims.append(flow)
 
             summary = self._generate_summary(dims)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.08)
+            if __sig_instituti: dims.append(__sig_instituti)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
@@ -231,44 +237,60 @@ class NorthboundFundEvaluator(InstitutionEvaluator):
             return None
 
     def _eval_flow_trend(self, code, errors, factors) -> Optional[EvalDimension]:
-        """外资增持趋势代理 15%"""
+        """外资增持趋势 — 使用北向资金实际流向数据 15%"""
         try:
             k = self._get_kline(code, count=120)
             r = self._get_realtime(code)
-            if not k or len(k) < 60: return None
+            if not r: return None
             score = 5.0; details = []
 
-            # 用量价趋势作为外资关注的代理
-            closes = np.array([d.close for d in k])
-            volumes = np.array([d.volume for d in k], dtype=float)
-
-            # 价格趋势
-            ret_3m = (closes[-1] / closes[-60] - 1) * 100
-            factors["nb_ret_3m"] = round(ret_3m, 2)
-
-            if -5 < ret_3m < 15:
-                score += 1.5; details.append("温和上涨趋势")
-            elif ret_3m > 15:
-                score += 1.0; details.append("强势上涨")
-            elif ret_3m < -15:
-                score -= 1.5; details.append("下跌趋势")
+            # 实际北向资金流向 (取代之前的量价代理!)
+            mf = self._get_money_flow(code)
+            if mf:
+                try:
+                    latest = mf[0]
+                    nb_net = self._safe_float(getattr(latest, 'north_net_inflow', None))
+                    if nb_net is not None:
+                        factors["nb_actual_net_inflow"] = nb_net
+                        if nb_net > 1e7: score += 3.0; details.append(f"北向净流入{abs(nb_net)/1e6:.0f}万")
+                        elif nb_net > 1e6: score += 1.5; details.append("北向小幅流入")
+                        elif nb_net < -1e7: score -= 2.0; details.append(f"北向净流出{abs(nb_net)/1e6:.0f}万")
+                        elif nb_net < -1e6: score -= 1.0; details.append("北向小幅流出")
+                    else:
+                        # fallback to price proxy
+                        if k and len(k) >= 60:
+                            closes = np.array([d.close for d in k])
+                            ret_3m = (closes[-1]/closes[-60]-1)*100
+                            if -5 < ret_3m < 15: score += 1.0
+                            elif ret_3m > 15: score += 1.0
+                except Exception:
+                    pass
+            else:
+                # fallback: price proxy
+                if k and len(k) >= 60:
+                    closes = np.array([d.close for d in k])
+                    ret_3m = (closes[-1]/closes[-60]-1)*100
+                    if -5 < ret_3m < 15: score += 1.0
 
             # 相对强度(相对沪深300)
             try:
                 idx = self._de.index_kline("000300", "daily", count=60)
+                if k and len(k) >= 60:
+                    closes = np.array([d.close for d in k])
+                    ret_3m = (closes[-1]/closes[-60]-1)*100
+                else:
+                    ret_3m = 0
                 if idx and idx.success and idx.data and len(idx.data) >= 2:
                     idx_c = np.array([d.close for d in idx.data])
                     idx_r = (idx_c[-1] / idx_c[0] - 1) * 100
                     rel_strength = ret_3m - idx_r
                     factors["nb_rel_strength"] = round(rel_strength, 2)
-                    if rel_strength > 10:
-                        score += 1.5; details.append("相对大盘强势")
-                    elif rel_strength < -10:
-                        score -= 1.0; details.append("相对大盘弱势")
+                    if rel_strength > 10: score += 1.5; details.append("相对大盘强势")
+                    elif rel_strength < -10: score -= 1.0; details.append("相对大盘弱势")
             except Exception:
                 pass
 
-            return EvalDimension("外资偏好趋势", min(10, max(0, score)), 0.15,
+            return EvalDimension("北向资金趋势(实际)", min(10, max(0, score)), 0.15,
                                  "; ".join(details) if details else "")
         except Exception:
             return None

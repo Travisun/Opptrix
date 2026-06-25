@@ -40,7 +40,7 @@ from .base import (
 # 四维: 成长性(30%) / 盈利能力(25%) / 估值(25%) / 质量(20%)
 
 class CICCEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """中金公司 — 多维评分 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 中金内部选股方法论未公开。此评估器基于中金研报风格的行为推断构造"
@@ -66,6 +66,12 @@ class CICCEvaluator(InstitutionEvaluator):
 
             summary = self._generate_summary(dims)
             # 数据质量评估
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
             _has_r = bool(self._get_realtime(code))
@@ -187,7 +193,7 @@ class CICCEvaluator(InstitutionEvaluator):
 # 中信: 综合评分 = 基本面(30%)+估值(25%)+动量(20%)+市场情绪(15%)+风险(10%)
 
 class CITICEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """中信证券 — 多维量化评分 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 中信内部选股方法论未公开。此评估器基于其研报风格的行为推断构造"
@@ -220,6 +226,12 @@ class CITICEvaluator(InstitutionEvaluator):
 
             summary = self._generate_summary(dims)
             # 数据质量评估
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
             _has_r = bool(self._get_realtime(code))
@@ -343,7 +355,7 @@ class CITICEvaluator(InstitutionEvaluator):
 # 华泰: 综合Alpha = 0.3*价值 + 0.25*质量 + 0.20*成长 + 0.15*一致预期 + 0.10*技术
 
 class HuataiEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 5
+    _planned_dimensions = 7
     """华泰证券 — 多因子模型 [来源: 研报风格]"""
     method_source = MethodSource.RESEARCH_STYLE
     method_source_note = "华泰金工组公开发表过多因子系列研报(方向真实); 具体维度划分和权重为此处工程构造"
@@ -371,6 +383,10 @@ class HuataiEvaluator(InstitutionEvaluator):
 
             summary = self._generate_summary(dims)
             # 数据质量评估
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
             _has_r = bool(self._get_realtime(code))
@@ -478,7 +494,7 @@ class HuataiEvaluator(InstitutionEvaluator):
 # 招商: 护城河(30%)+成长(25%)+财务健康(25%)+估值(20%)
 
 class CMSEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """招商证券 — 核心资产评分 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 招商内部选股方法论未公开。此评估器基于其核心资产研报风格的行为推断构造"
@@ -504,6 +520,12 @@ class CMSEvaluator(InstitutionEvaluator):
 
             summary = self._generate_summary(dims)
             # 数据质量评估
+            __sig_dividend_ = self._eval_dividend_quality(code, weight=0.08)
+            if __sig_dividend_: dims.append(__sig_dividend_)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
             _has_r = bool(self._get_realtime(code))
@@ -610,7 +632,7 @@ class CMSEvaluator(InstitutionEvaluator):
 # ═══════════════════════════════════════════════════════════════════
 
 class GuotaiJunanEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 4
+    _planned_dimensions = 7
     """国泰君安 — CAPM+多因子 [来源: 研报风格]"""
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 国君内部选股方法论未公开。此评估器基于其研报风格的行为推断构造"
@@ -636,6 +658,12 @@ class GuotaiJunanEvaluator(InstitutionEvaluator):
 
             summary = self._generate_summary(dims)
             # 数据质量评估
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))
             _has_r = bool(self._get_realtime(code))

@@ -23,7 +23,7 @@ from .base import (
 
 
 class TechnicalIndicatorEvaluator(InstitutionEvaluator):
-    _planned_dimensions = 6
+    _planned_dimensions = 8
     """技术指标评级 [来源: 标准技术分析]"""
     method_source = MethodSource.DOCUMENTED
     method_source_note = "基于通用技术指标(MA/MACD/RSI/布林/OBV/ATR等), 非任何机构专属"
@@ -60,6 +60,10 @@ class TechnicalIndicatorEvaluator(InstitutionEvaluator):
             if sentiment: dims.append(sentiment)
 
             summary = self._generate_summary(dims)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
             # 数据质量评估
             _has_k = bool(self._get_kline(code, count=250))
             _has_f = bool(self._get_financials(code))

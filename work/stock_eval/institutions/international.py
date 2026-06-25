@@ -52,7 +52,7 @@ from .base import (
 
 class GoldmanSachsEvaluator(InstitutionEvaluator):
     """高盛 — GAMES框架 [DOCUMENTED: GS公开研究报告框架]"""
-    _planned_dimensions = 6
+    _planned_dimensions = 15
     method_source = MethodSource.DOCUMENTED
     method_source_note = (
         "GAMES是GS公开的研究报告框架(出现在GS研究报告方法论声明中); "
@@ -91,6 +91,18 @@ class GoldmanSachsEvaluator(InstitutionEvaluator):
             if qgv: dims.append(qgv)
 
             # 数据质量
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
             k = self._get_kline(code, count=250)
             f = self._get_financials(code)
             r = self._get_realtime(code)
@@ -123,9 +135,23 @@ class GoldmanSachsEvaluator(InstitutionEvaluator):
             if len(profits) >= 3:
                 pr_cagr = (profits[0] / profits[-1]) ** (1/(len(profits)-1)) - 1
                 factors["gs_profit_cagr"] = round(pr_cagr*100, 2)
-                if pr_cagr > 0.25: score += 2.5; details.append(f"利润CAGR {pr_cagr*100:.1f}%")
+                if pr_cagr > 0.25: score += 2.0; details.append(f"利润CAGR {pr_cagr*100:.1f}%")
                 elif pr_cagr > 0.15: score += 1.5
                 elif pr_cagr < 0: score -= 2.0; details.append("利润负增长")
+            # 业绩预告: 前瞻性增长信号 (GS关注)
+            pf = self._get_perf_forecast(code)
+            if pf:
+                try:
+                    latest = pf[0]
+                    forecast_type = getattr(latest, 'forecast_type', '')
+                    pr_change = self._safe_float(getattr(latest, 'profit_change_pct', None))
+                    if pr_change is not None:
+                        factors["gs_forecast_profit_change"] = pr_change
+                        if pr_change > 50: score += 1.5; details.append(f"业绩预告利润大增+{pr_change:.0f}%")
+                        elif pr_change > 20: score += 1.0
+                        elif pr_change < -30: score -= 1.5; details.append("业绩预告预警")
+                except Exception:
+                    pass
             return EvalDimension("Growth 成长性", min(10, max(1, score)), 0.25,
                                  "; ".join(details) if details else "数据有限")
         except Exception as e:
@@ -273,7 +299,7 @@ class GoldmanSachsEvaluator(InstitutionEvaluator):
 
 class MorganStanleyEvaluator(InstitutionEvaluator):
     """摩根士丹利 — EQS模型 [PARTIAL: EQS真实，其余维度为基于研报风格构造]"""
-    _planned_dimensions = 4
+    _planned_dimensions = 8
     method_source = MethodSource.PARTIALLY_DOCUMENTED
     method_source_note = (
         "EQS(Earnings Quality Score)是MS量化团队公开评分模型(真实); "
@@ -302,6 +328,10 @@ class MorganStanleyEvaluator(InstitutionEvaluator):
             alpha = self._eval_alpha(code, errors, factors)
             if alpha: dims.append(alpha)
 
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
+            __sig_instituti = self._eval_institutional_activity(code, weight=0.05)
+            if __sig_instituti: dims.append(__sig_instituti)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -432,7 +462,7 @@ class MorganStanleyEvaluator(InstitutionEvaluator):
 
 class JPMorganEvaluator(InstitutionEvaluator):
     """摩根大通 — CAR框架 [DOCUMENTED: JPM研究报告标准框架]"""
-    _planned_dimensions = 3
+    _planned_dimensions = 9
     method_source = MethodSource.DOCUMENTED
     method_source_note = "CAR(Catalysts/Analysis/Risk-Reward)是JPMorgan研究报告标准化框架(已公开)"
 
@@ -455,6 +485,12 @@ class JPMorganEvaluator(InstitutionEvaluator):
             rr = self._eval_risk_reward(code, errors, factors)
             if rr: dims.append(rr)
 
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.08)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_insider_c = self._eval_insider_confidence(code, weight=0.05)
+            if __sig_insider_c: dims.append(__sig_insider_c)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -491,6 +527,23 @@ class JPMorganEvaluator(InstitutionEvaluator):
                 avg_vol = np.mean(volumes[:-1])
                 if avg_vol > 0 and volumes[-1]/avg_vol > 1.5:
                     score += 1.5; details.append("量能突破催化")
+            # 新闻情绪催化 (JPM关注催化剂事件)
+            sent = self._get_sentiment(code)
+            if sent:
+                try:
+                    s = sent[0]
+                    sent_score = self._safe_float(getattr(s, 'sentiment_score', None))
+                    if sent_score is not None:
+                        factors["jpm_sentiment"] = sent_score
+                        if sent_score > 0.6: score += 1.5; details.append("正面新闻情绪催化")
+                        elif sent_score < -0.3: score -= 1.5; details.append("负面新闻情绪压制")
+                except Exception:
+                    pass
+            news_data = self._get_news(code, limit=5)
+            if news_data:
+                news_count = len(news_data)
+                factors["jpm_news_volume"] = news_count
+                if news_count > 5: score += 0.5; details.append(f"近期{news_count}条新闻关注")
             return EvalDimension("Catalysts 催化剂", min(10, max(1, score)), 0.35,
                                  "; ".join(details) if details else "无明显催化")
         except Exception:
@@ -561,7 +614,7 @@ class JPMorganEvaluator(InstitutionEvaluator):
 
 class UBSEvaluator(InstitutionEvaluator):
     """瑞银 — K-Ward/D [PARTIAL: K-Ward真实但评分规则不公开]"""
-    _planned_dimensions = 4
+    _planned_dimensions = 10
     method_source = MethodSource.PARTIALLY_DOCUMENTED
     method_source_note = "K-Ward/D是UBS内部使用的评级信号系统(真实存在); 具体评分规则不公开"
 
@@ -582,6 +635,12 @@ class UBSEvaluator(InstitutionEvaluator):
             r = self._eval_risk_ubs(code, errors, factors)
             if r: dims.append(r)
 
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.08)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_macro_con = self._eval_macro_context(code, weight=0.08)
+            if __sig_macro_con: dims.append(__sig_macro_con)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -691,7 +750,7 @@ class UBSEvaluator(InstitutionEvaluator):
 
 class CitiEvaluator(InstitutionEvaluator):
     """花旗 — Q-Grade [DOCUMENTED: 花旗量化研究组公开评分系统]"""
-    _planned_dimensions = 5
+    _planned_dimensions = 9
     method_source = MethodSource.DOCUMENTED
     method_source_note = "Q-Grade是花旗量化研究组公开的评分框架; Earnings Revision是花旗核心信号来源"
 
@@ -717,6 +776,10 @@ class CitiEvaluator(InstitutionEvaluator):
             mom = self._eval_momentum_qgrade(code, errors, factors)
             if mom: dims.append(mom)
 
+            __sig_news_sent = self._eval_news_sentiment(code, weight=0.05)
+            if __sig_news_sent: dims.append(__sig_news_sent)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -787,7 +850,7 @@ class CitiEvaluator(InstitutionEvaluator):
             return None
 
     def _eval_earnings_revision(self, code, errors, factors):
-        """Earnings Revision — 利润率趋势 + EPS趋势 (花旗核心差异化)"""
+        """Earnings Revision — 基于历史趋势+业绩预告 (花旗核心差异化)"""
         try:
             fin = self._get_financials(code)
             if not fin or len(fin) < 3: return None
@@ -797,18 +860,30 @@ class CitiEvaluator(InstitutionEvaluator):
             if len(margins) >= 3:
                 trend = margins[0] - margins[-1]
                 factors["citi_margin_trend"] = round(trend, 2)
-                if trend > 5: score += 2.0; details.append("利润率显著上修")
+                if trend > 5: score += 1.5; details.append("利润率显著上修")
                 elif trend > 2: score += 1.0; details.append("利润率趋势改善")
                 elif trend < -5: score -= 2.0; details.append("利润率下修")
                 elif trend < -2: score -= 1.0
             eps_vals = [self._safe_float(f.eps) for f in fin[:4] if f.eps]
             eps_vals = [e for e in eps_vals if e is not None]
             if len(eps_vals) >= 3:
-                for i in range(len(eps_vals)-1):
-                    if eps_vals[i] > eps_vals[i+1]:
-                        score += 0.5
                 if eps_vals[0] > eps_vals[-1]: score += 1.0; details.append("EPS上修趋势")
-                else: score -= 1.0
+                else: score -= 0.5
+            # 业绩预告: 真实盈利修正信号 (花旗核心)
+            pf = self._get_perf_forecast(code)
+            if pf:
+                try:
+                    latest = pf[0]
+                    ftype = getattr(latest, 'forecast_type', '')
+                    pr_chg = self._safe_float(getattr(latest, 'profit_change_pct', None))
+                    if pr_chg is not None and pr_chg > 0:
+                        score += 2.0; details.append(f"业绩预告利润上修+{pr_chg:.0f}%")
+                        factors["citi_forecast_rev"] = pr_chg
+                    elif pr_chg is not None and pr_chg < 0:
+                        score -= 2.0; details.append(f"业绩预告利润下修{pr_chg:.0f}%")
+                        factors["citi_forecast_rev"] = pr_chg
+                except Exception:
+                    pass
             return EvalDimension("Earnings Revision 盈利修正", min(10, max(1, score)), 0.25,
                                  "; ".join(details) if details else "")
         except Exception:
@@ -851,7 +926,7 @@ class CitiEvaluator(InstitutionEvaluator):
 
 class CreditSuisseEvaluator(InstitutionEvaluator):
     """瑞信 — HOLT/CFROI [DOCUMENTED: HOLT白皮书+Bartley J. Madden CFROI方法论]"""
-    _planned_dimensions = 3
+    _planned_dimensions = 9
     method_source = MethodSource.DOCUMENTED
     method_source_note = (
         "HOLT(CFROI)框架由Bartley J. Madden创立(CS 2000年收购); "
@@ -877,6 +952,12 @@ class CreditSuisseEvaluator(InstitutionEvaluator):
             esg = self._eval_esg_proxy(code, errors, factors)
             if esg: dims.append(esg)
 
+            __sig_buyback_s = self._eval_buyback_signal(code, weight=0.05)
+            if __sig_buyback_s: dims.append(__sig_buyback_s)
+            __sig_rd_streng = self._eval_rd_strength(code, weight=0.05)
+            if __sig_rd_streng: dims.append(__sig_rd_streng)
+            __sig_dividend_ = self._eval_dividend_quality(code, weight=0.05)
+            if __sig_dividend_: dims.append(__sig_dividend_)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -983,7 +1064,7 @@ class CreditSuisseEvaluator(InstitutionEvaluator):
 
 class BarclaysEvaluator(InstitutionEvaluator):
     """巴克莱 — QVM [DOCUMENTED: Barclays Equity Gilt Study]"""
-    _planned_dimensions = 3
+    _planned_dimensions = 7
     method_source = MethodSource.DOCUMENTED
     method_source_note = "QVM(Quality/Value/Momentum)是巴克莱量化团队公开因子框架(年度Equity Gilt Study)"
 
@@ -1002,6 +1083,10 @@ class BarclaysEvaluator(InstitutionEvaluator):
             m = self._eval_momentum(code, errors, factors)
             if m: dims.append(m)
 
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -1097,7 +1182,7 @@ class BarclaysEvaluator(InstitutionEvaluator):
 
 class HSBCEvaluator(InstitutionEvaluator):
     """汇丰 — 价值代理 [BEHAVIORAL: HSBC无公开命名评估框架]"""
-    _planned_dimensions = 3
+    _planned_dimensions = 9
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ HSBC无公开个股评估框架。此评估器为基于HSBC价值导向研报风格的行为推断构造"
 
@@ -1116,6 +1201,12 @@ class HSBCEvaluator(InstitutionEvaluator):
             inc = self._eval_income(code, errors, factors)
             if inc: dims.append(inc)
 
+            __sig_dividend_ = self._eval_dividend_quality(code, weight=0.08)
+            if __sig_dividend_: dims.append(__sig_dividend_)
+            __sig_buyback_s = self._eval_buyback_signal(code, weight=0.05)
+            if __sig_buyback_s: dims.append(__sig_buyback_s)
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
@@ -1203,7 +1294,7 @@ class HSBCEvaluator(InstitutionEvaluator):
 
 class DeutscheBankEvaluator(InstitutionEvaluator):
     """德银 — 多因子代理 [BEHAVIORAL: DB无公开命名评估框架]"""
-    _planned_dimensions = 5
+    _planned_dimensions = 9
     method_source = MethodSource.BEHAVIORAL
     method_source_note = "⚠️ 德银无公开个股评估框架。此评估器为基于DB量化研究风格的行为推断构造"
 
@@ -1226,6 +1317,10 @@ class DeutscheBankEvaluator(InstitutionEvaluator):
             size = self._eval_size_alpha(code, errors, factors)
             if size: dims.append(size)
 
+            __sig_money_flo = self._eval_money_flow_signal(code, weight=0.05)
+            if __sig_money_flo: dims.append(__sig_money_flo)
+            __sig_margin_ac = self._eval_margin_activity(code, weight=0.05)
+            if __sig_margin_ac: dims.append(__sig_margin_ac)
             kline = self._get_kline(code, count=250)
             fin = self._get_financials(code)
             rt = self._get_realtime(code)
