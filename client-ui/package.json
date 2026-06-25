@@ -1,0 +1,31 @@
+{
+  "name": "stock-research-client",
+  "version": "0.3.0",
+  "private": true,
+  "main": "electron/main.cjs",
+  "scripts": {
+    "build": "node build.mjs",
+    "watch": "node build.mjs --watch",
+    "electron:dev": "node build.mjs && electron ."
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "esbuild": "^0.24.0",
+    "@fluentui/react-components": "^9.59.0",
+    "@fluentui/react-icons": "^2.0.274"
+  },
+  "build": {
+    "appId": "com.stock-research.app",
+    "productName": "Stock Research",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "directories": {
+      "output": "release"
+    }
+  }
+}
