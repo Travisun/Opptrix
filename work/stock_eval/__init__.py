@@ -30,6 +30,7 @@ from . import screening
 from . import utils
 from . import analysis
 from . import backtest
+from . import institutions
 
 from .core.engine import EvaluationEngine
 from .core.registry import REGISTRY, register_factor
@@ -41,6 +42,26 @@ from .scoring.outliers import clean_factors, winsorize
 from .scoring.regime import MarketRegimeDetector, RegimeWeightAdjuster, MarketRegime
 from .analysis.portfolio import PortfolioAnalyzer
 
+# 机构评估模块顶层导出
+from .institutions import (
+    # Base
+    InstitutionEvaluator, InstitutionRating, RatingLevel, EvalDimension,
+    # International
+    GoldmanSachsEvaluator, MorganStanleyEvaluator, JPMorganEvaluator,
+    UBSEvaluator, CitiEvaluator, CreditSuisseEvaluator,
+    BarclaysEvaluator, HSBCEvaluator, DeutscheBankEvaluator,
+    # Domestic
+    CICCEvaluator, CITICEvaluator, HuataiEvaluator,
+    CMSEvaluator, GuotaiJunanEvaluator,
+    # National
+    SocialSecurityEvaluator, HuijinEvaluator,
+    CSFEvaluator, BigFundEvaluator,
+    # Other
+    NorthboundFundEvaluator, TechnicalIndicatorEvaluator,
+    # Consolidated
+    ConsolidatedRating, ConsolidatedReport, ConsolidatedEngine, ALL_EVALUATORS,
+)
+
 __all__ = [
     "EvaluationEngine", "REGISTRY", "register_factor",
     "SnapshotStore", "StoredSnapshot",
@@ -50,6 +71,18 @@ __all__ = [
     "clean_factors", "winsorize",
     "MarketRegimeDetector", "RegimeWeightAdjuster", "MarketRegime",
     "PortfolioAnalyzer",
+    # Institutions
+    "InstitutionEvaluator", "InstitutionRating", "RatingLevel", "EvalDimension",
+    "GoldmanSachsEvaluator", "MorganStanleyEvaluator", "JPMorganEvaluator",
+    "UBSEvaluator", "CitiEvaluator", "CreditSuisseEvaluator",
+    "BarclaysEvaluator", "HSBCEvaluator", "DeutscheBankEvaluator",
+    "CICCEvaluator", "CITICEvaluator", "HuataiEvaluator",
+    "CMSEvaluator", "GuotaiJunanEvaluator",
+    "SocialSecurityEvaluator", "HuijinEvaluator",
+    "CSFEvaluator", "BigFundEvaluator",
+    "NorthboundFundEvaluator", "TechnicalIndicatorEvaluator",
+    "ConsolidatedRating", "ConsolidatedReport", "ConsolidatedEngine",
+    "ALL_EVALUATORS",
 ]
 
-__version__ = "0.2.0"
+__version__ = "0.3.0"

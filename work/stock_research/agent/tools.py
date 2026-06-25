@@ -109,6 +109,30 @@ class ToolRegistry:
                 category="通用",
             ),
             ToolDef(
+                name="institution_rating",
+                description="多机构综合评级：运行20个机构评估器(高盛/大摩/小摩/瑞银/花旗/瑞信/巴克莱/汇丰/德银/中金/中信/华泰/招商/国君/社保/汇金/证金/大基金/北向/技术面)，输出各自评级与信心评分",
+                parameters=[
+                    {"name": "code", "type": "string", "required": True,
+                     "description": "股票代码，如 600519"},
+                    {"name": "groups", "type": "list", "required": False,
+                     "description": "可选: 选择机构组 ['国际投行','国内券商','国家队','其他']"},
+                ],
+                handler=lambda code, groups=None:
+                    h.institution_rating(code, groups),
+                category="个股分析",
+            ),
+            ToolDef(
+                name="institution_report",
+                description="生成完备的多机构评级报告文本，包含20家机构的详细评级、信心评分和评估维度",
+                parameters=[
+                    {"name": "code", "type": "string", "required": True,
+                     "description": "股票代码，如 600519"},
+                ],
+                handler=lambda code: h.institution_report_text(code),
+                category="报告",
+            ),
+
+            ToolDef(
                 name="get_closing_report",
                 description="生成收盘报告：当日大盘表现、资金流向、涨停跌停、龙虎榜",
                 parameters=[],

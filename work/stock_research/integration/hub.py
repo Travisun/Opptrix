@@ -383,6 +383,67 @@ class ResearchHub:
                 success=False, message=f"搜索失败: {e}"
             )
 
+
+    def institution_rating(self, code: str,
+                          groups: Optional[List[str]] = None
+                          ) -> ResearchResult:
+        """多机构综合评级 — 运行20个机构评估器"""
+        import time
+        t0 = time.time()
+        try:
+            from stock_eval.institutions.consolidated import ConsolidatedEngine
+            engine = ConsolidatedEngine(self.de)
+            result = engine.evaluate(code, groups=groups)
+            report = ConsolidatedReport(result)
+            elapsed = time.time() - t0
+            return ResearchResult(
+                success=True,
+                data={
+                    "code": result.code,
+                    "name": result.name,
+                    "avg_confidence": result.avg_confidence,
+                    "consensus_rating": result.consensus_rating.value,
+                    "consensus_rating_cn": result.consensus_rating.label_cn,
+                    "rating_distribution": result.rating_distribution,
+                    "bullish_count": result.bullish_count,
+                    "bearish_count": result.bearish_count,
+                    "neutral_count": result.neutral_count,
+                    "group_stats": result.group_stats,
+                    "ratings": [r.to_dict() for r in result.ratings],
+                },
+                message=(f"{result.name}({result.code}) "
+                         f"机构共识: {result.consensus_rating.label_cn} "
+                         f"信心{result.avg_confidence:.1f}/10"),
+                elapsed=elapsed,
+            )
+        except Exception as e:
+            return ResearchResult(
+                success=False, message=f"机构评级失败: {e}"
+            )
+
+    def institution_report_text(self, code: str,
+                                groups: Optional[List[str]] = None
+                                ) -> ResearchResult:
+        """多机构综合评级 — 返回文本报告"""
+        import time
+        t0 = time.time()
+        try:
+            from stock_eval.institutions.consolidated import ConsolidatedEngine
+            engine = ConsolidatedEngine(self.de)
+            result = engine.evaluate(code, groups=groups)
+            text = result.to_report().format_text()
+            elapsed = time.time() - t0
+            return ResearchResult(
+                success=True,
+                data={"text": text, "code": code, "name": result.name},
+                message=f"{result.name} 机构评级报告生成完成",
+                elapsed=elapsed,
+            )
+        except Exception as e:
+            return ResearchResult(
+                success=False, message=f"机构评级报告失败: {e}"
+            )
+
     def get_latest_evaluation(self, code: str) -> ResearchResult:
         """查看最近的评估记录"""
         stored = self.store.get_latest(code)
