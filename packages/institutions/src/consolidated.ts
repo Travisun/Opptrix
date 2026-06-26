@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
-import type { InstitutionRatingItem, RatingLevel } from '@ni-k/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { InstitutionRatingItem, RatingLevel } from '@inno-a-stock/shared'
 import { ConfigurableEvaluator, type EvaluatorConfig, ratingFromConfidence } from './base.js'
 import { EVALUATOR_CONFIGS } from './registry.js'
 

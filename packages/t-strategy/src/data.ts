@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
-import type { StockKline } from '@ni-k/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { StockKline } from '@inno-a-stock/shared'
 import type { StrategyData } from './base.js'
 import { computeAll } from './indicators.js'
 

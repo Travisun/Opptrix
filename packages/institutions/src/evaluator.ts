@@ -1,7 +1,7 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
 import type {
   EvalDimension, InstitutionRatingItem, MethodSource, RatingLevel,
-} from '@ni-k/shared'
+} from '@inno-a-stock/shared'
 
 const METHOD_WEIGHT: Record<MethodSource, number> = {
   documented: 1.0,

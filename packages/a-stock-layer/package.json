@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/a-stock-layer",
+  "name": "@inno-a-stock/a-stock-layer",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -15,7 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
-    "@ni-k/shared": "*",
+    "@inno-a-stock/shared": "*",
     "nodetdx": "^4.2.6"
   }
 }

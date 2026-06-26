@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
-import type { EvalDimension, InstitutionRatingItem, MethodSource } from '@ni-k/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { EvalDimension, InstitutionRatingItem, MethodSource } from '@inno-a-stock/shared'
 import { buildQuality, makeRating, ratingFromConfidence } from './evaluator.js'
 
 export { ratingFromConfidence }

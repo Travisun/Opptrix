@@ -1,5 +1,5 @@
-import type { StockSnapshot } from '@ni-k/shared'
-import type { AshareEngine } from '@ni-k/a-stock-layer'
+import type { StockSnapshot } from '@inno-a-stock/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
 import { EvaluationEngine } from '../core/engine.js'
 import { createScorecard } from '../scoring/scorecard.js'
 import { REGISTRY } from '../core/registry.js'

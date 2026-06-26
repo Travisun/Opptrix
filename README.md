@@ -67,15 +67,25 @@ npm start                # 单端口 http://127.0.0.1:8711/（API + SPA）
 
 端口可通过环境变量 `STOCK_RESEARCH_PORT` 修改（默认 `8711`）。
 
+### Docker 部署
+
+```bash
+cp .env.example .env   # 填入 LLM_API_KEY
+docker compose up -d --build
+# → http://localhost:8711
+```
+
+数据持久化：`apps/server/data`（配置）、`~/.a_stock_layer`（账本/Writer）。
+
 ## 配置
 
 | 位置 | 用途 |
 |------|------|
-| `apps/server/data/config.json` | LLM provider / model / API Key、默认评分卡 |
+| `apps/server/data/config.json` | LLM provider / model / API Key、默认评分卡（可被环境变量覆盖） |
 | `~/.a_stock_layer/portfolio.json` | 交易账本持久化 |
 | `~/.a_stock_layer/writer-config.yaml` | 微信写作配置（可选） |
 
-在 Web UI **设置** 页可修改 LLM 配置（写入 `config.json`）。
+在 Web UI **设置** 页或 `.env` / 环境变量中配置 LLM（`LLM_API_KEY` 优先于本地 json）。
 
 ## API 入口
 

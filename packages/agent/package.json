@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/agent",
+  "name": "@inno-a-stock/agent",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@ni-k/shared": "*",
-    "@ni-k/research-hub": "*"
+    "@inno-a-stock/shared": "*",
+    "@inno-a-stock/research-hub": "*"
   }
 }

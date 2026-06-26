@@ -120,7 +120,7 @@ export default function Settings() {
       <SectionCard>
         <Text size={200}>innoAStock v0.6.0</Text>
         <Text size={100} style={{ color: '#888' }}>
-          数据源: a_stock_layer (13源自动回退) · 40因子 · 28机构评估 · 9策略
+          数据源: a_stock_layer (13源) · 因子引擎 · 28机构 · 9策略 · Function Calling Agent
         </Text>
         <Text size={100} style={{ color: '#888' }}>
           开发: npm run dev (Node :8711) + npm run dev:web (5173)

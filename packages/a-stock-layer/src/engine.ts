@@ -1,6 +1,6 @@
 import type {
   FinancialSummary, QueryResult, StockKline, StockListItem, StockRealtime,
-} from '@ni-k/shared'
+} from '@inno-a-stock/shared'
 import { CACHE_TYPE, Capability } from './core/capabilities.js'
 import { Cache } from './core/cache.js'
 import { DriverRegistry } from './core/registry.js'

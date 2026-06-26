@@ -1,4 +1,4 @@
-import type { StockSnapshot } from '@ni-k/shared'
+import type { StockSnapshot } from '@inno-a-stock/shared'
 import { REGISTRY } from '../core/registry.js'
 import { TEMPLATES } from './templates.js'
 

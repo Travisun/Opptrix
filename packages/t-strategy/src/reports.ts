@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
 import { computeAll, lastRow } from './indicators.js'
 import { SignalEngine, verifyStrategy } from './signal-engine.js'
 import { listStrategies } from './strategies.js'

@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
 
 const CN_INDICES: Record<string, string> = {
   '000001': '上证指数', '399001': '深证成指', '399006': '创业板指',

@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/stock-writer",
+  "name": "@inno-a-stock/stock-writer",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -7,6 +7,6 @@
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json && cp -r assets dist/" },
-  "dependencies": { "@ni-k/a-stock-layer": "*", "@ni-k/shared": "*", "js-yaml": "^4.1.0", "marked": "^15.0.6" },
+  "dependencies": { "@inno-a-stock/a-stock-layer": "*", "@inno-a-stock/shared": "*", "js-yaml": "^4.1.0", "marked": "^15.0.6" },
   "devDependencies": { "@types/js-yaml": "^4.0.9" }
 }

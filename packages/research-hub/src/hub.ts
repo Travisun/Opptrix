@@ -1,15 +1,15 @@
-import { AshareEngine } from '@ni-k/a-stock-layer'
-import { ConsolidatedEngine, formatInstitutionReport } from '@ni-k/institutions'
-import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@ni-k/skills'
+import { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
+import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
 import {
   EvaluationEngine, createScorecard, Screener, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
-} from '@ni-k/stock-eval'
-import { ok, fail, type ResearchResult } from '@ni-k/shared'
-import { quickAssess, verifyStrategy } from '@ni-k/t-strategy'
-import { fetchArticleData, listArticleTypes, StockWriter, listPersonas, formatArticle, publishArticle, loadWriterConfig, saveWriterConfig, listHistory, listThemes } from '@ni-k/stock-writer'
+} from '@inno-a-stock/stock-eval'
+import { ok, fail, type ResearchResult } from '@inno-a-stock/shared'
+import { quickAssess, verifyStrategy } from '@inno-a-stock/t-strategy'
+import { fetchArticleData, listArticleTypes, StockWriter, listPersonas, formatArticle, publishArticle, loadWriterConfig, saveWriterConfig, listHistory, listThemes } from '@inno-a-stock/stock-writer'
 import { serializeInstitutionData } from './serialize.js'
-import { formatVerificationReport, generateStrategyReport } from '@ni-k/t-strategy'
+import { formatVerificationReport, generateStrategyReport } from '@inno-a-stock/t-strategy'
 
 /** Unified research hub — single entry for feature dispatch */
 export class ResearchHub {
@@ -170,13 +170,13 @@ export class ResearchHub {
   }
 
   private async writerFetch(code: string, type: string, t0: number) {
-    const data = await fetchArticleData(this.de, code, type as import('@ni-k/stock-writer').ArticleType)
+    const data = await fetchArticleData(this.de, code, type as import('@inno-a-stock/stock-writer').ArticleType)
     return ok(data, `${data.name} ${data.templateName} 数据采集`, t0)
   }
 
   private async writerPrompt(code: string, type: string, persona: string | undefined, t0: number) {
     const writer = new StockWriter(this.de)
-    const { data, prompt } = await writer.prepare(code, type as import('@ni-k/stock-writer').ArticleType, { persona })
+    const { data, prompt } = await writer.prepare(code, type as import('@inno-a-stock/stock-writer').ArticleType, { persona })
     return ok({ data, prompt, meta: prompt.meta }, `${data.name} 写作 Prompt`, t0)
   }
 

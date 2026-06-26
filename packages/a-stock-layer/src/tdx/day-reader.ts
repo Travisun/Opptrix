@@ -1,6 +1,6 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import type { StockKline } from '@ni-k/shared'
+import type { StockKline } from '@inno-a-stock/shared'
 import { normalizeCode } from '../utils/helpers.js'
 
 const COEFFICIENTS: Record<string, [number, number]> = {

@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
-import type { FactorResult, StockSnapshot } from '@ni-k/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { FactorResult, StockSnapshot } from '@inno-a-stock/shared'
 import { REGISTRY } from './registry.js'
 
 export class EvaluationEngine {

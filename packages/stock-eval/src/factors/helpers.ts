@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
-import type { FactorMeta, FinancialSummary } from '@ni-k/shared'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { FactorMeta, FinancialSummary } from '@inno-a-stock/shared'
 
 export function m(
   name: string,

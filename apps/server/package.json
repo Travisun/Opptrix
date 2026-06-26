@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/server",
+  "name": "@inno-a-stock/server",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -10,9 +10,9 @@
   },
   "dependencies": {
     "@fastify/static": "^8.0.0",
-    "@ni-k/agent": "*",
-    "@ni-k/research-hub": "*",
-    "@ni-k/stock-eval": "*",
+    "@inno-a-stock/agent": "*",
+    "@inno-a-stock/research-hub": "*",
+    "@inno-a-stock/stock-eval": "*",
     "fastify": "^5.2.0"
   },
   "devDependencies": {

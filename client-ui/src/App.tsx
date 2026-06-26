@@ -14,6 +14,7 @@ import MarketReport from './pages/MarketReport'
 import IndustryMining from './pages/IndustryMining'
 import Backtest from './pages/Backtest'
 import StockWriter from './pages/StockWriter'
+import AgentChat from './pages/AgentChat'
 import Settings from './pages/Settings'
 
 const useStyles = makeStyles({
@@ -76,6 +77,7 @@ const useStyles = makeStyles({
 })
 
 const navItems: NavItem[] = [
+  { id: 'agent', label: 'AI 助手', icon: 'chat' },
   { id: 'diagnosis', label: '个股诊断', icon: 'search' },
   { id: 'screening', label: '智能选股', icon: 'filter' },
   { id: 'institution_rating', label: '机构群评', icon: 'star' },
@@ -98,6 +100,7 @@ const iconMap: Record<string, React.ReactNode> = {
   map: <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M20.5 3l-.16.03L15 5.1 9 3 3.36 4.9c-.21.07-.36.25-.36.48V20.5c0 .28.22.5.5.5l.16-.03L9 18.9l6 2.1 5.64-1.9c.21-.07.36-.25.36-.48V3.5c0-.28-.22-.5-.5-.5M15 19l-6-2.11V5l6 2.11z"/></svg>,
   beaker: <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M22 3H2l8 9.5V21h4v-8.5L22 3m-7.5 7h-5l-2.2-2.5h9.4L14.5 10Z"/></svg>,
   edit: <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>,
+  chat: <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 3c5.5 0 10 3.58 10 8s-4.5 8-10 8a10.3 10.3 0 0 1-2.55-.32l-4.45 1.48 1.49-3.32C5.56 15.85 2 12.42 2 8s4.5-5 10-5"/></svg>,
   settings: <svg width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M19.14 12.94c.04-.3.06-.61.06-.94 0-.32-.02-.64-.07-.94l2.03-1.58a.49.49 0 0 0 .12-.61l-1.92-3.32a.488.488 0 0 0-.59-.22l-2.39.96c-.5-.38-1.03-.7-1.62-.94l-.36-2.54a.484.484 0 0 0-.48-.41h-3.84c-.24 0-.43.17-.47.41l-.36 2.54c-.59.24-1.13.57-1.62.94l-2.39-.96c-.22-.09-.47 0-.59.22L2.74 8.87c-.12.21-.08.47.12.61l2.03 1.58c-.05.3-.07.62-.07.94s.02.64.07.94l-2.03 1.58a.49.49 0 0 0-.12.61l1.92 3.32c.12.22.37.29.59.22l2.39-.96c.5.38 1.03.7 1.62.94l.36 2.54c.05.24.24.41.48.41h3.84c.24 0 .44-.17.47-.41l.36-2.54c.59-.24 1.13-.56 1.62-.94l2.39.96c.22.08.47 0 .59-.22l1.92-3.32c.12-.22.07-.47-.12-.61l-2.01-1.58M12 15.6A3.6 3.6 0 1 1 12 8.4a3.6 3.6 0 0 1 0 7.2"/></svg>,
 }
 
@@ -165,6 +168,7 @@ export default function App() {
       case 'industry_mining': return <IndustryMining {...pageProps} />
       case 'backtest': return <Backtest {...pageProps} />
       case 'stock_writer': return <StockWriter {...pageProps} />
+      case 'agent': return <AgentChat />
       case 'settings': return <Settings {...pageProps} />
     }
   }

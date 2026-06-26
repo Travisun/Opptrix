@@ -22,10 +22,10 @@ npm run clean        # 删除各包 dist 与 client-ui/dist
 |------|----------|
 | 根 | `inno-a-stock` |
 | client-ui | `inno-a-stock-client` |
-| apps/server | `@ni-k/server` |
-| packages/* | `@ni-k/<name>` |
+| apps/server | `@inno-a-stock/server` |
+| packages/* | `@inno-a-stock/<name>` |
 
-内部包 scope 仍为 `@ni-k/*`，对外品牌为 **innoAStock**。
+内部包 scope 仍为 `@inno-a-stock/*`，对外品牌为 **innoAStock**。
 
 ## 日常开发
 
@@ -41,7 +41,7 @@ npm run dev
 npm run dev:web
 ```
 
-浏览器打开 http://127.0.0.1:5173 。修改 `packages/*` 后需重新编译对应包（server 的 dev 脚本会 build server，但不会自动 rebuild 所有 packages — 改 package 源码时运行 `npm run build:packages` 或单包 `npm run build -w @ni-k/a-stock-layer`）。
+浏览器打开 http://127.0.0.1:5173 。修改 `packages/*` 后需重新编译对应包（server 的 dev 脚本会 build server，但不会自动 rebuild 所有 packages — 改 package 源码时运行 `npm run build:packages` 或单包 `npm run build -w @inno-a-stock/a-stock-layer`）。
 
 ## 修改代码的常见位置
 

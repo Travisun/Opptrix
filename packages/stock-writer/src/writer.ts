@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@ni-k/a-stock-layer'
+import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
 import type { ArticleType } from './templates.js'
 import { fetchArticleData } from './fetcher.js'
 import { buildWriterPrompt, type WriterPromptOptions } from './prompt.js'

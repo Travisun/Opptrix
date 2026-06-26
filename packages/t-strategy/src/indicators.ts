@@ -1,4 +1,4 @@
-import type { StockKline } from '@ni-k/shared'
+import type { StockKline } from '@inno-a-stock/shared'
 
 export interface IndicatorRow {
   date: string

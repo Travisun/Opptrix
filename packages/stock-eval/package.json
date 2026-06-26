@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/stock-eval",
+  "name": "@inno-a-stock/stock-eval",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@ni-k/shared": "*",
-    "@ni-k/a-stock-layer": "*"
+    "@inno-a-stock/shared": "*",
+    "@inno-a-stock/a-stock-layer": "*"
   }
 }

@@ -28,6 +28,7 @@ Thumbs.db
 
 # Secrets & runtime data
 .env
+.env.local
 *.key
 api_keys.txt
 apps/server/data/

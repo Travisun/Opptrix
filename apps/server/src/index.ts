@@ -2,14 +2,15 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import Fastify from 'fastify'
 import fastifyStatic from '@fastify/static'
-import { AgentEngine } from '@ni-k/agent'
-import { ResearchHub } from '@ni-k/research-hub'
-import { listTemplates } from '@ni-k/stock-eval'
+import { AgentEngine } from '@inno-a-stock/agent'
+import { ResearchHub } from '@inno-a-stock/research-hub'
+import { listTemplates, REGISTRY } from '@inno-a-stock/stock-eval'
 import { loadConfig, saveConfig, publicConfig } from './config.js'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const CLIENT_DIST = path.resolve(__dirname, '../../../client-ui/dist')
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
+const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 
 const hub = new ResearchHub()
 let cfg = loadConfig()
@@ -34,7 +35,7 @@ app.get('/api/health', async () => ({
   model: cfg.llm.model,
   scorecard: cfg.default_scorecard,
   tools: agent.tools.list().length,
-  factors: 40,
+  factors: REGISTRY.count(),
 }))
 
 app.post<{ Body: { feature: string; params?: Record<string, unknown> } }>(
@@ -73,8 +74,13 @@ app.post<{ Body: Record<string, unknown> }>('/api/config', async (req) => {
 app.get('/api/templates', async () => ({ templates: listTemplates() }))
 
 app.post<{ Body: { message: string } }>('/api/chat', async (req) => {
-  const reply = await agent.chat(req.body?.message ?? '')
-  return { reply }
+  const { reply, toolsUsed } = await agent.chat(req.body?.message ?? '')
+  return { reply, tools_used: toolsUsed }
+})
+
+app.post('/api/chat/reset', async () => {
+  agent.resetHistory()
+  return { status: 'ok' }
 })
 
 // REST endpoints aligned with research-hub features
@@ -232,7 +238,7 @@ app.setNotFoundHandler(async (req, reply) => {
   return reply.sendFile('index.html')
 })
 
-app.listen({ port: PORT, host: '127.0.0.1' }).then(() => {
-  console.log(`\n  innoAStock → http://127.0.0.1:${PORT}/`)
+app.listen({ port: PORT, host: HOST }).then(() => {
+  console.log(`\n  innoAStock → http://${HOST}:${PORT}/`)
   console.log(`  API: /api/research · Agent: /api/chat · Web UI (no Electron)\n`)
 })

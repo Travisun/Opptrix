@@ -1,5 +1,5 @@
 {
-  "name": "@ni-k/skills",
+  "name": "@inno-a-stock/skills",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json && cp src/chain-knowledge.json dist/" },
   "dependencies": {
-    "@ni-k/shared": "*",
-    "@ni-k/a-stock-layer": "*"
+    "@inno-a-stock/shared": "*",
+    "@inno-a-stock/a-stock-layer": "*"
   }
 }

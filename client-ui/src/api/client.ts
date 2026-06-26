@@ -119,6 +119,22 @@ export async function getConfig() {
   return resp.json()
 }
 
+export async function sendChat(message: string) {
+  const resp = await fetch(`${API_BASE}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+  if (!resp.ok) throw new Error(`Chat failed: ${resp.status}`)
+  return resp.json() as Promise<{ reply: string; tools_used?: string[] }>
+}
+
+export async function resetChat() {
+  const resp = await fetch(`${API_BASE}/chat/reset`, { method: 'POST' })
+  if (!resp.ok) throw new Error(`Chat reset failed: ${resp.status}`)
+  return resp.json()
+}
+
 export async function saveConfig(payload: {
   api_key?: string
   model?: string
