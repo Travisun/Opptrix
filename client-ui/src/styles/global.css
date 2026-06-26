@@ -1,0 +1,139 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+  height: 100dvh;
+  margin: 0;
+  overflow: hidden;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", sans-serif;
+  -webkit-font-smoothing: antialiased;
+  background: var(--inno-canvas, #F2F2F7);
+  color: var(--inno-text, #1C1C1E);
+  overscroll-behavior: none;
+  touch-action: manipulation;
+}
+
+:root {
+  --inno-canvas: #F2F2F7;
+  --inno-surface: #FFFFFF;
+  --inno-separator: rgba(60, 60, 67, 0.12);
+  --inno-accent: #D17A5D;
+  --inno-text: #1C1C1E;
+  --inno-motion-fast: 140ms;
+  --inno-motion-normal: 220ms;
+  --inno-ease: cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Native flat: strip Fluent shadows ── */
+.fui-Button,
+.fui-Input,
+.fui-Dropdown,
+.fui-Textarea,
+.fui-OverlayDrawerSurface,
+.fui-DrawerSurface {
+  box-shadow: none !important;
+}
+
+.inno-field .fui-Input,
+.inno-field .fui-Dropdown,
+.inno-field .fui-Textarea {
+  border: none !important;
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.inno-field .fui-Input__input,
+.inno-field .fui-Textarea__textarea {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 15px;
+}
+
+.inno-field .fui-Dropdown__button {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  min-height: unset !important;
+  font-size: 15px;
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.inno-field .fui-Dropdown__button::before,
+.inno-field .fui-Dropdown__button::after {
+  display: none !important;
+}
+
+.inno-field .fui-Dropdown__button span,
+.inno-field .fui-Dropdown__button [class*="Button__content"] {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
+.inno-model-select .fui-Dropdown__button {
+  border: none !important;
+  background: transparent !important;
+  padding: 0 4px !important;
+  min-height: unset !important;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--inno-text, #1C1C1E);
+  text-decoration: none !important;
+  box-shadow: none !important;
+}
+
+.inno-model-select .fui-Dropdown__button::before,
+.inno-model-select .fui-Dropdown__button::after {
+  display: none !important;
+}
+
+.inno-model-select .fui-Dropdown__button span {
+  text-decoration: none !important;
+  border-bottom: none !important;
+}
+
+.inno-field .fui-Dropdown__expandIcon {
+  color: #8E8E93;
+}
+
+@keyframes inno-fade-in-up {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.inno-animate-in {
+  animation: inno-fade-in-up var(--inno-motion-normal) var(--inno-ease) both;
+}
+
+.inno-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+.inno-scroll::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 67, 0.18);
+  border-radius: 999px;
+}
+
+.inno-scroll-x {
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.inno-scroll-x::-webkit-scrollbar {
+  display: none;
+}
+
+@media (max-width: 767px) {
+  .inno-field {
+    grid-template-columns: 1fr !important;
+    gap: 6px !important;
+  }
+}

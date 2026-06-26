@@ -106,7 +106,7 @@ export default function Screening({ navigate, setGlobalStock }: Props) {
           {result.items.slice(0, 30).map(item => (
             <div key={item.code} className={s.tableRow}
               style={{ cursor: 'pointer' }}
-              onClick={() => { setGlobalStock({ code: item.code, name: item.name }); navigate('diagnosis') }}>
+              onClick={() => { setGlobalStock({ code: item.code, name: item.name }); navigate('stock_research') }}>
               <Text>{item.code}</Text>
               <Text>{item.name}</Text>
               <Text style={{ fontWeight: 600, color: item.total_score >= 7 ? '#4caf50' : '#ff9800' }}>

@@ -1,7 +1,17 @@
 import type { ApiResponse } from '../types/schemas'
+import type { ChatDisplayMessage, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
 
-/** Dev: Vite proxies /api → :8711. Prod: Fastify serves SPA + API on same origin. */
+/** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+
+async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  const resp = await fetch(`${API_BASE}${path}`, init)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `API error: ${resp.status}`)
+  }
+  return resp.json() as Promise<T>
+}
 
 export async function apiCall<T>(
   feature: string,
@@ -109,44 +119,147 @@ export async function getHealth() {
     version: string
     llm_configured: boolean
     model: string | null
+    available_models?: number
     scorecard: string
   }>
+}
+
+export interface PublicProvider {
+  id: string
+  name: string
+  base_url: string
+  models: string[]
+  api_key_configured: boolean
+}
+
+export interface ProviderPreset {
+  id: string
+  name: string
+  base_url: string
+}
+
+export interface AppConfig {
+  providers: PublicProvider[]
+  available_models: AvailableModel[]
+  default_model?: string
+  default_scorecard: string
+  default_top_n: number
+  llm_configured: boolean
 }
 
 export async function getConfig() {
   const resp = await fetch(`${API_BASE}/config`)
   if (!resp.ok) throw new Error(`Config fetch failed: ${resp.status}`)
-  return resp.json()
+  return resp.json() as Promise<AppConfig>
 }
 
-export async function sendChat(message: string) {
-  const resp = await fetch(`${API_BASE}/chat`, {
+export async function patchConfig(payload: {
+  default_scorecard?: string
+  default_top_n?: number
+  default_model?: string
+}) {
+  return jsonFetch<{ status: string; config: AppConfig }>('/config', {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function getProviderPresets() {
+  return jsonFetch<{ presets: ProviderPreset[] }>('/providers/presets')
+}
+
+export async function discoverModels(base_url: string, api_key: string) {
+  return jsonFetch<{ models: string[] }>('/providers/discover-models', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message }),
+    body: JSON.stringify({ base_url, api_key }),
   })
-  if (!resp.ok) throw new Error(`Chat failed: ${resp.status}`)
-  return resp.json() as Promise<{ reply: string; tools_used?: string[] }>
 }
 
-export async function resetChat() {
-  const resp = await fetch(`${API_BASE}/chat/reset`, { method: 'POST' })
-  if (!resp.ok) throw new Error(`Chat reset failed: ${resp.status}`)
-  return resp.json()
-}
-
-export async function saveConfig(payload: {
-  api_key?: string
-  model?: string
-  provider?: string
-  scorecard?: string
-  base_url?: string
+export async function createProvider(payload: {
+  name: string
+  base_url: string
+  api_key: string
+  models: string[]
 }) {
-  const resp = await fetch(`${API_BASE}/config`, {
+  return jsonFetch<{ status: string; provider: PublicProvider }>('/providers', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
   })
-  if (!resp.ok) throw new Error(`Config save failed: ${resp.status}`)
-  return resp.json()
+}
+
+export async function updateProvider(id: string, payload: Partial<{
+  name: string
+  base_url: string
+  api_key: string
+  models: string[]
+}>) {
+  return jsonFetch<{ status: string; provider: PublicProvider }>(`/providers/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteProvider(id: string) {
+  return jsonFetch<{ status: string }>(`/providers/${id}`, { method: 'DELETE' })
+}
+
+export async function listAvailableModels() {
+  return jsonFetch<{ models: AvailableModel[]; default_model: string | null }>('/models/available')
+}
+
+export async function listSessions() {
+  return jsonFetch<{ sessions: SessionMeta[] }>('/sessions')
+}
+
+export async function createSession(title?: string) {
+  return jsonFetch<{ session: SessionMeta }>('/sessions', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(title ? { title } : {}),
+  })
+}
+
+export async function getSession(id: string) {
+  return jsonFetch<{ session: SessionMeta; messages: ChatDisplayMessage[] }>(`/sessions/${id}`)
+}
+
+export async function renameSession(id: string, title: string) {
+  return jsonFetch<{ session: Pick<SessionMeta, 'id' | 'title' | 'updatedAt'> }>(`/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function setSessionModel(id: string, model: string | null) {
+  return jsonFetch<{ session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'updatedAt'> }>(`/sessions/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ model }),
+  })
+}
+
+export async function deleteSession(id: string) {
+  return jsonFetch<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' })
+}
+
+export async function sendSessionChat(sessionId: string, message: string, model?: string) {
+  return jsonFetch<{
+    reply: string
+    tools_used?: string[]
+    session_id: string
+    title?: string
+  }>(`/sessions/${sessionId}/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, ...(model ? { model } : {}) }),
+  })
+}
+
+export async function listSkills() {
+  return jsonFetch<{ categories: SkillCategory[] }>('/agent/skills')
 }

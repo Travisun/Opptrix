@@ -1,16 +1,21 @@
-import { makeStyles, tokens, Text } from '@fluentui/react-components'
+import { makeStyles, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
+import { innoTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   card: {
-    backgroundColor: tokens.colorNeutralBackground2,
-    padding: tokens.spacingVerticalM,
+    backgroundColor: innoTokens.surface,
+    borderRadius: innoTokens.radiusLg,
+    border: `1px solid ${innoTokens.separator}`,
+    padding: '16px',
     display: 'flex',
     flexDirection: 'column',
-    gap: tokens.spacingVerticalS,
+    gap: '12px',
   },
   title: {
-    color: tokens.colorNeutralForeground2,
+    fontSize: '16px',
+    fontWeight: 600,
+    color: innoTokens.textPrimary,
   },
 })
 
@@ -23,7 +28,7 @@ export default function SectionCard({ title, children }: Props) {
   const s = useStyles()
   return (
     <div className={s.card}>
-      {title && <Text size={300} weight="semibold" className={s.title}>{title}</Text>}
+      {title && <Text className={s.title}>{title}</Text>}
       {children}
     </div>
   )

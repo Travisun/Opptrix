@@ -1,29 +1,25 @@
-# innoAStock — A股投研助手
+# innoAStock — A股投研 Chat Agent
 
-纯 **Node.js** monorepo：多源行情数据、40 因子评估、28 机构群评、9 种 T 策略、市场报告、产业透视、组合分析与 Agent 对话。
+纯 **Node.js** monorepo：**对话式投研助手**，LLM + 21 个 Function Calling 工具，支持多会话、技能快捷入口与设置面板。
 
-> **Web 应用**：浏览器访问 React SPA，由 Fastify 统一提供 API 与静态资源。**不含 Electron 桌面壳**，也不依赖 Python 运行时。
+> **Web 应用**：浏览器访问 Vite 前端（`:5173`），API 在后台运行（`:8711`，仅内部/代理，无需直接打开）。
 
 ## 功能概览
 
-| 模块 | 能力 |
+| 能力 | 说明 |
 |------|------|
-| 个股诊断 | 40 因子 · 8 评分卡 · 行业中性化 |
-| 智能选股 | 多条件筛选 · 评分排序 |
-| 机构群评 | 28 家机构 config-driven 综合评级 |
-| 策略信号 | 9 策略 · 信号验证 · 回测报告 |
-| 组合分析 | 持仓诊断 · 交易账本（买/卖记录） |
-| 市场日报 | 收盘报告 · 早报 |
-| 产业透视 | 产业链挖掘 · Mermaid 导图 |
-| 投研写作 | 可选：数据采集 · Prompt · 微信排版 |
-| Agent | LLM + 19 tools · slash 命令 |
+| **Chat Agent** | 自然语言对话，自动调用投研工具 |
+| **多会话** | 历史对话持久化，侧边栏切换/新建/删除 |
+| **21 投研工具** | 个股诊断、选股、机构评级、策略信号、回测、市场报告、产业透视、组合账本等 |
+| **技能面板** | 按分类展示工具与示例提问，一键填入输入框 |
+| **设置** | LLM 提供商、模型、API Key、默认评分卡 |
 
 ## 架构
 
 ```
 innoAStock/
-├── apps/server/          Fastify API (:8711) + 生产环境静态 SPA
-├── client-ui/            React + Fluent UI（Vite 开发 :5173）
+├── apps/server/          Fastify API（后台 :8711，Vite 代理 /api）
+├── client-ui/            React Chat UI（Vite :5173 · 多会话 · 技能面板）
 └── packages/
     ├── shared/           共享类型与 Result
     ├── a-stock-layer/    13 数据源 driver + TDX + efinance
@@ -33,7 +29,7 @@ innoAStock/
     ├── skills/           收盘/早报 · 产业透视 · Mermaid
     ├── stock-writer/     可选：投研文章 Prompt + 微信排版
     ├── research-hub/     统一 feature dispatch
-    └── agent/            LLM + 工具 + slash 命令
+    └── agent/            LLM + 工具注册 + 多会话持久化
 ```
 
 详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md)。
@@ -51,28 +47,27 @@ npm run build            # 编译 packages + client-ui
 
 ### 开发模式
 
-两个终端，或分别启动：
-
 ```bash
-npm run dev              # API → http://127.0.0.1:8711
-npm run dev:web          # Vite 热更新 → http://127.0.0.1:5173（/api 代理到 8711）
+npm run dev              # 同时启动 API + Vite → 打开 http://127.0.0.1:5173
 ```
 
-### 生产模式
+只需访问 **5173** 端口；`:8711` 为 API 后台，由 Vite 自动代理 `/api`。
+
+### 生产 / 部署预览
 
 ```bash
 npm run build
-npm start                # 单端口 http://127.0.0.1:8711/（API + SPA）
+npm run serve            # API + Vite preview → http://127.0.0.1:5173
 ```
 
-端口可通过环境变量 `STOCK_RESEARCH_PORT` 修改（默认 `8711`）。
+API 端口可通过 `STOCK_RESEARCH_PORT` 修改（默认 `8711`，一般无需暴露到外网）。
 
 ### Docker 部署
 
 ```bash
 cp .env.example .env   # 填入 LLM_API_KEY
 docker compose up -d --build
-# → http://localhost:8711
+# → http://localhost:5173
 ```
 
 数据持久化：`apps/server/data`（配置）、`~/.a_stock_layer`（账本/Writer）。
@@ -103,6 +98,8 @@ docker compose up -d --build
 | 文档 | 内容 |
 |------|------|
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 分层设计、数据流、本地状态 |
+| [docs/UI-DESIGN-SYSTEM.md](docs/UI-DESIGN-SYSTEM.md) | 设计 Token、组件规范 |
+| [docs/UI-LAYOUT.md](docs/UI-LAYOUT.md) | 布局与页面模板 |
 | [docs/API.md](docs/API.md) | REST 端点与 Hub features |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发、构建、调试、常见问题 |
 

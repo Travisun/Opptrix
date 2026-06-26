@@ -5,14 +5,21 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
+    "dev:clean": "node -e \"require('fs').rmSync('node_modules/.vite',{recursive:true,force:true})\" && vite --force",
     "build": "vite build",
     "preview": "vite preview"
   },
   "dependencies": {
+    "@fluentui/react-components": "^9.59.0",
+    "@fluentui/react-icons": "^2.0.274",
+    "katex": "^0.17.0",
+    "mermaid": "^11.16.0",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@fluentui/react-components": "^9.59.0",
-    "@fluentui/react-icons": "^2.0.274"
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-gfm": "^4.0.1",
+    "remark-math": "^6.0.0"
   },
   "devDependencies": {
     "@types/react": "^18.3.12",

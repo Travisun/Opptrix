@@ -1,10 +1,15 @@
-import { makeStyles, tokens, Text } from '@fluentui/react-components'
+import { makeStyles, Text } from '@fluentui/react-components'
+import { innoTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
-    padding: `${tokens.spacingVerticalXXL} ${tokens.spacingHorizontalL}`,
+    padding: '48px 24px',
     textAlign: 'center',
-    color: tokens.colorNeutralForeground3,
+    color: innoTokens.textTertiary,
+    fontSize: '13px',
+    backgroundColor: innoTokens.surfaceMuted,
+    borderRadius: innoTokens.radiusLg,
+    border: `1px dashed ${innoTokens.border}`,
   },
 })
 

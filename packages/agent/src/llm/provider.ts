@@ -130,6 +130,23 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   }
 
   async listModels() {
-    return ['deepseek-chat', 'deepseek-reasoner', 'gpt-4o-mini']
+    return fetchOpenAiModelList(this.cfg.baseUrl, this.cfg.apiKey).catch(() => [])
   }
+}
+
+/** OpenAI-compatible GET /v1/models */
+export async function fetchOpenAiModelList(baseUrl: string, apiKey: string): Promise<string[]> {
+  const root = baseUrl.trim().replace(/\/$/, '').replace(/\/v1$/, '')
+  const url = `${root}/v1/models`
+  const resp = await fetch(url, {
+    headers: { Authorization: `Bearer ${apiKey}` },
+    signal: AbortSignal.timeout(30_000),
+  })
+  if (!resp.ok) {
+    const text = (await resp.text()).slice(0, 200)
+    throw new Error(`HTTP ${resp.status}: ${text}`)
+  }
+  const data = await resp.json() as { data?: { id: string }[] }
+  const ids = (data.data ?? []).map(m => m.id).filter(Boolean)
+  return [...new Set(ids)].sort()
 }

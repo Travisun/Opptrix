@@ -179,9 +179,8 @@ export interface ApiResponse<T = any> {
 
 // ─── Feature routes ───
 export type FeatureRoute =
-  | 'diagnosis' | 'screening' | 'institution_rating'
-  | 'strategy_signals' | 'portfolio' | 'market_report'
-  | 'industry_mining' | 'backtest' | 'stock_writer' | 'agent' | 'settings'
+  | 'dashboard' | 'stock_research' | 'portfolio_hub' | 'market_insight'
+  | 'stock_writer' | 'settings'
 
 export interface NavItem {
   id: FeatureRoute

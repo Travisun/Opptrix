@@ -1,3 +1,5 @@
-export { AgentEngine, type AgentSettings, type ChatResult } from './engine.js'
+export { AgentEngine, type AgentSettings, type ChatResult, type SkillInfo } from './engine.js'
 export { ToolRegistry } from './tools.js'
-export { createProvider, isConfigured, type LlmConfig } from './llm/provider.js'
+export { SessionStore, type SessionMeta, type SessionRecord, type DisplayMessage } from './sessions.js'
+export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
+export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'

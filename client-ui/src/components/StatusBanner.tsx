@@ -1,25 +1,37 @@
-import { makeStyles, tokens, Text } from '@fluentui/react-components'
+import { makeStyles, Text } from '@fluentui/react-components'
+import { innoTokens } from '../theme/tokens'
+import { motion } from '../theme/mixins'
 
 const useStyles = makeStyles({
   root: {
-    padding: `${tokens.spacingVerticalS} ${tokens.spacingHorizontalM}`,
-    fontSize: tokens.fontSizeBase200,
+    padding: '10px 14px',
+    fontSize: '13px',
+    lineHeight: 1.45,
+    borderRadius: innoTokens.radiusMd,
+    border: 'none',
+    animationName: {
+      from: { opacity: 0, transform: 'translateY(-4px)' },
+      to: { opacity: 1, transform: 'translateY(0)' },
+    },
+    animationDuration: motion.normal,
+    animationTimingFunction: motion.easeOut,
+    animationFillMode: 'both',
   },
   error: {
-    backgroundColor: 'rgba(244, 67, 54, 0.12)',
-    color: '#ef9a9a',
+    backgroundColor: innoTokens.errorSoft,
+    color: innoTokens.error,
   },
   info: {
-    backgroundColor: tokens.colorNeutralBackground3,
-    color: tokens.colorNeutralForeground3,
+    backgroundColor: innoTokens.infoSoft,
+    color: innoTokens.accentHover,
   },
   success: {
-    backgroundColor: 'rgba(76, 175, 80, 0.12)',
-    color: '#81c784',
+    backgroundColor: innoTokens.successSoft,
+    color: innoTokens.success,
   },
   warning: {
-    backgroundColor: 'rgba(255, 152, 0, 0.12)',
-    color: '#ffb74d',
+    backgroundColor: innoTokens.warningSoft,
+    color: innoTokens.warning,
   },
 })
 
@@ -34,7 +46,7 @@ export default function StatusBanner({ message, tone = 'info' }: Props) {
     : tone === 'success' ? s.success
       : tone === 'warning' ? s.warning : s.info
   return (
-    <Text className={`${s.root} ${toneClass}`}>
+    <Text className={`${s.root} ${toneClass}`} role="status">
       {message}
     </Text>
   )

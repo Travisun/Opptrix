@@ -29,19 +29,18 @@ npm run clean        # 删除各包 dist 与 client-ui/dist
 
 ## 日常开发
 
-**终端 A — API（含 watch 重建 server）**
+一条命令同时启动 API 后台与 Vite 前端：
 
 ```bash
 npm run dev
 ```
 
-**终端 B — 前端热更新**
+浏览器打开 **http://127.0.0.1:5173** 即可。`:8711` 为 API 内部端口，由 Vite 代理 `/api`，**无需在浏览器中访问**。
 
-```bash
-npm run dev:web
-```
+单独调试 API：`npm run dev:api`  
+单独调试前端：`npm run dev:web`（需另开终端运行 `dev:api`）
 
-浏览器打开 http://127.0.0.1:5173 。修改 `packages/*` 后需重新编译对应包（server 的 dev 脚本会 build server，但不会自动 rebuild 所有 packages — 改 package 源码时运行 `npm run build:packages` 或单包 `npm run build -w @inno-a-stock/a-stock-layer`）。
+修改 `packages/*` 后需重新编译对应包（server 的 dev 会 rebuild server；改其他 package 时运行 `npm run build:packages`）。
 
 ## 修改代码的常见位置
 
@@ -78,10 +77,10 @@ npm run dev:web
 
 ```bash
 npm run build
-STOCK_RESEARCH_PORT=8711 npm start
+npm run serve          # API :8711 + Vite preview :5173
 ```
 
-访问 `http://<host>:8711/` 。仅需暴露单一端口；静态资源与 API 同源，无 CORS 配置。
+对外暴露 **5173**（Web）；8711 仅容器/本机内部。Docker：`docker compose up` → http://localhost:5173
 
 ## 调试技巧
 
@@ -93,7 +92,7 @@ STOCK_RESEARCH_PORT=8711 npm start
 
 ### API 未连接（前端状态栏）
 
-确认 `npm run dev` 已在 8711 端口运行；若只开了 `dev:web`，需同时启动 API。
+确认根目录 `npm run dev` 已运行（会同时启动 API 与 Vite）。不要只开 Vite 而不开 API。
 
 ### 修改 package 后 API 行为未变
 

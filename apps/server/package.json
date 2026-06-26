@@ -9,7 +9,6 @@
     "start": "node dist/index.js"
   },
   "dependencies": {
-    "@fastify/static": "^8.0.0",
     "@inno-a-stock/agent": "*",
     "@inno-a-stock/research-hub": "*",
     "@inno-a-stock/stock-eval": "*",

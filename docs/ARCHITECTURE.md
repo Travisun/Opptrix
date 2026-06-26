@@ -82,7 +82,7 @@ agent, server
 | stock_writer | 投研写作 | `/api/writer/*` |
 | settings | 设置 | `/api/config` |
 
-开发时 Vite 将 `/api` 代理到 `127.0.0.1:8711`；生产构建后由 Fastify 同域服务。
+开发时 Vite（`:5173`）将 `/api` 代理到后台 API（`:8711`）；生产用 `npm run serve`（Vite preview + API）。
 
 ## 本地持久化
 

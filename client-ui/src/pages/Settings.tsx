@@ -6,8 +6,14 @@ import PageShell from '../components/PageShell'
 import SectionCard from '../components/SectionCard'
 import StatusBanner from '../components/StatusBanner'
 import { getConfig, saveConfig, getHealth } from '../api/client'
+import { useApp } from '../context/AppContext'
 
 export default function Settings() {
+  const { setPageContext } = useApp()
+  useEffect(() => {
+    setPageContext({ route: 'settings', title: '设置' })
+  }, [setPageContext])
+
   const [provider, setProvider] = useState('DeepSeek')
   const [model, setModel] = useState('deepseek-chat')
   const [apiKey, setApiKey] = useState('')
@@ -123,10 +129,7 @@ export default function Settings() {
           数据源: a_stock_layer (13源) · 因子引擎 · 28机构 · 9策略 · Function Calling Agent
         </Text>
         <Text size={100} style={{ color: '#888' }}>
-          开发: npm run dev (Node :8711) + npm run dev:web (5173)
-        </Text>
-        <Text size={100} style={{ color: '#888' }}>
-          生产: npm run build 后访问 http://127.0.0.1:8711/
+          开发: npm run dev → http://127.0.0.1:5173（API 后台自动代理）
         </Text>
       </SectionCard>
     </PageShell>

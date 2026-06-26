@@ -9,6 +9,7 @@ import SectionCard from '../components/SectionCard'
 import EmptyState from '../components/EmptyState'
 import StatusBanner from '../components/StatusBanner'
 import { research, writerTypes, writerPersonas } from '../api/client'
+import { useApp } from '../context/AppContext'
 import type { WriterFormatData, WriterPromptData, WriterPublishData } from '../types/schemas'
 
 interface Props {
@@ -25,6 +26,11 @@ const DEFAULT_MD = `# 标题在此
 `
 
 export default function StockWriter({ globalStock }: Props) {
+  const { setPageContext } = useApp()
+  useEffect(() => {
+    setPageContext({ route: 'stock_writer', title: '投研写作' })
+  }, [setPageContext])
+
   const [code, setCode] = useState(globalStock?.code || '600519')
   const [articleType, setArticleType] = useState('value')
   const [persona, setPersona] = useState('retail-voice')

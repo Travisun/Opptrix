@@ -2,10 +2,11 @@ services:
   inno-a-stock:
     build: .
     ports:
-      - "${STOCK_RESEARCH_PORT:-8711}:8711"
+      - "${WEB_PORT:-5173}:5173"
     environment:
       STOCK_RESEARCH_PORT: "8711"
       STOCK_RESEARCH_HOST: "0.0.0.0"
+      API_PROXY_TARGET: "http://127.0.0.1:8711"
       LLM_PROVIDER: ${LLM_PROVIDER:-DeepSeek}
       LLM_MODEL: ${LLM_MODEL:-deepseek-chat}
       LLM_API_KEY: ${LLM_API_KEY:-}
