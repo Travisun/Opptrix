@@ -1,8 +1,0 @@
-#!/bin/bash
-# stock-research TUI 投研助手 — 固定面板，零滚动
-# 用法: ./research-cli
-
-WORK_DIR="$(cd "$(dirname "$0")" && pwd)/work"
-cd "$WORK_DIR" || { echo "❌ 找不到 work/ 目录"; exit 1; }
-
-python3 __main__.py "$@"

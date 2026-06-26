@@ -1,0 +1,19 @@
+{
+  "name": "@ni-k/research-hub",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
+  "scripts": { "build": "tsc -p tsconfig.json" },
+  "dependencies": {
+    "@ni-k/shared": "*",
+    "@ni-k/a-stock-layer": "*",
+    "@ni-k/stock-eval": "*",
+    "@ni-k/institutions": "*",
+    "@ni-k/t-strategy": "*",
+    "@ni-k/skills": "*",
+    "@ni-k/stock-writer": "*"
+  }
+}

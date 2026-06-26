@@ -1,6 +1,7 @@
 import type { ApiResponse } from '../types/schemas'
 
-const API_BASE = 'http://localhost:8080/api'
+/** Dev: Vite proxies /api → :8711. Prod: Fastify serves SPA + API on same origin. */
+const API_BASE = import.meta.env.VITE_API_BASE || '/api'
 
 export async function apiCall<T>(
   feature: string,
@@ -56,4 +57,80 @@ export const research = {
 
   latestEval: (code: string) =>
     apiCall<LatestEvalData>('latest_evaluation', { code }),
+
+  strategyReport: (code: string) =>
+    apiCall<ReportTextData>('strategy_report', { code }),
+
+  writerPrompt: (code: string, type = 'value', persona?: string) =>
+    apiCall<import('../types/schemas').WriterPromptData>('writer_prompt', { code, type, persona }),
+
+  writerFormat: (markdown: string, theme?: string) =>
+    apiCall<import('../types/schemas').WriterFormatData>('writer_format', { markdown, theme }),
+
+  writerPublish: (payload: Record<string, unknown>) =>
+    apiCall<import('../types/schemas').WriterPublishData>('writer_publish', payload),
+
+  portfolioTrades: (code = '') =>
+    apiCall<import('../types/schemas').PortfolioLedgerData>('portfolio_trades', { code }),
+
+  portfolioSummary: () =>
+    apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
+}
+
+export async function writerTypes() {
+  const resp = await fetch(`${API_BASE}/writer/types`)
+  if (!resp.ok) throw new Error('writer types failed')
+  return resp.json() as Promise<{ types: { type: string; name: string }[] }>
+}
+
+export async function writerPersonas() {
+  const resp = await fetch(`${API_BASE}/writer/personas`)
+  if (!resp.ok) throw new Error('writer personas failed')
+  return resp.json() as Promise<{ personas: string[] }>
+}
+
+export async function portfolioTrade(payload: {
+  code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string
+}) {
+  const resp = await fetch(`${API_BASE}/portfolio/trade`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!resp.ok) throw new Error('trade failed')
+  return resp.json()
+}
+
+export async function getHealth() {
+  const resp = await fetch(`${API_BASE}/health`)
+  if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)
+  return resp.json() as Promise<{
+    status: string
+    version: string
+    llm_configured: boolean
+    model: string | null
+    scorecard: string
+  }>
+}
+
+export async function getConfig() {
+  const resp = await fetch(`${API_BASE}/config`)
+  if (!resp.ok) throw new Error(`Config fetch failed: ${resp.status}`)
+  return resp.json()
+}
+
+export async function saveConfig(payload: {
+  api_key?: string
+  model?: string
+  provider?: string
+  scorecard?: string
+  base_url?: string
+}) {
+  const resp = await fetch(`${API_BASE}/config`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!resp.ok) throw new Error(`Config save failed: ${resp.status}`)
+  return resp.json()
 }

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import {
   makeStyles, tokens, Text, SearchBox, Button, Spinner, Badge, ProgressBar, TabList, Tab,
 } from '@fluentui/react-components'
@@ -32,7 +32,10 @@ const groupColors: Record<string, string> = {
   '国家队': '#f44336', '补充机构': '#ff9800', '其他': '#9c27b0',
 }
 
-interface Props { globalStock: { code: string } | null }
+interface Props {
+  globalStock: { code: string } | null
+  setGlobalStock?: (s: { code: string; name: string }) => void
+}
 
 export default function InstitutionRating({ globalStock }: Props) {
   const s = useStyles()
@@ -41,6 +44,10 @@ export default function InstitutionRating({ globalStock }: Props) {
   const [data, setData] = useState<InstitutionRatingData | null>(null)
   const [groupTab, setGroupTab] = useState('all')
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (globalStock?.code) setCode(globalStock.code)
+  }, [globalStock])
 
   const load = async () => {
     if (!code.trim()) return

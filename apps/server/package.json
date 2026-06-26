@@ -1,0 +1,22 @@
+{
+  "name": "@ni-k/server",
+  "version": "0.4.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "npm run build && node --watch dist/index.js",
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/index.js"
+  },
+  "dependencies": {
+    "@fastify/static": "^8.0.0",
+    "@ni-k/agent": "*",
+    "@ni-k/research-hub": "*",
+    "@ni-k/stock-eval": "*",
+    "fastify": "^5.2.0"
+  },
+  "devDependencies": {
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

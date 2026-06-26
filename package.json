@@ -1,0 +1,24 @@
+{
+  "name": "inno-a-stock",
+  "private": true,
+  "workspaces": [
+    "packages/*",
+    "apps/*",
+    "client-ui"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @ni-k/server",
+    "dev:web": "npm run dev -w inno-a-stock-client",
+    "build": "npm run build:packages && npm run build -w inno-a-stock-client",
+    "build:packages": "npm run build -w @ni-k/shared -w @ni-k/a-stock-layer -w @ni-k/stock-eval -w @ni-k/institutions -w @ni-k/t-strategy -w @ni-k/skills -w @ni-k/stock-writer -w @ni-k/research-hub -w @ni-k/agent -w @ni-k/server",
+    "start": "npm run start -w @ni-k/server",
+    "clean": "find packages apps -name dist -type d -prune -exec rm -rf {} + 2>/dev/null; rm -rf client-ui/dist"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,31 +1,24 @@
 {
-  "name": "stock-research-client",
-  "version": "0.3.0",
+  "name": "inno-a-stock-client",
+  "version": "0.6.0",
   "private": true,
-  "main": "electron/main.cjs",
+  "type": "module",
   "scripts": {
-    "build": "node build.mjs",
-    "watch": "node build.mjs --watch",
-    "electron:dev": "node build.mjs && electron ."
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   },
   "dependencies": {
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
-    "@types/react": "^18.3.12",
-    "@types/react-dom": "^18.3.1",
-    "esbuild": "^0.24.0",
     "@fluentui/react-components": "^9.59.0",
     "@fluentui/react-icons": "^2.0.274"
   },
-  "build": {
-    "appId": "com.stock-research.app",
-    "productName": "Stock Research",
-    "files": [
-      "dist/**/*",
-      "electron/**/*"
-    ],
-    "directories": {
-      "output": "release"
-    }
+  "devDependencies": {
+    "@types/react": "^18.3.12",
+    "@types/react-dom": "^18.3.1",
+    "@vitejs/plugin-react": "^4.3.4",
+    "typescript": "^5.7.2",
+    "vite": "^6.0.3"
   }
 }

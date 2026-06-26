@@ -1,10 +1,17 @@
-# Python
+# Dependencies
+node_modules/
+client-ui/node_modules/
+
+# Build output
+dist/
+**/dist/
+client-ui/dist/
+*.tsbuildinfo
+
+# Python (legacy — removed from repo)
 __pycache__/
 *.py[cod]
 *.egg-info/
-dist/
-build/
-*.egg
 .venv/
 venv/
 env/
@@ -19,13 +26,16 @@ env/
 .DS_Store
 Thumbs.db
 
-# Environment
+# Secrets & runtime data
 .env
 *.key
 api_keys.txt
+apps/server/data/
 
-# Project specific
-*.db
-*.sqlite
-data/cache/
+# User-local state (portfolio, writer config)
+.a_stock_layer/
+
+# Logs & cache
 logs/
+data/cache/
+outputs/

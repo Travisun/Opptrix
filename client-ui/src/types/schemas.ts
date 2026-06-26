@@ -1,4 +1,4 @@
-/* ──── Auto-generated from Python schemas ──── */
+/* Shared API response types for client-ui */
 
 export interface ScorecardDimension {
   name: string; score: number; weight: number
@@ -59,6 +59,9 @@ export interface StrategyPerformanceItem {
   name: string; overall_win_rate: number
   avg_return: number; sharpe: number | null
   signal_count: number
+  buy_signals?: number; sell_signals?: number
+  buy_win_rate?: number; sell_win_rate?: number
+  precision?: number; recall?: number; signal_freq?: number
 }
 export interface StrategyVerifyData {
   code: string; name: string
@@ -85,6 +88,52 @@ export interface PortfolioAnalysisData {
 export interface IndustryMiningData {
   industry: string; summary: string
   chain_overview: string; key_companies: number
+  mermaid?: string
+}
+
+export interface WriterPromptData {
+  data: {
+    code: string; name: string; templateName: string; articleType: string
+    summary: { requiredOk: number; requiredTotal: number }
+  }
+  prompt: { system: string; user: string; meta: { persona: string } }
+}
+
+export interface WriterFormatData {
+  convert: { html: string; title: string; digest: string; wordCount: number }
+  seo: { titleCandidates: string[]; digest: string; tags: string[] }
+  preflight: { ok: boolean; checks: { name: string; pass: boolean; detail?: string }[] }
+  previewHtml?: string
+  theme: string
+}
+
+export interface WriterPublishData extends WriterFormatData {
+  published: boolean
+  mediaId?: string
+  message: string
+}
+
+export interface PortfolioTradeItem {
+  id: number; code: string; name: string
+  tradeSide: 'buy' | 'sell'; shares: number; price: number
+  amount: number; totalFee: number; tradeDate: string
+}
+
+export interface PortfolioLedgerData {
+  trades: PortfolioTradeItem[]
+  count: number
+}
+
+export interface PortfolioSummaryData {
+  totalCost: number; totalMarketValue: number
+  totalUnrealizedPnl: number; totalRealizedPnl: number
+  totalPnl: number; totalPnlPct: number
+  holdingsCount: number; tradesCount: number
+  holdings: {
+    code: string; name: string; shares: number
+    costBasis: number; currentPrice: number
+    marketValue: number; unrealizedPnl: number; unrealizedPnlPct: number
+  }[]
 }
 
 export interface MarketReportData {
@@ -132,7 +181,7 @@ export interface ApiResponse<T = any> {
 export type FeatureRoute =
   | 'diagnosis' | 'screening' | 'institution_rating'
   | 'strategy_signals' | 'portfolio' | 'market_report'
-  | 'industry_mining' | 'backtest' | 'settings'
+  | 'industry_mining' | 'backtest' | 'settings' | 'stock_writer'
 
 export interface NavItem {
   id: FeatureRoute
