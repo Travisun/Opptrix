@@ -21,6 +21,39 @@ export interface ChatDisplayMessage {
   at: string
 }
 
+export interface SessionForkContextRef {
+  kind: 'fork'
+  sourceSessionId: string
+  sourceSessionTitle: string
+  anchorIndex: number
+  anchorAt: string
+  preview: string
+  turns: ChatDisplayMessage[]
+}
+
+export interface SessionSelectionContextRef {
+  kind: 'selection'
+  selectedText: string
+  sourceMessageIndex: number
+  sourceRole: 'user' | 'assistant'
+  anchorAt: string
+  preview: string
+  turns: ChatDisplayMessage[]
+}
+
+export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef
+
+export interface MessageSelection {
+  text: string
+  messageIndex: number
+  messageRole: 'user' | 'assistant'
+}
+
+export interface EphemeralAskTurn {
+  role: 'user' | 'assistant'
+  content: string
+}
+
 export interface SkillInfo {
   name: string
   description: string

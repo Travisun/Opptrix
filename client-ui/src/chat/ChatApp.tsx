@@ -3,18 +3,26 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import SessionSidebar from './SessionSidebar'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
+import RightPanel from './RightPanel'
+import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
-  listSessions, createSession, getSession, deleteSession,
+  listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
+  setSessionContext, ephemeralAsk,
   sendSessionChat, listSkills, getHealth, listAvailableModels, setSessionModel,
 } from '../api/client'
-import type { ChatDisplayMessage, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
+import type {
+  ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
+  SessionMeta, SkillCategory, AvailableModel,
+} from '../types/chat'
+import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { innoTokens } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
+import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -33,42 +41,63 @@ const useStyles = makeStyles({
     minHeight: 0,
     width: '100%',
   },
-  main: {
+  /** Shared parent of chat + right panel — peer to SessionSidebar */
+  contentWorkspace: {
     flex: 1,
     minWidth: 0,
+    minHeight: 0,
+    height: '100%',
     display: 'flex',
-    flexDirection: 'column',
-    transitionProperty: 'margin, padding',
+    flexDirection: 'row',
+    overflow: 'hidden',
+    transitionProperty: 'padding',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
-  mainChatElectron: {
+  contentWorkspaceMobile: {
+    flexDirection: 'column',
+  },
+  contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    paddingBottom: innoTokens.windowInset,
-    paddingRight: 0,
-    paddingLeft: 0,
     backgroundColor: innoTokens.canvas,
+  },
+  chatColumn: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+    transitionProperty: 'width, min-width, flex',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+  },
+  chatColumnDragging: {
+    transitionProperty: 'none',
+  },
+  chatColumnElectron: {
+    marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
+    boxSizing: 'border-box',
+  },
+  /** Occupies the title-bar band; title text renders in DesktopWindowChrome over this slot */
+  chatTitleBar: {
+    flexShrink: 0,
+    height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
+    boxSizing: 'border-box',
+    backgroundColor: innoTokens.canvas,
+    borderBottom: `1px solid ${innoTokens.separatorStrong}`,
+    position: 'relative',
+    zIndex: 2,
   },
   chatPanel: {
     flex: 1,
+    minWidth: 0,
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
     backgroundColor: innoTokens.canvas,
     borderRadius: 0,
     overflow: 'hidden',
-  },
-  chatHeaderHairline: {
-    position: 'fixed',
-    top: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    right: 0,
-    height: 0,
-    borderBottom: `1px solid ${innoTokens.separatorStrong}`,
-    zIndex: DESKTOP_Z_TITLE,
-    pointerEvents: 'none',
-    transitionProperty: 'left',
-    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
-    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
   settingsHost: {
     flex: 1,
@@ -131,6 +160,7 @@ export default function ChatApp() {
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
+  const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -139,6 +169,23 @@ export default function ChatApp() {
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
+
+  const electronChrome = isElectron() && !isMobile
+  const splitEnabled = !isMobile && view === 'chat'
+
+  const {
+    workspaceRef,
+    rightPanelOpen: rightPanelVisible,
+    chatVisible,
+    rightPanelWidth,
+    showSplitter,
+    chatWidth,
+    isDragging,
+    canToggleChatColumn,
+    beginDrag,
+    toggleRightPanel: handleToggleRightPanel,
+    toggleChatColumn: handleToggleChatColumn,
+  } = useWorkspaceSplit({ enabled: splitEnabled })
 
   const refreshModels = useCallback(async () => {
     try {
@@ -177,6 +224,7 @@ export default function ChatApp() {
     const data = await getSession(id)
     setActiveId(id)
     setMessages(data.messages)
+    setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
     setError('')
   }, [])
@@ -217,6 +265,7 @@ export default function ChatApp() {
       setSessions(list)
       setActiveId(session.id)
       setMessages([])
+      setContextRef(null)
       setSessionModelState(undefined)
       setInput('')
       setError('')
@@ -248,6 +297,7 @@ export default function ChatApp() {
         } else {
           setActiveId(null)
           setMessages([])
+          setContextRef(null)
         }
       }
     } catch (e) {
@@ -285,26 +335,100 @@ export default function ChatApp() {
 
     try {
       const result = await sendSessionChat(sessionId, msg, sessionModel)
-      const assistant: ChatDisplayMessage = {
-        role: 'assistant',
-        content: result.reply,
-        toolsUsed: result.tools_used,
-        at: new Date().toISOString(),
-      }
-      setMessages(prev => [...prev, assistant])
+      const sid = result.session_id && result.session_id !== sessionId ? result.session_id : sessionId
       if (result.session_id && result.session_id !== sessionId) {
         setActiveId(result.session_id)
       }
+      const fresh = await getSession(sid)
+      setMessages(fresh.messages)
+      setContextRef(fresh.contextRef ?? null)
+      setSessionModelState(fresh.session.model)
       const list = await refreshSessions()
       setSessions(list)
     } catch (e) {
-      setMessages(prev => prev.slice(0, -1))
       setInput(msg)
       setError(e instanceof Error ? e.message : '发送失败')
+      try {
+        const fresh = await getSession(sessionId)
+        setMessages(fresh.messages)
+        setContextRef(fresh.contextRef ?? null)
+      } catch {
+        setMessages(prev => prev.slice(0, -1))
+      }
     } finally {
       setLoading(false)
     }
   }
+
+  const handleForkFromMessage = async (messageIndex: number) => {
+    if (!activeId) return
+    try {
+      const data = await forkSession(activeId, messageIndex)
+      const list = await refreshSessions()
+      setSessions(list)
+      setActiveId(data.session.id)
+      setMessages(data.messages)
+      setContextRef(data.contextRef ?? null)
+      setSessionModelState(data.session.model)
+      setInput('')
+      setError('')
+      closeDrawer()
+      if (view !== 'chat') navigate('chat')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '分叉对话失败')
+    }
+  }
+
+  const handleClearContextRef = async () => {
+    if (!activeId) return
+    try {
+      await clearSessionContext(activeId)
+      setContextRef(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '移除引用失败')
+    }
+  }
+
+  const handleQuoteSelection = async (selection: MessageSelection) => {
+    if (!activeId) return
+    try {
+      const at = messages[selection.messageIndex]?.at ?? new Date().toISOString()
+      const nextRef: SessionSelectionContextRef = {
+        kind: 'selection',
+        selectedText: selection.text,
+        sourceMessageIndex: selection.messageIndex,
+        sourceRole: selection.messageRole,
+        anchorAt: at,
+        preview: previewSelectionText(selection.text),
+        turns: [{
+          role: selection.messageRole,
+          content: selection.text,
+          at,
+        }],
+      }
+      const data = await setSessionContext(activeId, nextRef)
+      setContextRef(data.contextRef ?? nextRef)
+      setError('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '设置引用失败')
+    }
+  }
+
+  const handleEphemeralAsk = useCallback(async (
+    message: string,
+    selection: MessageSelection,
+    priorTurns: EphemeralAskTurn[],
+  ) => {
+    if (!activeId) throw new Error('无活动对话')
+    const { reply } = await ephemeralAsk(
+      activeId,
+      message,
+      selection.text,
+      sessionModel,
+      priorTurns,
+    )
+    return reply
+  }, [activeId, sessionModel])
 
   const handleModelChange = async (ref: string) => {
     setSessionModelState(ref)
@@ -320,7 +444,6 @@ export default function ChatApp() {
   }
 
   const activeSession = sessions.find(x => x.id === activeId)
-  const electronChrome = isElectron() && !isMobile
   const isSettings = view === 'settings'
   const chromeTitle = activeSession?.title ?? '新对话'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
@@ -367,13 +490,10 @@ export default function ChatApp() {
           onNewChat={handleNew}
           onGoBack={goBack}
           onGoForward={goForward}
-        />
-      )}
-      {electronChrome && !isSettings && (
-        <div
-          className={s.chatHeaderHairline}
-          style={{ left: sidebarInlineVisible ? `${innoTokens.sidebarWidthPx}px` : 0 }}
-          aria-hidden
+          rightPanelOpen={!isSettings ? rightPanelVisible : undefined}
+          chatColumnVisible={!isSettings ? chatVisible : undefined}
+          onToggleRightPanel={!isSettings && !isMobile ? handleToggleRightPanel : undefined}
+          onToggleChatColumn={!isSettings && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
         />
       )}
       <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'inno-app-shell')}>
@@ -400,7 +520,15 @@ export default function ChatApp() {
             />
           </div>
         ) : (
-          <div className={mergeClasses(s.main, electronChrome && s.mainChatElectron, electronChrome && 'inno-app-main')}>
+          <div
+            ref={workspaceRef}
+            className={mergeClasses(
+              s.contentWorkspace,
+              isMobile && s.contentWorkspaceMobile,
+              electronChrome && s.contentWorkspaceElectron,
+              electronChrome && 'inno-app-main',
+            )}
+          >
             {isMobile && (
               <SessionSidebar
                 mode="drawer"
@@ -410,29 +538,75 @@ export default function ChatApp() {
               />
             )}
 
-            <div className={mergeClasses(electronChrome && s.chatPanel, electronChrome && 'inno-chat-panel')}>
-              <ChatView
-                title={activeSession?.title ?? '新对话'}
-                messages={messages}
-                input={input}
-                loading={loading}
-                error={error}
-                skills={skills}
-                availableModels={availableModels}
-                sessionModel={sessionModel}
-                isMobile={isMobile}
-                llmLabel={llmLabel}
-                backendOk={backendOk}
-                onInputChange={setInput}
-                onSubmit={handleSubmit}
-                onModelChange={availableModels.length ? handleModelChange : undefined}
-                onOpenSidebar={openDrawer}
-                onNewChat={handleNew}
-                onOpenSettings={openSettings}
+            {(isMobile || chatVisible) && (
+              <div
+                className={mergeClasses(
+                  s.chatColumn,
+                  electronChrome && s.chatColumnElectron,
+                  isDragging && s.chatColumnDragging,
+                )}
+                style={!isMobile ? {
+                  flex: showSplitter ? '0 0 auto' : 1,
+                  width: showSplitter ? chatWidth : undefined,
+                  minWidth: showSplitter ? chatWidth : 0,
+                } : undefined}
+              >
+                {electronChrome && (
+                  <div className={mergeClasses(s.chatTitleBar, 'inno-chat-title-bar')} aria-hidden />
+                )}
+                <div className={mergeClasses(s.chatPanel, electronChrome && 'inno-chat-panel')}>
+                  <ChatView
+                    title={activeSession?.title ?? '新对话'}
+                    sessionId={activeId}
+                    messages={messages}
+                    contextRef={contextRef}
+                    input={input}
+                    loading={loading}
+                    error={error}
+                    skills={skills}
+                    availableModels={availableModels}
+                    sessionModel={sessionModel}
+                    isMobile={isMobile}
+                    llmLabel={llmLabel}
+                    backendOk={backendOk}
+                    onInputChange={setInput}
+                    onSubmit={handleSubmit}
+                    onForkMessage={handleForkFromMessage}
+                    onQuoteSelection={activeId ? handleQuoteSelection : undefined}
+                    onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
+                    onClearContextRef={contextRef ? handleClearContextRef : undefined}
+                    onModelChange={availableModels.length ? handleModelChange : undefined}
+                    onOpenSidebar={openDrawer}
+                    onNewChat={handleNew}
+                    onOpenSettings={openSettings}
+                    rightPanelOpen={rightPanelVisible}
+                    chatColumnVisible={chatVisible}
+                    onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
+                    onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isMobile && showSplitter && (
+              <WorkspaceSplitDivider
+                electronChrome={electronChrome}
+                isDragging={isDragging}
+                onBeginDrag={beginDrag}
               />
-            </div>
+            )}
+
+            {!isMobile && (
+              <RightPanel
+                visible={rightPanelVisible}
+                width={rightPanelWidth}
+                fullWidth={!chatVisible}
+                transitionEnabled={!isDragging}
+              />
+            )}
           </div>
         )}
+
         </div>
       </div>
     </>

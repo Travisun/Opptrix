@@ -3,8 +3,9 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import SkillPicker from './SkillPicker'
+import ComposerContextRefTag from './ComposerContextRefTag'
 import InnoButton from '../components/inno/InnoButton'
-import type { AvailableModel, SkillCategory } from '../types/chat'
+import type { AvailableModel, SessionContextRef, SkillCategory } from '../types/chat'
 import { innoTokens } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
 
@@ -113,10 +114,19 @@ const useStyles = makeStyles({
       boxShadow: innoTokens.composerFloatShadowFocus,
     },
   },
-  textarea: {
+  inputRow: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'flex-start',
+    alignContent: 'flex-start',
+    gap: '6px',
     width: '100%',
     minHeight: `${MIN_TEXT_HEIGHT}px`,
-    maxHeight: `${MAX_TEXT_HEIGHT}px`,
+  },
+  textarea: {
+    flex: '1 1 120px',
+    width: 'auto',
+    minWidth: '48px',
     border: 'none',
     background: 'transparent',
     resize: 'none',
@@ -129,6 +139,18 @@ const useStyles = makeStyles({
     '::placeholder': {
       color: innoTokens.textTertiary,
     },
+  },
+  textareaWithRef: {
+    minHeight: `${ROW_PX * Math.max(ROWS - 1, 1)}px`,
+    maxHeight: `${MAX_TEXT_HEIGHT}px`,
+  },
+  textareaSolo: {
+    minHeight: `${MIN_TEXT_HEIGHT}px`,
+    maxHeight: `${MAX_TEXT_HEIGHT}px`,
+  },
+  textareaFull: {
+    flex: '1 1 100%',
+    width: '100%',
   },
   textareaMobile: {
     fontSize: '16px',
@@ -186,6 +208,7 @@ interface ChatComposerProps {
   error: string
   isEmpty: boolean
   isMobile?: boolean
+  contextRef?: SessionContextRef | null
   starters: string[]
   skillCategories: SkillCategory[]
   availableModels: AvailableModel[]
@@ -193,6 +216,7 @@ interface ChatComposerProps {
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
   onModelChange?: (ref: string) => void
+  onClearContextRef?: () => void
   onPickSkill: (prompt: string) => void
 }
 
@@ -202,6 +226,7 @@ export default function ChatComposer({
   error,
   isEmpty,
   isMobile = false,
+  contextRef = null,
   starters,
   skillCategories,
   availableModels,
@@ -209,6 +234,7 @@ export default function ChatComposer({
   onInputChange,
   onSubmit,
   onModelChange,
+  onClearContextRef,
   onPickSkill,
 }: ChatComposerProps) {
   const s = useStyles()
@@ -218,13 +244,14 @@ export default function ChatComposer({
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    const next = Math.min(Math.max(el.scrollHeight, MIN_TEXT_HEIGHT), MAX_TEXT_HEIGHT)
+    const lineMin = contextRef ? ROW_PX * Math.max(ROWS - 1, 1) : MIN_TEXT_HEIGHT
+    const next = Math.min(Math.max(el.scrollHeight, lineMin), MAX_TEXT_HEIGHT)
     el.style.height = `${next}px`
-  }, [])
+  }, [contextRef])
 
   useEffect(() => {
     syncHeight()
-  }, [input, syncHeight])
+  }, [input, contextRef, syncHeight])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
@@ -259,17 +286,30 @@ export default function ChatComposer({
       <div className={s.panelWrap}>
         <div className={s.panelGround} aria-hidden />
         <div className={mergeClasses(s.panel, 'inno-composer-shell')}>
-          <textarea
-            ref={textareaRef}
-            className={mergeClasses(s.textarea, isMobile && s.textareaMobile)}
-            value={input}
-            onChange={e => onInputChange(e.target.value)}
-            onKeyDown={handleKeyDown}
-            placeholder={isMobile ? '输入投研问题…' : '输入投研问题，Enter 发送，Shift+Enter 换行…'}
-            rows={ROWS}
-            disabled={loading}
-            enterKeyHint="send"
-          />
+          <div className={s.inputRow}>
+            {contextRef && (
+              <ComposerContextRefTag
+                contextRef={contextRef}
+                onClear={onClearContextRef}
+              />
+            )}
+            <textarea
+              ref={textareaRef}
+              className={mergeClasses(
+                s.textarea,
+                contextRef ? s.textareaWithRef : s.textareaSolo,
+                !contextRef && s.textareaFull,
+                isMobile && s.textareaMobile,
+              )}
+              value={input}
+              onChange={e => onInputChange(e.target.value)}
+              onKeyDown={handleKeyDown}
+              placeholder={isMobile ? '输入投研问题…' : '输入投研问题，Enter 发送，Shift+Enter 换行…'}
+              rows={ROWS}
+              disabled={loading}
+              enterKeyHint="send"
+            />
+          </div>
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
               <div className={s.skillBtnSlot}>

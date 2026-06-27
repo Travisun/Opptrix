@@ -15,17 +15,40 @@ export interface SessionMeta {
   model?: string
 }
 
-export interface SessionRecord extends SessionMeta {
-  messages: ChatMessage[]
-  /** UI-visible turns (user/assistant only) */
-  turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; at: string }[]
-}
-
 export interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
   toolsUsed?: string[]
   at: string
+}
+
+export interface SessionForkContextRef {
+  kind: 'fork'
+  sourceSessionId: string
+  sourceSessionTitle: string
+  anchorIndex: number
+  anchorAt: string
+  preview: string
+  turns: DisplayMessage[]
+}
+
+export interface SessionSelectionContextRef {
+  kind: 'selection'
+  selectedText: string
+  sourceMessageIndex: number
+  sourceRole: 'user' | 'assistant'
+  anchorAt: string
+  preview: string
+  turns: DisplayMessage[]
+}
+
+export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef
+
+export interface SessionRecord extends SessionMeta {
+  messages: ChatMessage[]
+  /** UI-visible turns (user/assistant only) */
+  turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; at: string }[]
+  contextRef?: SessionContextRef | null
 }
 
 function ensureDir() {
@@ -34,6 +57,50 @@ function ensureDir() {
 
 function sessionPath(id: string) {
   return path.join(SESSIONS_DIR, `${id}.json`)
+}
+
+function previewText(content: string, max = 72): string {
+  const oneLine = content.replace(/\s+/g, ' ').trim()
+  if (!oneLine) return '空消息'
+  return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max)}…`
+}
+
+function writeRecord(record: SessionRecord) {
+  ensureDir()
+  record.updatedAt = new Date().toISOString()
+  const p = sessionPath(record.id)
+  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`
+  fs.writeFileSync(tmp, JSON.stringify(record, null, 2), 'utf8')
+  fs.renameSync(tmp, p)
+}
+
+function migrateTurns(record: SessionRecord): SessionRecord {
+  if (record.turns?.length) return record
+
+  const turns: SessionRecord['turns'] = []
+  for (const m of record.messages) {
+    if ((m.role === 'user' || m.role === 'assistant') && m.content) {
+      turns.push({
+        role: m.role,
+        content: String(m.content),
+        at: record.updatedAt,
+      })
+    }
+  }
+  if (!turns.length) return record
+
+  record.turns = turns
+  writeRecord(record)
+  return record
+}
+
+function normalizeRecord(raw: SessionRecord): SessionRecord {
+  const record: SessionRecord = {
+    ...raw,
+    turns: raw.turns ?? [],
+    contextRef: raw.contextRef ?? null,
+  }
+  return migrateTurns(record)
 }
 
 export class SessionStore {
@@ -61,7 +128,7 @@ export class SessionStore {
     const p = sessionPath(id)
     if (!fs.existsSync(p)) return null
     const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as SessionRecord
-    return { ...raw, turns: raw.turns ?? [] }
+    return normalizeRecord(raw)
   }
 
   create(title = '新对话'): SessionRecord {
@@ -74,15 +141,14 @@ export class SessionStore {
       updatedAt: now,
       messages: [],
       turns: [],
+      contextRef: null,
     }
-    fs.writeFileSync(sessionPath(record.id), JSON.stringify(record, null, 2))
+    writeRecord(record)
     return record
   }
 
   save(record: SessionRecord) {
-    ensureDir()
-    record.updatedAt = new Date().toISOString()
-    fs.writeFileSync(sessionPath(record.id), JSON.stringify(record, null, 2))
+    writeRecord(record)
   }
 
   delete(id: string) {
@@ -115,5 +181,83 @@ export class SessionStore {
       }
     }
     return out
+  }
+
+  fork(source: SessionRecord, throughDisplayIndex: number): SessionRecord | null {
+    const display = this.toDisplayMessages(source)
+    if (throughDisplayIndex < 0 || throughDisplayIndex >= display.length) return null
+
+    const anchor = display[throughDisplayIndex]
+    if (anchor.role !== 'assistant') return null
+
+    const now = new Date().toISOString()
+    const baseTitle = source.title.trim() || '新对话'
+    const record: SessionRecord = {
+      id: randomUUID(),
+      title: `研讨 · ${baseTitle.length > 24 ? `${baseTitle.slice(0, 24)}…` : baseTitle}`,
+      createdAt: now,
+      updatedAt: now,
+      model: source.model,
+      messages: [],
+      turns: [],
+      contextRef: {
+        kind: 'fork',
+        sourceSessionId: source.id,
+        sourceSessionTitle: baseTitle,
+        anchorIndex: throughDisplayIndex,
+        anchorAt: anchor.at,
+        preview: previewText(anchor.content),
+        turns: [{
+          role: 'assistant',
+          content: anchor.content,
+          toolsUsed: anchor.toolsUsed,
+          at: anchor.at,
+        }],
+      },
+    }
+    writeRecord(record)
+    return record
+  }
+
+  clearContextRef(id: string): SessionRecord | null {
+    const record = this.get(id)
+    if (!record) return null
+    record.contextRef = null
+    this.save(record)
+    return record
+  }
+
+  setContextRef(id: string, contextRef: SessionContextRef | null): SessionRecord | null {
+    const record = this.get(id)
+    if (!record) return null
+    record.contextRef = contextRef
+    this.save(record)
+    return record
+  }
+
+  shouldMaterializeContext(record: SessionRecord): boolean {
+    if (!record.contextRef?.turns?.length) return false
+    const anchorAt = record.contextRef.anchorAt
+    return !(record.turns ?? []).some(t => t.at === anchorAt)
+  }
+
+  materializeContextRef(record: SessionRecord): SessionRecord {
+    if (!record.contextRef?.turns?.length) return record
+
+    const prefix = record.contextRef.turns
+    record.turns = [
+      ...prefix.map(t => ({
+        role: t.role,
+        content: t.content,
+        toolsUsed: t.toolsUsed,
+        at: t.at,
+      })),
+      ...(record.turns ?? []),
+    ]
+    const prefixMessages = prefix.map(t => ({ role: t.role, content: t.content }))
+    record.messages = [...prefixMessages, ...record.messages]
+    record.contextRef = null
+    this.save(record)
+    return record
   }
 }

@@ -40,6 +40,13 @@ export const DESKTOP_SIDEBAR_COLLAPSE_WIDTH = DESKTOP_SIDEBAR_OVERLAY_THRESHOLD
 /** Minimum window width */
 export const DESKTOP_CHAT_MIN_WIDTH = 510
 
+/** Draggable split between chat column and right panel */
+export const WORKSPACE_CHAT_MIN_WIDTH = 350
+/** Default right panel width = sidebarWidth (228) × 2 */
+export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 456
+export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 228
+export const WORKSPACE_SPLITTER_WIDTH = 5
+
 /** Title bar stacking — overlay sidebar sits between title and toolbar */
 export const DESKTOP_Z_TITLE = 1100
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150

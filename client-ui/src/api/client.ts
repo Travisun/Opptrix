@@ -1,5 +1,5 @@
 import type { ApiResponse } from '../types/schemas'
-import type { ChatDisplayMessage, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
+import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -224,7 +224,11 @@ export async function createSession(title?: string) {
 }
 
 export async function getSession(id: string) {
-  return jsonFetch<{ session: SessionMeta; messages: ChatDisplayMessage[] }>(`/sessions/${id}`)
+  return jsonFetch<{
+    session: SessionMeta
+    messages: ChatDisplayMessage[]
+    contextRef: SessionContextRef | null
+  }>(`/sessions/${id}`)
 }
 
 export async function renameSession(id: string, title: string) {
@@ -245,6 +249,57 @@ export async function setSessionModel(id: string, model: string | null) {
 
 export async function deleteSession(id: string) {
   return jsonFetch<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' })
+}
+
+export async function forkSession(sessionId: string, messageIndex: number) {
+  return jsonFetch<{
+    session: SessionMeta
+    messages: ChatDisplayMessage[]
+    contextRef: SessionContextRef | null
+  }>(`/sessions/${sessionId}/fork`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message_index: messageIndex }),
+  })
+}
+
+export async function clearSessionContext(sessionId: string) {
+  return jsonFetch<{
+    session: SessionMeta
+    contextRef: null
+  }>(`/sessions/${sessionId}/context`, {
+    method: 'DELETE',
+  })
+}
+
+export async function setSessionContext(sessionId: string, contextRef: SessionContextRef) {
+  return jsonFetch<{
+    session: SessionMeta
+    contextRef: SessionContextRef | null
+  }>(`/sessions/${sessionId}/context`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ contextRef }),
+  })
+}
+
+export async function ephemeralAsk(
+  sessionId: string,
+  message: string,
+  selectedText: string,
+  model?: string,
+  history?: EphemeralAskTurn[],
+) {
+  return jsonFetch<{ reply: string }>(`/sessions/${sessionId}/ephemeral-ask`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message,
+      selected_text: selectedText,
+      ...(model ? { model } : {}),
+      ...(history?.length ? { history } : {}),
+    }),
+  })
 }
 
 export async function sendSessionChat(sessionId: string, message: string, model?: string) {

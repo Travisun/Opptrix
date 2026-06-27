@@ -20,8 +20,13 @@ import {
 import {
   PanelLeftContractRegular,
   PanelLeftExpandRegular,
+  PanelRightContractRegular,
+  PanelRightExpandRegular,
   ChatAddRegular,
+  ArrowMaximizeRegular,
+  ArrowMinimizeRegular,
 } from '../chat/chatIcons'
+import { electronPlatform } from '../platform/detect'
 import { innoTokens } from '../theme/tokens'
 import { desktopTitleLeft, desktopToolbarLeft, type DesktopViewMode } from './layout'
 import ChromeToolButton from './ChromeToolButton'
@@ -77,6 +82,17 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     width: '100%',
   },
+  titleBarActions: {
+    position: 'fixed',
+    top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
+    height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
+    display: 'flex',
+    alignItems: 'center',
+    gap: `${DESKTOP_TOOL_GAP}px`,
+    pointerEvents: 'auto',
+    WebkitAppRegion: 'no-drag',
+    zIndex: DESKTOP_Z_CHROME_TOOLS,
+  },
 })
 
 interface DesktopWindowChromeProps {
@@ -94,6 +110,10 @@ interface DesktopWindowChromeProps {
   onNewChat?: () => void
   onGoBack?: () => void
   onGoForward?: () => void
+  rightPanelOpen?: boolean
+  onToggleRightPanel?: () => void
+  chatColumnVisible?: boolean
+  onToggleChatColumn?: () => void
 }
 
 export default function DesktopWindowChrome({
@@ -110,6 +130,10 @@ export default function DesktopWindowChrome({
   onNewChat,
   onGoBack,
   onGoForward,
+  rightPanelOpen = false,
+  onToggleRightPanel,
+  chatColumnVisible = true,
+  onToggleChatColumn,
 }: DesktopWindowChromeProps) {
   const s = useStyles()
 
@@ -117,6 +141,7 @@ export default function DesktopWindowChrome({
 
   const isSettings = viewMode === 'settings'
   const titleLeft = desktopTitleLeft(sidebarInline, isSettings)
+  const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
@@ -175,6 +200,36 @@ export default function DesktopWindowChrome({
           )}
         </div>
       </header>
+
+      {!isSettings && (onToggleRightPanel || onToggleChatColumn) && (
+        <div
+          className={s.titleBarActions}
+          style={{ right: `${titleBarActionsRight}px` }}
+        >
+          {onToggleChatColumn && (
+            <ChromeToolButton
+              label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              onClick={onToggleChatColumn}
+            >
+              {chatColumnVisible
+                ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+            </ChromeToolButton>
+          )}
+          {onToggleRightPanel && (
+            <ChromeToolButton
+              label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              onClick={onToggleRightPanel}
+            >
+              {rightPanelOpen
+                ? <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                : <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+            </ChromeToolButton>
+          )}
+        </div>
+      )}
 
       <WindowControls />
     </>

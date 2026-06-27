@@ -2,5 +2,9 @@
 export {
   PanelLeftExpandRegular,
   PanelLeftContractRegular,
+  PanelRightExpandRegular,
+  PanelRightContractRegular,
   ChatAddRegular,
+  ArrowMaximizeRegular,
+  ArrowMinimizeRegular,
 } from '@fluentui/react-icons'

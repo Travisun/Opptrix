@@ -5,6 +5,7 @@ import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 import type { Components } from 'react-markdown'
 import MermaidBlock from './MermaidBlock'
+import MarkdownTable from './MarkdownTable'
 import 'katex/dist/katex.min.css'
 import '../styles/markdown.css'
 
@@ -41,11 +42,13 @@ function MarkdownMessage({ content, className }: Props) {
       )
     },
     table({ children, ...props }) {
-      return (
-        <div className="inno-md-table-wrap">
-          <table {...props}>{children}</table>
-        </div>
-      )
+      return <MarkdownTable {...props}>{children}</MarkdownTable>
+    },
+    blockquote({ children, ...props }) {
+      return <blockquote className="inno-md-blockquote" {...props}>{children}</blockquote>
+    },
+    hr(props) {
+      return <hr className="inno-md-hr" {...props} />
     },
   }), [])
 

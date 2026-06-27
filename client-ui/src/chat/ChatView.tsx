@@ -1,15 +1,31 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import {
-  Text, Spinner, Badge, makeStyles, mergeClasses,
+  Text, Spinner, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import { BotRegular } from '@fluentui/react-icons'
-import type { ChatDisplayMessage, SkillCategory, AvailableModel } from '../types/chat'
+import type {
+  ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
+  SkillCategory, AvailableModel,
+} from '../types/chat'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
-import MarkdownMessage from './MarkdownMessage'
+import ChatMessageItem from './ChatMessageItem'
+import MessageSelectionToolbar from './MessageSelectionToolbar'
+import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
 import { innoTokens } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { isElectron } from '../platform/detect'
+import ChromeToolButton from '../desktop/ChromeToolButton'
+import {
+  PanelRightContractRegular,
+  PanelRightExpandRegular,
+  ArrowMaximizeRegular,
+  ArrowMinimizeRegular,
+} from './chatIcons'
+import {
+  DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
+  DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
+} from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -52,7 +68,7 @@ const useStyles = makeStyles({
     padding: `8px 0 ${innoTokens.chatThreadScrollPadBottom}`,
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '5px',
     boxSizing: 'border-box',
   },
   contentColumnElectron: {
@@ -60,7 +76,7 @@ const useStyles = makeStyles({
   },
   contentColumnMobile: {
     padding: `8px 0 ${innoTokens.chatThreadScrollPadBottomMobile}`,
-    gap: '16px',
+    gap: '5px',
   },
   composerDock: {
     position: 'absolute',
@@ -89,21 +105,34 @@ const useStyles = makeStyles({
   },
   header: {
     flexShrink: 0,
-    padding: '8px 0 0',
     display: 'flex',
     alignItems: 'center',
-    minHeight: '40px',
+    height: '40px',
+    padding: 0,
+    boxSizing: 'border-box',
     backgroundColor: innoTokens.canvas,
     borderBottom: `1px solid ${innoTokens.separatorStrong}`,
   },
   headerInner: {
     maxWidth: innoTokens.chatThreadMaxWidth,
     width: '100%',
+    height: '100%',
     margin: '0 auto',
     minWidth: 0,
     paddingLeft: innoTokens.chatThreadPaddingX,
     paddingRight: innoTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  headerActions: {
+    marginLeft: 'auto',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    flexShrink: 0,
   },
   title: {
     fontSize: '14px',
@@ -152,34 +181,6 @@ const useStyles = makeStyles({
     color: innoTokens.textTertiary,
     lineHeight: 1.55,
   },
-  bubble: {
-    wordBreak: 'break-word',
-    fontSize: '14px',
-    lineHeight: 1.65,
-    userSelect: 'text',
-    ...fadeInUp,
-  },
-  bubbleMobile: {
-    fontSize: '15px',
-  },
-  userBubble: {
-    alignSelf: 'flex-end',
-    maxWidth: '78%',
-    padding: '11px 15px',
-    borderRadius: innoTokens.radiusLg,
-    backgroundColor: innoTokens.userBubble,
-    color: innoTokens.textPrimary,
-    whiteSpace: 'pre-wrap',
-  },
-  userBubbleMobile: {
-    maxWidth: '90%',
-  },
-  assistantBubble: {
-    alignSelf: 'stretch',
-    maxWidth: '100%',
-    padding: '2px 0',
-    color: innoTokens.textPrimary,
-  },
   loadingRow: {
     alignSelf: 'flex-start',
     display: 'flex',
@@ -188,20 +189,6 @@ const useStyles = makeStyles({
     padding: '8px 0',
     color: innoTokens.textSecondary,
     ...fadeInUp,
-  },
-  toolTags: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-    marginTop: '12px',
-  },
-  toolBadge: {
-    border: 'none',
-    backgroundColor: innoTokens.canvasAlt,
-    color: innoTokens.textSecondary,
-    borderRadius: innoTokens.radiusFull,
-    fontSize: '11px',
-    fontFamily: 'ui-monospace, monospace',
   },
 })
 
@@ -216,7 +203,9 @@ const MOBILE_STARTERS = STARTERS.slice(0, 3)
 
 interface ChatViewProps {
   title?: string
+  sessionId?: string | null
   messages: ChatDisplayMessage[]
+  contextRef?: SessionContextRef | null
   input: string
   loading: boolean
   error: string
@@ -229,29 +218,127 @@ interface ChatViewProps {
   backendOk?: boolean
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
+  onForkMessage?: (messageIndex: number) => void
+  onQuoteSelection?: (selection: MessageSelection) => void
+  onEphemeralAsk?: (
+    message: string,
+    selection: MessageSelection,
+    priorTurns: EphemeralAskTurn[],
+  ) => Promise<string>
+  onClearContextRef?: () => void
   onModelChange?: (ref: string) => void
   onOpenSidebar?: () => void
   onNewChat?: () => void
   onOpenSettings?: () => void
   onToggleSidebar?: () => void
+  rightPanelOpen?: boolean
+  onToggleRightPanel?: () => void
+  chatColumnVisible?: boolean
+  onToggleChatColumn?: () => void
 }
 
 export default function ChatView({
-  title = '新对话', messages, input, loading, error, skills,
+  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, error, skills,
   availableModels = [],
   sessionModel,
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onInputChange, onSubmit, onModelChange,
+  onInputChange, onSubmit, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
   onOpenSidebar, onNewChat, onOpenSettings,
+  rightPanelOpen = false,
+  onToggleRightPanel,
+  chatColumnVisible = true,
+  onToggleChatColumn,
 }: ChatViewProps) {
   const s = useStyles()
   const chatBoxRef = useRef<HTMLDivElement>(null)
+  const bodyShellRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
+  const [pinnedToolbar, setPinnedToolbar] = useState<{
+    selection: MessageSelection
+    anchor: MessageSelectionAnchor
+  } | null>(null)
+  const [toolbarExpanded, setToolbarExpanded] = useState(false)
+  const toolbarExpandedRef = useRef(false)
 
-  const isEmpty = messages.length === 0 && !loading
+  useEffect(() => {
+    toolbarExpandedRef.current = toolbarExpanded
+  }, [toolbarExpanded])
+
+  const { selection, anchor, clearSelection } = useMessageSelection({
+    rootRef: chatBoxRef,
+    anchorRef: bodyShellRef,
+    enabled: Boolean(sessionId) && !loading,
+  })
+
+  useEffect(() => {
+    if (selection && anchor) {
+      setPinnedToolbar({ selection, anchor })
+    } else if (!toolbarExpanded) {
+      setPinnedToolbar(null)
+    }
+  }, [selection, anchor, toolbarExpanded])
+
+  const dismissToolbar = useCallback(() => {
+    setPinnedToolbar(null)
+    setToolbarExpanded(false)
+    window.getSelection()?.removeAllRanges()
+    clearSelection()
+  }, [clearSelection])
+
+  useEffect(() => {
+    if (!pinnedToolbar) return
+
+    const onSelectionChange = () => {
+      window.setTimeout(() => {
+        if (toolbarExpandedRef.current) return
+        const sel = window.getSelection()
+        const hasText = Boolean(sel && !sel.isCollapsed && sel.toString().trim())
+        if (!hasText) {
+          dismissToolbar()
+        }
+      }, 0)
+    }
+
+    document.addEventListener('selectionchange', onSelectionChange)
+    return () => document.removeEventListener('selectionchange', onSelectionChange)
+  }, [dismissToolbar, pinnedToolbar])
+
+  useEffect(() => {
+    if (!pinnedToolbar) return
+
+    const onPointerDown = (e: Event) => {
+      const target = e.target
+      if (target instanceof Element && target.closest('[data-selection-toolbar]')) return
+      dismissToolbar()
+    }
+
+    document.addEventListener('mousedown', onPointerDown, true)
+    document.addEventListener('touchstart', onPointerDown, true)
+    return () => {
+      document.removeEventListener('mousedown', onPointerDown, true)
+      document.removeEventListener('touchstart', onPointerDown, true)
+    }
+  }, [dismissToolbar, pinnedToolbar])
+
+  const handleQuote = useCallback(() => {
+    if (!pinnedToolbar || !onQuoteSelection) return
+    onQuoteSelection(pinnedToolbar.selection)
+    dismissToolbar()
+  }, [dismissToolbar, onQuoteSelection, pinnedToolbar])
+
+  const handleEphemeralAsk = useCallback((
+    message: string,
+    sel: MessageSelection,
+    priorTurns: EphemeralAskTurn[],
+  ) => {
+    if (!onEphemeralAsk) return Promise.reject(new Error('无活动对话'))
+    return onEphemeralAsk(message, sel, priorTurns)
+  }, [onEphemeralAsk])
+
+  const isEmpty = messages.length === 0 && !loading && !contextRef
   const electronChrome = isElectron() && !isMobile
 
   const syncScrollbarHalfOffset = useCallback(() => {
@@ -321,11 +408,51 @@ export default function ChatView({
         <div className={s.header}>
           <div className={s.headerInner}>
             <Text className={s.title}>{title || '新对话'}</Text>
+            {(onToggleRightPanel || onToggleChatColumn) && (
+              <div className={s.headerActions}>
+                {onToggleChatColumn && (
+                  <ChromeToolButton
+                    label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                    onClick={onToggleChatColumn}
+                  >
+                    {chatColumnVisible
+                      ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                      : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                  </ChromeToolButton>
+                )}
+                {onToggleRightPanel && (
+                  <ChromeToolButton
+                    label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
+                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                    onClick={onToggleRightPanel}
+                  >
+                    {rightPanelOpen
+                      ? <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                      : <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                  </ChromeToolButton>
+                )}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      <div className={s.bodyShell}>
+      <div className={s.bodyShell} ref={bodyShellRef}>
+        {pinnedToolbar && onQuoteSelection && onEphemeralAsk && (
+          <MessageSelectionToolbar
+            style={{
+              top: pinnedToolbar.anchor.top,
+              left: pinnedToolbar.anchor.left,
+            }}
+            selection={pinnedToolbar.selection}
+            onQuote={handleQuote}
+            onEphemeralAsk={handleEphemeralAsk}
+            onDismiss={dismissToolbar}
+            onExpandedChange={setToolbarExpanded}
+          />
+        )}
+
         <div
           ref={chatBoxRef}
           className={mergeClasses(s.scrollViewport, 'inno-scroll', 'inno-chat-scroll')}
@@ -352,28 +479,13 @@ export default function ChatView({
               )}
 
               {messages.map((m, i) => (
-                <div
+                <ChatMessageItem
                   key={`${m.at}-${i}`}
-                  className={mergeClasses(
-                    s.bubble,
-                    isMobile && s.bubbleMobile,
-                    m.role === 'user'
-                      ? mergeClasses(s.userBubble, isMobile && s.userBubbleMobile)
-                      : s.assistantBubble,
-                  )}
-                  style={{ animationDelay: `${Math.min(i * 40, 200)}ms` }}
-                >
-                  {m.role === 'assistant'
-                    ? <MarkdownMessage content={m.content} />
-                    : m.content}
-                  {m.toolsUsed && m.toolsUsed.length > 0 && (
-                    <div className={s.toolTags}>
-                      {m.toolsUsed.map(t => (
-                        <Badge key={t} size="small" className={s.toolBadge}>{t}</Badge>
-                      ))}
-                    </div>
-                  )}
-                </div>
+                  message={m}
+                  index={i}
+                  isMobile={isMobile}
+                  onFork={onForkMessage ? () => onForkMessage(i) : undefined}
+                />
               ))}
 
               {loading && (
@@ -399,6 +511,7 @@ export default function ChatView({
               error={error}
               isEmpty={isEmpty}
               isMobile={isMobile}
+              contextRef={contextRef}
               starters={starters}
               skillCategories={skills}
               availableModels={availableModels}
@@ -406,6 +519,7 @@ export default function ChatView({
               onInputChange={onInputChange}
               onSubmit={handleSubmit}
               onModelChange={onModelChange}
+              onClearContextRef={onClearContextRef}
               onPickSkill={onInputChange}
             />
           </div>

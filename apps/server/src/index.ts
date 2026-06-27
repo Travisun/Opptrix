@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import Fastify from 'fastify'
-import { AgentEngine, fetchOpenAiModelList } from '@inno-a-stock/agent'
+import { AgentEngine, fetchOpenAiModelList, type SessionContextRef } from '@inno-a-stock/agent'
 import { ResearchHub } from '@inno-a-stock/research-hub'
 import { listTemplates, REGISTRY } from '@inno-a-stock/stock-eval'
 import {
@@ -178,6 +178,7 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
       updatedAt: session.updatedAt,
     },
     messages: agent.getDisplayMessages(req.params.id),
+    contextRef: session.contextRef ?? null,
   }
 })
 
@@ -218,6 +219,80 @@ app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) =
   agent.deleteSession(req.params.id)
   return { status: 'deleted' }
 })
+
+app.post<{ Params: { id: string }; Body: { message_index: number } }>(
+  '/api/sessions/:id/fork',
+  async (req, reply) => {
+    const messageIndex = req.body?.message_index
+    if (typeof messageIndex !== 'number' || !Number.isInteger(messageIndex) || messageIndex < 0) {
+      return reply.code(400).send({ error: 'message_index required' })
+    }
+    const forked = agent.forkSession(req.params.id, messageIndex)
+    if (!forked) return reply.code(404).send({ error: 'session or message not found' })
+    return {
+      session: {
+        id: forked.id,
+        title: forked.title,
+        model: forked.model,
+        createdAt: forked.createdAt,
+        updatedAt: forked.updatedAt,
+      },
+      messages: agent.getDisplayMessages(forked.id),
+      contextRef: forked.contextRef ?? null,
+    }
+  },
+)
+
+app.patch<{ Params: { id: string }; Body: { contextRef: SessionContextRef | null } }>(
+  '/api/sessions/:id/context',
+  async (req, reply) => {
+    if (!('contextRef' in (req.body ?? {}))) {
+      return reply.code(400).send({ error: 'contextRef required' })
+    }
+    const updated = agent.setSessionContextRef(req.params.id, req.body?.contextRef ?? null)
+    if (!updated) return reply.code(404).send({ error: 'session not found' })
+    return {
+      session: {
+        id: updated.id,
+        title: updated.title,
+        model: updated.model,
+        createdAt: updated.createdAt,
+        updatedAt: updated.updatedAt,
+      },
+      contextRef: updated.contextRef ?? null,
+    }
+  },
+)
+
+app.delete<{ Params: { id: string } }>('/api/sessions/:id/context', async (req, reply) => {
+  const updated = agent.clearSessionContextRef(req.params.id)
+  if (!updated) return reply.code(404).send({ error: 'session not found' })
+  return {
+    session: {
+      id: updated.id,
+      title: updated.title,
+      model: updated.model,
+      createdAt: updated.createdAt,
+      updatedAt: updated.updatedAt,
+    },
+    contextRef: null,
+  }
+})
+
+app.post<{ Params: { id: string }; Body: { message: string; selected_text: string; model?: string; history?: Array<{ role: 'user' | 'assistant'; content: string }> } }>(
+  '/api/sessions/:id/ephemeral-ask',
+  async (req, reply) => {
+    if (!req.body?.message?.trim()) return reply.code(400).send({ error: 'message required' })
+    const result = await agent.ephemeralAsk(
+      req.params.id,
+      req.body.message,
+      req.body.selected_text ?? '',
+      req.body.model,
+      req.body.history,
+    )
+    return { reply: result.reply }
+  },
+)
 
 app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
   '/api/sessions/:id/chat',

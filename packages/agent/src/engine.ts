@@ -2,7 +2,7 @@ import type { ResearchHub } from '@inno-a-stock/research-hub'
 import { type ChatMessage } from './llm/provider.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { ToolRegistry } from './tools.js'
-import { SessionStore, type SessionRecord } from './sessions.js'
+import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
 
 export interface AgentSettings {
   providers?: ProviderProfile[]
@@ -108,6 +108,77 @@ export class AgentEngine {
     return this.sessions.toDisplayMessages(record)
   }
 
+  forkSession(sessionId: string, messageIndex: number) {
+    const source = this.sessions.get(sessionId)
+    if (!source) return null
+    return this.sessions.fork(source, messageIndex)
+  }
+
+  getSessionContextRef(sessionId: string): SessionContextRef | null {
+    const record = this.sessions.get(sessionId)
+    return record?.contextRef ?? null
+  }
+
+  clearSessionContextRef(sessionId: string) {
+    return this.sessions.clearContextRef(sessionId)
+  }
+
+  setSessionContextRef(sessionId: string, contextRef: SessionContextRef | null) {
+    return this.sessions.setContextRef(sessionId, contextRef)
+  }
+
+  async ephemeralAsk(
+    sessionId: string,
+    message: string,
+    selectedText: string,
+    modelRef?: string,
+    priorTurns?: Array<{ role: 'user' | 'assistant'; content: string }>,
+  ): Promise<{ reply: string }> {
+    const text = message.trim()
+    const quote = selectedText.trim()
+    if (!text) return { reply: '请输入问题。' }
+
+    const record = this.sessions.get(sessionId)
+    if (!record) return { reply: '对话不存在。' }
+
+    const activeModel = modelRef?.trim() || record.model
+    const llm = this.registry.createLlm(activeModel)
+    if (!llm) {
+      return { reply: '⚠️ LLM 未配置。请在设置中添加模型提供商并启用模型。' }
+    }
+
+    const contextMessages = contextRefToChatMessages(record.contextRef)
+    const history = record.messages
+      .filter(m => m.role === 'user' || m.role === 'assistant')
+      .slice(-24)
+      .map(m => ({ role: m.role, content: m.content ?? '' } as ChatMessage))
+
+    const ephemeralHistory = (priorTurns ?? [])
+      .filter(t => t.role === 'user' || t.role === 'assistant')
+      .map(t => ({ role: t.role, content: t.content ?? '' } as ChatMessage))
+
+    const isFollowUp = ephemeralHistory.length > 0
+    const prompt = isFollowUp
+      ? text
+      : quote
+        ? `用户划选了以下内容：\n"""${quote}"""\n\n请结合当前对话上下文，回答用户的问题：\n${text}`
+        : text
+
+    const messages: ChatMessage[] = [
+      { role: 'system', content: this.tools.systemPrompt() },
+      ...contextMessages,
+      ...history,
+      ...ephemeralHistory,
+      { role: 'user', content: prompt },
+    ]
+
+    const turn = await llm.chat(messages)
+    if (turn.finishReason === 'error') {
+      return { reply: turn.message.content ?? turn.error ?? '请求失败' }
+    }
+    return { reply: turn.message.content?.trim() || '（无回复内容）' }
+  }
+
   async chat(sessionId: string, message: string, modelRef?: string): Promise<ChatResult> {
     const text = message.trim()
     let record = this.sessions.get(sessionId)
@@ -133,6 +204,9 @@ export class AgentEngine {
     this.sessions.save(record)
 
     const pushAssistant = (reply: string, used: string[]) => {
+      if (this.sessions.shouldMaterializeContext(record!)) {
+        this.sessions.materializeContextRef(record!)
+      }
       record!.messages.push({ role: 'assistant', content: reply })
       record!.turns!.push({
         role: 'assistant',
@@ -154,8 +228,10 @@ export class AgentEngine {
     const systemPrompt = this.tools.systemPrompt()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      const contextMessages = contextRefToChatMessages(record.contextRef)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
+        ...contextMessages,
         ...record.messages.slice(-24),
       ]
 
@@ -173,6 +249,7 @@ export class AgentEngine {
           content: turn.message.content ?? null,
           tool_calls: turn.message.tool_calls,
         })
+        this.sessions.save(record)
 
         for (const tc of turn.message.tool_calls) {
           const fn = tc.function.name
@@ -190,6 +267,7 @@ export class AgentEngine {
             content: truncateJson(result),
           })
         }
+        this.sessions.save(record)
         continue
       }
 
@@ -208,6 +286,19 @@ function truncateJson(value: unknown): string {
   const s = JSON.stringify(value, null, 0)
   if (s.length <= TRUNCATE) return s
   return s.slice(0, TRUNCATE) + '…[truncated]'
+}
+
+function contextRefToChatMessages(ref: SessionContextRef | null | undefined): ChatMessage[] {
+  if (!ref) return []
+  if (ref.kind === 'selection') {
+    return [{
+      role: 'user',
+      content: `[引用内容]\n${ref.selectedText}`,
+    }]
+  }
+  return ref.turns
+    .filter(t => t.role === 'assistant' && t.content)
+    .map(t => ({ role: 'assistant', content: t.content }))
 }
 
 function examplePromptFor(name: string, desc: string): string {

@@ -94,6 +94,15 @@ html.inno-electron .inno-settings-panel {
   border-radius: 0;
 }
 
+html.inno-electron .inno-chat-title-bar {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+}
+
+html.inno-electron .inno-right-panel {
+  background: #FFFFFF !important;
+}
+
 html.inno-electron .inno-glass-sidebar {
   background: rgba(255, 255, 255, 0.10) !important;
   backdrop-filter: blur(40px) saturate(180%);
