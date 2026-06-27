@@ -425,6 +425,7 @@ export default function ChatView({
                   <ChromeToolButton
                     label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
                     iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                    active={rightPanelOpen}
                     onClick={onToggleRightPanel}
                   >
                     {rightPanelOpen

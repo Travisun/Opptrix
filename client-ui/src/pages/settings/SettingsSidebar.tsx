@@ -1,7 +1,6 @@
 import { useMemo } from 'react'
 import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
-  ArrowLeftRegular,
   BotRegular,
   InfoRegular,
   SearchRegular,
@@ -12,6 +11,7 @@ import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, s
 import { isElectron } from '../../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
+import SettingsBackRow from './SettingsBackRow'
 
 export type SettingsSection = 'general' | 'models' | 'about'
 export type SettingsSidebarMode = 'panel' | 'overlay'
@@ -48,23 +48,6 @@ const useStyles = makeStyles({
     minWidth: 'unset',
     height: 'auto',
     backgroundColor: innoTokens.canvas,
-  },
-  backRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '5px 12px 2px',
-    margin: '0 8px',
-    borderRadius: innoTokens.radiusMd,
-    cursor: 'pointer',
-    border: 'none',
-    backgroundColor: 'transparent',
-    color: innoTokens.textSecondary,
-    fontSize: '13px',
-    fontWeight: 500,
-    width: 'calc(100% - 16px)',
-    textAlign: 'left',
-    ...ghostInteractive,
   },
   searchWrap: {
     padding: '8px 12px 6px',
@@ -171,12 +154,7 @@ export default function SettingsSidebar({
 
   const body = (
     <>
-      {!electronChrome && onBack && (
-        <button type="button" className={mergeClasses(s.backRow, 'inno-focusable')} onClick={onBack}>
-          <ArrowLeftRegular fontSize={15} />
-          <span>返回应用</span>
-        </button>
-      )}
+      {onBack && <SettingsBackRow onClick={onBack} />}
 
       {!isMobile && (
         <div className={mergeClasses(s.searchWrap, isOverlay && s.searchWrapOverlay)}>

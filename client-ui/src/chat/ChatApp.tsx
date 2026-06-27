@@ -128,18 +128,6 @@ export default function ChatApp() {
     return window.innerWidth >= DESKTOP_SIDEBAR_EXPAND_THRESHOLD
   })
 
-  const collapseSidebars = useCallback(() => {
-    setSidebarVisible(false)
-    setSettingsSidebarVisible(false)
-  }, [setSidebarVisible])
-
-  const expandSidebars = useCallback(() => {
-    setSidebarVisible(true)
-    setSettingsSidebarVisible(true)
-  }, [setSidebarVisible])
-
-  useSidebarResizeSync(!isMobile, collapseSidebars, expandSidebars)
-
   const {
     current: view,
     canGoBack,
@@ -148,6 +136,37 @@ export default function ChatApp() {
     goBack,
     goForward,
   } = useAppNavigation('chat')
+
+  const electronChrome = isElectron() && !isMobile
+  const splitEnabled = !isMobile && view === 'chat'
+
+  const {
+    workspaceRef,
+    rightPanelOpen: rightPanelVisible,
+    chatVisible,
+    rightPanelWidth,
+    showSplitter,
+    chatWidth,
+    isDragging,
+    canToggleChatColumn,
+    beginDrag,
+    collapseRightPanel,
+    toggleRightPanel: handleToggleRightPanel,
+    toggleChatColumn: handleToggleChatColumn,
+  } = useWorkspaceSplit({ enabled: splitEnabled })
+
+  const collapseSidebars = useCallback(() => {
+    setSidebarVisible(false)
+    setSettingsSidebarVisible(false)
+    collapseRightPanel(true)
+  }, [collapseRightPanel, setSidebarVisible])
+
+  const expandSidebars = useCallback(() => {
+    setSidebarVisible(true)
+    setSettingsSidebarVisible(true)
+  }, [setSidebarVisible])
+
+  useSidebarResizeSync(!isMobile, collapseSidebars, expandSidebars)
 
   const handleToggleSidebar = useCallback(() => {
     if (view === 'settings') {
@@ -169,23 +188,6 @@ export default function ChatApp() {
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
-
-  const electronChrome = isElectron() && !isMobile
-  const splitEnabled = !isMobile && view === 'chat'
-
-  const {
-    workspaceRef,
-    rightPanelOpen: rightPanelVisible,
-    chatVisible,
-    rightPanelWidth,
-    showSplitter,
-    chatWidth,
-    isDragging,
-    canToggleChatColumn,
-    beginDrag,
-    toggleRightPanel: handleToggleRightPanel,
-    toggleChatColumn: handleToggleChatColumn,
-  } = useWorkspaceSplit({ enabled: splitEnabled })
 
   const refreshModels = useCallback(async () => {
     try {
@@ -257,6 +259,10 @@ export default function ChatApp() {
     closeDrawer()
     navigate('settings')
   }
+
+  const handleExitSettings = useCallback(() => {
+    navigate('chat')
+  }, [navigate])
 
   const handleNew = async () => {
     try {
@@ -484,12 +490,12 @@ export default function ChatApp() {
           showSidebarToggle={!isSettings || sidebarOverlayMode}
           sidebarHoverReveal={sidebarOverlayMode}
           onRevealSidebar={handleEdgeRevealSidebar}
-          canGoBack={canGoBack}
-          canGoForward={canGoForward}
+          canGoBack={!isSettings && canGoBack}
+          canGoForward={!isSettings && canGoForward}
           onToggleSidebar={handleToggleSidebar}
           onNewChat={handleNew}
-          onGoBack={goBack}
-          onGoForward={goForward}
+          onGoBack={!isSettings ? goBack : undefined}
+          onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={!isSettings ? rightPanelVisible : undefined}
           chatColumnVisible={!isSettings ? chatVisible : undefined}
           onToggleRightPanel={!isSettings && !isMobile ? handleToggleRightPanel : undefined}
@@ -513,7 +519,7 @@ export default function ChatApp() {
               isMobile={isMobile}
               sidebarVisible={settingsSidebarVisible}
               onSidebarClose={() => setSettingsSidebarVisible(false)}
-              onBack={goBack}
+              onBack={handleExitSettings}
               onSaved={async () => {
                 await refreshHealth()
               }}

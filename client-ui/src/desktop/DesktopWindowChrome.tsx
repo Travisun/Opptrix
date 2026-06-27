@@ -183,17 +183,17 @@ export default function DesktopWindowChrome({
                 : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
             </ChromeToolButton>
           )}
-          {onGoBack && (
+          {!isSettings && onGoBack && (
             <ChromeToolButton label="后退" disabled={!canGoBack} onClick={onGoBack}>
               <ArrowLeftRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
             </ChromeToolButton>
           )}
-          {onGoForward && (
+          {!isSettings && onGoForward && (
             <ChromeToolButton label="前进" disabled={!canGoForward} onClick={onGoForward}>
               <ArrowRightRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
             </ChromeToolButton>
           )}
-          {!isSettings && onNewChat && (
+          {!isSettings && onNewChat && !sidebarOpen && (
             <ChromeToolButton label="新建对话" onClick={onNewChat}>
               <ChatAddRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
             </ChromeToolButton>
@@ -221,6 +221,7 @@ export default function DesktopWindowChrome({
             <ChromeToolButton
               label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
               iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              active={rightPanelOpen}
               onClick={onToggleRightPanel}
             >
               {rightPanelOpen

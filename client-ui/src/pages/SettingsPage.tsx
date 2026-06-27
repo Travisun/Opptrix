@@ -10,6 +10,7 @@ import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
 } from './settings/SettingsSidebar'
+import SettingsBackRow from './settings/SettingsBackRow'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
@@ -84,6 +85,10 @@ const useStyles = makeStyles({
     flexShrink: 0,
     paddingTop: '24px',
     paddingBottom: '4px',
+  },
+  contentBack: {
+    marginBottom: '12px',
+    marginLeft: '-2px',
   },
   pageTitle: {
     fontSize: '20px',
@@ -412,6 +417,9 @@ export default function SettingsPage({
         <div className={s.contentViewport}>
           <div className={mergeClasses(s.contentColumn, isMobile && s.contentColumnMobile)}>
             <header className={s.contentHeader}>
+              {sidebarOverlayMode && !sidebarVisible && (
+                <SettingsBackRow className={s.contentBack} onClick={onBack} />
+              )}
               <Text className={s.pageTitle} block>{sectionTitle}</Text>
               <Text className={s.pageSubtitle} block>{sectionSubtitle}</Text>
             </header>

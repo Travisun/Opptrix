@@ -1,8 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   WORKSPACE_CHAT_MIN_WIDTH,
+  WORKSPACE_CHAT_RIGHT_MIN_WIDTH,
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
   WORKSPACE_RIGHT_PANEL_MIN_WIDTH,
+  WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH,
   WORKSPACE_SPLITTER_WIDTH,
 } from '../desktop/constants'
 
@@ -30,6 +32,7 @@ export function useWorkspaceSplit({
   const [isDragging, setIsDragging] = useState(false)
   const savedRightWidthRef = useRef(defaultRightWidth)
   const rightPanelWidthRef = useRef(defaultRightWidth)
+  const autoCollapsedByWidthRef = useRef(false)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
 
   useEffect(() => {
@@ -56,11 +59,21 @@ export function useWorkspaceSplit({
       ? workspaceWidth
       : 0
 
+  const canFitRightPanel = workspaceWidth <= 0 || workspaceWidth >= WORKSPACE_CHAT_RIGHT_MIN_WIDTH
+
   const commitWidth = useCallback((nextWidth: number, wsWidth: number) => {
     const clamped = clampRightWidth(nextWidth, wsWidth)
     savedRightWidthRef.current = clamped
     setRightPanelWidth(clamped)
   }, [])
+
+  const collapseRightPanel = useCallback((markAuto = true) => {
+    if (!rightPanelOpen) return
+    savedRightWidthRef.current = rightPanelWidthRef.current
+    if (markAuto) autoCollapsedByWidthRef.current = true
+    setRightPanelOpen(false)
+    setChatVisible(true)
+  }, [rightPanelOpen])
 
   const beginDrag = useCallback((clientX: number) => {
     if (!enabled || !chatVisible || !rightPanelOpen) return
@@ -110,24 +123,55 @@ export function useWorkspaceSplit({
 
   useEffect(() => {
     if (!enabled || isDragging || workspaceWidth <= 0) return
-    if (!chatVisible || !rightPanelOpen) return
+
+    if (rightPanelOpen && workspaceWidth < WORKSPACE_CHAT_RIGHT_MIN_WIDTH) {
+      collapseRightPanel(true)
+      return
+    }
+
+    if (
+      !rightPanelOpen
+      && autoCollapsedByWidthRef.current
+      && workspaceWidth >= WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH
+    ) {
+      autoCollapsedByWidthRef.current = false
+      setRightPanelWidth(savedRightWidthRef.current || defaultRightWidth)
+      setRightPanelOpen(true)
+      setChatVisible(true)
+      return
+    }
+
+    if (!rightPanelOpen || !chatVisible) return
 
     const clamped = clampRightWidth(rightPanelWidth, workspaceWidth)
     if (clamped !== rightPanelWidth) {
       commitWidth(clamped, workspaceWidth)
     }
-  }, [chatVisible, commitWidth, enabled, isDragging, rightPanelOpen, rightPanelWidth, workspaceWidth])
+  }, [
+    chatVisible,
+    collapseRightPanel,
+    commitWidth,
+    defaultRightWidth,
+    enabled,
+    isDragging,
+    rightPanelOpen,
+    rightPanelWidth,
+    workspaceWidth,
+  ])
 
   const toggleRightPanel = useCallback(() => {
     if (rightPanelOpen) {
       savedRightWidthRef.current = rightPanelWidthRef.current
+      autoCollapsedByWidthRef.current = false
       setRightPanelOpen(false)
       setChatVisible(true)
       return
     }
+    if (enabled && workspaceWidth > 0 && workspaceWidth < WORKSPACE_CHAT_RIGHT_MIN_WIDTH) return
+    autoCollapsedByWidthRef.current = false
     setRightPanelWidth(savedRightWidthRef.current || defaultRightWidth)
     setRightPanelOpen(true)
-  }, [defaultRightWidth, rightPanelOpen])
+  }, [defaultRightWidth, enabled, rightPanelOpen, workspaceWidth])
 
   const toggleChatColumn = useCallback(() => {
     if (!rightPanelOpen) return
@@ -152,7 +196,9 @@ export function useWorkspaceSplit({
     chatWidth,
     isDragging,
     canToggleChatColumn,
+    canFitRightPanel,
     beginDrag,
+    collapseRightPanel,
     toggleRightPanel,
     toggleChatColumn,
   }

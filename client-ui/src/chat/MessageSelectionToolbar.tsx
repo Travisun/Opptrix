@@ -39,9 +39,8 @@ const useStyles = makeStyles({
     zIndex: 20,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'stretch',
+    alignItems: 'flex-start',
     width: 'fit-content',
-    minWidth: '148px',
     maxWidth: 'min(400px, calc(100vw - 24px))',
     gap: '2px',
     padding: '2px',
@@ -56,6 +55,10 @@ const useStyles = makeStyles({
     transitionProperty: 'width, max-width, border-radius',
     transitionDuration: motion.normal,
     transitionTimingFunction: motion.easeOut,
+  },
+  toolbarExpanded: {
+    alignItems: 'stretch',
+    minWidth: '240px',
   },
   toolbarConversation: {
     minWidth: '280px',
@@ -365,10 +368,16 @@ export default function MessageSelectionToolbar({
   }
 
   const inConversation = mode === 'conversation'
+  const isExpanded = mode !== 'compact'
 
   return (
     <div
-      className={mergeClasses(s.toolbar, inConversation && s.toolbarConversation, className)}
+      className={mergeClasses(
+        s.toolbar,
+        isExpanded && s.toolbarExpanded,
+        inConversation && s.toolbarConversation,
+        className,
+      )}
       style={style}
       role="toolbar"
       aria-label="选区工具"

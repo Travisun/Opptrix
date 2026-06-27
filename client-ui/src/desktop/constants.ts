@@ -47,6 +47,30 @@ export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 456
 export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 228
 export const WORKSPACE_SPLITTER_WIDTH = 5
 
+/** Inline left sidebar width — keep in sync with innoTokens.sidebarWidthPx */
+export const SIDEBAR_INLINE_WIDTH = 228
+
+/**
+ * Minimum workspace width (chat area) to keep chat + splitter + right panel open.
+ * Below this, the right panel auto-collapses so chat keeps a usable 350px column.
+ */
+export const WORKSPACE_CHAT_RIGHT_MIN_WIDTH =
+  WORKSPACE_CHAT_MIN_WIDTH + WORKSPACE_SPLITTER_WIDTH + WORKSPACE_RIGHT_PANEL_MIN_WIDTH
+
+/**
+ * Minimum window width for three inline columns (left sidebar + chat + right panel).
+ * Matches SIDEBAR_INLINE_WIDTH + WORKSPACE_CHAT_RIGHT_MIN_WIDTH.
+ */
+export const WORKSPACE_TRIPLE_COLUMN_MIN_WIDTH =
+  SIDEBAR_INLINE_WIDTH + WORKSPACE_CHAT_RIGHT_MIN_WIDTH
+
+/** Hysteresis buffer so right panel does not flicker at the collapse boundary. */
+export const WORKSPACE_PANEL_HYSTERESIS = 28
+
+/** Auto-restore right panel once workspace grows past collapse minimum + hysteresis. */
+export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
+  WORKSPACE_CHAT_RIGHT_MIN_WIDTH + WORKSPACE_PANEL_HYSTERESIS
+
 /** Title bar stacking — overlay sidebar sits between title and toolbar */
 export const DESKTOP_Z_TITLE = 1100
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150

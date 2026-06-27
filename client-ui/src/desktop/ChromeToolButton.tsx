@@ -31,6 +31,14 @@ const useStyles = makeStyles({
       },
     },
   },
+  btnActive: {
+    backgroundColor: innoTokens.accentSoft,
+    color: innoTokens.accent,
+    ':hover': {
+      backgroundColor: innoTokens.accentSoft,
+      color: innoTokens.accent,
+    },
+  },
 })
 
 interface ChromeToolButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
@@ -38,6 +46,7 @@ interface ChromeToolButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> 
   label: string
   /** Inner padding — smaller values leave room for a larger glyph in the same hit target */
   iconPadding?: number
+  active?: boolean
 }
 
 export default function ChromeToolButton({
@@ -45,6 +54,7 @@ export default function ChromeToolButton({
   label,
   className,
   iconPadding = DESKTOP_TOOL_ICON_PADDING,
+  active = false,
   style,
   ...rest
 }: ChromeToolButtonProps) {
@@ -52,7 +62,8 @@ export default function ChromeToolButton({
   return (
     <button
       type="button"
-      className={mergeClasses(s.btn, 'inno-focusable', className)}
+      className={mergeClasses(s.btn, active && s.btnActive, 'inno-focusable', className)}
+      aria-pressed={active || undefined}
       aria-label={label}
       title={label}
       style={{ padding: `${iconPadding}px`, ...style }}
