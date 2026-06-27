@@ -1,6 +1,7 @@
 import {
   Children,
   cloneElement,
+  createElement,
   isValidElement,
   useCallback,
   useMemo,
@@ -12,16 +13,16 @@ import {
 } from 'react'
 import { CheckmarkCircleFilled, ClipboardPasteRegular } from '@fluentui/react-icons'
 
+const COPY_COL_CLASS = 'inno-md-table-copy-col'
+
 function escapeCell(text: string): string {
   return text.trim().replace(/\|/g, '\\|').replace(/\s+/g, ' ')
 }
 
 function extractRow(tr: Element): string[] {
-  return [...tr.querySelectorAll('th, td')].map((cell) => {
-    const clone = cell.cloneNode(true) as HTMLElement
-    clone.querySelector('.inno-md-table-copy')?.remove()
-    return escapeCell(clone.textContent ?? '')
-  })
+  return [...tr.querySelectorAll('th, td')]
+    .filter(cell => !cell.classList.contains(COPY_COL_CLASS))
+    .map(cell => escapeCell(cell.textContent ?? ''))
 }
 
 export function tableToMarkdown(table: HTMLTableElement): string {
@@ -41,7 +42,7 @@ export function tableToMarkdown(table: HTMLTableElement): string {
     body = fallback.slice(1)
   }
 
-  const colCount = Math.max(header.length, ...body.map((row) => row.length), 1)
+  const colCount = Math.max(header.length, ...body.map(row => row.length), 1)
   const pad = (cells: string[]) => {
     const row = [...cells]
     while (row.length < colCount) row.push('')
@@ -79,54 +80,46 @@ function TableCopyButton({
   )
 }
 
-function injectCopyIntoFirstRow(children: ReactNode, copyButton: ReactNode): ReactNode {
-  const sections = Children.toArray(children)
-  const hasThead = sections.some(
-    (child) => isValidElement(child) && child.type === 'thead',
+function appendCopyColumnCell(row: ReactElement, copyButton: ReactNode | null): ReactElement {
+  const cells = Children.toArray(row.props.children)
+  const usesHeaderCell = cells.some(cell => isValidElement(cell) && cell.type === 'th')
+  const cellType = usesHeaderCell ? 'th' : 'td'
+
+  return cloneElement(
+    row as ReactElement<{ children?: ReactNode }>,
+    {},
+    [
+      ...cells,
+      createElement(
+        cellType,
+        { className: COPY_COL_CLASS, 'aria-hidden': true },
+        copyButton,
+      ),
+    ],
   )
+}
 
-  let injected = false
+function injectCopyColumn(children: ReactNode, copyButton: ReactNode): ReactNode {
+  let copyHostAssigned = false
 
-  return Children.map(sections, (section) => {
-    if (!isValidElement(section) || injected) return section
+  return Children.map(children, section => {
+    if (!isValidElement(section) || (section.type !== 'thead' && section.type !== 'tbody')) {
+      return section
+    }
 
-    const useSection =
-      (hasThead && section.type === 'thead') ||
-      (!hasThead && section.type === 'tbody')
+    const rows = Children.toArray(section.props.children).map(row => {
+      if (!isValidElement(row) || row.type !== 'tr') return row
 
-    if (!useSection) return section
+      const hostCopy = !copyHostAssigned
+      if (hostCopy) copyHostAssigned = true
 
-    const rows = Children.toArray(section.props.children)
-    const nextRows = rows.map((row, rowIndex) => {
-      if (injected || rowIndex !== 0 || !isValidElement(row) || row.type !== 'tr') return row
-
-      const cells = Children.toArray(row.props.children)
-      const lastIndex = cells.length - 1
-      const lastCell = cells[lastIndex]
-      if (!isValidElement(lastCell)) return row
-
-      cells[lastIndex] = cloneElement(
-        lastCell as ReactElement<{ className?: string; children?: ReactNode }>,
-        {
-          className: [
-            (lastCell as ReactElement<{ className?: string }>).props.className,
-            'inno-md-table-cell--copy-host',
-          ].filter(Boolean).join(' '),
-        },
-        (
-          <>
-            <span className="inno-md-table-cell-content">
-              {(lastCell as ReactElement<{ children?: ReactNode }>).props.children}
-            </span>
-            {copyButton}
-          </>
-        ),
+      return appendCopyColumnCell(
+        row as ReactElement<{ children?: ReactNode }>,
+        hostCopy ? copyButton : null,
       )
-      injected = true
-      return cloneElement(row as ReactElement<{ children?: ReactNode }>, {}, cells)
     })
 
-    return cloneElement(section as ReactElement<{ children?: ReactNode }>, {}, nextRows)
+    return cloneElement(section as ReactElement<{ children?: ReactNode }>, {}, rows)
   })
 }
 
@@ -157,7 +150,7 @@ export default function MarkdownTable({ children, ...props }: Props) {
   const label = copied ? 'Copied table markdown' : 'Copy table as Markdown'
 
   const tableChildren = useMemo(
-    () => injectCopyIntoFirstRow(
+    () => injectCopyColumn(
       children,
       <TableCopyButton copied={copied} label={label} onCopy={handleCopy} />,
     ),
