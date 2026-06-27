@@ -7,6 +7,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
+import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -30,7 +31,8 @@ const app = Fastify({ logger: true })
 app.get('/api/health', async () => ({
   status: 'ok',
   version: '0.6.0',
-  runtime: 'node',
+  runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
+  desktop: process.env.INNO_DESKTOP === '1',
   llm_configured: agent.llmConfigured,
   model: cfg.default_model ?? null,
   available_models: agent.listAvailableModels().length,
@@ -387,11 +389,31 @@ app.post<{ Body: { code: string; shares: number; price: number; side?: string; d
   },
 )
 
-app.setNotFoundHandler(async (_req, reply) => {
-  reply.code(404).send({ error: 'not found' })
-})
+let serveUi = false
 
-app.listen({ port: PORT, host: HOST }).then(() => {
+async function bootstrap() {
+  serveUi = shouldServeUi()
+  if (serveUi) {
+    serveUi = await registerStaticUi(app)
+  }
+
+  app.setNotFoundHandler(async (req, reply) => {
+    if (serveUi && !isApiPath(req.url)) {
+      return reply.sendFile('index.html', resolveUiDist())
+    }
+    return reply.code(404).send({ error: 'not found' })
+  })
+
+  await app.listen({ port: PORT, host: HOST })
   console.log(`\n  innoAStock API → http://${HOST}:${PORT}/api/health`)
-  console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
+  if (serveUi) {
+    console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
+  } else {
+    console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
+  }
+}
+
+bootstrap().catch(err => {
+  console.error(err)
+  process.exit(1)
 })

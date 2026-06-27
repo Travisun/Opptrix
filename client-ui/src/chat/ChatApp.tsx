@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react'
-import { makeStyles } from '@fluentui/react-components'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import SessionSidebar from './SessionSidebar'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
@@ -9,9 +9,12 @@ import {
 } from '../api/client'
 import type { ChatDisplayMessage, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
 import { innoTokens } from '../theme/tokens'
-import { useBreakpoint, useSidebarPreference } from '../hooks/useBreakpoint'
-
-type AppView = 'chat' | 'settings'
+import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
+import { useAppNavigation } from '../hooks/useAppNavigation'
+import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
+import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
+import { isElectron } from '../platform/detect'
+import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -20,14 +23,60 @@ const useStyles = makeStyles({
     backgroundColor: innoTokens.canvas,
     overflow: 'hidden',
   },
+  rootElectron: {
+    backgroundColor: 'transparent',
+  },
+  rootLayout: {
+    display: 'flex',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    width: '100%',
+  },
   main: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    transitionProperty: 'margin',
-    transitionDuration: '220ms',
-    transitionTimingFunction: 'cubic-bezier(0, 0, 0.2, 1)',
+    transitionProperty: 'margin, padding',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+  },
+  mainChatElectron: {
+    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
+    paddingBottom: innoTokens.windowInset,
+    paddingRight: 0,
+    paddingLeft: 0,
+    backgroundColor: innoTokens.canvas,
+  },
+  chatPanel: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    backgroundColor: innoTokens.canvas,
+    borderRadius: 0,
+    overflow: 'hidden',
+  },
+  chatHeaderHairline: {
+    position: 'fixed',
+    top: `${DESKTOP_TITLEBAR_HEIGHT}px`,
+    right: 0,
+    height: 0,
+    borderBottom: `1px solid ${innoTokens.separatorStrong}`,
+    zIndex: DESKTOP_Z_TITLE,
+    pointerEvents: 'none',
+    transitionProperty: 'left',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+  },
+  settingsHost: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    width: '100%',
+    display: 'flex',
+    backgroundColor: 'transparent',
   },
 })
 
@@ -38,12 +87,47 @@ export default function ChatApp() {
   const {
     visible: sidebarVisible,
     drawerOpen,
+    setVisible: setSidebarVisible,
     toggleVisible,
     openDrawer,
     closeDrawer,
   } = useSidebarPreference(isMobile)
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
+  const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
+  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth >= DESKTOP_SIDEBAR_EXPAND_THRESHOLD
+  })
 
-  const [view, setView] = useState<AppView>('chat')
+  const collapseSidebars = useCallback(() => {
+    setSidebarVisible(false)
+    setSettingsSidebarVisible(false)
+  }, [setSidebarVisible])
+
+  const expandSidebars = useCallback(() => {
+    setSidebarVisible(true)
+    setSettingsSidebarVisible(true)
+  }, [setSidebarVisible])
+
+  useSidebarResizeSync(!isMobile, collapseSidebars, expandSidebars)
+
+  const {
+    current: view,
+    canGoBack,
+    canGoForward,
+    navigate,
+    goBack,
+    goForward,
+  } = useAppNavigation('chat')
+
+  const handleToggleSidebar = useCallback(() => {
+    if (view === 'settings') {
+      setSettingsSidebarVisible(prev => !prev)
+      return
+    }
+    toggleVisible()
+  }, [view, toggleVisible])
+
   const [sessions, setSessions] = useState<SessionMeta[]>([])
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
@@ -123,7 +207,7 @@ export default function ChatApp() {
 
   const openSettings = () => {
     closeDrawer()
-    setView('settings')
+    navigate('settings')
   }
 
   const handleNew = async () => {
@@ -137,6 +221,7 @@ export default function ChatApp() {
       setInput('')
       setError('')
       closeDrawer()
+      if (view !== 'chat') navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
@@ -146,6 +231,7 @@ export default function ChatApp() {
     if (id === activeId) return
     try {
       await loadSession(id)
+      if (view !== 'chat') navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载对话失败')
     }
@@ -225,8 +311,8 @@ export default function ChatApp() {
     if (!activeId) return
     try {
       await setSessionModel(activeId, ref)
-      setSessions(prev => prev.map(s =>
-        s.id === activeId ? { ...s, model: ref } : s,
+      setSessions(prev => prev.map(sess =>
+        sess.id === activeId ? { ...sess, model: ref } : sess,
       ))
     } catch (e) {
       setError(e instanceof Error ? e.message : '切换模型失败')
@@ -234,23 +320,22 @@ export default function ChatApp() {
   }
 
   const activeSession = sessions.find(x => x.id === activeId)
+  const electronChrome = isElectron() && !isMobile
+  const isSettings = view === 'settings'
+  const chromeTitle = activeSession?.title ?? '新对话'
+  const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
-  if (view === 'settings') {
-    return (
-      <SettingsPage
-        onBack={() => setView('chat')}
-        onSaved={async () => {
-          await refreshHealth()
-        }}
-      />
-    )
-  }
+  const handleEdgeRevealSidebar = useCallback(() => {
+    if (isSettings) {
+      setSettingsSidebarVisible(true)
+      return
+    }
+    setSidebarVisible(true)
+  }, [isSettings, setSidebarVisible])
 
   const sidebarProps = {
     sessions,
     activeId,
-    llmLabel,
-    backendOk,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
@@ -258,43 +343,98 @@ export default function ChatApp() {
   }
 
   return (
-    <div className={s.root}>
-      {!isMobile && (
-        <SessionSidebar mode="panel" visible={sidebarVisible} {...sidebarProps} />
+    <>
+      {electronChrome && sidebarOverlayMode && !overlaySidebarOpen && (
+        <OverlaySidebarEdgeTrigger
+          enabled
+          onReveal={handleEdgeRevealSidebar}
+        />
       )}
-
-      <div className={s.main}>
-        {isMobile && (
+      {electronChrome && (
+        <DesktopWindowChrome
+          title={chromeTitle}
+          viewMode={isSettings ? 'settings' : 'chat'}
+          sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
+          sidebarInline={isSettings
+            ? settingsSidebarVisible && !sidebarOverlayMode
+            : sidebarInlineVisible}
+          showSidebarToggle={!isSettings || sidebarOverlayMode}
+          sidebarHoverReveal={sidebarOverlayMode}
+          onRevealSidebar={handleEdgeRevealSidebar}
+          canGoBack={canGoBack}
+          canGoForward={canGoForward}
+          onToggleSidebar={handleToggleSidebar}
+          onNewChat={handleNew}
+          onGoBack={goBack}
+          onGoForward={goForward}
+        />
+      )}
+      {electronChrome && !isSettings && (
+        <div
+          className={s.chatHeaderHairline}
+          style={{ left: sidebarInlineVisible ? `${innoTokens.sidebarWidthPx}px` : 0 }}
+          aria-hidden
+        />
+      )}
+      <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'inno-app-shell')}>
+        <div className={s.rootLayout}>
+        {view === 'chat' && !isMobile && (
           <SessionSidebar
-            mode="drawer"
-            drawerOpen={drawerOpen}
-            onClose={closeDrawer}
+            mode={sidebarOverlayMode ? 'overlay' : 'panel'}
+            visible={sidebarVisible}
+            onClose={() => setSidebarVisible(false)}
             {...sidebarProps}
           />
         )}
 
-        <ChatView
-          title={activeSession?.title ?? '新对话'}
-          messages={messages}
-          input={input}
-          loading={loading}
-          error={error}
-          skills={skills}
-          availableModels={availableModels}
-          sessionModel={sessionModel}
-          isMobile={isMobile}
-          sidebarVisible={sidebarVisible}
-          llmLabel={llmLabel}
-          backendOk={backendOk}
-          onInputChange={setInput}
-          onSubmit={handleSubmit}
-          onModelChange={availableModels.length ? handleModelChange : undefined}
-          onOpenSidebar={openDrawer}
-          onNewChat={handleNew}
-          onOpenSettings={openSettings}
-          onToggleSidebar={toggleVisible}
-        />
+        {isSettings ? (
+          <div className={mergeClasses(s.settingsHost, electronChrome && 'inno-settings-host')}>
+            <SettingsPage
+              isMobile={isMobile}
+              sidebarVisible={settingsSidebarVisible}
+              onSidebarClose={() => setSettingsSidebarVisible(false)}
+              onBack={goBack}
+              onSaved={async () => {
+                await refreshHealth()
+              }}
+            />
+          </div>
+        ) : (
+          <div className={mergeClasses(s.main, electronChrome && s.mainChatElectron, electronChrome && 'inno-app-main')}>
+            {isMobile && (
+              <SessionSidebar
+                mode="drawer"
+                drawerOpen={drawerOpen}
+                onClose={closeDrawer}
+                {...sidebarProps}
+              />
+            )}
+
+            <div className={mergeClasses(electronChrome && s.chatPanel, electronChrome && 'inno-chat-panel')}>
+              <ChatView
+                title={activeSession?.title ?? '新对话'}
+                messages={messages}
+                input={input}
+                loading={loading}
+                error={error}
+                skills={skills}
+                availableModels={availableModels}
+                sessionModel={sessionModel}
+                isMobile={isMobile}
+                llmLabel={llmLabel}
+                backendOk={backendOk}
+                onInputChange={setInput}
+                onSubmit={handleSubmit}
+                onModelChange={availableModels.length ? handleModelChange : undefined}
+                onOpenSidebar={openDrawer}
+                onNewChat={handleNew}
+                onOpenSettings={openSettings}
+              />
+            </div>
+          </div>
+        )}
+        </div>
       </div>
-    </div>
+    </>
   )
 }

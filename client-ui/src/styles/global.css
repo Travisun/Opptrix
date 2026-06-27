@@ -16,39 +16,388 @@ body,
 body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
-  background: var(--inno-canvas, #F2F2F7);
-  color: var(--inno-text, #1C1C1E);
+  -moz-osx-font-smoothing: grayscale;
+  background: var(--inno-canvas, #FFFFFF);
+  color: var(--inno-text, #1D1D1F);
   overscroll-behavior: none;
   touch-action: manipulation;
+  font-size: 14px;
+  line-height: 1.5;
 }
 
 :root {
-  --inno-canvas: #F2F2F7;
+  --inno-canvas: #FFFFFF;
+  --inno-canvas-alt: #F5F5F7;
   --inno-surface: #FFFFFF;
-  --inno-separator: rgba(60, 60, 67, 0.12);
-  --inno-accent: #D17A5D;
-  --inno-text: #1C1C1E;
+  --inno-glass: rgba(255, 255, 255, 0.14);
+  --inno-separator: rgba(60, 60, 67, 0.06);
+  --inno-border: rgba(60, 60, 67, 0.08);
+  --inno-accent: #1D1D1F;
+  --inno-text: #1D1D1F;
+  --inno-text-secondary: #6E6E73;
+  --inno-text-tertiary: #AEAEB2;
   --inno-motion-fast: 140ms;
   --inno-motion-normal: 220ms;
   --inno-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --inno-focus-ring: 2px solid #1D1D1F;
+  --inno-focus-offset: 2px;
+  --inno-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
+  --inno-focus-border: rgba(60, 60, 67, 0.18);
+  --inno-active-opacity: 0.72;
+  --inno-overlay-sidebar-hover: #F2F2F7;
+  --inno-overlay-sidebar-selected: #F2F2F7;
 }
 
-/* ── Native flat: strip Fluent shadows ── */
+html.inno-desktop {
+  --inno-titlebar-height: 43px;
+  --inno-chrome-top-offset: 5px;
+}
+
+/* ── Electron: fully transparent shell, glass sidebars ── */
+html.inno-electron {
+  --inno-app-bg: transparent;
+  --inno-chrome-bg: transparent;
+}
+
+html.inno-electron,
+html.inno-electron body,
+html.inno-electron #root {
+  background: transparent !important;
+}
+
+html.inno-electron .inno-app-shell,
+html.inno-electron .fui-FluentProvider,
+html.inno-electron #root > * {
+  background: transparent !important;
+}
+
+html.inno-electron .inno-app-main {
+  background: #FFFFFF !important;
+}
+
+html.inno-electron .inno-settings-host {
+  background: transparent !important;
+}
+
+html.inno-electron .inno-settings-content {
+  flex: 1 !important;
+  min-width: 0 !important;
+  width: 100% !important;
+  height: 100% !important;
+  background: #FFFFFF !important;
+}
+
+html.inno-electron .inno-chat-panel,
+html.inno-electron .inno-settings-panel {
+  background: #FFFFFF;
+  border: none;
+  border-radius: 0;
+}
+
+html.inno-electron .inno-glass-sidebar {
+  background: rgba(255, 255, 255, 0.10) !important;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+.inno-chat-scroll {
+  scrollbar-gutter: auto;
+}
+
+.inno-chat-scroll::-webkit-scrollbar {
+  width: 6px;
+}
+
+.inno-chat-scroll::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 67, 0.14);
+  border-radius: 999px;
+}
+
+.inno-chat-scroll::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.inno-sidebar-edge {
+  border-right: 0.5px solid rgba(60, 60, 67, 0.11);
+  box-shadow: -2px 0 10px rgba(0, 0, 0, 0.032);
+}
+
+/* Overlay draw sidebar — gray hover / focus / active + selected session */
+.inno-overlay-sidebar .inno-session-item:hover,
+.inno-overlay-sidebar .inno-session-item:focus-visible,
+.inno-overlay-sidebar .inno-session-item:active,
+.inno-overlay-sidebar button.inno-focusable:hover,
+.inno-overlay-sidebar button.inno-focusable:focus-visible,
+.inno-overlay-sidebar button.inno-focusable:active {
+  background-color: var(--inno-overlay-sidebar-hover) !important;
+  color: var(--inno-text, #1D1D1F);
+}
+
+.inno-overlay-sidebar .inno-session-item.inno-session-item-active {
+  background-color: var(--inno-overlay-sidebar-selected) !important;
+}
+
+.inno-overlay-sidebar .inno-session-item.inno-session-item-active:hover,
+.inno-overlay-sidebar .inno-session-item.inno-session-item-active:focus-visible {
+  background-color: var(--inno-overlay-sidebar-hover) !important;
+}
+
+.inno-overlay-sidebar button.inno-settings-nav-item-active {
+  background-color: var(--inno-overlay-sidebar-selected) !important;
+}
+
+.inno-overlay-sidebar button.inno-settings-nav-item-active:hover,
+.inno-overlay-sidebar button.inno-settings-nav-item-active:focus-visible {
+  background-color: var(--inno-overlay-sidebar-hover) !important;
+}
+
+html.inno-electron .inno-settings-search-shell {
+  background: rgba(255, 255, 255, 0.35);
+}
+
+html.inno-electron .inno-settings-search-shell:hover:not(:focus-within) {
+  background: rgba(255, 255, 255, 0.42);
+}
+
+html.inno-electron .inno-settings-search-shell:focus-within {
+  background: rgba(255, 255, 255, 0.52);
+}
+
+html.inno-electron .inno-settings-search .fui-Input,
+html.inno-electron .inno-settings-search .fui-Input__input {
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+}
+
+.inno-settings-search-shell .inno-settings-search,
+.inno-settings-search-shell .fui-Input,
+.inno-settings-search-shell .fui-Input__input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 13px;
+}
+
+.inno-settings-search-shell .fui-Input::before,
+.inno-settings-search-shell .fui-Input::after,
+.inno-settings-search-shell .fui-Input__underline {
+  display: none !important;
+}
+
+html.inno-desktop body,
+html.inno-electron body {
+  touch-action: auto;
+  user-select: none;
+}
+
+html.inno-desktop .inno-md,
+html.inno-desktop .inno-md *,
+html.inno-desktop textarea,
+html.inno-desktop input {
+  user-select: text;
+}
+
+/* ── Unified interaction: focus / hover / active ── */
+.inno-focusable:focus {
+  outline: none;
+}
+
+.inno-focusable:focus-visible {
+  outline: var(--inno-focus-ring);
+  outline-offset: var(--inno-focus-offset);
+}
+
+.inno-input-shell {
+  border: 1px solid transparent;
+  transition:
+    background-color var(--inno-motion-fast) var(--inno-ease),
+    border-color var(--inno-motion-fast) var(--inno-ease),
+    box-shadow var(--inno-motion-fast) var(--inno-ease);
+}
+
+.inno-input-shell:hover:not(:focus-within) {
+  background-color: #EBEBED;
+}
+
+.inno-input-shell:focus-within {
+  background-color: #FFFFFF;
+  border-color: var(--inno-focus-border);
+  box-shadow: none;
+  outline: none;
+}
+
+.inno-input-shell .fui-Input,
+.inno-input-shell .fui-Input__input,
+.inno-input-shell .fui-Textarea,
+.inno-input-shell .fui-Textarea__textarea,
+.inno-input-shell .fui-Dropdown,
+.inno-input-shell .fui-Dropdown__button,
+.inno-input-shell input,
+.inno-input-shell textarea {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.inno-input-shell .fui-Input:focus-within,
+.inno-input-shell .fui-Textarea:focus-within,
+.inno-input-shell .fui-Dropdown:focus-within,
+.inno-input-shell input:focus,
+.inno-input-shell textarea:focus {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
+}
+
+.inno-btn.fui-Button:focus {
+  outline: none;
+}
+
+.inno-btn.fui-Button:focus-visible {
+  outline: var(--inno-focus-ring) !important;
+  outline-offset: var(--inno-focus-offset) !important;
+}
+
+.fui-Button:focus {
+  outline: none;
+}
+
+.fui-Button:focus-visible {
+  outline: var(--inno-focus-ring) !important;
+  outline-offset: var(--inno-focus-offset) !important;
+}
+
+.inno-composer-shell:focus-within {
+  border-color: var(--inno-focus-border) !important;
+  outline: none !important;
+}
+
+.inno-composer-shell textarea:focus,
+.inno-composer-shell textarea:focus-visible {
+  outline: none !important;
+}
+
+.inno-focusable:active:not(:disabled) {
+  opacity: var(--inno-active-opacity);
+}
+
+.fui-Checkbox:focus-within .fui-Checkbox__indicator,
+.fui-Checkbox input:focus-visible + .fui-Checkbox__indicator {
+  outline: var(--inno-focus-ring);
+  outline-offset: var(--inno-focus-offset);
+}
+
+.fui-Input:focus-visible,
+.fui-Textarea:focus-visible,
+.fui-Dropdown:focus-visible,
+.fui-Input__input:focus,
+.fui-Input__input:focus-visible,
+.fui-Textarea__textarea:focus,
+.fui-Textarea__textarea:focus-visible,
+.fui-Dropdown__button:focus,
+.fui-Dropdown__button:focus-visible,
+input:focus,
+input:focus-visible,
+textarea:focus,
+textarea:focus-visible,
+select:focus,
+select:focus-visible {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+.fui-Input,
+.fui-Textarea,
+.fui-Dropdown {
+  outline: none !important;
+}
+
+.fui-Input:focus-within,
+.fui-Textarea:focus-within,
+.fui-Dropdown:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+/* ── Fluent: flat native controls ── */
 .fui-Button,
 .fui-Input,
 .fui-Dropdown,
 .fui-Textarea,
 .fui-OverlayDrawerSurface,
-.fui-DrawerSurface {
+.fui-DrawerSurface,
+.fui-DialogSurface,
+.fui-DialogBody,
+.fui-DialogTitle,
+.fui-DialogContent,
+.fui-Checkbox,
+.fui-Badge {
   box-shadow: none !important;
 }
 
+.fui-Button--primary {
+  background-color: var(--inno-accent) !important;
+  color: #FFFFFF !important;
+  border: none !important;
+}
+
+.fui-Button--primary:hover {
+  background-color: #000000 !important;
+}
+
+.fui-Button--secondary {
+  background-color: var(--inno-canvas-alt) !important;
+  color: var(--inno-text) !important;
+  border: none !important;
+}
+
+.fui-Button--subtle {
+  background-color: transparent !important;
+  color: var(--inno-text-secondary) !important;
+}
+
+/* ── Dialog (Codex modal) ── */
+.inno-dialog-surface.fui-DialogSurface {
+  background: #FFFFFF !important;
+  border: none !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  max-width: 520px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(60, 60, 67, 0.08) !important;
+}
+
+.inno-dialog-surface .fui-DialogBody {
+  padding: 22px 24px 24px !important;
+  gap: 16px !important;
+}
+
+.inno-dialog-surface .fui-DialogTitle {
+  font-size: 16px !important;
+  font-weight: 650 !important;
+  color: var(--inno-text) !important;
+  padding: 0 !important;
+  letter-spacing: -0.02em;
+}
+
+.inno-dialog-surface .fui-DialogContent {
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+/* ── Form fields ── */
 .inno-field .fui-Input,
 .inno-field .fui-Dropdown,
 .inno-field .fui-Textarea {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
+  width: 100%;
+  min-height: 24px;
 }
 
 .inno-field .fui-Input__input,
@@ -56,17 +405,52 @@ body {
   border: none !important;
   background: transparent !important;
   padding: 0 !important;
-  font-size: 15px;
+  font-size: 14px;
+  color: var(--inno-text);
+  width: 100%;
+  min-height: 24px;
+  line-height: 1.4;
+}
+
+.inno-field .fui-Dropdown {
+  min-height: 24px;
 }
 
 .inno-field .fui-Dropdown__button {
   border: none !important;
   background: transparent !important;
   padding: 0 !important;
-  min-height: unset !important;
-  font-size: 15px;
+  min-height: 24px !important;
+  width: 100%;
+  font-size: 14px;
   text-decoration: none !important;
   box-shadow: none !important;
+  color: var(--inno-text);
+  justify-content: space-between;
+}
+
+.inno-settings-inline-input .fui-Input,
+.inno-settings-inline-input .fui-Input__input {
+  width: 100%;
+  min-height: 30px;
+  font-size: 14px;
+  color: var(--inno-text);
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0 !important;
+}
+
+.inno-settings-inline-input .fui-Input::before,
+.inno-settings-inline-input .fui-Input::after,
+.inno-settings-inline-input .fui-Input__underline {
+  display: none !important;
+}
+
+.inno-settings-inline-input .fui-Input:focus-within {
+  background: transparent !important;
+  box-shadow: none !important;
+  outline: none !important;
 }
 
 .inno-field .fui-Dropdown__button::before,
@@ -80,30 +464,42 @@ body {
   border-bottom: none !important;
 }
 
-.inno-model-select .fui-Dropdown__button {
-  border: none !important;
-  background: transparent !important;
-  padding: 0 4px !important;
-  min-height: unset !important;
-  font-size: 13px;
-  font-weight: 500;
-  color: var(--inno-text, #1C1C1E);
-  text-decoration: none !important;
-  box-shadow: none !important;
+.inno-model-menu-popover {
+  border: var(--inno-popover-border, 1px solid rgba(60, 60, 67, 0.14)) !important;
+  box-shadow: var(--inno-popover-shadow, 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03)) !important;
 }
 
-.inno-model-select .fui-Dropdown__button::before,
-.inno-model-select .fui-Dropdown__button::after {
-  display: none !important;
+.inno-model-menu-popover .fui-MenuGroupHeader {
+  line-height: 1.3;
 }
 
-.inno-model-select .fui-Dropdown__button span {
-  text-decoration: none !important;
-  border-bottom: none !important;
+.inno-model-menu-popover .fui-MenuItem {
+  min-height: 32px;
 }
 
 .inno-field .fui-Dropdown__expandIcon {
-  color: #8E8E93;
+  color: var(--inno-text-tertiary);
+}
+
+/* Strip Fluent input underline / bottom border */
+.fui-Input__underline,
+.fui-Input::after,
+.fui-Textarea__underline,
+.fui-Textarea::after,
+.fui-Dropdown__underline,
+.fui-Dropdown::after {
+  display: none !important;
+}
+
+.inno-field .fui-Input:focus-within,
+.inno-field .fui-Textarea:focus-within,
+.inno-field .fui-Dropdown:focus-within {
+  outline: none !important;
+  box-shadow: none !important;
+}
+
+.inno-composer-input:focus-within {
+  outline: none !important;
 }
 
 @keyframes inno-fade-in-up {
@@ -116,11 +512,37 @@ body {
 }
 
 .inno-scroll::-webkit-scrollbar {
-  width: 6px;
+  width: 5px;
 }
 .inno-scroll::-webkit-scrollbar-thumb {
-  background: rgba(60, 60, 67, 0.18);
+  background: rgba(60, 60, 67, 0.12);
   border-radius: 999px;
+}
+
+/* Scrollbar visible only while hovering the scroll area */
+.inno-scroll-hover {
+  scrollbar-width: thin;
+  scrollbar-color: transparent transparent;
+}
+.inno-scroll-hover:hover {
+  scrollbar-color: rgba(60, 60, 67, 0.12) transparent;
+}
+.inno-scroll-hover::-webkit-scrollbar-thumb {
+  background: transparent;
+}
+.inno-scroll-hover:hover::-webkit-scrollbar-thumb {
+  background: rgba(60, 60, 67, 0.12);
+}
+
+@media (hover: hover) {
+  .inno-session-item:hover .inno-session-date {
+    opacity: 0;
+  }
+
+  .inno-session-item:hover .inno-session-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
 }
 
 .inno-scroll-x {

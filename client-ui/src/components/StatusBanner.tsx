@@ -4,7 +4,7 @@ import { motion } from '../theme/mixins'
 
 const useStyles = makeStyles({
   root: {
-    padding: '10px 14px',
+    padding: '10px 12px',
     fontSize: '13px',
     lineHeight: 1.45,
     borderRadius: innoTokens.radiusMd,
@@ -23,7 +23,7 @@ const useStyles = makeStyles({
   },
   info: {
     backgroundColor: innoTokens.infoSoft,
-    color: innoTokens.accentHover,
+    color: innoTokens.textSecondary,
   },
   success: {
     backgroundColor: innoTokens.successSoft,

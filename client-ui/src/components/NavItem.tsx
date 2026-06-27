@@ -1,6 +1,7 @@
-import { makeStyles, tokens, Text } from '@fluentui/react-components'
+import { makeStyles, tokens, Text, mergeClasses } from '@fluentui/react-components'
 import type { FluentIcon } from '@fluentui/react-icons'
 import { innoTokens } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 
 const useStyles = makeStyles({
   root: {
@@ -9,14 +10,10 @@ const useStyles = makeStyles({
     gap: tokens.spacingHorizontalS,
     height: '36px',
     padding: `0 ${tokens.spacingHorizontalS}`,
-    borderRadius: innoTokens.radiusMd,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
     width: '100%',
     textAlign: 'left' as const,
-    transition: 'background 150ms ease',
     position: 'relative' as const,
+    ...ghostInteractive,
     ':hover': { backgroundColor: innoTokens.surfaceMuted },
   },
   active: {
@@ -60,11 +57,15 @@ interface Props {
 export default function NavItem({ icon: Icon, label, active, onClick }: Props) {
   const s = useStyles()
   return (
-    <button type="button" className={`${s.root} ${active ? s.active : ''}`} onClick={onClick}>
-      <span className={`${s.icon} ${active ? s.iconActive : ''}`}>
+    <button
+      type="button"
+      className={mergeClasses(s.root, active && s.active, 'inno-focusable')}
+      onClick={onClick}
+    >
+      <span className={mergeClasses(s.icon, active && s.iconActive)}>
         <Icon />
       </span>
-      <Text className={`${s.label} ${active ? s.labelActive : ''}`}>{label}</Text>
+      <Text className={mergeClasses(s.label, active && s.labelActive)}>{label}</Text>
     </button>
   )
 }

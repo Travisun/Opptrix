@@ -2,8 +2,9 @@ import { useState, useEffect, useMemo } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { SkillCategory } from '../types/chat'
+import { isElectron } from '../platform/detect'
 import { innoTokens } from '../theme/tokens'
-import { motion } from '../theme/mixins'
+import { ghostInteractive, motion, secondaryInteractive } from '../theme/mixins'
 import InnoButton from '../components/inno/InnoButton'
 
 const useStyles = makeStyles({
@@ -64,6 +65,12 @@ const useStyles = makeStyles({
     transform: 'translate(-50%, 50%) scale(1)',
     opacity: 1,
   },
+  backdropElectron: {
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+  },
+  sheetDesktopElectron: {
+    border: `1px solid ${innoTokens.separator}`,
+  },
   handle: {
     width: '36px',
     height: '4px',
@@ -99,20 +106,15 @@ const useStyles = makeStyles({
     padding: '8px 16px',
     minHeight: '44px',
     borderRadius: innoTokens.radiusFull,
-    border: 'none',
-    backgroundColor: innoTokens.surfaceMuted,
-    color: innoTokens.textSecondary,
     fontSize: '14px',
     fontWeight: 500,
-    cursor: 'pointer',
-    WebkitTapHighlightColor: 'transparent',
-    transitionProperty: 'background-color, color',
-    transitionDuration: motion.fast,
+    ...secondaryInteractive,
   },
   catPillActive: {
     backgroundColor: innoTokens.accentSoft,
-    color: innoTokens.accentHover,
+    color: innoTokens.textPrimary,
     fontWeight: 600,
+    border: `1px solid ${innoTokens.border}`,
   },
   list: {
     flex: 1,
@@ -126,22 +128,14 @@ const useStyles = makeStyles({
     display: 'block',
     width: '100%',
     textAlign: 'left',
-    padding: '14px 16px',
-    minHeight: '56px',
+    padding: '12px 14px',
+    minHeight: '52px',
     borderRadius: innoTokens.radiusMd,
-    border: 'none',
+    border: `1px solid ${innoTokens.separator}`,
     backgroundColor: innoTokens.canvas,
-    cursor: 'pointer',
-    WebkitTapHighlightColor: 'transparent',
-    transitionProperty: 'background-color',
-    transitionDuration: motion.fast,
-    ':active': {
-      backgroundColor: innoTokens.accentSoft,
-    },
-    '@media (hover: hover)': {
-      ':hover': {
-        backgroundColor: innoTokens.surfaceMuted,
-      },
+    ...ghostInteractive,
+    ':hover': {
+      backgroundColor: innoTokens.surfaceMuted,
     },
   },
   skillTitle: {
@@ -226,7 +220,7 @@ export default function SkillSheet({
             <button
               key={name}
               type="button"
-              className={mergeClasses(s.catPill, name === activeCat && s.catPillActive)}
+              className={mergeClasses(s.catPill, name === activeCat && s.catPillActive, 'inno-focusable')}
               onClick={() => setActiveCat(name)}
             >
               {name}
@@ -239,7 +233,7 @@ export default function SkillSheet({
             <button
               key={skill.name}
               type="button"
-              className={s.skillItem}
+              className={mergeClasses(s.skillItem, 'inno-focusable')}
               onClick={() => handlePick(skill.examplePrompt)}
             >
               <div className={s.skillTitle}>{skill.description}</div>

@@ -1,5 +1,7 @@
 import { Button, type ButtonProps, mergeClasses, makeStyles } from '@fluentui/react-components'
-import { ghostInteractive, primaryInteractive, focusRing, motion } from '../../theme/mixins'
+import {
+  ghostInteractive, primaryInteractive, secondaryInteractive, focusVisibleRing, motion,
+} from '../../theme/mixins'
 import { innoTokens } from '../../theme/tokens'
 
 const useStyles = makeStyles({
@@ -7,50 +9,51 @@ const useStyles = makeStyles({
     ...primaryInteractive,
     borderRadius: innoTokens.radiusMd,
     fontWeight: 600,
+    fontSize: '14px',
   },
   secondary: {
-    ...ghostInteractive,
-    backgroundColor: innoTokens.surfaceMuted,
-    color: innoTokens.textPrimary,
+    ...secondaryInteractive,
     fontWeight: 500,
-    ':hover': {
-      backgroundColor: innoTokens.surfaceHover,
-    },
+    fontSize: '14px',
   },
   ghost: {
     ...ghostInteractive,
-    color: innoTokens.accent,
+    color: innoTokens.textSecondary,
     fontWeight: 500,
+    fontSize: '14px',
     ':hover': {
-      backgroundColor: innoTokens.surfaceMuted,
+      backgroundColor: innoTokens.surfaceHover,
+      color: innoTokens.textPrimary,
     },
   },
   pill: {
     borderRadius: innoTokens.radiusFull,
     fontWeight: 500,
-    fontSize: '14px',
-    transitionProperty: 'background-color, color, opacity',
+    fontSize: '13px',
+    transitionProperty: 'background-color, color, opacity, border-color',
     transitionDuration: motion.fast,
-    border: 'none',
-    backgroundColor: innoTokens.surface,
-    color: innoTokens.textPrimary,
+    border: `1px solid ${innoTokens.border}`,
+    backgroundColor: innoTokens.canvas,
+    color: innoTokens.textSecondary,
     ':hover': {
-      backgroundColor: innoTokens.surfaceMuted,
+      backgroundColor: innoTokens.canvasAlt,
+      color: innoTokens.textPrimary,
+      borderColor: innoTokens.separatorStrong,
     },
     ':active': {
-      opacity: 0.72,
+      opacity: innoTokens.activeOpacity,
     },
-    ':focus-visible': focusRing,
+    ...focusVisibleRing,
   },
   iconBtn: {
     ...ghostInteractive,
-    minWidth: '44px',
-    height: '44px',
+    minWidth: '32px',
+    height: '32px',
     borderRadius: innoTokens.radiusSm,
     color: innoTokens.textTertiary,
     ':hover': {
-      color: innoTokens.error,
-      backgroundColor: innoTokens.errorSoft,
+      color: innoTokens.textPrimary,
+      backgroundColor: innoTokens.accentSoft,
     },
   },
 })
@@ -76,7 +79,7 @@ export default function InnoButton({ variant = 'primary', className, ...props }:
   return (
     <Button
       appearance={appearance}
-      className={mergeClasses(variantClass, className)}
+      className={mergeClasses('inno-btn', 'inno-focusable', variantClass, className)}
       {...props}
     />
   )

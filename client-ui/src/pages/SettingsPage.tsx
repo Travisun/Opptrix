@@ -1,147 +1,202 @@
-import { useState, useEffect, useCallback } from 'react'
-import { Text, Spinner, makeStyles, Badge } from '@fluentui/react-components'
-import { ArrowLeftRegular, AddRegular, DeleteRegular } from '@fluentui/react-icons'
+import { useState, useEffect, useCallback, useRef } from 'react'
+import {
+  Text, Spinner, makeStyles, mergeClasses,
+  Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
+} from '@fluentui/react-components'
+import { ChevronRightRegular, DeleteRegular } from '@fluentui/react-icons'
 import StatusBanner from '../components/StatusBanner'
-import InnoSurface from '../components/inno/InnoSurface'
-import InnoField from '../components/inno/InnoField'
-import InnoInput from '../components/inno/InnoInput'
 import InnoButton from '../components/inno/InnoButton'
 import ProviderWizard from './ProviderWizard'
+import SettingsSidebar, {
+  settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
+} from './settings/SettingsSidebar'
+import {
+  SettingsGroup, SettingsRow, SettingsStaticBlock,
+  SettingsTextField, SettingsProviderRow, SettingsActionRow,
+} from './settings/SettingsPrimitives'
 import {
   getConfig, patchConfig, deleteProvider, getHealth,
   type AppConfig, type PublicProvider,
 } from '../api/client'
 import { innoTokens } from '../theme/tokens'
-import { hairlineBottom, hairlineTop } from '../theme/mixins'
+import { isElectron } from '../platform/detect'
+import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
+import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
+
+const SCORECARD_SAVE_MS = 650
 
 const useStyles = makeStyles({
   page: {
     display: 'flex',
+    flexDirection: 'row',
+    flex: 1,
+    width: '100%',
+    height: '100%',
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+    backgroundColor: 'transparent',
+  },
+  pageMobile: {
     flexDirection: 'column',
-    height: '100dvh',
+    backgroundColor: innoTokens.canvas,
+  },
+  contentShell: {
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    height: '100%',
+    display: 'flex',
+    flexDirection: 'column',
     backgroundColor: innoTokens.canvas,
     overflow: 'hidden',
   },
-  header: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 12px',
-    paddingTop: 'max(8px, env(safe-area-inset-top))',
-    backgroundColor: innoTokens.surface,
-    ...hairlineBottom,
-    flexShrink: 0,
-    minHeight: '44px',
+  contentShellElectron: {
+    paddingTop: `calc(${DESKTOP_TITLEBAR_HEIGHT}px + ${innoTokens.windowInset})`,
   },
-  title: {
-    fontSize: '17px',
-    fontWeight: 600,
-    color: innoTokens.textPrimary,
-  },
-  body: {
+  contentViewport: {
     flex: 1,
-    overflowY: 'auto',
-    padding: '20px 16px',
+    minHeight: 0,
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    overflow: 'hidden',
   },
-  bodyInner: {
-    maxWidth: '540px',
-    margin: '0 auto',
+  contentColumn: {
+    width: innoTokens.settingsContentWidth,
+    maxWidth: innoTokens.settingsContentMaxWidth,
+    height: '100%',
+    minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '24px',
+    boxSizing: 'border-box',
+    paddingLeft: '28px',
+    paddingRight: '28px',
   },
-  providerRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-    padding: '12px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
-    ':last-child': { borderBottom: 'none' },
+  contentColumnMobile: {
+    width: '100%',
+    maxWidth: 'none',
+    paddingLeft: '16px',
+    paddingRight: '16px',
   },
-  providerInfo: {
-    flex: 1,
-    minWidth: 0,
+  contentHeader: {
+    flexShrink: 0,
+    paddingTop: '24px',
+    paddingBottom: '4px',
   },
-  providerName: {
-    fontSize: '15px',
+  pageTitle: {
+    fontSize: '20px',
     fontWeight: 600,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.3,
     color: innoTokens.textPrimary,
   },
-  providerMeta: {
+  pageSubtitle: {
+    fontSize: '14px',
+    fontWeight: 400,
+    color: innoTokens.textSecondary,
+    lineHeight: 1.55,
+    marginTop: '8px',
+    maxWidth: '52ch',
+  },
+  contentBody: {
+    flex: 1,
+    overflowY: 'auto',
+    padding: '16px 0 32px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '20px',
+  },
+  sectionBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  sectionLabel: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: innoTokens.textSecondary,
+    letterSpacing: '-0.01em',
+    paddingLeft: '2px',
+  },
+  saveHint: {
     fontSize: '12px',
     color: innoTokens.textTertiary,
-    marginTop: '2px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    minHeight: '18px',
+    paddingLeft: '2px',
   },
-  modelTags: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-    marginTop: '6px',
-  },
-  modelBadge: {
-    fontSize: '11px',
-    fontFamily: 'ui-monospace, monospace',
-    backgroundColor: innoTokens.surfaceMuted,
+  saveHintActive: {
     color: innoTokens.textSecondary,
-    border: 'none',
   },
-  emptyHint: {
-    fontSize: '14px',
-    color: innoTokens.textTertiary,
-    lineHeight: 1.5,
-    padding: '8px 0',
-  },
-  addBtn: {
-    marginTop: '4px',
-  },
-  footer: {
-    padding: '12px 16px',
-    paddingBottom: 'max(12px, env(safe-area-inset-bottom))',
-    backgroundColor: innoTokens.surface,
-    ...hairlineTop,
-    flexShrink: 0,
-  },
-  footerInner: {
-    maxWidth: '540px',
-    margin: '0 auto',
+  aboutProse: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '12px',
+    maxWidth: '52ch',
+    paddingTop: '4px',
   },
   aboutTitle: {
     fontSize: '15px',
     fontWeight: 600,
+    letterSpacing: '-0.02em',
     color: innoTokens.textPrimary,
+    lineHeight: 1.45,
   },
   aboutMeta: {
-    fontSize: '13px',
-    color: innoTokens.textTertiary,
-    lineHeight: 1.45,
-    marginTop: '4px',
+    fontSize: '14px',
+    color: innoTokens.textSecondary,
+    lineHeight: 1.65,
+  },
+  dialogSurface: {
+    maxWidth: '520px',
+    width: 'calc(100vw - 40px)',
+  },
+  dialogTitle: {
+    fontSize: '17px',
+    fontWeight: 650,
+    letterSpacing: '-0.02em',
+    color: innoTokens.textPrimary,
   },
 })
+
+type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 
 interface SettingsPageProps {
   onBack: () => void
   onSaved?: () => void
+  isMobile?: boolean
+  sidebarVisible?: boolean
+  onSidebarClose?: () => void
 }
 
-type View = 'list' | 'wizard'
-
-export default function SettingsPage({ onBack, onSaved }: SettingsPageProps) {
+export default function SettingsPage({
+  onBack, onSaved, isMobile = false,
+  sidebarVisible = true,
+  onSidebarClose,
+}: SettingsPageProps) {
   const s = useStyles()
-  const [view, setView] = useState<View>('list')
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
+  const [section, setSection] = useState<SettingsSection>('general')
+  const [search, setSearch] = useState('')
+  const [wizardOpen, setWizardOpen] = useState(false)
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [scorecard, setScorecard] = useState('综合评估')
   const [loading, setLoading] = useState(true)
-  const [saving, setSaving] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const skipScorecardSave = useRef(true)
+  const scorecardBaseline = useRef<string | null>(null)
+  const electronChrome = isElectron() && !isMobile
 
   const refresh = useCallback(async () => {
     const cfg = await getConfig()
     setConfig(cfg)
-    setScorecard(cfg.default_scorecard || '综合评估')
+    const baseline = cfg.default_scorecard || '综合评估'
+    scorecardBaseline.current = baseline
+    skipScorecardSave.current = true
+    setScorecard(baseline)
     return cfg
   }, [])
 
@@ -151,6 +206,29 @@ export default function SettingsPage({ onBack, onSaved }: SettingsPageProps) {
       .catch(() => setError('无法读取后端配置，请确认 npm run dev 已启动'))
       .finally(() => setLoading(false))
   }, [refresh])
+
+  useDebouncedEffect(() => {
+    if (loading || skipScorecardSave.current) {
+      skipScorecardSave.current = false
+      return
+    }
+    const baseline = scorecardBaseline.current
+    if (baseline === null || scorecard === baseline) return
+
+    setSaveState('pending')
+    patchConfig({ default_scorecard: scorecard })
+      .then(() => {
+        scorecardBaseline.current = scorecard
+        setConfig(prev => (prev ? { ...prev, default_scorecard: scorecard } : prev))
+        setSaveState('saved')
+        onSaved?.()
+        window.setTimeout(() => setSaveState('idle'), 2000)
+      })
+      .catch((e: unknown) => {
+        setSaveState('error')
+        setError(e instanceof Error ? e.message : '保存失败')
+      })
+  }, [scorecard, loading], SCORECARD_SAVE_MS, true)
 
   const handleDeleteProvider = async (p: PublicProvider) => {
     if (!confirm(`确定删除提供商「${p.name}」？`)) return
@@ -163,20 +241,6 @@ export default function SettingsPage({ onBack, onSaved }: SettingsPageProps) {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }
-
-  const handleSaveScorecard = async () => {
-    setSaving(true)
-    setError('')
-    setMessage('')
-    try {
-      await patchConfig({ default_scorecard: scorecard })
-      setMessage('配置已保存')
-      onSaved?.()
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败')
-    }
-    setSaving(false)
   }
 
   const handleTest = async () => {
@@ -192,95 +256,194 @@ export default function SettingsPage({ onBack, onSaved }: SettingsPageProps) {
     }
   }
 
-  if (view === 'wizard') {
-    return (
-      <ProviderWizard
-        onBack={() => setView('list')}
-        onDone={async () => {
-          await refresh()
-          setView('list')
-          setMessage('提供商已添加')
-          onSaved?.()
-        }}
-      />
-    )
-  }
-
   const providers = config?.providers ?? []
 
-  return (
-    <div className={s.page}>
-      <header className={s.header}>
-        <InnoButton variant="ghost" icon={<ArrowLeftRegular />} onClick={onBack} aria-label="返回" />
-        <Text className={s.title}>设置</Text>
-      </header>
+  const saveHintText = (() => {
+    switch (saveState) {
+      case 'pending': return '正在保存…'
+      case 'saved': return '已保存'
+      case 'error': return '保存失败'
+      default: return ''
+    }
+  })()
 
-      <div className={`${s.body} inno-scroll`}>
-        <div className={s.bodyInner}>
-          {loading && <Spinner size="tiny" label="加载配置..." />}
-          {error && <StatusBanner message={error} tone="error" />}
-          {message && <StatusBanner message={message} tone="success" />}
+  const renderSection = () => {
+    if (loading) return <Spinner size="tiny" label="加载配置..." />
 
-          <InnoSurface title="模型提供商" subtitle="多提供商合并后，聊天时可选择当前对话模型">
-            {providers.length === 0 ? (
-              <Text className={s.emptyHint}>
-                尚未配置任何提供商。点击下方按钮，通过 3 步向导添加：选择提供商 → 填写 API Key → 勾选启用模型。
+    switch (section) {
+      case 'general':
+        return (
+          <>
+            <div className={s.sectionBlock}>
+              <Text className={s.sectionLabel} block>偏好</Text>
+              <SettingsGroup>
+                <SettingsRow
+                  title="评分卡"
+                  desc="因子评估默认使用的评分模板"
+                  control={(
+                    <SettingsTextField
+                      value={scorecard}
+                      onChange={setScorecard}
+                      placeholder="综合评估"
+                    />
+                  )}
+                  last
+                />
+              </SettingsGroup>
+              <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
+                {saveHintText}
               </Text>
-            ) : (
-              providers.map(p => (
-                <div key={p.id} className={s.providerRow}>
-                  <div className={s.providerInfo}>
-                    <Text className={s.providerName}>{p.name}</Text>
-                    <Text className={s.providerMeta}>{p.base_url}</Text>
-                    <div className={s.modelTags}>
-                      {p.models.map(m => (
-                        <Badge key={m} size="small" className={s.modelBadge}>{m}</Badge>
-                      ))}
-                    </div>
-                  </div>
-                  <InnoButton
-                    variant="icon"
-                    icon={<DeleteRegular />}
-                    onClick={() => handleDeleteProvider(p)}
-                    aria-label={`删除 ${p.name}`}
+            </div>
+
+            <div className={s.sectionBlock}>
+              <Text className={s.sectionLabel} block>连接</Text>
+              <SettingsGroup>
+                <SettingsRow
+                  title="后端连接"
+                  desc="检查 API 服务与 LLM 提供商配置是否正常"
+                  control={(
+                    <InnoButton variant="secondary" onClick={handleTest}>
+                      测试
+                    </InnoButton>
+                  )}
+                  last
+                />
+              </SettingsGroup>
+            </div>
+          </>
+        )
+
+      case 'models':
+        return (
+          <div className={s.sectionBlock}>
+            <Text className={s.sectionLabel} block>提供商</Text>
+            <SettingsGroup>
+              {providers.length === 0 ? (
+                <SettingsStaticBlock>
+                  <Text className={s.aboutMeta} block>
+                    尚未配置任何提供商。添加 OpenAI 兼容接口以启用多模型对话。
+                  </Text>
+                </SettingsStaticBlock>
+              ) : (
+                providers.map((p, i) => (
+                  <SettingsProviderRow
+                    key={p.id}
+                    name={p.name}
+                    baseUrl={p.base_url}
+                    models={p.models}
+                    avatar={p.name.charAt(0).toUpperCase()}
+                    first={i === 0}
+                    action={(
+                      <InnoButton
+                        variant="icon"
+                        icon={<DeleteRegular />}
+                        onClick={() => handleDeleteProvider(p)}
+                        aria-label={`删除 ${p.name}`}
+                      />
+                    )}
                   />
-                </div>
-              ))
-            )}
-            <InnoButton
-              className={s.addBtn}
-              variant="secondary"
-              icon={<AddRegular />}
-              onClick={() => setView('wizard')}
-              style={{ width: '100%' }}
-            >
-              添加提供商
-            </InnoButton>
-          </InnoSurface>
+                ))
+              )}
+              <SettingsActionRow
+                title="添加模型提供商"
+                desc="配置 Base URL 与 API Key"
+                icon={<ChevronRightRegular fontSize={16} color={innoTokens.textTertiary} />}
+                onClick={() => setWizardOpen(true)}
+              />
+            </SettingsGroup>
+          </div>
+        )
 
-          <InnoSurface title="投研默认" subtitle="因子评估等工具的默认参数">
-            <InnoField label="评分卡" hint="因子评估默认使用的评分模板">
-              <InnoInput value={scorecard} onChange={(_, d) => setScorecard(d.value || '')} placeholder="综合评估" />
-            </InnoField>
-            <InnoButton variant="secondary" onClick={handleTest} style={{ alignSelf: 'flex-start', marginTop: 8 }}>
-              测试连接
-            </InnoButton>
-          </InnoSurface>
+      case 'about':
+        return (
+          <div className={s.aboutProse}>
+            <Text className={s.aboutTitle} block>innoAStock · 投研 Chat Agent</Text>
+            <Text className={s.aboutMeta} block>
+              21 投研工具 · 多会话 · Function Calling · 多模型提供商。
+            </Text>
+            <Text className={s.aboutMeta} block>
+              本地运行，数据与 API Key 保存在本机服务端。
+            </Text>
+          </div>
+        )
 
-          <InnoSurface title="关于" sectionHeader>
-            <Text className={s.aboutTitle}>innoAStock · 投研 Chat Agent</Text>
-            <Text className={s.aboutMeta}>21 投研工具 · 多会话 · Function Calling · 多模型提供商</Text>
-          </InnoSurface>
+      default:
+        return null
+    }
+  }
+
+  const sectionTitle = settingsSectionTitle(section)
+  const sectionSubtitle = settingsSectionSubtitle(section)
+
+  return (
+    <div className={mergeClasses(s.page, isMobile && s.pageMobile)}>
+      {!sidebarOverlayMode && (
+        <SettingsSidebar
+          mode="panel"
+          active={section}
+          onSelect={setSection}
+          onBack={onBack}
+          search={search}
+          onSearchChange={setSearch}
+          isMobile={isMobile}
+        />
+      )}
+      {sidebarOverlayMode && (
+        <SettingsSidebar
+          mode="overlay"
+          visible={sidebarVisible}
+          onClose={onSidebarClose}
+          active={section}
+          onSelect={setSection}
+          onBack={onBack}
+          search={search}
+          onSearchChange={setSearch}
+          isMobile={isMobile}
+        />
+      )}
+
+      <div
+        className={mergeClasses(
+          s.contentShell,
+          'inno-settings-content',
+          electronChrome && s.contentShellElectron,
+        )}
+      >
+        <div className={s.contentViewport}>
+          <div className={mergeClasses(s.contentColumn, isMobile && s.contentColumnMobile)}>
+            <header className={s.contentHeader}>
+              <Text className={s.pageTitle} block>{sectionTitle}</Text>
+              <Text className={s.pageSubtitle} block>{sectionSubtitle}</Text>
+            </header>
+
+            <div className={mergeClasses(s.contentBody, 'inno-scroll')}>
+              {error && <StatusBanner message={error} tone="error" />}
+              {message && <StatusBanner message={message} tone="success" />}
+              {renderSection()}
+            </div>
+          </div>
         </div>
       </div>
 
-      <footer className={s.footer}>
-        <div className={s.footerInner}>
-          <InnoButton variant="primary" onClick={handleSaveScorecard} disabled={saving} style={{ width: '100%' }}>
-            {saving ? '保存中…' : '保存配置'}
-          </InnoButton>
-        </div>
-      </footer>
+      <Dialog open={wizardOpen} onOpenChange={(_, data) => setWizardOpen(!!data.open)}>
+        <DialogSurface className={mergeClasses(s.dialogSurface, 'inno-dialog-surface')}>
+          <DialogBody>
+            <DialogTitle className={s.dialogTitle}>添加模型提供商</DialogTitle>
+            <DialogContent>
+              <ProviderWizard
+                onCancel={() => setWizardOpen(false)}
+                onDone={async () => {
+                  await refresh()
+                  setWizardOpen(false)
+                  setSection('models')
+                  setMessage('提供商已添加')
+                  onSaved?.()
+                }}
+              />
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
     </div>
   )
 }

@@ -1,7 +1,8 @@
 import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import {
-  NavigationRegular, AddRegular, SettingsRegular,
+  NavigationRegular, SettingsRegular,
 } from '@fluentui/react-icons'
+import { ChatAddRegular } from './chatIcons'
 import type { AvailableModel } from '../types/chat'
 import ModelSelector from './ModelSelector'
 import { innoTokens } from '../theme/tokens'
@@ -25,7 +26,7 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: innoTokens.accent,
+    color: innoTokens.textPrimary,
     flexShrink: 0,
   },
   center: {
@@ -61,7 +62,7 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: innoTokens.accent,
+    color: innoTokens.textSecondary,
   },
   statusDot: {
     width: '6px',
@@ -123,7 +124,7 @@ export default function MobileTopBar({
         <InnoButton
           className={s.actionBtn}
           variant="ghost"
-          icon={<AddRegular fontSize={22} />}
+          icon={<ChatAddRegular fontSize={22} />}
           onClick={onNewChat}
           aria-label="新对话"
         />

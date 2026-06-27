@@ -1,51 +1,54 @@
-import { makeStyles, Text } from '@fluentui/react-components'
+import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
 import { innoTokens } from '../../theme/tokens'
-import { inputSurface } from '../../theme/mixins'
+import { inputShellInteractive } from '../../theme/mixins'
 
 const useStyles = makeStyles({
   rootStack: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
+    gap: '8px',
     width: '100%',
   },
   label: {
-    fontSize: '13px',
-    fontWeight: 500,
-    color: innoTokens.textSecondary,
+    fontSize: '14px',
+    fontWeight: 600,
+    letterSpacing: '-0.02em',
+    color: innoTokens.textPrimary,
     lineHeight: 1.3,
   },
   control: {
-    ...inputSurface,
+    ...inputShellInteractive,
     minHeight: '44px',
-    padding: '0 12px',
+    padding: '11px 14px',
     display: 'flex',
     alignItems: 'center',
     width: '100%',
+    boxSizing: 'border-box',
   },
   hint: {
-    fontSize: '12px',
+    fontSize: '13px',
     color: innoTokens.textTertiary,
-    lineHeight: 1.4,
+    lineHeight: 1.5,
+    marginTop: '-2px',
   },
 })
 
 interface InnoFieldProps {
-  label: string
+  label?: string
   hint?: string
   children: ReactNode
   className?: string
 }
 
-/** Native stacked label + filled control */
+/** Stacked label + filled control surface */
 export default function InnoField({ label, hint, children, className }: InnoFieldProps) {
   const s = useStyles()
   return (
-    <div className={`inno-field ${s.rootStack} ${className ?? ''}`}>
-      <Text className={s.label}>{label}</Text>
-      <div className={s.control}>{children}</div>
-      {hint && <Text className={s.hint}>{hint}</Text>}
+    <div className={mergeClasses('inno-field', s.rootStack, className)}>
+      {label ? <Text className={s.label} block>{label}</Text> : null}
+      <div className={mergeClasses(s.control, 'inno-input-shell')}>{children}</div>
+      {hint ? <Text className={s.hint} block>{hint}</Text> : null}
     </div>
   )
 }

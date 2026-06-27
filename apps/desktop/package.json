@@ -1,0 +1,58 @@
+{
+  "name": "@inno-a-stock/desktop",
+  "version": "0.6.0",
+  "private": true,
+  "description": "innoAStock cross-platform desktop shell (Electron + Node sidecar)",
+  "main": "electron/main.cjs",
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "build": "node scripts/prebuild.mjs && electron-builder",
+    "build:dir": "node scripts/prebuild.mjs && electron-builder --dir"
+  },
+  "build": {
+    "appId": "com.inno-a-stock.desktop",
+    "productName": "innoAStock",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "electron/**/*",
+      "package.json",
+      "app-icon.png"
+    ],
+    "extraResources": [
+      {
+        "from": "runtime-stage",
+        "to": "runtime-stage",
+        "filter": [
+          "**/*"
+        ]
+      }
+    ],
+    "mac": {
+      "category": "public.app-category.finance",
+      "icon": "app-icon.png",
+      "target": [
+        "dmg",
+        "zip"
+      ]
+    },
+    "win": {
+      "icon": "app-icon.png",
+      "target": [
+        "nsis"
+      ]
+    },
+    "linux": {
+      "icon": "app-icon.png",
+      "target": [
+        "AppImage",
+        "deb"
+      ]
+    }
+  },
+  "devDependencies": {
+    "electron": "^35.0.0",
+    "electron-builder": "^25.1.8"
+  }
+}

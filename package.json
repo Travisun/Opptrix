@@ -8,9 +8,11 @@
   ],
   "scripts": {
     "dev": "concurrently -n api,web -c blue,cyan \"npm run dev:api\" \"npm run dev:web\"",
+    "dev:desktop": "npm run build:packages && npm run dev -w @inno-a-stock/desktop",
     "dev:api": "npm run dev -w @inno-a-stock/server",
     "dev:web": "npm run dev -w inno-a-stock-client",
     "build": "npm run build:packages && npm run build -w inno-a-stock-client",
+    "build:desktop": "npm run build -w @inno-a-stock/desktop",
     "build:packages": "npm run build -w @inno-a-stock/shared -w @inno-a-stock/a-stock-layer -w @inno-a-stock/stock-eval -w @inno-a-stock/institutions -w @inno-a-stock/t-strategy -w @inno-a-stock/skills -w @inno-a-stock/stock-writer -w @inno-a-stock/research-hub -w @inno-a-stock/agent -w @inno-a-stock/server",
     "start": "npm run start -w @inno-a-stock/server",
     "serve": "concurrently -k -n api,web -c blue,cyan \"npm run start\" \"npm run preview -w inno-a-stock-client -- --host 0.0.0.0\"",

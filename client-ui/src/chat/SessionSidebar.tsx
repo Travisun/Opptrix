@@ -2,22 +2,29 @@ import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import {
-  AddRegular, SettingsRegular, DeleteRegular, ChatRegular, DismissRegular,
+  SettingsRegular, DeleteRegular, DismissRegular,
 } from '@fluentui/react-icons'
+import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { innoTokens } from '../theme/tokens'
-import { motion } from '../theme/mixins'
+import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
 import InnoButton from '../components/inno/InnoButton'
+import { isElectron } from '../platform/detect'
+import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 
-export type SidebarMode = 'panel' | 'drawer'
+export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 
 const useStyles = makeStyles({
   sidebar: {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    backgroundColor: innoTokens.surface,
+    backgroundColor: 'transparent',
     flexShrink: 0,
+  },
+  sidebarWeb: {
+    backgroundColor: innoTokens.canvasAlt,
   },
   panelShell: {
     flexShrink: 0,
@@ -25,8 +32,9 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     pointerEvents: 'none',
     transitionProperty: 'width',
-    transitionDuration: motion.normal,
-    transitionTimingFunction: motion.easeOut,
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+    backgroundColor: 'transparent',
   },
   panelShellVisible: {
     width: innoTokens.sidebarWidth,
@@ -37,16 +45,22 @@ const useStyles = makeStyles({
     minWidth: innoTokens.sidebarWidth,
     height: '100%',
     opacity: 0,
-    transform: 'translateX(-20px)',
+    transform: 'translateX(-12px)',
     transitionProperty: 'opacity, transform',
-    transitionDuration: motion.normal,
-    transitionTimingFunction: motion.easeOut,
-    willChange: 'opacity, transform',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
   sidebarPanelVisible: {
     opacity: 1,
     transform: 'translateX(0)',
-    borderRight: `1px solid ${innoTokens.separator}`,
+  },
+  sidebarElectron: {
+    backgroundColor: 'transparent',
+  },
+  sidebarTopElectron: {
+    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT + 4}px`,
+    boxSizing: 'border-box',
+    height: '100%',
   },
   sidebarDrawer: {
     position: 'fixed',
@@ -56,63 +70,36 @@ const useStyles = makeStyles({
     width: innoTokens.mobileDrawerWidth,
     maxWidth: '300px',
     zIndex: 200,
-    borderRight: `1px solid ${innoTokens.separator}`,
     paddingTop: 'env(safe-area-inset-top)',
     paddingBottom: 'env(safe-area-inset-bottom)',
     transform: 'translateX(-100%)',
     transitionProperty: 'transform',
     transitionDuration: motion.slow,
     transitionTimingFunction: motion.easeOut,
-    willChange: 'transform',
+    backgroundColor: innoTokens.canvas,
+    borderLeft: `1px solid ${innoTokens.separator}`,
   },
   sidebarDrawerOpen: {
     transform: 'translateX(0)',
   },
-  backdrop: {
-    position: 'fixed',
-    inset: 0,
-    backgroundColor: 'rgba(0, 0, 0, 0.32)',
-    zIndex: 150,
-    opacity: 0,
-    pointerEvents: 'none',
-    transitionProperty: 'opacity',
-    transitionDuration: motion.slow,
-    transitionTimingFunction: motion.easeOut,
-  },
-  backdropVisible: {
-    opacity: 1,
-    pointerEvents: 'auto',
-  },
-  brand: {
-    padding: '20px 16px 12px',
+  drawerHead: {
     display: 'flex',
-    alignItems: 'flex-start',
-    justifyContent: 'space-between',
-    gap: '8px',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    padding: '8px 8px 0',
   },
-  brandTitle: {
-    fontSize: '16px',
-    fontWeight: 650,
-    color: innoTokens.textPrimary,
+  menuRow: {
+    ...sidebarTopMenuRow,
+    marginBottom: '6px',
   },
-  brandSub: {
-    fontSize: '12px',
-    color: innoTokens.textTertiary,
-    marginTop: '4px',
-  },
-  iconBtn: {
-    minWidth: '40px',
-    height: '40px',
-    borderRadius: innoTokens.radiusSm,
-    color: innoTokens.textTertiary,
-  },
-  newBtnWrap: {
-    padding: '0 12px 8px',
-  },
-  newBtn: {
-    width: '100%',
-    borderRadius: innoTokens.radiusMd,
+  menuIcon: sidebarTopMenuIcon,
+  sectionLabel: {
+    fontSize: '11px',
     fontWeight: 600,
+    color: innoTokens.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    padding: '6px 14px 2px',
   },
   list: {
     flex: 1,
@@ -125,58 +112,63 @@ const useStyles = makeStyles({
   item: {
     display: 'flex',
     alignItems: 'center',
-    gap: '10px',
-    padding: '12px',
-    minHeight: '48px',
+    gap: '8px',
+    padding: '5px 10px',
+    minHeight: '30px',
     borderRadius: innoTokens.radiusMd,
-    cursor: 'pointer',
-    backgroundColor: 'transparent',
-    WebkitTapHighlightColor: 'transparent',
-    '@media (hover: hover)': {
-      ':hover': {
-        backgroundColor: innoTokens.surfaceMuted,
-      },
-    },
-    ':active': {
-      backgroundColor: innoTokens.surfaceMuted,
+    color: innoTokens.textPrimary,
+    ...ghostInteractive,
+    ':hover': {
+      backgroundColor: innoTokens.surfaceHover,
     },
   },
   itemActive: {
-    backgroundColor: innoTokens.accentSoft,
-  },
-  itemIcon: {
-    color: innoTokens.textTertiary,
-    flexShrink: 0,
-  },
-  itemIconActive: {
-    color: innoTokens.accent,
+    ...sidebarItemSelected,
   },
   itemTitle: {
     flex: 1,
-    fontSize: '14px',
+    fontSize: '13px',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
-    color: innoTokens.textPrimary,
+    color: 'inherit',
   },
-  itemTime: {
+  itemTrailing: {
+    position: 'relative',
+    flexShrink: 0,
+    width: '40px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
+  itemDate: {
     fontSize: '11px',
     color: innoTokens.textTertiary,
-    flexShrink: 0,
-  },
-  deleteBtn: {
-    opacity: 0.45,
-    minWidth: '40px',
-    height: '40px',
-    '@media (hover: hover)': {
-      opacity: 0,
-      ':hover': { opacity: 1 },
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+    '@media (hover: none)': {
+      display: 'none',
     },
   },
-  itemWithDelete: {
-    '@media (hover: hover)': {
-      ':hover $deleteBtn': { opacity: 0.55 },
+  itemDelete: {
+    ...nativeIconInteractive,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 0,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    opacity: 0,
+    pointerEvents: 'none',
+    '@media (hover: none)': {
+      opacity: 1,
+      pointerEvents: 'auto',
     },
   },
   empty: {
@@ -187,50 +179,48 @@ const useStyles = makeStyles({
     lineHeight: 1.6,
   },
   footer: {
-    padding: '12px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  statusRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '0 4px',
-  },
-  statusDot: {
-    width: '6px',
-    height: '6px',
-    borderRadius: innoTokens.radiusFull,
-    flexShrink: 0,
-  },
-  statusOk: { backgroundColor: innoTokens.success },
-  statusErr: { backgroundColor: innoTokens.error },
-  statusText: {
-    fontSize: '12px',
-    color: innoTokens.textSecondary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    padding: '8px',
+    marginTop: 'auto',
   },
   settingsBtn: {
     width: '100%',
     justifyContent: 'flex-start',
     color: innoTokens.textSecondary,
     fontWeight: 500,
-    minHeight: '44px',
+    minHeight: '32px',
+    paddingTop: '5px',
+    paddingBottom: '5px',
+    borderRadius: innoTokens.radiusMd,
+  },
+  backdrop: {
+    position: 'fixed',
+    inset: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.18)',
+    backdropFilter: 'blur(4px)',
+    zIndex: 150,
+    opacity: 0,
+    pointerEvents: 'none',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.slow,
+  },
+  backdropVisible: {
+    opacity: 1,
+    pointerEvents: 'auto',
+  },
+  iconBtn: {
+    minWidth: '36px',
+    height: '36px',
+    borderRadius: innoTokens.radiusMd,
+    color: innoTokens.textTertiary,
   },
 })
 
 interface SessionSidebarProps {
   mode: SidebarMode
-  /** Desktop panel: animate show/hide */
   visible?: boolean
   drawerOpen?: boolean
   sessions: SessionMeta[]
   activeId: string | null
-  llmLabel: string
-  backendOk: boolean
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -238,54 +228,41 @@ interface SessionSidebarProps {
   onClose?: () => void
 }
 
-function formatTime(iso: string) {
-  const d = new Date(iso)
-  const now = new Date()
-  if (d.toDateString() === now.toDateString()) {
-    return d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
-  }
-  return d.toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
+function formatDate(iso: string) {
+  return new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
-  sessions, activeId, llmLabel, backendOk,
+  sessions, activeId,
   onSelect, onNew, onDelete, onOpenSettings, onClose,
 }: SessionSidebarProps) {
   const s = useStyles()
   const isDrawer = mode === 'drawer'
+  const isOverlay = mode === 'overlay'
+  const electronChrome = isElectron() && !isDrawer
 
   const handleSelect = (id: string) => {
     onSelect(id)
-    if (isDrawer) onClose?.()
+    if (isDrawer || isOverlay) onClose?.()
   }
 
-  const sidebarEl = (
-    <aside
-      className={mergeClasses(
-        s.sidebar,
-        isDrawer ? s.sidebarDrawer : s.sidebarPanel,
-        !isDrawer && visible && s.sidebarPanelVisible,
-        isDrawer && drawerOpen && s.sidebarDrawerOpen,
-      )}
-    >
-      <div className={s.brand}>
-        <div>
-          <div className={s.brandTitle}>innoAStock</div>
-          <div className={s.brandSub}>投研 Chat Agent</div>
-        </div>
-        {isDrawer && (
+  const sidebarBody = (
+    <>
+      {isDrawer && (
+        <div className={s.drawerHead}>
           <InnoButton className={s.iconBtn} variant="ghost" icon={<DismissRegular />} onClick={onClose} aria-label="关闭" />
-        )}
-      </div>
+        </div>
+      )}
 
-      <div className={s.newBtnWrap}>
-        <InnoButton className={s.newBtn} variant="primary" icon={<AddRegular />} onClick={onNew}>
-          新对话
-        </InnoButton>
-      </div>
+      <button type="button" className={mergeClasses(s.menuRow, 'inno-focusable')} onClick={onNew}>
+        <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>新对话</span>
+      </button>
 
-      <div className={`${s.list} inno-scroll`}>
+      <Text className={s.sectionLabel}>对话</Text>
+
+      <div className={mergeClasses(s.list, 'inno-scroll', 'inno-scroll-hover')}>
         {sessions.length === 0 && (
           <div className={s.empty}>暂无历史对话</div>
         )}
@@ -294,36 +271,79 @@ export default function SessionSidebar({
           return (
             <div
               key={sess.id}
-              className={mergeClasses(s.item, s.itemWithDelete, active && s.itemActive)}
+              className={mergeClasses(
+                'inno-session-item',
+                'inno-focusable',
+                s.item,
+                active && s.itemActive,
+                active && 'inno-session-item-active',
+              )}
               onClick={() => handleSelect(sess.id)}
               role="button"
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
-              <ChatRegular className={mergeClasses(s.itemIcon, active && s.itemIconActive)} fontSize={16} />
               <span className={s.itemTitle}>{sess.title}</span>
-              <span className={s.itemTime}>{formatTime(sess.updatedAt)}</span>
-              <InnoButton
-                className={s.deleteBtn}
-                variant="icon"
-                icon={<DeleteRegular fontSize={14} />}
-                onClick={e => { e.stopPropagation(); onDelete(sess.id) }}
-                aria-label="删除对话"
-              />
+              <span className={s.itemTrailing}>
+                <span className={mergeClasses(s.itemDate, 'inno-session-date')}>{formatDate(sess.updatedAt)}</span>
+                <button
+                  type="button"
+                  className={mergeClasses(s.itemDelete, 'inno-session-delete', 'inno-focusable')}
+                  onClick={e => { e.stopPropagation(); onDelete(sess.id) }}
+                  aria-label="删除对话"
+                >
+                  <DeleteRegular fontSize={14} />
+                </button>
+              </span>
             </div>
           )
         })}
       </div>
 
       <div className={s.footer}>
-        <div className={s.statusRow}>
-          <span className={mergeClasses(s.statusDot, backendOk ? s.statusOk : s.statusErr)} />
-          <Text className={s.statusText}>{llmLabel}</Text>
-        </div>
         <InnoButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
           设置
         </InnoButton>
       </div>
+    </>
+  )
+
+  if (isOverlay) {
+    return (
+      <OverlaySidebarShell
+        open={visible}
+        width={innoTokens.sidebarWidth}
+        onClose={onClose}
+      >
+        <div
+          className={mergeClasses(
+            s.sidebar,
+            electronChrome && s.sidebarElectron,
+            electronChrome && s.sidebarTopElectron,
+          )}
+        >
+          {sidebarBody}
+        </div>
+      </OverlaySidebarShell>
+    )
+  }
+
+  const sidebarEl = (
+    <aside
+      className={mergeClasses(
+        s.sidebar,
+        isDrawer && s.sidebarDrawer,
+        !isDrawer && s.sidebarPanel,
+        !isDrawer && visible && s.sidebarPanelVisible,
+        isDrawer && drawerOpen && s.sidebarDrawerOpen,
+        !electronChrome && !isDrawer && s.sidebarWeb,
+        electronChrome && s.sidebarElectron,
+        electronChrome && s.sidebarTopElectron,
+        electronChrome && 'inno-glass-sidebar',
+        !isDrawer && 'inno-sidebar-edge',
+      )}
+    >
+      {sidebarBody}
     </aside>
   )
 
