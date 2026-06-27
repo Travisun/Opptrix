@@ -1,11 +1,12 @@
 import { useRef, useEffect, useCallback } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { AddRegular, ArrowUpRegular } from '@fluentui/react-icons'
+import { ArrowUpRegular } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
+import SkillPicker from './SkillPicker'
 import InnoButton from '../components/inno/InnoButton'
-import type { AvailableModel } from '../types/chat'
+import type { AvailableModel, SkillCategory } from '../types/chat'
 import { innoTokens } from '../theme/tokens'
-import { motion, primaryInteractive, ghostInteractive, interactiveTransition } from '../theme/mixins'
+import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
@@ -79,10 +80,10 @@ const useStyles = makeStyles({
     backgroundImage: [
       'linear-gradient(',
       '180deg,',
-      'rgba(255, 255, 255, 0.28) 0%,',
-      'rgba(255, 255, 255, 0.52) 38%,',
-      'rgba(255, 255, 255, 0.88) 68%,',
-      `${innoTokens.canvas} 82%,`,
+      'rgba(255, 255, 255, 0.62) 0%,',
+      'rgba(255, 255, 255, 0.78) 38%,',
+      'rgba(255, 255, 255, 0.96) 68%,',
+      `${innoTokens.canvas} 88%,`,
       `${innoTokens.canvas} 100%`,
       ')',
     ].join(' '),
@@ -99,7 +100,9 @@ const useStyles = makeStyles({
     gap: '10px',
     borderRadius: innoTokens.radiusXl,
     border: `1px solid ${innoTokens.border}`,
-    backgroundColor: 'transparent',
+    backgroundColor: 'rgba(255, 255, 255, 0.38)',
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
     boxShadow: innoTokens.composerFloatShadow,
     ':hover': {
       borderColor: innoTokens.borderStrong,
@@ -151,12 +154,10 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     height: '34px',
   },
-  skillBtn: {
-    ...ghostInteractive,
-    minWidth: '34px',
-    height: '34px',
-    borderRadius: innoTokens.radiusFull,
-    color: innoTokens.textSecondary,
+  skillBtnSlot: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
   },
   sendBtn: {
     ...primaryInteractive,
@@ -186,13 +187,13 @@ interface ChatComposerProps {
   isEmpty: boolean
   isMobile?: boolean
   starters: string[]
-  skillsCount: number
+  skillCategories: SkillCategory[]
   availableModels: AvailableModel[]
   sessionModel?: string
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
   onModelChange?: (ref: string) => void
-  onOpenSkills: () => void
+  onPickSkill: (prompt: string) => void
 }
 
 export default function ChatComposer({
@@ -202,13 +203,13 @@ export default function ChatComposer({
   isEmpty,
   isMobile = false,
   starters,
-  skillsCount,
+  skillCategories,
   availableModels,
   sessionModel,
   onInputChange,
   onSubmit,
   onModelChange,
-  onOpenSkills,
+  onPickSkill,
 }: ChatComposerProps) {
   const s = useStyles()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -271,15 +272,14 @@ export default function ChatComposer({
           />
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
-              {skillsCount > 0 && (
-                <InnoButton
-                  className={s.skillBtn}
-                  variant="ghost"
-                  icon={<AddRegular fontSize={16} />}
-                  onClick={onOpenSkills}
-                  aria-label="Skills"
+              <div className={s.skillBtnSlot}>
+                <SkillPicker
+                  categories={skillCategories}
+                  disabled={loading}
+                  isMobile={isMobile}
+                  onPickPrompt={onPickSkill}
                 />
-              )}
+              </div>
             </div>
             <div className={s.toolbarRight}>
               {onModelChange && (

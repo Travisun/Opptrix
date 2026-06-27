@@ -4,7 +4,6 @@ import {
 } from '@fluentui/react-components'
 import { BotRegular } from '@fluentui/react-icons'
 import type { ChatDisplayMessage, SkillCategory, AvailableModel } from '../types/chat'
-import SkillSheet from './SkillSheet'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import MarkdownMessage from './MarkdownMessage'
@@ -250,7 +249,6 @@ export default function ChatView({
   const s = useStyles()
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
-  const [skillsOpen, setSkillsOpen] = useState(false)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
 
   const isEmpty = messages.length === 0 && !loading
@@ -402,25 +400,17 @@ export default function ChatView({
               isEmpty={isEmpty}
               isMobile={isMobile}
               starters={starters}
-              skillsCount={skills.length}
+              skillCategories={skills}
               availableModels={availableModels}
               sessionModel={sessionModel}
               onInputChange={onInputChange}
               onSubmit={handleSubmit}
               onModelChange={onModelChange}
-              onOpenSkills={() => setSkillsOpen(true)}
+              onPickSkill={onInputChange}
             />
           </div>
         </div>
       </div>
-
-      <SkillSheet
-        open={skillsOpen}
-        isMobile={isMobile}
-        categories={skills}
-        onClose={() => setSkillsOpen(false)}
-        onPickPrompt={onInputChange}
-      />
     </div>
   )
 }
