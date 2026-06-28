@@ -21,6 +21,8 @@ import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
+import { desktopChromeToolbarReserve } from '../desktop/layout'
+import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 
@@ -139,6 +141,10 @@ export default function ChatApp() {
   } = useAppNavigation('chat')
 
   const electronChrome = isElectron() && !isMobile
+  const macFullscreen = useElectronFullscreen()
+  const chromeToolbarReserve = electronChrome && !sidebarInlineVisible
+    ? desktopChromeToolbarReserve(macFullscreen)
+    : 0
   const splitEnabled = !isMobile && view === 'chat'
 
   const {
@@ -498,6 +504,7 @@ export default function ChatApp() {
           onGoBack={!isSettings ? goBack : undefined}
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={!isSettings ? rightPanelVisible : undefined}
+          rightPanelWidth={!isSettings && rightPanelVisible ? rightPanelWidth : undefined}
           chatColumnVisible={!isSettings ? chatVisible : undefined}
           onToggleRightPanel={!isSettings && !isMobile ? handleToggleRightPanel : undefined}
           onToggleChatColumn={!isSettings && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
@@ -611,6 +618,7 @@ export default function ChatApp() {
                 transitionEnabled={!isDragging}
                 electronChrome={electronChrome}
                 chatColumnVisible={chatVisible}
+                chromeToolbarReserve={chromeToolbarReserve}
                 onToggleRightPanel={handleToggleRightPanel}
                 onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
               />

@@ -46,10 +46,6 @@ const useStyles = makeStyles({
     backgroundColor: innoTokens.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
-    pointerEvents: 'auto',
-  },
-  titleBarElectron: {
-    WebkitAppRegion: 'drag',
   },
   titleBarWeb: {
     height: '40px',
@@ -75,7 +71,6 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: '8px',
     alignSelf: 'stretch',
-    WebkitAppRegion: 'drag',
   },
   titleBarActions: {
     flexShrink: 0,
@@ -98,6 +93,8 @@ const useStyles = makeStyles({
 interface Props {
   electronChrome?: boolean
   chatColumnVisible?: boolean
+  /** Skip left global toolbar band when sidebar is not inline (overlay / collapsed). */
+  chromeToolbarReserve?: number
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
 }
@@ -105,6 +102,7 @@ interface Props {
 export default function RightMarketPanel({
   electronChrome = false,
   chatColumnVisible = true,
+  chromeToolbarReserve = 0,
   onToggleRightPanel,
   onToggleChatColumn,
 }: Props) {
@@ -165,7 +163,6 @@ export default function RightMarketPanel({
         className={mergeClasses(
           s.titleBar,
           !electronChrome && s.titleBarWeb,
-          electronChrome && s.titleBarElectron,
           electronChrome && 'inno-right-panel-title-bar',
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}
@@ -182,7 +179,13 @@ export default function RightMarketPanel({
           </TabList>
         </div>
 
-        {electronChrome && <div className={s.dragFill} aria-hidden />}
+        {electronChrome && (
+          <div
+            className={mergeClasses(s.dragFill, 'inno-right-panel-title-drag')}
+            style={chromeToolbarReserve > 0 ? { marginLeft: `${chromeToolbarReserve}px` } : undefined}
+            aria-hidden
+          />
+        )}
 
         {showWorkspaceActions && (
           <div className={mergeClasses(s.titleBarActions, 'inno-panel-title-no-drag')}>

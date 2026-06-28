@@ -6,6 +6,8 @@ declare global {
       windowMinimize?: () => void
       windowMaximize?: () => void
       windowClose?: () => void
+      getIsFullscreen?: () => Promise<boolean>
+      onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
     }
   }
 }

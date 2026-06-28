@@ -134,6 +134,13 @@ function createWindow() {
 
   const win = new BrowserWindow(options)
 
+  const notifyFullscreen = () => {
+    win.webContents.send('window-fullscreen-changed', win.isFullScreen())
+  }
+  win.on('enter-full-screen', notifyFullscreen)
+  win.on('leave-full-screen', notifyFullscreen)
+  win.webContents.on('did-finish-load', notifyFullscreen)
+
   // Required on macOS for true transparent compositing with CSS glass layers
   win.setBackgroundColor('#00000000')
 
@@ -157,6 +164,9 @@ app.whenReady().then(async () => {
   })
   ipcMain.on('window-close', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
+  })
+  ipcMain.handle('window-is-fullscreen', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
   })
 
   // Dev: scripts/dev-stack.mjs already runs API + Vite.

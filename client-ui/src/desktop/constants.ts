@@ -6,8 +6,10 @@ export const DESKTOP_CHROME_TOP_OFFSET = 5
 /** Usable band below the top inset inside the title bar */
 export const DESKTOP_CHROME_BAND_HEIGHT = DESKTOP_TITLEBAR_HEIGHT - DESKTOP_CHROME_TOP_OFFSET
 
-/** macOS native traffic-light zone before app toolbar */
+/** macOS native traffic-light zone before app toolbar (windowed) */
 export const DESKTOP_TRAFFIC_LIGHT_WIDTH = 80
+/** macOS toolbar inset when traffic lights move to the top bar in fullscreen */
+export const DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN = 12
 
 export const DESKTOP_TOOL_SIZE = 26
 export const DESKTOP_TOOL_GAP = 4
@@ -79,4 +81,5 @@ export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
 export const DESKTOP_Z_TITLE = 1100
 export const DESKTOP_Z_PANEL_TITLE = 1200
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
-export const DESKTOP_Z_CHROME_TOOLS = 1210
+/** Global fixed toolbar / window controls — always above panel title bands */
+export const DESKTOP_Z_CHROME_TOOLS = 1300

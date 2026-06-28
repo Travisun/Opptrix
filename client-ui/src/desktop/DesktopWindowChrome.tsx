@@ -1,3 +1,5 @@
+import { createPortal } from 'react-dom'
+import type { CSSProperties } from 'react'
 import {
   ArrowLeftRegular,
   ArrowRightRegular,
@@ -30,6 +32,7 @@ import { innoTokens } from '../theme/tokens'
 import { desktopTitleLeft, desktopToolbarLeft, type DesktopViewMode } from './layout'
 import ChromeToolButton from './ChromeToolButton'
 import WindowControls from './WindowControls'
+import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 
 const useStyles = makeStyles({
   chromeBar: {
@@ -45,6 +48,7 @@ const useStyles = makeStyles({
     position: 'absolute',
     inset: 0,
     WebkitAppRegion: 'drag',
+    pointerEvents: 'auto',
   },
   toolbar: {
     position: 'absolute',
@@ -56,6 +60,9 @@ const useStyles = makeStyles({
     pointerEvents: 'auto',
     WebkitAppRegion: 'no-drag',
     zIndex: 1,
+    transitionProperty: 'left',
+    transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
+    transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
   title: {
     position: 'fixed',
@@ -110,6 +117,8 @@ interface DesktopWindowChromeProps {
   onGoBack?: () => void
   onGoForward?: () => void
   rightPanelOpen?: boolean
+  /** Width of the open right panel — used to clip global drag off panel title bar. */
+  rightPanelWidth?: number
   onToggleRightPanel?: () => void
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
@@ -130,17 +139,28 @@ export default function DesktopWindowChrome({
   onGoBack,
   onGoForward,
   rightPanelOpen = false,
+  rightPanelWidth = 0,
   onToggleRightPanel,
   chatColumnVisible = true,
   onToggleChatColumn,
 }: DesktopWindowChromeProps) {
   const s = useStyles()
+  const macFullscreen = useElectronFullscreen()
 
   if (!isElectron()) return null
 
   const isSettings = viewMode === 'settings'
-  const titleLeft = desktopTitleLeft(sidebarInline, isSettings)
+  const titleLeft = desktopTitleLeft(sidebarInline, isSettings, macFullscreen)
+  const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
+
+  /** Full-width drag (z-index 1300) sits above panel title (1200) — clip it off the right panel band. */
+  const dragLayerStyle: CSSProperties = (() => {
+    if (isSettings || !rightPanelOpen) return {}
+    if (!chatColumnVisible) return { pointerEvents: 'none' }
+    if (rightPanelWidth > 0) return { right: `${rightPanelWidth}px` }
+    return {}
+  })()
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
@@ -153,12 +173,13 @@ export default function DesktopWindowChrome({
   const handleSidebarClick = () => {
     if (sidebarHoverReveal) {
       if (sidebarOpen) onToggleSidebar?.()
+      else onRevealSidebar?.()
       return
     }
     onToggleSidebar?.()
   }
 
-  return (
+  return createPortal(
     <>
       {!isSettings && (
         <div className={s.title} style={{ left: `${titleLeft}px` }}>
@@ -167,9 +188,9 @@ export default function DesktopWindowChrome({
       )}
 
       <header className={s.chromeBar} aria-label="窗口标题栏">
-        <div className={s.drag} aria-hidden />
+        <div className={s.drag} style={dragLayerStyle} aria-hidden />
 
-        <div className={s.toolbar} style={{ left: `${desktopToolbarLeft()}px` }}>
+        <div className={s.toolbar} style={{ left: `${toolbarLeft}px` }}>
           {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (
             <ChromeToolButton
               label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
@@ -229,6 +250,7 @@ export default function DesktopWindowChrome({
       )}
 
       <WindowControls />
-    </>
+    </>,
+    document.body,
   )
 }

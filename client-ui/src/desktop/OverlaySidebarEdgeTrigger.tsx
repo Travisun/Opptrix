@@ -11,7 +11,8 @@ const useStyles = makeStyles({
     left: 0,
     bottom: 0,
     width: `${EDGE_WIDTH_PX}px`,
-    zIndex: DESKTOP_Z_OVERLAY_SIDEBAR - 1,
+    // Below global chrome (1300), above panel title content
+    zIndex: DESKTOP_Z_OVERLAY_SIDEBAR,
     pointerEvents: 'auto',
     backgroundColor: 'transparent',
   },

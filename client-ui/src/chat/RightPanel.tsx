@@ -48,6 +48,7 @@ interface Props {
   transitionEnabled?: boolean
   electronChrome?: boolean
   chatColumnVisible?: boolean
+  chromeToolbarReserve?: number
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
 }
@@ -59,6 +60,7 @@ export default function RightPanel({
   transitionEnabled = true,
   electronChrome = false,
   chatColumnVisible = true,
+  chromeToolbarReserve = 0,
   onToggleRightPanel,
   onToggleChatColumn,
 }: Props) {
@@ -90,6 +92,7 @@ export default function RightPanel({
         <RightMarketPanel
           electronChrome={electronChrome}
           chatColumnVisible={chatColumnVisible}
+          chromeToolbarReserve={chromeToolbarReserve}
           onToggleRightPanel={visible ? onToggleRightPanel : undefined}
           onToggleChatColumn={visible ? onToggleChatColumn : undefined}
         />

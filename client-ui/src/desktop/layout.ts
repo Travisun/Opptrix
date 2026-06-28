@@ -8,10 +8,12 @@ import {
   DESKTOP_TOOL_SIZE,
   DESKTOP_TOOLBAR_TOOL_COUNT,
   DESKTOP_TRAFFIC_LIGHT_WIDTH,
+  DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN,
 } from './constants'
 
-export function desktopToolbarLeft(): number {
-  return electronPlatform() === 'darwin' ? DESKTOP_TRAFFIC_LIGHT_WIDTH : 12
+export function desktopToolbarLeft(fullscreen = false): number {
+  if (electronPlatform() !== 'darwin') return 12
+  return fullscreen ? DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN : DESKTOP_TRAFFIC_LIGHT_WIDTH
 }
 
 export function desktopToolbarWidth(): number {
@@ -21,8 +23,12 @@ export function desktopToolbarWidth(): number {
 
 export type DesktopViewMode = 'chat' | 'settings'
 
-export function desktopTitleLeft(sidebarInline: boolean, view: DesktopViewMode = 'chat'): number {
-  const afterToolbar = desktopToolbarLeft() + desktopToolbarWidth() + DESKTOP_TITLE_GAP
+export function desktopTitleLeft(
+  sidebarInline: boolean,
+  view: DesktopViewMode = 'chat',
+  fullscreen = false,
+): number {
+  const afterToolbar = desktopToolbarLeft(fullscreen) + desktopToolbarWidth() + DESKTOP_TITLE_GAP
   if (view === 'settings') {
     if (sidebarInline) {
       return DESKTOP_SETTINGS_SIDEBAR_WIDTH + DESKTOP_TITLE_GAP
@@ -33,6 +39,10 @@ export function desktopTitleLeft(sidebarInline: boolean, view: DesktopViewMode =
     return innoTokens.sidebarWidthPx + DESKTOP_TITLE_GAP
   }
   return afterToolbar
+}
+
+export function desktopChromeToolbarReserve(fullscreen = false): number {
+  return desktopToolbarLeft(fullscreen) + desktopToolbarWidth() + DESKTOP_TITLE_GAP
 }
 
 export { DESKTOP_TITLEBAR_HEIGHT }
