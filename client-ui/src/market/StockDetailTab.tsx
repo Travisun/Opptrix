@@ -233,13 +233,16 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     border: `1px solid ${innoTokens.separator}`,
   },
-  listRow: {
+  flatList: {
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  annRow: {
     display: 'grid',
-    gridTemplateColumns: '62px minmax(0, 1fr)',
+    gridTemplateColumns: '58px minmax(0, 1fr)',
     gap: '6px',
     alignItems: 'start',
-    padding: '6px 8px',
-    backgroundColor: innoTokens.surface,
+    padding: '5px 0',
     borderBottom: `1px solid ${innoTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
@@ -258,10 +261,9 @@ const useStyles = makeStyles({
   },
   tableHead: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1.4fr) repeat(3, minmax(0, 0.7fr))',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
-    padding: '4px 8px',
-    backgroundColor: innoTokens.canvasAlt,
+    padding: '4px 0',
     borderBottom: `1px solid ${innoTokens.separator}`,
   },
   tableHeadCell: {
@@ -270,11 +272,26 @@ const useStyles = makeStyles({
   },
   tableRow: {
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1.4fr) repeat(3, minmax(0, 0.7fr))',
+    gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
-    padding: '5px 8px',
+    padding: '4px 0',
     borderBottom: `1px solid ${innoTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
+  },
+  tableRowWide: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${innoTokens.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  tableHeadWide: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
+    gap: '4px',
+    padding: '4px 0',
+    borderBottom: `1px solid ${innoTokens.separator}`,
   },
   tableCell: {
     fontSize: '10px',
@@ -347,9 +364,9 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
     return <Text className={s.emptyHint}>暂无公告</Text>
   }
   return (
-    <div className={s.list}>
+    <div className={s.flatList}>
       {items.map(item => (
-        <div key={`${item.date}-${item.title}`} className={s.listRow}>
+        <div key={`${item.date}-${item.title}`} className={s.annRow}>
           <span className={s.listDate}>{item.date || '—'}</span>
           {item.url ? (
             <Link className={s.listTitle} href={item.url} target="_blank" rel="noreferrer">
@@ -370,21 +387,21 @@ function DividendPanel({ items }: { items: StockDividendItem[] }) {
     return <Text className={s.emptyHint}>暂无分红记录</Text>
   }
   return (
-    <div className={s.list}>
-      <div className={s.tableHead}>
+    <div className={s.flatList}>
+      <div className={s.tableHeadWide}>
+        <span className={s.tableHeadCell}>方案</span>
+        <span className={s.tableHeadCell}>进度</span>
+        <span className={s.tableHeadCell}>登记日</span>
         <span className={s.tableHeadCell}>除权日</span>
-        <span className={s.tableHeadCell}>年度</span>
-        <span className={s.tableHeadCell}>每股分红</span>
-        <span className={s.tableHeadCell} />
+        <span className={s.tableHeadCell}>派息日</span>
       </div>
-      {items.slice(0, 8).map(item => (
-        <div key={`${item.exDate}-${item.year}`} className={s.tableRow}>
+      {items.slice(0, 10).map(item => (
+        <div key={`${item.exDate}-${item.plan}`} className={s.tableRowWide}>
+          <span className={s.tableCellName} title={item.plan}>{item.plan || '—'}</span>
+          <span className={s.tableCell}>{item.progress || '—'}</span>
+          <span className={s.tableCell}>{item.recordDate || '—'}</span>
           <span className={s.tableCell}>{item.exDate || '—'}</span>
-          <span className={s.tableCell}>{item.year || '—'}</span>
-          <span className={s.tableCell}>
-            {item.cashBonus != null ? `${item.cashBonus.toFixed(2)} 元` : '—'}
-          </span>
-          <span className={s.tableCell} />
+          <span className={s.tableCell}>{item.payDate || '—'}</span>
         </div>
       ))}
     </div>
@@ -431,11 +448,14 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
         <Metric label="股东户数" value={data?.shareholderCount != null ? String(Math.round(data.shareholderCount)) : '—'} />
         <Metric
           label="户数变动"
-          value={data?.shareholderCountChange != null ? formatSignedNumber(data.shareholderCountChange, 0) : '—'}
+          value={data?.shareholderCountChange != null ? formatPct(data.shareholderCountChange) : '—'}
         />
+        <Metric label="户均持股" value={data?.avgFreeShares != null ? formatCompactNumber(data.avgFreeShares) : '—'} />
+        <Metric label="户均市值" value={formatCompactNumber(data?.avgHoldingValue ?? null)} />
+        <Metric label="集中度" value={data?.holdFocus || '—'} />
       </div>
       {top10.length > 0 && (
-        <div className={s.list}>
+        <div className={s.flatList}>
           <div className={s.tableHead}>
             <span className={s.tableHeadCell}>股东</span>
             <span className={s.tableHeadCell}>持股数</span>
@@ -466,16 +486,18 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
     return <Text className={s.emptyHint}>暂无财务历史</Text>
   }
   return (
-    <div className={s.list}>
-      <div className={s.tableHead}>
+    <div className={s.flatList}>
+      <div className={s.tableHeadWide}>
         <span className={s.tableHeadCell}>报告期</span>
+        <span className={s.tableHeadCell}>类型</span>
         <span className={s.tableHeadCell}>营收</span>
         <span className={s.tableHeadCell}>净利</span>
         <span className={s.tableHeadCell}>ROE</span>
       </div>
-      {rows.slice(0, 8).map(row => (
-        <div key={row.reportDate} className={s.tableRow}>
+      {rows.slice(0, 12).map(row => (
+        <div key={`${row.reportDate}-${row.reportType}`} className={s.tableRowWide}>
           <span className={s.tableCell}>{row.reportDate || '—'}</span>
+          <span className={s.tableCell}>{row.reportType || '—'}</span>
           <span className={s.tableCell}>{formatCompactNumber(row.revenue)}</span>
           <span className={s.tableCell}>{formatCompactNumber(row.netProfit)}</span>
           <span className={s.tableCell}>{row.roe != null ? `${row.roe.toFixed(2)}%` : '—'}</span>
@@ -625,17 +647,20 @@ export default function StockDetailTab({ stock }: Props) {
                 <Metric label="换手率" value={quote?.turnoverRate != null ? `${quote.turnoverRate.toFixed(2)}%` : '—'} />
                 <Metric label="成交量" value={formatVolume(quote?.volume ?? null)} />
                 <Metric label="成交额" value={formatCompactNumber(quote?.amount ?? null)} />
+                <Metric label="量比" value={quote?.volumeRatio != null ? quote.volumeRatio.toFixed(2) : '—'} />
+                <Metric label="市盈率" value={quote?.pe != null ? quote.pe.toFixed(2) : '—'} />
+                <Metric label="市净率" value={quote?.pb != null ? quote.pb.toFixed(2) : '—'} />
               </div>
             </MetricSection>
 
             <MetricSection title="估值 · 规模">
               <div className={s.metricGrid3}>
-                <Metric label="市盈率 TTM" value={quote?.pe != null ? quote.pe.toFixed(2) : '—'} />
-                <Metric label="市净率" value={quote?.pb != null ? quote.pb.toFixed(2) : '—'} />
                 <Metric label="总市值" value={formatCompactNumber(profile?.totalMarketCap ?? quote?.marketCap ?? null)} />
                 <Metric label="流通市值" value={formatCompactNumber(profile?.circulatingMarketCap ?? null)} />
                 <Metric label="所属行业" value={profile?.industry ?? stock.industry ?? '—'} />
                 <Metric label="EPS" value={financial?.eps != null ? financial.eps.toFixed(2) : '—'} />
+                <Metric label="每股净资产" value={financial?.bps != null ? financial.bps.toFixed(2) : '—'} />
+                <Metric label="报告类型" value={financial?.reportType ?? '—'} />
               </div>
             </MetricSection>
 
@@ -648,8 +673,9 @@ export default function StockDetailTab({ stock }: Props) {
                   <Metric label="净利同比" value={formatPct(financial.netProfitYoy)} />
                   <Metric label="ROE" value={financial.roe != null ? `${financial.roe.toFixed(2)}%` : '—'} />
                   <Metric label="毛利率" value={financial.grossMargin != null ? `${financial.grossMargin.toFixed(2)}%` : '—'} />
+                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
                   <Metric label="资产负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="经营现金流" value={formatCompactNumber(financial.operatingCashFlow)} />
+                  <Metric label="每股现金流" value={financial.operatingCashFlow != null ? financial.operatingCashFlow.toFixed(2) : '—'} />
                   <Metric label="报告期" value={financial.reportDate || '—'} />
                 </div>
               </MetricSection>
@@ -661,12 +687,26 @@ export default function StockDetailTab({ stock }: Props) {
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
             <MetricSection title="公司概况">
               <div className={s.metricGrid3}>
+                <Metric label="公司全称" value={profile?.orgName || detail.name || '—'} />
+                <Metric label="证券类型" value={profile?.securityType ?? '—'} />
+                <Metric label="曾用名" value={profile?.formerName ?? '—'} />
+                <Metric label="成立日期" value={profile?.foundDate ?? '—'} />
                 <Metric label="上市日期" value={profile?.listingDate ?? '—'} />
+                <Metric label="发行价" value={profile?.issuePrice != null ? formatPrice(profile.issuePrice) : '—'} />
+                <Metric label="注册资本" value={profile?.regCapital != null ? formatCompactNumber(profile.regCapital) : '—'} />
                 <Metric label="员工人数" value={profile?.employees != null ? String(profile.employees) : '—'} />
-                <Metric label="注册地" value={[profile?.province, profile?.city].filter(Boolean).join(' · ') || '—'} />
                 <Metric label="所属行业" value={profile?.industry ?? stock.industry ?? '—'} />
-                <Metric label="总市值" value={formatCompactNumber(profile?.totalMarketCap ?? quote?.marketCap ?? null)} />
-                <Metric label="流通市值" value={formatCompactNumber(profile?.circulatingMarketCap ?? null)} />
+                <Metric label="证监会行业" value={profile?.industryCsrc ?? '—'} />
+                <Metric label="注册地址" value={profile?.address || profile?.province || '—'} />
+                <Metric label="联系电话" value={profile?.orgTel ?? '—'} />
+              </div>
+            </MetricSection>
+
+            <MetricSection title="治理结构">
+              <div className={s.metricGrid3}>
+                <Metric label="董事长" value={profile?.chairman ?? '—'} />
+                <Metric label="法人代表" value={profile?.legalPerson ?? '—'} />
+                <Metric label="董秘" value={profile?.secretary ?? '—'} />
               </div>
             </MetricSection>
 
@@ -679,28 +719,32 @@ export default function StockDetailTab({ stock }: Props) {
             )}
 
             {profile?.concepts?.length ? (
-              <MetricSection title="概念题材">
+              <MetricSection title="板块 · 题材">
                 <div className={s.tagRow}>
-                  {profile.concepts.slice(0, 12).map(tag => (
+                  {profile.concepts.slice(0, 16).map(tag => (
                     <span key={tag} className={s.tag}>{tag}</span>
                   ))}
                 </div>
               </MetricSection>
             ) : null}
 
-            <MetricSection title="主营业务">
+            <MetricSection title="公司简介">
               <Text className={s.prose} block>
-                {profile?.mainBusiness || '暂无主营业务介绍'}
+                {profile?.orgProfile || profile?.mainBusiness || '暂无公司简介'}
               </Text>
             </MetricSection>
+
+            {profile?.businessScope && (
+              <MetricSection title="经营范围">
+                <Text className={s.prose} block>{profile.businessScope}</Text>
+              </MetricSection>
+            )}
           </div>
         </div>
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'news' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
-            <MetricSection title="最新公告">
-              <NewsPanel items={detail.news ?? []} />
-            </MetricSection>
+            <NewsPanel items={detail.news ?? []} />
           </div>
         </div>
 
@@ -715,12 +759,12 @@ export default function StockDetailTab({ stock }: Props) {
                   <Metric label="净利同比" value={formatPct(financial.netProfitYoy)} />
                   <Metric label="ROE" value={financial.roe != null ? `${financial.roe.toFixed(2)}%` : '—'} />
                   <Metric label="毛利率" value={financial.grossMargin != null ? `${financial.grossMargin.toFixed(2)}%` : '—'} />
+                  <Metric label="净利率" value={financial.netMargin != null ? `${financial.netMargin.toFixed(2)}%` : '—'} />
                   <Metric label="资产负债率" value={financial.debtRatio != null ? `${financial.debtRatio.toFixed(2)}%` : '—'} />
-                  <Metric label="经营现金流" value={formatCompactNumber(financial.operatingCashFlow)} />
-                  <Metric label="总资产" value={formatCompactNumber(financial.totalAssets ?? null)} />
-                  <Metric label="总负债" value={formatCompactNumber(financial.totalLiabilities ?? null)} />
+                  <Metric label="每股现金流" value={financial.operatingCashFlow != null ? financial.operatingCashFlow.toFixed(2) : '—'} />
+                  <Metric label="每股净资产" value={financial.bps != null ? financial.bps.toFixed(2) : '—'} />
                   <Metric label="EPS" value={financial.eps != null ? financial.eps.toFixed(2) : '—'} />
-                  <Metric label="报告期" value={financial.reportDate || '—'} />
+                  <Metric label="报告期" value={`${financial.reportDate || '—'} ${financial.reportType ?? ''}`.trim()} />
                 </div>
               </MetricSection>
             )}

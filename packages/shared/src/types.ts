@@ -64,6 +64,7 @@ export interface StockKline {
 export interface FinancialSummary {
   code: string
   reportDate: string
+  reportType?: string
   revenue: number | null
   revenueYoy: number | null
   netProfit: number | null
@@ -71,8 +72,10 @@ export interface FinancialSummary {
   eps: number | null
   roe: number | null
   grossMargin: number | null
+  netMargin?: number | null
   debtRatio: number | null
   operatingCashFlow: number | null
+  bps?: number | null
   totalAssets?: number | null
   totalLiabilities?: number | null
 }

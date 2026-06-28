@@ -63,16 +63,30 @@ export interface SectorMoneyFlow {
 export interface StockProfile {
   code: string
   name?: string
+  orgName?: string
   industry?: string
+  industryCsrc?: string
   concepts?: string[]
   listingDate?: string
+  foundDate?: string
   mainBusiness?: string
+  orgProfile?: string
+  businessScope?: string
   totalMarketCap?: number | null
   circulatingMarketCap?: number | null
   employees?: number | null
   province?: string
   city?: string
+  address?: string
   website?: string
+  regCapital?: number | null
+  chairman?: string
+  legalPerson?: string
+  secretary?: string
+  orgTel?: string
+  securityType?: string
+  formerName?: string
+  issuePrice?: number | null
 }
 
 export interface NewsItem {
@@ -99,6 +113,9 @@ export interface Dividend {
   stockBonus?: number | null
   exDate?: string
   recordDate?: string
+  payDate?: string
+  plan?: string
+  progress?: string
 }
 
 export interface DragonTiger {

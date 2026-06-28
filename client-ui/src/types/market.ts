@@ -21,26 +21,42 @@ export interface MarketQuote {
   amount?: number | null
   change?: number | null
   amplitude?: number | null
+  volumeRatio?: number | null
 }
 
 export interface StockProfileData {
   code: string
   name?: string
+  orgName?: string
   industry?: string
+  industryCsrc?: string
   concepts?: string[]
   listingDate?: string
+  foundDate?: string
   mainBusiness?: string
+  orgProfile?: string
+  businessScope?: string
   totalMarketCap?: number | null
   circulatingMarketCap?: number | null
   employees?: number | null
   province?: string
   city?: string
+  address?: string
   website?: string
+  regCapital?: number | null
+  chairman?: string
+  legalPerson?: string
+  secretary?: string
+  orgTel?: string
+  securityType?: string
+  formerName?: string
+  issuePrice?: number | null
 }
 
 export interface FinancialSummaryData {
   code: string
   reportDate: string
+  reportType?: string
   revenue: number | null
   revenueYoy: number | null
   netProfit: number | null
@@ -48,8 +64,10 @@ export interface FinancialSummaryData {
   eps: number | null
   roe: number | null
   grossMargin: number | null
+  netMargin?: number | null
   debtRatio: number | null
   operatingCashFlow: number | null
+  bps?: number | null
   totalAssets?: number | null
   totalLiabilities?: number | null
 }
@@ -135,6 +153,10 @@ export interface StockDividendItem {
   year?: string
   cashBonus?: number | null
   exDate?: string
+  recordDate?: string
+  payDate?: string
+  plan?: string
+  progress?: string
 }
 
 export interface StockMoneyFlowItem {
@@ -151,6 +173,7 @@ export interface TopShareholderItem {
   sharesHeld?: number | null
   sharePct?: number | null
   change?: number | null
+  shareType?: string
 }
 
 export interface StockShareholderData {
@@ -159,6 +182,8 @@ export interface StockShareholderData {
   shareholderCount?: number | null
   shareholderCountChange?: number | null
   avgHoldingValue?: number | null
+  holdFocus?: string
+  avgFreeShares?: number | null
   top10Shareholders?: TopShareholderItem[]
 }
 

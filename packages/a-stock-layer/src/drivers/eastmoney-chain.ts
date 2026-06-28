@@ -1,4 +1,5 @@
 import { normalizeCode, safeFloat } from '../utils/helpers.js'
+import { fetchEmWebPage, fetchF10Financials, fetchF10Profile, fetchF10Shareholders } from './eastmoney-f10.js'
 import type { EastMoneyDriver } from './eastmoney.js'
 
 type EM = EastMoneyDriver & {
@@ -26,27 +27,33 @@ export function mixEastMoneyChain(Driver: { prototype: EastMoneyDriver }) {
   p.mainBusiness = async function mainBusiness(code: string) {
     try {
       const cc = c(code)
-      const items = await dcFirst(this, [
-        'RPT_DMSK_FN_INCOME', 'RPT_F10_INCOME_CONSTRUCT', 'RPT_MAIN_BUSINESS_INCOME',
-      ], `(SECURITY_CODE="${cc}")`)
-      if (!items.length) return null
-      const byDate = new Map<string, Record<string, unknown>[]>()
-      for (const it of items) {
-        const d = String(it.REPORT_DATE ?? '').slice(0, 10)
-        if (!byDate.has(d)) byDate.set(d, [])
-        byDate.get(d)!.push(it)
+      const industry = await fetchEmWebPage<{ hyzx?: Record<string, unknown>[] }>('IndustryAnalysis', cc)
+      const segments = industry?.hyzx ?? []
+      if (segments.length) {
+        return [{
+          code: cc,
+          reportDate: String(segments[0]?.REPORT_DATE ?? segments[0]?.END_DATE ?? '').slice(0, 10),
+          items: segments.slice(0, 8).map(it => ({
+            name: String(it.BOARD_NAME ?? it.INDUSTRY_NAME ?? it.ITEM_NAME ?? ''),
+            type: String(it.INDUSTRY_TYPE ?? it.TYPE ?? ''),
+            revenue: safeFloat(it.OPERATE_INCOME ?? it.MAIN_BUSINESS_INCOME ?? it.REVENUE),
+            revenuePct: safeFloat(it.INCOME_RATIO ?? it.RATIO),
+            grossMargin: safeFloat(it.GROSS_PROFIT_RATIO ?? it.GROSS_MARGIN),
+          })),
+          totalRevenue: safeFloat(segments[0]?.TOTAL_OPERATE_INCOME ?? segments[0]?.MAIN_BUSINESS_INCOME),
+        }]
       }
-      return [...byDate.entries()].slice(0, 4).map(([reportDate, rows]) => ({
-        code: cc, reportDate,
-        items: rows.map(r => ({
-          name: String(r.BUSINESS_NAME ?? r.ITEM_NAME ?? ''),
-          type: String(r.BUSINESS_TYPE ?? r.TYPE_NAME ?? ''),
-          revenue: safeFloat(r.OPERATE_INCOME ?? r.REVENUE),
-          revenuePct: safeFloat(r.INCOME_PROPORTION ?? r.REVENUE_PCT),
-          grossMargin: safeFloat(r.GROSS_PROFIT_RATIO ?? r.GROSS_MARGIN),
-        })),
-        totalRevenue: safeFloat(rows[0]?.TOTAL_OPERATE_INCOME ?? rows[0]?.TOTAL_REVENUE),
-      }))
+
+      const profile = await fetchF10Profile(cc)
+      const text = profile?.[0]?.businessScope || profile?.[0]?.mainBusiness
+      if (!text) return null
+      return [{
+        code: cc,
+        reportDate: profile?.[0]?.listingDate ?? '',
+        items: [{ name: '主营业务', type: '概要', revenue: null, revenuePct: null, grossMargin: null }],
+        totalRevenue: null,
+        summary: text,
+      }]
     } catch { return null }
   }
 
@@ -72,15 +79,20 @@ export function mixEastMoneyChain(Driver: { prototype: EastMoneyDriver }) {
   p.actualController = async function actualController(code: string) {
     try {
       const cc = c(code)
-      const items = await dcFirst(this, ['RPT_CONTROLLER_INFO', 'RPT_F10_CONTROLLER'], `(SECURITY_CODE="${cc}")`)
-      if (!items.length) return null
-      return items.map(it => ({
+      const profile = await fetchF10Profile(cc)
+      const holderRows = await fetchF10Shareholders(cc)
+      const holder = holderRows?.[0] as Record<string, unknown> | undefined
+      const topList = holder?.top10Shareholders as Record<string, unknown>[] | undefined
+      const top = topList?.[0]
+      const p0 = profile?.[0]
+      if (!p0 && !top) return null
+      return [{
         code: cc,
-        name: String(it.CONTROLLER_NAME ?? it.ACTUAL_CONTROLLER ?? ''),
-        type: String(it.CONTROLLER_TYPE ?? it.HOLD_TYPE ?? ''),
-        ratio: safeFloat(it.HOLD_RATIO ?? it.CONTROL_RATIO),
-        reportDate: String(it.REPORT_DATE ?? it.END_DATE ?? '').slice(0, 10),
-      }))
+        name: String(p0?.chairman || top?.name || ''),
+        type: top?.shareType ? String(top.shareType) : '控制股东',
+        ratio: safeFloat(top?.sharePct),
+        reportDate: String(holder?.reportDate ?? p0?.listingDate ?? ''),
+      }]
     } catch { return null }
   }
 

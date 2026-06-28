@@ -204,11 +204,11 @@ export class ResearchHub {
   }
 
   private async stockDetail(code: string, t0: number) {
-    const [quoteR, profileR, financialR, financialQR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
+    const [quoteR, profileR, financialR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
       this.de.realtime(code),
       this.de.profile(code),
       this.de.financials(code),
-      this.de.financialsQuarterly(code),
+      this.de.financials(code, '', 'all'),
       this.de.news(code, 1, 20),
       this.de.dividend(code),
       this.de.moneyFlow(code),
@@ -227,7 +227,7 @@ export class ResearchHub {
       quote,
       profile,
       financial,
-      financialHistory: financialQR.data ?? [],
+      financialHistory: financialAllR.data ?? [],
       news: newsR.data ?? [],
       dividends: dividendR.data ?? [],
       moneyFlow: moneyFlowR.data ?? [],

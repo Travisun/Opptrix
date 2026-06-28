@@ -1,4 +1,4 @@
-import { httpGet } from '../utils/http.js'
+import { fetchDragonTigerDetails } from '../drivers/eastmoney-f10.js'
 import { FS_DICT, KLT_MAP } from './config.js'
 import type { EfRow } from './common.js'
 import {
@@ -42,15 +42,10 @@ export const stock = {
   getHistoryBill,
   getDealDetail,
 
-  /** Daily billboard — uses datacenter API */
+  /** Daily billboard — EastMoney datacenter */
   async getDailyBillboard(date = '') {
-    const d = date || new Date().toISOString().slice(0, 10)
-    const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
-      reportName: 'RPT_DAILYBILLBOARD_DETAILS',
-      columns: 'ALL', filter: `(TRADE_DATE='${d}')`,
-      pageNumber: '1', pageSize: '50', sortTypes: '-1', sortColumns: 'BILLBOARD_NET_AMT',
-    })
-    return (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+    const hit = await fetchDragonTigerDetails(date)
+    return hit?.items ?? []
   },
 }
 

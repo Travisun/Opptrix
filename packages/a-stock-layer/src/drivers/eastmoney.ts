@@ -9,6 +9,16 @@ import {
   normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveSecId, safeFloat,
 } from '../utils/helpers.js'
 import { BaseDriver } from './base.js'
+import {
+  fetchDataCenterReport,
+  fetchDragonTigerDetails,
+  fetchF10Dividends,
+  fetchF10Financials,
+  fetchF10Profile,
+  fetchF10Shareholders,
+  fetchNorthMoneyFlowSnapshot,
+  fetchTradeCalendar,
+} from './eastmoney-f10.js'
 
 const BASE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
 const KLINE_URL = 'https://push2his.eastmoney.com/api/qt/stock/kline/get'
@@ -16,7 +26,6 @@ const TRENDS2_URL = 'https://push2his.eastmoney.com/api/qt/stock/trends2/get'
 const LIST_URL = 'https://push2.eastmoney.com/api/qt/clist/get'
 const FLOW_URL = 'https://push2.eastmoney.com/api/qt/stock/fflow/day/get'
 const SECTOR_FLOW_URL = 'https://push2.eastmoney.com/api/qt/clist/get'
-const FIN_URL = 'https://datacenter-web.eastmoney.com/api/data/v1/get'
 const PERIOD_MAP: Record<string, string> = {
   daily: '101', weekly: '102', monthly: '103', '60m': '60', '30m': '30', '15m': '15', '5m': '5', '1m': '1',
 }
@@ -65,11 +74,7 @@ export class EastMoneyDriver extends BaseDriver {
   }
 
   protected async dcFetch(reportName: string, columns: string, filter: string, pageSize = '20') {
-    const json = await httpGet(FIN_URL, {
-      reportName, columns, filter,
-      pageNumber: '1', pageSize, sortTypes: '-1', sortColumns: 'REPORT_DATE',
-    })
-    return (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+    return fetchDataCenterReport(reportName, filter, pageSize, 'REPORT_DATE', columns)
   }
 
   async realtime(code: string) {
@@ -217,35 +222,10 @@ export class EastMoneyDriver extends BaseDriver {
     } catch { return null }
   }
 
-  async financials(code: string, _reportDate = '', reportType = 'annual') {
+  async financials(code: string, _reportDate = '', reportType: 'annual' | 'quarter' | 'all' = 'annual') {
     try {
-      const c = normalizeCode(code)
-      const json = await httpGet(FIN_URL, {
-        reportName: 'RPT_LICO_FN_CPD',
-        columns: 'SECURITY_CODE,REPORT_DATE,BASIC_EPS,WEIGHTAVG_ROE,OPERATE_INCOME,OPERATE_INCOME_YOY,NET_PROFIT_PARENT_YOY,TOTAL_PROFIT_PARENT,GROSS_PROFIT_MARGIN,DEBT_RATIO,OPERATE_CASH_FLOW,TOTAL_ASSETS,TOTAL_LIABILITIES',
-        filter: reportType === 'quarter'
-          ? `(SECURITY_CODE="${c}")`
-          : `(SECURITY_CODE="${c}")(REPORT_DATE_TYPE="1")`,
-        pageNumber: '1', pageSize: reportType === 'quarter' ? '12' : '8',
-        sortTypes: '-1', sortColumns: 'REPORT_DATE',
-      })
-      const items = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
-      if (!items.length) return null
-      return items.map(item => ({
-        code: c,
-        reportDate: String(item.REPORT_DATE ?? '').slice(0, 10),
-        revenue: safeFloat(item.OPERATE_INCOME),
-        revenueYoy: safeFloat(item.OPERATE_INCOME_YOY),
-        netProfit: safeFloat(item.TOTAL_PROFIT_PARENT),
-        netProfitYoy: safeFloat(item.NET_PROFIT_PARENT_YOY),
-        eps: safeFloat(item.BASIC_EPS),
-        roe: safeFloat(item.WEIGHTAVG_ROE),
-        grossMargin: safeFloat(item.GROSS_PROFIT_MARGIN),
-        debtRatio: safeFloat(item.DEBT_RATIO),
-        operatingCashFlow: safeFloat(item.OPERATE_CASH_FLOW),
-        totalAssets: safeFloat(item.TOTAL_ASSETS),
-        totalLiabilities: safeFloat(item.TOTAL_LIABILITIES),
-      } satisfies FinancialSummary))
+      const rows = await fetchF10Financials(code, reportType)
+      return rows?.length ? rows : null
     } catch { return null }
   }
 
@@ -256,27 +236,20 @@ export class EastMoneyDriver extends BaseDriver {
         secid: resolveSecId(code),
         fields: 'f58,f84,f85,f116,f117',
       })
+      const marketCap = safeFloat(data1?.f116)
+      const circulating = safeFloat(data1?.f117)
+      const f10 = await fetchF10Profile(c, marketCap, circulating)
+      if (f10?.length) return f10
+
       if (!data1) return null
       let industry = String(data1.f84 ?? data1.f85 ?? '')
       if (/^\d/.test(industry)) industry = ''
-      const items = await this.dcFetch(
-        'RPT_DMSK_FNCOMPANY',
-        'SECURITY_CODE,SECURITY_NAME_ABBR,INDUSTRY,PROVINCE,CITY,MAIN_BUSINESS,LISTING_DATE,WEBSITE,EMPLOYEES',
-        `(SECURITY_CODE="${c}")`, '1',
-      )
-      const item = items[0]
       return [{
         code: c,
-        name: String(data1.f58 ?? item?.SECURITY_NAME_ABBR ?? ''),
-        industry: String(item?.INDUSTRY ?? industry),
-        province: String(item?.PROVINCE ?? ''),
-        city: String(item?.CITY ?? ''),
-        mainBusiness: String(item?.MAIN_BUSINESS ?? ''),
-        listingDate: String(item?.LISTING_DATE ?? '').slice(0, 10),
-        website: String(item?.WEBSITE ?? ''),
-        employees: item?.EMPLOYEES ? Number(item.EMPLOYEES) : null,
-        totalMarketCap: safeFloat(data1.f116),
-        circulatingMarketCap: safeFloat(data1.f117),
+        name: String(data1.f58 ?? ''),
+        industry,
+        totalMarketCap: marketCap,
+        circulatingMarketCap: circulating,
       } satisfies StockProfile]
     } catch { return null }
   }
@@ -313,38 +286,21 @@ export class EastMoneyDriver extends BaseDriver {
 
   async dividend(code: string) {
     try {
-      const c = normalizeCode(code)
-      const items = await this.dcFetch(
-        'RPT_F10_DIVIDEND',
-        'SECURITY_CODE,SECURITY_NAME_ABBR,EX_DIVIDEND_DATE,CASH_DIVIDEND_RATIO,IMPL_PLAN_PROFILE',
-        `(SECURITY_CODE="${c}")`, '10',
-      )
-      if (!items.length) return null
-      return items.map(it => ({
-        code: c,
-        year: String(it.EX_DIVIDEND_DATE ?? '').slice(0, 4),
-        cashBonus: safeFloat(it.CASH_DIVIDEND_RATIO),
-        exDate: String(it.EX_DIVIDEND_DATE ?? '').slice(0, 10),
-      } satisfies Dividend))
+      return await fetchF10Dividends(code)
     } catch { return null }
   }
 
   async dragonTiger(date = '') {
     try {
-      const d = date || new Date().toISOString().slice(0, 10)
-      const items = await this.dcFetch(
-        'RPT_DAILYBILLBOARD',
-        'SECURITY_CODE,SECURITY_NAME_ABBR,TRADE_DATE,EXPLAIN,BILLBOARD_NET_AMT,CHANGE_RATE',
-        `(TRADE_DATE='${d}')`, '50',
-      )
-      if (!items.length) return null
-      return items.map(it => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? ''),
-        date: d,
-        reason: String(it.EXPLAIN ?? ''),
-        netAmount: safeFloat(it.BILLBOARD_NET_AMT),
-        changePct: safeFloat(it.CHANGE_RATE),
+      const hit = await fetchDragonTigerDetails(date)
+      if (!hit?.items.length) return null
+      return hit.items.map(it => ({
+        code: String(it.SECURITY_CODE ?? it.STOCK_CODE ?? ''),
+        name: String(it.SECURITY_NAME_ABBR ?? it.SECURITY_NAME ?? ''),
+        date: hit.date,
+        reason: String(it.EXPLANATION ?? it.EXPLAIN ?? it.BILLBOARD_EXPLAIN ?? ''),
+        netAmount: safeFloat(it.BILLBOARD_NET_AMT ?? it.NET_BUY_AMT),
+        changePct: safeFloat(it.CHANGE_RATE ?? it.CLOSE_PRICE),
       } satisfies DragonTiger))
     } catch { return null }
   }
@@ -447,19 +403,9 @@ export class EastMoneyDriver extends BaseDriver {
 
   async marketMoneyFlow(direction = 'north') {
     try {
-      const items = await this.dcFetch(
-        'RPT_MUTUAL_NETINFLOW',
-        'TRADE_DATE,NET_INFLOW,HNET_INFLOW,SNET_INFLOW',
-        `(MUTUAL_TYPE="${direction === 'north' ? '001' : '002'}")`, '10',
-      )
-      if (!items.length) return null
-      return items.map(it => ({
-        direction,
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        netAmount: safeFloat(it.NET_INFLOW) ?? 0,
-        shNet: safeFloat(it.HNET_INFLOW),
-        szNet: safeFloat(it.SNET_INFLOW),
-      }))
+      if (direction !== 'north') return null
+      const rows = await fetchNorthMoneyFlowSnapshot()
+      return rows?.length ? rows : null
     } catch { return null }
   }
 
@@ -479,33 +425,27 @@ export class EastMoneyDriver extends BaseDriver {
   }
 
   async tradeCalendar(year = 0) {
-    const y = year || new Date().getFullYear()
     try {
-      const items = await this.dcFetch(
-        'RPT_CALENDAR',
-        'CALENDAR_DATE,IS_TRADE_DAY',
-        `(YEAR="${y}")`, '400',
-      )
-      return items.length ? items.map(it => ({
-        date: String(it.CALENDAR_DATE ?? '').slice(0, 10),
-        isTradeDay: it.IS_TRADE_DAY === '1' || it.IS_TRADE_DAY === 1,
-      })) : null
+      const rows = await fetchTradeCalendar(year || new Date().getFullYear())
+      return rows?.length ? rows : null
     } catch { return null }
   }
 
   async cashFlow(code: string, reportDate = '') {
     try {
       const cc = normalizeCode(code)
-      let filter = `(SECURITY_CODE="${cc}")`
-      if (reportDate) filter += `(REPORT_DATE>="${reportDate}")`
-      const items = await this.dcFetch('RPT_CASHFLOW', 'ALL', filter, '8')
-      if (!items.length) return null
-      return items.map(it => ({
-        code: cc, reportDate: String(it.REPORT_DATE ?? '').slice(0, 10),
-        operatingNetCash: safeFloat(it.OPERATE_NET_CASH),
-        investingNetCash: safeFloat(it.INVEST_NET_CASH),
-        financingNetCash: safeFloat(it.FINANCE_NET_CASH),
-        freeCashFlow: safeFloat(it.FREE_CASH_FLOW),
+      const rows = await fetchF10Financials(cc, 'all')
+      if (!rows?.length) return null
+      const filtered = reportDate
+        ? rows.filter(r => r.reportDate >= reportDate)
+        : rows
+      return filtered.slice(0, 8).map(r => ({
+        code: cc,
+        reportDate: r.reportDate,
+        operatingNetCash: r.operatingCashFlow,
+        investingNetCash: null,
+        financingNetCash: null,
+        freeCashFlow: null,
       }))
     } catch { return null }
   }

@@ -1,5 +1,6 @@
 import { httpGet } from '../utils/http.js'
 import { normalizeCode, resolveSecId, safeFloat } from '../utils/helpers.js'
+import { fetchF10Financials, fetchF10Profile, fetchF10Shareholders } from './eastmoney-f10.js'
 import type { EastMoneyDriver } from './eastmoney.js'
 
 type EM = EastMoneyDriver & {
@@ -20,33 +21,7 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
 
   p.shareholders = async function shareholders(code: string, _reportDate = '') {
     try {
-      const cc = c(code)
-      const countItems = await this.dcFetch(
-        'RPT_HOLDERCOUNT',
-        'SECURITY_CODE,END_DATE,SHAREHOLDER_TOTAL_NUM,AVG_HOLDING_MARKET_CAP,TOTAL_CHANGE',
-        `(SECURITY_CODE="${cc}")`, '5',
-      )
-      const top10 = await this.dcFetch(
-        'RPT_HOLDER_TOP10',
-        'SECURITY_CODE,END_DATE,HOLDER_NAME,HOLDER_RANK,HELD_SHARES,HELD_SHARES_PCT,CHANGE_IN_SHARES',
-        `(SECURITY_CODE="${cc}")`, '10',
-      )
-      if (!countItems.length && !top10.length) return null
-      const item = countItems[0]
-      return [{
-        code: cc,
-        reportDate: String(item?.END_DATE ?? top10[0]?.END_DATE ?? '').slice(0, 10),
-        shareholderCount: safeFloat(item?.SHAREHOLDER_TOTAL_NUM),
-        shareholderCountChange: safeFloat(item?.TOTAL_CHANGE),
-        avgHoldingValue: safeFloat(item?.AVG_HOLDING_MARKET_CAP),
-        top10Shareholders: top10.map(it => ({
-          rank: Number(it.HOLDER_RANK) || 0,
-          name: String(it.HOLDER_NAME ?? ''),
-          sharesHeld: safeFloat(it.HELD_SHARES),
-          sharePct: safeFloat(it.HELD_SHARES_PCT),
-          change: safeFloat(it.CHANGE_IN_SHARES),
-        })),
-      }]
+      return await fetchF10Shareholders(code)
     } catch { return null }
   }
 
@@ -69,16 +44,16 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
   p.balanceSheet = async function balanceSheet(code: string, reportDate = '') {
     try {
       const cc = c(code)
-      let filter = `(SECURITY_CODE="${cc}")`
-      if (reportDate) filter += `(REPORT_DATE>="${reportDate}")`
-      const items = await dcAll(this, 'RPT_DMSK_FN_BALANCE', filter, '8')
-      if (!items.length) return null
-      return items.map(it => ({
-        code: cc, reportDate: String(it.REPORT_DATE ?? '').slice(0, 10),
-        totalAssets: safeFloat(it.TOTAL_ASSETS ?? it.ASSETS_TOTAL),
-        totalLiabilities: safeFloat(it.TOTAL_LIABILITIES ?? it.LIABILITIES_TOTAL),
-        equity: safeFloat(it.EQUITY ?? it.EQUITY_TOTAL),
-        cash: safeFloat(it.CASH ?? it.MONETARY_CAPITAL),
+      const rows = await fetchF10Financials(cc, 'all')
+      if (!rows?.length) return null
+      const filtered = reportDate ? rows.filter(r => r.reportDate >= reportDate) : rows
+      return filtered.slice(0, 8).map(r => ({
+        code: cc,
+        reportDate: r.reportDate,
+        totalAssets: r.totalAssets,
+        totalLiabilities: r.totalLiabilities,
+        equity: r.totalAssets != null && r.totalLiabilities != null ? r.totalAssets - r.totalLiabilities : null,
+        cash: null,
       }))
     } catch { return null }
   }
@@ -86,15 +61,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
   p.incomeStatement = async function incomeStatement(code: string, reportDate = '') {
     try {
       const cc = c(code)
-      let filter = `(SECURITY_CODE="${cc}")`
-      if (reportDate) filter += `(REPORT_DATE>="${reportDate}")`
-      const items = await dcAll(this, 'RPT_LICO_FN_CPD', filter, '8')
-      if (!items.length) return null
-      return items.map(it => ({
-        code: cc, reportDate: String(it.REPORT_DATE ?? '').slice(0, 10),
-        revenue: safeFloat(it.OPERATE_INCOME ?? it.REVENUE),
-        netProfit: safeFloat(it.NET_PROFIT ?? it.TOTAL_PROFIT_PARENT),
-        epsBasic: safeFloat(it.BASIC_EPS),
+      const rows = await fetchF10Financials(cc, 'all')
+      if (!rows?.length) return null
+      const filtered = reportDate ? rows.filter(r => r.reportDate >= reportDate) : rows
+      return filtered.slice(0, 8).map(r => ({
+        code: cc,
+        reportDate: r.reportDate,
+        revenue: r.revenue,
+        netProfit: r.netProfit,
+        epsBasic: r.eps,
       }))
     } catch { return null }
   }
@@ -152,27 +127,31 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  p.intradayTick = async function intradayTick(code: string, date = '') {
+  p.intradayTick = async function intradayTick(code: string, _date = '') {
     try {
       const cc = c(code)
-      const params: Record<string, string> = {
-        secid: resolveSecId(code), fields1: 'f1,f2,f3', fields2: 'f51,f52,f53,f54,f55,f56,f57',
-        klt: '1', fqt: '1', lmt: '240',
-      }
-      if (date) {
-        params.beg = date.replace(/-/g, '')
-        params.end = date.replace(/-/g, '')
-      }
-      const data = await this.getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', params)
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const parts = line.split(',')
-        return {
-          code: cc, time: parts[0]?.slice(-5) ?? parts[0],
-          price: safeFloat(parts[2]), volume: safeFloat(parts[5]), amount: safeFloat(parts[6]),
-        }
+      const data = await this.getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        iscr: '0',
+        ndays: '1',
+        iscca: '0',
       })
+      const trends = data?.trends as string[] | undefined
+      if (!trends?.length) return null
+      return trends.map(line => {
+        const parts = line.split(',')
+        const stamp = String(parts[0] ?? '')
+        if (stamp.includes(' 09:30')) return null
+        return {
+          code: cc,
+          time: stamp.includes(' ') ? stamp : stamp.slice(-5),
+          price: safeFloat(parts[2] ?? parts[1]),
+          volume: safeFloat(parts[5]),
+          amount: safeFloat(parts[6]),
+        }
+      }).filter(Boolean) as Record<string, unknown>[]
     } catch { return null }
   }
 
