@@ -1,10 +1,10 @@
-import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { innoTokens } from '../theme/tokens'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   DESKTOP_SIDEBAR_LAYOUT_EASE,
   DESKTOP_SIDEBAR_LAYOUT_MS,
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
 } from '../desktop/constants'
+import RightMarketPanel from '../market/RightMarketPanel'
 
 const useStyles = makeStyles({
   panelShell: {
@@ -32,27 +32,6 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: innoTokens.canvas,
-  },
-  placeholder: {
-    flex: 1,
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px 16px',
-    textAlign: 'center',
-    gap: '8px',
-  },
-  placeholderTitle: {
-    fontSize: '13px',
-    fontWeight: 600,
-    color: innoTokens.textSecondary,
-  },
-  placeholderSub: {
-    fontSize: '12px',
-    color: innoTokens.textTertiary,
-    lineHeight: 1.5,
   },
 })
 
@@ -90,13 +69,10 @@ export default function RightPanel({
       <aside
         className={mergeClasses(s.panel, 'inno-right-panel')}
         style={contentWidth != null ? { width: `${contentWidth}px`, minWidth: `${contentWidth}px` } : { width: '100%' }}
-        aria-label="右侧面板"
+        aria-label="行情侧栏"
         aria-hidden={!visible}
       >
-        <div className={s.placeholder}>
-          <Text className={s.placeholderTitle}>右侧面板</Text>
-          <Text className={s.placeholderSub}>内容即将上线</Text>
-        </div>
+        <RightMarketPanel />
       </aside>
     </div>
   )

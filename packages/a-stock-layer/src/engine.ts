@@ -13,6 +13,9 @@ import type {
 } from './core/schema.js'
 import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
+import { tdxClient } from './tdx/client.js'
+
+const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
 /** aaashare AshareEngine — multi-driver fallback + cache */
 export class AshareEngine {
@@ -80,12 +83,93 @@ export class AshareEngine {
   }
 
   kline(code: string, periodOrCount: number): Promise<QueryResult<StockKline[]>>
-  kline(code: string, period?: string, start?: string, end?: string): Promise<QueryResult<StockKline[]>>
-  kline(code: string, periodOrCount: string | number = 'daily', start = '', end = '') {
+  kline(code: string, period?: string, start?: string, end?: string, count?: number): Promise<QueryResult<StockKline[]>>
+  kline(code: string, periodOrCount: string | number = 'daily', start = '', end = '', count?: number) {
     if (typeof periodOrCount === 'number') {
       return this.query<StockKline>(Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, 'daily', '', '', periodOrCount])
     }
-    return this.q<StockKline>(Capability.STOCK_KLINE, 'kline', true, code, periodOrCount, start, end)
+    if (MINUTE_PERIODS.has(periodOrCount)) {
+      return this.minuteKline(code, periodOrCount, count ?? 800, 0)
+    }
+    const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
+    return this.query<StockKline>(Capability.STOCK_KLINE, 'kline', 'stock_kline', true, args)
+  }
+
+  /** Minute OHLC — TDX primary, EastMoney fallback when TDX unavailable. */
+  minuteKline(
+    code: string,
+    period: string,
+    count = 800,
+    startOffset = 0,
+  ): Promise<QueryResult<StockKline[]>> {
+    const safeCount = Math.max(1, Math.min(count, 800))
+    const safeOffset = Math.max(0, startOffset)
+    return this.fetchMinuteKline(code, period, safeCount, safeOffset)
+  }
+
+  private async fetchMinuteKline(
+    code: string,
+    period: string,
+    count: number,
+    startOffset: number,
+  ): Promise<QueryResult<StockKline[]>> {
+    try {
+      const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
+      if (tdxRows?.length) {
+        return { success: true, data: tdxRows, source: 'mootdx', cached: false }
+      }
+    } catch { /* EastMoney fallback */ }
+
+    return this.eastmoneyMinuteFallback(code, period, count, startOffset)
+  }
+
+  /** 东财备选：1m 用 trends2+当日 kline，其余分钟周期走 kline API。 */
+  private async eastmoneyMinuteFallback(
+    code: string,
+    period: string,
+    count: number,
+    startOffset = 0,
+  ): Promise<QueryResult<StockKline[]>> {
+    const window = Math.min(count + startOffset, 800)
+    if (period === '1m') return this.eastmoney1mFallback(code, window)
+    return this.query<StockKline>(
+      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, period, '', '', window],
+    )
+  }
+
+  /** EastMoney 1m fallback when TDX offline — trends2 历史 + kline 当日。 */
+  private async eastmoney1mFallback(code: string, count: number): Promise<QueryResult<StockKline[]>> {
+    const ndays = Math.min(5, Math.max(1, Math.ceil(count / 240)))
+    const trendR = await this.minuteTrendKline(code, ndays, 0)
+    if (!trendR.success || !trendR.data?.length) {
+      return this.query<StockKline>(
+        Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', count],
+      )
+    }
+    const klineR = await this.query<StockKline>(
+      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', 240],
+    )
+    let merged = trendR.data
+    if (klineR.success && klineR.data?.length) {
+      const latestDay = klineR.data[klineR.data.length - 1].date.slice(0, 10)
+      merged = [
+        ...trendR.data.filter(b => b.date.slice(0, 10) < latestDay),
+        ...klineR.data,
+      ]
+    }
+    return {
+      success: true,
+      data: merged.slice(-Math.min(count, 800)),
+      source: trendR.source ?? 'eastmoney',
+      cached: trendR.cached,
+    }
+  }
+
+  /** 1-minute multi-day history (EastMoney trends2 fallback; up to 5 sessions). */
+  minuteTrendKline(code: string, ndays = 1, count = 0): Promise<QueryResult<StockKline[]>> {
+    return this.query<StockKline>(
+      Capability.STOCK_KLINE, 'minuteTrendKline', 'stock_minute_trend', false, [code, ndays, count],
+    )
   }
 
   moneyFlow(code: string): Promise<QueryResult<MoneyFlow[]>> {
@@ -96,12 +180,13 @@ export class AshareEngine {
   }
 
   indexKline(code: string, periodOrCount: number): Promise<QueryResult<IndexKline[]>>
-  indexKline(code: string, period?: string, start?: string, end?: string): Promise<QueryResult<IndexKline[]>>
-  indexKline(code: string, periodOrCount: string | number = 'daily', start = '', end = '') {
+  indexKline(code: string, period?: string, start?: string, end?: string, count?: number): Promise<QueryResult<IndexKline[]>>
+  indexKline(code: string, periodOrCount: string | number = 'daily', start = '', end = '', count?: number) {
     if (typeof periodOrCount === 'number') {
       return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, [code, 'daily', '', '', periodOrCount])
     }
-    return this.q<IndexKline>(Capability.INDEX_KLINE, 'indexKline', true, code, periodOrCount, start, end)
+    const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
+    return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, args)
   }
 
   marketMoneyFlow(direction = 'north'): Promise<QueryResult<MarketMoneyFlow[]>> {

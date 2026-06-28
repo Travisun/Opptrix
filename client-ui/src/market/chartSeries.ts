@@ -1,0 +1,203 @@
+import type { ChartPeriod, IntradayChartBar, OhlcChartBar, StockChartData } from '../types/market'
+import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, toChartTime } from './chartTime'
+import { MARKET_DOWN, MARKET_UP } from './chartTheme'
+import { innoTokens } from '../theme/tokens'
+import type { Time } from 'lightweight-charts'
+
+export type ChartMode = 'ohlc' | 'intraday'
+
+export interface LinePoint {
+  time: Time
+  value: number
+}
+
+export interface CandlePoint {
+  time: Time
+  open: number
+  high: number
+  low: number
+  close: number
+}
+
+export interface VolumePoint {
+  time: Time
+  value: number
+  color: string
+}
+
+export interface MacdPoint {
+  time: Time
+  hist: number
+  histColor: string
+  dif: number
+  dea: number
+}
+
+export interface ChartSeriesBundle {
+  mode: ChartMode
+  showMacd: boolean
+  candles: CandlePoint[]
+  priceLine: LinePoint[]
+  avgLine: LinePoint[]
+  maLines: { key: string; color: string; points: LinePoint[] }[]
+  volume: VolumePoint[]
+  macd: MacdPoint[]
+}
+
+function volumeColor(change: number | null | undefined): string {
+  if (change == null || change === 0) return innoTokens.textTertiary
+  return change >= 0 ? MARKET_UP : MARKET_DOWN
+}
+
+function timeKey(time: Time): string {
+  return typeof time === 'number' ? String(time) : time
+}
+
+function dedupeByTime<T extends { time: Time }>(rows: T[]): T[] {
+  const map = new Map<string, T>()
+  for (const row of rows) map.set(timeKey(row.time), row)
+  return [...map.values()].sort((a, b) => compareChartTime(a.time, b.time))
+}
+
+function assertUniqueTimes(times: Time[], label: string, period: string): void {
+  const unique = new Set(times.map(timeKey))
+  if (unique.size === times.length || times.length === 0) return
+  if (isMinuteOhlcPeriod(period)) {
+    throw new Error(`${label} 时间轴异常（${times.length} 条/${unique.size} 个时间点），分钟 K 线数据不完整`)
+  }
+}
+
+function chartTime(raw: string, period: string): Time {
+  return toChartTime(raw, isMinuteOhlcPeriod(period))
+}
+
+function normalizeOhlc(bar: OhlcChartBar, period: string): CandlePoint {
+  let open = Number(bar.open)
+  let high = Number(bar.high)
+  let low = Number(bar.low)
+  let close = Number(bar.close)
+  if (!Number.isFinite(open)) open = close
+  if (!Number.isFinite(close)) close = open
+  if (!Number.isFinite(high)) high = Math.max(open, close)
+  if (!Number.isFinite(low)) low = Math.min(open, close)
+  high = Math.max(open, high, low, close)
+  low = Math.min(open, high, low, close)
+  return {
+    time: chartTime(bar.time, period),
+    open,
+    high,
+    low,
+    close,
+  }
+}
+
+function maPoints(
+  indicators: StockChartData['indicators'],
+  key: 'ma5' | 'ma10' | 'ma20' | 'ma60',
+  period: string,
+): LinePoint[] {
+  return dedupeByTime(
+    indicators
+      .filter(row => row[key] != null)
+      .map(row => ({ time: chartTime(row.time, period), value: row[key]! })),
+  )
+}
+
+/** Normalize API payload → chart-ready series (sorted, deduped, validated). */
+export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
+  const intraday = isIntradayPeriod(data.period)
+  const minuteOhlc = isMinuteOhlcPeriod(data.period)
+  const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
+
+  if (intraday) {
+    const bars = data.bars as IntradayChartBar[]
+    const priceLine = dedupeByTime(bars.map(bar => ({
+      time: chartTime(bar.time, data.period),
+      value: bar.price,
+    })))
+    const avgLine = dedupeByTime(bars.map(bar => ({
+      time: chartTime(bar.time, data.period),
+      value: bar.avgPrice,
+    })))
+    const volume = dedupeByTime(bars.map((bar, i) => {
+      const ref = i > 0 ? bars[i - 1].price : data.preClose
+      const delta = ref == null ? null : bar.price - ref
+      return {
+        time: chartTime(bar.time, data.period),
+        value: bar.volume,
+        color: volumeColor(delta),
+      }
+    }))
+
+    assertUniqueTimes(priceLine.map(p => p.time), '分时', data.period)
+
+    return {
+      mode: 'intraday',
+      showMacd: false,
+      candles: [],
+      priceLine,
+      avgLine,
+      volume,
+      maLines: [],
+      macd: [],
+    }
+  }
+
+  const bars = data.bars as OhlcChartBar[]
+  const candles = dedupeByTime(bars.map(bar => normalizeOhlc(bar, data.period)))
+  const volume = dedupeByTime(bars.map(bar => ({
+    time: chartTime(bar.time, data.period),
+    value: bar.volume,
+    color: volumeColor(bar.changePct),
+  })))
+  const macd = dedupeByTime(
+    data.indicators
+      .filter(row => row.macdHist != null && row.macd != null && row.macdSignal != null)
+      .map(row => ({
+        time: chartTime(row.time, data.period),
+        hist: row.macdHist!,
+        histColor: row.macdHist! >= 0 ? MARKET_UP : MARKET_DOWN,
+        dif: row.macd!,
+        dea: row.macdSignal!,
+      })),
+  )
+
+  assertUniqueTimes(candles.map(c => c.time), periodLabel(data.period), data.period)
+
+  return {
+    mode: 'ohlc',
+    showMacd,
+    candles,
+    priceLine: [],
+    avgLine: [],
+    maLines: minuteOhlc
+      ? [
+          { key: 'ma5', color: '#1D1D1F', points: maPoints(data.indicators, 'ma5', data.period) },
+          { key: 'ma10', color: '#FF9500', points: maPoints(data.indicators, 'ma10', data.period) },
+        ].filter(row => row.points.length > 0)
+      : [
+          { key: 'ma5', color: '#1D1D1F', points: maPoints(data.indicators, 'ma5', data.period) },
+          { key: 'ma10', color: '#FF9500', points: maPoints(data.indicators, 'ma10', data.period) },
+          { key: 'ma20', color: '#5856D6', points: maPoints(data.indicators, 'ma20', data.period) },
+          { key: 'ma60', color: '#32ADE6', points: maPoints(data.indicators, 'ma60', data.period) },
+        ].filter(row => row.points.length > 0),
+    volume,
+    macd,
+  }
+}
+
+export function periodLabel(period: ChartPeriod): string {
+  return PERIOD_LABELS[period] ?? period
+}
+
+const PERIOD_LABELS: Record<ChartPeriod, string> = {
+  intraday: '分时',
+  '1m': '1分',
+  '5m': '5分',
+  '15m': '15分',
+  '30m': '30分',
+  '60m': '60分',
+  daily: '日K',
+  weekly: '周K',
+  monthly: '月K',
+}

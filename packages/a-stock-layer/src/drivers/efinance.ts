@@ -34,7 +34,7 @@ function quoteToRealtime(row: Record<string, unknown>, code: string): StockRealt
 function klineRow(row: Record<string, unknown>, code: string): StockKline {
   return {
     code: normalizeCode(code),
-    date: String(row['日期'] ?? '').slice(0, 10),
+    date: String(row['日期'] ?? '').trim(),
     open: safeFloat(row['开盘']) ?? 0,
     close: safeFloat(row['收盘']) ?? 0,
     high: safeFloat(row['最高']) ?? 0,

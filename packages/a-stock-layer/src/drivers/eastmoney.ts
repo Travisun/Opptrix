@@ -6,18 +6,31 @@ import type {
 } from '../core/schema.js'
 import { httpGet } from '../utils/http.js'
 import {
-  normalizeChangePct, normalizeCode, normalizePrice, resolveSecId, safeFloat,
+  normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveSecId, safeFloat,
 } from '../utils/helpers.js'
 import { BaseDriver } from './base.js'
 
 const BASE_URL = 'https://push2.eastmoney.com/api/qt/stock/get'
 const KLINE_URL = 'https://push2his.eastmoney.com/api/qt/stock/kline/get'
+const TRENDS2_URL = 'https://push2his.eastmoney.com/api/qt/stock/trends2/get'
 const LIST_URL = 'https://push2.eastmoney.com/api/qt/clist/get'
 const FLOW_URL = 'https://push2.eastmoney.com/api/qt/stock/fflow/day/get'
 const SECTOR_FLOW_URL = 'https://push2.eastmoney.com/api/qt/clist/get'
 const FIN_URL = 'https://datacenter-web.eastmoney.com/api/data/v1/get'
 const PERIOD_MAP: Record<string, string> = {
-  daily: '101', weekly: '102', monthly: '103', '60m': '60', '30m': '30', '5m': '5', '1m': '1',
+  daily: '101', weekly: '102', monthly: '103', '60m': '60', '30m': '30', '15m': '15', '5m': '5', '1m': '1',
+}
+
+/** EastMoney push2 qt/stock/get — prices and deltas are ×100. */
+function emQuotePrice(v: unknown): number | null {
+  const f = safeFloat(v)
+  return f == null ? null : f / 100
+}
+
+function emQuoteDelta(v: unknown): number | null {
+  const f = safeFloat(v)
+  if (f == null) return null
+  return Math.abs(f) > 50 ? f / 100 : f
 }
 
 export class EastMoneyDriver extends BaseDriver {
@@ -63,23 +76,28 @@ export class EastMoneyDriver extends BaseDriver {
     try {
       const data = await this.getData(BASE_URL, {
         secid: resolveSecId(code),
-        fields: 'f43,f44,f45,f46,f47,f48,f50,f57,f58,f116,f115,f170,f162,f167,f168,f169',
+        fields: 'f43,f44,f45,f46,f47,f48,f50,f51,f57,f58,f116,f115,f170,f162,f167,f168,f169',
       })
       if (!data) return null
+      const amount = safeFloat(data.f48)
+      const volume = safeFloat(data.f51)
       return [{
         code: normalizeCode(code),
         name: String(data.f58 ?? ''),
-        price: normalizePrice(data.f43),
-        open: safeFloat(data.f44),
-        high: safeFloat(data.f45),
-        low: safeFloat(data.f46),
-        preClose: safeFloat(data.f47),
-        volume: safeFloat(data.f48),
+        price: emQuotePrice(data.f43),
+        open: emQuotePrice(data.f44),
+        high: emQuotePrice(data.f45),
+        low: emQuotePrice(data.f46),
+        preClose: emQuotePrice(data.f47),
+        volume,
+        amount: amount != null && amount > 1e6 ? amount : null,
+        change: emQuoteDelta(data.f169),
         changePct: normalizeChangePct(data.f170),
         pe: safeFloat(data.f162),
         pb: safeFloat(data.f167),
         turnoverRate: safeFloat(data.f168),
         marketCap: safeFloat(data.f116),
+        volumeRatio: safeFloat(data.f50),
       }]
     } catch { return null }
   }
@@ -101,7 +119,7 @@ export class EastMoneyDriver extends BaseDriver {
       const p = line.split(',')
       if (p.length < 7) continue
       rows.push({
-        code: normalizeCode(code), date: p[0],
+        code: normalizeCode(code), date: normalizeKlineDateTime(p[0]),
         open: Number(p[1]), close: Number(p[2]), high: Number(p[3]), low: Number(p[4]),
         volume: Number(p[5]), amount: Number(p[6]),
         changePct: p[8] != null ? Number(p[8]) : null,
@@ -111,20 +129,63 @@ export class EastMoneyDriver extends BaseDriver {
     return rows
   }
 
+  /** trends2 字段与 kline 不同：p[5] 为分笔量，p[10] 为累计量；09:30 为竞价快照非标准 1m K。 */
+  private parseTrend2Klines(trends: string[], code: string): StockKline[] {
+    const rows: StockKline[] = []
+    for (const line of trends) {
+      const p = line.split(',')
+      if (p.length < 7) continue
+      const date = normalizeKlineDateTime(p[0])
+      if (date.includes(' 09:30')) continue
+      rows.push({
+        code: normalizeCode(code), date,
+        open: Number(p[1]), close: Number(p[2]), high: Number(p[3]), low: Number(p[4]),
+        volume: Number(p[5]), amount: Number(p[6]),
+        changePct: null,
+        turnoverRate: null,
+      })
+    }
+    return rows
+  }
+
+  /** 1m multi-day bars via trends2 (kline API only returns latest session). ndays: 1–5. */
+  async minuteTrendKline(code: string, ndays = 1, count = 0) {
+    try {
+      const safeDays = Math.max(1, Math.min(Math.floor(ndays), 5))
+      const data = await this.getData(TRENDS2_URL, {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        iscr: '0',
+        ndays: String(safeDays),
+        iscca: '0',
+      })
+      const trends = data?.trends as string[] | undefined
+      if (!trends?.length) return null
+      let rows = this.parseTrend2Klines(trends, code)
+      if (count > 0 && rows.length > count) rows = rows.slice(-count)
+      return rows
+    } catch { return null }
+  }
+
   async kline(code: string, period = 'daily', start = '', end = '', count = 1000) {
     try {
       const params: Record<string, string> = {
         secid: resolveSecId(code),
-        fields1: 'f1,f2,f3',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
         fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: PERIOD_MAP[period] ?? '101', fqt: '1', lmt: String(count),
+        klt: PERIOD_MAP[period] ?? '101',
+        fqt: '1',
+        rtntype: '6',
+        beg: start ? start.replace(/-/g, '') : '19000101',
+        end: end ? end.replace(/-/g, '') : '20500101',
       }
-      if (start) params.beg = start.replace(/-/g, '')
-      if (end) params.end = end.replace(/-/g, '')
       const data = await this.getData(KLINE_URL, params)
       const klines = data?.klines as string[] | undefined
       if (!klines?.length) return null
-      return this.parseKlines(klines, code)
+      let rows = this.parseKlines(klines, code)
+      if (count > 0 && rows.length > count) rows = rows.slice(-count)
+      return rows
     } catch { return null }
   }
 
@@ -290,23 +351,43 @@ export class EastMoneyDriver extends BaseDriver {
 
   async stockList(_market = 'all') {
     try {
-      const json = await httpGet(LIST_URL, {
-        pn: '1', pz: '6000', po: '1', np: '1',
-        fields: 'f12,f14,f100',
-        fltt: '2', invt: '2',
-        fs: 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048',
-      })
-      const raw = (json?.data as { diff?: Record<string, unknown> | Record<string, unknown>[] })?.diff
-      const diff: Record<string, unknown>[] = raw
-        ? (Array.isArray(raw) ? raw : Object.values(raw) as Record<string, unknown>[])
-        : []
-      const data = diff.map(item => {
-        const c = String(item.f12 ?? '')
-        return {
-          code: c, name: String(item.f14 ?? ''), industry: String(item.f100 ?? ''),
-          market: c.startsWith('6') || c.startsWith('9') ? 'SH' : 'SZ',
-        } satisfies StockListItem
-      })
+      const fs = 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048'
+      const pageSize = 100
+      const data: StockListItem[] = []
+      let page = 1
+      let total = Number.POSITIVE_INFINITY
+
+      while (data.length < total) {
+        const json = await httpGet(LIST_URL, {
+          pn: String(page), pz: String(pageSize), po: '1', np: '1',
+          fields: 'f12,f14,f100',
+          fltt: '2', invt: '2',
+          fs,
+        })
+        const block = json?.data as {
+          diff?: Record<string, unknown> | Record<string, unknown>[]
+          total?: number
+        } | undefined
+        const raw = block?.diff
+        const diff: Record<string, unknown>[] = raw
+          ? (Array.isArray(raw) ? raw : Object.values(raw) as Record<string, unknown>[])
+          : []
+        if (!diff.length) break
+
+        total = Number(block?.total ?? data.length + diff.length)
+        for (const item of diff) {
+          const c = String(item.f12 ?? '')
+          data.push({
+            code: c, name: String(item.f14 ?? ''), industry: String(item.f100 ?? ''),
+            market: c.startsWith('6') || c.startsWith('9') ? 'SH' : 'SZ',
+          })
+        }
+
+        if (diff.length < pageSize || data.length >= total) break
+        page += 1
+        if (page > 80) break
+      }
+
       return data.length ? data : null
     } catch { return null }
   }

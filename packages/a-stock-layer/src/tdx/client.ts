@@ -15,7 +15,7 @@ function sleep(ms: number) {
 }
 
 /** TDX quote servers — same pool as Python pytdx/mootdx drivers */
-const TDX_HOSTS: [string, number][] = [
+const TDX_HOSTS: readonly [string, number][] = [
   ['119.147.212.81', 7709],
   ['119.147.212.42', 7709],
   ['112.95.142.222', 7709],
@@ -26,8 +26,30 @@ const TDX_HOSTS: [string, number][] = [
   ['114.80.63.12', 7709],
 ]
 
+const HOST_CONNECT_MS = 1200
+const AUTO_GATEWAY_MS = 3500
+const API_CALL_MS = 8000
+const FAIL_COOLDOWN_MS = 15_000
+
 function barDate(bar: import('nodetdx').TdxBar): string {
-  if (bar.datetime) return bar.datetime.slice(0, 10)
+  const ext = bar as import('nodetdx').TdxBar & { hour?: number; minute?: number }
+  if (bar.datetime) {
+    const dt = bar.datetime.trim()
+    if (dt.includes(' ')) {
+      const [d, t = ''] = dt.split(/\s+/)
+      const time = t.length === 5 ? `${t}:00` : t.slice(0, 8)
+      return `${d.slice(0, 10)} ${time}`
+    }
+  }
+  if (ext.hour != null && ext.minute != null && bar.year) {
+    const y = bar.year
+    const m = String(bar.month).padStart(2, '0')
+    const d = String(bar.day).padStart(2, '0')
+    const hh = String(ext.hour).padStart(2, '0')
+    const mm = String(ext.minute).padStart(2, '0')
+    return `${y}-${m}-${d} ${hh}:${mm}:00`
+  }
+  if (bar.datetime) return bar.datetime.trim().slice(0, 10)
   return `${bar.year}-${String(bar.month).padStart(2, '0')}-${String(bar.day).padStart(2, '0')}`
 }
 
@@ -77,71 +99,88 @@ function toRealtime(code: string, q: import('nodetdx').TdxQuote): StockRealtime 
   }
 }
 
+function createApi(autoSelectBestGateway: boolean): import('nodetdx').TdxMarketApi {
+  return new TdxMarketApi({
+    autoSelectBestGateway,
+    useHeartbeat: true,
+    heartbeatInterval: 10000,
+    idleTimeout: 30000,
+    maxReconnectTimes: 0,
+    pingTimeout: 400,
+  })
+}
+
 /**
- * Singleton TDX TCP client — pure Node replacement for Python mootdx/pytdx.
- * Uses nodetdx (通达信 binary protocol) with persistent connection + host fallback.
+ * Singleton TDX TCP client — multi-host fallback + adaptive host preference + auto gateway.
  */
 export class TdxClient {
   private api: import('nodetdx').TdxMarketApi | null = null
   private connectTask: Promise<boolean> | null = null
-  private hostIndex = 0
+  /** Last successful host index in TDX_HOSTS; rotates forward on failure. */
+  private preferredHostIndex = 0
+  private usingAutoGateway = false
+  private cooldownUntil = 0
+
+  private orderedHostIndices(): number[] {
+    const n = TDX_HOSTS.length
+    return Array.from({ length: n }, (_, i) => (this.preferredHostIndex + i) % n)
+  }
 
   async ensureConnected(): Promise<boolean> {
+    if (Date.now() < this.cooldownUntil) return false
     if (this.api) return true
     if (this.connectTask) return this.connectTask
-    this.connectTask = this.connectNext()
+    this.connectTask = this.connectWithFallback()
     try {
-      return await this.connectTask
+      const ok = await this.connectTask
+      if (!ok) this.cooldownUntil = Date.now() + FAIL_COOLDOWN_MS
+      return ok
     } finally {
       this.connectTask = null
     }
   }
 
-  private async connectNext(): Promise<boolean> {
-    for (let i = 0; i < TDX_HOSTS.length; i++) {
-      const idx = (this.hostIndex + i) % TDX_HOSTS.length
+  /** Try all known hosts (adaptive order), then nodetdx auto gateway selection. */
+  private async connectWithFallback(): Promise<boolean> {
+    for (const idx of this.orderedHostIndices()) {
       const [host, port] = TDX_HOSTS[idx]
-      const api = await this.tryConnectHost(host, port, 3500)
+      const api = await this.tryConnectHost(host, port)
       if (api) {
         this.api = api
-        this.hostIndex = idx
+        this.preferredHostIndex = idx
+        this.usingAutoGateway = false
         return true
       }
     }
-    // Fallback: nodetdx auto-ping best gateway (slower but finds live servers)
-    const api = new TdxMarketApi({
-      autoSelectBestGateway: true,
-      useHeartbeat: true,
-      heartbeatInterval: 15000,
-      idleTimeout: 120000,
-      pingTimeout: 500,
-    })
-    try {
-      const ok = await Promise.race([
-        api.connect(),
-        sleep(25000).then(() => false),
-      ])
-      if (ok) {
-        this.api = api
-        return true
-      }
-    } catch { /* ignore */ }
-    api.destroy?.()
+
+    const autoApi = await this.tryAutoGateway()
+    if (autoApi) {
+      this.api = autoApi
+      this.usingAutoGateway = true
+      return true
+    }
     return false
   }
 
-  private async tryConnectHost(host: string, port: number, timeoutMs: number) {
-    const api = new TdxMarketApi({
-      autoSelectBestGateway: false,
-      useHeartbeat: true,
-      heartbeatInterval: 15000,
-      idleTimeout: 120000,
-      maxReconnectTimes: 0,
-    })
+  private async tryConnectHost(host: string, port: number) {
+    const api = createApi(false)
     try {
       const ok = await Promise.race([
         api.connect(host, port),
-        sleep(timeoutMs).then(() => false),
+        sleep(HOST_CONNECT_MS).then(() => false),
+      ])
+      if (ok) return api
+    } catch { /* try next host */ }
+    api.destroy?.()
+    return null
+  }
+
+  private async tryAutoGateway() {
+    const api = createApi(true)
+    try {
+      const ok = await Promise.race([
+        api.connect(),
+        sleep(AUTO_GATEWAY_MS).then(() => false),
       ])
       if (ok) return api
     } catch { /* ignore */ }
@@ -150,27 +189,39 @@ export class TdxClient {
   }
 
   private async withApi<T>(fn: (api: import('nodetdx').TdxMarketApi) => Promise<T>): Promise<T | null> {
-    if (!(await this.ensureConnected()) || !this.api) return null
-    try {
-      return await fn(this.api)
-    } catch {
-      this.reset()
-      if (await this.ensureConnected() && this.api) {
-        try {
-          return await fn(this.api)
-        } catch {
-          return null
-        }
-      }
-      return null
+    for (let attempt = 0; attempt < 2; attempt++) {
+      if (!(await this.ensureConnected()) || !this.api) return null
+      try {
+        const result = await Promise.race([
+          fn(this.api),
+          sleep(API_CALL_MS).then(() => null),
+        ])
+        if (result != null) return result
+      } catch { /* reconnect below */ }
+      this.bumpPreferredHost()
+      this.destroyApi()
+    }
+    return null
+  }
+
+  private bumpPreferredHost() {
+    if (!this.usingAutoGateway) {
+      this.preferredHostIndex = (this.preferredHostIndex + 1) % TDX_HOSTS.length
+    } else {
+      this.usingAutoGateway = false
+      this.preferredHostIndex = 0
     }
   }
 
-  reset() {
+  private destroyApi() {
     try {
       this.api?.destroy?.()
     } catch { /* ignore */ }
     this.api = null
+  }
+
+  reset() {
+    this.destroyApi()
   }
 
   async realtime(code: string): Promise<StockRealtime[] | null> {
@@ -190,13 +241,20 @@ export class TdxClient {
   }
 
   async kline(
-    code: string, period = 'daily', _start = '', _end = '', count = 800,
+    code: string,
+    period = 'daily',
+    _startDate = '',
+    _endDate = '',
+    count = 800,
+    startOffset = 0,
   ): Promise<StockKline[] | null> {
     const sym = toTdxSymbol(code)
     const p = toTdxPeriod(period)
-    const bars = await this.withApi(api => api.getSecurityBars(p, sym, 0, count))
+    const bars = await this.withApi(api => api.getSecurityBars(p, sym, startOffset, count))
     if (!bars?.length) return null
-    return bars.map(b => toStockKline(code, b))
+    const rows = bars.map(b => toStockKline(code, b))
+    rows.sort((a, b) => a.date.localeCompare(b.date))
+    return rows
   }
 
   async indexRealtime(code: string): Promise<IndexRealtime[] | null> {

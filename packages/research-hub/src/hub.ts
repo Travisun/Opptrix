@@ -1,4 +1,5 @@
-import { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import { AshareEngine, computeIndicators, normalizeCode, searchQuote } from '@inno-a-stock/a-stock-layer'
+import type { StockListItem } from '@inno-a-stock/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
 import {
@@ -41,6 +42,17 @@ export class ResearchHub {
         case 'industry_mermaid': return this.industryMermaid(String(params.industry), t0)
         case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
         case 'search_stocks': return this.searchStocks(String(params.keyword), t0)
+        case 'stock_quotes': return this.stockQuotes(params.codes as string[] | undefined, t0)
+        case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
+        case 'stock_chart': return this.stockChart(
+          String(params.code),
+          String(params.period ?? 'daily'),
+          Number(params.count ?? 0),
+          String(params.before ?? ''),
+          Number(params.tail ?? 0),
+          t0,
+        )
+        case 'stock_detail': return this.stockDetail(String(params.code), t0)
         case 'backtest': return this.runBacktest(params, t0)
         case 'latest_evaluation': return this.latestEvaluation(String(params.code), t0)
         case 'writer_fetch': return this.writerFetch(String(params.code), String(params.type ?? 'value'), t0)
@@ -152,10 +164,335 @@ export class ResearchHub {
   }
 
   private async searchStocks(keyword: string, t0: number) {
-    const list = await this.de.stockList()
-    if (!list.success || !list.data) return fail('无法获取股票列表', t0)
-    const results = list.data.filter(s => s.code.includes(keyword) || s.name.includes(keyword) || s.industry.includes(keyword)).slice(0, 30)
-    return ok({ keyword, results }, `找到 ${results.length} 只`, t0)
+    const raw = keyword.trim()
+    if (!raw) return ok({ keyword: raw, results: [] as StockListItem[] }, '请输入关键词', t0)
+
+    const query = /^\d+$/.test(raw)
+      ? (raw.length >= 6 ? normalizeCode(raw) : raw)
+      : raw
+    const found = await searchQuote(query, 30)
+    const items = found == null ? [] : (Array.isArray(found) ? found : [found])
+    const results: StockListItem[] = items
+      .filter(q => q.marketType === 'AStock')
+      .map(q => {
+        const code = normalizeCode(q.code)
+        return {
+          code,
+          name: q.name,
+          industry: '',
+          market: code.startsWith('6') || code.startsWith('9') ? 'SH' : 'SZ',
+        }
+      })
+      .slice(0, 30)
+
+    return ok({ keyword: raw, results }, `找到 ${results.length} 只`, t0)
+  }
+
+  private async stockQuotes(codes: string[] | undefined, t0: number) {
+    const normalized = [...new Set((codes ?? []).map(c => String(c).padStart(6, '0')).filter(Boolean))]
+    if (!normalized.length) return ok({ quotes: [] }, '暂无自选', t0)
+    const result = await this.de.batchRealtime(normalized)
+    if (!result.success) return fail(result.error ?? '行情获取失败', t0)
+    return ok({ quotes: result.data ?? [] }, `更新 ${result.data?.length ?? 0} 只`, t0)
+  }
+
+  private async stockKline(code: string, count: number, t0: number) {
+    const safeCount = Math.max(20, Math.min(count, 240))
+    const result = await this.de.kline(code, safeCount)
+    if (!result.success) return fail(result.error ?? 'K线获取失败', t0)
+    return ok({ code, klines: result.data ?? [] }, `${code} K线 ${result.data?.length ?? 0} 根`, t0)
+  }
+
+  private async stockDetail(code: string, t0: number) {
+    const [quoteR, profileR, financialR, financialQR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
+      this.de.realtime(code),
+      this.de.profile(code),
+      this.de.financials(code),
+      this.de.financialsQuarterly(code),
+      this.de.news(code, 1, 20),
+      this.de.dividend(code),
+      this.de.moneyFlow(code),
+      this.de.shareholders(code),
+    ])
+
+    const quoteRaw = quoteR.data?.[0] ?? null
+    const quote = quoteRaw ? this.enrichQuote(quoteRaw) : null
+    const profile = profileR.data?.[0] ?? null
+    const financial = financialR.data?.[0] ?? null
+    const name = quote?.name ?? profile?.name ?? code
+
+    return ok({
+      code,
+      name,
+      quote,
+      profile,
+      financial,
+      financialHistory: financialQR.data ?? [],
+      news: newsR.data ?? [],
+      dividends: dividendR.data ?? [],
+      moneyFlow: moneyFlowR.data ?? [],
+      shareholders: shareholdersR.data?.[0] ?? null,
+    }, `${name}(${code}) 详情`, t0)
+  }
+
+  private enrichQuote(quote: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0]) {
+    const price = quote.price
+    const preClose = quote.preClose
+    const derivedChange = price != null && preClose != null ? price - preClose : null
+    const change = derivedChange ?? quote.change
+    const amplitude = quote.amplitude ?? (
+      quote.high != null && quote.low != null && preClose
+        ? ((quote.high - quote.low) / preClose) * 100
+        : null
+    )
+    return { ...quote, change, amplitude }
+  }
+
+  private isCnTradingDayCandidate(): boolean {
+    const cn = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    const day = cn.getDay()
+    return day >= 1 && day <= 5
+  }
+
+  private cnTodayString(): string {
+    const cn = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
+    const y = cn.getFullYear()
+    const m = String(cn.getMonth() + 1).padStart(2, '0')
+    const d = String(cn.getDate()).padStart(2, '0')
+    return `${y}-${m}-${d}`
+  }
+
+  private defaultChartCount(period: string): number {
+    switch (period) {
+      case 'intraday': return 240
+      case '1m': return 480
+      case '5m': return 480
+      case '15m': return 320
+      case '30m': return 240
+      case '60m': return 240
+      case 'weekly': return 160
+      case 'monthly': return 80
+      default: return 320
+    }
+  }
+
+  private sortChartBars<T extends { time: string }>(rows: T[]): T[] {
+    return [...rows].sort((a, b) => a.time.localeCompare(b.time))
+  }
+
+  private isMinutePeriod(period: string): boolean {
+    return ['1m', '5m', '15m', '30m', '60m'].includes(period)
+  }
+
+  private dayBefore(timeStr: string): string {
+    const day = timeStr.slice(0, 10)
+    const [y, m, d] = day.split('-').map(Number)
+    const dt = new Date(Date.UTC(y, m - 1, d))
+    dt.setUTCDate(dt.getUTCDate() - 1)
+    const y2 = dt.getUTCFullYear()
+    const m2 = String(dt.getUTCMonth() + 1).padStart(2, '0')
+    const d2 = String(dt.getUTCDate()).padStart(2, '0')
+    return `${y2}-${m2}-${d2}`
+  }
+
+  private mergeKlineByTime<T extends { date: string }>(older: T[], recent: T[], before: string): T[] {
+    const map = new Map<string, T>()
+    for (const row of older) map.set(row.date, row)
+    for (const row of recent) {
+      if (!before || row.date >= before) map.set(row.date, row)
+    }
+    return [...map.values()].sort((a, b) => a.date.localeCompare(b.date))
+  }
+
+  private minuteMaxBars(period: string): number {
+    switch (period) {
+      case '1m': return 2400
+      case '5m': return 1600
+      case '15m': return 1200
+      case '30m':
+      case '60m': return 800
+      default: return 800
+    }
+  }
+
+  private async fetchMinuteChartKlines(
+    code: string,
+    period: string,
+    safeCount: number,
+    before: string,
+    tail: number,
+  ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
+    const step = 200
+    const cap = this.minuteMaxBars(period)
+
+    if (tail > 0) {
+      const olderR = await this.de.minuteKline(code, period, step, tail)
+      const recentR = await this.de.minuteKline(code, period, Math.min(tail, 800), 0)
+      if (!recentR.success || !recentR.data?.length) return null
+      const older = olderR.success ? (olderR.data ?? []) : []
+      const anchor = before || recentR.data[0].date
+      const merged = this.mergeKlineByTime(older, recentR.data, anchor).slice(-cap)
+      return {
+        klines: merged,
+        hasMore: older.length >= step && merged.length < cap,
+      }
+    }
+
+    const r = await this.de.minuteKline(code, period, Math.min(safeCount, 800), 0)
+    if (!r.success || !r.data?.length) return null
+    const klines = r.data.slice(-cap)
+    const got = klines.length
+    return {
+      klines,
+      hasMore: got < cap && (got >= safeCount * 0.9 || got >= 120),
+    }
+  }
+
+  private async fetchChartKlines(
+    code: string,
+    period: string,
+    safeCount: number,
+    before: string,
+    tail: number,
+  ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
+    if (this.isMinutePeriod(period)) {
+      return this.fetchMinuteChartKlines(code, period, safeCount, before, tail)
+    }
+
+    const klinePeriod = period === 'daily' ? 'daily' : period
+    if (before) {
+      const step = 200
+      const endDay = this.dayBefore(before.slice(0, 10))
+      let olderR = await this.de.kline(code, klinePeriod, '', endDay, step)
+      let older = (olderR.data ?? []).filter(b => b.date < before)
+      if (!older.length) {
+        olderR = await this.de.kline(code, klinePeriod, '', before.slice(0, 10), step)
+        older = (olderR.data ?? []).filter(b => b.date < before)
+      }
+      const recentCount = Math.max(tail, safeCount, 240)
+      const recentR = await this.de.kline(code, klinePeriod, '', '', recentCount)
+      if (!recentR.success || !recentR.data?.length) return null
+      const merged = this.mergeKlineByTime(older, recentR.data, before)
+      return {
+        klines: merged.slice(-800),
+        hasMore: older.length >= step,
+      }
+    }
+
+    const klineR = await this.de.kline(code, klinePeriod, '', '', safeCount)
+    if (!klineR.success || !klineR.data?.length) return null
+    return {
+      klines: klineR.data,
+      hasMore: klineR.data.length >= safeCount && safeCount < 800,
+    }
+  }
+
+  private async stockChart(
+    code: string,
+    period: string,
+    count: number,
+    before: string,
+    tail: number,
+    t0: number,
+  ) {
+    const normalized = code.padStart(6, '0')
+    const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : 800
+    const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
+    const quoteR = await this.de.realtime(code)
+    const quote = quoteR.data?.[0] ?? null
+    const preClose = quote?.preClose ?? null
+    const name = quote?.name ?? normalized
+
+    if (period === 'intraday') {
+      if (!this.isCnTradingDayCandidate()) {
+        return ok({
+          code: normalized,
+          name,
+          period,
+          preClose,
+          isTradingDay: false,
+          bars: [],
+          indicators: [],
+        }, `${name} 非交易日`, t0)
+      }
+
+      const intradayR = await this.de.intradayTick(code)
+      const raw = intradayR.data ?? []
+      const today = this.cnTodayString()
+      let cumAmount = 0
+      let cumVolume = 0
+      const bars = raw.map(row => {
+        const timeText = String(row.time ?? '')
+        const price = Number(row.price ?? 0)
+        const volume = Number(row.volume ?? 0)
+        const amount = Number(row.amount ?? 0)
+        cumAmount += amount
+        cumVolume += volume
+        const avgPrice = cumVolume > 0 ? cumAmount / cumVolume : price
+        const stamp = timeText.includes('-')
+          ? timeText
+          : `${today} ${timeText.length <= 5 ? `${timeText}:00` : timeText}`
+        return {
+          time: stamp,
+          price,
+          volume,
+          amount,
+          avgPrice,
+        }
+      })
+
+      return ok({
+        code: normalized,
+        name,
+        period,
+        preClose,
+        isTradingDay: bars.length > 0,
+        hasMore: false,
+        bars: this.sortChartBars(bars),
+        indicators: [],
+      }, `${name} 分时 ${bars.length} 点`, t0)
+    }
+
+    const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail)
+    if (!fetched?.klines.length) {
+      return fail('K线获取失败', t0)
+    }
+
+    const bars = this.sortChartBars(fetched.klines.map(bar => ({
+      time: bar.date,
+      open: bar.open,
+      high: bar.high,
+      low: bar.low,
+      close: bar.close,
+      volume: bar.volume,
+      amount: bar.amount,
+      changePct: bar.changePct,
+      turnoverRate: bar.turnoverRate,
+    })))
+
+    const indicators = this.sortChartBars(computeIndicators(code, fetched.klines).map(row => ({
+      time: row.date,
+      ma5: row.ma5,
+      ma10: row.ma10,
+      ma20: row.ma20,
+      ma60: row.ma60,
+      rsi6: row.rsi6,
+      rsi12: row.rsi12,
+      macd: row.macd,
+      macdSignal: row.macdSignal,
+      macdHist: row.macdHist,
+    })))
+
+    return ok({
+      code: normalized,
+      name,
+      period,
+      preClose,
+      isTradingDay: this.isCnTradingDayCandidate(),
+      hasMore: fetched.hasMore,
+      bars,
+      indicators,
+    }, `${name} ${period} ${bars.length} 根`, t0)
   }
 
   private async runBacktest(params: Record<string, unknown>, t0: number) {

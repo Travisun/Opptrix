@@ -35,3 +35,15 @@ export function safeFloat(v: unknown): number | null {
   const n = Number(v)
   return Number.isFinite(n) ? n : null
 }
+
+/** Preserve minute datetime from EastMoney kline (YYYY-MM-DD HH:mm[:ss]). */
+export function normalizeKlineDateTime(raw: string): string {
+  const v = String(raw).trim()
+  if (!v) return v
+  if (!v.includes(' ')) return v.slice(0, 10)
+  const [datePart, timePart = ''] = v.split(/\s+/)
+  const date = datePart.slice(0, 10)
+  const rawTime = timePart.slice(0, 8)
+  const time = rawTime.length === 5 ? `${rawTime}:00` : rawTime
+  return `${date} ${time}`
+}

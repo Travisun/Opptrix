@@ -3,9 +3,25 @@ import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMe
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
+const REQUEST_TIMEOUT = 10000 // 10s timeout for all API requests
+
+async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  const external = init?.signal
+  const onExternalAbort = () => controller.abort()
+  external?.addEventListener('abort', onExternalAbort)
+  try {
+    const { signal: _ignored, ...rest } = init ?? {}
+    return await fetch(path, { ...rest, signal: controller.signal })
+  } finally {
+    clearTimeout(timer)
+    external?.removeEventListener('abort', onExternalAbort)
+  }
+}
 
 async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetch(`${API_BASE}${path}`, init)
+  const resp = await fetchWithTimeout(`${API_BASE}${path}`, init)
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({})) as { error?: string }
     throw new Error(err.error || `API error: ${resp.status}`)
@@ -16,11 +32,13 @@ async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
 export async function apiCall<T>(
   feature: string,
   params: Record<string, any> = {},
+  init?: RequestInit,
 ): Promise<ApiResponse<T>> {
-  const resp = await fetch(`${API_BASE}/research`, {
+  const resp = await fetchWithTimeout(`${API_BASE}/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feature, params }),
+    ...init,
   })
   if (!resp.ok) throw new Error(`API error: ${resp.status}`)
   return resp.json()
@@ -62,6 +80,29 @@ export const research = {
   searchStocks: (keyword: string) =>
     apiCall<SearchStocksData>('search_stocks', { keyword }),
 
+  stockQuotes: (codes: string[]) =>
+    apiCall<import('../types/market').StockQuotesData>('stock_quotes', { codes }),
+
+  stockKline: (code: string, count = 90) =>
+    apiCall<import('../types/market').StockKlineData>('stock_kline', { code, count }),
+
+  stockChart: (
+    code: string,
+    period: import('../types/market').ChartPeriod,
+    count?: number,
+    signal?: AbortSignal,
+    before?: string,
+    tail?: number,
+  ) =>
+    apiCall<import('../types/market').StockChartData>(
+      'stock_chart',
+      { code, period, count, before, tail },
+      { signal },
+    ),
+
+  stockDetail: (code: string) =>
+    apiCall<import('../types/market').StockDetailData>('stock_detail', { code }),
+
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
@@ -88,13 +129,13 @@ export const research = {
 }
 
 export async function writerTypes() {
-  const resp = await fetch(`${API_BASE}/writer/types`)
+  const resp = await fetchWithTimeout(`${API_BASE}/writer/types`)
   if (!resp.ok) throw new Error('writer types failed')
   return resp.json() as Promise<{ types: { type: string; name: string }[] }>
 }
 
 export async function writerPersonas() {
-  const resp = await fetch(`${API_BASE}/writer/personas`)
+  const resp = await fetchWithTimeout(`${API_BASE}/writer/personas`)
   if (!resp.ok) throw new Error('writer personas failed')
   return resp.json() as Promise<{ personas: string[] }>
 }
@@ -102,7 +143,7 @@ export async function writerPersonas() {
 export async function portfolioTrade(payload: {
   code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string
 }) {
-  const resp = await fetch(`${API_BASE}/portfolio/trade`, {
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
@@ -112,7 +153,7 @@ export async function portfolioTrade(payload: {
 }
 
 export async function getHealth() {
-  const resp = await fetch(`${API_BASE}/health`)
+  const resp = await fetchWithTimeout(`${API_BASE}/health`)
   if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)
   return resp.json() as Promise<{
     status: string
@@ -148,7 +189,7 @@ export interface AppConfig {
 }
 
 export async function getConfig() {
-  const resp = await fetch(`${API_BASE}/config`)
+  const resp = await fetchWithTimeout(`${API_BASE}/config`)
   if (!resp.ok) throw new Error(`Config fetch failed: ${resp.status}`)
   return resp.json() as Promise<AppConfig>
 }

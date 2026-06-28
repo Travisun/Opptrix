@@ -53,8 +53,18 @@ export async function getQuoteId(code: string): Promise<string> {
   return resolveSecId(c)
 }
 
+/** Preserve intraday datetime (YYYY-MM-DD HH:mm[:ss]); daily stays YYYY-MM-DD. */
 export function normDate(s: string) {
-  return String(s).slice(0, 10)
+  const v = String(s).trim()
+  if (!v) return v
+  if (v.includes(' ')) {
+    const [datePart, timePart = ''] = v.split(/\s+/)
+    const date = datePart.slice(0, 10)
+    const raw = timePart.slice(0, 8)
+    const time = raw.length === 5 ? `${raw}:00` : raw
+    return `${date} ${time}`
+  }
+  return v.slice(0, 10)
 }
 
 export function num(v: unknown) {
