@@ -17,7 +17,6 @@ import { fadeInUp } from '../theme/mixins'
 import { isElectron } from '../platform/detect'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
-  PanelRightContractRegular,
   PanelRightExpandRegular,
   ArrowMaximizeRegular,
   ArrowMinimizeRegular,
@@ -408,7 +407,7 @@ export default function ChatView({
         <div className={s.header}>
           <div className={s.headerInner}>
             <Text className={s.title}>{title || '新对话'}</Text>
-            {(onToggleRightPanel || onToggleChatColumn) && (
+            {!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
               <div className={s.headerActions}>
                 {onToggleChatColumn && (
                   <ChromeToolButton
@@ -423,14 +422,11 @@ export default function ChatView({
                 )}
                 {onToggleRightPanel && (
                   <ChromeToolButton
-                    label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
+                    label="展开右侧面板"
                     iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                    active={rightPanelOpen}
                     onClick={onToggleRightPanel}
                   >
-                    {rightPanelOpen
-                      ? <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                      : <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                    <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
                   </ChromeToolButton>
                 )}
               </div>

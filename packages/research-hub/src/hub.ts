@@ -44,6 +44,7 @@ export class ResearchHub {
         case 'search_stocks': return this.searchStocks(String(params.keyword), t0)
         case 'stock_quotes': return this.stockQuotes(params.codes as string[] | undefined, t0)
         case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
+        case 'stock_cyq': return this.stockCyq(String(params.code), t0)
         case 'stock_chart': return this.stockChart(
           String(params.code),
           String(params.period ?? 'daily'),
@@ -201,6 +202,44 @@ export class ResearchHub {
     const result = await this.de.kline(code, safeCount)
     if (!result.success) return fail(result.error ?? 'K线获取失败', t0)
     return ok({ code, klines: result.data ?? [] }, `${code} K线 ${result.data?.length ?? 0} 根`, t0)
+  }
+
+  private async stockCyq(code: string, t0: number) {
+    const normalized = code.padStart(6, '0')
+    const result = await this.de.chipDistribution(normalized)
+    if (!result.success || !result.data?.length) {
+      return fail(result.error ?? '筹码分布获取失败', t0)
+    }
+    const latest = result.data[result.data.length - 1]
+    return ok({
+      code: normalized,
+      rows: result.data,
+      latest,
+    }, `${normalized} 筹码 ${result.data.length} 日`, t0)
+  }
+
+  private mapCyqRow(row: {
+    date: string
+    benefitPart: number
+    avgCost: number
+    cost90Low: number
+    cost90High: number
+    cost90Con: number
+    cost70Low: number
+    cost70High: number
+    cost70Con: number
+  }) {
+    return {
+      date: row.date,
+      benefitPart: row.benefitPart,
+      avgCost: row.avgCost,
+      cost90Low: row.cost90Low,
+      cost90High: row.cost90High,
+      cost90Con: row.cost90Con,
+      cost70Low: row.cost70Low,
+      cost70High: row.cost70High,
+      cost70Con: row.cost70Con,
+    }
   }
 
   private async stockDetail(code: string, t0: number) {
@@ -483,6 +522,16 @@ export class ResearchHub {
       macdHist: row.macdHist,
     })))
 
+    let cyq: ReturnType<ResearchHub['mapCyqRow']>[] | undefined
+    let cyqLatest: ReturnType<ResearchHub['mapCyqRow']> | null = null
+    if (period === 'daily' || period === 'weekly' || period === 'monthly') {
+      const cyqR = await this.de.chipDistribution(normalized)
+      if (cyqR.success && cyqR.data?.length) {
+        cyq = cyqR.data.map(row => this.mapCyqRow(row))
+        cyqLatest = cyq[cyq.length - 1] ?? null
+      }
+    }
+
     return ok({
       code: normalized,
       name,
@@ -492,6 +541,8 @@ export class ResearchHub {
       hasMore: fetched.hasMore,
       bars,
       indicators,
+      cyq,
+      cyqLatest,
     }, `${name} ${period} ${bars.length} 根`, t0)
   }
 

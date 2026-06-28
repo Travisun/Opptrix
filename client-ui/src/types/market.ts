@@ -120,6 +120,20 @@ export interface ChartIndicatorPoint {
   macdHist: number | null
 }
 
+/** 筹码分布（CYQ）— 与东财 K 线筹码字段对齐 */
+export interface ChipDistributionPoint {
+  date: string
+  /** 获利比例 0–1 */
+  benefitPart: number
+  avgCost: number
+  cost90Low: number
+  cost90High: number
+  cost90Con: number
+  cost70Low: number
+  cost70High: number
+  cost70Con: number
+}
+
 export interface StockChartData {
   code: string
   name: string
@@ -129,6 +143,8 @@ export interface StockChartData {
   hasMore?: boolean
   bars: IntradayChartBar[] | OhlcChartBar[]
   indicators: ChartIndicatorPoint[]
+  cyq?: ChipDistributionPoint[]
+  cyqLatest?: ChipDistributionPoint | null
 }
 
 export interface StockQuotesData {

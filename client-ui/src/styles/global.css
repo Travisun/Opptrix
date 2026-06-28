@@ -97,6 +97,21 @@ html.inno-electron .inno-settings-panel {
 html.inno-electron .inno-chat-title-bar {
   background: #FFFFFF !important;
   border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+  -webkit-app-region: drag;
+}
+
+html.inno-electron .inno-right-panel-title-bar {
+  background: #FFFFFF !important;
+  border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+  position: relative;
+  z-index: 1200;
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+html.inno-electron .inno-panel-title-no-drag {
+  -webkit-app-region: no-drag;
+  pointer-events: auto;
 }
 
 html.inno-electron .inno-right-panel {

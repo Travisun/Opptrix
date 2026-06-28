@@ -20,7 +20,6 @@ import {
 import {
   PanelLeftContractRegular,
   PanelLeftExpandRegular,
-  PanelRightContractRegular,
   PanelRightExpandRegular,
   ChatAddRegular,
   ArrowMaximizeRegular,
@@ -201,7 +200,7 @@ export default function DesktopWindowChrome({
         </div>
       </header>
 
-      {!isSettings && (onToggleRightPanel || onToggleChatColumn) && (
+      {!isSettings && !rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
         <div
           className={s.titleBarActions}
           style={{ right: `${titleBarActionsRight}px` }}
@@ -219,14 +218,11 @@ export default function DesktopWindowChrome({
           )}
           {onToggleRightPanel && (
             <ChromeToolButton
-              label={rightPanelOpen ? '收起右侧面板' : '展开右侧面板'}
+              label="展开右侧面板"
               iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-              active={rightPanelOpen}
               onClick={onToggleRightPanel}
             >
-              {rightPanelOpen
-                ? <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                : <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+              <PanelRightExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
             </ChromeToolButton>
           )}
         </div>

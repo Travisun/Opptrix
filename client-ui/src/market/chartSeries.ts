@@ -42,6 +42,13 @@ export interface ChartSeriesBundle {
   maLines: { key: string; color: string; points: LinePoint[] }[]
   volume: VolumePoint[]
   macd: MacdPoint[]
+  cyqOverlay?: {
+    avgCost: number
+    cost90Low: number
+    cost90High: number
+    cost70Low: number
+    cost70High: number
+  } | null
 }
 
 function volumeColor(change: number | null | undefined): string {
@@ -140,6 +147,7 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
       volume,
       maLines: [],
       macd: [],
+      cyqOverlay: null,
     }
   }
 
@@ -164,6 +172,15 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
 
   assertUniqueTimes(candles.map(c => c.time), periodLabel(data.period), data.period)
 
+  const latest = data.cyqLatest
+  const cyqOverlay = latest ? {
+    avgCost: latest.avgCost,
+    cost90Low: latest.cost90Low,
+    cost90High: latest.cost90High,
+    cost70Low: latest.cost70Low,
+    cost70High: latest.cost70High,
+  } : null
+
   return {
     mode: 'ohlc',
     showMacd,
@@ -183,6 +200,7 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
         ].filter(row => row.points.length > 0),
     volume,
     macd,
+    cyqOverlay,
   }
 }
 

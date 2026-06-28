@@ -22,5 +22,5 @@ export type { EfRow } from './efinance/common.js'
 export type {
   MoneyFlow, IndexRealtime, IndexKline, MarketMoneyFlow, SectorMoneyFlow,
   StockProfile, NewsItem, SentimentData, Dividend, DragonTiger, LimitUpDown,
-  GlobalIndex, TechnicalIndicator,
+  GlobalIndex, TechnicalIndicator, ChipDistribution,
 } from './core/schema.js'

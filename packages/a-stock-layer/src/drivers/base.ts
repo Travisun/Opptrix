@@ -50,6 +50,7 @@ export abstract class BaseDriver {
   cashFlow?(code: string, reportDate?: string): Promise<unknown[] | null> | unknown[] | null
   indexConstituents?(indexCode: string): Promise<unknown[] | null> | unknown[] | null
   macroIndicator?(indicator?: string): Promise<unknown[] | null> | unknown[] | null
+  chipDistribution?(code: string, adjust?: string): Promise<unknown[] | null> | unknown[] | null
 }
 
 /** Map Capability → driver method name */
@@ -103,4 +104,5 @@ export const CAP_METHOD: Partial<Record<Capability, string>> = {
   [Capability.EMPLOYEE_COMP]: 'employeeComposition',
   [Capability.INSTITUTIONAL_VISIT]: 'institutionalVisits',
   [Capability.PEER_COMPANY]: 'peerCompanies',
+  [Capability.CHIP_DISTRIBUTION]: 'chipDistribution',
 }

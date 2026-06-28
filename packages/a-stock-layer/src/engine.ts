@@ -331,6 +331,10 @@ export class AshareEngine {
     return this.q(Capability.PEER_COMPANY, 'peerCompanies', true, code)
   }
 
+  chipDistribution(code: string, adjust = ''): Promise<QueryResult<import('./core/schema.js').ChipDistribution[]>> {
+    return this.q(Capability.CHIP_DISTRIBUTION, 'chipDistribution', true, code, adjust)
+  }
+
   async techIndicator(code: string, period = 'daily', count = 120): Promise<QueryResult<TechnicalIndicator[]>> {
     const kl = await this.kline(code, count)
     if (!kl.success || !kl.data?.length) return { success: false, error: kl.error ?? 'kline failed' }
@@ -360,3 +364,4 @@ export {
   registerAllDrivers,
 } from './drivers/register.js'
 export { computeIndicators } from './utils/indicators.js'
+export { computeChipDistribution } from './utils/cyq.js'

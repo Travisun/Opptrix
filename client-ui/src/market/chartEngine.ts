@@ -2,6 +2,7 @@ import {
   CandlestickSeries,
   HistogramSeries,
   LineSeries,
+  LineStyle,
   createChart,
   type IChartApi,
   type LogicalRange,
@@ -155,6 +156,33 @@ export class ChartWorkspace {
         priceFormat: stockPriceFormat,
       })
       this.setSeriesData('K线', () => candles.setData(bundle.candles))
+      if (bundle.cyqOverlay) {
+        const o = bundle.cyqOverlay
+        candles.createPriceLine({
+          price: o.cost90High,
+          color: 'rgba(255,149,0,0.9)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: '90高',
+        })
+        candles.createPriceLine({
+          price: o.cost90Low,
+          color: 'rgba(255,149,0,0.55)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: '90低',
+        })
+        candles.createPriceLine({
+          price: o.avgCost,
+          color: 'rgba(88,86,214,0.9)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Solid,
+          axisLabelVisible: true,
+          title: '均成',
+        })
+      }
       for (const ma of bundle.maLines) {
         const line = this.mainChart.addSeries(LineSeries, { ...lineOpts, color: ma.color })
         this.setSeriesData(ma.key, () => line.setData(ma.points))
@@ -238,6 +266,12 @@ export class ChartWorkspace {
             from: options.preserveRange.from + shift,
             to: options.preserveRange.to + shift,
           })
+        } catch {
+          this.focusRecent(this.totalBars, visible)
+        }
+      } else if (options.preserveRange) {
+        try {
+          this.mainChart.timeScale().setVisibleLogicalRange(options.preserveRange)
         } catch {
           this.focusRecent(this.totalBars, visible)
         }

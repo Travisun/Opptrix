@@ -73,5 +73,6 @@ export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
 
 /** Title bar stacking — overlay sidebar sits between title and toolbar */
 export const DESKTOP_Z_TITLE = 1100
+export const DESKTOP_Z_PANEL_TITLE = 1200
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
 export const DESKTOP_Z_CHROME_TOOLS = 1210

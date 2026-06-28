@@ -6,6 +6,7 @@ import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, periodLabel } from './chartSeries'
 import { initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isIntradayPeriod, isMinuteOhlcPeriod } from './chartTime'
+import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
 import { indicatorColors, maColors } from './chartTheme'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
@@ -194,6 +195,33 @@ const useStyles = makeStyles({
   hintError: {
     color: innoTokens.textSecondary,
   },
+  cyqStrip: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'center',
+    gap: '4px 10px',
+    padding: '5px 8px',
+    borderRadius: innoTokens.radiusMd,
+    border: `1px solid ${innoTokens.separator}`,
+    backgroundColor: innoTokens.canvasAlt,
+    fontSize: '9px',
+    color: innoTokens.textSecondary,
+    lineHeight: 1.35,
+  },
+  cyqLabel: {
+    color: innoTokens.textTertiary,
+    fontWeight: 600,
+  },
+  cyqValue: {
+    color: innoTokens.textPrimary,
+    fontWeight: 600,
+    marginRight: '2px',
+  },
+  cyqDate: {
+    marginLeft: 'auto',
+    color: innoTokens.textTertiary,
+    fontSize: '8px',
+  },
 })
 
 interface Props {
@@ -226,6 +254,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
   const prevBarCountRef = useRef(0)
   const fetchCountRef = useRef(initialFetchCount('daily'))
   const lastHistoryLoadRef = useRef(0)
+  const periodRef = useRef(period)
+  const activeRef = useRef(active)
+
+  useEffect(() => { periodRef.current = period }, [period])
+  useEffect(() => { activeRef.current = active }, [active])
 
   useEffect(() => {
     hasDataRef.current = data != null
@@ -236,19 +269,25 @@ export default function TradingViewChart({ code, expanded = false, active = true
     nextPeriod: ChartPeriod,
     count: number,
     signal?: AbortSignal,
-    opts?: { append?: boolean; before?: string; tail?: number },
+    opts?: { append?: boolean; before?: string; tail?: number; live?: boolean },
   ) => {
     const seq = ++loadSeqRef.current
     const hasChart = hasDataRef.current
+    const isLive = Boolean(opts?.live)
     if (opts?.append) {
       preserveRangeRef.current = workspaceRef.current.getVisibleLogicalRange()
       prevBarCountRef.current = dataRef.current?.bars.length ?? 0
-    } else if (!hasChart) {
+    } else if (!hasChart || isLive) {
+      if (!isLive) {
+        preserveRangeRef.current = null
+        addedBarsRef.current = 0
+      }
+    } else {
       preserveRangeRef.current = null
       addedBarsRef.current = 0
     }
-    if (hasChart) setRefreshing(true)
-    else setLoading(true)
+    if (hasChart && !isLive) setRefreshing(true)
+    else if (!hasChart) setLoading(true)
     setError('')
 
     try {
@@ -277,9 +316,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
       }
       if (opts?.append && prevBarCountRef.current > 0) {
         addedBarsRef.current = resp.data.bars.length - prevBarCountRef.current
-      } else if (!opts?.append) {
+      } else if (!opts?.append && !isLive) {
         addedBarsRef.current = 0
         preserveRangeRef.current = null
+      } else if (isLive) {
+        addedBarsRef.current = 0
       }
       fetchCountRef.current = count
       setData(resp.data)
@@ -332,6 +373,31 @@ export default function TradingViewChart({ code, expanded = false, active = true
     void loadChart(period, fetchCountRef.current, controller.signal)
     return () => { controller.abort() }
   }, [code, period, loadChart])
+
+  useEffect(() => {
+    const tradingDay = data?.isTradingDay
+    if (!shouldPollChartLive(period, active, tradingDay)) return undefined
+
+    const poll = () => {
+      const currentPeriod = periodRef.current
+      if (!shouldPollChartLive(currentPeriod, activeRef.current, dataRef.current?.isTradingDay)) return
+      if (loadingMoreRef.current) return
+
+      const range = workspaceRef.current.getVisibleLogicalRange()
+      const total = dataRef.current?.bars.length ?? 0
+      if (range && total > 0 && range.to < total - 3) {
+        preserveRangeRef.current = range
+      } else {
+        preserveRangeRef.current = null
+      }
+
+      void loadChart(currentPeriod, fetchCountRef.current, undefined, { live: true })
+    }
+
+    const intervalMs = chartLivePollIntervalMs(period)
+    const id = window.setInterval(poll, intervalMs)
+    return () => { window.clearInterval(id) }
+  }, [period, active, data?.isTradingDay, loadChart])
 
   useEffect(() => {
     const controller = new AbortController()
@@ -396,6 +462,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
 
   const legendIntraday = intraday && data
   const legendOhlc = !intraday && data
+  const cyqLatest = data?.cyqLatest ?? null
+  const showCyq = Boolean(cyqLatest && !intraday)
+
+  const fmtCyqPct = (v: number) => `${(v * 100).toFixed(2)}%`
+  const fmtCyqPrice = (v: number) => v.toFixed(2)
 
   const resetZoom = () => { workspaceRef.current.resetView() }
 
@@ -438,9 +509,35 @@ export default function TradingViewChart({ code, expanded = false, active = true
                 <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.signal }} />DEA</span>
               </>
             )}
+            {showCyq && (
+              <>
+                <span className={s.legendItem}><i className={s.dot} style={{ background: 'rgba(255,149,0,0.85)' }} />90%</span>
+                <span className={s.legendItem}><i className={s.dot} style={{ background: '#5856D6' }} />均成</span>
+              </>
+            )}
           </div>
         )}
       </div>
+
+      {showCyq && cyqLatest && (
+        <div className={s.cyqStrip}>
+          <span><span className={s.cyqLabel}>获利 </span><span className={s.cyqValue}>{fmtCyqPct(cyqLatest.benefitPart)}</span></span>
+          <span><span className={s.cyqLabel}>均成 </span><span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.avgCost)}</span></span>
+          <span>
+            <span className={s.cyqLabel}>90% </span>
+            <span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.cost90Low)}–{fmtCyqPrice(cyqLatest.cost90High)}</span>
+            <span className={s.cyqLabel}> 集中 </span>
+            <span className={s.cyqValue}>{fmtCyqPct(cyqLatest.cost90Con)}</span>
+          </span>
+          <span>
+            <span className={s.cyqLabel}>70% </span>
+            <span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.cost70Low)}–{fmtCyqPrice(cyqLatest.cost70High)}</span>
+            <span className={s.cyqLabel}> 集中 </span>
+            <span className={s.cyqValue}>{fmtCyqPct(cyqLatest.cost70Con)}</span>
+          </span>
+          <span className={s.cyqDate}>{cyqLatest.date}</span>
+        </div>
+      )}
 
       <div className={s.zoomRow}>
         <Text className={s.hint}>

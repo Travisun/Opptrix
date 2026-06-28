@@ -608,6 +608,10 @@ export default function ChatApp() {
                 width={rightPanelWidth}
                 fullWidth={!chatVisible}
                 transitionEnabled={!isDragging}
+                electronChrome={electronChrome}
+                chatColumnVisible={chatVisible}
+                onToggleRightPanel={handleToggleRightPanel}
+                onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
               />
             )}
           </div>

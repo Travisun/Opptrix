@@ -2,6 +2,7 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   DESKTOP_SIDEBAR_LAYOUT_EASE,
   DESKTOP_SIDEBAR_LAYOUT_MS,
+  DESKTOP_TITLEBAR_HEIGHT,
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
 } from '../desktop/constants'
 import RightMarketPanel from '../market/RightMarketPanel'
@@ -26,6 +27,10 @@ const useStyles = makeStyles({
   panelShellNoTransition: {
     transitionProperty: 'none',
   },
+  panelShellElectron: {
+    marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
+    boxSizing: 'border-box',
+  },
   panel: {
     height: '100%',
     minHeight: 0,
@@ -40,6 +45,10 @@ interface Props {
   width?: number
   fullWidth?: boolean
   transitionEnabled?: boolean
+  electronChrome?: boolean
+  chatColumnVisible?: boolean
+  onToggleRightPanel?: () => void
+  onToggleChatColumn?: () => void
 }
 
 export default function RightPanel({
@@ -47,6 +56,10 @@ export default function RightPanel({
   width = WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
   fullWidth = false,
   transitionEnabled = true,
+  electronChrome = false,
+  chatColumnVisible = true,
+  onToggleRightPanel,
+  onToggleChatColumn,
 }: Props) {
   const s = useStyles()
 
@@ -63,6 +76,7 @@ export default function RightPanel({
         s.panelShell,
         visible && s.panelShellOpen,
         !transitionEnabled && s.panelShellNoTransition,
+        electronChrome && s.panelShellElectron,
       )}
       style={{ width: typeof shellWidth === 'number' ? `${shellWidth}px` : shellWidth }}
     >
@@ -72,7 +86,12 @@ export default function RightPanel({
         aria-label="行情侧栏"
         aria-hidden={!visible}
       >
-        <RightMarketPanel />
+        <RightMarketPanel
+          electronChrome={electronChrome}
+          chatColumnVisible={chatColumnVisible}
+          onToggleRightPanel={visible ? onToggleRightPanel : undefined}
+          onToggleChatColumn={visible ? onToggleChatColumn : undefined}
+        />
       </aside>
     </div>
   )

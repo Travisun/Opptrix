@@ -52,6 +52,7 @@ export enum Capability {
   EMPLOYEE_COMP = 'employee_composition',
   INSTITUTIONAL_VISIT = 'institutional_visit',
   PEER_COMPANY = 'peer_company',
+  CHIP_DISTRIBUTION = 'chip_distribution',
 }
 
 /** Maps capability → cache type key (mirrors Python CACHE_TYPE) */

@@ -160,3 +160,20 @@ export interface TechnicalIndicator {
   macdSignal?: number | null
   macdHist?: number | null
 }
+
+/** EastMoney CYQ (筹码分布) — aligned with AKShare stock_cyq_em / 东财 K 线筹码. */
+export interface ChipDistribution {
+  code: string
+  date: string
+  /** 获利比例 0–1 */
+  benefitPart: number
+  /** 平均成本 */
+  avgCost: number
+  cost90Low: number
+  cost90High: number
+  /** 90集中度 (pr_high - pr_low) / (pr_high + pr_low) */
+  cost90Con: number
+  cost70Low: number
+  cost70High: number
+  cost70Con: number
+}

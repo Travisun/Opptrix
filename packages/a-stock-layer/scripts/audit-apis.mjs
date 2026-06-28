@@ -28,6 +28,7 @@ const engineTests = [
   ['mainBusiness', e => e.mainBusiness(CODE)],
   ['actualController', e => e.actualController(CODE)],
   ['globalIndex', e => e.globalIndex()],
+  ['chipDistribution', e => e.chipDistribution(CODE)],
 ]
 
 const hubTests = [
@@ -36,6 +37,7 @@ const hubTests = [
   ['stock_kline', h => h.dispatch('stock_kline', { code: CODE, count: 30 })],
   ['stock_chart daily', h => h.dispatch('stock_chart', { code: CODE, period: 'daily', count: 60 })],
   ['stock_chart intraday', h => h.dispatch('stock_chart', { code: CODE, period: 'intraday' })],
+  ['stock_cyq', h => h.dispatch('stock_cyq', { code: CODE })],
   ['stock_detail', h => h.dispatch('stock_detail', { code: CODE })],
 ]
 
@@ -60,8 +62,10 @@ for (const [name, fn] of hubTests) {
   const extra = name === 'stock_detail'
     ? ` fin=${r.data?.financialHistory?.length} div=${r.data?.dividends?.length}`
     : name === 'stock_chart daily'
-      ? ` bars=${r.data?.bars?.length}`
-      : ''
+      ? ` bars=${r.data?.bars?.length} cyq=${r.data?.cyqLatest?.date ?? '-'}`
+      : name === 'stock_cyq'
+        ? ` n=${r.data?.rows?.length ?? 0}`
+        : ''
   console.log(`${ok ? 'OK' : 'FAIL'} ${name.padEnd(22)} ${Date.now() - t0}ms ${extra}`)
   if (!ok) hubFails.push(name)
 }

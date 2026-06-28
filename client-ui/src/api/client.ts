@@ -100,6 +100,12 @@ export const research = {
       { signal },
     ),
 
+  stockCyq: (code: string) =>
+    apiCall<{ code: string; rows: import('../types/market').ChipDistributionPoint[]; latest: import('../types/market').ChipDistributionPoint }>(
+      'stock_cyq',
+      { code },
+    ),
+
   stockDetail: (code: string) =>
     apiCall<import('../types/market').StockDetailData>('stock_detail', { code }),
 
