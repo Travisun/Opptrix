@@ -177,3 +177,14 @@ export interface ChipDistribution {
   cost70High: number
   cost70Con: number
 }
+
+export interface ChipPriceLevel {
+  price: number
+  /** Normalized chip weight 0–1 */
+  weight: number
+}
+
+export interface ChipDistributionProfile extends ChipDistribution {
+  currentPrice: number
+  levels: ChipPriceLevel[]
+}

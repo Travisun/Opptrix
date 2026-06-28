@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react'
-import { Link, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Link, Spinner, Tab, TabList, Text, Badge, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
 import type {
   FinancialSummaryData,
@@ -20,8 +21,11 @@ import {
 } from './format'
 import TradingViewChart from './TradingViewChart'
 import { innoTokens } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 
 type DetailTab = 'chart' | 'basic' | 'company' | 'news' | 'f10'
+
+const CONTENT_PAD = '15px'
 
 const useStyles = makeStyles({
   root: {
@@ -32,7 +36,7 @@ const useStyles = makeStyles({
   },
   hero: {
     flexShrink: 0,
-    padding: '6px 10px 5px',
+    padding: `6px ${CONTENT_PAD} 5px`,
     borderBottom: `1px solid ${innoTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
@@ -68,9 +72,24 @@ const useStyles = makeStyles({
   },
   quoteMain: {
     display: 'flex',
-    alignItems: 'baseline',
-    gap: '8px',
+    alignItems: 'center',
+    gap: '6px',
     flexShrink: 0,
+  },
+  manageBtn: {
+    border: `1px solid ${innoTokens.separator}`,
+    backgroundColor: innoTokens.canvasAlt,
+    color: innoTokens.textSecondary,
+    borderRadius: innoTokens.radiusSm,
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '3px 7px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    lineHeight: 1.2,
+    ...ghostInteractive,
   },
   price: {
     fontSize: '20px',
@@ -120,7 +139,7 @@ const useStyles = makeStyles({
   },
   tabBar: {
     flexShrink: 0,
-    padding: '0 6px',
+    padding: `0 ${CONTENT_PAD}`,
     minHeight: '28px',
     borderBottom: `1px solid ${innoTokens.separator}`,
     overflowX: 'auto',
@@ -148,15 +167,15 @@ const useStyles = makeStyles({
   chartPanel: {
     flex: 1,
     minHeight: 0,
-    padding: '4px 8px 8px',
-    display: 'flex',
-    flexDirection: 'column',
+    padding: `4px ${CONTENT_PAD} 8px`,
+    overflowY: 'auto',
+    overflowX: 'hidden',
   },
   scrollPanel: {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    padding: '8px 10px 10px',
+    padding: `8px ${CONTENT_PAD} 10px`,
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
@@ -326,6 +345,8 @@ const useStyles = makeStyles({
 
 interface Props {
   stock: WatchlistItem | null
+  isHolding?: boolean
+  onManage?: () => void
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -507,7 +528,7 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
   )
 }
 
-export default function StockDetailTab({ stock }: Props) {
+export default function StockDetailTab({ stock, isHolding = false, onManage }: Props) {
   const s = useStyles()
   const [detailTab, setDetailTab] = useState<DetailTab>('chart')
   const [detail, setDetail] = useState<StockDetailData | null>(null)
@@ -550,7 +571,7 @@ export default function StockDetailTab({ stock }: Props) {
   }, [stock])
 
   if (!stock) {
-    return <div className={s.center}>从自选列表选择股票查看详情</div>
+    return <div className={s.center}>从关注列表选择股票查看详情</div>
   }
 
   if (loading && !detail) {
@@ -582,8 +603,15 @@ export default function StockDetailTab({ stock }: Props) {
           <div className={s.titleMain}>
             <Text className={s.name}>{detail.name}</Text>
             <span className={s.code}>{detail.code}</span>
+            {isHolding && <Badge size="small" color="informative" appearance="outline">持有</Badge>}
           </div>
           <div className={s.quoteMain}>
+            {onManage && (
+              <button type="button" className={s.manageBtn} onClick={onManage}>
+                <EditRegular fontSize={12} />
+                持仓管理
+              </button>
+            )}
             <span className={mergeClasses(s.price, toneClass)}>
               {formatPrice(quote?.price ?? null)}
             </span>

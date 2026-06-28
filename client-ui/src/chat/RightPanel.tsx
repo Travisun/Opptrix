@@ -29,6 +29,7 @@ const useStyles = makeStyles({
   },
   panelShellElectron: {
     marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
+    height: `calc(100% + ${DESKTOP_TITLEBAR_HEIGHT}px)`,
     boxSizing: 'border-box',
   },
   panel: {

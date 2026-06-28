@@ -51,6 +51,7 @@ export abstract class BaseDriver {
   indexConstituents?(indexCode: string): Promise<unknown[] | null> | unknown[] | null
   macroIndicator?(indicator?: string): Promise<unknown[] | null> | unknown[] | null
   chipDistribution?(code: string, adjust?: string): Promise<unknown[] | null> | unknown[] | null
+  chipProfile?(code: string, adjust?: string): Promise<unknown[] | null> | unknown[] | null
 }
 
 /** Map Capability → driver method name */

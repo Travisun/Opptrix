@@ -1,17 +1,31 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
+  Badge,
   Input,
   Spinner,
   Text,
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { DismissRegular, SearchRegular } from '@fluentui/react-icons'
+import { DismissRegular, DeleteRegular, EditRegular, SearchRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
+import { followReturnPct } from './portfolioCalc'
+import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { innoTokens } from '../theme/tokens'
-import { ghostInteractive } from '../theme/mixins'
+import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
+
+function stopRowActionPointer(e: React.MouseEvent | React.PointerEvent) {
+  e.preventDefault()
+  e.stopPropagation()
+}
+
+/** Text aligns with search field; item hover bg sits ITEM_BG_INSET from panel edges */
+const CONTENT_PAD = '15px'
+const ITEM_BG_INSET = '10px'
+const ITEM_INNER_PAD = '10px'
 
 const useStyles = makeStyles({
   root: {
@@ -21,7 +35,7 @@ const useStyles = makeStyles({
     height: '100%',
   },
   searchRow: {
-    padding: '10px 12px 8px',
+    padding: `8px ${CONTENT_PAD} 6px`,
     display: 'flex',
     gap: '6px',
     alignItems: 'center',
@@ -33,8 +47,12 @@ const useStyles = makeStyles({
   },
   results: {
     borderBottom: `1px solid ${innoTokens.separator}`,
-    maxHeight: '160px',
+    maxHeight: '140px',
     overflowY: 'auto',
+    padding: `4px ${ITEM_BG_INSET}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   resultItem: {
     width: '100%',
@@ -44,9 +62,12 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    padding: '8px 12px',
+    padding: `6px ${ITEM_INNER_PAD}`,
+    minHeight: '30px',
+    borderRadius: innoTokens.radiusMd,
     cursor: 'pointer',
     textAlign: 'left',
+    boxSizing: 'border-box',
     ...ghostInteractive,
     ':hover': {
       backgroundColor: innoTokens.accentSoft,
@@ -60,64 +81,165 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
+    padding: `10px ${ITEM_BG_INSET} 0`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   row: {
-    display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-    gap: '4px 8px',
+    display: 'flex',
     alignItems: 'center',
-    padding: '10px 12px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
-    cursor: 'pointer',
+    gap: '8px',
+    padding: `6px ${ITEM_INNER_PAD}`,
+    minHeight: '34px',
+    borderRadius: innoTokens.radiusMd,
     backgroundColor: 'transparent',
     width: '100%',
     boxSizing: 'border-box',
+    color: innoTokens.textPrimary,
+    cursor: 'pointer',
     ...ghostInteractive,
     ':hover': {
       backgroundColor: innoTokens.accentSoft,
     },
+    ':focus-within': {
+      backgroundColor: innoTokens.accentSoft,
+    },
   },
   rowActive: {
-    backgroundColor: innoTokens.accentSoft,
+    ...sidebarItemSelected,
+    ':hover': {
+      backgroundColor: innoTokens.accentSoft,
+    },
+    ':focus-within': {
+      backgroundColor: innoTokens.accentSoft,
+    },
   },
-  nameLine: {
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  rowTitle: {
     fontSize: '13px',
-    fontWeight: 600,
-    color: innoTokens.textPrimary,
+    fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     textAlign: 'left',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
   },
-  codeLine: {
-    fontSize: '11px',
+  rowNote: {
+    fontSize: '10px',
     color: innoTokens.textTertiary,
-    textAlign: 'left',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
-  priceCol: {
-    textAlign: 'right',
-    minWidth: '64px',
+  holdBadge: {
+    flexShrink: 0,
   },
-  price: {
-    fontSize: '13px',
-    fontWeight: 600,
-    fontVariantNumeric: 'tabular-nums',
+  rowTrailing: {
+    position: 'relative',
+    flexShrink: 0,
+    width: '112px',
+    minHeight: '28px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
   },
-  pct: {
+  rowQuote: {
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '1px',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+    '@media (hover: none)': {
+      display: 'none',
+    },
+  },
+  quotePrimary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
     fontSize: '11px',
     fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.1,
   },
-  pctUp: { color: '#FF3B30' },
-  pctDown: { color: '#34C759' },
+  quoteSecondary: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '5px',
+    fontSize: '9px',
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.1,
+  },
+  metricPrice: {
+    fontWeight: 650,
+    color: innoTokens.textPrimary,
+  },
+  retLabel: {
+    color: innoTokens.textTertiary,
+    fontWeight: 500,
+  },
+  pctUp: { color: MARKET_UP, fontWeight: 600 },
+  pctDown: { color: MARKET_DOWN, fontWeight: 600 },
   pctFlat: { color: innoTokens.textTertiary },
+  rowActions: {
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    opacity: 0,
+    pointerEvents: 'none',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+    '@media (hover: none)': {
+      opacity: 1,
+      pointerEvents: 'auto',
+    },
+  },
+  rowActionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '28px',
+    height: '28px',
+    padding: 0,
+    border: 'none',
+    borderRadius: innoTokens.radiusFull,
+    backgroundColor: 'transparent',
+    color: innoTokens.textSecondary,
+    cursor: 'pointer',
+    lineHeight: 0,
+    flexShrink: 0,
+    ':hover': {
+      backgroundColor: 'rgba(29, 29, 31, 0.08)',
+      color: innoTokens.textPrimary,
+    },
+  },
   empty: {
-    padding: '24px 16px',
+    padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '12px',
     color: innoTokens.textTertiary,
   },
   footer: {
-    padding: '8px 12px',
+    padding: `6px ${CONTENT_PAD}`,
     fontSize: '11px',
     color: innoTokens.textTertiary,
     borderTop: `1px solid ${innoTokens.separator}`,
@@ -125,6 +247,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
+    flexShrink: 0,
   },
   iconBtn: {
     border: 'none',
@@ -140,17 +263,23 @@ const useStyles = makeStyles({
 interface Props {
   items: WatchlistItem[]
   selectedCode?: string | null
+  holdingsByCode: Record<string, HoldingSnapshot>
   onSelect: (item: WatchlistItem) => void
-  onAdd: (item: WatchlistItem) => void
+  onManage: (item: WatchlistItem) => void
+  onAdd: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => void
   onRemove: (code: string) => void
+  onPatchItem: (code: string, patch: Partial<WatchlistItem>) => void
 }
 
 export default function WatchlistTab({
   items,
   selectedCode,
+  holdingsByCode,
   onSelect,
+  onManage,
   onAdd,
   onRemove,
+  onPatchItem,
 }: Props) {
   const s = useStyles()
   const [keyword, setKeyword] = useState('')
@@ -159,6 +288,7 @@ export default function WatchlistTab({
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
   const [updatedAt, setUpdatedAt] = useState('')
+  const patchedRef = useRef<Set<string>>(new Set())
 
   const codes = useMemo(() => items.map(item => item.code), [items])
 
@@ -188,6 +318,19 @@ export default function WatchlistTab({
     const timer = window.setInterval(() => { void refreshQuotes() }, 15000)
     return () => window.clearInterval(timer)
   }, [refreshQuotes])
+
+  useEffect(() => {
+    for (const item of items) {
+      if (item.addedPrice != null || patchedRef.current.has(item.code)) continue
+      const price = quotes[item.code]?.price
+      if (price == null) continue
+      patchedRef.current.add(item.code)
+      onPatchItem(item.code, {
+        addedPrice: price,
+        addedAt: item.addedAt ?? new Date().toISOString(),
+      })
+    }
+  }, [items, quotes, onPatchItem])
 
   useEffect(() => {
     const q = keyword.trim()
@@ -221,6 +364,11 @@ export default function WatchlistTab({
     }
   }, [keyword])
 
+  const holdingCount = useMemo(
+    () => items.filter(item => (holdingsByCode[item.code]?.shares ?? 0) > 0).length,
+    [items, holdingsByCode],
+  )
+
   return (
     <div className={s.root}>
       <div className={s.searchRow}>
@@ -228,10 +376,10 @@ export default function WatchlistTab({
           className={s.searchInput}
           appearance="filled-darker"
           size="small"
-          placeholder="搜索代码 / 名称添加自选"
+          placeholder="搜索代码 / 名称添加关注"
           value={keyword}
-          contentBefore={<SearchRegular fontSize={14} />}
           onChange={(_, data) => setKeyword(data.value)}
+          contentBefore={<SearchRegular fontSize={14} />}
         />
         {keyword && (
           <button type="button" className={s.iconBtn} aria-label="清除搜索" onClick={() => setKeyword('')}>
@@ -249,14 +397,19 @@ export default function WatchlistTab({
               key={hit.code}
               type="button"
               className={s.resultItem}
-              onClick={() => {
-                onAdd(hit)
+              onClick={async () => {
+                let addedPrice: number | null = null
+                try {
+                  const q = await research.stockQuotes([hit.code])
+                  addedPrice = q.data?.quotes?.[0]?.price ?? null
+                } catch { /* ignore */ }
+                onAdd(hit, { addedPrice })
                 setKeyword('')
                 setSearchHits([])
               }}
             >
               <div>
-                <Text block>{hit.name}</Text>
+                <Text block style={{ fontSize: '13px', fontWeight: 500 }}>{hit.name}</Text>
                 <span className={s.resultMeta}>{hit.code}{hit.industry ? ` · ${hit.industry}` : ''}</span>
               </div>
               <span className={s.resultMeta}>添加</span>
@@ -265,17 +418,34 @@ export default function WatchlistTab({
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'inno-scroll')}>
-        {!items.length && <div className={s.empty}>添加股票开始盯盘</div>}
+      <div className={mergeClasses(s.list, 'inno-scroll', 'inno-scroll-hover')}>
+        {!items.length && <div className={s.empty}>添加股票开始关注</div>}
         {items.map(item => {
           const quote = quotes[item.code]
-          const tone = pctTone(quote?.changePct)
+          const holding = holdingsByCode[item.code]
+          const isHolding = (holding?.shares ?? 0) > 0
+          const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct
+          const followPct = followReturnPct(quote?.price, item.addedPrice)
+          const holdTone = pctTone(holdPct)
+          const followTone = pctTone(followPct)
+          const dayTone = pctTone(quote?.changePct)
+          const showHoldReturn = isHolding && holdPct != null
+          const secondaryPct = showHoldReturn ? holdPct : followPct
+          const secondaryTone = showHoldReturn ? holdTone : followTone
+          const secondaryLabel = showHoldReturn ? '持' : '关'
+          const hasSecondary = secondaryPct != null
+
           return (
             <div
               key={item.code}
+              className={mergeClasses(
+                s.row,
+                'inno-follow-item',
+                'inno-focusable',
+                selectedCode === item.code && s.rowActive,
+              )}
               role="button"
               tabIndex={0}
-              className={mergeClasses(s.row, selectedCode === item.code && s.rowActive)}
               onClick={() => onSelect(item)}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -284,34 +454,73 @@ export default function WatchlistTab({
                 }
               }}
             >
-              <div>
-                <div className={s.nameLine}>{quote?.name ?? item.name}</div>
-                <div className={s.codeLine}>{item.code}{item.industry ? ` · ${item.industry}` : ''}</div>
+              <div className={s.rowBody}>
+                <span className={s.rowTitle}>
+                  {quote?.name ?? item.name}
+                  {isHolding && (
+                    <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
+                  )}
+                </span>
+                {(item.note || item.code) && (
+                  <span className={s.rowNote}>
+                    {item.code}
+                    {item.note ? ` · ${item.note}` : ''}
+                  </span>
+                )}
               </div>
-              <div className={s.priceCol}>
-                <div className={s.price}>{formatPrice(quote?.price ?? null)}</div>
-                <div className={mergeClasses(s.pct, tone === 'up' && s.pctUp, tone === 'down' && s.pctDown, tone === 'flat' && s.pctFlat)}>
-                  {formatPct(quote?.changePct ?? null)}
-                </div>
-              </div>
-              <button
-                type="button"
-                className={s.iconBtn}
-                aria-label={`移除 ${item.name}`}
-                onClick={e => {
-                  e.stopPropagation()
-                  onRemove(item.code)
-                }}
+
+              <div
+                className={s.rowTrailing}
+                onPointerDown={stopRowActionPointer}
+                onMouseDown={stopRowActionPointer}
+                onClick={stopRowActionPointer}
               >
-                <DismissRegular fontSize={12} />
-              </button>
+                <div className={mergeClasses(s.rowQuote, 'inno-follow-quote')}>
+                  <span className={s.quotePrimary}>
+                    <span className={s.metricPrice}>{formatPrice(quote?.price ?? null)}</span>
+                    <span className={mergeClasses(dayTone === 'up' && s.pctUp, dayTone === 'down' && s.pctDown, dayTone === 'flat' && s.pctFlat)}>
+                      {formatPct(quote?.changePct ?? null, 1)}
+                    </span>
+                  </span>
+                  {hasSecondary && (
+                    <span className={s.quoteSecondary}>
+                      <span className={mergeClasses(secondaryTone === 'up' && s.pctUp, secondaryTone === 'down' && s.pctDown, secondaryTone === 'flat' && s.pctFlat)}>
+                        <span className={s.retLabel}>{secondaryLabel}</span>{formatPct(secondaryPct, 1)}
+                      </span>
+                    </span>
+                  )}
+                </div>
+
+                <span className={mergeClasses(s.rowActions, 'inno-follow-actions')}>
+                  <button
+                    type="button"
+                    className={mergeClasses(s.rowActionBtn, 'inno-focusable')}
+                    aria-label={`修改 ${item.name}`}
+                    onClick={() => onManage(item)}
+                  >
+                    <EditRegular fontSize={14} />
+                  </button>
+                  <button
+                    type="button"
+                    className={mergeClasses(s.rowActionBtn, 'inno-focusable')}
+                    aria-label={`删除 ${item.name}`}
+                    onClick={() => onRemove(item.code)}
+                  >
+                    <DeleteRegular fontSize={14} />
+                  </button>
+                </span>
+              </div>
             </div>
           )
         })}
       </div>
 
       <div className={s.footer}>
-        <span>{loadingQuotes ? '刷新中…' : updatedAt ? `更新 ${updatedAt}` : '等待行情'}</span>
+        <span>
+          {loadingQuotes
+            ? '刷新中…'
+            : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
+        </span>
         <button type="button" className={s.iconBtn} onClick={() => void refreshQuotes()}>刷新</button>
       </div>
     </div>

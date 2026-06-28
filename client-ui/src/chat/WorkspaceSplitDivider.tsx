@@ -1,7 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { innoTokens } from '../theme/tokens'
-import { DESKTOP_TITLEBAR_HEIGHT, WORKSPACE_SPLITTER_WIDTH } from '../desktop/constants'
+import {
+  DESKTOP_TITLEBAR_HEIGHT,
+  WORKSPACE_SPLITTER_HIT_SLOP,
+  WORKSPACE_SPLITTER_WIDTH,
+  WORKSPACE_SPLITTER_Z_INDEX,
+} from '../desktop/constants'
 
 const FOCUS_FADE_PERCENT = 14
 
@@ -23,24 +28,34 @@ const useStyles = makeStyles({
     flexShrink: 0,
     width: `${WORKSPACE_SPLITTER_WIDTH}px`,
     alignSelf: 'stretch',
-    cursor: 'col-resize',
     position: 'relative',
+    zIndex: WORKSPACE_SPLITTER_Z_INDEX,
     boxSizing: 'border-box',
+    pointerEvents: 'none',
     backgroundColor: 'transparent',
   },
   line: {
     position: 'absolute',
     top: 0,
     bottom: 0,
-    left: '50%',
-    width: '1px',
-    transform: 'translateX(-50%)',
+    left: 0,
+    width: `${WORKSPACE_SPLITTER_WIDTH}px`,
     pointerEvents: 'none',
     backgroundColor: innoTokens.separatorStrong,
   },
+  hitZone: {
+    position: 'absolute',
+    top: 0,
+    bottom: 0,
+    left: `-${WORKSPACE_SPLITTER_HIT_SLOP}px`,
+    right: `-${WORKSPACE_SPLITTER_HIT_SLOP}px`,
+    cursor: 'col-resize',
+    pointerEvents: 'auto',
+    backgroundColor: 'transparent',
+  },
   dividerElectron: {
     marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
-    paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
+    height: `calc(100% + ${DESKTOP_TITLEBAR_HEIGHT}px)`,
   },
 })
 
@@ -77,6 +92,19 @@ export default function WorkspaceSplitDivider({
     return () => window.removeEventListener('mousemove', onMove)
   }, [isDragging, syncFocusFromClientY])
 
+  const bindHitZonePointer = {
+    onMouseEnter: (e: React.MouseEvent<HTMLDivElement>) => syncFocusFromClientY(e.clientY),
+    onMouseMove: (e: React.MouseEvent<HTMLDivElement>) => syncFocusFromClientY(e.clientY),
+    onMouseLeave: () => {
+      if (!isDragging) setFocusRatio(null)
+    },
+    onMouseDown: (e: React.MouseEvent<HTMLDivElement>) => {
+      e.preventDefault()
+      syncFocusFromClientY(e.clientY)
+      onBeginDrag(e.clientX)
+    },
+  }
+
   return (
     <div
       ref={dividerRef}
@@ -84,21 +112,13 @@ export default function WorkspaceSplitDivider({
       role="separator"
       aria-orientation="vertical"
       aria-label="调整聊天区与右侧面板宽度"
-      onMouseEnter={e => syncFocusFromClientY(e.clientY)}
-      onMouseMove={e => syncFocusFromClientY(e.clientY)}
-      onMouseLeave={() => {
-        if (!isDragging) setFocusRatio(null)
-      }}
-      onMouseDown={e => {
-        e.preventDefault()
-        syncFocusFromClientY(e.clientY)
-        onBeginDrag(e.clientX)
-      }}
     >
       <div
         className={s.line}
+        aria-hidden
         style={{ background: buildLineBackground(active ? focusRatio : null) }}
       />
+      <div className={s.hitZone} aria-hidden {...bindHitZonePointer} />
     </div>
   )
 }

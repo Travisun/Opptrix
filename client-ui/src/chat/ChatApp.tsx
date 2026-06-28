@@ -77,6 +77,7 @@ const useStyles = makeStyles({
   },
   chatColumnElectron: {
     marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
+    height: `calc(100% + ${DESKTOP_TITLEBAR_HEIGHT}px)`,
     boxSizing: 'border-box',
   },
   /** Occupies the title-bar band; title text renders in DesktopWindowChrome over this slot */

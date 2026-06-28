@@ -158,6 +158,12 @@ export async function portfolioTrade(payload: {
   return resp.json()
 }
 
+export async function portfolioDeleteTrade(id: number) {
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade/${id}`, { method: 'DELETE' })
+  if (!resp.ok) throw new Error('delete trade failed')
+  return resp.json() as Promise<{ success: boolean }>
+}
+
 export async function getHealth() {
   const resp = await fetchWithTimeout(`${API_BASE}/health`)
   if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)

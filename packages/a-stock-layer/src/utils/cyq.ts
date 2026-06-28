@@ -1,5 +1,5 @@
 import type { StockKline } from '@inno-a-stock/shared'
-import type { ChipDistribution } from '../core/schema.js'
+import type { ChipDistribution, ChipDistributionProfile, ChipPriceLevel as SchemaChipPriceLevel } from '../core/schema.js'
 
 /** EastMoney-compatible CYQ input row (AKShare stock_cyq_em). */
 export interface CyqKlineInput {
@@ -20,6 +20,13 @@ interface CyqCalcResult {
   benefitPart: number
   avgCost: number
   percentChips: Record<'90' | '70', PercentChips>
+  profile: ChipPriceLevel[]
+  currentPrice: number
+}
+
+export interface ChipPriceLevel {
+  price: number
+  weight: number
 }
 
 function createNumberArray(count: number): number[] {
@@ -130,6 +137,11 @@ export function cyqCalculator(index: number, klinedata: CyqKlineInput[]): CyqCal
       '90': computePercentChips(0.9),
       '70': computePercentChips(0.7),
     },
+    profile: yrange.map((price, i) => ({
+      price,
+      weight: Number(xdata[i].toPrecision(12)),
+    })),
+    currentPrice: currentprice,
   }
 }
 
@@ -168,4 +180,32 @@ export function computeChipDistribution(
   }
   if (tail > 0 && rows.length > tail) return rows.slice(-tail)
   return rows
+}
+
+/** Latest-day CYQ metrics plus price-level profile for histogram rendering. */
+export function computeLatestChipProfile(
+  code: string,
+  klines: StockKline[],
+): ChipDistributionProfile | null {
+  if (!klines.length) return null
+  const inputs = klinesToCyqInput(klines)
+  const index = inputs.length - 1
+  const m = cyqCalculator(index, inputs)
+  const maxW = Math.max(...m.profile.map(p => p.weight), 1e-12)
+  return {
+    code,
+    date: klines[index].date.slice(0, 10),
+    benefitPart: m.benefitPart,
+    avgCost: m.avgCost,
+    cost90Low: m.percentChips['90'].priceRange[0],
+    cost90High: m.percentChips['90'].priceRange[1],
+    cost90Con: m.percentChips['90'].concentration,
+    cost70Low: m.percentChips['70'].priceRange[0],
+    cost70High: m.percentChips['70'].priceRange[1],
+    cost70Con: m.percentChips['70'].concentration,
+    currentPrice: m.currentPrice,
+    levels: m.profile
+      .filter(p => p.weight > 0)
+      .map((p): SchemaChipPriceLevel => ({ price: p.price, weight: p.weight / maxW })),
+  }
 }

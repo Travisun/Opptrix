@@ -131,8 +131,9 @@ export interface PortfolioSummaryData {
   holdingsCount: number; tradesCount: number
   holdings: {
     code: string; name: string; shares: number
-    costBasis: number; currentPrice: number
+    costBasis: number; totalCost?: number; currentPrice: number
     marketValue: number; unrealizedPnl: number; unrealizedPnlPct: number
+    realizedPnl?: number; totalPnl?: number; totalPnlPct?: number
   }[]
 }
 

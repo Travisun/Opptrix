@@ -8,7 +8,7 @@ import { httpGet } from '../utils/http.js'
 import {
   normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveSecId, safeFloat,
 } from '../utils/helpers.js'
-import { computeChipDistribution } from '../utils/cyq.js'
+import { computeChipDistribution, computeLatestChipProfile } from '../utils/cyq.js'
 import { BaseDriver } from './base.js'
 import {
   fetchDataCenterReport,
@@ -218,6 +218,27 @@ export class EastMoneyDriver extends BaseDriver {
       const rows = this.parseKlines(klines, code)
       const cyq = computeChipDistribution(normalizeCode(code), rows, 90)
       return cyq.length ? cyq : null
+    } catch { return null }
+  }
+
+  async chipProfile(code: string, adjust: '' | 'qfq' | 'hfq' = '') {
+    try {
+      const adjustMap: Record<string, string> = { qfq: '1', hfq: '2', '': '0' }
+      const end = new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const data = await this.getData(KLINE_URL, {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: '101',
+        fqt: adjustMap[adjust] ?? '0',
+        end,
+        lmt: '210',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      const rows = this.parseKlines(klines, code)
+      const profile = computeLatestChipProfile(normalizeCode(code), rows)
+      return profile ? [profile] : null
     } catch { return null }
   }
 

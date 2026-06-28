@@ -1,12 +1,14 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
-import type { ChartPeriod, StockChartData } from '../types/market'
+import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, periodLabel } from './chartSeries'
 import { initialFetchCount, LOAD_MORE_STEP, maxChartBars } from './chartViewConfig'
 import { isIntradayPeriod, isMinuteOhlcPeriod } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
+import CyqProfileStrip from './CyqProfileStrip'
+import { computeCyqPriceSpan, isCyqChartPeriod } from './cyqUtils'
 import { indicatorColors, maColors } from './chartTheme'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
@@ -31,9 +33,8 @@ const useStyles = makeStyles({
     minHeight: 0,
   },
   rootExpanded: {
-    flex: 1,
-    minHeight: 0,
-    height: '100%',
+    flexShrink: 0,
+    width: '100%',
   },
   toolbar: {
     display: 'flex',
@@ -74,10 +75,26 @@ const useStyles = makeStyles({
   legend: {
     display: 'flex',
     flexWrap: 'wrap',
-    gap: '6px',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px 10px',
     fontSize: '9px',
     color: innoTokens.textTertiary,
-    marginLeft: 'auto',
+  },
+  chartLegend: {
+    flexShrink: 0,
+    borderTop: `1px solid ${innoTokens.separator}`,
+    padding: '4px 8px',
+    backgroundColor: innoTokens.canvasAlt,
+  },
+  chartArea: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    flexShrink: 0,
+  },
+  chartAreaExpanded: {
+    width: '100%',
   },
   legendItem: {
     display: 'inline-flex',
@@ -98,10 +115,9 @@ const useStyles = makeStyles({
     overflow: 'hidden',
   },
   chartFrameExpanded: {
-    flex: 1,
-    minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
+    minHeight: '360px',
   },
   chartOverlay: {
     position: 'absolute',
@@ -119,8 +135,7 @@ const useStyles = makeStyles({
     '& > :first-child': { borderTop: 'none' },
   },
   chartStackExpanded: {
-    flex: 1,
-    minHeight: 0,
+    flexShrink: 0,
   },
   paneRow: {
     display: 'flex',
@@ -151,7 +166,7 @@ const useStyles = makeStyles({
     '& [class*="attribution"]': { display: 'none !important', opacity: '0 !important' },
   },
   paneMain: { height: '148px' },
-  paneMainExpanded: { flex: 1, minHeight: '300px' },
+  paneMainExpanded: { minHeight: '300px', height: '300px' },
   paneVol: { height: '38px' },
   paneVolExpanded: { height: '46px', flexShrink: 0 },
   paneMacd: { height: '36px' },
@@ -195,32 +210,49 @@ const useStyles = makeStyles({
   hintError: {
     color: innoTokens.textSecondary,
   },
-  cyqStrip: {
+  paneKSplit: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'stretch',
+  },
+  cyqMetrics: {
     display: 'flex',
     flexWrap: 'wrap',
     alignItems: 'center',
-    gap: '4px 10px',
-    padding: '5px 8px',
+    gap: '6px 10px',
+    padding: '4px 8px',
     borderRadius: innoTokens.radiusMd,
     border: `1px solid ${innoTokens.separator}`,
     backgroundColor: innoTokens.canvasAlt,
     fontSize: '9px',
     color: innoTokens.textSecondary,
-    lineHeight: 1.35,
+    lineHeight: 1.3,
   },
-  cyqLabel: {
+  cyqMetricLabel: {
     color: innoTokens.textTertiary,
     fontWeight: 600,
   },
-  cyqValue: {
+  cyqMetricValue: {
     color: innoTokens.textPrimary,
-    fontWeight: 600,
-    marginRight: '2px',
+    fontWeight: 650,
+    fontVariantNumeric: 'tabular-nums',
   },
-  cyqDate: {
-    marginLeft: 'auto',
-    color: innoTokens.textTertiary,
-    fontSize: '8px',
+  cyqStackBar: {
+    display: 'flex',
+    width: '72px',
+    height: '6px',
+    borderRadius: '3px',
+    overflow: 'hidden',
+    flexShrink: 0,
+    border: `1px solid ${innoTokens.separator}`,
+  },
+  cyqStackProfit: {
+    backgroundColor: 'rgba(255, 59, 48, 0.85)',
+  },
+  cyqStackLoss: {
+    flex: 1,
+    backgroundColor: 'rgba(52, 199, 89, 0.65)',
   },
 })
 
@@ -463,12 +495,51 @@ export default function TradingViewChart({ code, expanded = false, active = true
   const legendIntraday = intraday && data
   const legendOhlc = !intraday && data
   const cyqLatest = data?.cyqLatest ?? null
-  const showCyq = Boolean(cyqLatest && !intraday)
-
-  const fmtCyqPct = (v: number) => `${(v * 100).toFixed(2)}%`
-  const fmtCyqPrice = (v: number) => v.toFixed(2)
+  const cyqProfile = data?.cyqProfile ?? null
+  const showCyq = Boolean(
+    isCyqChartPeriod(period)
+    && cyqLatest
+    && cyqProfile
+    && cyqProfile.levels.length > 0,
+  )
+  const cyqPriceSpan = useMemo(() => {
+    if (!showCyq || !cyqLatest || !cyqProfile || !data) return null
+    const ohlc = data.bars as OhlcChartBar[]
+    return computeCyqPriceSpan(ohlc, cyqLatest, cyqProfile.currentPrice)
+  }, [showCyq, cyqLatest, cyqProfile, data])
 
   const resetZoom = () => { workspaceRef.current.resetView() }
+
+  const chartLegend = (legendIntraday || legendOhlc) && (
+    <div className={mergeClasses(s.legend, s.chartLegend)}>
+      {legendIntraday && (
+        <>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: '#FF3B30' }} />价格</span>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.avg }} />均价</span>
+        </>
+      )}
+      {legendOhlc && (
+        <>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
+          <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
+          {showMacd && (
+            <>
+              <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.macd }} />DIF</span>
+              <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.signal }} />DEA</span>
+            </>
+          )}
+          {showCyq && (
+            <>
+              <span className={s.legendItem}><i className={s.dot} style={{ background: 'rgba(255,149,0,0.85)' }} />90%成本</span>
+              <span className={s.legendItem}><i className={s.dot} style={{ background: '#5856D6' }} />均成</span>
+            </>
+          )}
+        </>
+      )}
+    </div>
+  )
 
   return (
     <div className={mergeClasses(s.root, expanded && s.rootExpanded)}>
@@ -476,13 +547,13 @@ export default function TradingViewChart({ code, expanded = false, active = true
         <div className={s.periodGroup}>
           {PERIODS.map(item => {
             const disabled = item.tradingOnly && !intradayAvailable && item.id === 'intraday'
-            const active = period === item.id
+            const activeTab = period === item.id
             return (
               <button
                 key={item.id}
                 type="button"
                 disabled={disabled}
-                className={mergeClasses(s.periodBtn, active && s.periodBtnActive, disabled && s.periodBtnDisabled)}
+                className={mergeClasses(s.periodBtn, activeTab && s.periodBtnActive, disabled && s.periodBtnDisabled)}
                 onClick={() => { if (item.id !== period) setPeriod(item.id) }}
               >
                 {item.label}
@@ -490,54 +561,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
             )
           })}
         </div>
-
-        {legendIntraday && (
-          <div className={s.legend}>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: '#FF3B30' }} />价格</span>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.avg }} />均价</span>
-          </div>
-        )}
-        {legendOhlc && (
-          <div className={s.legend}>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma5 }} />MA5</span>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma10 }} />MA10</span>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma20 }} />MA20</span>
-            <span className={s.legendItem}><i className={s.dot} style={{ background: maColors.ma60 }} />MA60</span>
-            {showMacd && (
-              <>
-                <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.macd }} />DIF</span>
-                <span className={s.legendItem}><i className={s.dot} style={{ background: indicatorColors.signal }} />DEA</span>
-              </>
-            )}
-            {showCyq && (
-              <>
-                <span className={s.legendItem}><i className={s.dot} style={{ background: 'rgba(255,149,0,0.85)' }} />90%</span>
-                <span className={s.legendItem}><i className={s.dot} style={{ background: '#5856D6' }} />均成</span>
-              </>
-            )}
-          </div>
-        )}
       </div>
-
-      {showCyq && cyqLatest && (
-        <div className={s.cyqStrip}>
-          <span><span className={s.cyqLabel}>获利 </span><span className={s.cyqValue}>{fmtCyqPct(cyqLatest.benefitPart)}</span></span>
-          <span><span className={s.cyqLabel}>均成 </span><span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.avgCost)}</span></span>
-          <span>
-            <span className={s.cyqLabel}>90% </span>
-            <span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.cost90Low)}–{fmtCyqPrice(cyqLatest.cost90High)}</span>
-            <span className={s.cyqLabel}> 集中 </span>
-            <span className={s.cyqValue}>{fmtCyqPct(cyqLatest.cost90Con)}</span>
-          </span>
-          <span>
-            <span className={s.cyqLabel}>70% </span>
-            <span className={s.cyqValue}>{fmtCyqPrice(cyqLatest.cost70Low)}–{fmtCyqPrice(cyqLatest.cost70High)}</span>
-            <span className={s.cyqLabel}> 集中 </span>
-            <span className={s.cyqValue}>{fmtCyqPct(cyqLatest.cost70Con)}</span>
-          </span>
-          <span className={s.cyqDate}>{cyqLatest.date}</span>
-        </div>
-      )}
 
       <div className={s.zoomRow}>
         <Text className={s.hint}>
@@ -550,6 +574,42 @@ export default function TradingViewChart({ code, expanded = false, active = true
         </button>
       </div>
 
+      {showCyq && cyqLatest && cyqProfile && (
+        <div className={s.cyqMetrics}>
+          <span>
+            <span className={s.cyqMetricLabel}>获利 </span>
+            <span className={s.cyqMetricValue} style={{ color: '#FF3B30' }}>
+              {(cyqLatest.benefitPart * 100).toFixed(1)}%
+            </span>
+          </span>
+          <span>
+            <span className={s.cyqMetricLabel}>套牢 </span>
+            <span className={s.cyqMetricValue} style={{ color: '#34C759' }}>
+              {((1 - cyqLatest.benefitPart) * 100).toFixed(1)}%
+            </span>
+          </span>
+          <div className={s.cyqStackBar} title="获利 / 套牢占比">
+            <div className={s.cyqStackProfit} style={{ width: `${Math.max(cyqLatest.benefitPart * 100, 0.5)}%` }} />
+            <div className={s.cyqStackLoss} />
+          </div>
+          <span>
+            <span className={s.cyqMetricLabel}>现价 </span>
+            <span className={s.cyqMetricValue}>{cyqProfile.currentPrice.toFixed(2)}</span>
+          </span>
+          <span>
+            <span className={s.cyqMetricLabel}>均成 </span>
+            <span className={s.cyqMetricValue}>{cyqLatest.avgCost.toFixed(2)}</span>
+          </span>
+          <span>
+            <span className={s.cyqMetricLabel}>90% </span>
+            <span className={s.cyqMetricValue}>
+              {cyqLatest.cost90Low.toFixed(2)}–{cyqLatest.cost90High.toFixed(2)}
+            </span>
+          </span>
+          <Text className={s.hint}>{cyqProfile.date}</Text>
+        </div>
+      )}
+
       {loading && !data && (
         <div className={mergeClasses(s.empty, expanded && s.emptyExpanded)}>
           <Spinner size="tiny" label="加载图表…" />
@@ -559,26 +619,39 @@ export default function TradingViewChart({ code, expanded = false, active = true
         <div className={mergeClasses(s.empty, expanded && s.emptyExpanded)}>{error}</div>
       )}
 
-      <div className={mergeClasses(s.chartFrame, expanded && s.chartFrameExpanded, !data && s.paneHidden)}>
-        {refreshing && (
-          <div className={s.chartOverlay}>
-            <Spinner size="tiny" label={`加载 ${periodLabel(period)}…`} />
-          </div>
-        )}
+      <div className={mergeClasses(s.chartArea, expanded && s.chartAreaExpanded, !data && s.paneHidden)}>
+        <div className={mergeClasses(s.chartFrame, expanded && s.chartFrameExpanded)}>
+          {refreshing && (
+            <div className={s.chartOverlay}>
+              <Spinner size="tiny" label={`加载 ${periodLabel(period)}…`} />
+            </div>
+          )}
 
-        <div className={mergeClasses(s.chartStack, expanded && s.chartStackExpanded)}>
-          <div className={s.paneRow}>
-            <span className={s.paneLabel}>{intraday ? '分' : 'K'}</span>
-            <div className={mergeClasses(s.panePlot, expanded ? s.paneMainExpanded : s.paneMain)} ref={mainRef} />
+          <div className={mergeClasses(s.chartStack, expanded && s.chartStackExpanded)}>
+            <div className={s.paneRow}>
+              <span className={s.paneLabel}>{intraday ? '分' : 'K'}</span>
+              <div className={s.paneKSplit}>
+                <div className={mergeClasses(s.panePlot, expanded ? s.paneMainExpanded : s.paneMain)} ref={mainRef} />
+                {showCyq && cyqProfile && cyqLatest && cyqPriceSpan && (
+                  <CyqProfileStrip
+                    profile={cyqProfile}
+                    latest={cyqLatest}
+                    priceSpan={cyqPriceSpan}
+                  />
+                )}
+              </div>
+            </div>
+            <div className={s.paneRow}>
+              <span className={s.paneLabel}>V</span>
+              <div className={mergeClasses(s.panePlot, expanded ? s.paneVolExpanded : s.paneVol)} ref={volumeRef} />
+            </div>
+            <div className={mergeClasses(s.paneRow, !showMacd && s.paneHidden)}>
+              <span className={s.paneLabel}>M</span>
+              <div className={mergeClasses(s.panePlot, expanded ? s.paneMacdExpanded : s.paneMacd)} ref={macdRef} />
+            </div>
           </div>
-          <div className={s.paneRow}>
-            <span className={s.paneLabel}>V</span>
-            <div className={mergeClasses(s.panePlot, expanded ? s.paneVolExpanded : s.paneVol)} ref={volumeRef} />
-          </div>
-          <div className={mergeClasses(s.paneRow, !showMacd && s.paneHidden)}>
-            <span className={s.paneLabel}>M</span>
-            <div className={mergeClasses(s.panePlot, expanded ? s.paneMacdExpanded : s.paneMacd)} ref={macdRef} />
-          </div>
+
+          {chartLegend}
         </div>
       </div>
 

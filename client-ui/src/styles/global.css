@@ -413,6 +413,58 @@ select:focus-visible {
   overflow: visible !important;
 }
 
+/* ── Frosted glass dialog — matches MessageSelectionToolbar ── */
+.inno-glass-dialog-surface.fui-DialogSurface {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  border-radius: 16px !important;
+  padding: 0 !important;
+  max-width: 440px;
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
+}
+
+.inno-glass-dialog-surface .fui-DialogBody {
+  padding: 14px 16px 16px !important;
+  gap: 10px !important;
+}
+
+.inno-glass-dialog-surface .fui-DialogTitle {
+  font-size: 14px !important;
+  font-weight: 650 !important;
+  color: var(--inno-text) !important;
+  padding: 0 !important;
+  margin: 0 !important;
+  letter-spacing: -0.02em;
+}
+
+.inno-glass-dialog-surface .fui-DialogTitle__action .fui-Button,
+.inno-glass-dialog-surface .fui-DialogTitle__action button {
+  width: 28px !important;
+  min-width: 28px !important;
+  height: 28px !important;
+  border-radius: 999px !important;
+  color: var(--inno-text-secondary) !important;
+}
+
+.inno-glass-dialog-surface .fui-DialogTitle__action .fui-Button:hover,
+.inno-glass-dialog-surface .fui-DialogTitle__action button:hover {
+  background-color: rgba(29, 29, 31, 0.08) !important;
+  color: var(--inno-text) !important;
+}
+
+.inno-glass-dialog-surface .fui-DialogContent {
+  padding: 0 !important;
+  margin: 0 !important;
+  overflow: visible !important;
+}
+
+/* ── Follow stock bottom drawer (right panel) ── */
+.inno-follow-drawer-scrim:focus-visible {
+  outline: none;
+}
+
 /* ── Form fields ── */
 .inno-field .fui-Input,
 .inno-field .fui-Dropdown,
@@ -584,6 +636,21 @@ select:focus-visible {
   }
 
   .inno-session-item:hover .inno-session-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .inno-follow-item:hover,
+  .inno-follow-item:focus-within {
+    background-color: rgba(29, 29, 31, 0.07);
+  }
+
+  .inno-follow-item:hover .inno-follow-quote {
+    opacity: 0;
+    pointer-events: none;
+  }
+
+  .inno-follow-item:hover .inno-follow-actions {
     opacity: 1;
     pointer-events: auto;
   }

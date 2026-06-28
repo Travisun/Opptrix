@@ -2,7 +2,9 @@ import { useCallback, useMemo, useState } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
+import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
+import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
 import { innoTokens } from '../theme/tokens'
 import ChromeToolButton from '../desktop/ChromeToolButton'
@@ -18,6 +20,8 @@ import {
   ArrowMinimizeRegular,
 } from '../chat/chatIcons'
 import { electronPlatform } from '../platform/detect'
+import { research } from '../api/client'
+import { normalizeCode } from './format'
 
 type MarketTab = 'watchlist' | 'detail'
 
@@ -36,7 +40,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '0',
-    paddingLeft: '8px',
+    paddingLeft: '0',
     paddingRight: '8px',
     borderBottom: `1px solid ${innoTokens.separator}`,
     backgroundColor: innoTokens.canvas,
@@ -60,6 +64,7 @@ const useStyles = makeStyles({
   tabsWrap: {
     flexShrink: 0,
     maxWidth: '100%',
+    paddingLeft: '15px',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
   },
@@ -85,6 +90,8 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
+    position: 'relative',
+    overflow: 'hidden',
   },
 })
 
@@ -102,9 +109,18 @@ export default function RightMarketPanel({
   onToggleChatColumn,
 }: Props) {
   const s = useStyles()
-  const { items, addItem, removeItem } = useWatchlist()
+  const { items, addItem, updateItem, removeItem } = useWatchlist()
+  const {
+    holdingsByCode,
+    loadTrades,
+    submitTrade,
+    deleteTrade,
+    refreshHoldings,
+  } = useFollowPortfolio()
   const [tab, setTab] = useState<MarketTab>('watchlist')
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
+  const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
+  const [dialogPrice, setDialogPrice] = useState<number | null>(null)
 
   const selectedCode = selected?.code ?? null
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -114,14 +130,32 @@ export default function RightMarketPanel({
     setTab('detail')
   }, [])
 
-  const handleAdd = useCallback((item: WatchlistItem) => {
-    addItem(item)
+  const handleAdd = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
+    addItem(item, opts)
   }, [addItem])
+
+  const handleManage = useCallback(async (item: WatchlistItem) => {
+    setManageStock(item)
+    try {
+      const resp = await research.stockQuotes([item.code])
+      setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
+    } catch {
+      setDialogPrice(null)
+    }
+  }, [])
+
+  const handleSaveNote = useCallback((code: string, note: string) => {
+    updateItem(code, { note: note || undefined })
+  }, [updateItem])
 
   const detailStock = useMemo(() => {
     if (!selected) return null
     return items.find(item => item.code === selected.code) ?? selected
   }, [items, selected])
+
+  const manageHolding = manageStock
+    ? holdingsByCode[normalizeCode(manageStock.code)] ?? null
+    : null
 
   const showWorkspaceActions = Boolean(onToggleRightPanel || onToggleChatColumn)
 
@@ -143,7 +177,7 @@ export default function RightMarketPanel({
             selectedValue={tab}
             onTabSelect={(_, data) => setTab(data.value as MarketTab)}
           >
-            <Tab value="watchlist">自选</Tab>
+            <Tab value="watchlist">关注</Tab>
             <Tab value="detail" disabled={!selected}>个股</Tab>
           </TabList>
         </div>
@@ -182,8 +216,11 @@ export default function RightMarketPanel({
           <WatchlistTab
             items={items}
             selectedCode={selectedCode}
+            holdingsByCode={holdingsByCode}
             onSelect={handleSelect}
+            onManage={item => { void handleManage(item) }}
             onAdd={handleAdd}
+            onPatchItem={updateItem}
             onRemove={code => {
               removeItem(code)
               if (selected?.code === code) {
@@ -193,8 +230,35 @@ export default function RightMarketPanel({
             }}
           />
         ) : (
-          <StockDetailTab stock={detailStock} />
+          <StockDetailTab
+            stock={detailStock}
+            isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}
+            onManage={detailStock ? () => { void handleManage(detailStock) } : undefined}
+          />
         )}
+
+        <FollowStockDialog
+          open={!!manageStock}
+          stock={manageStock}
+          currentPrice={dialogPrice}
+          holding={manageHolding}
+          onClose={() => {
+            setManageStock(null)
+            setDialogPrice(null)
+          }}
+          onSaveNote={handleSaveNote}
+          loadTrades={loadTrades}
+          submitTrade={async payload => {
+            const rows = await submitTrade(payload)
+            await refreshHoldings()
+            return rows
+          }}
+          deleteTrade={async (id, code) => {
+            const rows = await deleteTrade(id, code)
+            await refreshHoldings()
+            return rows
+          }}
+        />
       </div>
     </div>
   )

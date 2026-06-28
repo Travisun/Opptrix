@@ -2,7 +2,8 @@ import { useCallback, useEffect, useState } from 'react'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from './format'
 
-const STORAGE_KEY = 'inno-watchlist-v1'
+const STORAGE_KEY = 'inno-watchlist-v2'
+const LEGACY_KEY = 'inno-watchlist-v1'
 
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
@@ -10,21 +11,36 @@ const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '300750', name: '宁德时代', industry: '电池' },
 ]
 
+function normalizeItem(item: WatchlistItem): WatchlistItem {
+  return {
+    code: normalizeCode(item.code),
+    name: item.name,
+    industry: item.industry,
+    note: item.note?.trim() || undefined,
+    addedAt: item.addedAt,
+    addedPrice: item.addedPrice ?? null,
+  }
+}
+
 function readStorage(): WatchlistItem[] {
-  if (typeof window === 'undefined') return DEFAULT_ITEMS
+  if (typeof window === 'undefined') return DEFAULT_ITEMS.map(normalizeItem)
   try {
     const raw = localStorage.getItem(STORAGE_KEY)
-    if (!raw) return DEFAULT_ITEMS
-    const parsed = JSON.parse(raw) as WatchlistItem[]
-    if (!Array.isArray(parsed) || !parsed.length) return DEFAULT_ITEMS
-    return parsed.map(item => ({
-      code: normalizeCode(item.code),
-      name: item.name,
-      industry: item.industry,
-    }))
-  } catch {
-    return DEFAULT_ITEMS
-  }
+    if (raw) {
+      const parsed = JSON.parse(raw) as WatchlistItem[]
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.map(normalizeItem)
+      }
+    }
+    const legacy = localStorage.getItem(LEGACY_KEY)
+    if (legacy) {
+      const parsed = JSON.parse(legacy) as WatchlistItem[]
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed.map(row => normalizeItem({ ...row, addedAt: row.addedAt ?? new Date().toISOString() }))
+      }
+    }
+  } catch { /* fall through */ }
+  return DEFAULT_ITEMS.map(row => normalizeItem({ ...row, addedAt: new Date().toISOString() }))
 }
 
 export function useWatchlist() {
@@ -34,12 +50,25 @@ export function useWatchlist() {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
   }, [items])
 
-  const addItem = useCallback((item: WatchlistItem) => {
+  const addItem = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
     const code = normalizeCode(item.code)
+    const now = new Date().toISOString()
     setItems(prev => {
       if (prev.some(x => x.code === code)) return prev
-      return [{ ...item, code }, ...prev]
+      return [normalizeItem({
+        ...item,
+        code,
+        addedAt: item.addedAt ?? now,
+        addedPrice: opts?.addedPrice ?? item.addedPrice ?? null,
+      }), ...prev]
     })
+  }, [])
+
+  const updateItem = useCallback((code: string, patch: Partial<WatchlistItem>) => {
+    const normalized = normalizeCode(code)
+    setItems(prev => prev.map(item => (
+      item.code === normalized ? normalizeItem({ ...item, ...patch, code: normalized }) : item
+    )))
   }, [])
 
   const removeItem = useCallback((code: string) => {
@@ -61,5 +90,5 @@ export function useWatchlist() {
     })
   }, [])
 
-  return { items, addItem, removeItem, reorderItem, setItems }
+  return { items, addItem, updateItem, removeItem, reorderItem, setItems }
 }

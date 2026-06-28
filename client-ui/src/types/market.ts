@@ -2,6 +2,12 @@ export interface WatchlistItem {
   code: string
   name: string
   industry?: string
+  /** 用户备注 */
+  note?: string
+  /** ISO date when added to follow list */
+  addedAt?: string
+  /** Reference price when added — for follow return */
+  addedPrice?: number | null
 }
 
 export interface MarketQuote {
@@ -134,6 +140,18 @@ export interface ChipDistributionPoint {
   cost70Con: number
 }
 
+export interface ChipPriceLevelPoint {
+  price: number
+  /** Normalized chip weight 0–1 */
+  weight: number
+}
+
+export interface ChipDistributionProfileData {
+  date: string
+  currentPrice: number
+  levels: ChipPriceLevelPoint[]
+}
+
 export interface StockChartData {
   code: string
   name: string
@@ -143,8 +161,8 @@ export interface StockChartData {
   hasMore?: boolean
   bars: IntradayChartBar[] | OhlcChartBar[]
   indicators: ChartIndicatorPoint[]
-  cyq?: ChipDistributionPoint[]
   cyqLatest?: ChipDistributionPoint | null
+  cyqProfile?: ChipDistributionProfileData | null
 }
 
 export interface StockQuotesData {

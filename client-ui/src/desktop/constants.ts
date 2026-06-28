@@ -45,7 +45,11 @@ export const WORKSPACE_CHAT_MIN_WIDTH = 350
 /** Default right panel width = sidebarWidth (228) × 2 */
 export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 456
 export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 228
-export const WORKSPACE_SPLITTER_WIDTH = 5
+export const WORKSPACE_SPLITTER_WIDTH = 1
+/** Invisible drag padding on each side of the 1px splitter line (overlay; no layout gap) */
+export const WORKSPACE_SPLITTER_HIT_SLOP = 1
+/** Stacking above chat / right panel so the widened hit layer receives pointer events */
+export const WORKSPACE_SPLITTER_Z_INDEX = 50
 
 /** Inline left sidebar width — keep in sync with innoTokens.sidebarWidthPx */
 export const SIDEBAR_INLINE_WIDTH = 228

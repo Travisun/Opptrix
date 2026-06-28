@@ -464,6 +464,14 @@ app.post<{ Body: { code: string; shares: number; price: number; side?: string; d
   },
 )
 
+app.delete<{ Params: { id: string } }>('/api/portfolio/trade/:id', async (req, reply) => {
+  const id = Number(req.params.id)
+  if (!Number.isFinite(id) || id <= 0) return reply.code(400).send({ error: 'invalid trade id' })
+  const ok = hub.de.portfolio.removeTrade(id)
+  if (!ok) return reply.code(404).send({ error: 'trade not found' })
+  return { success: true }
+})
+
 let serveUi = false
 
 async function bootstrap() {

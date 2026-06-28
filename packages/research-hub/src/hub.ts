@@ -191,7 +191,7 @@ export class ResearchHub {
 
   private async stockQuotes(codes: string[] | undefined, t0: number) {
     const normalized = [...new Set((codes ?? []).map(c => String(c).padStart(6, '0')).filter(Boolean))]
-    if (!normalized.length) return ok({ quotes: [] }, '暂无自选', t0)
+    if (!normalized.length) return ok({ quotes: [] }, '暂无关注', t0)
     const result = await this.de.batchRealtime(normalized)
     if (!result.success) return fail(result.error ?? '行情获取失败', t0)
     return ok({ quotes: result.data ?? [] }, `更新 ${result.data?.length ?? 0} 只`, t0)
@@ -522,13 +522,18 @@ export class ResearchHub {
       macdHist: row.macdHist,
     })))
 
-    let cyq: ReturnType<ResearchHub['mapCyqRow']>[] | undefined
     let cyqLatest: ReturnType<ResearchHub['mapCyqRow']> | null = null
+    let cyqProfile: { date: string; currentPrice: number; levels: { price: number; weight: number }[] } | null = null
     if (period === 'daily' || period === 'weekly' || period === 'monthly') {
-      const cyqR = await this.de.chipDistribution(normalized)
-      if (cyqR.success && cyqR.data?.length) {
-        cyq = cyqR.data.map(row => this.mapCyqRow(row))
-        cyqLatest = cyq[cyq.length - 1] ?? null
+      const profileR = await this.de.chipProfile(normalized)
+      const raw = profileR.data?.[0]
+      if (profileR.success && raw) {
+        cyqLatest = this.mapCyqRow(raw)
+        cyqProfile = {
+          date: raw.date,
+          currentPrice: raw.currentPrice,
+          levels: raw.levels.map(level => ({ price: level.price, weight: level.weight })),
+        }
       }
     }
 
@@ -541,8 +546,8 @@ export class ResearchHub {
       hasMore: fetched.hasMore,
       bars,
       indicators,
-      cyq,
       cyqLatest,
+      cyqProfile,
     }, `${name} ${period} ${bars.length} 根`, t0)
   }
 
