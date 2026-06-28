@@ -8,6 +8,7 @@ import { PytdxDriver } from './pytdx.js'
 import { TencentDriver } from './tencent.js'
 import { SinaDriver } from './sina.js'
 import { TonghuashunDriver } from './tonghuashun.js'
+import { TushareDriver } from './tushare.js'
 import { NeteaseDriver } from './netease.js'
 import { XueqiuDriver } from './xueqiu.js'
 import { GubaDriver } from './guba.js'
@@ -20,6 +21,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
   mixEastMoneyResearch(EastMoneyDriver)
   mixEastMoneyChain(EastMoneyDriver)
   const drivers = [
+    new TushareDriver(),
     new EastMoneyDriver(),
     new MootdxDriver(),
     new PytdxDriver(),
@@ -41,5 +43,5 @@ export function registerAllDrivers(registry: DriverRegistry) {
 export {
   EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
-  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver,
+  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
 }

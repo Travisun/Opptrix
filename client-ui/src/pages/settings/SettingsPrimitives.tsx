@@ -1,10 +1,10 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Input, Text,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { EyeRegular } from '@fluentui/react-icons'
+import { EyeRegular, EyeOffRegular } from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
 import { innoTokens } from '../../theme/tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
@@ -24,7 +24,7 @@ const useStyles = makeStyles({
     gap: '20px',
     padding: '10px 18px',
     minHeight: '44px',
-    '@media (max-width: 640px)': {
+    '@media (max-width: 720px)': {
       flexDirection: 'column',
       alignItems: 'stretch',
       gap: '12px',
@@ -62,8 +62,9 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
-    '@media (max-width: 640px)': {
-      justifyContent: 'stretch',
+    width: '100%',
+    '@media (min-width: 721px)': {
+      width: 'auto',
     },
   },
   rowTopBorder: {
@@ -84,7 +85,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     boxSizing: 'border-box',
-    '@media (max-width: 640px)': {
+    '@media (max-width: 720px)': {
       maxWidth: 'none',
     },
   },
@@ -157,6 +158,43 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '2px',
+  },
+  credentialRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    minWidth: 0,
+    '@media (max-width: 720px)': {
+      flexWrap: 'wrap',
+    },
+  },
+  credentialInputShell: {
+    ...inputShellInteractive,
+    flex: '1 1 220px',
+    minWidth: 0,
+    minHeight: '32px',
+    padding: '0 4px 0 11px',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    boxSizing: 'border-box',
+  },
+  credentialInput: {
+    flex: 1,
+    minWidth: 0,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: '12px',
+  },
+  credentialActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexShrink: 0,
+    '@media (max-width: 720px)': {
+      width: '100%',
+      justifyContent: 'flex-start',
+    },
   },
   actionRow: {
     display: 'flex',
@@ -259,6 +297,82 @@ export function SettingsTextField({
         onChange={(_, d) => onChange(d.value ?? '')}
       />
     </SettingsInlineInput>
+  )
+}
+
+export function SettingsCredentialRow({
+  value,
+  onChange,
+  placeholder = '粘贴 Token',
+  onTest,
+  onSave,
+  testing = false,
+  saving = false,
+  saveDisabled = false,
+  testDisabled = false,
+  revealWhenFilled = true,
+}: {
+  value: string
+  onChange: (value: string) => void
+  placeholder?: string
+  onTest: () => void
+  onSave: () => void
+  testing?: boolean
+  saving?: boolean
+  saveDisabled?: boolean
+  testDisabled?: boolean
+  /** 已有密钥加载后默认明文展示，便于查看 */
+  revealWhenFilled?: boolean
+}) {
+  const s = useStyles()
+  const userToggledVisibility = useRef(false)
+  const [visible, setVisible] = useState(false)
+
+  useEffect(() => {
+    if (revealWhenFilled && value && !userToggledVisibility.current) {
+      setVisible(true)
+    }
+  }, [value, revealWhenFilled])
+
+  return (
+    <div className={s.credentialRow}>
+      <div className={mergeClasses(s.credentialInputShell, 'inno-input-shell', 'inno-settings-inline-input')}>
+        <Input
+          className={mergeClasses(s.credentialInput, 'inno-settings-field-input')}
+          appearance="filled-darker"
+          size="medium"
+          type={visible ? 'text' : 'password'}
+          value={value}
+          placeholder={placeholder}
+          onChange={(_, d) => onChange(d.value ?? '')}
+        />
+        <InnoButton
+          variant="icon"
+          aria-label={visible ? '隐藏密钥' : '显示密钥'}
+          icon={visible ? <EyeOffRegular fontSize={16} /> : <EyeRegular fontSize={16} />}
+          onClick={() => {
+            userToggledVisibility.current = true
+            setVisible(v => !v)
+          }}
+        />
+      </div>
+      <div className={s.credentialActions}>
+        <InnoButton
+          variant="secondary"
+          disabled={testing || testDisabled}
+          onClick={onTest}
+        >
+          {testing ? '测试中…' : '测试'}
+        </InnoButton>
+        <InnoButton
+          variant="primary"
+          disabled={saving || saveDisabled}
+          onClick={onSave}
+        >
+          {saving ? '保存中…' : '保存'}
+        </InnoButton>
+      </div>
+    </div>
   )
 }
 

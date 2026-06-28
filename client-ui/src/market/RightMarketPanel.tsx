@@ -1,7 +1,9 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
+import DiscoverTab from './DiscoverTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
+import type { StockDiscussPayload } from './StockDecisionCard'
 import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
 import { useFollowPortfolio } from './useFollowPortfolio'
@@ -23,7 +25,7 @@ import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
 import { normalizeCode } from './format'
 
-type MarketTab = 'watchlist' | 'detail'
+type MarketTab = 'watchlist' | 'discover' | 'detail'
 
 const useStyles = makeStyles({
   root: {
@@ -97,6 +99,7 @@ interface Props {
   chromeToolbarReserve?: number
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
+  onDiscussInChat?: (payload: StockDiscussPayload) => void
 }
 
 export default function RightMarketPanel({
@@ -105,6 +108,7 @@ export default function RightMarketPanel({
   chromeToolbarReserve = 0,
   onToggleRightPanel,
   onToggleChatColumn,
+  onDiscussInChat,
 }: Props) {
   const s = useStyles()
   const { items, addItem, updateItem, removeItem } = useWatchlist()
@@ -146,6 +150,20 @@ export default function RightMarketPanel({
     updateItem(code, { note: note || undefined })
   }, [updateItem])
 
+  const watchlistCodeSet = useMemo(
+    () => new Set(items.map(item => normalizeCode(item.code))),
+    [items],
+  )
+
+  const handleDiscoverSelect = useCallback((item: WatchlistItem) => {
+    setSelected(item)
+    setTab('detail')
+  }, [])
+
+  const handleDiscoverAdd = useCallback((item: WatchlistItem) => {
+    addItem(item)
+  }, [addItem])
+
   const detailStock = useMemo(() => {
     if (!selected) return null
     return items.find(item => item.code === selected.code) ?? selected
@@ -175,6 +193,7 @@ export default function RightMarketPanel({
             onTabSelect={(_, data) => setTab(data.value as MarketTab)}
           >
             <Tab value="watchlist">关注</Tab>
+            <Tab value="discover">发现</Tab>
             <Tab value="detail" disabled={!selected}>个股</Tab>
           </TabList>
         </div>
@@ -232,11 +251,19 @@ export default function RightMarketPanel({
               }
             }}
           />
+        ) : tab === 'discover' ? (
+          <DiscoverTab
+            watchlistCodes={watchlistCodeSet}
+            onSelect={handleDiscoverSelect}
+            onAdd={handleDiscoverAdd}
+          />
         ) : (
           <StockDetailTab
             stock={detailStock}
             isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}
+            holding={detailStock ? holdingsByCode[detailStock.code] ?? null : null}
             onManage={detailStock ? () => { void handleManage(detailStock) } : undefined}
+            onDiscussInChat={onDiscussInChat}
           />
         )}
 

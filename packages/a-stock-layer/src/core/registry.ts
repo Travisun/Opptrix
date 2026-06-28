@@ -34,7 +34,8 @@ export class DriverRegistry {
   getDriversForCapability(cap: Capability): BaseDriver[] {
     return (this.capIndex.get(cap) ?? [])
       .map(n => this.drivers.get(n))
-      .filter((d): d is BaseDriver => d != null)
+      .filter((d): d is BaseDriver => d != null && d.priority > 0)
+      .sort((a, b) => b.priority - a.priority)
   }
 
   listDriverInfo() {

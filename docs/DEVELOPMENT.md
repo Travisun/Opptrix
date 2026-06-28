@@ -116,3 +116,7 @@ npm run serve          # API :8711 + Vite preview :5173
 | `client-ui/package-lock.json` | 根 lockfile only |
 
 GitHub 主仓库：**innoAStock**（`Travisun/innoAStock`）。
+
+## 产品规划
+
+- [右侧投研面板升级规划](./RIGHT-PANEL-RESEARCH-PLAN.md) — 关注/发现/行业/组合分期路线图；P0 决策雷达、P1 决策卡已落地。

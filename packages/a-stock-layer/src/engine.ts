@@ -14,6 +14,7 @@ import type {
 import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
 import { tdxClient } from './tdx/client.js'
+import { isTushareEnabled } from './tushare/config.js'
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
@@ -79,20 +80,89 @@ export class AshareEngine {
     return this.q(Capability.STOCK_REALTIME, 'realtime', false, code)
   }
   batchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
-    return this.q(Capability.STOCK_REALTIME, 'batchRealtime', false, codes)
+    return this.fetchBatchRealtime(codes)
   }
 
   kline(code: string, periodOrCount: number): Promise<QueryResult<StockKline[]>>
   kline(code: string, period?: string, start?: string, end?: string, count?: number): Promise<QueryResult<StockKline[]>>
   kline(code: string, periodOrCount: string | number = 'daily', start = '', end = '', count?: number) {
     if (typeof periodOrCount === 'number') {
-      return this.query<StockKline>(Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, 'daily', '', '', periodOrCount])
+      return this.fetchDailyKline(code, periodOrCount, 0)
     }
     if (MINUTE_PERIODS.has(periodOrCount)) {
       return this.minuteKline(code, periodOrCount, count ?? 800, 0)
     }
+    if (periodOrCount === 'daily' || periodOrCount === 'weekly' || periodOrCount === 'monthly') {
+      return this.fetchDailyKline(code, count ?? 800, 0, periodOrCount)
+    }
     const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
     return this.query<StockKline>(Capability.STOCK_KLINE, 'kline', 'stock_kline', true, args)
+  }
+
+  private async fetchBatchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
+    if (!codes.length) return { success: false, error: 'codes empty' }
+    if (isTushareEnabled()) {
+      const viaDriver = await this.q<StockRealtime>(Capability.STOCK_REALTIME, 'batchRealtime', false, codes)
+      if (viaDriver.success && viaDriver.data?.length) return viaDriver
+    }
+    try {
+      const rows = await tdxClient.batchRealtime(codes)
+      if (rows?.length) return { success: true, data: rows, source: 'mootdx', cached: false }
+    } catch { /* driver fallback */ }
+    return this.q(Capability.STOCK_REALTIME, 'batchRealtime', false, codes)
+  }
+
+  private async fetchDailyKline(
+    code: string,
+    count: number,
+    startOffset = 0,
+    period = 'daily',
+  ): Promise<QueryResult<StockKline[]>> {
+    const want = Math.max(1, count)
+    if (isTushareEnabled()) {
+      const viaDriver = await this.query<StockKline>(
+        Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
+        [code, period, '', '', want],
+      )
+      if (viaDriver.success && viaDriver.data?.length) return viaDriver
+    }
+    try {
+      const rows = await this.fetchTdxBars(code, period, want, startOffset)
+      if (rows?.length) {
+        return { success: true, data: rows, source: 'mootdx', cached: false }
+      }
+    } catch { /* driver fallback */ }
+    return this.query<StockKline>(
+      Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
+      [code, period, '', '', want],
+    )
+  }
+
+  /** TDX bars — paginate when count > 800. */
+  private async fetchTdxBars(
+    code: string,
+    period: string,
+    count: number,
+    startOffset = 0,
+  ): Promise<StockKline[] | null> {
+    if (count <= 800) {
+      return tdxClient.kline(code, period, '', '', count, startOffset)
+    }
+    const chunks: StockKline[] = []
+    let remaining = count
+    let offset = startOffset
+    while (remaining > 0) {
+      const n = Math.min(800, remaining)
+      const part = await tdxClient.kline(code, period, '', '', n, offset)
+      if (!part?.length) break
+      chunks.unshift(...part)
+      remaining -= part.length
+      offset += part.length
+      if (part.length < n) break
+    }
+    if (!chunks.length) return null
+    chunks.sort((a, b) => a.date.localeCompare(b.date))
+    return chunks.slice(-count)
   }
 
   /** Minute OHLC — TDX primary, EastMoney fallback when TDX unavailable. */
@@ -183,10 +253,36 @@ export class AshareEngine {
   indexKline(code: string, period?: string, start?: string, end?: string, count?: number): Promise<QueryResult<IndexKline[]>>
   indexKline(code: string, periodOrCount: string | number = 'daily', start = '', end = '', count?: number) {
     if (typeof periodOrCount === 'number') {
-      return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, [code, 'daily', '', '', periodOrCount])
+      return this.fetchIndexKline(code, periodOrCount)
+    }
+    if (periodOrCount === 'daily' || periodOrCount === 'weekly' || periodOrCount === 'monthly') {
+      return this.fetchIndexKline(code, count ?? 800, periodOrCount)
     }
     const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
     return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, args)
+  }
+
+  private async fetchIndexKline(
+    code: string,
+    count: number,
+    period = 'daily',
+  ): Promise<QueryResult<IndexKline[]>> {
+    const want = Math.max(1, count)
+    if (isTushareEnabled()) {
+      const viaDriver = await this.query<IndexKline>(
+        Capability.INDEX_KLINE, 'indexKline', 'index_kline', true,
+        [code, period, '', '', want],
+      )
+      if (viaDriver.success && viaDriver.data?.length) return viaDriver
+    }
+    try {
+      const rows = await tdxClient.indexKline(code, period, '', '', want)
+      if (rows?.length) return { success: true, data: rows, source: 'mootdx', cached: false }
+    } catch { /* driver fallback */ }
+    return this.query<IndexKline>(
+      Capability.INDEX_KLINE, 'indexKline', 'index_kline', true,
+      [code, period, '', '', want],
+    )
   }
 
   marketMoneyFlow(direction = 'north'): Promise<QueryResult<MarketMoneyFlow[]>> {
@@ -364,7 +460,7 @@ export { BaseDriver, CAP_METHOD } from './drivers/base.js'
 export {
   EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
-  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver,
+  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
   registerAllDrivers,
 } from './drivers/register.js'
 export { computeIndicators } from './utils/indicators.js'

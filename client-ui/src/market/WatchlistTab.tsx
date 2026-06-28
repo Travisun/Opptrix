@@ -13,6 +13,8 @@ import type { MarketQuote, WatchlistItem } from '../types/market'
 import { followReturnPct } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { formatWatchlistRadarLine } from './watchlistRadar'
+import type { WatchlistRadarItem } from '../types/schemas'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
@@ -139,6 +141,14 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  rowRadar: {
+    fontSize: '9px',
+    color: innoTokens.textSecondary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.25,
   },
   holdBadge: {
     flexShrink: 0,
@@ -286,6 +296,8 @@ export default function WatchlistTab({
   const [searching, setSearching] = useState(false)
   const [searchHits, setSearchHits] = useState<WatchlistItem[]>([])
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
+  const [radar, setRadar] = useState<Record<string, WatchlistRadarItem>>({})
+  const [strategyByCode, setStrategyByCode] = useState<Record<string, string>>({})
   const [loadingQuotes, setLoadingQuotes] = useState(false)
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
@@ -312,6 +324,42 @@ export default function WatchlistTab({
       setLoadingQuotes(false)
     }
   }, [codes])
+
+  const refreshRadar = useCallback(async () => {
+    if (!codes.length) {
+      setRadar({})
+      return
+    }
+    try {
+      const resp = await research.watchlistRadar(codes)
+      if (resp.success && resp.data?.items) {
+        const map: Record<string, WatchlistRadarItem> = {}
+        for (const row of resp.data.items) map[normalizeCode(row.code)] = row
+        setRadar(map)
+      }
+    } catch {
+      /* ignore transient radar errors */
+    }
+  }, [codes])
+
+  useEffect(() => {
+    void refreshRadar()
+    const timer = window.setInterval(() => { void refreshRadar() }, 60000)
+    return () => window.clearInterval(timer)
+  }, [refreshRadar])
+
+  useEffect(() => {
+    if (!selectedCode) return undefined
+    const code = normalizeCode(selectedCode)
+    let cancelled = false
+    void research.strategySignals(code).then(resp => {
+      if (cancelled || !resp.success || !resp.data?.summary) return
+      setStrategyByCode(prev => (
+        prev[code] ? prev : { ...prev, [code]: resp.data!.summary }
+      ))
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [selectedCode])
 
   useEffect(() => {
     void refreshQuotes()
@@ -434,6 +482,12 @@ export default function WatchlistTab({
           const secondaryTone = showHoldReturn ? holdTone : followTone
           const secondaryLabel = showHoldReturn ? '持' : '关'
           const hasSecondary = secondaryPct != null
+          const radarRow = radar[item.code]
+          const radarLine = formatWatchlistRadarLine(
+            item,
+            radarRow,
+            selectedCode === item.code ? strategyByCode[item.code] : null,
+          )
 
           return (
             <div
@@ -466,6 +520,9 @@ export default function WatchlistTab({
                     {item.code}
                     {item.note ? ` · ${item.note}` : ''}
                   </span>
+                )}
+                {radarLine && (
+                  <span className={s.rowRadar}>{radarLine}</span>
                 )}
               </div>
 

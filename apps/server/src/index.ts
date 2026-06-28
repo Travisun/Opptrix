@@ -13,6 +13,7 @@ const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 
 const hub = new ResearchHub()
+hub.initMarketDataAutoResume()
 let cfg = loadConfig()
 
 function syncAgentProviders() {
@@ -50,6 +51,51 @@ app.post<{ Body: { feature: string; params?: Record<string, unknown> } }>(
     return { success: result.success, feature, data: result.data, message: result.message, elapsed: result.elapsed }
   },
 )
+
+app.get('/api/market-data/status', async () => {
+  const result = await hub.dispatch('market_db_status', {})
+  return { success: result.success, data: result.data, message: result.message }
+})
+
+app.get('/api/market-data/sync-state', async () => {
+  const result = await hub.dispatch('market_db_sync_state', {})
+  return { success: result.success, data: result.data, message: result.message }
+})
+
+app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; background?: boolean; force?: boolean; profile?: string } }>(
+  '/api/market-data/sync',
+  async (req) => {
+    const body = req.body ?? {}
+    const result = await hub.dispatch('market_db_sync', {
+      mode: body.mode,
+      max_stocks: body.max_stocks,
+      jobs: body.jobs,
+      background: body.background,
+      force: body.force,
+      profile: body.profile,
+    })
+    return { success: result.success, data: result.data, message: result.message, elapsed: result.elapsed }
+  },
+)
+
+app.get('/api/tushare/config', async () => {
+  const r = await hub.dispatch('tushare_config', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: { enabled?: boolean; token?: string } }>('/api/tushare/config', async (req) => {
+  const body = req.body ?? {}
+  const r = await hub.dispatch('tushare_config_save', {
+    enabled: body.enabled,
+    token: body.token,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: { token?: string } }>('/api/tushare/test', async (req) => {
+  const r = await hub.dispatch('tushare_test', { token: req.body?.token })
+  return { success: r.success, data: r.data, message: r.message }
+})
 
 app.get('/api/config', async () => publicConfig(cfg))
 

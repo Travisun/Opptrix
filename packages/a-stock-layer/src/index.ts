@@ -3,8 +3,15 @@ export {
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
   EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
-  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver,
+  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
 } from './engine.js'
+
+export {
+  loadTushareConfig, saveTushareConfig, publicTushareConfig, isTushareEnabled,
+  tushareConfigPath,
+} from './tushare/config.js'
+export { testTushareConnection } from './tushare/client.js'
+export type { TushareRuntimeConfig, PublicTushareConfig } from './tushare/config.js'
 
 export { PortfolioManager } from './portfolio/manager.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'

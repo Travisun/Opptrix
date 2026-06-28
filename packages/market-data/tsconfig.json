@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "../shared" },
+    { "path": "../a-stock-layer" },
+    { "path": "../stock-eval" }
+  ],
+  "include": ["src/**/*"]
+}

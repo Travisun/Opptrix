@@ -4,6 +4,7 @@
   "references": [
     { "path": "../shared" },
     { "path": "../a-stock-layer" },
+    { "path": "../market-data" },
     { "path": "../stock-eval" },
     { "path": "../institutions" },
     { "path": "../t-strategy" }

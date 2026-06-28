@@ -11,6 +11,7 @@ import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
 } from './settings/SettingsSidebar'
 import SettingsBackRow from './settings/SettingsBackRow'
+import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
@@ -56,30 +57,47 @@ const useStyles = makeStyles({
   contentShellElectron: {
     paddingTop: `calc(${DESKTOP_TITLEBAR_HEIGHT}px + ${innoTokens.windowInset})`,
   },
-  contentViewport: {
+  contentScroll: {
     flex: 1,
     minHeight: 0,
     width: '100%',
-    display: 'flex',
-    justifyContent: 'center',
-    overflow: 'hidden',
+    overflowX: 'hidden',
+    overflowY: 'auto',
   },
   contentColumn: {
     width: innoTokens.settingsContentWidth,
     maxWidth: innoTokens.settingsContentMaxWidth,
-    height: '100%',
     minWidth: 0,
+    marginLeft: 'auto',
+    marginRight: 'auto',
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
     paddingLeft: '28px',
     paddingRight: '28px',
   },
+  /** 侧栏浮层 / 小窗口 — 内容区占满可用宽度，仅保留最小边距 */
+  contentColumnFlush: {
+    width: '100%',
+    maxWidth: 'none',
+    marginLeft: 0,
+    marginRight: 0,
+    paddingLeft: '12px',
+    paddingRight: '12px',
+  },
   contentColumnMobile: {
     width: '100%',
     maxWidth: 'none',
-    paddingLeft: '16px',
-    paddingRight: '16px',
+    marginLeft: 0,
+    marginRight: 0,
+    paddingLeft: '12px',
+    paddingRight: '12px',
+  },
+  contentHeaderFlush: {
+    paddingTop: '16px',
+  },
+  pageSubtitleFlush: {
+    maxWidth: 'none',
   },
   contentHeader: {
     flexShrink: 0,
@@ -106,12 +124,14 @@ const useStyles = makeStyles({
     maxWidth: '52ch',
   },
   contentBody: {
-    flex: 1,
-    overflowY: 'auto',
     padding: '16px 0 32px',
     display: 'flex',
     flexDirection: 'column',
     gap: '20px',
+  },
+  contentBodyCompact: {
+    padding: '10px 0 20px',
+    gap: '8px',
   },
   sectionBlock: {
     display: 'flex',
@@ -140,6 +160,9 @@ const useStyles = makeStyles({
     gap: '12px',
     maxWidth: '52ch',
     paddingTop: '4px',
+  },
+  aboutProseFlush: {
+    maxWidth: 'none',
   },
   aboutTitle: {
     fontSize: '15px',
@@ -272,6 +295,8 @@ export default function SettingsPage({
     }
   })()
 
+  const contentFlush = isMobile || sidebarOverlayMode
+
   const renderSection = () => {
     if (loading) return <Spinner size="tiny" label="加载配置..." />
 
@@ -359,9 +384,12 @@ export default function SettingsPage({
           </div>
         )
 
+      case 'market_data':
+        return <MarketDataSettingsSection />
+
       case 'about':
         return (
-          <div className={s.aboutProse}>
+          <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
             <Text className={s.aboutTitle} block>innoAStock · 投研 Chat Agent</Text>
             <Text className={s.aboutMeta} block>
               21 投研工具 · 多会话 · Function Calling · 多模型提供商。
@@ -414,17 +442,29 @@ export default function SettingsPage({
           electronChrome && s.contentShellElectron,
         )}
       >
-        <div className={s.contentViewport}>
-          <div className={mergeClasses(s.contentColumn, isMobile && s.contentColumnMobile)}>
-            <header className={s.contentHeader}>
+        <div className={mergeClasses(s.contentScroll, 'inno-scroll')}>
+          <div className={mergeClasses(
+            s.contentColumn,
+            contentFlush && s.contentColumnFlush,
+            isMobile && s.contentColumnMobile,
+          )}>
+            <header className={mergeClasses(s.contentHeader, contentFlush && s.contentHeaderFlush)}>
               {sidebarOverlayMode && !sidebarVisible && (
                 <SettingsBackRow className={s.contentBack} onClick={onBack} />
               )}
               <Text className={s.pageTitle} block>{sectionTitle}</Text>
-              <Text className={s.pageSubtitle} block>{sectionSubtitle}</Text>
+              <Text
+                className={mergeClasses(s.pageSubtitle, contentFlush && s.pageSubtitleFlush)}
+                block
+              >
+                {sectionSubtitle}
+              </Text>
             </header>
 
-            <div className={mergeClasses(s.contentBody, 'inno-scroll')}>
+            <div className={mergeClasses(
+              s.contentBody,
+              section === 'market_data' && s.contentBodyCompact,
+            )}>
               {error && <StatusBanner message={error} tone="error" />}
               {message && <StatusBanner message={message} tone="success" />}
               {renderSection()}

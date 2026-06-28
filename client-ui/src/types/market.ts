@@ -233,3 +233,41 @@ export interface StockDetailData {
   moneyFlow?: StockMoneyFlowItem[]
   shareholders?: StockShareholderData | null
 }
+
+export interface MarketDbStatusData {
+  db_path: string
+  schema_version: number
+  stock_count: number
+  latest_trade_date: string | null
+  latest_factor_date: string | null
+  profile_count: number
+  partner_count: number
+  segment_count: number
+  announcement_count: number
+  dividend_count: number
+  shareholder_count: number
+  forecast_count: number
+  inst_holding_count: number
+  insider_trade_count: number
+  buyback_count: number
+  last_sync: Record<string, string | null>
+  job_progress: Record<string, { done: number; error: number; pending: number }>
+  is_ready: boolean
+}
+
+export interface MarketDataSyncState {
+  running: boolean
+  mode: 'full' | 'incremental' | 'resume' | null
+  session_id: number | null
+  started_at: string | null
+  finished_at: string | null
+  current_job: string | null
+  job_current: number
+  job_total: number
+  jobs_completed: number
+  jobs_total: number
+  overall_percent: number
+  message: string | null
+  logs: string[]
+  db_status: MarketDbStatusData
+}

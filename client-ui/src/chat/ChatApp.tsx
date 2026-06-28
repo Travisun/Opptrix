@@ -4,6 +4,7 @@ import SessionSidebar from './SessionSidebar'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
 import RightPanel from './RightPanel'
+import type { StockDiscussPayload } from '../market/StockDecisionCard'
 import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
@@ -427,6 +428,35 @@ export default function ChatApp() {
     }
   }
 
+  const handleStockDiscuss = useCallback(async (payload: StockDiscussPayload) => {
+    if (!activeId) {
+      setError('请先新建或选择一个对话')
+      return
+    }
+    try {
+      const at = new Date().toISOString()
+      const nextRef: SessionSelectionContextRef = {
+        kind: 'selection',
+        selectedText: payload.contextText,
+        sourceMessageIndex: 0,
+        sourceRole: 'user',
+        anchorAt: at,
+        preview: `${payload.topic === 'buy' ? '研讨买入' : '研讨卖出'} · ${payload.name}`,
+        turns: [{
+          role: 'user',
+          content: payload.contextText,
+          at,
+        }],
+      }
+      const data = await setSessionContext(activeId, nextRef)
+      setContextRef(data.contextRef ?? nextRef)
+      setInput(payload.prompt)
+      setError('')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '设置研讨上下文失败')
+    }
+  }, [activeId])
+
   const handleEphemeralAsk = useCallback(async (
     message: string,
     selection: MessageSelection,
@@ -621,6 +651,7 @@ export default function ChatApp() {
                 chromeToolbarReserve={chromeToolbarReserve}
                 onToggleRightPanel={handleToggleRightPanel}
                 onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
+                onDiscussInChat={handleStockDiscuss}
               />
             )}
           </div>

@@ -6,6 +6,7 @@ import {
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
 } from '../desktop/constants'
 import RightMarketPanel from '../market/RightMarketPanel'
+import type { StockDiscussPayload } from '../market/StockDecisionCard'
 
 const useStyles = makeStyles({
   panelShell: {
@@ -51,6 +52,7 @@ interface Props {
   chromeToolbarReserve?: number
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
+  onDiscussInChat?: (payload: StockDiscussPayload) => void
 }
 
 export default function RightPanel({
@@ -63,6 +65,7 @@ export default function RightPanel({
   chromeToolbarReserve = 0,
   onToggleRightPanel,
   onToggleChatColumn,
+  onDiscussInChat,
 }: Props) {
   const s = useStyles()
 
@@ -95,6 +98,7 @@ export default function RightPanel({
           chromeToolbarReserve={chromeToolbarReserve}
           onToggleRightPanel={visible ? onToggleRightPanel : undefined}
           onToggleChatColumn={visible ? onToggleChatColumn : undefined}
+          onDiscussInChat={visible ? onDiscussInChat : undefined}
         />
       </aside>
     </div>

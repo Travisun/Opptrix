@@ -1,4 +1,4 @@
-import { AshareEngine, computeIndicators, normalizeCode, searchQuote } from '@inno-a-stock/a-stock-layer'
+import { AshareEngine, computeIndicators, normalizeCode, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection } from '@inno-a-stock/a-stock-layer'
 import type { StockListItem } from '@inno-a-stock/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
@@ -6,11 +6,26 @@ import {
   EvaluationEngine, createScorecard, Screener, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
 } from '@inno-a-stock/stock-eval'
+import { getMarketDataService } from '@inno-a-stock/market-data'
 import { ok, fail, type ResearchResult } from '@inno-a-stock/shared'
 import { quickAssess, verifyStrategy } from '@inno-a-stock/t-strategy'
 import { fetchArticleData, listArticleTypes, StockWriter, listPersonas, formatArticle, publishArticle, loadWriterConfig, saveWriterConfig, listHistory, listThemes } from '@inno-a-stock/stock-writer'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@inno-a-stock/t-strategy'
+
+interface WatchlistRadarItem {
+  code: string
+  name: string
+  total_score: number | null
+  scorecard: string | null
+  from_store: boolean
+  pe: number | null
+  pb: number | null
+  pe_percentile: number | null
+  pb_percentile: number | null
+  main_net: number | null
+  flow_date: string | null
+}
 
 /** Unified research hub — single entry for feature dispatch */
 export class ResearchHub {
@@ -25,6 +40,11 @@ export class ResearchHub {
   readonly closingReport = new ClosingReport(this.de)
   readonly morningBrief = new MorningBrief(this.de)
   readonly industrySkill = new IndustryMining(this.de)
+  readonly marketData = getMarketDataService()
+
+  initMarketDataAutoResume(): void {
+    this.marketData.autoResumeOnBoot()
+  }
 
   async dispatch(feature: string, params: Record<string, unknown>): Promise<ResearchResult> {
     const t0 = Date.now()
@@ -43,6 +63,11 @@ export class ResearchHub {
         case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
         case 'search_stocks': return this.searchStocks(String(params.keyword), t0)
         case 'stock_quotes': return this.stockQuotes(params.codes as string[] | undefined, t0)
+        case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
+        case 'market_db_status': return this.marketDbStatus(t0)
+        case 'market_db_sync': return this.marketDbSync(params, t0)
+        case 'market_db_sync_state': return this.marketDbSyncState(t0)
+        case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
         case 'stock_cyq': return this.stockCyq(String(params.code), t0)
         case 'stock_chart': return this.stockChart(
@@ -68,6 +93,9 @@ export class ResearchHub {
         case 'writer_config_save': return this.writerConfigSave(params, t0)
         case 'writer_history': return ok({ history: listHistory(Number(params.limit ?? 20)) }, '写作历史', t0)
         case 'writer_themes': return ok({ themes: listThemes() }, '排版主题列表', t0)
+        case 'tushare_config': return ok(publicTushareConfig(), 'Tushare 配置', t0)
+        case 'tushare_config_save': return this.tushareConfigSave(params, t0)
+        case 'tushare_test': return this.tushareTest(params, t0)
         case 'strategy_report': return this.strategyReport(String(params.code), t0)
         default: return fail(`Unknown feature: ${feature}`, t0)
       }
@@ -116,11 +144,66 @@ export class ResearchHub {
   }
 
   private async screening(params: Record<string, unknown>, t0: number) {
-    const data = await this.screener.run(params.conditions as never[], String(params.scorecard ?? '综合评估'), Number(params.top_n ?? 20))
+    const conditions = (params.conditions ?? []) as { factor: string; op: string; value: number }[]
+    const scorecard = String(params.scorecard ?? '综合评估')
+    const topN = Number(params.top_n ?? 20)
+    const localStatus = this.marketData.status()
+
+    if (localStatus.is_ready && conditions.length) {
+      const data = this.marketData.screen(
+        conditions as never[],
+        topN,
+      )
+      return ok({
+        total_scanned: localStatus.stock_count,
+        passed: data.passed,
+        scorecard,
+        source: 'local',
+        trade_date: data.trade_date,
+        items: data.items.map(i => ({
+          code: i.code,
+          name: i.name,
+          total_score: i.total_score ?? 0,
+          key_factors: i.key_factors as Record<string, number>,
+        })),
+      }, `本地扫描 ${localStatus.stock_count} 只，通过 ${data.passed}`, t0)
+    }
+
+    const data = await this.screener.run(conditions as never[], scorecard, topN)
     return ok({
       total_scanned: data.totalScanned, passed: data.passed, scorecard: data.scorecard,
+      source: 'live',
       items: data.items.map(i => ({ code: i.code, name: i.name, total_score: i.total_score, key_factors: i.key_factors })),
-    }, `扫描 ${data.totalScanned} 通过 ${data.passed}`, t0)
+    }, `在线扫描 ${data.totalScanned} 通过 ${data.passed}`, t0)
+  }
+
+  private marketDbStatus(t0: number) {
+    return ok(this.marketData.status(), '本地指标库状态', t0)
+  }
+
+  private marketDbSyncState(t0: number) {
+    return ok(this.marketData.syncState(), '同步状态', t0)
+  }
+
+  private async marketDbSync(params: Record<string, unknown>, t0: number) {
+    const modeRaw = String(params.mode ?? 'incremental')
+    const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
+    const maxStocks = params.max_stocks != null ? Number(params.max_stocks) : undefined
+    const jobs = Array.isArray(params.jobs) ? (params.jobs as string[]) : undefined
+    const force = params.force === true
+    const profile = params.profile != null ? String(params.profile) : undefined
+
+    const result = await this.marketData.sync({ mode, maxStocks, jobs, force, profile })
+    const msg = result.started
+      ? (mode === 'resume' ? '基础数据接续同步已在后台启动' : '基础数据同步已在后台启动')
+      : '同步任务进行中'
+    return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
+  }
+
+  private marketIndustryStats(params: Record<string, unknown>, t0: number) {
+    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
+    const items = this.marketData.industryStats(tradeDate)
+    return ok({ items, trade_date: tradeDate ?? this.marketData.status().latest_factor_date }, '行业统计', t0)
   }
 
   private async strategySignal(code: string, t0: number) {
@@ -195,6 +278,93 @@ export class ResearchHub {
     const result = await this.de.batchRealtime(normalized)
     if (!result.success) return fail(result.error ?? '行情获取失败', t0)
     return ok({ quotes: result.data ?? [] }, `更新 ${result.data?.length ?? 0} 只`, t0)
+  }
+
+  /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
+  private async watchlistRadar(codes: string[] | undefined, t0: number) {
+    const normalized = [...new Set((codes ?? []).map(c => normalizeCode(String(c))).filter(Boolean))]
+    if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无关注', t0)
+
+    const localRows = this.marketData.status().is_ready
+      ? this.marketData.radarBatch(normalized) as {
+          code: string
+          name: string
+          total_score: number | null
+          scorecard: string | null
+          pe: number | null
+          pb: number | null
+          pe_percentile: number | null
+          pb_percentile: number | null
+        }[]
+      : []
+    const localByCode = new Map(localRows.map(row => [row.code, row]))
+
+    const quoteByCode = new Map<string, { name?: string; pe?: number | null; pb?: number | null }>()
+    try {
+      const batch = await this.de.batchRealtime(normalized)
+      for (const q of batch.data ?? []) {
+        quoteByCode.set(normalizeCode(q.code), q)
+      }
+    } catch {
+      // fallback per-code inside buildWatchlistRadarItem
+    }
+
+    const items = await Promise.all(
+      normalized.map(code => this.buildWatchlistRadarItem(code, localByCode.get(code), quoteByCode.get(code))),
+    )
+    return ok({ items }, `雷达 ${items.length} 只`, t0)
+  }
+
+  private async buildWatchlistRadarItem(
+    code: string,
+    local?: {
+      name: string
+      total_score: number | null
+      scorecard: string | null
+      pe: number | null
+      pb: number | null
+      pe_percentile: number | null
+      pb_percentile: number | null
+    },
+    cachedQuote?: { name?: string; pe?: number | null; pb?: number | null },
+  ): Promise<WatchlistRadarItem> {
+    const stored = this.store.getLatest(code)
+    const factors = stored?.factorValues ?? {}
+    try {
+      const quoteR = cachedQuote
+        ? { data: [cachedQuote] }
+        : await this.de.realtime(code)
+      const flowR = await this.de.moneyFlow(code)
+      const quote = quoteR.data?.[0]
+      const flow = flowR.data?.[0]
+      return {
+        code,
+        name: quote?.name ?? local?.name ?? stored?.name ?? code,
+        total_score: local?.total_score ?? stored?.totalScore ?? null,
+        scorecard: local?.scorecard ?? stored?.scorecardName ?? null,
+        from_store: Boolean(local || stored),
+        pe: quote?.pe ?? local?.pe ?? null,
+        pb: quote?.pb ?? local?.pb ?? null,
+        pe_percentile: local?.pe_percentile ?? factors.pe_percentile ?? null,
+        pb_percentile: local?.pb_percentile ?? factors.pb_percentile ?? null,
+        main_net: flow?.mainNet ?? null,
+        flow_date: flow?.date ?? null,
+      }
+    } catch {
+      return {
+        code,
+        name: local?.name ?? stored?.name ?? code,
+        total_score: local?.total_score ?? stored?.totalScore ?? null,
+        scorecard: local?.scorecard ?? stored?.scorecardName ?? null,
+        from_store: Boolean(local || stored),
+        pe: local?.pe ?? null,
+        pb: local?.pb ?? null,
+        pe_percentile: local?.pe_percentile ?? factors.pe_percentile ?? null,
+        pb_percentile: local?.pb_percentile ?? factors.pb_percentile ?? null,
+        main_net: null,
+        flow_date: null,
+      }
+    }
   }
 
   private async stockKline(code: string, count: number, t0: number) {
@@ -608,6 +778,25 @@ export class ResearchHub {
       },
     })
     return ok(saved, 'Writer 配置已保存', t0)
+  }
+
+  private tushareConfigSave(params: Record<string, unknown>, t0: number) {
+    const current = loadTushareConfig()
+    const tokenRaw = params.token
+    const saved = saveTushareConfig({
+      enabled: params.enabled === true,
+      token: tokenRaw === undefined || tokenRaw === null
+        ? current.token
+        : String(tokenRaw).trim(),
+    })
+    this.de.clearCache()
+    return ok(publicTushareConfig(saved), 'Tushare 配置已保存', t0)
+  }
+
+  private async tushareTest(params: Record<string, unknown>, t0: number) {
+    const token = params.token != null ? String(params.token).trim() : loadTushareConfig().token
+    const result = await testTushareConnection(token)
+    return ok(result, result.ok ? result.message : `连接失败: ${result.message}`, t0)
   }
 
   private async strategyReport(code: string, t0: number) {

@@ -43,6 +43,8 @@ export interface ScreenedItem {
 export interface ScreeningData {
   total_scanned: number; passed: number
   scorecard: string; items: ScreenedItem[]
+  source?: 'local' | 'live'
+  trade_date?: string | null
 }
 
 export interface SingleStrategySignal {
@@ -52,6 +54,7 @@ export interface SingleStrategySignal {
 export interface StrategySignalData {
   code: string; name: string; summary: string
   bullish_count: number; bearish_count: number; neutral_count: number
+  score?: number; verdict?: string; confidence?: number
   signals: SingleStrategySignal[]; timestamp?: string
 }
 
@@ -163,6 +166,24 @@ export interface LatestEvalData {
   code: string; name: string; timestamp: string
   scorecard: string; total_score: number
   factors: Record<string, number | null>
+}
+
+export interface WatchlistRadarItem {
+  code: string
+  name: string
+  total_score: number | null
+  scorecard: string | null
+  from_store: boolean
+  pe: number | null
+  pb: number | null
+  pe_percentile: number | null
+  pb_percentile: number | null
+  main_net: number | null
+  flow_date: string | null
+}
+
+export interface WatchlistRadarData {
+  items: WatchlistRadarItem[]
 }
 
 export interface ReportTextData {

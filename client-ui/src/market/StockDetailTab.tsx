@@ -20,10 +20,12 @@ import {
   pctTone,
 } from './format'
 import TradingViewChart from './TradingViewChart'
+import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
+import type { HoldingSnapshot } from './useFollowPortfolio'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
-type DetailTab = 'chart' | 'basic' | 'company' | 'news' | 'f10'
+type DetailTab = 'analysis' | 'chart' | 'basic' | 'company' | 'news' | 'f10'
 
 const CONTENT_PAD = '15px'
 
@@ -346,7 +348,9 @@ const useStyles = makeStyles({
 interface Props {
   stock: WatchlistItem | null
   isHolding?: boolean
+  holding?: HoldingSnapshot | null
   onManage?: () => void
+  onDiscussInChat?: (payload: StockDiscussPayload) => void
 }
 
 function Metric({ label, value }: { label: string; value: string }) {
@@ -528,9 +532,15 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
   )
 }
 
-export default function StockDetailTab({ stock, isHolding = false, onManage }: Props) {
+export default function StockDetailTab({
+  stock,
+  isHolding = false,
+  holding,
+  onManage,
+  onDiscussInChat,
+}: Props) {
   const s = useStyles()
-  const [detailTab, setDetailTab] = useState<DetailTab>('chart')
+  const [detailTab, setDetailTab] = useState<DetailTab>('analysis')
   const [detail, setDetail] = useState<StockDetailData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
@@ -542,7 +552,7 @@ export default function StockDetailTab({ stock, isHolding = false, onManage }: P
       return undefined
     }
 
-    setDetailTab('chart')
+    setDetailTab('analysis')
     let cancelled = false
     setLoading(true)
     setError('')
@@ -642,6 +652,7 @@ export default function StockDetailTab({ stock, isHolding = false, onManage }: P
           selectedValue={detailTab}
           onTabSelect={(_, data) => setDetailTab(data.value as DetailTab)}
         >
+          <Tab value="analysis">分析</Tab>
           <Tab value="chart">图表</Tab>
           <Tab value="basic">基本</Tab>
           <Tab value="company">公司</Tab>
@@ -651,6 +662,20 @@ export default function StockDetailTab({ stock, isHolding = false, onManage }: P
       </div>
 
       <div className={s.tabBody}>
+        <div className={mergeClasses(s.tabPanel, detailTab !== 'analysis' && s.tabPanelHidden)}>
+          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+            <StockDecisionCard
+              stock={stock}
+              price={quote?.price ?? null}
+              quotePe={quote?.pe ?? null}
+              quotePb={quote?.pb ?? null}
+              holding={holding}
+              moneyFlow={detail.moneyFlow?.[0] ?? null}
+              onDiscuss={onDiscussInChat}
+            />
+          </div>
+        </div>
+
         <div className={mergeClasses(s.tabPanel, detailTab !== 'chart' && s.tabPanelHidden)}>
           <div className={s.chartPanel}>
             <TradingViewChart

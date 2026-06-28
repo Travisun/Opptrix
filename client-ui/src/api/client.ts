@@ -7,13 +7,22 @@ const REQUEST_TIMEOUT = 10000 // 10s timeout for all API requests
 
 async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
   const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  let timedOut = false
+  const timer = setTimeout(() => {
+    timedOut = true
+    controller.abort()
+  }, timeoutMs)
   const external = init?.signal
   const onExternalAbort = () => controller.abort()
   external?.addEventListener('abort', onExternalAbort)
   try {
     const { signal: _ignored, ...rest } = init ?? {}
     return await fetch(path, { ...rest, signal: controller.signal })
+  } catch (e) {
+    if (timedOut && e instanceof Error && e.name === 'AbortError') {
+      throw new Error('请求超时')
+    }
+    throw e
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onExternalAbort)
@@ -33,13 +42,14 @@ export async function apiCall<T>(
   feature: string,
   params: Record<string, any> = {},
   init?: RequestInit,
+  timeoutMs = REQUEST_TIMEOUT,
 ): Promise<ApiResponse<T>> {
   const resp = await fetchWithTimeout(`${API_BASE}/research`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ feature, params }),
     ...init,
-  })
+  }, timeoutMs)
   if (!resp.ok) throw new Error(`API error: ${resp.status}`)
   return resp.json()
 }
@@ -56,14 +66,25 @@ export const research = {
   diagnose:      (code: string) =>
     apiCall<StockDiagnosisData>('stock_diagnosis', { code }),
 
-  institutionRating: (code: string, groups?: string[]) =>
-    apiCall<InstitutionRatingData>('institution_rating', { code, groups }),
+  institutionRating: (code: string, groups?: string[], signal?: AbortSignal) =>
+    apiCall<InstitutionRatingData>('institution_rating', { code, groups }, { signal }, 20000),
 
-  screen: (conditions: any[], scorecard = '综合评估', topN = 20) =>
-    apiCall<ScreeningData>('screening', { conditions, scorecard, top_n: topN }),
+  screen: (conditions: any[], scorecard = '综合评估', topN = 20, signal?: AbortSignal) =>
+    apiCall<ScreeningData>('screening', { conditions, scorecard, top_n: topN }, { signal }, 120000),
 
-  strategySignals: (code: string) =>
-    apiCall<StrategySignalData>('strategy_signal', { code }),
+  marketDbStatus: () =>
+    apiCall<import('../types/market').MarketDbStatusData>('market_db_status'),
+
+  marketDbSync: (mode: 'full' | 'incremental' | 'resume' = 'full', background = true, force = false) =>
+    apiCall<{ started: boolean; running: boolean; mode: string }>(
+      'market_db_sync',
+      { mode, background, force },
+      undefined,
+      background ? 15000 : 600000,
+    ),
+
+  strategySignals: (code: string, signal?: AbortSignal) =>
+    apiCall<StrategySignalData>('strategy_signal', { code }, { signal }, 30000),
 
   strategyVerify: (code: string, checkpoints = 30, forwardDays = 5) =>
     apiCall<StrategyVerifyData>('strategy_verify', { code, checkpoints, forward_days: forwardDays }),
@@ -83,6 +104,9 @@ export const research = {
   stockQuotes: (codes: string[]) =>
     apiCall<import('../types/market').StockQuotesData>('stock_quotes', { codes }),
 
+  watchlistRadar: (codes: string[], signal?: AbortSignal) =>
+    apiCall<import('../types/schemas').WatchlistRadarData>('watchlist_radar', { codes }, { signal }, 15000),
+
   stockKline: (code: string, count = 90) =>
     apiCall<import('../types/market').StockKlineData>('stock_kline', { code, count }),
 
@@ -100,10 +124,12 @@ export const research = {
       { signal },
     ),
 
-  stockCyq: (code: string) =>
+  stockCyq: (code: string, signal?: AbortSignal) =>
     apiCall<{ code: string; rows: import('../types/market').ChipDistributionPoint[]; latest: import('../types/market').ChipDistributionPoint }>(
       'stock_cyq',
       { code },
+      { signal },
+      15000,
     ),
 
   stockDetail: (code: string) =>
@@ -112,8 +138,8 @@ export const research = {
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
-  latestEval: (code: string) =>
-    apiCall<LatestEvalData>('latest_evaluation', { code }),
+  latestEval: (code: string, signal?: AbortSignal) =>
+    apiCall<LatestEvalData>('latest_evaluation', { code }, { signal }, 30000),
 
   strategyReport: (code: string) =>
     apiCall<ReportTextData>('strategy_report', { code }),
@@ -132,6 +158,61 @@ export const research = {
 
   portfolioSummary: () =>
     apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
+}
+
+export async function getMarketDataSyncState() {
+  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').MarketDataSyncState }>(
+    '/market-data/sync-state',
+  )
+  if (!resp.data) throw new Error('无法获取同步状态')
+  return resp.data
+}
+
+export async function startMarketDataSync(
+  mode: 'full' | 'incremental' | 'resume' = 'full',
+  options: { force?: boolean; jobs?: string[]; profile?: string } = {},
+) {
+  return jsonFetch<{ success: boolean; message?: string }>('/market-data/sync', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      mode,
+      background: true,
+      force: options.force ?? false,
+      jobs: options.jobs,
+      profile: options.profile,
+    }),
+  })
+}
+
+export interface TusharePublicConfig {
+  enabled: boolean
+  token: string
+  token_configured: boolean
+  token_preview: string
+  config_path: string
+}
+
+export async function getTushareConfig() {
+  const resp = await jsonFetch<{ success: boolean; data: TusharePublicConfig }>('/tushare/config')
+  if (!resp.data) throw new Error('无法读取 Tushare 配置')
+  return resp.data
+}
+
+export async function saveTushareConfig(payload: { enabled: boolean; token?: string }) {
+  return jsonFetch<{ success: boolean; data: TusharePublicConfig; message?: string }>('/tushare/config', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function testTushareConfig(token?: string) {
+  return jsonFetch<{ success: boolean; data: { ok: boolean; message: string }; message?: string }>('/tushare/test', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(token ? { token } : {}),
+  })
 }
 
 export async function writerTypes() {
