@@ -2,10 +2,15 @@ const SH_INDEX_CODES = new Set([
   '000001', '000016', '000300', '000688', '000905', '000906', '000985',
 ])
 
-/** 北交所股票（920xxx 等新代码段） */
+/** 北交所股票（920 新代码；43/83/87 为存量旧代码） */
 export function isBseCode(code: string): boolean {
   const c = normalizeCode(code)
-  return c.startsWith('92')
+  return c.startsWith('92') || c.startsWith('43') || c.startsWith('83') || c.startsWith('87')
+}
+
+/** 北交所 920 新代码段（东财 push2 secid 使用 3. 前缀） */
+export function isBse920Code(code: string): boolean {
+  return normalizeCode(code).startsWith('92')
 }
 
 export function resolveMarket(code: string): 'BJ' | 'SH' | 'SZ' {
@@ -25,9 +30,30 @@ export function resolveSecId(code: string): string {
     return `1.${c}`
   }
   if (c.startsWith('399')) return `0.${c}`
+  if (isBse920Code(c)) return `3.${c}`
   if (isBseCode(c)) return `0.${c}`
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `1.${c}`
   return `0.${c}`
+}
+
+/** Sina / Tencent 等行情 list 参数（如 bj920002、sh600519） */
+export function secFullCode(code: string): string {
+  const c = normalizeCode(code)
+  if (isBseCode(c)) return `bj${c}`
+  if (c.startsWith('399') || (c.startsWith('0') && !c.startsWith('000'))) return `sz${c}`
+  if (c.startsWith('000') && parseInt(c, 10) < 1000) return `sh${c}`
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `sh${c}`
+  return `sz${c}`
+}
+
+/** 雪球 symbol（如 BJ920002） */
+export function secXueqiuSymbol(code: string): string {
+  const c = normalizeCode(code)
+  if (isBseCode(c)) return `BJ${c}`
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || (c.startsWith('000') && parseInt(c, 10) < 1000)) {
+    return `SH${c}`
+  }
+  return `SZ${c}`
 }
 
 export function normalizeCode(code: string): string {

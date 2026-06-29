@@ -10,6 +10,7 @@ import {
   localUniverseScreen,
   queryDiscoverCandidates,
   queryIndustryStats,
+  queryIndustryStocks,
   queryRadarBatch,
   queryStockSnapshot,
   type LocalUniverseScreenQuery,
@@ -17,6 +18,8 @@ import {
   type ScreenCondition,
   type DiscoverCandidateRow,
 } from './query/screen.js'
+import { queryLocalDailyKlines, queryLocalLatestQuote } from './query/local-bars.js'
+import { searchUniverseStocks } from './query/search-stocks.js'
 import { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
 import { listScreenFactors } from './query/factors.js'
 
@@ -92,8 +95,24 @@ export class MarketDataService {
     return queryIndustryStats(this.store, tradeDate)
   }
 
+  industryStocks(industry: string, tradeDate?: string, limit = 120) {
+    return queryIndustryStocks(this.store, industry, tradeDate, limit)
+  }
+
   stockSnapshot(code: string) {
     return queryStockSnapshot(this.store, code)
+  }
+
+  searchStocks(keyword: string, limit = 30) {
+    return searchUniverseStocks(this.store, keyword, limit)
+  }
+
+  localLatestQuote(code: string) {
+    return queryLocalLatestQuote(this.store, code)
+  }
+
+  localDailyKlines(code: string, limit = 800, before?: string) {
+    return queryLocalDailyKlines(this.store, code, limit, before)
   }
 
   radarBatch(codes: string[], tradeDate?: string) {
@@ -130,6 +149,7 @@ export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUnive
 export { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
 export type { LocalUniverseScreenSchema } from './query/screen-schema.js'
 export { listScreenFactors, SCREEN_FACTOR_LABELS } from './query/factors.js'
+export { searchUniverseStocks } from './query/search-stocks.js'
 export {
   BOOTSTRAP_SYNC_JOBS,
   DAILY_SYNC_JOBS,

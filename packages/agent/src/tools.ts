@@ -299,7 +299,7 @@ export class ToolRegistry {
       },
       {
         name: 'search_stocks', category: '通用',
-        description: '按代码或名称关键词搜索 A 股',
+        description: '按代码或名称关键词搜索本地股票池（market.db universe）',
         parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
         handler: (a: Record<string, unknown>) => d('search_stocks', { keyword: a.keyword }),
       },

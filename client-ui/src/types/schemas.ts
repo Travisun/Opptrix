@@ -212,6 +212,26 @@ export interface PortfolioAnalysisData {
   factor_exposures: FactorExposureItem[]
 }
 
+export interface IndustryStatItem {
+  industry: string
+  stock_count: number
+  avg_score: number | null
+  avg_pe: number | null
+  avg_pb: number | null
+  up_count: number
+  down_count: number
+  flat_count?: number
+}
+
+export interface IndustryStockItem {
+  code: string
+  name: string
+  industry: string | null
+  total_score: number | null
+  price: number | null
+  change_pct: number | null
+}
+
 export interface IndustryMiningData {
   industry: string; summary: string
   chain_overview: string; key_companies: number

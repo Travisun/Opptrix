@@ -114,8 +114,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_stocks: {
     hubFeature: 'search_stocks',
     miningEligible: true,
-    usageGuide: '根据名称/代码关键词定位标的；候选列表外补全或验证代码时使用。',
-    compliance: 'keyword ≥ 2 字符；A 股；结果需与候选列表交叉验证。',
+    usageGuide: '根据名称/代码/行业关键词在本地 universe 中定位标的；需先完成 universe 同步。',
+    compliance: 'keyword ≥ 2 字符；结果来自本地 market.db；与候选列表交叉验证。',
   },
   evaluate_stock: {
     hubFeature: 'stock_diagnosis',

@@ -16,6 +16,7 @@ import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
 import { tdxClient } from './tdx/client.js'
 import { isTushareEnabled } from './tushare/config.js'
+import { isBse920Code, normalizeCode } from './utils/helpers.js'
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
@@ -109,15 +110,49 @@ export class AshareEngine {
 
   private async fetchBatchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
     if (!codes.length) return { success: false, error: 'codes empty' }
-    if (isTushareEnabled()) {
-      const viaDriver = await this.q<StockRealtime>(Capability.STOCK_REALTIME, 'batchRealtime', false, codes)
-      if (viaDriver.success && viaDriver.data?.length) return viaDriver
+
+    const normalized = codes.map(c => normalizeCode(c))
+    const results: StockRealtime[] = []
+    const seen = new Set<string>()
+
+    const pushRows = (rows: StockRealtime[] | null | undefined) => {
+      if (!rows?.length) return
+      for (const row of rows) {
+        const key = normalizeCode(row.code)
+        if (seen.has(key)) continue
+        seen.add(key)
+        results.push({ ...row, code: key })
+      }
     }
-    try {
-      const rows = await tdxClient.batchRealtime(codes)
-      if (rows?.length) return { success: true, data: rows, source: 'mootdx', cached: false }
-    } catch { /* driver fallback */ }
-    return this.q(Capability.STOCK_REALTIME, 'batchRealtime', false, codes)
+
+    const tushareEligible = isTushareEnabled()
+      ? normalized.filter(c => !isBse920Code(c))
+      : []
+    if (tushareEligible.length) {
+      const viaDriver = await this.q<StockRealtime>(
+        Capability.STOCK_REALTIME, 'batchRealtime', false, tushareEligible,
+      )
+      if (viaDriver.success) pushRows(viaDriver.data)
+    }
+
+    const missing = normalized.filter(c => !seen.has(c))
+    const tdxEligible = missing.filter(c => !isBse920Code(c))
+    if (tdxEligible.length) {
+      try {
+        pushRows(await tdxClient.batchRealtime(tdxEligible))
+      } catch { /* driver fallback */ }
+    }
+
+    const stillMissing = normalized.filter(c => !seen.has(c))
+    if (stillMissing.length) {
+      const viaQ = await this.q<StockRealtime>(
+        Capability.STOCK_REALTIME, 'batchRealtime', false, stillMissing,
+      )
+      if (viaQ.success) pushRows(viaQ.data)
+    }
+
+    if (!results.length) return { success: false, error: 'batchRealtime failed' }
+    return { success: true, data: results, source: 'mixed', cached: false }
   }
 
   private async fetchDailyKline(
@@ -127,19 +162,22 @@ export class AshareEngine {
     period = 'daily',
   ): Promise<QueryResult<StockKline[]>> {
     const want = Math.max(1, count)
-    if (isTushareEnabled()) {
+    const bse920 = isBse920Code(normalizeCode(code))
+    if (isTushareEnabled() && !bse920) {
       const viaDriver = await this.query<StockKline>(
         Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
         [code, period, '', '', want],
       )
       if (viaDriver.success && viaDriver.data?.length) return viaDriver
     }
-    try {
-      const rows = await this.fetchTdxBars(code, period, want, startOffset)
-      if (rows?.length) {
-        return { success: true, data: rows, source: 'mootdx', cached: false }
-      }
-    } catch { /* driver fallback */ }
+    if (!bse920) {
+      try {
+        const rows = await this.fetchTdxBars(code, period, want, startOffset)
+        if (rows?.length) {
+          return { success: true, data: rows, source: 'mootdx', cached: false }
+        }
+      } catch { /* driver fallback */ }
+    }
     return this.query<StockKline>(
       Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
       [code, period, '', '', want],
@@ -191,12 +229,14 @@ export class AshareEngine {
     count: number,
     startOffset: number,
   ): Promise<QueryResult<StockKline[]>> {
-    try {
-      const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
-      if (tdxRows?.length) {
-        return { success: true, data: tdxRows, source: 'mootdx', cached: false }
-      }
-    } catch { /* EastMoney fallback */ }
+    if (!isBse920Code(normalizeCode(code))) {
+      try {
+        const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
+        if (tdxRows?.length) {
+          return { success: true, data: tdxRows, source: 'mootdx', cached: false }
+        }
+      } catch { /* EastMoney fallback */ }
+    }
 
     return this.eastmoneyMinuteFallback(code, period, count, startOffset)
   }

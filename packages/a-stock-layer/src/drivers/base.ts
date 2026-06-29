@@ -1,5 +1,5 @@
 import { Capability } from '../core/capabilities.js'
-import { normalizeCode } from '../utils/helpers.js'
+import { isBseCode, normalizeCode, secFullCode } from '../utils/helpers.js'
 
 /** Base driver — all aaashare data sources extend this */
 export abstract class BaseDriver {
@@ -13,15 +13,12 @@ export abstract class BaseDriver {
 
   protected isSh(code: string) {
     const c = normalizeCode(code)
-    return c.startsWith('6') || c.startsWith('9') || c.startsWith('000')
+    if (isBseCode(c)) return false
+    return c.startsWith('6') || c.startsWith('9') || (c.startsWith('000') && parseInt(c, 10) < 1000)
   }
 
   protected secFullCode(code: string): string {
-    const c = normalizeCode(code)
-    if (c.startsWith('399') || (c.startsWith('0') && !c.startsWith('000'))) return `sz${c}`
-    if (c.startsWith('000') && parseInt(c, 10) < 1000) return `sh${c}`
-    if (c.startsWith('6') || c.startsWith('9')) return `sh${c}`
-    return `sz${c}`
+    return secFullCode(code)
   }
 
   // Optional methods — return null if unsupported

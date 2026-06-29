@@ -713,6 +713,16 @@ export class MarketDataStore {
     `).all(minBars) as { code: string }[]).map(r => r.code)
   }
 
+  /** BJ-listed codes with fewer than minBars daily K-lines (for post-bulk supplement). */
+  listBseCodesNeedingKlines(minBars: number): string[] {
+    const withMin = new Set(this.listCodesWithMinKlines(minBars))
+    const rows = this.db.prepare(`
+      SELECT code FROM stocks
+      WHERE market = 'BJ' AND status IN ('active', 'st')
+    `).all() as { code: string }[]
+    return rows.map(r => r.code).filter(c => !withMin.has(c))
+  }
+
   markBootstrapJobDoneForCodes(jobName: string, codes: string[], scopeKey = ''): void {
     const tx = this.db.transaction((list: string[]) => {
       for (const code of list) this.markJobProgress(jobName, code, scopeKey, 'done')

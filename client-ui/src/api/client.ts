@@ -3,7 +3,9 @@ import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMe
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
-const REQUEST_TIMEOUT = 10000 // 10s timeout for all API requests
+const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
+/** Agent chat: multiple LLM + tool rounds (server LLM timeout up to 120s per round). */
+const CHAT_REQUEST_TIMEOUT = 300_000
 
 async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
   const controller = new AbortController()
@@ -29,8 +31,8 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
   }
 }
 
-async function jsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
-  const resp = await fetchWithTimeout(`${API_BASE}${path}`, init)
+async function jsonFetch<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<T> {
+  const resp = await fetchWithTimeout(`${API_BASE}${path}`, init, timeoutMs)
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({})) as { error?: string }
     throw new Error(err.error || `API error: ${resp.status}`)
@@ -58,7 +60,7 @@ export async function apiCall<T>(
 import type {
   StockDiagnosisData, InstitutionRatingData,
   ScreeningData, StrategySignalData, StrategyVerifyData,
-  PortfolioAnalysisData, IndustryMiningData, MarketReportData,
+  PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
 
@@ -94,6 +96,18 @@ export const research = {
 
   industryMining: (industry: string) =>
     apiCall<IndustryMiningData>('industry_mining', { industry }),
+
+  marketIndustryStats: (tradeDate?: string) =>
+    apiCall<{ items: IndustryStatItem[]; trade_date: string | null; quote_date: string | null }>(
+      'market_industry_stats',
+      tradeDate ? { trade_date: tradeDate } : {},
+    ),
+
+  industryStocks: (industry: string, limit = 120) =>
+    apiCall<{ trade_date: string; industry: string; items: IndustryStockItem[] }>(
+      'market_industry_stocks',
+      { industry, limit },
+    ),
 
   marketReport: (type: 'morning' | 'closing') =>
     apiCall<MarketReportData>('market_report', { type }),
@@ -510,7 +524,7 @@ export async function ephemeralAsk(
       ...(model ? { model } : {}),
       ...(history?.length ? { history } : {}),
     }),
-  })
+  }, CHAT_REQUEST_TIMEOUT)
 }
 
 export async function sendSessionChat(
@@ -530,5 +544,5 @@ export async function sendSessionChat(
       message,
       ...(model ? { model } : {}),
     }),
-  })
+  }, CHAT_REQUEST_TIMEOUT)
 }

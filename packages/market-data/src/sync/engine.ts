@@ -411,12 +411,21 @@ export class MarketDataSyncEngine {
           this.markDone('quotes', code, tradeDate)
           success++
         }
-        for (const code of chunk) {
-          if (!seen.has(code)) {
-            error++
-            this.markError('quotes', code, tradeDate)
-            this.store.logError(runId, 'quotes', code, 'missing from batchRealtime response')
-          }
+        const missing = chunk.filter(code => !seen.has(code))
+        if (missing.length) {
+          await mapPool(missing, cfg.concurrency, cfg.delayMs, async code => {
+            try {
+              const single = await this.callApi(() => this.de.realtime(code), 'default')
+              if (!single.success || !single.data?.[0]) throw new Error(single.error ?? 'realtime failed')
+              this.store.upsertQuoteDaily(tradeDate, code, single.data[0] as unknown as Record<string, unknown>)
+              this.markDone('quotes', code, tradeDate)
+              success++
+            } catch (e) {
+              error++
+              this.markError('quotes', code, tradeDate)
+              this.store.logError(runId, 'quotes', code, e instanceof Error ? e.message : String(e))
+            }
+          })
         }
       } catch {
         await mapPool(chunk, cfg.concurrency, cfg.delayMs, async code => {
@@ -883,6 +892,7 @@ export class MarketDataSyncEngine {
       }
       const cutoff = dates[0] ?? todayTradeDate()
       this.store.pruneKlinesOlderThan(cutoff)
+      await this.syncBseKlineSupplement(runId, options, cfg)
       const klineCodes = this.store.listCodesWithMinKlines(60)
       if (klineCodes.length) {
         this.store.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
@@ -934,6 +944,57 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
+  }
+
+  /** After Tushare bulk K-line sync, backfill BJ stocks via EastMoney per-stock API. */
+  private async syncBseKlineSupplement(
+    runId: number,
+    options: SyncOptions,
+    cfg: JobSyncConfig,
+  ): Promise<void> {
+    const bseCodes = this.store.listBseCodesNeedingKlines(60)
+    if (!bseCodes.length) return
+
+    options.onLog?.(`北交所 K 线补全 · ${bseCodes.length} 只`)
+    let success = 0
+    let error = 0
+
+    await mapPool(bseCodes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'kline_bootstrap', current: index + 1, total: bseCodes.length })
+      try {
+        const resp = await this.callApi(
+          () => this.de.kline(code, 'daily', '', '', KLINE_BOOTSTRAP_DAYS),
+          'default',
+        )
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'kline failed')
+        this.store.bulkUpsertKlines(resp.data.map(bar => ({
+          tradeDate: bar.date.slice(0, 10),
+          code,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume ?? null,
+          amount: bar.amount ?? null,
+          changePct: bar.changePct ?? null,
+        })))
+        this.markDone('kline_bootstrap', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('kline_bootstrap', code, '')
+        this.store.logError(
+          runId,
+          'kline_bootstrap',
+          code,
+          e instanceof Error ? e.message : String(e),
+        )
+      }
+    })
+
+    if (success || error) {
+      options.onLog?.(`北交所 K 线补全完成 · 成功 ${success} · 失败 ${error}`)
+    }
   }
 
   private syncScreenFactors(

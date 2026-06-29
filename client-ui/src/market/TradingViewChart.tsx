@@ -337,6 +337,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
         if (!hasChart) setData(null)
         return
       }
+      if (resp.data.bars.length === 0 && resp.message) {
+        setError(resp.message)
+        if (!hasChart) setData(null)
+        return
+      }
       if (nextPeriod === 'intraday') {
         const ok = resp.data.isTradingDay && resp.data.bars.length > 0
         setIntradayAvailable(ok)

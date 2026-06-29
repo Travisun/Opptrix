@@ -1,6 +1,8 @@
-import { useCallback, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import DiscoverTab from './DiscoverTab'
+import IndustryTab from './IndustryTab'
+import PortfolioTab from './PortfolioTab'
 import { useDiscoverSession } from './useDiscoverSession'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
@@ -26,7 +28,7 @@ import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
 import { normalizeCode } from './format'
 
-type MarketTab = 'watchlist' | 'discover' | 'detail'
+type MarketTab = 'watchlist' | 'discover' | 'industry' | 'portfolio' | 'detail'
 
 const useStyles = makeStyles({
   root: {
@@ -61,17 +63,24 @@ const useStyles = makeStyles({
     paddingRight: '12px',
   },
   tabsWrap: {
-    flexShrink: 0,
+    flex: '0 1 auto',
+    minWidth: 0,
     maxWidth: '100%',
     paddingLeft: '15px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    scrollbarWidth: 'none',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
+    '&::-webkit-scrollbar': { display: 'none' },
   },
   tabs: {
     minHeight: 'unset',
+    flexWrap: 'nowrap',
+    width: 'max-content',
   },
   dragFill: {
-    flex: 1,
+    flex: '1 1 auto',
     minWidth: '8px',
     alignSelf: 'stretch',
   },
@@ -105,8 +114,10 @@ const useStyles = makeStyles({
 interface Props {
   electronChrome?: boolean
   chatColumnVisible?: boolean
-  /** Skip left global toolbar band when sidebar is not inline (overlay / collapsed). */
+  /** Skip left global toolbar band when sidebar overlay + panel spans full width. */
   chromeToolbarReserve?: number
+  /** Right panel occupies full workspace width (chat column hidden). */
+  panelFullWidth?: boolean
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
   onDiscussInChat?: (payload: StockDiscussPayload) => void
@@ -116,6 +127,7 @@ export default function RightMarketPanel({
   electronChrome = false,
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
+  panelFullWidth = false,
   onToggleRightPanel,
   onToggleChatColumn,
   onDiscussInChat,
@@ -175,6 +187,18 @@ export default function RightMarketPanel({
     addItem(item)
   }, [addItem])
 
+  const handlePortfolioSelect = useCallback((code: string) => {
+    const normalized = normalizeCode(code)
+    const fromList = items.find(item => normalizeCode(item.code) === normalized)
+    const holding = holdingsByCode[normalized]
+    const item: WatchlistItem = fromList ?? {
+      code: normalized,
+      name: holding?.name ?? normalized,
+    }
+    setSelected(item)
+    setTab('detail')
+  }, [items, holdingsByCode])
+
   const detailStock = useMemo(() => {
     if (!selected) return null
     return items.find(item => item.code === selected.code) ?? selected
@@ -183,6 +207,22 @@ export default function RightMarketPanel({
   const manageHolding = manageStock
     ? holdingsByCode[normalizeCode(manageStock.code)] ?? null
     : null
+
+  const showDetailTab = tab === 'detail'
+  /** Overlay sidebar + full-width panel: indent tabs past global toolbar (no fixed title bar). */
+  const tabsPadLeft = electronChrome && panelFullWidth && !chatColumnVisible && chromeToolbarReserve > 0
+    ? Math.max(15, chromeToolbarReserve)
+    : undefined
+
+  useEffect(() => {
+    if (tab === 'detail' && !selected) {
+      setTab('watchlist')
+    }
+  }, [tab, selected])
+
+  const handleTabSelect = useCallback((_: unknown, data: { value: unknown }) => {
+    setTab(data.value as MarketTab)
+  }, [])
 
   const showWorkspaceActions = Boolean(onToggleRightPanel || onToggleChatColumn)
 
@@ -196,23 +236,27 @@ export default function RightMarketPanel({
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}
       >
-        <div className={mergeClasses(s.tabsWrap, 'inno-panel-title-no-drag')}>
+        <div
+          className={mergeClasses(s.tabsWrap, 'inno-panel-title-no-drag')}
+          style={tabsPadLeft != null ? { paddingLeft: `${tabsPadLeft}px` } : undefined}
+        >
           <TabList
             className={s.tabs}
             size="small"
             selectedValue={tab}
-            onTabSelect={(_, data) => setTab(data.value as MarketTab)}
+            onTabSelect={handleTabSelect}
           >
             <Tab value="watchlist">关注</Tab>
+            <Tab value="portfolio">组合</Tab>
+            <Tab value="industry">行业</Tab>
             <Tab value="discover">选股</Tab>
-            <Tab value="detail" disabled={!selected}>详情</Tab>
+            {showDetailTab ? <Tab value="detail">详情</Tab> : null}
           </TabList>
         </div>
 
         {electronChrome && (
           <div
             className={mergeClasses(s.dragFill, 'inno-right-panel-title-drag')}
-            style={chromeToolbarReserve > 0 ? { marginLeft: `${chromeToolbarReserve}px` } : undefined}
             aria-hidden
           />
         )}
@@ -269,6 +313,16 @@ export default function RightMarketPanel({
             watchlistCodes={watchlistCodeSet}
             onSelect={handleDiscoverSelect}
             onAdd={handleDiscoverAdd}
+          />
+        </div>
+        <div className={mergeClasses(s.tabPane, tab !== 'industry' && s.tabPaneHidden)}>
+          <IndustryTab onSelectStock={handleDiscoverSelect} />
+        </div>
+        <div className={mergeClasses(s.tabPane, tab !== 'portfolio' && s.tabPaneHidden)}>
+          <PortfolioTab
+            active={tab === 'portfolio'}
+            selectedCode={selectedCode}
+            onSelect={handlePortfolioSelect}
           />
         </div>
         {tab === 'detail' && (

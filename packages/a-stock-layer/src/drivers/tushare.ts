@@ -19,7 +19,7 @@ import {
   todayYmd,
   ymdDaysAgo,
 } from '../tushare/transform.js'
-import { normalizeCode } from '../utils/helpers.js'
+import { isBse920Code, normalizeCode } from '../utils/helpers.js'
 
 const ENABLED_PRIORITY = 110
 const DISABLED_PRIORITY = 0
@@ -107,11 +107,12 @@ export class TushareDriver extends BaseDriver {
 
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     const client = this.client()
-    if (!client || !codes.length) return null
+    const eligible = codes.filter(c => !isBse920Code(normalizeCode(c)))
+    if (!client || !eligible.length) return null
     try {
       const snapshot = await this.loadDailySnapshot(client)
       const out: StockRealtime[] = []
-      for (const code of codes) {
+      for (const code of eligible) {
         const q = snapshot.get(normalizeCode(code))
         if (q) out.push(q)
       }
@@ -122,6 +123,7 @@ export class TushareDriver extends BaseDriver {
   }
 
   async realtime(code: string): Promise<StockRealtime[] | null> {
+    if (isBse920Code(normalizeCode(code))) return null
     const batch = await this.batchRealtime([code])
     return batch
   }
@@ -133,6 +135,7 @@ export class TushareDriver extends BaseDriver {
     end = '',
     count?: number,
   ): Promise<StockKline[] | null> {
+    if (isBse920Code(normalizeCode(code))) return null
     if (period !== 'daily' && period !== 'weekly' && period !== 'monthly') return null
     const client = this.client()
     if (!client) return null
@@ -208,6 +211,7 @@ export class TushareDriver extends BaseDriver {
   }
 
   async profile(code: string): Promise<StockProfile[] | null> {
+    if (isBse920Code(normalizeCode(code))) return null
     const client = this.client()
     if (!client) return null
     try {

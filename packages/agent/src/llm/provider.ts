@@ -60,7 +60,9 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         model: this.cfg.model,
         messages: messages.map(m => ({
           role: m.role,
-          content: m.content ?? '',
+          ...(m.role === 'assistant' && m.tool_calls
+            ? { content: m.content ?? null }
+            : { content: m.content ?? '' }),
           ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
           ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
           ...(m.name ? { name: m.name } : {}),

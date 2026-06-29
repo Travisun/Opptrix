@@ -1,7 +1,7 @@
 import { Capability } from '../core/capabilities.js'
 import type { MoneyFlow, StockRealtime } from '../core/schema.js'
 import { BaseDriver } from './base.js'
-import { normalizeCode } from '../utils/helpers.js'
+import { normalizeCode, isBseCode, resolveMarket, secXueqiuSymbol } from '../utils/helpers.js'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
@@ -34,8 +34,7 @@ export class XueqiuDriver extends BaseDriver {
   }
 
   private symbol(code: string) {
-    const c = normalizeCode(code)
-    return `${c.startsWith('6') || c.startsWith('9') ? 'SH' : 'SZ'}${c}`
+    return secXueqiuSymbol(code)
   }
 
   async realtime(code: string) {

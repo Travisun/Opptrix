@@ -58,6 +58,45 @@ export function latestFactorDate(db: Database.Database): string | null {
   return row.d
 }
 
+export function latestQuoteDate(db: Database.Database): string | null {
+  const row = db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }
+  return row.d
+}
+
+/** CTEs: per-code latest quote/kline rows for change_pct (factor date may differ from quote date). */
+const LATEST_MARKET_CTES = `
+  WITH latest_quotes AS (
+    SELECT code, MAX(trade_date) AS trade_date
+    FROM stock_quotes_daily
+    GROUP BY code
+  ),
+  quotes AS (
+    SELECT q.code, q.close, q.change_pct, q.pe, q.pb, q.market_cap
+    FROM stock_quotes_daily q
+    INNER JOIN latest_quotes lq ON q.code = lq.code AND q.trade_date = lq.trade_date
+  ),
+  latest_klines AS (
+    SELECT code, MAX(trade_date) AS trade_date
+    FROM stock_klines_daily
+    GROUP BY code
+  ),
+  klines AS (
+    SELECT k.code, k.close, k.change_pct
+    FROM stock_klines_daily k
+    INNER JOIN latest_klines lk ON k.code = lk.code AND k.trade_date = lk.trade_date
+  )
+`
+
+const EFFECTIVE_CHANGE_PCT = 'COALESCE(q.change_pct, k.change_pct)'
+const EFFECTIVE_CLOSE = 'COALESCE(q.close, k.close)'
+
+/** 可纳入行业/列表统计的活跃个股（排除退市等） */
+const LISTABLE_STOCK_WHERE = `
+  s.status = 'active'
+  AND s.name NOT LIKE '退市%'
+  AND TRIM(COALESCE(s.name, '')) != ''
+`
+
 export function localScreen(
   store: MarketDataStore,
   conditions: ScreenCondition[],
@@ -371,14 +410,106 @@ export function localUniverseScreen(
   }
 }
 
+export interface IndustryStockRow {
+  code: string
+  name: string
+  industry: string | null
+  total_score: number | null
+  price: number | null
+  change_pct: number | null
+}
+
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
-  const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
-  return store.db.prepare(`
-    SELECT industry, stock_count, avg_score, avg_pe, avg_pb
-    FROM industry_stats
-    WHERE trade_date = ?
-    ORDER BY stock_count DESC
-  `).all(date)
+  const db = store.db
+  const factorDate = tradeDate ?? latestFactorDate(db) ?? latestQuoteDate(db) ?? todayTradeDate()
+  const quoteDate = latestQuoteDate(db)
+  const rows = db.prepare(`
+    ${LATEST_MARKET_CTES}
+    SELECT
+      COALESCE(NULLIF(TRIM(s.industry), ''), '未分类') AS industry,
+      COUNT(*) AS stock_count,
+      AVG(sc.total_score) AS avg_score,
+      AVG(q.pe) AS avg_pe,
+      AVG(q.pb) AS avg_pb,
+      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} > 0 THEN 1 ELSE 0 END) AS up_count,
+      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} < 0 THEN 1 ELSE 0 END) AS down_count,
+      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} IS NULL OR ${EFFECTIVE_CHANGE_PCT} = 0 THEN 1 ELSE 0 END) AS flat_count
+    FROM stocks s
+    LEFT JOIN quotes q ON q.code = s.code
+    LEFT JOIN klines k ON k.code = s.code
+    LEFT JOIN stock_scores sc ON sc.code = s.code AND sc.trade_date = ? AND sc.scorecard = '综合评估'
+    WHERE ${LISTABLE_STOCK_WHERE} AND s.industry IS NOT NULL AND TRIM(s.industry) != ''
+    GROUP BY COALESCE(NULLIF(TRIM(s.industry), ''), '未分类')
+    HAVING COUNT(*) > 0
+    ORDER BY up_count DESC, down_count ASC, stock_count DESC
+  `).all(factorDate) as {
+    industry: string
+    stock_count: number
+    avg_score: number | null
+    avg_pe: number | null
+    avg_pb: number | null
+    up_count: number
+    down_count: number
+    flat_count: number
+  }[]
+  return { trade_date: factorDate, quote_date: quoteDate, items: rows }
+}
+
+export function queryIndustryStocks(
+  store: MarketDataStore,
+  industry: string,
+  tradeDate?: string,
+  limit = 120,
+): { trade_date: string; industry: string; items: IndustryStockRow[] } {
+  const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
+  const db = store.db
+  const key = industry.trim()
+  let industryClause: string
+  const industryParams: string[] = []
+  if (key === '-' || key === '未分类' || key === '其他') {
+    industryClause = `(s.industry IS NULL OR TRIM(s.industry) = '' OR s.industry = '-' OR s.industry = '未分类')`
+  } else {
+    industryClause = 's.industry = ?'
+    industryParams.push(key)
+  }
+  const cap = Math.min(Math.max(limit, 1), 200)
+  const rows = db.prepare(`
+    ${LATEST_MARKET_CTES}
+    SELECT
+      s.code,
+      s.name,
+      s.industry,
+      sc.total_score,
+      ${EFFECTIVE_CLOSE} AS price,
+      ${EFFECTIVE_CHANGE_PCT} AS change_pct
+    FROM stocks s
+    LEFT JOIN quotes q ON q.code = s.code
+    LEFT JOIN klines k ON k.code = s.code
+    LEFT JOIN stock_scores sc ON sc.code = s.code AND sc.trade_date = ? AND sc.scorecard = '综合评估'
+    WHERE ${LISTABLE_STOCK_WHERE} AND ${industryClause}
+    ORDER BY (${EFFECTIVE_CHANGE_PCT} IS NULL), ${EFFECTIVE_CHANGE_PCT} DESC, s.code ASC
+    LIMIT ?
+  `).all(factorDate, ...industryParams, cap) as {
+    code: string
+    name: string
+    industry: string | null
+    total_score: number | null
+    price: number | null
+    change_pct: number | null
+  }[]
+
+  return {
+    trade_date: factorDate,
+    industry: key,
+    items: rows.map(row => ({
+      code: row.code,
+      name: row.name,
+      industry: row.industry,
+      total_score: row.total_score,
+      price: row.price,
+      change_pct: row.change_pct,
+    })),
+  }
 }
 
 export function queryRadarBatch(store: MarketDataStore, codes: string[], tradeDate?: string) {

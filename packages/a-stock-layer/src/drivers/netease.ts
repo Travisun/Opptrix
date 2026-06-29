@@ -1,7 +1,7 @@
 import { Capability } from '../core/capabilities.js'
 import type { IndexKline, StockKline } from '../core/schema.js'
 import { BaseDriver } from './base.js'
-import { normalizeCode } from '../utils/helpers.js'
+import { isBseCode, normalizeCode } from '../utils/helpers.js'
 
 const HEADERS = {
   'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
@@ -10,7 +10,9 @@ const HEADERS = {
 
 function neteaseCode(code: string) {
   const c = normalizeCode(code)
-  return `${c.startsWith('6') || c.startsWith('9') ? '0' : '1'}${c}`
+  if (isBseCode(c)) return `2${c}`
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `0${c}`
+  return `1${c}`
 }
 
 function parseCsv(text: string, code: string) {

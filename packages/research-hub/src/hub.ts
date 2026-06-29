@@ -1,4 +1,4 @@
-import { AshareEngine, computeIndicators, normalizeCode, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection } from '@inno-a-stock/a-stock-layer'
+import { AshareEngine, computeIndicators, normalizeCode, resolveMarket, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode } from '@inno-a-stock/a-stock-layer'
 import type { StockListItem } from '@inno-a-stock/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
@@ -75,6 +75,7 @@ export class ResearchHub {
         case 'market_db_sync': return this.marketDbSync(params, t0)
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
+        case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
         case 'list_screen_factors': return this.listScreenFactors(t0)
         case 'local_universe_screen_schema': return this.localUniverseScreenSchema(t0)
         case 'local_universe_screen': return this.localUniverseScreen(params, t0)
@@ -236,8 +237,25 @@ export class ResearchHub {
 
   private marketIndustryStats(params: Record<string, unknown>, t0: number) {
     const tradeDate = params.trade_date ? String(params.trade_date) : undefined
-    const items = this.marketData.industryStats(tradeDate)
-    return ok({ items, trade_date: tradeDate ?? this.marketData.status().latest_factor_date }, '行业统计', t0)
+    const data = this.marketData.industryStats(tradeDate)
+    return ok(
+      { items: data.items, trade_date: data.trade_date, quote_date: data.quote_date },
+      '行业统计',
+      t0,
+    )
+  }
+
+  private marketIndustryStocks(params: Record<string, unknown>, t0: number) {
+    const industry = String(params.industry ?? '').trim()
+    if (!industry) return fail('请指定行业', t0)
+    const limit = params.limit != null ? Number(params.limit) : 120
+    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
+    const data = this.marketData.industryStocks(industry, tradeDate, limit)
+    const topCodes = data.items.map(i => i.code).slice(0, 30)
+    if (topCodes.length) {
+      void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
+    }
+    return ok(data, `${industry} ${data.items.length} 只`, t0)
   }
 
   private listScreenFactors(t0: number) {
@@ -341,28 +359,11 @@ export class ResearchHub {
     return ok(data, data.title, t0)
   }
 
-  private async searchStocks(keyword: string, t0: number) {
+  private searchStocks(keyword: string, t0: number) {
     const raw = keyword.trim()
     if (!raw) return ok({ keyword: raw, results: [] as StockListItem[] }, '请输入关键词', t0)
 
-    const query = /^\d+$/.test(raw)
-      ? (raw.length >= 6 ? normalizeCode(raw) : raw)
-      : raw
-    const found = await searchQuote(query, 30)
-    const items = found == null ? [] : (Array.isArray(found) ? found : [found])
-    const results: StockListItem[] = items
-      .filter(q => q.marketType === 'AStock')
-      .map(q => {
-        const code = normalizeCode(q.code)
-        return {
-          code,
-          name: q.name,
-          industry: '',
-          market: code.startsWith('6') || code.startsWith('9') ? 'SH' : 'SZ',
-        }
-      })
-      .slice(0, 30)
-
+    const results = this.marketData.searchStocks(raw)
     return ok({ keyword: raw, results }, `找到 ${results.length} 只`, t0)
   }
 
@@ -581,7 +582,7 @@ export class ResearchHub {
     ])
 
     const quoteRaw = quoteR.data?.[0] ?? null
-    const quote = quoteRaw ? this.enrichQuote(quoteRaw) : null
+    const quote = this.mergeQuoteWithLocal(code, quoteRaw)
     const profile = profileR.data?.[0] ?? null
     const financial = financialR.data?.[0] ?? null
     const name = this.resolveStockName(
@@ -603,6 +604,53 @@ export class ResearchHub {
       moneyFlow: moneyFlowR.data ?? [],
       shareholders: shareholdersR.data?.[0] ?? null,
     }, `${name}(${code}) 详情`, t0)
+  }
+
+  private mergeQuoteWithLocal(
+    code: string,
+    quoteRaw: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0] | null,
+  ) {
+    const local = isBseCode(code) ? this.marketData.localLatestQuote(code) : null
+    const livePrice = quoteRaw?.price
+    const needsLocal = isBseCode(code) && (livePrice == null || livePrice <= 0) && local?.close != null
+
+    if (!quoteRaw && !needsLocal) return null
+    if (!needsLocal) return quoteRaw ? this.enrichQuote(quoteRaw) : null
+
+    const merged = {
+      code: normalizeCode(code),
+      name: quoteRaw?.name ?? local?.name ?? code,
+      price: local!.close!,
+      changePct: quoteRaw?.changePct ?? local?.change_pct ?? null,
+      pe: quoteRaw?.pe ?? local?.pe ?? null,
+      pb: quoteRaw?.pb ?? local?.pb ?? null,
+      turnoverRate: quoteRaw?.turnoverRate ?? null,
+      preClose: quoteRaw?.preClose ?? null,
+      open: quoteRaw?.open ?? null,
+      high: quoteRaw?.high ?? null,
+      low: quoteRaw?.low ?? null,
+      volume: quoteRaw?.volume ?? null,
+      amount: quoteRaw?.amount ?? null,
+      marketCap: quoteRaw?.marketCap ?? local?.market_cap ?? null,
+      change: quoteRaw?.change ?? null,
+      amplitude: quoteRaw?.amplitude ?? null,
+    }
+    return this.enrichQuote(merged)
+  }
+
+  private fetchLocalChartKlines(
+    code: string,
+    safeCount: number,
+    before: string,
+  ): { klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null {
+    if (!isBseCode(code)) return null
+    const limit = before ? 200 : safeCount
+    const klines = this.marketData.localDailyKlines(code, limit, before || undefined)
+    if (!klines.length) return null
+    return {
+      klines,
+      hasMore: klines.length >= limit && klines.length < 800,
+    }
   }
 
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0]) {
@@ -741,20 +789,24 @@ export class ResearchHub {
       }
       const recentCount = Math.max(tail, safeCount, 240)
       const recentR = await this.de.kline(code, klinePeriod, '', '', recentCount)
-      if (!recentR.success || !recentR.data?.length) return null
-      const merged = this.mergeKlineByTime(older, recentR.data, before)
-      return {
-        klines: merged.slice(-800),
-        hasMore: older.length >= step,
+      if (recentR.success && recentR.data?.length) {
+        const merged = this.mergeKlineByTime(older, recentR.data, before)
+        return {
+          klines: merged.slice(-800),
+          hasMore: older.length >= step,
+        }
       }
+      return this.fetchLocalChartKlines(code, safeCount, before)
     }
 
     const klineR = await this.de.kline(code, klinePeriod, '', '', safeCount)
-    if (!klineR.success || !klineR.data?.length) return null
-    return {
-      klines: klineR.data,
-      hasMore: klineR.data.length >= safeCount && safeCount < 800,
+    if (klineR.success && klineR.data?.length) {
+      return {
+        klines: klineR.data,
+        hasMore: klineR.data.length >= safeCount && safeCount < 800,
+      }
     }
+    return this.fetchLocalChartKlines(code, safeCount, before)
   }
 
   private async stockChart(
@@ -769,7 +821,22 @@ export class ResearchHub {
     const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : 800
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
     const quoteR = await this.de.realtime(code)
-    const quote = quoteR.data?.[0] ?? null
+    let quote = quoteR.data?.[0] ?? null
+    if (isBseCode(normalized) && (quote?.price == null || quote.price <= 0)) {
+      const local = this.marketData.localLatestQuote(normalized)
+      if (local?.close != null) {
+        quote = {
+          code: normalized,
+          name: quote?.name ?? local.name ?? normalized,
+          price: local.close,
+          changePct: quote?.changePct ?? local.change_pct ?? null,
+          pe: quote?.pe ?? local.pe ?? null,
+          pb: quote?.pb ?? local.pb ?? null,
+          turnoverRate: quote?.turnoverRate ?? null,
+          preClose: quote?.preClose ?? null,
+        }
+      }
+    }
     const preClose = quote?.preClose ?? null
     const name = this.resolveStockName(code, quote?.name)
 
@@ -825,6 +892,18 @@ export class ResearchHub {
 
     const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail)
     if (!fetched?.klines.length) {
+      if (isBseCode(normalized)) {
+        return ok({
+          code: normalized,
+          name,
+          period,
+          preClose,
+          isTradingDay: this.isCnTradingDayCandidate(),
+          hasMore: false,
+          bars: [],
+          indicators: [],
+        }, `${name} 暂无K线数据（可先同步本地行情）`, t0)
+      }
       return fail('K线获取失败', t0)
     }
 

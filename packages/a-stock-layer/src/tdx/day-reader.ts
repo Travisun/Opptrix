@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import type { StockKline } from '@inno-a-stock/shared'
-import { normalizeCode } from '../utils/helpers.js'
+import { isBseCode, normalizeCode } from '../utils/helpers.js'
 
 const COEFFICIENTS: Record<string, [number, number]> = {
   SH_A_STOCK: [0.01, 0.01], SZ_A_STOCK: [0.01, 0.01],
@@ -61,7 +61,8 @@ export class TdxDailyBarReader {
 
   resolvePath(code: string, exchange?: string) {
     const c = normalizeCode(code)
-    const ex = exchange ?? (c.startsWith('6') || c.startsWith('9') || (c.startsWith('000') && parseInt(c, 10) < 1000) ? 'sh' : 'sz')
+    const ex = exchange ?? (isBseCode(c) ? 'bj'
+      : (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || (c.startsWith('000') && parseInt(c, 10) < 1000) ? 'sh' : 'sz'))
     if (!this.vipdocPath) throw new Error('vipdoc path not set')
     return path.join(this.vipdocPath, ex, 'lday', `${ex}${c}.day`)
   }

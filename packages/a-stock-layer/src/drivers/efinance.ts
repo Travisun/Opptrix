@@ -5,7 +5,7 @@ import type {
 } from '../core/schema.js'
 import { ef } from '../efinance/index.js'
 import { KLT_MAP } from '../efinance/config.js'
-import { normalizeCode, safeFloat } from '../utils/helpers.js'
+import { normalizeCode, resolveMarket, safeFloat } from '../utils/helpers.js'
 import { BaseDriver } from './base.js'
 
 function quoteToRealtime(row: Record<string, unknown>, code: string): StockRealtime {
@@ -155,7 +155,7 @@ export class EfinanceDriver extends BaseDriver {
         const c = String(r['代码'] ?? '')
         return {
           code: c, name: String(r['名称'] ?? ''), industry: '',
-          market: c.startsWith('6') || c.startsWith('9') ? 'SH' : 'SZ',
+          market: resolveMarket(c),
         } satisfies StockListItem
       })
     } catch { return null }

@@ -1,6 +1,7 @@
 import type { ResearchHub } from '@inno-a-stock/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import { type ChatMessage } from './llm/provider.js'
+import { tailMessagesForLlm } from './llm/messages.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
@@ -216,7 +217,7 @@ export class AgentEngine {
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
         ...contextMessages,
-        ...record.messages.slice(-24),
+        ...tailMessagesForLlm(record.messages),
       ]
 
       const turn = await llm.chat(messages, openAiTools)
@@ -243,7 +244,12 @@ export class AgentEngine {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
 
-          const result = await broker.call(fn, args)
+          let result: unknown
+          try {
+            result = await broker.call(fn, args)
+          } catch (e) {
+            result = { error: e instanceof Error ? e.message : String(e) }
+          }
           record.messages.push({
             role: 'tool',
             tool_call_id: tc.id,

@@ -155,7 +155,7 @@ export default function DesktopWindowChrome({
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
 
-  /** Clip drag off the right panel title band (panel title z-index 1200 < chrome 1300). */
+  /** Clip global drag off the right panel title band (panel title z-index 1200 < chrome 1300). */
   const dragLayerStyle: CSSProperties = (() => {
     if (isSettings || !rightPanelOpen) return {}
     if (!chatColumnVisible) {
@@ -172,6 +172,9 @@ export default function DesktopWindowChrome({
     if (rightPanelWidth > 0) return { right: `${rightPanelWidth}px` }
     return {}
   })()
+
+  /** Chat title drag overlaps the right panel tab strip when chat column is hidden. */
+  const showChatTitle = !isSettings && chatColumnVisible
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
@@ -192,7 +195,7 @@ export default function DesktopWindowChrome({
 
   return createPortal(
     <>
-      {!isSettings && (
+      {!isSettings && showChatTitle && (
         <div className={s.title} style={{ left: `${titleLeft}px` }}>
           <Text className={s.titleText}>{title || '新对话'}</Text>
         </div>

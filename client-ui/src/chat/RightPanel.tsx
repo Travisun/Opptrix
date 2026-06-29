@@ -96,6 +96,7 @@ export default function RightPanel({
           electronChrome={electronChrome}
           chatColumnVisible={chatColumnVisible}
           chromeToolbarReserve={chromeToolbarReserve}
+          panelFullWidth={fullWidth}
           onToggleRightPanel={visible ? onToggleRightPanel : undefined}
           onToggleChatColumn={visible ? onToggleChatColumn : undefined}
           onDiscussInChat={visible ? onDiscussInChat : undefined}
