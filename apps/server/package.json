@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "npm run build && node scripts/dev.mjs",
+    "dev": "npm run build && concurrently -k -n tsc,api \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node scripts/dev.mjs\"",
     "build": "tsc -p tsconfig.json",
     "start": "node dist/index.js",
     "mcp": "npm run build -w @inno-a-stock/agent && node ../../packages/agent/dist/mcp/stdio-entry.js"

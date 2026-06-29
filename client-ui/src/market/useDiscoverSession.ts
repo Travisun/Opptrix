@@ -24,7 +24,9 @@ export interface DiscoverSessionState {
   runCustomStrategy: (opts: { id: string; name: string; prompt: string }) => Promise<void>
   cancelRun: () => Promise<void>
   loadHistoryJob: (job: DiscoverJobSnapshot) => void
-  deleteHistoryJob: (jobId: string) => Promise<void>
+  deleteHistoryJob: (jobId: string) => Promise<boolean>
+  deleteError: string
+  clearDeleteError: () => void
 }
 
 export function useDiscoverSession(): DiscoverSessionState {
@@ -35,6 +37,7 @@ export function useDiscoverSession(): DiscoverSessionState {
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null)
+  const [deleteError, setDeleteError] = useState('')
   const pollRef = useRef<number | null>(null)
   const viewingJobIdRef = useRef<string | null>(null)
   const historyRef = useRef<DiscoverJobSnapshot[]>([])
@@ -206,6 +209,7 @@ export function useDiscoverSession(): DiscoverSessionState {
   }, [])
 
   const deleteHistoryJob = useCallback(async (jobId: string) => {
+    setDeleteError('')
     const viewingDeleted = viewingJobIdRef.current === jobId || activeJobId === jobId
     const prevHistory = historyRef.current
 
@@ -220,7 +224,13 @@ export function useDiscoverSession(): DiscoverSessionState {
 
     try {
       await deleteDiscoverJob(jobId)
-    } catch {
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : ''
+      setDeleteError(
+        msg.includes('not running')
+          ? '删除失败：请重启应用或 API 服务后再试'
+          : '删除失败，请稍后重试',
+      )
       setHistory(prevHistory)
       if (viewingDeleted) {
         const jobs = await refreshHistory()
@@ -233,11 +243,14 @@ export function useDiscoverSession(): DiscoverSessionState {
           setActiveJobId(restored.status === 'running' ? restored.id : null)
         }
       }
-      return
+      return false
     }
 
     await refreshHistory()
+    return true
   }, [activeJobId, clearViewingJob, refreshHistory, stopPoll])
+
+  const clearDeleteError = useCallback(() => setDeleteError(''), [])
 
   return {
     history,
@@ -254,5 +267,7 @@ export function useDiscoverSession(): DiscoverSessionState {
     cancelRun,
     loadHistoryJob,
     deleteHistoryJob,
+    deleteError,
+    clearDeleteError,
   }
 }

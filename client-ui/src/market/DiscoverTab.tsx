@@ -377,6 +377,8 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
     cancelRun,
     loadHistoryJob,
     deleteHistoryJob,
+    deleteError,
+    clearDeleteError,
   } = session
 
   const strategyOptions = useMemo((): DiscoverStrategyOption[] => {
@@ -433,6 +435,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   const handleDeleteHistory = (e: MouseEvent, jobId: string) => {
     e.preventDefault()
     e.stopPropagation()
+    clearDeleteError()
     void deleteHistoryJob(jobId)
   }
 
@@ -591,6 +594,9 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
       {panelTab === 'history' && (
         <div className={mergeClasses(s.historyList, 'inno-scroll')}>
+          {deleteError && (
+            <Text className={s.error} block>{deleteError}</Text>
+          )}
           {historyJobs.length === 0 && (
             <Text className={s.empty}>
               暂无历史记录。完成一次挖掘后，结果会保存在这里，可随时回看或删除。
