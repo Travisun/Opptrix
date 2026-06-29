@@ -1,5 +1,6 @@
 import { type ReactNode } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { ArrowClockwiseRegular } from '@fluentui/react-icons'
 import InnoButton from '../components/inno/InnoButton'
 import type { WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
@@ -299,7 +300,7 @@ export default function StockDecisionCard({
   onDiscuss,
 }: Props) {
   const s = useStyles()
-  const { data, loading, error } = useStockDecisionCard(stock, holding, price, moneyFlow, quotePe, quotePb)
+  const { data, loading, error, reload } = useStockDecisionCard(stock, holding, price, moneyFlow, quotePe, quotePb)
 
   const handleDiscuss = (topic: DiscussTopic) => {
     if (!data || !onDiscuss) return
@@ -320,6 +321,14 @@ export default function StockDecisionCard({
   if (loading && !data) {
     return (
       <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
+        <div className={s.headRow}>
+          <InnoButton
+            variant="icon"
+            icon={<ArrowClockwiseRegular fontSize={14} />}
+            aria-label="刷新分析"
+            disabled
+          />
+        </div>
         <div className={s.loading}><Spinner size="small" label="加载分析…" /></div>
       </div>
     )
@@ -328,6 +337,14 @@ export default function StockDecisionCard({
   if (error && !data) {
     return (
       <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
+        <div className={s.headRow}>
+          <InnoButton
+            variant="icon"
+            icon={<ArrowClockwiseRegular fontSize={14} />}
+            aria-label="刷新分析"
+            onClick={reload}
+          />
+        </div>
         <Text className={s.error}>{error}</Text>
       </div>
     )
@@ -353,11 +370,18 @@ export default function StockDecisionCard({
 
   return (
     <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
-      {loading && (
-        <div className={s.headRow}>
-          <Spinner size="tiny" label="刷新中" />
-        </div>
-      )}
+      <div className={s.headRow}>
+        {loading
+          ? <Spinner size="tiny" label="刷新中" />
+          : (
+            <InnoButton
+              variant="icon"
+              icon={<ArrowClockwiseRegular fontSize={14} />}
+              aria-label="刷新分析"
+              onClick={reload}
+            />
+          )}
+      </div>
 
       <Section title="核心研判">
         <div className={s.metricGrid3}>

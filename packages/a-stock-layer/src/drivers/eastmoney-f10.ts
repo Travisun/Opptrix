@@ -1,6 +1,6 @@
 import type { Dividend, FinancialSummary, StockProfile } from '../core/schema.js'
 import { httpGet } from '../utils/http.js'
-import { normalizeCode, safeFloat } from '../utils/helpers.js'
+import { isBseCode, normalizeCode, resolveMarket, safeFloat } from '../utils/helpers.js'
 
 const EMWEB_BASE = 'https://emweb.securities.eastmoney.com/PC_HSF10'
 export const SEC_DC_API = 'https://datacenter.eastmoney.com/securities/api/data/v1/get'
@@ -12,12 +12,14 @@ const SEC_HEADERS = { Referer: 'https://data.eastmoney.com/' }
 
 export function toEmWebCode(code: string): string {
   const c = normalizeCode(code)
-  return c.startsWith('6') || c.startsWith('9') ? `SH${c}` : `SZ${c}`
+  const m = resolveMarket(c)
+  return `${m}${c}`
 }
 
 export function toSecuCode(code: string): string {
   const c = normalizeCode(code)
-  return c.startsWith('6') || c.startsWith('9') ? `${c}.SH` : `${c}.SZ`
+  if (isBseCode(c)) return `${c}.BJ`
+  return `${c}.${resolveMarket(c)}`
 }
 
 function sliceDate(v: unknown): string {

@@ -9,12 +9,15 @@ import {
 } from './config.js'
 import { getMarketDataService } from '@inno-a-stock/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
+import { cancelDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
+import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
+import { listDiscoverStrategiesPublic, getDiscoverStrategy } from '@inno-a-stock/agent'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 
 const hub = new ResearchHub()
-hub.initMarketDataAutoResume()
+hub.initMarketDataAutoSync()
 let cfg = loadConfig()
 
 function syncAgentProviders() {
@@ -29,6 +32,15 @@ let agent = new AgentEngine(hub, {
 })
 
 const app = Fastify({ logger: true })
+
+app.post<{ Params: { code: string }; Body: { force?: boolean } }>('/api/stock/:code/prep', async (req) => {
+  const prep = startStockPrep(hub, req.params.code, { force: Boolean(req.body?.force) })
+  return { prep }
+})
+
+app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
+  return { prep: getStockPrep(req.params.code) }
+})
 
 app.get('/api/health', async () => ({
   status: 'ok',
@@ -61,6 +73,73 @@ app.get('/api/market-data/status', async () => {
 app.get('/api/market-data/sync-state', async () => {
   const result = await hub.dispatch('market_db_sync_state', {})
   return { success: result.success, data: result.data, message: result.message }
+})
+
+app.get('/api/discover/jobs', async () => {
+  return { jobs: listDiscoverJobs(40) }
+})
+
+app.get('/api/discover/strategies', async () => {
+  return { strategies: listDiscoverStrategiesPublic() }
+})
+
+app.get<{ Params: { id: string } }>('/api/discover/strategies/:id', async (req, reply) => {
+  const strategy = getDiscoverStrategy(req.params.id)
+  if (!strategy) return reply.code(404).send({ error: 'strategy not found' })
+  return {
+    strategy: {
+      id: strategy.id,
+      name: strategy.name,
+      category: strategy.category,
+      tagline: strategy.tagline,
+      methodology: strategy.methodology,
+      description: strategy.description,
+      scorecard: strategy.scorecard,
+      prescreen_top_n: strategy.prescreen_top_n,
+      final_top_n: strategy.final_top_n,
+      conditions: strategy.conditions,
+      refinement_notes: strategy.refinement_notes,
+      source: 'builtin' as const,
+    },
+  }
+})
+
+app.post<{ Body: { strategy_id?: string; custom_prompt?: string; custom_name?: string; custom_id?: string; model?: string } }>(
+  '/api/discover/run',
+  async (req, reply) => {
+    if (!agent.llmConfigured) return reply.code(503).send({ error: 'LLM 未配置' })
+    const strategyId = req.body?.strategy_id?.trim()
+    const customPrompt = req.body?.custom_prompt?.trim()
+    const model = req.body?.model
+    try {
+      if (strategyId) {
+        const job = startDiscoverJob(agent, strategyId, model)
+        return { job_id: job.id, status: job.status, phase: job.phase, message: job.message }
+      }
+      if (customPrompt) {
+        const customId = req.body?.custom_id?.trim() || `custom_${Date.now()}`
+        const customName = req.body?.custom_name?.trim() || '自建策略'
+        const job = startDiscoverCustomJob(agent, customPrompt, customName, customId, model)
+        return { job_id: job.id, status: job.status, phase: job.phase, message: job.message }
+      }
+      return reply.code(400).send({ error: 'strategy_id or custom_prompt required' })
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return reply.code(400).send({ error: msg })
+    }
+  },
+)
+
+app.get<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, reply) => {
+  const job = getDiscoverJob(req.params.id)
+  if (!job) return reply.code(404).send({ error: 'job not found' })
+  return { job }
+})
+
+app.delete<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, reply) => {
+  const cancelled = cancelDiscoverJob(req.params.id)
+  if (!cancelled) return reply.code(404).send({ error: 'job not found or not running' })
+  return { cancelled: true }
 })
 
 app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; background?: boolean; force?: boolean; profile?: string } }>(

@@ -1,22 +1,29 @@
 import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import { isTushareEnabled } from '@inno-a-stock/a-stock-layer'
+import { isBseCode, isTushareEnabled, resolveMarket } from '@inno-a-stock/a-stock-layer'
 import { createScorecard } from '@inno-a-stock/stock-eval'
 import { EvaluationEngine } from '@inno-a-stock/stock-eval'
 import type { MarketDataStore } from '../store.js'
 import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../utils.js'
 import { SyncCachingEngine } from './cache-engine.js'
 import {
+  ALL_SYNC_JOBS,
+  BOOTSTRAP_SYNC_JOBS,
   DEFAULT_API_MIN_GAP_MS,
   EASTMONEY_HEAVY_JOBS,
   getSyncProfileSettings,
   getTushareSyncBoost,
   isTushareBackedSyncJob,
+  KLINE_BOOTSTRAP_DAYS,
   type JobSyncConfig,
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
 } from './config.js'
+import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
+import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from './tushare-bulk.js'
+
+export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
 
 export type SyncMode = 'full' | 'incremental' | 'resume'
 
@@ -43,25 +50,6 @@ export interface SyncOptions {
   onJobFinish?: (job: string, status: string, index: number) => void
   onLog?: (message: string) => void
 }
-
-export const ALL_SYNC_JOBS = [
-  'universe',
-  'quotes',
-  'profiles',
-  'financials',
-  'financials_quarterly',
-  'business',
-  'partners',
-  'announcements',
-  'dividends',
-  'shareholders',
-  'forecasts',
-  'inst_holdings',
-  'insider_trades',
-  'buybacks',
-  'factors',
-  'industry_stats',
-] as const
 
 function shouldRefresh(syncedAt: string | null, ttlDays: number | undefined, mode: SyncMode): boolean {
   if (mode === 'full') return true
@@ -105,9 +93,14 @@ export class MarketDataSyncEngine {
       options.onLog?.(`同步档位: ${this.profileSettings.label} · API 间隔 ${safeGap}ms`)
     }
 
-    const jobs = options.jobs?.length ? options.jobs : [...ALL_SYNC_JOBS]
+    const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
     if (options.force) {
       for (const job of jobs) this.store.clearJobProgress(job)
+    } else {
+      const cleared = this.store.clearBseJobErrors([...BOOTSTRAP_SYNC_JOBS])
+      if (cleared > 0) {
+        options.onLog?.(`北交所 ${cleared} 条历史失败已清除，将重新尝试`)
+      }
     }
 
     const results: Record<string, string> = {}
@@ -137,6 +130,12 @@ export class MarketDataSyncEngine {
             break
           case 'quotes':
             await this.syncQuotes(runId, mode, options)
+            break
+          case 'kline_bootstrap':
+            await this.syncKlineBootstrap(runId, mode, options)
+            break
+          case 'screen_factors':
+            await this.syncScreenFactors(runId, mode, options)
             break
           case 'profiles':
             await this.syncProfiles(runId, mode, options)
@@ -195,6 +194,9 @@ export class MarketDataSyncEngine {
         options.onJobFinish?.(job, results[job], jobIndex)
       }
     }
+
+    await this.finalizeDerivedData(options, mode, results)
+
     return { jobs: results }
   }
 
@@ -220,11 +222,52 @@ export class MarketDataSyncEngine {
   }
 
   private shouldRunJobInIncremental(job: string): boolean {
+    if (job === 'screen_factors' && this.store.screenFactorsStale()) return true
+    if (job === 'industry_stats' && this.store.industryStatsStale()) return true
     const cfg = SYNC_JOB_CONFIG[job]
     if (!cfg?.ttlDays) return true
     const last = this.store.getCursorLastSuccess(job)
     if (!last) return true
     return daysSince(last) >= cfg.ttlDays
+  }
+
+  /** After market inputs update, ensure K-line-derived factors + industry stats are fresh. */
+  private async finalizeDerivedData(
+    options: SyncOptions,
+    mode: SyncMode,
+    results: Record<string, string>,
+  ): Promise<void> {
+    const tradeDate = todayTradeDate()
+    const needsFactors = this.store.screenFactorsStale(tradeDate)
+    const needsIndustry = this.store.industryStatsStale(tradeDate)
+    if (!needsFactors && !needsIndustry) return
+
+    if (needsFactors) {
+      options.onLog?.('行情/K线/财务已更新，重算初选因子（动量/量比等）')
+      const runId = this.store.beginRun('screen_factors', mode)
+      try {
+        await this.syncScreenFactors(runId, mode, options, true)
+        results.screen_factors = 'ok'
+        this.store.setCursor('screen_factors', { trade_date: tradeDate, source: 'finalize' })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
+        results.screen_factors = `failed: ${msg}`
+      }
+    }
+
+    if (needsIndustry || needsFactors) {
+      const runId = this.store.beginRun('industry_stats', mode)
+      try {
+        this.syncIndustryStats(runId, mode, options, true)
+        results.industry_stats = 'ok'
+        this.store.setCursor('industry_stats', { trade_date: tradeDate, source: 'finalize' })
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
+        results.industry_stats = `failed: ${msg}`
+      }
+    }
   }
 
   private finishJobEmpty(
@@ -248,13 +291,15 @@ export class MarketDataSyncEngine {
     const all = this.codes(options)
     return all.filter(code => {
       if (extraSkip?.(code)) return false
+      const errored = this.store.isJobError(job, code, scopeKey)
+      const bseRetry = errored && isBseCode(code)
       if (mode === 'resume') {
         if (this.store.isJobDone(job, code, scopeKey)) return false
-        // Skip prior failures on resume — retry only via full sync or clearing job progress.
-        if (this.store.isJobError(job, code, scopeKey)) return false
+        if (errored && !bseRetry) return false
         return true
       }
       if (mode === 'full') return true
+      if (bseRetry) return true
       if (this.store.isJobDone(job, code, scopeKey)) {
         const syncedAt = this.store.jobProgressSyncedAt(job, code, scopeKey)
         if (shouldRefresh(syncedAt, ttlDays, mode)) return true
@@ -321,7 +366,7 @@ export class MarketDataSyncEngine {
       this.store.upsertStock({
         code,
         name: item.name,
-        market: item.market,
+        market: item.market ?? resolveMarket(code),
         industry: item.industry,
         is_st: detectSt(item.name),
         status: detectSt(item.name) ? 'st' : 'active',
@@ -467,8 +512,10 @@ export class MarketDataSyncEngine {
           () => kind === 'quarterly' ? this.de.financialsQuarterly(code) : this.de.financials(code),
           this.laneForJob(job),
         )
-        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'financials failed')
-        this.store.replaceFinancial(code, resp.data[0] as unknown as Record<string, unknown>)
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'financials failed')
+        for (const row of resp.data) {
+          this.store.replaceFinancial(code, row as unknown as Record<string, unknown>)
+        }
         this.markDone(job, code, kind)
         success++
       } catch (e) {
@@ -795,6 +842,132 @@ export class MarketDataSyncEngine {
     })
   }
 
+  private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('kline_bootstrap', options)
+    let dates = await listBootstrapTradeDates()
+    if (!dates.length) {
+      this.finishJobEmpty(runId, 'kline_bootstrap', options, '无可用交易日')
+      return
+    }
+
+    if (mode === 'incremental') {
+      const missing = dates.filter(d => !this.store.hasTradeDateKlines(d))
+      const recent = dates.slice(-3)
+      dates = [...new Set([...missing, ...recent])].sort()
+    }
+
+    if (tushareBulkEnabled()) {
+      let barCount = 0
+      for (let i = 0; i < dates.length; i++) {
+        const tradeDate = dates[i]!
+        options.onProgress?.({ job: 'kline_bootstrap', current: i + 1, total: dates.length })
+        try {
+          const bars = await this.callApi(() => fetchBulkDailyBars(tradeDate), 'tushare')
+          if (bars.length) {
+            barCount += this.store.bulkUpsertKlines(bars.map(b => ({
+              tradeDate: b.tradeDate,
+              code: b.code,
+              open: b.open,
+              high: b.high,
+              low: b.low,
+              close: b.close,
+              volume: b.volume,
+              amount: b.amount,
+              changePct: b.changePct,
+            })))
+          }
+        } catch (e) {
+          this.store.logError(runId, 'kline_bootstrap', null, e instanceof Error ? e.message : String(e))
+        }
+        if (cfg.delayMs > 0) await sleep(cfg.delayMs)
+      }
+      const cutoff = dates[0] ?? todayTradeDate()
+      this.store.pruneKlinesOlderThan(cutoff)
+      const klineCodes = this.store.listCodesWithMinKlines(60)
+      if (klineCodes.length) {
+        this.store.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
+        options.onLog?.(`K 线覆盖 ${klineCodes.length} 只（≥60 个交易日）`)
+      }
+      this.store.setCursor('kline_bootstrap', { trade_dates: dates.length, bars: barCount })
+      this.store.finishRun(runId, 'success', { total: dates.length, success: dates.length, error: 0 })
+      return
+    }
+
+    const codes = this.pendingCodes('kline_bootstrap', options, mode, '', cfg.ttlDays)
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'kline_bootstrap', options, 'K 线均在 TTL 内，跳过')
+      return
+    }
+    let success = 0
+    let error = 0
+
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'kline_bootstrap', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(
+          () => this.de.kline(code, 'daily', '', '', KLINE_BOOTSTRAP_DAYS),
+          'default',
+        )
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'kline failed')
+        this.store.bulkUpsertKlines(resp.data.map(bar => ({
+          tradeDate: bar.date.slice(0, 10),
+          code,
+          open: bar.open,
+          high: bar.high,
+          low: bar.low,
+          close: bar.close,
+          volume: bar.volume ?? null,
+          amount: bar.amount ?? null,
+          changePct: bar.changePct ?? null,
+        })))
+        this.markDone('kline_bootstrap', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('kline_bootstrap', code, '')
+        this.store.logError(runId, 'kline_bootstrap', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private syncScreenFactors(
+    runId: number,
+    mode: SyncMode,
+    options: SyncOptions,
+    forceRecalc = false,
+  ): Promise<void> {
+    const tradeDate = todayTradeDate()
+    const all = this.codes(options)
+    const codes = forceRecalc
+      ? all
+      : (mode === 'resume'
+        ? all.filter(code => !this.store.isJobDone('screen_factors', code, tradeDate))
+        : all.filter(code =>
+          mode !== 'incremental' || !this.store.hasFactorsForDate(code, tradeDate),
+        ))
+
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'screen_factors', options, '今日初选因子已齐，跳过')
+      return Promise.resolve()
+    }
+
+    options.onLog?.(`本地计算初选因子 · ${codes.length} 只${forceRecalc ? '（全量重算）' : ''}`)
+    const { success, skipped } = runLocalScreenFactors(this.store, tradeDate, codes)
+    this.store.setCursor('screen_factors', { trade_date: tradeDate, success, skipped, force: forceRecalc })
+    this.store.finishRun(runId, skipped > 0 ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error: skipped,
+    })
+    return Promise.resolve()
+  }
+
   private async syncFactors(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
     const cfg = this.cfg('factors', options)
     const tradeDate = todayTradeDate()
@@ -842,17 +1015,27 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private syncIndustryStats(runId: number, mode: SyncMode, options: SyncOptions): void {
+  private syncIndustryStats(
+    runId: number,
+    mode: SyncMode,
+    options: SyncOptions,
+    force = false,
+  ): void {
     const cfg = SYNC_JOB_CONFIG.industry_stats
-    if (mode === 'incremental' && cfg.ttlDays) {
+    if (!force && mode === 'incremental' && cfg.ttlDays) {
       const last = this.store.getCursorLastSuccess('industry_stats')
-      if (last && daysSince(last) < cfg.ttlDays) {
+      if (last && daysSince(last) < cfg.ttlDays && !this.store.industryStatsStale()) {
         this.finishJobEmpty(runId, 'industry_stats', options, '行业统计今日已重建，跳过')
         return
       }
     }
     const tradeDate = todayTradeDate()
     const n = this.store.rebuildIndustryStats(tradeDate)
+    const activeCodes = this.codes({})
+    if (activeCodes.length) {
+      this.store.markBootstrapJobDoneForCodes('industry_stats', activeCodes, tradeDate)
+    }
+    this.store.setCursor('industry_stats', { trade_date: tradeDate, industries: n })
     this.store.finishRun(runId, 'success', { total: n, success: n, error: 0 })
   }
 }

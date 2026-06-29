@@ -86,6 +86,28 @@
 | `shadow-card` | `0 1px 2px rgba(26,26,26,0.04), 0 4px 12px rgba(26,26,26,0.06)` |
 | `shadow-panel` | `0 0 0 1px #E8E6E1, 0 8px 24px rgba(26,26,26,0.08)` |
 
+桌面端浮层优先使用 **毛玻璃（Frosted Glass）** 而非重阴影分层（见 §5.1）。
+
+### 5.1 毛玻璃浮层（Panel / Dialog / Dropdown）
+
+**统一用于**：Dialog、抽屉、下拉面板、策略选择器、聊天选区工具条、侧栏浮层等所有「盖在内容之上」的面板。
+
+| 属性 | 值 |
+|------|-----|
+| 背景 | `rgba(255, 255, 255, 0.72)` |
+| 模糊 | `blur(16px) saturate(160%)` |
+| 描边 | `1px solid rgba(0, 0, 0, 0.06)` 或 `separator` token |
+| 阴影 | `0 8px 32px rgba(0, 0, 0, 0.08)`（轻量，不抢毛玻璃质感） |
+
+**实现**：
+
+- 全局类：`.inno-glass-panel`（`global.css`）
+- Dialog：`.inno-glass-dialog-surface`（Fluent `DialogSurface`）
+- Mixins：`glassDropdown`、`glassPanel`（`theme/mixins.ts`）
+- Tokens：`glass`、`glassBlur`、`surfaceGlass`（`theme/tokens.ts`）
+
+**原则**：面板与 Dialog **默认毛玻璃**；实体卡片（SurfaceCard、列表行）仍用 `surface` 实底 + 轻描边，不用毛玻璃。
+
 ## 6. Layout Constants
 
 | Token | Value |
@@ -135,7 +157,13 @@
 - 空态居中 Caption 文字
 - 对话气泡：用户 `accentSoft` 底，助手 `surfaceMuted` 底
 
-### 7.7 TabList
+### 7.7 毛玻璃浮层面板
+
+- 发现页策略下拉、设置抽屉、Follow 对话框、SkillSheet 等浮层使用 **§5.1 毛玻璃**
+- 类名 `.inno-glass-panel` 或 mixin `glassDropdown`
+- 列表内选项 Hover：半透明白底 `rgba(255,255,255,0.45)`，不用实体灰块
+
+### 7.8 TabList
 
 - Fluent Tab `appearance="subtle"` 或自定义 pill
 - 选中：白底 + shadow-card + accent 下划线

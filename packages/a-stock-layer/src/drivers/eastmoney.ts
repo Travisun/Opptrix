@@ -6,7 +6,7 @@ import type {
 } from '../core/schema.js'
 import { httpGet } from '../utils/http.js'
 import {
-  normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveSecId, safeFloat,
+  normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveMarket, resolveSecId, safeFloat,
 } from '../utils/helpers.js'
 import { computeChipDistribution, computeLatestChipProfile } from '../utils/cyq.js'
 import { BaseDriver } from './base.js'
@@ -379,7 +379,7 @@ export class EastMoneyDriver extends BaseDriver {
           const c = String(item.f12 ?? '')
           data.push({
             code: c, name: String(item.f14 ?? ''), industry: String(item.f100 ?? ''),
-            market: c.startsWith('6') || c.startsWith('9') ? 'SH' : 'SZ',
+            market: resolveMarket(c),
           })
         }
 

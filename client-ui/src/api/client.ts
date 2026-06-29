@@ -75,7 +75,7 @@ export const research = {
   marketDbStatus: () =>
     apiCall<import('../types/market').MarketDbStatusData>('market_db_status'),
 
-  marketDbSync: (mode: 'full' | 'incremental' | 'resume' = 'full', background = true, force = false) =>
+  marketDbSync: (mode: 'auto' | 'full' | 'incremental' | 'resume' = 'auto', background = true, force = false) =>
     apiCall<{ started: boolean; running: boolean; mode: string }>(
       'market_db_sync',
       { mode, background, force },
@@ -168,21 +168,95 @@ export async function getMarketDataSyncState() {
   return resp.data
 }
 
-export async function startMarketDataSync(
-  mode: 'full' | 'incremental' | 'resume' = 'full',
-  options: { force?: boolean; jobs?: string[]; profile?: string } = {},
-) {
+export async function startMarketDataSync(options: { force?: boolean } = {}) {
   return jsonFetch<{ success: boolean; message?: string }>('/market-data/sync', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
-      mode,
+      mode: 'auto',
       background: true,
       force: options.force ?? false,
-      jobs: options.jobs,
-      profile: options.profile,
     }),
   })
+}
+
+export async function listDiscoverJobs() {
+  return jsonFetch<{ jobs: import('../types/schemas').DiscoverJobSnapshot[] }>('/discover/jobs')
+}
+
+export async function listDiscoverStrategies() {
+  return jsonFetch<{ strategies: import('../types/schemas').DiscoverStrategyPublic[] }>('/discover/strategies')
+}
+
+export async function getDiscoverStrategyDetail(id: string) {
+  return jsonFetch<{ strategy: import('../types/schemas').DiscoverStrategyDetail }>(`/discover/strategies/${encodeURIComponent(id)}`)
+}
+
+export async function startDiscoverRun(
+  opts: { strategy_id: string } | { custom_prompt: string; custom_name?: string; custom_id?: string },
+  model?: string,
+) {
+  const body = 'strategy_id' in opts
+    ? { strategy_id: opts.strategy_id, model }
+    : {
+      custom_prompt: opts.custom_prompt,
+      custom_name: opts.custom_name,
+      custom_id: opts.custom_id,
+      model,
+    }
+  const resp = await fetchWithTimeout(`${API_BASE}/discover/run`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  }, 30000)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `API error: ${resp.status}`)
+  }
+  return resp.json() as Promise<{
+    job_id: string
+    status: string
+    phase: string
+    message: string
+  }>
+}
+
+export async function getDiscoverJob(jobId: string) {
+  return jsonFetch<{ job: import('../types/schemas').DiscoverJobSnapshot }>(`/discover/jobs/${jobId}`)
+}
+
+export async function cancelDiscoverJob(jobId: string) {
+  return jsonFetch<{ cancelled: boolean }>(`/discover/jobs/${jobId}`, { method: 'DELETE' })
+}
+
+export interface StockPrepStep {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'done' | 'error'
+  message: string | null
+}
+
+export interface StockPrepSnapshot {
+  code: string
+  status: 'idle' | 'running' | 'done' | 'error'
+  steps: StockPrepStep[]
+  percent: number
+  message: string | null
+  started_at: string | null
+  updated_at: string
+  error: string | null
+}
+
+export async function startStockPrep(code: string, force = false) {
+  return jsonFetch<{ prep: StockPrepSnapshot }>(`/stock/${encodeURIComponent(code)}/prep`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(force ? { force: true } : {}),
+  })
+}
+
+export async function getStockPrep(code: string) {
+  return jsonFetch<{ prep: StockPrepSnapshot }>(`/stock/${encodeURIComponent(code)}/prep`)
 }
 
 export interface TusharePublicConfig {

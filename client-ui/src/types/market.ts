@@ -253,6 +253,18 @@ export interface MarketDbStatusData {
   last_sync: Record<string, string | null>
   job_progress: Record<string, { done: number; error: number; pending: number }>
   is_ready: boolean
+  bootstrap?: {
+    ready: boolean
+    universe: boolean
+    quotes: boolean
+    klines: boolean
+    fundamentals: boolean
+    screen_factors: boolean
+    quote_stock_ratio?: number
+    kline_stock_ratio?: number
+    fin_stock_ratio?: number
+    factor_stock_ratio?: number
+  }
 }
 
 export interface MarketDataSyncState {

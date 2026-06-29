@@ -47,6 +47,130 @@ export interface ScreeningData {
   trade_date?: string | null
 }
 
+export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced'
+
+export type DiscoverStrategySource = 'builtin' | 'custom'
+
+export interface DiscoverStrategyPublic {
+  id: string
+  name: string
+  category: DiscoverStrategyCategory
+  tagline: string
+  methodology: string
+  description: string
+  final_top_n: number
+  condition_count: number
+  source: DiscoverStrategySource
+}
+
+export interface CustomDiscoverStrategy {
+  id: string
+  name: string
+  prompt: string
+  tagline: string
+  description: string
+  methodology: string
+  refinement_notes: string
+  copied_from: string | null
+  created_at: string
+  updated_at: string
+}
+
+export interface DiscoverStrategyDetail {
+  id: string
+  name: string
+  category: DiscoverStrategyCategory
+  tagline: string
+  methodology: string
+  description: string
+  scorecard: string
+  prescreen_top_n: number
+  final_top_n: number
+  conditions: Array<{ factor: string; op: string; value: number }>
+  refinement_notes: string
+  source: 'builtin'
+}
+
+/** 发现页策略选择器统一条目 */
+export interface DiscoverStrategyOption {
+  id: string
+  name: string
+  tagline: string
+  source: DiscoverStrategySource
+  category?: DiscoverStrategyCategory
+  meta?: string
+}
+
+export type DiscoverJobPhase = 'parsing' | 'prescreen' | 'mining' | 'done' | 'error'
+export type DiscoverJobStatus = 'running' | 'done' | 'error' | 'cancelled'
+
+export interface DiscoverFinalItem {
+  rank: number
+  code: string
+  name: string
+  match_score: number
+  thesis: string
+  highlights: string[]
+  risks: string[]
+  key_factors: Record<string, number>
+}
+
+export interface DiscoverRunResult {
+  strategy_id: string | null
+  strategy_title: string
+  strategy_summary: string
+  prompt: string
+  plan: {
+    strategy_title: string
+    conditions: Array<{ factor: string; op: string; value: number }>
+    prescreen_top_n: number
+    final_top_n: number
+    refinement_notes: string
+  }
+  prescreen: {
+    scanned: number
+    passed: number
+    trade_date: string | null
+    source: 'local' | 'live'
+  }
+  items: DiscoverFinalItem[]
+  tools_used: string[]
+}
+
+export interface DiscoverJobSnapshot {
+  id: string
+  status: DiscoverJobStatus
+  phase: DiscoverJobPhase
+  message: string
+  percent: number
+  strategy_id: string
+  strategy_name: string
+  prompt: string
+  model: string | null
+  started_at: string
+  updated_at: string
+  result: DiscoverRunResult | null
+  error: string | null
+}
+
+export interface StockPrepStep {
+  id: string
+  label: string
+  status: 'pending' | 'running' | 'done' | 'error'
+  message: string | null
+}
+
+export interface StockPrepSnapshot {
+  code: string
+  status: 'idle' | 'running' | 'done' | 'error'
+  steps: StockPrepStep[]
+  percent: number
+  message: string | null
+  started_at: string | null
+  updated_at: string
+  error: string | null
+}
+
 export interface SingleStrategySignal {
   name: string; direction: string
   confidence: number; detail?: string

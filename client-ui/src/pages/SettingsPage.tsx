@@ -12,6 +12,7 @@ import SettingsSidebar, {
 } from './settings/SettingsSidebar'
 import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
+import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
@@ -132,6 +133,25 @@ const useStyles = makeStyles({
   contentBodyCompact: {
     padding: '10px 0 20px',
     gap: '8px',
+  },
+  contentScrollFill: {
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  contentColumnFill: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  contentBodyFill: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+    paddingBottom: '16px',
   },
   sectionBlock: {
     display: 'flex',
@@ -387,6 +407,9 @@ export default function SettingsPage({
       case 'market_data':
         return <MarketDataSettingsSection />
 
+      case 'discover_strategies':
+        return <DiscoverStrategiesSettingsSection />
+
       case 'about':
         return (
           <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
@@ -442,11 +465,16 @@ export default function SettingsPage({
           electronChrome && s.contentShellElectron,
         )}
       >
-        <div className={mergeClasses(s.contentScroll, 'inno-scroll')}>
+        <div className={mergeClasses(
+          s.contentScroll,
+          'inno-scroll',
+          section === 'discover_strategies' && s.contentScrollFill,
+        )}>
           <div className={mergeClasses(
             s.contentColumn,
             contentFlush && s.contentColumnFlush,
             isMobile && s.contentColumnMobile,
+            section === 'discover_strategies' && s.contentColumnFill,
           )}>
             <header className={mergeClasses(s.contentHeader, contentFlush && s.contentHeaderFlush)}>
               {sidebarOverlayMode && !sidebarVisible && (
@@ -464,6 +492,7 @@ export default function SettingsPage({
             <div className={mergeClasses(
               s.contentBody,
               section === 'market_data' && s.contentBodyCompact,
+              section === 'discover_strategies' && s.contentBodyFill,
             )}>
               {error && <StatusBanner message={error} tone="error" />}
               {message && <StatusBanner message={message} tone="success" />}

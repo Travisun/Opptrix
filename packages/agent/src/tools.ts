@@ -19,6 +19,25 @@ export interface OpenAiTool {
   function: { name: string; description: string; parameters: JsonSchema }
 }
 
+/** 发现页 Agent 挖掘阶段可调用的本地数据与分析工具 */
+export const DISCOVER_MINING_TOOL_NAMES = [
+  'get_market_db_status',
+  'get_market_db_sync_state',
+  'list_local_screen_factors',
+  'local_screen_stocks',
+  'get_industry_stats',
+  'batch_stock_snapshots',
+  'get_stock_quotes',
+  'get_watchlist_radar',
+  'get_stock_kline',
+  'get_stock_cyq',
+  'get_stock_chart',
+  'get_stock_detail',
+  'evaluate_stock',
+  'get_strategy_signal',
+  'get_latest_evaluation',
+] as const
+
 export class ToolRegistry {
   readonly tools: ToolDef[]
 
@@ -53,6 +72,8 @@ export class ToolRegistry {
       '你是 innoAStock A股投研助手。根据用户问题主动调用工具获取数据，再基于结果用中文给出简洁、专业的分析。',
       '规则：',
       '- 需要数据时必须先调用工具，不要编造数字',
+      '- 优先使用本地数据工具（get_market_db_status、batch_stock_snapshots、get_stock_quotes 等），由本地执行分析与拉取，减少无效上下文',
+      '- 批量查询时用 codes 数组一次调用，避免逐只重复请求',
       '- 不推荐具体买卖，仅提供研究与数据解读',
       '- 可组合多个工具完成复杂问题',
       '- 工具返回 JSON 时提取关键字段组织回答',
@@ -81,13 +102,103 @@ export class ToolRegistry {
       },
       {
         name: 'screen_stocks', category: '选股',
-        description: '按因子条件筛选股票并返回评分排序结果',
+        description: '按因子条件筛选股票（优先本地 L0 初选库，未就绪时在线扫描）',
         parameters: S({
           conditions: { type: 'array', description: '条件数组 [{factor, op, value}]，op 为 > >= < <= =' },
           scorecard: { type: 'string', description: '评分卡' },
           top_n: { type: 'number', description: '返回条数，默认20' },
         }, ['conditions']),
         handler: a => d('screening', { conditions: a.conditions, scorecard: a.scorecard, top_n: a.top_n ?? 20 }),
+      },
+      {
+        name: 'get_market_db_status', category: '本地数据',
+        description: '查询本地初选数据库就绪状态、股票数量、因子日期与 bootstrap 覆盖率',
+        parameters: S({}),
+        handler: () => d('market_db_status', {}),
+      },
+      {
+        name: 'list_local_screen_factors', category: '本地数据',
+        description: '列出本地初选库可用于筛选的因子字段（PE/ROE/动量/量比等）',
+        parameters: S({}),
+        handler: () => d('list_screen_factors', {}),
+      },
+      {
+        name: 'local_screen_stocks', category: '本地数据',
+        description: '使用本地 L0 因子库快速初选，不拉取全市场在线数据',
+        parameters: S({
+          conditions: { type: 'array', description: '条件数组 [{factor, op, value}]' },
+          top_n: { type: 'number', description: '返回条数，默认60' },
+        }, ['conditions']),
+        handler: a => d('screening', { conditions: a.conditions, scorecard: '综合评估', top_n: a.top_n ?? 60 }),
+      },
+      {
+        name: 'get_industry_stats', category: '本地数据',
+        description: '本地行业截面统计：股票数、均分、均 PE/PB',
+        parameters: S({
+          trade_date: { type: 'string', description: '可选交易日 YYYY-MM-DD' },
+        }),
+        handler: a => d('market_industry_stats', { trade_date: a.trade_date }),
+      },
+      {
+        name: 'batch_stock_snapshots', category: '本地数据',
+        description: '批量获取候选股的本地截面快照（行业、评分、估值、初选因子）',
+        parameters: S({
+          codes: { type: 'array', description: '股票代码列表，建议不超过80' },
+        }, ['codes']),
+        handler: a => d('batch_stock_snapshots', { codes: a.codes }),
+      },
+      {
+        name: 'get_market_db_sync_state', category: '本地数据',
+        description: '查询本地数据同步任务进度与最近更新时间',
+        parameters: S({}),
+        handler: () => d('market_db_sync_state', {}),
+      },
+      {
+        name: 'get_stock_quotes', category: '本地数据',
+        description: '批量获取股票实时行情（价量、涨跌幅）',
+        parameters: S({
+          codes: { type: 'array', description: '股票代码列表' },
+        }, ['codes']),
+        handler: a => d('stock_quotes', { codes: a.codes }),
+      },
+      {
+        name: 'get_watchlist_radar', category: '本地数据',
+        description: '关注列表雷达：行情 + 策略信号摘要',
+        parameters: S({
+          codes: { type: 'array', description: '股票代码列表，空则返回默认关注' },
+        }),
+        handler: a => d('watchlist_radar', { codes: a.codes }),
+      },
+      {
+        name: 'get_stock_kline', category: '本地数据',
+        description: '获取单股日 K 线序列（本地/在线）',
+        parameters: S({
+          code: { type: 'string', description: '6位股票代码' },
+          count: { type: 'number', description: 'K线根数，默认90，最大240' },
+        }, ['code']),
+        handler: a => d('stock_kline', { code: a.code, count: a.count ?? 90 }),
+      },
+      {
+        name: 'get_stock_cyq', category: '本地数据',
+        description: '获取单股筹码分布（CYQ）',
+        parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
+        handler: a => d('stock_cyq', { code: a.code }),
+      },
+      {
+        name: 'get_stock_chart', category: '本地数据',
+        description: '获取单股多周期图表数据（日/周/月/分钟）',
+        parameters: S({
+          code: { type: 'string', description: '6位股票代码' },
+          period: { type: 'string', description: '周期：daily/weekly/monthly/1m/5m 等' },
+          count: { type: 'number', description: '返回条数，0 为默认' },
+        }, ['code']),
+        handler: a => d('stock_chart', { code: a.code, period: a.period ?? 'daily', count: a.count ?? 0 }),
+      },
+      {
+        name: 'get_stock_detail', category: '本地数据',
+        description: '获取单股详情：行情、基本面、财务、新闻、资金流等聚合',
+        parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
+        handler: a => d('stock_detail', { code: a.code }),
       },
       {
         name: 'analyze_portfolio', category: '组合管理',

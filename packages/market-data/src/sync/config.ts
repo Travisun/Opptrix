@@ -17,13 +17,76 @@ export interface SyncProfileSettings {
   jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>>
 }
 
-/** Daily essentials — skip slow F10 jobs for quick incremental refresh. */
-export const DAILY_SYNC_JOBS = [
+/** ~6 months of trading days for momentum / volume factors */
+export const KLINE_BOOTSTRAP_DAYS = 130
+
+/** Factors computed locally during bootstrap (no per-stock API analyze). */
+export const SCREEN_PACK_FACTORS = [
+  'pe',
+  'pb',
+  'roe',
+  'debt_ratio',
+  'gross_margin',
+  'net_profit_yoy',
+  'profit_cagr_3y',
+  'roe_trend',
+  'peg',
+  'momentum_1m',
+  'momentum_3m',
+  'momentum_6m',
+  'volume_ratio',
+] as const
+
+/** L0 bootstrap — enough for local screening / discover. */
+export const BOOTSTRAP_SYNC_JOBS = [
   'universe',
   'quotes',
-  'announcements',
-  'factors',
+  'kline_bootstrap',
+  'financials',
+  'screen_factors',
   'industry_stats',
+] as const
+
+/** Daily refresh after bootstrap ready. */
+export const DAILY_SYNC_JOBS = [...BOOTSTRAP_SYNC_JOBS] as const
+
+/** L2 deep sync — only on full rebuild or explicit force. */
+export const DEEP_SYNC_JOBS = [
+  'profiles',
+  'financials_quarterly',
+  'business',
+  'partners',
+  'announcements',
+  'dividends',
+  'shareholders',
+  'forecasts',
+  'inst_holdings',
+  'insider_trades',
+  'buybacks',
+  'factors',
+] as const
+
+/** L1 on-demand hydration (quarterly TTL). */
+export const HYDRATE_SYNC_JOBS = [
+  'shareholders',
+  'partners',
+] as const
+
+/** Full legacy pipeline = bootstrap + deep. */
+export const ALL_SYNC_JOBS = [
+  ...BOOTSTRAP_SYNC_JOBS,
+  'profiles',
+  'financials_quarterly',
+  'business',
+  'partners',
+  'announcements',
+  'dividends',
+  'shareholders',
+  'forecasts',
+  'inst_holdings',
+  'insider_trades',
+  'buybacks',
+  'factors',
 ] as const
 
 export const SYNC_PROFILES: Record<SyncSpeedProfile, SyncProfileSettings> = {
@@ -140,6 +203,10 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   /** 日频截面 — 每个交易日刷新 */
   quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },
+  /** 6 月日 K — 截面按交易日批量拉取 */
+  kline_bootstrap: { concurrency: 1, delayMs: 80, ttlDays: 1 },
+  /** 本地初选因子 — 从 SQLite 计算 */
+  screen_factors: { concurrency: 1, delayMs: 0, ttlDays: 1 },
   profiles: { concurrency: 2, delayMs: 320, ttlDays: 30 },
   financials: { concurrency: 2, delayMs: 360, ttlDays: 7 },
   financials_quarterly: { concurrency: 2, delayMs: 360, ttlDays: 7 },

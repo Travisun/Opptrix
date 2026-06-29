@@ -26,6 +26,25 @@ export function normalizeCode(code: string): string {
   return code.trim().padStart(6, '0')
 }
 
+export function hasCjkText(value: string | null | undefined): boolean {
+  return Boolean(value && /[\u4e00-\u9fff]/.test(value))
+}
+
+/** Prefer Chinese name from quote / radar / stored watchlist item. */
+export function resolveDisplayStockName(
+  code: string,
+  ...candidates: Array<string | null | undefined>
+): string {
+  const normalized = normalizeCode(code)
+  const clean = candidates
+    .map(c => c?.trim())
+    .filter((c): c is string => Boolean(c && c !== normalized))
+  const cjk = clean.find(hasCjkText)
+  if (cjk) return cjk
+  if (clean[0]) return clean[0]
+  return normalized
+}
+
 /** A-share volume in lots (手). */
 export function formatVolume(value: number | null | undefined): string {
   if (value == null || Number.isNaN(value)) return '—'

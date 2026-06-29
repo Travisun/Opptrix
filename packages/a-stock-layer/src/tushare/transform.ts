@@ -21,8 +21,14 @@ function fmtDate(v: unknown): string {
 
 export function mapStockListRows(rows: TushareRow[]): StockListItem[] {
   return rows.map(r => {
-    const code = fromTsCode(str(r.ts_code))
-    const market = str(r.market) || (code.startsWith('6') ? 'SH' : 'SZ')
+    const ts = str(r.ts_code)
+    const code = fromTsCode(ts)
+    let market = 'SZ'
+    if (ts.endsWith('.BJ')) market = 'BJ'
+    else if (ts.endsWith('.SH')) market = 'SH'
+    else if (ts.endsWith('.SZ')) market = 'SZ'
+    else if (str(r.market).includes('北交')) market = 'BJ'
+    else market = code.startsWith('6') ? 'SH' : 'SZ'
     return {
       code,
       name: str(r.name),

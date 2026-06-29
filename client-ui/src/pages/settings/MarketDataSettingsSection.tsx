@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { CheckmarkCircleRegular, CircleRegular } from '@fluentui/react-icons'
 import InnoButton from '../../components/inno/InnoButton'
 import StatusBanner from '../../components/StatusBanner'
 import {
@@ -10,7 +11,7 @@ import {
   testTushareConfig,
 } from '../../api/client'
 import type { MarketDataSyncState } from '../../types/market'
-import { SettingsGroup, SettingsCredentialRow, SettingsDivider, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
+import { SettingsGroup, SettingsCredentialRow, SettingsPanelHeader, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
 import { innoTokens } from '../../theme/tokens'
 
 const POLL_MS = 2000
@@ -59,7 +60,6 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    padding: '10px 18px 12px',
   },
   progressBarTrack: {
     width: '100%',
@@ -118,10 +118,11 @@ const useStyles = makeStyles({
     wordBreak: 'break-word',
     overscrollBehavior: 'contain',
   },
-  actions: {
+  syncBody: {
     display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
+    flexDirection: 'column',
+    gap: '8px',
+    padding: '10px 18px 12px',
   },
   readyBadge: {
     fontSize: '11px',
@@ -136,7 +137,55 @@ const useStyles = makeStyles({
     lineHeight: 1.35,
     paddingLeft: '2px',
   },
+  bootstrapList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '2px 0',
+  },
+  bootstrapRow: {
+    display: 'grid',
+    gridTemplateColumns: '18px minmax(0, 1fr) auto',
+    gap: '8px',
+    alignItems: 'center',
+    fontSize: '11px',
+    lineHeight: 1.35,
+  },
+  bootstrapLabel: {
+    color: innoTokens.textPrimary,
+    fontWeight: 500,
+  },
+  bootstrapMeta: {
+    color: innoTokens.textTertiary,
+    fontVariantNumeric: 'tabular-nums',
+    fontSize: '10px',
+  },
+  bootstrapIconOk: {
+    color: '#248A3D',
+  },
+  bootstrapIconPending: {
+    color: innoTokens.textTertiary,
+  },
 })
+
+function formatCoveragePercent(
+  ratio: number | null | undefined,
+  job: string | undefined,
+  stockCount: number,
+  jobProgress: MarketDataSyncState['db_status']['job_progress'] | undefined,
+): string {
+  if (typeof ratio === 'number' && Number.isFinite(ratio)) {
+    return `${ratio}%`
+  }
+  if (job && stockCount > 0) {
+    const done = jobProgress?.[job]?.done
+    if (typeof done === 'number' && Number.isFinite(done)) {
+      const pct = Math.round((Math.min(done, stockCount) / stockCount) * 1000) / 10
+      return `${pct}%`
+    }
+  }
+  return '—'
+}
 
 export default function MarketDataSettingsSection() {
   const s = useStyles()
@@ -208,16 +257,13 @@ export default function MarketDataSettingsSection() {
     if (nearBottom) el.scrollTop = el.scrollHeight
   }, [state?.logs])
 
-  const handleStart = async (
-    mode: 'full' | 'resume' | 'incremental',
-    opts: { jobs?: string[] } = {},
-  ) => {
+  const handleStart = async () => {
     setStarting(true)
     setActionMsg('')
     setError('')
     try {
       setSyncActive(true)
-      const resp = await startMarketDataSync(mode, opts)
+      const resp = await startMarketDataSync()
       setActionMsg(resp.message || '同步已启动')
       await refreshSync()
     } catch (e) {
@@ -273,6 +319,39 @@ export default function MarketDataSettingsSection() {
     ? 0.03
     : Math.min(1, Math.max(0, overallPct / 100))
 
+  const syncDesc = db?.is_ready
+    ? '库已就绪，可本地初选挖掘；每 15 分钟自动检查并日更'
+    : (hasProgress
+      ? '将自动接续上次未完成的初选数据构建'
+      : '将构建初选包：全A列表、估值截面、6月K线、财务与本地因子')
+
+  const bootstrap = db?.bootstrap
+  const bootstrapItems = bootstrap
+    ? [
+      { ok: bootstrap.universe, label: '股票池', meta: db?.stock_count ? `${db.stock_count} 只` : '—' },
+      {
+        ok: bootstrap.quotes,
+        label: '估值截面',
+        meta: formatCoveragePercent(bootstrap.quote_stock_ratio, 'quotes', db?.stock_count ?? 0, db?.job_progress),
+      },
+      {
+        ok: bootstrap.klines,
+        label: '6 月日 K',
+        meta: formatCoveragePercent(bootstrap.kline_stock_ratio, 'kline_bootstrap', db?.stock_count ?? 0, db?.job_progress),
+      },
+      {
+        ok: bootstrap.fundamentals,
+        label: '财务指标',
+        meta: formatCoveragePercent(bootstrap.fin_stock_ratio, 'financials', db?.stock_count ?? 0, db?.job_progress),
+      },
+      {
+        ok: bootstrap.screen_factors,
+        label: '初选因子',
+        meta: formatCoveragePercent(bootstrap.factor_stock_ratio, 'screen_factors', db?.stock_count ?? 0, db?.job_progress),
+      },
+    ]
+    : []
+
   return (
     <div className={s.root}>
       {error && <StatusBanner message={error} tone="error" />}
@@ -313,7 +392,7 @@ export default function MarketDataSettingsSection() {
           />
         </SettingsGroup>
         <Text className={s.syncHint} block>
-          覆盖：股票池、日 K、日频行情截面、财务/分红/股东/预告/回购/主营/档案等 bulk 接口。公告、前五客户/供应商仍走 CNINFO/东财。
+          覆盖：全A列表与行业、日频估值截面、6月日K、财务指标与本地初选因子。深度 F10（客户/公告等）在挖掘入选后按需加载。
         </Text>
       </div>
 
@@ -334,61 +413,40 @@ export default function MarketDataSettingsSection() {
                 {`${db?.profile_count ?? 0}/${db?.shareholder_count ?? 0}`}
               </span>
             </div>
+            {bootstrapItems.length > 0 && (
+              <div className={s.bootstrapList}>
+                {bootstrapItems.map(item => (
+                  <div key={item.label} className={s.bootstrapRow}>
+                    {item.ok
+                      ? <CheckmarkCircleRegular className={s.bootstrapIconOk} fontSize={16} />
+                      : <CircleRegular className={s.bootstrapIconPending} fontSize={16} />}
+                    <Text className={s.bootstrapLabel}>{item.label}</Text>
+                    <Text className={s.bootstrapMeta}>{item.meta}</Text>
+                  </div>
+                ))}
+              </div>
+            )}
           </SettingsStaticBlock>
         </SettingsGroup>
       </div>
 
       <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>同步</Text>
         <SettingsGroup>
-          <SettingsRow
-            title={running ? '进行中' : '后台任务'}
-            desc=""
-            stack
-            control={(
-              <div className={s.actions}>
-                <InnoButton
-                  variant="primary"
-                  disabled={starting || running}
-                  onClick={() => { void handleStart('full') }}
-                >
-                  全量
-                </InnoButton>
-                <InnoButton
-                  variant="secondary"
-                  disabled={starting || running || !hasProgress}
-                  onClick={() => { void handleStart('resume') }}
-                >
-                  接续
-                </InnoButton>
-                {db?.is_ready && (
-                  <>
-                    <InnoButton
-                      variant="secondary"
-                      disabled={starting || running}
-                      onClick={() => { void handleStart('incremental') }}
-                    >
-                      增量
-                    </InnoButton>
-                    <InnoButton
-                      variant="secondary"
-                      disabled={starting || running}
-                      onClick={() => {
-                        void handleStart('incremental', {
-                          jobs: ['universe', 'quotes', 'announcements', 'factors', 'industry_stats'],
-                        })
-                      }}
-                    >
-                      快速增量
-                    </InnoButton>
-                  </>
-                )}
-              </div>
+          <SettingsPanelHeader
+            title="同步"
+            action={(
+              <InnoButton
+                variant="primary"
+                disabled={starting || running}
+                onClick={() => { void handleStart() }}
+              >
+                {running ? '同步中…' : '同步数据'}
+              </InnoButton>
             )}
           />
-          {showProgress && (
-            <>
-              <SettingsDivider />
+          <div className={s.syncBody}>
+            <Text className={s.syncHint} block>{syncDesc}</Text>
+            {showProgress && (
               <div className={s.progressBlock}>
                 <div className={s.progressMeta}>
                   <Text className={s.progressJob} block>
@@ -421,11 +479,11 @@ export default function MarketDataSettingsSection() {
                   {running ? ' · 进行中' : ''}
                 </Text>
               </div>
-            </>
-          )}
+            )}
+          </div>
         </SettingsGroup>
         <Text className={s.syncHint} block>
-          全量＝强制重拉；增量＝按 TTL 只更新到期项；快速增量＝仅行情/公告/因子（跳过 F10 慢任务）；接续＝中断续跑。启用 Tushare 后仅 Tushare 接口并行（默认 4 路），东财/CNINFO 仍串行安全间隔
+          初选包就绪即可本地挖掘；应用常驻时每 15 分钟检查过期并后台更新，K 线/行情变更后会自动重算动量与量比等因子。
         </Text>
       </div>
 
@@ -440,7 +498,7 @@ export default function MarketDataSettingsSection() {
           >
             {(state?.logs?.length
               ? state.logs.join('\n')
-              : '暂无日志。点击「全量」或等待自动接续。')}
+              : '暂无日志。点击「同步数据」或等待自动接续。')}
           </pre>
         </div>
       </div>

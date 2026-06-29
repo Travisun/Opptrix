@@ -20,11 +20,16 @@ const useStyles = makeStyles({
   control: {
     ...inputShellInteractive,
     minHeight: '44px',
-    padding: '11px 14px',
+    padding: '0 14px',
     display: 'flex',
     alignItems: 'center',
     width: '100%',
     boxSizing: 'border-box',
+  },
+  controlMultiline: {
+    minHeight: 'unset',
+    alignItems: 'stretch',
+    padding: '8px 12px',
   },
   hint: {
     fontSize: '13px',
@@ -39,15 +44,17 @@ interface InnoFieldProps {
   hint?: string
   children: ReactNode
   className?: string
+  /** 多行文本域：放宽 shell 高度与内边距 */
+  multiline?: boolean
 }
 
 /** Stacked label + filled control surface */
-export default function InnoField({ label, hint, children, className }: InnoFieldProps) {
+export default function InnoField({ label, hint, children, className, multiline = false }: InnoFieldProps) {
   const s = useStyles()
   return (
     <div className={mergeClasses('inno-field', s.rootStack, className)}>
       {label ? <Text className={s.label} block>{label}</Text> : null}
-      <div className={mergeClasses(s.control, 'inno-input-shell')}>{children}</div>
+      <div className={mergeClasses(s.control, multiline && s.controlMultiline, 'inno-input-shell')}>{children}</div>
       {hint ? <Text className={s.hint} block>{hint}</Text> : null}
     </div>
   )

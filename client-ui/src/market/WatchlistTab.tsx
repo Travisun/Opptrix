@@ -12,7 +12,7 @@ import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import { followReturnPct } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { formatPct, formatPrice, normalizeCode, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
@@ -381,6 +381,18 @@ export default function WatchlistTab({
   }, [items, quotes, onPatchItem])
 
   useEffect(() => {
+    for (const item of items) {
+      const qName = quotes[item.code]?.name
+      const rName = radar[item.code]?.name
+      const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
+      if (resolved === item.name) continue
+      if (!item.name || item.name === item.code || !hasCjkText(item.name)) {
+        onPatchItem(item.code, { name: resolved })
+      }
+    }
+  }, [items, quotes, radar, onPatchItem])
+
+  useEffect(() => {
     const q = keyword.trim()
     if (q.length < 2) {
       setSearchHits([])
@@ -510,7 +522,7 @@ export default function WatchlistTab({
             >
               <div className={s.rowBody}>
                 <span className={s.rowTitle}>
-                  {quote?.name ?? item.name}
+                  {resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)}
                   {isHolding && (
                     <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
                   )}

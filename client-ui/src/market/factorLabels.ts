@@ -1,5 +1,7 @@
 /** Factor display names — aligned with packages/stock-eval/src/factors/register.ts */
 export const FACTOR_LABELS: Record<string, string> = {
+  pe: '市盈率',
+  pb: '市净率',
   pe_percentile: 'PE历史百分位',
   pb_percentile: 'PB历史百分位',
   dividend_yield: '股息率',
@@ -55,6 +57,8 @@ export function positiveFactorBullet(key: string, value: number): string | null 
   if (!factorLabel(key)) return null
 
   switch (key) {
+    case 'pe':
+      return value > 0 && value <= 25 ? `PE ${value.toFixed(1)}，估值偏低` : null
     case 'pe_percentile':
       return value <= 35 ? `估值偏低（PE ${Math.round(value)}% 历史分位）` : null
     case 'pb_percentile':

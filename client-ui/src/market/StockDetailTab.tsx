@@ -19,8 +19,10 @@ import {
   formatVolume,
   pctTone,
 } from './format'
+import InnoButton from '../components/inno/InnoButton'
 import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
+import { useStockPrep } from './useStockPrep'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
@@ -138,6 +140,55 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  prepBanner: {
+    flexShrink: 0,
+    padding: `6px ${CONTENT_PAD}`,
+    borderBottom: `1px solid ${innoTokens.separator}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    backgroundColor: innoTokens.canvasAlt,
+  },
+  prepTitle: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: innoTokens.textPrimary,
+    lineHeight: 1.35,
+  },
+  prepHint: {
+    fontSize: '9px',
+    color: innoTokens.textTertiary,
+    lineHeight: 1.4,
+  },
+  prepActions: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  prepSteps: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  prepStep: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    fontSize: '9px',
+    color: innoTokens.textSecondary,
+  },
+  prepStepDone: {
+    color: '#248A3D',
+  },
+  prepStepRunning: {
+    color: innoTokens.textPrimary,
+    fontWeight: 600,
+  },
+  prepStepError: {
+    color: innoTokens.error,
   },
   tabBar: {
     flexShrink: 0,
@@ -540,10 +591,13 @@ export default function StockDetailTab({
   onDiscussInChat,
 }: Props) {
   const s = useStyles()
-  const [detailTab, setDetailTab] = useState<DetailTab>('analysis')
+  const [detailTab, setDetailTab] = useState<DetailTab>('chart')
   const [detail, setDetail] = useState<StockDetailData | null>(null)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [detailReload, setDetailReload] = useState(0)
+  const stockCode = stock?.code ?? null
+  const { prep, refresh: refreshPrep } = useStockPrep(stockCode)
 
   useEffect(() => {
     if (!stock) {
@@ -552,7 +606,7 @@ export default function StockDetailTab({
       return undefined
     }
 
-    setDetailTab('analysis')
+    setDetailTab('chart')
     let cancelled = false
     setLoading(true)
     setError('')
@@ -578,14 +632,33 @@ export default function StockDetailTab({
       })
 
     return () => { cancelled = true }
-  }, [stock])
+  }, [stock, detailReload])
+
+  useEffect(() => {
+    if (prep?.status === 'done') {
+      setDetailReload(n => n + 1)
+    }
+  }, [prep?.status, prep?.updated_at])
 
   if (!stock) {
     return <div className={s.center}>从关注列表选择股票查看详情</div>
   }
 
   if (loading && !detail) {
-    return <div className={s.center}><Spinner size="small" label="加载行情与资料…" /></div>
+    const pendingName = stock.name && stock.name !== stock.code ? stock.name : stock.code
+    return (
+      <div className={s.root}>
+        <div className={s.hero}>
+          <div className={s.titleRow}>
+            <div className={s.titleMain}>
+              <Text className={s.name}>{pendingName}</Text>
+              <span className={s.code}>{stock.code}</span>
+            </div>
+          </div>
+        </div>
+        <div className={s.center}><Spinner size="small" label="加载行情与资料…" /></div>
+      </div>
+    )
   }
 
   if (error && !detail) {
@@ -599,6 +672,9 @@ export default function StockDetailTab({
   const quote = detail.quote
   const profile = detail.profile
   const financial = detail.financial
+  const displayName = detail.name && detail.name !== detail.code
+    ? detail.name
+    : (stock.name && stock.name !== stock.code ? stock.name : (profile?.name || profile?.orgName || detail.code))
   const tone = pctTone(quote?.changePct)
   const toneClass = mergeClasses(
     tone === 'up' && s.pctUp,
@@ -611,7 +687,7 @@ export default function StockDetailTab({
       <div className={s.hero}>
         <div className={s.titleRow}>
           <div className={s.titleMain}>
-            <Text className={s.name}>{detail.name}</Text>
+            <Text className={s.name}>{displayName}</Text>
             <span className={s.code}>{detail.code}</span>
             {isHolding && <Badge size="small" color="informative" appearance="outline">持有</Badge>}
           </div>
@@ -645,6 +721,51 @@ export default function StockDetailTab({
         </div>
       </div>
 
+      {prep && (prep.status === 'running' || prep.status === 'error') && (
+        <div className={s.prepBanner}>
+          <Text className={s.prepTitle} block>
+            {prep.status === 'running' ? '正在后台准备个股数据…' : '部分数据准备未完成'}
+          </Text>
+          <Text className={s.prepHint} block>
+            可先浏览其他页面，完成后会自动刷新；图表与分析将随步骤就绪逐步可用。
+          </Text>
+          <div className={s.prepSteps}>
+            {prep.steps.map(step => (
+              <div
+                key={step.id}
+                className={mergeClasses(
+                  s.prepStep,
+                  step.status === 'done' && s.prepStepDone,
+                  step.status === 'running' && s.prepStepRunning,
+                  step.status === 'error' && s.prepStepError,
+                )}
+              >
+                <span>{step.label}</span>
+                <span>{step.message ?? (step.status === 'pending' ? '等待' : step.status === 'done' ? '完成' : '')}</span>
+              </div>
+            ))}
+          </div>
+          {prep.status === 'error' && (
+            <InnoButton variant="secondary" onClick={() => { void refreshPrep(true) }}>
+              重新准备
+            </InnoButton>
+          )}
+        </div>
+      )}
+
+      {prep && prep.status === 'done' && detailTab === 'analysis' && (
+        <div className={s.prepBanner}>
+          <div className={s.prepActions}>
+            <Text className={s.prepHint} block>
+              分析数据已缓存，可手动刷新获取最新信号。
+            </Text>
+            <InnoButton variant="secondary" onClick={() => { void refreshPrep(true) }}>
+              更新分析数据
+            </InnoButton>
+          </div>
+        </div>
+      )}
+
       <div className={s.tabBar}>
         <TabList
           className={s.tabList}
@@ -652,8 +773,8 @@ export default function StockDetailTab({
           selectedValue={detailTab}
           onTabSelect={(_, data) => setDetailTab(data.value as DetailTab)}
         >
-          <Tab value="analysis">分析</Tab>
           <Tab value="chart">图表</Tab>
+          <Tab value="analysis">分析</Tab>
           <Tab value="basic">基本</Tab>
           <Tab value="company">公司</Tab>
           <Tab value="news">公告</Tab>
@@ -665,7 +786,8 @@ export default function StockDetailTab({
         <div className={mergeClasses(s.tabPanel, detailTab !== 'analysis' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
             <StockDecisionCard
-              stock={stock}
+              key={`${stock.code}-${prep?.updated_at ?? 'init'}`}
+              stock={{ ...stock, name: displayName }}
               price={quote?.price ?? null}
               quotePe={quote?.pe ?? null}
               quotePb={quote?.pb ?? null}

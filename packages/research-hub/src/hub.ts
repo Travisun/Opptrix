@@ -41,9 +41,15 @@ export class ResearchHub {
   readonly morningBrief = new MorningBrief(this.de)
   readonly industrySkill = new IndustryMining(this.de)
   readonly marketData = getMarketDataService()
+  private readonly stockNameCache = new Map<string, string>()
 
+  initMarketDataAutoSync(): void {
+    this.marketData.autoSyncOnBoot()
+  }
+
+  /** @deprecated Use initMarketDataAutoSync */
   initMarketDataAutoResume(): void {
-    this.marketData.autoResumeOnBoot()
+    this.initMarketDataAutoSync()
   }
 
   async dispatch(feature: string, params: Record<string, unknown>): Promise<ResearchResult> {
@@ -68,6 +74,8 @@ export class ResearchHub {
         case 'market_db_sync': return this.marketDbSync(params, t0)
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
+        case 'list_screen_factors': return this.listScreenFactors(t0)
+        case 'batch_stock_snapshots': return this.batchStockSnapshots(params, t0)
         case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
         case 'stock_cyq': return this.stockCyq(String(params.code), t0)
         case 'stock_chart': return this.stockChart(
@@ -154,6 +162,10 @@ export class ResearchHub {
         conditions as never[],
         topN,
       )
+      const topCodes = data.items.map(i => i.code).slice(0, Math.min(topN, 30))
+      if (topCodes.length) {
+        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
+      }
       return ok({
         total_scanned: localStatus.stock_count,
         passed: data.passed,
@@ -186,16 +198,44 @@ export class ResearchHub {
   }
 
   private async marketDbSync(params: Record<string, unknown>, t0: number) {
-    const modeRaw = String(params.mode ?? 'incremental')
-    const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
+    const force = params.force === true
+    const modeRaw = params.mode != null ? String(params.mode) : 'auto'
     const maxStocks = params.max_stocks != null ? Number(params.max_stocks) : undefined
     const jobs = Array.isArray(params.jobs) ? (params.jobs as string[]) : undefined
-    const force = params.force === true
     const profile = params.profile != null ? String(params.profile) : undefined
 
-    const result = await this.marketData.sync({ mode, maxStocks, jobs, force, profile })
+    let result: Awaited<ReturnType<typeof this.marketData.syncAdaptive>>
+    let planLabel: string
+
+    if (force || modeRaw === 'full') {
+      const r = await this.marketData.sync({
+        mode: 'full',
+        maxStocks,
+        jobs,
+        force: true,
+        profile,
+        background: true,
+      })
+      result = { ...r, plan: { mode: 'full' as const, jobs: jobs ?? [], label: '全量重拉' } }
+      planLabel = '全量重拉'
+    } else if (modeRaw === 'resume' || modeRaw === 'incremental') {
+      const r = await this.marketData.sync({
+        mode: modeRaw,
+        maxStocks,
+        jobs,
+        force,
+        profile,
+        background: true,
+      })
+      planLabel = modeRaw === 'resume' ? '接续同步' : '增量同步'
+      result = { ...r, plan: { mode: modeRaw, jobs: jobs ?? [], label: planLabel } }
+    } else {
+      result = await this.marketData.syncAdaptive(force)
+      planLabel = result.plan.label
+    }
+
     const msg = result.started
-      ? (mode === 'resume' ? '基础数据接续同步已在后台启动' : '基础数据同步已在后台启动')
+      ? `${planLabel}已在后台启动`
       : '同步任务进行中'
     return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
   }
@@ -204,6 +244,19 @@ export class ResearchHub {
     const tradeDate = params.trade_date ? String(params.trade_date) : undefined
     const items = this.marketData.industryStats(tradeDate)
     return ok({ items, trade_date: tradeDate ?? this.marketData.status().latest_factor_date }, '行业统计', t0)
+  }
+
+  private listScreenFactors(t0: number) {
+    return ok({ factors: this.marketData.listScreenFactors() }, '本地初选因子列表', t0)
+  }
+
+  private batchStockSnapshots(params: Record<string, unknown>, t0: number) {
+    const codes = Array.isArray(params.codes) ? (params.codes as string[]).map(String) : []
+    const limit = Math.min(codes.length, 80)
+    const slice = codes.slice(0, limit)
+    const tradeDate = this.marketData.status().latest_factor_date ?? undefined
+    const items = this.marketData.discoverCandidates(slice, undefined, tradeDate ?? undefined)
+    return ok({ trade_date: tradeDate ?? null, items }, `批量快照 ${items.length} 只`, t0)
   }
 
   private async strategySignal(code: string, t0: number) {
@@ -272,18 +325,77 @@ export class ResearchHub {
     return ok({ keyword: raw, results }, `找到 ${results.length} 只`, t0)
   }
 
+  private resolveStockName(
+    code: string,
+    ...candidates: Array<string | null | undefined>
+  ): string {
+    const normalized = normalizeCode(code)
+    const cached = this.stockNameCache.get(normalized)
+    if (cached && cached !== normalized) return cached
+    for (const c of candidates) {
+      if (c && c.trim() && c.trim() !== normalized) {
+        this.stockNameCache.set(normalized, c.trim())
+        return c.trim()
+      }
+    }
+    const local = this.marketData.store.stockMeta(normalized)
+    if (local?.name && local.name !== normalized) {
+      this.stockNameCache.set(normalized, local.name)
+      return local.name
+    }
+    const stored = this.store.getLatest(normalized)
+    if (stored?.name && stored.name !== normalized) {
+      this.stockNameCache.set(normalized, stored.name)
+      return stored.name
+    }
+    return normalized
+  }
+
+  private async fillMissingStockNames(codes: string[]): Promise<void> {
+    const missing = [...new Set(codes.map(c => normalizeCode(c)).filter(c => this.resolveStockName(c) === c))]
+    if (!missing.length) return
+
+    const metaBatch = this.marketData.store.stockMetaBatch(missing)
+    for (const [code, meta] of metaBatch) {
+      if (meta.name && meta.name !== code) this.stockNameCache.set(code, meta.name)
+    }
+
+    const stillMissing = missing.filter(c => this.resolveStockName(c) === c)
+    await Promise.all(stillMissing.map(async code => {
+      if (this.resolveStockName(code) !== code) return
+      try {
+        const found = await searchQuote(code, 5)
+        const items = found == null ? [] : (Array.isArray(found) ? found : [found])
+        const hit = items.find(q => normalizeCode(q.code) === code)
+        if (hit?.name && hit.name !== code) {
+          this.stockNameCache.set(code, hit.name)
+        }
+      } catch {
+        /* ignore lookup errors */
+      }
+    }))
+  }
+
   private async stockQuotes(codes: string[] | undefined, t0: number) {
     const normalized = [...new Set((codes ?? []).map(c => String(c).padStart(6, '0')).filter(Boolean))]
     if (!normalized.length) return ok({ quotes: [] }, '暂无关注', t0)
+    await this.fillMissingStockNames(normalized)
     const result = await this.de.batchRealtime(normalized)
     if (!result.success) return fail(result.error ?? '行情获取失败', t0)
-    return ok({ quotes: result.data ?? [] }, `更新 ${result.data?.length ?? 0} 只`, t0)
+    const quotes = (result.data ?? []).map(q => ({
+      ...q,
+      name: this.resolveStockName(q.code, q.name),
+    }))
+    return ok({ quotes }, `更新 ${quotes.length} 只`, t0)
   }
 
   /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
   private async watchlistRadar(codes: string[] | undefined, t0: number) {
     const normalized = [...new Set((codes ?? []).map(c => normalizeCode(String(c))).filter(Boolean))]
     if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无关注', t0)
+
+    await this.fillMissingStockNames(normalized)
+    void this.marketData.hydrateStocks(normalized, 'watchlist').catch(() => {})
 
     const localRows = this.marketData.status().is_ready
       ? this.marketData.radarBatch(normalized) as {
@@ -339,7 +451,7 @@ export class ResearchHub {
       const flow = flowR.data?.[0]
       return {
         code,
-        name: quote?.name ?? local?.name ?? stored?.name ?? code,
+        name: this.resolveStockName(code, quote?.name, local?.name, stored?.name),
         total_score: local?.total_score ?? stored?.totalScore ?? null,
         scorecard: local?.scorecard ?? stored?.scorecardName ?? null,
         from_store: Boolean(local || stored),
@@ -353,7 +465,7 @@ export class ResearchHub {
     } catch {
       return {
         code,
-        name: local?.name ?? stored?.name ?? code,
+        name: this.resolveStockName(code, local?.name, stored?.name),
         total_score: local?.total_score ?? stored?.totalScore ?? null,
         scorecard: local?.scorecard ?? stored?.scorecardName ?? null,
         from_store: Boolean(local || stored),
@@ -413,6 +525,8 @@ export class ResearchHub {
   }
 
   private async stockDetail(code: string, t0: number) {
+    void this.marketData.hydrateStocks([normalizeCode(code)], 'detail').catch(() => {})
+
     const [quoteR, profileR, financialR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
       this.de.realtime(code),
       this.de.profile(code),
@@ -428,7 +542,12 @@ export class ResearchHub {
     const quote = quoteRaw ? this.enrichQuote(quoteRaw) : null
     const profile = profileR.data?.[0] ?? null
     const financial = financialR.data?.[0] ?? null
-    const name = quote?.name ?? profile?.name ?? code
+    const name = this.resolveStockName(
+      code,
+      quote?.name,
+      profile?.name,
+      profile?.orgName,
+    )
 
     return ok({
       code,
@@ -610,7 +729,7 @@ export class ResearchHub {
     const quoteR = await this.de.realtime(code)
     const quote = quoteR.data?.[0] ?? null
     const preClose = quote?.preClose ?? null
-    const name = quote?.name ?? normalized
+    const name = this.resolveStockName(code, quote?.name)
 
     if (period === 'intraday') {
       if (!this.isCnTradingDayCandidate()) {

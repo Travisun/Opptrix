@@ -67,13 +67,35 @@ const useStyles = makeStyles({
       width: 'auto',
     },
   },
+  rowControlStack: {
+    width: '100%',
+    justifyContent: 'stretch',
+    '@media (min-width: 721px)': {
+      width: '100%',
+    },
+  },
   rowTopBorder: {
     borderTop: `1px solid ${innoTokens.gray200}`,
   },
   rowDivider: {
     height: '1px',
-    backgroundColor: innoTokens.gray200,
+    backgroundColor: innoTokens.separator,
     margin: '0 18px',
+  },
+  panelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '10px 18px',
+    minHeight: '44px',
+  },
+  panelHeaderTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
+    color: innoTokens.textPrimary,
+    lineHeight: 1.35,
   },
   inlineInput: {
     ...inputShellInteractive,
@@ -159,42 +181,47 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '2px',
   },
-  credentialRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
+  credentialCombo: {
+    ...inputShellInteractive,
     width: '100%',
     minWidth: 0,
-    '@media (max-width: 720px)': {
-      flexWrap: 'wrap',
-    },
-  },
-  credentialInputShell: {
-    ...inputShellInteractive,
-    flex: '1 1 220px',
-    minWidth: 0,
     minHeight: '32px',
-    padding: '0 4px 0 11px',
     display: 'flex',
-    alignItems: 'center',
-    gap: '2px',
+    alignItems: 'stretch',
+    padding: 0,
+    overflow: 'hidden',
     boxSizing: 'border-box',
   },
   credentialInput: {
-    flex: 1,
+    flex: '1 1 0',
     minWidth: 0,
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: '12px',
+    paddingLeft: '11px',
   },
-  credentialActions: {
+  credentialSegment: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
     flexShrink: 0,
-    '@media (max-width: 720px)': {
-      width: '100%',
-      justifyContent: 'flex-start',
-    },
+    borderLeft: `1px solid ${innoTokens.separator}`,
+  },
+  credentialActionBtn: {
+    minHeight: '30px',
+    height: '100%',
+    borderRadius: 0,
+    fontSize: '12px',
+    fontWeight: 500,
+    paddingLeft: '12px',
+    paddingRight: '12px',
+  },
+  credentialSaveBtn: {
+    minHeight: '30px',
+    height: '100%',
+    borderRadius: 0,
+    fontSize: '12px',
+    fontWeight: 600,
+    paddingLeft: '12px',
+    paddingRight: '12px',
   },
   actionRow: {
     display: 'flex',
@@ -249,7 +276,7 @@ export function SettingsRow({
           {desc && <Text className={s.rowDesc} block>{desc}</Text>}
         </div>
         {control != null && (
-          <div className={s.rowControl}>{control}</div>
+          <div className={mergeClasses(s.rowControl, stack && s.rowControlStack)}>{control}</div>
         )}
       </div>
       {!last && <div className={s.rowDivider} aria-hidden />}
@@ -335,17 +362,17 @@ export function SettingsCredentialRow({
   }, [value, revealWhenFilled])
 
   return (
-    <div className={s.credentialRow}>
-      <div className={mergeClasses(s.credentialInputShell, 'inno-input-shell', 'inno-settings-inline-input')}>
-        <Input
-          className={mergeClasses(s.credentialInput, 'inno-settings-field-input')}
-          appearance="filled-darker"
-          size="medium"
-          type={visible ? 'text' : 'password'}
-          value={value}
-          placeholder={placeholder}
-          onChange={(_, d) => onChange(d.value ?? '')}
-        />
+    <div className={mergeClasses(s.credentialCombo, 'inno-input-shell', 'inno-settings-inline-input')}>
+      <Input
+        className={mergeClasses(s.credentialInput, 'inno-settings-field-input')}
+        appearance="filled-darker"
+        size="medium"
+        type={visible ? 'text' : 'password'}
+        value={value}
+        placeholder={placeholder}
+        onChange={(_, d) => onChange(d.value ?? '')}
+      />
+      <div className={s.credentialSegment}>
         <InnoButton
           variant="icon"
           aria-label={visible ? '隐藏密钥' : '显示密钥'}
@@ -356,16 +383,20 @@ export function SettingsCredentialRow({
           }}
         />
       </div>
-      <div className={s.credentialActions}>
+      <div className={s.credentialSegment}>
         <InnoButton
-          variant="secondary"
+          variant="ghost"
+          className={s.credentialActionBtn}
           disabled={testing || testDisabled}
           onClick={onTest}
         >
           {testing ? '测试中…' : '测试'}
         </InnoButton>
+      </div>
+      <div className={s.credentialSegment}>
         <InnoButton
           variant="primary"
+          className={s.credentialSaveBtn}
           disabled={saving || saveDisabled}
           onClick={onSave}
         >
@@ -404,6 +435,25 @@ export function SettingsActionRow({
 export function SettingsDivider() {
   const s = useStyles()
   return <div className={s.rowDivider} aria-hidden />
+}
+
+export function SettingsPanelHeader({
+  title,
+  action,
+}: {
+  title: string
+  action?: ReactNode
+}) {
+  const s = useStyles()
+  return (
+    <>
+      <div className={s.panelHeader}>
+        <Text className={s.panelHeaderTitle} block>{title}</Text>
+        {action}
+      </div>
+      <SettingsDivider />
+    </>
+  )
 }
 
 function ProviderModelsViewer({ name, models }: { name: string; models: string[] }) {

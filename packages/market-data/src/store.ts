@@ -1,6 +1,6 @@
 import Database from 'better-sqlite3'
 import { marketDbPath } from './paths.js'
-import { migrate, nowIso, todayTradeDate } from './utils.js'
+import { migrate, nowIso, todayTradeDate, daysSince } from './utils.js'
 
 export interface JobProgressSummary {
   done: number
@@ -27,6 +27,20 @@ export interface MarketDbStatus {
   last_sync: Record<string, string | null>
   job_progress: Record<string, JobProgressSummary>
   is_ready: boolean
+  bootstrap: BootstrapReadiness
+}
+
+export interface BootstrapReadiness {
+  ready: boolean
+  universe: boolean
+  quotes: boolean
+  klines: boolean
+  fundamentals: boolean
+  screen_factors: boolean
+  quote_stock_ratio: number
+  kline_stock_ratio: number
+  fin_stock_ratio: number
+  factor_stock_ratio: number
 }
 
 export class MarketDataStore {
@@ -128,6 +142,11 @@ export class MarketDataStore {
       }
     }
 
+    const activeCount = (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
+    ).get() as { c: number }).c
+    const bootstrap = this.assessBootstrapReadiness(activeCount, latestQuote.d, latestFactor.d)
+
     return {
       db_path: this.db.name,
       schema_version: schemaVersion,
@@ -146,8 +165,190 @@ export class MarketDataStore {
       buyback_count: buybackCount,
       last_sync: lastSync,
       job_progress: jobProgress,
-      is_ready: stockCount > 1000 && latestFactor.d != null,
+      is_ready: bootstrap.ready,
+      bootstrap,
     }
+  }
+
+  assessBootstrapReadiness(
+    stockCount?: number,
+    latestQuoteDate?: string | null,
+    latestFactorDate?: string | null,
+  ): BootstrapReadiness {
+    const total = stockCount ?? (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
+    ).get() as { c: number }).c
+    const minKlines = 60
+    const klineRow = this.db.prepare(`
+      SELECT COUNT(DISTINCT code) AS c FROM (
+        SELECT code FROM stock_klines_daily GROUP BY code HAVING COUNT(*) >= ?
+      )
+    `).get(minKlines) as { c: number }
+    const klineStockRatio = total > 0 ? klineRow.c / total : 0
+
+    const factorDate = latestFactorDate
+      ?? (this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }).d
+    const factorRow = factorDate
+      ? this.db.prepare(`
+          SELECT COUNT(DISTINCT code) AS c FROM stock_factors WHERE trade_date = ?
+        `).get(factorDate) as { c: number }
+      : { c: 0 }
+    const factorStockRatio = total > 0 ? factorRow.c / total : 0
+
+    const finRow = this.db.prepare('SELECT COUNT(DISTINCT code) AS c FROM stock_financials').get() as { c: number }
+    const finRatio = total > 0 ? finRow.c / total : 0
+
+    const quoteDate = latestQuoteDate
+      ?? (this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }).d
+    const quoteRow = quoteDate
+      ? this.db.prepare('SELECT COUNT(*) AS c FROM stock_quotes_daily WHERE trade_date = ?').get(quoteDate) as { c: number }
+      : { c: 0 }
+    const quoteRatio = total > 0 ? quoteRow.c / total : 0
+
+    const universe = total > 1000
+    const quotes = quoteRatio >= 0.85
+    const klines = klineStockRatio >= 0.8
+    const fundamentals = finRatio >= 0.75
+    const screen_factors = factorStockRatio >= 0.75
+    const ready = universe && quotes && klines && fundamentals && screen_factors
+
+    return {
+      ready,
+      universe,
+      quotes,
+      klines,
+      fundamentals,
+      screen_factors,
+      quote_stock_ratio: Math.round(quoteRatio * 1000) / 10,
+      kline_stock_ratio: Math.round(klineStockRatio * 1000) / 10,
+      fin_stock_ratio: Math.round(finRatio * 1000) / 10,
+      factor_stock_ratio: Math.round(factorStockRatio * 1000) / 10,
+    }
+  }
+
+  /** True when quotes/K线/财务比上次因子计算更新 — 需要重算 screen_factors。 */
+  screenFactorsStale(tradeDate = todayTradeDate()): boolean {
+    const factorCursor = this.getCursorLastSuccess('screen_factors')
+    if (!factorCursor) return true
+
+    const factorAt = new Date(factorCursor).getTime()
+    for (const job of ['quotes', 'kline_bootstrap', 'financials'] as const) {
+      const at = this.getCursorLastSuccess(job)
+      if (at && new Date(at).getTime() > factorAt) return true
+    }
+
+    const latestFactorDate = (this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM stock_factors',
+    ).get() as { d: string | null }).d
+    if (latestFactorDate !== tradeDate) return true
+
+    const active = (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
+    ).get() as { c: number }).c
+    if (active <= 0) return false
+
+    const withFactors = (this.db.prepare(
+      'SELECT COUNT(DISTINCT code) AS c FROM stock_factors WHERE trade_date = ?',
+    ).get(tradeDate) as { c: number }).c
+    return withFactors / active < 0.75
+  }
+
+  industryStatsStale(tradeDate = todayTradeDate()): boolean {
+    const last = this.getCursorLastSuccess('industry_stats')
+    if (!last) return true
+    if (daysSince(last) >= 1) return true
+    const factorCursor = this.getCursorLastSuccess('screen_factors')
+    if (factorCursor && new Date(factorCursor).getTime() > new Date(last).getTime()) return true
+    const meta = this.getCursorMeta('industry_stats')
+    const metaDate = meta?.trade_date != null ? String(meta.trade_date) : ''
+    return metaDate !== tradeDate
+  }
+
+  getCursorMeta(jobName: string): Record<string, unknown> | null {
+    const row = this.db.prepare(
+      'SELECT meta_json FROM sync_cursor WHERE job_name = ?',
+    ).get(jobName) as { meta_json: string | null } | undefined
+    if (!row?.meta_json) return null
+    try {
+      return JSON.parse(row.meta_json) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  bulkUpsertKlines(
+    rows: Array<{
+      tradeDate: string
+      code: string
+      open?: number | null
+      high?: number | null
+      low?: number | null
+      close?: number | null
+      volume?: number | null
+      amount?: number | null
+      changePct?: number | null
+    }>,
+  ): number {
+    if (!rows.length) return 0
+    const ts = nowIso()
+    const stmt = this.db.prepare(`
+      INSERT INTO stock_klines_daily (
+        trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(trade_date, code) DO UPDATE SET
+        open = excluded.open,
+        high = excluded.high,
+        low = excluded.low,
+        close = excluded.close,
+        volume = excluded.volume,
+        amount = excluded.amount,
+        change_pct = excluded.change_pct,
+        synced_at = excluded.synced_at
+    `)
+    const tx = this.db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        stmt.run(
+          r.tradeDate,
+          r.code,
+          r.open ?? null,
+          r.high ?? null,
+          r.low ?? null,
+          r.close ?? null,
+          r.volume ?? null,
+          r.amount ?? null,
+          r.changePct ?? null,
+          ts,
+        )
+      }
+    })
+    for (let i = 0; i < rows.length; i += 800) tx(rows.slice(i, i + 800))
+    return rows.length
+  }
+
+  hasTradeDateKlines(tradeDate: string): boolean {
+    const row = this.db.prepare(
+      'SELECT 1 FROM stock_klines_daily WHERE trade_date = ? LIMIT 1',
+    ).get(tradeDate)
+    return Boolean(row)
+  }
+
+  pruneKlinesOlderThan(cutoffDate: string): number {
+    return this.db.prepare('DELETE FROM stock_klines_daily WHERE trade_date < ?').run(cutoffDate).changes
+  }
+
+  shareholderSyncedAt(code: string): string | null {
+    const row = this.db.prepare(
+      'SELECT MAX(synced_at) AS synced_at FROM stock_shareholder_summary WHERE code = ?',
+    ).get(code) as { synced_at: string | null } | undefined
+    return row?.synced_at ?? null
+  }
+
+  listFinancials(code: string, limit = 4): Array<Record<string, unknown>> {
+    return this.db.prepare(`
+      SELECT * FROM stock_financials
+      WHERE code = ? AND (report_type IS NULL OR report_type = 'annual')
+      ORDER BY report_date DESC LIMIT ?
+    `).all(code, limit) as Array<Record<string, unknown>>
   }
 
   upsertStock(row: {
@@ -191,6 +392,25 @@ export class MarketDataStore {
       ? `SELECT code FROM stocks WHERE status = 'active' ORDER BY code`
       : `SELECT code FROM stocks ORDER BY code`
     return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+  }
+
+  stockMeta(code: string): { code: string; name: string; industry: string | null } | null {
+    const row = this.db.prepare(
+      'SELECT code, name, industry FROM stocks WHERE code = ?',
+    ).get(code) as { code: string; name: string; industry: string | null } | undefined
+    return row ?? null
+  }
+
+  stockMetaBatch(codes: string[]): Map<string, { code: string; name: string; industry: string | null }> {
+    const normalized = [...new Set(codes.map(c => String(c).padStart(6, '0')).filter(Boolean))]
+    const out = new Map<string, { code: string; name: string; industry: string | null }>()
+    if (!normalized.length) return out
+    const placeholders = normalized.map(() => '?').join(',')
+    const rows = this.db.prepare(
+      `SELECT code, name, industry FROM stocks WHERE code IN (${placeholders})`,
+    ).all(...normalized) as { code: string; name: string; industry: string | null }[]
+    for (const row of rows) out.set(row.code, row)
+    return out
   }
 
   profileSyncedAt(code: string): string | null {
@@ -470,6 +690,55 @@ export class MarketDataStore {
       return this.db.prepare('DELETE FROM sync_job_progress WHERE job_name = ?').run(jobName).changes
     }
     return this.db.prepare('DELETE FROM sync_job_progress').run().changes
+  }
+
+  /** Clear prior per-stock errors for 北交所 920xxx — retry after code mapping fix. */
+  clearBseJobErrors(jobNames?: string[]): number {
+    if (jobNames?.length) {
+      const placeholders = jobNames.map(() => '?').join(',')
+      return this.db.prepare(`
+        DELETE FROM sync_job_progress
+        WHERE status = 'error' AND code LIKE '92%' AND job_name IN (${placeholders})
+      `).run(...jobNames).changes
+    }
+    return this.db.prepare(`
+      DELETE FROM sync_job_progress WHERE status = 'error' AND code LIKE '92%'
+    `).run().changes
+  }
+
+  listCodesWithMinKlines(minBars: number): string[] {
+    return (this.db.prepare(`
+      SELECT code FROM stock_klines_daily
+      GROUP BY code HAVING COUNT(*) >= ?
+    `).all(minBars) as { code: string }[]).map(r => r.code)
+  }
+
+  markBootstrapJobDoneForCodes(jobName: string, codes: string[], scopeKey = ''): void {
+    const tx = this.db.transaction((list: string[]) => {
+      for (const code of list) this.markJobProgress(jobName, code, scopeKey, 'done')
+    })
+    for (let i = 0; i < codes.length; i += 500) tx(codes.slice(i, i + 500))
+  }
+
+  /** Backfill per-stock job flags for bulk bootstrap tasks (fixes stale progress display). */
+  repairBootstrapJobProgress(): { klines: number; industry: number } {
+    const klineCodes = this.listCodesWithMinKlines(60)
+    if (klineCodes.length) this.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
+
+    const tradeDate = (this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM industry_stats',
+    ).get() as { d: string | null }).d
+    let industry = 0
+    if (tradeDate) {
+      const codes = (this.db.prepare(
+        'SELECT code FROM stocks WHERE status = \'active\'',
+      ).all() as { code: string }[]).map(r => r.code)
+      if (codes.length) {
+        this.markBootstrapJobDoneForCodes('industry_stats', codes, tradeDate)
+        industry = codes.length
+      }
+    }
+    return { klines: klineCodes.length, industry }
   }
 
   replaceAnnouncements(code: string, items: Record<string, unknown>[]): void {

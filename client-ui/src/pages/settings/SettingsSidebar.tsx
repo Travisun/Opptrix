@@ -2,6 +2,7 @@ import { useMemo } from 'react'
 import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BotRegular,
+  ChartMultipleRegular,
   DatabaseRegular,
   InfoRegular,
   SearchRegular,
@@ -14,13 +15,14 @@ import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
 
-export type SettingsSection = 'general' | 'models' | 'market_data' | 'about'
+export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'about'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'models', label: '模型', icon: BotRegular },
   { id: 'market_data', label: '基础数据', icon: DatabaseRegular },
+  { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'about', label: '关于', icon: InfoRegular },
 ]
 
@@ -251,6 +253,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '配置 LLM 提供商与可用模型'
     case 'market_data':
       return '本地指标库、Tushare 数据源与同步日志'
+    case 'discover_strategies':
+      return '查看内置策略、管理自编策略与复制编辑'
     case 'about':
       return '应用版本与运行说明'
     default:

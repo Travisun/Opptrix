@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 3
+export const SCHEMA_VERSION = 4
 
 export const MIGRATION_SQL = `
 PRAGMA journal_mode = WAL;
@@ -335,4 +335,23 @@ CREATE TABLE IF NOT EXISTS sync_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_sync_logs_session ON sync_logs(session_id, id DESC);
+`
+
+export const MIGRATION_V4_SQL = `
+CREATE TABLE IF NOT EXISTS stock_klines_daily (
+  trade_date TEXT NOT NULL,
+  code TEXT NOT NULL,
+  open REAL,
+  high REAL,
+  low REAL,
+  close REAL,
+  volume REAL,
+  amount REAL,
+  change_pct REAL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (trade_date, code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_klines_code_date ON stock_klines_daily(code, trade_date DESC);
+CREATE INDEX IF NOT EXISTS idx_klines_date ON stock_klines_daily(trade_date);
 `

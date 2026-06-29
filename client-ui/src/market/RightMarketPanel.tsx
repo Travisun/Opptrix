@@ -1,6 +1,7 @@
 import { useCallback, useMemo, useState } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import DiscoverTab from './DiscoverTab'
+import { useDiscoverSession } from './useDiscoverSession'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
@@ -90,6 +91,15 @@ const useStyles = makeStyles({
     position: 'relative',
     overflow: 'hidden',
   },
+  tabPane: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  tabPaneHidden: {
+    display: 'none',
+  },
 })
 
 interface Props {
@@ -119,6 +129,7 @@ export default function RightMarketPanel({
     deleteTrade,
     refreshHoldings,
   } = useFollowPortfolio()
+  const discover = useDiscoverSession()
   const [tab, setTab] = useState<MarketTab>('watchlist')
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
@@ -193,7 +204,7 @@ export default function RightMarketPanel({
             onTabSelect={(_, data) => setTab(data.value as MarketTab)}
           >
             <Tab value="watchlist">关注</Tab>
-            <Tab value="discover">发现</Tab>
+            <Tab value="discover">选股</Tab>
             <Tab value="detail" disabled={!selected}>个股</Tab>
           </TabList>
         </div>
@@ -234,7 +245,7 @@ export default function RightMarketPanel({
       </div>
 
       <div className={s.content}>
-        {tab === 'watchlist' ? (
+        <div className={mergeClasses(s.tabPane, tab !== 'watchlist' && s.tabPaneHidden)}>
           <WatchlistTab
             items={items}
             selectedCode={selectedCode}
@@ -251,13 +262,16 @@ export default function RightMarketPanel({
               }
             }}
           />
-        ) : tab === 'discover' ? (
+        </div>
+        <div className={mergeClasses(s.tabPane, tab !== 'discover' && s.tabPaneHidden)}>
           <DiscoverTab
+            session={discover}
             watchlistCodes={watchlistCodeSet}
             onSelect={handleDiscoverSelect}
             onAdd={handleDiscoverAdd}
           />
-        ) : (
+        </div>
+        {tab === 'detail' && (
           <StockDetailTab
             stock={detailStock}
             isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}

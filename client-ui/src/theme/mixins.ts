@@ -51,6 +51,15 @@ export const glassPanel = {
   WebkitBackdropFilter: innoTokens.glassBlur,
 } as const
 
+/** 下拉浮层 / 面板 — 毛玻璃（与 Dialog、MessageSelectionToolbar 一致） */
+export const glassDropdown = {
+  backgroundColor: 'rgba(255, 255, 255, 0.72)',
+  backdropFilter: 'blur(16px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(16px) saturate(160%)',
+  border: `1px solid ${innoTokens.separator}`,
+  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+} as const
+
 export const contentPanel = {
   backgroundColor: innoTokens.canvas,
   borderRadius: innoTokens.radiusLg,

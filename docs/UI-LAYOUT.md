@@ -21,6 +21,7 @@
 - **Sidebar**：全高固定，不随主区滚动
 - **Main Canvas**：暖色 canvas 背景，内部卡片为 surface 白
 - **Agent Panel**：右侧滑入，与 EchoBird「会话记录」栏同位；关闭时主区占满
+- **浮层面板**：Dialog、下拉、抽屉统一毛玻璃（见 `UI-DESIGN-SYSTEM.md` §5.1）
 
 ## 2. 路由与页面映射
 

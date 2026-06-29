@@ -1,21 +1,31 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { AddRegular, ArrowRightRegular } from '@fluentui/react-icons'
-import { research } from '../api/client'
-import type { ScreeningData } from '../types/schemas'
+import { useEffect, useMemo, useState, type MouseEvent } from 'react'
+import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { AddRegular, ArrowRightRegular, HistoryRegular } from '@fluentui/react-icons'
+import { listDiscoverStrategies, listSkills } from '../api/client'
+import type { DiscoverStrategyOption, DiscoverStrategyPublic } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import InnoButton from '../components/inno/InnoButton'
+import DiscoverStrategyPicker from './DiscoverStrategyPicker'
 import { factorLabel } from './factorLabels'
-import { formatScoreSummary } from './scoreGrade'
-import { scoreMetricTone } from './decisionCardTone'
-import { DISCOVER_PRESETS, type DiscoverPreset } from './discoverPresets'
 import { normalizeCode } from './format'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
+import { research } from '../api/client'
+import type { DiscoverSessionState } from './useDiscoverSession'
+import type { DiscoverRunResult } from '../types/schemas'
+import { useCustomDiscoverStrategies } from './useCustomDiscoverStrategies'
 
 const CONTENT_PAD = '15px'
 const ITEM_BG_INSET = '10px'
 const ITEM_INNER_PAD = '10px'
+
+const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
+  value: '价值',
+  growth: '成长',
+  quality: '质量',
+  momentum: '动量',
+  balanced: '均衡',
+}
 
 const useStyles = makeStyles({
   root: {
@@ -32,55 +42,52 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
   },
-  presetRow: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
+  headHint: {
+    fontSize: '10px',
+    color: innoTokens.textTertiary,
+    lineHeight: 1.45,
   },
-  presetBtn: {
+  historyRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexWrap: 'wrap',
+  },
+  historyChip: {
     border: `1px solid ${innoTokens.separator}`,
     backgroundColor: innoTokens.canvas,
     color: innoTokens.textSecondary,
     borderRadius: innoTokens.radiusFull,
-    fontSize: '10px',
-    fontWeight: 600,
-    padding: '4px 10px',
+    fontSize: '9px',
+    fontWeight: 500,
+    padding: '3px 8px',
     cursor: 'pointer',
-    lineHeight: 1.2,
+    maxWidth: '160px',
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
     ...ghostInteractive,
     ':hover': {
       borderColor: innoTokens.separatorStrong,
       color: innoTokens.textPrimary,
     },
   },
-  presetBtnActive: {
+  historyChipActive: {
+    borderColor: innoTokens.accent,
     backgroundColor: innoTokens.accentSoft,
-    borderColor: innoTokens.borderStrong,
     color: innoTokens.textPrimary,
-  },
-  presetDesc: {
-    fontSize: '10px',
-    lineHeight: 1.45,
-    color: innoTokens.textTertiary,
-  },
-  condList: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '4px',
-  },
-  condTag: {
-    fontSize: '9px',
-    padding: '2px 6px',
-    borderRadius: innoTokens.radiusFull,
-    backgroundColor: innoTokens.canvas,
-    border: `1px solid ${innoTokens.separator}`,
-    color: innoTokens.textSecondary,
   },
   runRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
+  },
+  strategyShell: {
+    padding: `8px ${ITEM_BG_INSET}`,
+    borderRadius: innoTokens.radiusMd,
+    backgroundColor: innoTokens.canvasAlt,
+    border: `1px solid ${innoTokens.separator}`,
   },
   runBtn: {
     fontSize: '11px',
@@ -89,6 +96,26 @@ const useStyles = makeStyles({
   runHint: {
     fontSize: '10px',
     color: innoTokens.textTertiary,
+    lineHeight: 1.4,
+  },
+  progressBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: `6px ${CONTENT_PAD}`,
+    borderBottom: `1px solid ${innoTokens.separator}`,
+  },
+  progressMeta: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    gap: '8px',
+    fontSize: '10px',
+    color: innoTokens.textSecondary,
+  },
+  progressPct: {
+    fontVariantNumeric: 'tabular-nums',
+    fontWeight: 600,
+    color: innoTokens.textPrimary,
   },
   dbBanner: {
     flexShrink: 0,
@@ -98,10 +125,25 @@ const useStyles = makeStyles({
     color: innoTokens.textSecondary,
     lineHeight: 1.45,
   },
-  stats: {
+  summary: {
     flexShrink: 0,
-    padding: `6px ${CONTENT_PAD}`,
+    padding: `8px ${CONTENT_PAD}`,
     borderBottom: `1px solid ${innoTokens.separator}`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  summaryTitle: {
+    fontSize: '12px',
+    fontWeight: 650,
+    color: innoTokens.textPrimary,
+  },
+  summaryText: {
+    fontSize: '10px',
+    lineHeight: 1.45,
+    color: innoTokens.textSecondary,
+  },
+  stats: {
     fontSize: '10px',
     color: innoTokens.textTertiary,
   },
@@ -118,8 +160,8 @@ const useStyles = makeStyles({
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto',
     gap: '6px',
-    alignItems: 'center',
-    padding: `6px ${ITEM_INNER_PAD}`,
+    alignItems: 'flex-start',
+    padding: `8px ${ITEM_INNER_PAD}`,
     borderRadius: innoTokens.radiusMd,
     cursor: 'pointer',
     ...ghostInteractive,
@@ -129,7 +171,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
+    gap: '4px',
   },
   rowTitle: {
     display: 'flex',
@@ -150,18 +192,34 @@ const useStyles = makeStyles({
     color: innoTokens.textTertiary,
     flexShrink: 0,
   },
-  rowMeta: {
+  rankBadge: {
     fontSize: '10px',
+    fontWeight: 650,
     color: innoTokens.textSecondary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  matchScore: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: '#248A3D',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  thesis: {
+    fontSize: '10px',
+    lineHeight: 1.45,
+    color: innoTokens.textSecondary,
+  },
+  highlights: {
+    fontSize: '9px',
+    color: innoTokens.textTertiary,
+    lineHeight: 1.4,
   },
   rowActions: {
     display: 'flex',
     alignItems: 'center',
     gap: '2px',
     flexShrink: 0,
+    paddingTop: '2px',
   },
   iconBtn: {
     border: 'none',
@@ -178,22 +236,12 @@ const useStyles = makeStyles({
       backgroundColor: innoTokens.accentSoft,
     },
   },
-  score: {
-    fontSize: '11px',
-    fontWeight: 650,
-    fontVariantNumeric: 'tabular-nums',
-    color: innoTokens.textPrimary,
-  },
-  toneExcellent: { color: '#248A3D' },
-  toneGood: { color: innoTokens.success },
-  toneCaution: { color: innoTokens.warning },
-  toneRisk: { color: innoTokens.error },
-  toneMuted: { color: innoTokens.textTertiary },
   empty: {
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '11px',
     color: innoTokens.textTertiary,
+    lineHeight: 1.5,
   },
   error: {
     padding: `8px ${CONTENT_PAD}`,
@@ -202,189 +250,237 @@ const useStyles = makeStyles({
   },
 })
 
+const PHASE_LABEL: Record<string, string> = {
+  parsing: '加载策略',
+  prescreen: '本地初选',
+  mining: 'Agent 挖掘',
+  done: '完成',
+  error: '出错',
+}
+
 interface Props {
+  session: DiscoverSessionState
   watchlistCodes: Set<string>
   onSelect: (item: WatchlistItem) => void
   onAdd: (item: WatchlistItem) => void
 }
 
-function toneClass(s: ReturnType<typeof useStyles>, tone: ReturnType<typeof scoreMetricTone>) {
-  if (tone === 'excellent') return s.toneExcellent
-  if (tone === 'good') return s.toneGood
-  if (tone === 'caution') return s.toneCaution
-  if (tone === 'risk') return s.toneRisk
-  return s.toneMuted
+function formatHighlights(item: DiscoverRunResult['items'][0]): string {
+  const parts = [...(item.highlights ?? [])]
+  if (item.risks?.length) parts.push(`风险: ${item.risks.join('；')}`)
+  const factors = Object.entries(item.key_factors ?? {})
+    .slice(0, 3)
+    .map(([k, v]) => `${factorLabel(k) ?? k} ${v.toFixed(1)}`)
+  if (factors.length) parts.push(factors.join(' · '))
+  return parts.join(' · ')
 }
 
-function formatKeyFactors(keyFactors: Record<string, number>, preset: DiscoverPreset): string {
-  return preset.conditions
-    .map(c => {
-      const val = keyFactors[c.factor]
-      if (val == null) return null
-      const label = factorLabel(c.factor) ?? c.factor
-      return `${label} ${val.toFixed(1)}`
-    })
-    .filter(Boolean)
-    .join(' · ')
+function formatHistoryLabel(strategyName: string, updatedAt: string, status: string): string {
+  const d = new Date(updatedAt)
+  const time = Number.isNaN(d.getTime())
+    ? ''
+    : d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  const suffix = status === 'running' ? '进行中' : status === 'done' ? '完成' : status === 'error' ? '失败' : '已取消'
+  return `${strategyName || '策略'} · ${time} · ${suffix}`
 }
 
-export default function DiscoverTab({ watchlistCodes, onSelect, onAdd }: Props) {
+function toBuiltinOptions(list: DiscoverStrategyPublic[]): DiscoverStrategyOption[] {
+  return list.map(st => ({
+    id: st.id,
+    name: st.name,
+    tagline: st.tagline,
+    source: 'builtin' as const,
+    category: st.category,
+    meta: `${CATEGORY_LABEL[st.category]} · ${st.condition_count} 条因子 · 精选 ${st.final_top_n} 只`,
+  }))
+}
+
+export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }: Props) {
   const s = useStyles()
-  const [presetId, setPresetId] = useState(DISCOVER_PRESETS[0]?.id ?? 'value')
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
-  const [result, setResult] = useState<ScreeningData | null>(null)
+  const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
+  const [selectedId, setSelectedId] = useState<string | null>(null)
   const [dbReady, setDbReady] = useState<boolean | null>(null)
-  const abortRef = useRef<AbortController | null>(null)
+  const [llmReady, setLlmReady] = useState<boolean | null>(null)
+
+  const { strategies: customStrategies } = useCustomDiscoverStrategies()
+
+  const {
+    history,
+    job,
+    result,
+    running,
+    error,
+    runStrategy,
+    runCustomStrategy,
+    cancelRun,
+    loadHistoryJob,
+  } = session
+
+  const strategyOptions = useMemo((): DiscoverStrategyOption[] => {
+    const builtins = toBuiltinOptions(builtinList)
+    const customs = customStrategies.map(st => ({
+      id: st.id,
+      name: st.name,
+      tagline: st.tagline,
+      source: 'custom' as const,
+      meta: '自编策略',
+    }))
+    return [...builtins, ...customs]
+  }, [builtinList, customStrategies])
 
   useEffect(() => {
     let cancelled = false
+    void listDiscoverStrategies().then(resp => {
+      if (cancelled) return
+      const list = resp.strategies ?? []
+      setBuiltinList(list)
+      setSelectedId(prev => prev ?? list[0]?.id ?? null)
+    }).catch(() => {})
     void research.marketDbStatus().then(resp => {
       if (cancelled || !resp.success || !resp.data) return
       setDbReady(resp.data.is_ready)
     }).catch(() => {})
+    void listSkills().then(data => {
+      if (cancelled) return
+      setLlmReady(data.categories.length > 0)
+    }).catch(() => setLlmReady(false))
     return () => { cancelled = true }
   }, [])
 
-  const preset = useMemo(
-    () => DISCOVER_PRESETS.find(p => p.id === presetId) ?? DISCOVER_PRESETS[0],
-    [presetId],
-  )
-
-  const runScreen = useCallback(async () => {
-    if (!preset) return
-    abortRef.current?.abort()
-    const controller = new AbortController()
-    abortRef.current = controller
-    setLoading(true)
-    setError('')
-    setResult(null)
-    try {
-      const resp = await research.screen(
-        preset.conditions,
-        preset.scorecard ?? '综合评估',
-        preset.topN ?? 15,
-        controller.signal,
-      )
-      if (controller.signal.aborted) return
-      if (!resp.success || !resp.data) {
-        setError(resp.message || '筛选失败')
-        return
-      }
-      setResult(resp.data)
-    } catch (e) {
-      if (controller.signal.aborted) return
-      setError(e instanceof Error ? e.message : '筛选失败')
-    } finally {
-      if (!controller.signal.aborted) setLoading(false)
+  const handleRun = () => {
+    if (!selectedId) return
+    const custom = customStrategies.find(st => st.id === selectedId)
+    if (custom) {
+      void runCustomStrategy({ id: custom.id, name: custom.name, prompt: custom.prompt })
+    } else {
+      void runStrategy(selectedId)
     }
-  }, [preset])
-
-  const handleOpen = (code: string, name: string) => {
-    onSelect({ code, name })
   }
 
-  const handleAdd = (e: MouseEvent, code: string, name: string) => {
-    e.stopPropagation()
-    onAdd({ code, name })
-  }
+  const progressPct = job?.percent ?? 0
+  const barValue = running && progressPct <= 0 ? 0.03 : Math.min(1, progressPct / 100)
+  const doneHistory = history.filter(h => h.status === 'done' && h.result)
 
   return (
     <div className={mergeClasses(s.root, 'inno-discover-tab')}>
       <div className={s.head}>
-        <div className={s.presetRow}>
-          {DISCOVER_PRESETS.map(p => (
-            <button
-              key={p.id}
-              type="button"
-              className={mergeClasses(s.presetBtn, p.id === presetId && s.presetBtnActive)}
-              onClick={() => {
-                setPresetId(p.id)
-                setResult(null)
-                setError('')
-              }}
-            >
-              {p.name}
-            </button>
-          ))}
+        <Text className={s.headHint} block>
+          选择策略并执行；自编策略请在设置 → 选股策略中管理。
+        </Text>
+        <div className={s.strategyShell}>
+          <DiscoverStrategyPicker
+            strategies={strategyOptions}
+            selectedId={selectedId}
+            onSelect={setSelectedId}
+            disabled={running}
+            placeholder="选择策略"
+          />
         </div>
-        {preset && (
-          <>
-            <Text className={s.presetDesc}>{preset.description}</Text>
-            <div className={s.condList}>
-              {preset.conditions.map(c => (
-                <span key={`${c.factor}-${c.op}`} className={s.condTag}>
-                  {(factorLabel(c.factor) ?? c.factor)}
-                  {' '}
-                  {c.op}
-                  {' '}
-                  {c.value}
-                </span>
-              ))}
-            </div>
-          </>
+        {doneHistory.length > 0 && (
+          <div className={s.historyRow}>
+            <HistoryRegular fontSize={12} color={innoTokens.textTertiary} />
+            {doneHistory.slice(0, 6).map(h => (
+              <button
+                key={h.id}
+                type="button"
+                className={mergeClasses(s.historyChip, job?.id === h.id && s.historyChipActive)}
+                title={h.strategy_name}
+                onClick={() => loadHistoryJob(h)}
+              >
+                {formatHistoryLabel(h.strategy_name, h.updated_at, h.status)}
+              </button>
+            ))}
+          </div>
         )}
         <div className={s.runRow}>
           <InnoButton
             className={s.runBtn}
             variant="primary"
-            disabled={loading || !preset}
-            onClick={() => { void runScreen() }}
+            disabled={running || !selectedId}
+            onClick={handleRun}
           >
-            {loading ? '扫描中…' : '执行筛选'}
+            {running ? '挖掘中…' : '开始挖掘'}
           </InnoButton>
-          {loading && <Spinner size="tiny" />}
+          {running && (
+            <InnoButton className={s.runBtn} variant="secondary" onClick={() => { void cancelRun() }}>
+              取消
+            </InnoButton>
+          )}
+          {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
-            {dbReady
-              ? '本地库已就绪，秒级筛选'
-              : '本地库未就绪时将在线扫描；请前往 设置 → 基础数据 同步'}
+            {dbReady ? '本地初选 → Agent 精选' : '初选库未就绪时将在线扫描'}
+            {llmReady === false ? ' · 需配置 LLM' : ''}
           </Text>
         </div>
       </div>
+
       {dbReady === false && (
         <Text className={s.dbBanner} block>
-          全A基础数据尚未就绪。打开设置 → 基础数据，可查看进度与日志并启动/接续同步。
+          初选数据库尚未就绪。建议打开设置 → 基础数据完成构建。
         </Text>
+      )}
+
+      {(running || job) && (
+        <div className={s.progressBlock}>
+          <div className={s.progressMeta}>
+            <Text block>
+              {PHASE_LABEL[job?.phase ?? 'parsing'] ?? job?.phase}
+              {' · '}
+              {job?.message || '准备中…'}
+            </Text>
+            <Text className={s.progressPct}>
+              {running && progressPct <= 0 ? '…' : `${Math.round(progressPct)}%`}
+            </Text>
+          </div>
+          <ProgressBar value={barValue} thickness="medium" color="brand" shape="rounded" />
+        </div>
       )}
 
       {error && <Text className={s.error}>{error}</Text>}
 
       {result && (
-        <Text className={s.stats}>
-          扫描 {result.total_scanned} 只 · 通过 {result.passed} 只 · 展示 {result.items.length} 只
-        </Text>
+        <div className={s.summary}>
+          <Text className={s.summaryTitle} block>{result.strategy_title}</Text>
+          <Text className={s.summaryText} block>{result.strategy_summary}</Text>
+          <Text className={s.stats} block>
+            {`初选扫描 ${result.prescreen.scanned} 只 · 通过 ${result.prescreen.passed} 只 · 最终 ${result.items.length} 只`}
+            {result.prescreen.source ? ` · ${result.prescreen.source === 'local' ? '本地' : '在线'}` : ''}
+            {result.tools_used?.length ? ` · 工具 ${result.tools_used.length} 次` : ''}
+          </Text>
+        </div>
       )}
 
       <div className={mergeClasses(s.list, 'inno-scroll')}>
-        {!result && !loading && !error && (
-          <Text className={s.empty}>选择策略预设并执行筛选</Text>
+        {!result && !running && !error && (
+          <Text className={s.empty}>
+            选择策略并点击「执行策略」；任务在后台运行，切换标签不会中断。
+          </Text>
         )}
         {result?.items.map(item => {
           const inWatchlist = watchlistCodes.has(normalizeCode(item.code))
-          const scoreText = formatScoreSummary(item.total_score)
-          const scoreTone = scoreMetricTone(item.total_score)
-          const meta = formatKeyFactors(item.key_factors, preset)
           return (
             <div
               key={item.code}
               className={s.row}
               role="button"
               tabIndex={0}
-              onClick={() => handleOpen(item.code, item.name)}
+              onClick={() => onSelect({ code: item.code, name: item.name })}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  handleOpen(item.code, item.name)
+                  onSelect({ code: item.code, name: item.name })
                 }
               }}
             >
               <div className={s.rowMain}>
                 <div className={s.rowTitle}>
+                  <span className={s.rankBadge}>#{item.rank}</span>
                   <span className={s.rowName}>{item.name}</span>
                   <span className={s.rowCode}>{item.code}</span>
+                  <span className={s.matchScore}>{item.match_score} 分</span>
                 </div>
-                <span className={mergeClasses(s.score, toneClass(s, scoreTone))}>{scoreText}</span>
-                {meta && <span className={s.rowMeta}>{meta}</span>}
+                {item.thesis && <Text className={s.thesis} block>{item.thesis}</Text>}
+                <Text className={s.highlights} block>{formatHighlights(item)}</Text>
               </div>
               <div className={s.rowActions}>
                 {!inWatchlist && (
@@ -393,7 +489,7 @@ export default function DiscoverTab({ watchlistCodes, onSelect, onAdd }: Props) 
                     className={s.iconBtn}
                     title="加入关注"
                     aria-label={`加入关注 ${item.name}`}
-                    onClick={e => handleAdd(e, item.code, item.name)}
+                    onClick={e => { e.stopPropagation(); onAdd({ code: item.code, name: item.name }) }}
                   >
                     <AddRegular fontSize={14} />
                   </button>
@@ -405,7 +501,7 @@ export default function DiscoverTab({ watchlistCodes, onSelect, onAdd }: Props) 
                   aria-label={`查看 ${item.name}`}
                   onClick={e => {
                     e.stopPropagation()
-                    handleOpen(item.code, item.name)
+                    onSelect({ code: item.code, name: item.name })
                   }}
                 >
                   <ArrowRightRegular fontSize={14} />
@@ -415,7 +511,7 @@ export default function DiscoverTab({ watchlistCodes, onSelect, onAdd }: Props) 
           )
         })}
         {result && result.items.length === 0 && (
-          <Text className={s.empty}>暂无符合条件的标的</Text>
+          <Text className={s.empty}>暂无符合该策略的标的，可换一条策略重试</Text>
         )}
       </div>
     </div>

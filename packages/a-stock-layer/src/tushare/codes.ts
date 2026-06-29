@@ -1,9 +1,10 @@
-import { normalizeCode } from '../utils/helpers.js'
+import { isBseCode, normalizeCode } from '../utils/helpers.js'
 
 export function toTsCode(code: string): string {
   const c = normalizeCode(code)
+  if (isBseCode(c)) return `${c}.BJ`
   if (c.startsWith('399') || c.startsWith('159') || c.startsWith('16')) return `${c}.SZ`
-  if (c.startsWith('6') || c.startsWith('9') || (c.startsWith('000') && parseInt(c, 10) < 1000)) {
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || (c.startsWith('000') && parseInt(c, 10) < 1000)) {
     return `${c}.SH`
   }
   return `${c}.SZ`

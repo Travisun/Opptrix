@@ -1,6 +1,7 @@
 import type { ResearchHub } from '@inno-a-stock/research-hub'
 import { type ChatMessage } from './llm/provider.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
+import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
 import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
 
@@ -32,6 +33,7 @@ const TRUNCATE = 12_000
 
 export class AgentEngine {
   readonly tools: ToolRegistry
+  readonly discover: DiscoverRunner
   readonly sessions = new SessionStore()
   private registry = new ProviderRegistry()
   private settings: AgentSettings
@@ -42,6 +44,7 @@ export class AgentEngine {
   ) {
     this.settings = settings
     this.tools = new ToolRegistry(hub)
+    this.discover = new DiscoverRunner(hub, this.registry, this.tools)
     if (settings.providers?.length) {
       this.registry.setProviders(settings.providers, settings.defaultModel)
     }
@@ -305,6 +308,18 @@ function examplePromptFor(name: string, desc: string): string {
   const map: Record<string, string> = {
     evaluate_stock: '帮我全面诊断贵州茅台(600519)的因子评分',
     screen_stocks: '筛选 ROE>15 且负债率<50 的股票，取前20',
+    get_market_db_status: '本地初选库是否就绪？覆盖多少只股票？',
+    get_market_db_sync_state: '本地数据同步进度如何？',
+    list_local_screen_factors: '本地初选库支持哪些筛选因子？',
+    local_screen_stocks: '本地初选：PE<25 且 ROE>12，取前60只候选',
+    get_industry_stats: '各行业平均估值与评分分布',
+    batch_stock_snapshots: '批量查看候选股的本地截面数据',
+    get_stock_quotes: '批量查 600519、000858 的实时行情',
+    get_watchlist_radar: '这几只候选股的雷达摘要',
+    get_stock_kline: '600519 最近90根日K',
+    get_stock_cyq: '600519 筹码分布',
+    get_stock_chart: '600519 日K图表数据',
+    get_stock_detail: '600519 个股详情聚合',
     analyze_portfolio: '分析我的组合：600519占50%，000858占50%',
     search_stocks: '搜索比亚迪相关股票',
     get_strategy_signal: '600519 的策略信号怎么看？',

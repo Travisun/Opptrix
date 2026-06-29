@@ -2,13 +2,31 @@ const SH_INDEX_CODES = new Set([
   '000001', '000016', '000300', '000688', '000905', '000906', '000985',
 ])
 
+/** 北交所股票（920xxx 等新代码段） */
+export function isBseCode(code: string): boolean {
+  const c = normalizeCode(code)
+  return c.startsWith('92')
+}
+
+export function resolveMarket(code: string): 'BJ' | 'SH' | 'SZ' {
+  const c = normalizeCode(code)
+  if (isBseCode(c)) return 'BJ'
+  if (c.startsWith('399')) return 'SZ'
+  if (SH_INDEX_CODES.has(c) || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)) {
+    return 'SH'
+  }
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return 'SH'
+  return 'SZ'
+}
+
 export function resolveSecId(code: string): string {
-  const c = code.trim().padStart(6, '0')
-  if (SH_INDEX_CODES.has(c) || c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) {
+  const c = normalizeCode(code)
+  if (SH_INDEX_CODES.has(c) || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)) {
     return `1.${c}`
   }
   if (c.startsWith('399')) return `0.${c}`
-  if (c.startsWith('6') || c.startsWith('9')) return `1.${c}`
+  if (isBseCode(c)) return `0.${c}`
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `1.${c}`
   return `0.${c}`
 }
 

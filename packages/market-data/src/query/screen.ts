@@ -120,10 +120,6 @@ export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
   `).all(date)
 }
 
-export function queryStockSnapshot(store: MarketDataStore, code: string) {
-  return store.db.prepare('SELECT * FROM v_stock_latest WHERE code = ?').get(code)
-}
-
 export function queryRadarBatch(store: MarketDataStore, codes: string[], tradeDate?: string) {
   const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
   if (!codes.length) return []
@@ -146,4 +142,71 @@ export function queryRadarBatch(store: MarketDataStore, codes: string[], tradeDa
     LEFT JOIN stock_factors f_pb ON f_pb.code = s.code AND f_pb.trade_date = ? AND f_pb.factor_name = 'pb_percentile'
     WHERE s.code IN (${placeholders})
   `).all(date, date, date, date, ...codes)
+}
+
+export function queryStockSnapshot(store: MarketDataStore, code: string) {
+  return store.db.prepare('SELECT * FROM v_stock_latest WHERE code = ?').get(code)
+}
+
+export interface DiscoverCandidateRow {
+  code: string
+  name: string
+  industry: string | null
+  total_score: number | null
+  pe: number | null
+  pb: number | null
+  factors: Record<string, number | null>
+}
+
+/** Compact rows for agent discover mining — only requested factor columns. */
+export function queryDiscoverCandidates(
+  store: MarketDataStore,
+  codes: string[],
+  factorNames: readonly string[],
+  tradeDate?: string,
+): DiscoverCandidateRow[] {
+  if (!codes.length) return []
+  const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
+  const placeholders = codes.map(() => '?').join(',')
+  const baseRows = store.db.prepare(`
+    SELECT
+      s.code,
+      s.name,
+      s.industry,
+      sc.total_score,
+      q.pe,
+      q.pb
+    FROM stocks s
+    LEFT JOIN stock_scores sc ON sc.code = s.code AND sc.trade_date = ? AND sc.scorecard = '综合评估'
+    LEFT JOIN stock_quotes_daily q ON q.code = s.code AND q.trade_date = ?
+    WHERE s.code IN (${placeholders})
+  `).all(date, date, ...codes) as {
+    code: string
+    name: string
+    industry: string | null
+    total_score: number | null
+    pe: number | null
+    pb: number | null
+  }[]
+
+  const factorStmt = store.db.prepare(
+    'SELECT factor_value FROM stock_factors WHERE trade_date = ? AND code = ? AND factor_name = ?',
+  )
+
+  return baseRows.map(row => {
+    const factors: Record<string, number | null> = {}
+    for (const f of factorNames) {
+      const r = factorStmt.get(date, row.code, f) as { factor_value: number | null } | undefined
+      factors[f] = r?.factor_value ?? null
+    }
+    return {
+      code: row.code,
+      name: row.name,
+      industry: row.industry,
+      total_score: row.total_score,
+      pe: row.pe,
+      pb: row.pb,
+      factors,
+    }
+  })
 }
