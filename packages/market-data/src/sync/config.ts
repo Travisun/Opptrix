@@ -87,6 +87,54 @@ export function getSyncProfileSettings(profile?: string): SyncProfileSettings {
   return SYNC_PROFILES[resolveSyncProfile(profile)]
 }
 
+/** Jobs that hit Tushare per-stock when Pro is enabled (safe to raise concurrency). */
+export const TUSHARE_PER_STOCK_JOBS = new Set([
+  'profiles',
+  'financials',
+  'financials_quarterly',
+  'dividends',
+  'shareholders',
+  'forecasts',
+  'inst_holdings',
+  'insider_trades',
+  'buybacks',
+  'business',
+])
+
+/** Still Eastmoney/CNINFO — keep conservative pacing even with Tushare on. */
+export const EASTMONEY_HEAVY_JOBS = new Set(['partners', 'announcements'])
+
+function clampInt(n: number, min: number, max: number): number {
+  if (!Number.isFinite(n)) return min
+  return Math.min(max, Math.max(min, Math.round(n)))
+}
+
+/** Tushare 满额度时可并行 3–5 路请求 — override via INNO_TUSHARE_SYNC_CONCURRENCY */
+export function getTushareSyncBoost(): {
+  maxConcurrent: number
+  quotesBatchDelayMs: number
+  jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>>
+} {
+  const concurrency = clampInt(
+    Number(process.env.INNO_TUSHARE_SYNC_CONCURRENCY ?? 4),
+    2,
+    5,
+  )
+  const delayMs = clampInt(Number(process.env.INNO_TUSHARE_STOCK_DELAY_MS ?? 15), 0, 120)
+  const perJob = { concurrency, delayMs }
+  const jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>> = {}
+  for (const job of TUSHARE_PER_STOCK_JOBS) jobOverrides[job] = { ...perJob }
+  return {
+    maxConcurrent: concurrency,
+    quotesBatchDelayMs: Number(process.env.INNO_TUSHARE_QUOTES_BATCH_DELAY_MS ?? 40),
+    jobOverrides,
+  }
+}
+
+export function isTushareBackedSyncJob(job: string): boolean {
+  return TUSHARE_PER_STOCK_JOBS.has(job)
+}
+
 export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   /** 股票池 — 增量 7 天刷新一次 */
   universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },

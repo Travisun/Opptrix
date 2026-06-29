@@ -1,4 +1,5 @@
 import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import { isTushareEnabled } from '@inno-a-stock/a-stock-layer'
 import { createScorecard } from '@inno-a-stock/stock-eval'
 import { EvaluationEngine } from '@inno-a-stock/stock-eval'
 import type { MarketDataStore } from '../store.js'
@@ -6,7 +7,10 @@ import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../util
 import { SyncCachingEngine } from './cache-engine.js'
 import {
   DEFAULT_API_MIN_GAP_MS,
+  EASTMONEY_HEAVY_JOBS,
   getSyncProfileSettings,
+  getTushareSyncBoost,
+  isTushareBackedSyncJob,
   type JobSyncConfig,
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
@@ -67,23 +71,39 @@ function shouldRefresh(syncedAt: string | null, ttlDays: number | undefined, mod
 }
 
 export class MarketDataSyncEngine {
-  private throttler: ApiThrottler
+  private serialThrottler: ApiThrottler
+  private tushareThrottler: ApiThrottler | null = null
   private profileSettings = getSyncProfileSettings()
+  private tushareBoost = isTushareEnabled() ? getTushareSyncBoost() : null
+  private quotesBatchDelayMs = getSyncProfileSettings().quotesBatchDelayMs
 
   constructor(
     private store: MarketDataStore,
     private de: AshareEngine,
     apiGapMs = DEFAULT_API_MIN_GAP_MS,
   ) {
-    this.throttler = new ApiThrottler(apiGapMs)
+    this.serialThrottler = new ApiThrottler(apiGapMs, 1)
   }
 
   async sync(options: SyncOptions = {}): Promise<{ jobs: Record<string, string> }> {
     const mode = options.mode ?? 'incremental'
     this.profileSettings = getSyncProfileSettings(options.profile)
-    const apiGap = options.apiGapMs ?? this.profileSettings.apiGapMs
-    this.throttler = new ApiThrottler(apiGap)
-    options.onLog?.(`同步档位: ${this.profileSettings.label} · API 间隔 ${apiGap}ms`)
+    this.tushareBoost = isTushareEnabled() ? getTushareSyncBoost() : null
+    this.quotesBatchDelayMs = this.profileSettings.quotesBatchDelayMs
+
+    const safeGap = options.apiGapMs ?? this.profileSettings.apiGapMs
+    this.serialThrottler = new ApiThrottler(safeGap, 1)
+
+    if (this.tushareBoost) {
+      this.tushareThrottler = new ApiThrottler(0, this.tushareBoost.maxConcurrent)
+      this.quotesBatchDelayMs = Math.min(this.quotesBatchDelayMs, this.tushareBoost.quotesBatchDelayMs)
+      options.onLog?.(
+        `Tushare 加速 · ${this.tushareBoost.maxConcurrent} 路并行；东财/CNINFO 仍串行 ${safeGap}ms 间隔`,
+      )
+    } else {
+      this.tushareThrottler = null
+      options.onLog?.(`同步档位: ${this.profileSettings.label} · API 间隔 ${safeGap}ms`)
+    }
 
     const jobs = options.jobs?.length ? options.jobs : [...ALL_SYNC_JOBS]
     if (options.force) {
@@ -102,6 +122,12 @@ export class MarketDataSyncEngine {
       }
 
       options.onJobStart?.(job, jobIndex, jobs.length)
+      if (mode === 'resume') {
+        const failed = this.store.countJobFailed(job)
+        if (failed > 0) {
+          options.onLog?.(`${job}: 跳过 ${failed} 只先前失败的标的（全量同步可重试）`)
+        }
+      }
       options.onLog?.(`开始任务 ${job}`)
       const runId = this.store.beginRun(job, mode)
       try {
@@ -175,11 +201,15 @@ export class MarketDataSyncEngine {
   private cfg(job: string, options: SyncOptions): JobSyncConfig {
     const base = { ...(SYNC_JOB_CONFIG[job] ?? { concurrency: 2, delayMs: 300 }) }
     const override = this.profileSettings.jobOverrides[job] ?? {}
+    const tsOverride = this.tushareBoost && isTushareBackedSyncJob(job) && !EASTMONEY_HEAVY_JOBS.has(job)
+      ? (this.tushareBoost.jobOverrides[job] ?? {})
+      : {}
     return {
       ...base,
       ...override,
-      concurrency: options.concurrency ?? override.concurrency ?? base.concurrency,
-      delayMs: options.delayMs ?? override.delayMs ?? base.delayMs,
+      ...tsOverride,
+      concurrency: options.concurrency ?? tsOverride.concurrency ?? override.concurrency ?? base.concurrency,
+      delayMs: options.delayMs ?? tsOverride.delayMs ?? override.delayMs ?? base.delayMs,
     }
   }
 
@@ -218,7 +248,12 @@ export class MarketDataSyncEngine {
     const all = this.codes(options)
     return all.filter(code => {
       if (extraSkip?.(code)) return false
-      if (mode === 'resume') return !this.store.isJobDone(job, code, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, code, scopeKey)) return false
+        // Skip prior failures on resume — retry only via full sync or clearing job progress.
+        if (this.store.isJobError(job, code, scopeKey)) return false
+        return true
+      }
       if (mode === 'full') return true
       if (this.store.isJobDone(job, code, scopeKey)) {
         const syncedAt = this.store.jobProgressSyncedAt(job, code, scopeKey)
@@ -229,9 +264,30 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private async callApi<T>(fn: () => Promise<T>): Promise<T> {
-    await this.throttler.acquire()
-    return withRetry(fn)
+  private useTushareLane(job: string): boolean {
+    return this.tushareBoost != null
+      && isTushareBackedSyncJob(job)
+      && !EASTMONEY_HEAVY_JOBS.has(job)
+  }
+
+  private laneForJob(job: string): 'tushare' | 'default' {
+    return this.useTushareLane(job) ? 'tushare' : 'default'
+  }
+
+  private laneTushareIfEnabled(): 'tushare' | 'default' {
+    return this.tushareBoost ? 'tushare' : 'default'
+  }
+
+  private async callApi<T>(fn: () => Promise<T>, lane: 'tushare' | 'default' = 'default'): Promise<T> {
+    const throttler = lane === 'tushare' && this.tushareThrottler
+      ? this.tushareThrottler
+      : this.serialThrottler
+    const release = await throttler.acquire()
+    try {
+      return await withRetry(fn)
+    } finally {
+      release()
+    }
   }
 
   private markDone(job: string, code: string, scopeKey: string): void {
@@ -252,7 +308,7 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(() => this.de.stockList())
+    const resp = await this.callApi(() => this.de.stockList(), this.laneTushareIfEnabled())
     if (!resp.success || !resp.data?.length) {
       throw new Error(resp.error ?? 'stockList failed')
     }
@@ -296,7 +352,10 @@ export class MarketDataSyncEngine {
       })
 
       try {
-        const resp = await this.callApi(() => this.de.batchRealtime(chunk))
+        const resp = await this.callApi(
+          () => this.de.batchRealtime(chunk),
+          this.laneTushareIfEnabled(),
+        )
         if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'batchRealtime failed')
         const seen = new Set<string>()
         for (const q of resp.data) {
@@ -317,7 +376,7 @@ export class MarketDataSyncEngine {
       } catch {
         await mapPool(chunk, cfg.concurrency, cfg.delayMs, async code => {
           try {
-            const resp = await this.callApi(() => this.de.realtime(code))
+            const resp = await this.callApi(() => this.de.realtime(code), 'default')
             if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'realtime failed')
             this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
             this.markDone('quotes', code, tradeDate)
@@ -331,7 +390,7 @@ export class MarketDataSyncEngine {
       }
 
       if (offset + this.profileSettings.quotesBatchSize < codes.length) {
-        await sleep(this.profileSettings.quotesBatchDelayMs)
+        await sleep(this.quotesBatchDelayMs)
       }
     }
 
@@ -357,7 +416,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'profiles', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.profile(code))
+        const resp = await this.callApi(() => this.de.profile(code), this.laneForJob('profiles'))
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'profile failed')
         const p = resp.data[0]
         this.store.replaceProfile(code, p as unknown as Record<string, unknown>)
@@ -404,8 +463,9 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job, current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() =>
-          kind === 'quarterly' ? this.de.financialsQuarterly(code) : this.de.financials(code),
+        const resp = await this.callApi(
+          () => kind === 'quarterly' ? this.de.financialsQuarterly(code) : this.de.financials(code),
+          this.laneForJob(job),
         )
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'financials failed')
         this.store.replaceFinancial(code, resp.data[0] as unknown as Record<string, unknown>)
@@ -438,7 +498,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'business', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.mainBusiness(code))
+        const resp = await this.callApi(() => this.de.mainBusiness(code), this.laneForJob('business'))
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'mainBusiness failed')
         const row = resp.data[0] as Record<string, unknown>
         const items = (row.items as Record<string, unknown>[] | undefined) ?? []
@@ -475,8 +535,8 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'partners', current: index + 1, total: codes.length })
       try {
-        const cust = await this.callApi(() => this.de.topCustomerSupplier(code, 'customer'))
-        const supp = await this.callApi(() => this.de.topCustomerSupplier(code, 'supplier'))
+        const cust = await this.callApi(() => this.de.topCustomerSupplier(code, 'customer'), 'default')
+        const supp = await this.callApi(() => this.de.topCustomerSupplier(code, 'supplier'), 'default')
         if (cust.success && cust.data?.length) {
           this.store.replacePartners(code, 'customer', cust.data as Record<string, unknown>[])
         }
@@ -516,7 +576,7 @@ export class MarketDataSyncEngine {
       try {
         const all: Record<string, unknown>[] = []
         for (let page = 1; page <= pages; page++) {
-          const resp = await this.callApi(() => this.de.news(code, page, 30))
+          const resp = await this.callApi(() => this.de.news(code, page, 30), 'default')
           if (resp.success && resp.data?.length) all.push(...(resp.data as unknown as Record<string, unknown>[]))
           if (!resp.data?.length || resp.data.length < 30) break
         }
@@ -550,7 +610,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'dividends', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.dividend(code))
+        const resp = await this.callApi(() => this.de.dividend(code), this.laneForJob('dividends'))
         if (resp.success && resp.data?.length) {
           this.store.replaceDividends(code, resp.data as unknown as Record<string, unknown>[])
         }
@@ -583,7 +643,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'shareholders', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.shareholders(code))
+        const resp = await this.callApi(() => this.de.shareholders(code), this.laneForJob('shareholders'))
         if (resp.success && resp.data?.[0]) {
           this.store.replaceShareholders(code, resp.data[0] as Record<string, unknown>)
         }
@@ -616,7 +676,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'forecasts', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.perfForecast(code))
+        const resp = await this.callApi(() => this.de.perfForecast(code), this.laneForJob('forecasts'))
         if (resp.success && resp.data?.length) {
           this.store.replaceForecasts(code, resp.data as Record<string, unknown>[])
         }
@@ -649,7 +709,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'inst_holdings', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.instHolding(code))
+        const resp = await this.callApi(() => this.de.instHolding(code), this.laneForJob('inst_holdings'))
         if (resp.success && resp.data?.length) {
           this.store.replaceInstHoldings(code, resp.data as Record<string, unknown>[])
         }
@@ -682,7 +742,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'insider_trades', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.insiderTrade(code))
+        const resp = await this.callApi(() => this.de.insiderTrade(code), this.laneForJob('insider_trades'))
         if (resp.success && resp.data?.length) {
           this.store.replaceInsiderTrades(code, resp.data as Record<string, unknown>[])
         }
@@ -715,7 +775,7 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'buybacks', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.buyback(code))
+        const resp = await this.callApi(() => this.de.buyback(code), this.laneForJob('buybacks'))
         if (resp.success && resp.data?.length) {
           this.store.replaceBuybacks(code, resp.data as Record<string, unknown>[])
         }
@@ -759,7 +819,7 @@ export class MarketDataSyncEngine {
       try {
         const cachingDe = new SyncCachingEngine(this.de)
         const ee = new EvaluationEngine(cachingDe as unknown as AshareEngine)
-        const snap = await this.callApi(() => ee.analyze(code))
+        const snap = await this.callApi(() => ee.analyze(code), 'default')
         card.score([snap])
         const factors = Object.fromEntries(
           Object.entries(snap.factors).map(([k, v]) => [k, v?.value ?? null]),

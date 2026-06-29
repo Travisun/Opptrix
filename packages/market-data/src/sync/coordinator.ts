@@ -11,6 +11,9 @@ export interface SyncStateSnapshot {
   current_job: string | null
   job_current: number
   job_total: number
+  /** In-flight batch within the current job (resume subset). */
+  job_batch_current: number | null
+  job_batch_total: number | null
   jobs_completed: number
   jobs_total: number
   overall_percent: number
@@ -21,10 +24,44 @@ export interface SyncStateSnapshot {
 
 const MAX_MEMORY_LOGS = 500
 
+function computeOverallPercent(
+  jobs: readonly string[],
+  stockCount: number,
+  jobProgress: MarketDbStatus['job_progress'],
+): number {
+  if (jobs.length === 0 || stockCount <= 0) return 0
+  let sum = 0
+  for (const job of jobs) {
+    const done = Math.min(stockCount, jobProgress[job]?.done ?? 0)
+    sum += done / stockCount
+  }
+  return Math.round((sum / jobs.length) * 1000) / 10
+}
+
+function countCompletedJobs(
+  jobs: readonly string[],
+  stockCount: number,
+  jobProgress: MarketDbStatus['job_progress'],
+): number {
+  if (stockCount <= 0) return 0
+  return jobs.filter(job => (jobProgress[job]?.done ?? 0) >= stockCount).length
+}
+
 export class MarketSyncCoordinator {
   private running = false
   private memoryLogs: string[] = []
   private snapshot: Partial<SyncStateSnapshot> = {}
+  private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
+
+  private dbStatus(): MarketDbStatus {
+    const now = Date.now()
+    if (this.running && this.dbStatusCache && now - this.dbStatusCache.at < 2000) {
+      return this.dbStatusCache.value
+    }
+    const value = this.store.getStatus()
+    if (this.running) this.dbStatusCache = { at: now, value }
+    return value
+  }
 
   constructor(
     private store: MarketDataStore,
@@ -33,34 +70,56 @@ export class MarketSyncCoordinator {
 
   getSnapshot(): SyncStateSnapshot {
     const session = this.store.getLatestSession()
-    const dbStatus = this.store.getStatus()
+    const dbStatus = this.dbStatus()
     const logs = this.running
       ? this.memoryLogs
       : this.store.getRecentLogs(session?.id ?? null, MAX_MEMORY_LOGS)
 
     const jobsTotal = session?.jobs_total ?? this.snapshot.jobs_total ?? ALL_SYNC_JOBS.length
-    const jobsCompleted = session?.jobs_completed ?? this.snapshot.jobs_completed ?? 0
-    const jobCurrent = session?.job_current ?? this.snapshot.job_current ?? 0
-    const jobTotal = session?.job_total ?? this.snapshot.job_total ?? 0
-    const jobFrac = jobTotal > 0 ? jobCurrent / jobTotal : 0
-    const overall = jobsTotal > 0
-      ? Math.min(100, ((jobsCompleted + jobFrac) / jobsTotal) * 100)
-      : 0
+    const jobsList = ALL_SYNC_JOBS.slice(0, jobsTotal)
+    const stockCount = dbStatus.stock_count
+    const currentJob = session?.current_job ?? this.snapshot.current_job ?? null
+    const sessionRunning = this.running || session?.status === 'running'
+    const rawJobCurrent = session?.job_current ?? this.snapshot.job_current ?? 0
+    const rawJobTotal = session?.job_total ?? this.snapshot.job_total ?? 0
+    const sessionJobsCompleted = session?.jobs_completed ?? this.snapshot.jobs_completed ?? 0
 
-    const sessionRunning = session?.status === 'running'
+    let jobCurrent = 0
+    let jobTotal = stockCount
+    if (currentJob && stockCount > 0) {
+      jobCurrent = Math.min(stockCount, this.store.countJobDone(currentJob))
+      jobTotal = stockCount
+    }
+
+    const jobBatchCurrent = sessionRunning && rawJobTotal > 0 ? rawJobCurrent : null
+    const jobBatchTotal = sessionRunning && rawJobTotal > 0 ? rawJobTotal : null
+
+    const jobsCompleted = sessionRunning
+      ? sessionJobsCompleted
+      : countCompletedJobs(jobsList, stockCount, dbStatus.job_progress)
+
+    let overall: number
+    if (sessionRunning) {
+      const batchFrac = rawJobTotal > 0 ? rawJobCurrent / rawJobTotal : 0
+      overall = Math.min(100, Math.round(((sessionJobsCompleted + batchFrac) / jobsTotal) * 1000) / 10)
+    } else {
+      overall = computeOverallPercent(jobsList, stockCount, dbStatus.job_progress)
+    }
 
     return {
-      running: this.running || sessionRunning,
+      running: sessionRunning,
       mode: (session?.mode as SyncMode | undefined) ?? null,
       session_id: session?.id ?? null,
       started_at: session?.started_at ?? null,
       finished_at: session?.finished_at ?? null,
-      current_job: session?.current_job ?? this.snapshot.current_job ?? null,
+      current_job: currentJob,
       job_current: jobCurrent,
       job_total: jobTotal,
+      job_batch_current: jobBatchCurrent,
+      job_batch_total: jobBatchTotal,
       jobs_completed: jobsCompleted,
       jobs_total: jobsTotal,
-      overall_percent: Math.round(overall * 10) / 10,
+      overall_percent: overall,
       message: session?.message ?? null,
       logs,
       db_status: dbStatus,
@@ -75,7 +134,22 @@ export class MarketSyncCoordinator {
     const line = `[${new Date().toLocaleTimeString('zh-CN', { hour12: false })}] ${message}`
     this.memoryLogs.push(line)
     if (this.memoryLogs.length > MAX_MEMORY_LOGS) this.memoryLogs.shift()
-    if (sessionId != null) this.store.appendLog(sessionId, line)
+    if (sessionId != null) {
+      try {
+        this.store.appendLog(sessionId, line)
+      } catch {
+        // Keep sync alive if a progress log write fails (e.g. SQLITE_BUSY).
+      }
+    }
+  }
+
+  private patchProgress(sessionId: number, patch: Parameters<MarketDataStore['updateSessionProgress']>[1]): void {
+    try {
+      this.store.updateSessionProgress(sessionId, patch)
+      this.dbStatusCache = null
+    } catch {
+      // Progress polling remains best-effort; sync must not abort on DB contention.
+    }
   }
 
   async start(options: SyncOptions = {}): Promise<{ started: boolean; running: boolean; mode: SyncMode }> {
@@ -85,10 +159,23 @@ export class MarketSyncCoordinator {
     }
 
     this.running = true
-    this.memoryLogs = []
     const jobs = options.jobs?.length ? options.jobs : [...ALL_SYNC_JOBS]
-    const sessionId = this.store.beginSession(mode, jobs.length)
-    this.log(sessionId, `同步启动 · 模式 ${mode}${mode === 'incremental' ? '（按 TTL 跳过未到期数据）' : ''} · ${jobs.length} 个任务`)
+    const latest = this.store.getLatestSession()
+    const reuseSession = mode === 'resume'
+      && latest != null
+      && (latest.status === 'interrupted' || latest.status === 'partial')
+
+    let sessionId: number
+    if (reuseSession) {
+      sessionId = latest.id
+      this.store.reopenSession(sessionId)
+      this.memoryLogs = this.store.getRecentLogs(sessionId, MAX_MEMORY_LOGS)
+      this.log(sessionId, `接续同步 · 恢复会话 #${sessionId} · ${jobs.length} 个任务`)
+    } else {
+      this.memoryLogs = []
+      sessionId = this.store.beginSession(mode, jobs.length)
+      this.log(sessionId, `同步启动 · 模式 ${mode}${mode === 'incremental' ? '（按 TTL 跳过未到期数据）' : ''} · ${jobs.length} 个任务`)
+    }
 
     void this.runSession(sessionId, { ...options, mode, jobs }).finally(() => {
       this.running = false
@@ -108,7 +195,7 @@ export class MarketSyncCoordinator {
             job_current: p.current,
             job_total: p.total,
           }
-          this.store.updateSessionProgress(sessionId, {
+          this.patchProgress(sessionId, {
             current_job: p.job,
             job_current: p.current,
             job_total: p.total,
@@ -126,7 +213,7 @@ export class MarketSyncCoordinator {
             job_current: 0,
             job_total: 0,
           }
-          this.store.updateSessionProgress(sessionId, {
+          this.patchProgress(sessionId, {
             current_job: job,
             jobs_completed: index,
             jobs_total: total,
@@ -140,7 +227,7 @@ export class MarketSyncCoordinator {
             ...this.snapshot,
             jobs_completed: index + 1,
           }
-          this.store.updateSessionProgress(sessionId, { jobs_completed: index + 1 })
+          this.patchProgress(sessionId, { jobs_completed: index + 1 })
           this.log(sessionId, `任务 ${job} 完成 (${status})`)
         },
       })

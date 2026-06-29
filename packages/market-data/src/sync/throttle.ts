@@ -1,13 +1,28 @@
 import { sleep } from './pool.js'
 
-/** Global minimum gap between outbound API calls (shared across workers). */
+type Release = () => void
+
+/** Rate-limit outbound sync API calls. Serial (gap) or concurrent (semaphore) mode. */
 export class ApiThrottler {
   private lastAt = 0
   private lock: Promise<void> = Promise.resolve()
+  private active = 0
+  private waitQueue: Array<() => void> = []
 
-  constructor(private minGapMs: number) {}
+  constructor(
+    private minGapMs: number,
+    private maxConcurrent = 1,
+  ) {}
 
-  async acquire(): Promise<void> {
+  async acquire(): Promise<Release> {
+    if (this.maxConcurrent <= 1) {
+      await this.acquireSerial()
+      return () => {}
+    }
+    return this.acquireConcurrent()
+  }
+
+  private async acquireSerial(): Promise<void> {
     let release!: () => void
     const gate = new Promise<void>(resolve => { release = resolve })
     this.lock = this.lock.then(async () => {
@@ -18,5 +33,26 @@ export class ApiThrottler {
       release()
     })
     await gate
+  }
+
+  private acquireConcurrent(): Promise<Release> {
+    return new Promise(resolve => {
+      const enter = () => {
+        if (this.active < this.maxConcurrent) {
+          this.active++
+          let released = false
+          resolve(() => {
+            if (released) return
+            released = true
+            this.active--
+            const next = this.waitQueue.shift()
+            if (next) next()
+          })
+          return
+        }
+        this.waitQueue.push(enter)
+      }
+      enter()
+    })
   }
 }

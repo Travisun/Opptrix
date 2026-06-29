@@ -7,6 +7,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
+import { getMarketDataService } from '@inno-a-stock/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
@@ -541,6 +542,32 @@ async function bootstrap() {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
   }
 }
+
+let shuttingDown = false
+
+async function shutdown(signal: string) {
+  if (shuttingDown) return
+  shuttingDown = true
+  app.log.info(`received ${signal}, shutting down`)
+  try {
+    await app.close()
+    getMarketDataService().store.close()
+  } catch (err) {
+    app.log.error({ err }, 'shutdown error')
+  } finally {
+    process.exit(0)
+  }
+}
+
+process.on('SIGTERM', () => { void shutdown('SIGTERM') })
+process.on('SIGINT', () => { void shutdown('SIGINT') })
+process.on('unhandledRejection', err => {
+  app.log.error({ err }, 'unhandledRejection')
+})
+process.on('uncaughtException', err => {
+  app.log.error({ err }, 'uncaughtException')
+  void shutdown('uncaughtException')
+})
 
 bootstrap().catch(err => {
   console.error(err)

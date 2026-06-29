@@ -394,7 +394,13 @@ export default function MarketDataSettingsSection() {
                   <Text className={s.progressJob} block>
                     {running
                       ? (state?.current_job
-                        ? `${state.current_job} · ${state.job_current}/${state.job_total || '—'}`
+                        ? (() => {
+                            const batch = state.job_batch_total != null && state.job_batch_total > 0
+                              ? `本批 ${state.job_batch_current ?? 0}/${state.job_batch_total}`
+                              : null
+                            const cumulative = `累计 ${state.job_current}/${state.job_total || '—'}`
+                            return `${state.current_job} · ${batch ? `${batch} · ${cumulative}` : cumulative}`
+                          })()
                         : (state?.message || '同步准备中…'))
                       : (state?.message || '上次同步')}
                   </Text>
@@ -419,7 +425,7 @@ export default function MarketDataSettingsSection() {
           )}
         </SettingsGroup>
         <Text className={s.syncHint} block>
-          全量＝强制重拉；增量＝按 TTL 只更新到期项；快速增量＝仅行情/公告/因子（跳过 F10 慢任务）；接续＝中断续跑。默认「均衡」档位，可设环境变量 INNO_MARKET_SYNC_PROFILE=fast
+          全量＝强制重拉；增量＝按 TTL 只更新到期项；快速增量＝仅行情/公告/因子（跳过 F10 慢任务）；接续＝中断续跑。启用 Tushare 后仅 Tushare 接口并行（默认 4 路），东财/CNINFO 仍串行安全间隔
         </Text>
       </div>
 

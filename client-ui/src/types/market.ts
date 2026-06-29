@@ -264,6 +264,8 @@ export interface MarketDataSyncState {
   current_job: string | null
   job_current: number
   job_total: number
+  job_batch_current: number | null
+  job_batch_total: number | null
   jobs_completed: number
   jobs_total: number
   overall_percent: number

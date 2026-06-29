@@ -34,6 +34,8 @@ export class MarketDataStore {
 
   constructor(dbPath = marketDbPath()) {
     this.db = new Database(dbPath)
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
   }
 
@@ -113,8 +115,8 @@ export class MarketDataStore {
     const jobProgress: Record<string, JobProgressSummary> = {}
     const progressRows = this.db.prepare(`
       SELECT job_name,
-        SUM(CASE WHEN status = 'done' THEN 1 ELSE 0 END) AS done,
-        SUM(CASE WHEN status = 'error' THEN 1 ELSE 0 END) AS error
+        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
+        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
       FROM sync_job_progress
       GROUP BY job_name
     `).all() as { job_name: string; done: number; error: number }[]
@@ -428,6 +430,23 @@ export class MarketDataStore {
     return Boolean(row)
   }
 
+  isJobError(jobName: string, code: string, scopeKey = ''): boolean {
+    const row = this.db.prepare(`
+      SELECT 1 FROM sync_job_progress
+      WHERE job_name = ? AND code = ? AND scope_key = ? AND status = 'error'
+      LIMIT 1
+    `).get(jobName, code, scopeKey)
+    return Boolean(row)
+  }
+
+  countJobFailed(jobName: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(DISTINCT code) AS c FROM sync_job_progress
+      WHERE job_name = ? AND status = 'error'
+    `).get(jobName) as { c: number }
+    return row.c
+  }
+
   jobProgressSyncedAt(jobName: string, code: string, scopeKey = ''): string | null {
     const row = this.db.prepare(`
       SELECT synced_at FROM sync_job_progress
@@ -662,6 +681,23 @@ export class MarketDataStore {
       ) VALUES (?, 'running', ?, ?, 0, 0, 0)
     `).run(mode, started, jobsTotal)
     return Number(r.lastInsertRowid)
+  }
+
+  /** Re-attach to an interrupted session (resume after restart). */
+  reopenSession(sessionId: number): void {
+    this.db.prepare(`
+      UPDATE sync_sessions
+      SET status = 'running', finished_at = NULL, message = NULL
+      WHERE id = ?
+    `).run(sessionId)
+  }
+
+  countJobDone(jobName: string): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(DISTINCT code) AS c FROM sync_job_progress
+      WHERE job_name = ? AND status = 'done'
+    `).get(jobName) as { c: number }
+    return row.c
   }
 
   updateSessionProgress(
