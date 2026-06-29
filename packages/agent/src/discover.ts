@@ -427,7 +427,7 @@ export class DiscoverRunner {
     const systemPrompt = [
       '你是 innoAStock 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
       '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-      '1) get_market_db_status → batch_stock_snapshots 批量截面',
+      '1) get_market_db_status → get_local_universe_screen_schema（了解筛选维度与数值格式）→ screen_local_universe / batch_stock_snapshots',
       '2) 不足时对 shortlisted 单股：get_stock_detail / evaluate_stock / get_strategy_signal / institution_rating',
       '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
       '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',

@@ -7,13 +7,17 @@ import { resolveSyncPlan, type SyncPlan } from './sync/plan.js'
 import { hydrateStocks, type HydrateManifest } from './sync/hydrate.js'
 import {
   localScreen,
+  localUniverseScreen,
   queryDiscoverCandidates,
   queryIndustryStats,
   queryRadarBatch,
   queryStockSnapshot,
+  type LocalUniverseScreenQuery,
+  type LocalUniverseScreenResult,
   type ScreenCondition,
   type DiscoverCandidateRow,
 } from './query/screen.js'
+import { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
 import { listScreenFactors } from './query/factors.js'
 
 export class MarketDataService {
@@ -76,6 +80,14 @@ export class MarketDataService {
     return localScreen(this.store, conditions, tradeDate, topN)
   }
 
+  universeScreen(query: LocalUniverseScreenQuery): LocalUniverseScreenResult {
+    return localUniverseScreen(this.store, query)
+  }
+
+  universeScreenSchema() {
+    return buildLocalUniverseScreenSchema(this.status().latest_factor_date)
+  }
+
   industryStats(tradeDate?: string) {
     return queryIndustryStats(this.store, tradeDate)
   }
@@ -114,7 +126,9 @@ export { getMarketDataStore, MarketDataStore } from './store.js'
 export type { MarketDbStatus, BootstrapReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
-export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow } from './query/screen.js'
+export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult } from './query/screen.js'
+export { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
+export type { LocalUniverseScreenSchema } from './query/screen-schema.js'
 export { listScreenFactors, SCREEN_FACTOR_LABELS } from './query/factors.js'
 export {
   BOOTSTRAP_SYNC_JOBS,

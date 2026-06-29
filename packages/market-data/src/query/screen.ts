@@ -1,11 +1,37 @@
 import type Database from 'better-sqlite3'
 import type { MarketDataStore } from '../store.js'
+import { SCREEN_PACK_FACTORS } from '../sync/config.js'
 import { todayTradeDate } from '../utils.js'
+
+const SCREEN_FACTOR_SET = new Set<string>(SCREEN_PACK_FACTORS)
+const ALLOWED_OPS = new Set<ScreenCondition['op']>(['>', '<', '>=', '<=', '='])
+const YI_YUAN = 1e8
 
 export interface ScreenCondition {
   factor: string
   op: '>' | '<' | '>=' | '<=' | '='
   value: number
+}
+
+export interface LocalUniverseScreenQuery {
+  factor_conditions?: ScreenCondition[]
+  industry_contains?: string
+  industries?: string[]
+  markets?: Array<'SH' | 'SZ' | 'BJ'>
+  min_total_score?: number
+  max_total_score?: number
+  min_market_cap_yi?: number
+  max_market_cap_yi?: number
+  min_pe?: number
+  max_pe?: number
+  min_pb?: number
+  max_pb?: number
+  exclude_st?: boolean
+  scorecard?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+  trade_date?: string
+  top_n?: number
 }
 
 export interface LocalScreenItem {
@@ -15,7 +41,16 @@ export interface LocalScreenItem {
   industry: string | null
   pe: number | null
   pb: number | null
+  market_cap_yi?: number | null
   key_factors: Record<string, number | null>
+}
+
+export interface LocalUniverseScreenResult {
+  trade_date: string
+  passed: number
+  total_universe: number
+  scorecard: string
+  items: LocalScreenItem[]
 }
 
 export function latestFactorDate(db: Database.Database): string | null {
@@ -108,6 +143,232 @@ export function localScreen(
   })
 
   return { trade_date: date, passed: countRow?.c ?? items.length, items }
+}
+
+function normalizeConditions(raw: ScreenCondition[] | undefined): ScreenCondition[] {
+  if (!raw?.length) return []
+  if (raw.length > 8) throw new Error('factor_conditions 最多 8 条')
+  return raw.map((c, i) => {
+    const factor = String(c.factor ?? '').trim()
+    const op = c.op
+    const value = Number(c.value)
+    if (!factor || !SCREEN_FACTOR_SET.has(factor)) {
+      throw new Error(`factor_conditions[${i}].factor 无效: ${factor || '(空)'}，请先调用 get_local_universe_screen_schema`)
+    }
+    if (!ALLOWED_OPS.has(op)) throw new Error(`factor_conditions[${i}].op 无效: ${op}`)
+    if (!Number.isFinite(value)) throw new Error(`factor_conditions[${i}].value 须为数字`)
+    return { factor, op, value }
+  })
+}
+
+function marketBoardSql(markets: string[]): string {
+  const parts: string[] = []
+  for (const m of markets) {
+    if (m === 'SH') parts.push("(s.code LIKE '60%' OR s.code LIKE '68%')")
+    else if (m === 'SZ') parts.push("(s.code LIKE '00%' OR s.code LIKE '30%')")
+    else if (m === 'BJ') parts.push("(s.code LIKE '43%' OR s.code LIKE '83%' OR s.code LIKE '87%' OR s.code LIKE '92%')")
+  }
+  return parts.length ? `(${parts.join(' OR ')})` : '1=1'
+}
+
+function hasActiveFilters(query: LocalUniverseScreenQuery, conditions: ScreenCondition[]): boolean {
+  return conditions.length > 0
+    || Boolean(query.industry_contains?.trim())
+    || Boolean(query.industries?.length)
+    || Boolean(query.markets?.length)
+    || query.min_total_score != null
+    || query.max_total_score != null
+    || query.min_market_cap_yi != null
+    || query.max_market_cap_yi != null
+    || query.min_pe != null
+    || query.max_pe != null
+    || query.min_pb != null
+    || query.max_pb != null
+}
+
+/** 多维度组合筛选本地初选股票池（因子 + 行业 + 评分 + 估值 + 市值 + 板块）。 */
+export function localUniverseScreen(
+  store: MarketDataStore,
+  query: LocalUniverseScreenQuery,
+): LocalUniverseScreenResult {
+  const db = store.db
+  const date = query.trade_date ?? latestFactorDate(db) ?? todayTradeDate()
+  const conditions = normalizeConditions(query.factor_conditions)
+  const scorecard = String(query.scorecard ?? '综合评估').trim() || '综合评估'
+  const topN = Math.min(200, Math.max(1, Number(query.top_n ?? 40)))
+  const excludeSt = query.exclude_st !== false
+  const sortOrder = query.sort_order === 'asc' ? 'ASC' : 'DESC'
+  const sortBy = query.sort_by ?? 'total_score'
+
+  if (!hasActiveFilters(query, conditions)) {
+    throw new Error('请至少提供 factor_conditions 或一项 filters（行业/板块/评分/估值/市值）')
+  }
+
+  const wheres = ["s.status = 'active'"]
+  const whereParams: unknown[] = []
+  if (excludeSt) wheres.push('s.is_st = 0')
+
+  if (query.industry_contains?.trim()) {
+    wheres.push('s.industry LIKE ?')
+    whereParams.push(`%${query.industry_contains.trim()}%`)
+  }
+  if (query.industries?.length) {
+    const list = query.industries.map(i => i.trim()).filter(Boolean).slice(0, 20)
+    if (list.length) {
+      wheres.push(`s.industry IN (${list.map(() => '?').join(',')})`)
+      whereParams.push(...list)
+    }
+  }
+  if (query.markets?.length) {
+    wheres.push(marketBoardSql(query.markets.map(m => String(m).toUpperCase())))
+  }
+  if (query.min_total_score != null) {
+    wheres.push('sc.total_score >= ?')
+    whereParams.push(Number(query.min_total_score))
+  }
+  if (query.max_total_score != null) {
+    wheres.push('sc.total_score <= ?')
+    whereParams.push(Number(query.max_total_score))
+  }
+  if (query.min_market_cap_yi != null) {
+    wheres.push('q.market_cap >= ?')
+    whereParams.push(Number(query.min_market_cap_yi) * YI_YUAN)
+  }
+  if (query.max_market_cap_yi != null) {
+    wheres.push('q.market_cap <= ?')
+    whereParams.push(Number(query.max_market_cap_yi) * YI_YUAN)
+  }
+  if (query.min_pe != null) {
+    wheres.push('q.pe >= ?')
+    whereParams.push(Number(query.min_pe))
+  }
+  if (query.max_pe != null) {
+    wheres.push('q.pe <= ?')
+    whereParams.push(Number(query.max_pe))
+  }
+  if (query.min_pb != null) {
+    wheres.push('q.pb >= ?')
+    whereParams.push(Number(query.min_pb))
+  }
+  if (query.max_pb != null) {
+    wheres.push('q.pb <= ?')
+    whereParams.push(Number(query.max_pb))
+  }
+
+  const joinParams: unknown[] = []
+  let joinSql = ''
+  for (let i = 0; i < conditions.length; i++) {
+    const c = conditions[i]
+    const alias = `f${i}`
+    joinSql += `
+      INNER JOIN stock_factors ${alias}
+        ON ${alias}.code = s.code
+        AND ${alias}.trade_date = ?
+        AND ${alias}.factor_name = ?
+        AND ${alias}.factor_value ${c.op} ?
+    `
+    joinParams.push(date, c.factor, c.value)
+  }
+
+  const scoreJoin = `LEFT JOIN stock_scores sc ON sc.code = s.code AND sc.trade_date = ? AND sc.scorecard = ?`
+  const quoteJoin = `LEFT JOIN stock_quotes_daily q ON q.code = s.code AND q.trade_date = ?`
+  const joinTailParams: unknown[] = [date, scorecard, date]
+
+  let sortJoin = ''
+  let sortJoinParams: unknown[] = []
+  let orderExpr = 'sc.total_score'
+  if (sortBy === 'pe') orderExpr = 'q.pe'
+  else if (sortBy === 'pb') orderExpr = 'q.pb'
+  else if (sortBy === 'market_cap') orderExpr = 'q.market_cap'
+  else if (sortBy === 'total_score') orderExpr = 'sc.total_score'
+  else if (SCREEN_FACTOR_SET.has(sortBy)) {
+    sortJoin = `
+      LEFT JOIN stock_factors fsort
+        ON fsort.code = s.code AND fsort.trade_date = ? AND fsort.factor_name = ?
+    `
+    sortJoinParams = [date, sortBy]
+    orderExpr = 'fsort.factor_value'
+  }
+
+  const universeRow = db.prepare(`
+    SELECT COUNT(*) AS c FROM stocks s WHERE s.status = 'active' ${excludeSt ? 'AND s.is_st = 0' : ''}
+  `).get() as { c: number }
+
+  const countRow = db.prepare(`
+    SELECT COUNT(DISTINCT s.code) AS c
+    FROM stocks s
+    ${joinSql}
+    ${scoreJoin}
+    ${quoteJoin}
+    WHERE ${wheres.join(' AND ')}
+  `).get(...joinParams, ...joinTailParams, ...whereParams) as { c: number }
+
+  const rows = db.prepare(`
+    SELECT DISTINCT
+      s.code,
+      s.name,
+      s.industry,
+      sc.total_score,
+      q.pe,
+      q.pb,
+      q.market_cap
+    FROM stocks s
+    ${joinSql}
+    ${scoreJoin}
+    ${quoteJoin}
+    ${sortJoin}
+    WHERE ${wheres.join(' AND ')}
+    ORDER BY (${orderExpr} IS NULL), ${orderExpr} ${sortOrder}, s.code ASC
+    LIMIT ?
+  `).all(
+    ...joinParams,
+    ...joinTailParams,
+    ...sortJoinParams,
+    ...whereParams,
+    topN,
+  ) as {
+    code: string
+    name: string
+    industry: string | null
+    total_score: number | null
+    pe: number | null
+    pb: number | null
+    market_cap: number | null
+  }[]
+
+  const factorNames = new Set(conditions.map(c => c.factor))
+  if (sortBy !== 'total_score' && sortBy !== 'pe' && sortBy !== 'pb' && sortBy !== 'market_cap') {
+    factorNames.add(sortBy)
+  }
+  const factorStmt = db.prepare(
+    'SELECT factor_value FROM stock_factors WHERE trade_date = ? AND code = ? AND factor_name = ?',
+  )
+
+  const items: LocalScreenItem[] = rows.map(row => {
+    const key_factors: Record<string, number | null> = {}
+    for (const f of factorNames) {
+      const r = factorStmt.get(date, row.code, f) as { factor_value: number | null } | undefined
+      key_factors[f] = r?.factor_value ?? null
+    }
+    return {
+      code: row.code,
+      name: row.name,
+      total_score: row.total_score,
+      industry: row.industry,
+      pe: row.pe,
+      pb: row.pb,
+      market_cap_yi: row.market_cap != null ? Math.round((row.market_cap / YI_YUAN) * 100) / 100 : null,
+      key_factors,
+    }
+  })
+
+  return {
+    trade_date: date,
+    passed: countRow?.c ?? items.length,
+    total_universe: universeRow?.c ?? 0,
+    scorecard,
+    items,
+  }
 }
 
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {

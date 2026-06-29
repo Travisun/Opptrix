@@ -76,6 +76,8 @@ export class ResearchHub {
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'list_screen_factors': return this.listScreenFactors(t0)
+        case 'local_universe_screen_schema': return this.localUniverseScreenSchema(t0)
+        case 'local_universe_screen': return this.localUniverseScreen(params, t0)
         case 'batch_stock_snapshots': return this.batchStockSnapshots(params, t0)
         case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
         case 'stock_cyq': return this.stockCyq(String(params.code), t0)
@@ -240,6 +242,53 @@ export class ResearchHub {
 
   private listScreenFactors(t0: number) {
     return ok({ factors: this.marketData.listScreenFactors() }, '本地初选因子列表', t0)
+  }
+
+  private localUniverseScreenSchema(t0: number) {
+    return ok(this.marketData.universeScreenSchema(), '本地初选筛选维度说明', t0)
+  }
+
+  private localUniverseScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if (!status.is_ready) {
+      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
+    }
+    try {
+      const data = this.marketData.universeScreen({
+        factor_conditions: params.factor_conditions as never,
+        industry_contains: params.industry_contains as string | undefined,
+        industries: params.industries as string[] | undefined,
+        markets: params.markets as Array<'SH' | 'SZ' | 'BJ'> | undefined,
+        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
+        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
+        min_market_cap_yi: params.min_market_cap_yi != null ? Number(params.min_market_cap_yi) : undefined,
+        max_market_cap_yi: params.max_market_cap_yi != null ? Number(params.max_market_cap_yi) : undefined,
+        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
+        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
+        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
+        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
+        exclude_st: params.exclude_st as boolean | undefined,
+        scorecard: params.scorecard as string | undefined,
+        sort_by: params.sort_by as string | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        trade_date: params.trade_date as string | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      })
+      const topCodes = data.items.map(i => i.code).slice(0, Math.min(data.items.length, 30))
+      if (topCodes.length) {
+        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
+      }
+      return ok({
+        source: 'local',
+        trade_date: data.trade_date,
+        scorecard: data.scorecard,
+        total_universe: data.total_universe,
+        passed: data.passed,
+        items: data.items,
+      }, `本地筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
   }
 
   private batchStockSnapshots(params: Record<string, unknown>, t0: number) {

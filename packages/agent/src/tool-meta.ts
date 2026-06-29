@@ -30,8 +30,20 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_local_screen_factors: {
     hubFeature: 'list_screen_factors',
     miningEligible: true,
-    usageGuide: '构造 local_screen_stocks / screen_stocks 条件前，确认可用因子字段与语义。',
-    compliance: '只读；解析策略条件时优先查阅，避免使用不存在的 factor 名。',
+    usageGuide: '快速查看可用因子字段名；构造筛选条件前更推荐 get_local_universe_screen_schema 获取完整维度、单位与示例。',
+    compliance: '只读；factor 名须与 schema 一致。',
+  },
+  get_local_universe_screen_schema: {
+    hubFeature: 'local_universe_screen_schema',
+    miningEligible: true,
+    usageGuide: '本地初选组合筛选前必读：返回因子列表、单位、典型区间、行业/板块/评分/市值等过滤字段与查询示例。',
+    compliance: '只读；同一任务调用一次即可；按 schema 构造 screen_local_universe 参数。',
+  },
+  screen_local_universe: {
+    hubFeature: 'local_universe_screen',
+    miningEligible: true,
+    usageGuide: '本地 L0 库已就绪时，按多维度组合筛选股票列表（因子 AND + 行业/板块/评分/估值/市值 + 排序）。选股挖掘扩大/收紧候选池的首选工具。',
+    compliance: '须先 get_market_db_status 与 get_local_universe_screen_schema；factor_conditions ≤8；top_n ≤200；至少一项条件或过滤；本地库未就绪时勿调用。',
   },
   local_screen_stocks: {
     hubFeature: 'screening',
