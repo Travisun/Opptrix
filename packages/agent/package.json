@@ -5,10 +5,22 @@
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
-  "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json" },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "bin": {
+    "inno-a-stock-mcp": "./dist/mcp/stdio-entry.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "mcp": "node dist/mcp/stdio-entry.js"
+  },
   "dependencies": {
+    "@inno-a-stock/research-hub": "*",
     "@inno-a-stock/shared": "*",
-    "@inno-a-stock/research-hub": "*"
+    "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

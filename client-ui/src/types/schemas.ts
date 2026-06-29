@@ -218,28 +218,6 @@ export interface IndustryMiningData {
   mermaid?: string
 }
 
-export interface WriterPromptData {
-  data: {
-    code: string; name: string; templateName: string; articleType: string
-    summary: { requiredOk: number; requiredTotal: number }
-  }
-  prompt: { system: string; user: string; meta: { persona: string } }
-}
-
-export interface WriterFormatData {
-  convert: { html: string; title: string; digest: string; wordCount: number }
-  seo: { titleCandidates: string[]; digest: string; tags: string[] }
-  preflight: { ok: boolean; checks: { name: string; pass: boolean; detail?: string }[] }
-  previewHtml?: string
-  theme: string
-}
-
-export interface WriterPublishData extends WriterFormatData {
-  published: boolean
-  mediaId?: string
-  message: string
-}
-
 export interface PortfolioTradeItem {
   id: number; code: string; name: string
   tradeSide: 'buy' | 'sell'; shares: number; price: number
@@ -326,7 +304,7 @@ export interface ApiResponse<T = any> {
 // ─── Feature routes ───
 export type FeatureRoute =
   | 'dashboard' | 'stock_research' | 'portfolio_hub' | 'market_insight'
-  | 'stock_writer' | 'settings'
+  | 'settings'
 
 export interface NavItem {
   id: FeatureRoute

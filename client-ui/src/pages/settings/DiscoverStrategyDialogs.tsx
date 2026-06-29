@@ -157,7 +157,7 @@ function BuiltinViewBody({ detail }: { detail: DiscoverStrategyDetail }) {
       <StrategyViewField label="一句话">{detail.tagline}</StrategyViewField>
       <StrategyViewField label="方法论">{detail.methodology}</StrategyViewField>
       <StrategyViewField label="执行说明">{detail.description}</StrategyViewField>
-      <StrategyViewField label="筛选条件">
+      <StrategyViewField label="参考因子（执行时由 AI 解析）">
         <div className={s.conditions}>
           {detail.conditions.map(c => (
             <div key={`${c.factor}-${c.op}-${c.value}`} className={s.conditionRow}>

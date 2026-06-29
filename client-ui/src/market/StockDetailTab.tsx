@@ -22,7 +22,6 @@ import {
 import InnoButton from '../components/inno/InnoButton'
 import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
-import { useStockPrep } from './useStockPrep'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { innoTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
@@ -143,12 +142,45 @@ const useStyles = makeStyles({
   },
   prepBanner: {
     flexShrink: 0,
-    padding: `6px ${CONTENT_PAD}`,
     borderBottom: `1px solid ${innoTokens.separator}`,
+    backgroundColor: innoTokens.canvasAlt,
+  },
+  prepHead: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: `5px ${CONTENT_PAD}`,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+    ...ghostInteractive,
+  },
+  prepHeadMain: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  prepHeadText: {
+    fontSize: '10px',
+    fontWeight: 600,
+    color: innoTokens.textSecondary,
+    lineHeight: 1.35,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  prepHeadTextError: {
+    color: innoTokens.error,
+  },
+  prepBody: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
-    backgroundColor: innoTokens.canvasAlt,
+    padding: `0 ${CONTENT_PAD} 6px`,
   },
   prepTitle: {
     fontSize: '10px',
@@ -437,7 +469,7 @@ function MetricSection({ title, children }: { title: string; children: ReactNode
 function NewsPanel({ items }: { items: StockNewsItem[] }) {
   const s = useStyles()
   if (!items.length) {
-    return <Text className={s.emptyHint}>暂无公告</Text>
+    return <Text className={s.emptyHint}>暂无公告信息</Text>
   }
   return (
     <div className={s.flatList}>
@@ -460,7 +492,7 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
 function DividendPanel({ items }: { items: StockDividendItem[] }) {
   const s = useStyles()
   if (!items.length) {
-    return <Text className={s.emptyHint}>暂无分红记录</Text>
+    return <Text className={s.emptyHint}>暂无分红送转记录</Text>
   }
   return (
     <div className={s.flatList}>
@@ -487,7 +519,7 @@ function DividendPanel({ items }: { items: StockDividendItem[] }) {
 function MoneyFlowPanel({ items }: { items: StockMoneyFlowItem[] }) {
   const s = useStyles()
   if (!items.length) {
-    return <Text className={s.emptyHint}>暂无资金流向</Text>
+    return <Text className={s.emptyHint}>暂无资金流向数据</Text>
   }
   return (
     <div className={s.list}>
@@ -515,7 +547,7 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
   const s = useStyles()
   const top10 = data?.top10Shareholders ?? []
   if (!data && !top10.length) {
-    return <Text className={s.emptyHint}>暂无股东数据</Text>
+    return <Text className={s.emptyHint}>暂无股东户数与持股结构</Text>
   }
   return (
     <>
@@ -559,7 +591,7 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
 function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
   const s = useStyles()
   if (!rows.length) {
-    return <Text className={s.emptyHint}>暂无财务历史</Text>
+    return <Text className={s.emptyHint}>暂无历史财务数据</Text>
   }
   return (
     <div className={s.flatList}>
@@ -596,8 +628,6 @@ export default function StockDetailTab({
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [detailReload, setDetailReload] = useState(0)
-  const stockCode = stock?.code ?? null
-  const { prep, refresh: refreshPrep } = useStockPrep(stockCode)
 
   useEffect(() => {
     if (!stock) {
@@ -615,7 +645,7 @@ export default function StockDetailTab({
       .then(resp => {
         if (cancelled) return
         if (!resp.success || !resp.data) {
-          setError(resp.message || '加载失败')
+          setError(resp.message || '加载失败，请稍后重试')
           setDetail(null)
           return
         }
@@ -623,7 +653,7 @@ export default function StockDetailTab({
       })
       .catch(e => {
         if (!cancelled) {
-          setError(e instanceof Error ? e.message : '加载失败')
+          setError(e instanceof Error ? e.message : '加载失败，请稍后重试')
           setDetail(null)
         }
       })
@@ -634,14 +664,8 @@ export default function StockDetailTab({
     return () => { cancelled = true }
   }, [stock, detailReload])
 
-  useEffect(() => {
-    if (prep?.status === 'done') {
-      setDetailReload(n => n + 1)
-    }
-  }, [prep?.status, prep?.updated_at])
-
   if (!stock) {
-    return <div className={s.center}>从关注列表选择股票查看详情</div>
+    return <div className={s.center}>请在「关注」中选择一只股票</div>
   }
 
   if (loading && !detail) {
@@ -656,7 +680,7 @@ export default function StockDetailTab({
             </div>
           </div>
         </div>
-        <div className={s.center}><Spinner size="small" label="加载行情与资料…" /></div>
+        <div className={s.center}><Spinner size="small" label="正在加载行情…" /></div>
       </div>
     )
   }
@@ -666,7 +690,7 @@ export default function StockDetailTab({
   }
 
   if (!detail) {
-    return <div className={s.center}>暂无数据</div>
+    return <div className={s.center}>暂时无法显示该股数据</div>
   }
 
   const quote = detail.quote
@@ -695,7 +719,7 @@ export default function StockDetailTab({
             {onManage && (
               <button type="button" className={s.manageBtn} onClick={onManage}>
                 <EditRegular fontSize={12} />
-                持仓管理
+                管理持仓
               </button>
             )}
             <span className={mergeClasses(s.price, toneClass)}>
@@ -721,51 +745,6 @@ export default function StockDetailTab({
         </div>
       </div>
 
-      {prep && (prep.status === 'running' || prep.status === 'error') && (
-        <div className={s.prepBanner}>
-          <Text className={s.prepTitle} block>
-            {prep.status === 'running' ? '正在后台准备个股数据…' : '部分数据准备未完成'}
-          </Text>
-          <Text className={s.prepHint} block>
-            可先浏览其他页面，完成后会自动刷新；图表与分析将随步骤就绪逐步可用。
-          </Text>
-          <div className={s.prepSteps}>
-            {prep.steps.map(step => (
-              <div
-                key={step.id}
-                className={mergeClasses(
-                  s.prepStep,
-                  step.status === 'done' && s.prepStepDone,
-                  step.status === 'running' && s.prepStepRunning,
-                  step.status === 'error' && s.prepStepError,
-                )}
-              >
-                <span>{step.label}</span>
-                <span>{step.message ?? (step.status === 'pending' ? '等待' : step.status === 'done' ? '完成' : '')}</span>
-              </div>
-            ))}
-          </div>
-          {prep.status === 'error' && (
-            <InnoButton variant="secondary" onClick={() => { void refreshPrep(true) }}>
-              重新准备
-            </InnoButton>
-          )}
-        </div>
-      )}
-
-      {prep && prep.status === 'done' && detailTab === 'analysis' && (
-        <div className={s.prepBanner}>
-          <div className={s.prepActions}>
-            <Text className={s.prepHint} block>
-              分析数据已缓存，可手动刷新获取最新信号。
-            </Text>
-            <InnoButton variant="secondary" onClick={() => { void refreshPrep(true) }}>
-              更新分析数据
-            </InnoButton>
-          </div>
-        </div>
-      )}
-
       <div className={s.tabBar}>
         <TabList
           className={s.tabList}
@@ -773,28 +752,30 @@ export default function StockDetailTab({
           selectedValue={detailTab}
           onTabSelect={(_, data) => setDetailTab(data.value as DetailTab)}
         >
-          <Tab value="chart">图表</Tab>
+          <Tab value="chart">走势</Tab>
           <Tab value="analysis">分析</Tab>
-          <Tab value="basic">基本</Tab>
+          <Tab value="basic">概况</Tab>
           <Tab value="company">公司</Tab>
           <Tab value="news">公告</Tab>
-          <Tab value="f10">F10</Tab>
+          <Tab value="f10">财务</Tab>
         </TabList>
       </div>
 
       <div className={s.tabBody}>
         <div className={mergeClasses(s.tabPanel, detailTab !== 'analysis' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
-            <StockDecisionCard
-              key={`${stock.code}-${prep?.updated_at ?? 'init'}`}
-              stock={{ ...stock, name: displayName }}
-              price={quote?.price ?? null}
-              quotePe={quote?.pe ?? null}
-              quotePb={quote?.pb ?? null}
-              holding={holding}
-              moneyFlow={detail.moneyFlow?.[0] ?? null}
-              onDiscuss={onDiscussInChat}
-            />
+            {detailTab === 'analysis' && (
+              <StockDecisionCard
+                key={stock.code}
+                stock={{ ...stock, name: displayName }}
+                price={quote?.price ?? null}
+                quotePe={quote?.pe ?? null}
+                quotePb={quote?.pb ?? null}
+                holding={holding}
+                moneyFlow={detail.moneyFlow?.[0] ?? null}
+                onDiscuss={onDiscussInChat}
+              />
+            )}
           </div>
         </div>
 
@@ -810,7 +791,7 @@ export default function StockDetailTab({
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'basic' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
-            <MetricSection title="行情">
+            <MetricSection title="今日行情">
               <div className={s.metricGrid3}>
                 <Metric label="今开" value={formatPrice(quote?.open ?? null)} />
                 <Metric label="最高" value={formatPrice(quote?.high ?? null)} />
@@ -828,7 +809,7 @@ export default function StockDetailTab({
               </div>
             </MetricSection>
 
-            <MetricSection title="估值 · 规模">
+            <MetricSection title="规模与估值">
               <div className={s.metricGrid3}>
                 <Metric label="总市值" value={formatCompactNumber(profile?.totalMarketCap ?? quote?.marketCap ?? null)} />
                 <Metric label="流通市值" value={formatCompactNumber(profile?.circulatingMarketCap ?? null)} />
@@ -840,7 +821,7 @@ export default function StockDetailTab({
             </MetricSection>
 
             {financial && (
-              <MetricSection title="盈利 · 质量">
+              <MetricSection title="盈利能力">
                 <div className={s.metricGrid3}>
                   <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
                   <Metric label="营收同比" value={formatPct(financial.revenueYoy)} />
@@ -905,7 +886,7 @@ export default function StockDetailTab({
 
             <MetricSection title="公司简介">
               <Text className={s.prose} block>
-                {profile?.orgProfile || profile?.mainBusiness || '暂无公司简介'}
+                {profile?.orgProfile || profile?.mainBusiness || '暂无公司介绍'}
               </Text>
             </MetricSection>
 
@@ -926,7 +907,7 @@ export default function StockDetailTab({
         <div className={mergeClasses(s.tabPanel, detailTab !== 'f10' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
             {financial && (
-              <MetricSection title="财务摘要 · 最新">
+              <MetricSection title="最新财报摘要">
                 <div className={s.metricGrid3}>
                   <Metric label="营收" value={formatCompactNumber(financial.revenue)} />
                   <Metric label="营收同比" value={formatPct(financial.revenueYoy)} />

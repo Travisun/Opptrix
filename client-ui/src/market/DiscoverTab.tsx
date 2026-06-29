@@ -1,8 +1,8 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
-import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { AddRegular, ArrowRightRegular, HistoryRegular } from '@fluentui/react-icons'
-import { listDiscoverStrategies, listSkills } from '../api/client'
-import type { DiscoverStrategyOption, DiscoverStrategyPublic } from '../types/schemas'
+import { ProgressBar, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { AddRegular, ArrowRightRegular, DeleteRegular } from '@fluentui/react-icons'
+import { listDiscoverStrategies, getHealth } from '../api/client'
+import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyPublic } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import InnoButton from '../components/inno/InnoButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
@@ -47,47 +47,25 @@ const useStyles = makeStyles({
     color: innoTokens.textTertiary,
     lineHeight: 1.45,
   },
-  historyRow: {
+  tabBar: {
+    flexShrink: 0,
+    padding: `0 ${CONTENT_PAD}`,
+    borderBottom: `1px solid ${innoTokens.separator}`,
+  },
+  tabList: {
+    minHeight: '32px',
+  },
+  body: {
+    flex: 1,
+    minHeight: 0,
     display: 'flex',
-    alignItems: 'center',
-    gap: '6px',
-    flexWrap: 'wrap',
-  },
-  historyChip: {
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvas,
-    color: innoTokens.textSecondary,
-    borderRadius: innoTokens.radiusFull,
-    fontSize: '9px',
-    fontWeight: 500,
-    padding: '3px 8px',
-    cursor: 'pointer',
-    maxWidth: '160px',
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    ...ghostInteractive,
-    ':hover': {
-      borderColor: innoTokens.separatorStrong,
-      color: innoTokens.textPrimary,
-    },
-  },
-  historyChipActive: {
-    borderColor: innoTokens.accent,
-    backgroundColor: innoTokens.accentSoft,
-    color: innoTokens.textPrimary,
+    flexDirection: 'column',
   },
   runRow: {
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     flexWrap: 'wrap',
-  },
-  strategyShell: {
-    padding: `8px ${ITEM_BG_INSET}`,
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.canvasAlt,
-    border: `1px solid ${innoTokens.separator}`,
   },
   runBtn: {
     fontSize: '11px',
@@ -243,6 +221,70 @@ const useStyles = makeStyles({
     color: innoTokens.textTertiary,
     lineHeight: 1.5,
   },
+  historyList: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    padding: `8px ${ITEM_BG_INSET} 10px`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  historyRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gap: '6px',
+    alignItems: 'center',
+    padding: `8px ${ITEM_INNER_PAD}`,
+    borderRadius: innoTokens.radiusMd,
+    cursor: 'pointer',
+    ...ghostInteractive,
+    ':hover': { backgroundColor: innoTokens.surfaceHover },
+  },
+  historyRowActive: {
+    backgroundColor: innoTokens.accentSoft,
+    ':hover': { backgroundColor: innoTokens.accentSoft },
+  },
+  historyMain: {
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '3px',
+  },
+  historyTitle: {
+    fontSize: '12px',
+    fontWeight: 650,
+    color: innoTokens.textPrimary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  historyMeta: {
+    fontSize: '10px',
+    color: innoTokens.textTertiary,
+    lineHeight: 1.4,
+  },
+  historyActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
+  },
+  deleteBtn: {
+    border: 'none',
+    background: 'transparent',
+    color: innoTokens.textTertiary,
+    padding: '4px',
+    borderRadius: innoTokens.radiusSm,
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    ...ghostInteractive,
+    ':hover': {
+      color: innoTokens.error,
+      backgroundColor: innoTokens.accentSoft,
+    },
+  },
   error: {
     padding: `8px ${CONTENT_PAD}`,
     fontSize: '11px',
@@ -251,11 +293,20 @@ const useStyles = makeStyles({
 })
 
 const PHASE_LABEL: Record<string, string> = {
-  parsing: '加载策略',
-  prescreen: '本地初选',
-  mining: 'Agent 挖掘',
-  done: '完成',
-  error: '出错',
+  parsing: '理解策略',
+  prescreen: '快速初选',
+  mining: '深度挖掘',
+  done: '已完成',
+  error: '出错了',
+}
+
+type DiscoverPanelTab = 'results' | 'history'
+
+const STATUS_LABEL: Record<DiscoverJobSnapshot['status'], string> = {
+  running: '进行中',
+  done: '已完成',
+  error: '失败',
+  cancelled: '已取消',
 }
 
 interface Props {
@@ -275,13 +326,23 @@ function formatHighlights(item: DiscoverRunResult['items'][0]): string {
   return parts.join(' · ')
 }
 
-function formatHistoryLabel(strategyName: string, updatedAt: string, status: string): string {
+function formatHistoryTime(updatedAt: string): string {
   const d = new Date(updatedAt)
-  const time = Number.isNaN(d.getTime())
-    ? ''
-    : d.toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' })
-  const suffix = status === 'running' ? '进行中' : status === 'done' ? '完成' : status === 'error' ? '失败' : '已取消'
-  return `${strategyName || '策略'} · ${time} · ${suffix}`
+  if (Number.isNaN(d.getTime())) return ''
+  return d.toLocaleString('zh-CN', {
+    month: 'numeric',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
+}
+
+function formatHistoryMeta(job: DiscoverJobSnapshot): string {
+  const time = formatHistoryTime(job.updated_at)
+  const status = STATUS_LABEL[job.status] ?? job.status
+  const count = job.result?.items.length
+  const countText = count != null ? ` · ${count} 只` : ''
+  return `${time} · ${status}${countText}`
 }
 
 function toBuiltinOptions(list: DiscoverStrategyPublic[]): DiscoverStrategyOption[] {
@@ -299,6 +360,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   const s = useStyles()
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
+  const [panelTab, setPanelTab] = useState<DiscoverPanelTab>('results')
   const [dbReady, setDbReady] = useState<boolean | null>(null)
   const [llmReady, setLlmReady] = useState<boolean | null>(null)
 
@@ -314,6 +376,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
     runCustomStrategy,
     cancelRun,
     loadHistoryJob,
+    deleteHistoryJob,
   } = session
 
   const strategyOptions = useMemo((): DiscoverStrategyOption[] => {
@@ -340,15 +403,16 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       if (cancelled || !resp.success || !resp.data) return
       setDbReady(resp.data.is_ready)
     }).catch(() => {})
-    void listSkills().then(data => {
+    void getHealth().then(h => {
       if (cancelled) return
-      setLlmReady(data.categories.length > 0)
+      setLlmReady(Boolean(h.llm_configured))
     }).catch(() => setLlmReady(false))
     return () => { cancelled = true }
   }, [])
 
   const handleRun = () => {
     if (!selectedId) return
+    setPanelTab('results')
     const custom = customStrategies.find(st => st.id === selectedId)
     if (custom) {
       void runCustomStrategy({ id: custom.id, name: custom.name, prompt: custom.prompt })
@@ -359,39 +423,32 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
   const progressPct = job?.percent ?? 0
   const barValue = running && progressPct <= 0 ? 0.03 : Math.min(1, progressPct / 100)
-  const doneHistory = history.filter(h => h.status === 'done' && h.result)
+  const historyJobs = history.filter(h => h.status !== 'running' || h.id === job?.id)
+
+  const handleLoadHistory = (histJob: DiscoverJobSnapshot) => {
+    loadHistoryJob(histJob)
+    setPanelTab('results')
+  }
+
+  const handleDeleteHistory = (e: MouseEvent, jobId: string) => {
+    e.preventDefault()
+    e.stopPropagation()
+    void deleteHistoryJob(jobId)
+  }
 
   return (
     <div className={mergeClasses(s.root, 'inno-discover-tab')}>
       <div className={s.head}>
         <Text className={s.headHint} block>
-          选择策略并执行；自编策略请在设置 → 选股策略中管理。
+          选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。
         </Text>
-        <div className={s.strategyShell}>
-          <DiscoverStrategyPicker
-            strategies={strategyOptions}
-            selectedId={selectedId}
-            onSelect={setSelectedId}
-            disabled={running}
-            placeholder="选择策略"
-          />
-        </div>
-        {doneHistory.length > 0 && (
-          <div className={s.historyRow}>
-            <HistoryRegular fontSize={12} color={innoTokens.textTertiary} />
-            {doneHistory.slice(0, 6).map(h => (
-              <button
-                key={h.id}
-                type="button"
-                className={mergeClasses(s.historyChip, job?.id === h.id && s.historyChipActive)}
-                title={h.strategy_name}
-                onClick={() => loadHistoryJob(h)}
-              >
-                {formatHistoryLabel(h.strategy_name, h.updated_at, h.status)}
-              </button>
-            ))}
-          </div>
-        )}
+        <DiscoverStrategyPicker
+          strategies={strategyOptions}
+          selectedId={selectedId}
+          onSelect={setSelectedId}
+          disabled={running}
+          placeholder="请选择策略"
+        />
         <div className={s.runRow}>
           <InnoButton
             className={s.runBtn}
@@ -408,12 +465,27 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           )}
           {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
-            {dbReady ? '本地初选 → Agent 精选' : '初选库未就绪时将在线扫描'}
-            {llmReady === false ? ' · 需配置 LLM' : ''}
+            {dbReady ? '解析条件 → 因子初选 → 精选标的' : '初选库未就绪时将在线扫描'}
+            {llmReady === false ? ' · 需配置大模型' : ''}
           </Text>
         </div>
       </div>
 
+      <div className={s.tabBar}>
+        <TabList
+          className={s.tabList}
+          size="small"
+          selectedValue={panelTab}
+          onTabSelect={(_, data) => setPanelTab(data.value as DiscoverPanelTab)}
+        >
+          <Tab value="results">详情</Tab>
+          <Tab value="history">历史记录</Tab>
+        </TabList>
+      </div>
+
+      <div className={s.body}>
+      {panelTab === 'results' && (
+        <>
       {dbReady === false && (
         <Text className={s.dbBanner} block>
           初选数据库尚未就绪。建议打开设置 → 基础数据完成构建。
@@ -453,7 +525,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       <div className={mergeClasses(s.list, 'inno-scroll')}>
         {!result && !running && !error && (
           <Text className={s.empty}>
-            选择策略并点击「执行策略」；任务在后台运行，切换标签不会中断。
+            选好策略并点击「开始挖掘」；任务在后台运行，切换页面不会中断。
           </Text>
         )}
         {result?.items.map(item => {
@@ -511,8 +583,57 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           )
         })}
         {result && result.items.length === 0 && (
-          <Text className={s.empty}>暂无符合该策略的标的，可换一条策略重试</Text>
+          <Text className={s.empty}>暂无符合该策略的标的，可换一条策略再试</Text>
         )}
+      </div>
+        </>
+      )}
+
+      {panelTab === 'history' && (
+        <div className={mergeClasses(s.historyList, 'inno-scroll')}>
+          {historyJobs.length === 0 && (
+            <Text className={s.empty}>
+              暂无历史记录。完成一次挖掘后，结果会保存在这里，可随时回看或删除。
+            </Text>
+          )}
+          {historyJobs.map(histJob => (
+            <div
+              key={histJob.id}
+              className={mergeClasses(s.historyRow, job?.id === histJob.id && s.historyRowActive)}
+              role="button"
+              tabIndex={0}
+              onClick={() => handleLoadHistory(histJob)}
+              onKeyDown={e => {
+                if (e.key === 'Enter' || e.key === ' ') {
+                  e.preventDefault()
+                  handleLoadHistory(histJob)
+                }
+              }}
+            >
+              <div className={s.historyMain}>
+                <Text className={s.historyTitle} block>
+                  {histJob.strategy_name || '未命名策略'}
+                </Text>
+                <Text className={s.historyMeta} block>
+                  {formatHistoryMeta(histJob)}
+                </Text>
+              </div>
+              <div className={s.historyActions}>
+                <button
+                  type="button"
+                  className={s.deleteBtn}
+                  title="删除记录"
+                  aria-label={`删除 ${histJob.strategy_name} 的挖掘记录`}
+                  onMouseDown={e => e.stopPropagation()}
+                  onClick={e => handleDeleteHistory(e, histJob.id)}
+                >
+                  <DeleteRegular fontSize={14} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
       </div>
     </div>
   )

@@ -205,7 +205,7 @@ export default function RightMarketPanel({
           >
             <Tab value="watchlist">关注</Tab>
             <Tab value="discover">选股</Tab>
-            <Tab value="detail" disabled={!selected}>个股</Tab>
+            <Tab value="detail" disabled={!selected}>详情</Tab>
           </TabList>
         </div>
 

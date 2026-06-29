@@ -1,4 +1,13 @@
-export { AgentEngine, type AgentSettings, type ChatResult, type SkillInfo } from './engine.js'
+export { AgentEngine, type AgentSettings, type ChatResult } from './engine.js'
+export {
+  type AgentAppContext,
+  type PublicAppSettings,
+  createDefaultAppContext,
+  getCurrentTime,
+  getDataLayerPaths,
+  getSystemInfo,
+  resolveProjectRoot,
+} from './app-context.js'
 export { DiscoverRunner, type DiscoverProgress, type DiscoverResult, type DiscoverPhase, type DiscoverFinalItem } from './discover.js'
 export {
   DISCOVER_STRATEGIES,
@@ -8,6 +17,14 @@ export {
   type DiscoverStrategyCategory,
 } from './discover-strategies.js'
 export { ToolRegistry, DISCOVER_MINING_TOOL_NAMES } from './tools.js'
+export {
+  DATA_LAYER_MINING_TOOL_NAMES,
+  TOOL_META,
+  formatToolDescription,
+  mcpToolCatalog,
+} from './tool-meta.js'
+export { createMcpServer, runMcpStdio } from './mcp/server.js'
+export { McpToolBroker } from './mcp/broker.js'
 export { SessionStore, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef } from './sessions.js'
 export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'

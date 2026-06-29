@@ -1,9 +1,9 @@
 import type { ResearchHub } from '@inno-a-stock/research-hub'
 import type { ToolRegistry } from './tools.js'
-import { DISCOVER_MINING_TOOL_NAMES } from './tools.js'
+import { McpToolBroker } from './mcp/broker.js'
 import type { ProviderRegistry } from './llm/providers.js'
 import type { ChatMessage } from './llm/provider.js'
-import { getDiscoverStrategy, strategyToPlan } from './discover-strategies.js'
+import { getDiscoverStrategy, buildStrategyExecutionPrompt } from './discover-strategies.js'
 
 export type DiscoverPhase = 'parsing' | 'prescreen' | 'mining' | 'done' | 'error'
 
@@ -99,8 +99,7 @@ function normalizePlan(raw: Record<string, unknown>, prompt: string): DiscoverPa
   }
 
   if (!conditions.length) {
-    conditions.push({ factor: 'roe', op: '>=', value: 12 })
-    conditions.push({ factor: 'pe', op: '<=', value: 30 })
+    throw new Error('AI 未生成有效筛选条件')
   }
 
   const prescreen_top_n = Math.min(120, Math.max(20, Number(raw.prescreen_top_n) || 60))
@@ -112,31 +111,6 @@ function normalizePlan(raw: Record<string, unknown>, prompt: string): DiscoverPa
     prescreen_top_n,
     final_top_n,
     refinement_notes: String(raw.refinement_notes ?? raw.refinement_focus ?? '').trim() || prompt,
-  }
-}
-
-function fallbackPlan(prompt: string): DiscoverParsedPlan {
-  const lower = prompt.toLowerCase()
-  const conditions: DiscoverScreenCondition[] = []
-  if (/动量|突破|趋势/.test(prompt)) {
-    conditions.push({ factor: 'momentum_6m', op: '>', value: 5 })
-    conditions.push({ factor: 'volume_ratio', op: '>=', value: 1.2 })
-  } else if (/成长|garp|peg/.test(lower) || /PEG/.test(prompt)) {
-    conditions.push({ factor: 'peg', op: '<=', value: 1.5 })
-    conditions.push({ factor: 'profit_cagr_3y', op: '>=', value: 10 })
-  } else if (/质量|roe|盈利/.test(lower)) {
-    conditions.push({ factor: 'roe', op: '>=', value: 15 })
-    conditions.push({ factor: 'gross_margin', op: '>=', value: 25 })
-  } else {
-    conditions.push({ factor: 'pe', op: '<=', value: 25 })
-    conditions.push({ factor: 'roe', op: '>=', value: 12 })
-  }
-  return {
-    strategy_title: prompt.slice(0, 24) || '定制选股',
-    conditions,
-    prescreen_top_n: 60,
-    final_top_n: 15,
-    refinement_notes: prompt,
   }
 }
 
@@ -180,11 +154,16 @@ export class DiscoverRunner {
 
     onProgress({
       phase: 'parsing',
-      message: `加载策略「${strategy.name}」…`,
+      message: `AI 解析策略「${strategy.name}」…`,
       percent: 10,
     })
 
-    const plan = strategyToPlan(strategy)
+    const executionPrompt = buildStrategyExecutionPrompt(strategy)
+    const plan = await this.resolvePlan(llm, executionPrompt, {
+      strategy_title: strategy.name,
+      prescreen_top_n: strategy.prescreen_top_n,
+      final_top_n: strategy.final_top_n,
+    })
     const prompt = `${strategy.name}：${strategy.description}`
 
     return this.executePlan({
@@ -211,14 +190,9 @@ export class DiscoverRunner {
     const llm = this.registry.createLlm(modelRef)
     if (!llm) throw new Error('LLM 未配置，请在设置中添加模型提供商')
 
-    onProgress({ phase: 'parsing', message: '解析策略为可执行筛选条件…', percent: 8 })
+    onProgress({ phase: 'parsing', message: 'AI 解析策略为可执行条件…', percent: 8 })
 
-    let plan: DiscoverParsedPlan
-    try {
-      plan = await this.parsePlan(llm, text)
-    } catch {
-      plan = fallbackPlan(text)
-    }
+    const plan = await this.resolvePlan(llm, text)
 
     return this.executePlan({
       strategyId: null,
@@ -248,7 +222,7 @@ export class DiscoverRunner {
 
     onProgress({
       phase: 'prescreen',
-      message: `本地初选：${plan.conditions.length} 条因子条件，最多 ${plan.prescreen_top_n} 只…`,
+      message: `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`,
       percent: 25,
     })
     throwIfAborted()
@@ -348,17 +322,44 @@ export class DiscoverRunner {
     }
   }
 
+  private async resolvePlan(
+    llm: NonNullable<ReturnType<ProviderRegistry['createLlm']>>,
+    prompt: string,
+    hints?: { strategy_title?: string; prescreen_top_n?: number; final_top_n?: number },
+  ): Promise<DiscoverParsedPlan> {
+    const errors: string[] = []
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        const userPrompt = attempt === 0
+          ? prompt
+          : `${prompt}\n\n上次解析未得到有效 conditions，请严格输出 1-5 条可用因子条件 JSON。`
+        const plan = await this.parsePlan(llm, userPrompt)
+        if (!plan.conditions.length) throw new Error('conditions 为空')
+        return {
+          ...plan,
+          strategy_title: plan.strategy_title || hints?.strategy_title || prompt.slice(0, 24) || '定制选股',
+          prescreen_top_n: plan.prescreen_top_n || hints?.prescreen_top_n || 60,
+          final_top_n: plan.final_top_n || hints?.final_top_n || 15,
+        }
+      } catch (e) {
+        errors.push(e instanceof Error ? e.message : String(e))
+      }
+    }
+    throw new Error(`策略 AI 解析失败：${errors.join('；')}`)
+  }
+
   private async parsePlan(llm: NonNullable<ReturnType<ProviderRegistry['createLlm']>>, prompt: string): Promise<DiscoverParsedPlan> {
     const factorList = SCREEN_PACK_FACTORS.join(', ')
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: [
-          '你是 A 股选股策略解析器。将用户自然语言策略转为 JSON，不要输出其它文字。',
+          '你是 A 股选股策略解析器。将用户或预置策略描述转为 JSON，不要输出其它文字。',
+          '必须根据策略语义推导量化条件，禁止套用与策略无关的固定模板。',
           `可用因子：${factorList}`,
           'JSON 格式：',
           '{"strategy_title":"标题","conditions":[{"factor":"pe","op":"<=","value":25}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}',
-          '规则：conditions 1-5 条；op 为 > >= < <= =；数值用合理量化近似。',
+          '规则：conditions 1-5 条；op 为 > >= < <= =；数值为合理量化近似；参考因子示例可调整但需符合策略意图。',
         ].join('\n'),
       },
       { role: 'user', content: prompt },
@@ -424,8 +425,13 @@ export class DiscoverRunner {
     }, null, 0)
 
     const systemPrompt = [
-      '你是 innoAStock 发现页选股 Agent。预编译策略已完成本地初选。',
-      '优先调用本地数据工具（batch_stock_snapshots、get_stock_quotes、get_stock_detail 等）补充候选信息，不要编造数字。',
+      '你是 innoAStock 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
+      '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
+      '1) get_market_db_status → batch_stock_snapshots 批量截面',
+      '2) 不足时对 shortlisted 单股：get_stock_detail / evaluate_stock / get_strategy_signal / institution_rating',
+      '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
+      '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',
+      '禁止编造数字；禁止对全部候选逐只 get_stock_detail。',
       '只能从候选列表中选股。最终必须输出严格 JSON（可用 ```json 包裹），格式：',
       outputSchema,
       `最终 items 数量不超过 ${plan.final_top_n}，按 match_score 降序。`,
@@ -445,11 +451,11 @@ export class DiscoverRunner {
       },
     ]
 
-    const openAiTools = this.tools.openAiTools().filter(t =>
-      (DISCOVER_MINING_TOOL_NAMES as readonly string[]).includes(t.function.name),
-    )
+    const broker = await McpToolBroker.create(this.tools, null)
+    const openAiTools = await broker.openAiTools()
 
     const MAX_ROUNDS = 6
+    try {
     for (let round = 0; round < MAX_ROUNDS; round++) {
       if (signal?.aborted) throw new Error('已取消')
       onPct(45 + Math.round((round / MAX_ROUNDS) * 50))
@@ -471,7 +477,7 @@ export class DiscoverRunner {
           try {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
-          const result = await this.tools.call(tc.function.name, args)
+          const result = await broker.call(tc.function.name, args)
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -520,6 +526,9 @@ export class DiscoverRunner {
     }
 
     return this.fallbackMine(plan, candidates)
+    } finally {
+      await broker.close()
+    }
   }
 
   private fallbackMine(

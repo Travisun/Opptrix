@@ -1,6 +1,6 @@
-import { type ReactNode } from 'react'
+import { useState, type ReactNode } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowClockwiseRegular } from '@fluentui/react-icons'
+import { ArrowClockwiseRegular, ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import InnoButton from '../components/inno/InnoButton'
 import type { WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
@@ -24,6 +24,7 @@ import {
   valuationMetricTone,
 } from './decisionCardTone'
 import { useStockDecisionCard } from './useStockDecisionCard'
+import { useStockAnalysis, type AnalysisStep } from './useStockAnalysis'
 
 const useStyles = makeStyles({
   panel: {
@@ -171,13 +172,6 @@ const useStyles = makeStyles({
   guideValue: {
     fontWeight: 600,
   },
-  loading: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '24px 0',
-    color: innoTokens.textTertiary,
-  },
   emptyHint: {
     fontSize: '11px',
     color: innoTokens.textTertiary,
@@ -185,7 +179,7 @@ const useStyles = makeStyles({
   },
   error: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: innoTokens.error,
     padding: '2px',
   },
   headRow: {
@@ -194,6 +188,73 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     minHeight: '16px',
   },
+  idleCard: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    padding: '12px',
+    borderRadius: innoTokens.radiusMd,
+    backgroundColor: innoTokens.canvas,
+    border: `1px solid ${innoTokens.separator}`,
+  },
+  idleTitle: {
+    fontSize: '12px',
+    fontWeight: 650,
+    color: innoTokens.textPrimary,
+  },
+  idleDesc: {
+    fontSize: '10px',
+    lineHeight: 1.55,
+    color: innoTokens.textSecondary,
+  },
+  stepBanner: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '8px',
+    borderRadius: innoTokens.radiusMd,
+    backgroundColor: innoTokens.canvasAlt,
+    border: `1px solid ${innoTokens.separator}`,
+  },
+  stepHead: {
+    width: '100%',
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  stepHeadText: {
+    flex: 1,
+    fontSize: '10px',
+    fontWeight: 600,
+    color: innoTokens.textSecondary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  stepHeadTextError: {
+    color: innoTokens.error,
+  },
+  stepBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  stepRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    fontSize: '9px',
+    color: innoTokens.textSecondary,
+  },
+  stepDone: { color: '#248A3D' },
+  stepRunning: { color: innoTokens.textPrimary, fontWeight: 600 },
+  stepError: { color: innoTokens.error },
 })
 
 export interface StockDiscussPayload {
@@ -242,10 +303,7 @@ function Metric({
   return (
     <div className={s.metric}>
       <span className={s.metricLabel}>{label}</span>
-      <span
-        className={mergeClasses(s.metricValue, toneClass(s, tone))}
-        title={value}
-      >
+      <span className={mergeClasses(s.metricValue, toneClass(s, tone))} title={value}>
         {value}
       </span>
     </div>
@@ -279,14 +337,75 @@ function GuideLine({
       <span className={s.guideHighlight}>{label}：</span>
       {value ? (
         <>
-          当前
-          {' '}
-          <span className={mergeClasses(s.guideValue, toneClass(s, valueTone))}>{value}</span>
-          。
+          当前{' '}
+          <span className={mergeClasses(s.guideValue, toneClass(s, valueTone))}>{value}</span>。
         </>
       ) : null}
       {suffix}
     </Text>
+  )
+}
+
+function AnalysisStepBanner({
+  steps,
+  percent,
+  status,
+  error,
+  expanded,
+  onToggle,
+  onRetry,
+}: {
+  steps: AnalysisStep[]
+  percent: number
+  status: 'running' | 'error'
+  error: string
+  expanded: boolean
+  onToggle: () => void
+  onRetry?: () => void
+}) {
+  const s = useStyles()
+  const runningStep = steps.find(step => step.status === 'running')
+  const label = status === 'error'
+    ? (error || '分析未能全部完成')
+    : `正在分析 ${percent}%${runningStep ? ` · ${runningStep.label}` : ''}`
+
+  return (
+    <div className={s.stepBanner}>
+      <button type="button" className={s.stepHead} aria-expanded={expanded} onClick={onToggle}>
+        {status === 'running' && <Spinner size="tiny" />}
+        <Text className={mergeClasses(s.stepHeadText, status === 'error' && s.stepHeadTextError)} block>
+          {label}
+        </Text>
+        {expanded
+          ? <ChevronDownRegular fontSize={12} color={innoTokens.textTertiary} />
+          : <ChevronRightRegular fontSize={12} color={innoTokens.textTertiary} />}
+      </button>
+      {expanded && (
+        <div className={s.stepBody}>
+          {steps.map(step => (
+            <div
+              key={step.id}
+              className={mergeClasses(
+                s.stepRow,
+                step.status === 'done' && s.stepDone,
+                step.status === 'running' && s.stepRunning,
+                step.status === 'error' && s.stepError,
+              )}
+            >
+              <span>{step.label}</span>
+              <span>
+                {step.message ?? (step.status === 'pending' ? '排队中' : step.status === 'done' ? '完成' : '')}
+              </span>
+            </div>
+          ))}
+          {status === 'error' && onRetry && (
+            <InnoButton variant="secondary" onClick={onRetry}>
+              重试
+            </InnoButton>
+          )}
+        </div>
+      )}
+    </div>
   )
 }
 
@@ -300,7 +419,9 @@ export default function StockDecisionCard({
   onDiscuss,
 }: Props) {
   const s = useStyles()
-  const { data, loading, error, reload } = useStockDecisionCard(stock, holding, price, moneyFlow, quotePe, quotePb)
+  const [stepsExpanded, setStepsExpanded] = useState(false)
+  const analysis = useStockAnalysis(stock.code)
+  const { data } = useStockDecisionCard(stock, analysis.raw, holding, price, moneyFlow, quotePe, quotePb)
 
   const handleDiscuss = (topic: DiscussTopic) => {
     if (!data || !onDiscuss) return
@@ -313,39 +434,39 @@ export default function StockDecisionCard({
       institution: data.institution,
     })
     const prompt = topic === 'buy'
-      ? `请基于分析卡数据，分析 ${stock.name}（${stock.code}）的买入时机、仓位与风险。`
-      : `请基于分析卡数据，分析 ${stock.name}（${stock.code}）是否应减仓/卖出及关键价位。`
+      ? `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）的买入时机、仓位与风险。`
+      : `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）是否适合减仓或卖出，以及关键价位。`
     onDiscuss({ code: stock.code, name: stock.name, topic, contextText, prompt })
   }
 
-  if (loading && !data) {
+  if (analysis.status === 'idle') {
     return (
       <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
-        <div className={s.headRow}>
-          <InnoButton
-            variant="icon"
-            icon={<ArrowClockwiseRegular fontSize={14} />}
-            aria-label="刷新分析"
-            disabled
-          />
+        <div className={s.idleCard}>
+          <Text className={s.idleTitle} block>投研摘要</Text>
+          <Text className={s.idleDesc} block>
+            综合评分、多空倾向、研报观点与估值评估，完整分析约需半分钟。
+          </Text>
+          <InnoButton variant="primary" onClick={() => { void analysis.start(true) }}>
+            开始分析
+          </InnoButton>
         </div>
-        <div className={s.loading}><Spinner size="small" label="加载分析…" /></div>
       </div>
     )
   }
 
-  if (error && !data) {
+  if (analysis.status === 'running' || analysis.status === 'error') {
     return (
       <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
-        <div className={s.headRow}>
-          <InnoButton
-            variant="icon"
-            icon={<ArrowClockwiseRegular fontSize={14} />}
-            aria-label="刷新分析"
-            onClick={reload}
-          />
-        </div>
-        <Text className={s.error}>{error}</Text>
+        <AnalysisStepBanner
+          steps={analysis.steps}
+          percent={analysis.percent}
+          status={analysis.status}
+          error={analysis.error}
+          expanded={stepsExpanded}
+          onToggle={() => setStepsExpanded(v => !v)}
+          onRetry={analysis.status === 'error' ? () => { void analysis.start(true) } : undefined}
+        />
       </div>
     )
   }
@@ -371,26 +492,22 @@ export default function StockDecisionCard({
   return (
     <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
       <div className={s.headRow}>
-        {loading
-          ? <Spinner size="tiny" label="刷新中" />
-          : (
-            <InnoButton
-              variant="icon"
-              icon={<ArrowClockwiseRegular fontSize={14} />}
-              aria-label="刷新分析"
-              onClick={reload}
-            />
-          )}
+        <InnoButton
+          variant="icon"
+          icon={<ArrowClockwiseRegular fontSize={14} />}
+          aria-label="重新分析"
+          onClick={() => { void analysis.start(true) }}
+        />
       </div>
 
-      <Section title="核心研判">
+      <Section title="核心结论">
         <div className={s.metricGrid3}>
           <Metric label="综合评分" value={vm.scoreSummary} tone={scoreTone} />
-          <Metric label="策略倾向" value={vm.strategySummary ?? '—'} tone={strategyTone} />
-          <Metric label="机构共识" value={vm.institutionLabel ?? '—'} tone={institutionTone} />
-          <Metric label="估值分位" value={vm.valuationLabel ?? '—'} tone={valuationToneVal} />
+          <Metric label="多空倾向" value={vm.strategySummary ?? '—'} tone={strategyTone} />
+          <Metric label="研报观点" value={vm.institutionLabel ?? '—'} tone={institutionTone} />
+          <Metric label="估值高低" value={vm.valuationLabel ?? '—'} tone={valuationToneVal} />
           <Metric label="现价" value={vm.priceLabel || '—'} />
-          {stock.note ? <Metric label="关注备注" value={stock.note} /> : null}
+          {stock.note ? <Metric label="我的备注" value={stock.note} /> : null}
         </div>
         <div className={s.guideBox}>
           <Text className={s.guideText}>
@@ -402,19 +519,19 @@ export default function StockDecisionCard({
             {vm.scoreExplanation ?? SCORE_GRADE_LEGEND}
           </Text>
           <GuideLine
-            label="策略倾向"
+            label="多空倾向"
             value={vm.strategySummary}
             valueTone={strategyTone}
-            suffix={vm.strategySummary ? STRATEGY_SUMMARY_LEGEND : `暂无策略信号。${STRATEGY_SUMMARY_LEGEND}`}
+            suffix={vm.strategySummary ? STRATEGY_SUMMARY_LEGEND : `暂无多空倾向结论。${STRATEGY_SUMMARY_LEGEND}`}
           />
           <GuideLine
-            label="估值分位"
+            label="估值高低"
             value={vm.valuationLabel}
             valueTone={valuationToneVal}
-            suffix={vm.valuationLabel ? VALUATION_LEGEND : `暂无分位数据，可参考 PE/PB 绝对值。${VALUATION_LEGEND}`}
+            suffix={vm.valuationLabel ? VALUATION_LEGEND : `暂无历史分位，可参考市盈率、市净率绝对值。${VALUATION_LEGEND}`}
           />
           <Text className={s.guideText}>
-            <span className={s.guideHighlight}>机构共识：</span>
+            <span className={s.guideHighlight}>研报观点：</span>
             {INSTITUTION_LEGEND}
           </Text>
         </div>
@@ -430,7 +547,7 @@ export default function StockDecisionCard({
         </Section>
       )}
 
-      <Section title="投资逻辑">
+      <Section title="看好理由">
         {vm.thesis.length > 0 ? (
           <div className={s.bulletList}>
             {vm.thesis.map(item => (
@@ -438,11 +555,11 @@ export default function StockDecisionCard({
             ))}
           </div>
         ) : (
-          <Text className={s.emptyHint}>暂无显著正向因子，需结合定性判断</Text>
+          <Text className={s.emptyHint}>暂无明显利好因素，建议结合自己的判断</Text>
         )}
       </Section>
 
-      <Section title="风险提示">
+      <Section title="需要注意">
         {vm.risks.length > 0 ? (
           <div className={s.bulletList}>
             {vm.risks.map(item => (
@@ -450,12 +567,12 @@ export default function StockDecisionCard({
             ))}
           </div>
         ) : (
-          <Text className={s.emptyHint}>暂无显著风险项</Text>
+          <Text className={s.emptyHint}>暂未列出显著风险点</Text>
         )}
       </Section>
 
       {strategy?.signals?.length ? (
-        <Section title="策略信号">
+        <Section title="各策略看法">
           <div className={s.bulletList}>
             {strategy.signals.slice(0, 6).map(sig => {
               const dirTone = signalDirectionTone(sig.direction)
@@ -473,19 +590,11 @@ export default function StockDecisionCard({
 
       {onDiscuss && (
         <div className={s.actions}>
-          <InnoButton
-            className={s.actionBtn}
-            variant="primary"
-            onClick={() => handleDiscuss('buy')}
-          >
-            研讨买入点
+          <InnoButton className={s.actionBtn} variant="primary" onClick={() => handleDiscuss('buy')}>
+            和 AI 讨论买入
           </InnoButton>
-          <InnoButton
-            className={s.actionBtn}
-            variant="pill"
-            onClick={() => handleDiscuss('sell')}
-          >
-            研讨卖出点
+          <InnoButton className={s.actionBtn} variant="pill" onClick={() => handleDiscuss('sell')}>
+            和 AI 讨论卖出
           </InnoButton>
         </div>
       )}

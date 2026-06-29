@@ -9,7 +9,6 @@ import {
 import { getMarketDataService } from '@inno-a-stock/market-data'
 import { ok, fail, type ResearchResult } from '@inno-a-stock/shared'
 import { quickAssess, verifyStrategy } from '@inno-a-stock/t-strategy'
-import { fetchArticleData, listArticleTypes, StockWriter, listPersonas, formatArticle, publishArticle, loadWriterConfig, saveWriterConfig, listHistory, listThemes } from '@inno-a-stock/stock-writer'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@inno-a-stock/t-strategy'
 
@@ -70,6 +69,8 @@ export class ResearchHub {
         case 'search_stocks': return this.searchStocks(String(params.keyword), t0)
         case 'stock_quotes': return this.stockQuotes(params.codes as string[] | undefined, t0)
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
+        case 'watchlist_list': return this.watchlistList(t0)
+        case 'watchlist_save': return this.watchlistSave(params, t0)
         case 'market_db_status': return this.marketDbStatus(t0)
         case 'market_db_sync': return this.marketDbSync(params, t0)
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
@@ -89,18 +90,9 @@ export class ResearchHub {
         case 'stock_detail': return this.stockDetail(String(params.code), t0)
         case 'backtest': return this.runBacktest(params, t0)
         case 'latest_evaluation': return this.latestEvaluation(String(params.code), t0)
-        case 'writer_fetch': return this.writerFetch(String(params.code), String(params.type ?? 'value'), t0)
-        case 'writer_types': return ok({ types: listArticleTypes() }, '文章类型列表', t0)
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), t0)
+        case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
-        case 'writer_prompt': return this.writerPrompt(String(params.code), String(params.type ?? 'value'), params.persona as string | undefined, t0)
-        case 'writer_personas': return ok({ personas: listPersonas() }, '写作人格列表', t0)
-        case 'writer_format': return this.writerFormat(String(params.markdown ?? ''), params.theme as string | undefined, t0)
-        case 'writer_publish': return this.writerPublish(params, t0)
-        case 'writer_config': return ok(loadWriterConfig(), 'Writer 配置', t0)
-        case 'writer_config_save': return this.writerConfigSave(params, t0)
-        case 'writer_history': return ok({ history: listHistory(Number(params.limit ?? 20)) }, '写作历史', t0)
-        case 'writer_themes': return ok({ themes: listThemes() }, '排版主题列表', t0)
         case 'tushare_config': return ok(publicTushareConfig(), 'Tushare 配置', t0)
         case 'tushare_config_save': return this.tushareConfigSave(params, t0)
         case 'tushare_test': return this.tushareTest(params, t0)
@@ -391,7 +383,8 @@ export class ResearchHub {
 
   /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
   private async watchlistRadar(codes: string[] | undefined, t0: number) {
-    const normalized = [...new Set((codes ?? []).map(c => normalizeCode(String(c))).filter(Boolean))]
+    const sourceCodes = codes?.length ? codes : this.de.watchlist.codes()
+    const normalized = [...new Set(sourceCodes.map(c => normalizeCode(String(c))).filter(Boolean))]
     if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无关注', t0)
 
     await this.fillMissingStockNames(normalized)
@@ -851,54 +844,6 @@ export class ResearchHub {
     return ok(data, '回测完成', t0)
   }
 
-  private async writerFetch(code: string, type: string, t0: number) {
-    const data = await fetchArticleData(this.de, code, type as import('@inno-a-stock/stock-writer').ArticleType)
-    return ok(data, `${data.name} ${data.templateName} 数据采集`, t0)
-  }
-
-  private async writerPrompt(code: string, type: string, persona: string | undefined, t0: number) {
-    const writer = new StockWriter(this.de)
-    const { data, prompt } = await writer.prepare(code, type as import('@inno-a-stock/stock-writer').ArticleType, { persona })
-    return ok({ data, prompt, meta: prompt.meta }, `${data.name} 写作 Prompt`, t0)
-  }
-
-  private writerFormat(markdown: string, theme: string | undefined, t0: number) {
-    if (!markdown.trim()) return fail('markdown required', t0)
-    const result = formatArticle(markdown, theme)
-    return ok(result, '微信排版完成', t0)
-  }
-
-  private async writerPublish(params: Record<string, unknown>, t0: number) {
-    const markdown = String(params.markdown ?? '')
-    if (!markdown.trim()) return fail('markdown required', t0)
-    const result = await publishArticle({
-      markdown,
-      theme: params.theme as string | undefined,
-      title: params.title as string | undefined,
-      digest: params.digest as string | undefined,
-      coverPath: params.cover_path as string | undefined,
-      stockCode: params.code as string | undefined,
-      stockName: params.name as string | undefined,
-      articleType: params.type as string | undefined,
-      persona: params.persona as string | undefined,
-      skipPublish: params.skip_publish as boolean | undefined,
-    })
-    return ok(result, result.message, t0)
-  }
-
-  private writerConfigSave(params: Record<string, unknown>, t0: number) {
-    const saved = saveWriterConfig({
-      theme: params.theme as string | undefined,
-      skip_publish: params.skip_publish as boolean | undefined,
-      wechat: {
-        appid: params.appid as string | undefined,
-        secret: params.secret as string | undefined,
-        author: params.author as string | undefined,
-      },
-    })
-    return ok(saved, 'Writer 配置已保存', t0)
-  }
-
   private tushareConfigSave(params: Record<string, unknown>, t0: number) {
     const current = loadTushareConfig()
     const tokenRaw = params.token
@@ -928,9 +873,25 @@ export class ResearchHub {
     return ok({ trades, count: trades.length }, `交易记录 ${trades.length} 条`, t0)
   }
 
+  private async portfolioHoldings(t0: number) {
+    const holdings = await this.de.portfolio.holdings(true)
+    return ok({ holdings, count: holdings.length }, `当前持仓 ${holdings.length} 只`, t0)
+  }
+
   private async portfolioSummary(t0: number) {
     const summary = await this.de.portfolio.summary(true)
     return ok(summary, `持仓 ${summary.holdingsCount} 只`, t0)
+  }
+
+  private watchlistList(t0: number) {
+    const items = this.de.watchlist.list()
+    return ok({ items, count: items.length }, `关注列表 ${items.length} 只`, t0)
+  }
+
+  private watchlistSave(params: Record<string, unknown>, t0: number) {
+    const items = Array.isArray(params.items) ? params.items as import('@inno-a-stock/a-stock-layer').WatchlistItem[] : []
+    const saved = this.de.watchlist.replace(items)
+    return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }
 
   private async latestEvaluation(code: string, t0: number) {

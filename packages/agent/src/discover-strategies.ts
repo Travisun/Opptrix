@@ -15,6 +15,7 @@ export interface DiscoverStrategy {
   scorecard: string
   prescreen_top_n: number
   final_top_n: number
+  /** 参考因子示例（展示与 AI 提示）；实际执行条件由 LLM 解析策略文本生成 */
   conditions: DiscoverScreenCondition[]
   /** Agent 挖掘阶段的侧重点（预编译，非用户输入） */
   refinement_notes: string
@@ -208,6 +209,23 @@ export function getDiscoverStrategy(id: string): DiscoverStrategy | undefined {
   return DISCOVER_STRATEGIES.find(s => s.id === id)
 }
 
+/** 将策略全文组装为 LLM 解析输入（不直接套用 conditions 执行） */
+export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string {
+  const ref = strategy.conditions
+    .map(c => `${c.factor} ${c.op} ${c.value}`)
+    .join('；')
+  return [
+    `【策略】${strategy.name}`,
+    `【方法论】${strategy.methodology}`,
+    `【执行说明】${strategy.description}`,
+    `【挖掘侧重】${strategy.refinement_notes}`,
+    ref ? `【参考因子示例（可按策略语义调整阈值）】${ref}` : '',
+    `【规模】初选约 ${strategy.prescreen_top_n} 只，最终精选 ${strategy.final_top_n} 只。`,
+    '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
+  ].filter(Boolean).join('\n')
+}
+
+/** @deprecated 仅用于兼容；执行请使用 buildStrategyExecutionPrompt + LLM 解析 */
 export function strategyToPlan(strategy: DiscoverStrategy): DiscoverParsedPlan {
   return {
     strategy_title: strategy.name,

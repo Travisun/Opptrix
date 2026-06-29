@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   cancelDiscoverJob,
+  deleteDiscoverJob,
   getDiscoverJob,
   listDiscoverJobs,
   startDiscoverRun,
@@ -23,6 +24,7 @@ export interface DiscoverSessionState {
   runCustomStrategy: (opts: { id: string; name: string; prompt: string }) => Promise<void>
   cancelRun: () => Promise<void>
   loadHistoryJob: (job: DiscoverJobSnapshot) => void
+  deleteHistoryJob: (jobId: string) => Promise<void>
 }
 
 export function useDiscoverSession(): DiscoverSessionState {
@@ -34,6 +36,16 @@ export function useDiscoverSession(): DiscoverSessionState {
   const [error, setError] = useState('')
   const [selectedStrategyId, setSelectedStrategyId] = useState<string | null>(null)
   const pollRef = useRef<number | null>(null)
+  const viewingJobIdRef = useRef<string | null>(null)
+  const historyRef = useRef<DiscoverJobSnapshot[]>([])
+
+  useEffect(() => {
+    historyRef.current = history
+  }, [history])
+
+  useEffect(() => {
+    viewingJobIdRef.current = job?.id ?? null
+  }, [job?.id])
 
   const stopPoll = useCallback(() => {
     if (pollRef.current != null) {
@@ -186,6 +198,47 @@ export function useDiscoverSession(): DiscoverSessionState {
     setSelectedStrategyId(histJob.strategy_id)
   }, [])
 
+  const clearViewingJob = useCallback(() => {
+    viewingJobIdRef.current = null
+    setJob(null)
+    setResult(null)
+    setError('')
+  }, [])
+
+  const deleteHistoryJob = useCallback(async (jobId: string) => {
+    const viewingDeleted = viewingJobIdRef.current === jobId || activeJobId === jobId
+    const prevHistory = historyRef.current
+
+    setHistory(prev => prev.filter(j => j.id !== jobId))
+
+    if (viewingDeleted) {
+      stopPoll()
+      setRunning(false)
+      setActiveJobId(null)
+      clearViewingJob()
+    }
+
+    try {
+      await deleteDiscoverJob(jobId)
+    } catch {
+      setHistory(prevHistory)
+      if (viewingDeleted) {
+        const jobs = await refreshHistory()
+        const restored = jobs.find(j => j.id === jobId)
+        if (restored) {
+          setJob(restored)
+          setResult(restored.result)
+          setError(restored.status === 'error' ? (restored.error || restored.message) : '')
+          setRunning(restored.status === 'running')
+          setActiveJobId(restored.status === 'running' ? restored.id : null)
+        }
+      }
+      return
+    }
+
+    await refreshHistory()
+  }, [activeJobId, clearViewingJob, refreshHistory, stopPoll])
+
   return {
     history,
     activeJobId,
@@ -200,5 +253,6 @@ export function useDiscoverSession(): DiscoverSessionState {
     runCustomStrategy,
     cancelRun,
     loadHistoryJob,
+    deleteHistoryJob,
   }
 }

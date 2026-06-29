@@ -53,15 +53,3 @@ export interface EphemeralAskTurn {
   role: 'user' | 'assistant'
   content: string
 }
-
-export interface SkillInfo {
-  name: string
-  description: string
-  category: string
-  examplePrompt: string
-}
-
-export interface SkillCategory {
-  category: string
-  skills: SkillInfo[]
-}

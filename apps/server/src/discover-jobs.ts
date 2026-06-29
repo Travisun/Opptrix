@@ -98,6 +98,18 @@ export function cancelDiscoverJob(id: string): boolean {
   return true
 }
 
+export function deleteDiscoverJob(id: string): boolean {
+  const job = jobs.get(id)
+  if (!job) return false
+  if (job.status === 'running') {
+    abortControllers.get(id)?.abort()
+    abortControllers.delete(id)
+  }
+  jobs.delete(id)
+  persistToDisk()
+  return true
+}
+
 export function startDiscoverJob(
   agent: AgentEngine,
   strategyId: string,

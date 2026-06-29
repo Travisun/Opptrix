@@ -9,11 +9,11 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  sendSessionChat, listSkills, getHealth, listAvailableModels, setSessionModel,
+  sendSessionChat, getHealth, listAvailableModels, setSessionModel,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
-  SessionMeta, SkillCategory, AvailableModel,
+  SessionMeta, AvailableModel,
 } from '../types/chat'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { innoTokens } from '../theme/tokens'
@@ -191,7 +191,6 @@ export default function ChatApp() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
-  const [skills, setSkills] = useState<SkillCategory[]>([])
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [llmLabel, setLlmLabel] = useState('连接中…')
@@ -244,13 +243,9 @@ export default function ChatApp() {
 
     refreshHealth().catch(() => {})
 
-    Promise.all([
-      refreshSessions(),
-      listSkills().catch(() => ({ categories: [] as SkillCategory[] })),
-    ])
-      .then(async ([list, skillData]) => {
+    refreshSessions()
+      .then(async list => {
         if (cancelled) return
-        setSkills(skillData.categories)
         if (list.length > 0) {
           await loadSession(list[0].id)
         }
@@ -272,7 +267,14 @@ export default function ChatApp() {
     navigate('chat')
   }, [navigate])
 
+  const restoreChatColumn = useCallback(() => {
+    if (!chatVisible && canToggleChatColumn) {
+      handleToggleChatColumn()
+    }
+  }, [canToggleChatColumn, chatVisible, handleToggleChatColumn])
+
   const handleNew = async () => {
+    restoreChatColumn()
     try {
       const { session } = await createSession()
       const list = await refreshSessions()
@@ -291,6 +293,7 @@ export default function ChatApp() {
   }
 
   const handleSelect = async (id: string) => {
+    restoreChatColumn()
     if (id === activeId) return
     try {
       await loadSession(id)
@@ -607,7 +610,6 @@ export default function ChatApp() {
                     input={input}
                     loading={loading}
                     error={error}
-                    skills={skills}
                     availableModels={availableModels}
                     sessionModel={sessionModel}
                     isMobile={isMobile}

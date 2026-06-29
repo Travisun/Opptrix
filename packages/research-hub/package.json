@@ -14,7 +14,6 @@
     "@inno-a-stock/stock-eval": "*",
     "@inno-a-stock/institutions": "*",
     "@inno-a-stock/t-strategy": "*",
-    "@inno-a-stock/skills": "*",
-    "@inno-a-stock/stock-writer": "*"
+    "@inno-a-stock/skills": "*"
   }
 }

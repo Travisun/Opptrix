@@ -233,7 +233,7 @@ export default function DiscoverStrategiesSettingsSection() {
       kind: 'builtin' as const,
       id: b.id,
       name: b.name,
-      meta: `${CATEGORY_LABEL[b.category]} · ${b.condition_count} 条因子`,
+      meta: `${CATEGORY_LABEL[b.category]} · 参考 ${b.condition_count} 条因子`,
     }))
     const customs = customStrategies.map(c => ({
       kind: 'custom' as const,

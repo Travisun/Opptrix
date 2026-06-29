@@ -13,6 +13,7 @@ import type {
 } from './core/schema.js'
 import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
+import { WatchlistManager } from './watchlist/manager.js'
 import { tdxClient } from './tdx/client.js'
 import { isTushareEnabled } from './tushare/config.js'
 
@@ -23,11 +24,18 @@ export class AshareEngine {
   readonly registry = new DriverRegistry()
   readonly cache = new Cache()
   private _portfolio?: PortfolioManager
+  private _watchlist?: WatchlistManager
 
   /** Portfolio trade manager (lazy init) */
   get portfolio() {
     if (!this._portfolio) this._portfolio = new PortfolioManager(this)
     return this._portfolio
+  }
+
+  /** User watchlist (synced from client) */
+  get watchlist() {
+    if (!this._watchlist) this._watchlist = new WatchlistManager()
+    return this._watchlist
   }
   constructor(autoDiscover = true) {
     if (autoDiscover) registerAllDrivers(this.registry)

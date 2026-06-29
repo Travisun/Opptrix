@@ -8,7 +8,7 @@ export interface ScoreGradeInfo {
 }
 
 const GRADE_BANDS: ScoreGradeInfo[] = [
-  { minScore: 80, grade: 'A', label: '优秀', description: '多因子综合表现领先，质地较好' },
+  { minScore: 80, grade: 'A', label: '优秀', description: '多维度综合表现领先，质地较好' },
   { minScore: 70, grade: 'B+', label: '良好', description: '整体不错，具备持续跟踪价值' },
   { minScore: 60, grade: 'B', label: '中等偏上', description: '部分维度有亮点，需结合行业与估值' },
   { minScore: 50, grade: 'C', label: '一般', description: '因子表现平平，宜谨慎参与' },
@@ -44,17 +44,18 @@ export function formatScoreSummary(totalScore: number | null | undefined): strin
 export function formatScoreExplanation(totalScore: number | null | undefined): string | null {
   const info = getScoreGradeInfo(totalScore)
   if (!info) return null
-  return `${info.description}。评分基于价值、质量、成长、动量等因子加权（0–100 分；A≥80，B+≥70，B≥60，C≥50，D<50）。`
+  return `${info.description}。评分基于价值、质量、成长、动量等维度加权（0–100 分；A≥80，B+≥70，B≥60，C≥50，D<50）。`
 }
 
+/** 分析卡说明 — 面向投资者 */
 export const SCORE_GRADE_LEGEND =
-  '综合评分 0–100：价值、质量、成长、动量等因子加权；等级 A≥80 · B+≥70 · B≥60 · C≥50 · D<50'
+  '综合评分 0–100 分，综合价值、盈利质量、成长性、股价动能等维度；分数越高通常表示基本面与趋势相对更好。'
 
 export const STRATEGY_SUMMARY_LEGEND =
-  '策略倾向：趋势、动量、估值等规则策略融合后的整体多空判断（偏多 / 中性 / 偏空）'
+  '多空倾向：综合多种交易规则后的整体看法，分为偏多、中性、偏空，仅供参考。'
 
 export const VALUATION_LEGEND =
-  '估值分位：PE/PB 在近五年历史区间中的位置，越低通常代表越便宜'
+  '估值高低：当前市盈率、市净率在近年历史中的位置；分位越低通常表示相对更便宜。'
 
 export const INSTITUTION_LEGEND =
-  '机构共识：近期券商研报评级汇总'
+  '研报观点：汇总近期券商研报的评级与倾向，不代表买卖建议。'

@@ -15,6 +15,8 @@ export type { TushareRuntimeConfig, PublicTushareConfig } from './tushare/config
 
 export { PortfolioManager } from './portfolio/manager.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
+export { WatchlistManager } from './watchlist/manager.js'
+export type { WatchlistItem } from './watchlist/models.js'
 
 export { TdxClient, tdxClient } from './tdx/client.js'
 export { TdxDailyBarReader, readTdxDayFile } from './tdx/day-reader.js'

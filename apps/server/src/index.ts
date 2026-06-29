@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import Fastify from 'fastify'
-import { AgentEngine, fetchOpenAiModelList, type SessionContextRef } from '@inno-a-stock/agent'
+import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type SessionContextRef } from '@inno-a-stock/agent'
 import { ResearchHub } from '@inno-a-stock/research-hub'
 import { listTemplates, REGISTRY } from '@inno-a-stock/stock-eval'
 import {
@@ -9,9 +9,9 @@ import {
 } from './config.js'
 import { getMarketDataService } from '@inno-a-stock/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
-import { cancelDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
+import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
-import { listDiscoverStrategiesPublic, getDiscoverStrategy } from '@inno-a-stock/agent'
+import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@inno-a-stock/agent'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -24,11 +24,28 @@ function syncAgentProviders() {
   agent.setProviders(toAgentProviders(cfg), cfg.default_model)
 }
 
-let agent = new AgentEngine(hub, {
+let agent!: AgentEngine
+const serverAppContext = {
+  getAppSettings: async () => publicConfig(cfg),
+  getProjectInfo: async () => ({
+    app: 'innoAStock',
+    version: '0.6.0',
+    runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
+    desktop: process.env.INNO_DESKTOP === '1',
+    project_root: resolveProjectRoot(),
+    server: { host: HOST, port: PORT },
+    paths: getDataLayerPaths(),
+    tool_count: agent.tools.list().length,
+    mining_tool_count: agent.tools.miningTools().length,
+  }),
+}
+
+agent = new AgentEngine(hub, {
   providers: toAgentProviders(cfg),
   defaultModel: cfg.default_model,
   defaultScorecard: cfg.default_scorecard,
   defaultTopN: cfg.default_top_n,
+  appContext: serverAppContext,
 })
 
 const app = Fastify({ logger: true })
@@ -52,8 +69,20 @@ app.get('/api/health', async () => ({
   available_models: agent.listAvailableModels().length,
   scorecard: cfg.default_scorecard,
   tools: agent.tools.list().length,
+  mcp_tools: agent.tools.mcpTools().length,
+  mining_tools: agent.tools.miningTools().length,
   factors: REGISTRY.count(),
 }))
+
+app.get<{ Querystring: { mining?: string } }>('/api/mcp/tools', async (req) => {
+  const miningOnly = req.query.mining === '1' || req.query.mining === 'true'
+  const catalog = mcpToolCatalog(agent.tools)
+  return {
+    tools: miningOnly ? catalog.filter(t => t.mining_eligible) : catalog,
+    mining_count: catalog.filter(t => t.mining_eligible).length,
+    total: catalog.length,
+  }
+})
 
 app.post<{ Body: { feature: string; params?: Record<string, unknown> } }>(
   '/api/research',
@@ -136,10 +165,16 @@ app.get<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, reply)
   return { job }
 })
 
-app.delete<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, reply) => {
+app.post<{ Params: { id: string } }>('/api/discover/jobs/:id/cancel', async (req, reply) => {
   const cancelled = cancelDiscoverJob(req.params.id)
   if (!cancelled) return reply.code(404).send({ error: 'job not found or not running' })
   return { cancelled: true }
+})
+
+app.delete<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, reply) => {
+  const deleted = deleteDiscoverJob(req.params.id)
+  if (!deleted) return reply.code(404).send({ error: 'job not found' })
+  return { deleted: true }
 })
 
 app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; background?: boolean; force?: boolean; profile?: string } }>(
@@ -283,8 +318,6 @@ app.get('/api/models/available', async () => ({
 
 app.get('/api/templates', async () => ({ templates: listTemplates() }))
 
-app.get('/api/agent/skills', async () => ({ categories: agent.listSkills() }))
-
 app.get('/api/sessions', async () => ({ sessions: agent.listSessions() }))
 
 app.post<{ Body: { title?: string } }>('/api/sessions', async (req) => {
@@ -424,7 +457,11 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
   '/api/sessions/:id/chat',
   async (req, reply) => {
     if (!req.body?.message?.trim()) return reply.code(400).send({ error: 'message required' })
-    const result = await agent.chat(req.params.id, req.body.message, req.body.model)
+    const result = await agent.chat(
+      req.params.id,
+      req.body.message,
+      req.body.model,
+    )
     return {
       reply: result.reply,
       tools_used: result.toolsUsed,
@@ -471,84 +508,6 @@ app.post<{ Body: { code: string } }>('/api/signal', async (req) => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
-// Stock writer — article data collection
-app.post<{ Body: { code: string; type?: string } }>('/api/writer/fetch', async (req, reply) => {
-  const { code, type = 'value' } = req.body ?? {}
-  if (!code) return reply.code(400).send({ error: 'code required' })
-  const r = await hub.dispatch('writer_fetch', { code, type })
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
-app.get('/api/writer/types', async () => {
-  const r = await hub.dispatch('writer_types', {})
-  return r.data
-})
-
-app.get('/api/writer/personas', async () => {
-  const r = await hub.dispatch('writer_personas', {})
-  return r.data
-})
-
-app.post<{ Body: { code: string; type?: string; persona?: string } }>('/api/writer/prompt', async (req, reply) => {
-  const { code, type = 'value', persona } = req.body ?? {}
-  if (!code) return reply.code(400).send({ error: 'code required' })
-  const r = await hub.dispatch('writer_prompt', { code, type, persona })
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
-app.post<{ Body: { markdown: string; theme?: string } }>('/api/writer/format', async (req, reply) => {
-  const { markdown, theme } = req.body ?? {}
-  if (!markdown) return reply.code(400).send({ error: 'markdown required' })
-  const r = await hub.dispatch('writer_format', { markdown, theme })
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
-app.post<{ Body: Record<string, unknown> }>('/api/writer/publish', async (req, reply) => {
-  const body = req.body ?? {}
-  if (!body.markdown) return reply.code(400).send({ error: 'markdown required' })
-  const r = await hub.dispatch('writer_publish', body)
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
-app.get('/api/writer/config', async () => {
-  const r = await hub.dispatch('writer_config', {})
-  const cfg = r.data as Record<string, unknown>
-  const wechat = cfg.wechat as Record<string, unknown> | undefined
-  return {
-    theme: cfg.theme,
-    skip_publish: cfg.skip_publish,
-    wechat_configured: !!(wechat?.appid && wechat?.secret),
-    author: wechat?.author ?? '',
-  }
-})
-
-app.post<{ Body: Record<string, unknown> }>('/api/writer/config', async (req) => {
-  const b = req.body ?? {}
-  const r = await hub.dispatch('writer_config_save', {
-    theme: b.theme,
-    skip_publish: b.skip_publish,
-    appid: b.appid,
-    secret: b.secret,
-    author: b.author,
-  })
-  return { status: 'saved', config: r.data }
-})
-
-app.get('/api/writer/history', async (req) => {
-  const limit = Number((req.query as { limit?: string }).limit ?? 20)
-  const r = await hub.dispatch('writer_history', { limit })
-  return r.data
-})
-
-app.get('/api/writer/themes', async () => {
-  const r = await hub.dispatch('writer_themes', {})
-  return r.data
-})
-
 app.post<{ Body: { code: string } }>('/api/strategy/report', async (req, reply) => {
   const { code } = req.body ?? {}
   if (!code) return reply.code(400).send({ error: 'code required' })
@@ -576,6 +535,22 @@ app.get('/api/portfolio/summary', async () => {
   const r = await hub.dispatch('portfolio_summary', {})
   return { success: r.success, data: r.data, message: r.message }
 })
+
+app.get('/api/watchlist', async () => {
+  const r = await hub.dispatch('watchlist_list', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{ Body: { items: Array<{ code: string; name: string; industry?: string; note?: string; addedAt?: string; addedPrice?: number | null }> } }>(
+  '/api/watchlist',
+  async (req, reply) => {
+    const items = req.body?.items
+    if (!Array.isArray(items)) return reply.code(400).send({ error: 'items array required' })
+    const r = await hub.dispatch('watchlist_save', { items })
+    if (!r.success) return reply.code(400).send({ error: r.message })
+    return { success: true, data: r.data, message: r.message }
+  },
+)
 
 app.post<{ Body: { code: string; shares: number; price: number; side?: string; date?: string } }>(
   '/api/portfolio/trade',

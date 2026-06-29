@@ -18,7 +18,6 @@ const WORKSPACE_PACKAGES = [
   'institutions',
   't-strategy',
   'skills',
-  'stock-writer',
   'research-hub',
   'agent',
 ]

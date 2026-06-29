@@ -89,7 +89,7 @@ export default function RightPanel({
       <aside
         className={mergeClasses(s.panel, 'inno-right-panel')}
         style={contentWidth != null ? { width: `${contentWidth}px`, minWidth: `${contentWidth}px` } : { width: '100%' }}
-        aria-label="行情侧栏"
+        aria-label="行情与自选"
         aria-hidden={!visible}
       >
         <RightMarketPanel

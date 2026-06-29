@@ -5,7 +5,7 @@ import {
 import { BotRegular } from '@fluentui/react-icons'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
-  SkillCategory, AvailableModel,
+  AvailableModel,
 } from '../types/chat'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
@@ -208,7 +208,6 @@ interface ChatViewProps {
   input: string
   loading: boolean
   error: string
-  skills: SkillCategory[]
   availableModels?: AvailableModel[]
   sessionModel?: string
   isMobile?: boolean
@@ -237,7 +236,7 @@ interface ChatViewProps {
 }
 
 export default function ChatView({
-  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, error, skills,
+  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -510,14 +509,12 @@ export default function ChatView({
               isMobile={isMobile}
               contextRef={contextRef}
               starters={starters}
-              skillCategories={skills}
               availableModels={availableModels}
               sessionModel={sessionModel}
               onInputChange={onInputChange}
               onSubmit={handleSubmit}
               onModelChange={onModelChange}
               onClearContextRef={onClearContextRef}
-              onPickSkill={onInputChange}
             />
           </div>
         </div>

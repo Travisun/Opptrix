@@ -1,7 +1,7 @@
 import { useEffect } from 'react'
 import { Text, Button, makeStyles } from '@fluentui/react-components'
 import {
-  DataTrendingRegular, BriefcaseRegular, GlobeRegular, EditRegular, BotRegular,
+  DataTrendingRegular, BriefcaseRegular, GlobeRegular, BotRegular,
 } from '@fluentui/react-icons'
 import PageShell from '../components/PageShell'
 import StatCard from '../components/StatCard'
@@ -63,7 +63,6 @@ export default function Dashboard({ navigate }: Props) {
     { route: 'stock_research' as const, icon: DataTrendingRegular, title: '个股研究', desc: '因子诊断 · 机构 · 策略 · 回测' },
     { route: 'portfolio_hub' as const, icon: BriefcaseRegular, title: '机会与组合', desc: '选股 · 持仓 · 交易账本' },
     { route: 'market_insight' as const, icon: GlobeRegular, title: '市场与产业', desc: '收盘早报 · 产业链' },
-    { route: 'stock_writer' as const, icon: EditRegular, title: '投研写作', desc: 'Prompt · 排版 · 微信' },
   ]
 
   return (

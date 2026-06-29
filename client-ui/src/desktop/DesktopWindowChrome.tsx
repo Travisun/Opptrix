@@ -18,6 +18,7 @@ import {
   DESKTOP_TOOL_ICON_SIZE,
   DESKTOP_Z_CHROME_TOOLS,
   DESKTOP_Z_TITLE,
+  SIDEBAR_INLINE_WIDTH,
 } from './constants'
 import {
   PanelLeftContractRegular,
@@ -154,10 +155,20 @@ export default function DesktopWindowChrome({
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
 
-  /** Full-width drag (z-index 1300) sits above panel title (1200) — clip it off the right panel band. */
+  /** Clip drag off the right panel title band (panel title z-index 1200 < chrome 1300). */
   const dragLayerStyle: CSSProperties = (() => {
     if (isSettings || !rightPanelOpen) return {}
-    if (!chatColumnVisible) return { pointerEvents: 'none' }
+    if (!chatColumnVisible) {
+      if (sidebarInline) {
+        return { right: `calc(100% - ${SIDEBAR_INLINE_WIDTH}px)` }
+      }
+      return {
+        width: 0,
+        overflow: 'hidden',
+        pointerEvents: 'none',
+        WebkitAppRegion: 'no-drag',
+      }
+    }
     if (rightPanelWidth > 0) return { right: `${rightPanelWidth}px` }
     return {}
   })()

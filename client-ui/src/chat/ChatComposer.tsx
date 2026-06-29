@@ -2,10 +2,9 @@ import { useRef, useEffect, useCallback } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
-import SkillPicker from './SkillPicker'
 import ComposerContextRefTag from './ComposerContextRefTag'
 import InnoButton from '../components/inno/InnoButton'
-import type { AvailableModel, SessionContextRef, SkillCategory } from '../types/chat'
+import type { AvailableModel, SessionContextRef } from '../types/chat'
 import { innoTokens } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
 
@@ -210,14 +209,12 @@ interface ChatComposerProps {
   isMobile?: boolean
   contextRef?: SessionContextRef | null
   starters: string[]
-  skillCategories: SkillCategory[]
   availableModels: AvailableModel[]
   sessionModel?: string
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
   onModelChange?: (ref: string) => void
   onClearContextRef?: () => void
-  onPickSkill: (prompt: string) => void
 }
 
 export default function ChatComposer({
@@ -228,14 +225,12 @@ export default function ChatComposer({
   isMobile = false,
   contextRef = null,
   starters,
-  skillCategories,
   availableModels,
   sessionModel,
   onInputChange,
   onSubmit,
   onModelChange,
   onClearContextRef,
-  onPickSkill,
 }: ChatComposerProps) {
   const s = useStyles()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -311,16 +306,7 @@ export default function ChatComposer({
             />
           </div>
           <div className={s.toolbar}>
-            <div className={s.toolbarLeft}>
-              <div className={s.skillBtnSlot}>
-                <SkillPicker
-                  categories={skillCategories}
-                  disabled={loading}
-                  isMobile={isMobile}
-                  onPickPrompt={onPickSkill}
-                />
-              </div>
-            </div>
+            <div className={s.toolbarLeft} />
             <div className={s.toolbarRight}>
               {onModelChange && (
                 <ModelSelector

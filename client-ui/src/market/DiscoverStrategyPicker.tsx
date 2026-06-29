@@ -3,7 +3,7 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import type { DiscoverStrategyOption, DiscoverStrategySource } from '../types/schemas'
 import { innoTokens } from '../theme/tokens'
-import { ghostInteractive, glassDropdown, motion } from '../theme/mixins'
+import { ghostInteractive, glassDropdown, motion, focusVisibleRing } from '../theme/mixins'
 
 const SOURCE_LABEL: Record<DiscoverStrategySource, string> = {
   builtin: '内置',
@@ -27,17 +27,17 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     textAlign: 'left',
     boxSizing: 'border-box',
-    ...ghostInteractive,
     transitionProperty: 'border-color, background-color',
     transitionDuration: motion.fast,
+    ...focusVisibleRing,
     ':hover': {
+      backgroundColor: innoTokens.surfaceHover,
       borderColor: innoTokens.separatorStrong,
-      backgroundColor: innoTokens.accentSoft,
     },
   },
   triggerOpen: {
-    borderColor: innoTokens.accent,
-    backgroundColor: innoTokens.accentSoft,
+    backgroundColor: innoTokens.canvas,
+    borderColor: innoTokens.borderStrong,
   },
   triggerMain: {
     flex: 1,
@@ -122,6 +122,9 @@ const useStyles = makeStyles({
     ':hover': {
       backgroundColor: innoTokens.accentSoft,
     },
+    ':focus-visible': {
+      backgroundColor: innoTokens.accentSoft,
+    },
   },
   menuItemActive: {
     backgroundColor: innoTokens.accentSoft,
@@ -190,7 +193,7 @@ export default function DiscoverStrategyPicker({
   selectedId,
   onSelect,
   disabled = false,
-  placeholder = '选择策略',
+  placeholder = '请选择策略',
 }: Props) {
   const s = useStyles()
   const [open, setOpen] = useState(false)

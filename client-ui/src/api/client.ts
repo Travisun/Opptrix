@@ -1,5 +1,5 @@
 import type { ApiResponse } from '../types/schemas'
-import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, SkillCategory, AvailableModel } from '../types/chat'
+import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -144,20 +144,31 @@ export const research = {
   strategyReport: (code: string) =>
     apiCall<ReportTextData>('strategy_report', { code }),
 
-  writerPrompt: (code: string, type = 'value', persona?: string) =>
-    apiCall<import('../types/schemas').WriterPromptData>('writer_prompt', { code, type, persona }),
-
-  writerFormat: (markdown: string, theme?: string) =>
-    apiCall<import('../types/schemas').WriterFormatData>('writer_format', { markdown, theme }),
-
-  writerPublish: (payload: Record<string, unknown>) =>
-    apiCall<import('../types/schemas').WriterPublishData>('writer_publish', payload),
-
   portfolioTrades: (code = '') =>
     apiCall<import('../types/schemas').PortfolioLedgerData>('portfolio_trades', { code }),
 
   portfolioSummary: () =>
     apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
+}
+
+export async function fetchWatchlist() {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: { items: import('../types/market').WatchlistItem[]; count: number }
+  }>('/watchlist')
+  return resp.data ?? { items: [], count: 0 }
+}
+
+export async function saveWatchlist(items: import('../types/market').WatchlistItem[]) {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: { items: import('../types/market').WatchlistItem[]; count: number }
+  }>('/watchlist', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ items }),
+  })
+  return resp.data ?? { items, count: items.length }
 }
 
 export async function getMarketDataSyncState() {
@@ -226,7 +237,11 @@ export async function getDiscoverJob(jobId: string) {
 }
 
 export async function cancelDiscoverJob(jobId: string) {
-  return jsonFetch<{ cancelled: boolean }>(`/discover/jobs/${jobId}`, { method: 'DELETE' })
+  return jsonFetch<{ cancelled: boolean }>(`/discover/jobs/${jobId}/cancel`, { method: 'POST' })
+}
+
+export async function deleteDiscoverJob(jobId: string) {
+  return jsonFetch<{ deleted: boolean }>(`/discover/jobs/${jobId}`, { method: 'DELETE' })
 }
 
 export interface StockPrepStep {
@@ -287,18 +302,6 @@ export async function testTushareConfig(token?: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(token ? { token } : {}),
   })
-}
-
-export async function writerTypes() {
-  const resp = await fetchWithTimeout(`${API_BASE}/writer/types`)
-  if (!resp.ok) throw new Error('writer types failed')
-  return resp.json() as Promise<{ types: { type: string; name: string }[] }>
-}
-
-export async function writerPersonas() {
-  const resp = await fetchWithTimeout(`${API_BASE}/writer/personas`)
-  if (!resp.ok) throw new Error('writer personas failed')
-  return resp.json() as Promise<{ personas: string[] }>
 }
 
 export async function portfolioTrade(payload: {
@@ -510,7 +513,11 @@ export async function ephemeralAsk(
   })
 }
 
-export async function sendSessionChat(sessionId: string, message: string, model?: string) {
+export async function sendSessionChat(
+  sessionId: string,
+  message: string,
+  model?: string,
+) {
   return jsonFetch<{
     reply: string
     tools_used?: string[]
@@ -519,10 +526,9 @@ export async function sendSessionChat(sessionId: string, message: string, model?
   }>(`/sessions/${sessionId}/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ message, ...(model ? { model } : {}) }),
+    body: JSON.stringify({
+      message,
+      ...(model ? { model } : {}),
+    }),
   })
-}
-
-export async function listSkills() {
-  return jsonFetch<{ categories: SkillCategory[] }>('/agent/skills')
 }

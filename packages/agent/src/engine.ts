@@ -1,8 +1,10 @@
 import type { ResearchHub } from '@inno-a-stock/research-hub'
+import type { AgentAppContext } from './app-context.js'
 import { type ChatMessage } from './llm/provider.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
+import { McpToolBroker } from './mcp/broker.js'
 import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
 
 export interface AgentSettings {
@@ -10,6 +12,7 @@ export interface AgentSettings {
   defaultModel?: string
   defaultScorecard: string
   defaultTopN: number
+  appContext?: AgentAppContext
   /** @deprecated single llm */
   llm?: import('./llm/provider.js').LlmConfig
 }
@@ -21,13 +24,6 @@ export interface ChatResult {
   title?: string
 }
 
-export interface SkillInfo {
-  name: string
-  description: string
-  category: string
-  examplePrompt: string
-}
-
 const MAX_TOOL_ROUNDS = 8
 const TRUNCATE = 12_000
 
@@ -37,13 +33,14 @@ export class AgentEngine {
   readonly sessions = new SessionStore()
   private registry = new ProviderRegistry()
   private settings: AgentSettings
+  private mcpBrokerPromise: Promise<McpToolBroker> | null = null
 
   constructor(
     private hub: ResearchHub,
     settings: AgentSettings,
   ) {
     this.settings = settings
-    this.tools = new ToolRegistry(hub)
+    this.tools = new ToolRegistry(hub, settings.appContext)
     this.discover = new DiscoverRunner(hub, this.registry, this.tools)
     if (settings.providers?.length) {
       this.registry.setProviders(settings.providers, settings.defaultModel)
@@ -51,6 +48,14 @@ export class AgentEngine {
   }
 
   get llmConfigured() { return this.registry.configured }
+
+  /** 投研 MCP 工具经进程内 broker 暴露 */
+  private mcpBroker() {
+    if (!this.mcpBrokerPromise) {
+      this.mcpBrokerPromise = McpToolBroker.create(this.tools, null)
+    }
+    return this.mcpBrokerPromise
+  }
 
   setProviders(providers: ProviderProfile[], defaultModel?: string) {
     this.registry.setProviders(providers, defaultModel)
@@ -68,21 +73,6 @@ export class AgentEngine {
     record.model = modelRef?.trim() || undefined
     this.sessions.save(record)
     return record
-  }
-
-  listSkills(): { category: string; skills: SkillInfo[] }[] {
-    const byCat = new Map<string, SkillInfo[]>()
-    for (const t of this.tools.list()) {
-      const list = byCat.get(t.category) ?? []
-      list.push({
-        name: t.name,
-        description: t.description,
-        category: t.category,
-        examplePrompt: examplePromptFor(t.name, t.description),
-      })
-      byCat.set(t.category, list)
-    }
-    return [...byCat.entries()].map(([category, skills]) => ({ category, skills }))
   }
 
   createSession(title?: string) {
@@ -207,17 +197,7 @@ export class AgentEngine {
     this.sessions.save(record)
 
     const pushAssistant = (reply: string, used: string[]) => {
-      if (this.sessions.shouldMaterializeContext(record!)) {
-        this.sessions.materializeContextRef(record!)
-      }
-      record!.messages.push({ role: 'assistant', content: reply })
-      record!.turns!.push({
-        role: 'assistant',
-        content: reply,
-        toolsUsed: used.length ? used : undefined,
-        at: new Date().toISOString(),
-      })
-      this.sessions.save(record!)
+      this.pushAssistant(record!, reply, used)
     }
 
     if (!llm) {
@@ -227,7 +207,8 @@ export class AgentEngine {
     }
 
     const toolsUsed: string[] = []
-    const openAiTools = this.tools.openAiTools()
+    const broker = await this.mcpBroker()
+    const openAiTools = await broker.openAiTools()
     const systemPrompt = this.tools.systemPrompt()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
@@ -262,7 +243,7 @@ export class AgentEngine {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
 
-          const result = await this.tools.call(fn, args)
+          const result = await broker.call(fn, args)
           record.messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -283,6 +264,21 @@ export class AgentEngine {
     pushAssistant(reply, toolsUsed)
     return { reply, toolsUsed, sessionId, title: record.title }
   }
+
+  private pushAssistant(record: SessionRecord, reply: string, toolsUsed: string[]) {
+    if (this.sessions.shouldMaterializeContext(record)) {
+      this.sessions.materializeContextRef(record)
+    }
+    record.messages.push({ role: 'assistant', content: reply })
+    if (!record.turns) record.turns = []
+    record.turns.push({
+      role: 'assistant',
+      content: reply,
+      toolsUsed: toolsUsed.length ? toolsUsed : undefined,
+      at: new Date().toISOString(),
+    })
+    this.sessions.save(record)
+  }
 }
 
 function truncateJson(value: unknown): string {
@@ -302,39 +298,4 @@ function contextRefToChatMessages(ref: SessionContextRef | null | undefined): Ch
   return ref.turns
     .filter(t => t.role === 'assistant' && t.content)
     .map(t => ({ role: 'assistant', content: t.content }))
-}
-
-function examplePromptFor(name: string, desc: string): string {
-  const map: Record<string, string> = {
-    evaluate_stock: '帮我全面诊断贵州茅台(600519)的因子评分',
-    screen_stocks: '筛选 ROE>15 且负债率<50 的股票，取前20',
-    get_market_db_status: '本地初选库是否就绪？覆盖多少只股票？',
-    get_market_db_sync_state: '本地数据同步进度如何？',
-    list_local_screen_factors: '本地初选库支持哪些筛选因子？',
-    local_screen_stocks: '本地初选：PE<25 且 ROE>12，取前60只候选',
-    get_industry_stats: '各行业平均估值与评分分布',
-    batch_stock_snapshots: '批量查看候选股的本地截面数据',
-    get_stock_quotes: '批量查 600519、000858 的实时行情',
-    get_watchlist_radar: '这几只候选股的雷达摘要',
-    get_stock_kline: '600519 最近90根日K',
-    get_stock_cyq: '600519 筹码分布',
-    get_stock_chart: '600519 日K图表数据',
-    get_stock_detail: '600519 个股详情聚合',
-    analyze_portfolio: '分析我的组合：600519占50%，000858占50%',
-    search_stocks: '搜索比亚迪相关股票',
-    get_strategy_signal: '600519 的策略信号怎么看？',
-    institution_rating: '600519 的机构群评共识是什么？',
-    get_closing_report: '生成今日 A 股收盘市场报告',
-    get_morning_brief: '生成今日开盘早报',
-    run_backtest: '对600519、000858做因子IC回测',
-    strategy_verify: '验证600519策略历史信号胜率',
-    strategy_report: '出一份600519的策略综合分析报告',
-    institution_report: '600519 机构评级详细报告',
-    industry_mining: '半导体产业链有哪些代表公司？',
-    industry_mermaid: '生成半导体产业链 Mermaid 导图',
-    portfolio_summary: '我的交易账本盈亏汇总',
-    portfolio_trades: '查看最近交易记录',
-    writer_prepare: '为600519准备一篇价值投资风格投研文章 Prompt',
-  }
-  return map[name] ?? `请使用「${desc}」`
 }

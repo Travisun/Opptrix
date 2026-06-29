@@ -13,7 +13,7 @@
     "dev:web": "npm run dev -w inno-a-stock-client",
     "build": "npm run build:packages && npm run build -w inno-a-stock-client",
     "build:desktop": "npm run build -w @inno-a-stock/desktop",
-    "build:packages": "npm run build -w @inno-a-stock/shared -w @inno-a-stock/a-stock-layer -w @inno-a-stock/stock-eval -w @inno-a-stock/market-data -w @inno-a-stock/institutions -w @inno-a-stock/t-strategy -w @inno-a-stock/skills -w @inno-a-stock/stock-writer -w @inno-a-stock/research-hub -w @inno-a-stock/agent -w @inno-a-stock/server",
+    "build:packages": "npm run build -w @inno-a-stock/shared -w @inno-a-stock/a-stock-layer -w @inno-a-stock/stock-eval -w @inno-a-stock/market-data -w @inno-a-stock/institutions -w @inno-a-stock/t-strategy -w @inno-a-stock/skills -w @inno-a-stock/research-hub -w @inno-a-stock/agent -w @inno-a-stock/server",
     "start": "npm run start -w @inno-a-stock/server",
     "serve": "concurrently -k -n api,web -c blue,cyan \"npm run start\" \"npm run preview -w inno-a-stock-client -- --host 0.0.0.0\"",
     "clean": "find packages apps -name dist -type d -prune -exec rm -rf {} + 2>/dev/null; rm -rf client-ui/dist",

@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
+import { fetchWatchlist, saveWatchlist } from '../api/client'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from './format'
 
@@ -45,9 +46,38 @@ function readStorage(): WatchlistItem[] {
 
 export function useWatchlist() {
   const [items, setItems] = useState<WatchlistItem[]>(readStorage)
+  const hydrated = useRef(false)
+  const skipNextSync = useRef(false)
+
+  useEffect(() => {
+    let cancelled = false
+    void (async () => {
+      try {
+        const remote = await fetchWatchlist()
+        if (cancelled) return
+        if (remote.items.length > 0) {
+          skipNextSync.current = true
+          setItems(remote.items.map(normalizeItem))
+        } else {
+          const local = readStorage()
+          if (local.length) await saveWatchlist(local)
+        }
+      } catch { /* offline: keep local */ }
+      finally {
+        if (!cancelled) hydrated.current = true
+      }
+    })()
+    return () => { cancelled = true }
+  }, [])
 
   useEffect(() => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
+    if (!hydrated.current) return
+    if (skipNextSync.current) {
+      skipNextSync.current = false
+      return
+    }
+    void saveWatchlist(items).catch(() => {})
   }, [items])
 
   const addItem = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
