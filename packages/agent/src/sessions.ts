@@ -3,6 +3,9 @@ import path from 'node:path'
 import os from 'node:os'
 import { randomUUID } from 'node:crypto'
 import type { ChatMessage } from './llm/provider.js'
+import type { ChatToolStep } from './chat-progress.js'
+
+export type { ChatToolStep }
 
 const SESSIONS_DIR = path.join(os.homedir(), '.a_stock_layer', 'sessions')
 
@@ -19,6 +22,7 @@ export interface DisplayMessage {
   role: 'user' | 'assistant'
   content: string
   toolsUsed?: string[]
+  toolSteps?: ChatToolStep[]
   at: string
 }
 
@@ -47,7 +51,7 @@ export type SessionContextRef = SessionForkContextRef | SessionSelectionContextR
 export interface SessionRecord extends SessionMeta {
   messages: ChatMessage[]
   /** UI-visible turns (user/assistant only) */
-  turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; at: string }[]
+  turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; toolSteps?: ChatToolStep[]; at: string }[]
   contextRef?: SessionContextRef | null
 }
 
@@ -170,6 +174,7 @@ export class SessionStore {
         role: t.role,
         content: t.content,
         toolsUsed: t.toolsUsed,
+        toolSteps: t.toolSteps,
         at: t.at,
       }))
     }

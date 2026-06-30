@@ -1,4 +1,4 @@
-import { AshareEngine, computeIndicators, normalizeCode, resolveMarket, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode } from '@inno-a-stock/a-stock-layer'
+import { AshareEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote, resolveMarket, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode } from '@inno-a-stock/a-stock-layer'
 import type { StockListItem } from '@inno-a-stock/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
@@ -610,30 +610,31 @@ export class ResearchHub {
     code: string,
     quoteRaw: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0] | null,
   ) {
-    const local = isBseCode(code) ? this.marketData.localLatestQuote(code) : null
-    const livePrice = quoteRaw?.price
-    const needsLocal = isBseCode(code) && (livePrice == null || livePrice <= 0) && local?.close != null
+    const normalizedCode = normalizeCode(code)
+    const normalized = quoteRaw ? normalizePreOpenRealtimeQuote(quoteRaw) : null
+    const local = this.marketData.localLatestQuote(normalizedCode)
+    const needsLocal = isMissingLivePrice(normalized?.price) && local?.close != null && local.close > 0
 
-    if (!quoteRaw && !needsLocal) return null
-    if (!needsLocal) return quoteRaw ? this.enrichQuote(quoteRaw) : null
+    if (!normalized && !needsLocal) return null
+    if (!needsLocal) return normalized ? this.enrichQuote(normalized) : null
 
     const merged = {
-      code: normalizeCode(code),
-      name: quoteRaw?.name ?? local?.name ?? code,
+      code: normalizedCode,
+      name: normalized?.name ?? local?.name ?? code,
       price: local!.close!,
-      changePct: quoteRaw?.changePct ?? local?.change_pct ?? null,
-      pe: quoteRaw?.pe ?? local?.pe ?? null,
-      pb: quoteRaw?.pb ?? local?.pb ?? null,
-      turnoverRate: quoteRaw?.turnoverRate ?? null,
-      preClose: quoteRaw?.preClose ?? null,
-      open: quoteRaw?.open ?? null,
-      high: quoteRaw?.high ?? null,
-      low: quoteRaw?.low ?? null,
-      volume: quoteRaw?.volume ?? null,
-      amount: quoteRaw?.amount ?? null,
-      marketCap: quoteRaw?.marketCap ?? local?.market_cap ?? null,
-      change: quoteRaw?.change ?? null,
-      amplitude: quoteRaw?.amplitude ?? null,
+      changePct: normalized?.changePct ?? local?.change_pct ?? 0,
+      pe: normalized?.pe ?? local?.pe ?? null,
+      pb: normalized?.pb ?? local?.pb ?? null,
+      turnoverRate: normalized?.turnoverRate ?? null,
+      preClose: normalized?.preClose ?? local?.close ?? null,
+      open: normalized?.open ?? null,
+      high: normalized?.high ?? null,
+      low: normalized?.low ?? null,
+      volume: normalized?.volume ?? null,
+      amount: normalized?.amount ?? null,
+      marketCap: normalized?.marketCap ?? local?.market_cap ?? null,
+      change: normalized?.change ?? 0,
+      amplitude: normalized?.amplitude ?? null,
     }
     return this.enrichQuote(merged)
   }
@@ -822,18 +823,19 @@ export class ResearchHub {
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
     const quoteR = await this.de.realtime(code)
     let quote = quoteR.data?.[0] ?? null
-    if (isBseCode(normalized) && (quote?.price == null || quote.price <= 0)) {
+    if (quote) quote = normalizePreOpenRealtimeQuote(quote)
+    if (isMissingLivePrice(quote?.price)) {
       const local = this.marketData.localLatestQuote(normalized)
-      if (local?.close != null) {
+      if (local?.close != null && local.close > 0) {
         quote = {
           code: normalized,
           name: quote?.name ?? local.name ?? normalized,
           price: local.close,
-          changePct: quote?.changePct ?? local.change_pct ?? null,
+          changePct: quote?.changePct ?? local.change_pct ?? 0,
           pe: quote?.pe ?? local.pe ?? null,
           pb: quote?.pb ?? local.pb ?? null,
           turnoverRate: quote?.turnoverRate ?? null,
-          preClose: quote?.preClose ?? null,
+          preClose: quote?.preClose ?? local.close ?? null,
         }
       }
     }

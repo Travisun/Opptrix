@@ -61,6 +61,9 @@ const useStyles = makeStyles({
   },
   panelWrap: {
     position: 'relative',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
     width: '100%',
     boxSizing: 'border-box',
     marginBottom: `calc(-1 * ${innoTokens.chatComposerGroundExtend})`,
@@ -135,6 +138,7 @@ const useStyles = makeStyles({
     fontFamily: 'inherit',
     color: innoTokens.textPrimary,
     padding: 0,
+    margin: 0,
     '::placeholder': {
       color: innoTokens.textTertiary,
     },
@@ -198,6 +202,20 @@ const useStyles = makeStyles({
       from: { opacity: 0 },
       to: { opacity: 1 },
     },
+  },
+  disclaimer: {
+    position: 'relative',
+    zIndex: 1,
+    display: 'block',
+    flexShrink: 0,
+    textAlign: 'center',
+    fontSize: '12px',
+    lineHeight: 1.45,
+    color: innoTokens.textSecondary,
+    width: '100%',
+    margin: 0,
+    padding: '9px 0 0',
+    userSelect: 'none',
   },
 })
 
@@ -329,6 +347,9 @@ export default function ChatComposer({
             </div>
           </div>
         </div>
+        <span className={s.disclaimer}>
+          内容由AI生成，不构成投资建议，请核实重要信息
+        </span>
       </div>
     </div>
   )

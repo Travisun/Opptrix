@@ -6,6 +6,14 @@ import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './l
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
+import {
+  type ChatProgressEvent,
+  type ChatProgressOptions,
+  type ChatToolStep,
+  enrichStepFromResult,
+  formatArgsPreview,
+  formatToolLabel,
+} from './chat-progress.js'
 import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
 
 export interface AgentSettings {
@@ -173,7 +181,12 @@ export class AgentEngine {
     return { reply: turn.message.content?.trim() || '（无回复内容）' }
   }
 
-  async chat(sessionId: string, message: string, modelRef?: string): Promise<ChatResult> {
+  async chat(
+    sessionId: string,
+    message: string,
+    modelRef?: string,
+    progress?: ChatProgressOptions,
+  ): Promise<ChatResult> {
     const text = message.trim()
     let record = this.sessions.get(sessionId)
     if (!record) {
@@ -197,17 +210,30 @@ export class AgentEngine {
     }
     this.sessions.save(record)
 
-    const pushAssistant = (reply: string, used: string[]) => {
-      this.pushAssistant(record!, reply, used)
+    const emit = (event: ChatProgressEvent) => {
+      progress?.onProgress?.(event)
+    }
+
+    const pushAssistant = (reply: string, used: string[], steps: ChatToolStep[]) => {
+      this.pushAssistant(record!, reply, used, steps)
     }
 
     if (!llm) {
       const reply = '⚠️ LLM 未配置。请在设置中添加模型提供商并启用模型。'
-      pushAssistant(reply, [])
+      pushAssistant(reply, [], [])
+      emit({
+        type: 'done',
+        reply,
+        tools_used: [],
+        session_id: sessionId,
+        title: record.title,
+        tool_steps: [],
+      })
       return { reply, toolsUsed: [], sessionId, title: record.title }
     }
 
     const toolsUsed: string[] = []
+    const toolSteps: ChatToolStep[] = []
     const broker = await this.mcpBroker()
     const openAiTools = await broker.openAiTools()
     const systemPrompt = this.tools.systemPrompt()
@@ -220,15 +246,43 @@ export class AgentEngine {
         ...tailMessagesForLlm(record.messages),
       ]
 
+      emit({
+        type: 'thinking',
+        round: round + 1,
+        label: round === 0 ? '模型正在思考…' : '模型正在整理结果…',
+      })
+
       const turn = await llm.chat(messages, openAiTools)
 
       if (turn.finishReason === 'error') {
         const reply = turn.message.content ?? turn.error ?? '请求失败'
-        pushAssistant(reply, toolsUsed)
+        pushAssistant(reply, toolsUsed, toolSteps)
+        emit({
+          type: 'error',
+          message: reply,
+        })
+        emit({
+          type: 'done',
+          reply,
+          tools_used: toolsUsed,
+          session_id: sessionId,
+          title: record.title,
+          tool_steps: toolSteps,
+        })
         return { reply, toolsUsed, sessionId, title: record.title }
       }
 
       if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
+        const thinkingSnippet = turn.message.content?.trim()
+        if (thinkingSnippet) {
+          emit({
+            type: 'thinking',
+            round: round + 1,
+            label: '模型分析思路',
+            snippet: thinkingSnippet,
+          })
+        }
+
         record.messages.push({
           role: 'assistant',
           content: turn.message.content ?? null,
@@ -244,12 +298,29 @@ export class AgentEngine {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
 
+          const runningStep: ChatToolStep = {
+            id: tc.id,
+            tool: fn,
+            label: formatToolLabel(fn, args),
+            status: 'running',
+            argsPreview: formatArgsPreview(args),
+            thinking: thinkingSnippet || undefined,
+            startedAt: new Date().toISOString(),
+          }
+          toolSteps.push(runningStep)
+          emit({ type: 'tool_start', step: runningStep })
+
           let result: unknown
           try {
             result = await broker.call(fn, args)
           } catch (e) {
             result = { error: e instanceof Error ? e.message : String(e) }
           }
+
+          const doneStep = enrichStepFromResult(runningStep, result)
+          toolSteps[toolSteps.length - 1] = doneStep
+          emit({ type: 'tool_done', step: doneStep })
+
           record.messages.push({
             role: 'tool',
             tool_call_id: tc.id,
@@ -262,16 +333,38 @@ export class AgentEngine {
       }
 
       const reply = turn.message.content?.trim() || '（无回复内容）'
-      pushAssistant(reply, toolsUsed)
+      emit({ type: 'reply', content: reply })
+      pushAssistant(reply, toolsUsed, toolSteps)
+      emit({
+        type: 'done',
+        reply,
+        tools_used: toolsUsed,
+        session_id: sessionId,
+        title: record.title,
+        tool_steps: toolSteps,
+      })
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
     const reply = '⚠️ 工具调用轮次过多，请简化问题后重试。'
-    pushAssistant(reply, toolsUsed)
+    pushAssistant(reply, toolsUsed, toolSteps)
+    emit({
+      type: 'done',
+      reply,
+      tools_used: toolsUsed,
+      session_id: sessionId,
+      title: record.title,
+      tool_steps: toolSteps,
+    })
     return { reply, toolsUsed, sessionId, title: record.title }
   }
 
-  private pushAssistant(record: SessionRecord, reply: string, toolsUsed: string[]) {
+  private pushAssistant(
+    record: SessionRecord,
+    reply: string,
+    toolsUsed: string[],
+    toolSteps: ChatToolStep[] = [],
+  ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
     }
@@ -281,6 +374,7 @@ export class AgentEngine {
       role: 'assistant',
       content: reply,
       toolsUsed: toolsUsed.length ? toolsUsed : undefined,
+      toolSteps: toolSteps.length ? toolSteps : undefined,
       at: new Date().toISOString(),
     })
     this.sessions.save(record)

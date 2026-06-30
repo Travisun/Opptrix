@@ -9,12 +9,13 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  sendSessionChat, getHealth, listAvailableModels, setSessionModel,
+  streamSessionChat, getHealth, listAvailableModels, setSessionModel,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
   SessionMeta, AvailableModel,
 } from '../types/chat'
+import type { ChatLiveTrace } from '../types/chatProgress'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { innoTokens } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
@@ -190,6 +191,7 @@ export default function ChatApp() {
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
+  const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
@@ -341,6 +343,7 @@ export default function ChatApp() {
 
     setInput('')
     setLoading(true)
+    setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
     setError('')
 
     const optimistic: ChatDisplayMessage = {
@@ -350,11 +353,52 @@ export default function ChatApp() {
     }
     setMessages(prev => [...prev, optimistic])
 
+    let resolvedSessionId = sessionId
+
     try {
-      const result = await sendSessionChat(sessionId, msg, sessionModel)
-      const sid = result.session_id && result.session_id !== sessionId ? result.session_id : sessionId
-      if (result.session_id && result.session_id !== sessionId) {
-        setActiveId(result.session_id)
+      await streamSessionChat(sessionId, msg, (event) => {
+        if (event.type === 'thinking') {
+          setLiveTrace(prev => ({
+            steps: prev?.steps ?? [],
+            thinkingLabel: event.label,
+            thinkingSnippet: event.snippet ?? prev?.thinkingSnippet,
+          }))
+          return
+        }
+        if (event.type === 'tool_start') {
+          setLiveTrace(prev => ({
+            thinkingLabel: prev?.thinkingLabel,
+            thinkingSnippet: prev?.thinkingSnippet,
+            steps: [...(prev?.steps ?? []), event.step],
+          }))
+          return
+        }
+        if (event.type === 'tool_done') {
+          setLiveTrace(prev => ({
+            thinkingLabel: prev?.thinkingLabel ?? '模型正在整理结果…',
+            thinkingSnippet: prev?.thinkingSnippet,
+            steps: (prev?.steps ?? []).map(step =>
+              step.id === event.step.id ? event.step : step,
+            ),
+          }))
+          return
+        }
+        if (event.type === 'reply') {
+          setLiveTrace(prev => ({
+            steps: prev?.steps ?? [],
+            thinkingLabel: '正在生成回复…',
+            thinkingSnippet: prev?.thinkingSnippet,
+          }))
+          return
+        }
+        if (event.type === 'done') {
+          resolvedSessionId = event.session_id || resolvedSessionId
+        }
+      }, sessionModel)
+
+      const sid = resolvedSessionId
+      if (sid !== sessionId) {
+        setActiveId(sid)
       }
       const fresh = await getSession(sid)
       setMessages(fresh.messages)
@@ -373,6 +417,7 @@ export default function ChatApp() {
         setMessages(prev => prev.slice(0, -1))
       }
     } finally {
+      setLiveTrace(null)
       setLoading(false)
     }
   }
@@ -609,6 +654,7 @@ export default function ChatApp() {
                     contextRef={contextRef}
                     input={input}
                     loading={loading}
+                    liveTrace={liveTrace}
                     error={error}
                     availableModels={availableModels}
                     sessionModel={sessionModel}

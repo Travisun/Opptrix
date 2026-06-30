@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto'
 import Fastify from 'fastify'
-import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type SessionContextRef } from '@inno-a-stock/agent'
+import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@inno-a-stock/agent'
 import { ResearchHub } from '@inno-a-stock/research-hub'
 import { listTemplates, REGISTRY } from '@inno-a-stock/stock-eval'
 import {
@@ -450,6 +450,46 @@ app.post<{ Params: { id: string }; Body: { message: string; selected_text: strin
       req.body.history,
     )
     return { reply: result.reply }
+  },
+)
+
+app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
+  '/api/sessions/:id/chat/stream',
+  async (req, reply) => {
+    if (!req.body?.message?.trim()) return reply.code(400).send({ error: 'message required' })
+
+    reply.hijack()
+    reply.raw.writeHead(200, {
+      'Content-Type': 'text/event-stream; charset=utf-8',
+      'Cache-Control': 'no-cache, no-transform',
+      Connection: 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    })
+
+    const write = (event: ChatProgressEvent) => {
+      reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
+    }
+
+    try {
+      await agent.chat(
+        req.params.id,
+        req.body.message,
+        req.body.model,
+        { onProgress: write },
+      )
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      write({ type: 'error', message })
+      write({
+        type: 'done',
+        reply: message,
+        tools_used: [],
+        session_id: req.params.id,
+        tool_steps: [],
+      })
+    } finally {
+      reply.raw.end()
+    }
   },
 )
 

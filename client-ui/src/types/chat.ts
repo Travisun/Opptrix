@@ -1,3 +1,5 @@
+import type { ChatToolStep } from './chatProgress'
+
 export interface SessionMeta {
   id: string
   title: string
@@ -18,6 +20,7 @@ export interface ChatDisplayMessage {
   role: 'user' | 'assistant'
   content: string
   toolsUsed?: string[]
+  toolSteps?: ChatToolStep[]
   at: string
 }
 

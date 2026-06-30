@@ -86,9 +86,9 @@ export const innoTokens = {
   chatComposerBottomInsetPx: 25,
   /** Parent ground extends below panel toward window bottom (negative margin pull) */
   chatComposerGroundExtend: '10px',
-  /** Scroll padding so last message clears the composer dock */
-  chatThreadScrollPadBottom: '183px',
-  chatThreadScrollPadBottomMobile: '167px',
+  /** Scroll padding so last message clears the composer dock (+ disclaimer row in panel) */
+  chatThreadScrollPadBottom: '212px',
+  chatThreadScrollPadBottomMobile: '196px',
   /** @deprecated use chatThreadPaddingX */
   chatThreadAlignInset: '3px',
 

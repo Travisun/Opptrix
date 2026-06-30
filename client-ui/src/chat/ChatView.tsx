@@ -1,15 +1,17 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import {
-  Text, Spinner, makeStyles, mergeClasses,
+  Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import { BotRegular } from '@fluentui/react-icons'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
   AvailableModel,
 } from '../types/chat'
+import type { ChatLiveTrace } from '../types/chatProgress'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
+import ChatProcessTrace from './ChatProcessTrace'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
 import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
 import { innoTokens } from '../theme/tokens'
@@ -181,12 +183,8 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
   },
   loadingRow: {
-    alignSelf: 'flex-start',
-    display: 'flex',
-    gap: '10px',
-    alignItems: 'center',
-    padding: '8px 0',
-    color: innoTokens.textSecondary,
+    alignSelf: 'stretch',
+    padding: '4px 0 8px',
     ...fadeInUp,
   },
 })
@@ -207,6 +205,7 @@ interface ChatViewProps {
   contextRef?: SessionContextRef | null
   input: string
   loading: boolean
+  liveTrace?: ChatLiveTrace | null
   error: string
   availableModels?: AvailableModel[]
   sessionModel?: string
@@ -236,7 +235,7 @@ interface ChatViewProps {
 }
 
 export default function ChatView({
-  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, error,
+  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, liveTrace = null, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -253,6 +252,7 @@ export default function ChatView({
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const bodyShellRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
+  const prevLoadingRef = useRef(false)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
   const [pinnedToolbar, setPinnedToolbar] = useState<{
     selection: MessageSelection
@@ -366,6 +366,18 @@ export default function ChatView({
     el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
 
+  const scrollMessageStartToCenter = useCallback((messageIndex: number) => {
+    const container = chatBoxRef.current
+    if (!container) return
+    const el = container.querySelector(`[data-message-index="${messageIndex}"]`)
+    if (!(el instanceof HTMLElement)) return
+    const containerRect = container.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const elTopInContainer = elRect.top - containerRect.top + container.scrollTop
+    const target = elTopInContainer - container.clientHeight / 2
+    container.scrollTo({ top: Math.max(0, target), behavior: 'smooth' })
+  }, [])
+
   const handleChatScroll = useCallback(() => {
     const el = chatBoxRef.current
     if (!el) return
@@ -374,9 +386,31 @@ export default function ChatView({
   }, [])
 
   useEffect(() => {
-    if (!stickToBottomRef.current) return
-    scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth')
-  }, [messages, loading, scrollToBottom])
+    if (loading || liveTrace) {
+      if (stickToBottomRef.current) {
+        scrollToBottom(messages.length <= 1 ? 'auto' : 'smooth')
+      }
+      prevLoadingRef.current = loading
+      return
+    }
+
+    if (prevLoadingRef.current) {
+      let idx = -1
+      for (let i = messages.length - 1; i >= 0; i -= 1) {
+        if (messages[i].role === 'assistant') {
+          idx = i
+          break
+        }
+      }
+      if (idx >= 0) {
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => scrollMessageStartToCenter(idx))
+        })
+      }
+    }
+
+    prevLoadingRef.current = loading
+  }, [messages, loading, liveTrace, scrollToBottom, scrollMessageStartToCenter])
 
   const handleSubmit = (text?: string) => {
     stickToBottomRef.current = true
@@ -484,10 +518,23 @@ export default function ChatView({
                 />
               ))}
 
-              {loading && (
+              {loading && liveTrace && (
+                <div className={s.loadingRow} data-message-role="assistant">
+                  <ChatProcessTrace
+                    steps={liveTrace.steps}
+                    thinkingLabel={liveTrace.thinkingLabel}
+                    thinkingSnippet={liveTrace.thinkingSnippet}
+                    live
+                  />
+                </div>
+              )}
+              {loading && !liveTrace && (
                 <div className={s.loadingRow}>
-                  <Spinner size="tiny" />
-                  <Text size={200}>正在分析…</Text>
+                  <ChatProcessTrace
+                    steps={[]}
+                    thinkingLabel="模型正在思考…"
+                    live
+                  />
                 </div>
               )}
             </div>

@@ -1,6 +1,7 @@
 export {
   AshareEngine, Capability, CACHE_TYPE, DriverRegistry, Cache,
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
+  normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice,
   EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
   GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,

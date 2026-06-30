@@ -4,6 +4,7 @@ import { McpToolBroker } from './mcp/broker.js'
 import type { ProviderRegistry } from './llm/providers.js'
 import type { ChatMessage } from './llm/provider.js'
 import { getDiscoverStrategy, buildStrategyExecutionPrompt } from './discover-strategies.js'
+import { DATA_LAYER_MINING_TOOL_NAMES } from './tool-meta.js'
 
 export type DiscoverPhase = 'parsing' | 'prescreen' | 'mining' | 'done' | 'error'
 
@@ -451,7 +452,7 @@ export class DiscoverRunner {
       },
     ]
 
-    const broker = await McpToolBroker.create(this.tools, null)
+    const broker = await McpToolBroker.create(this.tools, DATA_LAYER_MINING_TOOL_NAMES)
     const openAiTools = await broker.openAiTools()
 
     const MAX_ROUNDS = 6
@@ -477,7 +478,12 @@ export class DiscoverRunner {
           try {
             args = JSON.parse(tc.function.arguments || '{}') as Record<string, unknown>
           } catch { /* empty */ }
-          const result = await broker.call(tc.function.name, args)
+          let result: unknown
+          try {
+            result = await broker.call(tc.function.name, args, { signal })
+          } catch (e) {
+            result = { error: e instanceof Error ? e.message : String(e) }
+          }
           messages.push({
             role: 'tool',
             tool_call_id: tc.id,

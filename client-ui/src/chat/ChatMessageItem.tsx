@@ -7,6 +7,7 @@ import {
 } from '@fluentui/react-icons'
 import type { ChatDisplayMessage } from '../types/chat'
 import MarkdownMessage from './MarkdownMessage'
+import ChatProcessTrace from './ChatProcessTrace'
 import { innoTokens } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
@@ -237,7 +238,21 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
         {isUser
           ? message.content
           : <MarkdownMessage content={message.content} />}
-        {message.toolsUsed && message.toolsUsed.length > 0 && (
+        {message.toolSteps && message.toolSteps.length > 0 && (
+          <details style={{ marginTop: 12 }}>
+            <summary style={{
+              fontSize: 12,
+              color: innoTokens.textTertiary,
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+            >
+              {`执行过程（${message.toolSteps.length} 步）`}
+            </summary>
+            <ChatProcessTrace steps={message.toolSteps} />
+          </details>
+        )}
+        {!message.toolSteps?.length && message.toolsUsed && message.toolsUsed.length > 0 && (
           <div className={s.toolTags}>
             {message.toolsUsed.map(t => (
               <Badge key={t} size="small" className={s.toolBadge}>{t}</Badge>

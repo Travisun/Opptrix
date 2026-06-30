@@ -1,4 +1,5 @@
 import type { ApiResponse } from '../types/schemas'
+import type { ChatProgressEvent } from '../types/chatProgress'
 import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
@@ -545,4 +546,59 @@ export async function sendSessionChat(
       ...(model ? { model } : {}),
     }),
   }, CHAT_REQUEST_TIMEOUT)
+}
+
+export async function streamSessionChat(
+  sessionId: string,
+  message: string,
+  onEvent: (event: ChatProgressEvent) => void,
+  model?: string,
+  signal?: AbortSignal,
+): Promise<void> {
+  const resp = await fetchWithTimeout(`${API_BASE}/sessions/${sessionId}/chat/stream`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'text/event-stream',
+    },
+    body: JSON.stringify({
+      message,
+      ...(model ? { model } : {}),
+    }),
+    signal,
+  }, CHAT_REQUEST_TIMEOUT)
+
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `API error: ${resp.status}`)
+  }
+  if (!resp.body) throw new Error('流式响应不可用')
+
+  const reader = resp.body.getReader()
+  const decoder = new TextDecoder()
+  let buffer = ''
+
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    buffer += decoder.decode(value, { stream: true })
+    const chunks = buffer.split('\n\n')
+    buffer = chunks.pop() ?? ''
+    for (const chunk of chunks) {
+      const line = chunk.split('\n').find(row => row.startsWith('data: '))
+      if (!line) continue
+      try {
+        onEvent(JSON.parse(line.slice(6)) as ChatProgressEvent)
+      } catch {
+        /* ignore malformed chunk */
+      }
+    }
+  }
+
+  if (buffer.trim()) {
+    const line = buffer.split('\n').find(row => row.startsWith('data: '))
+    if (line) {
+      onEvent(JSON.parse(line.slice(6)) as ChatProgressEvent)
+    }
+  }
 }

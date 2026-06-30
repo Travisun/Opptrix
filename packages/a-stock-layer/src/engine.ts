@@ -17,6 +17,10 @@ import { WatchlistManager } from './watchlist/manager.js'
 import { tdxClient } from './tdx/client.js'
 import { isTushareEnabled } from './tushare/config.js'
 import { isBse920Code, normalizeCode } from './utils/helpers.js'
+import {
+  normalizePreOpenRealtimeQuote,
+  normalizePreOpenRealtimeQuotes,
+} from './utils/quote-normalize.js'
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
@@ -86,7 +90,10 @@ export class AshareEngine {
 
   // ── Core market data ──
   realtime(code: string): Promise<QueryResult<StockRealtime[]>> {
-    return this.q(Capability.STOCK_REALTIME, 'realtime', false, code)
+    return this.q<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', false, code).then(result => {
+      if (!result.success || !result.data?.length) return result
+      return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
+    })
   }
   batchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
     return this.fetchBatchRealtime(codes)
@@ -121,7 +128,7 @@ export class AshareEngine {
         const key = normalizeCode(row.code)
         if (seen.has(key)) continue
         seen.add(key)
-        results.push({ ...row, code: key })
+        results.push(normalizePreOpenRealtimeQuote({ ...row, code: key }))
       }
     }
 
@@ -511,5 +518,6 @@ export {
   GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
   registerAllDrivers,
 } from './drivers/register.js'
+export { normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice } from './utils/quote-normalize.js'
 export { computeIndicators } from './utils/indicators.js'
 export { computeChipDistribution, computeLatestChipProfile } from './utils/cyq.js'

@@ -1,5 +1,12 @@
 export { AgentEngine, type AgentSettings, type ChatResult } from './engine.js'
 export {
+  type ChatProgressEvent,
+  type ChatProgressOptions,
+  type ChatToolStep,
+  type ChatToolStepStatus,
+  formatToolLabel,
+} from './chat-progress.js'
+export {
   type AgentAppContext,
   type PublicAppSettings,
   createDefaultAppContext,
