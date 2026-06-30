@@ -1,10 +1,17 @@
-import { useRef, useEffect, useCallback } from 'react'
+import { useRef, useEffect, useCallback, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ComposerContextRefTag from './ComposerContextRefTag'
+import ComposerStockRefTag from './ComposerStockRefTag'
+import ComposerQuickTasks from './ComposerQuickTasks'
+import ComposerStockMentionList from './ComposerStockMentionList'
 import InnoButton from '../components/inno/InnoButton'
+import { useWatchlist } from '../market/useWatchlist'
+import { useStockMention } from './useStockMention'
 import type { AvailableModel, SessionContextRef } from '../types/chat'
+import type { WatchlistItem } from '../types/market'
+import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
 import { innoTokens } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
 
@@ -124,6 +131,15 @@ const useStyles = makeStyles({
     gap: '6px',
     width: '100%',
     minHeight: `${MIN_TEXT_HEIGHT}px`,
+    position: 'relative',
+  },
+  mentionAnchor: {
+    position: 'absolute',
+    left: 0,
+    bottom: '2px',
+    width: '24px',
+    height: '20px',
+    pointerEvents: 'none',
   },
   textarea: {
     flex: '1 1 120px',
@@ -252,26 +268,130 @@ export default function ChatComposer({
 }: ChatComposerProps) {
   const s = useStyles()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const mentionAnchorRef = useRef<HTMLSpanElement>(null)
+  const [stockRefs, setStockRefs] = useState<WatchlistItem[]>([])
+  const hasInlineRefs = Boolean(contextRef) || stockRefs.length > 0
+  const { items: watchlistItems } = useWatchlist()
+  const {
+    state: mentionState,
+    matches: mentionMatches,
+    syncFromInput: syncMentionFromInput,
+    close: closeMention,
+    moveActive: moveMentionActive,
+    selectActive: selectMentionActive,
+    applySelection: applyMentionSelection,
+    clampActiveIndex: clampMentionActiveIndex,
+    setMentionActiveIndex,
+  } = useStockMention(watchlistItems)
+
+  useEffect(() => {
+    clampMentionActiveIndex()
+  }, [clampMentionActiveIndex, mentionMatches.length])
 
   const syncHeight = useCallback(() => {
     const el = textareaRef.current
     if (!el) return
     el.style.height = 'auto'
-    const lineMin = contextRef ? ROW_PX * Math.max(ROWS - 1, 1) : MIN_TEXT_HEIGHT
+    const lineMin = hasInlineRefs ? ROW_PX * Math.max(ROWS - 1, 1) : MIN_TEXT_HEIGHT
     const next = Math.min(Math.max(el.scrollHeight, lineMin), MAX_TEXT_HEIGHT)
     el.style.height = `${next}px`
-  }, [contextRef])
+  }, [hasInlineRefs])
 
   useEffect(() => {
     syncHeight()
-  }, [input, contextRef, syncHeight])
+  }, [input, hasInlineRefs, syncHeight])
+
+  const handleInputChange = useCallback((value: string) => {
+    onInputChange(value)
+    const cursor = textareaRef.current?.selectionStart ?? value.length
+    syncMentionFromInput(value, cursor)
+  }, [onInputChange, syncMentionFromInput])
+
+  const handleApplyQuickTask = useCallback((text: string) => {
+    onInputChange(text)
+    closeMention()
+    textareaRef.current?.focus()
+  }, [closeMention, onInputChange])
+
+  const handleSelectMention = useCallback((item: WatchlistItem) => {
+    const el = textareaRef.current
+    if (!el) return
+    const cursor = el.selectionStart ?? input.length
+    const { nextText, nextCursor } = applyMentionSelection(input, cursor)
+    setStockRefs(prev => mergeStockRef(prev, item))
+    onInputChange(nextText)
+    window.requestAnimationFrame(() => {
+      el.focus()
+      el.setSelectionRange(nextCursor, nextCursor)
+    })
+  }, [applyMentionSelection, input, onInputChange])
+
+  const handleRemoveStockRef = useCallback((code: string) => {
+    setStockRefs(prev => prev.filter(r => stockRefKey(r) !== code))
+  }, [])
+
+  const handleSubmitMessage = useCallback((text?: string) => {
+    const explicit = text?.trim()
+    if (explicit) {
+      onSubmit(explicit)
+      setStockRefs([])
+      return
+    }
+    const composed = composeComposerMessage(input, stockRefs)
+    if (!composed.trim() || loading) return
+    onSubmit(composed)
+    setStockRefs([])
+  }, [input, loading, onSubmit, stockRefs])
+
+  const canSend = Boolean(input.trim() || stockRefs.length) && !loading
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (mentionState.open && mentionMatches.length) {
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        moveMentionActive(1)
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        moveMentionActive(-1)
+        return
+      }
+      if (e.key === 'Enter' || e.key === 'Tab') {
+        e.preventDefault()
+        const el = textareaRef.current
+        if (!el) return
+        const cursor = el.selectionStart ?? input.length
+        const result = selectMentionActive(input, cursor)
+        if (result) {
+          setStockRefs(prev => mergeStockRef(prev, result.item))
+          onInputChange(result.nextText)
+          window.requestAnimationFrame(() => {
+            el.focus()
+            el.setSelectionRange(result.nextCursor, result.nextCursor)
+          })
+        }
+        return
+      }
+    }
+
+    if (mentionState.open && e.key === 'Escape') {
+      e.preventDefault()
+      closeMention()
+      return
+    }
+
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault()
-      if (!loading && input.trim()) onSubmit()
+      if (canSend) handleSubmitMessage()
     }
   }
+
+  const handleTextareaSelect = useCallback(() => {
+    const el = textareaRef.current
+    if (!el) return
+    syncMentionFromInput(input, el.selectionStart ?? input.length)
+  }, [input, syncMentionFromInput])
 
   return (
     <div className={s.wrap}>
@@ -300,31 +420,46 @@ export default function ChatComposer({
         <div className={s.panelGround} aria-hidden />
         <div className={mergeClasses(s.panel, 'inno-composer-shell')}>
           <div className={s.inputRow}>
+            <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
             {contextRef && (
               <ComposerContextRefTag
                 contextRef={contextRef}
                 onClear={onClearContextRef}
               />
             )}
+            {stockRefs.map(item => (
+              <ComposerStockRefTag
+                key={stockRefKey(item)}
+                item={item}
+                onRemove={() => handleRemoveStockRef(stockRefKey(item))}
+              />
+            ))}
             <textarea
               ref={textareaRef}
               className={mergeClasses(
                 s.textarea,
-                contextRef ? s.textareaWithRef : s.textareaSolo,
-                !contextRef && s.textareaFull,
+                hasInlineRefs ? s.textareaWithRef : s.textareaSolo,
+                !hasInlineRefs && s.textareaFull,
                 isMobile && s.textareaMobile,
               )}
               value={input}
-              onChange={e => onInputChange(e.target.value)}
+              onChange={e => handleInputChange(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder={isMobile ? '输入投研问题…' : '输入投研问题，Enter 发送，Shift+Enter 换行…'}
+              onClick={handleTextareaSelect}
+              onKeyUp={handleTextareaSelect}
+              placeholder={isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…'}
               rows={ROWS}
               disabled={loading}
               enterKeyHint="send"
             />
           </div>
           <div className={s.toolbar}>
-            <div className={s.toolbarLeft} />
+            <div className={s.toolbarLeft}>
+              <ComposerQuickTasks
+                disabled={loading}
+                onApply={handleApplyQuickTask}
+              />
+            </div>
             <div className={s.toolbarRight}>
               {onModelChange && (
                 <ModelSelector
@@ -340,8 +475,8 @@ export default function ChatComposer({
                 className={s.sendBtn}
                 variant="primary"
                 icon={<ArrowUpRegular fontSize={14} />}
-                disabled={loading || !input.trim()}
-                onClick={() => onSubmit()}
+                disabled={!canSend}
+                onClick={() => handleSubmitMessage()}
                 aria-label="Send"
               />
             </div>
@@ -351,6 +486,17 @@ export default function ChatComposer({
           内容由AI生成，不构成投资建议，请核实重要信息
         </span>
       </div>
+
+      <ComposerStockMentionList
+        open={mentionState.open}
+        anchorRef={mentionAnchorRef}
+        items={mentionMatches}
+        activeIndex={mentionState.activeIndex}
+        query={mentionState.query}
+        onSelect={handleSelectMention}
+        onHover={setMentionActiveIndex}
+        onClose={closeMention}
+      />
     </div>
   )
 }

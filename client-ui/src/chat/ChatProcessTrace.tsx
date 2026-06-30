@@ -294,11 +294,12 @@ export default function ChatProcessTrace({
       {showStatusHead && (
         <div className={s.thinkingRow}>
           <div className={s.thinkingHead}>
-            <SparkleRegular className={s.leadIcon} aria-hidden />
-            {modelThinking && (
+            {modelThinking ? (
               <span className={s.stepIcon} aria-hidden>
                 <Spinner size="tiny" />
               </span>
+            ) : (
+              <SparkleRegular className={s.leadIcon} aria-hidden />
             )}
             <Text
               className={mergeClasses(
