@@ -7,3 +7,7 @@ export {
 } from './reports.js'
 export * from './portfolio/risk.js'
 export * from './portfolio/allocation.js'
+export {
+  buildTrendBrief, groupTrendStrips, TREND_GROUP_LABELS,
+  type TrendBriefData, type TrendBriefInput, type TrendStrip, type TrendStripTone,
+} from './trend-brief.js'

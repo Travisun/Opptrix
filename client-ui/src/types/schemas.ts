@@ -182,6 +182,26 @@ export interface StrategySignalData {
   signals: SingleStrategySignal[]; timestamp?: string
 }
 
+export type TrendStripTone = 'bullish' | 'bearish' | 'neutral' | 'caution' | 'muted'
+
+export interface TrendStrip {
+  id: string
+  group: 'trend' | 'volume' | 'risk' | 'aux' | 'holding'
+  title: string
+  status: string
+  detail: string
+  tone: TrendStripTone
+}
+
+export interface TrendBriefData {
+  code: string
+  name: string
+  as_of: string
+  data_days: number
+  strips: TrendStrip[]
+  timestamp?: string
+}
+
 export interface StrategyPerformanceItem {
   name: string; overall_win_rate: number
   avg_return: number; sharpe: number | null

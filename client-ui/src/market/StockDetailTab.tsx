@@ -22,11 +22,12 @@ import {
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
+import StockTrendTab from './StockTrendTab'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
-type DetailTab = 'analysis' | 'chart' | 'basic' | 'company' | 'news' | 'f10'
+type DetailTab = 'analysis' | 'chart' | 'trend' | 'basic' | 'company' | 'news' | 'f10'
 
 const CONTENT_PAD = '15px'
 
@@ -753,6 +754,7 @@ export default function StockDetailTab({
           onTabSelect={(_, data) => setDetailTab(data.value as DetailTab)}
         >
           <Tab value="chart">走势</Tab>
+          <Tab value="trend">趋势</Tab>
           <Tab value="analysis">分析</Tab>
           <Tab value="basic">概况</Tab>
           <Tab value="company">公司</Tab>
@@ -762,6 +764,18 @@ export default function StockDetailTab({
       </div>
 
       <div className={s.tabBody}>
+        <div className={mergeClasses(s.tabPanel, detailTab !== 'trend' && s.tabPanelHidden)}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
+            {detailTab === 'trend' && (
+              <StockTrendTab
+                code={detail.code}
+                active={detailTab === 'trend'}
+                holdingCost={holding?.costBasis}
+              />
+            )}
+          </div>
+        </div>
+
         <div className={mergeClasses(s.tabPanel, detailTab !== 'analysis' && s.tabPanelHidden)}>
           <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             {detailTab === 'analysis' && (

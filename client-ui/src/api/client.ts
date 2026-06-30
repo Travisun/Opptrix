@@ -66,7 +66,7 @@ export async function apiCall<T>(
 // ─── Typed convenience wrappers ───
 import type {
   StockDiagnosisData, InstitutionRatingData,
-  ScreeningData, StrategySignalData, StrategyVerifyData,
+  ScreeningData, StrategySignalData, StrategyVerifyData, TrendBriefData,
   PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
@@ -94,6 +94,17 @@ export const research = {
 
   strategySignals: (code: string, signal?: AbortSignal) =>
     apiCall<StrategySignalData>('strategy_signal', { code }, { signal }, 30000),
+
+  trendBrief: (code: string, holdingCost?: number | null, signal?: AbortSignal) =>
+    apiCall<TrendBriefData>(
+      'trend_brief',
+      {
+        code,
+        ...(holdingCost != null && holdingCost > 0 ? { holding_cost: holdingCost } : {}),
+      },
+      { signal },
+      30000,
+    ),
 
   strategyVerify: (code: string, checkpoints = 30, forwardDays = 5) =>
     apiCall<StrategyVerifyData>('strategy_verify', { code, checkpoints, forward_days: forwardDays }),

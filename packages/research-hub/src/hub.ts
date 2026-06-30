@@ -14,7 +14,7 @@ import {
 } from '@opptrix/stock-eval'
 import { getMarketDataService } from '@opptrix/market-data'
 import { ok, fail, type ResearchResult } from '@opptrix/shared'
-import { quickAssess, verifyStrategy } from '@opptrix/t-strategy'
+import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
 
@@ -68,6 +68,7 @@ export class ResearchHub {
         case 'institution_report': return this.institutionReport(String(params.code), params.groups as string[] | undefined, t0)
         case 'screening': return this.screening(params, t0)
         case 'strategy_signal': return this.strategySignal(String(params.code), t0)
+        case 'trend_brief': return this.trendBrief(String(params.code), params, t0)
         case 'strategy_verify': return this.strategyVerify(params, t0)
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
@@ -385,6 +386,38 @@ export class ResearchHub {
   private async strategySignal(code: string, t0: number) {
     const data = await quickAssess(this.de, code)
     return ok(data, `${code} ${data.summary}`, t0)
+  }
+
+  private async trendBrief(code: string, params: Record<string, unknown>, t0: number) {
+    const normalized = normalizeCode(code)
+    let klines = this.marketData.localDailyKlines(normalized, 280)
+    if (klines.length < 30) {
+      const kl = await this.de.kline(normalized, 280)
+      if (kl.success && kl.data?.length) klines = kl.data
+    }
+    if (klines.length < 20) {
+      return fail('K 线数据不足，请先同步本地行情后再查看趋势研判', t0)
+    }
+
+    const indexKlines = this.marketData.localDailyKlines('000300', 280)
+    const quoteR = await this.stockRealtime(normalized)
+    const quote = quoteR.data?.[0] ?? null
+    const name = this.resolveStockName(normalized, quote?.name)
+
+    const holdingCost = Number(params.holding_cost)
+    const brief = buildTrendBrief({
+      code: normalized,
+      name,
+      klines,
+      indexKlines: indexKlines.length >= 60 ? indexKlines : undefined,
+      livePrice: quote?.price ?? null,
+      holdingCost: Number.isFinite(holdingCost) && holdingCost > 0 ? holdingCost : null,
+    })
+
+    return ok({
+      ...brief,
+      timestamp: new Date().toISOString(),
+    }, `${name} 趋势研判`, t0)
   }
 
   private async strategyVerify(params: Record<string, unknown>, t0: number) {

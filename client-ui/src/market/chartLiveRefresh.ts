@@ -63,6 +63,12 @@ export function shouldUseLiveIndustryQuotes(storedQuoteDate: string | null | und
 
 export const INDUSTRY_STATS_POLL_MS = 5 * 60_000
 export const INDUSTRY_QUOTES_POLL_MS = 60_000
+export const TREND_BRIEF_POLL_MS = 60_000
+
+/** 趋势研判仅在 A 股盘中轮询；非交易日、盘前盘后数据已固定，进入页面加载一次即可。 */
+export function shouldPollTrendBrief(now = cnMarketNow()): boolean {
+  return isCnMarketOpen(now)
+}
 
 export function shouldPollChartLive(
   period: ChartPeriod,

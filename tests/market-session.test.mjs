@@ -76,3 +76,29 @@ describe('shouldUseLiveIndustryQuotes', () => {
     assert.equal(shouldUseLiveIndustryQuotes('2025-06-30', after), false)
   })
 })
+
+function shouldPollTrendBrief(now) {
+  return isCnMarketOpen(now)
+}
+
+describe('shouldPollTrendBrief', () => {
+  it('weekend does not poll', () => {
+    const sat = cnMarketNow('2025-06-28T03:00:00.000Z')
+    assert.equal(shouldPollTrendBrief(sat), false)
+  })
+
+  it('weekday before open does not poll', () => {
+    const pre = cnMarketNow('2025-06-30T00:30:00.000Z')
+    assert.equal(shouldPollTrendBrief(pre), false)
+  })
+
+  it('weekday during session polls', () => {
+    const open = cnMarketNow('2025-06-30T02:00:00.000Z')
+    assert.equal(shouldPollTrendBrief(open), true)
+  })
+
+  it('weekday after close does not poll', () => {
+    const after = cnMarketNow('2025-06-30T08:00:00.000Z')
+    assert.equal(shouldPollTrendBrief(after), false)
+  })
+})
