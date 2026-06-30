@@ -12,6 +12,8 @@ export default defineConfig({
       'remark-gfm',
       'remark-math',
       'rehype-katex',
+      'rehype-raw',
+      'rehype-sanitize',
       'katex',
       'mermaid',
     ],

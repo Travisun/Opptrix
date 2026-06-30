@@ -14,6 +14,7 @@
 .inno-md ul,
 .inno-md ol,
 .inno-md blockquote,
+.inno-md .inno-md-pre-shell,
 .inno-md pre,
 .inno-md table,
 .inno-md .inno-md-mermaid {
@@ -49,12 +50,51 @@
   padding-left: var(--inno-md-list-indent);
 }
 
+.inno-md ul {
+  list-style-type: disc;
+}
+
+.inno-md ol {
+  list-style-type: decimal;
+}
+
+.inno-md ul ul,
+.inno-md ol ul {
+  list-style-type: circle;
+}
+
+.inno-md ul ul ul,
+.inno-md ol ul ul,
+.inno-md ul ol ul,
+.inno-md ol ol ul {
+  list-style-type: square;
+}
+
+.inno-md ol ol,
+.inno-md ul ol {
+  list-style-type: lower-alpha;
+}
+
+.inno-md ul ul,
+.inno-md ul ol,
+.inno-md ol ul,
+.inno-md ol ol {
+  margin-top: 0.2em;
+  margin-bottom: 0.15em;
+}
+
 .inno-md li + li {
   margin-top: var(--inno-md-list-item-gap);
 }
 
 .inno-md li > p {
   margin: 0.2em 0;
+}
+
+.inno-md li > ul,
+.inno-md li > ol {
+  margin-top: 0.2em;
+  margin-bottom: 0.1em;
 }
 
 .inno-md .contains-task-list {
@@ -71,6 +111,9 @@
 .inno-md .task-list-item input[type="checkbox"] {
   margin: 0.2em 0 0;
   flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  accent-color: #007AFF;
 }
 
 .inno-md strong {
@@ -83,27 +126,94 @@
   color: var(--inno-md-em-fg);
 }
 
-.inno-md mark {
+.inno-md strong em,
+.inno-md em strong {
+  font-weight: 650;
+  font-style: italic;
+  color: var(--inno-md-strong-fg);
+}
+
+.inno-md mark,
+.inno-md .inno-md-mark {
   background: var(--inno-md-mark-bg);
   color: var(--inno-md-mark-fg);
   padding: 0 0.15em;
   border-radius: 2px;
 }
 
-.inno-md del {
+.inno-md del,
+.inno-md s,
+.inno-md .inno-md-del {
   color: var(--inno-md-del-fg);
   text-decoration: line-through;
+  text-decoration-color: rgba(174, 174, 178, 0.65);
 }
 
-.inno-md blockquote {
+.inno-md u,
+.inno-md ins,
+.inno-md .inno-md-underline {
+  text-decoration: underline;
+  text-decoration-color: var(--inno-md-underline);
+  text-underline-offset: 2px;
+  text-decoration-thickness: 1px;
+}
+
+.inno-md sub,
+.inno-md .inno-md-sub {
+  font-size: 0.78em;
+  line-height: 0;
+  vertical-align: sub;
+}
+
+.inno-md sup,
+.inno-md .inno-md-sup {
+  font-size: 0.78em;
+  line-height: 0;
+  vertical-align: super;
+}
+
+.inno-md kbd,
+.inno-md .inno-md-kbd {
+  display: inline-block;
+  padding: 0.06em 0.38em;
+  border-radius: 4px;
+  border: 1px solid var(--inno-md-kbd-border);
+  background: var(--inno-md-kbd-bg);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 0.84em;
+  line-height: 1.35;
+  color: var(--inno-md-text);
+  box-shadow: inset 0 -1px 0 rgba(60, 60, 67, 0.06);
+}
+
+.inno-md blockquote,
+.inno-md .inno-md-blockquote {
   margin: var(--inno-md-block-gap) 0;
-  padding: 0.15em 0 0.15em 0.65em;
+  padding: 0.35em 0 0.35em 0.75em;
   border-left: 2px solid var(--inno-md-blockquote-border);
+  border-radius: 0 6px 6px 0;
+  background: var(--inno-md-blockquote-bg);
   color: var(--inno-md-blockquote-fg);
+}
+
+.inno-md blockquote blockquote,
+.inno-md .inno-md-blockquote .inno-md-blockquote {
+  margin-top: 0.35em;
+  margin-bottom: 0;
+  padding-left: 0.65em;
+  border-left-color: var(--inno-md-blockquote-border-nested);
+  background: transparent;
+  color: var(--inno-md-text-subtle);
 }
 
 .inno-md blockquote > :first-child { margin-top: 0; }
 .inno-md blockquote > :last-child { margin-bottom: 0; }
+
+.inno-md blockquote ul,
+.inno-md blockquote ol {
+  margin-top: 0.25em;
+  margin-bottom: 0.25em;
+}
 
 .inno-md a {
   color: var(--inno-md-link);
@@ -127,9 +237,25 @@
   color: var(--inno-md-code-fg);
 }
 
-.inno-md-pre {
+.inno-md-pre-shell {
+  position: relative;
   margin: var(--inno-md-block-gap) 0;
+}
+
+.inno-md-pre-lang {
+  display: block;
+  margin-bottom: 4px;
+  font-size: 0.72em;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: lowercase;
+  color: var(--inno-md-pre-lang-fg);
+}
+
+.inno-md-pre {
+  margin: 0;
   padding: var(--inno-md-pre-padding);
+  border: 1px solid var(--inno-md-pre-border);
   border-radius: var(--inno-md-radius-pre);
   background: var(--inno-md-pre-bg);
   overflow-x: auto;
@@ -328,4 +454,57 @@
 .inno-md .inno-md-tag--error {
   background: var(--inno-md-tag-error-bg);
   color: var(--inno-md-tag-error-fg);
+}
+
+/* Inline tone colors — use <span class="inno-md-tone--success">涨</span> */
+.inno-md .inno-md-tone--muted {
+  color: var(--inno-md-text-muted);
+}
+
+.inno-md .inno-md-tone--subtle {
+  color: var(--inno-md-text-subtle);
+}
+
+.inno-md .inno-md-tone--accent {
+  color: var(--inno-md-tone-accent);
+}
+
+.inno-md .inno-md-tone--success {
+  color: var(--inno-md-tag-success-fg);
+  font-weight: 600;
+}
+
+.inno-md .inno-md-tone--warning {
+  color: var(--inno-md-tag-warning-fg);
+  font-weight: 600;
+}
+
+.inno-md .inno-md-tone--error {
+  color: var(--inno-md-tag-error-fg);
+  font-weight: 600;
+}
+
+/* GFM footnotes */
+.inno-md .footnotes {
+  margin-top: 0.85em;
+  padding-top: 0.55em;
+  border-top: 1px solid var(--inno-md-hr);
+  font-size: 0.88em;
+  color: var(--inno-md-text-muted);
+}
+
+.inno-md .footnotes ol {
+  padding-left: 1.2em;
+}
+
+.inno-md .footnote-ref,
+.inno-md .data-footnote-backref {
+  color: var(--inno-md-link);
+  text-decoration: none;
+}
+
+.inno-md .footnote-ref:hover,
+.inno-md .data-footnote-backref:hover {
+  color: var(--inno-md-link-hover);
+  text-decoration: underline;
 }

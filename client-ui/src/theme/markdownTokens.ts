@@ -32,6 +32,8 @@ export const markdownTokens = {
   /** Blockquote */
   blockquoteFg: '#6E6E73',
   blockquoteBorder: 'rgba(60, 60, 67, 0.14)',
+  blockquoteBg: 'rgba(60, 60, 67, 0.03)',
+  blockquoteBorderNested: 'rgba(60, 60, 67, 0.1)',
 
   /** Divider */
   hr: 'rgba(60, 60, 67, 0.1)',
@@ -61,6 +63,12 @@ export const markdownTokens = {
   markBg: 'rgba(255, 149, 0, 0.14)',
   markFg: '#1D1D1F',
   delFg: '#AEAEB2',
+  underline: 'rgba(60, 60, 67, 0.36)',
+  toneAccent: '#007AFF',
+  preBorder: 'rgba(60, 60, 67, 0.08)',
+  preLangFg: '#AEAEB2',
+  kbdBg: 'rgba(29, 29, 31, 0.06)',
+  kbdBorder: 'rgba(60, 60, 67, 0.12)',
 
   /** Optional badge-like tags in prose */
   tagNeutralBg: 'rgba(29, 29, 31, 0.06)',
