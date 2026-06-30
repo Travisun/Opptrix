@@ -1,6 +1,6 @@
 {
-  "name": "@opptrix/a-stock-layer",
-  "version": "0.4.0",
+  "name": "@opptrix/user-store",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -12,12 +12,13 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
-    "audit:apis": "npm run build && node scripts/audit-apis.mjs"
+    "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*",
-    "nodetdx": "^4.2.6"
+    "better-sqlite3": "^11.7.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.12"
   }
 }

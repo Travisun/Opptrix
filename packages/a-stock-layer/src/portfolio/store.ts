@@ -1,11 +1,9 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { getUserDataStore } from '@opptrix/user-store'
 import type { FeeConfig, TradeRecord } from './models.js'
 import { DEFAULT_FEE_CONFIG } from './models.js'
 
-const DB_DIR = resolveUserDataRoot()
-const DB_FILE = path.join(DB_DIR, 'portfolio.json')
+const NAMESPACE = 'portfolio'
+const DOC_ID = 'default'
 
 interface DbState {
   config: FeeConfig
@@ -23,7 +21,6 @@ export class PortfolioStore {
   private state: DbState
 
   private constructor() {
-    fs.mkdirSync(DB_DIR, { recursive: true })
     this.state = this.load()
   }
 
@@ -34,16 +31,14 @@ export class PortfolioStore {
 
   private load(): DbState {
     try {
-      if (fs.existsSync(DB_FILE)) {
-        const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as DbState
-        return { ...defaultState(), ...raw, trades: raw.trades ?? [] }
-      }
+      const raw = getUserDataStore().getDocument<DbState>(NAMESPACE, DOC_ID)
+      if (raw) return { ...defaultState(), ...raw, trades: raw.trades ?? [] }
     } catch { /* reset */ }
     return defaultState()
   }
 
   private save() {
-    fs.writeFileSync(DB_FILE, JSON.stringify(this.state, null, 2))
+    getUserDataStore().setDocument(NAMESPACE, DOC_ID, this.state)
   }
 
   getConfig(): FeeConfig {

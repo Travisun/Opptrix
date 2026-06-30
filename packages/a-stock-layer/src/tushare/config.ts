@@ -1,9 +1,9 @@
-import fs from 'node:fs'
-import path from 'node:path'
+import { getUserDataStore } from '@opptrix/user-store'
 import { resolveUserDataRoot } from '@opptrix/shared'
+import path from 'node:path'
 
-const CONFIG_DIR = resolveUserDataRoot()
-const CONFIG_PATH = path.join(CONFIG_DIR, 'tushare-config.json')
+const NAMESPACE = 'tushare_config'
+const DOC_ID = 'default'
 
 export interface TushareRuntimeConfig {
   enabled: boolean
@@ -24,13 +24,13 @@ const DEFAULTS: TushareRuntimeConfig = {
 }
 
 export function tushareConfigPath(): string {
-  return CONFIG_PATH
+  return path.join(resolveUserDataRoot(), 'opptrix.db')
 }
 
 export function loadTushareConfig(): TushareRuntimeConfig {
   try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      const raw = JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) as Partial<TushareRuntimeConfig>
+    const raw = getUserDataStore().getDocument<Partial<TushareRuntimeConfig>>(NAMESPACE, DOC_ID)
+    if (raw) {
       return {
         enabled: raw.enabled ?? DEFAULTS.enabled,
         token: String(raw.token ?? DEFAULTS.token).trim(),
@@ -41,13 +41,12 @@ export function loadTushareConfig(): TushareRuntimeConfig {
 }
 
 export function saveTushareConfig(partial: Partial<TushareRuntimeConfig>): TushareRuntimeConfig {
-  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true })
   const current = loadTushareConfig()
   const next: TushareRuntimeConfig = {
     enabled: partial.enabled ?? current.enabled,
     token: partial.token !== undefined ? String(partial.token).trim() : current.token,
   }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(next, null, 2))
+  getUserDataStore().setDocument(NAMESPACE, DOC_ID, next)
   return next
 }
 
@@ -62,6 +61,6 @@ export function publicTushareConfig(cfg = loadTushareConfig()): PublicTushareCon
     token,
     token_configured: !!token,
     token_preview: token ? `${token.slice(0, 4)}…${token.slice(-4)}` : '',
-    config_path: CONFIG_PATH,
+    config_path: tushareConfigPath(),
   }
 }

@@ -3,11 +3,6 @@ import { fetchWatchlist, saveWatchlist } from '../api/client'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from './format'
 
-const STORAGE_KEY = 'opptrix-watchlist-v2'
-const LEGACY_KEY = 'opptrix-watchlist-v1'
-const LEGACY_INNO_V2 = 'inno-watchlist-v2'
-const LEGACY_INNO_V1 = 'inno-watchlist-v1'
-
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
   { code: '000001', name: '平安银行', industry: '银行' },
@@ -25,29 +20,8 @@ function normalizeItem(item: WatchlistItem): WatchlistItem {
   }
 }
 
-function readStorage(): WatchlistItem[] {
-  if (typeof window === 'undefined') return DEFAULT_ITEMS.map(normalizeItem)
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY)
-    if (raw) {
-      const parsed = JSON.parse(raw) as WatchlistItem[]
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map(normalizeItem)
-      }
-    }
-    const legacy = localStorage.getItem(LEGACY_KEY) ?? localStorage.getItem(LEGACY_INNO_V2) ?? localStorage.getItem(LEGACY_INNO_V1)
-    if (legacy) {
-      const parsed = JSON.parse(legacy) as WatchlistItem[]
-      if (Array.isArray(parsed) && parsed.length) {
-        return parsed.map(row => normalizeItem({ ...row, addedAt: row.addedAt ?? new Date().toISOString() }))
-      }
-    }
-  } catch { /* fall through */ }
-  return DEFAULT_ITEMS.map(row => normalizeItem({ ...row, addedAt: new Date().toISOString() }))
-}
-
 export function useWatchlist() {
-  const [items, setItems] = useState<WatchlistItem[]>(readStorage)
+  const [items, setItems] = useState<WatchlistItem[]>([])
   const hydrated = useRef(false)
   const skipNextSync = useRef(false)
 
@@ -61,11 +35,22 @@ export function useWatchlist() {
           skipNextSync.current = true
           setItems(remote.items.map(normalizeItem))
         } else {
-          const local = readStorage()
-          if (local.length) await saveWatchlist(local)
+          const seeded = DEFAULT_ITEMS.map(row => normalizeItem({
+            ...row,
+            addedAt: new Date().toISOString(),
+          }))
+          await saveWatchlist(seeded)
+          skipNextSync.current = true
+          setItems(seeded)
         }
-      } catch { /* offline: keep local */ }
-      finally {
+      } catch {
+        if (!cancelled) {
+          setItems(DEFAULT_ITEMS.map(row => normalizeItem({
+            ...row,
+            addedAt: new Date().toISOString(),
+          })))
+        }
+      } finally {
         if (!cancelled) hydrated.current = true
       }
     })()
@@ -73,7 +58,6 @@ export function useWatchlist() {
   }, [])
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
     if (!hydrated.current) return
     if (skipNextSync.current) {
       skipNextSync.current = false

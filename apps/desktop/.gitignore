@@ -2,4 +2,5 @@ runtime-stage/
 release/
 build/
 electron/splash-logo.png
+electron/about-logo.png
 node_modules/

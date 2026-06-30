@@ -27,7 +27,7 @@
       "package.json",
       "build/icons/**/*"
     ],
-    "icon": "build/icons/logo.png",
+    "icon": "build/icons/logo-app.png",
     "extraResources": [
       {
         "from": "runtime-stage",
@@ -39,7 +39,7 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "build/icons/logo.png",
+      "icon": "build/icons/logo-app.png",
       "extendInfo": {
         "CFBundleDisplayName": "Opptrix",
         "CFBundleName": "Opptrix"
@@ -50,7 +50,7 @@
       ]
     },
     "win": {
-      "icon": "build/icons/logo.png",
+      "icon": "build/icons/logo-app.png",
       "target": [
         "nsis"
       ]

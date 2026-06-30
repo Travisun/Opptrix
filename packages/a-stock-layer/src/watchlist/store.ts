@@ -1,10 +1,8 @@
-import fs from 'node:fs'
-import path from 'node:path'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { getUserDataStore } from '@opptrix/user-store'
 import type { WatchlistItem } from './models.js'
 
-const DB_DIR = resolveUserDataRoot()
-const DB_FILE = path.join(DB_DIR, 'watchlist.json')
+const NAMESPACE = 'watchlist'
+const DOC_ID = 'default'
 
 function normalizeCode(code: string) {
   return code.replace(/\D/g, '').padStart(6, '0').slice(-6)
@@ -26,7 +24,6 @@ export class WatchlistStore {
   private items: WatchlistItem[] = []
 
   private constructor() {
-    fs.mkdirSync(DB_DIR, { recursive: true })
     this.items = this.load()
   }
 
@@ -37,18 +34,16 @@ export class WatchlistStore {
 
   private load(): WatchlistItem[] {
     try {
-      if (fs.existsSync(DB_FILE)) {
-        const raw = JSON.parse(fs.readFileSync(DB_FILE, 'utf8')) as { items?: WatchlistItem[] }
-        if (Array.isArray(raw.items)) {
-          return raw.items.map(normalizeItem)
-        }
+      const raw = getUserDataStore().getDocument<{ items?: WatchlistItem[] }>(NAMESPACE, DOC_ID)
+      if (Array.isArray(raw?.items)) {
+        return raw.items.map(normalizeItem)
       }
     } catch { /* reset */ }
     return []
   }
 
   private save() {
-    fs.writeFileSync(DB_FILE, JSON.stringify({ items: this.items }, null, 2))
+    getUserDataStore().setDocument(NAMESPACE, DOC_ID, { items: this.items })
   }
 
   list(): WatchlistItem[] {

@@ -1,13 +1,11 @@
-import fs from 'node:fs'
-import path from 'node:path'
 import { randomUUID } from 'node:crypto'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { getUserDataStore } from '@opptrix/user-store'
 import type { ChatMessage } from './llm/provider.js'
 import type { ChatToolStep } from './chat-progress.js'
 
 export type { ChatToolStep }
 
-const SESSIONS_DIR = path.join(resolveUserDataRoot(), 'sessions')
+const NAMESPACE = 'session'
 
 export interface SessionMeta {
   id: string
@@ -55,14 +53,6 @@ export interface SessionRecord extends SessionMeta {
   contextRef?: SessionContextRef | null
 }
 
-function ensureDir() {
-  if (!fs.existsSync(SESSIONS_DIR)) fs.mkdirSync(SESSIONS_DIR, { recursive: true })
-}
-
-function sessionPath(id: string) {
-  return path.join(SESSIONS_DIR, `${id}.json`)
-}
-
 function previewText(content: string, max = 72): string {
   const oneLine = content.replace(/\s+/g, ' ').trim()
   if (!oneLine) return '空消息'
@@ -70,12 +60,8 @@ function previewText(content: string, max = 72): string {
 }
 
 function writeRecord(record: SessionRecord) {
-  ensureDir()
   record.updatedAt = new Date().toISOString()
-  const p = sessionPath(record.id)
-  const tmp = `${p}.${process.pid}.${Date.now()}.tmp`
-  fs.writeFileSync(tmp, JSON.stringify(record, null, 2), 'utf8')
-  fs.renameSync(tmp, p)
+  getUserDataStore().setDocument(NAMESPACE, record.id, record)
 }
 
 function migrateTurns(record: SessionRecord): SessionRecord {
@@ -109,34 +95,25 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
 
 export class SessionStore {
   list(): SessionMeta[] {
-    ensureDir()
-    const files = fs.readdirSync(SESSIONS_DIR).filter(f => f.endsWith('.json'))
-    const sessions: SessionMeta[] = []
-    for (const f of files) {
-      try {
-        const raw = JSON.parse(fs.readFileSync(path.join(SESSIONS_DIR, f), 'utf8')) as SessionRecord
-        sessions.push({
-          id: raw.id,
-          title: raw.title,
-          createdAt: raw.createdAt,
-          updatedAt: raw.updatedAt,
-          model: raw.model,
-        })
-      } catch { /* skip corrupt */ }
-    }
+    const sessions = getUserDataStore()
+      .listDocuments<SessionRecord>(NAMESPACE)
+      .map(raw => ({
+        id: raw.id,
+        title: raw.title,
+        createdAt: raw.createdAt,
+        updatedAt: raw.updatedAt,
+        model: raw.model,
+      }))
     return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
   }
 
   get(id: string): SessionRecord | null {
-    ensureDir()
-    const p = sessionPath(id)
-    if (!fs.existsSync(p)) return null
-    const raw = JSON.parse(fs.readFileSync(p, 'utf8')) as SessionRecord
+    const raw = getUserDataStore().getDocument<SessionRecord>(NAMESPACE, id)
+    if (!raw) return null
     return normalizeRecord(raw)
   }
 
   create(title = '新对话'): SessionRecord {
-    ensureDir()
     const now = new Date().toISOString()
     const record: SessionRecord = {
       id: randomUUID(),
@@ -156,8 +133,7 @@ export class SessionStore {
   }
 
   delete(id: string) {
-    const p = sessionPath(id)
-    if (fs.existsSync(p)) fs.unlinkSync(p)
+    getUserDataStore().deleteDocument(NAMESPACE, id)
   }
 
   rename(id: string, title: string) {
@@ -178,7 +154,6 @@ export class SessionStore {
         at: t.at,
       }))
     }
-    // legacy sessions without turns
     const out: DisplayMessage[] = []
     for (const m of record.messages) {
       if ((m.role === 'user' || m.role === 'assistant') && m.content) {

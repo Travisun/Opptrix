@@ -210,6 +210,32 @@ export async function listDiscoverJobs() {
   return jsonFetch<{ jobs: import('../types/schemas').DiscoverJobSnapshot[] }>('/discover/jobs')
 }
 
+export async function fetchCustomDiscoverStrategies() {
+  return jsonFetch<{ strategies: import('../types/schemas').CustomDiscoverStrategy[] }>('/discover/custom-strategies')
+}
+
+export async function saveCustomDiscoverStrategies(
+  strategies: import('../types/schemas').CustomDiscoverStrategy[],
+) {
+  return jsonFetch<{ strategies: import('../types/schemas').CustomDiscoverStrategy[] }>('/discover/custom-strategies', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ strategies }),
+  })
+}
+
+export async function getUserPreference<T>(key: string) {
+  return jsonFetch<{ key: string; value: T | null }>(`/preferences/${encodeURIComponent(key)}`)
+}
+
+export async function setUserPreference<T>(key: string, value: T) {
+  return jsonFetch<{ key: string; value: T }>(`/preferences/${encodeURIComponent(key)}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ value }),
+  })
+}
+
 export async function listDiscoverStrategies() {
   return jsonFetch<{ strategies: import('../types/schemas').DiscoverStrategyPublic[] }>('/discover/strategies')
 }

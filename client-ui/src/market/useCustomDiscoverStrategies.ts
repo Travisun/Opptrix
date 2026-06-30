@@ -8,11 +8,19 @@ import {
 } from './discoverStrategyStorage'
 
 export function useCustomDiscoverStrategies() {
-  const [strategies, setStrategies] = useState<CustomDiscoverStrategy[]>(() => loadCustomDiscoverStrategies())
+  const [strategies, setStrategies] = useState<CustomDiscoverStrategy[]>([])
+  const [loading, setLoading] = useState(true)
 
-  useEffect(() => subscribeCustomDiscoverStrategies(() => {
-    setStrategies(loadCustomDiscoverStrategies())
-  }), [])
+  const refresh = useCallback(async () => {
+    const items = await loadCustomDiscoverStrategies()
+    setStrategies(items)
+    setLoading(false)
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+    return subscribeCustomDiscoverStrategies(() => { void refresh() })
+  }, [refresh])
 
   const saveStrategy = useCallback((input: Partial<CustomDiscoverStrategy> & { name: string; prompt: string }) => {
     const result = saveCustomDiscoverStrategy(strategies, input)
@@ -25,5 +33,5 @@ export function useCustomDiscoverStrategies() {
     setStrategies(removeCustomDiscoverStrategy(strategies, id))
   }, [strategies])
 
-  return { strategies, saveStrategy, removeStrategy, setStrategies }
+  return { strategies, loading, saveStrategy, removeStrategy, setStrategies }
 }

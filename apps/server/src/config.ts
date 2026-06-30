@@ -2,9 +2,12 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { getUserDataStore } from '@opptrix/user-store'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const CONFIG_PATH = path.resolve(__dirname, '../data/config.json')
+const LEGACY_CONFIG_PATH = path.resolve(__dirname, '../data/config.json')
+const NAMESPACE = 'app_config'
+const DOC_ID = 'default'
 
 export interface StoredProvider {
   id: string
@@ -43,15 +46,6 @@ export const PROVIDER_PRESETS = [
   { id: 'custom', name: '自定义', base_url: '' },
 ] as const
 
-function fromFile(): Partial<AppConfig> & { llm?: LegacyLlmConfig } {
-  try {
-    if (fs.existsSync(CONFIG_PATH)) {
-      return JSON.parse(fs.readFileSync(CONFIG_PATH, 'utf8')) as Partial<AppConfig> & { llm?: LegacyLlmConfig }
-    }
-  } catch { /* use defaults */ }
-  return {}
-}
-
 function migrateLegacy(file: Partial<AppConfig> & { llm?: LegacyLlmConfig }): StoredProvider[] {
   if (file.providers?.length) return file.providers
   const llm = file.llm
@@ -70,8 +64,27 @@ function migrateLegacy(file: Partial<AppConfig> & { llm?: LegacyLlmConfig }): St
   return []
 }
 
+function readLegacyConfigFile(): Partial<AppConfig> & { llm?: LegacyLlmConfig } {
+  try {
+    if (fs.existsSync(LEGACY_CONFIG_PATH)) {
+      return JSON.parse(fs.readFileSync(LEGACY_CONFIG_PATH, 'utf8')) as Partial<AppConfig> & { llm?: LegacyLlmConfig }
+    }
+  } catch { /* use defaults */ }
+  return {}
+}
+
+function readStoredConfig(): Partial<AppConfig> & { llm?: LegacyLlmConfig } {
+  const fromDb = getUserDataStore().getDocument<Partial<AppConfig> & { llm?: LegacyLlmConfig }>(NAMESPACE, DOC_ID)
+  if (fromDb) return fromDb
+  const legacy = readLegacyConfigFile()
+  if (Object.keys(legacy).length) {
+    getUserDataStore().setDocument(NAMESPACE, DOC_ID, legacy)
+  }
+  return legacy
+}
+
 export function loadConfig(): AppConfig {
-  const file = fromFile()
+  const file = readStoredConfig()
   const providers = migrateLegacy(file)
   const defaultModel = file.default_model
     ?? (providers[0] ? `${providers[0].id}:${providers[0].models[0]}` : undefined)
@@ -85,8 +98,6 @@ export function loadConfig(): AppConfig {
 }
 
 export function saveConfig(partial: Partial<AppConfig>): AppConfig {
-  const dir = path.dirname(CONFIG_PATH)
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   const current = loadConfig()
   const next: AppConfig = {
     ...current,
@@ -99,7 +110,7 @@ export function saveConfig(partial: Partial<AppConfig>): AppConfig {
     default_scorecard: next.default_scorecard,
     default_top_n: next.default_top_n,
   }
-  fs.writeFileSync(CONFIG_PATH, JSON.stringify(toWrite, null, 2))
+  getUserDataStore().setDocument(NAMESPACE, DOC_ID, toWrite)
   return next
 }
 

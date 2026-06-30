@@ -21,6 +21,7 @@
   "dependencies": {
     "@opptrix/research-hub": "*",
     "@opptrix/shared": "*",
+    "@opptrix/user-store": "*",
     "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

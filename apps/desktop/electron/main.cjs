@@ -9,6 +9,7 @@ const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs'
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
+const MIN_SPLASH_MS = 900
 
 app.setName(APP_NAME)
 
@@ -18,6 +19,19 @@ let serverProcess = null
 let mainWindow = null
 /** @type {import('electron').BrowserWindow | null} */
 let splashWindow = null
+let splashShownAt = 0
+
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms))
+}
+
+async function waitForSplashMinimum() {
+  if (!splashShownAt) return
+  const elapsed = Date.now() - splashShownAt
+  if (elapsed < MIN_SPLASH_MS) {
+    await wait(MIN_SPLASH_MS - elapsed)
+  }
+}
 
 function repoRoot() {
   if (isDev) {
@@ -133,34 +147,38 @@ function closeSplash() {
 
 function createSplashWindow() {
   if (splashWindow && !splashWindow.isDestroyed()) {
-    return splashWindow
+    return Promise.resolve(splashWindow)
   }
 
-  splashWindow = new BrowserWindow({
-    width: 360,
-    height: 240,
-    frame: false,
-    resizable: false,
-    movable: true,
-    center: true,
-    show: false,
-    alwaysOnTop: true,
-    backgroundColor: '#F5F5F7',
-    ...windowIconOptions(),
-    webPreferences: {
-      nodeIntegration: false,
-      contextIsolation: true,
-      sandbox: true,
-      devTools: false,
-    },
-  })
+  return new Promise((resolve) => {
+    splashWindow = new BrowserWindow({
+      width: 380,
+      height: 260,
+      frame: false,
+      resizable: false,
+      movable: false,
+      center: true,
+      show: true,
+      alwaysOnTop: true,
+      backgroundColor: '#F5F5F7',
+      ...windowIconOptions(),
+      webPreferences: {
+        nodeIntegration: false,
+        contextIsolation: true,
+        sandbox: true,
+        devTools: false,
+      },
+    })
 
-  splashWindow.loadFile(path.join(__dirname, 'splash.html'))
-  splashWindow.once('ready-to-show', () => {
-    if (!splashWindow?.isDestroyed()) splashWindow.show()
+    splashWindow.loadFile(path.join(__dirname, 'splash.html'))
+    splashWindow.once('ready-to-show', () => {
+      if (!splashWindow?.isDestroyed()) {
+        splashWindow.show()
+        splashShownAt = Date.now()
+      }
+      resolve(splashWindow)
+    })
   })
-
-  return splashWindow
 }
 
 function createMainWindow() {
@@ -214,13 +232,14 @@ function createMainWindow() {
 
     win.setBackgroundColor('#00000000')
 
-    win.once('ready-to-show', () => {
+    win.once('ready-to-show', async () => {
+      await waitForSplashMinimum()
       closeSplash()
       win.show()
       resolve(win)
     })
 
-    win.loadURL(appUrl())
+    void win.loadURL(appUrl())
 
     if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
       win.webContents.openDevTools({ mode: 'bottom' })
@@ -253,9 +272,12 @@ async function ensureSidecarReady() {
 }
 
 async function bootstrapApp({ withSplash = true } = {}) {
-  if (withSplash) createSplashWindow()
+  if (withSplash) {
+    await createSplashWindow()
+  }
+  const mainReady = createMainWindow()
   await ensureSidecarReady()
-  await createMainWindow()
+  await mainReady
 }
 
 async function openMainWindowFromMenu() {

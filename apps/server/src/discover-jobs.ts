@@ -2,12 +2,14 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
+import { getUserDataStore } from '@opptrix/user-store'
 import type { AgentEngine } from '@opptrix/agent'
 import { getDiscoverStrategy } from '@opptrix/agent'
 import type { DiscoverPhase, DiscoverProgress, DiscoverResult } from '@opptrix/agent'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const STORE_PATH = path.resolve(__dirname, '../data/discover-jobs.json')
+const LEGACY_STORE_PATH = path.resolve(__dirname, '../data/discover-jobs.json')
+const NAMESPACE = 'discover_job'
 
 export type DiscoverJobStatus = 'running' | 'done' | 'error' | 'cancelled'
 
@@ -34,28 +36,44 @@ const JOB_TTL_MS = 7 * 24 * 60 * 60 * 1000
 const MAX_STORED_JOBS = 80
 
 function loadFromDisk() {
+  const store = getUserDataStore()
+
   try {
-    if (!fs.existsSync(STORE_PATH)) return
-    const raw = JSON.parse(fs.readFileSync(STORE_PATH, 'utf8')) as DiscoverJobSnapshot[]
-    if (!Array.isArray(raw)) return
-    for (const job of raw) {
-      if (job.status === 'running') {
-        jobs.set(job.id, { ...job, status: 'error', phase: 'error', message: '服务重启，任务已中断', error: '服务重启，任务已中断' })
-      } else {
-        jobs.set(job.id, job)
+    if (fs.existsSync(LEGACY_STORE_PATH)) {
+      const raw = JSON.parse(fs.readFileSync(LEGACY_STORE_PATH, 'utf8')) as DiscoverJobSnapshot[]
+      if (Array.isArray(raw)) {
+        for (const job of raw) {
+          store.setDocument(NAMESPACE, job.id, job.status === 'running'
+            ? { ...job, status: 'error', phase: 'error', message: '服务重启，任务已中断', error: '服务重启，任务已中断' }
+            : job)
+        }
       }
     }
   } catch {
-    // ignore corrupt store
+    // ignore corrupt legacy store
+  }
+
+  for (const job of store.listDocuments<DiscoverJobSnapshot>(NAMESPACE)) {
+    if (job.status === 'running') {
+      jobs.set(job.id, { ...job, status: 'error', phase: 'error', message: '服务重启，任务已中断', error: '服务重启，任务已中断' })
+    } else {
+      jobs.set(job.id, job)
+    }
   }
 }
 
 function persistToDisk() {
+  const store = getUserDataStore()
   const list = [...jobs.values()]
     .sort((a, b) => new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
     .slice(0, MAX_STORED_JOBS)
-  fs.mkdirSync(path.dirname(STORE_PATH), { recursive: true })
-  fs.writeFileSync(STORE_PATH, JSON.stringify(list, null, 0))
+  const keep = new Set(list.map(job => job.id))
+  for (const job of list) {
+    store.setDocument(NAMESPACE, job.id, job)
+  }
+  for (const id of store.listDocumentIds(NAMESPACE)) {
+    if (!keep.has(id)) store.deleteDocument(NAMESPACE, id)
+  }
 }
 
 loadFromDisk()

@@ -1,6 +1,9 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "references": [{ "path": "../../packages/research-hub" }],
+  "references": [
+    { "path": "../../packages/user-store" },
+    { "path": "../../packages/research-hub" }
+  ],
   "include": ["src/**/*"]
 }

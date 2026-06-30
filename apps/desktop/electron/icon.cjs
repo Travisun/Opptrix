@@ -3,6 +3,8 @@ const path = require('node:path')
 const { nativeImage } = require('electron')
 
 const ICON_CANDIDATES = [
+  path.join(__dirname, 'about-logo.png'),
+  path.join(__dirname, '..', 'build', 'icons', 'logo-app.png'),
   path.join(__dirname, '..', 'build', 'icons', 'logo.png'),
   path.join(__dirname, '..', '..', '..', 'icons', 'logo.png'),
   path.join(__dirname, '..', 'app-icon.png'),

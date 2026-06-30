@@ -1,20 +1,10 @@
 import type { CustomDiscoverStrategy } from '../types/schemas'
+import {
+  fetchCustomDiscoverStrategies,
+  saveCustomDiscoverStrategies,
+} from '../api/client'
 
-const STORAGE_KEY = 'opptrix-discover-custom-strategies'
-const LEGACY_STORAGE_KEY = 'inno-discover-custom-strategies'
 const CHANGE_EVENT = 'opptrix-discover-strategies-change'
-
-export function loadCustomDiscoverStrategies(): CustomDiscoverStrategy[] {
-  try {
-    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
-    if (!raw) return []
-    const parsed = JSON.parse(raw) as CustomDiscoverStrategy[]
-    if (!Array.isArray(parsed)) return []
-    return parsed.map(normalizeCustomStrategy)
-  } catch {
-    return []
-  }
-}
 
 function normalizeCustomStrategy(row: CustomDiscoverStrategy): CustomDiscoverStrategy {
   const prompt = row.prompt?.trim() ?? ''
@@ -30,21 +20,24 @@ function normalizeCustomStrategy(row: CustomDiscoverStrategy): CustomDiscoverStr
   }
 }
 
+export async function loadCustomDiscoverStrategies(): Promise<CustomDiscoverStrategy[]> {
+  try {
+    const resp = await fetchCustomDiscoverStrategies()
+    return (resp.strategies ?? []).map(normalizeCustomStrategy)
+  } catch {
+    return []
+  }
+}
+
 export function persistCustomDiscoverStrategies(items: CustomDiscoverStrategy[]) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(items))
-  window.dispatchEvent(new CustomEvent(CHANGE_EVENT))
+  void saveCustomDiscoverStrategies(items).then(() => {
+    window.dispatchEvent(new CustomEvent(CHANGE_EVENT))
+  }).catch(() => {})
 }
 
 export function subscribeCustomDiscoverStrategies(listener: () => void) {
-  const onStorage = (e: StorageEvent) => {
-    if (e.key === STORAGE_KEY) listener()
-  }
-  window.addEventListener('storage', onStorage)
   window.addEventListener(CHANGE_EVENT, listener)
-  return () => {
-    window.removeEventListener('storage', onStorage)
-    window.removeEventListener(CHANGE_EVENT, listener)
-  }
+  return () => window.removeEventListener(CHANGE_EVENT, listener)
 }
 
 export function saveCustomDiscoverStrategy(
@@ -57,7 +50,7 @@ export function saveCustomDiscoverStrategy(
   const id = input.id ?? `custom_${crypto.randomUUID()}`
   const existing = items.find(s => s.id === id)
   const description = input.description?.trim() || prompt
-  const saved: CustomDiscoverStrategy = {
+  const saved: CustomDiscoverStrategy = normalizeCustomStrategy({
     id,
     name: input.name.trim() || description.slice(0, 24),
     prompt,
@@ -68,7 +61,7 @@ export function saveCustomDiscoverStrategy(
     copied_from: input.copied_from ?? existing?.copied_from ?? null,
     created_at: existing?.created_at ?? now,
     updated_at: now,
-  }
+  })
   const idx = items.findIndex(s => s.id === id)
   const next = idx >= 0
     ? items.map((s, i) => (i === idx ? saved : s))

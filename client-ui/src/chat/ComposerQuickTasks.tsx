@@ -7,10 +7,7 @@ import ComposerTooltipMenu, {
   ComposerTooltipMenuItem,
 } from './ComposerTooltipMenu'
 import { QUICK_TASK_CATALOG } from './quickTaskCatalog'
-import {
-  readComposerQuickTasks,
-  saveComposerQuickTasks,
-} from './quickTasksStorage'
+import { useComposerQuickTasks } from './useComposerQuickTasks'
 
 interface Props {
   disabled?: boolean
@@ -18,16 +15,11 @@ interface Props {
 }
 
 export default function ComposerQuickTasks({ disabled, onApply }: Props) {
-  const [pinnedTasks, setPinnedTasks] = useState(readComposerQuickTasks)
+  const { tasks: pinnedTasks, saveTasks: persistPinned } = useComposerQuickTasks()
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [manageMode, setManageMode] = useState(false)
   const anchorRef = useRef<HTMLButtonElement>(null)
-
-  const persistPinned = useCallback((next: string[]) => {
-    setPinnedTasks(next)
-    saveComposerQuickTasks(next)
-  }, [])
 
   const handleAddPinned = useCallback(() => {
     const text = draft.trim()

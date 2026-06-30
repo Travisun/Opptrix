@@ -12,8 +12,10 @@
   "dependencies": {
     "@fastify/static": "^8.3.0",
     "@opptrix/agent": "*",
+    "@opptrix/market-data": "*",
     "@opptrix/research-hub": "*",
     "@opptrix/stock-eval": "*",
+    "@opptrix/user-store": "*",
     "fastify": "^5.2.0"
   },
   "devDependencies": {

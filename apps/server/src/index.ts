@@ -10,6 +10,13 @@ import {
 import { getMarketDataService } from '@opptrix/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
+import {
+  deleteCustomDiscoverStrategy,
+  listCustomDiscoverStrategies,
+  replaceCustomDiscoverStrategies,
+  upsertCustomDiscoverStrategy,
+} from './custom-discover-strategies.js'
+import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 
@@ -110,6 +117,38 @@ app.get('/api/discover/jobs', async () => {
 
 app.get('/api/discover/strategies', async () => {
   return { strategies: listDiscoverStrategiesPublic() }
+})
+
+app.get('/api/discover/custom-strategies', async () => {
+  return { strategies: listCustomDiscoverStrategies() }
+})
+
+app.put<{ Body: { strategies?: unknown[] } }>('/api/discover/custom-strategies', async (req, reply) => {
+  const strategies = Array.isArray(req.body?.strategies) ? req.body.strategies : []
+  replaceCustomDiscoverStrategies(strategies as ReturnType<typeof listCustomDiscoverStrategies>)
+  return { strategies: listCustomDiscoverStrategies() }
+})
+
+app.post<{ Body: Partial<ReturnType<typeof listCustomDiscoverStrategies>[number]> & { name: string; prompt: string } }>(
+  '/api/discover/custom-strategies/item',
+  async (req, reply) => {
+    const saved = upsertCustomDiscoverStrategy(req.body ?? { name: '', prompt: '' })
+    if (!saved) return reply.code(400).send({ error: 'name and prompt required' })
+    return { strategy: saved, strategies: listCustomDiscoverStrategies() }
+  },
+)
+
+app.delete<{ Params: { id: string } }>('/api/discover/custom-strategies/:id', async (req) => {
+  return { deleted: deleteCustomDiscoverStrategy(req.params.id), strategies: listCustomDiscoverStrategies() }
+})
+
+app.get<{ Params: { key: string } }>('/api/preferences/:key', async (req) => {
+  return { key: req.params.key, value: getUserPreference(req.params.key, null) }
+})
+
+app.put<{ Params: { key: string }; Body: { value?: unknown } }>('/api/preferences/:key', async (req) => {
+  const value = setUserPreference(req.params.key, req.body?.value ?? null)
+  return { key: req.params.key, value }
 })
 
 app.get<{ Params: { id: string } }>('/api/discover/strategies/:id', async (req, reply) => {
