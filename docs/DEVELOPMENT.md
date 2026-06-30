@@ -84,6 +84,32 @@ npm run serve          # API :8711 + Vite preview :5173
 
 对外暴露 **5173**（Web）；8711 仅本机内部，由 Vite 代理 `/api`。
 
+## 测试与 CI
+
+本地快速验证（与 GitHub Actions 一致）：
+
+```bash
+npm run build
+npm run test:ci
+```
+
+日常开发可用 `npm run test`（会先 `build:packages`，再跑全部测试）。
+
+| 脚本 | 说明 |
+|------|------|
+| `npm run test` | 编译 packages + 冒烟 / 集成测试 |
+| `npm run test:ci` | 仅跑测试（CI 在 `build` 之后调用） |
+| `npm run typecheck:ui` | 前端 TypeScript 检查（本地可选，暂未纳入 CI） |
+
+测试目录 `tests/`：
+
+- `smoke.test.mjs` — Agent 工具注册表、因子数量等静态检查
+- `integration.test.mjs` — SQLite 用户库读写、启动 API 后 `/api/health` 与关注列表往返
+
+集成测试使用临时目录作为 `OPPTRIX_DATA_DIR`，并在随机本地端口启动 server，不会污染本机 `~/.opptrix`。
+
+CI 工作流见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：`push` / `pull_request` 到 `main` 时执行 `npm ci` → `npm run build` → `npm run test:ci`。
+
 ## 调试技巧
 
 - **健康检查**：`curl http://127.0.0.1:8711/api/health`

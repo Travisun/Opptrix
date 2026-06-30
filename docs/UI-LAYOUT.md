@@ -23,6 +23,19 @@
 - **Agent Panel**：右侧滑入，与 EchoBird「会话记录」栏同位；关闭时主区占满
 - **浮层面板**：Dialog、下拉、抽屉统一毛玻璃（见 `UI-DESIGN-SYSTEM.md` §5.1）
 
+### 1.1 Chat 主界面（当前默认入口）
+
+产品默认以 **聊天 + 右侧投研面板** 为主布局（见根目录 [`screenshot.jpg`](../screenshot.jpg)）：
+
+```
+┌─────────────┬──────────────────────────────┬──────────────────┐
+│  Session    │  Chat + 工具过程 + 输入区     │  关注/发现/个股   │
+│  Sidebar    │  (flex 1)                    │  RightMarketPanel │
+└─────────────┴──────────────────────────────┴──────────────────┘
+```
+
+代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`。
+
 ## 2. 路由与页面映射
 
 | 导航 | 页面 | 布局模式 |

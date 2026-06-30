@@ -66,7 +66,7 @@ docs: 补充 AGENT-GUIDE 本地数据层说明
 
 ```bash
 npm run build
-npm run test
+npm run test        # 或 CI 等价：npm run build && npm run test:ci
 ```
 
 确保未暂存：

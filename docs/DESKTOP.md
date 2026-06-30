@@ -20,6 +20,12 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 
 **Why Electron?** Mature ecosystem, consistent Chromium rendering (Markdown / Mermaid / LaTeX), and the main process is Node — a natural fit for spawning the existing API sidecar. Production uses `ELECTRON_RUN_AS_NODE` so the bundled app does not require a separate Node.js install.
 
+<p align="center">
+  <img src="../screenshot.jpg" alt="Opptrix 桌面主界面" width="880" />
+</p>
+
+<p align="center"><sub>桌面端与 Web 共用 React UI：聊天投研 + 右侧个股面板</sub></p>
+
 ## Development
 
 Requirements: Node 20+.

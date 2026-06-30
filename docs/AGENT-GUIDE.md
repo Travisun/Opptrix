@@ -14,6 +14,12 @@
 - 提供 **Web**（浏览器 + Vite）与 **Desktop**（Electron 壳 + 本地 API sidecar）两种运行形态，**共用同一套 React UI 与 Fastify API**。
 - 核心能力：个股诊断、条件选股、本地因子库筛选、机构评级、策略信号与回测、市场报告、产业透视、关注列表与组合账本等。
 
+<p align="center">
+  <img src="../screenshot.jpg" alt="Opptrix 主界面示意" width="880" />
+</p>
+
+<p align="center"><sub>三栏布局：左侧会话、中间 Agent 分析与工具过程、右侧个股行情与 K 线</sub></p>
+
 ### 1.1 项目边界（必须遵守）
 
 | 允许 | 禁止 |
@@ -78,7 +84,7 @@ Opptrix/
 │   ├── research-hub/        # ResearchHub.dispatch 统一入口
 │   └── agent/               # LLM、ToolRegistry、MCP、多会话
 ├── docs/                    # 架构、API、UI、本文件
-├── tests/                   # 冒烟测试 smoke.test.mjs
+├── tests/                   # smoke + integration tests (*.test.mjs)
 ├── .cursor/rules/           # Cursor 工程规则（UI 与改动原则）
 ├── package.json             # 根脚本：dev / build / test / dev:desktop
 ```
@@ -163,7 +169,8 @@ npm run build:packages      # 修改 packages/* 后常需执行
 npm run dev                 # Web：API + Vite → http://127.0.0.1:5173
 npm run dev:desktop         # Electron 开发（会先 build packages）
 npm run build               # 全量编译
-npm run test                # 冒烟测试
+npm run test                # build:packages + 冒烟/集成测试
+npm run test:ci             # 仅跑测试（CI 在 build 之后）
 npm run serve               # 生产预览
 ```
 

@@ -12,6 +12,12 @@
 
 > 🤖 **协作者 / Vibe Coding**：请先阅读 **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** — 单文件说明项目用途、目录地图、架构约束与设计规范，供 Cursor / Codex 等 Agent 直接加载。
 
+<p align="center">
+  <img src="screenshot.jpg" alt="Opptrix 主界面：对话投研、工具执行过程与右侧个股行情面板" width="920" />
+</p>
+
+<p align="center"><sub>主界面：多会话聊天、Agent 工具链路与右侧关注/个股 K 线面板（桌面与 Web 共用同一套 UI）</sub></p>
+
 ---
 
 ## 项目定位与学习用途
@@ -146,7 +152,8 @@ npm run serve            # API + Vite preview → http://127.0.0.1:5173
 ### 测试
 
 ```bash
-npm run test             # build:packages + smoke tests
+npm run test             # build:packages + smoke/integration tests
+npm run test:ci          # run tests only (after build; same as CI)
 ```
 
 ---

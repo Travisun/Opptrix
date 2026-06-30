@@ -13,6 +13,16 @@
 | **Plain Language** | 按钮、提示、空状态等文案面向最终用户，易懂、可操作；细则见 `.cursor/rules/engineering-guidelines.mdc` |
 | **Icon Consistency** | 统一 `@fluentui/react-icons` Regular 20px |
 
+## 1.1 界面参考
+
+仓库根目录 [`screenshot.jpg`](../screenshot.jpg) 为当前产品主界面截图，可作为布局与信息密度的对照：
+
+- **左栏**：会话列表与新建对话
+- **中栏**：Agent 回复、工具执行过程、输入区与模型选择
+- **右栏**：关注/发现/行业/个股详情与 K 线
+
+实现入口：`client-ui/src/chat/ChatApp.tsx`、右侧 `client-ui/src/market/RightMarketPanel.tsx`。
+
 ## 2. Color Tokens
 
 ### 2.1 品牌色（Terracotta）

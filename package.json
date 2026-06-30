@@ -14,10 +14,12 @@
     "build": "npm run build:packages && npm run build -w opptrix-client",
     "build:desktop": "npm run build -w @opptrix/desktop",
     "build:packages": "npm run build -w @opptrix/shared -w @opptrix/user-store -w @opptrix/a-stock-layer -w @opptrix/stock-eval -w @opptrix/market-data -w @opptrix/institutions -w @opptrix/t-strategy -w @opptrix/skills -w @opptrix/research-hub -w @opptrix/agent -w @opptrix/server",
+    "typecheck:ui": "tsc -p client-ui/tsconfig.json --noEmit",
     "start": "npm run start -w @opptrix/server",
     "serve": "concurrently -k -n api,web -c blue,cyan \"npm run start\" \"npm run preview -w opptrix-client -- --host 0.0.0.0\"",
     "clean": "find packages apps -name dist -type d -prune -exec rm -rf {} + 2>/dev/null; rm -rf client-ui/dist",
-    "test": "npm run build:packages && node --test tests/smoke.test.mjs"
+    "test": "npm run build:packages && node --test tests/*.test.mjs",
+    "test:ci": "node --test tests/*.test.mjs"
   },
   "engines": {
     "node": ">=20"
