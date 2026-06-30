@@ -37,6 +37,9 @@ const TOOL_LABELS: Record<string, string> = {
   screen_stocks: '按条件筛选股票',
   local_screen_stocks: '本地因子初选',
   screen_local_universe: '本地多维度筛选',
+  list_local_industries: '读取本地行业列表',
+  screen_local_industry_stocks: '行业内策略筛选',
+  get_local_industry_stocks: '读取行业成分股',
   get_market_db_status: '查询本地数据库状态',
   get_market_db_sync_state: '查看数据同步进度',
   trigger_market_db_sync: '触发本地数据同步',
@@ -166,13 +169,20 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     }
     case 'screen_stocks':
     case 'local_screen_stocks':
-    case 'screen_local_universe': {
+    case 'screen_local_universe':
+    case 'screen_local_industry_stocks': {
       const conds = Array.isArray(args.conditions)
         ? args.conditions.length
         : Array.isArray(args.factor_conditions)
           ? args.factor_conditions.length
           : null
+      const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
+      if (industry) return `${industry} · ${base}`
       return conds != null ? `${base}（${conds} 条条件）` : base
+    }
+    case 'list_local_industries': {
+      const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
+      return kw ? `${base} · ${kw}` : base
     }
     default:
       return ref ? `${base} · ${ref}` : base

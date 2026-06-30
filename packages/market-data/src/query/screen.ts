@@ -53,6 +53,36 @@ export interface LocalUniverseScreenResult {
   items: LocalScreenItem[]
 }
 
+/** 按行业筛选本地股票（因子 + 评分/估值，行业名须与 list_local_industries 一致）。 */
+export interface LocalIndustryScreenQuery {
+  industry?: string
+  industries?: string[]
+  industry_contains?: string
+  factor_conditions?: ScreenCondition[]
+  min_total_score?: number
+  max_total_score?: number
+  min_pe?: number
+  max_pe?: number
+  min_pb?: number
+  max_pb?: number
+  exclude_st?: boolean
+  scorecard?: string
+  sort_by?: string
+  sort_order?: 'asc' | 'desc'
+  trade_date?: string
+  top_n?: number
+}
+
+export interface IndustryListItem {
+  industry: string
+  stock_count: number
+  avg_score: number | null
+  avg_pe: number | null
+  avg_pb: number | null
+  up_count?: number
+  down_count?: number
+}
+
 export function latestFactorDate(db: Database.Database): string | null {
   const row = db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
   return row.d
@@ -453,6 +483,68 @@ export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
     flat_count: number
   }[]
   return { trade_date: factorDate, quote_date: quoteDate, items: rows }
+}
+
+/** 本地行业名称列表（可选关键词过滤），便于 Agent 精确匹配行业后筛选。 */
+export function queryIndustryList(
+  store: MarketDataStore,
+  opts?: { keyword?: string; trade_date?: string; limit?: number },
+) {
+  const stats = queryIndustryStats(store, opts?.trade_date)
+  const kw = opts?.keyword?.trim()
+  let items: IndustryListItem[] = stats.items.map(row => ({
+    industry: row.industry,
+    stock_count: row.stock_count,
+    avg_score: row.avg_score,
+    avg_pe: row.avg_pe,
+    avg_pb: row.avg_pb,
+    up_count: row.up_count,
+    down_count: row.down_count,
+  }))
+  if (kw) items = items.filter(row => row.industry.includes(kw))
+  const cap = Math.min(Math.max(opts?.limit ?? 200, 1), 500)
+  const sliced = items.slice(0, cap)
+  return {
+    trade_date: stats.trade_date,
+    quote_date: stats.quote_date,
+    keyword: kw ?? null,
+    total: items.length,
+    industries: sliced.map(row => row.industry),
+    items: sliced,
+  }
+}
+
+/** 行业维度本地初选：在指定行业内叠加因子/评分/估值条件。 */
+export function localIndustryScreen(
+  store: MarketDataStore,
+  query: LocalIndustryScreenQuery,
+): LocalUniverseScreenResult {
+  const exact = String(query.industry ?? '').trim()
+  const list = (query.industries ?? []).map(i => i.trim()).filter(Boolean)
+  const contains = query.industry_contains?.trim()
+  if (!exact && !list.length && !contains) {
+    throw new Error('请指定 industry、industries 或 industry_contains')
+  }
+  const industries = exact
+    ? [...new Set([exact, ...list])].slice(0, 20)
+    : list.slice(0, 20)
+  return localUniverseScreen(store, {
+    industries: industries.length ? industries : undefined,
+    industry_contains: contains,
+    factor_conditions: query.factor_conditions,
+    min_total_score: query.min_total_score,
+    max_total_score: query.max_total_score,
+    min_pe: query.min_pe,
+    max_pe: query.max_pe,
+    min_pb: query.min_pb,
+    max_pb: query.max_pb,
+    exclude_st: query.exclude_st,
+    scorecard: query.scorecard,
+    sort_by: query.sort_by,
+    sort_order: query.sort_order,
+    trade_date: query.trade_date,
+    top_n: query.top_n,
+  })
 }
 
 export function queryIndustryStocks(

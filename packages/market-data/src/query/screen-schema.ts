@@ -187,7 +187,7 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
       },
       industries: {
         type: 'string[]',
-        description: '行业精确匹配（任一击中即可）。可先 get_industry_stats 查看可用行业名。',
+        description: '行业精确匹配（任一击中即可）。可先 list_local_industries 查看可用行业名。',
         example: ['白酒', '半导体'],
       },
       markets: {

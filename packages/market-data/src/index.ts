@@ -9,12 +9,16 @@ import {
   localScreen,
   localUniverseScreen,
   queryDiscoverCandidates,
+  queryIndustryList,
   queryIndustryStats,
   queryIndustryStocks,
+  localIndustryScreen,
   queryRadarBatch,
   queryStockSnapshot,
   type LocalUniverseScreenQuery,
   type LocalUniverseScreenResult,
+  type LocalIndustryScreenQuery,
+  type IndustryListItem,
   type ScreenCondition,
   type DiscoverCandidateRow,
 } from './query/screen.js'
@@ -95,6 +99,14 @@ export class MarketDataService {
     return queryIndustryStats(this.store, tradeDate)
   }
 
+  industryList(keyword?: string, tradeDate?: string, limit?: number) {
+    return queryIndustryList(this.store, { keyword, trade_date: tradeDate, limit })
+  }
+
+  industryScreen(query: LocalIndustryScreenQuery) {
+    return localIndustryScreen(this.store, query)
+  }
+
   industryStocks(industry: string, tradeDate?: string, limit = 120) {
     return queryIndustryStocks(this.store, industry, tradeDate, limit)
   }
@@ -145,7 +157,7 @@ export { getMarketDataStore, MarketDataStore } from './store.js'
 export type { MarketDbStatus, BootstrapReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
-export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult } from './query/screen.js'
+export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult, LocalIndustryScreenQuery, IndustryListItem } from './query/screen.js'
 export { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
 export type { LocalUniverseScreenSchema } from './query/screen-schema.js'
 export { listScreenFactors, SCREEN_FACTOR_LABELS } from './query/factors.js'

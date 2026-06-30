@@ -105,6 +105,7 @@ export class ToolRegistry {
       '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
       '- 任务开始先 get_market_db_status；本地库不足时用在线工具或 trigger_market_db_sync（谨慎）',
       '- 本地初选列表：先 get_local_universe_screen_schema 了解维度与数值格式，再用 screen_local_universe 组合筛选',
+      '- 按行业选股：先 list_local_industries 获取行业名称，再用 screen_local_industry_stocks 在行业内叠加因子/评分条件',
       '- 批量用 codes 数组（batch_stock_snapshots、get_stock_quotes）；单股深度（get_stock_detail）仅对 shortlisted 标的',
       '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
       '- 不推荐具体买卖，仅提供研究与数据解读',
@@ -193,6 +194,42 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('local_universe_screen', a),
       },
       {
+        name: 'list_local_industries', category: '本地数据',
+        description: '列出本地初选库中的行业名称（含股票数、均分/估值），支持关键词过滤',
+        parameters: S({
+          keyword: { type: 'string', description: '行业名称关键词，如「半导体」「银行」' },
+          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD，默认最新' },
+          limit: { type: 'number', description: '返回行业数上限 1-500，默认 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_industry_list', a),
+      },
+      {
+        name: 'screen_local_industry_stocks', category: '本地数据',
+        description: '在指定行业内筛选本地股票（因子条件 + 评分/估值 + 排序），行业名须与 list_local_industries 一致',
+        parameters: S({
+          industry: { type: 'string', description: '行业精确名称（推荐，来自 list_local_industries）' },
+          industries: { type: 'array', description: '多个行业精确匹配（与 industry 可叠加）' },
+          industry_contains: { type: 'string', description: '行业关键词模糊匹配（不知精确名时用）' },
+          factor_conditions: {
+            type: 'array',
+            description: '因子条件 [{factor, op, value}]，AND 组合，最多 8 条',
+          },
+          min_total_score: { type: 'number', description: '综合评分下限 0-100' },
+          max_total_score: { type: 'number', description: '综合评分上限 0-100' },
+          min_pe: { type: 'number', description: 'PE 下限（倍）' },
+          max_pe: { type: 'number', description: 'PE 上限（倍）' },
+          min_pb: { type: 'number', description: 'PB 下限（倍）' },
+          max_pb: { type: 'number', description: 'PB 上限（倍）' },
+          exclude_st: { type: 'boolean', description: '是否排除 ST，默认 true' },
+          scorecard: { type: 'string', description: '评分卡，默认综合评估' },
+          sort_by: { type: 'string', description: '排序：total_score / pe / pb / market_cap / 因子名' },
+          sort_order: { type: 'string', description: 'asc 或 desc，默认 desc' },
+          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD' },
+          top_n: { type: 'number', description: '返回条数 1-200，默认 40' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_industry_screen', a),
+      },
+      {
         name: 'local_screen_stocks', category: '本地数据',
         description: '使用本地 L0 因子库快速初选，不拉取全市场在线数据',
         parameters: S({
@@ -200,6 +237,16 @@ export class ToolRegistry {
           top_n: { type: 'number', description: '返回条数，默认60' },
         }, ['conditions']),
         handler: (a: Record<string, unknown>) => d('screening', { conditions: a.conditions, scorecard: '综合评估', top_n: a.top_n ?? 60 }),
+      },
+      {
+        name: 'get_local_industry_stocks', category: '本地数据',
+        description: '按行业名称获取本地成分股列表（价量、评分），不做因子筛选',
+        parameters: S({
+          industry: { type: 'string', description: '行业精确名称，来自 list_local_industries' },
+          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD' },
+          limit: { type: 'number', description: '返回条数 1-200，默认 120' },
+        }, ['industry']),
+        handler: (a: Record<string, unknown>) => d('market_industry_stocks', a),
       },
       {
         name: 'get_industry_stats', category: '本地数据',

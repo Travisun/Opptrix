@@ -45,6 +45,24 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '本地 L0 库已就绪时，按多维度组合筛选股票列表（因子 AND + 行业/板块/评分/估值/市值 + 排序）。选股挖掘扩大/收紧候选池的首选工具。',
     compliance: '须先 get_market_db_status 与 get_local_universe_screen_schema；factor_conditions ≤8；top_n ≤200；至少一项条件或过滤；本地库未就绪时勿调用。',
   },
+  list_local_industries: {
+    hubFeature: 'local_industry_list',
+    miningEligible: true,
+    usageGuide: '行业选股前获取可用行业名称列表；可用 keyword 模糊查找（如「半导体」「银行」）。返回 industries 数组供 screen_local_industry_stocks 精确匹配。',
+    compliance: '只读；须本地库 is_ready；行业名须原样传入后续筛选工具，勿臆造。',
+  },
+  screen_local_industry_stocks: {
+    hubFeature: 'local_industry_screen',
+    miningEligible: true,
+    usageGuide: '在单一或少数行业内按策略因子/评分/估值筛选候选股；适合「先定行业、再选股」流程。不知行业名时先 list_local_industries。',
+    compliance: '须 industry / industries / industry_contains 至少一项；factor_conditions ≤8；top_n ≤200；行业名与 list_local_industries 一致。',
+  },
+  get_local_industry_stocks: {
+    hubFeature: 'market_industry_stocks',
+    miningEligible: true,
+    usageGuide: '快速列出某行业全部成分股（价量、评分），不做因子过滤；需要策略条件时用 screen_local_industry_stocks。',
+    compliance: 'industry 必填且为精确名称；limit ≤200；不替代因子筛选。',
+  },
   local_screen_stocks: {
     hubFeature: 'screening',
     miningEligible: true,

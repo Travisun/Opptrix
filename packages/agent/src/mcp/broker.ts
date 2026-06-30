@@ -13,6 +13,7 @@ const SLOW_TOOLS = new Set([
   'screen_stocks',
   'local_screen_stocks',
   'screen_local_universe',
+  'screen_local_industry_stocks',
   'trigger_market_db_sync',
   'evaluate_stock',
   'get_stock_detail',

@@ -82,6 +82,8 @@ export class ResearchHub {
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
+        case 'local_industry_list': return this.localIndustryList(params, t0)
+        case 'local_industry_screen': return this.localIndustryScreen(params, t0)
         case 'list_screen_factors': return this.listScreenFactors(t0)
         case 'local_universe_screen_schema': return this.localUniverseScreenSchema(t0)
         case 'local_universe_screen': return this.localUniverseScreen(params, t0)
@@ -263,6 +265,59 @@ export class ResearchHub {
       void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
     }
     return ok(data, `${industry} ${data.items.length} 只`, t0)
+  }
+
+  private localIndustryList(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if (!status.is_ready) {
+      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
+    }
+    const keyword = params.keyword != null ? String(params.keyword) : undefined
+    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
+    const limit = params.limit != null ? Number(params.limit) : undefined
+    const data = this.marketData.industryList(keyword, tradeDate, limit)
+    return ok(data, `本地行业 ${data.total} 个${keyword ? `（含「${keyword}」）` : ''}`, t0)
+  }
+
+  private localIndustryScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if (!status.is_ready) {
+      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
+    }
+    try {
+      const data = this.marketData.industryScreen({
+        industry: params.industry as string | undefined,
+        industries: params.industries as string[] | undefined,
+        industry_contains: params.industry_contains as string | undefined,
+        factor_conditions: params.factor_conditions as never,
+        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
+        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
+        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
+        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
+        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
+        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
+        exclude_st: params.exclude_st as boolean | undefined,
+        scorecard: params.scorecard as string | undefined,
+        sort_by: params.sort_by as string | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        trade_date: params.trade_date as string | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      })
+      const topCodes = data.items.map(i => i.code).slice(0, Math.min(data.items.length, 30))
+      if (topCodes.length) {
+        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
+      }
+      return ok({
+        source: 'local',
+        trade_date: data.trade_date,
+        scorecard: data.scorecard,
+        total_universe: data.total_universe,
+        passed: data.passed,
+        items: data.items,
+      }, `行业筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
   }
 
   private listScreenFactors(t0: number) {
