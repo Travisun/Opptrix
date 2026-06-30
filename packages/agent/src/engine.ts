@@ -36,6 +36,17 @@ export interface ChatResult {
 const MAX_TOOL_ROUNDS = 8
 const TRUNCATE = 12_000
 
+export class ChatCancelledError extends Error {
+  constructor() {
+    super('已取消')
+    this.name = 'ChatCancelledError'
+  }
+}
+
+function throwIfAborted(signal?: AbortSignal) {
+  if (signal?.aborted) throw new ChatCancelledError()
+}
+
 export class AgentEngine {
   readonly tools: ToolRegistry
   readonly discover: DiscoverRunner
@@ -204,7 +215,9 @@ export class AgentEngine {
 
     record.messages.push({ role: 'user', content: text })
     if (!record.turns) record.turns = []
+    const turnsBeforeAssistant = record.turns.length
     record.turns.push({ role: 'user', content: text, at: new Date().toISOString() })
+    const messagesBeforeAssistant = record.messages.length
     if (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1) {
       record.title = text.slice(0, 28) + (text.length > 28 ? '…' : '')
     }
@@ -214,10 +227,36 @@ export class AgentEngine {
       progress?.onProgress?.(event)
     }
 
+    const signal = progress?.signal
+
+    const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
+      record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
+      if (record!.turns) {
+        record!.turns = record!.turns.slice(0, turnsBeforeAssistant + 1)
+      }
+      const reply = '（已停止）'
+      pushAssistant(reply, partialTools, partialSteps)
+      emit({ type: 'error', message: '已取消' })
+      emit({
+        type: 'done',
+        reply,
+        tools_used: partialTools,
+        session_id: sessionId,
+        title: record!.title,
+        tool_steps: partialSteps,
+        cancelled: true,
+      })
+      return { reply, toolsUsed: partialTools, sessionId, title: record!.title }
+    }
+
     const pushAssistant = (reply: string, used: string[], steps: ChatToolStep[]) => {
       this.pushAssistant(record!, reply, used, steps)
     }
 
+    const toolsUsed: string[] = []
+    const toolSteps: ChatToolStep[] = []
+
+    try {
     if (!llm) {
       const reply = '⚠️ LLM 未配置。请在设置中添加模型提供商并启用模型。'
       pushAssistant(reply, [], [])
@@ -232,13 +271,12 @@ export class AgentEngine {
       return { reply, toolsUsed: [], sessionId, title: record.title }
     }
 
-    const toolsUsed: string[] = []
-    const toolSteps: ChatToolStep[] = []
     const broker = await this.mcpBroker()
     const openAiTools = await broker.openAiTools()
     const systemPrompt = this.tools.systemPrompt()
 
     for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+      throwIfAborted(signal)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
@@ -252,9 +290,13 @@ export class AgentEngine {
         label: round === 0 ? '模型正在思考…' : '模型正在整理结果…',
       })
 
-      const turn = await llm.chat(messages, openAiTools)
+      const turn = await llm.chat(messages, openAiTools, signal)
+      throwIfAborted(signal)
 
       if (turn.finishReason === 'error') {
+        if (turn.error === 'cancelled' || signal?.aborted) {
+          return finalizeCancelled(toolsUsed, toolSteps)
+        }
         const reply = turn.message.content ?? turn.error ?? '请求失败'
         pushAssistant(reply, toolsUsed, toolSteps)
         emit({
@@ -291,6 +333,7 @@ export class AgentEngine {
         this.sessions.save(record)
 
         for (const tc of turn.message.tool_calls) {
+          throwIfAborted(signal)
           const fn = tc.function.name
           toolsUsed.push(fn)
           let args: Record<string, unknown> = {}
@@ -312,8 +355,15 @@ export class AgentEngine {
 
           let result: unknown
           try {
-            result = await broker.call(fn, args)
+            result = await broker.call(fn, args, { signal })
           } catch (e) {
+            if (
+              e instanceof ChatCancelledError
+              || signal?.aborted
+              || (e instanceof DOMException && e.name === 'AbortError')
+            ) {
+              throw new ChatCancelledError()
+            }
             result = { error: e instanceof Error ? e.message : String(e) }
           }
 
@@ -357,6 +407,16 @@ export class AgentEngine {
       tool_steps: toolSteps,
     })
     return { reply, toolsUsed, sessionId, title: record.title }
+    } catch (e) {
+      if (
+        e instanceof ChatCancelledError
+        || signal?.aborted
+        || (e instanceof DOMException && e.name === 'AbortError')
+      ) {
+        return finalizeCancelled(toolsUsed, toolSteps)
+      }
+      throw e
+    }
   }
 
   private pushAssistant(

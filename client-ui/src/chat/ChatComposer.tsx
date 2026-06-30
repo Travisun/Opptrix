@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowUpRegular } from '@fluentui/react-icons'
+import { ArrowUpRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ComposerContextRefTag from './ComposerContextRefTag'
 import ComposerStockRefTag from './ComposerStockRefTag'
@@ -13,7 +13,7 @@ import type { AvailableModel, SessionContextRef } from '../types/chat'
 import type { WatchlistItem } from '../types/market'
 import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
 import { opptrixTokens } from '../theme/tokens'
-import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
+import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
@@ -34,13 +34,16 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
     paddingLeft: opptrixTokens.chatComposerPadding,
+    ...fadeInUp,
+    animationDuration: '480ms',
+    animationDelay: '0.95s',
+    opacity: 0,
   },
   startersLabel: {
-    fontSize: '11px',
-    fontWeight: 600,
+    fontSize: '12px',
+    fontWeight: 500,
     color: opptrixTokens.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
+    letterSpacing: '0.01em',
   },
   starters: {
     display: 'flex',
@@ -243,10 +246,12 @@ interface ChatComposerProps {
   isMobile?: boolean
   contextRef?: SessionContextRef | null
   starters: string[]
+  welcomeKey?: number
   availableModels: AvailableModel[]
   sessionModel?: string
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
+  onStop?: () => void
   onModelChange?: (ref: string) => void
   onClearContextRef?: () => void
 }
@@ -259,10 +264,12 @@ export default function ChatComposer({
   isMobile = false,
   contextRef = null,
   starters,
+  welcomeKey = 0,
   availableModels,
   sessionModel,
   onInputChange,
   onSubmit,
+  onStop,
   onModelChange,
   onClearContextRef,
 }: ChatComposerProps) {
@@ -396,8 +403,8 @@ export default function ChatComposer({
   return (
     <div className={s.wrap}>
       {isEmpty && (
-        <div className={s.startersSection}>
-          <Text className={s.startersLabel}>试试这些</Text>
+        <div key={`starters-${welcomeKey}`} className={s.startersSection}>
+          <Text className={s.startersLabel}>你可以这样问</Text>
           <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
             {starters.map(st => (
               <OpptrixButton
@@ -474,10 +481,13 @@ export default function ChatComposer({
               <OpptrixButton
                 className={s.sendBtn}
                 variant="primary"
-                icon={<ArrowUpRegular fontSize={14} />}
-                disabled={!canSend}
-                onClick={() => handleSubmitMessage()}
-                aria-label="Send"
+                icon={loading ? <PauseFilled fontSize={14} /> : <ArrowUpRegular fontSize={14} />}
+                disabled={loading ? !onStop : !canSend}
+                onClick={() => {
+                  if (loading) onStop?.()
+                  else handleSubmitMessage()
+                }}
+                aria-label={loading ? '停止生成' : '发送'}
               />
             </div>
           </div>

@@ -103,7 +103,7 @@ export class McpToolBroker {
         return { error: formatToolTimeoutError(name) }
       }
       if (opts?.signal?.aborted) {
-        return { error: '已取消' }
+        throw new DOMException('Aborted', 'AbortError')
       }
       throw e
     }

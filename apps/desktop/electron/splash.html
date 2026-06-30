@@ -42,6 +42,7 @@
 
       .splash {
         display: flex;
+        flex-direction: column;
         align-items: center;
         justify-content: center;
       }
@@ -53,6 +54,29 @@
         font-weight: 600;
         letter-spacing: 0.08em;
         line-height: 1;
+        opacity: 0;
+        animation: brand-in 0.55s ease-out 0.25s forwards;
+      }
+
+      .tagline {
+        margin-top: 14px;
+        font-size: 14px;
+        font-weight: 500;
+        color: var(--text-mid);
+        letter-spacing: 0.02em;
+        opacity: 0;
+        animation: brand-in 0.5s ease-out 0.7s forwards;
+      }
+
+      @keyframes brand-in {
+        from {
+          opacity: 0;
+          transform: translateY(6px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
       }
 
       .brand span {
@@ -62,25 +86,25 @@
       }
 
       .brand span:nth-child(1) {
-        animation-delay: 0s;
+        animation-delay: 0.55s;
       }
       .brand span:nth-child(2) {
-        animation-delay: 0.12s;
+        animation-delay: 0.67s;
       }
       .brand span:nth-child(3) {
-        animation-delay: 0.24s;
+        animation-delay: 0.79s;
       }
       .brand span:nth-child(4) {
-        animation-delay: 0.36s;
+        animation-delay: 0.91s;
       }
       .brand span:nth-child(5) {
-        animation-delay: 0.48s;
+        animation-delay: 1.03s;
       }
       .brand span:nth-child(6) {
-        animation-delay: 0.6s;
+        animation-delay: 1.15s;
       }
       .brand span:nth-child(7) {
-        animation-delay: 0.72s;
+        animation-delay: 1.27s;
       }
 
       @keyframes letter-load {
@@ -113,6 +137,7 @@
       <div class="brand" aria-hidden="true">
         <span>O</span><span>p</span><span>p</span><span>t</span><span>r</span><span>i</span><span>x</span>
       </div>
+      <p class="tagline">正在打开你的投研助手</p>
     </div>
   </body>
 </html>

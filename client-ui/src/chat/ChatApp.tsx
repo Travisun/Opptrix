@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import SessionSidebar from './SessionSidebar'
 import ChatView from './ChatView'
@@ -9,7 +9,7 @@ import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
-  streamSessionChat, getHealth, listAvailableModels, setSessionModel,
+  streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -197,6 +197,9 @@ export default function ChatApp() {
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
+  const chatAbortRef = useRef<AbortController | null>(null)
+  const stoppingRef = useRef(false)
+  const [welcomeEpoch, setWelcomeEpoch] = useState(0)
 
   const refreshModels = useCallback(async () => {
     try {
@@ -287,6 +290,7 @@ export default function ChatApp() {
       setSessionModelState(undefined)
       setInput('')
       setError('')
+      setWelcomeEpoch(epoch => epoch + 1)
       closeDrawer()
       if (view !== 'chat') navigate('chat')
     } catch (e) {
@@ -324,6 +328,20 @@ export default function ChatApp() {
     }
   }
 
+  const handleStop = useCallback(async () => {
+    if (!loading || stoppingRef.current) return
+    stoppingRef.current = true
+    const sid = activeId
+    if (sid) {
+      try {
+        await cancelSessionChat(sid)
+      } catch {
+        /* stream may have already ended */
+      }
+    }
+    chatAbortRef.current?.abort()
+  }, [activeId, loading])
+
   const handleSubmit = async (text?: string) => {
     const msg = (text ?? input).trim()
     if (!msg || loading) return
@@ -354,6 +372,9 @@ export default function ChatApp() {
     setMessages(prev => [...prev, optimistic])
 
     let resolvedSessionId = sessionId
+    const abortController = new AbortController()
+    chatAbortRef.current = abortController
+    stoppingRef.current = false
 
     try {
       await streamSessionChat(sessionId, msg, (event) => {
@@ -394,7 +415,7 @@ export default function ChatApp() {
         if (event.type === 'done') {
           resolvedSessionId = event.session_id || resolvedSessionId
         }
-      }, sessionModel)
+      }, sessionModel, abortController.signal)
 
       const sid = resolvedSessionId
       if (sid !== sessionId) {
@@ -407,6 +428,23 @@ export default function ChatApp() {
       const list = await refreshSessions()
       setSessions(list)
     } catch (e) {
+      const aborted = (
+        (e instanceof DOMException && e.name === 'AbortError')
+        || (e instanceof Error && e.name === 'AbortError')
+      )
+      if (aborted) {
+        try {
+          const fresh = await getSession(sessionId)
+          setMessages(fresh.messages)
+          setContextRef(fresh.contextRef ?? null)
+          setSessionModelState(fresh.session.model)
+          const list = await refreshSessions()
+          setSessions(list)
+        } catch {
+          /* keep current messages */
+        }
+        return
+      }
       setInput(msg)
       setError(e instanceof Error ? e.message : '发送失败')
       try {
@@ -417,6 +455,8 @@ export default function ChatApp() {
         setMessages(prev => prev.slice(0, -1))
       }
     } finally {
+      chatAbortRef.current = null
+      stoppingRef.current = false
       setLiveTrace(null)
       setLoading(false)
     }
@@ -650,6 +690,7 @@ export default function ChatApp() {
                   <ChatView
                     title={activeSession?.title ?? '新对话'}
                     sessionId={activeId}
+                    welcomeEpoch={welcomeEpoch}
                     messages={messages}
                     contextRef={contextRef}
                     input={input}
@@ -663,6 +704,7 @@ export default function ChatApp() {
                     backendOk={backendOk}
                     onInputChange={setInput}
                     onSubmit={handleSubmit}
+                    onStop={handleStop}
                     onForkMessage={handleForkFromMessage}
                     onQuoteSelection={activeId ? handleQuoteSelection : undefined}
                     onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}

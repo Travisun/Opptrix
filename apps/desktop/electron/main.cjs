@@ -10,7 +10,7 @@ const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs'
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
-const MIN_SPLASH_MS = 900
+const MIN_SPLASH_MS = 2200
 const SPLASH_HTML = path.join(__dirname, 'splash.html')
 
 app.setName(APP_NAME)

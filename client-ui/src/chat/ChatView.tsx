@@ -2,7 +2,6 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { BotRegular } from '@fluentui/react-icons'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
   AvailableModel,
@@ -27,6 +26,7 @@ import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
 } from '../desktop/constants'
+import { pickWelcomeVariant } from './chatWelcomeVariants'
 
 const useStyles = makeStyles({
   root: {
@@ -149,38 +149,62 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
-    gap: '12px',
-    padding: '48px 24px 24px',
+    gap: '10px',
+    padding: '48px 24px 20px',
     textAlign: 'center',
-    maxWidth: '420px',
-    ...fadeInUp,
+    maxWidth: '440px',
   },
   welcomeBannerMobile: {
-    padding: '32px 16px 16px',
+    padding: '32px 16px 12px',
   },
-  welcomeIconWrap: {
-    width: '44px',
-    height: '44px',
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvasAlt,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
+  welcomeEnter: {
+    ...fadeInUp,
+    animationDuration: '480ms',
+    opacity: 0,
   },
-  welcomeIcon: {
-    fontSize: '22px',
-    color: opptrixTokens.textSecondary,
+  welcomeBrand: {
+    display: 'inline-flex',
+    alignItems: 'baseline',
+    fontSize: '36px',
+    fontWeight: 600,
+    letterSpacing: '0.08em',
+    lineHeight: 1,
+    animationDelay: '0.35s',
+  },
+  welcomeBrandLetter: {
+    display: 'inline-block',
+    color: opptrixTokens.textTertiary,
+    animationName: {
+      '0%, 100%': {
+        color: opptrixTokens.textTertiary,
+        opacity: 0.45,
+      },
+      '35%': {
+        color: opptrixTokens.textPrimary,
+        opacity: 1,
+      },
+      '55%': {
+        color: opptrixTokens.textSecondary,
+        opacity: 0.78,
+      },
+    },
+    animationDuration: '1.9s',
+    animationTimingFunction: 'ease-in-out',
+    animationIterationCount: 'infinite',
   },
   welcomeTitle: {
-    fontSize: '16px',
+    fontSize: '17px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixTokens.textPrimary,
+    animationDelay: '0.55s',
   },
   welcomeSub: {
-    fontSize: '13px',
-    color: opptrixTokens.textTertiary,
-    lineHeight: 1.55,
+    fontSize: '14px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.6,
+    maxWidth: '36ch',
+    animationDelay: '0.75s',
   },
   loadingRow: {
     alignSelf: 'stretch',
@@ -189,18 +213,13 @@ const useStyles = makeStyles({
   },
 })
 
-const STARTERS = [
-  '帮我全面诊断贵州茅台(600519)',
-  '筛选 ROE>15 且负债率<50 的股票',
-  '生成今日 A 股收盘市场报告',
-  '半导体产业链有哪些代表公司？',
-]
-
-const MOBILE_STARTERS = STARTERS.slice(0, 3)
+const WELCOME_LETTERS = ['O', 'p', 'p', 't', 'r', 'i', 'x'] as const
+const WELCOME_LETTER_BASE_DELAY_S = 0.55
 
 interface ChatViewProps {
   title?: string
   sessionId?: string | null
+  welcomeEpoch?: number
   messages: ChatDisplayMessage[]
   contextRef?: SessionContextRef | null
   input: string
@@ -215,6 +234,7 @@ interface ChatViewProps {
   backendOk?: boolean
   onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
+  onStop?: () => void
   onForkMessage?: (messageIndex: number) => void
   onQuoteSelection?: (selection: MessageSelection) => void
   onEphemeralAsk?: (
@@ -235,13 +255,13 @@ interface ChatViewProps {
 }
 
 export default function ChatView({
-  title = '新对话', sessionId = null, messages, contextRef = null, input, loading, liveTrace = null, error,
+  title = '新对话', sessionId = null, welcomeEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onInputChange, onSubmit, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
+  onInputChange, onSubmit, onStop, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
   onToggleRightPanel,
@@ -337,6 +357,8 @@ export default function ChatView({
   }, [onEphemeralAsk])
 
   const isEmpty = messages.length === 0 && !loading && !contextRef
+  const welcome = pickWelcomeVariant(welcomeEpoch)
+  const starters = isMobile ? welcome.starters.slice(0, 3) : welcome.starters
   const electronChrome = isElectron() && !isMobile
 
   const syncScrollbarHalfOffset = useCallback(() => {
@@ -355,6 +377,12 @@ export default function ChatView({
     observer.observe(el)
     return () => observer.disconnect()
   }, [syncScrollbarHalfOffset])
+
+  useEffect(() => {
+    if (!isEmpty) return
+    const el = chatBoxRef.current
+    if (el) el.scrollTop = 0
+  }, [welcomeEpoch, isEmpty])
 
   useEffect(() => {
     syncScrollbarHalfOffset()
@@ -417,7 +445,6 @@ export default function ChatView({
     onSubmit(text)
   }
 
-  const starters = isMobile ? MOBILE_STARTERS : STARTERS
   const threadColumnClass = mergeClasses(s.threadColumn, isMobile && s.threadColumnMobile)
 
   return (
@@ -497,13 +524,26 @@ export default function ChatView({
               )}
             >
               {isEmpty && (
-                <div className={mergeClasses(s.welcomeBanner, isMobile && s.welcomeBannerMobile)}>
-                  <div className={s.welcomeIconWrap}>
-                    <BotRegular className={s.welcomeIcon} />
+                <div
+                  key={`welcome-${welcomeEpoch}`}
+                  className={mergeClasses(s.welcomeBanner, isMobile && s.welcomeBannerMobile)}
+                >
+                  <div className={mergeClasses(s.welcomeBrand, s.welcomeEnter)} aria-hidden>
+                    {WELCOME_LETTERS.map((letter, index) => (
+                      <span
+                        key={`${letter}-${index}`}
+                        className={s.welcomeBrandLetter}
+                        style={{ animationDelay: `${WELCOME_LETTER_BASE_DELAY_S + index * 0.1}s` }}
+                      >
+                        {letter}
+                      </span>
+                    ))}
                   </div>
-                  <Text className={s.welcomeTitle}>有什么可以帮你？</Text>
-                  <Text className={s.welcomeSub}>
-                    投研问答 · Markdown · LaTeX · Mermaid
+                  <Text className={mergeClasses(s.welcomeTitle, s.welcomeEnter)}>
+                    {welcome.title}
+                  </Text>
+                  <Text className={mergeClasses(s.welcomeSub, s.welcomeEnter)}>
+                    {welcome.subtitle}
                   </Text>
                 </div>
               )}
@@ -556,10 +596,12 @@ export default function ChatView({
               isMobile={isMobile}
               contextRef={contextRef}
               starters={starters}
+              welcomeKey={welcomeEpoch}
               availableModels={availableModels}
               sessionModel={sessionModel}
               onInputChange={onInputChange}
               onSubmit={handleSubmit}
+              onStop={onStop}
               onModelChange={onModelChange}
               onClearContextRef={onClearContextRef}
             />

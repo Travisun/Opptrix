@@ -31,7 +31,7 @@ export interface LlmTurn {
 }
 
 export interface LlmProvider {
-  chat(messages: ChatMessage[], tools?: OpenAiTool[]): Promise<LlmTurn>
+  chat(messages: ChatMessage[], tools?: OpenAiTool[], signal?: AbortSignal): Promise<LlmTurn>
   listModels(): Promise<string[]>
 }
 
@@ -46,7 +46,7 @@ export function createProvider(cfg: LlmConfig): LlmProvider {
 export class OpenAiCompatibleProvider implements LlmProvider {
   constructor(private cfg: LlmConfig) {}
 
-  async chat(messages: ChatMessage[], tools?: OpenAiTool[]): Promise<LlmTurn> {
+  async chat(messages: ChatMessage[], tools?: OpenAiTool[], signal?: AbortSignal): Promise<LlmTurn> {
     if (!isConfigured(this.cfg)) {
       return {
         message: { role: 'assistant', content: '[LLM 未配置] 请在设置或环境变量中填入 API Key' },
@@ -75,6 +75,11 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         body.tool_choice = 'auto'
       }
 
+      const timeoutSignal = AbortSignal.timeout(this.cfg.timeout ?? 120_000)
+      const requestSignal = signal
+        ? AbortSignal.any([signal, timeoutSignal])
+        : timeoutSignal
+
       const resp = await fetch(url, {
         method: 'POST',
         headers: {
@@ -82,7 +87,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
           'Content-Type': 'application/json',
         },
         body: JSON.stringify(body),
-        signal: AbortSignal.timeout(this.cfg.timeout ?? 120_000),
+        signal: requestSignal,
       })
 
       if (!resp.ok) {
@@ -126,6 +131,10 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         finishReason: 'stop',
       }
     } catch (e) {
+      if (signal?.aborted) {
+        const msg = '已取消'
+        return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: 'cancelled' }
+      }
       const msg = `⚠️ 请求失败: ${e}`
       return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: msg }
     }

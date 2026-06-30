@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Input, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowLeftRegular, DismissRegular, SearchRegular } from '@fluentui/react-icons'
+import { ArrowLeftRegular, BuildingRegular, DismissRegular, OrganizationRegular, SearchRegular } from '@fluentui/react-icons'
+import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { IndustryMiningData, IndustryStatItem, IndustryStockItem } from '../types/schemas'
 import type { MarketQuote, WatchlistItem } from '../types/market'
@@ -108,6 +109,13 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflowY: 'auto',
     padding: `0 ${ITEM_BG_INSET}`,
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  listCentered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: `10px ${ITEM_BG_INSET}`,
   },
   listItem: {
     borderBottom: `1px solid ${opptrixTokens.separator}`,
@@ -207,6 +215,12 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '10px',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  chainPaneFilled: {
+    justifyContent: 'flex-start',
+    alignItems: 'stretch',
   },
   chainSection: {
     display: 'flex',
@@ -223,13 +237,6 @@ const useStyles = makeStyles({
     color: opptrixTokens.textSecondary,
     lineHeight: 1.55,
     whiteSpace: 'pre-wrap',
-  },
-  empty: {
-    padding: `24px ${CONTENT_PAD}`,
-    textAlign: 'center',
-    fontSize: '11px',
-    color: opptrixTokens.textTertiary,
-    lineHeight: 1.5,
   },
   center: {
     display: 'flex',
@@ -473,9 +480,11 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   if (loading) {
     return (
       <div className={s.root}>
-        <div className={s.center}>
-          <Spinner size="tiny" />
-          <Text>加载行业统计…</Text>
+        <div className={mergeClasses(s.list, s.listCentered)}>
+          <div className={s.center}>
+            <Spinner size="tiny" />
+            <Text>正在加载行业涨跌…</Text>
+          </div>
         </div>
       </div>
     )
@@ -498,10 +507,10 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
             <Text className={s.headTitle}>{title}</Text>
           </div>
           <Text className={s.headHint}>
-            {detailTab === 'stocks'
-              ? `${stocksLoading ? '加载成分股…' : `${stocks.length} 只成分股`}${quoteStatusHint(stocksQuoteDate, useLiveStocks) ? ` · ${quoteStatusHint(stocksQuoteDate, useLiveStocks)}` : ''}`
-              : '产业链上下游结构与代表环节'}
-          </Text>
+          {detailTab === 'stocks'
+            ? `${stocksLoading ? '正在加载成分股…' : `共 ${stocks.length} 只成分股`}${quoteStatusHint(stocksQuoteDate, useLiveStocks) ? ` · ${quoteStatusHint(stocksQuoteDate, useLiveStocks)}` : ''}`
+            : '了解这个行业上下游有哪些环节与代表公司'}
+        </Text>
           {detailTab === 'stocks' && stocksError ? (
             <Text className={s.meta} style={{ color: opptrixTokens.error }}>{stocksError}</Text>
           ) : null}
@@ -521,27 +530,27 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
 
         <div className={s.body}>
           {detailTab === 'stocks' ? (
-            <div className={s.list}>
+            <div className={mergeClasses(s.list, (stocksLoading || stocks.length === 0) && s.listCentered)}>
               {stocksLoading ? (
                 <div className={s.center}>
                   <Spinner size="tiny" />
-                  <Text>加载个股…</Text>
+                  <Text>正在加载成分股…</Text>
                 </div>
               ) : stocks.length === 0 ? (
-                <div className={s.empty}>
-                  {stocksError ? '加载失败' : '该行业暂无个股'}
-                  {stocksError ? (
-                    <div style={{ marginTop: 12 }}>
-                      <OpptrixButton
-                        size="small"
-                        variant="secondary"
-                        onClick={() => void loadStocks(selectedIndustry)}
-                      >
-                        重试
-                      </OpptrixButton>
-                    </div>
-                  ) : null}
-                </div>
+                <SidebarListEmpty
+                  icon={<OrganizationRegular />}
+                  title={stocksError ? '成分股暂时加载不了' : '这个行业暂无成分股'}
+                  hint={stocksError ? '请检查网络后重试' : '可以返回列表，试试其他行业'}
+                  action={stocksError ? (
+                    <OpptrixButton
+                      size="small"
+                      variant="secondary"
+                      onClick={() => void loadStocks(selectedIndustry)}
+                    >
+                      重试
+                    </OpptrixButton>
+                  ) : undefined}
+                />
               ) : (
                 sortedStocks.map(row => {
                   const code = normalizeCode(row.code)
@@ -581,16 +590,18 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
               )}
             </div>
           ) : (
-            <div className={s.chainPane}>
+            <div className={mergeClasses(s.chainPane, mining && s.chainPaneFilled)}>
               {miningLoading ? (
                 <div className={s.center}>
                   <Spinner size="tiny" />
-                  <Text>生成产业链解读…</Text>
+                  <Text>正在整理产业链解读…</Text>
                 </div>
               ) : miningError ? (
-                <div className={s.empty}>
-                  {miningError}
-                  <div style={{ marginTop: 12 }}>
+                <SidebarListEmpty
+                  icon={<BuildingRegular />}
+                  title="产业链解读暂时生成不了"
+                  hint="请稍后再试，或换一天再看"
+                  action={(
                     <OpptrixButton
                       size="small"
                       variant="secondary"
@@ -598,8 +609,8 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                     >
                       重试
                     </OpptrixButton>
-                  </div>
-                </div>
+                  )}
+                />
               ) : mining ? (
                 <>
                   {mining.summary ? (
@@ -653,7 +664,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
 
       <div className={s.head}>
         <Text className={s.headHint}>
-          按申万行业聚合本地行情；点击行业查看成分股，再点个股进入详情。
+          按行业查看涨跌与成分股，点行业名可进入详情，再点个股可看走势。
         </Text>
         {quoteStatusHint(quoteDate, useLiveList) ? (
           <Text className={s.meta}>{quoteStatusHint(quoteDate, useLiveList)}</Text>
@@ -664,15 +675,25 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
         {error ? <Text className={s.meta} style={{ color: opptrixTokens.error }}>{error}</Text> : null}
       </div>
 
-      <div className={s.list}>
+      <div className={mergeClasses(s.list, filtered.length === 0 && s.listCentered)}>
         {filtered.length === 0 ? (
-          <div className={s.empty}>
-            {error
-              ? '暂无行业数据'
-              : items.length === 0
-                ? '暂无行业数据，请先完成本地数据构建'
-                : '未匹配到行业'}
-          </div>
+          <SidebarListEmpty
+            icon={<BuildingRegular />}
+            title={
+              error
+                ? '行业数据暂时不可用'
+                : items.length === 0
+                  ? '暂时还没有行业数据'
+                  : '没有符合条件的行业'
+            }
+            hint={
+              error
+                ? '请检查网络后重试，或稍后再打开此页'
+                : items.length === 0
+                  ? '请先在设置里准备好本地行情，完成后这里会显示各行业涨跌'
+                  : '换个关键词试试，或清空上方筛选'
+            }
+          />
         ) : (
           filtered.map(it => (
             <div

@@ -25,11 +25,13 @@ export type ChatProgressEvent =
     session_id: string
     title?: string
     tool_steps: ChatToolStep[]
+    cancelled?: boolean
   }
   | { type: 'error'; message: string }
 
 export interface ChatProgressOptions {
   onProgress?: (event: ChatProgressEvent) => void
+  signal?: AbortSignal
 }
 
 const TOOL_LABELS: Record<string, string> = {

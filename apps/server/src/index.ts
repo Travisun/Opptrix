@@ -10,6 +10,7 @@ import {
 import { getMarketDataService, suggestPackageFilename } from '@opptrix/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
+import { cancelSessionChat, clearSessionChat, registerSessionChat } from './session-chat-runs.js'
 import {
   deleteCustomDiscoverStrategy,
   listCustomDiscoverStrategies,
@@ -562,6 +563,12 @@ app.post<{ Params: { id: string }; Body: { message: string; selected_text: strin
   },
 )
 
+app.post<{ Params: { id: string } }>('/api/sessions/:id/chat/cancel', async (req, reply) => {
+  const cancelled = cancelSessionChat(req.params.id)
+  if (!cancelled) return reply.code(404).send({ error: 'no active chat' })
+  return { cancelled: true }
+})
+
 app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
   '/api/sessions/:id/chat/stream',
   async (req, reply) => {
@@ -579,24 +586,32 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
       reply.raw.write(`data: ${JSON.stringify(event)}\n\n`)
     }
 
+    const ac = registerSessionChat(req.params.id)
+    req.raw.on('close', () => {
+      if (!reply.raw.writableEnded) ac.abort()
+    })
+
     try {
       await agent.chat(
         req.params.id,
         req.body.message,
         req.body.model,
-        { onProgress: write },
+        { onProgress: write, signal: ac.signal },
       )
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
-      write({ type: 'error', message })
-      write({
-        type: 'done',
-        reply: message,
-        tools_used: [],
-        session_id: req.params.id,
-        tool_steps: [],
-      })
+      if (message !== '已取消' && !ac.signal.aborted) {
+        write({ type: 'error', message })
+        write({
+          type: 'done',
+          reply: message,
+          tools_used: [],
+          session_id: req.params.id,
+          tool_steps: [],
+        })
+      }
     } finally {
+      clearSessionChat(req.params.id, ac)
       reply.raw.end()
     }
   },

@@ -668,6 +668,12 @@ export async function sendSessionChat(
   }, CHAT_REQUEST_TIMEOUT)
 }
 
+export async function cancelSessionChat(sessionId: string) {
+  return jsonFetch<{ cancelled: boolean }>(`/sessions/${sessionId}/chat/cancel`, {
+    method: 'POST',
+  })
+}
+
 export async function streamSessionChat(
   sessionId: string,
   message: string,
@@ -699,6 +705,9 @@ export async function streamSessionChat(
   let buffer = ''
 
   while (true) {
+    if (signal?.aborted) {
+      throw new DOMException('Aborted', 'AbortError')
+    }
     const { done, value } = await reader.read()
     if (done) break
     buffer += decoder.decode(value, { stream: true })

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { BriefcaseRegular } from '@fluentui/react-icons'
+import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
@@ -59,6 +61,11 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
+  },
+  listCentered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: '10px',
   },
   row: {
     display: 'flex',
@@ -134,13 +141,6 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     lineHeight: 1.2,
   },
-  empty: {
-    padding: `24px ${CONTENT_PAD}`,
-    textAlign: 'center',
-    fontSize: '12px',
-    color: opptrixTokens.textTertiary,
-    lineHeight: 1.5,
-  },
   center: {
     display: 'flex',
     alignItems: 'center',
@@ -200,9 +200,11 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
   if (loading) {
     return (
       <div className={s.root}>
-        <div className={s.center}>
-          <Spinner size="tiny" />
-          <Text>加载组合…</Text>
+        <div className={mergeClasses(s.list, s.listCentered)}>
+          <div className={s.center}>
+            <Spinner size="tiny" />
+            <Text>正在加载组合…</Text>
+          </div>
         </div>
       </div>
     )
@@ -211,11 +213,17 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
   if (error && !data) {
     return (
       <div className={s.root}>
-        <div className={s.empty}>
-          <div>{error}</div>
-          <OpptrixButton size="small" appearance="secondary" onClick={() => void load()} style={{ marginTop: 12 }}>
-            重试
-          </OpptrixButton>
+        <div className={mergeClasses(s.list, s.listCentered)}>
+          <SidebarListEmpty
+            icon={<BriefcaseRegular />}
+            title="组合暂时加载不了"
+            hint="请检查网络连接后重试"
+            action={(
+              <OpptrixButton size="small" appearance="secondary" onClick={() => void load()}>
+                重试
+              </OpptrixButton>
+            )}
+          />
         </div>
       </div>
     )
@@ -254,13 +262,13 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
         </div>
       ) : null}
 
-      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', empty && s.listCentered)}>
         {empty ? (
-          <div className={s.empty}>
-            暂无持仓
-            <br />
-            在个股详情录入买卖后，会在此汇总
-          </div>
+          <SidebarListEmpty
+            icon={<BriefcaseRegular />}
+            title="还没有持仓记录"
+            hint="在个股详情里录入买卖后，会在这里汇总市值与盈亏"
+          />
         ) : (
           holdings.map((h) => {
             const code = normalizeCode(h.code)

@@ -7,7 +7,8 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { DismissRegular, DeleteRegular, EditRegular, SearchRegular } from '@fluentui/react-icons'
+import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, StarRegular } from '@fluentui/react-icons'
+import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import { followReturnPct } from './portfolioCalc'
@@ -55,6 +56,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
+    minHeight: '88px',
   },
   resultItem: {
     width: '100%',
@@ -87,6 +89,15 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
+  },
+  listCentered: {
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingBottom: '10px',
+  },
+  resultsCentered: {
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   row: {
     display: 'flex',
@@ -243,10 +254,14 @@ const useStyles = makeStyles({
     },
   },
   empty: {
-    padding: `24px ${CONTENT_PAD}`,
+    padding: `12px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '12px',
     color: opptrixTokens.textTertiary,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
   },
   footer: {
     padding: `6px ${CONTENT_PAD}`,
@@ -436,7 +451,7 @@ export default function WatchlistTab({
           className={s.searchInput}
           appearance="filled-darker"
           size="small"
-          placeholder="搜索代码 / 名称添加关注"
+          placeholder="搜索股票名称或代码"
           value={keyword}
           onChange={(_, data) => setKeyword(data.value)}
           contentBefore={<SearchRegular fontSize={14} />}
@@ -449,9 +464,21 @@ export default function WatchlistTab({
       </div>
 
       {keyword.trim().length >= 2 && (
-        <div className={mergeClasses(s.results, 'opptrix-scroll')}>
-          {searching && <div className={s.empty}><Spinner size="tiny" /> 搜索中…</div>}
-          {!searching && searchHits.length === 0 && <div className={s.empty}>未找到匹配股票</div>}
+        <div className={mergeClasses(s.results, 'opptrix-scroll', !searching && searchHits.length === 0 && s.resultsCentered)}>
+          {searching && (
+            <div className={s.empty}>
+              <Spinner size="tiny" />
+              正在搜索…
+            </div>
+          )}
+          {!searching && searchHits.length === 0 && (
+            <SidebarListEmpty
+              compact
+              icon={<SearchRegular />}
+              title="没找到匹配的股票"
+              hint="试试输入完整代码，或换一个字再搜"
+            />
+          )}
           {!searching && searchHits.map(hit => (
             <button
               key={hit.code}
@@ -478,8 +505,14 @@ export default function WatchlistTab({
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-        {!items.length && <div className={s.empty}>添加股票开始关注</div>}
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !items.length && s.listCentered)}>
+        {!items.length && (
+          <SidebarListEmpty
+            icon={<StarRegular />}
+            title="还没有关注的股票"
+            hint="在上方搜索并添加后，会在这里显示行情与涨跌"
+          />
+        )}
         {items.map(item => {
           const quote = quotes[item.code]
           const holding = holdingsByCode[item.code]

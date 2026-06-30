@@ -1,4 +1,4 @@
-export { AgentEngine, type AgentSettings, type ChatResult } from './engine.js'
+export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult } from './engine.js'
 export {
   type ChatProgressEvent,
   type ChatProgressOptions,
