@@ -8,7 +8,7 @@
 
 ## 1. 项目是什么
 
-**Opptrix** 是一款 **基于 AI 的投研分析助手**，面向 A 股投资者（非券商、非投顾产品）：
+**Opptrix** 是一款 **你的A股投研助手**，面向 A 股投资者（非券商、非投顾产品）：
 
 - 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取真实行情、因子、机构观点等数据，再生成中文分析。
 - 提供 **Web**（浏览器 + Vite）与 **Desktop**（Electron 壳 + 本地 API sidecar）两种运行形态，**共用同一套 React UI 与 Fastify API**。
@@ -43,7 +43,7 @@
 
 | 端口 | 用途 |
 |------|------|
-| `5173` | 用户访问的 Web UI（开发：Vite HMR；生产：preview 或 Docker 暴露） |
+| `5173` | 用户访问的 Web UI（开发：Vite HMR；生产：preview） |
 | `8711` | API 后台（`STOCK_RESEARCH_PORT`），开发时由 Vite 代理 `/api` |
 
 桌面版同样加载 `http://127.0.0.1:8711`（生产）或开发时 `5173`（HMR）。
@@ -81,7 +81,6 @@ Opptrix/
 ├── tests/                   # 冒烟测试 smoke.test.mjs
 ├── .cursor/rules/           # Cursor 工程规则（UI 与改动原则）
 ├── package.json             # 根脚本：dev / build / test / dev:desktop
-└── docker-compose.yml
 ```
 
 ---

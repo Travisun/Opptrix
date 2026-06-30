@@ -85,7 +85,7 @@ agent, server
 | 设置 | `src/pages/SettingsPage.tsx` | `/api/config`, 市场数据同步 |
 | 桌面壳层 | `src/desktop/` | Electron 窗口与浮层侧栏 |
 
-开发时 Vite（`:5173`）将 `/api` 代理到后台 API（`:8711`）；生产用 `npm run serve` 或 Docker。桌面开发：`npm run dev:desktop`。
+开发时 Vite（`:5173`）将 `/api` 代理到后台 API（`:8711`）；生产用 `npm run serve`。桌面开发：`npm run dev:desktop`。
 
 协作者与 Agent 请参阅 [AGENT-GUIDE.md](./AGENT-GUIDE.md)。
 

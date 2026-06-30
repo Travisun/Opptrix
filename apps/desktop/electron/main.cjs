@@ -177,7 +177,7 @@ function createMainWindow() {
       // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
       minWidth: 510,
       minHeight: 640,
-      title: 'Opptrix 投研助手',
+      title: 'Opptrix 你的A股投研助手',
       backgroundColor: '#00000000',
       transparent: true,
       show: false,

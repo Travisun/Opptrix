@@ -2,13 +2,13 @@
   <img src="icons/logo@256.png" alt="Opptrix" width="128" height="128" />
 </p>
 
-# Opptrix — 基于 AI 的投研分析助手
+# Opptrix — 你的A股投研助手
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**Opptrix** 是一款开源的 **基于 AI 的投研分析助手**：用自然语言提问，由大模型调用 **40+ MCP 投研工具** 获取行情、因子、机构观点与策略信号，再生成结构化中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
+**Opptrix** 是一款开源的 **你的A股投研助手**：用自然语言提问，由大模型调用 **40+ MCP 投研工具** 获取行情、因子、机构观点与策略信号，再生成结构化中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
 
 > 🤖 **协作者 / Vibe Coding**：请先阅读 **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** — 单文件说明项目用途、目录地图、架构约束与设计规范，供 Cursor / Codex 等 Agent 直接加载。
 
@@ -108,7 +108,7 @@ Opptrix/
 
 - **Node.js** ≥ 20  
 - **npm**（workspaces）  
-- 可选：Docker、macOS/Windows/Linux（桌面打包见 DESKTOP.md）
+- 可选：macOS/Windows/Linux（桌面打包见 DESKTOP.md）
 
 ### 安装与编译
 
@@ -141,15 +141,7 @@ npm run build
 npm run serve            # API + Vite preview → http://127.0.0.1:5173
 ```
 
-### Docker
-
-```bash
-cp .env.example .env
-docker compose up -d --build
-# → http://localhost:5173
-```
-
-数据卷：`apps/server/data`（配置）、`~/.opptrix`（账本与本地市场数据）。
+数据目录：`apps/server/data`（配置）、`~/.opptrix`（账本与本地市场数据）。
 
 ### 测试
 

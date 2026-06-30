@@ -82,7 +82,7 @@ npm run build
 npm run serve          # API :8711 + Vite preview :5173
 ```
 
-对外暴露 **5173**（Web）；8711 仅容器/本机内部。Docker：`docker compose up` → http://localhost:5173
+对外暴露 **5173**（Web）；8711 仅本机内部，由 Vite 代理 `/api`。
 
 ## 调试技巧
 

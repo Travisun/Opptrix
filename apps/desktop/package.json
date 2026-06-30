@@ -65,7 +65,7 @@
       "category": "Office;Finance",
       "desktop": {
         "Name": "Opptrix",
-        "Comment": "基于 AI 的投研分析助手",
+        "Comment": "你的A股投研助手",
         "StartupWMClass": "Opptrix"
       },
       "target": [

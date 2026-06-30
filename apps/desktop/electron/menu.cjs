@@ -27,7 +27,7 @@ function showAboutDialog(parentWindow) {
       detail: [
         `版本 ${VERSION}`,
         '',
-        '基于 AI 的投研分析助手',
+        '你的A股投研助手',
         '开源项目，仅供学习与研究。',
         '',
         COPYRIGHT,

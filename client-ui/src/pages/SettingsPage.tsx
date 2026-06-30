@@ -413,7 +413,7 @@ export default function SettingsPage({
       case 'about':
         return (
           <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
-            <Text className={s.aboutTitle} block>Opptrix · 基于 AI 的投研分析助手</Text>
+            <Text className={s.aboutTitle} block>Opptrix · 你的A股投研助手</Text>
             <Text className={s.aboutMeta} block>
               21 投研工具 · 多会话 · Function Calling · 多模型提供商。
             </Text>
