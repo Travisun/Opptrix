@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Opptrix</title>
+    <style>
+      :root {
+        --canvas: #f5f5f7;
+        --text-idle: #d1d1d6;
+        --text-mid: #aeaeb2;
+        --text-active: #636366;
+      }
+
+      * {
+        box-sizing: border-box;
+      }
+
+      html,
+      body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+      }
+
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: var(--canvas);
+        font-family:
+          -apple-system,
+          BlinkMacSystemFont,
+          'Segoe UI',
+          system-ui,
+          sans-serif;
+        -webkit-font-smoothing: antialiased;
+        user-select: none;
+      }
+
+      .splash {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 18px;
+      }
+
+      .logo {
+        width: 56px;
+        height: 56px;
+        object-fit: contain;
+        opacity: 0.92;
+      }
+
+      .brand {
+        display: inline-flex;
+        align-items: baseline;
+        font-size: 30px;
+        font-weight: 600;
+        letter-spacing: 0.06em;
+        line-height: 1;
+      }
+
+      .brand span {
+        display: inline-block;
+        color: var(--text-idle);
+        animation: letter-wave 1.8s ease-in-out infinite;
+      }
+
+      .brand span:nth-child(1) {
+        animation-delay: 0s;
+      }
+      .brand span:nth-child(2) {
+        animation-delay: 0.12s;
+      }
+      .brand span:nth-child(3) {
+        animation-delay: 0.24s;
+      }
+      .brand span:nth-child(4) {
+        animation-delay: 0.36s;
+      }
+      .brand span:nth-child(5) {
+        animation-delay: 0.48s;
+      }
+      .brand span:nth-child(6) {
+        animation-delay: 0.6s;
+      }
+      .brand span:nth-child(7) {
+        animation-delay: 0.72s;
+      }
+
+      @keyframes letter-wave {
+        0%,
+        100% {
+          color: var(--text-idle);
+          opacity: 0.42;
+          transform: translateY(0);
+        }
+        35% {
+          color: var(--text-active);
+          opacity: 1;
+          transform: translateY(-1px);
+        }
+        55% {
+          color: var(--text-mid);
+          opacity: 0.72;
+          transform: translateY(0);
+        }
+      }
+
+      @media (prefers-reduced-motion: reduce) {
+        .brand span {
+          animation: none;
+          color: var(--text-mid);
+          opacity: 0.8;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="splash" role="status" aria-label="Opptrix 正在启动">
+      <img class="logo" src="splash-logo.png" alt="" width="56" height="56" />
+      <div class="brand" aria-hidden="true">
+        <span>O</span><span>p</span><span>p</span><span>t</span><span>r</span><span>i</span><span>x</span>
+      </div>
+    </div>
+  </body>
+</html>

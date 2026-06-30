@@ -3,6 +3,13 @@
   "version": "0.6.0",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
+  "homepage": "https://github.com/Travisun/Opptrix",
+  "author": "Opptrix contributors",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travisun/Opptrix.git"
+  },
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -33,6 +40,10 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icons/logo.png",
+      "extendInfo": {
+        "CFBundleDisplayName": "Opptrix",
+        "CFBundleName": "Opptrix"
+      },
       "target": [
         "dmg",
         "zip"
@@ -44,8 +55,19 @@
         "nsis"
       ]
     },
+    "nsis": {
+      "shortcutName": "Opptrix",
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    },
     "linux": {
       "icon": "build/icons/linux",
+      "category": "Office;Finance",
+      "desktop": {
+        "Name": "Opptrix",
+        "Comment": "基于 AI 的投研分析助手",
+        "StartupWMClass": "Opptrix"
+      },
       "target": [
         "AppImage",
         "deb"

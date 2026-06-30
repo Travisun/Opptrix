@@ -33,7 +33,21 @@ This builds workspace packages, starts the API sidecar + Vite HMR, and opens the
 
 If the API is already running on port `8711`, stop it first or set `STOCK_RESEARCH_PORT` to avoid a port conflict.
 
-Optional: `ELECTRON_OPEN_DEVTOOLS=1 npm run dev:desktop` opens DevTools.
+Optional: `ELECTRON_OPEN_DEVTOOLS=1 npm run dev:desktop` opens DevTools（仅开发模式）。
+
+## 菜单与版本信息
+
+打包后的桌面应用提供定制菜单栏：
+
+| 菜单 | 内容 |
+|------|------|
+| **Opptrix**（macOS 应用菜单） | 关于、隐藏/退出 |
+| **文件** | 打开主窗口、关闭窗口 |
+| **编辑** | 撤销、复制、粘贴等 |
+| **视图** | 缩放、全屏（开发模式含重新加载与开发者工具） |
+| **帮助** | [GitHub 项目主页](https://github.com/Travisun/Opptrix)、报告问题、关于与版本号 |
+
+版本号来自 `apps/desktop/package.json`。生产包默认禁用 DevTools 与调试快捷键。
 
 ## Production build
 

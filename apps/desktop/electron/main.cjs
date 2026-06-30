@@ -1,14 +1,23 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 const { spawn } = require('node:child_process')
+const { APP_NAME } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
+const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
+const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
 
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 
+app.setName(APP_NAME)
+
 /** @type {import('node:child_process').ChildProcess | null} */
 let serverProcess = null
+/** @type {import('electron').BrowserWindow | null} */
+let mainWindow = null
+/** @type {import('electron').BrowserWindow | null} */
+let splashWindow = null
 
 function repoRoot() {
   if (isDev) {
@@ -104,62 +113,122 @@ function appUrl() {
   return `http://${API_HOST}:${API_PORT}`
 }
 
-function createWindow() {
-  /** @type {import('electron').BrowserWindowConstructorOptions} */
-  const options = {
-    width: 1280,
-    height: 840,
-    // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
-    minWidth: 510,
-    minHeight: 640,
-    title: 'Opptrix 投研助手',
-    backgroundColor: '#00000000',
-    transparent: true,
-    show: false,
-    webPreferences: {
-      preload: path.join(__dirname, 'preload.cjs'),
-      nodeIntegration: false,
-      contextIsolation: true,
-    },
-  }
-
+function windowIconOptions() {
   const iconPath = resolveAppIconPath()
-  if (iconPath && process.platform !== 'darwin') {
-    options.icon = iconPath
-  }
-
-  if (process.platform === 'darwin') {
-    options.titleBarStyle = 'hiddenInset'
-    options.trafficLightPosition = { x: 16, y: 16 }
-    options.vibrancy = 'sidebar'
-    options.visualEffectState = 'active'
-  } else {
-    options.frame = false
-  }
-
-  const win = new BrowserWindow(options)
-
-  const notifyFullscreen = () => {
-    win.webContents.send('window-fullscreen-changed', win.isFullScreen())
-  }
-  win.on('enter-full-screen', notifyFullscreen)
-  win.on('leave-full-screen', notifyFullscreen)
-  win.webContents.on('did-finish-load', notifyFullscreen)
-
-  // Required on macOS for true transparent compositing with CSS glass layers
-  win.setBackgroundColor('#00000000')
-
-  win.once('ready-to-show', () => win.show())
-  win.loadURL(appUrl())
-
-  if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
-    win.webContents.openDevTools({ mode: 'bottom' })
-  }
+  if (!iconPath || process.platform === 'darwin') return {}
+  return { icon: iconPath }
 }
 
-app.whenReady().then(async () => {
-  applyAppIcon(app)
+function getMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) return mainWindow
+  return null
+}
 
+function closeSplash() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    splashWindow.close()
+  }
+  splashWindow = null
+}
+
+function createSplashWindow() {
+  if (splashWindow && !splashWindow.isDestroyed()) {
+    return splashWindow
+  }
+
+  splashWindow = new BrowserWindow({
+    width: 360,
+    height: 240,
+    frame: false,
+    resizable: false,
+    movable: true,
+    center: true,
+    show: false,
+    alwaysOnTop: true,
+    backgroundColor: '#F5F5F7',
+    ...windowIconOptions(),
+    webPreferences: {
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      devTools: false,
+    },
+  })
+
+  splashWindow.loadFile(path.join(__dirname, 'splash.html'))
+  splashWindow.once('ready-to-show', () => {
+    if (!splashWindow?.isDestroyed()) splashWindow.show()
+  })
+
+  return splashWindow
+}
+
+function createMainWindow() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus()
+    return Promise.resolve(mainWindow)
+  }
+
+  return new Promise((resolve) => {
+    /** @type {import('electron').BrowserWindowConstructorOptions} */
+    const options = {
+      width: 1280,
+      height: 840,
+      // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
+      minWidth: 510,
+      minHeight: 640,
+      title: 'Opptrix 投研助手',
+      backgroundColor: '#00000000',
+      transparent: true,
+      show: false,
+      webPreferences: mainWindowWebPreferences({
+        isDev,
+        preloadPath: path.join(__dirname, 'preload.cjs'),
+      }),
+      ...windowIconOptions(),
+    }
+
+    if (process.platform === 'darwin') {
+      options.titleBarStyle = 'hiddenInset'
+      options.trafficLightPosition = { x: 16, y: 16 }
+      options.vibrancy = 'sidebar'
+      options.visualEffectState = 'active'
+    } else {
+      options.frame = false
+    }
+
+    const win = new BrowserWindow(options)
+    mainWindow = win
+
+    hardenWebContents(win.webContents, { isDev })
+
+    const notifyFullscreen = () => {
+      win.webContents.send('window-fullscreen-changed', win.isFullScreen())
+    }
+    win.on('enter-full-screen', notifyFullscreen)
+    win.on('leave-full-screen', notifyFullscreen)
+    win.webContents.on('did-finish-load', notifyFullscreen)
+    win.on('closed', () => {
+      if (mainWindow === win) mainWindow = null
+    })
+
+    win.setBackgroundColor('#00000000')
+
+    win.once('ready-to-show', () => {
+      closeSplash()
+      win.show()
+      resolve(win)
+    })
+
+    win.loadURL(appUrl())
+
+    if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
+      win.webContents.openDevTools({ mode: 'bottom' })
+    }
+  })
+}
+
+function registerWindowIpc() {
   ipcMain.on('window-minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
   })
@@ -175,25 +244,59 @@ app.whenReady().then(async () => {
   ipcMain.handle('window-is-fullscreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
   })
+}
 
-  // Dev: scripts/dev-stack.mjs already runs API + Vite.
-  if (!isDev) {
-    spawnSidecar()
-    await waitForHealth()
+async function ensureSidecarReady() {
+  if (isDev) return
+  if (!serverProcess) spawnSidecar()
+  await waitForHealth()
+}
+
+async function bootstrapApp({ withSplash = true } = {}) {
+  if (withSplash) createSplashWindow()
+  await ensureSidecarReady()
+  await createMainWindow()
+}
+
+async function openMainWindowFromMenu() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus()
+    return
   }
+  await bootstrapApp({ withSplash: false })
+}
 
-  createWindow()
+function setupDesktopChrome() {
+  configureAboutPanel(app, resolveAppIconPath() ?? undefined)
+  installApplicationMenu({
+    isDev,
+    getMainWindow,
+    onOpenMainWindow: () => {
+      void openMainWindowFromMenu()
+    },
+  })
+}
 
-  app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+app.whenReady().then(async () => {
+  applyAppIcon(app)
+  setupDesktopChrome()
+  registerWindowIpc()
+  await bootstrapApp()
+
+  app.on('activate', async () => {
+    if (!mainWindow || mainWindow.isDestroyed()) {
+      await bootstrapApp()
+    }
   })
 })
 
 app.on('window-all-closed', () => {
+  closeSplash()
   stopSidecar()
   app.quit()
 })
 
 app.on('before-quit', () => {
+  closeSplash()
   stopSidecar()
 })

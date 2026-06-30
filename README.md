@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="icons/logo@256.png" alt="Opptrix" width="128" height="128" />
+</p>
+
 # Opptrix — 基于 AI 的投研分析助手
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
