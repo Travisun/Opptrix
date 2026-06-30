@@ -15,6 +15,12 @@ import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
 import { tdxClient } from './tdx/client.js'
+import {
+  hasIntradaySessionOnDate,
+  mergeIntradaySessions,
+} from './tdx/intraday.js'
+import type { IntradayTrendFetchResult } from './utils/intraday-trends.js'
+import { cnTodayString, shouldPreferTodayIntraday } from './utils/market-session.js'
 import { isTushareEnabled } from './tushare/config.js'
 import { isBse920Code, normalizeCode } from './utils/helpers.js'
 import {
@@ -451,19 +457,49 @@ export class AshareEngine {
     return this.q(Capability.INTRADAY_TICK, 'intradayTick', false, code, date)
   }
 
-  /** Multi-day intraday — TDX primary, EastMoney trends2 fallback. */
+  /** Multi-day intraday — TDX history + EastMoney today on trading days. */
   async fetchIntradaySessions(
     code: string,
     ndays = 5,
     market?: import('./utils/helpers.js').StockMarket,
   ) {
-    try {
-      const tdx = await tdxClient.fetchIntradaySessions(code, ndays)
-      if (tdx?.sessions?.length) {
-        return { success: true as const, data: tdx, source: 'mootdx' }
-      }
-    } catch { /* EastMoney fallback */ }
+    const today = cnTodayString()
+    const preferToday = shouldPreferTodayIntraday()
 
+    let tdx: IntradayTrendFetchResult | null = null
+    try {
+      tdx = await tdxClient.fetchIntradaySessions(code, ndays, market)
+    } catch { /* EastMoney supplement */ }
+
+    const em = await this.fetchEastmoneyIntradaySessions(code, ndays, market)
+
+    if (preferToday && em && hasIntradaySessionOnDate(em.sessions, today)) {
+      const emToday = em.sessions.find(row => row.sessionDate === today)!
+      const tdxHistory = (tdx?.sessions ?? []).filter(row => row.sessionDate !== today)
+      const merged = mergeIntradaySessions(
+        [...tdxHistory, emToday],
+        em.apiPreClose ?? tdx?.apiPreClose ?? null,
+      )
+      if (merged.sessions.length) {
+        const source = hasIntradaySessionOnDate(tdx?.sessions ?? [], today) ? 'mootdx' : 'eastmoney'
+        return { success: true as const, data: merged, source }
+      }
+    }
+
+    if (tdx?.sessions.length) {
+      return { success: true as const, data: tdx, source: 'mootdx' }
+    }
+    if (em?.sessions.length) {
+      return { success: true as const, data: em, source: 'eastmoney' }
+    }
+    return { success: false as const, error: '分时数据获取失败' }
+  }
+
+  private async fetchEastmoneyIntradaySessions(
+    code: string,
+    ndays = 5,
+    market?: import('./utils/helpers.js').StockMarket,
+  ): Promise<IntradayTrendFetchResult | null> {
     const drivers = this.registry.getDriversForCapability(Capability.INTRADAY_TICK)
     for (const driver of drivers) {
       const fn = (driver as { fetchIntradaySessions?: (c: string, n?: number, m?: 'SH' | 'SZ' | 'BJ') => Promise<unknown> })
@@ -472,16 +508,14 @@ export class AshareEngine {
       try {
         const data = await fn.call(driver, code, ndays, market)
         if (data && typeof data === 'object' && 'sessions' in data) {
-          const sessions = (data as { sessions: unknown[] }).sessions
-          if (sessions?.length) {
-            return { success: true as const, data, source: driver.name }
-          }
+          const sessions = (data as IntradayTrendFetchResult).sessions
+          if (sessions?.length) return data as IntradayTrendFetchResult
         }
       } catch {
         /* try next driver */
       }
     }
-    return { success: false as const, error: '分时数据获取失败' }
+    return null
   }
   indexConstituents(indexCode: string): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.INDEX_CONST, 'indexConstituents', true, indexCode)

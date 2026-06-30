@@ -36,6 +36,7 @@ export interface MacdPoint {
 export interface ChartSeriesBundle {
   mode: ChartMode
   showMacd: boolean
+  preClose?: number | null
   candles: CandlePoint[]
   priceLine: LinePoint[]
   avgLine: LinePoint[]
@@ -141,6 +142,7 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
     return {
       mode: 'intraday',
       showMacd: false,
+      preClose: data.preClose,
       candles: [],
       priceLine,
       avgLine,

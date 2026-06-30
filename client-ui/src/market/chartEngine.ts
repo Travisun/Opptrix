@@ -60,6 +60,7 @@ export class ChartWorkspace {
     this.mountOptions = options
     this.totalBars = this.countBars(bundle)
     const minuteChart = isMinuteOhlcPeriod(options.period)
+    const intradayChart = isIntradayPeriod(options.period)
 
     try {
       this.mainChart = createChart(refs.main, {
@@ -74,8 +75,8 @@ export class ChartWorkspace {
           fixLeftEdge: false,
           fixRightEdge: true,
           timeVisible: true,
-          secondsVisible: (minuteChart && options.period === '1m') || isIntradayPeriod(options.period),
-          ...(minuteChart ? { barSpacing: 7, minBarSpacing: 2 } : {}),
+          secondsVisible: (minuteChart && options.period === '1m') || intradayChart,
+          ...((minuteChart || intradayChart) ? { barSpacing: 7, minBarSpacing: 2 } : {}),
         },
         crosshair: {
           vertLine: { width: 1, color: 'rgba(60,60,67,0.16)' },
@@ -159,6 +160,16 @@ export class ChartWorkspace {
         priceFormat: stockPriceFormat,
       })
       this.setSeriesData('均价', () => avg.setData(bundle.avgLine))
+      if (bundle.preClose != null && bundle.preClose > 0) {
+        price.createPriceLine({
+          price: bundle.preClose,
+          color: 'rgba(60,60,67,0.35)',
+          lineWidth: 1,
+          lineStyle: LineStyle.Dashed,
+          axisLabelVisible: true,
+          title: '昨收',
+        })
+      }
     } else {
       const candles = this.mainChart.addSeries(CandlestickSeries, {
         ...candlestickColors,

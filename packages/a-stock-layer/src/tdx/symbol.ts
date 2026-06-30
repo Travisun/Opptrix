@@ -1,12 +1,10 @@
-import { isBseCode, normalizeCode } from '../utils/helpers.js'
+import { normalizeCode, resolveStockMarketCode, type StockMarket } from '../utils/helpers.js'
 
-/** Map A-share code → nodetdx symbol (e.g. SH.600519, BJ.920002) */
-export function toTdxSymbol(code: string): string {
+/** Map A-share code → nodetdx symbol (e.g. SH.600519, SZ.000002, BJ.920002) */
+export function toTdxSymbol(code: string, market?: StockMarket | null): string {
   const c = normalizeCode(code)
-  if (isBseCode(c)) return `BJ.${c}`
-  const isSh = c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))
-    || (c.startsWith('000') && parseInt(c, 10) < 1000)
-  return `${isSh ? 'SH' : 'SZ'}.${c}`
+  const m = market ?? resolveStockMarketCode(c)
+  return `${m}.${c}`
 }
 
 export function isIndexCode(code: string): boolean {

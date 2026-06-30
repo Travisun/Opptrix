@@ -3,8 +3,10 @@ import type { IndexKline, IndexRealtime, StockKline, StockRealtime } from '../co
 import type { IntradayTrendFetchResult } from '../utils/intraday-trends.js'
 import { cnTodayString } from '../utils/market-session.js'
 import { normalizeCode } from '../utils/helpers.js'
+import type { StockMarket } from '../utils/helpers.js'
 import {
   intradayProbeDates,
+  isPlausibleIntradaySession,
   mergeIntradaySessions,
   sessionDateToTdxInt,
   shouldFetchTodayTdxIntraday,
@@ -236,8 +238,8 @@ export class TdxClient {
     this.destroyApi()
   }
 
-  async realtime(code: string): Promise<StockRealtime[] | null> {
-    const sym = toTdxSymbol(code)
+  async realtime(code: string, market?: StockMarket | null): Promise<StockRealtime[] | null> {
+    const sym = toTdxSymbol(code, market)
     const rows = await this.withApi(api => api.getSecurityQuotes(sym))
     const q = rows?.[0]
     if (!q || q.lastPrice == null) return null
@@ -246,7 +248,7 @@ export class TdxClient {
 
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
-    const syms = codes.map(toTdxSymbol)
+    const syms = codes.map(c => toTdxSymbol(c))
     const rows = await this.withApi(api => api.getSecurityQuotes(...syms))
     if (!rows?.length) return null
     return rows.map((q, i) => toRealtime(codes[i], q))
@@ -293,16 +295,20 @@ export class TdxClient {
   }
 
   /** Today's intraday ticks via TDX getMinuteTimeData. */
-  async minuteTimeData(code: string): Promise<TdxMinutePoint[] | null> {
-    const sym = toTdxSymbol(code)
+  async minuteTimeData(code: string, market?: StockMarket | null): Promise<TdxMinutePoint[] | null> {
+    const sym = toTdxSymbol(code, market)
     const rows = await this.withApi(api => api.getMinuteTimeData(sym))
     if (!rows?.length) return null
     return rows.map(r => ({ price: r.price, volume: r.volume }))
   }
 
   /** Historical intraday for a YYYY-MM-DD session. */
-  async historyMinuteTimeData(code: string, sessionDate: string): Promise<TdxMinutePoint[] | null> {
-    const sym = toTdxSymbol(code)
+  async historyMinuteTimeData(
+    code: string,
+    sessionDate: string,
+    market?: StockMarket | null,
+  ): Promise<TdxMinutePoint[] | null> {
+    const sym = toTdxSymbol(code, market)
     const dateInt = sessionDateToTdxInt(sessionDate)
     const rows = await this.withApi(api => api.getHistoryMinuteTimeData(sym, dateInt))
     if (!rows?.length) return null
@@ -313,26 +319,38 @@ export class TdxClient {
    * Multi-day intraday sessions (TDX primary).
    * Probes up to `ndays` recent weekdays; today uses live minute feed when session started.
    */
-  async fetchIntradaySessions(code: string, ndays = 5): Promise<IntradayTrendFetchResult | null> {
+  async fetchIntradaySessions(
+    code: string,
+    ndays = 5,
+    market?: StockMarket | null,
+  ): Promise<IntradayTrendFetchResult | null> {
     const today = cnTodayString()
     const probeDates = intradayProbeDates(ndays, today)
     const sessions: NonNullable<IntradayTrendFetchResult['sessions']> = []
     let apiPreClose: number | null = null
+    let refPrice: number | null = null
 
-    const quote = await this.realtime(code)
+    const quote = await this.realtime(code, market)
     if (quote?.[0]?.preClose != null && quote[0].preClose > 0) {
       apiPreClose = quote[0].preClose
+    }
+    if (quote?.[0]?.price != null && quote[0].price > 0) {
+      refPrice = quote[0].price
     }
 
     for (const sessionDate of probeDates) {
       if (sessionDate === today && !shouldFetchTodayTdxIntraday(today)) continue
       const points = sessionDate === today
-        ? await this.minuteTimeData(code)
-        : await this.historyMinuteTimeData(code, sessionDate)
+        ? await this.minuteTimeData(code, market)
+        : await this.historyMinuteTimeData(code, sessionDate, market)
       if (!points?.length) continue
       const preClose = sessionDate === today ? apiPreClose : null
       const session = transformTdxMinutePoints(sessionDate, points, preClose)
-      if (session) sessions.push(session)
+      const allowPartial = sessionDate === today
+      if (!session || !isPlausibleIntradaySession(session, refPrice, preClose ?? apiPreClose, allowPartial)) {
+        continue
+      }
+      sessions.push(session)
     }
 
     const merged = mergeIntradaySessions(sessions, apiPreClose)

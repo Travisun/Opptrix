@@ -2,6 +2,7 @@ import {
   resolveStockSecId,
   resolveStockMarketCode,
 } from '../dist/utils/helpers.js'
+import { toTdxSymbol } from '../dist/tdx/symbol.js'
 
 const cases = [
   { code: '600519', market: 'SH', expect: '1.600519', label: '沪市主板' },
@@ -40,6 +41,21 @@ for (const [code, want] of marketCases) {
   if (got !== want) {
     failed += 1
     console.error(`FAIL market ${code}: ${got}, want ${want}`)
+  }
+}
+
+const tdxCases = [
+  ['600519', null, 'SH.600519'],
+  ['000001', null, 'SZ.000001'],
+  ['000002', null, 'SZ.000002'],
+  ['000300', null, 'SH.000300'],
+  ['920002', null, 'BJ.920002'],
+]
+for (const [code, market, want] of tdxCases) {
+  const got = toTdxSymbol(code, market)
+  if (got !== want) {
+    failed += 1
+    console.error(`FAIL tdx ${code}: ${got}, want ${want}`)
   }
 }
 

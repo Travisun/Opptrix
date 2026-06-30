@@ -46,14 +46,31 @@ function attachVwap(bars: IntradayTrendBar[]): void {
   }
 }
 
+/** TDX minute vol is sometimes cumulative — diff when monotonic. */
+export function normalizeTdxMinuteVolumes(points: TdxMinutePoint[]): TdxMinutePoint[] {
+  if (points.length < 2) return points
+  let increasing = 0
+  for (let i = 1; i < points.length; i += 1) {
+    if ((points[i].volume ?? 0) >= (points[i - 1].volume ?? 0)) increasing += 1
+  }
+  if (increasing / (points.length - 1) < 0.85) return points
+  return points.map((p, i) => ({
+    price: p.price,
+    volume: i === 0
+      ? (p.volume ?? 0)
+      : Math.max(0, (p.volume ?? 0) - (points[i - 1].volume ?? 0)),
+  }))
+}
+
 export function transformTdxMinutePoints(
   sessionDate: string,
   points: TdxMinutePoint[],
   preClose: number | null = null,
 ): IntradayTrendSession | null {
+  const normalized = normalizeTdxMinuteVolumes(points)
   const bars: IntradayTrendBar[] = []
-  for (let i = 0; i < points.length; i += 1) {
-    const p = points[i]
+  for (let i = 0; i < normalized.length; i += 1) {
+    const p = normalized[i]
     if (!p || p.price <= 0) continue
     bars.push({
       time: tdxMinuteIndexToTime(sessionDate, i),
@@ -66,6 +83,31 @@ export function transformTdxMinutePoints(
   if (!bars.length) return null
   attachVwap(bars)
   return { sessionDate, preClose, bars }
+}
+
+/** Reject TDX sessions whose price level clearly mismatches quote / preClose. */
+export function isPlausibleIntradaySession(
+  session: IntradayTrendSession,
+  refPrice: number | null,
+  preClose: number | null,
+  allowPartial = false,
+): boolean {
+  const minBars = allowPartial ? 1 : 5
+  if (session.bars.length < minBars) return false
+  const anchor = refPrice ?? preClose
+  if (anchor == null || anchor <= 0) return true
+  const prices = session.bars.map(b => b.price).filter(p => p > 0)
+  if (prices.length < minBars) return false
+  const med = prices[Math.floor(prices.length / 2)]!
+  const ratio = med / anchor
+  return ratio >= 0.55 && ratio <= 1.8
+}
+
+export function hasIntradaySessionOnDate(
+  sessions: IntradayTrendSession[],
+  sessionDate: string,
+): boolean {
+  return sessions.some(row => row.sessionDate === sessionDate && row.bars.length > 0)
 }
 
 export function mergeIntradaySessions(
