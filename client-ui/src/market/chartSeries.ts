@@ -1,5 +1,5 @@
 import type { ChartPeriod, IntradayChartBar, OhlcChartBar, StockChartData } from '../types/market'
-import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, toChartTime } from './chartTime'
+import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPeriod } from './chartTime'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { innoTokens } from '../theme/tokens'
 import type { Time } from 'lightweight-charts'
@@ -75,7 +75,7 @@ function assertUniqueTimes(times: Time[], label: string, period: string): void {
 }
 
 function chartTime(raw: string, period: string): Time {
-  return toChartTime(raw, isMinuteOhlcPeriod(period))
+  return chartTimeForPeriod(raw, period)
 }
 
 function normalizeOhlc(bar: OhlcChartBar, period: string): CandlePoint {

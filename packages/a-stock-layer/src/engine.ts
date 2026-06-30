@@ -89,33 +89,55 @@ export class AshareEngine {
   }
 
   // ── Core market data ──
-  realtime(code: string): Promise<QueryResult<StockRealtime[]>> {
-    return this.q<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', false, code).then(result => {
+  realtime(code: string, market?: import('./utils/helpers.js').StockMarket): Promise<QueryResult<StockRealtime[]>> {
+    return this.q<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
   }
-  batchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
-    return this.fetchBatchRealtime(codes)
+  batchRealtime(
+    codes: string[],
+    markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+  ): Promise<QueryResult<StockRealtime[]>> {
+    return this.fetchBatchRealtime(codes, markets)
   }
 
   kline(code: string, periodOrCount: number): Promise<QueryResult<StockKline[]>>
-  kline(code: string, period?: string, start?: string, end?: string, count?: number): Promise<QueryResult<StockKline[]>>
-  kline(code: string, periodOrCount: string | number = 'daily', start = '', end = '', count?: number) {
+  kline(
+    code: string,
+    period?: string,
+    start?: string,
+    end?: string,
+    count?: number,
+    market?: import('./utils/helpers.js').StockMarket,
+  ): Promise<QueryResult<StockKline[]>>
+  kline(
+    code: string,
+    periodOrCount: string | number = 'daily',
+    start = '',
+    end = '',
+    count?: number,
+    market?: import('./utils/helpers.js').StockMarket,
+  ) {
     if (typeof periodOrCount === 'number') {
-      return this.fetchDailyKline(code, periodOrCount, 0)
+      return this.fetchDailyKline(code, periodOrCount, 0, 'daily', market)
     }
     if (MINUTE_PERIODS.has(periodOrCount)) {
-      return this.minuteKline(code, periodOrCount, count ?? 800, 0)
+      return this.minuteKline(code, periodOrCount, count ?? 800, 0, market)
     }
     if (periodOrCount === 'daily' || periodOrCount === 'weekly' || periodOrCount === 'monthly') {
-      return this.fetchDailyKline(code, count ?? 800, 0, periodOrCount)
+      return this.fetchDailyKline(code, count ?? 800, 0, periodOrCount, market)
     }
-    const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
+    const args = count != null
+      ? [code, periodOrCount, start, end, count, market]
+      : [code, periodOrCount, start, end, market]
     return this.query<StockKline>(Capability.STOCK_KLINE, 'kline', 'stock_kline', true, args)
   }
 
-  private async fetchBatchRealtime(codes: string[]): Promise<QueryResult<StockRealtime[]>> {
+  private async fetchBatchRealtime(
+    codes: string[],
+    markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
+  ): Promise<QueryResult<StockRealtime[]>> {
     if (!codes.length) return { success: false, error: 'codes empty' }
 
     const normalized = codes.map(c => normalizeCode(c))
@@ -143,17 +165,16 @@ export class AshareEngine {
     }
 
     const missing = normalized.filter(c => !seen.has(c))
-    const tdxEligible = missing.filter(c => !isBse920Code(c))
-    if (tdxEligible.length) {
+    if (missing.length) {
       try {
-        pushRows(await tdxClient.batchRealtime(tdxEligible))
+        pushRows(await tdxClient.batchRealtime(missing))
       } catch { /* driver fallback */ }
     }
 
     const stillMissing = normalized.filter(c => !seen.has(c))
     if (stillMissing.length) {
       const viaQ = await this.q<StockRealtime>(
-        Capability.STOCK_REALTIME, 'batchRealtime', false, stillMissing,
+        Capability.STOCK_REALTIME, 'batchRealtime', false, stillMissing, markets,
       )
       if (viaQ.success) pushRows(viaQ.data)
     }
@@ -167,27 +188,26 @@ export class AshareEngine {
     count: number,
     startOffset = 0,
     period = 'daily',
+    market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
     const want = Math.max(1, count)
     const bse920 = isBse920Code(normalizeCode(code))
     if (isTushareEnabled() && !bse920) {
       const viaDriver = await this.query<StockKline>(
         Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
-        [code, period, '', '', want],
+        [code, period, '', '', want, market],
       )
       if (viaDriver.success && viaDriver.data?.length) return viaDriver
     }
-    if (!bse920) {
-      try {
-        const rows = await this.fetchTdxBars(code, period, want, startOffset)
-        if (rows?.length) {
-          return { success: true, data: rows, source: 'mootdx', cached: false }
-        }
-      } catch { /* driver fallback */ }
-    }
+    try {
+      const rows = await this.fetchTdxBars(code, period, want, startOffset)
+      if (rows?.length) {
+        return { success: true, data: rows, source: 'mootdx', cached: false }
+      }
+    } catch { /* driver fallback */ }
     return this.query<StockKline>(
       Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
-      [code, period, '', '', want],
+      [code, period, '', '', want, market],
     )
   }
 
@@ -224,10 +244,11 @@ export class AshareEngine {
     period: string,
     count = 800,
     startOffset = 0,
+    market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
     const safeCount = Math.max(1, Math.min(count, 800))
     const safeOffset = Math.max(0, startOffset)
-    return this.fetchMinuteKline(code, period, safeCount, safeOffset)
+    return this.fetchMinuteKline(code, period, safeCount, safeOffset, market)
   }
 
   private async fetchMinuteKline(
@@ -235,17 +256,16 @@ export class AshareEngine {
     period: string,
     count: number,
     startOffset: number,
+    market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
-    if (!isBse920Code(normalizeCode(code))) {
-      try {
-        const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
-        if (tdxRows?.length) {
-          return { success: true, data: tdxRows, source: 'mootdx', cached: false }
-        }
-      } catch { /* EastMoney fallback */ }
-    }
+    try {
+      const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
+      if (tdxRows?.length) {
+        return { success: true, data: tdxRows, source: 'mootdx', cached: false }
+      }
+    } catch { /* EastMoney fallback */ }
 
-    return this.eastmoneyMinuteFallback(code, period, count, startOffset)
+    return this.eastmoneyMinuteFallback(code, period, count, startOffset, market)
   }
 
   /** 东财备选：1m 用 trends2+当日 kline，其余分钟周期走 kline API。 */
@@ -254,25 +274,30 @@ export class AshareEngine {
     period: string,
     count: number,
     startOffset = 0,
+    market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
     const window = Math.min(count + startOffset, 800)
-    if (period === '1m') return this.eastmoney1mFallback(code, window)
+    if (period === '1m') return this.eastmoney1mFallback(code, window, market)
     return this.query<StockKline>(
-      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, period, '', '', window],
+      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, period, '', '', window, market],
     )
   }
 
   /** EastMoney 1m fallback when TDX offline — trends2 历史 + kline 当日。 */
-  private async eastmoney1mFallback(code: string, count: number): Promise<QueryResult<StockKline[]>> {
+  private async eastmoney1mFallback(
+    code: string,
+    count: number,
+    market?: import('./utils/helpers.js').StockMarket,
+  ): Promise<QueryResult<StockKline[]>> {
     const ndays = Math.min(5, Math.max(1, Math.ceil(count / 240)))
-    const trendR = await this.minuteTrendKline(code, ndays, 0)
+    const trendR = await this.minuteTrendKline(code, ndays, 0, market)
     if (!trendR.success || !trendR.data?.length) {
       return this.query<StockKline>(
-        Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', count],
+        Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', count, market],
       )
     }
     const klineR = await this.query<StockKline>(
-      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', 240],
+      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', 240, market],
     )
     let merged = trendR.data
     if (klineR.success && klineR.data?.length) {
@@ -291,9 +316,14 @@ export class AshareEngine {
   }
 
   /** 1-minute multi-day history (EastMoney trends2 fallback; up to 5 sessions). */
-  minuteTrendKline(code: string, ndays = 1, count = 0): Promise<QueryResult<StockKline[]>> {
+  minuteTrendKline(
+    code: string,
+    ndays = 1,
+    count = 0,
+    market?: import('./utils/helpers.js').StockMarket,
+  ): Promise<QueryResult<StockKline[]>> {
     return this.query<StockKline>(
-      Capability.STOCK_KLINE, 'minuteTrendKline', 'stock_minute_trend', false, [code, ndays, count],
+      Capability.STOCK_KLINE, 'minuteTrendKline', 'stock_minute_trend', false, [code, ndays, count, market],
     )
   }
 
@@ -419,6 +449,39 @@ export class AshareEngine {
   }
   intradayTick(code: string, date = ''): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.INTRADAY_TICK, 'intradayTick', false, code, date)
+  }
+
+  /** Multi-day intraday — TDX primary, EastMoney trends2 fallback. */
+  async fetchIntradaySessions(
+    code: string,
+    ndays = 5,
+    market?: import('./utils/helpers.js').StockMarket,
+  ) {
+    try {
+      const tdx = await tdxClient.fetchIntradaySessions(code, ndays)
+      if (tdx?.sessions?.length) {
+        return { success: true as const, data: tdx, source: 'mootdx' }
+      }
+    } catch { /* EastMoney fallback */ }
+
+    const drivers = this.registry.getDriversForCapability(Capability.INTRADAY_TICK)
+    for (const driver of drivers) {
+      const fn = (driver as { fetchIntradaySessions?: (c: string, n?: number, m?: 'SH' | 'SZ' | 'BJ') => Promise<unknown> })
+        .fetchIntradaySessions
+      if (typeof fn !== 'function') continue
+      try {
+        const data = await fn.call(driver, code, ndays, market)
+        if (data && typeof data === 'object' && 'sessions' in data) {
+          const sessions = (data as { sessions: unknown[] }).sessions
+          if (sessions?.length) {
+            return { success: true as const, data, source: driver.name }
+          }
+        }
+      } catch {
+        /* try next driver */
+      }
+    }
+    return { success: false as const, error: '分时数据获取失败' }
   }
   indexConstituents(indexCode: string): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.INDEX_CONST, 'indexConstituents', true, indexCode)

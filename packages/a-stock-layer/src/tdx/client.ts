@@ -1,6 +1,17 @@
 import { createRequire } from 'node:module'
 import type { IndexKline, IndexRealtime, StockKline, StockRealtime } from '../core/schema.js'
+import type { IntradayTrendFetchResult } from '../utils/intraday-trends.js'
+import { cnTodayString } from '../utils/market-session.js'
 import { normalizeCode } from '../utils/helpers.js'
+import {
+  intradayProbeDates,
+  mergeIntradaySessions,
+  sessionDateToTdxInt,
+  shouldFetchTodayTdxIntraday,
+  transformTdxMinutePoints,
+  type TdxMinutePoint,
+} from './intraday.js'
+import { patchNodetdxBjMarket } from './market-id.js'
 import { isIndexCode, toTdxSymbol } from './symbol.js'
 import { toTdxPeriod } from './period.js'
 
@@ -9,6 +20,7 @@ const nodetdx = require('nodetdx') as typeof import('nodetdx')
 const { TdxMarketApi, setLogLevel } = nodetdx
 
 setLogLevel('ERROR')
+patchNodetdxBjMarket()
 
 function sleep(ms: number) {
   return new Promise(resolve => setTimeout(resolve, ms))
@@ -278,6 +290,53 @@ export class TdxClient {
     const bars = await this.withApi(fetch)
     if (!bars?.length) return null
     return bars.map(b => toIndexKline(code, b))
+  }
+
+  /** Today's intraday ticks via TDX getMinuteTimeData. */
+  async minuteTimeData(code: string): Promise<TdxMinutePoint[] | null> {
+    const sym = toTdxSymbol(code)
+    const rows = await this.withApi(api => api.getMinuteTimeData(sym))
+    if (!rows?.length) return null
+    return rows.map(r => ({ price: r.price, volume: r.volume }))
+  }
+
+  /** Historical intraday for a YYYY-MM-DD session. */
+  async historyMinuteTimeData(code: string, sessionDate: string): Promise<TdxMinutePoint[] | null> {
+    const sym = toTdxSymbol(code)
+    const dateInt = sessionDateToTdxInt(sessionDate)
+    const rows = await this.withApi(api => api.getHistoryMinuteTimeData(sym, dateInt))
+    if (!rows?.length) return null
+    return rows.map(r => ({ price: r.price, volume: r.volume }))
+  }
+
+  /**
+   * Multi-day intraday sessions (TDX primary).
+   * Probes up to `ndays` recent weekdays; today uses live minute feed when session started.
+   */
+  async fetchIntradaySessions(code: string, ndays = 5): Promise<IntradayTrendFetchResult | null> {
+    const today = cnTodayString()
+    const probeDates = intradayProbeDates(ndays, today)
+    const sessions: NonNullable<IntradayTrendFetchResult['sessions']> = []
+    let apiPreClose: number | null = null
+
+    const quote = await this.realtime(code)
+    if (quote?.[0]?.preClose != null && quote[0].preClose > 0) {
+      apiPreClose = quote[0].preClose
+    }
+
+    for (const sessionDate of probeDates) {
+      if (sessionDate === today && !shouldFetchTodayTdxIntraday(today)) continue
+      const points = sessionDate === today
+        ? await this.minuteTimeData(code)
+        : await this.historyMinuteTimeData(code, sessionDate)
+      if (!points?.length) continue
+      const preClose = sessionDate === today ? apiPreClose : null
+      const session = transformTdxMinutePoints(sessionDate, points, preClose)
+      if (session) sessions.push(session)
+    }
+
+    const merged = mergeIntradaySessions(sessions, apiPreClose)
+    return merged.sessions.length ? merged : null
   }
 }
 

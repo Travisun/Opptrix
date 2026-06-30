@@ -17,7 +17,7 @@ import {
   stockPriceFormat,
 } from './chartTheme'
 import { defaultVisibleBars, HISTORY_EDGE_THRESHOLD } from './chartViewConfig'
-import { isMinuteOhlcPeriod } from './chartTime'
+import { isMinuteOhlcPeriod, isIntradayPeriod } from './chartTime'
 
 const LINE_OPTS = {
   lineWidth: 1 as const,
@@ -74,7 +74,7 @@ export class ChartWorkspace {
           fixLeftEdge: false,
           fixRightEdge: true,
           timeVisible: true,
-          secondsVisible: minuteChart && options.period === '1m',
+          secondsVisible: (minuteChart && options.period === '1m') || isIntradayPeriod(options.period),
           ...(minuteChart ? { barSpacing: 7, minBarSpacing: 2 } : {}),
         },
         crosshair: {
@@ -146,9 +146,18 @@ export class ChartWorkspace {
       : LINE_OPTS
 
     if (bundle.mode === 'intraday') {
-      const price = this.mainChart.addSeries(LineSeries, { ...lineOpts, lineWidth: 2, color: '#FF3B30' })
+      const price = this.mainChart.addSeries(LineSeries, {
+        ...lineOpts,
+        lineWidth: 2,
+        color: '#FF3B30',
+        priceFormat: stockPriceFormat,
+      })
       this.setSeriesData('分时价格', () => price.setData(bundle.priceLine))
-      const avg = this.mainChart.addSeries(LineSeries, { ...lineOpts, color: indicatorColors.avg })
+      const avg = this.mainChart.addSeries(LineSeries, {
+        ...lineOpts,
+        color: indicatorColors.avg,
+        priceFormat: stockPriceFormat,
+      })
       this.setSeriesData('均价', () => avg.setData(bundle.avgLine))
     } else {
       const candles = this.mainChart.addSeries(CandlestickSeries, {

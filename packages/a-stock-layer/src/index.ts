@@ -7,6 +7,24 @@ export {
   GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
 } from './engine.js'
 
+export type { IntradayTrendBar, IntradayTrendFetchResult, IntradayTrendSession } from './utils/intraday-trends.js'
+export {
+  cnMarketNow,
+  cnTodayString,
+  isCnAfterMarketClose,
+  isCnBeforeMarketOpen,
+  isCnMarketOpen,
+  isCnTradingWeekday,
+  shouldPreferTodayIntraday,
+} from './utils/market-session.js'
+export { pickIntradaySession } from './utils/intraday-trends.js'
+export {
+  parseStockMarket,
+  resolveStockMarketCode,
+  isShIndexCode,
+  type StockMarket,
+} from './utils/helpers.js'
+
 export {
   loadTushareConfig, saveTushareConfig, publicTushareConfig, isTushareEnabled,
   tushareConfigPath,
@@ -22,10 +40,12 @@ export type { WatchlistItem } from './watchlist/models.js'
 export { TdxClient, tdxClient } from './tdx/client.js'
 export { TdxDailyBarReader, readTdxDayFile } from './tdx/day-reader.js'
 export { toTdxSymbol, isIndexCode } from './tdx/symbol.js'
+export { toTdxMarketId, patchNodetdxBjMarket } from './tdx/market-id.js'
+export { tdxMinuteIndexToTime, transformTdxMinutePoints } from './tdx/intraday.js'
 export { ef, stock as efStock, fund as efFund, bond as efBond, futures as efFutures } from './efinance/index.js'
 export { searchQuote } from './efinance/utils.js'
 export type { SearchQuote } from './efinance/utils.js'
-export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, secFullCode, secXueqiuSymbol } from './utils/helpers.js'
+export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, secXueqiuSymbol } from './utils/helpers.js'
 export { TushareClient } from './tushare/client.js'
 export { toTsCode, fromTsCode } from './tushare/codes.js'
 export type { Efinance } from './efinance/index.js'

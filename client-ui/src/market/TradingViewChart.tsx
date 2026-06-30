@@ -343,11 +343,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
         return
       }
       if (nextPeriod === 'intraday') {
-        const ok = resp.data.isTradingDay && resp.data.bars.length > 0
+        const ok = resp.data.bars.length > 0
         setIntradayAvailable(ok)
         if (!ok) {
-          setPeriod('daily')
-          setError('当前非交易日，已切换至日K')
+          setError(resp.message || '暂无分时数据')
+          if (!hasChart) setData(null)
           return
         }
       }
@@ -441,7 +441,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
     research.stockChart(code, 'intraday', undefined, controller.signal)
       .then(resp => {
         if (controller.signal.aborted || !resp.success || !resp.data) return
-        setIntradayAvailable(resp.data.isTradingDay && resp.data.bars.length > 0)
+        setIntradayAvailable(resp.data.bars.length > 0)
       })
       .catch(() => {})
     return () => { controller.abort() }
@@ -571,7 +571,9 @@ export default function TradingViewChart({ code, expanded = false, active = true
       <div className={s.zoomRow}>
         <Text className={s.hint}>
           {intraday
-            ? '默认显示最新时段 · 滚轮缩放 · 左拖查看更早'
+            ? (data?.sessionDate && !data.isTradingDay
+              ? `${data.sessionDate} 收盘分时 · 滚轮缩放 · 左拖查看更早`
+              : '默认显示最新时段 · 滚轮缩放 · 左拖查看更早')
             : `默认显示最新 ${periodLabel(period)} · 滚轮缩放 · 左拖加载历史`}
         </Text>
         <button type="button" className={s.zoomBtn} onClick={resetZoom} disabled={!data}>

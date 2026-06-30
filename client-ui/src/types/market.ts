@@ -157,6 +157,8 @@ export interface StockChartData {
   name: string
   period: ChartPeriod
   preClose: number | null
+  /** Intraday session trade date (YYYY-MM-DD); null when unavailable. */
+  sessionDate?: string | null
   isTradingDay: boolean
   hasMore?: boolean
   bars: IntradayChartBar[] | OhlcChartBar[]

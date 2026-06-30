@@ -1,4 +1,5 @@
 import Database from 'better-sqlite3'
+import { parseStockMarket, type StockMarket } from '@inno-a-stock/a-stock-layer'
 import { marketDbPath } from './paths.js'
 import { migrate, nowIso, todayTradeDate, daysSince } from './utils.js'
 
@@ -399,6 +400,28 @@ export class MarketDataStore {
       'SELECT code, name, industry FROM stocks WHERE code = ?',
     ).get(code) as { code: string; name: string; industry: string | null } | undefined
     return row ?? null
+  }
+
+  stockMarket(code: string): StockMarket | null {
+    const row = this.db.prepare(
+      'SELECT market FROM stocks WHERE code = ?',
+    ).get(code) as { market: string | null } | undefined
+    return parseStockMarket(row?.market)
+  }
+
+  stockMarketBatch(codes: string[]): Map<string, StockMarket> {
+    const normalized = [...new Set(codes.map(c => String(c).padStart(6, '0')).filter(Boolean))]
+    const out = new Map<string, StockMarket>()
+    if (!normalized.length) return out
+    const placeholders = normalized.map(() => '?').join(',')
+    const rows = this.db.prepare(
+      `SELECT code, market FROM stocks WHERE code IN (${placeholders})`,
+    ).all(...normalized) as { code: string; market: string | null }[]
+    for (const row of rows) {
+      const market = parseStockMarket(row.market)
+      if (market) out.set(row.code, market)
+    }
+    return out
   }
 
   stockMetaBatch(codes: string[]): Map<string, { code: string; name: string; industry: string | null }> {

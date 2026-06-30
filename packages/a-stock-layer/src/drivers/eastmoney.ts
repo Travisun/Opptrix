@@ -6,9 +6,15 @@ import type {
 } from '../core/schema.js'
 import { httpGet } from '../utils/http.js'
 import {
-  normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveMarket, resolveSecId, safeFloat,
+  normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveMarket, resolveSecId, resolveStockSecId, safeFloat,
+  type StockMarket,
 } from '../utils/helpers.js'
 import { computeChipDistribution, computeLatestChipProfile } from '../utils/cyq.js'
+import {
+  attachApiPreCloseToLatestSession,
+  groupTrendsIntoSessions,
+  type IntradayTrendFetchResult,
+} from '../utils/intraday-trends.js'
 import { BaseDriver } from './base.js'
 import {
   fetchDataCenterReport,
@@ -78,23 +84,27 @@ export class EastMoneyDriver extends BaseDriver {
     return fetchDataCenterReport(reportName, filter, pageSize, 'REPORT_DATE', columns)
   }
 
-  async realtime(code: string) {
+  async realtime(code: string, market?: StockMarket) {
     try {
       const data = await this.getData(BASE_URL, {
-        secid: resolveSecId(code),
-        fields: 'f43,f44,f45,f46,f47,f48,f50,f51,f57,f58,f116,f115,f170,f162,f167,f168,f169',
+        secid: resolveStockSecId(code, market),
+        fields: 'f43,f44,f45,f46,f47,f48,f50,f51,f57,f58,f116,f115,f170,f162,f167,f168,f169,f60,f71',
+        fltt: '2',
+        invt: '2',
       })
       if (!data) return null
       const amount = safeFloat(data.f48)
       const volume = safeFloat(data.f51)
+      const price = safeFloat(data.f43)
+      const preClose = safeFloat(data.f60) ?? emQuotePrice(data.f47)
       return [{
         code: normalizeCode(code),
         name: String(data.f58 ?? ''),
-        price: emQuotePrice(data.f43),
-        open: emQuotePrice(data.f44),
-        high: emQuotePrice(data.f45),
-        low: emQuotePrice(data.f46),
-        preClose: emQuotePrice(data.f47),
+        price,
+        open: safeFloat(data.f44) ?? emQuotePrice(data.f44),
+        high: safeFloat(data.f45) ?? emQuotePrice(data.f45),
+        low: safeFloat(data.f46) ?? emQuotePrice(data.f46),
+        preClose,
         volume,
         amount: amount != null && amount > 1e6 ? amount : null,
         change: emQuoteDelta(data.f169),
@@ -108,16 +118,21 @@ export class EastMoneyDriver extends BaseDriver {
     } catch { return null }
   }
 
-  async batchRealtime(codes: string[]) {
+  async batchRealtime(codes: string[], markets?: Record<string, StockMarket | undefined>) {
     const results: StockRealtime[] = []
     for (const c of codes) {
-      const r = await this.realtime(c)
+      const normalized = normalizeCode(c)
+      const r = await this.realtime(c, markets?.[normalized])
       if (r) results.push(...r)
     }
     return results.length ? results : null
   }
 
-  async indexRealtime(code: string) { return this.realtime(code) }
+  async indexRealtime(code: string) {
+    const c = normalizeCode(code)
+    const market: StockMarket = c.startsWith('399') ? 'SZ' : 'SH'
+    return this.realtime(code, market)
+  }
 
   private parseKlines(klines: string[], code: string): StockKline[] {
     const rows: StockKline[] = []
@@ -154,12 +169,37 @@ export class EastMoneyDriver extends BaseDriver {
     return rows
   }
 
-  /** 1m multi-day bars via trends2 (kline API only returns latest session). ndays: 1–5. */
-  async minuteTrendKline(code: string, ndays = 1, count = 0) {
+  /** Intraday sessions via EastMoney trends2 (up to 5 trading days). */
+  async fetchIntradaySessions(
+    code: string,
+    ndays = 5,
+    market?: StockMarket,
+  ): Promise<IntradayTrendFetchResult | null> {
     try {
       const safeDays = Math.max(1, Math.min(Math.floor(ndays), 5))
       const data = await this.getData(TRENDS2_URL, {
-        secid: resolveSecId(code),
+        secid: resolveStockSecId(code, market),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        iscr: '0',
+        ndays: String(safeDays),
+        iscca: '0',
+      })
+      const trends = data?.trends as string[] | undefined
+      if (!trends?.length) return null
+      const apiPreClose = safeFloat(data?.preClose) ?? safeFloat(data?.prePrice)
+      const sessions = groupTrendsIntoSessions(trends)
+      attachApiPreCloseToLatestSession(sessions, apiPreClose)
+      return sessions.length ? { sessions, apiPreClose } : null
+    } catch { return null }
+  }
+
+  /** 1m multi-day bars via trends2 (kline API only returns latest session). ndays: 1–5. */
+  async minuteTrendKline(code: string, ndays = 1, count = 0, market?: StockMarket) {
+    try {
+      const safeDays = Math.max(1, Math.min(Math.floor(ndays), 5))
+      const data = await this.getData(TRENDS2_URL, {
+        secid: resolveStockSecId(code, market),
         fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
         fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
         iscr: '0',
@@ -174,10 +214,17 @@ export class EastMoneyDriver extends BaseDriver {
     } catch { return null }
   }
 
-  async kline(code: string, period = 'daily', start = '', end = '', count = 1000) {
+  async kline(
+    code: string,
+    period = 'daily',
+    start = '',
+    end = '',
+    count = 1000,
+    market?: StockMarket,
+  ) {
     try {
       const params: Record<string, string> = {
-        secid: resolveSecId(code),
+        secid: resolveStockSecId(code, market),
         fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
         fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
         klt: PERIOD_MAP[period] ?? '101',

@@ -2,6 +2,35 @@ const SH_INDEX_CODES = new Set([
   '000001', '000016', '000300', '000688', '000905', '000906', '000985',
 ])
 
+export type StockMarket = 'SH' | 'SZ' | 'BJ'
+
+export function isShIndexCode(code: string): boolean {
+  return SH_INDEX_CODES.has(normalizeCode(code))
+}
+
+export function parseStockMarket(value: unknown): StockMarket | null {
+  const m = String(value ?? '').trim().toUpperCase()
+  if (m === 'SH' || m === 'SZ' || m === 'BJ') return m
+  return null
+}
+
+/**
+ * 无本地 market 时的代码段推断（个股场景）。
+ * 000001 默认深市平安银行；上证指数等应走指数接口或显式传 market=SH。
+ */
+export function resolveStockMarketCode(code: string): StockMarket {
+  const c = normalizeCode(code)
+  if (isBseCode(c)) return 'BJ'
+  if (c.startsWith('399')) return 'SZ'
+  if (c.startsWith('6')) return 'SH'
+  if (c.startsWith('9') && !isBseCode(c)) return 'SH'
+  if (c.startsWith('3') || c.startsWith('2')) return 'SZ'
+  if (c === '000001') return 'SZ'
+  if (isShIndexCode(c)) return 'SH'
+  if (c.startsWith('0')) return 'SZ'
+  return 'SZ'
+}
+
 /** 北交所股票（920 新代码；43/83/87 为存量旧代码） */
 export function isBseCode(code: string): boolean {
   const c = normalizeCode(code)
@@ -34,6 +63,18 @@ export function resolveSecId(code: string): string {
   if (isBseCode(c)) return `0.${c}`
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `1.${c}`
   return `0.${c}`
+}
+
+/** 个股行情/分时：用 market 或代码段推断 secid；指数请用 resolveSecId 或 indexRealtime。 */
+export function resolveStockSecId(
+  code: string,
+  market?: StockMarket | null,
+): string {
+  const c = normalizeCode(code)
+  const m = market ?? resolveStockMarketCode(c)
+  if (m === 'SZ') return `0.${c}`
+  if (m === 'SH') return `1.${c}`
+  return isBse920Code(c) ? `3.${c}` : `0.${c}`
 }
 
 /** Sina / Tencent 等行情 list 参数（如 bj920002、sh600519） */

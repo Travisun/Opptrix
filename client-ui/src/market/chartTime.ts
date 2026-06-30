@@ -37,6 +37,11 @@ export function timeSortKey(time: Time): number | string {
   return typeof time === 'number' ? time : time
 }
 
+export function chartTimeForPeriod(raw: string, period: string): Time {
+  if (isIntradayPeriod(period)) return toChartTime(raw, true)
+  return toChartTime(raw, isMinuteOhlcPeriod(period))
+}
+
 export function compareChartTime(a: Time, b: Time): number {
   const ka = timeSortKey(a)
   const kb = timeSortKey(b)

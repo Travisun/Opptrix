@@ -1,4 +1,9 @@
 declare module 'nodetdx' {
+  export interface TdxMinutePoint {
+    price: number
+    volume: number
+  }
+
   export interface TdxQuote {
     market: number
     code: string
@@ -42,6 +47,8 @@ declare module 'nodetdx' {
     getSecurityQuotes(...symbols: string[]): Promise<TdxQuote[]>
     getSecurityBars(period: string, symbol: string, start: number, count: number): Promise<TdxBar[]>
     getIndexBars(period: string, symbol: string, start: number, count: number): Promise<TdxBar[]>
+    getMinuteTimeData(symbol: string): Promise<TdxMinutePoint[]>
+    getHistoryMinuteTimeData(symbol: string, date: number): Promise<TdxMinutePoint[]>
   }
 
   export function setLogLevel(level: string): void

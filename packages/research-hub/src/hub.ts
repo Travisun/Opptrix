@@ -1,4 +1,10 @@
-import { AshareEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote, resolveMarket, searchQuote, loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode } from '@inno-a-stock/a-stock-layer'
+import {
+  AshareEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+  pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
+  loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode,
+  cnTodayString, shouldPreferTodayIntraday, type StockMarket,
+} from '@inno-a-stock/a-stock-layer'
+import type { IntradayTrendFetchResult, IntradayTrendSession } from '@inno-a-stock/a-stock-layer'
 import type { StockListItem } from '@inno-a-stock/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
@@ -88,6 +94,7 @@ export class ResearchHub {
           Number(params.count ?? 0),
           String(params.before ?? ''),
           Number(params.tail ?? 0),
+          typeof params.market === 'string' ? params.market : undefined,
           t0,
         )
         case 'stock_detail': return this.stockDetail(String(params.code), t0)
@@ -422,8 +429,8 @@ export class ResearchHub {
     const normalized = [...new Set((codes ?? []).map(c => String(c).padStart(6, '0')).filter(Boolean))]
     if (!normalized.length) return ok({ quotes: [] }, '暂无关注', t0)
     await this.fillMissingStockNames(normalized)
-    const result = await this.de.batchRealtime(normalized)
-    if (!result.success) return fail(result.error ?? '行情获取失败', t0)
+    const result = await this.stockBatchRealtime(normalized)
+    if (!result.success || !result.data?.length) return fail('行情获取失败', t0)
     const quotes = (result.data ?? []).map(q => ({
       ...q,
       name: this.resolveStockName(q.code, q.name),
@@ -456,7 +463,7 @@ export class ResearchHub {
 
     const quoteByCode = new Map<string, { name?: string; pe?: number | null; pb?: number | null }>()
     try {
-      const batch = await this.de.batchRealtime(normalized)
+      const batch = await this.stockBatchRealtime(normalized)
       for (const q of batch.data ?? []) {
         quoteByCode.set(normalizeCode(q.code), q)
       }
@@ -488,7 +495,7 @@ export class ResearchHub {
     try {
       const quoteR = cachedQuote
         ? { data: [cachedQuote] }
-        : await this.de.realtime(code)
+        : await this.stockRealtime(code)
       const flowR = await this.de.moneyFlow(code)
       const quote = quoteR.data?.[0]
       const flow = flowR.data?.[0]
@@ -571,7 +578,7 @@ export class ResearchHub {
     void this.marketData.hydrateStocks([normalizeCode(code)], 'detail').catch(() => {})
 
     const [quoteR, profileR, financialR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
-      this.de.realtime(code),
+      this.stockRealtime(code),
       this.de.profile(code),
       this.de.financials(code),
       this.de.financials(code, '', 'all'),
@@ -673,12 +680,60 @@ export class ResearchHub {
     return day >= 1 && day <= 5
   }
 
-  private cnTodayString(): string {
-    const cn = new Date(new Date().toLocaleString('en-US', { timeZone: 'Asia/Shanghai' }))
-    const y = cn.getFullYear()
-    const m = String(cn.getMonth() + 1).padStart(2, '0')
-    const d = String(cn.getDate()).padStart(2, '0')
-    return `${y}-${m}-${d}`
+  private resolveStockMarket(code: string, explicitMarket?: string | null): StockMarket {
+    const normalized = normalizeCode(code)
+    const parsed = parseStockMarket(explicitMarket)
+    if (parsed) return parsed
+    return this.marketData.store.stockMarket(normalized) ?? resolveStockMarketCode(normalized)
+  }
+
+  private resolveStockMarkets(codes: string[]): Map<string, StockMarket> {
+    const normalized = [...new Set(codes.map(c => normalizeCode(String(c))).filter(Boolean))]
+    const fromDb = this.marketData.store.stockMarketBatch(normalized)
+    const out = new Map<string, StockMarket>()
+    for (const code of normalized) {
+      out.set(code, fromDb.get(code) ?? resolveStockMarketCode(code))
+    }
+    return out
+  }
+
+  private async stockRealtime(code: string, explicitMarket?: string | null) {
+    const market = this.resolveStockMarket(code, explicitMarket)
+    return this.de.realtime(code, market)
+  }
+
+  private async stockBatchRealtime(codes: string[]) {
+    const markets = this.resolveStockMarkets(codes)
+    const normalized = [...new Set(codes.map(c => normalizeCode(String(c))).filter(Boolean))]
+    const rows = await Promise.all(
+      normalized.map(async code => {
+        const result = await this.de.realtime(code, markets.get(code))
+        return result.data?.[0] ?? null
+      }),
+    )
+    const quotes = rows.filter((row): row is NonNullable<typeof row> => row != null)
+    return { success: quotes.length > 0, data: quotes }
+  }
+
+  private async resolveIntradaySessionPreClose(
+    code: string,
+    session: IntradayTrendSession,
+    apiPreClose: number | null,
+    isLatestSession: boolean,
+  ): Promise<number | null> {
+    if (session.preClose != null && session.preClose > 0) return session.preClose
+    if (isLatestSession && apiPreClose != null && apiPreClose > 0) return apiPreClose
+
+    const r = await this.de.kline(code, 'daily', '', session.sessionDate, 12)
+    const rows = (r.data ?? [])
+      .filter(row => row.date.slice(0, 10) <= session.sessionDate)
+      .sort((a, b) => a.date.localeCompare(b.date))
+    const idx = rows.findIndex(row => row.date.slice(0, 10) === session.sessionDate)
+    if (idx > 0) {
+      const prevClose = rows[idx - 1].close
+      if (prevClose != null && prevClose > 0) return prevClose
+    }
+    return apiPreClose != null && apiPreClose > 0 ? apiPreClose : null
   }
 
   private defaultChartCount(period: string): number {
@@ -740,13 +795,14 @@ export class ResearchHub {
     safeCount: number,
     before: string,
     tail: number,
+    stockMarket: StockMarket,
   ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
     const step = 200
     const cap = this.minuteMaxBars(period)
 
     if (tail > 0) {
-      const olderR = await this.de.minuteKline(code, period, step, tail)
-      const recentR = await this.de.minuteKline(code, period, Math.min(tail, 800), 0)
+      const olderR = await this.de.minuteKline(code, period, step, tail, stockMarket)
+      const recentR = await this.de.minuteKline(code, period, Math.min(tail, 800), 0, stockMarket)
       if (!recentR.success || !recentR.data?.length) return null
       const older = olderR.success ? (olderR.data ?? []) : []
       const anchor = before || recentR.data[0].date
@@ -757,7 +813,7 @@ export class ResearchHub {
       }
     }
 
-    const r = await this.de.minuteKline(code, period, Math.min(safeCount, 800), 0)
+    const r = await this.de.minuteKline(code, period, Math.min(safeCount, 800), 0, stockMarket)
     if (!r.success || !r.data?.length) return null
     const klines = r.data.slice(-cap)
     const got = klines.length
@@ -773,23 +829,24 @@ export class ResearchHub {
     safeCount: number,
     before: string,
     tail: number,
+    stockMarket: StockMarket,
   ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
     if (this.isMinutePeriod(period)) {
-      return this.fetchMinuteChartKlines(code, period, safeCount, before, tail)
+      return this.fetchMinuteChartKlines(code, period, safeCount, before, tail, stockMarket)
     }
 
     const klinePeriod = period === 'daily' ? 'daily' : period
     if (before) {
       const step = 200
       const endDay = this.dayBefore(before.slice(0, 10))
-      let olderR = await this.de.kline(code, klinePeriod, '', endDay, step)
+      let olderR = await this.de.kline(code, klinePeriod, '', endDay, step, stockMarket)
       let older = (olderR.data ?? []).filter(b => b.date < before)
       if (!older.length) {
-        olderR = await this.de.kline(code, klinePeriod, '', before.slice(0, 10), step)
+        olderR = await this.de.kline(code, klinePeriod, '', before.slice(0, 10), step, stockMarket)
         older = (olderR.data ?? []).filter(b => b.date < before)
       }
       const recentCount = Math.max(tail, safeCount, 240)
-      const recentR = await this.de.kline(code, klinePeriod, '', '', recentCount)
+      const recentR = await this.de.kline(code, klinePeriod, '', '', recentCount, stockMarket)
       if (recentR.success && recentR.data?.length) {
         const merged = this.mergeKlineByTime(older, recentR.data, before)
         return {
@@ -800,7 +857,7 @@ export class ResearchHub {
       return this.fetchLocalChartKlines(code, safeCount, before)
     }
 
-    const klineR = await this.de.kline(code, klinePeriod, '', '', safeCount)
+    const klineR = await this.de.kline(code, klinePeriod, '', '', safeCount, stockMarket)
     if (klineR.success && klineR.data?.length) {
       return {
         klines: klineR.data,
@@ -816,12 +873,14 @@ export class ResearchHub {
     count: number,
     before: string,
     tail: number,
+    explicitMarket: string | undefined,
     t0: number,
   ) {
     const normalized = code.padStart(6, '0')
     const cap = this.isMinutePeriod(period) ? this.minuteMaxBars(period) : 800
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
-    const quoteR = await this.de.realtime(code)
+    const stockMarket = this.resolveStockMarket(normalized, explicitMarket)
+    const quoteR = await this.stockRealtime(code, explicitMarket)
     let quote = quoteR.data?.[0] ?? null
     if (quote) quote = normalizePreOpenRealtimeQuote(quote)
     if (isMissingLivePrice(quote?.price)) {
@@ -843,56 +902,61 @@ export class ResearchHub {
     const name = this.resolveStockName(code, quote?.name)
 
     if (period === 'intraday') {
-      if (!this.isCnTradingDayCandidate()) {
+      const trendR = await this.de.fetchIntradaySessions(code, 5, stockMarket)
+      const trendData = trendR.success
+        ? trendR.data as IntradayTrendFetchResult
+        : null
+      const today = cnTodayString()
+      const session = pickIntradaySession(
+        trendData?.sessions ?? [],
+        today,
+        shouldPreferTodayIntraday(),
+      )
+
+      if (!session?.bars.length) {
         return ok({
           code: normalized,
           name,
           period,
           preClose,
+          sessionDate: null,
           isTradingDay: false,
           bars: [],
           indicators: [],
-        }, `${name} 非交易日`, t0)
+        }, `${name} 暂无分时数据`, t0)
       }
 
-      const intradayR = await this.de.intradayTick(code)
-      const raw = intradayR.data ?? []
-      const today = this.cnTodayString()
-      let cumAmount = 0
-      let cumVolume = 0
-      const bars = raw.map(row => {
-        const timeText = String(row.time ?? '')
-        const price = Number(row.price ?? 0)
-        const volume = Number(row.volume ?? 0)
-        const amount = Number(row.amount ?? 0)
-        cumAmount += amount
-        cumVolume += volume
-        const avgPrice = cumVolume > 0 ? cumAmount / cumVolume : price
-        const stamp = timeText.includes('-')
-          ? timeText
-          : `${today} ${timeText.length <= 5 ? `${timeText}:00` : timeText}`
-        return {
-          time: stamp,
-          price,
-          volume,
-          amount,
-          avgPrice,
-        }
-      })
+      const isLiveSession = session.sessionDate === today && shouldPreferTodayIntraday()
+      const latestSessionDate = trendData?.sessions.at(-1)?.sessionDate
+      const chartPreClose = await this.resolveIntradaySessionPreClose(
+        normalized,
+        session,
+        trendData?.apiPreClose ?? null,
+        session.sessionDate === latestSessionDate,
+      ) ?? preClose
+
+      const bars = session.bars.map(bar => ({
+        time: bar.time,
+        price: bar.price,
+        volume: bar.volume,
+        amount: bar.amount,
+        avgPrice: bar.avgPrice,
+      }))
 
       return ok({
         code: normalized,
         name,
         period,
-        preClose,
-        isTradingDay: bars.length > 0,
+        preClose: chartPreClose,
+        sessionDate: session.sessionDate,
+        isTradingDay: isLiveSession,
         hasMore: false,
         bars: this.sortChartBars(bars),
         indicators: [],
-      }, `${name} 分时 ${bars.length} 点`, t0)
+      }, `${name} 分时 ${session.sessionDate} ${bars.length} 点`, t0)
     }
 
-    const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail)
+    const fetched = await this.fetchChartKlines(normalized, period, safeCount, before, tail, stockMarket)
     if (!fetched?.klines.length) {
       if (isBseCode(normalized)) {
         return ok({

@@ -1,5 +1,6 @@
 import { httpGet } from '../utils/http.js'
 import { normalizeCode, resolveSecId, safeFloat } from '../utils/helpers.js'
+import { parseTrend2IntradayLine } from '../utils/intraday-trends.js'
 import { fetchF10Financials, fetchF10Profile, fetchF10Shareholders } from './eastmoney-f10.js'
 import type { EastMoneyDriver } from './eastmoney.js'
 
@@ -141,15 +142,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
       const trends = data?.trends as string[] | undefined
       if (!trends?.length) return null
       return trends.map(line => {
-        const parts = line.split(',')
-        const stamp = String(parts[0] ?? '')
-        if (stamp.includes(' 09:30')) return null
+        const bar = parseTrend2IntradayLine(line)
+        if (!bar) return null
         return {
           code: cc,
-          time: stamp.includes(' ') ? stamp : stamp.slice(-5),
-          price: safeFloat(parts[2] ?? parts[1]),
-          volume: safeFloat(parts[5]),
-          amount: safeFloat(parts[6]),
+          time: bar.time,
+          price: bar.price,
+          volume: bar.volume,
+          amount: bar.amount,
+          avgPrice: bar.avgPrice,
         }
       }).filter(Boolean) as Record<string, unknown>[]
     } catch { return null }
