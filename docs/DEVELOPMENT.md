@@ -6,7 +6,7 @@
 - **npm** workspaces（根目录单一 `package-lock.json`）
 - 推荐 macOS / Linux；Windows 需 WSL 或原生 Node
 
-本项目为 **纯 Web 应用**，不包含 Electron 桌面打包流程。若曾使用 Electron 版，请改用浏览器 + `npm run dev` / `npm start`。
+本项目支持 **Web**（浏览器 + `npm run dev`）与 **Electron 桌面**（`npm run dev:desktop`）。二者共用 `client-ui` 与 `apps/server` API。桌面打包见 [DESKTOP.md](./DESKTOP.md)。
 
 ## 仓库结构
 
@@ -23,6 +23,7 @@ npm run clean        # 删除各包 dist 与 client-ui/dist
 | 根 | `inno-a-stock` |
 | client-ui | `inno-a-stock-client` |
 | apps/server | `@inno-a-stock/server` |
+| apps/desktop | `@inno-a-stock/desktop` |
 | packages/* | `@inno-a-stock/<name>` |
 
 内部包 scope 仍为 `@inno-a-stock/*`，对外品牌为 **innoAStock**。
@@ -38,7 +39,8 @@ npm run dev
 浏览器打开 **http://127.0.0.1:5173** 即可。`:8711` 为 API 内部端口，由 Vite 代理 `/api`，**无需在浏览器中访问**。
 
 单独调试 API：`npm run dev:api`  
-单独调试前端：`npm run dev:web`（需另开终端运行 `dev:api`）
+单独调试前端：`npm run dev:web`（需另开终端运行 `dev:api`）  
+桌面开发（Electron）：`npm run dev:desktop`
 
 修改 `packages/*` 后需重新编译对应包（server 的 dev 会 rebuild server；改其他 package 时运行 `npm run build:packages`）。
 
@@ -51,7 +53,7 @@ npm run dev
 | 新增 Agent tool | `packages/agent/src/tools.ts` |
 | 新增数据源 | `packages/a-stock-layer/src/drivers/` |
 | 新增因子 | `packages/stock-eval/src/factors/` |
-| 新页面 | `client-ui/src/pages/` + `App.tsx` nav |
+| 新页面 / 聊天 UI | `client-ui/src/chat/` 或 `client-ui/src/pages/` |
 
 ## LLM 配置
 
@@ -112,8 +114,10 @@ npm run serve          # API :8711 + Vite preview :5173
 |------|------|
 | Python `work/` | 已移除 |
 | `research-cli` | 使用 `npm run dev` |
-| Electron 桌面 | 浏览器 Web |
+| Electron 桌面 | `npm run dev:desktop` / [DESKTOP.md](./DESKTOP.md) |
 | `client-ui/package-lock.json` | 根 lockfile only |
+
+**AI 协作者**：请先阅读 [AGENT-GUIDE.md](./AGENT-GUIDE.md) 与 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
 GitHub 主仓库：**innoAStock**（`Travisun/innoAStock`）。
 

@@ -2,31 +2,29 @@
 
 innoAStock monorepo 内部包说明。构建顺序由 workspace 依赖决定；根目录 `npm run build:packages` 一次编译全部。
 
+> Agent 协作请参阅 [docs/AGENT-GUIDE.md](../docs/AGENT-GUIDE.md)。
+
 ## 投研核心（Core）
 
 | Package | 职责 |
 |---------|------|
 | `@inno-a-stock/shared` | 共享 schema、`ResearchResult`、K 线/因子类型 |
-| `@inno-a-stock/a-stock-layer` | `AshareEngine` — 13 driver、产业链 API、TDX、组合账本 |
+| `@inno-a-stock/a-stock-layer` | `AshareEngine` — 14 driver、产业链 API、TDX、组合账本 |
+| `@inno-a-stock/market-data` | 本地 SQLite 因子库、同步引擎、全市场/行业本地筛选 |
 | `@inno-a-stock/stock-eval` | 40 因子、8 评分卡、筛选、回测、快照 |
 | `@inno-a-stock/institutions` | 28 机构 config-driven evaluators |
 | `@inno-a-stock/t-strategy` | 9 策略、`verifyStrategy`、报告、均值-方差权重 |
 | `@inno-a-stock/skills` | 收盘报告、早报、产业透视、Mermaid |
 | `@inno-a-stock/research-hub` | `dispatch(feature, params)` 统一入口 |
-| `@inno-a-stock/agent` | LLM provider、19 tools、slash 命令 |
+| `@inno-a-stock/agent` | LLM provider、MCP 工具（约 43 个）、多会话 |
 
 ## 应用层
 
 | Package | 职责 |
 |---------|------|
 | `@inno-a-stock/server` | Fastify HTTP、静态 SPA、配置持久化 |
+| `@inno-a-stock/desktop` | Electron 主进程、打包与 sidecar 生命周期 |
 | `inno-a-stock-client` | React + Fluent UI（`client-ui/`） |
-
-## 可选扩展（Optional）
-
-| Package | 职责 |
-|---------|------|
-| `@inno-a-stock/stock-writer` | 文章数据采集、Prompt、合规、微信排版/草稿箱 |
 
 ## Hub Features
 
@@ -36,8 +34,9 @@ screening                strategy_signal / strategy_verify / strategy_report
 portfolio_analysis       portfolio_trades / portfolio_summary
 industry_mining          industry_mermaid
 market_report            backtest / latest_evaluation / search_stocks
-writer_*                 (optional, stock-writer)
 ```
+
+本地数据相关能力主要通过 **MCP 工具**（`screen_local_universe`、`list_local_industries` 等）暴露，而非全部列入 Hub feature 字符串。
 
 参数与返回值见 [docs/API.md](../docs/API.md)。
 
@@ -45,6 +44,7 @@ writer_*                 (optional, stock-writer)
 
 ```bash
 npm run build -w @inno-a-stock/stock-eval
+npm run build -w @inno-a-stock/market-data
 npm run build -w @inno-a-stock/server
 ```
 
@@ -53,5 +53,6 @@ npm run build -w @inno-a-stock/server
 ```bash
 npm run build:packages   # packages + server
 npm run build            # 含 client-ui
+npm run build:desktop    # 含 Electron 发行包
 npm run clean            # 清理 dist
 ```
