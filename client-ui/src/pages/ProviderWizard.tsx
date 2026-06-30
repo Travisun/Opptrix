@@ -3,15 +3,15 @@ import {
   Text, Checkbox, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import { CheckmarkRegular } from '@fluentui/react-icons'
-import StatusBanner from '../components/StatusBanner'
 import OpptrixField from '../components/opptrix/OpptrixField'
 import OpptrixInput from '../components/opptrix/OpptrixInput'
 import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import {
-  getProviderPresets, discoverModels, createProvider,
-  type ProviderPreset,
+  getProviderPresets, discoverModels, createProvider, updateProvider,
+  type ProviderPreset, type PublicProvider,
 } from '../api/client'
+import { useSettingsToast } from './settings/SettingsToast'
 import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
@@ -137,6 +137,7 @@ const useStyles = makeStyles({
 interface ProviderWizardProps {
   onCancel: () => void
   onDone: () => void
+  provider?: PublicProvider | null
 }
 
 const DEFAULT_PRESETS: ProviderPreset[] = [
@@ -146,8 +147,10 @@ const DEFAULT_PRESETS: ProviderPreset[] = [
   { id: 'custom', name: '自定义', base_url: '' },
 ]
 
-export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps) {
+export default function ProviderWizard({ onCancel, onDone, provider = null }: ProviderWizardProps) {
   const s = useStyles()
+  const toast = useSettingsToast()
+  const isEdit = Boolean(provider)
   const [step, setStep] = useState(1)
   const [presets, setPresets] = useState<ProviderPreset[]>(DEFAULT_PRESETS)
   const [presetId, setPresetId] = useState('deepseek')
@@ -159,7 +162,6 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
   const [customModel, setCustomModel] = useState('')
   const [discovering, setDiscovering] = useState(false)
   const [saving, setSaving] = useState(false)
-  const [error, setError] = useState('')
   const [discoverHint, setDiscoverHint] = useState('')
 
   useEffect(() => {
@@ -170,7 +172,26 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
       .catch(() => { /* keep defaults */ })
   }, [])
 
-  const isCustom = presetId === 'custom'
+  useEffect(() => {
+    if (!provider) return
+    setName(provider.name)
+    setBaseUrl(provider.base_url)
+    setSelected(new Set(provider.models))
+    setDiscovered(provider.models)
+    setApiKey('')
+    setStep(1)
+    setDiscoverHint('')
+  }, [provider])
+
+  useEffect(() => {
+    if (!provider || !presets.length) return
+    const match = presets.find(
+      p => p.id !== 'custom' && p.base_url.replace(/\/$/, '') === provider.base_url.replace(/\/$/, ''),
+    )
+    setPresetId(match?.id ?? 'custom')
+  }, [provider, presets])
+
+  const isCustom = presetId === 'custom' || isEdit
 
   const handlePresetChange = (id: string) => {
     setPresetId(id)
@@ -185,7 +206,6 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
     const url = baseUrl.trim()
     if (!url || !apiKey.trim()) return false
     setDiscovering(true)
-    setError('')
     setDiscoverHint('正在验证 API Key 并拉取模型…')
     setDiscovered([])
     setSelected(new Set())
@@ -193,7 +213,12 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
       const { models } = await discoverModels(url, apiKey.trim())
       setDiscovered(models)
       if (models.length) {
-        setSelected(new Set(models.slice(0, 3)))
+        if (isEdit && provider) {
+          const kept = provider.models.filter(m => models.includes(m))
+          setSelected(new Set(kept.length ? kept : models.slice(0, 3)))
+        } else {
+          setSelected(new Set(models.slice(0, 3)))
+        }
         setDiscoverHint(`已获取 ${models.length} 个模型，请勾选要启用的型号`)
       } else {
         setDiscoverHint('连接成功，但未获取到模型，可手动添加')
@@ -201,7 +226,7 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
       return true
     } catch (e) {
       setDiscoverHint('')
-      setError(e instanceof Error ? e.message : 'API Key 验证失败，请检查后重试')
+      toast.showError(e instanceof Error ? e.message : 'API Key 验证失败，请检查后重试')
       return false
     } finally {
       setDiscovering(false)
@@ -231,16 +256,20 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
   }
 
   const canNextStep1 = Boolean(name.trim() && baseUrl.trim())
-  const canNextStep2 = apiKey.trim()
+  const canNextStep2 = isEdit || Boolean(apiKey.trim())
   const canSave = selected.size > 0
 
   const handleNext = async () => {
     if (step === 1 && canNextStep1) {
       setStep(2)
-      setError('')
       return
     }
     if (step === 2 && canNextStep2 && !discovering) {
+      if (isEdit && !apiKey.trim()) {
+        setDiscoverHint('沿用已保存的密钥，可调整启用的模型')
+        setStep(3)
+        return
+      }
       const ok = await runDiscover()
       if (ok) setStep(3)
     }
@@ -250,21 +279,29 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
 
   const handleSave = async () => {
     if (!canSave) {
-      setError('请至少勾选一个模型')
+      toast.showError('请至少勾选一个模型')
       return
     }
     setSaving(true)
-    setError('')
     try {
-      await createProvider({
-        name: name.trim(),
-        base_url: baseUrl.trim(),
-        api_key: apiKey.trim(),
-        models: [...selected],
-      })
+      if (isEdit && provider) {
+        await updateProvider(provider.id, {
+          name: name.trim(),
+          base_url: baseUrl.trim(),
+          ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
+          models: [...selected],
+        })
+      } else {
+        await createProvider({
+          name: name.trim(),
+          base_url: baseUrl.trim(),
+          api_key: apiKey.trim(),
+          models: [...selected],
+        })
+      }
       onDone()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '保存失败')
+      toast.showError(e instanceof Error ? e.message : '保存失败')
     }
     setSaving(false)
   }
@@ -275,7 +312,6 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
       return
     }
     setStep(step - 1)
-    setError('')
   }
 
   return (
@@ -288,26 +324,27 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
 
       <div className={`${s.scroll} opptrix-scroll`}>
         <div className={s.bodyInner}>
-          {error && <StatusBanner message={error} tone="error" />}
 
           {step === 1 && (
             <>
               <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>选择提供商</Text>
+                <Text className={s.stepTitle} block>{isEdit ? '编辑提供商' : '选择提供商'}</Text>
                 <Text className={s.stepDesc} block>OpenAI 兼容接口（/v1/chat/completions）</Text>
               </div>
               <div className={s.formGrid}>
-                <OpptrixField label="提供商">
-                  <OpptrixSelect
-                    value={presetLabel}
-                    selectedOptions={[presetId]}
-                    onOptionSelect={(_, d) => handlePresetChange(d.optionValue || presetId)}
-                  >
-                    {presets.map(p => (
-                      <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
-                    ))}
-                  </OpptrixSelect>
-                </OpptrixField>
+                {!isEdit && (
+                  <OpptrixField label="提供商">
+                    <OpptrixSelect
+                      value={presetLabel}
+                      selectedOptions={[presetId]}
+                      onOptionSelect={(_, d) => handlePresetChange(d.optionValue || presetId)}
+                    >
+                      {presets.map(p => (
+                        <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
+                      ))}
+                    </OpptrixSelect>
+                  </OpptrixField>
+                )}
                 <OpptrixField label="显示名称">
                   <OpptrixInput
                     value={name}
@@ -332,15 +369,19 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
             <>
               <div className={s.stepIntro}>
                 <Text className={s.stepTitle} block>配置 API Key</Text>
-                <Text className={s.stepDesc} block>密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。</Text>
+                <Text className={s.stepDesc} block>
+                  {isEdit
+                    ? '留空表示沿用已保存的密钥；填写新密钥将重新验证并拉取模型列表。'
+                    : '密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。'}
+                </Text>
               </div>
               <div className={s.formGrid}>
-                <OpptrixField label="API Key">
+                <OpptrixField label={isEdit ? 'API Key（可选）' : 'API Key'}>
                   <OpptrixInput
                     type="password"
                     value={apiKey}
                     onChange={(_, d) => setApiKey(d.value || '')}
-                    placeholder="sk-..."
+                    placeholder={isEdit ? '留空不修改' : 'sk-...'}
                   />
                 </OpptrixField>
               </div>
@@ -431,7 +472,7 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
             onClick={handleSave}
             disabled={saving || !canSave}
           >
-            {saving ? '保存中…' : '完成添加'}
+            {saving ? '保存中…' : (isEdit ? '保存更改' : '完成添加')}
           </OpptrixButton>
         )}
       </div>

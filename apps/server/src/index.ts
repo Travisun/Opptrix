@@ -7,7 +7,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
-import { getMarketDataService } from '@opptrix/market-data'
+import { getMarketDataService, suggestPackageFilename } from '@opptrix/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import {
@@ -55,7 +55,25 @@ agent = new AgentEngine(hub, {
   appContext: serverAppContext,
 })
 
-const app = Fastify({ logger: true })
+const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 })
+
+const MARKET_PACKAGE_BODY_LIMIT = 512 * 1024 * 1024
+
+app.addContentTypeParser(
+  'application/octet-stream',
+  { parseAs: 'buffer', bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
+  (_req, body, done) => {
+    done(null, body)
+  },
+)
+
+app.addContentTypeParser(
+  'application/vnd.opptrix.market-data+opmd',
+  { parseAs: 'buffer', bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
+  (_req, body, done) => {
+    done(null, body)
+  },
+)
 
 app.post<{ Params: { code: string }; Body: { force?: boolean } }>('/api/stock/:code/prep', async (req) => {
   const prep = startStockPrep(hub, req.params.code, { force: Boolean(req.body?.force) })
@@ -229,6 +247,58 @@ app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; backgrou
       profile: body.profile,
     })
     return { success: result.success, data: result.data, message: result.message, elapsed: result.elapsed }
+  },
+)
+
+app.get('/api/market-data/export', async (_req, reply) => {
+  try {
+    const svc = getMarketDataService()
+    const buffer = await svc.exportPackage()
+    const inspect = svc.inspectPackage(buffer)
+    const filename = suggestPackageFilename(inspect.metadata)
+    return reply
+      .header('Content-Type', 'application/vnd.opptrix.market-data+opmd')
+      .header('Content-Disposition', `attachment; filename="${filename}"`)
+      .header('X-Opptrix-Package-Format', '1')
+      .send(buffer)
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    return reply.code(409).send({ error: msg })
+  }
+})
+
+app.post<{ Body: Buffer }>(
+  '/api/market-data/package/inspect',
+  { bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
+  async (req, reply) => {
+    const body = req.body
+    if (!body?.length) return reply.code(400).send({ error: 'empty body' })
+    const result = getMarketDataService().inspectPackage(body)
+    if (!result.valid) {
+      return reply.code(400).send({ success: false, error: result.error ?? 'invalid package' })
+    }
+    return { success: true, data: result }
+  },
+)
+
+app.post<{ Body: Buffer }>(
+  '/api/market-data/import',
+  { bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
+  async (req, reply) => {
+    const body = req.body
+    if (!body?.length) return reply.code(400).send({ error: 'empty body' })
+    try {
+      const metadata = getMarketDataService().importPackage(body)
+      const status = hub.marketData.status()
+      return {
+        success: true,
+        message: '基础数据已导入',
+        data: { metadata, status },
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return reply.code(400).send({ success: false, error: msg })
+    }
   },
 )
 

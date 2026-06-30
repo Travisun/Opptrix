@@ -1,6 +1,12 @@
 import type { ApiResponse } from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
 import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
+import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
+import {
+  formatExportResultMessage,
+  pickExportDestination,
+  saveMarketPackageBlob,
+} from '../platform/saveMarketPackage'
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -105,7 +111,7 @@ export const research = {
     ),
 
   industryStocks: (industry: string, limit = 120) =>
-    apiCall<{ trade_date: string; industry: string; items: IndustryStockItem[] }>(
+    apiCall<{ trade_date: string; quote_date: string | null; industry: string; items: IndustryStockItem[] }>(
       'market_industry_stocks',
       { industry, limit },
     ),
@@ -204,6 +210,94 @@ export async function startMarketDataSync(options: { force?: boolean } = {}) {
       force: options.force ?? false,
     }),
   })
+}
+
+export interface MarketDataPackageMetadata {
+  app: string
+  kind: string
+  format_version: number
+  exported_at: string
+  schema_version: number
+  pack_signature: string
+  compatible: {
+    min_format_version: number
+    max_format_version: number
+    min_schema_version: number
+    max_schema_version: number
+  }
+  snapshot: {
+    stock_count: number
+    latest_trade_date: string | null
+    latest_factor_date: string | null
+    is_ready: boolean
+    bootstrap: import('../types/market').MarketDataSyncState['db_status']['bootstrap']
+  }
+}
+
+export interface MarketDataPackageInspectResult {
+  valid: boolean
+  error?: string
+  metadata?: MarketDataPackageMetadata
+  compressed_bytes?: number
+  sqlite_bytes?: number
+}
+
+export type { ExportDestination, ExportPackageResult }
+
+const MARKET_PACKAGE_TIMEOUT = 300_000
+
+async function fetchMarketDataPackageBlob(): Promise<{ blob: Blob; filename: string }> {
+  const resp = await fetchWithTimeout(`${API_BASE}/market-data/export`, {}, MARKET_PACKAGE_TIMEOUT)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `导出失败（${resp.status}）`)
+  }
+  const blob = await resp.blob()
+  const cd = resp.headers.get('Content-Disposition') ?? ''
+  const match = /filename="([^"]+)"/.exec(cd)
+  const filename = match?.[1] ?? 'opptrix-market.opmd'
+  return { blob, filename }
+}
+
+export async function exportMarketDataPackageFile(
+  destination: ExportDestination,
+): Promise<ExportPackageResult> {
+  const { blob, filename } = await fetchMarketDataPackageBlob()
+  return saveMarketPackageBlob(blob, filename, destination)
+}
+
+export { pickExportDestination, formatExportResultMessage }
+
+export async function inspectMarketDataPackageFile(file: File): Promise<MarketDataPackageInspectResult> {
+  const buffer = await file.arrayBuffer()
+  const resp = await fetchWithTimeout(`${API_BASE}/market-data/package/inspect`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: buffer,
+  }, MARKET_PACKAGE_TIMEOUT)
+  const json = await resp.json().catch(() => ({})) as {
+    success?: boolean
+    error?: string
+    data?: MarketDataPackageInspectResult
+  }
+  if (!resp.ok) {
+    throw new Error(json.error || `无法读取数据包（${resp.status}）`)
+  }
+  return json.data ?? { valid: false, error: '无效响应' }
+}
+
+export async function importMarketDataPackageFile(file: File) {
+  const buffer = await file.arrayBuffer()
+  return jsonFetch<{
+    success: boolean
+    message?: string
+    data?: { metadata: MarketDataPackageMetadata; status: import('../types/market').MarketDataSyncState['db_status'] }
+    error?: string
+  }>('/market-data/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: buffer,
+  }, MARKET_PACKAGE_TIMEOUT)
 }
 
 export async function listDiscoverJobs() {

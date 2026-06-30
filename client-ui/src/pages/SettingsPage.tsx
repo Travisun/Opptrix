@@ -3,8 +3,7 @@ import {
   Text, Spinner, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
 } from '@fluentui/react-components'
-import { ChevronRightRegular, DeleteRegular } from '@fluentui/react-icons'
-import StatusBanner from '../components/StatusBanner'
+import { ChevronRightRegular, DeleteRegular, EditRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
@@ -13,6 +12,7 @@ import SettingsSidebar, {
 import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
+import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
@@ -218,22 +218,30 @@ interface SettingsPageProps {
   onSidebarClose?: () => void
 }
 
-export default function SettingsPage({
+export default function SettingsPage(props: SettingsPageProps) {
+  return (
+    <SettingsToastProvider>
+      <SettingsPageView {...props} />
+    </SettingsToastProvider>
+  )
+}
+
+function SettingsPageView({
   onBack, onSaved, isMobile = false,
   sidebarVisible = true,
   onSidebarClose,
 }: SettingsPageProps) {
+  const toast = useSettingsToast()
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
   const [section, setSection] = useState<SettingsSection>('general')
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
+  const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
   const [scorecard, setScorecard] = useState('综合评估')
   const [loading, setLoading] = useState(true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
-  const [message, setMessage] = useState('')
-  const [error, setError] = useState('')
   const skipScorecardSave = useRef(true)
   const scorecardBaseline = useRef<string | null>(null)
   const electronChrome = isElectron() && !isMobile
@@ -251,9 +259,9 @@ export default function SettingsPage({
   useEffect(() => {
     setLoading(true)
     refresh()
-      .catch(() => setError('无法读取后端配置，请确认 npm run dev 已启动'))
+      .catch(() => toast.showError('无法读取后端配置，请确认服务已启动'))
       .finally(() => setLoading(false))
-  }, [refresh])
+  }, [refresh, toast])
 
   useDebouncedEffect(() => {
     if (loading || skipScorecardSave.current) {
@@ -270,37 +278,46 @@ export default function SettingsPage({
         setConfig(prev => (prev ? { ...prev, default_scorecard: scorecard } : prev))
         setSaveState('saved')
         onSaved?.()
+        toast.showSuccess('已保存')
         window.setTimeout(() => setSaveState('idle'), 2000)
       })
       .catch((e: unknown) => {
         setSaveState('error')
-        setError(e instanceof Error ? e.message : '保存失败')
+        toast.showError(e instanceof Error ? e.message : '保存失败')
+        window.setTimeout(() => setSaveState('idle'), 2000)
       })
-  }, [scorecard, loading], SCORECARD_SAVE_MS, true)
+  }, [scorecard, loading, onSaved, toast], SCORECARD_SAVE_MS, true)
+
+  const openProviderWizard = useCallback((provider: PublicProvider | null = null) => {
+    setEditingProvider(provider)
+    setWizardOpen(true)
+  }, [])
+
+  const closeProviderWizard = useCallback(() => {
+    setWizardOpen(false)
+    setEditingProvider(null)
+  }, [])
 
   const handleDeleteProvider = async (p: PublicProvider) => {
     if (!confirm(`确定删除提供商「${p.name}」？`)) return
-    setError('')
     try {
       await deleteProvider(p.id)
       await refresh()
-      setMessage('已删除')
+      toast.showSuccess('已删除')
       onSaved?.()
     } catch (e) {
-      setError(e instanceof Error ? e.message : '删除失败')
+      toast.showError(e instanceof Error ? e.message : '删除失败')
     }
   }
 
   const handleTest = async () => {
-    setError('')
-    setMessage('')
     try {
       const health = await getHealth()
-      setMessage(health.llm_configured
+      toast.showSuccess(health.llm_configured
         ? `连接正常 · ${health.available_models ?? 0} 个可用模型`
         : '后端已连接，但尚未配置 LLM 提供商')
     } catch (e) {
-      setError(e instanceof Error ? e.message : '连接失败')
+      toast.showError(e instanceof Error ? e.message : '连接失败')
     }
   }
 
@@ -310,7 +327,7 @@ export default function SettingsPage({
     switch (saveState) {
       case 'pending': return '正在保存…'
       case 'saved': return '已保存'
-      case 'error': return '保存失败'
+      case 'error': return ''
       default: return ''
     }
   })()
@@ -384,12 +401,20 @@ export default function SettingsPage({
                     avatar={p.name.charAt(0).toUpperCase()}
                     first={i === 0}
                     action={(
-                      <OpptrixButton
-                        variant="icon"
-                        icon={<DeleteRegular />}
-                        onClick={() => handleDeleteProvider(p)}
-                        aria-label={`删除 ${p.name}`}
-                      />
+                      <>
+                        <OpptrixButton
+                          variant="icon"
+                          icon={<EditRegular />}
+                          onClick={() => openProviderWizard(p)}
+                          aria-label={`编辑 ${p.name}`}
+                        />
+                        <OpptrixButton
+                          variant="icon"
+                          icon={<DeleteRegular />}
+                          onClick={() => handleDeleteProvider(p)}
+                          aria-label={`删除 ${p.name}`}
+                        />
+                      </>
                     )}
                   />
                 ))
@@ -398,7 +423,7 @@ export default function SettingsPage({
                 title="添加模型提供商"
                 desc="配置 Base URL 与 API Key"
                 icon={<ChevronRightRegular fontSize={16} color={opptrixTokens.textTertiary} />}
-                onClick={() => setWizardOpen(true)}
+                onClick={() => openProviderWizard()}
               />
             </SettingsGroup>
           </div>
@@ -494,26 +519,29 @@ export default function SettingsPage({
               section === 'market_data' && s.contentBodyCompact,
               section === 'discover_strategies' && s.contentBodyFill,
             )}>
-              {error && <StatusBanner message={error} tone="error" />}
-              {message && <StatusBanner message={message} tone="success" />}
               {renderSection()}
             </div>
           </div>
         </div>
       </div>
 
-      <Dialog open={wizardOpen} onOpenChange={(_, data) => setWizardOpen(!!data.open)}>
+      <Dialog open={wizardOpen} onOpenChange={(_, data) => { if (!data.open) closeProviderWizard() }}>
         <DialogSurface className={mergeClasses(s.dialogSurface, 'opptrix-dialog-surface')}>
           <DialogBody>
-            <DialogTitle className={s.dialogTitle}>添加模型提供商</DialogTitle>
+            <DialogTitle className={s.dialogTitle}>
+              {editingProvider ? '编辑模型提供商' : '添加模型提供商'}
+            </DialogTitle>
             <DialogContent>
               <ProviderWizard
-                onCancel={() => setWizardOpen(false)}
+                key={editingProvider?.id ?? 'new'}
+                provider={editingProvider}
+                onCancel={closeProviderWizard}
                 onDone={async () => {
+                  const wasEdit = Boolean(editingProvider)
                   await refresh()
-                  setWizardOpen(false)
+                  closeProviderWizard()
                   setSection('models')
-                  setMessage('提供商已添加')
+                  toast.showSuccess(wasEdit ? '提供商已更新' : '提供商已添加')
                   onSaved?.()
                 }}
               />

@@ -45,7 +45,9 @@ export class ResearchHub {
   readonly closingReport = new ClosingReport(this.de)
   readonly morningBrief = new MorningBrief(this.de)
   readonly industrySkill = new IndustryMining(this.de)
-  readonly marketData = getMarketDataService()
+  get marketData() {
+    return getMarketDataService()
+  }
   private readonly stockNameCache = new Map<string, string>()
 
   initMarketDataAutoSync(): void {
@@ -484,12 +486,14 @@ export class ResearchHub {
     const normalized = [...new Set((codes ?? []).map(c => String(c).padStart(6, '0')).filter(Boolean))]
     if (!normalized.length) return ok({ quotes: [] }, '暂无关注', t0)
     await this.fillMissingStockNames(normalized)
-    const result = await this.stockBatchRealtime(normalized)
-    if (!result.success || !result.data?.length) return fail('行情获取失败', t0)
-    const quotes = (result.data ?? []).map(q => ({
-      ...q,
-      name: this.resolveStockName(q.code, q.name),
-    }))
+    const batch = await this.stockBatchRealtime(normalized)
+    const byCode = new Map(
+      (batch.data ?? []).map(q => [normalizeCode(q.code), q]),
+    )
+    const quotes = normalized
+      .map(code => this.mergeQuoteWithLocal(code, byCode.get(code) ?? null))
+      .filter((q): q is NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> => q != null)
+    if (!quotes.length) return fail('行情获取失败', t0)
     return ok({ quotes }, `更新 ${quotes.length} 只`, t0)
   }
 

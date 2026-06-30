@@ -93,32 +93,59 @@ export function latestQuoteDate(db: Database.Database): string | null {
   return row.d
 }
 
-/** CTEs: per-code latest quote/kline rows for change_pct (factor date may differ from quote date). */
+/** 统一行情日：优先用全库最新 quote 日，缺码再回退到该股最近一条。 */
 const LATEST_MARKET_CTES = `
-  WITH latest_quotes AS (
-    SELECT code, MAX(trade_date) AS trade_date
-    FROM stock_quotes_daily
-    GROUP BY code
+  WITH market_ref AS (
+    SELECT COALESCE(
+      (SELECT MAX(trade_date) FROM stock_quotes_daily),
+      (SELECT MAX(trade_date) FROM stock_klines_daily)
+    ) AS trade_date
   ),
-  quotes AS (
+  quotes_ref AS (
     SELECT q.code, q.close, q.change_pct, q.pe, q.pb, q.market_cap
     FROM stock_quotes_daily q
-    INNER JOIN latest_quotes lq ON q.code = lq.code AND q.trade_date = lq.trade_date
+    INNER JOIN market_ref mr ON q.trade_date = mr.trade_date
   ),
-  latest_klines AS (
-    SELECT code, MAX(trade_date) AS trade_date
-    FROM stock_klines_daily
-    GROUP BY code
-  ),
-  klines AS (
+  klines_ref AS (
     SELECT k.code, k.close, k.change_pct
     FROM stock_klines_daily k
-    INNER JOIN latest_klines lk ON k.code = lk.code AND k.trade_date = lk.trade_date
+    INNER JOIN market_ref mr ON k.trade_date = mr.trade_date
+  ),
+  latest_quote AS (
+    SELECT q.code, q.close, q.change_pct, q.pe, q.pb, q.market_cap
+    FROM stock_quotes_daily q
+    INNER JOIN (
+      SELECT code, MAX(trade_date) AS trade_date FROM stock_quotes_daily GROUP BY code
+    ) l ON q.code = l.code AND q.trade_date = l.trade_date
+  ),
+  latest_kline AS (
+    SELECT k.code, k.close, k.change_pct
+    FROM stock_klines_daily k
+    INNER JOIN (
+      SELECT code, MAX(trade_date) AS trade_date FROM stock_klines_daily GROUP BY code
+    ) l ON k.code = l.code AND k.trade_date = l.trade_date
+  ),
+  quotes AS (
+    SELECT * FROM quotes_ref
+    UNION ALL
+    SELECT q.*
+    FROM latest_quote q
+    WHERE q.code NOT IN (SELECT code FROM quotes_ref)
+  ),
+  klines AS (
+    SELECT k.code, k.close, k.change_pct FROM klines_ref k
+    UNION ALL
+    SELECT k.code, k.close, k.change_pct
+    FROM latest_kline k
+    WHERE k.code NOT IN (SELECT code FROM klines_ref)
+      AND k.code NOT IN (SELECT code FROM quotes)
   )
 `
 
 const EFFECTIVE_CHANGE_PCT = 'COALESCE(q.change_pct, k.change_pct)'
 const EFFECTIVE_CLOSE = 'COALESCE(q.close, k.close)'
+const CHANGE_UP = `(${EFFECTIVE_CHANGE_PCT} > 0.0001)`
+const CHANGE_DOWN = `(${EFFECTIVE_CHANGE_PCT} < -0.0001)`
 
 /** 可纳入行业/列表统计的活跃个股（排除退市等） */
 const LISTABLE_STOCK_WHERE = `
@@ -461,9 +488,9 @@ export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
       AVG(sc.total_score) AS avg_score,
       AVG(q.pe) AS avg_pe,
       AVG(q.pb) AS avg_pb,
-      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} > 0 THEN 1 ELSE 0 END) AS up_count,
-      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} < 0 THEN 1 ELSE 0 END) AS down_count,
-      SUM(CASE WHEN ${EFFECTIVE_CHANGE_PCT} IS NULL OR ${EFFECTIVE_CHANGE_PCT} = 0 THEN 1 ELSE 0 END) AS flat_count
+      SUM(CASE WHEN ${CHANGE_UP} THEN 1 ELSE 0 END) AS up_count,
+      SUM(CASE WHEN ${CHANGE_DOWN} THEN 1 ELSE 0 END) AS down_count,
+      SUM(CASE WHEN NOT ${CHANGE_UP} AND NOT ${CHANGE_DOWN} THEN 1 ELSE 0 END) AS flat_count
     FROM stocks s
     LEFT JOIN quotes q ON q.code = s.code
     LEFT JOIN klines k ON k.code = s.code
@@ -552,8 +579,9 @@ export function queryIndustryStocks(
   industry: string,
   tradeDate?: string,
   limit = 120,
-): { trade_date: string; industry: string; items: IndustryStockRow[] } {
+): { trade_date: string; quote_date: string | null; industry: string; items: IndustryStockRow[] } {
   const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
+  const quoteDate = latestQuoteDate(store.db)
   const db = store.db
   const key = industry.trim()
   let industryClause: string
@@ -592,6 +620,7 @@ export function queryIndustryStocks(
 
   return {
     trade_date: factorDate,
+    quote_date: quoteDate,
     industry: key,
     items: rows.map(row => ({
       code: row.code,

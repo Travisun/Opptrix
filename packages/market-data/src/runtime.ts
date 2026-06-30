@@ -1,0 +1,16 @@
+import { resetSharedMarketSyncCoordinator } from './sync/coordinator.js'
+import { resetSharedMarketDataStore } from './store.js'
+
+let resetServiceHook: (() => void) | null = null
+
+/** Register service singleton reset (avoids circular import from index). */
+export function registerMarketDataServiceReset(fn: () => void): void {
+  resetServiceHook = fn
+}
+
+/** Close DB handles and drop in-memory singletons before replacing market.db on disk. */
+export function resetMarketDataRuntime(): void {
+  resetServiceHook?.()
+  resetSharedMarketDataStore()
+  resetSharedMarketSyncCoordinator()
+}

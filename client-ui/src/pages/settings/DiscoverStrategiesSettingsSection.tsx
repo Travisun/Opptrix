@@ -19,6 +19,7 @@ import {
   StrategyViewDialog,
   type StrategyDraft,
 } from './DiscoverStrategyDialogs'
+import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens } from '../../theme/tokens'
 
 const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
@@ -175,6 +176,7 @@ function customFromBuiltin(detail: DiscoverStrategyDetail): CustomDiscoverStrate
 
 export default function DiscoverStrategiesSettingsSection() {
   const s = useStyles()
+  const toast = useSettingsToast()
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [viewTarget, setViewTarget] = useState<ViewTarget>(null)
   const [editTarget, setEditTarget] = useState<EditTarget>(null)
@@ -258,13 +260,19 @@ export default function DiscoverStrategiesSettingsSection() {
     saveStrategy(copy)
     setViewTarget(null)
     setEditTarget({ mode: 'edit', id: copy.id })
-  }, [builtinDetail, saveStrategy])
+    toast.showSuccess('已复制为自编策略')
+  }, [builtinDetail, saveStrategy, toast])
 
   const handleSaveCustom = () => {
-    if (!draft.name.trim() || !draft.prompt.trim()) return
+    if (!draft.name.trim() || !draft.prompt.trim()) {
+      toast.showWarning('请填写策略名称与选股说明')
+      return
+    }
     const id = editTarget?.mode === 'edit' ? editTarget.id : undefined
+    const creating = editTarget?.mode === 'create'
     saveStrategy({ ...draft, id })
     setEditTarget(null)
+    toast.showSuccess(creating ? '自编策略已创建' : '策略已保存')
   }
 
   const handleDeleteCustom = () => {
@@ -275,6 +283,7 @@ export default function DiscoverStrategiesSettingsSection() {
     if (viewTarget?.kind === 'custom' && viewTarget.id === id) {
       setViewTarget(null)
     }
+    toast.showSuccess('已删除自编策略')
   }
 
   const openEditFromView = () => {
@@ -290,8 +299,9 @@ export default function DiscoverStrategiesSettingsSection() {
       const copy = customFromBuiltin(resp.strategy)
       saveStrategy(copy)
       setEditTarget({ mode: 'edit', id: copy.id })
+      toast.showSuccess('已复制为自编策略')
     } catch {
-      /* ignore */
+      toast.showError('复制失败，请稍后再试')
     }
   }
 

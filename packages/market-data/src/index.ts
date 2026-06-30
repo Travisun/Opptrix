@@ -6,6 +6,14 @@ import { getMarketSyncCoordinator, MarketSyncCoordinator, type SyncStateSnapshot
 import { resolveSyncPlan, type SyncPlan } from './sync/plan.js'
 import { hydrateStocks, type HydrateManifest } from './sync/hydrate.js'
 import {
+  exportMarketDataPackage,
+  importMarketDataPackageToDisk,
+  inspectMarketDataPackage,
+  type MarketDataPackageInspectResult,
+  type MarketDataPackageMetadata,
+} from './package.js'
+import { registerMarketDataServiceReset, resetMarketDataRuntime } from './runtime.js'
+import {
   localScreen,
   localUniverseScreen,
   queryDiscoverCandidates,
@@ -144,9 +152,47 @@ export class MarketDataService {
   hydrateStocks(codes: string[], manifest: HydrateManifest = 'watchlist') {
     return hydrateStocks(this.store, this.de, codes, manifest)
   }
+
+  async exportPackage(): Promise<Buffer> {
+    if (this.coordinator.isRunning()) {
+      throw new Error('同步进行中，请稍后再导出')
+    }
+    return exportMarketDataPackage(this.store)
+  }
+
+  inspectPackage(buffer: Buffer): MarketDataPackageInspectResult {
+    return inspectMarketDataPackage(buffer)
+  }
+
+  importPackage(buffer: Buffer): MarketDataPackageMetadata {
+    if (this.coordinator.isRunning()) {
+      throw new Error('同步进行中，请稍后再导入')
+    }
+    const preview = inspectMarketDataPackage(buffer)
+    if (!preview.valid || !preview.metadata) {
+      throw new Error(preview.error ?? '数据包无效')
+    }
+    resetMarketDataRuntime()
+    const metadata = importMarketDataPackageToDisk(buffer)
+    getMarketDataService()
+    return metadata
+  }
 }
 
 let sharedService: MarketDataService | null = null
+
+export function resetSharedMarketDataService(): void {
+  if (sharedService) {
+    try {
+      sharedService.store.close()
+    } catch {
+      // ignore close races during import
+    }
+    sharedService = null
+  }
+}
+
+registerMarketDataServiceReset(resetSharedMarketDataService)
 
 export function getMarketDataService(): MarketDataService {
   if (!sharedService) sharedService = new MarketDataService()
@@ -173,3 +219,15 @@ export {
 export type { HydrateManifest } from './sync/hydrate.js'
 export { resolveSyncPlan, resolveAutoBootPlan, shouldAutoSyncOnBoot, dailyJobsNeedRefresh, type SyncPlan } from './sync/plan.js'
 export { marketDbPath, marketDataDir } from './paths.js'
+export {
+  exportMarketDataPackage,
+  importMarketDataPackageToDisk,
+  inspectMarketDataPackage,
+  suggestPackageFilename,
+  PACKAGE_FILE_EXTENSION,
+  PACKAGE_MIME,
+  PACKAGE_FORMAT_VERSION,
+  type MarketDataPackageMetadata,
+  type MarketDataPackageInspectResult,
+} from './package.js'
+export { resetMarketDataRuntime } from './runtime.js'

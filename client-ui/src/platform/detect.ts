@@ -7,8 +7,15 @@ declare global {
       windowMaximize?: () => void
       windowClose?: () => void
       getIsFullscreen?: () => Promise<boolean>
+      pickExportDirectory?: () => Promise<string | null>
+      writeBinaryFile?: (payload: {
+        dirPath: string
+        filename: string
+        data: ArrayBuffer
+      }) => Promise<string>
       onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
     }
+    showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
   }
 }
 

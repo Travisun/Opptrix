@@ -108,6 +108,8 @@ npm run test:ci
 
 集成测试使用临时目录作为 `OPPTRIX_DATA_DIR`，并在随机本地端口启动 server，不会污染本机 `~/.opptrix`。
 
+`tests/package.test.mjs` 覆盖 `.opmd` 基础数据包导出/导入与校验。
+
 CI 工作流见 [`.github/workflows/ci.yml`](../.github/workflows/ci.yml)：`push` / `pull_request` 到 `main` 时执行 `npm ci` → `npm run build` → `npm run test:ci`。
 
 ## 调试技巧

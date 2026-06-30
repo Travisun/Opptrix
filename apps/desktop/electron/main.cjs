@@ -1,5 +1,6 @@
-const { app, BrowserWindow, ipcMain } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog } = require('electron')
 const path = require('path')
+const fs = require('fs/promises')
 const { spawn } = require('node:child_process')
 const { APP_NAME } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
@@ -10,6 +11,7 @@ const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 const MIN_SPLASH_MS = 900
+const SPLASH_HTML = path.join(__dirname, 'splash.html')
 
 app.setName(APP_NAME)
 
@@ -17,8 +19,6 @@ app.setName(APP_NAME)
 let serverProcess = null
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindow = null
-/** @type {import('electron').BrowserWindow | null} */
-let splashWindow = null
 let splashShownAt = 0
 
 function wait(ms) {
@@ -110,9 +110,24 @@ async function waitForHealth(timeoutMs = 30_000) {
     } catch {
       /* retry */
     }
-    await new Promise((resolve) => setTimeout(resolve, 250))
+    await wait(250)
   }
   throw new Error(`API sidecar not ready: ${url}`)
+}
+
+async function waitForAppUi(timeoutMs = 60_000) {
+  const url = appUrl()
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    try {
+      const resp = await fetch(url)
+      if (resp.ok) return
+    } catch {
+      /* retry */
+    }
+    await wait(250)
+  }
+  throw new Error(`App UI not ready: ${url}`)
 }
 
 function stopSidecar() {
@@ -138,47 +153,53 @@ function getMainWindow() {
   return null
 }
 
-function closeSplash() {
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    splashWindow.close()
+function buildMainWindowOptions() {
+  /** @type {import('electron').BrowserWindowConstructorOptions} */
+  const options = {
+    width: 1280,
+    height: 840,
+    // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
+    minWidth: 510,
+    minHeight: 640,
+    title: 'Opptrix 你的A股投研助手',
+    backgroundColor: '#F5F5F7',
+    show: false,
+    webPreferences: mainWindowWebPreferences({
+      isDev,
+      preloadPath: path.join(__dirname, 'preload.cjs'),
+    }),
+    ...windowIconOptions(),
   }
-  splashWindow = null
+
+  if (process.platform === 'darwin') {
+    options.titleBarStyle = 'hiddenInset'
+    options.trafficLightPosition = { x: 16, y: 16 }
+    options.vibrancy = 'sidebar'
+    options.visualEffectState = 'active'
+    options.transparent = true
+  } else {
+    options.frame = false
+  }
+
+  return options
 }
 
-function createSplashWindow() {
-  if (splashWindow && !splashWindow.isDestroyed()) {
-    return Promise.resolve(splashWindow)
+function attachMainWindowHandlers(win) {
+  hardenWebContents(win.webContents, { isDev })
+
+  const notifyFullscreen = () => {
+    win.webContents.send('window-fullscreen-changed', win.isFullScreen())
   }
-
-  return new Promise((resolve) => {
-    splashWindow = new BrowserWindow({
-      width: 380,
-      height: 260,
-      frame: false,
-      resizable: false,
-      movable: false,
-      center: true,
-      show: true,
-      alwaysOnTop: true,
-      backgroundColor: '#F5F5F7',
-      ...windowIconOptions(),
-      webPreferences: {
-        nodeIntegration: false,
-        contextIsolation: true,
-        sandbox: true,
-        devTools: false,
-      },
-    })
-
-    splashWindow.loadFile(path.join(__dirname, 'splash.html'))
-    splashWindow.once('ready-to-show', () => {
-      if (!splashWindow?.isDestroyed()) {
-        splashWindow.show()
-        splashShownAt = Date.now()
-      }
-      resolve(splashWindow)
-    })
+  win.on('enter-full-screen', notifyFullscreen)
+  win.on('leave-full-screen', notifyFullscreen)
+  win.webContents.on('did-finish-load', notifyFullscreen)
+  win.on('closed', () => {
+    if (mainWindow === win) mainWindow = null
   })
+
+  if (process.platform === 'darwin') {
+    win.setBackgroundColor('#00000000')
+  }
 }
 
 function createMainWindow() {
@@ -187,64 +208,73 @@ function createMainWindow() {
     return Promise.resolve(mainWindow)
   }
 
-  return new Promise((resolve) => {
-    /** @type {import('electron').BrowserWindowConstructorOptions} */
-    const options = {
-      width: 1280,
-      height: 840,
-      // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
-      minWidth: 510,
-      minHeight: 640,
-      title: 'Opptrix 你的A股投研助手',
-      backgroundColor: '#00000000',
-      transparent: true,
-      show: false,
-      webPreferences: mainWindowWebPreferences({
-        isDev,
-        preloadPath: path.join(__dirname, 'preload.cjs'),
-      }),
-      ...windowIconOptions(),
-    }
+  const win = new BrowserWindow(buildMainWindowOptions())
+  mainWindow = win
+  attachMainWindowHandlers(win)
 
-    if (process.platform === 'darwin') {
-      options.titleBarStyle = 'hiddenInset'
-      options.trafficLightPosition = { x: 16, y: 16 }
-      options.vibrancy = 'sidebar'
-      options.visualEffectState = 'active'
-    } else {
-      options.frame = false
-    }
+  if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
+    win.webContents.openDevTools({ mode: 'bottom' })
+  }
 
-    const win = new BrowserWindow(options)
-    mainWindow = win
+  return Promise.resolve(win)
+}
 
-    hardenWebContents(win.webContents, { isDev })
-
-    const notifyFullscreen = () => {
-      win.webContents.send('window-fullscreen-changed', win.isFullScreen())
-    }
-    win.on('enter-full-screen', notifyFullscreen)
-    win.on('leave-full-screen', notifyFullscreen)
-    win.webContents.on('did-finish-load', notifyFullscreen)
-    win.on('closed', () => {
-      if (mainWindow === win) mainWindow = null
-    })
-
-    win.setBackgroundColor('#00000000')
-
-    win.once('ready-to-show', async () => {
-      await waitForSplashMinimum()
-      closeSplash()
+function showSplashInMainWindow(win) {
+  return new Promise((resolve, reject) => {
+    const onReady = () => {
+      splashShownAt = Date.now()
       win.show()
-      resolve(win)
-    })
-
-    void win.loadURL(appUrl())
-
-    if (isDev && process.env.ELECTRON_OPEN_DEVTOOLS === '1') {
-      win.webContents.openDevTools({ mode: 'bottom' })
+      resolve()
     }
+    win.once('ready-to-show', onReady)
+    win.loadFile(SPLASH_HTML).catch((err) => {
+      win.removeListener('ready-to-show', onReady)
+      reject(err)
+    })
   })
+}
+
+async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
+  await ensureSidecarReady()
+  await waitForAppUi()
+  if (enforceMinSplash) await waitForSplashMinimum()
+
+  await win.loadURL(appUrl())
+
+  if (!win.isVisible()) {
+    await new Promise((resolve) => {
+      win.once('ready-to-show', () => {
+        win.show()
+        resolve()
+      })
+    })
+  }
+}
+
+async function ensureSidecarReady() {
+  if (isDev) return
+  if (!serverProcess) spawnSidecar()
+  await waitForHealth()
+}
+
+async function bootstrapApp({ withSplash = true } = {}) {
+  const win = await createMainWindow()
+
+  if (withSplash) {
+    await showSplashInMainWindow(win)
+    await loadAppInMainWindow(win, { enforceMinSplash: true })
+    return
+  }
+
+  await loadAppInMainWindow(win, { enforceMinSplash: false })
+}
+
+async function openMainWindowFromMenu() {
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.focus()
+    return
+  }
+  await bootstrapApp({ withSplash: false })
 }
 
 function registerWindowIpc() {
@@ -263,29 +293,31 @@ function registerWindowIpc() {
   ipcMain.handle('window-is-fullscreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
   })
-}
 
-async function ensureSidecarReady() {
-  if (isDev) return
-  if (!serverProcess) spawnSidecar()
-  await waitForHealth()
-}
+  ipcMain.handle('pick-export-directory', async (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const result = await dialog.showOpenDialog(win ?? undefined, {
+      properties: ['openDirectory', 'createDirectory'],
+      title: '选择导出文件夹',
+      buttonLabel: '选择此文件夹',
+    })
+    if (result.canceled || !result.filePaths?.[0]) return null
+    return result.filePaths[0]
+  })
 
-async function bootstrapApp({ withSplash = true } = {}) {
-  if (withSplash) {
-    await createSplashWindow()
-  }
-  const mainReady = createMainWindow()
-  await ensureSidecarReady()
-  await mainReady
-}
-
-async function openMainWindowFromMenu() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.focus()
-    return
-  }
-  await bootstrapApp({ withSplash: false })
+  ipcMain.handle('write-binary-file', async (_event, payload) => {
+    const dirPath = String(payload?.dirPath ?? '').trim()
+    const filename = String(payload?.filename ?? '').trim()
+    const data = payload?.data
+    if (!dirPath || !filename || !data) {
+      throw new Error('写入参数无效')
+    }
+    const safeName = path.basename(filename)
+    const filePath = path.join(dirPath, safeName)
+    const buf = Buffer.from(data)
+    await fs.writeFile(filePath, buf)
+    return filePath
+  })
 }
 
 function setupDesktopChrome() {
@@ -313,12 +345,10 @@ app.whenReady().then(async () => {
 })
 
 app.on('window-all-closed', () => {
-  closeSplash()
   stopSidecar()
   app.quit()
 })
 
 app.on('before-quit', () => {
-  closeSplash()
   stopSidecar()
 })

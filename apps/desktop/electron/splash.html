@@ -21,12 +21,14 @@
         width: 100%;
         height: 100%;
         margin: 0;
+        overflow: hidden;
       }
 
       body {
         display: flex;
         align-items: center;
         justify-content: center;
+        min-height: 100vh;
         background: var(--canvas);
         font-family:
           -apple-system,
@@ -40,31 +42,23 @@
 
       .splash {
         display: flex;
-        flex-direction: column;
         align-items: center;
-        gap: 18px;
-      }
-
-      .logo {
-        width: 56px;
-        height: 56px;
-        object-fit: contain;
-        opacity: 0.92;
+        justify-content: center;
       }
 
       .brand {
         display: inline-flex;
         align-items: baseline;
-        font-size: 30px;
+        font-size: 48px;
         font-weight: 600;
-        letter-spacing: 0.06em;
+        letter-spacing: 0.08em;
         line-height: 1;
       }
 
       .brand span {
         display: inline-block;
         color: var(--text-idle);
-        animation: letter-wave 1.8s ease-in-out infinite;
+        animation: letter-load 1.8s ease-in-out infinite;
       }
 
       .brand span:nth-child(1) {
@@ -89,22 +83,19 @@
         animation-delay: 0.72s;
       }
 
-      @keyframes letter-wave {
+      @keyframes letter-load {
         0%,
         100% {
           color: var(--text-idle);
           opacity: 0.42;
-          transform: translateY(0);
         }
         35% {
           color: var(--text-active);
           opacity: 1;
-          transform: translateY(-1px);
         }
         55% {
           color: var(--text-mid);
           opacity: 0.72;
-          transform: translateY(0);
         }
       }
 
@@ -119,7 +110,6 @@
   </head>
   <body>
     <div class="splash" role="status" aria-label="Opptrix 正在启动">
-      <img class="logo" src="splash-logo.png" alt="" width="56" height="56" />
       <div class="brand" aria-hidden="true">
         <span>O</span><span>p</span><span>p</span><span>t</span><span>r</span><span>i</span><span>x</span>
       </div>

@@ -813,6 +813,10 @@ select:focus-visible {
   outline: none !important;
 }
 
+.opptrix-credential-combo .fui-Input__input {
+  padding-left: 11px !important;
+}
+
 .opptrix-field .fui-Dropdown__button::before,
 .opptrix-field .fui-Dropdown__button::after {
   display: none !important;

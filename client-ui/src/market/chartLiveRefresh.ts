@@ -23,6 +23,47 @@ export function isCnMarketOpen(now = cnMarketNow()): boolean {
     || (mins >= 13 * 60 && mins <= 15 * 60 + 5)
 }
 
+export function cnTodayString(now = cnMarketNow()): string {
+  const y = now.getFullYear()
+  const m = String(now.getMonth() + 1).padStart(2, '0')
+  const d = String(now.getDate()).padStart(2, '0')
+  return `${y}-${m}-${d}`
+}
+
+export function isCnBeforeMarketOpen(now = cnMarketNow()): boolean {
+  if (!isCnTradingWeekday(now)) return true
+  const mins = now.getHours() * 60 + now.getMinutes()
+  return mins < 9 * 60 + 15
+}
+
+export function isCnAfterMarketClose(now = cnMarketNow()): boolean {
+  if (!isCnTradingWeekday(now)) return true
+  const mins = now.getHours() * 60 + now.getMinutes()
+  return mins > 15 * 60 + 5
+}
+
+/** Weekday and session has started (incl. lunch break and after close). */
+export function isCnTradingSessionDay(now = cnMarketNow()): boolean {
+  return isCnTradingWeekday(now) && !isCnBeforeMarketOpen(now)
+}
+
+/**
+ * 行业/列表是否应拉实时行情覆盖本地库：
+ * - 非交易日、开盘前：用本地已收盘数据
+ * - 盘中、午休、收盘后且库未更新到今天：用实时
+ */
+export function shouldUseLiveIndustryQuotes(storedQuoteDate: string | null | undefined, now = cnMarketNow()): boolean {
+  if (!isCnTradingSessionDay(now)) return false
+  if (isCnMarketOpen(now)) return true
+  if (!isCnAfterMarketClose(now)) return true
+  const today = cnTodayString(now)
+  if (!storedQuoteDate || storedQuoteDate < today) return true
+  return false
+}
+
+export const INDUSTRY_STATS_POLL_MS = 5 * 60_000
+export const INDUSTRY_QUOTES_POLL_MS = 60_000
+
 export function shouldPollChartLive(
   period: ChartPeriod,
   active: boolean,

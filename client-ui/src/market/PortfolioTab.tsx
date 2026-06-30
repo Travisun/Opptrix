@@ -19,87 +19,125 @@ const useStyles = makeStyles({
     minHeight: 0,
     height: '100%',
   },
-  head: {
+  summary: {
     flexShrink: 0,
-    padding: `8px ${CONTENT_PAD} 10px`,
+    padding: `8px ${CONTENT_PAD} 6px`,
     borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-  },
-  headHint: {
-    fontSize: '10px',
-    color: opptrixTokens.textTertiary,
-    lineHeight: 1.45,
-  },
-  summaryGrid: {
-    display: 'grid',
-    gridTemplateColumns: '1fr 1fr',
-    gap: '8px',
+    flexWrap: 'wrap',
+    gap: '6px',
   },
   metric: {
-    padding: '8px 10px',
+    padding: '5px 8px',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: opptrixTokens.surfaceSubtle,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+    minWidth: '72px',
+    flex: '1 1 0',
+    maxWidth: 'calc(50% - 3px)',
   },
   metricLabel: {
     fontSize: '10px',
     color: opptrixTokens.textTertiary,
-    marginBottom: '2px',
+    fontWeight: 600,
+    lineHeight: 1.3,
   },
   metricValue: {
     fontSize: '13px',
-    fontWeight: 600,
+    fontWeight: 650,
+    fontVariantNumeric: 'tabular-nums',
     color: opptrixTokens.textPrimary,
+    lineHeight: 1.35,
   },
   list: {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    padding: `6px ${ITEM_BG_INSET}`,
+    padding: `10px ${ITEM_BG_INSET} 0`,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
   },
   row: {
-    display: 'grid',
-    gridTemplateColumns: '1fr auto',
-    gap: '6px',
+    display: 'flex',
     alignItems: 'center',
-    padding: ITEM_INNER_PAD,
+    gap: '8px',
+    padding: `6px ${ITEM_INNER_PAD}`,
+    minHeight: '34px',
     borderRadius: opptrixTokens.radiusMd,
-    cursor: 'pointer',
-    marginBottom: '4px',
-    ...ghostInteractive,
-  },
-  rowSelected: sidebarItemSelected,
-  nameBlock: {
-    minWidth: 0,
-  },
-  name: {
-    fontSize: '12px',
-    fontWeight: 500,
+    backgroundColor: 'transparent',
+    width: '100%',
+    boxSizing: 'border-box',
     color: opptrixTokens.textPrimary,
+    cursor: 'pointer',
+    ...ghostInteractive,
+    ':hover': {
+      backgroundColor: opptrixTokens.accentSoft,
+    },
+    ':focus-within': {
+      backgroundColor: opptrixTokens.accentSoft,
+    },
+  },
+  rowActive: {
+    ...sidebarItemSelected,
+    ':hover': {
+      backgroundColor: opptrixTokens.accentSoft,
+    },
+    ':focus-within': {
+      backgroundColor: opptrixTokens.accentSoft,
+    },
+  },
+  rowBody: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  rowTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    textAlign: 'left',
   },
-  code: {
+  rowNote: {
     fontSize: '10px',
     color: opptrixTokens.textTertiary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    fontVariantNumeric: 'tabular-nums',
   },
-  pnlBlock: {
-    textAlign: 'right',
+  rowTrailing: {
+    flexShrink: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '1px',
+    minWidth: '72px',
   },
-  pnl: {
+  quotePrimary: {
     fontSize: '12px',
-    fontWeight: 500,
+    fontWeight: 650,
+    fontVariantNumeric: 'tabular-nums',
+    whiteSpace: 'nowrap',
+    lineHeight: 1.2,
   },
-  sub: {
+  quoteSecondary: {
     fontSize: '10px',
+    fontVariantNumeric: 'tabular-nums',
     color: opptrixTokens.textTertiary,
+    whiteSpace: 'nowrap',
+    lineHeight: 1.2,
   },
   empty: {
-    padding: `32px ${CONTENT_PAD}`,
+    padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
-    fontSize: '11px',
+    fontSize: '12px',
     color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
   },
@@ -110,7 +148,7 @@ const useStyles = makeStyles({
     padding: '32px',
     gap: '8px',
     color: opptrixTokens.textTertiary,
-    fontSize: '11px',
+    fontSize: '12px',
   },
 })
 
@@ -125,6 +163,11 @@ function pnlColor(pct: number): string {
   if (tone === 'up') return MARKET_UP
   if (tone === 'down') return MARKET_DOWN
   return opptrixTokens.textSecondary
+}
+
+function formatShares(shares: number): string {
+  if (!Number.isFinite(shares) || shares <= 0) return ''
+  return shares % 1 === 0 ? `${shares} 股` : `${shares.toFixed(0)} 股`
 }
 
 export default function PortfolioTab({ active = true, selectedCode, onSelect }: PortfolioTabProps) {
@@ -183,57 +226,51 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
 
   return (
     <div className={s.root}>
-      <div className={s.head}>
-        <Text className={s.headHint}>
-          基于本地账本汇总持仓市值与盈亏；点击标的进入详情继续分析。
-        </Text>
-        {!empty && data ? (
-          <div className={s.summaryGrid}>
-            <div className={s.metric}>
-              <Text className={s.metricLabel}>总市值</Text>
-              <Text className={s.metricValue}>{formatPrice(data.totalMarketValue)}</Text>
-            </div>
-            <div className={s.metric}>
-              <Text className={s.metricLabel}>总盈亏</Text>
-              <Text
-                className={s.metricValue}
-                style={{ color: pnlColor(data.totalPnlPct) }}
-              >
-                {formatPct(data.totalPnlPct)}
-              </Text>
-            </div>
-            <div className={s.metric}>
-              <Text className={s.metricLabel}>持仓</Text>
-              <Text className={s.metricValue}>{data.holdingsCount} 只</Text>
-            </div>
-            <div className={s.metric}>
-              <Text className={s.metricLabel}>浮动盈亏</Text>
-              <Text
-                className={s.metricValue}
-                style={{ color: pnlColor(data.totalUnrealizedPnl >= 0 ? 1 : -1) }}
-              >
-                {formatPrice(data.totalUnrealizedPnl)}
-              </Text>
-            </div>
+      {!empty && data ? (
+        <div className={s.summary}>
+          <div className={s.metric}>
+            <Text className={s.metricLabel}>总市值</Text>
+            <Text className={s.metricValue}>{formatPrice(data.totalMarketValue)}</Text>
           </div>
-        ) : null}
-      </div>
+          <div className={s.metric}>
+            <Text className={s.metricLabel}>总盈亏</Text>
+            <Text className={s.metricValue} style={{ color: pnlColor(data.totalPnlPct) }}>
+              {formatPct(data.totalPnlPct)}
+            </Text>
+          </div>
+          <div className={s.metric}>
+            <Text className={s.metricLabel}>浮动盈亏</Text>
+            <Text
+              className={s.metricValue}
+              style={{ color: pnlColor(data.totalUnrealizedPnl >= 0 ? 1 : -1) }}
+            >
+              {formatPrice(data.totalUnrealizedPnl)}
+            </Text>
+          </div>
+          <div className={s.metric}>
+            <Text className={s.metricLabel}>持仓</Text>
+            <Text className={s.metricValue}>{data.holdingsCount} 只</Text>
+          </div>
+        </div>
+      ) : null}
 
-      <div className={s.list}>
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {empty ? (
           <div className={s.empty}>
-            暂无持仓记录
+            暂无持仓
             <br />
-            在个股详情中记录买卖后，组合将在此汇总展示。
+            在个股详情录入买卖后，会在此汇总
           </div>
         ) : (
           holdings.map((h) => {
             const code = normalizeCode(h.code)
             const selected = selectedCode === code
+            const sharesLabel = formatShares(h.shares)
+            const note = sharesLabel ? `${code} · ${sharesLabel}` : code
             return (
               <div
                 key={code}
-                className={mergeClasses(s.row, selected && s.rowSelected)}
+                className={mergeClasses(s.row, 'opptrix-focusable', selected && s.rowActive)}
                 role="button"
                 tabIndex={0}
                 onClick={() => onSelect(code)}
@@ -244,15 +281,15 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
                   }
                 }}
               >
-                <div className={s.nameBlock}>
-                  <Text className={s.name}>{h.name}</Text>
-                  <Text className={s.code}>{code}</Text>
+                <div className={s.rowBody}>
+                  <Text className={s.rowTitle}>{h.name}</Text>
+                  <span className={s.rowNote}>{note}</span>
                 </div>
-                <div className={s.pnlBlock}>
-                  <Text className={s.pnl} style={{ color: pnlColor(h.unrealizedPnlPct) }}>
+                <div className={s.rowTrailing}>
+                  <span className={s.quotePrimary} style={{ color: pnlColor(h.unrealizedPnlPct) }}>
                     {formatPct(h.unrealizedPnlPct)}
-                  </Text>
-                  <Text className={s.sub}>{formatPrice(h.marketValue)}</Text>
+                  </span>
+                  <span className={s.quoteSecondary}>{formatPrice(h.marketValue)}</span>
                 </div>
               </div>
             )

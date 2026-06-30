@@ -252,7 +252,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'models':
       return '配置 LLM 提供商与可用模型'
     case 'market_data':
-      return '本地指标库、Tushare 数据源与同步日志'
+      return '本地行情库、数据源与同步'
     case 'discover_strategies':
       return '查看内置策略、管理自编策略与复制编辑'
     case 'about':

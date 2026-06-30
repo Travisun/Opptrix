@@ -35,7 +35,7 @@ npm install
 npm run dev:desktop
 ```
 
-This builds workspace packages, starts the API sidecar + Vite HMR, and opens the Electron window at `http://127.0.0.1:5173`.
+This builds workspace packages, starts the API sidecar + Vite HMR, and opens the Electron window. The main window first shows an in-window startup screen, then navigates to the app UI when the dev server is ready.
 
 If the API is already running on port `8711`, stop it first or set `STOCK_RESEARCH_PORT` to avoid a port conflict.
 

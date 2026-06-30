@@ -337,7 +337,7 @@ export function SettingsCredentialRow({
   saving = false,
   saveDisabled = false,
   testDisabled = false,
-  revealWhenFilled = true,
+  revealWhenFilled = false,
 }: {
   value: string
   onChange: (value: string) => void
@@ -348,7 +348,7 @@ export function SettingsCredentialRow({
   saving?: boolean
   saveDisabled?: boolean
   testDisabled?: boolean
-  /** 已有密钥加载后默认明文展示，便于查看 */
+  /** 为 true 时，加载已有密钥后自动明文展示 */
   revealWhenFilled?: boolean
 }) {
   const s = useStyles()
@@ -362,7 +362,7 @@ export function SettingsCredentialRow({
   }, [value, revealWhenFilled])
 
   return (
-    <div className={mergeClasses(s.credentialCombo, 'opptrix-input-shell', 'opptrix-settings-inline-input')}>
+    <div className={mergeClasses(s.credentialCombo, 'opptrix-input-shell', 'opptrix-settings-inline-input', 'opptrix-credential-combo')}>
       <Input
         className={mergeClasses(s.credentialInput, 'opptrix-settings-field-input')}
         appearance="filled-darker"

@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024px" height="1024px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>logo</title>
+    <defs>
+        <linearGradient x1="97.3515239%" y1="103.94356%" x2="0%" y2="-4.85654318%" id="linearGradient-1">
+            <stop stop-color="#F7D455" offset="0%"></stop>
+            <stop stop-color="#F1B03D" offset="17.4496143%"></stop>
+            <stop stop-color="#DA732C" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="100%" y1="50.0002166%" x2="-1.22047424%" y2="49.9997834%" id="linearGradient-2">
+            <stop stop-color="#F2B842" offset="0%"></stop>
+            <stop stop-color="#F7D287" stop-opacity="0.962049651" offset="39.0716287%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0.902869805" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="100%" y1="50.0002348%" x2="-1.22047424%" y2="49.9997652%" id="linearGradient-3">
+            <stop stop-color="#F2B842" offset="0%"></stop>
+            <stop stop-color="#F7D287" stop-opacity="0.962049651" offset="39.0716287%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0.902869805" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="100%" y1="50.0002453%" x2="-1.22047424%" y2="49.9997547%" id="linearGradient-4">
+            <stop stop-color="#F2B842" offset="0%"></stop>
+            <stop stop-color="#F7D287" stop-opacity="0.962049651" offset="39.0716287%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0.902869805" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="100%" y1="50.0002263%" x2="-1.22047424%" y2="49.9997737%" id="linearGradient-5">
+            <stop stop-color="#F2B842" offset="0%"></stop>
+            <stop stop-color="#F7D287" stop-opacity="0.962049651" offset="39.0716287%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0.902869805" offset="100%"></stop>
+        </linearGradient>
+        <linearGradient x1="100%" y1="50.0002889%" x2="-1.22047424%" y2="49.9997111%" id="linearGradient-6">
+            <stop stop-color="#F2B842" offset="0%"></stop>
+            <stop stop-color="#F7D287" stop-opacity="0.962049651" offset="39.0716287%"></stop>
+            <stop stop-color="#FFFFFF" stop-opacity="0.902869805" offset="100%"></stop>
+        </linearGradient>
+        <filter x="-2.7%" y="-2.7%" width="104.6%" height="107.3%" filterUnits="objectBoundingBox" id="filter-7">
+            <feOffset dx="0" dy="2" in="SourceAlpha" result="shadowOffsetOuter1"></feOffset>
+            <feGaussianBlur stdDeviation="2" in="shadowOffsetOuter1" result="shadowBlurOuter1"></feGaussianBlur>
+            <feColorMatrix values="0 0 0 0 0   0 0 0 0 0   0 0 0 0 0  0 0 0 0.5 0" type="matrix" in="shadowBlurOuter1" result="shadowMatrixOuter1"></feColorMatrix>
+            <feMerge>
+                <feMergeNode in="shadowMatrixOuter1"></feMergeNode>
+                <feMergeNode in="SourceGraphic"></feMergeNode>
+            </feMerge>
+        </filter>
+    </defs>
+    <g id="Template---App-Icons" stroke="none" stroke-width="1" fill="none" fill-rule="evenodd">
+        <g id="logo" transform="translate(-21, 0)">
+            <rect id="矩形" fill="url(#linearGradient-1)" x="20" y="0" width="1024" height="1024" rx="270"></rect>
+            <g id="编组-4" transform="translate(20, 1)" stroke-linecap="square" stroke-width="2">
+                <g id="编组-3" opacity="0.340203421" transform="translate(0, 122.1406)" stroke="#FFFFFF" stroke-opacity="0.9">
+                    <line x1="48.4464048" y1="0.25" x2="976.493255" y2="0.75" id="直线-2"></line>
+                    <line x1="1.70170337" y1="266.453131" x2="1023.57457" y2="266.453131" id="直线-2"></line>
+                    <line x1="1.27627752" y1="133.656271" x2="1023.14915" y2="133.656271" id="直线-2"></line>
+                    <line x1="0.425425841" y1="398.468833" x2="1022.2983" y2="398.468833" id="直线-2"></line>
+                </g>
+                <g id="编组-2" opacity="0.431607201" transform="translate(116, 0)">
+                    <line x1="107.5" y1="480.000011" x2="1068.5" y2="480.5" id="直线-2" stroke="url(#linearGradient-2)" transform="translate(588, 480.5) rotate(90) translate(-588, -480.5)"></line>
+                    <line x1="-460.5" y1="509.5" x2="462.5" y2="509.5" id="直线-2" stroke="url(#linearGradient-3)" transform="translate(1, 509.5) rotate(90) translate(-1, -509.5)"></line>
+                    <line x1="-59.5" y1="451.000011" x2="843.5" y2="451.5" id="直线-2" stroke="url(#linearGradient-4)" transform="translate(392, 451.5) rotate(90) translate(-392, -451.5)"></line>
+                    <line x1="-273" y1="470" x2="667" y2="470" id="直线-2" stroke="url(#linearGradient-5)" transform="translate(197, 470) rotate(90) translate(-197, -470)"></line>
+                    <line x1="367" y1="464" x2="1199" y2="464" id="直线-2" stroke="url(#linearGradient-6)" transform="translate(783, 464) rotate(90) translate(-783, -464)"></line>
+                </g>
+            </g>
+            <g id="编组-5" filter="url(#filter-7)" transform="translate(0, 217)" fill="#FFFFFF" fill-rule="nonzero">
+                <path id="直线" d="M934.856423,-9.66672262 C940.527796,-12.236685 947.208718,-9.72249506 949.778681,-4.0511222 C950.785523,-1.82923185 951.044553,0.659283583 950.516892,3.04090088 L910.262391,184.731118 C908.915537,190.810194 902.895632,194.646418 896.816556,193.299564 C895.107752,192.920969 893.510561,192.149719 892.151473,191.046892 L841.892,150.264 L476.423871,600.65684 C470.237633,608.280563 459.173478,609.744112 451.21778,603.991063 L185.192,411.618 L11.3392504,546.481668 C3.36120299,552.670487 -8.0820585,551.309904 -14.3942634,543.485601 L-14.6175033,543.203415 C-20.8799983,535.130391 -19.4122745,523.509157 -11.3392504,517.246662 L173.46376,373.889238 C179.9542,368.854402 188.987277,368.702265 195.643584,373.515679 L458.719,563.754 L813.162,126.951 L762.9011,86.167204 C758.148089,82.3103928 757.35333,75.3836823 761.054934,70.5567292 L761.250409,70.3089583 C762.353236,68.9498701 763.757348,67.8662133 765.351549,67.1438069 Z"></path>
+            </g>
+        </g>
+    </g>
+</svg>

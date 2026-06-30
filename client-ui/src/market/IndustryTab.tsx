@@ -8,6 +8,11 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MermaidBlock from '../chat/MermaidBlock'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
 import { industryDisplayName, industryMatchesFilter, industryMiningQuery } from './industryLabels'
+import {
+  INDUSTRY_QUOTES_POLL_MS,
+  INDUSTRY_STATS_POLL_MS,
+  shouldUseLiveIndustryQuotes,
+} from './chartLiveRefresh'
 import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
@@ -251,20 +256,24 @@ function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefi
 function stockChangePct(
   row: IndustryStockItem,
   quotes: Record<string, MarketQuote>,
+  useLive: boolean,
 ): number | null {
-  const code = normalizeCode(row.code)
-  const live = quotes[code]?.changePct
-  if (live != null) return live
+  if (useLive) {
+    const code = normalizeCode(row.code)
+    const live = quotes[code]?.changePct
+    if (live != null) return live
+  }
   return row.change_pct
 }
 
 function sortStocksByChange(
   stocks: IndustryStockItem[],
   quotes: Record<string, MarketQuote>,
+  useLive: boolean,
 ): IndustryStockItem[] {
   return [...stocks].sort((a, b) => {
-    const pctA = stockChangePct(a, quotes)
-    const pctB = stockChangePct(b, quotes)
+    const pctA = stockChangePct(a, quotes, useLive)
+    const pctB = stockChangePct(b, quotes, useLive)
     if (pctA == null && pctB == null) return normalizeCode(a.code).localeCompare(normalizeCode(b.code))
     if (pctA == null) return 1
     if (pctB == null) return -1
@@ -283,11 +292,18 @@ function sortIndustriesByUpDown(items: IndustryStatItem[]): IndustryStatItem[] {
   })
 }
 
+function quoteStatusHint(quoteDate: string | null, useLive: boolean): string {
+  if (useLive) return '盘中实时 · 约每分钟更新'
+  if (quoteDate) return `行情截至 ${quoteDate}`
+  return ''
+}
+
 export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   const s = useStyles()
   const [view, setView] = useState<'industries' | 'detail'>('industries')
   const [items, setItems] = useState<IndustryStatItem[]>([])
   const [tradeDate, setTradeDate] = useState<string | null>(null)
+  const [quoteDate, setQuoteDate] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
   const [filter, setFilter] = useState('')
@@ -295,7 +311,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   const [selectedIndustry, setSelectedIndustry] = useState<string | null>(null)
   const [detailTab, setDetailTab] = useState<IndustryDetailTab>('stocks')
   const [stocks, setStocks] = useState<IndustryStockItem[]>([])
-  const [stocksTradeDate, setStocksTradeDate] = useState<string | null>(null)
+  const [stocksQuoteDate, setStocksQuoteDate] = useState<string | null>(null)
   const [stocksLoading, setStocksLoading] = useState(false)
   const [stocksError, setStocksError] = useState('')
   const [quotes, setQuotes] = useState<Record<string, MarketQuote>>({})
@@ -314,7 +330,8 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
         throw new Error(resp.message || '行业数据加载失败')
       }
       setItems(resp.data.items ?? [])
-      setTradeDate(resp.data.quote_date ?? resp.data.trade_date ?? null)
+      setTradeDate(resp.data.trade_date ?? null)
+      setQuoteDate(resp.data.quote_date ?? resp.data.trade_date ?? null)
     } catch (e) {
       setError(e instanceof Error ? e.message : '行业数据加载失败')
       setItems([])
@@ -327,6 +344,14 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
     void loadStats()
   }, [loadStats])
 
+  const useLiveList = shouldUseLiveIndustryQuotes(quoteDate)
+
+  useEffect(() => {
+    if (!useLiveList) return undefined
+    const timer = window.setInterval(() => { void loadStats() }, INDUSTRY_STATS_POLL_MS)
+    return () => window.clearInterval(timer)
+  }, [useLiveList, loadStats])
+
   const filtered = useMemo(() => {
     const list = filter.trim()
       ? items.filter(it => industryMatchesFilter(it.industry, filter))
@@ -334,9 +359,11 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
     return sortIndustriesByUpDown(list)
   }, [items, filter])
 
+  const useLiveStocks = shouldUseLiveIndustryQuotes(stocksQuoteDate)
+
   const sortedStocks = useMemo(
-    () => sortStocksByChange(stocks, quotes),
-    [stocks, quotes],
+    () => sortStocksByChange(stocks, quotes, useLiveStocks),
+    [stocks, quotes, useLiveStocks],
   )
 
   const loadStocks = useCallback(async (industry: string) => {
@@ -350,7 +377,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
         throw new Error(resp.message || '个股列表加载失败')
       }
       setStocks(resp.data.items ?? [])
-      setStocksTradeDate(resp.data.trade_date ?? null)
+      setStocksQuoteDate(resp.data.quote_date ?? resp.data.trade_date ?? null)
     } catch (e) {
       setStocksError(e instanceof Error ? e.message : '个股列表加载失败')
       setStocks([])
@@ -395,6 +422,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
     setDetailTab('stocks')
     setStocks([])
     setStocksError('')
+    setStocksQuoteDate(null)
     setQuotes({})
     setMining(null)
     setMiningError('')
@@ -407,7 +435,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   )
 
   useEffect(() => {
-    if (view !== 'detail' || detailTab !== 'stocks' || !stockCodes.length) return undefined
+    if (!useLiveStocks || view !== 'detail' || detailTab !== 'stocks' || !stockCodes.length) return undefined
     let cancelled = false
     const refresh = async () => {
       try {
@@ -421,12 +449,12 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
       }
     }
     void refresh()
-    const timer = window.setInterval(() => { void refresh() }, 60000)
+    const timer = window.setInterval(() => { void refresh() }, INDUSTRY_QUOTES_POLL_MS)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [view, detailTab, stockCodes])
+  }, [useLiveStocks, view, detailTab, stockCodes])
 
   useEffect(() => {
     if (view !== 'detail' || detailTab !== 'chain' || !selectedIndustry) return
@@ -471,7 +499,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
           </div>
           <Text className={s.headHint}>
             {detailTab === 'stocks'
-              ? `${stocksLoading ? '加载成分股…' : `${stocks.length} 只成分股`}${stocksTradeDate ? ` · 行情 ${stocksTradeDate}` : ''}`
+              ? `${stocksLoading ? '加载成分股…' : `${stocks.length} 只成分股`}${quoteStatusHint(stocksQuoteDate, useLiveStocks) ? ` · ${quoteStatusHint(stocksQuoteDate, useLiveStocks)}` : ''}`
               : '产业链上下游结构与代表环节'}
           </Text>
           {detailTab === 'stocks' && stocksError ? (
@@ -517,9 +545,9 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
               ) : (
                 sortedStocks.map(row => {
                   const code = normalizeCode(row.code)
-                  const quote = quotes[code]
+                  const quote = useLiveStocks ? quotes[code] : undefined
                   const price = quote?.price ?? row.price
-                  const changePct = stockChangePct(row, quotes)
+                  const changePct = stockChangePct(row, quotes, useLiveStocks)
                   return (
                     <div
                       key={code}
@@ -625,9 +653,14 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
 
       <div className={s.head}>
         <Text className={s.headHint}>
-          按申万行业聚合本地因子库；点击行业查看成分股与产业链，再点个股进入详情。
+          按申万行业聚合本地行情；点击行业查看成分股，再点个股进入详情。
         </Text>
-        {tradeDate ? <Text className={s.meta}>行情日期 {tradeDate}</Text> : null}
+        {quoteStatusHint(quoteDate, useLiveList) ? (
+          <Text className={s.meta}>{quoteStatusHint(quoteDate, useLiveList)}</Text>
+        ) : null}
+        {tradeDate && tradeDate !== quoteDate ? (
+          <Text className={s.meta}>因子日期 {tradeDate}</Text>
+        ) : null}
         {error ? <Text className={s.meta} style={{ color: opptrixTokens.error }}>{error}</Text> : null}
       </div>
 
@@ -661,6 +694,12 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                 <span className={s.pctUp}>{it.up_count ?? 0}涨</span>
                 {' '}
                 <span className={s.pctDown}>{it.down_count ?? 0}跌</span>
+                {(it.flat_count ?? 0) > 0 ? (
+                  <>
+                    {' '}
+                    <span className={s.pctFlat}>{it.flat_count}平</span>
+                  </>
+                ) : null}
               </Text>
             </div>
           ))

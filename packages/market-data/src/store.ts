@@ -1101,3 +1101,10 @@ export function getMarketDataStore(): MarketDataStore {
   if (!sharedStore) sharedStore = new MarketDataStore()
   return sharedStore
 }
+
+export function resetSharedMarketDataStore(): void {
+  if (sharedStore) {
+    sharedStore.close()
+    sharedStore = null
+  }
+}

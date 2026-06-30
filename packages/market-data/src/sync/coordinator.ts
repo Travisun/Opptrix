@@ -313,3 +313,7 @@ export function getMarketSyncCoordinator(
   if (!sharedCoordinator) sharedCoordinator = new MarketSyncCoordinator(store, createEngine)
   return sharedCoordinator
 }
+
+export function resetSharedMarketSyncCoordinator(): void {
+  sharedCoordinator = null
+}
