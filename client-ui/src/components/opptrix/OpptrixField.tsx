@@ -1,6 +1,6 @@
 import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 import { inputShellInteractive } from '../../theme/mixins'
 
 const useStyles = makeStyles({
@@ -14,7 +14,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.3,
   },
   control: {
@@ -33,13 +33,13 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
     marginTop: '-2px',
   },
 })
 
-interface InnoFieldProps {
+interface OpptrixFieldProps {
   label?: string
   hint?: string
   children: ReactNode
@@ -49,12 +49,12 @@ interface InnoFieldProps {
 }
 
 /** Stacked label + filled control surface */
-export default function InnoField({ label, hint, children, className, multiline = false }: InnoFieldProps) {
+export default function OpptrixField({ label, hint, children, className, multiline = false }: OpptrixFieldProps) {
   const s = useStyles()
   return (
-    <div className={mergeClasses('inno-field', s.rootStack, className)}>
+    <div className={mergeClasses('opptrix-field', s.rootStack, className)}>
       {label ? <Text className={s.label} block>{label}</Text> : null}
-      <div className={mergeClasses(s.control, multiline && s.controlMultiline, 'inno-input-shell')}>{children}</div>
+      <div className={mergeClasses(s.control, multiline && s.controlMultiline, 'opptrix-input-shell')}>{children}</div>
       {hint ? <Text className={s.hint} block>{hint}</Text> : null}
     </div>
   )

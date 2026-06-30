@@ -1,7 +1,7 @@
-/** aaashare unified data schemas (extends @inno-a-stock/shared where applicable) */
+/** aaashare unified data schemas (extends @opptrix/shared where applicable) */
 export type {
   FinancialSummary, QueryResult, StockKline, StockListItem, StockRealtime,
-} from '@inno-a-stock/shared'
+} from '@opptrix/shared'
 
 export interface MoneyFlow {
   code: string

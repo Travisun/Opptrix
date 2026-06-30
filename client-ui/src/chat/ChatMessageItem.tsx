@@ -8,7 +8,7 @@ import {
 import type { ChatDisplayMessage } from '../types/chat'
 import MarkdownMessage from './MarkdownMessage'
 import ChatProcessTrace from './ChatProcessTrace'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
@@ -42,9 +42,9 @@ const useStyles = makeStyles({
   userBubble: {
     maxWidth: '100%',
     padding: '11px 15px',
-    borderRadius: innoTokens.radiusLg,
-    backgroundColor: innoTokens.userBubble,
-    color: innoTokens.textPrimary,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixTokens.userBubble,
+    color: opptrixTokens.textPrimary,
     whiteSpace: 'pre-wrap',
   },
   userBubbleMobile: {
@@ -53,7 +53,7 @@ const useStyles = makeStyles({
   assistantBubble: {
     maxWidth: '100%',
     padding: '2px 0',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   toolTags: {
     display: 'flex',
@@ -63,9 +63,9 @@ const useStyles = makeStyles({
   },
   toolBadge: {
     border: 'none',
-    backgroundColor: innoTokens.canvasAlt,
-    color: innoTokens.textSecondary,
-    borderRadius: innoTokens.radiusFull,
+    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
+    borderRadius: opptrixTokens.radiusFull,
     fontSize: '11px',
     fontFamily: 'ui-monospace, monospace',
   },
@@ -87,7 +87,7 @@ const useStyles = makeStyles({
   time: {
     fontSize: '11px',
     lineHeight: 1,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     userSelect: 'none',
   },
@@ -99,7 +99,7 @@ const useStyles = makeStyles({
     margin: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     cursor: 'pointer',
     opacity: 0,
     pointerEvents: 'none',
@@ -107,7 +107,7 @@ const useStyles = makeStyles({
     transitionDuration: '0.15s',
     transitionTimingFunction: 'ease',
     ':hover': {
-      color: innoTokens.textSecondary,
+      color: opptrixTokens.textSecondary,
     },
     ':focus-visible': {
       opacity: 1,
@@ -122,13 +122,13 @@ const useStyles = makeStyles({
   },
   entryInteractive: {
     ':hover': {
-      [`& .inno-msg-action`]: {
+      [`& .opptrix-msg-action`]: {
         opacity: 1,
         pointerEvents: 'auto',
       },
     },
     ':focus-within': {
-      [`& .inno-msg-action`]: {
+      [`& .opptrix-msg-action`]: {
         opacity: 1,
         pointerEvents: 'auto',
       },
@@ -166,7 +166,7 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
   const forkButton = onFork ? (
     <button
       type="button"
-      className={mergeClasses(s.actionBtn, 'inno-msg-action')}
+      className={mergeClasses(s.actionBtn, 'opptrix-msg-action')}
       onClick={onFork}
       title={forkLabel}
       aria-label={forkLabel}
@@ -178,7 +178,7 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
   const copyButton = (
     <button
       type="button"
-      className={mergeClasses(s.actionBtn, 'inno-msg-action')}
+      className={mergeClasses(s.actionBtn, 'opptrix-msg-action')}
       onClick={handleCopy}
       title={copyLabel}
       aria-label={copyLabel}
@@ -242,7 +242,7 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
           <details style={{ marginTop: 12 }}>
             <summary style={{
               fontSize: 12,
-              color: innoTokens.textTertiary,
+              color: opptrixTokens.textTertiary,
               cursor: 'pointer',
               userSelect: 'none',
             }}

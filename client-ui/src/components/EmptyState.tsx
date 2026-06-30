@@ -1,15 +1,15 @@
 import { makeStyles, Text } from '@fluentui/react-components'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     padding: '48px 24px',
     textAlign: 'center',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '13px',
-    backgroundColor: innoTokens.surfaceMuted,
-    borderRadius: innoTokens.radiusLg,
-    border: `1px dashed ${innoTokens.border}`,
+    backgroundColor: opptrixTokens.surfaceMuted,
+    borderRadius: opptrixTokens.radiusLg,
+    border: `1px dashed ${opptrixTokens.border}`,
   },
 })
 

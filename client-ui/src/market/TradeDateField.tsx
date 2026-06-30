@@ -7,7 +7,7 @@ import {
   mergeClasses,
 } from '@fluentui/react-components'
 import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const
@@ -63,18 +63,18 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: 0,
     margin: 0,
     cursor: 'pointer',
     lineHeight: 0,
     ':hover': {
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   surface: {
     padding: '8px',
-    borderRadius: innoTokens.radiusLg,
+    borderRadius: opptrixTokens.radiusLg,
     minWidth: '232px',
   },
   header: {
@@ -92,19 +92,19 @@ const useStyles = makeStyles({
     width: '24px',
     height: '24px',
     border: 'none',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     cursor: 'pointer',
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   monthLabel: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     letterSpacing: '-0.02em',
   },
   weekdayRow: {
@@ -116,7 +116,7 @@ const useStyles = makeStyles({
   weekday: {
     fontSize: '10px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     textAlign: 'center',
     lineHeight: '20px',
   },
@@ -128,9 +128,9 @@ const useStyles = makeStyles({
   dayCell: {
     ...ghostInteractive,
     border: 'none',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'transparent',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontSize: '11px',
     fontWeight: 500,
     lineHeight: '28px',
@@ -157,7 +157,7 @@ const useStyles = makeStyles({
     boxShadow: `inset 0 0 0 1px rgba(29, 29, 31, 0.18)`,
   },
   dayCellDisabled: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     opacity: 0.45,
     cursor: 'not-allowed',
     ':hover': {
@@ -172,9 +172,9 @@ const useStyles = makeStyles({
   todayBtn: {
     ...ghostInteractive,
     border: 'none',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontSize: '11px',
     fontWeight: 600,
     padding: '0 10px',
@@ -182,7 +182,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.1)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
 })

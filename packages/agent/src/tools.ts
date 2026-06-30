@@ -1,4 +1,4 @@
-import type { ResearchHub } from '@inno-a-stock/research-hub'
+import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import {
   createDefaultAppContext,
@@ -100,7 +100,7 @@ export class ToolRegistry {
 
   systemPrompt() {
     return [
-      '你是 innoAStock 专业 A 股投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
+      '你是 Opptrix 专业 A 股投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
       '规则：',
       '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
       '- 任务开始先 get_market_db_status；本地库不足时用在线工具或 trigger_market_db_sync（谨慎）',
@@ -495,9 +495,9 @@ export class ToolRegistry {
         handler: async () => {
           if (ctx.getProjectInfo) return ctx.getProjectInfo()
           return {
-            app: 'innoAStock',
+            app: 'Opptrix',
             version: '0.6.0',
-            runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
+            runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
             project_root: resolveProjectRoot(),
             paths: getDataLayerPaths(),
           }

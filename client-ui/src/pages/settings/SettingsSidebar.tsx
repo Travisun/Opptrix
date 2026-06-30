@@ -8,7 +8,7 @@ import {
   SearchRegular,
   SettingsRegular,
 } from '@fluentui/react-icons'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
 import { isElectron } from '../../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
@@ -30,14 +30,14 @@ const useStyles = makeStyles({
   sidebar: {
     display: 'flex',
     flexDirection: 'column',
-    width: innoTokens.settingsSidebarWidth,
-    minWidth: innoTokens.settingsSidebarWidth,
+    width: opptrixTokens.settingsSidebarWidth,
+    minWidth: opptrixTokens.settingsSidebarWidth,
     height: '100%',
     flexShrink: 0,
     backgroundColor: 'transparent',
   },
   sidebarWeb: {
-    backgroundColor: innoTokens.canvasAlt,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   sidebarElectron: {
     backgroundColor: 'transparent',
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
     width: '100%',
     minWidth: 'unset',
     height: 'auto',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
   },
   searchWrap: {
     padding: '8px 12px 6px',
@@ -91,11 +91,11 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '9px',
     padding: '5px 8px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontSize: '13px',
     fontWeight: 500,
     width: '100%',
@@ -119,12 +119,12 @@ const useStyles = makeStyles({
     ...sidebarItemSelected,
   },
   navIcon: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     flexShrink: 0,
   },
   navIconOverlay: sidebarTopMenuIcon,
   navIconActive: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
 })
 
@@ -162,10 +162,10 @@ export default function SettingsSidebar({
 
       {!isMobile && (
         <div className={mergeClasses(s.searchWrap, isOverlay && s.searchWrapOverlay)}>
-          <div className={mergeClasses(s.searchShell, 'inno-input-shell', 'inno-settings-search-shell')}>
-            <SearchRegular fontSize={14} color={innoTokens.textTertiary} />
+          <div className={mergeClasses(s.searchShell, 'opptrix-input-shell', 'opptrix-settings-search-shell')}>
+            <SearchRegular fontSize={14} color={opptrixTokens.textTertiary} />
             <Input
-              className="inno-settings-search"
+              className="opptrix-settings-search"
               appearance="filled-darker"
               contentBefore={null}
               placeholder="搜索设置…"
@@ -176,7 +176,7 @@ export default function SettingsSidebar({
         </div>
       )}
 
-      <nav className={mergeClasses(s.nav, isOverlay && s.navOverlay, isMobile && s.navMobile, 'inno-scroll')}>
+      <nav className={mergeClasses(s.nav, isOverlay && s.navOverlay, isMobile && s.navMobile, 'opptrix-scroll')}>
         {filtered.map(item => {
           const Icon = item.icon
           const isActive = active === item.id
@@ -189,8 +189,8 @@ export default function SettingsSidebar({
                 isOverlay && s.navItemOverlay,
                 isMobile && s.navItemMobile,
                 isActive && s.navItemActive,
-                isActive && 'inno-settings-nav-item-active',
-                'inno-focusable',
+                isActive && 'opptrix-settings-nav-item-active',
+                'opptrix-focusable',
               )}
               onClick={() => onSelect(item.id)}
             >
@@ -214,7 +214,7 @@ export default function SettingsSidebar({
     return (
       <OverlaySidebarShell
         open={visible}
-        width={innoTokens.settingsSidebarWidth}
+        width={opptrixTokens.settingsSidebarWidth}
         onClose={onClose}
       >
         <div className={mergeClasses(s.sidebar, s.sidebarTopElectron)}>
@@ -232,8 +232,8 @@ export default function SettingsSidebar({
         !electronChrome && !isMobile && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
         electronChrome && s.sidebarTopElectron,
-        electronChrome && 'inno-glass-sidebar',
-        'inno-sidebar-edge',
+        electronChrome && 'opptrix-glass-sidebar',
+        'opptrix-sidebar-edge',
       )}
     >
       {body}

@@ -11,7 +11,7 @@ import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -36,7 +36,7 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
   },
   titleBar: {
     flexShrink: 0,
@@ -47,8 +47,8 @@ const useStyles = makeStyles({
     gap: '0',
     paddingLeft: '0',
     paddingRight: '8px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvas,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
   },
@@ -232,12 +232,12 @@ export default function RightMarketPanel({
         className={mergeClasses(
           s.titleBar,
           !electronChrome && s.titleBarWeb,
-          electronChrome && 'inno-right-panel-title-bar',
+          electronChrome && 'opptrix-right-panel-title-bar',
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}
       >
         <div
-          className={mergeClasses(s.tabsWrap, 'inno-panel-title-no-drag')}
+          className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}
           style={tabsPadLeft != null ? { paddingLeft: `${tabsPadLeft}px` } : undefined}
         >
           <TabList
@@ -256,13 +256,13 @@ export default function RightMarketPanel({
 
         {electronChrome && (
           <div
-            className={mergeClasses(s.dragFill, 'inno-right-panel-title-drag')}
+            className={mergeClasses(s.dragFill, 'opptrix-right-panel-title-drag')}
             aria-hidden
           />
         )}
 
         {showWorkspaceActions && (
-          <div className={mergeClasses(s.titleBarActions, 'inno-panel-title-no-drag')}>
+          <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
             {onToggleChatColumn && (
               <ChromeToolButton
                 label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}

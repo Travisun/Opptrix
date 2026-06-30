@@ -1,4 +1,4 @@
-import { innoTokens } from './tokens'
+import { opptrixTokens } from './tokens'
 
 export const motion = {
   fast: '140ms',
@@ -10,8 +10,8 @@ export const motion = {
 
 /** Keyboard focus ring — buttons, links, icon controls */
 export const focusRing = {
-  outline: `${innoTokens.focusRingWidth} solid ${innoTokens.inputBorderFocus}`,
-  outlineOffset: innoTokens.focusRingOffset,
+  outline: `${opptrixTokens.focusRingWidth} solid ${opptrixTokens.inputBorderFocus}`,
+  outlineOffset: opptrixTokens.focusRingOffset,
 } as const
 
 export const focusVisibleRing = {
@@ -28,16 +28,16 @@ export const interactiveTransition = {
 /** Input / select container — hover + focus-within glow on shell */
 export const inputShellInteractive = {
   ...interactiveTransition,
-  backgroundColor: innoTokens.inputBg,
+  backgroundColor: opptrixTokens.inputBg,
   border: `1px solid transparent`,
-  borderRadius: innoTokens.radiusMd,
+  borderRadius: opptrixTokens.radiusMd,
   boxShadow: 'none',
   ':hover': {
-    backgroundColor: innoTokens.inputBgHover,
+    backgroundColor: opptrixTokens.inputBgHover,
   },
   ':focus-within': {
-    backgroundColor: innoTokens.inputBgFocus,
-    borderColor: innoTokens.borderStrong,
+    backgroundColor: opptrixTokens.inputBgFocus,
+    borderColor: opptrixTokens.borderStrong,
     boxShadow: 'none',
   },
 } as const
@@ -46,9 +46,9 @@ export const inputShellInteractive = {
 export const inputSurface = inputShellInteractive
 
 export const glassPanel = {
-  backgroundColor: innoTokens.glass,
-  backdropFilter: innoTokens.glassBlur,
-  WebkitBackdropFilter: innoTokens.glassBlur,
+  backgroundColor: opptrixTokens.glass,
+  backdropFilter: opptrixTokens.glassBlur,
+  WebkitBackdropFilter: opptrixTokens.glassBlur,
 } as const
 
 /** 下拉浮层 / 面板 — 毛玻璃（与 Dialog、MessageSelectionToolbar 一致） */
@@ -56,39 +56,39 @@ export const glassDropdown = {
   backgroundColor: 'rgba(255, 255, 255, 0.72)',
   backdropFilter: 'blur(16px) saturate(160%)',
   WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-  border: `1px solid ${innoTokens.separator}`,
+  border: `1px solid ${opptrixTokens.separator}`,
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
 } as const
 
 export const contentPanel = {
-  backgroundColor: innoTokens.canvas,
-  borderRadius: innoTokens.radiusLg,
+  backgroundColor: opptrixTokens.canvas,
+  borderRadius: opptrixTokens.radiusLg,
   border: 'none',
   boxShadow: 'none',
   overflow: 'hidden',
 } as const
 
 export const panelFloat = {
-  backgroundColor: innoTokens.surfaceGlass,
+  backgroundColor: opptrixTokens.surfaceGlass,
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
-  borderRadius: innoTokens.radiusLg,
+  borderRadius: opptrixTokens.radiusLg,
   border: 'none',
   boxShadow: 'none',
 } as const
 
 export const composerSurface = {
   ...interactiveTransition,
-  backgroundColor: innoTokens.canvas,
-  borderRadius: innoTokens.radiusXl,
-  border: `1px solid ${innoTokens.border}`,
+  backgroundColor: opptrixTokens.canvas,
+  borderRadius: opptrixTokens.radiusXl,
+  border: `1px solid ${opptrixTokens.border}`,
   boxShadow: 'none',
   ':hover': {
-    borderColor: innoTokens.borderStrong,
+    borderColor: opptrixTokens.borderStrong,
   },
   ':focus-within': {
-    borderColor: innoTokens.borderStrong,
-    backgroundColor: innoTokens.canvas,
+    borderColor: opptrixTokens.borderStrong,
+    backgroundColor: opptrixTokens.canvas,
     boxShadow: 'none',
   },
 }
@@ -96,13 +96,13 @@ export const composerSurface = {
 export const ghostInteractive = {
   ...interactiveTransition,
   border: 'none',
-  borderRadius: innoTokens.radiusMd,
+  borderRadius: opptrixTokens.radiusMd,
   backgroundColor: 'transparent',
   ':hover': {
-    backgroundColor: innoTokens.surfaceHover,
+    backgroundColor: opptrixTokens.surfaceHover,
   },
   ':active': {
-    opacity: innoTokens.activeOpacity,
+    opacity: opptrixTokens.activeOpacity,
   },
   ...focusVisibleRing,
 } as const
@@ -110,18 +110,18 @@ export const ghostInteractive = {
 export const primaryInteractive = {
   ...interactiveTransition,
   border: 'none',
-  borderRadius: innoTokens.radiusMd,
-  backgroundColor: innoTokens.accent,
+  borderRadius: opptrixTokens.radiusMd,
+  backgroundColor: opptrixTokens.accent,
   color: '#FFFFFF',
   ':hover': {
-    backgroundColor: innoTokens.accentHover,
+    backgroundColor: opptrixTokens.accentHover,
   },
   ':active': {
     opacity: 0.88,
   },
   ':disabled': {
     opacity: 0.35,
-    backgroundColor: innoTokens.accent,
+    backgroundColor: opptrixTokens.accent,
   },
   ...focusVisibleRing,
 } as const
@@ -129,14 +129,14 @@ export const primaryInteractive = {
 export const secondaryInteractive = {
   ...interactiveTransition,
   border: 'none',
-  borderRadius: innoTokens.radiusMd,
-  backgroundColor: innoTokens.canvasAlt,
-  color: innoTokens.textPrimary,
+  borderRadius: opptrixTokens.radiusMd,
+  backgroundColor: opptrixTokens.canvasAlt,
+  color: opptrixTokens.textPrimary,
   ':hover': {
-    backgroundColor: innoTokens.canvasMuted,
+    backgroundColor: opptrixTokens.canvasMuted,
   },
   ':active': {
-    opacity: innoTokens.activeOpacity,
+    opacity: opptrixTokens.activeOpacity,
   },
   ...focusVisibleRing,
 } as const
@@ -148,19 +148,19 @@ export const nativeIconInteractive = {
   border: 'none',
   background: 'none',
   cursor: 'pointer',
-  color: innoTokens.textSecondary,
+  color: opptrixTokens.textSecondary,
   ':hover': {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   ':active': {
-    opacity: innoTokens.activeOpacity,
+    opacity: opptrixTokens.activeOpacity,
   },
   ...focusVisibleRing,
 } as const
 
 export const surfaceGrouped = {
-  backgroundColor: innoTokens.canvasAlt,
-  borderRadius: innoTokens.radiusGrouped,
+  backgroundColor: opptrixTokens.canvasAlt,
+  borderRadius: opptrixTokens.radiusGrouped,
   border: 'none',
   boxShadow: 'none',
   overflow: 'hidden',
@@ -185,13 +185,13 @@ export const fadeInUp = {
 } as const
 
 export const messageBubble = {
-  borderRadius: innoTokens.radiusLg,
+  borderRadius: opptrixTokens.radiusLg,
   border: 'none',
   boxShadow: 'none',
 } as const
 
 export const sidebarItemSelected = {
-  backgroundColor: innoTokens.glassNavSelected,
+  backgroundColor: opptrixTokens.glassNavSelected,
   border: 'none',
   boxShadow: 'none',
 } as const
@@ -207,11 +207,11 @@ export const sidebarTopMenuRow = {
   padding: '5px 10px',
   marginLeft: '10px',
   marginRight: '10px',
-  borderRadius: innoTokens.radiusMd,
+  borderRadius: opptrixTokens.radiusMd,
   cursor: 'pointer',
   border: 'none',
   backgroundColor: 'transparent',
-  color: innoTokens.textPrimary,
+  color: opptrixTokens.textPrimary,
   fontSize: '13px',
   fontWeight: 500,
   width: 'calc(100% - 20px)',
@@ -220,6 +220,6 @@ export const sidebarTopMenuRow = {
 } as const
 
 export const sidebarTopMenuIcon = {
-  color: innoTokens.textSecondary,
+  color: opptrixTokens.textSecondary,
   flexShrink: 0,
 } as const

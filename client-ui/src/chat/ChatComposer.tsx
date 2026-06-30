@@ -6,13 +6,13 @@ import ComposerContextRefTag from './ComposerContextRefTag'
 import ComposerStockRefTag from './ComposerStockRefTag'
 import ComposerQuickTasks from './ComposerQuickTasks'
 import ComposerStockMentionList from './ComposerStockMentionList'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
 import type { AvailableModel, SessionContextRef } from '../types/chat'
 import type { WatchlistItem } from '../types/market'
 import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition } from '../theme/mixins'
 
 const LINE_HEIGHT = 1.5
@@ -33,12 +33,12 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    paddingLeft: innoTokens.chatComposerPadding,
+    paddingLeft: opptrixTokens.chatComposerPadding,
   },
   startersLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
   },
@@ -52,18 +52,18 @@ const useStyles = makeStyles({
     overflowX: 'auto',
   },
   starterChip: {
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     fontWeight: 500,
     fontSize: '13px',
     padding: '6px 14px',
     border: 'none',
-    backgroundColor: innoTokens.canvasAlt,
-    color: innoTokens.textSecondary,
+    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
     ':hover': {
-      backgroundColor: innoTokens.canvasAlt,
-      color: innoTokens.textPrimary,
+      backgroundColor: opptrixTokens.canvasAlt,
+      color: opptrixTokens.textPrimary,
     },
   },
   panelWrap: {
@@ -73,16 +73,16 @@ const useStyles = makeStyles({
     alignItems: 'stretch',
     width: '100%',
     boxSizing: 'border-box',
-    marginBottom: `calc(-1 * ${innoTokens.chatComposerGroundExtend})`,
+    marginBottom: `calc(-1 * ${opptrixTokens.chatComposerGroundExtend})`,
   },
   panelGround: {
     position: 'absolute',
     left: 0,
     right: 0,
     top: 0,
-    bottom: `calc(-1 * (${innoTokens.chatComposerGroundExtend} + ${innoTokens.chatComposerBottomInset}))`,
-    borderTopLeftRadius: innoTokens.radiusXl,
-    borderTopRightRadius: innoTokens.radiusXl,
+    bottom: `calc(-1 * (${opptrixTokens.chatComposerGroundExtend} + ${opptrixTokens.chatComposerBottomInset}))`,
+    borderTopLeftRadius: opptrixTokens.radiusXl,
+    borderTopRightRadius: opptrixTokens.radiusXl,
     pointerEvents: 'none',
     zIndex: 0,
     backdropFilter: 'blur(20px) saturate(160%)',
@@ -93,8 +93,8 @@ const useStyles = makeStyles({
       'rgba(255, 255, 255, 0.62) 0%,',
       'rgba(255, 255, 255, 0.78) 38%,',
       'rgba(255, 255, 255, 0.96) 68%,',
-      `${innoTokens.canvas} 88%,`,
-      `${innoTokens.canvas} 100%`,
+      `${opptrixTokens.canvas} 88%,`,
+      `${opptrixTokens.canvas} 100%`,
       ')',
     ].join(' '),
   },
@@ -106,21 +106,21 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     width: '100%',
     boxSizing: 'border-box',
-    padding: innoTokens.chatComposerPadding,
+    padding: opptrixTokens.chatComposerPadding,
     gap: '10px',
-    borderRadius: innoTokens.radiusXl,
-    border: `1px solid ${innoTokens.border}`,
+    borderRadius: opptrixTokens.radiusXl,
+    border: `1px solid ${opptrixTokens.border}`,
     backgroundColor: 'rgba(255, 255, 255, 0.38)',
     backdropFilter: 'blur(20px) saturate(160%)',
     WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-    boxShadow: innoTokens.composerFloatShadow,
+    boxShadow: opptrixTokens.composerFloatShadow,
     ':hover': {
-      borderColor: innoTokens.borderStrong,
-      boxShadow: innoTokens.composerFloatShadowHover,
+      borderColor: opptrixTokens.borderStrong,
+      boxShadow: opptrixTokens.composerFloatShadowHover,
     },
     ':focus-within': {
-      borderColor: innoTokens.borderStrong,
-      boxShadow: innoTokens.composerFloatShadowFocus,
+      borderColor: opptrixTokens.borderStrong,
+      boxShadow: opptrixTokens.composerFloatShadowFocus,
     },
   },
   inputRow: {
@@ -152,11 +152,11 @@ const useStyles = makeStyles({
     fontSize: `${FONT_SIZE}px`,
     lineHeight: LINE_HEIGHT,
     fontFamily: 'inherit',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     padding: 0,
     margin: 0,
     '::placeholder': {
-      color: innoTokens.textTertiary,
+      color: opptrixTokens.textTertiary,
     },
   },
   textareaWithRef: {
@@ -202,7 +202,7 @@ const useStyles = makeStyles({
   },
   sendBtn: {
     ...primaryInteractive,
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     minWidth: '28px',
     width: '28px',
     height: '28px',
@@ -211,8 +211,8 @@ const useStyles = makeStyles({
   },
   error: {
     fontSize: '13px',
-    color: innoTokens.error,
-    padding: `0 0 0 ${innoTokens.chatComposerPadding}`,
+    color: opptrixTokens.error,
+    padding: `0 0 0 ${opptrixTokens.chatComposerPadding}`,
     animationDuration: motion.fast,
     animationName: {
       from: { opacity: 0 },
@@ -227,7 +227,7 @@ const useStyles = makeStyles({
     textAlign: 'center',
     fontSize: '12px',
     lineHeight: 1.45,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     width: '100%',
     margin: 0,
     padding: '9px 0 0',
@@ -398,9 +398,9 @@ export default function ChatComposer({
       {isEmpty && (
         <div className={s.startersSection}>
           <Text className={s.startersLabel}>试试这些</Text>
-          <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} inno-scroll-x`)}>
+          <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
             {starters.map(st => (
-              <InnoButton
+              <OpptrixButton
                 key={st}
                 className={s.starterChip}
                 variant="pill"
@@ -408,7 +408,7 @@ export default function ChatComposer({
                 onClick={() => onSubmit(st)}
               >
                 {st}
-              </InnoButton>
+              </OpptrixButton>
             ))}
           </div>
         </div>
@@ -418,7 +418,7 @@ export default function ChatComposer({
 
       <div className={s.panelWrap}>
         <div className={s.panelGround} aria-hidden />
-        <div className={mergeClasses(s.panel, 'inno-composer-shell')}>
+        <div className={mergeClasses(s.panel, 'opptrix-composer-shell')}>
           <div className={s.inputRow}>
             <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
             {contextRef && (
@@ -471,7 +471,7 @@ export default function ChatComposer({
                   onChange={onModelChange}
                 />
               )}
-              <InnoButton
+              <OpptrixButton
                 className={s.sendBtn}
                 variant="primary"
                 icon={<ArrowUpRegular fontSize={14} />}

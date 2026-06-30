@@ -1,4 +1,4 @@
-import { isTushareEnabled, TushareClient, fromTsCode } from '@inno-a-stock/a-stock-layer'
+import { isTushareEnabled, TushareClient, fromTsCode } from '@opptrix/a-stock-layer'
 import { KLINE_BOOTSTRAP_DAYS } from './config.js'
 
 export interface BulkDailyBar {

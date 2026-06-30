@@ -1,4 +1,4 @@
-import type { StockKline } from '@inno-a-stock/shared'
+import type { StockKline } from '@opptrix/shared'
 import type { ChipDistribution, ChipDistributionProfile, ChipPriceLevel as SchemaChipPriceLevel } from '../core/schema.js'
 
 /** EastMoney-compatible CYQ input row (AKShare stock_cyq_em). */

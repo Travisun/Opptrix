@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import type { FactorResult } from '@inno-a-stock/shared'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
+import type { FactorResult } from '@opptrix/shared'
 import { registerFactor } from '../core/registry.js'
 import {
   annualVol, attrSeries, betaVsIndex, cagr, finSeries, m, maxDrawdown,

@@ -1,4 +1,4 @@
-import type { ResearchHub } from '@inno-a-stock/research-hub'
+import type { ResearchHub } from '@opptrix/research-hub'
 import type { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
 import type { ProviderRegistry } from './llm/providers.js'
@@ -426,7 +426,7 @@ export class DiscoverRunner {
     }, null, 0)
 
     const systemPrompt = [
-      '你是 innoAStock 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
+      '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
       '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
       '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_stock_snapshots',
       '2) 不足时对 shortlisted 单股：get_stock_detail / evaluate_stock / get_strategy_signal / institution_rating',

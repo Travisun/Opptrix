@@ -17,8 +17,8 @@ body {
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  background: var(--inno-canvas, #FFFFFF);
-  color: var(--inno-text, #1D1D1F);
+  background: var(--opptrix-canvas, #FFFFFF);
+  color: var(--opptrix-text, #1D1D1F);
   overscroll-behavior: none;
   touch-action: manipulation;
   font-size: 14px;
@@ -26,60 +26,60 @@ body {
 }
 
 :root {
-  --inno-canvas: #FFFFFF;
-  --inno-canvas-alt: #F5F5F7;
-  --inno-surface: #FFFFFF;
-  --inno-glass: rgba(255, 255, 255, 0.14);
-  --inno-separator: rgba(60, 60, 67, 0.06);
-  --inno-border: rgba(60, 60, 67, 0.08);
-  --inno-accent: #1D1D1F;
-  --inno-text: #1D1D1F;
-  --inno-text-secondary: #6E6E73;
-  --inno-text-tertiary: #AEAEB2;
-  --inno-motion-fast: 140ms;
-  --inno-motion-normal: 220ms;
-  --inno-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --inno-focus-ring: 2px solid #1D1D1F;
-  --inno-focus-offset: 2px;
-  --inno-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
-  --inno-focus-border: rgba(60, 60, 67, 0.18);
-  --inno-active-opacity: 0.72;
-  --inno-overlay-sidebar-hover: #F2F2F7;
-  --inno-overlay-sidebar-selected: #F2F2F7;
+  --opptrix-canvas: #FFFFFF;
+  --opptrix-canvas-alt: #F5F5F7;
+  --opptrix-surface: #FFFFFF;
+  --opptrix-glass: rgba(255, 255, 255, 0.14);
+  --opptrix-separator: rgba(60, 60, 67, 0.06);
+  --opptrix-border: rgba(60, 60, 67, 0.08);
+  --opptrix-accent: #1D1D1F;
+  --opptrix-text: #1D1D1F;
+  --opptrix-text-secondary: #6E6E73;
+  --opptrix-text-tertiary: #AEAEB2;
+  --opptrix-motion-fast: 140ms;
+  --opptrix-motion-normal: 220ms;
+  --opptrix-ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --opptrix-focus-ring: 2px solid #1D1D1F;
+  --opptrix-focus-offset: 2px;
+  --opptrix-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
+  --opptrix-focus-border: rgba(60, 60, 67, 0.18);
+  --opptrix-active-opacity: 0.72;
+  --opptrix-overlay-sidebar-hover: #F2F2F7;
+  --opptrix-overlay-sidebar-selected: #F2F2F7;
 }
 
-html.inno-desktop {
-  --inno-titlebar-height: 43px;
-  --inno-chrome-top-offset: 5px;
+html.opptrix-desktop {
+  --opptrix-titlebar-height: 43px;
+  --opptrix-chrome-top-offset: 5px;
 }
 
 /* ── Electron: fully transparent shell, glass sidebars ── */
-html.inno-electron {
-  --inno-app-bg: transparent;
-  --inno-chrome-bg: transparent;
+html.opptrix-electron {
+  --opptrix-app-bg: transparent;
+  --opptrix-chrome-bg: transparent;
 }
 
-html.inno-electron,
-html.inno-electron body,
-html.inno-electron #root {
+html.opptrix-electron,
+html.opptrix-electron body,
+html.opptrix-electron #root {
   background: transparent !important;
 }
 
-html.inno-electron .inno-app-shell,
-html.inno-electron .fui-FluentProvider,
-html.inno-electron #root > * {
+html.opptrix-electron .opptrix-app-shell,
+html.opptrix-electron .fui-FluentProvider,
+html.opptrix-electron #root > * {
   background: transparent !important;
 }
 
-html.inno-electron .inno-app-main {
+html.opptrix-electron .opptrix-app-main {
   background: #FFFFFF !important;
 }
 
-html.inno-electron .inno-settings-host {
+html.opptrix-electron .opptrix-settings-host {
   background: transparent !important;
 }
 
-html.inno-electron .inno-settings-content {
+html.opptrix-electron .opptrix-settings-content {
   flex: 1 !important;
   min-width: 0 !important;
   width: 100% !important;
@@ -87,21 +87,21 @@ html.inno-electron .inno-settings-content {
   background: #FFFFFF !important;
 }
 
-html.inno-electron .inno-chat-panel,
-html.inno-electron .inno-settings-panel {
+html.opptrix-electron .opptrix-chat-panel,
+html.opptrix-electron .opptrix-settings-panel {
   background: #FFFFFF;
   border: none;
   border-radius: 0;
 }
 
-html.inno-electron .inno-chat-title-bar {
+html.opptrix-electron .opptrix-chat-title-bar {
   background: #FFFFFF !important;
   border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
   pointer-events: none;
   -webkit-app-region: no-drag;
 }
 
-html.inno-electron .inno-right-panel-title-bar {
+html.opptrix-electron .opptrix-right-panel-title-bar {
   background: #FFFFFF !important;
   border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
   position: relative;
@@ -110,101 +110,101 @@ html.inno-electron .inno-right-panel-title-bar {
   -webkit-app-region: no-drag;
 }
 
-html.inno-electron .inno-right-panel-title-drag {
+html.opptrix-electron .opptrix-right-panel-title-drag {
   pointer-events: auto;
   -webkit-app-region: drag;
 }
 
-html.inno-electron .inno-panel-title-no-drag {
+html.opptrix-electron .opptrix-panel-title-no-drag {
   position: relative;
   z-index: 1;
   -webkit-app-region: no-drag;
   pointer-events: auto;
 }
 
-html.inno-electron .inno-right-panel {
+html.opptrix-electron .opptrix-right-panel {
   background: #FFFFFF !important;
 }
 
-html.inno-electron .inno-glass-sidebar {
+html.opptrix-electron .opptrix-glass-sidebar {
   background: rgba(255, 255, 255, 0.10) !important;
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 
-.inno-chat-scroll {
+.opptrix-chat-scroll {
   scrollbar-gutter: auto;
 }
 
-.inno-chat-scroll::-webkit-scrollbar {
+.opptrix-chat-scroll::-webkit-scrollbar {
   width: 6px;
 }
 
-.inno-chat-scroll::-webkit-scrollbar-thumb {
+.opptrix-chat-scroll::-webkit-scrollbar-thumb {
   background: rgba(60, 60, 67, 0.14);
   border-radius: 999px;
 }
 
-.inno-chat-scroll::-webkit-scrollbar-track {
+.opptrix-chat-scroll::-webkit-scrollbar-track {
   background: transparent;
 }
 
-.inno-sidebar-edge {
+.opptrix-sidebar-edge {
   border-right: 0.5px solid rgba(60, 60, 67, 0.11);
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.032);
 }
 
 /* Overlay draw sidebar — gray hover / focus / active + selected session */
-.inno-overlay-sidebar .inno-session-item:hover,
-.inno-overlay-sidebar .inno-session-item:focus-visible,
-.inno-overlay-sidebar .inno-session-item:active,
-.inno-overlay-sidebar button.inno-focusable:hover,
-.inno-overlay-sidebar button.inno-focusable:focus-visible,
-.inno-overlay-sidebar button.inno-focusable:active {
-  background-color: var(--inno-overlay-sidebar-hover) !important;
-  color: var(--inno-text, #1D1D1F);
+.opptrix-overlay-sidebar .opptrix-session-item:hover,
+.opptrix-overlay-sidebar .opptrix-session-item:focus-visible,
+.opptrix-overlay-sidebar .opptrix-session-item:active,
+.opptrix-overlay-sidebar button.opptrix-focusable:hover,
+.opptrix-overlay-sidebar button.opptrix-focusable:focus-visible,
+.opptrix-overlay-sidebar button.opptrix-focusable:active {
+  background-color: var(--opptrix-overlay-sidebar-hover) !important;
+  color: var(--opptrix-text, #1D1D1F);
 }
 
-.inno-overlay-sidebar .inno-session-item.inno-session-item-active {
-  background-color: var(--inno-overlay-sidebar-selected) !important;
+.opptrix-overlay-sidebar .opptrix-session-item.opptrix-session-item-active {
+  background-color: var(--opptrix-overlay-sidebar-selected) !important;
 }
 
-.inno-overlay-sidebar .inno-session-item.inno-session-item-active:hover,
-.inno-overlay-sidebar .inno-session-item.inno-session-item-active:focus-visible {
-  background-color: var(--inno-overlay-sidebar-hover) !important;
+.opptrix-overlay-sidebar .opptrix-session-item.opptrix-session-item-active:hover,
+.opptrix-overlay-sidebar .opptrix-session-item.opptrix-session-item-active:focus-visible {
+  background-color: var(--opptrix-overlay-sidebar-hover) !important;
 }
 
-.inno-overlay-sidebar button.inno-settings-nav-item-active {
-  background-color: var(--inno-overlay-sidebar-selected) !important;
+.opptrix-overlay-sidebar button.opptrix-settings-nav-item-active {
+  background-color: var(--opptrix-overlay-sidebar-selected) !important;
 }
 
-.inno-overlay-sidebar button.inno-settings-nav-item-active:hover,
-.inno-overlay-sidebar button.inno-settings-nav-item-active:focus-visible {
-  background-color: var(--inno-overlay-sidebar-hover) !important;
+.opptrix-overlay-sidebar button.opptrix-settings-nav-item-active:hover,
+.opptrix-overlay-sidebar button.opptrix-settings-nav-item-active:focus-visible {
+  background-color: var(--opptrix-overlay-sidebar-hover) !important;
 }
 
-html.inno-electron .inno-settings-search-shell {
+html.opptrix-electron .opptrix-settings-search-shell {
   background: rgba(255, 255, 255, 0.35);
 }
 
-html.inno-electron .inno-settings-search-shell:hover:not(:focus-within) {
+html.opptrix-electron .opptrix-settings-search-shell:hover:not(:focus-within) {
   background: rgba(255, 255, 255, 0.42);
 }
 
-html.inno-electron .inno-settings-search-shell:focus-within {
+html.opptrix-electron .opptrix-settings-search-shell:focus-within {
   background: rgba(255, 255, 255, 0.52);
 }
 
-html.inno-electron .inno-settings-search .fui-Input,
-html.inno-electron .inno-settings-search .fui-Input__input {
+html.opptrix-electron .opptrix-settings-search .fui-Input,
+html.opptrix-electron .opptrix-settings-search .fui-Input__input {
   border: none !important;
   box-shadow: none !important;
   background: transparent !important;
 }
 
-.inno-settings-search-shell .inno-settings-search,
-.inno-settings-search-shell .fui-Input,
-.inno-settings-search-shell .fui-Input__input {
+.opptrix-settings-search-shell .opptrix-settings-search,
+.opptrix-settings-search-shell .fui-Input,
+.opptrix-settings-search-shell .fui-Input__input {
   flex: 1;
   min-width: 0;
   border: none !important;
@@ -214,83 +214,83 @@ html.inno-electron .inno-settings-search .fui-Input__input {
   font-size: 13px;
 }
 
-.inno-settings-search-shell .fui-Input::before,
-.inno-settings-search-shell .fui-Input::after,
-.inno-settings-search-shell .fui-Input__underline {
+.opptrix-settings-search-shell .fui-Input::before,
+.opptrix-settings-search-shell .fui-Input::after,
+.opptrix-settings-search-shell .fui-Input__underline {
   display: none !important;
 }
 
-html.inno-desktop body,
-html.inno-electron body {
+html.opptrix-desktop body,
+html.opptrix-electron body {
   touch-action: auto;
   user-select: none;
 }
 
-html.inno-desktop .inno-md,
-html.inno-desktop .inno-md *,
-html.inno-desktop textarea,
-html.inno-desktop input {
+html.opptrix-desktop .opptrix-md,
+html.opptrix-desktop .opptrix-md *,
+html.opptrix-desktop textarea,
+html.opptrix-desktop input {
   user-select: text;
 }
 
 /* ── Unified interaction: focus / hover / active ── */
-.inno-focusable:focus {
+.opptrix-focusable:focus {
   outline: none;
 }
 
-.inno-focusable:focus-visible {
-  outline: var(--inno-focus-ring);
-  outline-offset: var(--inno-focus-offset);
+.opptrix-focusable:focus-visible {
+  outline: var(--opptrix-focus-ring);
+  outline-offset: var(--opptrix-focus-offset);
 }
 
-.inno-input-shell {
+.opptrix-input-shell {
   border: 1px solid transparent;
   transition:
-    background-color var(--inno-motion-fast) var(--inno-ease),
-    border-color var(--inno-motion-fast) var(--inno-ease),
-    box-shadow var(--inno-motion-fast) var(--inno-ease);
+    background-color var(--opptrix-motion-fast) var(--opptrix-ease),
+    border-color var(--opptrix-motion-fast) var(--opptrix-ease),
+    box-shadow var(--opptrix-motion-fast) var(--opptrix-ease);
 }
 
-.inno-input-shell:hover:not(:focus-within) {
+.opptrix-input-shell:hover:not(:focus-within) {
   background-color: #EBEBED;
 }
 
-.inno-input-shell:focus-within {
+.opptrix-input-shell:focus-within {
   background-color: #FFFFFF;
-  border-color: var(--inno-focus-border);
+  border-color: var(--opptrix-focus-border);
   box-shadow: none;
   outline: none;
 }
 
-.inno-input-shell .fui-Input,
-.inno-input-shell .fui-Input__input,
-.inno-input-shell .fui-Textarea,
-.inno-input-shell .fui-Textarea__textarea,
-.inno-input-shell .fui-Dropdown,
-.inno-input-shell .fui-Dropdown__button,
-.inno-input-shell input,
-.inno-input-shell textarea {
+.opptrix-input-shell .fui-Input,
+.opptrix-input-shell .fui-Input__input,
+.opptrix-input-shell .fui-Textarea,
+.opptrix-input-shell .fui-Textarea__textarea,
+.opptrix-input-shell .fui-Dropdown,
+.opptrix-input-shell .fui-Dropdown__button,
+.opptrix-input-shell input,
+.opptrix-input-shell textarea {
   outline: none !important;
   box-shadow: none !important;
 }
 
-.inno-input-shell .fui-Input:focus-within,
-.inno-input-shell .fui-Textarea:focus-within,
-.inno-input-shell .fui-Dropdown:focus-within,
-.inno-input-shell input:focus,
-.inno-input-shell textarea:focus {
+.opptrix-input-shell .fui-Input:focus-within,
+.opptrix-input-shell .fui-Textarea:focus-within,
+.opptrix-input-shell .fui-Dropdown:focus-within,
+.opptrix-input-shell input:focus,
+.opptrix-input-shell textarea:focus {
   background: transparent !important;
   box-shadow: none !important;
   outline: none !important;
 }
 
-.inno-btn.fui-Button:focus {
+.opptrix-btn.fui-Button:focus {
   outline: none;
 }
 
-.inno-btn.fui-Button:focus-visible {
-  outline: var(--inno-focus-ring) !important;
-  outline-offset: var(--inno-focus-offset) !important;
+.opptrix-btn.fui-Button:focus-visible {
+  outline: var(--opptrix-focus-ring) !important;
+  outline-offset: var(--opptrix-focus-offset) !important;
 }
 
 .fui-Button:focus {
@@ -298,28 +298,28 @@ html.inno-desktop input {
 }
 
 .fui-Button:focus-visible {
-  outline: var(--inno-focus-ring) !important;
-  outline-offset: var(--inno-focus-offset) !important;
+  outline: var(--opptrix-focus-ring) !important;
+  outline-offset: var(--opptrix-focus-offset) !important;
 }
 
-.inno-composer-shell:focus-within {
-  border-color: var(--inno-focus-border) !important;
+.opptrix-composer-shell:focus-within {
+  border-color: var(--opptrix-focus-border) !important;
   outline: none !important;
 }
 
-.inno-composer-shell textarea:focus,
-.inno-composer-shell textarea:focus-visible {
+.opptrix-composer-shell textarea:focus,
+.opptrix-composer-shell textarea:focus-visible {
   outline: none !important;
 }
 
-.inno-focusable:active:not(:disabled) {
-  opacity: var(--inno-active-opacity);
+.opptrix-focusable:active:not(:disabled) {
+  opacity: var(--opptrix-active-opacity);
 }
 
 .fui-Checkbox:focus-within .fui-Checkbox__indicator,
 .fui-Checkbox input:focus-visible + .fui-Checkbox__indicator {
-  outline: var(--inno-focus-ring);
-  outline-offset: var(--inno-focus-offset);
+  outline: var(--opptrix-focus-ring);
+  outline-offset: var(--opptrix-focus-offset);
 }
 
 .fui-Input:focus-visible,
@@ -372,7 +372,7 @@ select:focus-visible {
 }
 
 .fui-Button--primary {
-  background-color: var(--inno-accent) !important;
+  background-color: var(--opptrix-accent) !important;
   color: #FFFFFF !important;
   border: none !important;
 }
@@ -382,18 +382,18 @@ select:focus-visible {
 }
 
 .fui-Button--secondary {
-  background-color: var(--inno-canvas-alt) !important;
-  color: var(--inno-text) !important;
+  background-color: var(--opptrix-canvas-alt) !important;
+  color: var(--opptrix-text) !important;
   border: none !important;
 }
 
 .fui-Button--subtle {
   background-color: transparent !important;
-  color: var(--inno-text-secondary) !important;
+  color: var(--opptrix-text-secondary) !important;
 }
 
 /* ── Dialog (Codex modal) ── */
-.inno-dialog-surface.fui-DialogSurface {
+.opptrix-dialog-surface.fui-DialogSurface {
   background: #FFFFFF !important;
   border: none !important;
   border-radius: 16px !important;
@@ -402,27 +402,27 @@ select:focus-visible {
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.14), 0 0 0 1px rgba(60, 60, 67, 0.08) !important;
 }
 
-.inno-dialog-surface .fui-DialogBody {
+.opptrix-dialog-surface .fui-DialogBody {
   padding: 22px 24px 24px !important;
   gap: 16px !important;
 }
 
-.inno-dialog-surface .fui-DialogTitle {
+.opptrix-dialog-surface .fui-DialogTitle {
   font-size: 16px !important;
   font-weight: 650 !important;
-  color: var(--inno-text) !important;
+  color: var(--opptrix-text) !important;
   padding: 0 !important;
   letter-spacing: -0.02em;
 }
 
-.inno-dialog-surface .fui-DialogContent {
+.opptrix-dialog-surface .fui-DialogContent {
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
 }
 
 /* ── Frosted glass dialog — matches MessageSelectionToolbar ── */
-.inno-glass-dialog-surface.fui-DialogSurface {
+.opptrix-glass-dialog-surface.fui-DialogSurface {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
@@ -433,43 +433,43 @@ select:focus-visible {
   box-shadow: 0 6px 20px rgba(0, 0, 0, 0.1) !important;
 }
 
-.inno-glass-dialog-surface .fui-DialogBody {
+.opptrix-glass-dialog-surface .fui-DialogBody {
   padding: 14px 16px 16px !important;
   gap: 10px !important;
 }
 
-.inno-glass-dialog-surface .fui-DialogTitle {
+.opptrix-glass-dialog-surface .fui-DialogTitle {
   font-size: 14px !important;
   font-weight: 650 !important;
-  color: var(--inno-text) !important;
+  color: var(--opptrix-text) !important;
   padding: 0 !important;
   margin: 0 !important;
   letter-spacing: -0.02em;
 }
 
-.inno-glass-dialog-surface .fui-DialogTitle__action .fui-Button,
-.inno-glass-dialog-surface .fui-DialogTitle__action button {
+.opptrix-glass-dialog-surface .fui-DialogTitle__action .fui-Button,
+.opptrix-glass-dialog-surface .fui-DialogTitle__action button {
   width: 28px !important;
   min-width: 28px !important;
   height: 28px !important;
   border-radius: 999px !important;
-  color: var(--inno-text-secondary) !important;
+  color: var(--opptrix-text-secondary) !important;
 }
 
-.inno-glass-dialog-surface .fui-DialogTitle__action .fui-Button:hover,
-.inno-glass-dialog-surface .fui-DialogTitle__action button:hover {
+.opptrix-glass-dialog-surface .fui-DialogTitle__action .fui-Button:hover,
+.opptrix-glass-dialog-surface .fui-DialogTitle__action button:hover {
   background-color: rgba(29, 29, 31, 0.08) !important;
-  color: var(--inno-text) !important;
+  color: var(--opptrix-text) !important;
 }
 
-.inno-glass-dialog-surface .fui-DialogContent {
+.opptrix-glass-dialog-surface .fui-DialogContent {
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
 }
 
 /* ── Frosted glass panel / dropdown — 发现策略选择、浮层面板等 ── */
-.inno-glass-panel {
+.opptrix-glass-panel {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
@@ -477,24 +477,24 @@ select:focus-visible {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
-.inno-composer-glass-popover {
-  border-radius: var(--inno-radius-lg, 14px);
+.opptrix-composer-glass-popover {
+  border-radius: var(--opptrix-radius-lg, 14px);
 }
 
 /* Composer tooltip menus — @ mention, quick tasks, model picker */
-.inno-composer-tooltip-menu {
+.opptrix-composer-tooltip-menu {
   display: flex;
   flex-direction: column;
   width: 248px;
   max-width: min(268px, calc(100vw - 24px));
   box-sizing: border-box;
-  border-radius: var(--inno-radius-lg, 14px);
+  border-radius: var(--opptrix-radius-lg, 14px);
   overflow: hidden;
-  animation: inno-composer-tooltip-in 160ms cubic-bezier(0, 0, 0.2, 1) both;
+  animation: opptrix-composer-tooltip-in 160ms cubic-bezier(0, 0, 0.2, 1) both;
   transform-origin: bottom center;
 }
 
-@keyframes inno-composer-tooltip-in {
+@keyframes opptrix-composer-tooltip-in {
   from {
     opacity: 0;
     transform: translateY(6px) scale(0.98);
@@ -505,7 +505,7 @@ select:focus-visible {
   }
 }
 
-.inno-composer-tooltip-menu__head {
+.opptrix-composer-tooltip-menu__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -515,15 +515,15 @@ select:focus-visible {
   flex-shrink: 0;
 }
 
-.inno-composer-tooltip-menu__title {
+.opptrix-composer-tooltip-menu__title {
   font-size: 12px;
   font-weight: 600;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
-.inno-composer-tooltip-menu__close {
+.opptrix-composer-tooltip-menu__close {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -533,16 +533,16 @@ select:focus-visible {
   border: none;
   border-radius: 6px;
   background: transparent;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
   cursor: pointer;
 }
 
-.inno-composer-tooltip-menu__close:hover {
-  color: var(--inno-text, #1A1A1A);
+.opptrix-composer-tooltip-menu__close:hover {
+  color: var(--opptrix-text, #1A1A1A);
   background: rgba(60, 60, 67, 0.06);
 }
 
-.inno-composer-tooltip-menu__body {
+.opptrix-composer-tooltip-menu__body {
   overflow-y: auto;
   overflow-x: hidden;
   overscroll-behavior: contain;
@@ -550,13 +550,13 @@ select:focus-visible {
   -webkit-overflow-scrolling: touch;
 }
 
-.inno-composer-tooltip-menu__foot {
+.opptrix-composer-tooltip-menu__foot {
   flex-shrink: 0;
   padding: 8px 10px 10px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
 
-.inno-composer-tooltip-menu__item {
+.opptrix-composer-tooltip-menu__item {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -568,53 +568,53 @@ select:focus-visible {
   background: transparent;
   text-align: left;
   cursor: pointer;
-  color: var(--inno-text, #1A1A1A);
+  color: var(--opptrix-text, #1A1A1A);
   transition: background-color 140ms ease;
 }
 
-.inno-composer-tooltip-menu__item:hover,
-.inno-composer-tooltip-menu__item--active {
+.opptrix-composer-tooltip-menu__item:hover,
+.opptrix-composer-tooltip-menu__item--active {
   background: rgba(60, 60, 67, 0.08);
 }
 
-.inno-composer-tooltip-menu__item-main {
+.opptrix-composer-tooltip-menu__item-main {
   min-width: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
 }
 
-.inno-composer-tooltip-menu__item-title {
+.opptrix-composer-tooltip-menu__item-title {
   font-size: 13px;
   font-weight: 600;
   line-height: 1.35;
-  color: var(--inno-text, #1A1A1A);
+  color: var(--opptrix-text, #1A1A1A);
 }
 
-.inno-composer-tooltip-menu__item-meta {
+.opptrix-composer-tooltip-menu__item-meta {
   font-size: 11px;
   line-height: 1.35;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.inno-composer-tooltip-menu__item-code {
+.opptrix-composer-tooltip-menu__item-code {
   flex-shrink: 0;
   font-size: 12px;
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
-  color: var(--inno-text-secondary, #6B6B6B);
+  color: var(--opptrix-text-secondary, #6B6B6B);
 }
 
-.inno-composer-tooltip-menu__empty {
+.opptrix-composer-tooltip-menu__empty {
   padding: 12px 10px;
   font-size: 12px;
   line-height: 1.45;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
-.inno-composer-quick-add {
+.opptrix-composer-quick-add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -625,53 +625,53 @@ select:focus-visible {
   border: none;
   border-radius: 9999px;
   background: transparent;
-  color: var(--inno-text-secondary, #6B6B6B);
+  color: var(--opptrix-text-secondary, #6B6B6B);
   cursor: pointer;
   transition: background-color 140ms ease, color 140ms ease;
 }
 
-.inno-composer-quick-add:hover,
-.inno-composer-quick-add--open {
-  color: var(--inno-text, #1A1A1A);
+.opptrix-composer-quick-add:hover,
+.opptrix-composer-quick-add--open {
+  color: var(--opptrix-text, #1A1A1A);
   background: rgba(60, 60, 67, 0.08);
 }
 
-.inno-composer-quick-menu__task-text {
+.opptrix-composer-quick-menu__task-text {
   font-weight: 500;
   white-space: normal;
   word-break: break-word;
 }
 
-.inno-composer-quick-menu__foot {
+.opptrix-composer-quick-menu__foot {
   display: flex;
   flex-direction: column;
   gap: 6px;
 }
 
-.inno-composer-quick-menu__add-row {
+.opptrix-composer-quick-menu__add-row {
   display: flex;
   align-items: center;
   gap: 6px;
 }
 
-.inno-composer-quick-menu__manage-btn {
+.opptrix-composer-quick-menu__manage-btn {
   width: 100%;
   padding: 6px 8px;
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--inno-text-secondary, #6B6B6B);
+  color: var(--opptrix-text-secondary, #6B6B6B);
   font-size: 12px;
   text-align: center;
   cursor: pointer;
 }
 
-.inno-composer-quick-menu__manage-btn:hover {
+.opptrix-composer-quick-menu__manage-btn:hover {
   background: rgba(60, 60, 67, 0.06);
-  color: var(--inno-text, #1A1A1A);
+  color: var(--opptrix-text, #1A1A1A);
 }
 
-.inno-composer-quick-menu__manage-row {
+.opptrix-composer-quick-menu__manage-row {
   display: flex;
   align-items: center;
   gap: 6px;
@@ -679,22 +679,22 @@ select:focus-visible {
   border-radius: 8px;
 }
 
-.inno-composer-quick-menu__manage-row:hover {
+.opptrix-composer-quick-menu__manage-row:hover {
   background: rgba(60, 60, 67, 0.05);
 }
 
-.inno-composer-quick-menu__manage-text {
+.opptrix-composer-quick-menu__manage-text {
   flex: 1;
   min-width: 0;
   font-size: 13px;
   line-height: 1.4;
-  color: var(--inno-text, #1A1A1A);
+  color: var(--opptrix-text, #1A1A1A);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.inno-composer-quick-menu__delete {
+.opptrix-composer-quick-menu__delete {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -705,37 +705,37 @@ select:focus-visible {
   border: none;
   border-radius: 8px;
   background: transparent;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
   cursor: pointer;
 }
 
-.inno-composer-quick-menu__delete:hover {
-  color: var(--inno-error, #C75B5B);
+.opptrix-composer-quick-menu__delete:hover {
+  color: var(--opptrix-error, #C75B5B);
   background: rgba(199, 91, 91, 0.08);
 }
 
-.inno-composer-quick-menu__section {
+.opptrix-composer-quick-menu__section {
   margin-top: 2px;
 }
 
-.inno-composer-quick-menu__section-head {
+.opptrix-composer-quick-menu__section-head {
   padding: 8px 10px 4px;
   font-size: 11px;
   font-weight: 650;
   letter-spacing: 0.04em;
   text-transform: uppercase;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
-.inno-composer-quick-menu__tip {
+.opptrix-composer-quick-menu__tip {
   margin: 6px 10px 4px;
   font-size: 11px;
   line-height: 1.45;
-  color: var(--inno-text-tertiary, #9A9A9A);
+  color: var(--opptrix-text-tertiary, #9A9A9A);
 }
 
-.inno-model-menu-popover.fui-MenuPopover,
-.inno-model-menu-popover {
+.opptrix-model-menu-popover.fui-MenuPopover,
+.opptrix-model-menu-popover {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
@@ -745,14 +745,14 @@ select:focus-visible {
 }
 
 /* ── Follow stock bottom drawer (right panel) ── */
-.inno-follow-drawer-scrim:focus-visible {
+.opptrix-follow-drawer-scrim:focus-visible {
   outline: none;
 }
 
 /* ── Form fields ── */
-.inno-field .fui-Input,
-.inno-field .fui-Dropdown,
-.inno-field .fui-Textarea {
+.opptrix-field .fui-Input,
+.opptrix-field .fui-Dropdown,
+.opptrix-field .fui-Textarea {
   border: none !important;
   background: transparent !important;
   box-shadow: none !important;
@@ -760,23 +760,23 @@ select:focus-visible {
   min-height: 24px;
 }
 
-.inno-field .fui-Input__input,
-.inno-field .fui-Textarea__textarea {
+.opptrix-field .fui-Input__input,
+.opptrix-field .fui-Textarea__textarea {
   border: none !important;
   background: transparent !important;
   padding: 0 !important;
   font-size: 14px;
-  color: var(--inno-text);
+  color: var(--opptrix-text);
   width: 100%;
   min-height: 24px;
   line-height: 1.4;
 }
 
-.inno-field .fui-Dropdown {
+.opptrix-field .fui-Dropdown {
   min-height: 24px;
 }
 
-.inno-field .fui-Dropdown__button {
+.opptrix-field .fui-Dropdown__button {
   border: none !important;
   background: transparent !important;
   padding: 0 !important;
@@ -785,58 +785,58 @@ select:focus-visible {
   font-size: 14px;
   text-decoration: none !important;
   box-shadow: none !important;
-  color: var(--inno-text);
+  color: var(--opptrix-text);
   justify-content: space-between;
 }
 
-.inno-settings-inline-input .fui-Input,
-.inno-settings-inline-input .fui-Input__input {
+.opptrix-settings-inline-input .fui-Input,
+.opptrix-settings-inline-input .fui-Input__input {
   width: 100%;
   min-height: 30px;
   font-size: 14px;
-  color: var(--inno-text);
+  color: var(--opptrix-text);
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
   padding: 0 !important;
 }
 
-.inno-settings-inline-input .fui-Input::before,
-.inno-settings-inline-input .fui-Input::after,
-.inno-settings-inline-input .fui-Input__underline {
+.opptrix-settings-inline-input .fui-Input::before,
+.opptrix-settings-inline-input .fui-Input::after,
+.opptrix-settings-inline-input .fui-Input__underline {
   display: none !important;
 }
 
-.inno-settings-inline-input .fui-Input:focus-within {
+.opptrix-settings-inline-input .fui-Input:focus-within {
   background: transparent !important;
   box-shadow: none !important;
   outline: none !important;
 }
 
-.inno-field .fui-Dropdown__button::before,
-.inno-field .fui-Dropdown__button::after {
+.opptrix-field .fui-Dropdown__button::before,
+.opptrix-field .fui-Dropdown__button::after {
   display: none !important;
 }
 
-.inno-field .fui-Dropdown__button span,
-.inno-field .fui-Dropdown__button [class*="Button__content"] {
+.opptrix-field .fui-Dropdown__button span,
+.opptrix-field .fui-Dropdown__button [class*="Button__content"] {
   text-decoration: none !important;
   border-bottom: none !important;
 }
 
-.inno-model-menu-popover .fui-MenuGroupHeader,
-.inno-skill-menu-popover .fui-MenuGroupHeader {
+.opptrix-model-menu-popover .fui-MenuGroupHeader,
+.opptrix-skill-menu-popover .fui-MenuGroupHeader {
   line-height: 1.3;
 }
 
-.inno-model-menu-popover .fui-MenuItem,
-.inno-skill-menu-popover .fui-MenuItem {
+.opptrix-model-menu-popover .fui-MenuItem,
+.opptrix-skill-menu-popover .fui-MenuItem {
   min-height: 32px;
   max-width: 100%;
 }
 
-.inno-skill-menu-popover.fui-MenuPopover,
-.inno-skill-menu-popover {
+.opptrix-skill-menu-popover.fui-MenuPopover,
+.opptrix-skill-menu-popover {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
@@ -844,24 +844,24 @@ select:focus-visible {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
 }
 
-.inno-skill-menu-popover .fui-MenuList {
+.opptrix-skill-menu-popover .fui-MenuList {
   overflow-x: hidden !important;
 }
 
-.inno-skill-menu-popover .fui-MenuDivider {
+.opptrix-skill-menu-popover .fui-MenuDivider {
   height: 1px !important;
   min-height: 1px !important;
   margin: 4px 0 !important;
   background-color: rgba(60, 60, 67, 0.1) !important;
 }
 
-.inno-skill-menu-popover [class*="PopoverSurface__arrow"],
-.inno-skill-menu-popover [class*="popoverSurface__arrow"] {
+.opptrix-skill-menu-popover [class*="PopoverSurface__arrow"],
+.opptrix-skill-menu-popover [class*="popoverSurface__arrow"] {
   display: none !important;
 }
 
-.inno-field .fui-Dropdown__expandIcon {
-  color: var(--inno-text-tertiary);
+.opptrix-field .fui-Dropdown__expandIcon {
+  color: var(--opptrix-text-tertiary);
 }
 
 /* Strip Fluent input underline / bottom border */
@@ -874,85 +874,85 @@ select:focus-visible {
   display: none !important;
 }
 
-.inno-field .fui-Input:focus-within,
-.inno-field .fui-Textarea:focus-within,
-.inno-field .fui-Dropdown:focus-within {
+.opptrix-field .fui-Input:focus-within,
+.opptrix-field .fui-Textarea:focus-within,
+.opptrix-field .fui-Dropdown:focus-within {
   outline: none !important;
   box-shadow: none !important;
 }
 
-.inno-composer-input:focus-within {
+.opptrix-composer-input:focus-within {
   outline: none !important;
 }
 
-@keyframes inno-fade-in-up {
+@keyframes opptrix-fade-in-up {
   from { opacity: 0; transform: translateY(4px); }
   to { opacity: 1; transform: translateY(0); }
 }
 
-.inno-animate-in {
-  animation: inno-fade-in-up var(--inno-motion-normal) var(--inno-ease) both;
+.opptrix-animate-in {
+  animation: opptrix-fade-in-up var(--opptrix-motion-normal) var(--opptrix-ease) both;
 }
 
-.inno-scroll::-webkit-scrollbar {
+.opptrix-scroll::-webkit-scrollbar {
   width: 5px;
 }
-.inno-scroll::-webkit-scrollbar-thumb {
+.opptrix-scroll::-webkit-scrollbar-thumb {
   background: rgba(60, 60, 67, 0.12);
   border-radius: 999px;
 }
 
 /* Scrollbar visible only while hovering the scroll area */
-.inno-scroll-hover {
+.opptrix-scroll-hover {
   scrollbar-width: thin;
   scrollbar-color: transparent transparent;
 }
-.inno-scroll-hover:hover {
+.opptrix-scroll-hover:hover {
   scrollbar-color: rgba(60, 60, 67, 0.12) transparent;
 }
-.inno-scroll-hover::-webkit-scrollbar-thumb {
+.opptrix-scroll-hover::-webkit-scrollbar-thumb {
   background: transparent;
 }
-.inno-scroll-hover:hover::-webkit-scrollbar-thumb {
+.opptrix-scroll-hover:hover::-webkit-scrollbar-thumb {
   background: rgba(60, 60, 67, 0.12);
 }
 
 @media (hover: hover) {
-  .inno-session-item:hover .inno-session-date {
+  .opptrix-session-item:hover .opptrix-session-date {
     opacity: 0;
   }
 
-  .inno-session-item:hover .inno-session-delete {
+  .opptrix-session-item:hover .opptrix-session-delete {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .inno-follow-item:hover,
-  .inno-follow-item:focus-within {
+  .opptrix-follow-item:hover,
+  .opptrix-follow-item:focus-within {
     background-color: rgba(29, 29, 31, 0.07);
   }
 
-  .inno-follow-item:hover .inno-follow-quote {
+  .opptrix-follow-item:hover .opptrix-follow-quote {
     opacity: 0;
     pointer-events: none;
   }
 
-  .inno-follow-item:hover .inno-follow-actions {
+  .opptrix-follow-item:hover .opptrix-follow-actions {
     opacity: 1;
     pointer-events: auto;
   }
 }
 
-.inno-scroll-x {
+.opptrix-scroll-x {
   -webkit-overflow-scrolling: touch;
   scrollbar-width: none;
 }
-.inno-scroll-x::-webkit-scrollbar {
+.opptrix-scroll-x::-webkit-scrollbar {
   display: none;
 }
 
 @media (max-width: 767px) {
-  .inno-field {
+  .opptrix-field {
     grid-template-columns: 1fr !important;
     gap: 6px !important;
   }

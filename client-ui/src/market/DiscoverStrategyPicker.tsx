@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import type { DiscoverStrategyOption, DiscoverStrategySource } from '../types/schemas'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, glassDropdown, motion, focusVisibleRing } from '../theme/mixins'
 
 const SOURCE_LABEL: Record<DiscoverStrategySource, string> = {
@@ -21,9 +21,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '8px',
     padding: '8px 10px',
-    borderRadius: innoTokens.radiusMd,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
     cursor: 'pointer',
     textAlign: 'left',
     boxSizing: 'border-box',
@@ -31,13 +31,13 @@ const useStyles = makeStyles({
     transitionDuration: motion.fast,
     ...focusVisibleRing,
     ':hover': {
-      backgroundColor: innoTokens.surfaceHover,
-      borderColor: innoTokens.separatorStrong,
+      backgroundColor: opptrixTokens.surfaceHover,
+      borderColor: opptrixTokens.separatorStrong,
     },
   },
   triggerOpen: {
-    backgroundColor: innoTokens.canvas,
-    borderColor: innoTokens.borderStrong,
+    backgroundColor: opptrixTokens.canvas,
+    borderColor: opptrixTokens.borderStrong,
   },
   triggerMain: {
     flex: 1,
@@ -55,39 +55,39 @@ const useStyles = makeStyles({
   triggerName: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   triggerMeta: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   chevron: {
     flexShrink: 0,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   sourceTag: {
     flexShrink: 0,
     fontSize: '9px',
     fontWeight: 600,
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     padding: '1px 6px',
     lineHeight: 1.35,
   },
   sourceBuiltin: {
-    color: innoTokens.textSecondary,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   sourceCustom: {
-    color: innoTokens.accent,
-    border: `1px solid ${innoTokens.accentMuted}`,
-    backgroundColor: innoTokens.accentSoft,
+    color: opptrixTokens.accent,
+    border: `1px solid ${opptrixTokens.accentMuted}`,
+    backgroundColor: opptrixTokens.accentSoft,
   },
   panel: {
     position: 'absolute',
@@ -101,7 +101,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
     padding: '4px',
-    borderRadius: innoTokens.radiusLg,
+    borderRadius: opptrixTokens.radiusLg,
     boxSizing: 'border-box',
     ...glassDropdown,
   },
@@ -110,7 +110,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
     padding: '8px 9px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     border: 'none',
     background: 'transparent',
     cursor: 'pointer',
@@ -120,17 +120,17 @@ const useStyles = makeStyles({
     transitionDuration: motion.fast,
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
     ':focus-visible': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   menuItemActive: {
-    backgroundColor: innoTokens.accentSoft,
+    backgroundColor: opptrixTokens.accentSoft,
   },
   menuItemHover: {
-    backgroundColor: innoTokens.accentSoft,
+    backgroundColor: opptrixTokens.accentSoft,
   },
   menuItemHead: {
     display: 'flex',
@@ -141,7 +141,7 @@ const useStyles = makeStyles({
   menuName: {
     fontSize: '11px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -150,7 +150,7 @@ const useStyles = makeStyles({
   },
   menuTagline: {
     fontSize: '9px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -158,11 +158,11 @@ const useStyles = makeStyles({
   },
   menuMeta: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   placeholder: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
 })
 
@@ -250,7 +250,7 @@ export default function DiscoverStrategyPicker({
 
       {open && (
         <div
-          className={mergeClasses(s.panel, 'inno-glass-panel', 'inno-scroll')}
+          className={mergeClasses(s.panel, 'opptrix-glass-panel', 'opptrix-scroll')}
           role="listbox"
           aria-label="策略列表"
         >

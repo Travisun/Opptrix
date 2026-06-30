@@ -21,20 +21,20 @@ export function createMarkdownComponents(): Components {
       if (isBlock) {
         const showLang = lang && lang !== 'text' && lang !== 'plaintext'
         return (
-          <div className="inno-md-pre-shell">
+          <div className="opptrix-md-pre-shell">
             {showLang ? (
-              <span className="inno-md-pre-lang" aria-hidden>
+              <span className="opptrix-md-pre-lang" aria-hidden>
                 {lang}
               </span>
             ) : null}
-            <pre className="inno-md-pre">
+            <pre className="opptrix-md-pre">
               <code className={cn} {...props}>{text}</code>
             </pre>
           </div>
         )
       }
 
-      return <code className="inno-md-inline-code" {...props}>{children}</code>
+      return <code className="opptrix-md-inline-code" {...props}>{children}</code>
     },
     a({ href, children, ...props }) {
       return (
@@ -48,37 +48,37 @@ export function createMarkdownComponents(): Components {
     },
     blockquote({ children, ...props }) {
       return (
-        <blockquote className="inno-md-blockquote" {...props}>
+        <blockquote className="opptrix-md-blockquote" {...props}>
           {children}
         </blockquote>
       )
     },
     hr(props) {
-      return <hr className="inno-md-hr" {...props} />
+      return <hr className="opptrix-md-hr" {...props} />
     },
     u({ children, ...props }) {
-      return <u className="inno-md-underline" {...props}>{children}</u>
+      return <u className="opptrix-md-underline" {...props}>{children}</u>
     },
     ins({ children, ...props }) {
-      return <ins className="inno-md-underline" {...props}>{children}</ins>
+      return <ins className="opptrix-md-underline" {...props}>{children}</ins>
     },
     del({ children, ...props }) {
-      return <del className="inno-md-del" {...props}>{children}</del>
+      return <del className="opptrix-md-del" {...props}>{children}</del>
     },
     s({ children, ...props }) {
-      return <s className="inno-md-del" {...props}>{children}</s>
+      return <s className="opptrix-md-del" {...props}>{children}</s>
     },
     mark({ children, ...props }) {
-      return <mark className="inno-md-mark" {...props}>{children}</mark>
+      return <mark className="opptrix-md-mark" {...props}>{children}</mark>
     },
     kbd({ children, ...props }) {
-      return <kbd className="inno-md-kbd" {...props}>{children}</kbd>
+      return <kbd className="opptrix-md-kbd" {...props}>{children}</kbd>
     },
     sub({ children, ...props }) {
-      return <sub className="inno-md-sub" {...props}>{children}</sub>
+      return <sub className="opptrix-md-sub" {...props}>{children}</sub>
     },
     sup({ children, ...props }) {
-      return <sup className="inno-md-sup" {...props}>{children}</sup>
+      return <sup className="opptrix-md-sup" {...props}>{children}</sup>
     },
   }
 }

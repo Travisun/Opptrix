@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/agent",
+  "name": "@opptrix/agent",
   "version": "0.5.0",
   "private": true,
   "type": "module",
@@ -12,15 +12,15 @@
     }
   },
   "bin": {
-    "inno-a-stock-mcp": "./dist/mcp/stdio-entry.js"
+    "opptrix-mcp": "./dist/mcp/stdio-entry.js"
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "mcp": "node dist/mcp/stdio-entry.js"
   },
   "dependencies": {
-    "@inno-a-stock/research-hub": "*",
-    "@inno-a-stock/shared": "*",
+    "@opptrix/research-hub": "*",
+    "@opptrix/shared": "*",
     "@modelcontextprotocol/sdk": "^1.29.0"
   }
 }

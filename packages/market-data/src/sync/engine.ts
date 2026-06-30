@@ -1,7 +1,7 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import { isBseCode, isTushareEnabled, resolveMarket } from '@inno-a-stock/a-stock-layer'
-import { createScorecard } from '@inno-a-stock/stock-eval'
-import { EvaluationEngine } from '@inno-a-stock/stock-eval'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
+import { isBseCode, isTushareEnabled, resolveMarket } from '@opptrix/a-stock-layer'
+import { createScorecard } from '@opptrix/stock-eval'
+import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
 import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../utils.js'
 import { SyncCachingEngine } from './cache-engine.js'
@@ -40,7 +40,7 @@ export interface SyncOptions {
   concurrency?: number
   delayMs?: number
   apiGapMs?: number
-  /** safe | balanced | fast — default balanced, override via INNO_MARKET_SYNC_PROFILE */
+  /** safe | balanced | fast — default balanced, override via OPPTRIX_MARKET_SYNC_PROFILE */
   profile?: SyncSpeedProfile | string
   maxStocks?: number
   force?: boolean

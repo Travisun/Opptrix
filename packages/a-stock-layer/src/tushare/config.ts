@@ -1,8 +1,8 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { resolveUserDataRoot } from '@opptrix/shared'
 
-const CONFIG_DIR = path.join(os.homedir(), '.a_stock_layer')
+const CONFIG_DIR = resolveUserDataRoot()
 const CONFIG_PATH = path.join(CONFIG_DIR, 'tushare-config.json')
 
 export interface TushareRuntimeConfig {

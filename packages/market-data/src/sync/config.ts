@@ -142,7 +142,7 @@ export const SYNC_PROFILES: Record<SyncSpeedProfile, SyncProfileSettings> = {
 }
 
 export function resolveSyncProfile(profile?: string): SyncSpeedProfile {
-  const raw = profile ?? process.env.INNO_MARKET_SYNC_PROFILE ?? 'balanced'
+  const raw = profile ?? process.env.OPPTRIX_MARKET_SYNC_PROFILE ?? 'balanced'
   return raw in SYNC_PROFILES ? (raw as SyncSpeedProfile) : 'balanced'
 }
 
@@ -172,24 +172,24 @@ function clampInt(n: number, min: number, max: number): number {
   return Math.min(max, Math.max(min, Math.round(n)))
 }
 
-/** Tushare 满额度时可并行 3–5 路请求 — override via INNO_TUSHARE_SYNC_CONCURRENCY */
+/** Tushare 满额度时可并行 3–5 路请求 — override via OPPTRIX_TUSHARE_SYNC_CONCURRENCY */
 export function getTushareSyncBoost(): {
   maxConcurrent: number
   quotesBatchDelayMs: number
   jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>>
 } {
   const concurrency = clampInt(
-    Number(process.env.INNO_TUSHARE_SYNC_CONCURRENCY ?? 4),
+    Number(process.env.OPPTRIX_TUSHARE_SYNC_CONCURRENCY ?? 4),
     2,
     5,
   )
-  const delayMs = clampInt(Number(process.env.INNO_TUSHARE_STOCK_DELAY_MS ?? 15), 0, 120)
+  const delayMs = clampInt(Number(process.env.OPPTRIX_TUSHARE_STOCK_DELAY_MS ?? 15), 0, 120)
   const perJob = { concurrency, delayMs }
   const jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>> = {}
   for (const job of TUSHARE_PER_STOCK_JOBS) jobOverrides[job] = { ...perJob }
   return {
     maxConcurrent: concurrency,
-    quotesBatchDelayMs: Number(process.env.INNO_TUSHARE_QUOTES_BATCH_DELAY_MS ?? 40),
+    quotesBatchDelayMs: Number(process.env.OPPTRIX_TUSHARE_QUOTES_BATCH_DELAY_MS ?? 40),
     jobOverrides,
   }
 }
@@ -225,7 +225,7 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
 }
 
 export const DEFAULT_API_MIN_GAP_MS = Number(
-  process.env.INNO_MARKET_API_GAP_MS ?? getSyncProfileSettings().apiGapMs,
+  process.env.OPPTRIX_MARKET_API_GAP_MS ?? getSyncProfileSettings().apiGapMs,
 )
 
 export const QUOTES_BATCH_SIZE = getSyncProfileSettings().quotesBatchSize

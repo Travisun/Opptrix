@@ -49,7 +49,7 @@ export class McpToolBroker {
     private readonly registry: ToolRegistry,
     private readonly toolNames: readonly string[] | null,
   ) {
-    this.client = new Client({ name: 'inno-a-stock-agent', version: '0.6.0' })
+    this.client = new Client({ name: 'opptrix-agent', version: '0.6.0' })
   }
 
   /** @param toolNames null = 全部工具；传数组 = 白名单子集（如挖掘场景） */

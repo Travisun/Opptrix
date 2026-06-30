@@ -21,7 +21,7 @@ process.on('SIGTERM', () => { cleanup(); process.exit(0) })
 
 await waitForHealth()
 
-const vite = spawn('npm', ['run', 'dev', '-w', 'inno-a-stock-client'], {
+const vite = spawn('npm', ['run', 'dev', '-w', 'opptrix-client'], {
   cwd: REPO_ROOT,
   stdio: 'inherit',
   shell: true,

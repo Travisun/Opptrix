@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/skills",
+  "name": "@opptrix/skills",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,7 +8,7 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json && cp src/chain-knowledge.json dist/" },
   "dependencies": {
-    "@inno-a-stock/shared": "*",
-    "@inno-a-stock/a-stock-layer": "*"
+    "@opptrix/shared": "*",
+    "@opptrix/a-stock-layer": "*"
   }
 }

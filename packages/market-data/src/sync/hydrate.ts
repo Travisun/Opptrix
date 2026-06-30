@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
 import type { MarketDataStore } from '../store.js'
 import { daysSince } from '../utils.js'
 import { SYNC_JOB_CONFIG } from './config.js'

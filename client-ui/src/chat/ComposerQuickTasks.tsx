@@ -1,7 +1,7 @@
 import { useCallback, useRef, useState } from 'react'
 import { Input, mergeClasses } from '@fluentui/react-components'
 import { AddRegular, DeleteRegular } from '@fluentui/react-icons'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
@@ -61,8 +61,8 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
         ref={anchorRef}
         type="button"
         className={mergeClasses(
-          'inno-composer-quick-add inno-focusable',
-          open && 'inno-composer-quick-add--open',
+          'opptrix-composer-quick-add opptrix-focusable',
+          open && 'opptrix-composer-quick-add--open',
         )}
         disabled={disabled}
         aria-label="快捷任务"
@@ -83,10 +83,10 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
         showClose
         onClose={handleClose}
         footer={(
-          <div className="inno-composer-quick-menu__foot">
+          <div className="opptrix-composer-quick-menu__foot">
             {manageMode ? (
               <>
-                <div className="inno-composer-quick-menu__add-row">
+                <div className="opptrix-composer-quick-menu__add-row">
                   <Input
                     size="small"
                     placeholder="添加我的常用问题…"
@@ -99,18 +99,18 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
                       }
                     }}
                   />
-                  <InnoButton
+                  <OpptrixButton
                     variant="secondary"
                     size="small"
                     disabled={!draft.trim()}
                     onClick={handleAddPinned}
                   >
                     添加
-                  </InnoButton>
+                  </OpptrixButton>
                 </div>
                 <button
                   type="button"
-                  className="inno-composer-quick-menu__manage-btn inno-focusable"
+                  className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
                   onClick={() => {
                     setManageMode(false)
                     setDraft('')
@@ -122,7 +122,7 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
             ) : (
               <button
                 type="button"
-                className="inno-composer-quick-menu__manage-btn inno-focusable"
+                className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
                 onClick={() => setManageMode(true)}
               >
                 管理我的常用
@@ -133,13 +133,13 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
       >
         {manageMode ? (
           pinnedTasks.length ? pinnedTasks.map(task => (
-            <div key={task} className="inno-composer-quick-menu__manage-row">
-              <span className="inno-composer-quick-menu__manage-text" title={task}>
+            <div key={task} className="opptrix-composer-quick-menu__manage-row">
+              <span className="opptrix-composer-quick-menu__manage-text" title={task}>
                 {task}
               </span>
               <button
                 type="button"
-                className={mergeClasses('inno-composer-quick-menu__delete inno-focusable')}
+                className={mergeClasses('opptrix-composer-quick-menu__delete opptrix-focusable')}
                 aria-label={`删除 ${task}`}
                 onClick={() => handleRemovePinned(task)}
               >
@@ -147,7 +147,7 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
               </button>
             </div>
           )) : (
-            <div className="inno-composer-tooltip-menu__empty">
+            <div className="opptrix-composer-tooltip-menu__empty">
               还没有收藏。可在下方添加自定义问题，或返回推荐任务列表选用。
             </div>
           )
@@ -155,13 +155,13 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
           <>
             {!pinnedTasks.length ? null : (
               <>
-                <div className="inno-composer-quick-menu__section-head">我的常用</div>
+                <div className="opptrix-composer-quick-menu__section-head">我的常用</div>
                 {pinnedTasks.map(task => (
                   <ComposerTooltipMenuItem
                     key={`pin-${task}`}
                     onClick={() => handleApply(task)}
                   >
-                    <span className="inno-composer-tooltip-menu__item-title inno-composer-quick-menu__task-text">
+                    <span className="opptrix-composer-tooltip-menu__item-title opptrix-composer-quick-menu__task-text">
                       {task}
                     </span>
                   </ComposerTooltipMenuItem>
@@ -170,14 +170,14 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
             )}
 
             {QUICK_TASK_CATALOG.map(section => (
-              <div key={section.id} className="inno-composer-quick-menu__section">
-                <div className="inno-composer-quick-menu__section-head">{section.title}</div>
+              <div key={section.id} className="opptrix-composer-quick-menu__section">
+                <div className="opptrix-composer-quick-menu__section-head">{section.title}</div>
                 {section.tasks.map(task => (
                   <ComposerTooltipMenuItem
                     key={`${section.id}-${task}`}
                     onClick={() => handleApply(task)}
                   >
-                    <span className="inno-composer-tooltip-menu__item-title inno-composer-quick-menu__task-text">
+                    <span className="opptrix-composer-tooltip-menu__item-title opptrix-composer-quick-menu__task-text">
                       {task}
                     </span>
                   </ComposerTooltipMenuItem>
@@ -185,7 +185,7 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
               </div>
             ))}
 
-            <p className="inno-composer-quick-menu__tip">
+            <p className="opptrix-composer-quick-menu__tip">
               提示：输入 @ 选择股票（显示为标签），再点任务或直接提问。
             </p>
           </>

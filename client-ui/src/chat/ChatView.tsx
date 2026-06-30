@@ -14,7 +14,7 @@ import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
 import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { isElectron } from '../platform/detect'
 import ChromeToolButton from '../desktop/ChromeToolButton'
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     height: '100%',
     minWidth: 0,
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -55,18 +55,18 @@ const useStyles = makeStyles({
   },
   threadColumn: {
     width: '100%',
-    maxWidth: innoTokens.chatThreadMaxWidth,
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingInline: innoTokens.chatThreadPaddingX,
+    paddingInline: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
   },
   threadColumnMobile: {
     maxWidth: 'none',
-    paddingInline: innoTokens.chatThreadPaddingXMobile,
+    paddingInline: opptrixTokens.chatThreadPaddingXMobile,
   },
   contentColumn: {
     width: '100%',
-    padding: `8px 0 ${innoTokens.chatThreadScrollPadBottom}`,
+    padding: `8px 0 ${opptrixTokens.chatThreadScrollPadBottom}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '5px',
@@ -76,7 +76,7 @@ const useStyles = makeStyles({
     paddingTop: '4px',
   },
   contentColumnMobile: {
-    padding: `8px 0 ${innoTokens.chatThreadScrollPadBottomMobile}`,
+    padding: `8px 0 ${opptrixTokens.chatThreadScrollPadBottomMobile}`,
     gap: '5px',
   },
   composerDock: {
@@ -92,17 +92,17 @@ const useStyles = makeStyles({
     position: 'relative',
     zIndex: 1,
     width: '100%',
-    maxWidth: innoTokens.chatThreadMaxWidth,
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingInline: innoTokens.chatThreadPaddingX,
-    paddingBottom: innoTokens.chatComposerBottomInset,
+    paddingInline: opptrixTokens.chatThreadPaddingX,
+    paddingBottom: opptrixTokens.chatComposerBottomInset,
     boxSizing: 'border-box',
     pointerEvents: 'auto',
   },
   composerInnerMobile: {
     maxWidth: 'none',
-    paddingInline: innoTokens.chatThreadPaddingXMobile,
-    paddingBottom: `max(${innoTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
+    paddingInline: opptrixTokens.chatThreadPaddingXMobile,
+    paddingBottom: `max(${opptrixTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
   },
   header: {
     flexShrink: 0,
@@ -111,17 +111,17 @@ const useStyles = makeStyles({
     height: '40px',
     padding: 0,
     boxSizing: 'border-box',
-    backgroundColor: innoTokens.canvas,
-    borderBottom: `1px solid ${innoTokens.separatorStrong}`,
+    backgroundColor: opptrixTokens.canvas,
+    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
   },
   headerInner: {
-    maxWidth: innoTokens.chatThreadMaxWidth,
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
     width: '100%',
     height: '100%',
     margin: '0 auto',
     minWidth: 0,
-    paddingLeft: innoTokens.chatThreadPaddingX,
-    paddingRight: innoTokens.chatThreadPaddingX,
+    paddingLeft: opptrixTokens.chatThreadPaddingX,
+    paddingRight: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
@@ -139,7 +139,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 500,
     letterSpacing: '-0.01em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -161,25 +161,25 @@ const useStyles = makeStyles({
   welcomeIconWrap: {
     width: '44px',
     height: '44px',
-    borderRadius: innoTokens.radiusLg,
-    backgroundColor: innoTokens.canvasAlt,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixTokens.canvasAlt,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
   },
   welcomeIcon: {
     fontSize: '22px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   welcomeTitle: {
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   welcomeSub: {
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.55,
   },
   loadingRow: {
@@ -485,7 +485,7 @@ export default function ChatView({
 
         <div
           ref={chatBoxRef}
-          className={mergeClasses(s.scrollViewport, 'inno-scroll', 'inno-chat-scroll')}
+          className={mergeClasses(s.scrollViewport, 'opptrix-scroll', 'opptrix-chat-scroll')}
           onScroll={handleChatScroll}
         >
           <div className={threadColumnClass}>

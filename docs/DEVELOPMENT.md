@@ -20,13 +20,13 @@ npm run clean        # 删除各包 dist 与 client-ui/dist
 
 | 路径 | npm name |
 |------|----------|
-| 根 | `inno-a-stock` |
-| client-ui | `inno-a-stock-client` |
-| apps/server | `@inno-a-stock/server` |
-| apps/desktop | `@inno-a-stock/desktop` |
-| packages/* | `@inno-a-stock/<name>` |
+| 根 | `opptrix` |
+| client-ui | `opptrix-client` |
+| apps/server | `@opptrix/server` |
+| apps/desktop | `@opptrix/desktop` |
+| packages/* | `@opptrix/<name>` |
 
-内部包 scope 仍为 `@inno-a-stock/*`，对外品牌为 **innoAStock**。
+内部包 scope 仍为 `@opptrix/*`，对外品牌为 **Opptrix**。
 
 ## 日常开发
 
@@ -106,7 +106,7 @@ npm run serve          # API :8711 + Vite preview :5173
 
 ### 交易账本位置
 
-`~/.a_stock_layer/portfolio.json`，删除该文件可清空账本（请先备份）。
+`~/.opptrix/portfolio.json`，删除该文件可清空账本（请先备份）。
 
 ## 从旧版迁移
 
@@ -119,7 +119,7 @@ npm run serve          # API :8711 + Vite preview :5173
 
 **AI 协作者**：请先阅读 [AGENT-GUIDE.md](./AGENT-GUIDE.md) 与 [CONTRIBUTING.md](./CONTRIBUTING.md)。
 
-GitHub 主仓库：**innoAStock**（`Travisun/innoAStock`）。
+GitHub 主仓库：**Opptrix**（`Travisun/Opptrix`）。
 
 ## 产品规划
 

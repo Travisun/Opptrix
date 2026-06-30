@@ -2,12 +2,17 @@
 /**
  * Electron dev: API sidecar + Vite HMR, then open the desktop window.
  */
-import { spawn } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
+
+spawnSync('node', ['scripts/prepare-icons.mjs'], {
+  cwd: DESKTOP_ROOT,
+  stdio: 'inherit',
+})
 
 async function waitForUrl(url, timeoutMs = 60_000) {
   const started = Date.now()

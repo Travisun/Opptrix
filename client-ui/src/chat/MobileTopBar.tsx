@@ -5,9 +5,9 @@ import {
 import { ChatAddRegular } from './chatIcons'
 import type { AvailableModel } from '../types/chat'
 import ModelSelector from './ModelSelector'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, hairlineBottom } from '../theme/mixins'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   bar: {
@@ -16,7 +16,7 @@ const useStyles = makeStyles({
     gap: '4px',
     padding: '6px 8px',
     paddingTop: 'max(6px, env(safe-area-inset-top))',
-    backgroundColor: innoTokens.surface,
+    backgroundColor: opptrixTokens.surface,
     ...hairlineBottom,
     flexShrink: 0,
     zIndex: 10,
@@ -26,7 +26,7 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     flexShrink: 0,
   },
   center: {
@@ -40,14 +40,14 @@ const useStyles = makeStyles({
   title: {
     fontSize: '17px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   subtitle: {
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -62,16 +62,16 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   statusDot: {
     width: '6px',
     height: '6px',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     flexShrink: 0,
   },
-  statusOk: { backgroundColor: innoTokens.success },
-  statusErr: { backgroundColor: innoTokens.error },
+  statusOk: { backgroundColor: opptrixTokens.success },
+  statusErr: { backgroundColor: opptrixTokens.error },
 })
 
 interface MobileTopBarProps {
@@ -97,7 +97,7 @@ export default function MobileTopBar({
 
   return (
     <header className={s.bar}>
-      <InnoButton
+      <OpptrixButton
         className={s.menuBtn}
         variant="ghost"
         icon={<NavigationRegular fontSize={22} />}
@@ -121,14 +121,14 @@ export default function MobileTopBar({
         </div>
       </div>
       <div className={s.actions}>
-        <InnoButton
+        <OpptrixButton
           className={s.actionBtn}
           variant="ghost"
           icon={<ChatAddRegular fontSize={22} />}
           onClick={onNewChat}
           aria-label="新对话"
         />
-        <InnoButton
+        <OpptrixButton
           className={s.actionBtn}
           variant="ghost"
           icon={<SettingsRegular fontSize={22} />}

@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { StockSnapshot } from '@inno-a-stock/shared'
+import type { StockSnapshot } from '@opptrix/shared'
 
 export interface StoredSnapshot {
   code: string

@@ -1,9 +1,10 @@
-# innoAStock — A 股对话式投研助手
+# Opptrix — 基于 AI 的投研分析助手
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
+[![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
-**innoAStock** 是一款开源的 **A 股投研 Chat Agent**：用自然语言提问，由大模型调用 **40+ MCP 投研工具** 获取行情、因子、机构观点与策略信号，再生成结构化中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
+**Opptrix** 是一款开源的 **基于 AI 的投研分析助手**：用自然语言提问，由大模型调用 **40+ MCP 投研工具** 获取行情、因子、机构观点与策略信号，再生成结构化中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
 
 > 🤖 **协作者 / Vibe Coding**：请先阅读 **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** — 单文件说明项目用途、目录地图、架构约束与设计规范，供 Cursor / Codex 等 Agent 直接加载。
 
@@ -61,7 +62,7 @@
 ```
 
 ```
-innoAStock/
+Opptrix/
 ├── apps/server/          # Fastify API（:8711）
 ├── apps/desktop/         # Electron 桌面壳 + 打包
 ├── client-ui/            # React Chat UI（:5173）
@@ -108,8 +109,8 @@ innoAStock/
 ### 安装与编译
 
 ```bash
-git clone https://github.com/Travisun/innoAStock.git
-cd innoAStock
+git clone https://github.com/Travisun/Opptrix.git
+cd Opptrix
 npm install              # 仅在仓库根目录执行
 cp .env.example .env     # 填入 LLM_API_KEY（对话功能需要）
 npm run build            # 编译 packages + client-ui
@@ -144,7 +145,7 @@ docker compose up -d --build
 # → http://localhost:5173
 ```
 
-数据卷：`apps/server/data`（配置）、`~/.a_stock_layer`（账本与本地市场数据）。
+数据卷：`apps/server/data`（配置）、`~/.opptrix`（账本与本地市场数据）。
 
 ### 测试
 
@@ -160,7 +161,7 @@ npm run test             # build:packages + smoke tests
 |------|------|
 | `.env` | `LLM_API_KEY`、`LLM_MODEL`、`STOCK_RESEARCH_PORT` 等（见 `.env.example`） |
 | `apps/server/data/config.json` | UI 设置页持久化的 LLM 与默认值 |
-| `~/.a_stock_layer/portfolio.json` | 模拟交易账本 |
+| `~/.opptrix/portfolio.json` | 模拟交易账本 |
 | 设置 → 市场数据 | 本地因子库同步与状态 |
 
 环境变量通常 **覆盖** 本地 json 中的同名字段。
@@ -228,12 +229,12 @@ Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron ·
 
 ## 许可证
 
-本仓库采用 **[MIT License](LICENSE)** 发布（Copyright © innoAStock contributors）。  
-若你计划以其他许可证商用或二次发布，请先与维护者确认。
+本仓库采用 **[Apache License 2.0](LICENSE)** 发布（Copyright © 2025 Opptrix contributors）。  
+在遵守许可证条款的前提下，可自由使用、修改与分发本软件（含商业用途）；再分发时请保留版权声明与许可证全文。
 
 ---
 
 ## 相关链接
 
-- GitHub：[Travisun/innoAStock](https://github.com/Travisun/innoAStock)  
-- Issues：[报告问题或提议功能](https://github.com/Travisun/innoAStock/issues)
+- GitHub：[Travisun/Opptrix](https://github.com/Travisun/Opptrix)  
+- Issues：[报告问题或提议功能](https://github.com/Travisun/Opptrix/issues)

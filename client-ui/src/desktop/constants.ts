@@ -53,7 +53,7 @@ export const WORKSPACE_SPLITTER_HIT_SLOP = 1
 /** Stacking above chat / right panel so the widened hit layer receives pointer events */
 export const WORKSPACE_SPLITTER_Z_INDEX = 50
 
-/** Inline left sidebar width — keep in sync with innoTokens.sidebarWidthPx */
+/** Inline left sidebar width — keep in sync with opptrixTokens.sidebarWidthPx */
 export const SIDEBAR_INLINE_WIDTH = 228
 
 /**

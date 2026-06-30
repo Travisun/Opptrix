@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/t-strategy",
+  "name": "@opptrix/t-strategy",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -7,5 +7,5 @@
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json" },
-  "dependencies": { "@inno-a-stock/shared": "*", "@inno-a-stock/a-stock-layer": "*" }
+  "dependencies": { "@opptrix/shared": "*", "@opptrix/a-stock-layer": "*" }
 }

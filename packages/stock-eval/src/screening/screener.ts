@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
 import { EvaluationEngine } from '../core/engine.js'
 import { createScorecard } from '../scoring/scorecard.js'
 

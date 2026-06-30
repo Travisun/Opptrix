@@ -18,7 +18,7 @@ export function createMcpServer(
   const toolNames = opts.toolNames === undefined ? null : opts.toolNames
 
   const server = new Server(
-    { name: 'inno-a-stock-data', version: '0.6.0' },
+    { name: 'opptrix-data', version: '0.6.0' },
     { capabilities: { tools: {} } },
   )
 

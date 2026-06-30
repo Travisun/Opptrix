@@ -1,11 +1,11 @@
 import { useState, type ReactNode } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowClockwiseRegular, ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import type { StockMoneyFlowItem } from '../types/market'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import {
   INSTITUTION_LEGEND,
   SCORE_GRADE_LEGEND,
@@ -40,7 +40,7 @@ const useStyles = makeStyles({
   sectionTitle: {
     fontSize: '10px',
     fontWeight: 650,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
   },
@@ -51,9 +51,9 @@ const useStyles = makeStyles({
   },
   metric: {
     padding: '5px 6px',
-    borderRadius: innoTokens.radiusSm,
-    backgroundColor: innoTokens.canvas,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixTokens.canvas,
+    border: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -61,13 +61,13 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.3,
     overflow: 'hidden',
@@ -75,13 +75,13 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   toneExcellent: { color: '#248A3D' },
-  toneGood: { color: innoTokens.success },
-  toneNeutral: { color: innoTokens.textPrimary },
-  toneCaution: { color: innoTokens.warning },
-  toneRisk: { color: innoTokens.error },
+  toneGood: { color: opptrixTokens.success },
+  toneNeutral: { color: opptrixTokens.textPrimary },
+  toneCaution: { color: opptrixTokens.warning },
+  toneRisk: { color: opptrixTokens.error },
   toneBullish: { color: '#FF3B30' },
   toneBearish: { color: '#34C759' },
-  toneMuted: { color: innoTokens.textTertiary },
+  toneMuted: { color: opptrixTokens.textTertiary },
   bulletList: {
     display: 'flex',
     flexDirection: 'column',
@@ -90,23 +90,23 @@ const useStyles = makeStyles({
   bullet: {
     fontSize: '11px',
     lineHeight: 1.55,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     paddingLeft: '10px',
     position: 'relative',
     '::before': {
       content: '"·"',
       position: 'absolute',
       left: 0,
-      color: innoTokens.textTertiary,
+      color: opptrixTokens.textTertiary,
     },
   },
   bulletPositive: {
     color: '#248A3D',
-    '::before': { color: innoTokens.success },
+    '::before': { color: opptrixTokens.success },
   },
   bulletRisk: {
     color: '#C93400',
-    '::before': { color: innoTokens.error },
+    '::before': { color: opptrixTokens.error },
   },
   signalRow: {
     display: 'grid',
@@ -114,13 +114,13 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'center',
     padding: '5px 6px',
-    borderRadius: innoTokens.radiusSm,
-    backgroundColor: innoTokens.canvas,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixTokens.canvas,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   signalName: {
     fontSize: '10px',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -128,12 +128,12 @@ const useStyles = makeStyles({
   signalDir: {
     fontSize: '10px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     flexShrink: 0,
   },
   signalConf: {
     fontSize: '10px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontVariantNumeric: 'tabular-nums',
     flexShrink: 0,
   },
@@ -156,17 +156,17 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '4px',
     padding: '6px 8px',
-    borderRadius: innoTokens.radiusSm,
-    backgroundColor: innoTokens.canvas,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixTokens.canvas,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   guideText: {
     fontSize: '10px',
     lineHeight: 1.55,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   guideHighlight: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 600,
   },
   guideValue: {
@@ -174,12 +174,12 @@ const useStyles = makeStyles({
   },
   emptyHint: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '2px',
   },
   error: {
     fontSize: '11px',
-    color: innoTokens.error,
+    color: opptrixTokens.error,
     padding: '2px',
   },
   headRow: {
@@ -193,28 +193,28 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '10px',
     padding: '12px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.canvas,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvas,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   idleTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   idleDesc: {
     fontSize: '10px',
     lineHeight: 1.55,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   stepBanner: {
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
     padding: '8px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.canvasAlt,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   stepHead: {
     width: '100%',
@@ -231,13 +231,13 @@ const useStyles = makeStyles({
     flex: 1,
     fontSize: '10px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stepHeadTextError: {
-    color: innoTokens.error,
+    color: opptrixTokens.error,
   },
   stepBody: {
     display: 'flex',
@@ -250,11 +250,11 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '9px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   stepDone: { color: '#248A3D' },
-  stepRunning: { color: innoTokens.textPrimary, fontWeight: 600 },
-  stepError: { color: innoTokens.error },
+  stepRunning: { color: opptrixTokens.textPrimary, fontWeight: 600 },
+  stepError: { color: opptrixTokens.error },
 })
 
 export interface StockDiscussPayload {
@@ -377,8 +377,8 @@ function AnalysisStepBanner({
           {label}
         </Text>
         {expanded
-          ? <ChevronDownRegular fontSize={12} color={innoTokens.textTertiary} />
-          : <ChevronRightRegular fontSize={12} color={innoTokens.textTertiary} />}
+          ? <ChevronDownRegular fontSize={12} color={opptrixTokens.textTertiary} />
+          : <ChevronRightRegular fontSize={12} color={opptrixTokens.textTertiary} />}
       </button>
       {expanded && (
         <div className={s.stepBody}>
@@ -399,9 +399,9 @@ function AnalysisStepBanner({
             </div>
           ))}
           {status === 'error' && onRetry && (
-            <InnoButton variant="secondary" onClick={onRetry}>
+            <OpptrixButton variant="secondary" onClick={onRetry}>
               重试
-            </InnoButton>
+            </OpptrixButton>
           )}
         </div>
       )}
@@ -441,15 +441,15 @@ export default function StockDecisionCard({
 
   if (analysis.status === 'idle') {
     return (
-      <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
+      <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
         <div className={s.idleCard}>
           <Text className={s.idleTitle} block>投研摘要</Text>
           <Text className={s.idleDesc} block>
             综合评分、多空倾向、研报观点与估值评估，完整分析约需半分钟。
           </Text>
-          <InnoButton variant="primary" onClick={() => { void analysis.start(true) }}>
+          <OpptrixButton variant="primary" onClick={() => { void analysis.start(true) }}>
             开始分析
-          </InnoButton>
+          </OpptrixButton>
         </div>
       </div>
     )
@@ -457,7 +457,7 @@ export default function StockDecisionCard({
 
   if (analysis.status === 'running' || analysis.status === 'error') {
     return (
-      <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
+      <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
         <AnalysisStepBanner
           steps={analysis.steps}
           percent={analysis.percent}
@@ -490,9 +490,9 @@ export default function StockDecisionCard({
   ].filter((item): item is { label: string; value: string; tone: DecisionMetricTone } => item != null)
 
   return (
-    <div className={mergeClasses(s.panel, 'inno-stock-decision-card')}>
+    <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
       <div className={s.headRow}>
-        <InnoButton
+        <OpptrixButton
           variant="icon"
           icon={<ArrowClockwiseRegular fontSize={14} />}
           aria-label="重新分析"
@@ -590,12 +590,12 @@ export default function StockDecisionCard({
 
       {onDiscuss && (
         <div className={s.actions}>
-          <InnoButton className={s.actionBtn} variant="primary" onClick={() => handleDiscuss('buy')}>
+          <OpptrixButton className={s.actionBtn} variant="primary" onClick={() => handleDiscuss('buy')}>
             和 AI 讨论买入
-          </InnoButton>
-          <InnoButton className={s.actionBtn} variant="pill" onClick={() => handleDiscuss('sell')}>
+          </OpptrixButton>
+          <OpptrixButton className={s.actionBtn} variant="pill" onClick={() => handleDiscuss('sell')}>
             和 AI 讨论卖出
-          </InnoButton>
+          </OpptrixButton>
         </div>
       )}
     </div>

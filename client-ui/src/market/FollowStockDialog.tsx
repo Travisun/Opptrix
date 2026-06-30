@@ -9,7 +9,7 @@ import {
   mergeClasses,
 } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { PortfolioTradeItem } from '../types/schemas'
 import { formatCompactNumber, formatPct, formatPrice, normalizeCode, pctTone } from './format'
@@ -22,7 +22,7 @@ import {
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import TradeDateField, { todayTradeDate } from './TradeDateField'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive } from '../theme/mixins'
 
 type DialogTab = 'records' | 'trade'
@@ -69,7 +69,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     maxHeight: 'min(78%, 520px)',
-    borderRadius: `${innoTokens.radiusXl} ${innoTokens.radiusXl} 0 0`,
+    borderRadius: `${opptrixTokens.radiusXl} ${opptrixTokens.radiusXl} 0 0`,
     borderTop: '1px solid rgba(255, 255, 255, 0.55)',
     backgroundColor: 'rgba(255, 255, 255, 0.88)',
     backdropFilter: 'blur(16px) saturate(160%)',
@@ -87,8 +87,8 @@ const useStyles = makeStyles({
   handle: {
     width: '32px',
     height: '4px',
-    borderRadius: innoTokens.radiusFull,
-    backgroundColor: innoTokens.borderStrong,
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: opptrixTokens.borderStrong,
     margin: '8px auto 0',
     flexShrink: 0,
   },
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   sub: {
     fontSize: '11px',
     fontWeight: 500,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   closeBtn: {
     ...nativeIconInteractive,
@@ -126,12 +126,12 @@ const useStyles = makeStyles({
     minHeight: '28px',
     padding: 0,
     margin: 0,
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     lineHeight: 0,
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   drawerBody: {
@@ -158,7 +158,7 @@ const useStyles = makeStyles({
   },
   metric: {
     padding: '4px 7px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     display: 'flex',
     flexDirection: 'column',
@@ -167,7 +167,7 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontWeight: 600,
     lineHeight: 1.3,
   },
@@ -175,7 +175,7 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
   },
   fieldBlock: {
@@ -187,14 +187,14 @@ const useStyles = makeStyles({
   fieldLabel: {
     fontSize: '10px',
     fontWeight: 650,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     letterSpacing: '0.04em',
   },
   tabRow: {
     display: 'inline-flex',
     gap: '2px',
     padding: '2px',
-    borderRadius: innoTokens.radiusXl,
+    borderRadius: opptrixTokens.radiusXl,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     width: 'fit-content',
     flexShrink: 0,
@@ -202,23 +202,23 @@ const useStyles = makeStyles({
   tabBtn: {
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontSize: '11px',
     fontWeight: 500,
     padding: '0 10px',
     height: '26px',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     ...ghostInteractive,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   tabBtnActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
   },
   panel: {
@@ -254,7 +254,7 @@ const useStyles = makeStyles({
   sideBtn: {
     flex: 1,
     minHeight: '26px',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     border: 'none',
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     fontSize: '11px',
@@ -275,12 +275,12 @@ const useStyles = makeStyles({
   },
   glassInput: {
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
   },
   feeHint: {
     gridColumn: '1 / -1',
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.35,
   },
   tradeList: {
@@ -293,7 +293,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '6px',
     padding: '5px 7px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     fontSize: '11px',
   },
@@ -311,26 +311,26 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     width: '26px',
     height: '26px',
-    borderRadius: innoTokens.radiusFull,
-    color: innoTokens.textTertiary,
+    borderRadius: opptrixTokens.radiusFull,
+    color: opptrixTokens.textTertiary,
     lineHeight: 0,
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   emptyTrades: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '10px 2px',
     textAlign: 'center',
   },
   noteArea: {
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     minHeight: '52px',
   },
 })
@@ -523,13 +523,13 @@ export default function FollowStockDialog({
     <>
       <button
         type="button"
-        className={mergeClasses(s.scrim, 'inno-follow-drawer-scrim', presented && s.scrimOpen)}
+        className={mergeClasses(s.scrim, 'opptrix-follow-drawer-scrim', presented && s.scrimOpen)}
         aria-label="关闭"
         onClick={beginClose}
       />
       <div className={s.drawerAnchor}>
         <div
-          className={mergeClasses(s.drawer, 'inno-follow-drawer', presented && s.drawerOpen)}
+          className={mergeClasses(s.drawer, 'opptrix-follow-drawer', presented && s.drawerOpen)}
           role="dialog"
           aria-modal="false"
           aria-hidden={!presented}
@@ -553,7 +553,7 @@ export default function FollowStockDialog({
           </div>
           <button
             type="button"
-            className={mergeClasses(s.closeBtn, 'inno-focusable')}
+            className={mergeClasses(s.closeBtn, 'opptrix-focusable')}
             aria-label="关闭"
             onClick={beginClose}
           >
@@ -561,7 +561,7 @@ export default function FollowStockDialog({
           </button>
         </div>
 
-        <div className={mergeClasses(s.drawerBody, 'inno-scroll')}>
+        <div className={mergeClasses(s.drawerBody, 'opptrix-scroll')}>
           <div className={s.contentStack}>
             <div className={s.metrics}>
               <div className={s.metric}>
@@ -678,18 +678,18 @@ export default function FollowStockDialog({
                       费用约 {previewFees.totalFee.toFixed(2)}（佣金+过户{tradeForm.side === 'sell' ? '+印花税' : ''}）
                     </Text>
                   )}
-                  <InnoButton
+                  <OpptrixButton
                     variant="primary"
                     disabled={submitting || !tradeForm.shares || !tradeForm.price}
                     onClick={() => void handleSubmitTrade()}
                   >
                     {submitting ? '提交中…' : '添加记录'}
-                  </InnoButton>
+                  </OpptrixButton>
                 </div>
               )}
 
               {dialogTab === 'records' && (
-                <div className={mergeClasses(s.recordsScroll, 'inno-scroll', 'inno-scroll-hover')}>
+                <div className={mergeClasses(s.recordsScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
                   {loadingTrades && <Spinner size="tiny" label="加载记录…" />}
                   {!loadingTrades && sortedTrades.length === 0 && (
                     <Text className={s.emptyTrades}>暂无买卖记录，可切换到「录入交易」添加</Text>

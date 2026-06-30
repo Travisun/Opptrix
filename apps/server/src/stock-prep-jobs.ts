@@ -1,5 +1,5 @@
-import type { ResearchHub } from '@inno-a-stock/research-hub'
-import { normalizeCode } from '@inno-a-stock/a-stock-layer'
+import type { ResearchHub } from '@opptrix/research-hub'
+import { normalizeCode } from '@opptrix/a-stock-layer'
 
 export type StockPrepStepId = 'quote' | 'klines' | 'hydrate'
 export type StockPrepStepStatus = 'pending' | 'running' | 'done' | 'error'

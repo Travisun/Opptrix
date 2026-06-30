@@ -124,9 +124,9 @@ export default function Settings() {
       </SectionCard>
 
       <SectionCard>
-        <Text size={200}>innoAStock v0.6.0</Text>
+        <Text size={200}>Opptrix v0.6.0</Text>
         <Text size={100} style={{ color: '#888' }}>
-          数据源: a_stock_layer (13源) · 因子引擎 · 28机构 · 9策略 · Function Calling Agent
+          数据源: A股数据层 (13源) · 因子引擎 · 28机构 · 9策略 · Function Calling Agent
         </Text>
         <Text size={100} style={{ color: '#888' }}>
           开发: npm run dev → http://127.0.0.1:5173（API 后台自动代理）

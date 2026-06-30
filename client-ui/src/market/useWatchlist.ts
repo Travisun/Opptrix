@@ -3,8 +3,10 @@ import { fetchWatchlist, saveWatchlist } from '../api/client'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from './format'
 
-const STORAGE_KEY = 'inno-watchlist-v2'
-const LEGACY_KEY = 'inno-watchlist-v1'
+const STORAGE_KEY = 'opptrix-watchlist-v2'
+const LEGACY_KEY = 'opptrix-watchlist-v1'
+const LEGACY_INNO_V2 = 'inno-watchlist-v2'
+const LEGACY_INNO_V1 = 'inno-watchlist-v1'
 
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
@@ -33,7 +35,7 @@ function readStorage(): WatchlistItem[] {
         return parsed.map(normalizeItem)
       }
     }
-    const legacy = localStorage.getItem(LEGACY_KEY)
+    const legacy = localStorage.getItem(LEGACY_KEY) ?? localStorage.getItem(LEGACY_INNO_V2) ?? localStorage.getItem(LEGACY_INNO_V1)
     if (legacy) {
       const parsed = JSON.parse(legacy) as WatchlistItem[]
       if (Array.isArray(parsed) && parsed.length) {

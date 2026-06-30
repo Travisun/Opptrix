@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import type { FactorResult, StockSnapshot } from '@inno-a-stock/shared'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
+import type { FactorResult, StockSnapshot } from '@opptrix/shared'
 import { REGISTRY } from './registry.js'
 
 export class EvaluationEngine {

@@ -113,7 +113,7 @@
 
 ## Agent
 
-`POST /api/chat` 使用 `@inno-a-stock/agent` 的 `AgentEngine`，内置 tools 调用同一 `ResearchHub`。
+`POST /api/chat` 使用 `@opptrix/agent` 的 `AgentEngine`，内置 tools 调用同一 `ResearchHub`。
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 

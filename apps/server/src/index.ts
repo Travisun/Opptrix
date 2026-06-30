@@ -1,17 +1,17 @@
 import { randomUUID } from 'node:crypto'
 import Fastify from 'fastify'
-import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@inno-a-stock/agent'
-import { ResearchHub } from '@inno-a-stock/research-hub'
-import { listTemplates, REGISTRY } from '@inno-a-stock/stock-eval'
+import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { ResearchHub } from '@opptrix/research-hub'
+import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
-import { getMarketDataService } from '@inno-a-stock/market-data'
+import { getMarketDataService } from '@opptrix/market-data'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
-import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@inno-a-stock/agent'
+import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -28,10 +28,10 @@ let agent!: AgentEngine
 const serverAppContext = {
   getAppSettings: async () => publicConfig(cfg),
   getProjectInfo: async () => ({
-    app: 'innoAStock',
+    app: 'Opptrix',
     version: '0.6.0',
-    runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
-    desktop: process.env.INNO_DESKTOP === '1',
+    runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
+    desktop: process.env.OPPTRIX_DESKTOP === '1',
     project_root: resolveProjectRoot(),
     server: { host: HOST, port: PORT },
     paths: getDataLayerPaths(),
@@ -62,8 +62,8 @@ app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
 app.get('/api/health', async () => ({
   status: 'ok',
   version: '0.6.0',
-  runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
-  desktop: process.env.INNO_DESKTOP === '1',
+  runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
+  desktop: process.env.OPPTRIX_DESKTOP === '1',
   llm_configured: agent.llmConfigured,
   model: cfg.default_model ?? null,
   available_models: agent.listAvailableModels().length,
@@ -629,7 +629,7 @@ async function bootstrap() {
   })
 
   await app.listen({ port: PORT, host: HOST })
-  console.log(`\n  innoAStock API → http://${HOST}:${PORT}/api/health`)
+  console.log(`\n  Opptrix API → http://${HOST}:${PORT}/api/health`)
   if (serveUi) {
     console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
   } else {

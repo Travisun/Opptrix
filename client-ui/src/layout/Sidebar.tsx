@@ -5,15 +5,15 @@ import NavItem from '../components/NavItem'
 import { navGroups, bottomNav } from './navConfig'
 import type { FeatureRoute } from '../types/schemas'
 import { useApp } from '../context/AppContext'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    backgroundColor: innoTokens.surface,
-    borderRight: `1px solid ${innoTokens.border}`,
+    backgroundColor: opptrixTokens.surface,
+    borderRight: `1px solid ${opptrixTokens.border}`,
   },
   brand: {
     display: 'flex',
@@ -24,8 +24,8 @@ const useStyles = makeStyles({
   logo: {
     width: '32px',
     height: '32px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.accent,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.accent,
     color: '#fff',
     display: 'flex',
     alignItems: 'center',
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
   brandName: {
     fontSize: '16px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   scroll: {
     flex: 1,
@@ -49,13 +49,13 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '4px 8px',
   },
   group: { display: 'flex', flexDirection: 'column', gap: '2px' },
   footer: {
     padding: '10px',
-    borderTop: `1px solid ${innoTokens.border}`,
+    borderTop: `1px solid ${opptrixTokens.border}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
@@ -63,13 +63,13 @@ const useStyles = makeStyles({
   status: {
     padding: '8px 10px',
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
   },
-  dotOk: { color: innoTokens.success },
-  dotErr: { color: innoTokens.error },
+  dotOk: { color: opptrixTokens.success },
+  dotErr: { color: opptrixTokens.error },
 })
 
 interface Props {
@@ -89,7 +89,7 @@ export default function Sidebar({ activeRoute, onNavigate, llmLabel, backendOk }
         <div className={s.logo}>
           <ChartMultipleRegular fontSize={18} color="#fff" />
         </div>
-        <Text className={s.brandName}>innoAStock</Text>
+        <Text className={s.brandName}>Opptrix</Text>
       </div>
 
       <div className={s.scroll}>

@@ -13,7 +13,7 @@ export function serverEnv(extra = {}) {
   return {
     ...process.env,
     SERVE_UI: '1',
-    INNO_DESKTOP: '1',
+    OPPTRIX_DESKTOP: '1',
     STOCK_RESEARCH_HOST: '127.0.0.1',
     STOCK_RESEARCH_PORT: process.env.STOCK_RESEARCH_PORT ?? '8711',
     UI_DIST_PATH: UI_DIST,

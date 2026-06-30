@@ -1,4 +1,4 @@
-# innoAStock UI Design System
+# Opptrix UI Design System
 
 > 参考 EchoBird 风格：**暖色浅色画布、陶土橙强调、圆角卡片、紧凑信息密度**。基于 Fluent UI v9 组件，自定义 Design Tokens。
 
@@ -102,8 +102,8 @@
 
 **实现**：
 
-- 全局类：`.inno-glass-panel`（`global.css`）
-- Dialog：`.inno-glass-dialog-surface`（Fluent `DialogSurface`）
+- 全局类：`.opptrix-glass-panel`（`global.css`）
+- Dialog：`.opptrix-glass-dialog-surface`（Fluent `DialogSurface`）
 - Mixins：`glassDropdown`、`glassPanel`（`theme/mixins.ts`）
 - Tokens：`glass`、`glassBlur`、`surfaceGlass`（`theme/tokens.ts`）
 
@@ -161,7 +161,7 @@
 ### 7.7 毛玻璃浮层面板
 
 - 发现页策略下拉、设置抽屉、Follow 对话框、SkillSheet 等浮层使用 **§5.1 毛玻璃**
-- 类名 `.inno-glass-panel` 或 mixin `glassDropdown`
+- 类名 `.opptrix-glass-panel` 或 mixin `glassDropdown`
 - 列表内选项 Hover：半透明白底 `rgba(255,255,255,0.45)`，不用实体灰块
 
 ### 7.8 TabList
@@ -182,7 +182,7 @@
 | textSecondary | `colorNeutralForeground2` |
 | textTertiary | `colorNeutralForeground3` |
 
-主题实现：`client-ui/src/theme/innoTheme.ts`
+主题实现：`client-ui/src/theme/opptrixTheme.ts`
 
 ## 9. 图标规范
 

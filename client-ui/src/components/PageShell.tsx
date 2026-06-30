@@ -1,6 +1,6 @@
 import { makeStyles, tokens, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -22,18 +22,18 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: innoTokens.accent,
+    color: opptrixTokens.accent,
     marginBottom: '4px',
   },
   title: {
     fontSize: '22px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.3,
   },
   subtitle: {
     fontSize: '13px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     marginTop: '4px',
   },
   actions: {

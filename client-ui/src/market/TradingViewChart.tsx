@@ -10,7 +10,7 @@ import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh
 import CyqProfileStrip from './CyqProfileStrip'
 import { computeCyqPriceSpan, isCyqChartPeriod } from './cyqUtils'
 import { indicatorColors, maColors } from './chartTheme'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
@@ -47,14 +47,14 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
     gap: '2px',
     padding: '2px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.canvasAlt,
-    border: `1px solid ${innoTokens.separator}`,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   periodBtn: {
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '10px',
     fontWeight: 600,
     padding: '3px 7px',
@@ -64,8 +64,8 @@ const useStyles = makeStyles({
     ...ghostInteractive,
   },
   periodBtnActive: {
-    backgroundColor: innoTokens.canvas,
-    color: innoTokens.textPrimary,
+    backgroundColor: opptrixTokens.canvas,
+    color: opptrixTokens.textPrimary,
     boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
   },
   periodBtnDisabled: {
@@ -79,13 +79,13 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     gap: '6px 10px',
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   chartLegend: {
     flexShrink: 0,
-    borderTop: `1px solid ${innoTokens.separator}`,
+    borderTop: `1px solid ${opptrixTokens.separator}`,
     padding: '4px 8px',
-    backgroundColor: innoTokens.canvasAlt,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   chartArea: {
     display: 'flex',
@@ -109,9 +109,9 @@ const useStyles = makeStyles({
   },
   chartFrame: {
     position: 'relative',
-    borderRadius: innoTokens.radiusMd,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvas,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvas,
     overflow: 'hidden',
   },
   chartFrameExpanded: {
@@ -140,7 +140,7 @@ const useStyles = makeStyles({
   paneRow: {
     display: 'flex',
     alignItems: 'stretch',
-    borderTop: `1px solid ${innoTokens.separator}`,
+    borderTop: `1px solid ${opptrixTokens.separator}`,
   },
   paneHidden: {
     display: 'none',
@@ -154,7 +154,7 @@ const useStyles = makeStyles({
     fontSize: '7px',
     fontWeight: 600,
     letterSpacing: 0,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     opacity: 0.65,
     padding: 0,
   },
@@ -178,9 +178,9 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
   },
   zoomBtn: {
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
-    color: innoTokens.textSecondary,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
     fontSize: '10px',
     fontWeight: 600,
     padding: '3px 8px',
@@ -194,10 +194,10 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '11px',
-    color: innoTokens.textTertiary,
-    borderRadius: innoTokens.radiusMd,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    color: opptrixTokens.textTertiary,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   emptyExpanded: {
     flex: 1,
@@ -205,10 +205,10 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   hintError: {
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   paneKSplit: {
     flex: 1,
@@ -222,19 +222,19 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '6px 10px',
     padding: '4px 8px',
-    borderRadius: innoTokens.radiusMd,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
     fontSize: '9px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.3,
   },
   cyqMetricLabel: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontWeight: 600,
   },
   cyqMetricValue: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
   },
@@ -245,7 +245,7 @@ const useStyles = makeStyles({
     borderRadius: '3px',
     overflow: 'hidden',
     flexShrink: 0,
-    border: `1px solid ${innoTokens.separator}`,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   cyqStackProfit: {
     backgroundColor: 'rgba(255, 59, 48, 0.85)',

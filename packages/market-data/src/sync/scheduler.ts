@@ -4,7 +4,7 @@ import { resolveAutoBootPlan } from './plan.js'
 
 /** Background tick interval — check stale data while app stays open. */
 export const REFRESH_SCHEDULER_MS = Number(
-  process.env.INNO_MARKET_REFRESH_INTERVAL_MS ?? 15 * 60 * 1000,
+  process.env.OPPTRIX_MARKET_REFRESH_INTERVAL_MS ?? 15 * 60 * 1000,
 )
 
 let timer: ReturnType<typeof setInterval> | null = null

@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/institutions",
+  "name": "@opptrix/institutions",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,8 +8,8 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@inno-a-stock/shared": "*",
-    "@inno-a-stock/a-stock-layer": "*",
-    "@inno-a-stock/stock-eval": "*"
+    "@opptrix/shared": "*",
+    "@opptrix/a-stock-layer": "*",
+    "@opptrix/stock-eval": "*"
   }
 }

@@ -33,7 +33,8 @@ Thumbs.db
 api_keys.txt
 apps/server/data/
 
-# User-local state (portfolio, writer config)
+# User-local state (portfolio, market data, sessions)
+.opptrix/
 .a_stock_layer/
 
 # Logs & cache

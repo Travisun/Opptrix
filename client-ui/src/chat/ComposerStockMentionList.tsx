@@ -39,7 +39,7 @@ export default function ComposerStockMentionList({
       onClose={onClose}
     >
       {!items.length ? (
-        <div className="inno-composer-tooltip-menu__empty">
+        <div className="opptrix-composer-tooltip-menu__empty">
           {query
             ? '没有匹配的关注股票，请先在右侧面板添加关注'
             : '暂无关注股票，请先在右侧面板添加'}
@@ -54,13 +54,13 @@ export default function ComposerStockMentionList({
               onMouseEnter={() => onHover(index)}
               onClick={() => onSelect(item)}
             >
-              <span className="inno-composer-tooltip-menu__item-main">
-                <span className="inno-composer-tooltip-menu__item-title">{item.name}</span>
+              <span className="opptrix-composer-tooltip-menu__item-main">
+                <span className="opptrix-composer-tooltip-menu__item-title">{item.name}</span>
                 {item.industry ? (
-                  <span className="inno-composer-tooltip-menu__item-meta">{item.industry}</span>
+                  <span className="opptrix-composer-tooltip-menu__item-meta">{item.industry}</span>
                 ) : null}
               </span>
-              <span className="inno-composer-tooltip-menu__item-code">
+              <span className="opptrix-composer-tooltip-menu__item-code">
                 {normalizeCode(item.code)}
               </span>
             </ComposerTooltipMenuItem>

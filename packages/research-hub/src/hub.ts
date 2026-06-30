@@ -3,20 +3,20 @@ import {
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
   loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
-} from '@inno-a-stock/a-stock-layer'
-import type { IntradayTrendFetchResult, IntradayTrendSession } from '@inno-a-stock/a-stock-layer'
-import type { StockListItem } from '@inno-a-stock/shared'
-import { ConsolidatedEngine, formatInstitutionReport } from '@inno-a-stock/institutions'
-import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@inno-a-stock/skills'
+} from '@opptrix/a-stock-layer'
+import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
+import type { StockListItem } from '@opptrix/shared'
+import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
+import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@opptrix/skills'
 import {
   EvaluationEngine, createScorecard, Screener, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
-} from '@inno-a-stock/stock-eval'
-import { getMarketDataService } from '@inno-a-stock/market-data'
-import { ok, fail, type ResearchResult } from '@inno-a-stock/shared'
-import { quickAssess, verifyStrategy } from '@inno-a-stock/t-strategy'
+} from '@opptrix/stock-eval'
+import { getMarketDataService } from '@opptrix/market-data'
+import { ok, fail, type ResearchResult } from '@opptrix/shared'
+import { quickAssess, verifyStrategy } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
-import { formatVerificationReport, generateStrategyReport } from '@inno-a-stock/t-strategy'
+import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
 
 interface WatchlistRadarItem {
   code: string
@@ -705,7 +705,7 @@ export class ResearchHub {
     code: string,
     safeCount: number,
     before: string,
-  ): { klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null {
+  ): { klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null {
     if (!isBseCode(code)) return null
     const limit = before ? 200 : safeCount
     const klines = this.marketData.localDailyKlines(code, limit, before || undefined)
@@ -851,7 +851,7 @@ export class ResearchHub {
     before: string,
     tail: number,
     stockMarket: StockMarket,
-  ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
+  ): Promise<{ klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null> {
     const step = 200
     const cap = this.minuteMaxBars(period)
 
@@ -885,7 +885,7 @@ export class ResearchHub {
     before: string,
     tail: number,
     stockMarket: StockMarket,
-  ): Promise<{ klines: import('@inno-a-stock/shared').StockKline[]; hasMore: boolean } | null> {
+  ): Promise<{ klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null> {
     if (this.isMinutePeriod(period)) {
       return this.fetchMinuteChartKlines(code, period, safeCount, before, tail, stockMarket)
     }
@@ -1138,7 +1138,7 @@ export class ResearchHub {
   }
 
   private watchlistSave(params: Record<string, unknown>, t0: number) {
-    const items = Array.isArray(params.items) ? params.items as import('@inno-a-stock/a-stock-layer').WatchlistItem[] : []
+    const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
     const saved = this.de.watchlist.replace(items)
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }

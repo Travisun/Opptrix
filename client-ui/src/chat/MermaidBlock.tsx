@@ -57,9 +57,9 @@ export default function MermaidBlock({ code }: Props) {
 
   if (err) {
     return (
-      <pre className="inno-md-pre inno-md-pre--error">
+      <pre className="opptrix-md-pre opptrix-md-pre--error">
         <code>{code}</code>
-        <span className="inno-md-mermaid-err">{err}</span>
+        <span className="opptrix-md-mermaid-err">{err}</span>
       </pre>
     )
   }
@@ -67,7 +67,7 @@ export default function MermaidBlock({ code }: Props) {
   return (
     <div
       ref={hostRef}
-      className="inno-md-mermaid"
+      className="opptrix-md-mermaid"
       aria-label="关系图谱"
     />
   )

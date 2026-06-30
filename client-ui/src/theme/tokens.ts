@@ -2,7 +2,7 @@
  * Codex Agent UI — monochrome palette
  * Black / white / gray, frosted glass, flat surfaces (no shadow)
  */
-export const innoTokens = {
+export const opptrixTokens = {
   /** Primary actions, active indicators */
   accent: '#1D1D1F',
   accentHover: '#000000',

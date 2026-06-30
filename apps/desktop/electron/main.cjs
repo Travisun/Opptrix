@@ -1,6 +1,7 @@
 const { app, BrowserWindow, ipcMain } = require('electron')
 const path = require('path')
 const { spawn } = require('node:child_process')
+const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
@@ -32,7 +33,7 @@ function sidecarEnv(root) {
   const env = {
     ...process.env,
     SERVE_UI: '1',
-    INNO_DESKTOP: '1',
+    OPPTRIX_DESKTOP: '1',
     STOCK_RESEARCH_HOST: API_HOST,
     STOCK_RESEARCH_PORT: API_PORT,
     UI_DIST_PATH: uiDist(root),
@@ -111,7 +112,7 @@ function createWindow() {
     // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
     minWidth: 510,
     minHeight: 640,
-    title: 'innoAStock 投研助手',
+    title: 'Opptrix 投研助手',
     backgroundColor: '#00000000',
     transparent: true,
     show: false,
@@ -120,7 +121,11 @@ function createWindow() {
       nodeIntegration: false,
       contextIsolation: true,
     },
-    icon: path.join(__dirname, '..', 'app-icon.png'),
+  }
+
+  const iconPath = resolveAppIconPath()
+  if (iconPath && process.platform !== 'darwin') {
+    options.icon = iconPath
   }
 
   if (process.platform === 'darwin') {
@@ -153,6 +158,8 @@ function createWindow() {
 }
 
 app.whenReady().then(async () => {
+  applyAppIcon(app)
+
   ipcMain.on('window-minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
   })

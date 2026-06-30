@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/market-data",
+  "name": "@opptrix/market-data",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -16,9 +16,9 @@
     "sync": "npm run build && node dist/cli/sync.js"
   },
   "dependencies": {
-    "@inno-a-stock/a-stock-layer": "*",
-    "@inno-a-stock/shared": "*",
-    "@inno-a-stock/stock-eval": "*",
+    "@opptrix/a-stock-layer": "*",
+    "@opptrix/shared": "*",
+    "@opptrix/stock-eval": "*",
     "better-sqlite3": "^11.7.0"
   },
   "devDependencies": {

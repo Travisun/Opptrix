@@ -1,5 +1,5 @@
 import Database from 'better-sqlite3'
-import { parseStockMarket, type StockMarket } from '@inno-a-stock/a-stock-layer'
+import { parseStockMarket, type StockMarket } from '@opptrix/a-stock-layer'
 import { marketDbPath } from './paths.js'
 import { migrate, nowIso, todayTradeDate, daysSince } from './utils.js'
 

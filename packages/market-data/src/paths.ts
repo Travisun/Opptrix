@@ -1,15 +1,13 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
-
-const DEFAULT_DIR = path.join(os.homedir(), '.a_stock_layer')
+import { resolveUserDataRoot } from '@opptrix/shared'
 
 export function marketDataDir(): string {
-  const dir = process.env.INNO_MARKET_DATA_DIR ?? DEFAULT_DIR
+  const dir = resolveUserDataRoot()
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
   return dir
 }
 
 export function marketDbPath(): string {
-  return process.env.INNO_MARKET_DB_PATH ?? path.join(marketDataDir(), 'market.db')
+  return process.env.OPPTRIX_MARKET_DB_PATH ?? path.join(marketDataDir(), 'market.db')
 }

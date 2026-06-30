@@ -13,7 +13,7 @@ import {
 } from 'react'
 import { CheckmarkCircleFilled, ClipboardPasteRegular } from '@fluentui/react-icons'
 
-const COPY_COL_CLASS = 'inno-md-table-copy-col'
+const COPY_COL_CLASS = 'opptrix-md-table-copy-col'
 
 function escapeCell(text: string): string {
   return text.trim().replace(/\|/g, '\\|').replace(/\s+/g, ' ')
@@ -66,7 +66,7 @@ function TableCopyButton({
   return (
     <button
       type="button"
-      className="inno-md-table-copy"
+      className="opptrix-md-table-copy"
       onClick={onCopy}
       title={label}
       aria-label={label}
@@ -158,8 +158,8 @@ export default function MarkdownTable({ children, ...props }: Props) {
   )
 
   return (
-    <div className="inno-md-table-wrap" tabIndex={0}>
-      <table ref={tableRef} className="inno-md-table" {...props}>
+    <div className="opptrix-md-table-wrap" tabIndex={0}>
+      <table ref={tableRef} className="opptrix-md-table" {...props}>
         {tableChildren}
       </table>
     </div>

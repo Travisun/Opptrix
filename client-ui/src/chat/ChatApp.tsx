@@ -17,7 +17,7 @@ import type {
 } from '../types/chat'
 import type { ChatLiveTrace } from '../types/chatProgress'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
@@ -32,7 +32,7 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     height: '100dvh',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
     overflow: 'hidden',
   },
   rootElectron: {
@@ -63,7 +63,7 @@ const useStyles = makeStyles({
   },
   contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
   },
   chatColumn: {
     flex: 1,
@@ -89,8 +89,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
     boxSizing: 'border-box',
-    backgroundColor: innoTokens.canvas,
-    borderBottom: `1px solid ${innoTokens.separatorStrong}`,
+    backgroundColor: opptrixTokens.canvas,
+    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
     position: 'relative',
     zIndex: 2,
   },
@@ -100,7 +100,7 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
     borderRadius: 0,
     overflow: 'hidden',
   },
@@ -588,7 +588,7 @@ export default function ChatApp() {
           onToggleChatColumn={!isSettings && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
         />
       )}
-      <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'inno-app-shell')}>
+      <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'opptrix-app-shell')}>
         <div className={s.rootLayout}>
         {view === 'chat' && !isMobile && (
           <SessionSidebar
@@ -600,7 +600,7 @@ export default function ChatApp() {
         )}
 
         {isSettings ? (
-          <div className={mergeClasses(s.settingsHost, electronChrome && 'inno-settings-host')}>
+          <div className={mergeClasses(s.settingsHost, electronChrome && 'opptrix-settings-host')}>
             <SettingsPage
               isMobile={isMobile}
               sidebarVisible={settingsSidebarVisible}
@@ -618,7 +618,7 @@ export default function ChatApp() {
               s.contentWorkspace,
               isMobile && s.contentWorkspaceMobile,
               electronChrome && s.contentWorkspaceElectron,
-              electronChrome && 'inno-app-main',
+              electronChrome && 'opptrix-app-main',
             )}
           >
             {isMobile && (
@@ -644,9 +644,9 @@ export default function ChatApp() {
                 } : undefined}
               >
                 {electronChrome && (
-                  <div className={mergeClasses(s.chatTitleBar, 'inno-chat-title-bar')} aria-hidden />
+                  <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
                 )}
-                <div className={mergeClasses(s.chatPanel, electronChrome && 'inno-chat-panel')}>
+                <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
                   <ChatView
                     title={activeSession?.title ?? '新对话'}
                     sessionId={activeId}

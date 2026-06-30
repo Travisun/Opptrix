@@ -1,6 +1,6 @@
 import { makeStyles, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 import { surfaceGrouped } from '../../theme/mixins'
 
 const useStyles = makeStyles({
@@ -13,13 +13,13 @@ const useStyles = makeStyles({
   title: {
     fontSize: '13px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
   },
   subtitle: {
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     marginTop: '2px',
     textTransform: 'none',
     letterSpacing: 0,
@@ -45,7 +45,7 @@ interface Props {
   sectionHeader?: boolean
 }
 
-export default function InnoSurface({ title, subtitle, children, className, sectionHeader = true }: Props) {
+export default function OpptrixSurface({ title, subtitle, children, className, sectionHeader = true }: Props) {
   const s = useStyles()
   return (
     <div className={className}>
@@ -63,6 +63,6 @@ export default function InnoSurface({ title, subtitle, children, className, sect
 }
 
 /** Row divider inside grouped surface */
-export function InnoDivider() {
-  return <div style={{ height: 1, background: innoTokens.separator, margin: '0 -16px' }} />
+export function OpptrixDivider() {
+  return <div style={{ height: 1, background: opptrixTokens.separator, margin: '0 -16px' }} />
 }

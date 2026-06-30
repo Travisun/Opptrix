@@ -1,4 +1,4 @@
-import type { ResearchHub } from '@inno-a-stock/research-hub'
+import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import { type ChatMessage } from './llm/provider.js'
 import { tailMessagesForLlm } from './llm/messages.js'

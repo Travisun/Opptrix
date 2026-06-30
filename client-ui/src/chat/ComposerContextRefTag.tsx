@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { Tooltip, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { SessionContextRef } from '../types/chat'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { formatContextRefLabel, formatContextRefPreview } from '../utils/formatContextRefPreview'
 
 const useStyles = makeStyles({
@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     maxWidth: 'min(100%, 240px)',
     height: '22px',
     marginTop: '1px',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'rgba(0, 122, 255, 0.1)',
     color: '#007AFF',
     overflow: 'hidden',
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     wordBreak: 'break-word',
     fontSize: '12px',
     lineHeight: 1.5,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
 })
 
@@ -96,7 +96,7 @@ export default function ComposerContextRefTag({ contextRef, onClear }: Props) {
         visible={previewOpen}
         onVisibleChange={(_, data) => setPreviewOpen(!!data.visible)}
         content={(
-          <div className={mergeClasses(s.tooltipBody, 'inno-scroll')}>
+          <div className={mergeClasses(s.tooltipBody, 'opptrix-scroll')}>
             {formatContextRefPreview(contextRef)}
           </div>
         )}

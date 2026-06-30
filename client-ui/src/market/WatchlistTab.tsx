@@ -16,7 +16,7 @@ import { formatPct, formatPrice, normalizeCode, pctTone, resolveDisplayStockName
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
 
 function stopRowActionPointer(e: React.MouseEvent | React.PointerEvent) {
@@ -41,14 +41,14 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '6px',
     alignItems: 'center',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
   },
   results: {
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     maxHeight: '140px',
     overflowY: 'auto',
     padding: `4px ${ITEM_BG_INSET}`,
@@ -66,18 +66,18 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: `6px ${ITEM_INNER_PAD}`,
     minHeight: '30px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     textAlign: 'left',
     boxSizing: 'border-box',
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   resultMeta: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   list: {
     flex: 1,
@@ -94,27 +94,27 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: `6px ${ITEM_INNER_PAD}`,
     minHeight: '34px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'transparent',
     width: '100%',
     boxSizing: 'border-box',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     cursor: 'pointer',
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   rowActive: {
     ...sidebarItemSelected,
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: innoTokens.accentSoft,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   rowBody: {
@@ -137,14 +137,14 @@ const useStyles = makeStyles({
   },
   rowNote: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowRadar: {
     fontSize: '9px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -197,15 +197,15 @@ const useStyles = makeStyles({
   },
   metricPrice: {
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   retLabel: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontWeight: 500,
   },
   pctUp: { color: MARKET_UP, fontWeight: 600 },
   pctDown: { color: MARKET_DOWN, fontWeight: 600 },
-  pctFlat: { color: innoTokens.textTertiary },
+  pctFlat: { color: opptrixTokens.textTertiary },
   rowActions: {
     position: 'absolute',
     right: 0,
@@ -231,28 +231,28 @@ const useStyles = makeStyles({
     height: '28px',
     padding: 0,
     border: 'none',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     cursor: 'pointer',
     lineHeight: 0,
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
     },
   },
   empty: {
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   footer: {
     padding: `6px ${CONTENT_PAD}`,
     fontSize: '11px',
-    color: innoTokens.textTertiary,
-    borderTop: `1px solid ${innoTokens.separator}`,
+    color: opptrixTokens.textTertiary,
+    borderTop: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -262,7 +262,7 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,
@@ -449,7 +449,7 @@ export default function WatchlistTab({
       </div>
 
       {keyword.trim().length >= 2 && (
-        <div className={mergeClasses(s.results, 'inno-scroll')}>
+        <div className={mergeClasses(s.results, 'opptrix-scroll')}>
           {searching && <div className={s.empty}><Spinner size="tiny" /> 搜索中…</div>}
           {!searching && searchHits.length === 0 && <div className={s.empty}>未找到匹配股票</div>}
           {!searching && searchHits.map(hit => (
@@ -478,7 +478,7 @@ export default function WatchlistTab({
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'inno-scroll', 'inno-scroll-hover')}>
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {!items.length && <div className={s.empty}>添加股票开始关注</div>}
         {items.map(item => {
           const quote = quotes[item.code]
@@ -506,8 +506,8 @@ export default function WatchlistTab({
               key={item.code}
               className={mergeClasses(
                 s.row,
-                'inno-follow-item',
-                'inno-focusable',
+                'opptrix-follow-item',
+                'opptrix-focusable',
                 selectedCode === item.code && s.rowActive,
               )}
               role="button"
@@ -544,7 +544,7 @@ export default function WatchlistTab({
                 onMouseDown={stopRowActionPointer}
                 onClick={stopRowActionPointer}
               >
-                <div className={mergeClasses(s.rowQuote, 'inno-follow-quote')}>
+                <div className={mergeClasses(s.rowQuote, 'opptrix-follow-quote')}>
                   <span className={s.quotePrimary}>
                     <span className={s.metricPrice}>{formatPrice(quote?.price ?? null)}</span>
                     <span className={mergeClasses(dayTone === 'up' && s.pctUp, dayTone === 'down' && s.pctDown, dayTone === 'flat' && s.pctFlat)}>
@@ -560,10 +560,10 @@ export default function WatchlistTab({
                   )}
                 </div>
 
-                <span className={mergeClasses(s.rowActions, 'inno-follow-actions')}>
+                <span className={mergeClasses(s.rowActions, 'opptrix-follow-actions')}>
                   <button
                     type="button"
-                    className={mergeClasses(s.rowActionBtn, 'inno-focusable')}
+                    className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
                     aria-label={`修改 ${item.name}`}
                     onClick={() => onManage(item)}
                   >
@@ -571,7 +571,7 @@ export default function WatchlistTab({
                   </button>
                   <button
                     type="button"
-                    className={mergeClasses(s.rowActionBtn, 'inno-focusable')}
+                    className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
                     aria-label={`删除 ${item.name}`}
                     onClick={() => onRemove(item.code)}
                   >

@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import type { FactorMeta, FactorResult } from '@inno-a-stock/shared'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
+import type { FactorMeta, FactorResult } from '@opptrix/shared'
 
 export type FactorCompute = (engine: AshareEngine, code: string) => Promise<FactorResult | null>
 

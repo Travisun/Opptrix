@@ -1,6 +1,6 @@
 import { makeStyles, tokens, Text, mergeClasses } from '@fluentui/react-components'
 import type { FluentIcon } from '@fluentui/react-icons'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const useStyles = makeStyles({
@@ -14,10 +14,10 @@ const useStyles = makeStyles({
     textAlign: 'left' as const,
     position: 'relative' as const,
     ...ghostInteractive,
-    ':hover': { backgroundColor: innoTokens.surfaceMuted },
+    ':hover': { backgroundColor: opptrixTokens.surfaceMuted },
   },
   active: {
-    backgroundColor: innoTokens.surfaceMuted,
+    backgroundColor: opptrixTokens.surfaceMuted,
     '::before': {
       content: '""',
       position: 'absolute' as const,
@@ -26,23 +26,23 @@ const useStyles = makeStyles({
       bottom: '8px',
       width: '3px',
       borderRadius: '2px',
-      backgroundColor: innoTokens.accent,
+      backgroundColor: opptrixTokens.accent,
     },
   },
   icon: {
     display: 'flex',
     alignItems: 'center',
     fontSize: '20px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
-  iconActive: { color: innoTokens.accent },
+  iconActive: { color: opptrixTokens.accent },
   label: {
     fontSize: '13px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontWeight: 500,
   },
   labelActive: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 600,
   },
 })
@@ -59,7 +59,7 @@ export default function NavItem({ icon: Icon, label, active, onClick }: Props) {
   return (
     <button
       type="button"
-      className={mergeClasses(s.root, active && s.active, 'inno-focusable')}
+      className={mergeClasses(s.root, active && s.active, 'opptrix-focusable')}
       onClick={onClick}
     >
       <span className={mergeClasses(s.icon, active && s.iconActive)}>

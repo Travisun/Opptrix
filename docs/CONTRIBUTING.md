@@ -1,6 +1,6 @@
 # 贡献指南
 
-感谢参与 **innoAStock** 开源协作。本文说明如何高效提交改动并与维护者评审对齐。
+感谢参与 **Opptrix** 开源协作。本文说明如何高效提交改动并与维护者评审对齐。
 
 > **使用 AI 编程助手？** 请先让 Agent 阅读 [AGENT-GUIDE.md](./AGENT-GUIDE.md)，其中包含目录地图、架构约束与 UI 规范摘要。
 
@@ -21,8 +21,8 @@
 - **npm**（workspaces，仅根目录安装依赖）
 
 ```bash
-git clone https://github.com/Travisun/innoAStock.git
-cd innoAStock
+git clone https://github.com/Travisun/Opptrix.git
+cd Opptrix
 npm install
 npm run dev
 ```
@@ -141,12 +141,12 @@ npm run test
 
 ## 7. 许可证
 
-向本仓库贡献即表示你同意在维护者选定的开源许可证下授权你的贡献（当前以仓库根目录 `LICENSE` 与 GitHub 仓库设置为准）。若你提交的代码衍生自其他项目，请在 PR 中注明出处与许可证兼容性。
+本仓库采用 **[Apache License 2.0](../LICENSE)**。向本仓库贡献即表示你同意在相同许可证下授权你的贡献。若你提交的代码衍生自其他项目，请在 PR 中注明出处与许可证兼容性。
 
 ---
 
 ## 8. 获取帮助
 
-- Bug 与功能请求：[GitHub Issues](https://github.com/Travisun/innoAStock/issues)
+- Bug 与功能请求：[GitHub Issues](https://github.com/Travisun/Opptrix/issues)
 - 架构与 Agent 开发：[AGENT-GUIDE.md](./AGENT-GUIDE.md)
 - API 细节：[API.md](./API.md)

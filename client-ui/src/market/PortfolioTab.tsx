@@ -2,9 +2,9 @@ import { useCallback, useEffect, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 
@@ -22,14 +22,14 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD} 10px`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
   headHint: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.45,
   },
   summaryGrid: {
@@ -39,18 +39,18 @@ const useStyles = makeStyles({
   },
   metric: {
     padding: '8px 10px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.surfaceSubtle,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.surfaceSubtle,
   },
   metricLabel: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     marginBottom: '2px',
   },
   metricValue: {
     fontSize: '13px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   list: {
     flex: 1,
@@ -64,7 +64,7 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'center',
     padding: ITEM_INNER_PAD,
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     marginBottom: '4px',
     ...ghostInteractive,
@@ -76,14 +76,14 @@ const useStyles = makeStyles({
   name: {
     fontSize: '12px',
     fontWeight: 500,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   code: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   pnlBlock: {
     textAlign: 'right',
@@ -94,13 +94,13 @@ const useStyles = makeStyles({
   },
   sub: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   empty: {
     padding: `32px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
   },
   center: {
@@ -109,7 +109,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '32px',
     gap: '8px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '11px',
   },
 })
@@ -124,7 +124,7 @@ function pnlColor(pct: number): string {
   const tone = pctTone(pct)
   if (tone === 'up') return MARKET_UP
   if (tone === 'down') return MARKET_DOWN
-  return innoTokens.textSecondary
+  return opptrixTokens.textSecondary
 }
 
 export default function PortfolioTab({ active = true, selectedCode, onSelect }: PortfolioTabProps) {
@@ -170,9 +170,9 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
       <div className={s.root}>
         <div className={s.empty}>
           <div>{error}</div>
-          <InnoButton size="small" appearance="secondary" onClick={() => void load()} style={{ marginTop: 12 }}>
+          <OpptrixButton size="small" appearance="secondary" onClick={() => void load()} style={{ marginTop: 12 }}>
             重试
-          </InnoButton>
+          </OpptrixButton>
         </div>
       </div>
     )

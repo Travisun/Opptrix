@@ -9,10 +9,10 @@ import {
   DismissRegular,
   TextQuoteRegular,
 } from '@fluentui/react-icons'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MarkdownMessage from './MarkdownMessage'
 import type { EphemeralAskTurn, MessageSelection } from '../types/chat'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { useRotatingPhrase } from '../hooks/useRotatingPhrase'
 
@@ -44,7 +44,7 @@ const useStyles = makeStyles({
     maxWidth: 'min(400px, calc(100vw - 24px))',
     gap: '2px',
     padding: '2px',
-    borderRadius: innoTokens.radiusXl,
+    borderRadius: opptrixTokens.radiusXl,
     backgroundColor: 'rgba(255, 255, 255, 0.72)',
     backdropFilter: 'blur(16px) saturate(160%)',
     WebkitBackdropFilter: 'blur(16px) saturate(160%)',
@@ -63,7 +63,7 @@ const useStyles = makeStyles({
   toolbarConversation: {
     minWidth: '280px',
     maxWidth: 'min(400px, calc(100vw - 24px))',
-    borderRadius: innoTokens.radiusLg,
+    borderRadius: opptrixTokens.radiusLg,
   },
   row: {
     display: 'inline-flex',
@@ -78,9 +78,9 @@ const useStyles = makeStyles({
     height: '28px',
     padding: '0 12px',
     border: 'none',
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontSize: '12px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -95,7 +95,7 @@ const useStyles = makeStyles({
   },
   btnIcon: {
     fontSize: '14px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   iconBtn: {
     width: '28px',
@@ -128,14 +128,14 @@ const useStyles = makeStyles({
     border: 'none',
     outline: 'none',
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     padding: '6px 8px',
     fontSize: '12px',
     lineHeight: 1.45,
     fontFamily: 'inherit',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     '::placeholder': {
-      color: innoTokens.textTertiary,
+      color: opptrixTokens.textTertiary,
     },
   },
   sendBtn: {
@@ -143,7 +143,7 @@ const useStyles = makeStyles({
     width: '28px',
     height: '28px',
     padding: 0,
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     flexShrink: 0,
   },
   thread: {
@@ -160,8 +160,8 @@ const useStyles = makeStyles({
     alignSelf: 'flex-end',
     maxWidth: '92%',
     padding: '6px 10px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.userBubble,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.userBubble,
     fontSize: '12px',
     lineHeight: 1.45,
     whiteSpace: 'pre-wrap',
@@ -171,7 +171,7 @@ const useStyles = makeStyles({
     alignSelf: 'stretch',
     fontSize: '12px',
     lineHeight: 1.55,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     wordBreak: 'break-word',
   },
   turnFooter: {
@@ -186,10 +186,10 @@ const useStyles = makeStyles({
     padding: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     cursor: 'pointer',
     ':hover': {
-      color: innoTokens.textSecondary,
+      color: opptrixTokens.textSecondary,
     },
   },
   composerRow: {
@@ -207,20 +207,20 @@ const useStyles = makeStyles({
     border: 'none',
     outline: 'none',
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     padding: '6px 8px',
     fontSize: '12px',
     lineHeight: 1.45,
     fontFamily: 'inherit',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     '::placeholder': {
-      color: innoTokens.textTertiary,
+      color: opptrixTokens.textTertiary,
     },
   },
   loadingLine: {
     fontSize: '12px',
     lineHeight: '28px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     padding: '0 8px',
     whiteSpace: 'nowrap',
     overflow: 'hidden',
@@ -438,7 +438,7 @@ export default function MessageSelectionToolbar({
         <div className={s.customRow}>
           <textarea
             ref={customInputRef}
-            className={mergeClasses(s.customInput, 'inno-scroll')}
+            className={mergeClasses(s.customInput, 'opptrix-scroll')}
             value={customInput}
             onChange={e => setCustomInput(e.target.value)}
             onKeyDown={handleCustomKeyDown}
@@ -446,7 +446,7 @@ export default function MessageSelectionToolbar({
             rows={1}
             disabled={loading}
           />
-          <InnoButton
+          <OpptrixButton
             className={s.sendBtn}
             variant="primary"
             icon={<ArrowUpRegular fontSize={14} />}
@@ -474,7 +474,7 @@ export default function MessageSelectionToolbar({
             </button>
           </div>
 
-          <div ref={threadRef} className={mergeClasses(s.thread, 'inno-scroll')}>
+          <div ref={threadRef} className={mergeClasses(s.thread, 'opptrix-scroll')}>
             {turns.map((turn, i) => (
               <div key={`${turn.role}-${i}`}>
                 {turn.role === 'user' ? (
@@ -498,7 +498,7 @@ export default function MessageSelectionToolbar({
               <>
                 <textarea
                   ref={followUpRef}
-                  className={mergeClasses(s.composerInput, 'inno-scroll')}
+                  className={mergeClasses(s.composerInput, 'opptrix-scroll')}
                   value={followUpInput}
                   onChange={e => setFollowUpInput(e.target.value)}
                   onKeyDown={handleFollowUpKeyDown}
@@ -506,7 +506,7 @@ export default function MessageSelectionToolbar({
                   rows={1}
                   disabled={loading}
                 />
-                <InnoButton
+                <OpptrixButton
                   className={s.sendBtn}
                   variant="primary"
                   icon={<ArrowUpRegular fontSize={14} />}

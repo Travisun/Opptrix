@@ -55,11 +55,11 @@ const deps = {
   '@fastify/static': '^8.0.4',
 }
 for (const pkg of WORKSPACE_PACKAGES) {
-  deps[`@inno-a-stock/${pkg}`] = `file:./packages/${pkg}`
+  deps[`@opptrix/${pkg}`] = `file:./packages/${pkg}`
 }
 
 const pkgJson = {
-  name: 'inno-a-stock-desktop-runtime',
+  name: 'opptrix-desktop-runtime',
   private: true,
   type: 'module',
   dependencies: deps,

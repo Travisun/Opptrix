@@ -6,15 +6,15 @@ import {
 } from '@fluentui/react-components'
 import { EyeRegular, EyeOffRegular } from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
-import InnoButton from '../../components/inno/InnoButton'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   group: {
-    border: innoTokens.settingsPanelBorder,
-    borderRadius: innoTokens.radiusLg,
-    backgroundColor: innoTokens.canvas,
+    border: opptrixTokens.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixTokens.canvas,
     overflow: 'hidden',
   },
   row: {
@@ -49,12 +49,12 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
   },
   rowDesc: {
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.55,
   },
   rowControl: {
@@ -75,11 +75,11 @@ const useStyles = makeStyles({
     },
   },
   rowTopBorder: {
-    borderTop: `1px solid ${innoTokens.gray200}`,
+    borderTop: `1px solid ${opptrixTokens.gray200}`,
   },
   rowDivider: {
     height: '1px',
-    backgroundColor: innoTokens.separator,
+    backgroundColor: opptrixTokens.separator,
     margin: '0 18px',
   },
   panelHeader: {
@@ -94,7 +94,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
   },
   inlineInput: {
@@ -130,14 +130,14 @@ const useStyles = makeStyles({
   providerAvatar: {
     width: '36px',
     height: '36px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.gray200,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.gray200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '14px',
     fontWeight: 650,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     flexShrink: 0,
   },
   modelsDialogSurface: {
@@ -148,7 +148,7 @@ const useStyles = makeStyles({
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   modelsDialogContent: {
     display: 'flex',
@@ -159,7 +159,7 @@ const useStyles = makeStyles({
   modelPopoverTitle: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
   },
@@ -173,7 +173,7 @@ const useStyles = makeStyles({
   modelPopoverItem: {
     fontSize: '13px',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.45,
   },
   rowActions: {
@@ -203,7 +203,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     flexShrink: 0,
-    borderLeft: `1px solid ${innoTokens.separator}`,
+    borderLeft: `1px solid ${opptrixTokens.separator}`,
   },
   credentialActionBtn: {
     minHeight: '30px',
@@ -231,17 +231,17 @@ const useStyles = makeStyles({
     textAlign: 'left',
     borderRadius: 0,
     border: 'none',
-    borderTop: `1px solid ${innoTokens.gray200}`,
+    borderTop: `1px solid ${opptrixTokens.gray200}`,
     transitionProperty: 'background-color, color, border-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     ':hover': {
-      backgroundColor: innoTokens.gray100,
-      color: innoTokens.textPrimary,
-      borderTopColor: innoTokens.borderStrong,
+      backgroundColor: opptrixTokens.gray100,
+      color: opptrixTokens.textPrimary,
+      borderTopColor: opptrixTokens.borderStrong,
     },
     ':focus-visible': {
-      borderTopColor: innoTokens.borderStrong,
+      borderTopColor: opptrixTokens.borderStrong,
     },
   },
   actionRowFlush: {
@@ -298,7 +298,7 @@ export function SettingsInlineInput({
 }) {
   const s = useStyles()
   return (
-    <div className={mergeClasses(s.inlineInput, wide && s.inlineInputWide, 'inno-input-shell', 'inno-settings-inline-input')}>
+    <div className={mergeClasses(s.inlineInput, wide && s.inlineInputWide, 'opptrix-input-shell', 'opptrix-settings-inline-input')}>
       {children}
     </div>
   )
@@ -316,7 +316,7 @@ export function SettingsTextField({
   return (
     <SettingsInlineInput>
       <Input
-        className="inno-settings-field-input"
+        className="opptrix-settings-field-input"
         appearance="filled-darker"
         size="medium"
         value={value}
@@ -362,9 +362,9 @@ export function SettingsCredentialRow({
   }, [value, revealWhenFilled])
 
   return (
-    <div className={mergeClasses(s.credentialCombo, 'inno-input-shell', 'inno-settings-inline-input')}>
+    <div className={mergeClasses(s.credentialCombo, 'opptrix-input-shell', 'opptrix-settings-inline-input')}>
       <Input
-        className={mergeClasses(s.credentialInput, 'inno-settings-field-input')}
+        className={mergeClasses(s.credentialInput, 'opptrix-settings-field-input')}
         appearance="filled-darker"
         size="medium"
         type={visible ? 'text' : 'password'}
@@ -373,7 +373,7 @@ export function SettingsCredentialRow({
         onChange={(_, d) => onChange(d.value ?? '')}
       />
       <div className={s.credentialSegment}>
-        <InnoButton
+        <OpptrixButton
           variant="icon"
           aria-label={visible ? '隐藏密钥' : '显示密钥'}
           icon={visible ? <EyeOffRegular fontSize={16} /> : <EyeRegular fontSize={16} />}
@@ -384,24 +384,24 @@ export function SettingsCredentialRow({
         />
       </div>
       <div className={s.credentialSegment}>
-        <InnoButton
+        <OpptrixButton
           variant="ghost"
           className={s.credentialActionBtn}
           disabled={testing || testDisabled}
           onClick={onTest}
         >
           {testing ? '测试中…' : '测试'}
-        </InnoButton>
+        </OpptrixButton>
       </div>
       <div className={s.credentialSegment}>
-        <InnoButton
+        <OpptrixButton
           variant="primary"
           className={s.credentialSaveBtn}
           disabled={saving || saveDisabled}
           onClick={onSave}
         >
           {saving ? '保存中…' : '保存'}
-        </InnoButton>
+        </OpptrixButton>
       </div>
     </div>
   )
@@ -424,7 +424,7 @@ export function SettingsActionRow({
   return (
     <button
       type="button"
-      className={mergeClasses(s.actionRow, !separated && s.actionRowFlush, 'inno-focusable')}
+      className={mergeClasses(s.actionRow, !separated && s.actionRowFlush, 'opptrix-focusable')}
       onClick={onClick}
     >
       <SettingsRow title={title} desc={desc} control={icon} last />
@@ -462,21 +462,21 @@ function ProviderModelsViewer({ name, models }: { name: string; models: string[]
 
   return (
     <>
-      <InnoButton
+      <OpptrixButton
         variant="icon"
         icon={<EyeRegular fontSize={16} />}
         aria-label={`查看 ${name} 的模型`}
         onClick={() => setOpen(true)}
       />
       <Dialog open={open} onOpenChange={(_, data) => setOpen(data.open)}>
-        <DialogSurface className={mergeClasses(s.modelsDialogSurface, 'inno-dialog-surface')}>
+        <DialogSurface className={mergeClasses(s.modelsDialogSurface, 'opptrix-dialog-surface')}>
           <DialogBody>
             <DialogTitle className={s.modelsDialogTitle}>{name}</DialogTitle>
             <DialogContent className={s.modelsDialogContent}>
               <Text className={s.modelPopoverTitle} block>
                 已启用模型 · {models.length}
               </Text>
-              <div className={mergeClasses(s.modelPopoverList, 'inno-scroll')}>
+              <div className={mergeClasses(s.modelPopoverList, 'opptrix-scroll')}>
                 {models.map(m => (
                   <span key={m} className={s.modelPopoverItem}>{m}</span>
                 ))}

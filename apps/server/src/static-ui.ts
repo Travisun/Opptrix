@@ -13,7 +13,7 @@ export function resolveUiDist(): string {
 
 export function shouldServeUi(): boolean {
   return process.env.SERVE_UI === '1'
-    || process.env.INNO_DESKTOP === '1'
+    || process.env.OPPTRIX_DESKTOP === '1'
     || process.env.NODE_ENV === 'desktop'
 }
 

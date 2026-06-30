@@ -36,7 +36,7 @@ export function useIsMobile() {
   return useBreakpoint() === 'mobile'
 }
 
-const SIDEBAR_KEY = 'inno-sidebar-visible'
+const SIDEBAR_KEY = 'opptrix-sidebar-visible'
 
 function isOverlayDesktop(): boolean {
   if (typeof window === 'undefined') return false
@@ -110,7 +110,7 @@ export function useSidebarPreference(isMobile: boolean) {
     if (isDesktopApp()) {
       return shouldAutoExpandSidebar()
     }
-    return localStorage.getItem(SIDEBAR_KEY) === 'true'
+    return localStorage.getItem(SIDEBAR_KEY) === 'true' || localStorage.getItem('inno-sidebar-visible') === 'true'
   })
   const [drawerOpen, setDrawerOpen] = useState(false)
 

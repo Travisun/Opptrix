@@ -1,12 +1,12 @@
 import { makeStyles, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   card: {
-    backgroundColor: innoTokens.surface,
-    borderRadius: innoTokens.radiusLg,
-    border: `1px solid ${innoTokens.separator}`,
+    backgroundColor: opptrixTokens.surface,
+    borderRadius: opptrixTokens.radiusLg,
+    border: `1px solid ${opptrixTokens.separator}`,
     padding: '16px',
     display: 'flex',
     flexDirection: 'column',
@@ -15,7 +15,7 @@ const useStyles = makeStyles({
   title: {
     fontSize: '16px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
 })
 

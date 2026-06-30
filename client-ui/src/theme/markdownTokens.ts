@@ -2,7 +2,7 @@
  * Markdown render theme — customize colors & spacing in:
  *   client-ui/src/styles/markdown/tokens.css
  *
- * CSS variables on `.inno-md` mirror these defaults for quick overrides.
+ * CSS variables on `.opptrix-md` mirror these defaults for quick overrides.
  */
 export const markdownTokens = {
   /** Base typography */

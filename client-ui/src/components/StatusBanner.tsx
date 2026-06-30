@@ -1,5 +1,5 @@
 import { makeStyles, Text } from '@fluentui/react-components'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 
 const useStyles = makeStyles({
@@ -7,7 +7,7 @@ const useStyles = makeStyles({
     padding: '10px 12px',
     fontSize: '13px',
     lineHeight: 1.45,
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     border: 'none',
     animationName: {
       from: { opacity: 0, transform: 'translateY(-4px)' },
@@ -18,20 +18,20 @@ const useStyles = makeStyles({
     animationFillMode: 'both',
   },
   error: {
-    backgroundColor: innoTokens.errorSoft,
-    color: innoTokens.error,
+    backgroundColor: opptrixTokens.errorSoft,
+    color: opptrixTokens.error,
   },
   info: {
-    backgroundColor: innoTokens.infoSoft,
-    color: innoTokens.textSecondary,
+    backgroundColor: opptrixTokens.infoSoft,
+    color: opptrixTokens.textSecondary,
   },
   success: {
-    backgroundColor: innoTokens.successSoft,
-    color: innoTokens.success,
+    backgroundColor: opptrixTokens.successSoft,
+    color: opptrixTokens.success,
   },
   warning: {
-    backgroundColor: innoTokens.warningSoft,
-    color: innoTokens.warning,
+    backgroundColor: opptrixTokens.warningSoft,
+    color: opptrixTokens.warning,
   },
 })
 

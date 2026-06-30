@@ -1,31 +1,31 @@
 import { makeStyles, Text, Tooltip } from '@fluentui/react-components'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
-    padding: `${innoTokens.radiusMd} 14px`,
-    backgroundColor: innoTokens.surface,
-    borderRadius: innoTokens.radiusMd,
-    border: `1px solid ${innoTokens.separator}`,
+    padding: `${opptrixTokens.radiusMd} 14px`,
+    backgroundColor: opptrixTokens.surface,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.separator}`,
     minWidth: '110px',
   },
   label: {
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   value: {
     fontSize: '24px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.2,
   },
   unit: {
     fontSize: '12px',
     fontWeight: 400,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     marginLeft: '4px',
   },
 })

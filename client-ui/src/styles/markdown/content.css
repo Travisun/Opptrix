@@ -1,114 +1,114 @@
 /* Markdown content layout — uses variables from tokens.css */
 
-.inno-md {
+.opptrix-md {
   font-size: inherit;
-  line-height: var(--inno-md-line-height);
-  color: var(--inno-md-text);
+  line-height: var(--opptrix-md-line-height);
+  color: var(--opptrix-md-text);
   word-break: break-word;
 }
 
-.inno-md > :first-child { margin-top: 0; }
-.inno-md > :last-child { margin-bottom: 0; }
+.opptrix-md > :first-child { margin-top: 0; }
+.opptrix-md > :last-child { margin-bottom: 0; }
 
-.inno-md p,
-.inno-md ul,
-.inno-md ol,
-.inno-md blockquote,
-.inno-md .inno-md-pre-shell,
-.inno-md pre,
-.inno-md table,
-.inno-md .inno-md-mermaid {
-  margin: var(--inno-md-block-gap) 0;
+.opptrix-md p,
+.opptrix-md ul,
+.opptrix-md ol,
+.opptrix-md blockquote,
+.opptrix-md .opptrix-md-pre-shell,
+.opptrix-md pre,
+.opptrix-md table,
+.opptrix-md .opptrix-md-mermaid {
+  margin: var(--opptrix-md-block-gap) 0;
 }
 
-.inno-md h1,
-.inno-md h2,
-.inno-md h3,
-.inno-md h4,
-.inno-md h5,
-.inno-md h6 {
-  margin: var(--inno-md-heading-gap-top) 0 var(--inno-md-heading-gap-bottom);
+.opptrix-md h1,
+.opptrix-md h2,
+.opptrix-md h3,
+.opptrix-md h4,
+.opptrix-md h5,
+.opptrix-md h6 {
+  margin: var(--opptrix-md-heading-gap-top) 0 var(--opptrix-md-heading-gap-bottom);
   font-weight: 650;
   letter-spacing: -0.02em;
   line-height: 1.28;
-  color: var(--inno-md-text);
+  color: var(--opptrix-md-text);
 }
 
-.inno-md h1 { font-size: 1.28em; }
-.inno-md h2 { font-size: 1.14em; }
-.inno-md h3 { font-size: 1.04em; }
-.inno-md h4 { font-size: 1em; font-weight: 600; }
-.inno-md h5,
-.inno-md h6 {
+.opptrix-md h1 { font-size: 1.28em; }
+.opptrix-md h2 { font-size: 1.14em; }
+.opptrix-md h3 { font-size: 1.04em; }
+.opptrix-md h4 { font-size: 1em; font-weight: 600; }
+.opptrix-md h5,
+.opptrix-md h6 {
   font-size: 0.95em;
   font-weight: 600;
-  color: var(--inno-md-text-muted);
+  color: var(--opptrix-md-text-muted);
 }
 
-.inno-md ul,
-.inno-md ol {
-  padding-left: var(--inno-md-list-indent);
+.opptrix-md ul,
+.opptrix-md ol {
+  padding-left: var(--opptrix-md-list-indent);
 }
 
-.inno-md ul {
+.opptrix-md ul {
   list-style-type: disc;
 }
 
-.inno-md ol {
+.opptrix-md ol {
   list-style-type: decimal;
 }
 
-.inno-md ul ul,
-.inno-md ol ul {
+.opptrix-md ul ul,
+.opptrix-md ol ul {
   list-style-type: circle;
 }
 
-.inno-md ul ul ul,
-.inno-md ol ul ul,
-.inno-md ul ol ul,
-.inno-md ol ol ul {
+.opptrix-md ul ul ul,
+.opptrix-md ol ul ul,
+.opptrix-md ul ol ul,
+.opptrix-md ol ol ul {
   list-style-type: square;
 }
 
-.inno-md ol ol,
-.inno-md ul ol {
+.opptrix-md ol ol,
+.opptrix-md ul ol {
   list-style-type: lower-alpha;
 }
 
-.inno-md ul ul,
-.inno-md ul ol,
-.inno-md ol ul,
-.inno-md ol ol {
+.opptrix-md ul ul,
+.opptrix-md ul ol,
+.opptrix-md ol ul,
+.opptrix-md ol ol {
   margin-top: 0.2em;
   margin-bottom: 0.15em;
 }
 
-.inno-md li + li {
-  margin-top: var(--inno-md-list-item-gap);
+.opptrix-md li + li {
+  margin-top: var(--opptrix-md-list-item-gap);
 }
 
-.inno-md li > p {
+.opptrix-md li > p {
   margin: 0.2em 0;
 }
 
-.inno-md li > ul,
-.inno-md li > ol {
+.opptrix-md li > ul,
+.opptrix-md li > ol {
   margin-top: 0.2em;
   margin-bottom: 0.1em;
 }
 
-.inno-md .contains-task-list {
+.opptrix-md .contains-task-list {
   list-style: none;
   padding-left: 0;
 }
 
-.inno-md .task-list-item {
+.opptrix-md .task-list-item {
   display: flex;
   align-items: flex-start;
   gap: 0.4em;
 }
 
-.inno-md .task-list-item input[type="checkbox"] {
+.opptrix-md .task-list-item input[type="checkbox"] {
   margin: 0.2em 0 0;
   flex-shrink: 0;
   width: 14px;
@@ -116,195 +116,195 @@
   accent-color: #007AFF;
 }
 
-.inno-md strong {
+.opptrix-md strong {
   font-weight: 650;
-  color: var(--inno-md-strong-fg);
+  color: var(--opptrix-md-strong-fg);
 }
 
-.inno-md em {
+.opptrix-md em {
   font-style: italic;
-  color: var(--inno-md-em-fg);
+  color: var(--opptrix-md-em-fg);
 }
 
-.inno-md strong em,
-.inno-md em strong {
+.opptrix-md strong em,
+.opptrix-md em strong {
   font-weight: 650;
   font-style: italic;
-  color: var(--inno-md-strong-fg);
+  color: var(--opptrix-md-strong-fg);
 }
 
-.inno-md mark,
-.inno-md .inno-md-mark {
-  background: var(--inno-md-mark-bg);
-  color: var(--inno-md-mark-fg);
+.opptrix-md mark,
+.opptrix-md .opptrix-md-mark {
+  background: var(--opptrix-md-mark-bg);
+  color: var(--opptrix-md-mark-fg);
   padding: 0 0.15em;
   border-radius: 2px;
 }
 
-.inno-md del,
-.inno-md s,
-.inno-md .inno-md-del {
-  color: var(--inno-md-del-fg);
+.opptrix-md del,
+.opptrix-md s,
+.opptrix-md .opptrix-md-del {
+  color: var(--opptrix-md-del-fg);
   text-decoration: line-through;
   text-decoration-color: rgba(174, 174, 178, 0.65);
 }
 
-.inno-md u,
-.inno-md ins,
-.inno-md .inno-md-underline {
+.opptrix-md u,
+.opptrix-md ins,
+.opptrix-md .opptrix-md-underline {
   text-decoration: underline;
-  text-decoration-color: var(--inno-md-underline);
+  text-decoration-color: var(--opptrix-md-underline);
   text-underline-offset: 2px;
   text-decoration-thickness: 1px;
 }
 
-.inno-md sub,
-.inno-md .inno-md-sub {
+.opptrix-md sub,
+.opptrix-md .opptrix-md-sub {
   font-size: 0.78em;
   line-height: 0;
   vertical-align: sub;
 }
 
-.inno-md sup,
-.inno-md .inno-md-sup {
+.opptrix-md sup,
+.opptrix-md .opptrix-md-sup {
   font-size: 0.78em;
   line-height: 0;
   vertical-align: super;
 }
 
-.inno-md kbd,
-.inno-md .inno-md-kbd {
+.opptrix-md kbd,
+.opptrix-md .opptrix-md-kbd {
   display: inline-block;
   padding: 0.06em 0.38em;
   border-radius: 4px;
-  border: 1px solid var(--inno-md-kbd-border);
-  background: var(--inno-md-kbd-bg);
+  border: 1px solid var(--opptrix-md-kbd-border);
+  background: var(--opptrix-md-kbd-bg);
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.84em;
   line-height: 1.35;
-  color: var(--inno-md-text);
+  color: var(--opptrix-md-text);
   box-shadow: inset 0 -1px 0 rgba(60, 60, 67, 0.06);
 }
 
-.inno-md blockquote,
-.inno-md .inno-md-blockquote {
-  margin: var(--inno-md-block-gap) 0;
+.opptrix-md blockquote,
+.opptrix-md .opptrix-md-blockquote {
+  margin: var(--opptrix-md-block-gap) 0;
   padding: 0.35em 0 0.35em 0.75em;
-  border-left: 2px solid var(--inno-md-blockquote-border);
+  border-left: 2px solid var(--opptrix-md-blockquote-border);
   border-radius: 0 6px 6px 0;
-  background: var(--inno-md-blockquote-bg);
-  color: var(--inno-md-blockquote-fg);
+  background: var(--opptrix-md-blockquote-bg);
+  color: var(--opptrix-md-blockquote-fg);
 }
 
-.inno-md blockquote blockquote,
-.inno-md .inno-md-blockquote .inno-md-blockquote {
+.opptrix-md blockquote blockquote,
+.opptrix-md .opptrix-md-blockquote .opptrix-md-blockquote {
   margin-top: 0.35em;
   margin-bottom: 0;
   padding-left: 0.65em;
-  border-left-color: var(--inno-md-blockquote-border-nested);
+  border-left-color: var(--opptrix-md-blockquote-border-nested);
   background: transparent;
-  color: var(--inno-md-text-subtle);
+  color: var(--opptrix-md-text-subtle);
 }
 
-.inno-md blockquote > :first-child { margin-top: 0; }
-.inno-md blockquote > :last-child { margin-bottom: 0; }
+.opptrix-md blockquote > :first-child { margin-top: 0; }
+.opptrix-md blockquote > :last-child { margin-bottom: 0; }
 
-.inno-md blockquote ul,
-.inno-md blockquote ol {
+.opptrix-md blockquote ul,
+.opptrix-md blockquote ol {
   margin-top: 0.25em;
   margin-bottom: 0.25em;
 }
 
-.inno-md a {
-  color: var(--inno-md-link);
+.opptrix-md a {
+  color: var(--opptrix-md-link);
   text-decoration: underline;
-  text-decoration-color: var(--inno-md-link-underline);
+  text-decoration-color: var(--opptrix-md-link-underline);
   text-underline-offset: 2px;
 }
 
-.inno-md a:hover {
-  color: var(--inno-md-link-hover);
+.opptrix-md a:hover {
+  color: var(--opptrix-md-link-hover);
   text-decoration-color: currentColor;
 }
 
-.inno-md-inline-code,
-.inno-md :not(pre) > code {
+.opptrix-md-inline-code,
+.opptrix-md :not(pre) > code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   font-size: 0.86em;
   padding: 0.08em 0.32em;
-  border-radius: var(--inno-md-radius-code);
-  background: var(--inno-md-code-bg);
-  color: var(--inno-md-code-fg);
+  border-radius: var(--opptrix-md-radius-code);
+  background: var(--opptrix-md-code-bg);
+  color: var(--opptrix-md-code-fg);
 }
 
-.inno-md-pre-shell {
+.opptrix-md-pre-shell {
   position: relative;
-  margin: var(--inno-md-block-gap) 0;
+  margin: var(--opptrix-md-block-gap) 0;
 }
 
-.inno-md-pre-lang {
+.opptrix-md-pre-lang {
   display: block;
   margin-bottom: 4px;
   font-size: 0.72em;
   font-weight: 600;
   letter-spacing: 0.02em;
   text-transform: lowercase;
-  color: var(--inno-md-pre-lang-fg);
+  color: var(--opptrix-md-pre-lang-fg);
 }
 
-.inno-md-pre {
+.opptrix-md-pre {
   margin: 0;
-  padding: var(--inno-md-pre-padding);
-  border: 1px solid var(--inno-md-pre-border);
-  border-radius: var(--inno-md-radius-pre);
-  background: var(--inno-md-pre-bg);
+  padding: var(--opptrix-md-pre-padding);
+  border: 1px solid var(--opptrix-md-pre-border);
+  border-radius: var(--opptrix-md-radius-pre);
+  background: var(--opptrix-md-pre-bg);
   overflow-x: auto;
   font-size: 0.86em;
   line-height: 1.48;
 }
 
-.inno-md-pre code {
+.opptrix-md-pre code {
   font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
   background: transparent;
   padding: 0;
-  color: var(--inno-md-code-fg);
+  color: var(--opptrix-md-code-fg);
 }
 
-.inno-md-pre--error {
-  border: 1px solid var(--inno-md-error-border);
+.opptrix-md-pre--error {
+  border: 1px solid var(--opptrix-md-error-border);
 }
 
-.inno-md-mermaid-err {
+.opptrix-md-mermaid-err {
   display: block;
   margin-top: 6px;
   font-size: 12px;
-  color: var(--inno-md-error);
+  color: var(--opptrix-md-error);
 }
 
-.inno-md-mermaid {
-  padding: var(--inno-md-mermaid-padding);
-  border-radius: var(--inno-md-radius-mermaid);
-  background: var(--inno-md-mermaid-bg);
+.opptrix-md-mermaid {
+  padding: var(--opptrix-md-mermaid-padding);
+  border-radius: var(--opptrix-md-radius-mermaid);
+  background: var(--opptrix-md-mermaid-bg);
   overflow-x: auto;
 }
 
-.inno-md-mermaid svg {
+.opptrix-md-mermaid svg {
   max-width: 100%;
   height: auto;
 }
 
-.inno-md-table-wrap {
+.opptrix-md-table-wrap {
   overflow-x: auto;
-  margin: var(--inno-md-block-gap) 0;
+  margin: var(--opptrix-md-block-gap) 0;
   outline: none;
 }
 
-.inno-md-table-copy-col {
-  width: calc(var(--inno-md-table-copy-icon-size) + var(--inno-md-cell-padding-x));
-  min-width: calc(var(--inno-md-table-copy-icon-size) + var(--inno-md-cell-padding-x));
-  max-width: calc(var(--inno-md-table-copy-icon-size) + var(--inno-md-cell-padding-x));
-  padding-top: var(--inno-md-cell-padding-y);
-  padding-bottom: var(--inno-md-cell-padding-y);
+.opptrix-md-table-copy-col {
+  width: calc(var(--opptrix-md-table-copy-icon-size) + var(--opptrix-md-cell-padding-x));
+  min-width: calc(var(--opptrix-md-table-copy-icon-size) + var(--opptrix-md-cell-padding-x));
+  max-width: calc(var(--opptrix-md-table-copy-icon-size) + var(--opptrix-md-cell-padding-x));
+  padding-top: var(--opptrix-md-cell-padding-y);
+  padding-bottom: var(--opptrix-md-cell-padding-y);
   padding-left: 4px;
   padding-right: 0;
   text-align: center;
@@ -312,7 +312,7 @@
   box-sizing: border-box;
 }
 
-.inno-md-table-copy {
+.opptrix-md-table-copy {
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -320,24 +320,24 @@
   padding: 0;
   border: none;
   background: transparent;
-  color: var(--inno-md-table-copy-fg);
+  color: var(--opptrix-md-table-copy-fg);
   cursor: pointer;
   opacity: 0;
   pointer-events: none;
   transition: opacity 0.15s ease, color 0.15s ease;
 }
 
-.inno-md-table-wrap:hover .inno-md-table-copy,
-.inno-md-table-wrap:focus-within .inno-md-table-copy {
+.opptrix-md-table-wrap:hover .opptrix-md-table-copy,
+.opptrix-md-table-wrap:focus-within .opptrix-md-table-copy {
   opacity: 1;
   pointer-events: auto;
 }
 
-.inno-md-table-copy:hover {
-  color: var(--inno-md-table-copy-fg-hover);
+.opptrix-md-table-copy:hover {
+  color: var(--opptrix-md-table-copy-fg-hover);
 }
 
-.inno-md-table-copy:focus-visible {
+.opptrix-md-table-copy:focus-visible {
   opacity: 1;
   pointer-events: auto;
   outline: 2px solid rgba(0, 122, 255, 0.35);
@@ -345,16 +345,16 @@
   border-radius: 3px;
 }
 
-.inno-md-table-copy:active {
+.opptrix-md-table-copy:active {
   opacity: 0.72;
 }
 
-.inno-md-table-copy svg {
-  width: var(--inno-md-table-copy-icon-size);
-  height: var(--inno-md-table-copy-icon-size);
+.opptrix-md-table-copy svg {
+  width: var(--opptrix-md-table-copy-icon-size);
+  height: var(--opptrix-md-table-copy-icon-size);
 }
 
-.inno-md table {
+.opptrix-md table {
   width: 100%;
   border-collapse: collapse;
   border-spacing: 0;
@@ -362,66 +362,66 @@
   background: transparent;
 }
 
-.inno-md thead,
-.inno-md tbody,
-.inno-md tr {
+.opptrix-md thead,
+.opptrix-md tbody,
+.opptrix-md tr {
   background: transparent;
 }
 
-.inno-md th,
-.inno-md td {
-  padding: var(--inno-md-cell-padding-y) var(--inno-md-cell-padding-x);
+.opptrix-md th,
+.opptrix-md td {
+  padding: var(--opptrix-md-cell-padding-y) var(--opptrix-md-cell-padding-x);
   border: none;
   background: transparent;
   text-align: left;
   vertical-align: top;
 }
 
-.inno-md thead th {
-  border-bottom: 1px solid var(--inno-md-table-row-divider);
+.opptrix-md thead th {
+  border-bottom: 1px solid var(--opptrix-md-table-row-divider);
 }
 
-.inno-md tbody td {
-  border-bottom: 1px solid var(--inno-md-table-row-divider);
+.opptrix-md tbody td {
+  border-bottom: 1px solid var(--opptrix-md-table-row-divider);
 }
 
-.inno-md tbody tr:last-child td {
+.opptrix-md tbody tr:last-child td {
   border-bottom: none;
 }
 
-.inno-md th {
+.opptrix-md th {
   font-weight: 650;
-  color: var(--inno-md-table-header-fg);
+  color: var(--opptrix-md-table-header-fg);
 }
 
-.inno-md td {
-  color: var(--inno-md-table-cell-fg);
+.opptrix-md td {
+  color: var(--opptrix-md-table-cell-fg);
 }
 
-.inno-md hr {
+.opptrix-md hr {
   border: none;
-  border-top: 1px solid var(--inno-md-hr);
+  border-top: 1px solid var(--opptrix-md-hr);
   margin: 0.65em 0;
 }
 
-.inno-md img {
+.opptrix-md img {
   max-width: 100%;
   height: auto;
-  border-radius: var(--inno-md-radius-pre);
+  border-radius: var(--opptrix-md-radius-pre);
 }
 
-.inno-md .katex-display {
+.opptrix-md .katex-display {
   margin: 0.55em 0;
   overflow-x: auto;
   overflow-y: hidden;
 }
 
-.inno-md .katex {
+.opptrix-md .katex {
   font-size: 1.02em;
 }
 
 /* Optional semantic tags in HTML/markdown output */
-.inno-md .inno-md-tag {
+.opptrix-md .opptrix-md-tag {
   display: inline-block;
   padding: 0.08em 0.45em;
   border-radius: 4px;
@@ -431,80 +431,80 @@
   vertical-align: baseline;
 }
 
-.inno-md .inno-md-tag--neutral {
-  background: var(--inno-md-tag-neutral-bg);
-  color: var(--inno-md-tag-neutral-fg);
+.opptrix-md .opptrix-md-tag--neutral {
+  background: var(--opptrix-md-tag-neutral-bg);
+  color: var(--opptrix-md-tag-neutral-fg);
 }
 
-.inno-md .inno-md-tag--info {
-  background: var(--inno-md-tag-info-bg);
-  color: var(--inno-md-tag-info-fg);
+.opptrix-md .opptrix-md-tag--info {
+  background: var(--opptrix-md-tag-info-bg);
+  color: var(--opptrix-md-tag-info-fg);
 }
 
-.inno-md .inno-md-tag--success {
-  background: var(--inno-md-tag-success-bg);
-  color: var(--inno-md-tag-success-fg);
+.opptrix-md .opptrix-md-tag--success {
+  background: var(--opptrix-md-tag-success-bg);
+  color: var(--opptrix-md-tag-success-fg);
 }
 
-.inno-md .inno-md-tag--warning {
-  background: var(--inno-md-tag-warning-bg);
-  color: var(--inno-md-tag-warning-fg);
+.opptrix-md .opptrix-md-tag--warning {
+  background: var(--opptrix-md-tag-warning-bg);
+  color: var(--opptrix-md-tag-warning-fg);
 }
 
-.inno-md .inno-md-tag--error {
-  background: var(--inno-md-tag-error-bg);
-  color: var(--inno-md-tag-error-fg);
+.opptrix-md .opptrix-md-tag--error {
+  background: var(--opptrix-md-tag-error-bg);
+  color: var(--opptrix-md-tag-error-fg);
 }
 
-/* Inline tone colors — use <span class="inno-md-tone--success">涨</span> */
-.inno-md .inno-md-tone--muted {
-  color: var(--inno-md-text-muted);
+/* Inline tone colors — use <span class="opptrix-md-tone--success">涨</span> */
+.opptrix-md .opptrix-md-tone--muted {
+  color: var(--opptrix-md-text-muted);
 }
 
-.inno-md .inno-md-tone--subtle {
-  color: var(--inno-md-text-subtle);
+.opptrix-md .opptrix-md-tone--subtle {
+  color: var(--opptrix-md-text-subtle);
 }
 
-.inno-md .inno-md-tone--accent {
-  color: var(--inno-md-tone-accent);
+.opptrix-md .opptrix-md-tone--accent {
+  color: var(--opptrix-md-tone-accent);
 }
 
-.inno-md .inno-md-tone--success {
-  color: var(--inno-md-tag-success-fg);
+.opptrix-md .opptrix-md-tone--success {
+  color: var(--opptrix-md-tag-success-fg);
   font-weight: 600;
 }
 
-.inno-md .inno-md-tone--warning {
-  color: var(--inno-md-tag-warning-fg);
+.opptrix-md .opptrix-md-tone--warning {
+  color: var(--opptrix-md-tag-warning-fg);
   font-weight: 600;
 }
 
-.inno-md .inno-md-tone--error {
-  color: var(--inno-md-tag-error-fg);
+.opptrix-md .opptrix-md-tone--error {
+  color: var(--opptrix-md-tag-error-fg);
   font-weight: 600;
 }
 
 /* GFM footnotes */
-.inno-md .footnotes {
+.opptrix-md .footnotes {
   margin-top: 0.85em;
   padding-top: 0.55em;
-  border-top: 1px solid var(--inno-md-hr);
+  border-top: 1px solid var(--opptrix-md-hr);
   font-size: 0.88em;
-  color: var(--inno-md-text-muted);
+  color: var(--opptrix-md-text-muted);
 }
 
-.inno-md .footnotes ol {
+.opptrix-md .footnotes ol {
   padding-left: 1.2em;
 }
 
-.inno-md .footnote-ref,
-.inno-md .data-footnote-backref {
-  color: var(--inno-md-link);
+.opptrix-md .footnote-ref,
+.opptrix-md .data-footnote-backref {
+  color: var(--opptrix-md-link);
   text-decoration: none;
 }
 
-.inno-md .footnote-ref:hover,
-.inno-md .data-footnote-backref:hover {
-  color: var(--inno-md-link-hover);
+.opptrix-md .footnote-ref:hover,
+.opptrix-md .data-footnote-backref:hover {
+  color: var(--opptrix-md-link-hover);
   text-decoration: underline;
 }

@@ -1,4 +1,4 @@
-# innoAStock Desktop
+# Opptrix Desktop
 
 Cross-platform desktop app built with **Electron** and a **Node.js API sidecar** (existing Fastify server).
 
@@ -12,7 +12,7 @@ Cross-platform desktop app built with **Electron** and a **Node.js API sidecar**
 └──────────────────┬──────────────────────┘
                    │ http://127.0.0.1:8711
 ┌──────────────────▼──────────────────────┐
-│  Node sidecar (@inno-a-stock/server)    │
+│  Node sidecar (@opptrix/server)    │
 │  · /api/*  REST + Agent                 │
 │  · /*      SPA (client-ui/dist)         │
 └─────────────────────────────────────────┘
@@ -54,7 +54,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 | Variable | Description |
 |----------|-------------|
 | `SERVE_UI=1` | Server serves `client-ui/dist` |
-| `INNO_DESKTOP=1` | Desktop mode flag |
+| `OPPTRIX_DESKTOP=1` | Desktop mode flag |
 | `UI_DIST_PATH` | Override UI dist directory |
 | `STOCK_RESEARCH_PORT` | API port (default `8711`) |
 | `ELECTRON_OPEN_DEVTOOLS` | Set to `1` to open DevTools in dev |

@@ -1,9 +1,9 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { resolveUserDataRoot } from '@opptrix/shared'
 import type { WatchlistItem } from './models.js'
 
-const DB_DIR = path.join(os.homedir(), '.a_stock_layer')
+const DB_DIR = resolveUserDataRoot()
 const DB_FILE = path.join(DB_DIR, 'watchlist.json')
 
 function normalizeCode(code: string) {

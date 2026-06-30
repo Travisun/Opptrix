@@ -6,7 +6,7 @@ import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-ic
 import { research } from '../api/client'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -14,8 +14,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     padding: '12px 20px',
-    backgroundColor: innoTokens.surface,
-    borderBottom: `1px solid ${innoTokens.border}`,
+    backgroundColor: opptrixTokens.surface,
+    borderBottom: `1px solid ${opptrixTokens.border}`,
     minHeight: '56px',
     flexShrink: 0,
   },
@@ -25,9 +25,9 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '8px',
     padding: '4px 10px',
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.accentSoft,
-    border: `1px solid ${innoTokens.border}`,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.accentSoft,
+    border: `1px solid ${opptrixTokens.border}`,
   },
   spacer: { flex: 1 },
 })
@@ -97,7 +97,7 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
         size="small"
         icon={<BotRegular />}
         onClick={() => setAgentOpen(!agentOpen)}
-        style={!agentOpen ? { backgroundColor: innoTokens.accentSoft, borderColor: innoTokens.accent } : undefined}
+        style={!agentOpen ? { backgroundColor: opptrixTokens.accentSoft, borderColor: opptrixTokens.accent } : undefined}
       >
         {agentOpen ? '关闭助手' : '问 AI'}
       </Button>

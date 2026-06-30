@@ -3,8 +3,8 @@ import {
   flattenQuickTaskCatalog,
 } from './quickTaskCatalog'
 
-const STORAGE_KEY = 'inno-composer-quick-tasks-v2'
-const LEGACY_KEY = 'inno-composer-quick-tasks-v1'
+const STORAGE_KEY = 'opptrix-composer-quick-tasks-v2'
+const LEGACY_KEY = 'opptrix-composer-quick-tasks-v1'
 
 const LEGACY_DEFAULTS = [
   '这只股票现在适合买入吗？',

@@ -1,4 +1,4 @@
-# innoAStock UI Layout
+# Opptrix UI Layout
 
 ## 1. 整体结构（EchoBird 三栏）
 

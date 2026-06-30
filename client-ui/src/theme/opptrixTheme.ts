@@ -1,5 +1,5 @@
 import { createLightTheme, type BrandVariants, type Theme } from '@fluentui/react-components'
-import { innoTokens } from './tokens.js'
+import { opptrixTokens } from './tokens.js'
 
 const brand: BrandVariants = {
   10: '#0a0a0a',
@@ -9,7 +9,7 @@ const brand: BrandVariants = {
   50: '#303030',
   60: '#3a3a3a',
   70: '#454545',
-  80: innoTokens.accent,
+  80: opptrixTokens.accent,
   90: '#525252',
   100: '#6e6e6e',
   110: '#8a8a8a',
@@ -22,24 +22,24 @@ const brand: BrandVariants = {
 
 const base = createLightTheme(brand)
 
-export const innoTheme: Theme = {
+export const opptrixTheme: Theme = {
   ...base,
-  colorBrandBackground: innoTokens.accent,
-  colorBrandBackgroundHover: innoTokens.accentHover,
-  colorBrandBackgroundPressed: innoTokens.accentHover,
+  colorBrandBackground: opptrixTokens.accent,
+  colorBrandBackgroundHover: opptrixTokens.accentHover,
+  colorBrandBackgroundPressed: opptrixTokens.accentHover,
   colorBrandForeground1: '#FFFFFF',
   colorBrandForeground2: '#FFFFFF',
-  colorNeutralBackground1: innoTokens.canvas,
-  colorNeutralBackground2: innoTokens.canvasAlt,
-  colorNeutralBackground3: innoTokens.canvasMuted,
-  colorNeutralForeground1: innoTokens.textPrimary,
-  colorNeutralForeground2: innoTokens.textSecondary,
-  colorNeutralForeground3: innoTokens.textTertiary,
-  colorNeutralStroke1: innoTokens.separatorStrong,
-  colorNeutralStroke2: innoTokens.separator,
-  borderRadiusSmall: innoTokens.radiusSm,
-  borderRadiusMedium: innoTokens.radiusMd,
-  borderRadiusLarge: innoTokens.radiusLg,
+  colorNeutralBackground1: opptrixTokens.canvas,
+  colorNeutralBackground2: opptrixTokens.canvasAlt,
+  colorNeutralBackground3: opptrixTokens.canvasMuted,
+  colorNeutralForeground1: opptrixTokens.textPrimary,
+  colorNeutralForeground2: opptrixTokens.textSecondary,
+  colorNeutralForeground3: opptrixTokens.textTertiary,
+  colorNeutralStroke1: opptrixTokens.separatorStrong,
+  colorNeutralStroke2: opptrixTokens.separator,
+  borderRadiusSmall: opptrixTokens.radiusSm,
+  borderRadiusMedium: opptrixTokens.radiusMd,
+  borderRadiusLarge: opptrixTokens.radiusLg,
   fontFamilyBase: '-apple-system, BlinkMacSystemFont, "Segoe UI Variable", "Segoe UI", sans-serif',
   spacingVerticalS: '8px',
   spacingVerticalM: '12px',

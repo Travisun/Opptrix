@@ -5,7 +5,7 @@ import {
 } from '@fluentui/react-components'
 import { ChevronRightRegular, DeleteRegular } from '@fluentui/react-icons'
 import StatusBanner from '../components/StatusBanner'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
@@ -21,7 +21,7 @@ import {
   getConfig, patchConfig, deleteProvider, getHealth,
   type AppConfig, type PublicProvider,
 } from '../api/client'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
@@ -43,7 +43,7 @@ const useStyles = makeStyles({
   },
   pageMobile: {
     flexDirection: 'column',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
   },
   contentShell: {
     flex: 1,
@@ -52,11 +52,11 @@ const useStyles = makeStyles({
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: innoTokens.canvas,
+    backgroundColor: opptrixTokens.canvas,
     overflow: 'hidden',
   },
   contentShellElectron: {
-    paddingTop: `calc(${DESKTOP_TITLEBAR_HEIGHT}px + ${innoTokens.windowInset})`,
+    paddingTop: `calc(${DESKTOP_TITLEBAR_HEIGHT}px + ${opptrixTokens.windowInset})`,
   },
   contentScroll: {
     flex: 1,
@@ -66,8 +66,8 @@ const useStyles = makeStyles({
     overflowY: 'auto',
   },
   contentColumn: {
-    width: innoTokens.settingsContentWidth,
-    maxWidth: innoTokens.settingsContentMaxWidth,
+    width: opptrixTokens.settingsContentWidth,
+    maxWidth: opptrixTokens.settingsContentMaxWidth,
     minWidth: 0,
     marginLeft: 'auto',
     marginRight: 'auto',
@@ -114,12 +114,12 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '-0.02em',
     lineHeight: 1.3,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   pageSubtitle: {
     fontSize: '14px',
     fontWeight: 400,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.55,
     marginTop: '8px',
     maxWidth: '52ch',
@@ -161,18 +161,18 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '13px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     letterSpacing: '-0.01em',
     paddingLeft: '2px',
   },
   saveHint: {
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     minHeight: '18px',
     paddingLeft: '2px',
   },
   saveHintActive: {
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   aboutProse: {
     display: 'flex',
@@ -188,12 +188,12 @@ const useStyles = makeStyles({
     fontSize: '15px',
     fontWeight: 600,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.45,
   },
   aboutMeta: {
     fontSize: '14px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.65,
   },
   dialogSurface: {
@@ -204,7 +204,7 @@ const useStyles = makeStyles({
     fontSize: '17px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
 })
 
@@ -352,9 +352,9 @@ export default function SettingsPage({
                   title="后端连接"
                   desc="检查 API 服务与 LLM 提供商配置是否正常"
                   control={(
-                    <InnoButton variant="secondary" onClick={handleTest}>
+                    <OpptrixButton variant="secondary" onClick={handleTest}>
                       测试
-                    </InnoButton>
+                    </OpptrixButton>
                   )}
                   last
                 />
@@ -384,7 +384,7 @@ export default function SettingsPage({
                     avatar={p.name.charAt(0).toUpperCase()}
                     first={i === 0}
                     action={(
-                      <InnoButton
+                      <OpptrixButton
                         variant="icon"
                         icon={<DeleteRegular />}
                         onClick={() => handleDeleteProvider(p)}
@@ -397,7 +397,7 @@ export default function SettingsPage({
               <SettingsActionRow
                 title="添加模型提供商"
                 desc="配置 Base URL 与 API Key"
-                icon={<ChevronRightRegular fontSize={16} color={innoTokens.textTertiary} />}
+                icon={<ChevronRightRegular fontSize={16} color={opptrixTokens.textTertiary} />}
                 onClick={() => setWizardOpen(true)}
               />
             </SettingsGroup>
@@ -413,7 +413,7 @@ export default function SettingsPage({
       case 'about':
         return (
           <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
-            <Text className={s.aboutTitle} block>innoAStock · 投研 Chat Agent</Text>
+            <Text className={s.aboutTitle} block>Opptrix · 基于 AI 的投研分析助手</Text>
             <Text className={s.aboutMeta} block>
               21 投研工具 · 多会话 · Function Calling · 多模型提供商。
             </Text>
@@ -461,13 +461,13 @@ export default function SettingsPage({
       <div
         className={mergeClasses(
           s.contentShell,
-          'inno-settings-content',
+          'opptrix-settings-content',
           electronChrome && s.contentShellElectron,
         )}
       >
         <div className={mergeClasses(
           s.contentScroll,
-          'inno-scroll',
+          'opptrix-scroll',
           section === 'discover_strategies' && s.contentScrollFill,
         )}>
           <div className={mergeClasses(
@@ -503,7 +503,7 @@ export default function SettingsPage({
       </div>
 
       <Dialog open={wizardOpen} onOpenChange={(_, data) => setWizardOpen(!!data.open)}>
-        <DialogSurface className={mergeClasses(s.dialogSurface, 'inno-dialog-surface')}>
+        <DialogSurface className={mergeClasses(s.dialogSurface, 'opptrix-dialog-surface')}>
           <DialogBody>
             <DialogTitle className={s.dialogTitle}>添加模型提供商</DialogTitle>
             <DialogContent>

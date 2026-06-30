@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
 
 /** Per-stock in-memory dedup during factor sync — avoids repeated kline/financials calls. */
 export class SyncCachingEngine {

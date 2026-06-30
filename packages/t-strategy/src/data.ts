@@ -1,5 +1,5 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import type { StockKline } from '@inno-a-stock/shared'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
+import type { StockKline } from '@opptrix/shared'
 import type { StrategyData } from './base.js'
 import { computeAll } from './indicators.js'
 

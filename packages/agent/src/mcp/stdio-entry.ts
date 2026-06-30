@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { ResearchHub } from '@inno-a-stock/research-hub'
+import { ResearchHub } from '@opptrix/research-hub'
 import { createDefaultAppContext } from '../app-context.js'
 import { DATA_LAYER_MINING_TOOL_NAMES } from '../tool-meta.js'
 import { ToolRegistry } from '../tools.js'

@@ -1,4 +1,4 @@
-# innoAStock Agent 协作指南
+# Opptrix Agent 协作指南
 
 > **面向对象**：使用 Cursor、Codex、Claude Code 等 AI 编程助手参与本仓库开发的协作者。  
 > **用法**：在 Agent 会话开头附加一句：「请先阅读 `docs/AGENT-GUIDE.md`，再按其中规范修改代码。」  
@@ -8,7 +8,7 @@
 
 ## 1. 项目是什么
 
-**innoAStock** 是一款面向 A 股投资者的 **对话式投研助手**（非券商、非投顾产品）：
+**Opptrix** 是一款 **基于 AI 的投研分析助手**，面向 A 股投资者（非券商、非投顾产品）：
 
 - 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取真实行情、因子、机构观点等数据，再生成中文分析。
 - 提供 **Web**（浏览器 + Vite）与 **Desktop**（Electron 壳 + 本地 API sidecar）两种运行形态，**共用同一套 React UI 与 Fastify API**。
@@ -53,7 +53,7 @@
 ## 3. 仓库目录地图
 
 ```
-innoAStock/
+Opptrix/
 ├── apps/
 │   ├── server/              # Fastify API、静态 SPA、配置与会话持久化
 │   └── desktop/             # Electron main/preload、打包脚本
@@ -63,7 +63,7 @@ innoAStock/
 │       ├── market/          # 右侧投研面板：关注/发现/行业/个股/组合
 │       ├── desktop/         # 窗口 chrome、浮层侧栏、Electron 布局
 │       ├── pages/           # 设置页等
-│       ├── components/inno/ # InnoButton、InnoField 等封装
+│       ├── components/opptrix/ # OpptrixButton、OpptrixField 等封装
 │       ├── theme/           # tokens、mixins、Fluent 主题
 │       ├── api/             # 前端 API 客户端
 │       └── platform/        # isElectron 等运行时检测
@@ -115,13 +115,13 @@ innoAStock/
 
 ### 4.3 数据层
 
-**在线层** `@inno-a-stock/a-stock-layer`：
+**在线层** `@opptrix/a-stock-layer`：
 
 - `AshareEngine`：按 capability 在多个 driver 间自动回退
 - 内置 driver：东财、efinance、TDX（mootdx/pytdx）、腾讯、新浪、同花顺、网易、雪球、股吧、巨潮、中证指数、统计局、Tushare 等（见 `drivers/register.ts`）
-- 组合账本：`~/.a_stock_layer/portfolio.json`
+- 组合账本：`~/.opptrix/portfolio.json`
 
-**本地层** `@inno-a-stock/market-data`：
+**本地层** `@opptrix/market-data`：
 
 - SQLite 存储全市场因子、K 线、行业映射等
 - `MarketDataSyncEngine` 从在线层同步；支持设置页触发与 Agent 工具 `trigger_market_db_sync`
@@ -203,8 +203,8 @@ npm run serve               # 生产预览
 
 - **Fluent UI v9** + 项目 tokens（`client-ui/src/theme/tokens.ts`）
 - 暖色画布、陶土橙 `#D17A5D` 强调、卡片式 surface
-- 复用 `InnoButton`、`InnoField`、`InnoSurface` 等封装
-- 浮层菜单：毛玻璃样式，参考 `ComposerTooltipMenu.tsx` / `global.css` 中 `.inno-composer-tooltip-menu`
+- 复用 `OpptrixButton`、`OpptrixField`、`OpptrixSurface` 等封装
+- 浮层菜单：毛玻璃样式，参考 `ComposerTooltipMenu.tsx` / `global.css` 中 `.opptrix-composer-tooltip-menu`
 
 ### 6.2 桌面 / Electron
 
@@ -233,11 +233,11 @@ npm run serve               # 生产预览
 | 路径 / 变量 | 说明 |
 |-------------|------|
 | `apps/server/data/config.json` | LLM provider、model、API Key、默认评分卡 |
-| `~/.a_stock_layer/portfolio.json` | 交易账本 |
-| `~/.a_stock_layer/market-data/` | 本地 SQLite 与市场数据（路径以实现为准，可用 `get_project_info` 工具查询） |
+| `~/.opptrix/portfolio.json` | 交易账本 |
+| `~/.opptrix/market-data/` | 本地 SQLite 与市场数据（路径以实现为准，可用 `get_project_info` 工具查询） |
 | `.env` | 复制自 `.env.example`；`LLM_API_KEY` 等 |
 | `STOCK_RESEARCH_PORT` | API 端口，默认 `8711` |
-| `INNO_DESKTOP=1` | 桌面模式标记 |
+| `OPPTRIX_DESKTOP=1` | 桌面模式标记 |
 
 环境变量 **优先于** `config.json` 中的同名字段（以 server 实现为准）。
 
@@ -250,7 +250,8 @@ npm run serve               # 生产预览
 | **行情延迟** | 免费数据源可能延迟、缺字段；driver 会回退但不保证实时 |
 | **LLM 幻觉** | 模型可能编造数据；工具链设计为「先调工具、再回答」，勿移除校验 |
 | **源站限流** | 频繁请求东财/TDX 等可能失败；本地库用于缓解 |
-| **许可证** | 数据源各有 ToS；勿添加明显侵权的抓取逻辑 |
+| **源码许可** | 本仓库采用 [Apache License 2.0](../LICENSE)；再分发或商用须遵守其条款 |
+| **数据许可** | 行情等数据源各有服务条款；勿添加明显侵权的抓取逻辑 |
 | **证券合规** | 界面与文档避免「荐股」「保本」等表述 |
 
 ---

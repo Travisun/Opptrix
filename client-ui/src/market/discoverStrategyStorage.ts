@@ -1,11 +1,12 @@
 import type { CustomDiscoverStrategy } from '../types/schemas'
 
-const STORAGE_KEY = 'inno-discover-custom-strategies'
-const CHANGE_EVENT = 'inno-discover-strategies-change'
+const STORAGE_KEY = 'opptrix-discover-custom-strategies'
+const LEGACY_STORAGE_KEY = 'inno-discover-custom-strategies'
+const CHANGE_EVENT = 'opptrix-discover-strategies-change'
 
 export function loadCustomDiscoverStrategies(): CustomDiscoverStrategy[] {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY)
+    const raw = localStorage.getItem(STORAGE_KEY) ?? localStorage.getItem(LEGACY_STORAGE_KEY)
     if (!raw) return []
     const parsed = JSON.parse(raw) as CustomDiscoverStrategy[]
     if (!Array.isArray(parsed)) return []

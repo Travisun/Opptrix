@@ -4,15 +4,15 @@ import {
 } from '@fluentui/react-components'
 import { CheckmarkRegular } from '@fluentui/react-icons'
 import StatusBanner from '../components/StatusBanner'
-import InnoField from '../components/inno/InnoField'
-import InnoInput from '../components/inno/InnoInput'
-import InnoSelect, { InnoOption } from '../components/inno/InnoSelect'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixField from '../components/opptrix/OpptrixField'
+import OpptrixInput from '../components/opptrix/OpptrixInput'
+import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import {
   getProviderPresets, discoverModels, createProvider,
   type ProviderPreset,
 } from '../api/client'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -30,12 +30,12 @@ const useStyles = makeStyles({
     flex: 1,
     height: '3px',
     borderRadius: '999px',
-    backgroundColor: innoTokens.separator,
+    backgroundColor: opptrixTokens.separator,
     transitionProperty: 'background-color',
     transitionDuration: '200ms',
   },
   stepActive: {
-    backgroundColor: innoTokens.accent,
+    backgroundColor: opptrixTokens.accent,
   },
   scroll: {
     flex: 1,
@@ -59,12 +59,12 @@ const useStyles = makeStyles({
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.25,
   },
   stepDesc: {
     fontSize: '13px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.55,
   },
   formGrid: {
@@ -76,8 +76,8 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
-    border: `1px solid ${innoTokens.border}`,
-    borderRadius: innoTokens.radiusMd,
+    border: `1px solid ${opptrixTokens.border}`,
+    borderRadius: opptrixTokens.radiusMd,
     padding: '4px 12px',
     maxHeight: '200px',
     overflowY: 'auto',
@@ -89,7 +89,7 @@ const useStyles = makeStyles({
     padding: '10px 0',
     minHeight: '40px',
     cursor: 'pointer',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     ':last-child': {
       borderBottom: 'none',
     },
@@ -111,7 +111,7 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     gap: '10px',
     flexShrink: 0,
-    borderTop: `1px solid ${innoTokens.separator}`,
+    borderTop: `1px solid ${opptrixTokens.separator}`,
     marginTop: '2px',
     paddingTop: '16px',
   },
@@ -120,7 +120,7 @@ const useStyles = makeStyles({
   },
   statusLine: {
     fontSize: '13px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -128,7 +128,7 @@ const useStyles = makeStyles({
   },
   emptyModels: {
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
     padding: '8px 0',
   },
@@ -286,7 +286,7 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
         ))}
       </div>
 
-      <div className={`${s.scroll} inno-scroll`}>
+      <div className={`${s.scroll} opptrix-scroll`}>
         <div className={s.bodyInner}>
           {error && <StatusBanner message={error} tone="error" />}
 
@@ -297,32 +297,32 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
                 <Text className={s.stepDesc} block>OpenAI 兼容接口（/v1/chat/completions）</Text>
               </div>
               <div className={s.formGrid}>
-                <InnoField label="提供商">
-                  <InnoSelect
+                <OpptrixField label="提供商">
+                  <OpptrixSelect
                     value={presetLabel}
                     selectedOptions={[presetId]}
                     onOptionSelect={(_, d) => handlePresetChange(d.optionValue || presetId)}
                   >
                     {presets.map(p => (
-                      <InnoOption key={p.id} value={p.id}>{p.name}</InnoOption>
+                      <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
                     ))}
-                  </InnoSelect>
-                </InnoField>
-                <InnoField label="显示名称">
-                  <InnoInput
+                  </OpptrixSelect>
+                </OpptrixField>
+                <OpptrixField label="显示名称">
+                  <OpptrixInput
                     value={name}
                     onChange={(_, d) => setName(d.value || '')}
                     placeholder={isCustom ? '例如 My Provider' : '例如 DeepSeek'}
                   />
-                </InnoField>
+                </OpptrixField>
                 {isCustom && (
-                  <InnoField label="Base URL" hint="无需包含 /v1，系统会自动补全">
-                    <InnoInput
+                  <OpptrixField label="Base URL" hint="无需包含 /v1，系统会自动补全">
+                    <OpptrixInput
                       value={baseUrl}
                       onChange={(_, d) => setBaseUrl(d.value || '')}
                       placeholder="https://api.example.com"
                     />
-                  </InnoField>
+                  </OpptrixField>
                 )}
               </div>
             </>
@@ -335,14 +335,14 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
                 <Text className={s.stepDesc} block>密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。</Text>
               </div>
               <div className={s.formGrid}>
-                <InnoField label="API Key">
-                  <InnoInput
+                <OpptrixField label="API Key">
+                  <OpptrixInput
                     type="password"
                     value={apiKey}
                     onChange={(_, d) => setApiKey(d.value || '')}
                     placeholder="sk-..."
                   />
-                </InnoField>
+                </OpptrixField>
               </div>
             </>
           )}
@@ -356,7 +356,7 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
 
               {discoverHint && (
                 <div className={s.statusLine}>
-                  <Text style={{ fontSize: 13, color: innoTokens.textSecondary }}>
+                  <Text style={{ fontSize: 13, color: opptrixTokens.textSecondary }}>
                     {discoverHint}
                   </Text>
                 </div>
@@ -365,7 +365,7 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
               {allModels.length === 0 ? (
                 <Text className={s.emptyModels} block>暂无模型，请在下方手动添加</Text>
               ) : (
-                <div className={`${s.modelList} inno-scroll`}>
+                <div className={`${s.modelList} opptrix-scroll`}>
                   {allModels.map(model => (
                     <label key={model} className={s.modelRow}>
                       <Checkbox
@@ -381,22 +381,22 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
               )}
 
               <div className={s.customBlock}>
-                <InnoField label="自定义模型" hint="无需等待远程拉取，可立即添加">
-                  <InnoInput
+                <OpptrixField label="自定义模型" hint="无需等待远程拉取，可立即添加">
+                  <OpptrixInput
                     value={customModel}
                     onChange={(_, d) => setCustomModel(d.value || '')}
                     placeholder="deepseek-chat"
                     onKeyDown={e => { if (e.key === 'Enter') { e.preventDefault(); addCustomModel() } }}
                   />
-                </InnoField>
+                </OpptrixField>
                 <div className={s.customActions}>
-                  <InnoButton variant="secondary" onClick={addCustomModel} disabled={!customModel.trim()}>
+                  <OpptrixButton variant="secondary" onClick={addCustomModel} disabled={!customModel.trim()}>
                     添加模型
-                  </InnoButton>
+                  </OpptrixButton>
                   {allModels.length === 0 && (
-                    <InnoButton variant="secondary" onClick={() => void runDiscover()} disabled={discovering}>
+                    <OpptrixButton variant="secondary" onClick={() => void runDiscover()} disabled={discovering}>
                       {discovering ? '获取中…' : '重新获取'}
-                    </InnoButton>
+                    </OpptrixButton>
                   )}
                 </div>
               </div>
@@ -406,15 +406,15 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
       </div>
 
       <div className={s.footer}>
-        <InnoButton
+        <OpptrixButton
           className={s.footerBack}
           variant="secondary"
           onClick={handleBack}
         >
           {step === 1 ? '取消' : '上一步'}
-        </InnoButton>
+        </OpptrixButton>
         {step < 3 ? (
-          <InnoButton
+          <OpptrixButton
             variant="primary"
             onClick={() => void handleNext()}
             disabled={
@@ -423,16 +423,16 @@ export default function ProviderWizard({ onCancel, onDone }: ProviderWizardProps
             }
           >
             {step === 2 && discovering ? '验证中…' : '下一步'}
-          </InnoButton>
+          </OpptrixButton>
         ) : (
-          <InnoButton
+          <OpptrixButton
             variant="primary"
             icon={<CheckmarkRegular />}
             onClick={handleSave}
             disabled={saving || !canSave}
           >
             {saving ? '保存中…' : '完成添加'}
-          </InnoButton>
+          </OpptrixButton>
         )}
       </div>
     </div>

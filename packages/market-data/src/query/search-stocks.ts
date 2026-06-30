@@ -1,5 +1,5 @@
-import { normalizeCode, resolveMarket } from '@inno-a-stock/a-stock-layer'
-import type { StockListItem } from '@inno-a-stock/shared'
+import { normalizeCode, resolveMarket } from '@opptrix/a-stock-layer'
+import type { StockListItem } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 
 const SEARCHABLE_WHERE = `

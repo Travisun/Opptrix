@@ -1,7 +1,7 @@
 import type { ChartPeriod, IntradayChartBar, OhlcChartBar, StockChartData } from '../types/market'
 import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPeriod } from './chartTime'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import type { Time } from 'lightweight-charts'
 
 export type ChartMode = 'ohlc' | 'intraday'
@@ -53,7 +53,7 @@ export interface ChartSeriesBundle {
 }
 
 function volumeColor(change: number | null | undefined): string {
-  if (change == null || change === 0) return innoTokens.textTertiary
+  if (change == null || change === 0) return opptrixTokens.textTertiary
   return change >= 0 ? MARKET_UP : MARKET_DOWN
 }
 

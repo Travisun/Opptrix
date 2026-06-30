@@ -1,8 +1,8 @@
 {
-  "name": "@inno-a-stock/desktop",
+  "name": "@opptrix/desktop",
   "version": "0.6.0",
   "private": true,
-  "description": "innoAStock cross-platform desktop shell (Electron + Node sidecar)",
+  "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -10,16 +10,17 @@
     "build:dir": "node scripts/prebuild.mjs && electron-builder --dir"
   },
   "build": {
-    "appId": "com.inno-a-stock.desktop",
-    "productName": "innoAStock",
+    "appId": "com.opptrix.desktop",
+    "productName": "Opptrix",
     "directories": {
       "output": "release"
     },
     "files": [
       "electron/**/*",
       "package.json",
-      "app-icon.png"
+      "build/icons/**/*"
     ],
+    "icon": "build/icons/logo.png",
     "extraResources": [
       {
         "from": "runtime-stage",
@@ -31,20 +32,20 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "app-icon.png",
+      "icon": "build/icons/logo.png",
       "target": [
         "dmg",
         "zip"
       ]
     },
     "win": {
-      "icon": "app-icon.png",
+      "icon": "build/icons/logo.png",
       "target": [
         "nsis"
       ]
     },
     "linux": {
-      "icon": "app-icon.png",
+      "icon": "build/icons/linux",
       "target": [
         "AppImage",
         "deb"

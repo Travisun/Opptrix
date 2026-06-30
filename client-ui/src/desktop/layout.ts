@@ -1,5 +1,5 @@
 import { electronPlatform } from '../platform/detect'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import {
   DESKTOP_SETTINGS_SIDEBAR_WIDTH,
   DESKTOP_TITLE_GAP,
@@ -36,7 +36,7 @@ export function desktopTitleLeft(
     return afterToolbar
   }
   if (sidebarInline) {
-    return innoTokens.sidebarWidthPx + DESKTOP_TITLE_GAP
+    return opptrixTokens.sidebarWidthPx + DESKTOP_TITLE_GAP
   }
   return afterToolbar
 }

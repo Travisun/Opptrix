@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/research-hub",
+  "name": "@opptrix/research-hub",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -8,12 +8,12 @@
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
   "scripts": { "build": "tsc -p tsconfig.json" },
   "dependencies": {
-    "@inno-a-stock/shared": "*",
-    "@inno-a-stock/a-stock-layer": "*",
-    "@inno-a-stock/market-data": "*",
-    "@inno-a-stock/stock-eval": "*",
-    "@inno-a-stock/institutions": "*",
-    "@inno-a-stock/t-strategy": "*",
-    "@inno-a-stock/skills": "*"
+    "@opptrix/shared": "*",
+    "@opptrix/a-stock-layer": "*",
+    "@opptrix/market-data": "*",
+    "@opptrix/stock-eval": "*",
+    "@opptrix/institutions": "*",
+    "@opptrix/t-strategy": "*",
+    "@opptrix/skills": "*"
   }
 }

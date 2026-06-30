@@ -1,5 +1,5 @@
 {
-  "name": "@inno-a-stock/a-stock-layer",
+  "name": "@opptrix/a-stock-layer",
   "version": "0.4.0",
   "private": true,
   "type": "module",
@@ -16,7 +16,7 @@
     "audit:apis": "npm run build && node scripts/audit-apis.mjs"
   },
   "dependencies": {
-    "@inno-a-stock/shared": "*",
+    "@opptrix/shared": "*",
     "nodetdx": "^4.2.6"
   }
 }

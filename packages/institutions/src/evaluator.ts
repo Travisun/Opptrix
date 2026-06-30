@@ -1,7 +1,7 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
 import type {
   EvalDimension, InstitutionRatingItem, MethodSource, RatingLevel,
-} from '@inno-a-stock/shared'
+} from '@opptrix/shared'
 
 const METHOD_WEIGHT: Record<MethodSource, number> = {
   documented: 1.0,

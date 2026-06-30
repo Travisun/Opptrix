@@ -2,7 +2,7 @@ import { Fragment, useMemo, useRef, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, CheckmarkRegular } from '@fluentui/react-icons'
 import type { AvailableModel } from '../types/chat'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { focusVisibleRing, ghostInteractive, motion } from '../theme/mixins'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
@@ -41,13 +41,13 @@ const useStyles = makeStyles({
     padding: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontWeight: 500,
     cursor: 'pointer',
     transitionProperty: 'color, opacity',
     transitionDuration: motion.fast,
     ':hover': {
-      color: innoTokens.textPrimary,
+      color: opptrixTokens.textPrimary,
       backgroundColor: 'transparent',
     },
     ':disabled': {
@@ -71,13 +71,13 @@ const useStyles = makeStyles({
   triggerIcon: {
     flexShrink: 0,
     fontSize: '12px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   groupHeader: {
     display: 'block',
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '8px 10px 4px',
@@ -85,7 +85,7 @@ const useStyles = makeStyles({
   groupDivider: {
     height: '1px',
     margin: '4px 0',
-    backgroundColor: innoTokens.separator,
+    backgroundColor: opptrixTokens.separator,
   },
   modelName: {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -139,7 +139,7 @@ export default function ModelSelector({
     return (
       <Text style={{
         fontSize: compact ? 11 : 12,
-        color: innoTokens.textTertiary,
+        color: opptrixTokens.textTertiary,
         whiteSpace: 'nowrap',
         overflow: 'hidden',
         textOverflow: 'ellipsis',
@@ -164,7 +164,7 @@ export default function ModelSelector({
         className={mergeClasses(
           s.trigger,
           compact || isMobile ? s.triggerCompact : s.triggerDefault,
-          'inno-focusable',
+          'opptrix-focusable',
         )}
         disabled={disabled}
         aria-label={`当前模型：${displayModel}`}

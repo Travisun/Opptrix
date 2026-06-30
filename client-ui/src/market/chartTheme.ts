@@ -1,11 +1,11 @@
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 export const MARKET_UP = '#FF3B30'
 export const MARKET_DOWN = '#34C759'
 
 export const chartLayout = {
-  background: { type: 'solid' as const, color: innoTokens.canvas },
-  textColor: innoTokens.textTertiary,
+  background: { type: 'solid' as const, color: opptrixTokens.canvas },
+  textColor: opptrixTokens.textTertiary,
   fontSize: 10,
   fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   attributionLogo: false,

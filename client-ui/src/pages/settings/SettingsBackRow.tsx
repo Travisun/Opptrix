@@ -17,7 +17,7 @@ export default function SettingsBackRow({ onClick, className }: Props) {
   return (
     <button
       type="button"
-      className={mergeClasses(s.row, 'inno-focusable', className)}
+      className={mergeClasses(s.row, 'opptrix-focusable', className)}
       onClick={onClick}
     >
       <ArrowLeftRegular className={s.icon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />

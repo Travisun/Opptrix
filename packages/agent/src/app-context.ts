@@ -1,9 +1,9 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
 
-const DATA_ROOT = process.env.INNO_MARKET_DATA_DIR ?? path.join(os.homedir(), '.a_stock_layer')
+const DATA_ROOT = resolveUserDataRoot()
 
 export interface PublicAppSettings {
   providers: Array<{
@@ -38,7 +38,7 @@ export function resolveProjectRoot(start = process.cwd()): string {
     if (fs.existsSync(pkgPath)) {
       try {
         const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string; workspaces?: unknown }
-        if (pkg.name === 'inno-a-stock' || pkg.workspaces) return dir
+        if (pkg.name === 'opptrix' || pkg.workspaces) return dir
       } catch { /* continue */ }
     }
     const parent = path.dirname(dir)
@@ -65,8 +65,8 @@ export function getSystemInfo() {
     platform: process.platform,
     arch: process.arch,
     node_version: process.version,
-    runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
-    desktop: process.env.INNO_DESKTOP === '1',
+    runtime: isDesktopRuntime() ? 'desktop' : 'node',
+    desktop: isDesktopRuntime(),
     pid: process.pid,
     cwd: process.cwd(),
     timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -99,15 +99,15 @@ export function createDefaultAppContext(): AgentAppContext {
         llm_configured: false,
         default_scorecard: process.env.DEFAULT_SCORECARD ?? '综合评估',
         default_top_n: Number(process.env.DEFAULT_TOP_N ?? 20),
-        hint: '完整 LLM 提供商与默认模型请通过 innoAStock 服务端 /api/config 或 UI 设置查看',
+        hint: '完整 LLM 提供商与默认模型请通过 Opptrix 服务端 /api/config 或 UI 设置查看',
       }
     },
     async getProjectInfo() {
       return {
-        app: 'innoAStock',
+        app: 'Opptrix',
         component: 'agent-mcp',
         version: '0.6.0',
-        runtime: process.env.INNO_DESKTOP === '1' ? 'desktop' : 'node',
+        runtime: isDesktopRuntime() ? 'desktop' : 'node',
         project_root: resolveProjectRoot(),
         agent_package: agentPkgRoot,
         paths: getDataLayerPaths(),

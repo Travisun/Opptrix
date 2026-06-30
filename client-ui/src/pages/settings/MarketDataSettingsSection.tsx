@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { CheckmarkCircleRegular, CircleRegular } from '@fluentui/react-icons'
-import InnoButton from '../../components/inno/InnoButton'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import StatusBanner from '../../components/StatusBanner'
 import {
   getMarketDataSyncState,
@@ -12,7 +12,7 @@ import {
 } from '../../api/client'
 import type { MarketDataSyncState } from '../../types/market'
 import { SettingsGroup, SettingsCredentialRow, SettingsPanelHeader, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 
 const POLL_MS = 2000
 
@@ -32,7 +32,7 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '12px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     letterSpacing: '-0.01em',
     paddingLeft: '2px',
   },
@@ -47,11 +47,11 @@ const useStyles = makeStyles({
     },
   },
   statLabel: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '11px',
   },
   statValue: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     fontSize: '12px',
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '11px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.35,
   },
   progressJob: {
@@ -82,12 +82,12 @@ const useStyles = makeStyles({
     flexShrink: 0,
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   logShell: {
-    border: innoTokens.settingsPanelBorder,
-    borderRadius: innoTokens.radiusMd,
-    backgroundColor: innoTokens.canvasAlt,
+    border: opptrixTokens.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvasAlt,
     height: `${LOG_HEIGHT}px`,
     overflow: 'hidden',
     display: 'flex',
@@ -96,10 +96,10 @@ const useStyles = makeStyles({
   logHead: {
     flexShrink: 0,
     padding: '5px 10px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.3,
   },
   logBody: {
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: '10px',
     lineHeight: 1.45,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     overscrollBehavior: 'contain',
@@ -133,7 +133,7 @@ const useStyles = makeStyles({
   },
   syncHint: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.35,
     paddingLeft: '2px',
   },
@@ -152,11 +152,11 @@ const useStyles = makeStyles({
     lineHeight: 1.35,
   },
   bootstrapLabel: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 500,
   },
   bootstrapMeta: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     fontSize: '10px',
   },
@@ -164,7 +164,7 @@ const useStyles = makeStyles({
     color: '#248A3D',
   },
   bootstrapIconPending: {
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
 })
 
@@ -435,13 +435,13 @@ export default function MarketDataSettingsSection() {
           <SettingsPanelHeader
             title="同步"
             action={(
-              <InnoButton
+              <OpptrixButton
                 variant="primary"
                 disabled={starting || running}
                 onClick={() => { void handleStart() }}
               >
                 {running ? '同步中…' : '同步数据'}
-              </InnoButton>
+              </OpptrixButton>
             )}
           />
           <div className={s.syncBody}>
@@ -494,7 +494,7 @@ export default function MarketDataSettingsSection() {
           <pre
             ref={logRef}
             tabIndex={0}
-            className={mergeClasses(s.logBody, 'inno-scroll')}
+            className={mergeClasses(s.logBody, 'opptrix-scroll')}
           >
             {(state?.logs?.length
               ? state.logs.join('\n')

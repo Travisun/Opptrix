@@ -1,3 +1,4 @@
 runtime-stage/
 release/
+build/
 node_modules/

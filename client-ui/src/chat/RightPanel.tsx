@@ -87,7 +87,7 @@ export default function RightPanel({
       style={{ width: typeof shellWidth === 'number' ? `${shellWidth}px` : shellWidth }}
     >
       <aside
-        className={mergeClasses(s.panel, 'inno-right-panel')}
+        className={mergeClasses(s.panel, 'opptrix-right-panel')}
         style={contentWidth != null ? { width: `${contentWidth}px`, minWidth: `${contentWidth}px` } : { width: '100%' }}
         aria-label="行情与自选"
         aria-hidden={!visible}

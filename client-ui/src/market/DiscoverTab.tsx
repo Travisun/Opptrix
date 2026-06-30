@@ -4,11 +4,11 @@ import { AddRegular, ArrowRightRegular, DeleteRegular } from '@fluentui/react-ic
 import { listDiscoverStrategies, getHealth } from '../api/client'
 import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyPublic } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
 import { factorLabel } from './factorLabels'
 import { normalizeCode } from './format'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { research } from '../api/client'
 import type { DiscoverSessionState } from './useDiscoverSession'
@@ -37,20 +37,20 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD} 6px`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
   headHint: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.45,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   tabList: {
     minHeight: '32px',
@@ -73,7 +73,7 @@ const useStyles = makeStyles({
   },
   runHint: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.4,
   },
   progressBlock: {
@@ -81,32 +81,32 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '6px',
     padding: `6px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   progressMeta: {
     display: 'flex',
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '10px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   progressPct: {
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   dbBanner: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     fontSize: '10px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.45,
   },
   summary: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -114,16 +114,16 @@ const useStyles = makeStyles({
   summaryTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   summaryText: {
     fontSize: '10px',
     lineHeight: 1.45,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   stats: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   list: {
     flex: 1,
@@ -140,10 +140,10 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'flex-start',
     padding: `8px ${ITEM_INNER_PAD}`,
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     ...ghostInteractive,
-    ':hover': { backgroundColor: innoTokens.accentSoft },
+    ':hover': { backgroundColor: opptrixTokens.accentSoft },
   },
   rowMain: {
     minWidth: 0,
@@ -160,20 +160,20 @@ const useStyles = makeStyles({
   rowName: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowCode: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     flexShrink: 0,
   },
   rankBadge: {
     fontSize: '10px',
     fontWeight: 650,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontVariantNumeric: 'tabular-nums',
   },
   matchScore: {
@@ -185,11 +185,11 @@ const useStyles = makeStyles({
   thesis: {
     fontSize: '10px',
     lineHeight: 1.45,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   highlights: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.4,
   },
   rowActions: {
@@ -202,23 +202,23 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '4px',
-    borderRadius: innoTokens.radiusSm,
+    borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
     ...ghostInteractive,
     ':hover': {
-      color: innoTokens.textPrimary,
-      backgroundColor: innoTokens.accentSoft,
+      color: opptrixTokens.textPrimary,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   empty: {
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
   },
   historyList: {
@@ -236,14 +236,14 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'center',
     padding: `8px ${ITEM_INNER_PAD}`,
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     ...ghostInteractive,
-    ':hover': { backgroundColor: innoTokens.surfaceHover },
+    ':hover': { backgroundColor: opptrixTokens.surfaceHover },
   },
   historyRowActive: {
-    backgroundColor: innoTokens.accentSoft,
-    ':hover': { backgroundColor: innoTokens.accentSoft },
+    backgroundColor: opptrixTokens.accentSoft,
+    ':hover': { backgroundColor: opptrixTokens.accentSoft },
   },
   historyMain: {
     minWidth: 0,
@@ -254,14 +254,14 @@ const useStyles = makeStyles({
   historyTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   historyMeta: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.4,
   },
   historyActions: {
@@ -273,22 +273,22 @@ const useStyles = makeStyles({
   deleteBtn: {
     border: 'none',
     background: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '4px',
-    borderRadius: innoTokens.radiusSm,
+    borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
     ...ghostInteractive,
     ':hover': {
-      color: innoTokens.error,
-      backgroundColor: innoTokens.accentSoft,
+      color: opptrixTokens.error,
+      backgroundColor: opptrixTokens.accentSoft,
     },
   },
   error: {
     padding: `8px ${CONTENT_PAD}`,
     fontSize: '11px',
-    color: innoTokens.error,
+    color: opptrixTokens.error,
   },
 })
 
@@ -440,7 +440,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   }
 
   return (
-    <div className={mergeClasses(s.root, 'inno-discover-tab')}>
+    <div className={mergeClasses(s.root, 'opptrix-discover-tab')}>
       <div className={s.head}>
         <Text className={s.headHint} block>
           选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。
@@ -453,18 +453,18 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           placeholder="请选择策略"
         />
         <div className={s.runRow}>
-          <InnoButton
+          <OpptrixButton
             className={s.runBtn}
             variant="primary"
             disabled={running || !selectedId}
             onClick={handleRun}
           >
             {running ? '挖掘中…' : '开始挖掘'}
-          </InnoButton>
+          </OpptrixButton>
           {running && (
-            <InnoButton className={s.runBtn} variant="secondary" onClick={() => { void cancelRun() }}>
+            <OpptrixButton className={s.runBtn} variant="secondary" onClick={() => { void cancelRun() }}>
               取消
-            </InnoButton>
+            </OpptrixButton>
           )}
           {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
@@ -525,7 +525,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'inno-scroll')}>
+      <div className={mergeClasses(s.list, 'opptrix-scroll')}>
         {!result && !running && !error && (
           <Text className={s.empty}>
             选好策略并点击「开始挖掘」；任务在后台运行，切换页面不会中断。
@@ -593,7 +593,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       )}
 
       {panelTab === 'history' && (
-        <div className={mergeClasses(s.historyList, 'inno-scroll')}>
+        <div className={mergeClasses(s.historyList, 'opptrix-scroll')}>
           {deleteError && (
             <Text className={s.error} block>{deleteError}</Text>
           )}

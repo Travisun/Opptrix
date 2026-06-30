@@ -136,7 +136,7 @@ export default function ComposerTooltipMenu({
   return createPortal(
     <div
       ref={panelRef}
-      className="inno-composer-tooltip-menu inno-glass-panel"
+      className="opptrix-composer-tooltip-menu opptrix-glass-panel"
       style={{
         ...style,
         width: menuWidth,
@@ -147,14 +147,14 @@ export default function ComposerTooltipMenu({
       aria-label={ariaLabel}
     >
       {(title || showClose) && (
-        <div className="inno-composer-tooltip-menu__head">
+        <div className="opptrix-composer-tooltip-menu__head">
           {title ? (
-            <span className="inno-composer-tooltip-menu__title">{title}</span>
+            <span className="opptrix-composer-tooltip-menu__title">{title}</span>
           ) : <span />}
           {showClose ? (
             <button
               type="button"
-              className="inno-composer-tooltip-menu__close inno-focusable"
+              className="opptrix-composer-tooltip-menu__close opptrix-focusable"
               aria-label="关闭"
               onClick={onClose}
             >
@@ -164,13 +164,13 @@ export default function ComposerTooltipMenu({
         </div>
       )}
       <div
-        className="inno-composer-tooltip-menu__body inno-scroll"
+        className="opptrix-composer-tooltip-menu__body opptrix-scroll"
         style={{ maxHeight }}
       >
         {children}
       </div>
       {footer ? (
-        <div className="inno-composer-tooltip-menu__foot">
+        <div className="opptrix-composer-tooltip-menu__foot">
           {footer}
         </div>
       ) : null}
@@ -197,8 +197,8 @@ export function ComposerTooltipMenuItem({
     <button
       type="button"
       className={mergeClasses(
-        'inno-composer-tooltip-menu__item',
-        active && 'inno-composer-tooltip-menu__item--active',
+        'opptrix-composer-tooltip-menu__item',
+        active && 'opptrix-composer-tooltip-menu__item--active',
         className,
       )}
       onMouseDown={e => e.preventDefault()}

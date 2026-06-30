@@ -2,85 +2,85 @@
  * Markdown theme tokens — edit here to customize chat message rendering.
  * See also: client-ui/src/theme/markdownTokens.ts
  */
-.inno-md {
+.opptrix-md {
   /* Typography & rhythm */
-  --inno-md-line-height: 1.58;
-  --inno-md-block-gap: 0.45em;
-  --inno-md-heading-gap-top: 0.75em;
-  --inno-md-heading-gap-bottom: 0.3em;
-  --inno-md-list-indent: 1.15em;
-  --inno-md-list-item-gap: 0.15em;
+  --opptrix-md-line-height: 1.58;
+  --opptrix-md-block-gap: 0.45em;
+  --opptrix-md-heading-gap-top: 0.75em;
+  --opptrix-md-heading-gap-bottom: 0.3em;
+  --opptrix-md-list-indent: 1.15em;
+  --opptrix-md-list-item-gap: 0.15em;
 
   /* Text */
-  --inno-md-text: #1D1D1F;
-  --inno-md-text-muted: #6E6E73;
-  --inno-md-text-subtle: #AEAEB2;
+  --opptrix-md-text: #1D1D1F;
+  --opptrix-md-text-muted: #6E6E73;
+  --opptrix-md-text-subtle: #AEAEB2;
 
   /* Links */
-  --inno-md-link: #1D1D1F;
-  --inno-md-link-hover: #000000;
-  --inno-md-link-underline: rgba(60, 60, 67, 0.28);
+  --opptrix-md-link: #1D1D1F;
+  --opptrix-md-link-hover: #000000;
+  --opptrix-md-link-underline: rgba(60, 60, 67, 0.28);
 
   /* Code */
-  --inno-md-code-bg: rgba(29, 29, 31, 0.06);
-  --inno-md-code-fg: #1D1D1F;
-  --inno-md-pre-bg: rgba(60, 60, 67, 0.045);
-  --inno-md-pre-padding: 10px 12px;
+  --opptrix-md-code-bg: rgba(29, 29, 31, 0.06);
+  --opptrix-md-code-fg: #1D1D1F;
+  --opptrix-md-pre-bg: rgba(60, 60, 67, 0.045);
+  --opptrix-md-pre-padding: 10px 12px;
 
   /* Blockquote */
-  --inno-md-blockquote-fg: #6E6E73;
-  --inno-md-blockquote-border: rgba(60, 60, 67, 0.14);
-  --inno-md-blockquote-bg: rgba(60, 60, 67, 0.03);
-  --inno-md-blockquote-border-nested: rgba(60, 60, 67, 0.1);
+  --opptrix-md-blockquote-fg: #6E6E73;
+  --opptrix-md-blockquote-border: rgba(60, 60, 67, 0.14);
+  --opptrix-md-blockquote-bg: rgba(60, 60, 67, 0.03);
+  --opptrix-md-blockquote-border-nested: rgba(60, 60, 67, 0.1);
 
   /* Divider */
-  --inno-md-hr: rgba(60, 60, 67, 0.1);
+  --opptrix-md-hr: rgba(60, 60, 67, 0.1);
 
   /* Table */
-  --inno-md-table-header-fg: #1D1D1F;
-  --inno-md-table-cell-fg: #1D1D1F;
-  --inno-md-cell-padding-y: 3px;
-  --inno-md-cell-padding-x: 0px;
-  --inno-md-table-row-divider: rgba(60, 60, 67, 0.1);
-  --inno-md-table-copy-icon-size: 18px;
-  --inno-md-table-copy-fg: #6E6E73;
-  --inno-md-table-copy-fg-hover: #1D1D1F;
+  --opptrix-md-table-header-fg: #1D1D1F;
+  --opptrix-md-table-cell-fg: #1D1D1F;
+  --opptrix-md-cell-padding-y: 3px;
+  --opptrix-md-cell-padding-x: 0px;
+  --opptrix-md-table-row-divider: rgba(60, 60, 67, 0.1);
+  --opptrix-md-table-copy-icon-size: 18px;
+  --opptrix-md-table-copy-fg: #6E6E73;
+  --opptrix-md-table-copy-fg-hover: #1D1D1F;
 
   /* Mermaid */
-  --inno-md-mermaid-bg: rgba(60, 60, 67, 0.03);
-  --inno-md-mermaid-padding: 10px;
+  --opptrix-md-mermaid-bg: rgba(60, 60, 67, 0.03);
+  --opptrix-md-mermaid-padding: 10px;
 
   /* Error */
-  --inno-md-error: #FF3B30;
-  --inno-md-error-border: rgba(255, 59, 48, 0.22);
+  --opptrix-md-error: #FF3B30;
+  --opptrix-md-error-border: rgba(255, 59, 48, 0.22);
 
   /* Inline semantics */
-  --inno-md-strong-fg: #1D1D1F;
-  --inno-md-em-fg: #6E6E73;
-  --inno-md-mark-bg: rgba(255, 149, 0, 0.14);
-  --inno-md-mark-fg: #1D1D1F;
-  --inno-md-del-fg: #AEAEB2;
-  --inno-md-underline: rgba(60, 60, 67, 0.36);
-  --inno-md-tone-accent: #007AFF;
-  --inno-md-pre-border: rgba(60, 60, 67, 0.08);
-  --inno-md-pre-lang-fg: #AEAEB2;
-  --inno-md-kbd-bg: rgba(29, 29, 31, 0.06);
-  --inno-md-kbd-border: rgba(60, 60, 67, 0.12);
+  --opptrix-md-strong-fg: #1D1D1F;
+  --opptrix-md-em-fg: #6E6E73;
+  --opptrix-md-mark-bg: rgba(255, 149, 0, 0.14);
+  --opptrix-md-mark-fg: #1D1D1F;
+  --opptrix-md-del-fg: #AEAEB2;
+  --opptrix-md-underline: rgba(60, 60, 67, 0.36);
+  --opptrix-md-tone-accent: #007AFF;
+  --opptrix-md-pre-border: rgba(60, 60, 67, 0.08);
+  --opptrix-md-pre-lang-fg: #AEAEB2;
+  --opptrix-md-kbd-bg: rgba(29, 29, 31, 0.06);
+  --opptrix-md-kbd-border: rgba(60, 60, 67, 0.12);
 
-  /* Badge-like tags (class="inno-md-tag inno-md-tag--success" etc.) */
-  --inno-md-tag-neutral-bg: rgba(29, 29, 31, 0.06);
-  --inno-md-tag-neutral-fg: #6E6E73;
-  --inno-md-tag-info-bg: rgba(29, 29, 31, 0.06);
-  --inno-md-tag-info-fg: #1D1D1F;
-  --inno-md-tag-success-bg: rgba(52, 199, 89, 0.1);
-  --inno-md-tag-success-fg: #248A3D;
-  --inno-md-tag-warning-bg: rgba(255, 149, 0, 0.12);
-  --inno-md-tag-warning-fg: #C93400;
-  --inno-md-tag-error-bg: rgba(255, 59, 48, 0.1);
-  --inno-md-tag-error-fg: #D70015;
+  /* Badge-like tags (class="opptrix-md-tag opptrix-md-tag--success" etc.) */
+  --opptrix-md-tag-neutral-bg: rgba(29, 29, 31, 0.06);
+  --opptrix-md-tag-neutral-fg: #6E6E73;
+  --opptrix-md-tag-info-bg: rgba(29, 29, 31, 0.06);
+  --opptrix-md-tag-info-fg: #1D1D1F;
+  --opptrix-md-tag-success-bg: rgba(52, 199, 89, 0.1);
+  --opptrix-md-tag-success-fg: #248A3D;
+  --opptrix-md-tag-warning-bg: rgba(255, 149, 0, 0.12);
+  --opptrix-md-tag-warning-fg: #C93400;
+  --opptrix-md-tag-error-bg: rgba(255, 59, 48, 0.1);
+  --opptrix-md-tag-error-fg: #D70015;
 
   /* Radius */
-  --inno-md-radius-code: 5px;
-  --inno-md-radius-pre: 8px;
-  --inno-md-radius-mermaid: 8px;
+  --opptrix-md-radius-code: 5px;
+  --opptrix-md-radius-pre: 8px;
+  --opptrix-md-radius-mermaid: 8px;
 }

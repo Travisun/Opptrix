@@ -19,11 +19,11 @@ import {
   formatVolume,
   pctTone,
 } from './format'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 type DetailTab = 'analysis' | 'chart' | 'basic' | 'company' | 'news' | 'f10'
@@ -40,7 +40,7 @@ const useStyles = makeStyles({
   hero: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD} 5px`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -63,14 +63,14 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   code: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     flexShrink: 0,
   },
   quoteMain: {
@@ -80,10 +80,10 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   manageBtn: {
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
-    color: innoTokens.textSecondary,
-    borderRadius: innoTokens.radiusSm,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
+    borderRadius: opptrixTokens.radiusSm,
     fontSize: '10px',
     fontWeight: 600,
     padding: '3px 7px',
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   },
   pctUp: { color: '#FF3B30' },
   pctDown: { color: '#34C759' },
-  pctFlat: { color: innoTokens.textTertiary },
+  pctFlat: { color: opptrixTokens.textTertiary },
   heroGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
@@ -128,13 +128,13 @@ const useStyles = makeStyles({
   },
   heroLabel: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     flexShrink: 0,
   },
   heroValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -142,8 +142,8 @@ const useStyles = makeStyles({
   },
   prepBanner: {
     flexShrink: 0,
-    borderBottom: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   prepHead: {
     width: '100%',
@@ -167,14 +167,14 @@ const useStyles = makeStyles({
   prepHeadText: {
     fontSize: '10px',
     fontWeight: 600,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   prepHeadTextError: {
-    color: innoTokens.error,
+    color: opptrixTokens.error,
   },
   prepBody: {
     display: 'flex',
@@ -185,12 +185,12 @@ const useStyles = makeStyles({
   prepTitle: {
     fontSize: '10px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
   },
   prepHint: {
     fontSize: '9px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.4,
   },
   prepActions: {
@@ -210,23 +210,23 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '9px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
   prepStepDone: {
     color: '#248A3D',
   },
   prepStepRunning: {
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontWeight: 600,
   },
   prepStepError: {
-    color: innoTokens.error,
+    color: opptrixTokens.error,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
     minHeight: '28px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     overflowX: 'auto',
     scrollbarWidth: 'none',
     '&::-webkit-scrollbar': { display: 'none' },
@@ -273,7 +273,7 @@ const useStyles = makeStyles({
   sectionTitle: {
     fontSize: '10px',
     fontWeight: 650,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
   },
@@ -289,8 +289,8 @@ const useStyles = makeStyles({
   },
   metric: {
     padding: '5px 6px',
-    borderRadius: innoTokens.radiusSm,
-    backgroundColor: innoTokens.canvasAlt,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixTokens.canvasAlt,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -298,13 +298,13 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.3,
     overflow: 'hidden',
@@ -314,7 +314,7 @@ const useStyles = makeStyles({
   prose: {
     fontSize: '11px',
     lineHeight: 1.55,
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     whiteSpace: 'pre-wrap',
   },
   tagRow: {
@@ -325,17 +325,17 @@ const useStyles = makeStyles({
   tag: {
     fontSize: '10px',
     padding: '1px 6px',
-    borderRadius: innoTokens.radiusFull,
-    backgroundColor: innoTokens.accentSoft,
-    color: innoTokens.textSecondary,
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixTokens.textSecondary,
   },
   list: {
     display: 'flex',
     flexDirection: 'column',
     gap: '0',
-    borderRadius: innoTokens.radiusSm,
+    borderRadius: opptrixTokens.radiusSm,
     overflow: 'hidden',
-    border: `1px solid ${innoTokens.separator}`,
+    border: `1px solid ${opptrixTokens.separator}`,
   },
   flatList: {
     display: 'flex',
@@ -347,39 +347,39 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'start',
     padding: '5px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   listDate: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.4,
   },
   listTitle: {
     fontSize: '11px',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.4,
     textDecoration: 'none',
-    ':hover': { color: innoTokens.accent },
+    ':hover': { color: opptrixTokens.accent },
   },
   tableHead: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   tableHeadCell: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   tableRow: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   tableRowWide: {
@@ -387,7 +387,7 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   tableHeadWide: {
@@ -395,11 +395,11 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   tableCell: {
     fontSize: '10px',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -407,14 +407,14 @@ const useStyles = makeStyles({
   },
   tableCellName: {
     fontSize: '10px',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   emptyHint: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     padding: '8px 2px',
   },
   center: {
@@ -423,7 +423,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     padding: '24px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '12px',
   },
 })
@@ -763,7 +763,7 @@ export default function StockDetailTab({
 
       <div className={s.tabBody}>
         <div className={mergeClasses(s.tabPanel, detailTab !== 'analysis' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             {detailTab === 'analysis' && (
               <StockDecisionCard
                 key={stock.code}
@@ -790,7 +790,7 @@ export default function StockDetailTab({
         </div>
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'basic' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             <MetricSection title="今日行情">
               <div className={s.metricGrid3}>
                 <Metric label="今开" value={formatPrice(quote?.open ?? null)} />
@@ -840,7 +840,7 @@ export default function StockDetailTab({
         </div>
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'company' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             <MetricSection title="公司概况">
               <div className={s.metricGrid3}>
                 <Metric label="公司全称" value={profile?.orgName || detail.name || '—'} />
@@ -899,13 +899,13 @@ export default function StockDetailTab({
         </div>
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'news' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             <NewsPanel items={detail.news ?? []} />
           </div>
         </div>
 
         <div className={mergeClasses(s.tabPanel, detailTab !== 'f10' && s.tabPanelHidden)}>
-          <div className={mergeClasses(s.scrollPanel, 'inno-scroll')}>
+          <div className={mergeClasses(s.scrollPanel, 'opptrix-scroll')}>
             {financial && (
               <MetricSection title="最新财报摘要">
                 <div className={s.metricGrid3}>

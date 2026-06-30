@@ -4,11 +4,11 @@ import { ArrowLeftRegular, DismissRegular, SearchRegular } from '@fluentui/react
 import { research } from '../api/client'
 import type { IndustryMiningData, IndustryStatItem, IndustryStockItem } from '../types/schemas'
 import type { MarketQuote, WatchlistItem } from '../types/market'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MermaidBlock from '../chat/MermaidBlock'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
 import { industryDisplayName, industryMatchesFilter, industryMiningQuery } from './industryLabels'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 
@@ -28,7 +28,7 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD} 8px`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -47,7 +47,7 @@ const useStyles = makeStyles({
   headTitle: {
     fontSize: '12px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -55,13 +55,13 @@ const useStyles = makeStyles({
   },
   headHint: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.45,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   tabList: {
     minHeight: '32px',
@@ -77,7 +77,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     flexShrink: 0,
   },
   searchInput: {
@@ -87,7 +87,7 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,
@@ -96,7 +96,7 @@ const useStyles = makeStyles({
   },
   meta: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
   list: {
     flex: 1,
@@ -105,7 +105,7 @@ const useStyles = makeStyles({
     padding: `0 ${ITEM_BG_INSET}`,
   },
   listItem: {
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   row: {
@@ -132,7 +132,7 @@ const useStyles = makeStyles({
   industryName: {
     fontSize: '12px',
     fontWeight: 500,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -148,21 +148,21 @@ const useStyles = makeStyles({
   stockName: {
     fontSize: '12px',
     fontWeight: 500,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stockMeta: {
     fontSize: '10px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stat: {
     fontSize: '10px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     textAlign: 'right',
     whiteSpace: 'nowrap',
   },
@@ -184,7 +184,7 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   quotePct: {
     fontSize: '10px',
@@ -193,7 +193,7 @@ const useStyles = makeStyles({
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
-  pctFlat: { color: innoTokens.textTertiary },
+  pctFlat: { color: opptrixTokens.textTertiary },
   chainPane: {
     flex: 1,
     minHeight: 0,
@@ -211,11 +211,11 @@ const useStyles = makeStyles({
   chainSectionTitle: {
     fontSize: '11px',
     fontWeight: 650,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
   },
   chainText: {
     fontSize: '11px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     lineHeight: 1.55,
     whiteSpace: 'pre-wrap',
   },
@@ -223,7 +223,7 @@ const useStyles = makeStyles({
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.5,
   },
   center: {
@@ -232,7 +232,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '32px',
     gap: '8px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     fontSize: '11px',
   },
 })
@@ -459,7 +459,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
       <div className={s.root}>
         <div className={s.head}>
           <div className={s.headRow}>
-            <InnoButton
+            <OpptrixButton
               className={s.backBtn}
               variant="icon"
               size="small"
@@ -475,7 +475,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
               : '产业链上下游结构与代表环节'}
           </Text>
           {detailTab === 'stocks' && stocksError ? (
-            <Text className={s.meta} style={{ color: innoTokens.error }}>{stocksError}</Text>
+            <Text className={s.meta} style={{ color: opptrixTokens.error }}>{stocksError}</Text>
           ) : null}
         </div>
 
@@ -504,13 +504,13 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                   {stocksError ? '加载失败' : '该行业暂无个股'}
                   {stocksError ? (
                     <div style={{ marginTop: 12 }}>
-                      <InnoButton
+                      <OpptrixButton
                         size="small"
                         variant="secondary"
                         onClick={() => void loadStocks(selectedIndustry)}
                       >
                         重试
-                      </InnoButton>
+                      </OpptrixButton>
                     </div>
                   ) : null}
                 </div>
@@ -563,13 +563,13 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                 <div className={s.empty}>
                   {miningError}
                   <div style={{ marginTop: 12 }}>
-                    <InnoButton
+                    <OpptrixButton
                       size="small"
                       variant="secondary"
                       onClick={() => void loadMining(selectedIndustry)}
                     >
                       重试
-                    </InnoButton>
+                    </OpptrixButton>
                   </div>
                 </div>
               ) : mining ? (
@@ -628,7 +628,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
           按申万行业聚合本地因子库；点击行业查看成分股与产业链，再点个股进入详情。
         </Text>
         {tradeDate ? <Text className={s.meta}>行情日期 {tradeDate}</Text> : null}
-        {error ? <Text className={s.meta} style={{ color: innoTokens.error }}>{error}</Text> : null}
+        {error ? <Text className={s.meta} style={{ color: opptrixTokens.error }}>{error}</Text> : null}
       </div>
 
       <div className={s.list}>

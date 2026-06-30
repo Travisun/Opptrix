@@ -10,7 +10,7 @@ import type {
   DiscoverStrategyDetail,
   DiscoverStrategyPublic,
 } from '../../types/schemas'
-import InnoButton from '../../components/inno/InnoButton'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { factorLabel } from '../../market/factorLabels'
 import { useCustomDiscoverStrategies } from '../../market/useCustomDiscoverStrategies'
 import { SettingsGroup } from './SettingsPrimitives'
@@ -19,7 +19,7 @@ import {
   StrategyViewDialog,
   type StrategyDraft,
 } from './DiscoverStrategyDialogs'
-import { innoTokens } from '../../theme/tokens'
+import { opptrixTokens } from '../../theme/tokens'
 
 const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
   value: '价值',
@@ -67,13 +67,13 @@ const useStyles = makeStyles({
     gap: '12px',
     padding: '10px 18px',
     minHeight: '44px',
-    borderBottom: `1px solid ${innoTokens.separator}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   panelHeaderTitle: {
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
   },
   listScroll: {
@@ -92,7 +92,7 @@ const useStyles = makeStyles({
     minHeight: '44px',
   },
   rowTopBorder: {
-    borderTop: `1px solid ${innoTokens.gray200}`,
+    borderTop: `1px solid ${opptrixTokens.gray200}`,
   },
   rowMain: {
     flex: 1,
@@ -105,7 +105,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   },
   rowDesc: {
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.45,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -129,23 +129,23 @@ const useStyles = makeStyles({
     flexShrink: 0,
     fontSize: '10px',
     fontWeight: 600,
-    borderRadius: innoTokens.radiusFull,
+    borderRadius: opptrixTokens.radiusFull,
     padding: '2px 8px',
   },
   tagBuiltin: {
-    color: innoTokens.textSecondary,
-    border: `1px solid ${innoTokens.separator}`,
-    backgroundColor: innoTokens.canvasAlt,
+    color: opptrixTokens.textSecondary,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   tagCustom: {
-    color: innoTokens.accent,
-    border: `1px solid ${innoTokens.accentMuted}`,
-    backgroundColor: innoTokens.accentSoft,
+    color: opptrixTokens.accent,
+    border: `1px solid ${opptrixTokens.accentMuted}`,
+    backgroundColor: opptrixTokens.accentSoft,
   },
   empty: {
     padding: '16px 18px',
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
   },
 })
 
@@ -300,11 +300,11 @@ export default function DiscoverStrategiesSettingsSection() {
       <SettingsGroup className={s.group}>
         <div className={s.panelHeader}>
           <Text className={s.panelHeaderTitle} block>策略库</Text>
-          <InnoButton variant="secondary" onClick={() => setEditTarget({ mode: 'create' })}>
+          <OpptrixButton variant="secondary" onClick={() => setEditTarget({ mode: 'create' })}>
             新建自编
-          </InnoButton>
+          </OpptrixButton>
         </div>
-        <div className={mergeClasses(s.listScroll, 'inno-scroll')}>
+        <div className={mergeClasses(s.listScroll, 'opptrix-scroll')}>
           {listItems.map((item, idx) => (
             <div
               key={`${item.kind}:${item.id}`}
@@ -319,7 +319,7 @@ export default function DiscoverStrategiesSettingsSection() {
                   {item.kind === 'builtin' ? '内置' : '自编'}
                 </span>
                 {item.kind === 'custom' && (
-                  <InnoButton
+                  <OpptrixButton
                     variant="icon"
                     icon={<EditRegular fontSize={16} />}
                     aria-label={`编辑 ${item.name}`}
@@ -327,14 +327,14 @@ export default function DiscoverStrategiesSettingsSection() {
                   />
                 )}
                 {item.kind === 'builtin' && (
-                  <InnoButton
+                  <OpptrixButton
                     variant="icon"
                     icon={<CopyRegular fontSize={16} />}
                     aria-label={`复制 ${item.name} 为自编`}
                     onClick={() => { void handleCopyBuiltinFromList(item.id) }}
                   />
                 )}
-                <InnoButton
+                <OpptrixButton
                   variant="icon"
                   icon={<EyeRegular fontSize={16} />}
                   aria-label={`查看 ${item.name}`}

@@ -1,4 +1,4 @@
-import type { AshareEngine } from '@inno-a-stock/a-stock-layer'
+import type { AshareEngine } from '@opptrix/a-stock-layer'
 import type { StrategyData } from './base.js'
 import type { Signal } from './base.js'
 import { gatherAll, gatherFromKline } from './data.js'

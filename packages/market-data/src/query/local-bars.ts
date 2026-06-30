@@ -1,4 +1,4 @@
-import type { StockKline } from '@inno-a-stock/shared'
+import type { StockKline } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 import { normalizeStockCode } from '../utils.js'
 

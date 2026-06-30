@@ -1,13 +1,13 @@
 import fs from 'node:fs'
 import path from 'node:path'
-import os from 'node:os'
 import { randomUUID } from 'node:crypto'
+import { resolveUserDataRoot } from '@opptrix/shared'
 import type { ChatMessage } from './llm/provider.js'
 import type { ChatToolStep } from './chat-progress.js'
 
 export type { ChatToolStep }
 
-const SESSIONS_DIR = path.join(os.homedir(), '.a_stock_layer', 'sessions')
+const SESSIONS_DIR = path.join(resolveUserDataRoot(), 'sessions')
 
 export interface SessionMeta {
   id: string

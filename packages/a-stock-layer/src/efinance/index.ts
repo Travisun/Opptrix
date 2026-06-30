@@ -7,7 +7,7 @@ import { stock } from './stock.js'
  * Pure Node efinance — mirrors `import efinance as ef`
  *
  * Usage:
- *   import { ef } from '@inno-a-stock/a-stock-layer'
+ *   import { ef } from '@opptrix/a-stock-layer'
  *   await ef.stock.getQuote('600519')
  *   await ef.fund.getQuoteHistory('161725')
  */

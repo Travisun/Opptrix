@@ -2,9 +2,9 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
-import type { AgentEngine } from '@inno-a-stock/agent'
-import { getDiscoverStrategy } from '@inno-a-stock/agent'
-import type { DiscoverPhase, DiscoverProgress, DiscoverResult } from '@inno-a-stock/agent'
+import type { AgentEngine } from '@opptrix/agent'
+import { getDiscoverStrategy } from '@opptrix/agent'
+import type { DiscoverPhase, DiscoverProgress, DiscoverResult } from '@opptrix/agent'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const STORE_PATH = path.resolve(__dirname, '../data/discover-jobs.json')

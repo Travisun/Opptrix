@@ -29,7 +29,7 @@ import {
   ArrowMinimizeRegular,
 } from '../chat/chatIcons'
 import { electronPlatform } from '../platform/detect'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { desktopTitleLeft, desktopToolbarLeft, type DesktopViewMode } from './layout'
 import ChromeToolButton from './ChromeToolButton'
 import WindowControls from './WindowControls'
@@ -82,7 +82,7 @@ const useStyles = makeStyles({
   titleText: {
     fontSize: '13px',
     fontWeight: 500,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     letterSpacing: '-0.01em',
     overflow: 'hidden',
     textOverflow: 'ellipsis',

@@ -6,9 +6,9 @@ import {
 } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
-import InnoButton from '../components/inno/InnoButton'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
@@ -24,7 +24,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   sidebarWeb: {
-    backgroundColor: innoTokens.canvasAlt,
+    backgroundColor: opptrixTokens.canvasAlt,
   },
   panelShell: {
     flexShrink: 0,
@@ -37,12 +37,12 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   panelShellVisible: {
-    width: innoTokens.sidebarWidth,
+    width: opptrixTokens.sidebarWidth,
     pointerEvents: 'auto',
   },
   sidebarPanel: {
-    width: innoTokens.sidebarWidth,
-    minWidth: innoTokens.sidebarWidth,
+    width: opptrixTokens.sidebarWidth,
+    minWidth: opptrixTokens.sidebarWidth,
     height: '100%',
     opacity: 0,
     transform: 'translateX(-12px)',
@@ -67,7 +67,7 @@ const useStyles = makeStyles({
     top: 0,
     left: 0,
     bottom: 0,
-    width: innoTokens.mobileDrawerWidth,
+    width: opptrixTokens.mobileDrawerWidth,
     maxWidth: '300px',
     zIndex: 200,
     paddingTop: 'env(safe-area-inset-top)',
@@ -76,8 +76,8 @@ const useStyles = makeStyles({
     transitionProperty: 'transform',
     transitionDuration: motion.slow,
     transitionTimingFunction: motion.easeOut,
-    backgroundColor: innoTokens.canvas,
-    borderLeft: `1px solid ${innoTokens.separator}`,
+    backgroundColor: opptrixTokens.canvas,
+    borderLeft: `1px solid ${opptrixTokens.separator}`,
   },
   sidebarDrawerOpen: {
     transform: 'translateX(0)',
@@ -96,7 +96,7 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '6px 14px 2px',
@@ -115,11 +115,11 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '5px 10px',
     minHeight: '30px',
-    borderRadius: innoTokens.radiusMd,
-    color: innoTokens.textPrimary,
+    borderRadius: opptrixTokens.radiusMd,
+    color: opptrixTokens.textPrimary,
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: innoTokens.surfaceHover,
+      backgroundColor: opptrixTokens.surfaceHover,
     },
   },
   itemActive: {
@@ -145,7 +145,7 @@ const useStyles = makeStyles({
   },
   itemDate: {
     fontSize: '11px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1,
     whiteSpace: 'nowrap',
     transitionProperty: 'opacity',
@@ -175,7 +175,7 @@ const useStyles = makeStyles({
     padding: '32px 16px',
     textAlign: 'center',
     fontSize: '13px',
-    color: innoTokens.textTertiary,
+    color: opptrixTokens.textTertiary,
     lineHeight: 1.6,
   },
   footer: {
@@ -185,12 +185,12 @@ const useStyles = makeStyles({
   settingsBtn: {
     width: '100%',
     justifyContent: 'flex-start',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
     fontWeight: 500,
     minHeight: '32px',
     paddingTop: '5px',
     paddingBottom: '5px',
-    borderRadius: innoTokens.radiusMd,
+    borderRadius: opptrixTokens.radiusMd,
   },
   backdrop: {
     position: 'fixed',
@@ -210,8 +210,8 @@ const useStyles = makeStyles({
   iconBtn: {
     minWidth: '36px',
     height: '36px',
-    borderRadius: innoTokens.radiusMd,
-    color: innoTokens.textTertiary,
+    borderRadius: opptrixTokens.radiusMd,
+    color: opptrixTokens.textTertiary,
   },
 })
 
@@ -251,18 +251,18 @@ export default function SessionSidebar({
     <>
       {isDrawer && (
         <div className={s.drawerHead}>
-          <InnoButton className={s.iconBtn} variant="ghost" icon={<DismissRegular />} onClick={onClose} aria-label="关闭" />
+          <OpptrixButton className={s.iconBtn} variant="ghost" icon={<DismissRegular />} onClick={onClose} aria-label="关闭" />
         </div>
       )}
 
-      <button type="button" className={mergeClasses(s.menuRow, 'inno-focusable')} onClick={onNew}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
       </button>
 
       <Text className={s.sectionLabel}>对话</Text>
 
-      <div className={mergeClasses(s.list, 'inno-scroll', 'inno-scroll-hover')}>
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {sessions.length === 0 && (
           <div className={s.empty}>暂无历史对话</div>
         )}
@@ -272,11 +272,11 @@ export default function SessionSidebar({
             <div
               key={sess.id}
               className={mergeClasses(
-                'inno-session-item',
-                'inno-focusable',
+                'opptrix-session-item',
+                'opptrix-focusable',
                 s.item,
                 active && s.itemActive,
-                active && 'inno-session-item-active',
+                active && 'opptrix-session-item-active',
               )}
               onClick={() => handleSelect(sess.id)}
               role="button"
@@ -285,10 +285,10 @@ export default function SessionSidebar({
             >
               <span className={s.itemTitle}>{sess.title}</span>
               <span className={s.itemTrailing}>
-                <span className={mergeClasses(s.itemDate, 'inno-session-date')}>{formatDate(sess.updatedAt)}</span>
+                <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
                 <button
                   type="button"
-                  className={mergeClasses(s.itemDelete, 'inno-session-delete', 'inno-focusable')}
+                  className={mergeClasses(s.itemDelete, 'opptrix-session-delete', 'opptrix-focusable')}
                   onClick={e => { e.stopPropagation(); onDelete(sess.id) }}
                   aria-label="删除对话"
                 >
@@ -301,9 +301,9 @@ export default function SessionSidebar({
       </div>
 
       <div className={s.footer}>
-        <InnoButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
+        <OpptrixButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
           设置
-        </InnoButton>
+        </OpptrixButton>
       </div>
     </>
   )
@@ -312,7 +312,7 @@ export default function SessionSidebar({
     return (
       <OverlaySidebarShell
         open={visible}
-        width={innoTokens.sidebarWidth}
+        width={opptrixTokens.sidebarWidth}
         onClose={onClose}
       >
         <div
@@ -339,8 +339,8 @@ export default function SessionSidebar({
         !electronChrome && !isDrawer && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
         electronChrome && s.sidebarTopElectron,
-        electronChrome && 'inno-glass-sidebar',
-        !isDrawer && 'inno-sidebar-edge',
+        electronChrome && 'opptrix-glass-sidebar',
+        !isDrawer && 'opptrix-sidebar-edge',
       )}
     >
       {sidebarBody}

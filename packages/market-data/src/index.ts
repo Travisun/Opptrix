@@ -1,5 +1,5 @@
-import { AshareEngine } from '@inno-a-stock/a-stock-layer'
-import { EvaluationEngine } from '@inno-a-stock/stock-eval'
+import { AshareEngine } from '@opptrix/a-stock-layer'
+import { EvaluationEngine } from '@opptrix/stock-eval'
 import { getMarketDataStore, MarketDataStore } from './store.js'
 import { MarketDataSyncEngine, ALL_SYNC_JOBS, type SyncOptions } from './sync/engine.js'
 import { getMarketSyncCoordinator, MarketSyncCoordinator, type SyncStateSnapshot } from './sync/coordinator.js'

@@ -1,10 +1,10 @@
 import fs from 'node:fs'
-import os from 'node:os'
 import path from 'node:path'
+import { resolveUserDataRoot } from '@opptrix/shared'
 import type { FeeConfig, TradeRecord } from './models.js'
 import { DEFAULT_FEE_CONFIG } from './models.js'
 
-const DB_DIR = path.join(os.homedir(), '.a_stock_layer')
+const DB_DIR = resolveUserDataRoot()
 const DB_FILE = path.join(DB_DIR, 'portfolio.json')
 
 interface DbState {

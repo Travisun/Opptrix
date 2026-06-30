@@ -23,7 +23,7 @@ function MarkdownMessage({ content, className }: Props) {
   )
 
   return (
-    <div className={`inno-md ${className ?? ''}`}>
+    <div className={`opptrix-md ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={rehypePlugins}

@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { DESKTOP_TOOL_ICON_PADDING, DESKTOP_TOOL_SIZE } from './constants'
 
@@ -14,29 +14,29 @@ const useStyles = makeStyles({
     minWidth: `${DESKTOP_TOOL_SIZE}px`,
     boxSizing: 'border-box',
     ...ghostInteractive,
-    borderRadius: innoTokens.radiusSm,
-    color: innoTokens.textSecondary,
+    borderRadius: opptrixTokens.radiusSm,
+    color: opptrixTokens.textSecondary,
     flexShrink: 0,
     WebkitAppRegion: 'no-drag',
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
-      color: innoTokens.textPrimary,
+      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixTokens.textPrimary,
     },
     ':disabled': {
       opacity: 0.28,
       cursor: 'default',
       ':hover': {
         backgroundColor: 'transparent',
-        color: innoTokens.textSecondary,
+        color: opptrixTokens.textSecondary,
       },
     },
   },
   btnActive: {
-    backgroundColor: innoTokens.accentSoft,
-    color: innoTokens.accent,
+    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixTokens.accent,
     ':hover': {
-      backgroundColor: innoTokens.accentSoft,
-      color: innoTokens.accent,
+      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixTokens.accent,
     },
   },
 })
@@ -62,7 +62,7 @@ export default function ChromeToolButton({
   return (
     <button
       type="button"
-      className={mergeClasses(s.btn, active && s.btnActive, 'inno-focusable', className)}
+      className={mergeClasses(s.btn, active && s.btnActive, 'opptrix-focusable', className)}
       aria-pressed={active || undefined}
       aria-label={label}
       title={label}

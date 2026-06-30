@@ -7,7 +7,7 @@ import PageShell from '../components/PageShell'
 import StatCard from '../components/StatCard'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   stats: {
@@ -23,27 +23,27 @@ const useStyles = makeStyles({
   module: {
     cursor: 'pointer',
     padding: '16px',
-    backgroundColor: innoTokens.surface,
-    borderRadius: innoTokens.radiusGrouped,
-    border: `1px solid ${innoTokens.separator}`,
+    backgroundColor: opptrixTokens.surface,
+    borderRadius: opptrixTokens.radiusGrouped,
+    border: `1px solid ${opptrixTokens.separator}`,
     transition: 'background-color 150ms ease',
     ':hover': {
-      backgroundColor: innoTokens.surfaceMuted,
+      backgroundColor: opptrixTokens.surfaceMuted,
     },
   },
   moduleIcon: {
     marginBottom: '12px',
-    color: innoTokens.accent,
+    color: opptrixTokens.accent,
   },
   moduleTitle: {
     fontSize: '16px',
     fontWeight: 600,
-    color: innoTokens.textPrimary,
+    color: opptrixTokens.textPrimary,
     marginBottom: '4px',
   },
   moduleDesc: {
     fontSize: '12px',
-    color: innoTokens.textSecondary,
+    color: opptrixTokens.textSecondary,
   },
 })
 
@@ -75,7 +75,7 @@ export default function Dashboard({ navigate }: Props) {
       </div>
 
       {globalStock && (
-        <Text style={{ fontSize: 13, color: innoTokens.textSecondary }}>
+        <Text style={{ fontSize: 13, color: opptrixTokens.textSecondary }}>
           当前标的：<strong>{globalStock.name}({globalStock.code})</strong> — 建议进入「个股研究」
         </Text>
       )}

@@ -2,7 +2,7 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from '../market/format'
-import { innoTokens } from '../theme/tokens'
+import { opptrixTokens } from '../theme/tokens'
 
 const useStyles = makeStyles({
   chipRow: {
@@ -12,9 +12,9 @@ const useStyles = makeStyles({
     maxWidth: 'min(100%, 200px)',
     height: '22px',
     marginTop: '1px',
-    borderRadius: innoTokens.radiusFull,
-    backgroundColor: innoTokens.accentSoft,
-    color: innoTokens.accent,
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixTokens.accent,
     overflow: 'hidden',
     verticalAlign: 'middle',
   },
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
     padding: 0,
     margin: 0,
     border: 'none',
-    borderLeft: `1px solid ${innoTokens.accentMuted}`,
+    borderLeft: `1px solid ${opptrixTokens.accentMuted}`,
     backgroundColor: 'transparent',
     color: 'inherit',
     opacity: 0.78,
@@ -73,7 +73,7 @@ export default function ComposerStockRefTag({ item, onRemove }: Props) {
   const code = normalizeCode(item.code)
 
   return (
-    <span className={mergeClasses(s.chipRow, 'inno-composer-stock-ref')}>
+    <span className={mergeClasses(s.chipRow, 'opptrix-composer-stock-ref')}>
       <span className={s.chipLabel} title={`${item.name} ${code}`}>
         <span className={s.chipText}>{item.name}</span>
         <span className={s.chipCode}>{code}</span>
