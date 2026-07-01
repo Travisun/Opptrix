@@ -13,6 +13,66 @@ export function sanitizeFeedHtml(html: string): string {
     .replace(/javascript:/gi, '')
 }
 
+import type { FeedSubscription } from '../../types/schemas'
+
+export function subscriptionUrlKey(raw: string): string {
+  const parsed = new URL(raw.trim())
+  parsed.hostname = parsed.hostname.toLowerCase()
+  if (parsed.pathname.length > 1 && parsed.pathname.endsWith('/')) {
+    parsed.pathname = parsed.pathname.slice(0, -1)
+  }
+  return parsed.toString()
+}
+
+export function isSameSubscriptionUrl(a: string, b: string): boolean {
+  try {
+    return subscriptionUrlKey(a) === subscriptionUrlKey(b)
+  } catch {
+    return a.trim() === b.trim()
+  }
+}
+
+export function findDuplicateSubscription(
+  subs: FeedSubscription[],
+  url: string,
+): FeedSubscription | undefined {
+  let key: string
+  try {
+    key = subscriptionUrlKey(url)
+  } catch {
+    key = url.trim()
+  }
+  return subs.find(s => {
+    const resolved = s.resolved_url
+    if (resolved) {
+      try {
+        if (subscriptionUrlKey(resolved) === key) return true
+      } catch {
+        if (resolved === key) return true
+      }
+    }
+    try {
+      return subscriptionUrlKey(s.url) === key
+    } catch {
+      return s.url.trim() === key
+    }
+  })
+}
+
+export function formatSubscriptionUrlShort(url: string): string {
+  try {
+    const u = new URL(url)
+    const path = u.pathname + u.search
+    const host = u.hostname
+    if (!path || path === '/') return host
+    const maxPath = 28
+    const shortPath = path.length > maxPath ? `${path.slice(0, maxPath)}…` : path
+    return `${host}${shortPath}`
+  } catch {
+    return url.length > 36 ? `${url.slice(0, 36)}…` : url
+  }
+}
+
 export function formatRelativeTime(iso: string): string {
   const d = new Date(iso)
   if (Number.isNaN(d.getTime())) return ''

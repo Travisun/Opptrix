@@ -262,7 +262,7 @@ export function SettingsRow({
   stack = false,
 }: {
   title: string
-  desc?: string
+  desc?: ReactNode
   control?: ReactNode
   last?: boolean
   stack?: boolean
@@ -273,7 +273,11 @@ export function SettingsRow({
       <div className={mergeClasses(s.row, stack && s.rowStack)}>
         <div className={s.rowMain}>
           <Text className={s.rowTitle} block>{title}</Text>
-          {desc && <Text className={s.rowDesc} block>{desc}</Text>}
+          {desc != null && (
+            typeof desc === 'string'
+              ? <Text className={s.rowDesc} block>{desc}</Text>
+              : <div className={s.rowDesc}>{desc}</div>
+          )}
         </div>
         {control != null && (
           <div className={mergeClasses(s.rowControl, stack && s.rowControlStack)}>{control}</div>

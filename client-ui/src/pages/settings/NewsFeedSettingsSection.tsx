@@ -11,7 +11,7 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { AddRegular, ArrowSyncRegular, DeleteRegular, EditRegular, FolderRegular } from '@fluentui/react-icons'
+import { AddRegular, ArrowSyncRegular, ChevronDownRegular, ChevronRightRegular, DeleteRegular, EditRegular, FolderRegular } from '@fluentui/react-icons'
 import { news } from '../../api/client'
 import type { FeedSubscription, FeedGroup, NewsSettings } from '../../types/schemas'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
@@ -19,13 +19,13 @@ import OpptrixField from '../../components/opptrix/OpptrixField'
 import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
 import {
-  SettingsActionRow,
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { opptrixTokens } from '../../theme/tokens'
+import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
 
 const REFRESH_INTERVAL_OPTIONS = [5, 10, 15, 30, 60] as const
 const RETENTION_YEAR_OPTIONS = [0, 1, 2, 3, 5, 10, 20] as const
@@ -116,6 +116,57 @@ const useStyles = makeStyles({
   intervalSelect: {
     minWidth: '120px',
   },
+  updateControl: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '10px',
+    flexWrap: 'wrap',
+  },
+  updateTime: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    whiteSpace: 'nowrap',
+  },
+  subMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
+  subError: {
+    fontSize: '12px',
+    color: opptrixTokens.error,
+    lineHeight: 1.45,
+  },
+  urlToggle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    fontSize: '12px',
+    color: opptrixTokens.textTertiary,
+    cursor: 'pointer',
+    textAlign: 'left',
+    lineHeight: 1.45,
+    maxWidth: '100%',
+    ':hover': {
+      color: opptrixTokens.textSecondary,
+    },
+  },
+  urlToggleLabel: {
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  urlFull: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.45,
+    wordBreak: 'break-all',
+    userSelect: 'text',
+  },
 })
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
@@ -142,6 +193,7 @@ export default function NewsFeedSettingsSection() {
   const [addTitle, setAddTitle] = useState('')
   const [validating, setValidating] = useState(false)
   const [preview, setPreview] = useState<{ title: string; item_count: number } | null>(null)
+  const [expandedSubIds, setExpandedSubIds] = useState<Record<string, boolean>>({})
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipSettingsSave = useRef(true)
   const settingsBaseline = useRef<NewsSettings | null>(null)
@@ -275,9 +327,22 @@ export default function NewsFeedSettingsSection() {
     }
   }
 
+  const toggleSubUrl = (id: string) => {
+    setExpandedSubIds(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const checkDuplicateUrl = (url: string): FeedSubscription | undefined => {
+    return findDuplicateSubscription(subs, url)
+  }
+
   const handleValidate = async () => {
     const url = addUrl.trim()
     if (!url) return
+    const duplicate = checkDuplicateUrl(url)
+    if (duplicate) {
+      toast.showError(`该订阅地址已添加（${duplicate.title}）`)
+      return
+    }
     setValidating(true)
     setPreview(null)
     try {
@@ -299,6 +364,11 @@ export default function NewsFeedSettingsSection() {
   const handleAdd = async () => {
     const url = addUrl.trim()
     if (!url) return
+    const duplicate = checkDuplicateUrl(url)
+    if (duplicate) {
+      toast.showError(`该订阅地址已添加（${duplicate.title}）`)
+      return
+    }
     setValidating(true)
     try {
       const resp = await news.addSubscription({
@@ -377,24 +447,44 @@ export default function NewsFeedSettingsSection() {
             <SettingsRow
               key={sub.id}
               title={sub.title}
-              desc={[
-                sub.url,
-                sub.last_error ? `拉取失败：${sub.last_error}` : '',
-              ].filter(Boolean).join(' · ')}
+              desc={(
+                <div className={s.subMeta}>
+                  {sub.last_error && (
+                    <Text className={s.subError} block>拉取失败：{sub.last_error}</Text>
+                  )}
+                  <button
+                    type="button"
+                    className={s.urlToggle}
+                    aria-expanded={!!expandedSubIds[sub.id]}
+                    onClick={() => toggleSubUrl(sub.id)}
+                  >
+                    {expandedSubIds[sub.id]
+                      ? <ChevronDownRegular fontSize={12} />
+                      : <ChevronRightRegular fontSize={12} />}
+                    <span className={s.urlToggleLabel}>
+                      {expandedSubIds[sub.id] ? '收起订阅地址' : formatSubscriptionUrlShort(sub.url)}
+                    </span>
+                  </button>
+                  {expandedSubIds[sub.id] && (
+                    <Text className={s.urlFull} block selectable>
+                      {sub.url}
+                    </Text>
+                  )}
+                </div>
+              )}
               control={(
                 <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
                   <OpptrixSelect
                     size="small"
                     style={{ minWidth: 100 }}
-                    value={sub.group_id ?? ''}
                     selectedOptions={[sub.group_id ?? '']}
                     onOptionSelect={(_, d) => {
                       void handleMoveGroup(sub.id, d.optionValue ?? '')
                     }}
                   >
-                    <OpptrixOption value="" text="未分组" />
+                    <OpptrixOption value="">未分组</OpptrixOption>
                     {groups.map(g => (
-                      <OpptrixOption key={g.id} value={g.id} text={g.title} />
+                      <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
                     ))}
                   </OpptrixSelect>
                   <Switch
@@ -455,7 +545,6 @@ export default function NewsFeedSettingsSection() {
               <OpptrixSelect
                 className={s.intervalSelect}
                 size="small"
-                value={String(settings.retention_years)}
                 selectedOptions={[String(settings.retention_years)]}
                 onOptionSelect={(_, d) => {
                   const n = Number(d.optionValue)
@@ -465,11 +554,9 @@ export default function NewsFeedSettingsSection() {
                 }}
               >
                 {RETENTION_YEAR_OPTIONS.map(y => (
-                  <OpptrixOption
-                    key={y}
-                    value={String(y)}
-                    text={y === 0 ? '不限制' : `${y} 年`}
-                  />
+                  <OpptrixOption key={y} value={String(y)}>
+                    {y === 0 ? '不限制' : `${y} 年`}
+                  </OpptrixOption>
                 ))}
               </OpptrixSelect>
             )}
@@ -481,7 +568,6 @@ export default function NewsFeedSettingsSection() {
               <OpptrixSelect
                 className={s.intervalSelect}
                 size="small"
-                value={settings.max_articles == null ? '__unlimited__' : String(settings.max_articles)}
                 selectedOptions={[settings.max_articles == null ? '__unlimited__' : String(settings.max_articles)]}
                 onOptionSelect={(_, d) => {
                   const v = d.optionValue ?? '__unlimited__'
@@ -492,7 +578,7 @@ export default function NewsFeedSettingsSection() {
                 }}
               >
                 {MAX_ARTICLE_OPTIONS.map(opt => (
-                  <OpptrixOption key={opt.value} value={opt.value} text={opt.label} />
+                  <OpptrixOption key={opt.value} value={opt.value}>{opt.label}</OpptrixOption>
                 ))}
               </OpptrixSelect>
             )}
@@ -514,7 +600,6 @@ export default function NewsFeedSettingsSection() {
               <OpptrixSelect
                 className={s.intervalSelect}
                 size="small"
-                value={String(settings.refresh_interval_min)}
                 selectedOptions={[String(settings.refresh_interval_min)]}
                 onOptionSelect={(_, d) => {
                   const n = Number(d.optionValue)
@@ -524,7 +609,7 @@ export default function NewsFeedSettingsSection() {
                 }}
               >
                 {REFRESH_INTERVAL_OPTIONS.map(min => (
-                  <OpptrixOption key={min} value={String(min)} text={`${min} 分钟`} />
+                  <OpptrixOption key={min} value={String(min)}>{min} 分钟</OpptrixOption>
                 ))}
               </OpptrixSelect>
             )}
@@ -533,30 +618,26 @@ export default function NewsFeedSettingsSection() {
             title="上次更新"
             desc="全部订阅源最近一次成功拉取的时间"
             control={(
-              <Text style={{ fontSize: 12, color: opptrixTokens.textSecondary }}>
-                {refreshedAt
-                  ? new Date(refreshedAt).toLocaleString('zh-CN')
-                  : '尚未拉取'}
-              </Text>
+              <div className={s.updateControl}>
+                <Text className={s.updateTime}>
+                  {refreshedAt
+                    ? new Date(refreshedAt).toLocaleString('zh-CN')
+                    : '尚未拉取'}
+                </Text>
+                <OpptrixButton
+                  variant="secondary"
+                  size="small"
+                  icon={<ArrowSyncRegular />}
+                  onClick={() => { void handleRefresh() }}
+                  disabled={refreshing || subs.length === 0}
+                >
+                  {refreshing ? '刷新中…' : '立即刷新'}
+                </OpptrixButton>
+              </div>
             )}
             last
           />
         </SettingsGroup>
-        <div style={{ height: 10 }} />
-        <SettingsActionRow
-          title="立即刷新全部订阅"
-          desc="手动拉取所有已启用源的最新文章，约需数秒到半分钟"
-          action={(
-            <OpptrixButton
-              variant="secondary"
-              icon={<ArrowSyncRegular />}
-              onClick={() => { void handleRefresh() }}
-              disabled={refreshing || subs.length === 0}
-            >
-              {refreshing ? '刷新中…' : '立即刷新'}
-            </OpptrixButton>
-          )}
-        />
       </div>
 
       <Dialog open={dialogOpen} onOpenChange={(_, d) => { setDialogOpen(d.open); if (!d.open) resetDialog() }}>
@@ -584,13 +665,12 @@ export default function NewsFeedSettingsSection() {
 
               <OpptrixField label="所属分组（可选）">
                 <OpptrixSelect
-                  value={addGroupId}
                   selectedOptions={[addGroupId]}
                   onOptionSelect={(_, d) => setAddGroupId(d.optionValue ?? '')}
                 >
-                  <OpptrixOption value="" text="未分组" />
+                  <OpptrixOption value="">未分组</OpptrixOption>
                   {groups.map(g => (
-                    <OpptrixOption key={g.id} value={g.id} text={g.title} />
+                    <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
                   ))}
                 </OpptrixSelect>
               </OpptrixField>

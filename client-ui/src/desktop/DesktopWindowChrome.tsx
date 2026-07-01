@@ -18,6 +18,8 @@ import {
   DESKTOP_TOOL_ICON_SIZE,
   DESKTOP_Z_CHROME_TOOLS,
   DESKTOP_Z_TITLE,
+  DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN,
+  DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN,
   SIDEBAR_INLINE_WIDTH,
 } from './constants'
 import {
@@ -156,8 +158,14 @@ export default function DesktopWindowChrome({
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
 
-  /** Clip global drag off the right panel title band (panel title z-index 1200 < chrome 1300). */
+  /** Clip global drag off interactive title bands (news actions, right panel, etc.). */
   const dragLayerStyle: CSSProperties = (() => {
+    if (isNews) {
+      const right = electronPlatform() === 'darwin'
+        ? DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN
+        : DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN
+      return { right: `${right}px` }
+    }
     if (isSettings || !rightPanelOpen) return {}
     if (!chatColumnVisible) {
       if (sidebarInline) {

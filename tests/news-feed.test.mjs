@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict'
 import test from 'node:test'
-import { resolveFeedUrl, detectAtomFromXml } from '../packages/news-feed/dist/url.js'
+import { resolveFeedUrl, detectAtomFromXml, subscriptionUrlKey, isSameSubscriptionUrl } from '../packages/news-feed/dist/url.js'
 import { parseFeedXml, articleId } from '../packages/news-feed/dist/parser.js'
 
 const RSS_SAMPLE = `<?xml version="1.0" encoding="UTF-8"?>
@@ -47,6 +47,23 @@ test('resolveFeedUrl: rsshub host uses full URL', () => {
 
 test('resolveFeedUrl: rejects non-http', () => {
   assert.throws(() => resolveFeedUrl('rsshub://eastmoney/report'), /http/)
+})
+
+test('subscriptionUrlKey normalizes trailing slash', () => {
+  const a = subscriptionUrlKey('https://example.com/feed.xml')
+  const b = subscriptionUrlKey('https://example.com/feed.xml/')
+  assert.equal(a, b)
+})
+
+test('isSameSubscriptionUrl matches resolved variants', () => {
+  assert.equal(
+    isSameSubscriptionUrl('https://example.com/feed', 'https://example.com/feed/'),
+    true,
+  )
+  assert.equal(
+    isSameSubscriptionUrl('https://example.com/feed', 'https://other.com/feed'),
+    false,
+  )
 })
 
 test('detectAtomFromXml', () => {

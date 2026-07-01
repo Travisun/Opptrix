@@ -15,6 +15,7 @@ import {
   FEED_PAGE_SIZE,
 } from './types.js'
 import { normalizeNewsSettings, selectRetainedArticles, sortArticlesByPubDate } from './retention.js'
+import { subscriptionUrlKey } from './url.js'
 
 const PREF_NS = 'preference'
 const SUBS_KEY = 'news_subscriptions'
@@ -156,6 +157,30 @@ export class NewsFeedStore {
 
   listSubscriptions(): FeedSubscription[] {
     return this.store.getDocument<FeedSubscription[]>(PREF_NS, SUBS_KEY) ?? []
+  }
+
+  findSubscriptionByUrl(raw: string, excludeId?: string): FeedSubscription | undefined {
+    let key: string
+    try {
+      key = subscriptionUrlKey(raw)
+    } catch {
+      key = raw.trim()
+    }
+    return this.listSubscriptions().find(s => {
+      if (excludeId && s.id === excludeId) return false
+      if (s.resolved_url) {
+        try {
+          if (subscriptionUrlKey(s.resolved_url) === key) return true
+        } catch {
+          if (s.resolved_url === key) return true
+        }
+      }
+      try {
+        return subscriptionUrlKey(s.url) === key
+      } catch {
+        return s.url.trim() === key
+      }
+    })
   }
 
   saveSubscriptions(subs: FeedSubscription[]): FeedSubscription[] {

@@ -37,7 +37,6 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
     backgroundColor: opptrixTokens.canvas,
     position: 'relative',
-    zIndex: 2,
   },
   electronTitleBarMac: {
     paddingRight: '12px',
@@ -45,7 +44,10 @@ const useStyles = makeStyles({
   electronTitleBarWin: {
     paddingRight: '132px',
   },
-  titleBarSpacer: { flex: 1, minWidth: 0 },
+  titleBarSpacer: {
+    flex: 1,
+    minWidth: 0,
+  },
   titleBarMeta: {
     fontSize: '11px',
     color: opptrixTokens.textTertiary,
@@ -57,8 +59,6 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '4px',
     flexShrink: 0,
-    pointerEvents: 'auto',
-    WebkitAppRegion: 'no-drag',
   },
   toolbarMeta: {
     fontSize: '11px',
@@ -173,13 +173,13 @@ export default function NewsCenterPage({
     <div
       className={mergeClasses(
         s.electronTitleBar,
-        'opptrix-chat-title-bar',
+        'opptrix-news-title-bar',
         electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
       )}
     >
-      <div className={s.titleBarSpacer} />
-      <Text className={s.titleBarMeta}>{statusLabel}</Text>
-      <div className={s.titleBarActions}>
+      <div className={mergeClasses(s.titleBarSpacer, 'opptrix-news-title-drag')} aria-hidden />
+      <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
+      <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
         {onOpenSettings && (
           <ChromeToolButton
             label="订阅设置"

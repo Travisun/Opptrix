@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
@@ -94,17 +94,6 @@ export default function NewsFeedFilterBar({
     setDateDraft(timelineDate ?? '')
   }, [timelineDate])
 
-  const groupLabel = useMemo(() => {
-    if (!groupFilterId) return '全部分组'
-    if (groupFilterId === '__ungrouped__') return '未分组'
-    return groups.find(g => g.id === groupFilterId)?.title ?? '全部分组'
-  }, [groupFilterId, groups])
-
-  const sourceLabel = useMemo(() => {
-    if (!sourceFilterId) return '全部来源'
-    return subscriptions.find(sub => sub.id === sourceFilterId)?.title ?? '全部来源'
-  }, [sourceFilterId, subscriptions])
-
   const applyDateDraft = useCallback((raw: string) => {
     setDateDraft(raw)
     const trimmed = raw.trim()
@@ -155,7 +144,6 @@ export default function NewsFeedFilterBar({
           <OpptrixSelect
             className={s.select}
             size="small"
-            value={groupLabel}
             selectedOptions={[groupFilterId ?? '__all__']}
             listbox={{ className: GLASS_LISTBOX }}
             onOptionSelect={(_, d) => {
@@ -174,7 +162,6 @@ export default function NewsFeedFilterBar({
           <OpptrixSelect
             className={s.select}
             size="small"
-            value={sourceLabel}
             selectedOptions={[sourceFilterId ?? '__all__']}
             listbox={{ className: GLASS_LISTBOX }}
             onOptionSelect={(_, d) => {

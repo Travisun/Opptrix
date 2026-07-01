@@ -275,8 +275,6 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
     }
   }
 
-  const presetLabel = presets.find(p => p.id === presetId)?.name ?? presetId
-
   const handleSave = async () => {
     if (!canSave) {
       toast.showError('请至少勾选一个模型')
@@ -335,7 +333,6 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
                 {!isEdit && (
                   <OpptrixField label="提供商">
                     <OpptrixSelect
-                      value={presetLabel}
                       selectedOptions={[presetId]}
                       onOptionSelect={(_, d) => handlePresetChange(d.optionValue || presetId)}
                     >

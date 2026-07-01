@@ -113,10 +113,15 @@ export async function validateFeedUrl(input: FeedUrlInput): Promise<ValidateFeed
 }
 
 export async function addSubscription(input: FeedUrlInput & { enabled?: boolean }): Promise<FeedSubscription> {
+  const store = getNewsFeedStore()
+  const duplicate = store.findSubscriptionByUrl(input.url)
+  if (duplicate) {
+    throw new Error(`该订阅地址已添加（${duplicate.title}）`)
+  }
   const validated = await validateFeedUrl(input)
   if (!validated.ok) throw new Error(validated.error || '订阅源验证失败')
   const { resolved_url, kind } = resolveFeedUrl(input.url)
-  const sub = getNewsFeedStore().upsertSubscription({
+  const sub = store.upsertSubscription({
     id: randomUUID(),
     title: input.title?.trim() || validated.title,
     url: input.url.trim(),

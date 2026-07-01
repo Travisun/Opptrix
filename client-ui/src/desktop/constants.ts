@@ -83,3 +83,7 @@ export const DESKTOP_Z_PANEL_TITLE = 1200
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
 /** Global fixed toolbar / window controls — always above panel title bands */
 export const DESKTOP_Z_CHROME_TOOLS = 1300
+
+/** Clip global title-bar drag so news status + action buttons stay clickable */
+export const DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN = 240
+export const DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN = 380
