@@ -5,7 +5,7 @@ import {
 } from '@fluentui/react-components'
 import { ArrowSyncRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
-import { research } from '../api/client'
+import { getConfig, research } from '../api/client'
 import type { StockDiagnosisData, InstitutionRatingData, StrategySignalData } from '../types/schemas'
 
 const useStyles = makeStyles({
@@ -65,8 +65,10 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
     if (!code.trim()) return
     setLoading(true)
     try {
+      const cfg = await getConfig().catch(() => null)
+      const scorecard = cfg?.default_scorecard || 'G=B+M'
       const [d, r, sg] = await Promise.all([
-        research.diagnose(code.trim()),
+        research.diagnose(code.trim(), scorecard),
         research.institutionRating(code.trim()),
         research.strategySignals(code.trim()).catch(() => null),
       ])

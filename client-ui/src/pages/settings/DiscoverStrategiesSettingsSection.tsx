@@ -28,6 +28,7 @@ const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
   quality: '质量',
   momentum: '动量',
   balanced: '均衡',
+  contrarian: '逆向',
 }
 
 type ListItem =

@@ -72,8 +72,8 @@ import type {
 } from '../types/schemas'
 
 export const research = {
-  diagnose:      (code: string) =>
-    apiCall<StockDiagnosisData>('stock_diagnosis', { code }),
+  diagnose: (code: string, scorecard?: string) =>
+    apiCall<StockDiagnosisData>('stock_diagnosis', { code, ...(scorecard ? { scorecard } : {}) }),
 
   institutionRating: (code: string, groups?: string[], signal?: AbortSignal) =>
     apiCall<InstitutionRatingData>('institution_rating', { code, groups }, { signal }, 20000),
@@ -120,6 +120,9 @@ export const research = {
       'market_industry_stats',
       tradeDate ? { trade_date: tradeDate } : {},
     ),
+
+  marketRegime: () =>
+    apiCall<import('../types/schemas').MarketRegimeData>('market_regime'),
 
   industryStocks: (industry: string, limit = 120) =>
     apiCall<{ trade_date: string; quote_date: string | null; industry: string; items: IndustryStockItem[] }>(
@@ -170,8 +173,13 @@ export const research = {
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
-  latestEval: (code: string, signal?: AbortSignal) =>
-    apiCall<LatestEvalData>('latest_evaluation', { code }, { signal }, 30000),
+  latestEval: (code: string, signal?: AbortSignal, scorecard?: string, force = false) =>
+    apiCall<LatestEvalData>(
+      'latest_evaluation',
+      { code, ...(scorecard ? { scorecard } : {}), ...(force ? { force: true } : {}) },
+      { signal },
+      90000,
+    ),
 
   strategyReport: (code: string) =>
     apiCall<ReportTextData>('strategy_report', { code }),

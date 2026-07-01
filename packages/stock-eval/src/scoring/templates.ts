@@ -110,17 +110,49 @@ export const TEMPLATES: Record<string, ScorecardTemplate> = {
       { name: 'profit_delta_1q', weight: 0.15 },
     ],
   },
+  'G=B+M': {
+    description: 'AlphaGBM 框架：基本面质量与 market 动量各半，好生意加好动量',
+    factors: [
+      { name: 'roe', weight: 0.10 },
+      { name: 'gross_margin', weight: 0.07 },
+      { name: 'profit_cagr_3y', weight: 0.08 },
+      { name: 'revenue_cagr_3y', weight: 0.06 },
+      { name: 'debt_ratio', weight: 0.05 },
+      { name: 'pe_percentile', weight: 0.06 },
+      { name: 'peg', weight: 0.04 },
+      { name: 'roe_trend', weight: 0.04 },
+      { name: 'momentum_3m', weight: 0.10 },
+      { name: 'momentum_6m', weight: 0.10 },
+      { name: 'momentum_1m', weight: 0.06 },
+      { name: 'ma_position', weight: 0.08 },
+      { name: 'rsi_score', weight: 0.07 },
+      { name: 'volume_ratio', weight: 0.06 },
+      { name: 'improvement_score', weight: 0.03 },
+    ],
+  },
+  '巴菲特四透镜': {
+    description: 'Buffett 四透镜：护城河盈利、资本回报与估值纪律（A 股阈值适配）',
+    factors: [
+      { name: 'roe', weight: 0.22 },
+      { name: 'gross_margin', weight: 0.18 },
+      { name: 'dividend_yield', weight: 0.12 },
+      { name: 'pe_percentile', weight: 0.20 },
+      { name: 'pb_percentile', weight: 0.10 },
+      { name: 'peg', weight: 0.10 },
+      { name: 'profit_cagr_3y', weight: 0.08 },
+    ],
+  },
 }
 
 export const TEMPLATE_CATEGORIES: Record<string, string[]> = {
   估值: ['价值评估'],
   成长: ['成长评估'],
-  质量: ['质量评估'],
+  质量: ['质量评估', '巴菲特四透镜'],
   技术: ['技术评估'],
   动量: ['动量评估'],
   风险: ['低风险评估'],
   反转: ['困境反转'],
-  综合: ['综合评估'],
+  综合: ['综合评估', 'G=B+M'],
 }
 
 export function listTemplateNames() { return Object.keys(TEMPLATES) }

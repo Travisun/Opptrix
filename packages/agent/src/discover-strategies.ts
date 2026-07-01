@@ -1,6 +1,6 @@
 import type { DiscoverParsedPlan, DiscoverScreenCondition } from './discover.js'
 
-export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced'
+export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
 
 export interface DiscoverStrategy {
   id: string
@@ -23,6 +23,10 @@ export interface DiscoverStrategy {
 
 const C = (factor: string, op: DiscoverScreenCondition['op'], value: number): DiscoverScreenCondition =>
   ({ factor, op, value })
+
+/** 观察池通用门槛（写入 refinement_notes，与本地初选 exclude_st / 市值过滤配合） */
+const WATCHLIST_GATE =
+  '排除 ST、流动性不足与壳股；优先日均成交额与市值达标的可研究标的；回避立案调查与重大诚信风险。'
 
 /** 预编译选股策略 — 综合经典价值投资、GARP、学术因子与投行框架 */
 export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
@@ -48,19 +52,20 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
     id: 'buffett_moat',
     name: '巴菲特护城河',
     category: 'quality',
-    tagline: '高质量 · 高 ROE + 盈利韧性',
-    methodology: '参考 Warren Buffett 护城河与 ROE 长期维持框架；结合毛利率、负债与盈利增长。',
-    description: '寻找具备持续竞争优势、盈利能力强且财务保守的优质公司。',
-    scorecard: '综合评估',
+    tagline: '四透镜 · 护城河 + 估值纪律',
+    methodology: '参考 Buffett 四透镜模型（业务简单、护城河、资本配置、估值）；A 股适配 ROE≥15%、毛利率≥35%。',
+    description: '寻找具备持续竞争优势、盈利能力强、分红与估值纪律兼顾的优质龙头，适合核心仓位研究。',
+    scorecard: '巴菲特四透镜',
     prescreen_top_n: 70,
     final_top_n: 12,
     conditions: [
       C('roe', '>=', 15),
-      C('gross_margin', '>=', 30),
+      C('gross_margin', '>=', 35),
       C('debt_ratio', '<=', 50),
+      C('peg', '<=', 1.2),
       C('net_profit_yoy', '>=', 0),
     ],
-    refinement_notes: '优先 ROE 稳定、毛利率领先、行业地位明确的龙头；评估护城河可持续性而非短期景气。',
+    refinement_notes: `优先 ROE 连续三年稳定、毛利率领先、行业地位明确的龙头；区分周期景气与真护城河。${WATCHLIST_GATE}`,
   },
   {
     id: 'lynch_garp',
@@ -202,6 +207,43 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('debt_ratio', '<=', 65),
     ],
     refinement_notes: '在各因子维度无极端短板；优先综合评分高、行业分散的标的组合。',
+  },
+  {
+    id: 'gbm_core',
+    name: 'G=B+M 核心池',
+    category: 'balanced',
+    tagline: '好生意 + 好动量 · 双维均衡',
+    methodology: '改编自 AlphaGBM G=B+M 框架：基本面质量（B）与市场动量（M）各半，缺一不可。',
+    description: '在全 A 中筛选基本面扎实且市场动能不弱的标的，适合观察池与组合初筛的广谱挖掘。',
+    scorecard: 'G=B+M',
+    prescreen_top_n: 90,
+    final_top_n: 18,
+    conditions: [
+      C('roe', '>=', 12),
+      C('pe', '<=', 40),
+      C('debt_ratio', '<=', 65),
+      C('momentum_6m', '>', -5),
+      C('volume_ratio', '>=', 0.8),
+    ],
+    refinement_notes: `B 高 M 低→观察名单；B 低 M 高→偏交易；综合 G 分高者优先。${WATCHLIST_GATE}`,
+  },
+  {
+    id: 'fear_rebound',
+    name: '恐慌反弹',
+    category: 'contrarian',
+    tagline: '超卖反转 · 估值低位 + 量能异动',
+    methodology: '改编自 FearScore 框架：个股超卖、技术弱势与放量信号复合，适合恐慌市况下的反转研究。',
+    description: '挖掘短期超跌、估值相对合理且出现资金异动的标的，偏左侧与波段研究（需控制仓位）。',
+    scorecard: '困境反转',
+    prescreen_top_n: 75,
+    final_top_n: 12,
+    conditions: [
+      C('momentum_1m', '<=', -8),
+      C('pe', '<=', 30),
+      C('roe', '>=', 8),
+      C('volume_ratio', '>=', 1.2),
+    ],
+    refinement_notes: `区分基本面恶化与情绪性杀跌；优先盈利质量尚可、行业非系统性衰退的标的。${WATCHLIST_GATE}`,
   },
 ]
 

@@ -35,7 +35,7 @@ export interface AppConfig {
 
 const DEFAULTS: AppConfig = {
   providers: [],
-  default_scorecard: process.env.DEFAULT_SCORECARD ?? '综合评估',
+  default_scorecard: process.env.DEFAULT_SCORECARD ?? 'G=B+M',
   default_top_n: Number(process.env.DEFAULT_TOP_N ?? 20),
 }
 

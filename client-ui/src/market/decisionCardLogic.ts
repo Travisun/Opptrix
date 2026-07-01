@@ -47,6 +47,8 @@ export interface DecisionCardViewModel {
   grade: string | null
   scoreSummary: string
   scoreExplanation: string | null
+  scorecardLabel: string | null
+  gbmLabel: string | null
   strategySummary: string | null
   institutionLabel: string | null
   valuationLabel: string | null
@@ -123,6 +125,13 @@ export function buildDecisionCardViewModel(input: {
 }): DecisionCardViewModel {
   const factors = input.evalData?.factors ?? {}
   const totalScore = input.evalData?.total_score ?? null
+  const scorecard = input.evalData?.scorecard ?? null
+  const gbm = input.evalData?.gbm ?? null
+
+  let gbmLabel: string | null = null
+  if (gbm) {
+    gbmLabel = `B ${gbm.b_score.toFixed(1)} · M ${gbm.m_score.toFixed(1)}`
+  }
 
   const valuationLabel = formatValuationDisplay({
     factors,
@@ -164,6 +173,8 @@ export function buildDecisionCardViewModel(input: {
     grade: scoreGrade(totalScore),
     scoreSummary: formatScoreSummary(totalScore),
     scoreExplanation: formatScoreExplanation(totalScore),
+    scorecardLabel: scorecard,
+    gbmLabel,
     strategySummary: formatStrategyDisplay(input.strategy),
     institutionLabel,
     valuationLabel,
@@ -193,6 +204,8 @@ export function buildStockResearchContext(input: {
     '## 摘要',
     `- 现价：${vm.priceLabel}`,
     vm.grade ? `- 综合评分：${vm.scoreSummary}` : '- 综合评分：待评估',
+    vm.scorecardLabel ? `- 评分模板：${vm.scorecardLabel}` : null,
+    vm.gbmLabel ? `- G=B+M：${vm.gbmLabel}` : null,
     vm.scoreExplanation ? `- 评分说明：${vm.scoreExplanation}` : null,
     vm.strategySummary ? `- 策略倾向：${vm.strategySummary}` : null,
     vm.institutionLabel ? `- 机构共识：${vm.institutionLabel}` : null,

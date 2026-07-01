@@ -64,7 +64,8 @@
 | `market_report` | `type?` (`closing` / `morning`) | 市场报告 |
 | `search_stocks` | `keyword` | 股票搜索 |
 | `backtest` | 见 hub 实现 | 因子回测 |
-| `latest_evaluation` | `code` | 最近快照 |
+| `latest_evaluation` | `code`, `scorecard?`, `force?` | 最近评估；默认 `G=B+M`，返回 `gbm` B/M 子分 |
+| `market_regime` | — | 市况快照（发现页横幅）；见 [RIGHT-PANEL-RESEARCH-PLAN.md](./RIGHT-PANEL-RESEARCH-PLAN.md#市况判断-market_regime--外部宏观期权数据源后续) 待办 |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |

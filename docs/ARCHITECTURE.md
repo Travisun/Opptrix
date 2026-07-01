@@ -99,3 +99,9 @@ agent, server
 | `~/.opptrix/snapshots/` | 因子评估快照（stock-eval） |
 
 `.gitignore` 已排除密钥、构建产物与运行时数据目录。
+
+## 市况模块 `@opptrix/shared` — `market-regime`
+
+- **职责**：综合指数动量、广度、情绪、Marks 周期等，输出 `MarketRegimeSnapshot`（发现页策略提示，非交易信号）。
+- **入口**：`ResearchHub.dispatch('market_regime')`；纯函数在 `packages/shared/src/market-regime.ts`。
+- **后续扩展**：社融、M1-M2、iVIX 等外部宏观/期权指标待接入，扩展 `MarketRegimeInputs` 即可，UI 已消费 `indicators` 字段。详见 [RIGHT-PANEL-RESEARCH-PLAN.md § 待办事项](./RIGHT-PANEL-RESEARCH-PLAN.md#待办事项)。

@@ -198,3 +198,31 @@
 - [ARCHITECTURE.md](./ARCHITECTURE.md) — ResearchHub 与数据层
 - [API.md](./API.md) — HTTP / research feature 列表
 - [UI-LAYOUT.md](./UI-LAYOUT.md) — 右侧面板布局
+
+---
+
+## 待办事项
+
+### 市况判断 `market_regime` — 外部宏观/期权数据源（后续）
+
+**现状（已实现）**
+
+- 实现位置：`packages/shared/src/market-regime.ts`，Hub feature `market_regime`，发现页市况横幅消费 `indicators`。
+- 已接入（本地或行情层可得）：沪深300 动量、MA125 位置、250 日价格分位、HV20、成交额相对 20 日均值、市场广度、涨跌停家数、北向净流入、Marks 周期（PE 分档 / 价格分位代理）、综合情绪分。
+
+**说明：以下指标需外部宏观/期权数据源，当前未接入**
+
+| 来源框架 | 待接入指标 | 典型数据源 |
+|---------|-----------|-----------|
+| 14 宏观观察 | 社融规模及增速、M1-M2 剪刀差、LPR/MLF、10Y 国债收益率、信用利差 | 央行、中债登、Wind/同花顺宏观 |
+| 15 市场情绪 | 中国波指 iVIX、50ETF 期权隐含波动率、认沽/认购比 | 上交所期权、行情商 |
+| 15 市场情绪 | 融资买入占比、两融余额变化、新增开户数 | 交易所、中国结算 |
+| 16 Marks 周期 | 社融增速触底、破净股数量、回购潮等确认信号 | 多源聚合 |
+
+**后续扩展方式（无需改 UI 结构）**
+
+1. 在 `MarketRegimeInputs`（`packages/shared/src/market-regime.ts`）增加可选字段，例如 `social_financing_yoy`、`m1_m2_spread`、`ivix` 等。
+2. 在 `computeSentimentScore` / `computeMarketRegime` 中纳入新权重；`MarketRegimeIndicators` 同步暴露展示字段。
+3. Hub `marketRegime()` 从宏观服务或新 driver 拉数后填入 inputs；发现页 `DiscoverTab` 已读取 `indicators`，无需改组件结构。
+
+**验收参考**：极端市况仍遵循「多指标共振」原则（见 policies 15）；单源宏观数据接入后应写单元测试覆盖阈值与 regime 映射。

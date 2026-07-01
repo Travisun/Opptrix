@@ -11,9 +11,13 @@ import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } fro
 import {
   EvaluationEngine, createScorecard, Screener, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
+  computeGbmBreakdown,
 } from '@opptrix/stock-eval'
 import { getMarketDataService } from '@opptrix/market-data'
-import { ok, fail, type ResearchResult } from '@opptrix/shared'
+import {
+  ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
+  computeTurnoverVs20d, computeHv20Pct, type ResearchResult,
+} from '@opptrix/shared'
 import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
@@ -85,6 +89,7 @@ export class ResearchHub {
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
+        case 'market_regime': return this.marketRegime(t0)
         case 'local_industry_list': return this.localIndustryList(params, t0)
         case 'local_industry_screen': return this.localIndustryScreen(params, t0)
         case 'list_screen_factors': return this.listScreenFactors(t0)
@@ -104,7 +109,7 @@ export class ResearchHub {
         )
         case 'stock_detail': return this.stockDetail(String(params.code), t0)
         case 'backtest': return this.runBacktest(params, t0)
-        case 'latest_evaluation': return this.latestEvaluation(String(params.code), t0)
+        case 'latest_evaluation': return this.latestEvaluation(String(params.code), params, t0)
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
@@ -454,6 +459,83 @@ export class ResearchHub {
     }
     const data = await this.closingReport.generate()
     return ok(data, data.title, t0)
+  }
+
+  private async marketRegime(t0: number) {
+    const klines = this.marketData.localDailyKlines('000300', 280)
+    const klineBars = klines.map(k => ({ close: k.close, amount: k.amount }))
+
+    let indexM6m: number | null = null
+    let indexM1m: number | null = null
+    if (klines.length >= 21) {
+      const last = klines[klines.length - 1]?.close
+      const m1Base = klines[Math.max(0, klines.length - 21)]?.close
+      if (last != null && m1Base != null && m1Base > 0) {
+        indexM1m = Math.round((last / m1Base - 1) * 1000) / 10
+      }
+    }
+    if (klines.length >= 121) {
+      const last = klines[klines.length - 1]?.close
+      const m6Base = klines[klines.length - 121]?.close
+      if (last != null && m6Base != null && m6Base > 0) {
+        indexM6m = Math.round((last / m6Base - 1) * 1000) / 10
+      }
+    }
+
+    let indexPe: number | null = null
+    try {
+      const idxR = await this.de.indexRealtime('000300')
+      const pe = (idxR.data?.[0] as { pe?: number | null } | undefined)?.pe
+      if (pe != null && pe > 0) indexPe = Math.round(pe * 100) / 100
+    } catch { /* offline fallback */ }
+
+    let advancePct: number | null = null
+    let limitUp: number | null = null
+    let limitDown: number | null = null
+    let northboundNetYi: number | null = null
+    try {
+      const [breadthR, limitR, northR] = await Promise.all([
+        this.de.marketBreadth(),
+        this.de.limitUpdown(),
+        this.de.marketMoneyFlow('north'),
+      ])
+      if (breadthR.success && breadthR.data?.[0]) {
+        const b = breadthR.data[0] as {
+          up?: number; down?: number; flat?: number; total?: number; advancePct?: number
+        }
+        if (b.advancePct != null) {
+          advancePct = b.advancePct
+        } else if (b.total != null && b.total > 0 && b.up != null) {
+          advancePct = Math.round((b.up / b.total) * 1000) / 10
+        }
+      }
+      if (limitR.success && limitR.data) {
+        limitUp = limitR.data.filter(l => l.type === 'limit_up').length
+        limitDown = limitR.data.filter(l => l.type === 'limit_down').length
+      }
+      if (northR.success && northR.data?.[0]?.netAmount != null) {
+        northboundNetYi = Math.round(northR.data[0].netAmount / 1e8 * 100) / 100
+      }
+    } catch { /* live sentiment optional */ }
+
+    const snapshot = computeMarketRegime({
+      index_m6m: indexM6m,
+      index_m1m: indexM1m,
+      index_pe: indexPe,
+      ma125_position_pct: computeMaPositionPct(klineBars, 125),
+      advance_pct: advancePct,
+      turnover_vs_20d: computeTurnoverVs20d(klineBars),
+      hv20_pct: computeHv20Pct(klineBars),
+      limit_up: limitUp,
+      limit_down: limitDown,
+      northbound_net_yi: northboundNetYi,
+      price_percentile_250d: computePricePercentile(klineBars, 250),
+    })
+
+    return ok({
+      ...snapshot,
+      timestamp: new Date().toISOString(),
+    }, snapshot.headline, t0)
   }
 
   private searchStocks(keyword: string, t0: number) {
@@ -1180,23 +1262,55 @@ export class ResearchHub {
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
   }
 
-  private async latestEvaluation(code: string, t0: number) {
-    const stored = this.store.getLatest(code)
-    if (stored) {
+  private async latestEvaluation(code: string, params: Record<string, unknown>, t0: number) {
+    const scorecardName = String(params.scorecard ?? 'G=B+M')
+    const force = params.force === true
+
+    const stored = !force ? this.store.getLatest(code) : null
+    if (stored && stored.scorecardName === scorecardName) {
+      const card = createScorecard(scorecardName)
+      const gbm = computeGbmBreakdown(stored.dimensionScores, scorecardName)
       return ok({
-        code: stored.code, name: stored.name, timestamp: stored.timestamp,
-        scorecard: stored.scorecardName, total_score: stored.totalScore,
-        factors: stored.factorValues, from_store: true,
+        code: stored.code,
+        name: stored.name,
+        timestamp: stored.timestamp,
+        scorecard: stored.scorecardName,
+        total_score: stored.totalScore,
+        factors: stored.factorValues,
+        scorecard_dimensions: card.factors.map(({ name, weight }) => ({
+          name,
+          weight,
+          score: stored.dimensionScores[`${name}_score`] ?? 0,
+        })),
+        gbm,
+        from_store: true,
       }, '最新评估（缓存）', t0)
     }
+
     const snap = await this.ee.analyze(code)
-    createScorecard('综合评估').score([snap])
-    this.store.save(snap, '综合评估')
+    const card = createScorecard(scorecardName)
+    await this.neutralizer.compute([snap as never])
+    card.score([snap])
+    this.store.save(snap, scorecardName)
+
+    const gbm = computeGbmBreakdown(snap.scores, scorecardName)
     return ok({
-      code: snap.code, name: snap.name, timestamp: new Date().toISOString(),
-      scorecard: '综合评估', total_score: snap.totalScore,
-      factors: Object.fromEntries(Object.entries(snap.factors).map(([k, v]) => [k, v?.value ?? null])),
-    }, '最新评估', t0)
+      code: snap.code,
+      name: snap.name,
+      timestamp: new Date().toISOString(),
+      scorecard: scorecardName,
+      total_score: snap.totalScore,
+      factors: Object.fromEntries(
+        Object.entries(snap.factors).map(([k, v]) => [k, v?.value ?? null]),
+      ),
+      scorecard_dimensions: card.factors.map(({ name, weight }) => ({
+        name,
+        weight,
+        score: snap.scores[`${name}_score`] ?? 0,
+      })),
+      gbm,
+      from_store: false,
+    }, `${snap.name} ${scorecardName} ${snap.totalScore}`, t0)
   }
 }
 

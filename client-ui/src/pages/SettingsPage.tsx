@@ -351,7 +351,7 @@ function SettingsPageView({
                     <SettingsTextField
                       value={scorecard}
                       onChange={setScorecard}
-                      placeholder="综合评估"
+                      placeholder="G=B+M"
                     />
                   )}
                   last

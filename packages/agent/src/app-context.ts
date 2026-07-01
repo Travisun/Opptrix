@@ -97,7 +97,7 @@ export function createDefaultAppContext(): AgentAppContext {
       return {
         source: 'standalone_mcp',
         llm_configured: false,
-        default_scorecard: process.env.DEFAULT_SCORECARD ?? '综合评估',
+        default_scorecard: process.env.DEFAULT_SCORECARD ?? 'G=B+M',
         default_top_n: Number(process.env.DEFAULT_TOP_N ?? 20),
         hint: '完整 LLM 提供商与默认模型请通过 Opptrix 服务端 /api/config 或 UI 设置查看',
       }

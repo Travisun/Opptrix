@@ -47,7 +47,7 @@ export interface ScreeningData {
   trade_date?: string | null
 }
 
-export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced'
+export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
 
 export type DiscoverStrategySource = 'builtin' | 'custom'
 
@@ -99,6 +99,34 @@ export interface DiscoverStrategyOption {
   source: DiscoverStrategySource
   category?: DiscoverStrategyCategory
   meta?: string
+}
+
+export type MarketRegimeKind = 'panic' | 'cautious' | 'neutral' | 'euphoria'
+
+export interface MarketRegimeIndicators {
+  index_pe: number | null
+  valuation_anchor: '低估区' | '合理' | '偏贵' | '高估区' | null
+  marks_cycle: '极度悲观' | '悲观' | '中性' | '乐观' | '极度乐观' | null
+  sentiment_score: number | null
+  ma125_position_pct: number | null
+  advance_pct: number | null
+  turnover_vs_20d: number | null
+  hv20_pct: number | null
+  limit_up: number | null
+  limit_down: number | null
+  northbound_net_yi: number | null
+  index_m6m: number | null
+  index_m1m: number | null
+  price_percentile_250d: number | null
+}
+
+export interface MarketRegimeData {
+  regime: MarketRegimeKind
+  headline: string
+  detail: string
+  suggested_strategy_ids: string[]
+  indicators: MarketRegimeIndicators
+  timestamp?: string
 }
 
 export type DiscoverJobPhase = 'parsing' | 'prescreen' | 'mining' | 'done' | 'error'
@@ -308,6 +336,9 @@ export interface LatestEvalData {
   code: string; name: string; timestamp: string
   scorecard: string; total_score: number
   factors: Record<string, number | null>
+  scorecard_dimensions?: ScorecardDimension[]
+  gbm?: { b_score: number; m_score: number } | null
+  from_store?: boolean
 }
 
 export interface WatchlistRadarItem {

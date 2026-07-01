@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { ProgressBar, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { AddRegular, ArrowRightRegular, DeleteRegular } from '@fluentui/react-icons'
 import { listDiscoverStrategies, getHealth } from '../api/client'
-import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyPublic } from '../types/schemas'
+import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyPublic, MarketRegimeData } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
@@ -25,6 +25,7 @@ const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
   quality: '质量',
   momentum: '动量',
   balanced: '均衡',
+  contrarian: '逆向',
 }
 
 const useStyles = makeStyles({
@@ -102,6 +103,26 @@ const useStyles = makeStyles({
     fontSize: '10px',
     color: opptrixTokens.textSecondary,
     lineHeight: 1.45,
+  },
+  regimeBanner: {
+    flexShrink: 0,
+    padding: `6px ${CONTENT_PAD}`,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    fontSize: '10px',
+    lineHeight: 1.45,
+    color: opptrixTokens.textSecondary,
+    backgroundColor: opptrixTokens.accentSoft,
+  },
+  regimeHeadline: {
+    fontWeight: 650,
+    color: opptrixTokens.textPrimary,
+    marginBottom: '2px',
+  },
+  regimeIndicators: {
+    fontSize: '9px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.4,
+    marginBottom: '3px',
   },
   summary: {
     flexShrink: 0,
@@ -363,6 +384,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   const [panelTab, setPanelTab] = useState<DiscoverPanelTab>('results')
   const [dbReady, setDbReady] = useState<boolean | null>(null)
   const [llmReady, setLlmReady] = useState<boolean | null>(null)
+  const [marketRegime, setMarketRegime] = useState<MarketRegimeData | null>(null)
 
   const { strategies: customStrategies } = useCustomDiscoverStrategies()
 
@@ -409,6 +431,10 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       if (cancelled) return
       setLlmReady(Boolean(h.llm_configured))
     }).catch(() => setLlmReady(false))
+    void research.marketRegime().then(resp => {
+      if (cancelled || !resp.success || !resp.data) return
+      setMarketRegime(resp.data)
+    }).catch(() => {})
     return () => { cancelled = true }
   }, [])
 
@@ -426,6 +452,35 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   const progressPct = job?.percent ?? 0
   const barValue = running && progressPct <= 0 ? 0.03 : Math.min(1, progressPct / 100)
   const historyJobs = history.filter(h => h.status !== 'running' || h.id === job?.id)
+
+  const regimeIndicators = useMemo(() => {
+    const ind = marketRegime?.indicators
+    if (!ind) return null
+    const parts: string[] = []
+    if (ind.marks_cycle) parts.push(`周期 ${ind.marks_cycle}`)
+    if (ind.valuation_anchor) parts.push(`估值 ${ind.valuation_anchor}`)
+    if (ind.sentiment_score != null) parts.push(`情绪 ${ind.sentiment_score}`)
+    if (ind.advance_pct != null) parts.push(`上涨 ${ind.advance_pct.toFixed(0)}%`)
+    if (ind.index_pe != null) parts.push(`沪深300 PE ${ind.index_pe.toFixed(1)}`)
+    if (ind.northbound_net_yi != null) {
+      const sign = ind.northbound_net_yi >= 0 ? '+' : ''
+      parts.push(`北向 ${sign}${ind.northbound_net_yi.toFixed(1)}亿`)
+    }
+    return parts.length ? parts.join(' · ') : null
+  }, [marketRegime])
+
+  const regimeHint = useMemo(() => {
+    if (!marketRegime) return null
+    if (!selectedId) return marketRegime.detail
+    const suggested = marketRegime.suggested_strategy_ids
+    if (!suggested.length) return marketRegime.detail
+    if (suggested.includes(selectedId)) {
+      return `当前市况与所选策略较契合。${marketRegime.detail}`
+    }
+    const first = builtinList.find(st => st.id === suggested[0])
+    if (!first) return marketRegime.detail
+    return `${marketRegime.detail} 可优先考虑「${first.name}」。`
+  }, [marketRegime, selectedId, builtinList])
 
   const handleLoadHistory = (histJob: DiscoverJobSnapshot) => {
     loadHistoryJob(histJob)
@@ -472,6 +527,19 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
             {llmReady === false ? ' · 需配置大模型' : ''}
           </Text>
         </div>
+        {marketRegime && (
+          <div className={s.regimeBanner}>
+            <Text className={s.regimeHeadline} block>
+              {marketRegime.headline}
+            </Text>
+            {regimeIndicators && (
+              <Text className={s.regimeIndicators} block>
+                {regimeIndicators}
+              </Text>
+            )}
+            {regimeHint && <Text block>{regimeHint}</Text>}
+          </div>
+        )}
       </div>
 
       <div className={s.tabBar}>
