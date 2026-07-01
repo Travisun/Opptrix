@@ -12,6 +12,7 @@ import SettingsSidebar, {
 import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
+import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
@@ -216,6 +217,7 @@ interface SettingsPageProps {
   isMobile?: boolean
   sidebarVisible?: boolean
   onSidebarClose?: () => void
+  initialSection?: SettingsSection
 }
 
 export default function SettingsPage(props: SettingsPageProps) {
@@ -230,11 +232,12 @@ function SettingsPageView({
   onBack, onSaved, isMobile = false,
   sidebarVisible = true,
   onSidebarClose,
+  initialSection,
 }: SettingsPageProps) {
   const toast = useSettingsToast()
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
-  const [section, setSection] = useState<SettingsSection>('general')
+  const [section, setSection] = useState<SettingsSection>(initialSection ?? 'general')
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
@@ -262,6 +265,10 @@ function SettingsPageView({
       .catch(() => toast.showError('无法读取后端配置，请确认服务已启动'))
       .finally(() => setLoading(false))
   }, [refresh, toast])
+
+  useEffect(() => {
+    if (initialSection) setSection(initialSection)
+  }, [initialSection])
 
   useDebouncedEffect(() => {
     if (loading || skipScorecardSave.current) {
@@ -434,6 +441,9 @@ function SettingsPageView({
 
       case 'discover_strategies':
         return <DiscoverStrategiesSettingsSection />
+
+      case 'news_feed':
+        return <NewsFeedSettingsSection />
 
       case 'about':
         return (

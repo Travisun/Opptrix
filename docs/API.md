@@ -98,6 +98,31 @@
 | GET | `/api/portfolio/summary` | 账本汇总 |
 | POST | `/api/portfolio/trade` | `{ code, shares, price, side?, date? }` |
 
+### 新闻订阅（RSS / RSSHub）
+
+服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/news/settings` | `{ settings: { refresh_interval_min, retention_years, max_articles } }` |
+| PUT | `/api/news/settings` | 保存刷新间隔、保留年限（默认 3 年）、文章数量上限（null=不限） |
+| GET | `/api/news/subscriptions` | 订阅列表 |
+| PUT | `/api/news/subscriptions` | `{ subscriptions: FeedSubscription[] }` 全量保存 |
+| DELETE | `/api/news/subscriptions/:id` | 删除单条 |
+| POST | `/api/news/subscriptions/item` | `{ url, title?, enabled? }` 验证并添加 |
+| POST | `/api/news/validate` | `{ url, title? }` 添加前探测 |
+| GET | `/api/news/feed` | `?limit=20&cursor=&subscription_id=&group_id=` 分页（默认 20 篇） |
+| GET | `/api/news/feed/grouped` | 按自定义分组 / 来源聚合的本地文章 |
+| GET | `/api/news/groups` | 订阅分组列表 |
+| POST | `/api/news/groups` | `{ title }` 新建分组 |
+| PUT | `/api/news/groups/:id` | 重命名 / 排序 |
+| DELETE | `/api/news/groups/:id` | 删除分组（订阅移至未分组） |
+| PUT | `/api/news/subscriptions/:id/group` | `{ group_id }` 移动订阅 |
+| GET | `/api/news/articles/:id` | 单篇文章 |
+| POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
+
+订阅地址须为完整 `http(s)://` 链接。文章持久化在本地 SQLite，默认保留 **3 年内**按 `pub_date` 排序的文章；可在设置中调整保留年限与数量上限（不限上限时仅按年限清理）。写入超出策略时自动删除最旧文章。
+
 ### Writer 端点
 
 | 方法 | 路径 |

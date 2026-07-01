@@ -1,9 +1,7 @@
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import {
-  SettingsRegular, DeleteRegular, DismissRegular,
-} from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens } from '../theme/tokens'
@@ -91,6 +89,9 @@ const useStyles = makeStyles({
   menuRow: {
     ...sidebarTopMenuRow,
     marginBottom: '6px',
+  },
+  menuRowActive: {
+    backgroundColor: opptrixTokens.accentSoft,
   },
   menuIcon: sidebarTopMenuIcon,
   sectionLabel: {
@@ -221,10 +222,12 @@ interface SessionSidebarProps {
   drawerOpen?: boolean
   sessions: SessionMeta[]
   activeId: string | null
+  activeRoute?: 'chat' | 'news'
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
   onOpenSettings: () => void
+  onOpenNewsCenter: () => void
   onClose?: () => void
 }
 
@@ -234,8 +237,8 @@ function formatDate(iso: string) {
 
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
-  sessions, activeId,
-  onSelect, onNew, onDelete, onOpenSettings, onClose,
+  sessions, activeId, activeRoute = 'chat',
+  onSelect, onNew, onDelete, onOpenSettings, onOpenNewsCenter, onClose,
 }: SessionSidebarProps) {
   const s = useStyles()
   const isDrawer = mode === 'drawer'
@@ -258,6 +261,19 @@ export default function SessionSidebar({
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
+      </button>
+
+      <button
+        type="button"
+        className={mergeClasses(
+          s.menuRow,
+          'opptrix-focusable',
+          activeRoute === 'news' && s.menuRowActive,
+        )}
+        onClick={onOpenNewsCenter}
+      >
+        <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>新闻中心</span>
       </button>
 
       <Text className={s.sectionLabel}>对话</Text>

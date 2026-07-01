@@ -363,6 +363,70 @@ export interface ReportTextData {
   code: string; name: string; report_type: string; text: string
 }
 
+// ─── News feed ───
+export type FeedSourceKind = 'rss' | 'atom' | 'rsshub'
+
+export interface FeedGroup {
+  id: string
+  title: string
+  sort_order: number
+  created_at: string
+}
+
+export interface FeedSubscription {
+  id: string
+  title: string
+  url: string
+  resolved_url: string
+  kind: FeedSourceKind
+  enabled: boolean
+  group_id?: string | null
+  created_at: string
+  last_fetched_at?: string
+  last_error?: string
+}
+
+export interface FeedArticle {
+  id: string
+  subscription_id: string
+  title: string
+  link: string
+  pub_date: string
+  summary?: string
+  content_html?: string
+  source_title: string
+}
+
+export interface NewsSettings {
+  refresh_interval_min: number
+  retention_years: number
+  max_articles: number | null
+}
+
+export interface FeedPageResult {
+  articles: FeedArticle[]
+  next_cursor: string | null
+  has_more: boolean
+  total: number
+  refreshed_at: string | null
+  stale: boolean
+}
+
+export interface NewsGroupedFeed {
+  groups: Array<{ id: string; title: string; articles: FeedArticle[] }>
+  ungrouped: FeedArticle[]
+  by_source: Array<{ subscription_id: string; title: string; articles: FeedArticle[] }>
+}
+
+export interface ValidateFeedResult {
+  ok: boolean
+  title: string
+  item_count: number
+  kind: FeedSourceKind
+  resolved_url: string
+  error?: string
+}
+
 // ─── Unified API response ───
 export interface ApiResponse<T = any> {
   success: boolean

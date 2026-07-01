@@ -21,7 +21,7 @@ export function desktopToolbarWidth(): number {
     + (DESKTOP_TOOLBAR_TOOL_COUNT - 1) * DESKTOP_TOOL_GAP
 }
 
-export type DesktopViewMode = 'chat' | 'settings'
+export type DesktopViewMode = 'chat' | 'settings' | 'news'
 
 export function desktopTitleLeft(
   sidebarInline: boolean,

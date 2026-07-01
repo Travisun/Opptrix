@@ -36,6 +36,19 @@
 
 代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`。
 
+### 1.2 新闻中心
+
+侧栏「新对话」下方进入；占满主栏时**不显示**右侧行情面板（与设置页相同）。
+
+| 状态 | 布局 | 行为 |
+|------|------|------|
+| `view=news` | 左列表（常驻）+ 右阅读器 | 时间线默认 20 篇，下滑自动加载；可切换「分组」「来源」视图 |
+| 阅读器空状态 | 右栏居中卡片 | 引导选择文章或管理订阅 |
+
+订阅管理：**设置 → 新闻订阅**（订阅源、自定义分组文件夹、自动刷新间隔）。
+
+代码：`client-ui/src/pages/news/`、`client-ui/src/pages/settings/NewsFeedSettingsSection.tsx`。
+
 ## 2. 路由与页面映射
 
 | 导航 | 页面 | 布局模式 |
@@ -46,6 +59,7 @@
 | 市场与产业 | MarketInsight | Tab + 报告/Mermaid 卡片 |
 | 投研写作 | StockWriter | 双栏 Editor 卡片 |
 | 设置 | Settings | 表单卡片堆叠 |
+| 新闻中心 | NewsCenter | 侧栏入口；feed / reader 双模式 |
 
 ## 3. 全局上下文
 
@@ -95,3 +109,5 @@
 | SurfaceCard | `client-ui/src/components/SectionCard.tsx` |
 | StatCard | `client-ui/src/components/StatCard.tsx` |
 | NavItem | `client-ui/src/components/NavItem.tsx` |
+| NewsCenter | `client-ui/src/pages/news/NewsCenterPage.tsx` |
+| SessionSidebar | `client-ui/src/chat/SessionSidebar.tsx` |

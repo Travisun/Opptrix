@@ -1,4 +1,13 @@
-import type { ApiResponse } from '../types/schemas'
+import type {
+  ApiResponse,
+  FeedArticle,
+  FeedGroup,
+  FeedPageResult,
+  FeedSubscription,
+  NewsGroupedFeed,
+  NewsSettings,
+  ValidateFeedResult,
+} from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
 import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
 import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
@@ -749,4 +758,120 @@ export async function streamSessionChat(
       onEvent(JSON.parse(line.slice(6)) as ChatProgressEvent)
     }
   }
+}
+
+// ─── News feed API ───
+
+async function newsJsonFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  return jsonFetch<T>(path, init)
+}
+
+export const news = {
+  getSettings: () =>
+    newsJsonFetch<{ settings: NewsSettings }>('/news/settings'),
+
+  saveSettings: (settings: Partial<NewsSettings>) =>
+    newsJsonFetch<{ settings: NewsSettings }>('/news/settings', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }),
+
+  listSubscriptions: () =>
+    newsJsonFetch<{ subscriptions: FeedSubscription[]; groups: FeedGroup[] }>('/news/subscriptions'),
+
+  listGroups: () =>
+    newsJsonFetch<{ groups: FeedGroup[] }>('/news/groups'),
+
+  createGroup: (title: string) =>
+    newsJsonFetch<{ group: FeedGroup; groups: FeedGroup[] }>('/news/groups', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    }),
+
+  updateGroup: (id: string, body: { title?: string; sort_order?: number }) =>
+    newsJsonFetch<{ group: FeedGroup; groups: FeedGroup[] }>(`/news/groups/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    }),
+
+  deleteGroup: (id: string) =>
+    newsJsonFetch<{ deleted: boolean; groups: FeedGroup[]; subscriptions: FeedSubscription[] }>(
+      `/news/groups/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
+
+  moveSubscriptionToGroup: (subId: string, groupId: string | null) =>
+    newsJsonFetch<{ subscription: FeedSubscription; subscriptions: FeedSubscription[] }>(
+      `/news/subscriptions/${encodeURIComponent(subId)}/group`,
+      {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ group_id: groupId }),
+      },
+    ),
+
+  saveSubscriptions: (subscriptions: FeedSubscription[]) =>
+    newsJsonFetch<{ subscriptions: FeedSubscription[] }>('/news/subscriptions', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ subscriptions }),
+    }),
+
+  addSubscription: (body: { url: string; title?: string; enabled?: boolean; group_id?: string | null }) =>
+    newsJsonFetch<{ subscription: FeedSubscription; subscriptions: FeedSubscription[] }>(
+      '/news/subscriptions/item',
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+      },
+    ),
+
+  deleteSubscription: (id: string) =>
+    newsJsonFetch<{ deleted: boolean; subscriptions: FeedSubscription[] }>(
+      `/news/subscriptions/${encodeURIComponent(id)}`,
+      { method: 'DELETE' },
+    ),
+
+  validate: (url: string, title?: string) =>
+    newsJsonFetch<{ result: ValidateFeedResult }>('/news/validate', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ url, title }),
+    }),
+
+  getFeed: (opts: {
+    limit?: number
+    cursor?: string | null
+    subscription_id?: string | null
+    group_id?: string | null
+    date?: string | null
+  } = {}) => {
+    const q = new URLSearchParams()
+    q.set('limit', String(opts.limit ?? 20))
+    if (opts.cursor) q.set('cursor', opts.cursor)
+    if (opts.subscription_id) q.set('subscription_id', opts.subscription_id)
+    if (opts.group_id) q.set('group_id', opts.group_id)
+    if (opts.date) q.set('date', opts.date)
+    return newsJsonFetch<FeedPageResult>(`/news/feed?${q.toString()}`)
+  },
+
+  getGroupedFeed: () =>
+    newsJsonFetch<NewsGroupedFeed>('/news/feed/grouped'),
+
+  getArticle: (id: string) =>
+    newsJsonFetch<{ article: FeedArticle }>(`/news/articles/${encodeURIComponent(id)}`),
+
+  refresh: () =>
+    newsJsonFetch<{
+      refreshed: number
+      errors: Array<{ id: string; title: string; error: string }>
+      articles: FeedArticle[]
+      next_cursor: string | null
+      has_more: boolean
+      total: number
+    }>('/news/refresh', { method: 'POST' }),
 }

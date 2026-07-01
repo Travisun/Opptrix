@@ -151,7 +151,8 @@ export default function DesktopWindowChrome({
   if (!isElectron()) return null
 
   const isSettings = viewMode === 'settings'
-  const titleLeft = desktopTitleLeft(sidebarInline, isSettings, macFullscreen)
+  const isNews = viewMode === 'news'
+  const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
 
@@ -173,8 +174,8 @@ export default function DesktopWindowChrome({
     return {}
   })()
 
-  /** Chat title drag overlaps the right panel tab strip when chat column is hidden. */
-  const showChatTitle = !isSettings && chatColumnVisible
+  /** Chat / news title in the title bar band. */
+  const showPageTitle = isNews || (!isSettings && chatColumnVisible)
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
@@ -195,9 +196,9 @@ export default function DesktopWindowChrome({
 
   return createPortal(
     <>
-      {!isSettings && showChatTitle && (
+      {showPageTitle && (
         <div className={s.title} style={{ left: `${titleLeft}px` }}>
-          <Text className={s.titleText}>{title || '新对话'}</Text>
+          <Text className={s.titleText}>{title || (isNews ? '新闻中心' : '新对话')}</Text>
         </div>
       )}
 

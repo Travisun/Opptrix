@@ -20,6 +20,8 @@ import {
 import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
+import { registerNewsRoutes } from './news-routes.js'
+import { startNewsFeedScheduler } from '@opptrix/news-feed'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -740,6 +742,8 @@ app.delete<{ Params: { id: string } }>('/api/portfolio/trade/:id', async (req, r
 let serveUi = false
 
 async function bootstrap() {
+  await registerNewsRoutes(app)
+  startNewsFeedScheduler()
   serveUi = shouldServeUi()
   if (serveUi) {
     serveUi = await registerStaticUi(app)

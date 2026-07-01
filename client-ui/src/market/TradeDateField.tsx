@@ -8,7 +8,7 @@ import {
 } from '@fluentui/react-components'
 import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import { opptrixTokens } from '../theme/tokens'
-import { ghostInteractive } from '../theme/mixins'
+import { ghostInteractive, glassDropdown } from '../theme/mixins'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
@@ -21,6 +21,12 @@ export function formatTradeDate(d: Date): string {
 
 export function todayTradeDate(): string {
   return formatTradeDate(new Date())
+}
+
+export function formatTradeDateLabel(value: string): string | null {
+  const d = parseTradeDate(value)
+  if (!d) return null
+  return `${d.getFullYear()}年${d.getMonth() + 1}月${d.getDate()}日`
 }
 
 function parseTradeDate(value: string): Date | null {
@@ -76,6 +82,7 @@ const useStyles = makeStyles({
     padding: '8px',
     borderRadius: opptrixTokens.radiusLg,
     minWidth: '232px',
+    ...glassDropdown,
   },
   header: {
     display: 'flex',
@@ -207,6 +214,9 @@ export default function TradeDateField({
   const [viewYear, setViewYear] = useState(() => (parsed ?? today).getFullYear())
   const [viewMonth, setViewMonth] = useState(() => (parsed ?? today).getMonth())
   const [open, setOpen] = useState(false)
+  const [editing, setEditing] = useState(false)
+
+  const inputValue = editing ? value : (formatTradeDateLabel(value) ?? value)
 
   const openPicker = useCallback(() => {
     const d = parseTradeDate(value)
@@ -254,7 +264,9 @@ export default function TradeDateField({
           appearance="filled-darker"
           size="small"
           placeholder={placeholder}
-          value={value}
+          value={inputValue}
+          onFocus={() => setEditing(true)}
+          onBlur={() => setEditing(false)}
           onChange={(_, data) => onChange(data.value)}
           contentAfter={(
             <button
@@ -277,7 +289,10 @@ export default function TradeDateField({
         positioning={{ target: anchorRef.current ?? undefined, position: 'below', align: 'start' }}
         trapFocus
       >
-        <PopoverSurface className={s.surface} anchor={anchorRef.current ?? undefined}>
+        <PopoverSurface
+          className={mergeClasses(s.surface, 'opptrix-glass-panel')}
+          anchor={anchorRef.current ?? undefined}
+        >
           <div className={s.header}>
             <button type="button" className={s.navBtn} aria-label="上一月" onClick={() => goMonth(-1)}>
               <ChevronLeftRegular fontSize={14} />

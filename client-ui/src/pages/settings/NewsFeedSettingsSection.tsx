@@ -1,0 +1,652 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogSurface,
+  DialogTitle,
+  Spinner,
+  Switch,
+  Text,
+  makeStyles,
+  mergeClasses,
+} from '@fluentui/react-components'
+import { AddRegular, ArrowSyncRegular, DeleteRegular, EditRegular, FolderRegular } from '@fluentui/react-icons'
+import { news } from '../../api/client'
+import type { FeedSubscription, FeedGroup, NewsSettings } from '../../types/schemas'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
+import OpptrixField from '../../components/opptrix/OpptrixField'
+import OpptrixInput from '../../components/opptrix/OpptrixInput'
+import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
+import {
+  SettingsActionRow,
+  SettingsGroup,
+  SettingsRow,
+} from './SettingsPrimitives'
+import { useSettingsToast } from './SettingsToast'
+import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
+import { opptrixTokens } from '../../theme/tokens'
+
+const REFRESH_INTERVAL_OPTIONS = [5, 10, 15, 30, 60] as const
+const RETENTION_YEAR_OPTIONS = [0, 1, 2, 3, 5, 10, 20] as const
+const MAX_ARTICLE_OPTIONS = [
+  { value: '__unlimited__', label: '不限制' },
+  { value: '5000', label: '5,000 篇' },
+  { value: '10000', label: '1 万篇' },
+  { value: '50000', label: '5 万篇' },
+  { value: '100000', label: '10 万篇' },
+] as const
+const SETTINGS_SAVE_MS = 500
+
+const useStyles = makeStyles({
+  toolbar: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    marginBottom: '12px',
+  },
+  toolbarMeta: {
+    fontSize: '12px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.45,
+    flex: 1,
+    minWidth: 0,
+  },
+  sectionBlock: {
+    marginTop: '20px',
+  },
+  sectionLabel: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: opptrixTokens.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    padding: '0 2px 8px',
+  },
+  saveHint: {
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    padding: '4px 2px 0',
+    minHeight: '16px',
+  },
+  saveHintActive: {
+    color: opptrixTokens.textSecondary,
+  },
+  emptyBlock: {
+    padding: '20px 18px',
+    textAlign: 'center',
+  },
+  emptyTitle: {
+    fontSize: '13px',
+    fontWeight: 650,
+    color: opptrixTokens.textPrimary,
+    marginBottom: '6px',
+  },
+  emptyDesc: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.5,
+  },
+  dialogBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '14px',
+    paddingTop: '4px',
+  },
+  dialogHint: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.5,
+  },
+  preview: {
+    fontSize: '12px',
+    color: opptrixTokens.textPrimary,
+    padding: '10px 12px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvasAlt,
+    lineHeight: 1.45,
+  },
+  dialogActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '4px',
+  },
+  intervalSelect: {
+    minWidth: '120px',
+  },
+})
+
+type SaveState = 'idle' | 'pending' | 'saved' | 'error'
+
+export default function NewsFeedSettingsSection() {
+  const s = useStyles()
+  const toast = useSettingsToast()
+  const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState<NewsSettings>({
+    refresh_interval_min: 15,
+    retention_years: 3,
+    max_articles: null,
+  })
+  const [subs, setSubs] = useState<FeedSubscription[]>([])
+  const [groups, setGroups] = useState<FeedGroup[]>([])
+  const [groupDialogOpen, setGroupDialogOpen] = useState(false)
+  const [editingGroup, setEditingGroup] = useState<FeedGroup | null>(null)
+  const [groupTitle, setGroupTitle] = useState('')
+  const [addGroupId, setAddGroupId] = useState<string>('')
+  const [refreshedAt, setRefreshedAt] = useState<string | null>(null)
+  const [refreshing, setRefreshing] = useState(false)
+  const [dialogOpen, setDialogOpen] = useState(false)
+  const [addUrl, setAddUrl] = useState('')
+  const [addTitle, setAddTitle] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [preview, setPreview] = useState<{ title: string; item_count: number } | null>(null)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const skipSettingsSave = useRef(true)
+  const settingsBaseline = useRef<NewsSettings | null>(null)
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [st, subResp] = await Promise.all([
+        news.getSettings(),
+        news.listSubscriptions(),
+      ])
+      setSettings(st.settings)
+      settingsBaseline.current = st.settings
+      skipSettingsSave.current = true
+      setSubs(subResp.subscriptions)
+      setGroups(subResp.groups)
+      try {
+        const feed = await news.getFeed({ limit: 1 })
+        setRefreshedAt(feed.refreshed_at)
+      } catch {
+        setRefreshedAt(null)
+      }
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [toast])
+
+  useEffect(() => { void load() }, [load])
+
+  useDebouncedEffect(() => {
+    if (loading || skipSettingsSave.current) {
+      skipSettingsSave.current = false
+      return
+    }
+    const baseline = settingsBaseline.current
+    if (!baseline) return
+    if (
+      baseline.refresh_interval_min === settings.refresh_interval_min
+      && baseline.retention_years === settings.retention_years
+      && baseline.max_articles === settings.max_articles
+    ) return
+
+    setSaveState('pending')
+    news.saveSettings(settings)
+      .then(resp => {
+        setSettings(resp.settings)
+        settingsBaseline.current = resp.settings
+        setSaveState('saved')
+        toast.showSuccess('已保存')
+        window.setTimeout(() => setSaveState('idle'), 2000)
+      })
+      .catch((e: unknown) => {
+        setSaveState('error')
+        toast.showError(e instanceof Error ? e.message : '保存失败')
+      })
+  }, [settings.refresh_interval_min, settings.retention_years, settings.max_articles, loading], SETTINGS_SAVE_MS)
+
+  const resetDialog = () => {
+    setAddUrl('')
+    setAddTitle('')
+    setAddGroupId('')
+    setPreview(null)
+  }
+
+  const openDialog = () => {
+    resetDialog()
+    setDialogOpen(true)
+  }
+
+  const handleMoveGroup = async (subId: string, groupId: string) => {
+    try {
+      const resp = await news.moveSubscriptionToGroup(subId, groupId || null)
+      setSubs(resp.subscriptions)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '移动失败')
+    }
+  }
+
+  const openGroupDialog = (group?: FeedGroup) => {
+    setEditingGroup(group ?? null)
+    setGroupTitle(group?.title ?? '')
+    setGroupDialogOpen(true)
+  }
+
+  const handleSaveGroup = async () => {
+    const title = groupTitle.trim()
+    if (!title) return
+    try {
+      if (editingGroup) {
+        const resp = await news.updateGroup(editingGroup.id, { title })
+        setGroups(resp.groups)
+      } else {
+        const resp = await news.createGroup(title)
+        setGroups(resp.groups)
+      }
+      setGroupDialogOpen(false)
+      toast.showSuccess(editingGroup ? '已更新分组' : '已创建分组')
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '保存分组失败')
+    }
+  }
+
+  const handleDeleteGroup = async (id: string) => {
+    if (!confirm('删除分组后，其中订阅将移至未分组。确定删除？')) return
+    try {
+      const resp = await news.deleteGroup(id)
+      setGroups(resp.groups)
+      setSubs(resp.subscriptions)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '删除分组失败')
+    }
+  }
+
+  const handleRefresh = async () => {
+    setRefreshing(true)
+    try {
+      const resp = await news.refresh()
+      setSubs(await news.listSubscriptions().then(r => r.subscriptions))
+      setRefreshedAt(new Date().toISOString())
+      if (resp.errors.length) {
+        toast.showError(`${resp.errors.length} 个源拉取失败，请检查订阅地址`)
+      } else {
+        toast.showSuccess(`已更新 ${resp.refreshed} 个订阅源`)
+      }
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '刷新失败')
+    } finally {
+      setRefreshing(false)
+    }
+  }
+
+  const handleValidate = async () => {
+    const url = addUrl.trim()
+    if (!url) return
+    setValidating(true)
+    setPreview(null)
+    try {
+      const v = await news.validate(url, addTitle.trim() || undefined)
+      if (!v.result.ok) {
+        toast.showError(v.result.error || '订阅源无效')
+        return
+      }
+      setPreview({ title: v.result.title, item_count: v.result.item_count })
+      if (!addTitle.trim()) setAddTitle(v.result.title)
+      toast.showSuccess(`验证通过，共 ${v.result.item_count} 条`)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '验证失败')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleAdd = async () => {
+    const url = addUrl.trim()
+    if (!url) return
+    setValidating(true)
+    try {
+      const resp = await news.addSubscription({
+        url,
+        title: addTitle.trim() || undefined,
+        group_id: addGroupId || null,
+      })
+      setSubs(resp.subscriptions)
+      setDialogOpen(false)
+      resetDialog()
+      toast.showSuccess('已添加订阅')
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '添加失败')
+    } finally {
+      setValidating(false)
+    }
+  }
+
+  const handleDelete = async (id: string) => {
+    try {
+      const resp = await news.deleteSubscription(id)
+      setSubs(resp.subscriptions)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '删除失败')
+    }
+  }
+
+  const toggleEnabled = async (sub: FeedSubscription, enabled: boolean) => {
+    const next = subs.map(item => (item.id === sub.id ? { ...item, enabled } : item))
+    setSubs(next)
+    try {
+      const resp = await news.saveSubscriptions(next)
+      setSubs(resp.subscriptions)
+    } catch {
+      setSubs(subs)
+      toast.showError('更新失败')
+    }
+  }
+
+  const saveHintText = (() => {
+    switch (saveState) {
+      case 'pending': return '保存中…'
+      case 'saved': return '已保存'
+      case 'error': return ''
+      default: return ''
+    }
+  })()
+
+  if (loading) return <Spinner size="tiny" label="加载订阅…" />
+
+  return (
+    <>
+      <div className={s.toolbar}>
+        <Text className={s.toolbarMeta} block>
+          {subs.length > 0
+            ? `已添加 ${subs.length} 个订阅源`
+            : '添加订阅后，资讯将按时间聚合到新闻中心'}
+        </Text>
+        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
+          <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openDialog}>
+            添加订阅
+          </OpptrixButton>
+        </div>
+      </div>
+
+      <SettingsGroup>
+        {subs.length === 0 ? (
+          <div className={s.emptyBlock}>
+            <Text className={s.emptyTitle} block>还没有订阅源</Text>
+            <Text className={s.emptyDesc} block>
+              点击「添加订阅」，粘贴 RSS、Atom 或 RSSHub 的完整订阅链接即可。
+            </Text>
+          </div>
+        ) : (
+          subs.map((sub, i) => (
+            <SettingsRow
+              key={sub.id}
+              title={sub.title}
+              desc={[
+                sub.url,
+                sub.last_error ? `拉取失败：${sub.last_error}` : '',
+              ].filter(Boolean).join(' · ')}
+              control={(
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                  <OpptrixSelect
+                    size="small"
+                    style={{ minWidth: 100 }}
+                    value={sub.group_id ?? ''}
+                    selectedOptions={[sub.group_id ?? '']}
+                    onOptionSelect={(_, d) => {
+                      void handleMoveGroup(sub.id, d.optionValue ?? '')
+                    }}
+                  >
+                    <OpptrixOption value="" text="未分组" />
+                    {groups.map(g => (
+                      <OpptrixOption key={g.id} value={g.id} text={g.title} />
+                    ))}
+                  </OpptrixSelect>
+                  <Switch
+                    checked={sub.enabled}
+                    onChange={(_, d) => { void toggleEnabled(sub, d.checked) }}
+                  />
+                  <OpptrixButton
+                    variant="icon"
+                    icon={<DeleteRegular />}
+                    aria-label="删除"
+                    onClick={() => { void handleDelete(sub.id) }}
+                  />
+                </div>
+              )}
+              last={i === subs.length - 1}
+            />
+          ))
+        )}
+      </SettingsGroup>
+
+      <div className={s.sectionBlock}>
+        <Text className={s.sectionLabel} block>订阅分组</Text>
+        <SettingsGroup>
+          {groups.length === 0 ? (
+            <div className={s.emptyBlock}>
+              <Text className={s.emptyDesc} block>创建文件夹，将订阅源归类整理。</Text>
+            </div>
+          ) : (
+            groups.map((g, i) => (
+              <SettingsRow
+                key={g.id}
+                title={g.title}
+                desc={`${subs.filter(s => s.group_id === g.id).length} 个订阅源`}
+                control={(
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <OpptrixButton variant="icon" icon={<EditRegular />} aria-label="重命名" onClick={() => openGroupDialog(g)} />
+                    <OpptrixButton variant="icon" icon={<DeleteRegular />} aria-label="删除" onClick={() => { void handleDeleteGroup(g.id) }} />
+                  </div>
+                )}
+                last={i === groups.length - 1}
+              />
+            ))
+          )}
+        </SettingsGroup>
+        <div style={{ height: 8 }} />
+        <OpptrixButton variant="secondary" icon={<FolderRegular />} onClick={() => openGroupDialog()}>
+          新建分组
+        </OpptrixButton>
+      </div>
+
+      <div className={s.sectionBlock}>
+        <Text className={s.sectionLabel} block>本地存储</Text>
+        <SettingsGroup>
+          <SettingsRow
+            title="保留年限"
+            desc="默认保留 3 年内发布的文章，便于历史回溯分析"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                value={String(settings.retention_years)}
+                selectedOptions={[String(settings.retention_years)]}
+                onOptionSelect={(_, d) => {
+                  const n = Number(d.optionValue)
+                  if (RETENTION_YEAR_OPTIONS.includes(n as typeof RETENTION_YEAR_OPTIONS[number])) {
+                    setSettings(prev => ({ ...prev, retention_years: n }))
+                  }
+                }}
+              >
+                {RETENTION_YEAR_OPTIONS.map(y => (
+                  <OpptrixOption
+                    key={y}
+                    value={String(y)}
+                    text={y === 0 ? '不限制' : `${y} 年`}
+                  />
+                ))}
+              </OpptrixSelect>
+            )}
+          />
+          <SettingsRow
+            title="文章数量上限"
+            desc="超出上限时，按发布时间从旧到新自动清理"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                value={settings.max_articles == null ? '__unlimited__' : String(settings.max_articles)}
+                selectedOptions={[settings.max_articles == null ? '__unlimited__' : String(settings.max_articles)]}
+                onOptionSelect={(_, d) => {
+                  const v = d.optionValue ?? '__unlimited__'
+                  setSettings(prev => ({
+                    ...prev,
+                    max_articles: v === '__unlimited__' ? null : Number(v),
+                  }))
+                }}
+              >
+                {MAX_ARTICLE_OPTIONS.map(opt => (
+                  <OpptrixOption key={opt.value} value={opt.value} text={opt.label} />
+                ))}
+              </OpptrixSelect>
+            )}
+            last
+          />
+        </SettingsGroup>
+        <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
+          {saveHintText}
+        </Text>
+      </div>
+
+      <div className={s.sectionBlock}>
+        <Text className={s.sectionLabel} block>更新</Text>
+        <SettingsGroup>
+          <SettingsRow
+            title="自动刷新间隔"
+            desc="打开新闻中心时，超过该时间将自动在后台拉取最新资讯"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                value={String(settings.refresh_interval_min)}
+                selectedOptions={[String(settings.refresh_interval_min)]}
+                onOptionSelect={(_, d) => {
+                  const n = Number(d.optionValue)
+                  if (REFRESH_INTERVAL_OPTIONS.includes(n as typeof REFRESH_INTERVAL_OPTIONS[number])) {
+                    setSettings(prev => ({ ...prev, refresh_interval_min: n }))
+                  }
+                }}
+              >
+                {REFRESH_INTERVAL_OPTIONS.map(min => (
+                  <OpptrixOption key={min} value={String(min)} text={`${min} 分钟`} />
+                ))}
+              </OpptrixSelect>
+            )}
+          />
+          <SettingsRow
+            title="上次更新"
+            desc="全部订阅源最近一次成功拉取的时间"
+            control={(
+              <Text style={{ fontSize: 12, color: opptrixTokens.textSecondary }}>
+                {refreshedAt
+                  ? new Date(refreshedAt).toLocaleString('zh-CN')
+                  : '尚未拉取'}
+              </Text>
+            )}
+            last
+          />
+        </SettingsGroup>
+        <div style={{ height: 10 }} />
+        <SettingsActionRow
+          title="立即刷新全部订阅"
+          desc="手动拉取所有已启用源的最新文章，约需数秒到半分钟"
+          action={(
+            <OpptrixButton
+              variant="secondary"
+              icon={<ArrowSyncRegular />}
+              onClick={() => { void handleRefresh() }}
+              disabled={refreshing || subs.length === 0}
+            >
+              {refreshing ? '刷新中…' : '立即刷新'}
+            </OpptrixButton>
+          )}
+        />
+      </div>
+
+      <Dialog open={dialogOpen} onOpenChange={(_, d) => { setDialogOpen(d.open); if (!d.open) resetDialog() }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>添加订阅</DialogTitle>
+            <DialogContent className={s.dialogBody}>
+              <Text className={s.dialogHint} block>
+                支持 RSS 2.0、Atom 等标准格式。RSSHub 同样输出标准订阅文件，直接粘贴完整链接即可。
+              </Text>
+              <OpptrixField label="订阅地址">
+                <OpptrixInput
+                  value={addUrl}
+                  onChange={(_, d) => { setAddUrl(d.value); setPreview(null) }}
+                  placeholder="https://…"
+                />
+              </OpptrixField>
+              <OpptrixField label="显示名称（可选）">
+                <OpptrixInput
+                  value={addTitle}
+                  onChange={(_, d) => setAddTitle(d.value)}
+                  placeholder="验证后自动填充"
+                />
+              </OpptrixField>
+
+              <OpptrixField label="所属分组（可选）">
+                <OpptrixSelect
+                  value={addGroupId}
+                  selectedOptions={[addGroupId]}
+                  onOptionSelect={(_, d) => setAddGroupId(d.optionValue ?? '')}
+                >
+                  <OpptrixOption value="" text="未分组" />
+                  {groups.map(g => (
+                    <OpptrixOption key={g.id} value={g.id} text={g.title} />
+                  ))}
+                </OpptrixSelect>
+              </OpptrixField>
+
+              {preview && (
+                <div className={s.preview}>
+                  验证通过：{preview.title}（{preview.item_count} 条）
+                </div>
+              )}
+
+              <div className={s.dialogActions}>
+                <OpptrixButton variant="ghost" onClick={() => setDialogOpen(false)}>
+                  取消
+                </OpptrixButton>
+                <OpptrixButton
+                  variant="secondary"
+                  disabled={validating || !addUrl.trim()}
+                  onClick={() => { void handleValidate() }}
+                >
+                  {validating ? '验证中…' : '验证'}
+                </OpptrixButton>
+                <OpptrixButton
+                  variant="primary"
+                  disabled={validating || !addUrl.trim()}
+                  onClick={() => { void handleAdd() }}
+                >
+                  {validating ? '添加中…' : '添加'}
+                </OpptrixButton>
+              </div>
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+
+      <Dialog open={groupDialogOpen} onOpenChange={(_, d) => setGroupDialogOpen(d.open)}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>{editingGroup ? '重命名分组' : '新建分组'}</DialogTitle>
+            <DialogContent className={s.dialogBody}>
+              <OpptrixField label="分组名称">
+                <OpptrixInput
+                  value={groupTitle}
+                  onChange={(_, d) => setGroupTitle(d.value)}
+                  placeholder="例如：财经资讯"
+                />
+              </OpptrixField>
+              <div className={s.dialogActions}>
+                <OpptrixButton variant="ghost" onClick={() => setGroupDialogOpen(false)}>取消</OpptrixButton>
+                <OpptrixButton variant="primary" disabled={!groupTitle.trim()} onClick={() => { void handleSaveGroup() }}>
+                  保存
+                </OpptrixButton>
+              </div>
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
+    </>
+  )
+}

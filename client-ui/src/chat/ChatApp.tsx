@@ -3,6 +3,8 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import SessionSidebar from './SessionSidebar'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
+import NewsCenterPage from '../pages/news/NewsCenterPage'
+import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import RightPanel from './RightPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
 import WorkspaceSplitDivider from './WorkspaceSplitDivider'
@@ -132,6 +134,7 @@ export default function ChatApp() {
     if (typeof window === 'undefined') return false
     return window.innerWidth >= DESKTOP_SIDEBAR_EXPAND_THRESHOLD
   })
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>()
 
   const {
     current: view,
@@ -263,10 +266,20 @@ export default function ChatApp() {
     return () => { cancelled = true; clearInterval(timer) }
   }, [refreshHealth, refreshSessions, loadSession])
 
-  const openSettings = () => {
+  const openSettings = useCallback((section?: SettingsSection) => {
     closeDrawer()
+    setSettingsInitialSection(section)
     navigate('settings')
-  }
+  }, [closeDrawer, navigate])
+
+  const openNewsCenter = useCallback(() => {
+    closeDrawer()
+    navigate('news')
+  }, [closeDrawer, navigate])
+
+  const openNewsSettings = useCallback(() => {
+    openSettings('news_feed')
+  }, [openSettings])
 
   const handleExitSettings = useCallback(() => {
     navigate('chat')
@@ -576,7 +589,9 @@ export default function ChatApp() {
 
   const activeSession = sessions.find(x => x.id === activeId)
   const isSettings = view === 'settings'
-  const chromeTitle = activeSession?.title ?? '新对话'
+  const isNews = view === 'news'
+  const chromeTitle = isNews ? '新闻中心' : (activeSession?.title ?? '新对话')
+  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
   const handleEdgeRevealSidebar = useCallback(() => {
@@ -590,10 +605,12 @@ export default function ChatApp() {
   const sidebarProps = {
     sessions,
     activeId,
+    activeRoute: isNews ? 'news' as const : 'chat' as const,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
-    onOpenSettings: openSettings,
+    onOpenSettings: () => { openSettings() },
+    onOpenNewsCenter: openNewsCenter,
   }
 
   return (
@@ -607,7 +624,7 @@ export default function ChatApp() {
       {electronChrome && (
         <DesktopWindowChrome
           title={chromeTitle}
-          viewMode={isSettings ? 'settings' : 'chat'}
+          viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
             ? settingsSidebarVisible && !sidebarOverlayMode
@@ -621,16 +638,16 @@ export default function ChatApp() {
           onNewChat={handleNew}
           onGoBack={!isSettings ? goBack : undefined}
           onGoForward={!isSettings ? goForward : undefined}
-          rightPanelOpen={!isSettings ? rightPanelVisible : undefined}
-          rightPanelWidth={!isSettings && rightPanelVisible ? rightPanelWidth : undefined}
-          chatColumnVisible={!isSettings ? chatVisible : undefined}
-          onToggleRightPanel={!isSettings && !isMobile ? handleToggleRightPanel : undefined}
-          onToggleChatColumn={!isSettings && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
+          rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
+          rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
+          chatColumnVisible={view === 'chat' && !isMobile ? chatVisible : undefined}
+          onToggleRightPanel={view === 'chat' && !isMobile ? handleToggleRightPanel : undefined}
+          onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
         />
       )}
       <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'opptrix-app-shell')}>
         <div className={s.rootLayout}>
-        {view === 'chat' && !isMobile && (
+        {!isMobile && !isSettings && (
           <SessionSidebar
             mode={sidebarOverlayMode ? 'overlay' : 'panel'}
             visible={sidebarVisible}
@@ -646,10 +663,40 @@ export default function ChatApp() {
               sidebarVisible={settingsSidebarVisible}
               onSidebarClose={() => setSettingsSidebarVisible(false)}
               onBack={handleExitSettings}
+              initialSection={settingsInitialSection}
               onSaved={async () => {
                 await refreshHealth()
               }}
             />
+          </div>
+        ) : isNews ? (
+          <div
+            className={mergeClasses(
+              s.contentWorkspace,
+              isMobile && s.contentWorkspaceMobile,
+              electronChrome && s.contentWorkspaceElectron,
+              electronChrome && 'opptrix-app-main',
+            )}
+          >
+            {isMobile && (
+              <SessionSidebar
+                mode="drawer"
+                drawerOpen={drawerOpen}
+                onClose={closeDrawer}
+                {...sidebarProps}
+              />
+            )}
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+              )}
+            >
+              <NewsCenterPage
+                electronChrome={electronChrome}
+                onOpenSettings={openNewsSettings}
+              />
+            </div>
           </div>
         ) : (
           <div

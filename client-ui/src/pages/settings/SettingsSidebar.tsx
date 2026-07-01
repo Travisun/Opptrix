@@ -5,6 +5,7 @@ import {
   ChartMultipleRegular,
   DatabaseRegular,
   InfoRegular,
+  NewsRegular,
   SearchRegular,
   SettingsRegular,
 } from '@fluentui/react-icons'
@@ -15,7 +16,7 @@ import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
 
-export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'about'
+export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'about'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
@@ -23,6 +24,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'models', label: '模型', icon: BotRegular },
   { id: 'market_data', label: '基础数据', icon: DatabaseRegular },
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
+  { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'about', label: '关于', icon: InfoRegular },
 ]
 
@@ -255,6 +257,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '本地行情库、数据源与同步'
     case 'discover_strategies':
       return '查看内置策略、管理自编策略与复制编辑'
+    case 'news_feed':
+      return '管理 RSS 订阅与资讯更新频率'
     case 'about':
       return '应用版本与运行说明'
     default:

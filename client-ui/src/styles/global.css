@@ -477,6 +477,17 @@ select:focus-visible {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
+.fui-PopoverSurface.opptrix-glass-panel {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+}
+
+.opptrix-news-filter-listbox.fui-Listbox {
+  border-radius: var(--opptrix-radius-lg, 14px);
+  padding: 4px;
+}
+
 .opptrix-composer-glass-popover {
   border-radius: var(--opptrix-radius-lg, 14px);
 }
