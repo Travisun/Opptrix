@@ -21,6 +21,13 @@ import {
 import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
+import {
+  newsArticleDetail,
+  newsArticlesList,
+  newsCenterStatus,
+  newsGroupsList,
+  newsSourcesList,
+} from './news-hub.js'
 
 interface WatchlistRadarItem {
   code: string
@@ -113,6 +120,11 @@ export class ResearchHub {
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
+        case 'news_center_status': return newsCenterStatus(t0)
+        case 'news_groups_list': return newsGroupsList(t0)
+        case 'news_sources_list': return newsSourcesList(t0)
+        case 'news_articles_list': return newsArticlesList(params, t0)
+        case 'news_article_detail': return newsArticleDetail(params, t0)
         case 'tushare_config': return ok(publicTushareConfig(), 'Tushare 配置', t0)
         case 'tushare_config_save': return this.tushareConfigSave(params, t0)
         case 'tushare_test': return this.tushareTest(params, t0)

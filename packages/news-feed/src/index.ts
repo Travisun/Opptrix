@@ -278,3 +278,8 @@ export {
   dedupeArticlesByTitle,
   dedupeArticleIdsByTitle,
 } from './dedupe.js'
+export {
+  compressNewsTextForAgent,
+  summarizeArticleForAgent,
+  formatArticleDetailForAgent,
+} from './agent-format.js'

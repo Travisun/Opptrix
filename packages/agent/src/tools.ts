@@ -111,6 +111,7 @@ export class ToolRegistry {
       '- 不推荐具体买卖，仅提供研究与数据解读',
       '- 可组合多个工具由浅入深补全数据',
       '- 用户关注列表用 get_watchlist；实盘持仓用 get_portfolio_holdings / portfolio_summary；交易流水用 portfolio_trades',
+      '- 资讯订阅（新闻中心 RSS）：先 get_news_center_status；list_news_groups / list_news_sources 查分组与来源；list_news_articles 按时间线/分组/来源浏览（仅摘要）；正文用 get_news_article(article_id)',
       '- 报告日期与时区用 get_current_time；环境/版本用 get_system_info；默认评分卡与模型用 get_app_settings；数据目录与项目路径用 get_project_info',
       '- 外部集成（Tushare）状态用 get_integration_status',
       '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
@@ -434,6 +435,57 @@ export class ToolRegistry {
         description: '产业链 Mermaid mindmap 源码',
         parameters: S({ industry: { type: 'string', description: '行业名称' } }, ['industry']),
         handler: (a: Record<string, unknown>) => d('industry_mermaid', { industry: a.industry }),
+      },
+      {
+        name: 'get_news_center_status', category: '资讯中心',
+        description: '查询新闻中心同步状态、订阅/分组数量与文章索引规模',
+        parameters: S({}),
+        handler: () => d('news_center_status', {}),
+      },
+      {
+        name: 'list_news_groups', category: '资讯中心',
+        description: '列出资讯自定义分组（id、名称、所含订阅数）',
+        parameters: S({}),
+        handler: () => d('news_groups_list', {}),
+      },
+      {
+        name: 'list_news_sources', category: '资讯中心',
+        description: '列出 RSS/Atom 订阅来源（id、名称、分组、启用状态）',
+        parameters: S({}),
+        handler: () => d('news_sources_list', {}),
+      },
+      {
+        name: 'list_news_articles', category: '资讯中心',
+        description: '按时间线/分组/来源分页浏览本地资讯列表（仅标题与短摘要，不含正文）',
+        parameters: S({
+          view: {
+            type: 'string',
+            description: 'timeline（默认，全站时间线）| group（按分组）| source（按订阅来源）',
+          },
+          group_id: {
+            type: 'string',
+            description: 'view=group 时必填；未分组订阅用 __ungrouped__',
+          },
+          subscription_id: {
+            type: 'string',
+            description: 'view=source 时必填；来自 list_news_sources',
+          },
+          date: {
+            type: 'string',
+            description: 'view=timeline 时可选，本地日历日 YYYY-MM-DD',
+          },
+          limit: { type: 'number', description: '每页条数 1-50，默认 20' },
+          cursor: { type: 'string', description: '上一页返回的 next_cursor，首页省略' },
+        }),
+        handler: (a: Record<string, unknown>) => d('news_articles_list', a),
+      },
+      {
+        name: 'get_news_article', category: '资讯中心',
+        description: '按本地文章 id 获取资讯正文（HTML 已剥离并压缩空白以节约 token）',
+        parameters: S({
+          article_id: { type: 'string', description: '文章 id，来自 list_news_articles' },
+        }, ['article_id']),
+        handler: (a: Record<string, unknown>) => d('news_article_detail', { article_id: a.article_id }),
       },
       {
         name: 'get_latest_evaluation', category: '通用',

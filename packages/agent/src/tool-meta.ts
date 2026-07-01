@@ -237,6 +237,36 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '持仓盈亏汇总 + 明细；需要组合层面 PnL 时使用。',
     compliance: '只读；比 get_portfolio_holdings 更重；二选一即可，勿重复调用。',
   },
+  get_news_center_status: {
+    hubFeature: 'news_center_status',
+    miningEligible: false,
+    usageGuide: '用户询问订阅资讯、RSS 要闻或新闻中心内容前调用；确认数据是否已刷新、订阅规模与文章总量。',
+    compliance: '只读；无参数；stale=true 时告知用户列表可能不是最新，勿编造文章。',
+  },
+  list_news_groups: {
+    hubFeature: 'news_groups_list',
+    miningEligible: false,
+    usageGuide: '需要按用户自定义分组浏览资讯时，先获取 group_id；与 list_news_articles(view=group) 配合。',
+    compliance: '只读；分组 id 须原样传入 list_news_articles；未分组订阅用 group_id=__ungrouped__。',
+  },
+  list_news_sources: {
+    hubFeature: 'news_sources_list',
+    miningEligible: false,
+    usageGuide: '需要按订阅源（Twitter、媒体 RSS 等）筛选文章时，先获取 subscription_id。',
+    compliance: '只读；subscription_id 须来自本工具返回；与 list_news_articles(view=source) 配合。',
+  },
+  list_news_articles: {
+    hubFeature: 'news_articles_list',
+    miningEligible: false,
+    usageGuide: '浏览资讯时间线、某分组或某来源下的文章标题与短摘要；用户问「订阅里有什么」「最近要闻」时使用。需正文再调 get_news_article。',
+    compliance: '只读；limit ≤50；view=group 须 group_id，view=source 须 subscription_id；列表无正文，禁止臆造 article_id；翻页用 cursor。',
+  },
+  get_news_article: {
+    hubFeature: 'news_article_detail',
+    miningEligible: false,
+    usageGuide: '用户点名某条资讯、需要读全文或做深度解读时，用 list 返回的 article_id 拉取正文。',
+    compliance: 'article_id 必填且须来自 list_news_articles；只读；正文已压缩空白；无正文时可能仅返回标题。',
+  },
   get_current_time: {
     miningEligible: true,
     usageGuide: '需要时间戳、时区、报告日期或交易日上下文时调用。',

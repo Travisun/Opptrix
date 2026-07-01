@@ -14,6 +14,7 @@
     "@opptrix/stock-eval": "*",
     "@opptrix/institutions": "*",
     "@opptrix/t-strategy": "*",
-    "@opptrix/skills": "*"
+    "@opptrix/skills": "*",
+    "@opptrix/news-feed": "*"
   }
 }
