@@ -15,6 +15,9 @@ import {
   FEED_PAGE_SIZE,
 } from './types.js'
 import { normalizeNewsSettings, selectRetainedArticles, sortArticlesByPubDate } from './retention.js'
+import { dedupeArticleIdsByContentKey, dedupeArticleIdsByTitle } from './dedupe.js'
+import { articleId } from './parser.js'
+import { buildTwitterStatusDedupeKey, extractTwitterStatusId } from './twitter-guid.js'
 import { subscriptionUrlKey } from './url.js'
 
 const PREF_NS = 'preference'
@@ -64,16 +67,88 @@ export class NewsFeedStore {
       LEGACY_CACHE_NS,
       LEGACY_CACHE_ID,
     )
-    if (!legacy?.articles?.length) return
-
-    for (const article of legacy.articles) {
-      this.store.setDocument(ARTICLE_NS, article.id, article)
+    if (legacy?.articles?.length) {
+      for (const article of legacy.articles) {
+        this.store.setDocument(ARTICLE_NS, article.id, article)
+      }
+      const index = this.readIndexDocument()
+      index.refreshed_at = legacy.refreshed_at ?? index.refreshed_at
+      index.subscription_meta = { ...index.subscription_meta, ...legacy.subscription_meta }
+      this.saveIndex(index)
+      this.rebuildArticleIndex()
+      this.store.deleteDocument(LEGACY_CACHE_NS, LEGACY_CACHE_ID)
     }
-    const index = this.getIndex()
-    index.refreshed_at = legacy.refreshed_at ?? index.refreshed_at
-    index.subscription_meta = { ...index.subscription_meta, ...legacy.subscription_meta }
-    this.rebuildArticleIndex()
-    this.store.deleteDocument(LEGACY_CACHE_NS, LEGACY_CACHE_ID)
+    this.ensureTwitterDedupeConsolidated()
+  }
+
+  private readIndexDocument(): NewsFeedIndex {
+    return this.store.getDocument<NewsFeedIndex>(INDEX_NS, INDEX_ID) ?? emptyIndex()
+  }
+
+  private ensureTwitterDedupeConsolidated(): void {
+    const index = this.readIndexDocument()
+    if (index.twitter_dedupe_v1) return
+    index.twitter_dedupe_v1 = true
+    this.saveIndex(index)
+
+    if (this.consolidateTwitterDuplicates()) {
+      this.rebuildArticleIndex()
+    }
+  }
+
+  private consolidateTwitterDuplicates(): boolean {
+    const all = this.listAllArticles()
+    const groups = new Map<string, FeedArticle[]>()
+
+    for (const article of all) {
+      const statusId =
+        extractTwitterStatusId(article.guid ?? '') ?? extractTwitterStatusId(article.link ?? '')
+      if (!statusId) continue
+      const key = `${article.subscription_id}::${statusId}`
+      const list = groups.get(key) ?? []
+      list.push(article)
+      groups.set(key, list)
+    }
+
+    let changed = false
+    for (const dupes of groups.values()) {
+      if (dupes.length <= 1) continue
+      const subId = dupes[0].subscription_id
+      const statusId =
+        extractTwitterStatusId(dupes[0].guid ?? '') ?? extractTwitterStatusId(dupes[0].link ?? '')
+      if (!statusId) continue
+
+      const canonicalId = articleId(subId, buildTwitterStatusDedupeKey(statusId))
+      const canonical = dupes.find(a => a.id === canonicalId)
+      const keeper = canonical ?? sortArticlesByPubDate(dupes)[0]
+      const merged: FeedArticle = { ...keeper, id: canonicalId }
+
+      this.store.setDocument(ARTICLE_NS, canonicalId, merged)
+      for (const dupe of dupes) {
+        if (dupe.id !== canonicalId) {
+          this.store.deleteDocument(ARTICLE_NS, dupe.id)
+          changed = true
+        }
+      }
+      if (!canonical || canonical.id !== canonicalId) changed = true
+    }
+    return changed
+  }
+
+  private removeStaleTwitterDuplicates(subscriptionId: string, article: FeedArticle): void {
+    const statusId =
+      extractTwitterStatusId(article.guid ?? '') ?? extractTwitterStatusId(article.link ?? '')
+    if (!statusId) return
+
+    const canonicalId = articleId(subscriptionId, buildTwitterStatusDedupeKey(statusId))
+    for (const existing of this.listAllArticles()) {
+      if (existing.subscription_id !== subscriptionId) continue
+      const existingStatus =
+        extractTwitterStatusId(existing.guid ?? '') ?? extractTwitterStatusId(existing.link ?? '')
+      if (existingStatus === statusId && existing.id !== canonicalId) {
+        this.store.deleteDocument(ARTICLE_NS, existing.id)
+      }
+    }
   }
 
   getSettings(): NewsSettings {
@@ -235,7 +310,7 @@ export class NewsFeedStore {
 
   private getIndex(): NewsFeedIndex {
     this.ensureMigrated()
-    return this.store.getDocument<NewsFeedIndex>(INDEX_NS, INDEX_ID) ?? emptyIndex()
+    return this.readIndexDocument()
   }
 
   private saveIndex(index: NewsFeedIndex): void {
@@ -269,7 +344,14 @@ export class NewsFeedStore {
   upsertArticlesForSubscription(subscriptionId: string, articles: FeedArticle[]): void {
     this.ensureMigrated()
     for (const article of articles) {
-      this.store.setDocument(ARTICLE_NS, article.id, article)
+      this.removeStaleTwitterDuplicates(subscriptionId, article)
+      const statusId =
+        extractTwitterStatusId(article.guid ?? '') ?? extractTwitterStatusId(article.link ?? '')
+      const canonicalId = statusId
+        ? articleId(subscriptionId, buildTwitterStatusDedupeKey(statusId))
+        : article.id
+      const stored = article.id === canonicalId ? article : { ...article, id: canonicalId }
+      this.store.setDocument(ARTICLE_NS, canonicalId, stored)
     }
     this.applyRetentionPolicy()
   }
@@ -341,6 +423,14 @@ export class NewsFeedStore {
         const doc = this.getArticleDoc(id)
         return doc && articleLocalYmd(doc.pub_date) === day
       })
+    }
+
+    // Timeline aggregate: same story may appear in multiple subscription feeds.
+    if (!filterSubs) {
+      ids = dedupeArticleIdsByTitle(ids, id => this.getArticleDoc(id))
+    } else {
+      // Per-source / per-group: collapse legacy Twitter rows that share a status id.
+      ids = dedupeArticleIdsByContentKey(ids, id => this.getArticleDoc(id))
     }
 
     let start = 0

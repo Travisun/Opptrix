@@ -32,6 +32,6 @@ export {
 } from './tool-meta.js'
 export { createMcpServer, runMcpStdio } from './mcp/server.js'
 export { McpToolBroker } from './mcp/broker.js'
-export { SessionStore, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef } from './sessions.js'
+export { SessionStore, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef } from './sessions.js'
 export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'

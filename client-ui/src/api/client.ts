@@ -830,6 +830,18 @@ export const news = {
       },
     ),
 
+  importSubscriptions: (file: { schema_version: number; subscriptions: Array<{ url: string; title: string }> }) =>
+    newsJsonFetch<{
+      added: number
+      skipped: number
+      errors: Array<{ url: string; error: string }>
+      subscriptions: FeedSubscription[]
+    }>('/news/subscriptions/import', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(file),
+    }),
+
   deleteSubscription: (id: string) =>
     newsJsonFetch<{ deleted: boolean; subscriptions: FeedSubscription[] }>(
       `/news/subscriptions/${encodeURIComponent(id)}`,

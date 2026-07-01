@@ -44,7 +44,19 @@ export interface SessionSelectionContextRef {
   turns: DisplayMessage[]
 }
 
-export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef
+export interface SessionArticleContextRef {
+  kind: 'article'
+  articleId: string
+  title: string
+  sourceTitle: string
+  link: string
+  pubDate: string
+  bodyText: string
+  anchorAt: string
+  preview: string
+}
+
+export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef | SessionArticleContextRef
 
 export interface SessionRecord extends SessionMeta {
   messages: ChatMessage[]
@@ -216,15 +228,17 @@ export class SessionStore {
   }
 
   shouldMaterializeContext(record: SessionRecord): boolean {
-    if (!record.contextRef?.turns?.length) return false
-    const anchorAt = record.contextRef.anchorAt
+    const ref = record.contextRef
+    if (!ref || ref.kind === 'article' || !ref.turns?.length) return false
+    const anchorAt = ref.anchorAt
     return !(record.turns ?? []).some(t => t.at === anchorAt)
   }
 
   materializeContextRef(record: SessionRecord): SessionRecord {
-    if (!record.contextRef?.turns?.length) return record
+    const ref = record.contextRef
+    if (!ref || ref.kind === 'article' || !ref.turns?.length) return record
 
-    const prefix = record.contextRef.turns
+    const prefix = ref.turns
     record.turns = [
       ...prefix.map(t => ({
         role: t.role,

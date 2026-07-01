@@ -18,7 +18,9 @@ import type {
   SessionMeta, AvailableModel,
 } from '../types/chat'
 import type { ChatLiveTrace } from '../types/chatProgress'
+import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
+import { feedArticleToContextRef } from '../pages/news/newsUtils'
 import { opptrixTokens } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
@@ -65,7 +67,6 @@ const useStyles = makeStyles({
   },
   contentWorkspaceElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    backgroundColor: opptrixTokens.canvas,
   },
   chatColumn: {
     flex: 1,
@@ -113,6 +114,9 @@ const useStyles = makeStyles({
     width: '100%',
     display: 'flex',
     backgroundColor: 'transparent',
+  },
+  viewHidden: {
+    display: 'none',
   },
 })
 
@@ -203,6 +207,7 @@ export default function ChatApp() {
   const chatAbortRef = useRef<AbortController | null>(null)
   const stoppingRef = useRef(false)
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
+  const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
 
   const refreshModels = useCallback(async () => {
     try {
@@ -265,6 +270,10 @@ export default function ChatApp() {
     const timer = setInterval(() => { refreshHealth().catch(() => {}) }, 15000)
     return () => { cancelled = true; clearInterval(timer) }
   }, [refreshHealth, refreshSessions, loadSession])
+
+  useEffect(() => {
+    if (view === 'news') setNewsCenterMounted(true)
+  }, [view])
 
   const openSettings = useCallback((section?: SettingsSection) => {
     closeDrawer()
@@ -558,6 +567,28 @@ export default function ChatApp() {
     }
   }, [activeId])
 
+  const handleDiscussArticle = useCallback(async (article: FeedArticle) => {
+    restoreChatColumn()
+    try {
+      const nextRef = feedArticleToContextRef(article)
+      const { session } = await createSession()
+      const list = await refreshSessions()
+      setSessions(list)
+      setActiveId(session.id)
+      setMessages([])
+      const data = await setSessionContext(session.id, nextRef)
+      setContextRef(data.contextRef ?? nextRef)
+      setSessionModelState(session.model)
+      setInput('')
+      setError('')
+      setWelcomeEpoch(epoch => epoch + 1)
+      closeDrawer()
+      navigate('chat')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '创建对话失败')
+    }
+  }, [closeDrawer, navigate, refreshSessions, restoreChatColumn])
+
   const handleEphemeralAsk = useCallback(async (
     message: string,
     selection: MessageSelection,
@@ -669,36 +700,43 @@ export default function ChatApp() {
               }}
             />
           </div>
-        ) : isNews ? (
-          <div
-            className={mergeClasses(
-              s.contentWorkspace,
-              isMobile && s.contentWorkspaceMobile,
-              electronChrome && s.contentWorkspaceElectron,
-              electronChrome && 'opptrix-app-main',
-            )}
-          >
-            {isMobile && (
-              <SessionSidebar
-                mode="drawer"
-                drawerOpen={drawerOpen}
-                onClose={closeDrawer}
-                {...sidebarProps}
-              />
-            )}
-            <div
-              className={mergeClasses(
-                s.chatColumn,
-                electronChrome && s.chatColumnElectron,
-              )}
-            >
-              <NewsCenterPage
-                electronChrome={electronChrome}
-                onOpenSettings={openNewsSettings}
-              />
-            </div>
-          </div>
         ) : (
+          <>
+            {newsCenterMounted && (
+              <div
+                className={mergeClasses(
+                  s.contentWorkspace,
+                  isMobile && s.contentWorkspaceMobile,
+                  electronChrome && s.contentWorkspaceElectron,
+                  electronChrome && 'opptrix-app-main',
+                  !isNews && s.viewHidden,
+                )}
+                aria-hidden={!isNews}
+              >
+                {isMobile && isNews && (
+                  <SessionSidebar
+                    mode="drawer"
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                )}
+                <div
+                  className={mergeClasses(
+                    s.chatColumn,
+                    electronChrome && s.chatColumnElectron,
+                  )}
+                >
+                  <NewsCenterPage
+                    electronChrome={electronChrome}
+                    onOpenSettings={openNewsSettings}
+                    onDiscussArticle={handleDiscussArticle}
+                  />
+                </div>
+              </div>
+            )}
+
+            {!isNews && (
           <div
             ref={workspaceRef}
             className={mergeClasses(
@@ -792,6 +830,8 @@ export default function ChatApp() {
               />
             )}
           </div>
+            )}
+          </>
         )}
 
         </div>

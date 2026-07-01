@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react'
 import type { Components } from 'react-markdown'
+import { openExternalUrl } from '../platform/openUrl'
 import MermaidBlock from './MermaidBlock'
 import MarkdownTable from './MarkdownTable'
 
@@ -38,7 +39,15 @@ export function createMarkdownComponents(): Components {
     },
     a({ href, children, ...props }) {
       return (
-        <a href={href} target="_blank" rel="noopener noreferrer" {...props}>
+        <a
+          href={href}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={event => {
+            if (href) openExternalUrl(href, event)
+          }}
+          {...props}
+        >
           {children}
         </a>
       )

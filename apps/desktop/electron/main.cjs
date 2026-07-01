@@ -1,8 +1,8 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron')
 const path = require('path')
 const fs = require('fs/promises')
 const { spawn } = require('node:child_process')
-const { APP_NAME } = require('./app-meta.cjs')
+const { APP_NAME, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
@@ -60,6 +60,10 @@ function sidecarEnv(root) {
     STOCK_RESEARCH_HOST: API_HOST,
     STOCK_RESEARCH_PORT: API_PORT,
     UI_DIST_PATH: uiDist(root),
+  }
+
+  if (app.isReady()) {
+    env.OPPTRIX_HTTP_USER_AGENT = session.defaultSession.getUserAgent()
   }
 
   if (!isDev) {
@@ -186,6 +190,13 @@ function buildMainWindowOptions() {
 
 function attachMainWindowHandlers(win) {
   hardenWebContents(win.webContents, { isDev })
+
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    if (/^https?:\/\//i.test(url)) {
+      void shell.openExternal(url)
+    }
+    return { action: 'deny' }
+  })
 
   const notifyFullscreen = () => {
     win.webContents.send('window-fullscreen-changed', win.isFullScreen())
@@ -317,6 +328,15 @@ function registerWindowIpc() {
     const buf = Buffer.from(data)
     await fs.writeFile(filePath, buf)
     return filePath
+  })
+
+  ipcMain.handle('client-version', async () => VERSION)
+
+  ipcMain.handle('open-external-url', async (_event, url) => {
+    const target = String(url ?? '').trim()
+    if (!/^https?:\/\//i.test(target)) return false
+    await shell.openExternal(target)
+    return true
   })
 }
 

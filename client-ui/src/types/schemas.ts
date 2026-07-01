@@ -389,6 +389,8 @@ export interface FeedSubscription {
 export interface FeedArticle {
   id: string
   subscription_id: string
+  /** RSS guid / atom id / link used for source-level dedupe */
+  guid?: string
   title: string
   link: string
   pub_date: string

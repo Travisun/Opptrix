@@ -2,12 +2,16 @@ import type { SessionContextRef } from '../types/chat'
 
 export function formatContextRefLabel(ref: SessionContextRef, max = 28): string {
   const preview = ref.preview.replace(/\s+/g, ' ').trim()
-  const prefix = ref.kind === 'selection' ? '引用' : '引用'
+  const prefix = ref.kind === 'article' ? '资讯' : '引用'
   const text = preview ? `${prefix} · ${preview}` : prefix
   return text.length <= max ? text : `${text.slice(0, max)}…`
 }
 
 export function formatContextRefPreview(ref: SessionContextRef): string {
+  if (ref.kind === 'article') {
+    const body = ref.bodyText.trim() || ref.title
+    return `资讯：${ref.title}\n来源：${ref.sourceTitle}${ref.link ? `\n链接：${ref.link}` : ''}\n\n${body}`
+  }
   if (ref.kind === 'selection') {
     const role = ref.sourceRole === 'user' ? '你' : 'Agent'
     return `${role} 消息节选：\n${ref.selectedText.trim()}`

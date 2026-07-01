@@ -14,6 +14,7 @@ import {
   setNewsFeedTimelineDate,
   setNewsFeedView,
   subscribeNewsFeed,
+  type NewsFeedRefreshResult,
   type NewsListView,
 } from './newsFeedSession'
 
@@ -38,8 +39,8 @@ export function useNewsFeed() {
     await loadMoreNewsFeed()
   }, [])
 
-  const refresh = useCallback(async () => {
-    await refreshNewsFeed()
+  const refresh = useCallback(async (): Promise<NewsFeedRefreshResult> => {
+    return refreshNewsFeed()
   }, [])
 
   const reload = useCallback(async () => {
@@ -50,11 +51,11 @@ export function useNewsFeed() {
     await setNewsFeedTimelineDate(date)
   }, [])
 
-  const setGroupFilter = useCallback((groupId: string | null) => {
+  const setGroupFilter = useCallback((groupId: string) => {
     setNewsFeedGroupFilter(groupId)
   }, [])
 
-  const setSourceFilter = useCallback((subscriptionId: string | null) => {
+  const setSourceFilter = useCallback((subscriptionId: string) => {
     setNewsFeedSourceFilter(subscriptionId)
   }, [])
 
@@ -73,6 +74,7 @@ export function useNewsFeed() {
     listSyncing: snap.listSyncing,
     loadingMore: snap.loadingMore,
     refreshing: snap.refreshing,
+    listPulseEpoch: snap.listPulseEpoch,
     error: snap.error,
     refreshedAt: snap.refreshedAt,
     selectedId: snap.selectedId,

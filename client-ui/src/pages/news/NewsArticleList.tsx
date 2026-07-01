@@ -1,12 +1,12 @@
-import type { UIEvent } from 'react'
+import { useEffect, useState, type UIEvent } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { BookOpenRegular, NewsRegular } from '@fluentui/react-icons'
+import { BookOpenRegular, ChevronDownRegular, ChevronRightRegular, NewsRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
 import { opptrixTokens } from '../../theme/tokens'
-import { ghostInteractive, sidebarItemSelected } from '../../theme/mixins'
+import { ghostInteractive } from '../../theme/mixins'
 import { formatRelativeTime, stripHtml } from './newsUtils'
 
-const CONTENT_PAD = '12px'
+const CONTENT_PAD = '10px'
 
 const useStyles = makeStyles({
   scroll: {
@@ -17,39 +17,72 @@ const useStyles = makeStyles({
   list: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
-    padding: `4px ${CONTENT_PAD} 16px`,
+    gap: '1px',
+    padding: `2px ${CONTENT_PAD} 12px`,
   },
   sectionHead: {
-    fontSize: '11px',
+    fontSize: '10px',
     fontWeight: 600,
     color: opptrixTokens.textTertiary,
-    textTransform: 'uppercase',
-    letterSpacing: '0.04em',
-    padding: '10px 10px 4px',
+    letterSpacing: '0.03em',
+    padding: '8px 8px 3px',
+  },
+  sectionHeadButton: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    width: '100%',
+    margin: 0,
+    padding: '8px 8px 3px',
+    border: 'none',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+    borderRadius: opptrixTokens.radiusSm,
+    ...ghostInteractive,
+  },
+  sectionHeadLabel: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: '10px',
+    fontWeight: 600,
+    color: opptrixTokens.textTertiary,
+    letterSpacing: '0.03em',
+    lineHeight: 1.35,
+  },
+  sectionHeadCount: {
+    flexShrink: 0,
+    fontSize: '10px',
+    fontWeight: 500,
+    color: opptrixTokens.textTertiary,
+    opacity: 0.75,
   },
   row: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
-    padding: '8px 10px',
-    minHeight: '30px',
-    borderRadius: opptrixTokens.radiusMd,
+    gap: '3px',
+    padding: '7px 8px',
+    minHeight: '28px',
+    borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
     ...ghostInteractive,
     ':hover': { backgroundColor: opptrixTokens.accentSoft },
   },
   rowCompact: {
-    padding: '7px 8px',
+    padding: '6px 8px',
+    gap: '2px',
   },
   rowActive: {
-    ...sidebarItemSelected,
+    backgroundColor: opptrixTokens.canvasAlt,
+    ':hover': {
+      backgroundColor: opptrixTokens.canvasMuted,
+    },
   },
   title: {
     fontSize: '13px',
-    fontWeight: 650,
+    fontWeight: 600,
     color: opptrixTokens.textPrimary,
-    lineHeight: 1.45,
+    lineHeight: 1.4,
     display: '-webkit-box',
     WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
@@ -89,6 +122,9 @@ type Props = {
   loadingMore?: boolean
   hasMore?: boolean
   onLoadMore?: () => void
+  listPulseEpoch?: number
+  /** 全部分组 / 全部来源时，各区块可展开收起 */
+  sectionsCollapsible?: boolean
 }
 
 export default function NewsArticleList({
@@ -100,8 +136,46 @@ export default function NewsArticleList({
   loadingMore,
   hasMore,
   onLoadMore,
+  listPulseEpoch = 0,
+  sectionsCollapsible = false,
 }: Props) {
   const s = useStyles()
+  const [pulseActive, setPulseActive] = useState(false)
+  const [collapsedKeys, setCollapsedKeys] = useState<Set<string>>(() => new Set())
+
+  const sectionKeys = sections?.map(sec => sec.key).join('|') ?? ''
+
+  useEffect(() => {
+    if (!listPulseEpoch) return
+    setPulseActive(true)
+    const timer = window.setTimeout(() => setPulseActive(false), 420)
+    return () => window.clearTimeout(timer)
+  }, [listPulseEpoch])
+
+  useEffect(() => {
+    setCollapsedKeys(new Set())
+  }, [sectionKeys, sectionsCollapsible])
+
+  useEffect(() => {
+    if (!sectionsCollapsible || !sections || !selectedId) return
+    const hit = sections.find(sec => sec.articles.some(a => a.id === selectedId))
+    if (!hit) return
+    setCollapsedKeys(prev => {
+      if (!prev.has(hit.key)) return prev
+      const next = new Set(prev)
+      next.delete(hit.key)
+      return next
+    })
+  }, [selectedId, sections, sectionsCollapsible])
+
+  const toggleSection = (key: string) => {
+    setCollapsedKeys(prev => {
+      const next = new Set(prev)
+      if (next.has(key)) next.delete(key)
+      else next.add(key)
+      return next
+    })
+  }
 
   const flatArticles = sections
     ? sections.flatMap(sec => sec.articles)
@@ -128,7 +202,14 @@ export default function NewsArticleList({
     return (
       <div
         key={article.id}
-        className={mergeClasses(s.row, compact && s.rowCompact, active && s.rowActive)}
+        className={mergeClasses(
+          s.row,
+          'opptrix-news-article-row',
+          compact && s.rowCompact,
+          active && s.rowActive,
+          pulseActive && 'opptrix-news-article-row-refresh',
+        )}
+        style={pulseActive ? { animationDelay: `${Math.min(idx, 14) * 14}ms` } : undefined}
         onClick={() => onSelect(article.id)}
         role="button"
         tabIndex={0}
@@ -154,14 +235,31 @@ export default function NewsArticleList({
     >
       <div className={s.list}>
         {sections ? (
-          sections.map(sec => (
-            sec.articles.length > 0 && (
+          sections.map(sec => {
+            if (sec.articles.length === 0) return null
+            const collapsed = sectionsCollapsible && collapsedKeys.has(sec.key)
+            return (
               <div key={sec.key}>
-                <Text className={s.sectionHead} block>{sec.label}</Text>
-                {sec.articles.map(renderRow)}
+                {sectionsCollapsible ? (
+                  <button
+                    type="button"
+                    className={s.sectionHeadButton}
+                    aria-expanded={!collapsed}
+                    onClick={() => toggleSection(sec.key)}
+                  >
+                    {collapsed
+                      ? <ChevronRightRegular fontSize={11} color={opptrixTokens.textTertiary} />
+                      : <ChevronDownRegular fontSize={11} color={opptrixTokens.textTertiary} />}
+                    <Text className={s.sectionHeadLabel} block>{sec.label}</Text>
+                    <span className={s.sectionHeadCount}>{sec.articles.length}</span>
+                  </button>
+                ) : (
+                  <Text className={s.sectionHead} block>{sec.label}</Text>
+                )}
+                {!collapsed && sec.articles.map(renderRow)}
               </div>
             )
-          ))
+          })
         ) : (
           articles.map(renderRow)
         )}

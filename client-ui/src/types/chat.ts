@@ -44,7 +44,19 @@ export interface SessionSelectionContextRef {
   turns: ChatDisplayMessage[]
 }
 
-export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef
+export interface SessionArticleContextRef {
+  kind: 'article'
+  articleId: string
+  title: string
+  sourceTitle: string
+  link: string
+  pubDate: string
+  bodyText: string
+  anchorAt: string
+  preview: string
+}
+
+export type SessionContextRef = SessionForkContextRef | SessionSelectionContextRef | SessionArticleContextRef
 
 export interface MessageSelection {
   text: string

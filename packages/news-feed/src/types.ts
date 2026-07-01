@@ -24,6 +24,8 @@ export interface FeedSubscription {
 export interface FeedArticle {
   id: string
   subscription_id: string
+  /** RSS guid / atom id / link used for source-level dedupe */
+  guid?: string
   title: string
   link: string
   pub_date: string
@@ -52,6 +54,8 @@ export interface NewsFeedIndex {
   subscription_meta: Record<string, SubscriptionFetchMeta>
   /** 文章 id，按 pub_date 降序 */
   article_order: string[]
+  /** 已合并同订阅下 Twitter 状态重复文章（旧 guid/link 哈希 id） */
+  twitter_dedupe_v1?: boolean
 }
 
 export interface FeedPageQuery {

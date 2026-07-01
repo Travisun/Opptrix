@@ -13,16 +13,36 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minHeight: 0,
     height: '100%',
-    backgroundColor: opptrixTokens.canvasAlt,
-    borderRight: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvas,
+    borderRight: `1px solid ${opptrixTokens.separatorStrong}`,
+  },
+  chrome: {
+    flexShrink: 0,
+    backgroundColor: opptrixTokens.canvas,
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
   tabs: {
-    flexShrink: 0,
-    padding: '8px 12px 4px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    padding: '6px 10px 0',
+    marginBottom: '5px',
   },
   tabList: {
     minHeight: 'unset',
+    gap: '2px',
+    '& .fui-Tab': {
+      backgroundColor: 'transparent',
+      ':enabled:hover': {
+        backgroundColor: 'transparent',
+      },
+      ':enabled:active': {
+        backgroundColor: 'transparent',
+      },
+      ':focus': {
+        backgroundColor: 'transparent',
+      },
+      ':focus-visible': {
+        backgroundColor: 'transparent',
+      },
+    },
   },
   body: {
     flex: 1,
@@ -52,6 +72,7 @@ type Props = {
   groupFilterId: string | null
   sourceFilterId: string | null
   listSyncing: boolean
+  listPulseEpoch: number
   selectedId: string | null
   onSelect: (id: string) => void
   onTimelineDateChange: (date: string | null) => void
@@ -66,41 +87,23 @@ type Props = {
 
 function buildGroupSections(
   grouped: NewsGroupedFeed,
-  groupFilterId: string | null,
+  groupFilterId: string,
 ): Section[] {
   if (groupFilterId === '__ungrouped__') {
     return grouped.ungrouped.length
       ? [{ key: '__ungrouped__', label: '未分组', articles: grouped.ungrouped }]
       : []
   }
-  if (groupFilterId) {
-    const g = grouped.groups.find(x => x.id === groupFilterId)
-    return g ? [{ key: g.id, label: g.title, articles: g.articles }] : []
-  }
-  const out = grouped.groups.map(g => ({
-    key: g.id,
-    label: g.title,
-    articles: g.articles,
-  }))
-  if (grouped.ungrouped.length) {
-    out.push({ key: '__ungrouped__', label: '未分组', articles: grouped.ungrouped })
-  }
-  return out
+  const g = grouped.groups.find(x => x.id === groupFilterId)
+  return g ? [{ key: g.id, label: g.title, articles: g.articles }] : []
 }
 
 function buildSourceSections(
   grouped: NewsGroupedFeed,
-  sourceFilterId: string | null,
+  sourceFilterId: string,
 ): Section[] {
-  if (sourceFilterId) {
-    const s = grouped.by_source.find(x => x.subscription_id === sourceFilterId)
-    return s ? [{ key: s.subscription_id, label: s.title, articles: s.articles }] : []
-  }
-  return grouped.by_source.map(s => ({
-    key: s.subscription_id,
-    label: s.title,
-    articles: s.articles,
-  }))
+  const s = grouped.by_source.find(x => x.subscription_id === sourceFilterId)
+  return s ? [{ key: s.subscription_id, label: s.title, articles: s.articles }] : []
 }
 
 export default function NewsFeedSidebar({
@@ -114,6 +117,7 @@ export default function NewsFeedSidebar({
   groupFilterId,
   sourceFilterId,
   listSyncing,
+  listPulseEpoch,
   selectedId,
   onSelect,
   onTimelineDateChange,
@@ -129,7 +133,11 @@ export default function NewsFeedSidebar({
 
   const sections = useMemo(() => {
     if (!grouped || view === 'timeline') return undefined
-    if (view === 'group') return buildGroupSections(grouped, groupFilterId)
+    if (view === 'group') {
+      if (!groupFilterId) return []
+      return buildGroupSections(grouped, groupFilterId)
+    }
+    if (!sourceFilterId) return []
     return buildSourceSections(grouped, sourceFilterId)
   }, [grouped, view, groupFilterId, sourceFilterId])
 
@@ -143,32 +151,35 @@ export default function NewsFeedSidebar({
 
   return (
     <div className={mergeClasses(s.root, 'opptrix-news-sidebar')}>
-      <div className={s.tabs}>
-        <TabList
-          className={s.tabList}
-          size="small"
-          selectedValue={view}
-          onTabSelect={(_, d) => onViewChange(d.value as NewsListView)}
-        >
-          <Tab value="timeline">时间线</Tab>
-          <Tab value="group">分组</Tab>
-          <Tab value="source">来源</Tab>
-        </TabList>
+      <div className={s.chrome}>
+        <div className={s.tabs}>
+          <TabList
+            className={s.tabList}
+            size="small"
+            appearance="subtle"
+            selectedValue={view}
+            onTabSelect={(_, d) => onViewChange(d.value as NewsListView)}
+          >
+            <Tab value="timeline">时间线</Tab>
+            <Tab value="group">分组</Tab>
+            <Tab value="source">来源</Tab>
+          </TabList>
+        </div>
+        <NewsFeedFilterBar
+          view={view}
+          groups={groups}
+          subscriptions={subscriptions}
+          timelineDate={timelineDate}
+          groupFilterId={groupFilterId}
+          sourceFilterId={sourceFilterId}
+          listSyncing={listSyncing}
+          loadedCount={visibleCount}
+          totalCount={displayTotal}
+          onTimelineDateChange={onTimelineDateChange}
+          onGroupFilterChange={onGroupFilterChange}
+          onSourceFilterChange={onSourceFilterChange}
+        />
       </div>
-      <NewsFeedFilterBar
-        view={view}
-        groups={groups}
-        subscriptions={subscriptions}
-        timelineDate={timelineDate}
-        groupFilterId={groupFilterId}
-        sourceFilterId={sourceFilterId}
-        listSyncing={listSyncing}
-        loadedCount={visibleCount}
-        totalCount={displayTotal}
-        onTimelineDateChange={onTimelineDateChange}
-        onGroupFilterChange={onGroupFilterChange}
-        onSourceFilterChange={onSourceFilterChange}
-      />
       <div className={s.body}>
         {loading ? (
           <div className={s.loading}>
@@ -181,6 +192,7 @@ export default function NewsFeedSidebar({
             selectedId={selectedId}
             onSelect={onSelect}
             compact
+            listPulseEpoch={listPulseEpoch}
             loadingMore={loadingMore || listSyncing}
             hasMore={view === 'timeline' ? hasMore : false}
             onLoadMore={view === 'timeline' ? onLoadMore : undefined}

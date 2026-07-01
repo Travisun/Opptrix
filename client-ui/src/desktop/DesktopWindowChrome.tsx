@@ -182,8 +182,8 @@ export default function DesktopWindowChrome({
     return {}
   })()
 
-  /** Chat / news title in the title bar band. */
-  const showPageTitle = isNews || (!isSettings && chatColumnVisible)
+  /** Page title in the chrome band (news uses its own in-page title bar). */
+  const showPageTitle = !isNews && !isSettings && chatColumnVisible
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {

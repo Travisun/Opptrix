@@ -9,6 +9,7 @@ import type {
   ValidateFeedResult,
 } from './types.js'
 import { FEED_PAGE_SIZE } from './types.js'
+import { MAX_ARTICLES_PER_FETCH } from './retention.js'
 import { resolveFeedUrl } from './url.js'
 import { fetchAndParseFeed } from './parser.js'
 import { getNewsFeedStore } from './store.js'
@@ -17,6 +18,13 @@ import {
   refreshSubscription,
   shouldAutoRefresh,
 } from './aggregator.js'
+import type { SubscriptionImportResult } from './subscription-transfer.js'
+import {
+  SUBSCRIPTION_EXPORT_SCHEMA_VERSION,
+  buildSubscriptionExportFile,
+  parseSubscriptionExportJson,
+  parseSubscriptionExportPayload,
+} from './subscription-transfer.js'
 
 export * from './types.js'
 export { resolveFeedUrl } from './url.js'
@@ -134,6 +142,40 @@ export async function addSubscription(input: FeedUrlInput & { enabled?: boolean 
   return sub
 }
 
+export async function importSubscriptions(
+  items: Array<{ url: string; title?: string }>,
+): Promise<SubscriptionImportResult> {
+  const result: SubscriptionImportResult = { added: 0, skipped: 0, errors: [] }
+  const store = getNewsFeedStore()
+
+  for (const item of items) {
+    const url = item.url?.trim()
+    if (!url) {
+      result.errors.push({ url: item.url ?? '', error: '订阅地址为空' })
+      continue
+    }
+    if (store.findSubscriptionByUrl(url)) {
+      result.skipped += 1
+      continue
+    }
+    try {
+      await addSubscription({
+        url,
+        title: item.title?.trim() || undefined,
+        group_id: null,
+      })
+      result.added += 1
+    } catch (e) {
+      result.errors.push({
+        url,
+        error: e instanceof Error ? e.message : String(e),
+      })
+    }
+  }
+
+  return result
+}
+
 export function getFeedArticles(query: FeedPageQuery = {}): FeedPageResult & {
   refreshed_at: string | null
   stale: boolean
@@ -144,6 +186,7 @@ export function getFeedArticles(query: FeedPageQuery = {}): FeedPageResult & {
     cursor: query.cursor ?? null,
     subscription_id: query.subscription_id ?? null,
     group_id: query.group_id ?? null,
+    date: query.date ?? null,
   })
   return {
     ...page,
@@ -160,13 +203,10 @@ export function getArticlesGrouped(): {
   const store = getNewsFeedStore()
   const subs = store.listSubscriptions()
   const groups = store.listGroups()
-  const all = store.listArticles(500)
 
   const bySub = new Map<string, FeedArticle[]>()
-  for (const a of all) {
-    const list = bySub.get(a.subscription_id) ?? []
-    list.push(a)
-    bySub.set(a.subscription_id, list)
+  for (const sub of subs) {
+    bySub.set(sub.id, store.listArticlesBySubscription(sub.id, MAX_ARTICLES_PER_FETCH))
   }
 
   const by_source = subs.map(sub => ({
@@ -174,6 +214,8 @@ export function getArticlesGrouped(): {
     title: sub.title,
     articles: bySub.get(sub.id) ?? [],
   })).filter(s => s.articles.length > 0)
+
+  const all = subs.flatMap(sub => bySub.get(sub.id) ?? [])
 
   const groupedSections = groups.map(g => {
     const subIds = new Set(subs.filter(s => s.group_id === g.id).map(s => s.id))
@@ -212,4 +254,27 @@ export async function refreshFeeds(force = false): Promise<{
 }
 
 export { refreshAllSubscriptions, shouldAutoRefresh }
+export {
+  extractTwitterStatusId,
+  normalizeFeedItemDedupeKey,
+  resolveFeedItemGuid,
+  resolveTwitterFeedTitle,
+} from './twitter-guid.js'
+export {
+  SUBSCRIPTION_EXPORT_SCHEMA_VERSION,
+  buildSubscriptionExportFile,
+  parseSubscriptionExportJson,
+  parseSubscriptionExportPayload,
+} from './subscription-transfer.js'
+export type {
+  SubscriptionExportFile,
+  SubscriptionExportItem,
+  SubscriptionImportResult,
+} from './subscription-transfer.js'
 export { normalizeNewsSettings, selectRetainedArticles } from './retention.js'
+export {
+  normalizeArticleTitle,
+  articleTitleDedupeKey,
+  dedupeArticlesByTitle,
+  dedupeArticleIdsByTitle,
+} from './dedupe.js'

@@ -8,7 +8,7 @@ import {
 } from '@fluentui/react-components'
 import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import { opptrixTokens } from '../theme/tokens'
-import { ghostInteractive, glassDropdown } from '../theme/mixins'
+import { ghostInteractive, glassDropdownClassName } from '../theme/mixins'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
@@ -80,9 +80,7 @@ const useStyles = makeStyles({
   },
   surface: {
     padding: '8px',
-    borderRadius: opptrixTokens.radiusLg,
     minWidth: '232px',
-    ...glassDropdown,
   },
   header: {
     display: 'flex',
@@ -267,6 +265,7 @@ export default function TradeDateField({
           value={inputValue}
           onFocus={() => setEditing(true)}
           onBlur={() => setEditing(false)}
+          onClick={() => openPicker()}
           onChange={(_, data) => onChange(data.value)}
           contentAfter={(
             <button
@@ -290,7 +289,7 @@ export default function TradeDateField({
         trapFocus
       >
         <PopoverSurface
-          className={mergeClasses(s.surface, 'opptrix-glass-panel')}
+          className={mergeClasses(s.surface, glassDropdownClassName)}
           anchor={anchorRef.current ?? undefined}
         >
           <div className={s.header}>

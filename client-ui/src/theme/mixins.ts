@@ -60,6 +60,9 @@ export const glassDropdown = {
   boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
 } as const
 
+/** 全局类名 — 发现策略、新闻筛选、日期选择等下拉浮层 */
+export const glassDropdownClassName = 'opptrix-glass-dropdown opptrix-glass-panel opptrix-scroll'
+
 export const contentPanel = {
   backgroundColor: opptrixTokens.canvas,
   borderRadius: opptrixTokens.radiusLg,

@@ -20,6 +20,7 @@ import {
   pctTone,
 } from './format'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import { openExternalUrl } from '../platform/openUrl'
 import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import StockTrendTab from './StockTrendTab'
@@ -478,7 +479,13 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
         <div key={`${item.date}-${item.title}`} className={s.annRow}>
           <span className={s.listDate}>{item.date || '—'}</span>
           {item.url ? (
-            <Link className={s.listTitle} href={item.url} target="_blank" rel="noreferrer">
+            <Link
+              className={s.listTitle}
+              href={item.url}
+              target="_blank"
+              rel="noreferrer"
+              onClick={event => openExternalUrl(item.url, event)}
+            >
               {item.title}
             </Link>
           ) : (
@@ -882,7 +889,15 @@ export default function StockDetailTab({
 
             {profile?.website && (
               <MetricSection title="官网">
-                <Link href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`} target="_blank" rel="noreferrer">
+                <Link
+                  href={profile.website.startsWith('http') ? profile.website : `https://${profile.website}`}
+                  target="_blank"
+                  rel="noreferrer"
+                  onClick={event => {
+                    const href = profile.website.startsWith('http') ? profile.website : `https://${profile.website}`
+                    openExternalUrl(href, event)
+                  }}
+                >
                   {profile.website}
                 </Link>
               </MetricSection>

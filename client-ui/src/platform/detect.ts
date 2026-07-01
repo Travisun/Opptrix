@@ -13,6 +13,8 @@ declare global {
         filename: string
         data: ArrayBuffer
       }) => Promise<string>
+      openExternalUrl?: (url: string) => Promise<boolean>
+      clientVersion?: () => Promise<string>
       onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>

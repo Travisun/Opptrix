@@ -11,7 +11,10 @@ export interface FetchFeedResult {
   notModified: boolean
 }
 
-const USER_AGENT = 'OpptrixNewsFeed/1.0 (+https://github.com/Travisun/Opptrix)'
+function resolveUserAgent(): string | undefined {
+  const ua = process.env.OPPTRIX_HTTP_USER_AGENT?.trim()
+  return ua || undefined
+}
 
 export async function fetchFeedXml(
   url: string,
@@ -20,9 +23,10 @@ export async function fetchFeedXml(
   const controller = new AbortController()
   const timeout = setTimeout(() => controller.abort(), opts.timeoutMs ?? 20000)
   const headers: Record<string, string> = {
-    'User-Agent': USER_AGENT,
     Accept: 'application/rss+xml, application/atom+xml, application/xml, text/xml, */*',
   }
+  const userAgent = resolveUserAgent()
+  if (userAgent) headers['User-Agent'] = userAgent
   if (opts.etag) headers['If-None-Match'] = opts.etag
   if (opts.lastModified) headers['If-Modified-Since'] = opts.lastModified
 

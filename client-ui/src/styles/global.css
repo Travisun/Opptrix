@@ -245,8 +245,22 @@ html.opptrix-electron body {
 html.opptrix-desktop .opptrix-md,
 html.opptrix-desktop .opptrix-md *,
 html.opptrix-desktop textarea,
-html.opptrix-desktop input {
+html.opptrix-desktop input,
+html.opptrix-desktop .opptrix-news-reader-selectable,
+html.opptrix-desktop .opptrix-news-reader-selectable * {
   user-select: text;
+}
+
+html.opptrix-electron .opptrix-news-reader-selectable,
+html.opptrix-electron .opptrix-news-reader-selectable * {
+  user-select: text;
+}
+
+html.opptrix-desktop .opptrix-news-reader-selectable .opptrix-news-video-external,
+html.opptrix-desktop .opptrix-news-reader-selectable .opptrix-news-video-external *,
+html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-external,
+html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-external * {
+  user-select: none;
 }
 
 /* ── Unified interaction: focus / hover / active ── */
@@ -493,15 +507,89 @@ select:focus-visible {
   box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
 }
 
-.fui-PopoverSurface.opptrix-glass-panel {
+.fui-PopoverSurface.opptrix-glass-panel,
+.fui-PopoverSurface.opptrix-glass-dropdown {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border-radius: var(--opptrix-radius-lg, 14px);
+  box-sizing: border-box;
 }
 
-.opptrix-news-filter-listbox.fui-Listbox {
+/* Fluent Dropdown：毛玻璃加在 PopoverSurface，Listbox 透明 */
+.fui-PopoverSurface:has(.opptrix-glass-dropdown),
+.fui-PopoverSurface:has(.opptrix-news-filter-listbox) {
+  background: rgba(255, 255, 255, 0.72) !important;
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border: 1px solid rgba(0, 0, 0, 0.06) !important;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
   border-radius: var(--opptrix-radius-lg, 14px);
   padding: 4px;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+.opptrix-glass-dropdown.fui-Listbox,
+.opptrix-news-filter-listbox.fui-Listbox,
+.fui-PopoverSurface:has(.opptrix-glass-dropdown) .fui-Listbox,
+.fui-PopoverSurface:has(.opptrix-news-filter-listbox) .fui-Listbox {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  padding: 0;
+  max-height: min(280px, 42vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  border-radius: 0;
+}
+
+.opptrix-glass-dropdown .fui-Option,
+.opptrix-news-filter-listbox.fui-Listbox .fui-Option {
+  border-radius: var(--opptrix-radius-md, 10px);
+  min-height: 32px;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--opptrix-text, #1d1d1f);
+}
+
+.opptrix-glass-dropdown .fui-Option:hover,
+.opptrix-news-filter-listbox.fui-Listbox .fui-Option:hover,
+.opptrix-glass-dropdown .fui-Option[data-activedescendant-focusvisible],
+.opptrix-news-filter-listbox.fui-Listbox .fui-Option[data-activedescendant-focusvisible] {
+  background-color: rgba(29, 29, 31, 0.07);
+}
+
+.opptrix-glass-dropdown .fui-Option[aria-selected='true'],
+.opptrix-news-filter-listbox.fui-Listbox .fui-Option[aria-selected='true'] {
+  background-color: rgba(29, 29, 31, 0.07);
+}
+
+.opptrix-news-video-external::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(to top, rgba(0, 0, 0, 0.45) 0%, transparent 42%);
+  pointer-events: none;
+  border-radius: inherit;
+}
+
+.opptrix-news-video-external::after {
+  content: '在浏览器中播放';
+  position: absolute;
+  left: 50%;
+  bottom: 14px;
+  transform: translateX(-50%);
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
+  background: rgba(0, 0, 0, 0.55);
+  padding: 5px 12px;
+  border-radius: 999px;
+  pointer-events: none;
+  white-space: nowrap;
 }
 
 .opptrix-composer-glass-popover {
@@ -923,6 +1011,27 @@ select:focus-visible {
 
 .opptrix-animate-in {
   animation: opptrix-fade-in-up var(--opptrix-motion-normal) var(--opptrix-ease) both;
+}
+
+@keyframes opptrix-news-row-refresh {
+  from {
+    opacity: 0.84;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.opptrix-news-article-row-refresh {
+  animation: opptrix-news-row-refresh 200ms cubic-bezier(0, 0, 0.2, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opptrix-news-article-row-refresh {
+    animation: none;
+  }
 }
 
 .opptrix-scroll::-webkit-scrollbar {

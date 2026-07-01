@@ -8,9 +8,11 @@ import {
   getArticlesGrouped,
   getFeedArticles,
   getNewsSettings,
+  importSubscriptions,
   listGroups,
   listSubscriptions,
   moveSubscriptionToGroup,
+  parseSubscriptionExportPayload,
   refreshFeeds,
   reorderGroups,
   saveNewsSettings,
@@ -119,6 +121,16 @@ export async function registerNewsRoutes(app: FastifyInstance) {
     },
   )
 
+  app.post<{ Body: unknown }>('/api/news/subscriptions/import', async (req, reply) => {
+    const parsed = parseSubscriptionExportPayload(req.body)
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error })
+    const result = await importSubscriptions(parsed.data.subscriptions)
+    return {
+      ...result,
+      subscriptions: listSubscriptions(),
+    }
+  })
+
   app.post<{ Body: { url?: string; title?: string } }>('/api/news/validate', async (req, reply) => {
     const url = req.body?.url?.trim()
     if (!url) return reply.code(400).send({ error: 'url required' })
@@ -143,9 +155,6 @@ export async function registerNewsRoutes(app: FastifyInstance) {
       group_id: req.query.group_id ?? null,
       date: req.query.date ?? null,
     })
-    if (data.stale) {
-      void refreshFeeds(false).catch(() => {})
-    }
     return {
       articles: data.articles,
       next_cursor: data.next_cursor,
@@ -165,6 +174,7 @@ export async function registerNewsRoutes(app: FastifyInstance) {
   })
 
   app.post('/api/news/refresh', async () => {
+    /** Manual RSS pull — settings「立即刷新」等；新闻中心列表刷新不走此接口。 */
     const result = await refreshFeeds(true)
     return {
       refreshed: result.refreshed,

@@ -11,7 +11,17 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { AddRegular, ArrowSyncRegular, ChevronDownRegular, ChevronRightRegular, DeleteRegular, EditRegular, FolderRegular } from '@fluentui/react-icons'
+import {
+  AddRegular,
+  ArrowSyncRegular,
+  ChevronDownRegular,
+  ChevronRightRegular,
+  DeleteRegular,
+  DocumentArrowDownRegular,
+  DocumentArrowUpRegular,
+  EditRegular,
+  FolderRegular,
+} from '@fluentui/react-icons'
 import { news } from '../../api/client'
 import type { FeedSubscription, FeedGroup, NewsSettings } from '../../types/schemas'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
@@ -26,6 +36,12 @@ import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { opptrixTokens } from '../../theme/tokens'
 import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
+import {
+  buildSubscriptionExportFile,
+  downloadSubscriptionExportFile,
+  parseSubscriptionExportJson,
+  type NewsSubscriptionExportFile,
+} from '../news/subscriptionTransfer'
 
 const REFRESH_INTERVAL_OPTIONS = [5, 10, 15, 30, 60] as const
 const RETENTION_YEAR_OPTIONS = [0, 1, 2, 3, 5, 10, 20] as const
@@ -39,19 +55,88 @@ const MAX_ARTICLE_OPTIONS = [
 const SETTINGS_SAVE_MS = 500
 
 const useStyles = makeStyles({
-  toolbar: {
+  listPanel: {
+    border: opptrixTokens.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixTokens.canvas,
+    overflow: 'hidden',
+    height: '360px',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  listHeader: {
+    flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
-    marginBottom: '12px',
+    padding: '10px 14px',
+    minHeight: '44px',
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
   },
-  toolbarMeta: {
+  listHeaderMeta: {
     fontSize: '12px',
     color: opptrixTokens.textTertiary,
     lineHeight: 1.45,
     flex: 1,
     minWidth: 0,
+  },
+  listHeaderActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexShrink: 0,
+    flexWrap: 'wrap',
+    justifyContent: 'flex-end',
+  },
+  listScroll: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+  },
+  listRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '5px 12px',
+    minHeight: '34px',
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    ':last-child': {
+      borderBottom: 'none',
+    },
+  },
+  listRowMain: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  listRowTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: opptrixTokens.textPrimary,
+    lineHeight: 1.35,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  listRowMeta: {
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.4,
+  },
+  listRowControls: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  groupSelect: {
+    minWidth: '88px',
+    maxWidth: '108px',
   },
   sectionBlock: {
     marginTop: '20px',
@@ -74,6 +159,12 @@ const useStyles = makeStyles({
     color: opptrixTokens.textSecondary,
   },
   emptyBlock: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
     padding: '20px 18px',
     textAlign: 'center',
   },
@@ -131,21 +222,21 @@ const useStyles = makeStyles({
   subMeta: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   subError: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: opptrixTokens.error,
-    lineHeight: 1.45,
+    lineHeight: 1.4,
   },
   urlToggle: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '3px',
     padding: 0,
     border: 'none',
     background: 'none',
-    fontSize: '12px',
+    fontSize: '11px',
     color: opptrixTokens.textTertiary,
     cursor: 'pointer',
     textAlign: 'left',
@@ -161,11 +252,21 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   urlFull: {
-    fontSize: '12px',
+    fontSize: '11px',
     color: opptrixTokens.textSecondary,
-    lineHeight: 1.45,
+    lineHeight: 1.4,
     wordBreak: 'break-all',
     userSelect: 'text',
+  },
+  importSummary: {
+    fontSize: '13px',
+    color: opptrixTokens.textPrimary,
+    lineHeight: 1.55,
+  },
+  importHint: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.5,
   },
 })
 
@@ -195,8 +296,13 @@ export default function NewsFeedSettingsSection() {
   const [preview, setPreview] = useState<{ title: string; item_count: number } | null>(null)
   const [expandedSubIds, setExpandedSubIds] = useState<Record<string, boolean>>({})
   const [saveState, setSaveState] = useState<SaveState>('idle')
+  const [importDialogOpen, setImportDialogOpen] = useState(false)
+  const [pendingImport, setPendingImport] = useState<NewsSubscriptionExportFile | null>(null)
+  const [importing, setImporting] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const skipSettingsSave = useRef(true)
   const settingsBaseline = useRef<NewsSettings | null>(null)
+  const importInputRef = useRef<HTMLInputElement>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -388,9 +494,15 @@ export default function NewsFeedSettingsSection() {
   }
 
   const handleDelete = async (id: string) => {
+    const sub = subs.find(s => s.id === id)
+    const label = sub?.title?.trim() || '该订阅源'
+    if (!confirm(
+      `确定删除「${label}」？\n\n删除后，该来源关联的历史文章将同步清除，无法恢复。`,
+    )) return
     try {
       const resp = await news.deleteSubscription(id)
       setSubs(resp.subscriptions)
+      toast.showSuccess('已删除订阅')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '删除失败')
     }
@@ -408,6 +520,80 @@ export default function NewsFeedSettingsSection() {
     }
   }
 
+  const handleExport = () => {
+    if (!subs.length) {
+      toast.showWarning('还没有可导出的订阅')
+      return
+    }
+    setExporting(true)
+    try {
+      const file = buildSubscriptionExportFile(subs)
+      downloadSubscriptionExportFile(file)
+      toast.showSuccess(`已导出 ${file.subscriptions.length} 个订阅`)
+    } finally {
+      setExporting(false)
+    }
+  }
+
+  const resetImportDialog = () => {
+    setImportDialogOpen(false)
+    setPendingImport(null)
+    setImporting(false)
+  }
+
+  const handleImportPick = () => {
+    importInputRef.current?.click()
+  }
+
+  const handleImportFile = async (file: File | null) => {
+    if (!file) return
+    try {
+      const text = await file.text()
+      const parsed = parseSubscriptionExportJson(text)
+      if (!parsed.ok) {
+        toast.showError(parsed.error)
+        return
+      }
+      setPendingImport(parsed.data)
+      setImportDialogOpen(true)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '读取文件失败')
+    } finally {
+      if (importInputRef.current) importInputRef.current.value = ''
+    }
+  }
+
+  const handleConfirmImport = async () => {
+    if (!pendingImport) return
+    setImporting(true)
+    try {
+      const resp = await news.importSubscriptions(pendingImport)
+      setSubs(resp.subscriptions)
+      resetImportDialog()
+      const parts = [`新增 ${resp.added} 个`]
+      if (resp.skipped > 0) parts.push(`跳过重复 ${resp.skipped} 个`)
+      if (resp.errors.length > 0) parts.push(`${resp.errors.length} 个失败`)
+      toast.showSuccess(`导入完成：${parts.join('，')}`)
+      if (resp.errors.length > 0) {
+        const sample = resp.errors.slice(0, 2).map(e => e.error).join('；')
+        toast.showError(resp.errors.length > 2 ? `${sample}…` : sample)
+      }
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '导入失败')
+    } finally {
+      setImporting(false)
+    }
+  }
+
+  const importPreviewText = (() => {
+    if (!pendingImport) return ''
+    const duplicateCount = pendingImport.subscriptions.filter(
+      item => findDuplicateSubscription(subs, item.url),
+    ).length
+    const newCount = pendingImport.subscriptions.length - duplicateCount
+    return `共 ${pendingImport.subscriptions.length} 个订阅，预计新增 ${newCount} 个，跳过重复 ${duplicateCount} 个。`
+  })()
+
   const saveHintText = (() => {
     switch (saveState) {
       case 'pending': return '保存中…'
@@ -421,20 +607,43 @@ export default function NewsFeedSettingsSection() {
 
   return (
     <>
-      <div className={s.toolbar}>
-        <Text className={s.toolbarMeta} block>
-          {subs.length > 0
-            ? `已添加 ${subs.length} 个订阅源`
-            : '添加订阅后，资讯将按时间聚合到新闻中心'}
-        </Text>
-        <div style={{ display: 'flex', gap: 8, flexShrink: 0 }}>
-          <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openDialog}>
-            添加订阅
-          </OpptrixButton>
-        </div>
-      </div>
+      <input
+        ref={importInputRef}
+        type="file"
+        accept="application/json,.json"
+        hidden
+        onChange={e => { void handleImportFile(e.target.files?.[0] ?? null) }}
+      />
 
-      <SettingsGroup>
+      <div className={s.listPanel}>
+        <div className={s.listHeader}>
+          <Text className={s.listHeaderMeta} block>
+            {subs.length > 0
+              ? `已添加 ${subs.length} 个订阅源`
+              : '添加订阅后，资讯将按时间聚合到新闻中心'}
+          </Text>
+          <div className={s.listHeaderActions}>
+            <OpptrixButton
+              variant="secondary"
+              icon={<DocumentArrowDownRegular />}
+              disabled={exporting || subs.length === 0}
+              onClick={handleExport}
+            >
+              导出
+            </OpptrixButton>
+            <OpptrixButton
+              variant="secondary"
+              icon={<DocumentArrowUpRegular />}
+              onClick={handleImportPick}
+            >
+              导入
+            </OpptrixButton>
+            <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openDialog}>
+              添加订阅
+            </OpptrixButton>
+          </div>
+        </div>
+
         {subs.length === 0 ? (
           <div className={s.emptyBlock}>
             <Text className={s.emptyTitle} block>还没有订阅源</Text>
@@ -443,40 +652,39 @@ export default function NewsFeedSettingsSection() {
             </Text>
           </div>
         ) : (
-          subs.map((sub, i) => (
-            <SettingsRow
-              key={sub.id}
-              title={sub.title}
-              desc={(
-                <div className={s.subMeta}>
-                  {sub.last_error && (
-                    <Text className={s.subError} block>拉取失败：{sub.last_error}</Text>
-                  )}
-                  <button
-                    type="button"
-                    className={s.urlToggle}
-                    aria-expanded={!!expandedSubIds[sub.id]}
-                    onClick={() => toggleSubUrl(sub.id)}
-                  >
-                    {expandedSubIds[sub.id]
-                      ? <ChevronDownRegular fontSize={12} />
-                      : <ChevronRightRegular fontSize={12} />}
-                    <span className={s.urlToggleLabel}>
-                      {expandedSubIds[sub.id] ? '收起订阅地址' : formatSubscriptionUrlShort(sub.url)}
-                    </span>
-                  </button>
-                  {expandedSubIds[sub.id] && (
-                    <Text className={s.urlFull} block selectable>
-                      {sub.url}
-                    </Text>
-                  )}
+          <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+            {subs.map(sub => (
+              <div key={sub.id} className={s.listRow}>
+                <div className={s.listRowMain}>
+                  <Text className={s.listRowTitle} block title={sub.title}>{sub.title}</Text>
+                  <div className={s.subMeta}>
+                    {sub.last_error && (
+                      <Text className={s.subError} block>拉取失败：{sub.last_error}</Text>
+                    )}
+                    <button
+                      type="button"
+                      className={s.urlToggle}
+                      aria-expanded={!!expandedSubIds[sub.id]}
+                      onClick={() => toggleSubUrl(sub.id)}
+                    >
+                      {expandedSubIds[sub.id]
+                        ? <ChevronDownRegular fontSize={11} />
+                        : <ChevronRightRegular fontSize={11} />}
+                      <span className={s.urlToggleLabel}>
+                        {expandedSubIds[sub.id] ? '收起订阅地址' : formatSubscriptionUrlShort(sub.url)}
+                      </span>
+                    </button>
+                    {expandedSubIds[sub.id] && (
+                      <Text className={s.urlFull} block selectable>
+                        {sub.url}
+                      </Text>
+                    )}
+                  </div>
                 </div>
-              )}
-              control={(
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', justifyContent: 'flex-end' }}>
+                <div className={s.listRowControls}>
                   <OpptrixSelect
+                    className={s.groupSelect}
                     size="small"
-                    style={{ minWidth: 100 }}
                     selectedOptions={[sub.group_id ?? '']}
                     onOptionSelect={(_, d) => {
                       void handleMoveGroup(sub.id, d.optionValue ?? '')
@@ -498,41 +706,64 @@ export default function NewsFeedSettingsSection() {
                     onClick={() => { void handleDelete(sub.id) }}
                   />
                 </div>
-              )}
-              last={i === subs.length - 1}
-            />
-          ))
+              </div>
+            ))}
+          </div>
         )}
-      </SettingsGroup>
+      </div>
 
       <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>订阅分组</Text>
-        <SettingsGroup>
+        <div className={s.listPanel}>
+          <div className={s.listHeader}>
+            <Text className={s.listHeaderMeta} block>
+              {groups.length > 0
+                ? `已创建 ${groups.length} 个分组`
+                : '创建文件夹，将订阅源归类整理'}
+            </Text>
+            <div className={s.listHeaderActions}>
+              <OpptrixButton variant="primary" icon={<FolderRegular />} onClick={() => openGroupDialog()}>
+                新建分组
+              </OpptrixButton>
+            </div>
+          </div>
+
           {groups.length === 0 ? (
             <div className={s.emptyBlock}>
-              <Text className={s.emptyDesc} block>创建文件夹，将订阅源归类整理。</Text>
+              <Text className={s.emptyTitle} block>还没有分组</Text>
+              <Text className={s.emptyDesc} block>
+                点击「新建分组」，例如「财经资讯」「科技动态」，便于在新闻中心按类浏览。
+              </Text>
             </div>
           ) : (
-            groups.map((g, i) => (
-              <SettingsRow
-                key={g.id}
-                title={g.title}
-                desc={`${subs.filter(s => s.group_id === g.id).length} 个订阅源`}
-                control={(
-                  <div style={{ display: 'flex', gap: 8 }}>
-                    <OpptrixButton variant="icon" icon={<EditRegular />} aria-label="重命名" onClick={() => openGroupDialog(g)} />
-                    <OpptrixButton variant="icon" icon={<DeleteRegular />} aria-label="删除" onClick={() => { void handleDeleteGroup(g.id) }} />
+            <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+              {groups.map(g => {
+                const count = subs.filter(sub => sub.group_id === g.id).length
+                return (
+                  <div key={g.id} className={s.listRow}>
+                    <div className={s.listRowMain}>
+                      <Text className={s.listRowTitle} block title={g.title}>{g.title}</Text>
+                      <Text className={s.listRowMeta} block>{count} 个订阅源</Text>
+                    </div>
+                    <div className={s.listRowControls}>
+                      <OpptrixButton
+                        variant="icon"
+                        icon={<EditRegular />}
+                        aria-label={`重命名 ${g.title}`}
+                        onClick={() => openGroupDialog(g)}
+                      />
+                      <OpptrixButton
+                        variant="icon"
+                        icon={<DeleteRegular />}
+                        aria-label={`删除 ${g.title}`}
+                        onClick={() => { void handleDeleteGroup(g.id) }}
+                      />
+                    </div>
                   </div>
-                )}
-                last={i === groups.length - 1}
-              />
-            ))
+                )
+              })}
+            </div>
           )}
-        </SettingsGroup>
-        <div style={{ height: 8 }} />
-        <OpptrixButton variant="secondary" icon={<FolderRegular />} onClick={() => openGroupDialog()}>
-          新建分组
-        </OpptrixButton>
+        </div>
       </div>
 
       <div className={s.sectionBlock}>
@@ -639,6 +870,32 @@ export default function NewsFeedSettingsSection() {
           />
         </SettingsGroup>
       </div>
+
+      <Dialog open={importDialogOpen} onOpenChange={(_, d) => { if (!d.open) resetImportDialog() }}>
+        <DialogSurface>
+          <DialogBody>
+            <DialogTitle>导入订阅</DialogTitle>
+            <DialogContent className={s.dialogBody}>
+              <Text className={s.importSummary} block>{importPreviewText}</Text>
+              <Text className={s.importHint} block>
+                导入文件仅包含订阅地址与名称，不含分组信息；重复地址将自动跳过。新订阅会验证源是否可用，可能需要一点时间。
+              </Text>
+              <div className={s.dialogActions}>
+                <OpptrixButton variant="ghost" disabled={importing} onClick={resetImportDialog}>
+                  取消
+                </OpptrixButton>
+                <OpptrixButton
+                  variant="primary"
+                  disabled={importing || !pendingImport}
+                  onClick={() => { void handleConfirmImport() }}
+                >
+                  {importing ? '导入中…' : '开始导入'}
+                </OpptrixButton>
+              </div>
+            </DialogContent>
+          </DialogBody>
+        </DialogSurface>
+      </Dialog>
 
       <Dialog open={dialogOpen} onOpenChange={(_, d) => { setDialogOpen(d.open); if (!d.open) resetDialog() }}>
         <DialogSurface>

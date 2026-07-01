@@ -3,6 +3,12 @@ import { createHash } from 'node:crypto'
 import type { FeedArticle, FeedSourceKind, FeedSubscription } from './types.js'
 import { detectAtomFromXml } from './url.js'
 import { fetchFeedXml, type FetchFeedOptions } from './fetcher.js'
+import {
+  isTwitterFeedItem,
+  normalizeFeedItemDedupeKey,
+  resolveFeedItemGuid,
+  resolveTwitterFeedTitle,
+} from './twitter-guid.js'
 
 const parser = new Parser({
   customFields: {
@@ -47,13 +53,20 @@ export async function parseFeedXml(
   const kind = kindOverride ?? (detectAtomFromXml(xml) ? 'atom' : subscription.kind)
   const feedTitle = parsed.title?.trim() || subscription.title
   const items = (parsed.items ?? []).map(item => {
-    const link = String(item.link || item.guid || '').trim()
-    const guid = String(item.guid || item.id || link || item.title || '').trim()
-    const title = String(item.title || link || '无标题').trim()
+    const rawGuid = String(item.guid ?? '').trim()
+    const atomId = String(item.id ?? '').trim()
+    const link = String(item.link ?? '').trim()
+    const guid = resolveFeedItemGuid(rawGuid, link, atomId || undefined)
+    const dedupeKey = normalizeFeedItemDedupeKey(rawGuid, link, atomId || undefined)
     const { summary, content_html } = pickContent(item)
+    const rawTitle = String(item.title ?? '').trim()
+    const title = isTwitterFeedItem(rawGuid, link, atomId || undefined)
+      ? resolveTwitterFeedTitle(rawTitle, link || guid, summary || content_html)
+      : String(rawTitle || link || guid || '无标题').trim()
     return {
-      id: articleId(subscription.id, guid || link || title),
+      id: articleId(subscription.id, dedupeKey || guid || link || title),
       subscription_id: subscription.id,
+      guid: guid || undefined,
       title,
       link: link || guid,
       pub_date: parsePubDate(item),

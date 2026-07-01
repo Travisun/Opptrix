@@ -5,6 +5,7 @@ import type {
   FeedSubscription,
   NewsGroupedFeed,
 } from '../../types/schemas'
+import { dedupeArticlesByTitle } from './newsUtils'
 
 export type NewsListView = 'timeline' | 'group' | 'source'
 
@@ -30,10 +31,13 @@ export type NewsFeedSnapshot = {
   listSyncing: boolean
   loadingMore: boolean
   refreshing: boolean
+  listPulseEpoch: number
   error: string
 }
 
-const STALE_REFETCH_MS = 2500
+export type NewsFeedRefreshResult =
+  | { ok: true }
+  | { ok: false; message: string }
 
 function emptySnapshot(): NewsFeedSnapshot {
   return {
@@ -55,6 +59,7 @@ function emptySnapshot(): NewsFeedSnapshot {
     listSyncing: false,
     loadingMore: false,
     refreshing: false,
+    listPulseEpoch: 0,
     error: '',
   }
 }
@@ -64,7 +69,6 @@ const listeners = new Set<() => void>()
 let bootstrapped = false
 let bootstrapPromise: Promise<void> | null = null
 let softSyncPromise: Promise<void> | null = null
-let staleRefetchTimer: ReturnType<typeof setTimeout> | null = null
 
 function emit() {
   for (const listener of listeners) listener()
@@ -103,6 +107,65 @@ export function getSelectedArticle(): FeedArticle | null {
   return findSelected(snapshot.selectedId, snapshot.articles, snapshot.grouped)
 }
 
+function defaultGroupFilterId(
+  groups: FeedGroup[],
+  grouped: NewsGroupedFeed | null,
+): string | null {
+  if (groups.length > 0) return groups[0].id
+  if ((grouped?.ungrouped.length ?? 0) > 0) return '__ungrouped__'
+  return null
+}
+
+function defaultSourceFilterId(
+  subscriptions: FeedSubscription[],
+  grouped: NewsGroupedFeed | null,
+): string | null {
+  if (grouped?.by_source.length) return grouped.by_source[0].subscription_id
+  const sub = subscriptions.find(s => s.enabled) ?? subscriptions[0]
+  return sub?.id ?? null
+}
+
+function resolveGroupFilterId(
+  groups: FeedGroup[],
+  grouped: NewsGroupedFeed | null,
+  current: string | null,
+): string | null {
+  const fallback = defaultGroupFilterId(groups, grouped)
+  if (!current) return fallback
+  if (current === '__ungrouped__') {
+    return (grouped?.ungrouped.length ?? 0) > 0 ? current : fallback
+  }
+  return groups.some(g => g.id === current) ? current : fallback
+}
+
+function resolveSourceFilterId(
+  subscriptions: FeedSubscription[],
+  grouped: NewsGroupedFeed | null,
+  current: string | null,
+): string | null {
+  const fallback = defaultSourceFilterId(subscriptions, grouped)
+  if (!current) return fallback
+  if (grouped?.by_source.some(s => s.subscription_id === current)) return current
+  if (subscriptions.some(s => s.id === current)) return current
+  return fallback
+}
+
+function normalizeListFilters() {
+  const groupFilterId = resolveGroupFilterId(
+    snapshot.groups,
+    snapshot.grouped,
+    snapshot.groupFilterId,
+  )
+  const sourceFilterId = resolveSourceFilterId(
+    snapshot.subscriptions,
+    snapshot.grouped,
+    snapshot.sourceFilterId,
+  )
+  if (groupFilterId !== snapshot.groupFilterId || sourceFilterId !== snapshot.sourceFilterId) {
+    patch({ groupFilterId, sourceFilterId })
+  }
+}
+
 function articleVisibleInCurrentView(articleId: string): boolean {
   const { view, articles, grouped, timelineDate, groupFilterId, sourceFilterId } = snapshot
   if (view === 'timeline') {
@@ -119,18 +182,11 @@ function articleVisibleInCurrentView(articleId: string): boolean {
     if (groupFilterId === '__ungrouped__') {
       return grouped.ungrouped.some(a => a.id === articleId)
     }
-    if (groupFilterId) {
-      const sec = grouped.groups.find(g => g.id === groupFilterId)
-      return sec?.articles.some(a => a.id === articleId) ?? false
-    }
-    return grouped.groups.some(g => g.articles.some(a => a.id === articleId))
-      || grouped.ungrouped.some(a => a.id === articleId)
-  }
-  if (sourceFilterId) {
-    const sec = grouped.by_source.find(s => s.subscription_id === sourceFilterId)
+    const sec = grouped.groups.find(g => g.id === groupFilterId)
     return sec?.articles.some(a => a.id === articleId) ?? false
   }
-  return grouped.by_source.some(s => s.articles.some(a => a.id === articleId))
+  const sec = grouped.by_source.find(s => s.subscription_id === sourceFilterId)
+  return sec?.articles.some(a => a.id === articleId) ?? false
 }
 
 function pruneSelection() {
@@ -158,25 +214,17 @@ async function loadTimelinePage(append: boolean) {
     cursor: append ? snapshot.cursor : null,
     date: snapshot.timelineDate,
   })
+  const merged = append ? [...snapshot.articles, ...resp.articles] : resp.articles
+  const articles = dedupeArticlesByTitle(merged)
   patch({
     cursor: resp.next_cursor,
     hasMore: resp.has_more,
     total: resp.total,
     refreshedAt: resp.refreshed_at,
-    articles: append ? [...snapshot.articles, ...resp.articles] : resp.articles,
+    articles,
   })
   pruneSelection()
-  scheduleStaleRefetch(resp.stale)
   return resp
-}
-
-function scheduleStaleRefetch(stale: boolean) {
-  if (!stale) return
-  if (staleRefetchTimer) clearTimeout(staleRefetchTimer)
-  staleRefetchTimer = setTimeout(() => {
-    staleRefetchTimer = null
-    void softSync()
-  }, STALE_REFETCH_MS)
 }
 
 async function softSync() {
@@ -188,6 +236,7 @@ async function softSync() {
         loadTimelinePage(false),
         loadGrouped(),
       ])
+      normalizeListFilters()
       patch({ hydrated: true, error: '' })
     } catch (e) {
       patch({
@@ -212,6 +261,7 @@ async function bootstrap() {
         loadTimelinePage(false),
         loadGrouped(),
       ])
+      normalizeListFilters()
       patch({ hydrated: true, error: '' })
     } catch (e) {
       patch({
@@ -240,6 +290,7 @@ export function ensureNewsFeedBootstrapped() {
 
 export function setNewsFeedView(next: NewsListView) {
   patch({ view: next })
+  normalizeListFilters()
   pruneSelection()
 }
 
@@ -260,12 +311,12 @@ export async function setNewsFeedTimelineDate(date: string | null) {
   }
 }
 
-export function setNewsFeedGroupFilter(groupId: string | null) {
+export function setNewsFeedGroupFilter(groupId: string) {
   patch({ groupFilterId: groupId })
   pruneSelection()
 }
 
-export function setNewsFeedSourceFilter(subscriptionId: string | null) {
+export function setNewsFeedSourceFilter(subscriptionId: string) {
   patch({ sourceFilterId: subscriptionId })
   pruneSelection()
 }
@@ -282,21 +333,23 @@ export async function loadMoreNewsFeed() {
   }
 }
 
-export async function refreshNewsFeed() {
-  if (snapshot.refreshing) return
+export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
+  if (snapshot.refreshing) return { ok: true }
   patch({ refreshing: true, error: '' })
   try {
-    await news.refresh()
-    patch({ cursor: null, refreshedAt: new Date().toISOString() })
+    patch({ cursor: null })
     await loadMeta()
     await Promise.all([
       loadTimelinePage(false),
       loadGrouped(),
     ])
-    patch({ hydrated: true })
+    normalizeListFilters()
+    patch({ hydrated: true, listPulseEpoch: snapshot.listPulseEpoch + 1 })
     pruneSelection()
+    return { ok: true }
   } catch (e) {
-    patch({ error: e instanceof Error ? e.message : '刷新失败' })
+    const message = e instanceof Error ? e.message : '刷新列表失败'
+    return { ok: false, message }
   } finally {
     patch({ refreshing: false })
   }

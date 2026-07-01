@@ -2,7 +2,6 @@ import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-compone
 import { ArrowSyncRegular, SettingsRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
-import StatusBanner from '../../components/StatusBanner'
 import { electronPlatform } from '../../platform/detect'
 import { opptrixTokens } from '../../theme/tokens'
 import {
@@ -14,6 +13,7 @@ import NewsFeedSidebar from './NewsFeedSidebar'
 import NewsArticleDetail from './NewsArticleDetail'
 import NewsReaderEmpty from './NewsReaderEmpty'
 import { useNewsFeed } from './useNewsFeed'
+import type { FeedArticle } from '../../types/schemas'
 
 const useStyles = makeStyles({
   root: {
@@ -47,6 +47,14 @@ const useStyles = makeStyles({
   titleBarSpacer: {
     flex: 1,
     minWidth: 0,
+  },
+  titleBarPageTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    letterSpacing: '-0.01em',
+    color: opptrixTokens.textPrimary,
+    flexShrink: 0,
+    whiteSpace: 'nowrap',
   },
   titleBarMeta: {
     fontSize: '11px',
@@ -106,17 +114,28 @@ const useStyles = makeStyles({
     minWidth: 0,
     minHeight: 0,
     overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  detailLoading: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
   },
 })
 
 type Props = {
   electronChrome?: boolean
   onOpenSettings?: () => void
+  onDiscussArticle?: (article: FeedArticle) => void
 }
 
-export default function NewsCenterPage({
+function NewsCenterContent({
   electronChrome = false,
   onOpenSettings,
+  onDiscussArticle,
 }: Props) {
   const s = useStyles()
   const feed = useNewsFeed()
@@ -128,7 +147,6 @@ export default function NewsCenterPage({
     loading,
     loadingMore,
     refreshing,
-    error,
     refreshedAt,
     selectedId,
     selected,
@@ -141,6 +159,7 @@ export default function NewsCenterPage({
     groupFilterId,
     sourceFilterId,
     listSyncing,
+    listPulseEpoch,
     setTimelineDate,
     setGroupFilter,
     setSourceFilter,
@@ -177,6 +196,9 @@ export default function NewsCenterPage({
         electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
       )}
     >
+      <Text className={mergeClasses(s.titleBarPageTitle, 'opptrix-panel-title-no-drag')} block>
+        新闻中心
+      </Text>
       <div className={mergeClasses(s.titleBarSpacer, 'opptrix-news-title-drag')} aria-hidden />
       <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
       <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
@@ -190,7 +212,7 @@ export default function NewsCenterPage({
           </ChromeToolButton>
         )}
         <ChromeToolButton
-          label="刷新资讯"
+          label="刷新列表"
           iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
           disabled={refreshing}
           onClick={() => { void refresh() }}
@@ -217,7 +239,7 @@ export default function NewsCenterPage({
           disabled={refreshing}
           onClick={() => { void refresh() }}
         >
-          {refreshing ? '刷新中…' : '刷新'}
+          {refreshing ? '刷新中…' : '刷新列表'}
         </OpptrixButton>
       </div>
     </div>
@@ -227,7 +249,6 @@ export default function NewsCenterPage({
     <div className={mergeClasses(s.root, 'opptrix-news-center')}>
       {electronTitleBar}
       {webHead}
-      {error && <StatusBanner message={error} tone="error" />}
 
       <div className={s.body}>
         <div className={s.sidebar}>
@@ -242,6 +263,7 @@ export default function NewsCenterPage({
             groupFilterId={groupFilterId}
             sourceFilterId={sourceFilterId}
             listSyncing={listSyncing}
+            listPulseEpoch={listPulseEpoch}
             selectedId={selectedId}
             onSelect={setSelectedId}
             onTimelineDateChange={date => { void setTimelineDate(date) }}
@@ -256,9 +278,11 @@ export default function NewsCenterPage({
         </div>
         <div className={s.detail}>
           {loading && !selected ? (
-            <Spinner size="medium" label="正在加载…" />
+            <div className={s.detailLoading}>
+              <Spinner size="medium" label="正在加载…" />
+            </div>
           ) : selected ? (
-            <NewsArticleDetail article={selected} />
+            <NewsArticleDetail article={selected} onDiscussArticle={onDiscussArticle} />
           ) : (
             <NewsReaderEmpty hasArticles={hasAnyArticles} />
           )}
@@ -266,4 +290,8 @@ export default function NewsCenterPage({
       </div>
     </div>
   )
+}
+
+export default function NewsCenterPage(props: Props) {
+  return <NewsCenterContent {...props} />
 }

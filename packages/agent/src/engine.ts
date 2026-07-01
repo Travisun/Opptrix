@@ -455,6 +455,17 @@ function contextRefToChatMessages(ref: SessionContextRef | null | undefined): Ch
       content: `[引用内容]\n${ref.selectedText}`,
     }]
   }
+  if (ref.kind === 'article') {
+    const lines = [
+      '[引用资讯]',
+      `标题：${ref.title}`,
+      `来源：${ref.sourceTitle}`,
+      ref.link ? `链接：${ref.link}` : '',
+      '',
+      ref.bodyText.trim() || ref.title,
+    ].filter(Boolean)
+    return [{ role: 'user', content: lines.join('\n') }]
+  }
   return ref.turns
     .filter(t => t.role === 'assistant' && t.content)
     .map(t => ({ role: 'assistant', content: t.content }))
