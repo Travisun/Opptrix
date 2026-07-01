@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icons/opptrix-logo.png" alt="Opptrix" width="128" height="128" />
+  <img src="icons/opptrix-logo.png" alt="Opptrix" height="76" />
 </p>
 
 # Opptrix — 你的A股投研助手
