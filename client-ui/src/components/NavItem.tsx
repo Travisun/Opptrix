@@ -1,6 +1,6 @@
 import { makeStyles, tokens, Text, mergeClasses } from '@fluentui/react-components'
 import type { FluentIcon } from '@fluentui/react-icons'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const useStyles = makeStyles({
@@ -14,10 +14,10 @@ const useStyles = makeStyles({
     textAlign: 'left' as const,
     position: 'relative' as const,
     ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixTokens.surfaceMuted },
+    ':hover': { backgroundColor: opptrixCssVars.surfaceMuted },
   },
   active: {
-    backgroundColor: opptrixTokens.surfaceMuted,
+    backgroundColor: opptrixCssVars.surfaceMuted,
     '::before': {
       content: '""',
       position: 'absolute' as const,
@@ -26,23 +26,23 @@ const useStyles = makeStyles({
       bottom: '8px',
       width: '3px',
       borderRadius: '2px',
-      backgroundColor: opptrixTokens.accent,
+      backgroundColor: opptrixCssVars.accent,
     },
   },
   icon: {
     display: 'flex',
     alignItems: 'center',
     fontSize: '20px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
-  iconActive: { color: opptrixTokens.accent },
+  iconActive: { color: opptrixCssVars.accent },
   label: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontWeight: 500,
   },
   labelActive: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 600,
   },
 })

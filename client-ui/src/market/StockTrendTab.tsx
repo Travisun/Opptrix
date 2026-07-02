@@ -2,7 +2,7 @@ import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-compone
 import { ArrowClockwiseRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { TrendStrip, TrendStripTone } from '../types/schemas'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useStockTrendBrief } from './useStockTrendBrief'
 import { shouldPollTrendBrief } from './chartLiveRefresh'
 
@@ -32,7 +32,7 @@ const useStyles = makeStyles({
   },
   meta: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
   section: {
@@ -43,7 +43,7 @@ const useStyles = makeStyles({
   sectionTitle: {
     fontSize: '10px',
     fontWeight: 650,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
     padding: '0 2px',
@@ -54,8 +54,8 @@ const useStyles = makeStyles({
     gap: '4px',
     padding: '8px 10px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvas,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   stripHead: {
     display: 'flex',
@@ -66,7 +66,7 @@ const useStyles = makeStyles({
   stripTitle: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     flexShrink: 0,
   },
   stripStatus: {
@@ -78,13 +78,13 @@ const useStyles = makeStyles({
   stripDetail: {
     fontSize: '11px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   toneBullish: { color: '#FF3B30' },
   toneBearish: { color: '#34C759' },
-  toneNeutral: { color: opptrixTokens.textPrimary },
-  toneCaution: { color: opptrixTokens.warning },
-  toneMuted: { color: opptrixTokens.textTertiary },
+  toneNeutral: { color: opptrixCssVars.textPrimary },
+  toneCaution: { color: opptrixCssVars.warning },
+  toneMuted: { color: opptrixCssVars.textTertiary },
   center: {
     display: 'flex',
     flexDirection: 'column',
@@ -92,14 +92,14 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     gap: '8px',
     padding: '32px 16px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '12px',
     textAlign: 'center',
   },
   disclaimer: {
     fontSize: '10px',
     lineHeight: 1.5,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px 2px 0',
   },
 })

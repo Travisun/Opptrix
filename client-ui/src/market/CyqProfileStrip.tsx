@@ -3,7 +3,7 @@ import { makeStyles } from '@fluentui/react-components'
 import type { ChipDistributionPoint, ChipDistributionProfileData } from '../types/market'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { priceToCanvasY } from './cyqUtils'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -11,8 +11,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
-    borderLeft: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    borderLeft: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
     minHeight: 0,
   },
   head: {
@@ -20,9 +20,9 @@ const useStyles = makeStyles({
     padding: '2px 4px',
     fontSize: '7px',
     fontWeight: 650,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textAlign: 'center',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     lineHeight: 1.2,
   },
   profitTag: {
@@ -103,7 +103,7 @@ function drawStrip(
   ctx.lineTo(w, yNow)
   ctx.stroke()
 
-  ctx.fillStyle = opptrixTokens.textTertiary
+  ctx.fillStyle = opptrixCssVars.textTertiary
   ctx.font = '8px -apple-system, BlinkMacSystemFont, sans-serif'
   ctx.textAlign = 'left'
   ctx.fillText(profile.currentPrice.toFixed(2), 2, Math.max(9, Math.min(h - 2, yNow - 2)))

@@ -5,15 +5,15 @@ import NavItem from '../components/NavItem'
 import { navGroups, bottomNav } from './navConfig'
 import type { FeatureRoute } from '../types/schemas'
 import { useApp } from '../context/AppContext'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
     height: '100%',
-    backgroundColor: opptrixTokens.surface,
-    borderRight: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.surface,
+    borderRight: `1px solid ${opptrixCssVars.border}`,
   },
   brand: {
     display: 'flex',
@@ -25,7 +25,7 @@ const useStyles = makeStyles({
     width: '32px',
     height: '32px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.accent,
+    backgroundColor: opptrixCssVars.accent,
     color: '#fff',
     display: 'flex',
     alignItems: 'center',
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
   brandName: {
     fontSize: '16px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   scroll: {
     flex: 1,
@@ -49,13 +49,13 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px 8px',
   },
   group: { display: 'flex', flexDirection: 'column', gap: '2px' },
   footer: {
     padding: '10px',
-    borderTop: `1px solid ${opptrixTokens.border}`,
+    borderTop: `1px solid ${opptrixCssVars.border}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
@@ -63,13 +63,13 @@ const useStyles = makeStyles({
   status: {
     padding: '8px 10px',
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
   },
-  dotOk: { color: opptrixTokens.success },
-  dotErr: { color: opptrixTokens.error },
+  dotOk: { color: opptrixCssVars.success },
+  dotErr: { color: opptrixCssVars.error },
 })
 
 interface Props {

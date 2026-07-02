@@ -3,7 +3,7 @@ import {
   Text, Spinner, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
 } from '@fluentui/react-components'
-import { ChevronRightRegular, DeleteRegular, EditRegular } from '@fluentui/react-icons'
+import { ChevronRightRegular, DeleteRegular, EditRegular, SystemRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
@@ -24,7 +24,8 @@ import {
   getConfig, patchConfig, deleteProvider, getHealth,
   type AppConfig, type PublicProvider,
 } from '../api/client'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
+import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
@@ -46,7 +47,7 @@ const useStyles = makeStyles({
   },
   pageMobile: {
     flexDirection: 'column',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
   },
   contentShell: {
     flex: 1,
@@ -55,7 +56,7 @@ const useStyles = makeStyles({
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
   contentShellElectron: {
@@ -117,12 +118,12 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '-0.02em',
     lineHeight: 1.3,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   pageSubtitle: {
     fontSize: '14px',
     fontWeight: 400,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     marginTop: '8px',
     maxWidth: '52ch',
@@ -164,18 +165,18 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     letterSpacing: '-0.01em',
     paddingLeft: '2px',
   },
   saveHint: {
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     minHeight: '18px',
     paddingLeft: '2px',
   },
   saveHintActive: {
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   aboutProse: {
     display: 'flex',
@@ -191,12 +192,12 @@ const useStyles = makeStyles({
     fontSize: '15px',
     fontWeight: 600,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
   },
   aboutMeta: {
     fontSize: '14px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.65,
   },
   dialogSurface: {
@@ -207,9 +208,88 @@ const useStyles = makeStyles({
     fontSize: '17px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
+  },
+  themePicker: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    padding: '2px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
+  },
+  themePickerBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '34px',
+    height: '30px',
+    padding: 0,
+    border: 'none',
+    borderRadius: '6px',
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    cursor: 'pointer',
+    transitionProperty: 'background-color, color, box-shadow',
+    transitionDuration: '140ms',
+    transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    ':hover': {
+      color: opptrixCssVars.textPrimary,
+      backgroundColor: opptrixCssVars.surfaceHover,
+    },
+    ':focus': { outline: 'none' },
+    ':focus-visible': {
+      outline: `2px solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: '2px',
+    },
+  },
+  themePickerBtnActive: {
+    backgroundColor: opptrixCssVars.canvas,
+    color: opptrixCssVars.textPrimary,
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.06)',
   },
 })
+
+const THEME_OPTIONS: { id: ThemePreference; label: string; icon: typeof SystemRegular }[] = [
+  { id: 'system', label: '跟随系统', icon: SystemRegular },
+  { id: 'light', label: '浅色', icon: WeatherSunnyRegular },
+  { id: 'dark', label: '深色', icon: WeatherMoonRegular },
+]
+
+function ThemePreferencePicker({
+  value,
+  onChange,
+  className,
+}: {
+  value: ThemePreference
+  onChange: (next: ThemePreference) => void
+  className?: string
+}) {
+  const s = useStyles()
+  return (
+    <div className={mergeClasses(s.themePicker, className)} role="radiogroup" aria-label="主题">
+      {THEME_OPTIONS.map(opt => {
+        const Icon = opt.icon
+        const active = value === opt.id
+        return (
+          <button
+            key={opt.id}
+            type="button"
+            role="radio"
+            aria-checked={active}
+            aria-label={opt.label}
+            title={opt.label}
+            className={mergeClasses(s.themePickerBtn, active && s.themePickerBtnActive)}
+            onClick={() => onChange(opt.id)}
+          >
+            <Icon fontSize={18} />
+          </button>
+        )
+      })}
+    </div>
+  )
+}
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 
@@ -237,6 +317,7 @@ function SettingsPageView({
   initialSection,
 }: SettingsPageProps) {
   const toast = useSettingsToast()
+  const { preference: themePreference, setPreference: setThemePreference } = useTheme()
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
   const [section, setSection] = useState<SettingsSection>(initialSection ?? 'general')
@@ -351,6 +432,23 @@ function SettingsPageView({
         return (
           <>
             <div className={s.sectionBlock}>
+              <Text className={s.sectionLabel} block>外观</Text>
+              <SettingsGroup>
+                <SettingsRow
+                  title="主题"
+                  desc="切换后立即生效；跟随系统会随操作系统浅色/深色自动变化"
+                  control={(
+                    <ThemePreferencePicker
+                      value={themePreference}
+                      onChange={setThemePreference}
+                    />
+                  )}
+                  last
+                />
+              </SettingsGroup>
+            </div>
+
+            <div className={s.sectionBlock}>
               <Text className={s.sectionLabel} block>偏好</Text>
               <SettingsGroup>
                 <SettingsRow
@@ -431,7 +529,7 @@ function SettingsPageView({
               <SettingsActionRow
                 title="添加模型提供商"
                 desc="配置 Base URL 与 API Key"
-                icon={<ChevronRightRegular fontSize={16} color={opptrixTokens.textTertiary} />}
+                icon={<ChevronRightRegular fontSize={16} color={opptrixCssVars.textTertiary} />}
                 onClick={() => openProviderWizard()}
               />
             </SettingsGroup>

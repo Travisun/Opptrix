@@ -2,7 +2,7 @@ import { Button, type ButtonProps, mergeClasses, makeStyles } from '@fluentui/re
 import {
   ghostInteractive, primaryInteractive, secondaryInteractive, focusVisibleRing, motion,
 } from '../../theme/mixins'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const useStyles = makeStyles({
   primary: {
@@ -18,12 +18,12 @@ const useStyles = makeStyles({
   },
   ghost: {
     ...ghostInteractive,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontWeight: 500,
     fontSize: '14px',
     ':hover': {
-      backgroundColor: opptrixTokens.surfaceHover,
-      color: opptrixTokens.textPrimary,
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
     },
   },
   pill: {
@@ -32,13 +32,13 @@ const useStyles = makeStyles({
     fontSize: '13px',
     transitionProperty: 'background-color, color, opacity, border-color',
     transitionDuration: motion.fast,
-    border: `1px solid ${opptrixTokens.border}`,
-    backgroundColor: opptrixTokens.canvas,
-    color: opptrixTokens.textSecondary,
+    border: `1px solid ${opptrixCssVars.border}`,
+    backgroundColor: opptrixCssVars.canvas,
+    color: opptrixCssVars.textSecondary,
     ':hover': {
-      backgroundColor: opptrixTokens.canvasAlt,
-      color: opptrixTokens.textPrimary,
-      borderColor: opptrixTokens.separatorStrong,
+      backgroundColor: opptrixCssVars.canvasAlt,
+      color: opptrixCssVars.textPrimary,
+      borderColor: opptrixCssVars.separatorStrong,
     },
     ':active': {
       opacity: opptrixTokens.activeOpacity,
@@ -50,10 +50,10 @@ const useStyles = makeStyles({
     minWidth: '32px',
     height: '32px',
     borderRadius: opptrixTokens.radiusSm,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     ':hover': {
-      color: opptrixTokens.textPrimary,
-      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixCssVars.textPrimary,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
 })

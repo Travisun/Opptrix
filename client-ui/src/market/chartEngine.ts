@@ -8,11 +8,11 @@ import {
   type LogicalRange,
 } from 'lightweight-charts'
 import type { ChartPeriod } from '../types/market'
+import type { ColorScheme } from '../theme/tokens'
 import type { ChartSeriesBundle } from './chartSeries'
 import {
   candlestickColors,
-  chartGrid,
-  chartLayout,
+  getChartTheme,
   indicatorColors,
   stockPriceFormat,
 } from './chartTheme'
@@ -34,6 +34,7 @@ export interface ChartPaneRefs {
 
 export interface ChartMountOptions {
   period: ChartPeriod
+  colorScheme?: ColorScheme
   preserveRange?: LogicalRange | null
   addedBars?: number
   onNeedHistory?: () => void
@@ -61,11 +62,13 @@ export class ChartWorkspace {
     this.totalBars = this.countBars(bundle)
     const minuteChart = isMinuteOhlcPeriod(options.period)
     const intradayChart = isIntradayPeriod(options.period)
+    const scheme = options.colorScheme ?? 'light'
+    const theme = getChartTheme(scheme)
 
     try {
       this.mainChart = createChart(refs.main, {
-        layout: chartLayout,
-        grid: chartGrid,
+        layout: theme.layout,
+        grid: theme.grid,
         rightPriceScale: {
           borderVisible: false,
           ...(minuteChart ? { minimumWidth: 52 } : {}),
@@ -78,10 +81,7 @@ export class ChartWorkspace {
           secondsVisible: (minuteChart && options.period === '1m') || intradayChart,
           ...((minuteChart || intradayChart) ? { barSpacing: 7, minBarSpacing: 2 } : {}),
         },
-        crosshair: {
-          vertLine: { width: 1, color: 'rgba(60,60,67,0.16)' },
-          horzLine: { width: 1, color: 'rgba(60,60,67,0.16)' },
-        },
+        crosshair: theme.crosshair,
         handleScroll: {
           mouseWheel: true,
           pressedMouseMove: true,
@@ -96,8 +96,8 @@ export class ChartWorkspace {
       })
 
       this.volumeChart = createChart(refs.volume, {
-        layout: chartLayout,
-        grid: chartGrid,
+        layout: theme.layout,
+        grid: theme.grid,
         rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.08, bottom: 0 } },
         timeScale: { visible: false, borderVisible: false },
         handleScroll: false,
@@ -106,8 +106,8 @@ export class ChartWorkspace {
 
       if (bundle.showMacd && refs.macd) {
         this.macdChart = createChart(refs.macd, {
-          layout: chartLayout,
-          grid: chartGrid,
+          layout: theme.layout,
+          grid: theme.grid,
           rightPriceScale: { borderVisible: false, scaleMargins: { top: 0.15, bottom: 0 } },
           timeScale: { visible: false, borderVisible: false },
           handleScroll: false,
@@ -161,9 +161,10 @@ export class ChartWorkspace {
       })
       this.setSeriesData('均价', () => avg.setData(bundle.avgLine))
       if (bundle.preClose != null && bundle.preClose > 0) {
+        const scheme = this.mountOptions?.colorScheme ?? 'light'
         price.createPriceLine({
           price: bundle.preClose,
-          color: 'rgba(60,60,67,0.35)',
+          color: scheme === 'dark' ? 'rgba(255,255,255,0.35)' : 'rgba(60,60,67,0.35)',
           lineWidth: 1,
           lineStyle: LineStyle.Dashed,
           axisLabelVisible: true,

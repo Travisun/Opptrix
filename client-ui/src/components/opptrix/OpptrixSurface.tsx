@@ -1,6 +1,6 @@
 import { makeStyles, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { surfaceGrouped } from '../../theme/mixins'
 
 const useStyles = makeStyles({
@@ -13,13 +13,13 @@ const useStyles = makeStyles({
   title: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
   },
   subtitle: {
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     marginTop: '2px',
     textTransform: 'none',
     letterSpacing: 0,
@@ -64,5 +64,5 @@ export default function OpptrixSurface({ title, subtitle, children, className, s
 
 /** Row divider inside grouped surface */
 export function OpptrixDivider() {
-  return <div style={{ height: 1, background: opptrixTokens.separator, margin: '0 -16px' }} />
+  return <div style={{ height: 1, background: opptrixCssVars.separator, margin: '0 -16px' }} />
 }

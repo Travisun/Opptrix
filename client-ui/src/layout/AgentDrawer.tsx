@@ -5,7 +5,7 @@ import {
 import { SendRegular, DeleteRegular, DismissRegular, BotRegular } from '@fluentui/react-icons'
 import { sendChat, resetChat } from '../api/client'
 import { useApp } from '../context/AppContext'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 interface ChatMessage {
   role: 'user' | 'assistant'
@@ -19,22 +19,22 @@ const useStyles = makeStyles({
     height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: opptrixTokens.surface,
-    borderLeft: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.surface,
+    borderLeft: `1px solid ${opptrixCssVars.border}`,
   },
   header: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     padding: '14px 16px',
-    borderBottom: `1px solid ${opptrixTokens.border}`,
+    borderBottom: `1px solid ${opptrixCssVars.border}`,
   },
   context: {
     padding: '8px 16px',
-    backgroundColor: opptrixTokens.surfaceMuted,
+    backgroundColor: opptrixCssVars.surfaceMuted,
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
-    borderBottom: `1px solid ${opptrixTokens.border}`,
+    color: opptrixCssVars.textSecondary,
+    borderBottom: `1px solid ${opptrixCssVars.border}`,
   },
   chatBox: {
     flex: 1,
@@ -49,7 +49,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '13px',
     textAlign: 'center' as const,
     padding: '24px',
@@ -65,17 +65,17 @@ const useStyles = makeStyles({
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: opptrixTokens.accentSoft,
-    color: opptrixTokens.textPrimary,
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.textPrimary,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: opptrixTokens.surfaceMuted,
-    border: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.surfaceMuted,
+    border: `1px solid ${opptrixCssVars.border}`,
   },
   inputArea: {
     padding: '12px 16px',
-    borderTop: `1px solid ${opptrixTokens.border}`,
+    borderTop: `1px solid ${opptrixCssVars.border}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
@@ -144,7 +144,7 @@ export default function AgentDrawer() {
     <div className={s.drawer}>
       <div className={s.header}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <BotRegular primaryFill={opptrixTokens.accent} fontSize={20} />
+          <BotRegular primaryFill={opptrixCssVars.accent} fontSize={20} />
           <Text weight="semibold" size={400}>AI 助手</Text>
         </div>
         <Button appearance="subtle" size="small" icon={<DismissRegular />} onClick={() => setAgentOpen(false)} />
@@ -162,7 +162,7 @@ export default function AgentDrawer() {
           <div className={s.empty}>
             <div className={s.starters}>
               <Text>暂无会话记录</Text>
-              <Text size={200} style={{ color: opptrixTokens.textTertiary, marginTop: 8 }}>
+              <Text size={200} style={{ color: opptrixCssVars.textTertiary, marginTop: 8 }}>
                 选择快捷问题或输入自然语言
               </Text>
               {STARTERS.map(q => (
@@ -189,7 +189,7 @@ export default function AgentDrawer() {
             <Spinner size="tiny" /><Text size={200}>分析中…</Text>
           </div>
         )}
-        {error && <Text size={200} style={{ color: opptrixTokens.error }}>{error}</Text>}
+        {error && <Text size={200} style={{ color: opptrixCssVars.error }}>{error}</Text>}
         <div ref={bottomRef} />
       </div>
 

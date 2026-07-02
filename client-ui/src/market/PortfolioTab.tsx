@@ -6,7 +6,7 @@ import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 
@@ -24,7 +24,7 @@ const useStyles = makeStyles({
   summary: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD} 6px`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexWrap: 'wrap',
     gap: '6px',
@@ -32,7 +32,7 @@ const useStyles = makeStyles({
   metric: {
     padding: '5px 8px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.surfaceSubtle,
+    backgroundColor: opptrixCssVars.surfaceSubtle,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -42,7 +42,7 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontWeight: 600,
     lineHeight: 1.3,
   },
@@ -50,7 +50,7 @@ const useStyles = makeStyles({
     fontSize: '13px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   list: {
@@ -77,23 +77,23 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
     width: '100%',
     boxSizing: 'border-box',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     cursor: 'pointer',
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   rowActive: {
     ...sidebarItemSelected,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   rowBody: {
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   },
   rowNote: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -137,7 +137,7 @@ const useStyles = makeStyles({
   quoteSecondary: {
     fontSize: '10px',
     fontVariantNumeric: 'tabular-nums',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
     lineHeight: 1.2,
   },
@@ -147,7 +147,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '32px',
     gap: '8px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '12px',
   },
 })
@@ -162,7 +162,7 @@ function pnlColor(pct: number): string {
   const tone = pctTone(pct)
   if (tone === 'up') return MARKET_UP
   if (tone === 'down') return MARKET_DOWN
-  return opptrixTokens.textSecondary
+  return opptrixCssVars.textSecondary
 }
 
 function formatShares(shares: number): string {

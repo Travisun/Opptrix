@@ -1,7 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { DESKTOP_Z_OVERLAY_SIDEBAR } from './constants'
 import { OVERLAY_SIDEBAR_MS, useOverlaySidebarAnimation } from '../hooks/useOverlaySidebarAnimation'
@@ -21,10 +21,8 @@ const useStyles = makeStyles({
     transitionProperty: 'transform, opacity',
     transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
     transitionTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)',
-    backgroundColor: 'rgba(255, 255, 255, 0.94)',
-    backdropFilter: 'blur(12px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(12px) saturate(160%)',
-    border: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.border}`,
     borderLeft: 'none',
     borderRadius: `0 ${opptrixTokens.radiusLg} ${opptrixTokens.radiusLg} 0`,
     boxShadow: '2px 0 16px rgba(0, 0, 0, 0.06)',

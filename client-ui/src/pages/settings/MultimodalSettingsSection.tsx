@@ -24,7 +24,7 @@ import {
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 
 const SETTINGS_SAVE_MS = 500
@@ -45,7 +45,7 @@ const DEFAULT_ENRICHMENT: NewsEnrichmentSettings = {
 const useStyles = makeStyles({
   hint: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     padding: '0 2px',
   },
@@ -53,7 +53,7 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     flexShrink: 0,
@@ -75,15 +75,15 @@ const useStyles = makeStyles({
   },
   saveHint: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px 2px 0',
     minHeight: '16px',
   },
-  saveHintActive: { color: opptrixTokens.textSecondary },
+  saveHintActive: { color: opptrixCssVars.textSecondary },
   listPanel: {
-    border: opptrixTokens.settingsPanelBorder,
+    border: opptrixCssVars.settingsPanelBorder,
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
@@ -100,19 +100,19 @@ const useStyles = makeStyles({
     gap: '10px',
     padding: '8px 14px',
     minHeight: '38px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   listRowMain: { flex: 1, minWidth: 0 },
   listRowTitle: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   listRowMeta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     marginTop: '2px',
   },
@@ -121,12 +121,12 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '4px',
     fontSize: '11px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
   },
-  statusReady: { color: opptrixTokens.success },
-  statusWarn: { color: opptrixTokens.warning },
+  statusReady: { color: opptrixCssVars.success },
+  statusWarn: { color: opptrixCssVars.warning },
   intervalSelect: { minWidth: '160px' },
   remoteModelSelect: { minWidth: '220px' },
   toolStatusGrid: {
@@ -136,8 +136,8 @@ const useStyles = makeStyles({
   },
   progressBlock: {
     padding: '10px 14px 12px',
-    borderTop: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   progressTopRow: {
     display: 'flex',
@@ -153,7 +153,7 @@ const useStyles = makeStyles({
   progressBarTrack: { width: '100%', minHeight: '6px', marginTop: '8px' },
   panelFooter: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 2px 0',
   },
@@ -161,7 +161,7 @@ const useStyles = makeStyles({
     display: 'block',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: '11px',
-    color: opptrixTokens.accent,
+    color: opptrixCssVars.accent,
     wordBreak: 'break-all',
     marginTop: '4px',
     padding: 0,
@@ -393,7 +393,7 @@ export default function MultimodalSettingsSection() {
         <SettingsGroup>
           {providers.length === 0 ? (
             <SettingsStaticBlock>
-              <Text block style={{ fontSize: '13px', color: opptrixTokens.textSecondary, lineHeight: 1.55 }}>
+              <Text block style={{ fontSize: '13px', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
                 图片仅支持远程多模态大模型。请先在「模型」页添加 OpenAI 兼容接口，再选择支持图片的模型（如 GPT-4o、Qwen-VL、GLM-4V）。
               </Text>
             </SettingsStaticBlock>

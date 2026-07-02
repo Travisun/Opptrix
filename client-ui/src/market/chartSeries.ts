@@ -1,7 +1,8 @@
 import type { ChartPeriod, IntradayChartBar, OhlcChartBar, StockChartData } from '../types/market'
 import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPeriod } from './chartTime'
-import { MARKET_DOWN, MARKET_UP } from './chartTheme'
-import { opptrixTokens } from '../theme/tokens'
+import { MARKET_DOWN, MARKET_UP, getMaColors } from './chartTheme'
+import type { ColorScheme } from '../theme/tokens'
+import { getOpptrixTokens } from '../theme/tokens'
 import type { Time } from 'lightweight-charts'
 
 export type ChartMode = 'ohlc' | 'intraday'
@@ -52,8 +53,8 @@ export interface ChartSeriesBundle {
   } | null
 }
 
-function volumeColor(change: number | null | undefined): string {
-  if (change == null || change === 0) return opptrixTokens.textTertiary
+function volumeColor(change: number | null | undefined, scheme: ColorScheme): string {
+  if (change == null || change === 0) return getOpptrixTokens(scheme).textTertiary
   return change >= 0 ? MARKET_UP : MARKET_DOWN
 }
 
@@ -112,10 +113,11 @@ function maPoints(
 }
 
 /** Normalize API payload → chart-ready series (sorted, deduped, validated). */
-export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
+export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'light'): ChartSeriesBundle {
   const intraday = isIntradayPeriod(data.period)
   const minuteOhlc = isMinuteOhlcPeriod(data.period)
   const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
+  const ma = getMaColors(scheme)
 
   if (intraday) {
     const bars = data.bars as IntradayChartBar[]
@@ -133,7 +135,7 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
       return {
         time: chartTime(bar.time, data.period),
         value: bar.volume,
-        color: volumeColor(delta),
+        color: volumeColor(delta, scheme),
       }
     }))
 
@@ -158,7 +160,7 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
   const volume = dedupeByTime(bars.map(bar => ({
     time: chartTime(bar.time, data.period),
     value: bar.volume,
-    color: volumeColor(bar.changePct),
+    color: volumeColor(bar.changePct, scheme),
   })))
   const macd = dedupeByTime(
     data.indicators
@@ -191,14 +193,14 @@ export function buildChartSeries(data: StockChartData): ChartSeriesBundle {
     avgLine: [],
     maLines: minuteOhlc
       ? [
-          { key: 'ma5', color: '#1D1D1F', points: maPoints(data.indicators, 'ma5', data.period) },
-          { key: 'ma10', color: '#FF9500', points: maPoints(data.indicators, 'ma10', data.period) },
+          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period) },
+          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period) },
         ].filter(row => row.points.length > 0)
       : [
-          { key: 'ma5', color: '#1D1D1F', points: maPoints(data.indicators, 'ma5', data.period) },
-          { key: 'ma10', color: '#FF9500', points: maPoints(data.indicators, 'ma10', data.period) },
-          { key: 'ma20', color: '#5856D6', points: maPoints(data.indicators, 'ma20', data.period) },
-          { key: 'ma60', color: '#32ADE6', points: maPoints(data.indicators, 'ma60', data.period) },
+          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period) },
+          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period) },
+          { key: 'ma20', color: ma.ma20, points: maPoints(data.indicators, 'ma20', data.period) },
+          { key: 'ma60', color: ma.ma60, points: maPoints(data.indicators, 'ma60', data.period) },
         ].filter(row => row.points.length > 0),
     volume,
     macd,

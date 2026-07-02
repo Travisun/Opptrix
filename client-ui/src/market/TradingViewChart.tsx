@@ -9,8 +9,9 @@ import { isIntradayPeriod, isMinuteOhlcPeriod } from './chartTime'
 import { chartLivePollIntervalMs, shouldPollChartLive } from './chartLiveRefresh'
 import CyqProfileStrip from './CyqProfileStrip'
 import { computeCyqPriceSpan, isCyqChartPeriod } from './cyqUtils'
-import { indicatorColors, maColors } from './chartTheme'
-import { opptrixTokens } from '../theme/tokens'
+import { indicatorColors, getMaColors } from './chartTheme'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { useTheme } from '../theme/ThemeContext'
 import { ghostInteractive } from '../theme/mixins'
 
 const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
@@ -48,13 +49,13 @@ const useStyles = makeStyles({
     gap: '2px',
     padding: '2px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvasAlt,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   periodBtn: {
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '10px',
     fontWeight: 600,
     padding: '3px 7px',
@@ -64,8 +65,8 @@ const useStyles = makeStyles({
     ...ghostInteractive,
   },
   periodBtnActive: {
-    backgroundColor: opptrixTokens.canvas,
-    color: opptrixTokens.textPrimary,
+    backgroundColor: opptrixCssVars.canvas,
+    color: opptrixCssVars.textPrimary,
     boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
   },
   periodBtnDisabled: {
@@ -79,13 +80,13 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     gap: '6px 10px',
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   chartLegend: {
     flexShrink: 0,
-    borderTop: `1px solid ${opptrixTokens.separator}`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
     padding: '4px 8px',
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   chartArea: {
     display: 'flex',
@@ -110,8 +111,8 @@ const useStyles = makeStyles({
   chartFrame: {
     position: 'relative',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
   chartFrameExpanded: {
@@ -140,7 +141,7 @@ const useStyles = makeStyles({
   paneRow: {
     display: 'flex',
     alignItems: 'stretch',
-    borderTop: `1px solid ${opptrixTokens.separator}`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
   },
   paneHidden: {
     display: 'none',
@@ -154,7 +155,7 @@ const useStyles = makeStyles({
     fontSize: '7px',
     fontWeight: 600,
     letterSpacing: 0,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     opacity: 0.65,
     padding: 0,
   },
@@ -178,9 +179,9 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
   },
   zoomBtn: {
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
-    color: opptrixTokens.textSecondary,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textSecondary,
     fontSize: '10px',
     fontWeight: 600,
     padding: '3px 8px',
@@ -194,10 +195,10 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   emptyExpanded: {
     flex: 1,
@@ -205,10 +206,10 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   hintError: {
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   paneKSplit: {
     flex: 1,
@@ -223,18 +224,18 @@ const useStyles = makeStyles({
     gap: '6px 10px',
     padding: '4px 8px',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
     fontSize: '9px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.3,
   },
   cyqMetricLabel: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontWeight: 600,
   },
   cyqMetricValue: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
   },
@@ -245,7 +246,7 @@ const useStyles = makeStyles({
     borderRadius: '3px',
     overflow: 'hidden',
     flexShrink: 0,
-    border: `1px solid ${opptrixTokens.separator}`,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   cyqStackProfit: {
     backgroundColor: 'rgba(255, 59, 48, 0.85)',
@@ -266,6 +267,8 @@ interface Props {
 
 export default function TradingViewChart({ code, expanded = false, active = true }: Props) {
   const s = useStyles()
+  const { resolvedScheme } = useTheme()
+  const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
   const [data, setData] = useState<StockChartData | null>(null)
   const [loading, setLoading] = useState(false)
@@ -457,7 +460,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
     addedBarsRef.current = 0
 
     try {
-      const series = buildChartSeries(data)
+      const series = buildChartSeries(data, resolvedScheme)
       workspace.mount(
         {
           main: mainRef.current,
@@ -467,6 +470,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
         series,
         {
           period: data.period,
+          colorScheme: resolvedScheme,
           preserveRange,
           addedBars,
           onNeedHistory: handleNeedHistory,
@@ -479,7 +483,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
     }
 
     return () => { workspace.destroy() }
-  }, [data, handleNeedHistory])
+  }, [data, handleNeedHistory, resolvedScheme])
 
   useEffect(() => {
     if (!active || !data) return undefined

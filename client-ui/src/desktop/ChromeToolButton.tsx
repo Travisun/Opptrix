@@ -1,6 +1,6 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { DESKTOP_TOOL_ICON_PADDING, DESKTOP_TOOL_SIZE } from './constants'
 
@@ -15,28 +15,28 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     ...ghostInteractive,
     borderRadius: opptrixTokens.radiusSm,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     WebkitAppRegion: 'no-drag',
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
-      color: opptrixTokens.textPrimary,
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.textPrimary,
     },
     ':disabled': {
       opacity: 0.28,
       cursor: 'default',
       ':hover': {
         backgroundColor: 'transparent',
-        color: opptrixTokens.textSecondary,
+        color: opptrixCssVars.textSecondary,
       },
     },
   },
   btnActive: {
-    backgroundColor: opptrixTokens.accentSoft,
-    color: opptrixTokens.accent,
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.accent,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
-      color: opptrixTokens.accent,
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.accent,
     },
   },
 })

@@ -1,6 +1,6 @@
 import { makeStyles, tokens, Text } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -22,18 +22,18 @@ const useStyles = makeStyles({
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
-    color: opptrixTokens.accent,
+    color: opptrixCssVars.accent,
     marginBottom: '4px',
   },
   title: {
     fontSize: '22px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
   subtitle: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     marginTop: '4px',
   },
   actions: {

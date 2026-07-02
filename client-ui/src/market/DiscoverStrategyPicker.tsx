@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import type { DiscoverStrategyOption, DiscoverStrategySource } from '../types/schemas'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, focusVisibleRing } from '../theme/mixins'
 import { OpptrixDropdownPanel } from '../components/opptrix/OpptrixDropdownPanel'
 
@@ -23,8 +23,8 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '8px 10px',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
     cursor: 'pointer',
     textAlign: 'left',
     boxSizing: 'border-box',
@@ -32,13 +32,13 @@ const useStyles = makeStyles({
     transitionDuration: motion.fast,
     ...focusVisibleRing,
     ':hover': {
-      backgroundColor: opptrixTokens.surfaceHover,
-      borderColor: opptrixTokens.separatorStrong,
+      backgroundColor: opptrixCssVars.surfaceHover,
+      borderColor: opptrixCssVars.separatorStrong,
     },
   },
   triggerOpen: {
-    backgroundColor: opptrixTokens.canvas,
-    borderColor: opptrixTokens.borderStrong,
+    backgroundColor: opptrixCssVars.canvas,
+    borderColor: opptrixCssVars.borderStrong,
   },
   triggerMain: {
     flex: 1,
@@ -56,21 +56,21 @@ const useStyles = makeStyles({
   triggerName: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   triggerMeta: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   chevron: {
     flexShrink: 0,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   sourceTag: {
     flexShrink: 0,
@@ -81,14 +81,14 @@ const useStyles = makeStyles({
     lineHeight: 1.35,
   },
   sourceBuiltin: {
-    color: opptrixTokens.textSecondary,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixCssVars.textSecondary,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   sourceCustom: {
-    color: opptrixTokens.accent,
-    border: `1px solid ${opptrixTokens.accentMuted}`,
-    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixCssVars.accent,
+    border: `1px solid ${opptrixCssVars.accentMuted}`,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   panelAnchor: {
     position: 'absolute',
@@ -112,17 +112,17 @@ const useStyles = makeStyles({
     transitionDuration: motion.fast,
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-visible': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   menuItemActive: {
-    backgroundColor: opptrixTokens.accentSoft,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   menuItemHover: {
-    backgroundColor: opptrixTokens.accentSoft,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   menuItemHead: {
     display: 'flex',
@@ -133,7 +133,7 @@ const useStyles = makeStyles({
   menuName: {
     fontSize: '11px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -142,7 +142,7 @@ const useStyles = makeStyles({
   },
   menuTagline: {
     fontSize: '9px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -150,11 +150,11 @@ const useStyles = makeStyles({
   },
   menuMeta: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   placeholder: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
 })
 

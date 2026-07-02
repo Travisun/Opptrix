@@ -17,7 +17,7 @@ import {
 } from '@fluentui/react-icons'
 import { isElectron } from '../../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { glassPanel, motion } from '../../theme/mixins'
 
 export type SettingsToastTone = 'success' | 'error' | 'info' | 'warning'
@@ -72,7 +72,7 @@ const useStyles = makeStyles({
     width: '100%',
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
+    border: `1px solid ${opptrixCssVars.separator}`,
     ...glassPanel,
     boxShadow: opptrixTokens.shadowPanel,
     animationName: {
@@ -102,38 +102,38 @@ const useStyles = makeStyles({
     minWidth: 0,
     fontSize: '13px',
     lineHeight: 1.45,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   dismissBtn: {
     flexShrink: 0,
     border: 'none',
     background: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,
     borderRadius: opptrixTokens.radiusSm,
     ':hover': {
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
       backgroundColor: 'rgba(29, 29, 31, 0.06)',
     },
   },
   toneSuccess: {
-    borderLeft: `3px solid ${opptrixTokens.success}`,
+    borderLeft: `3px solid ${opptrixCssVars.success}`,
   },
   toneError: {
-    borderLeft: `3px solid ${opptrixTokens.error}`,
+    borderLeft: `3px solid ${opptrixCssVars.error}`,
   },
   toneInfo: {
-    borderLeft: `3px solid ${opptrixTokens.textTertiary}`,
+    borderLeft: `3px solid ${opptrixCssVars.textTertiary}`,
   },
   toneWarning: {
-    borderLeft: `3px solid ${opptrixTokens.warning}`,
+    borderLeft: `3px solid ${opptrixCssVars.warning}`,
   },
-  iconSuccess: { color: opptrixTokens.success },
-  iconError: { color: opptrixTokens.error },
-  iconInfo: { color: opptrixTokens.textSecondary },
-  iconWarning: { color: opptrixTokens.warning },
+  iconSuccess: { color: opptrixCssVars.success },
+  iconError: { color: opptrixCssVars.error },
+  iconInfo: { color: opptrixCssVars.textSecondary },
+  iconWarning: { color: opptrixCssVars.warning },
 })
 
 function toneClass(s: ReturnType<typeof useStyles>, tone: SettingsToastTone) {

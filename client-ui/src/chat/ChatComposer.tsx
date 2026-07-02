@@ -12,7 +12,7 @@ import { useStockMention } from './useStockMention'
 import type { AvailableModel, SessionContextRef } from '../types/chat'
 import type { WatchlistItem } from '../types/market'
 import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 
 const LINE_HEIGHT = 1.5
@@ -42,7 +42,7 @@ const useStyles = makeStyles({
   startersLabel: {
     fontSize: '12px',
     fontWeight: 500,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.01em',
   },
   starters: {
@@ -60,13 +60,13 @@ const useStyles = makeStyles({
     fontSize: '13px',
     padding: '6px 14px',
     border: 'none',
-    backgroundColor: opptrixTokens.canvasAlt,
-    color: opptrixTokens.textSecondary,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
     ':hover': {
-      backgroundColor: opptrixTokens.canvasAlt,
-      color: opptrixTokens.textPrimary,
+      backgroundColor: opptrixCssVars.canvasAlt,
+      color: opptrixCssVars.textPrimary,
     },
   },
   panelWrap: {
@@ -88,16 +88,12 @@ const useStyles = makeStyles({
     borderTopRightRadius: opptrixTokens.radiusXl,
     pointerEvents: 'none',
     zIndex: 0,
-    backdropFilter: 'blur(20px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
     backgroundImage: [
       'linear-gradient(',
       '180deg,',
-      'rgba(255, 255, 255, 0.62) 0%,',
-      'rgba(255, 255, 255, 0.78) 38%,',
-      'rgba(255, 255, 255, 0.96) 68%,',
-      `${opptrixTokens.canvas} 88%,`,
-      `${opptrixTokens.canvas} 100%`,
+      'transparent 0%,',
+      `${opptrixCssVars.canvas} 62%,`,
+      `${opptrixCssVars.canvas} 100%`,
       ')',
     ].join(' '),
   },
@@ -112,18 +108,16 @@ const useStyles = makeStyles({
     padding: opptrixTokens.chatComposerPadding,
     gap: '10px',
     borderRadius: opptrixTokens.radiusXl,
-    border: `1px solid ${opptrixTokens.border}`,
-    backgroundColor: 'rgba(255, 255, 255, 0.38)',
-    backdropFilter: 'blur(20px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-    boxShadow: opptrixTokens.composerFloatShadow,
+    border: `1px solid ${opptrixCssVars.border}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    boxShadow: 'none',
     ':hover': {
-      borderColor: opptrixTokens.borderStrong,
-      boxShadow: opptrixTokens.composerFloatShadowHover,
+      borderColor: opptrixCssVars.borderStrong,
     },
     ':focus-within': {
-      borderColor: opptrixTokens.borderStrong,
-      boxShadow: opptrixTokens.composerFloatShadowFocus,
+      backgroundColor: opptrixCssVars.canvas,
+      borderColor: opptrixCssVars.inputBorderFocus,
+      boxShadow: opptrixCssVars.focusGlow,
     },
   },
   inputRow: {
@@ -155,11 +149,11 @@ const useStyles = makeStyles({
     fontSize: `${FONT_SIZE}px`,
     lineHeight: LINE_HEIGHT,
     fontFamily: 'inherit',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     padding: 0,
     margin: 0,
     '::placeholder': {
-      color: opptrixTokens.textTertiary,
+      color: opptrixCssVars.textTertiary,
     },
   },
   textareaWithRef: {
@@ -214,7 +208,7 @@ const useStyles = makeStyles({
   },
   error: {
     fontSize: '13px',
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
     padding: `0 0 0 ${opptrixTokens.chatComposerPadding}`,
     animationDuration: motion.fast,
     animationName: {
@@ -230,7 +224,7 @@ const useStyles = makeStyles({
     textAlign: 'center',
     fontSize: '12px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     width: '100%',
     margin: 0,
     padding: '9px 0 0',

@@ -21,7 +21,7 @@ import type { ChatLiveTrace } from '../types/chatProgress'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { feedArticleToContextRef } from '../pages/news/newsUtils'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
@@ -36,7 +36,7 @@ const useStyles = makeStyles({
   root: {
     display: 'flex',
     height: '100dvh',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
   rootElectron: {
@@ -92,8 +92,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
     boxSizing: 'border-box',
-    backgroundColor: opptrixTokens.canvas,
-    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
     position: 'relative',
     zIndex: 2,
   },
@@ -103,7 +103,7 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     borderRadius: 0,
     overflow: 'hidden',
   },

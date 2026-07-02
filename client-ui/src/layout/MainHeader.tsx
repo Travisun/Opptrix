@@ -6,7 +6,7 @@ import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-ic
 import { research } from '../api/client'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -14,8 +14,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '12px',
     padding: '12px 20px',
-    backgroundColor: opptrixTokens.surface,
-    borderBottom: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.surface,
+    borderBottom: `1px solid ${opptrixCssVars.border}`,
     minHeight: '56px',
     flexShrink: 0,
   },
@@ -26,8 +26,8 @@ const useStyles = makeStyles({
     gap: '8px',
     padding: '4px 10px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.accentSoft,
-    border: `1px solid ${opptrixTokens.border}`,
+    backgroundColor: opptrixCssVars.accentSoft,
+    border: `1px solid ${opptrixCssVars.border}`,
   },
   spacer: { flex: 1 },
 })
@@ -97,7 +97,7 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
         size="small"
         icon={<BotRegular />}
         onClick={() => setAgentOpen(!agentOpen)}
-        style={!agentOpen ? { backgroundColor: opptrixTokens.accentSoft, borderColor: opptrixTokens.accent } : undefined}
+        style={!agentOpen ? { backgroundColor: opptrixCssVars.accentSoft, borderColor: opptrixCssVars.accent } : undefined}
       >
         {agentOpen ? '关闭助手' : '问 AI'}
       </Button>

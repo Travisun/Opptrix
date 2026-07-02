@@ -6,7 +6,7 @@ import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSe
 import TradeDateField from '../../market/TradeDateField'
 import type { FeedGroup, FeedSubscription } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const useStyles = makeStyles({
   bar: {
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     maxWidth: '46%',
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
     textAlign: 'right',
     whiteSpace: 'nowrap',

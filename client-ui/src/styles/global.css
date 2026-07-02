@@ -25,29 +25,126 @@ body {
   line-height: 1.5;
 }
 
-:root {
+:root,
+[data-theme="light"] {
+  --opptrix-accent: #1D1D1F;
+  --opptrix-accent-hover: #000000;
+  --opptrix-accent-soft: rgba(29, 29, 31, 0.07);
+  --opptrix-accent-muted: #E5E5EA;
+  --opptrix-accent-foreground: #FFFFFF;
   --opptrix-canvas: #FFFFFF;
   --opptrix-canvas-alt: #F5F5F7;
+  --opptrix-canvas-muted: #EBEBED;
   --opptrix-surface: #FFFFFF;
+  --opptrix-surface-muted: rgba(255, 255, 255, 0.42);
+  --opptrix-surface-hover: rgba(255, 255, 255, 0.62);
+  --opptrix-surface-glass: rgba(255, 255, 255, 0.72);
   --opptrix-glass: rgba(255, 255, 255, 0.14);
+  --opptrix-glass-strong: rgba(255, 255, 255, 0.22);
+  --opptrix-glass-nav-selected: rgba(255, 255, 255, 0.38);
+  --opptrix-sidebar-glass: rgba(255, 255, 255, 0.14);
+  --opptrix-sidebar-selected: rgba(255, 255, 255, 0.38);
+  --opptrix-user-bubble: #F2F2F7;
+  --opptrix-gray-100: #F2F2F7;
+  --opptrix-gray-200: #E5E5EA;
+  --opptrix-gray-300: #D1D1D6;
   --opptrix-separator: rgba(60, 60, 67, 0.06);
+  --opptrix-separator-strong: rgba(60, 60, 67, 0.11);
   --opptrix-border: rgba(60, 60, 67, 0.08);
-  --opptrix-accent: #1D1D1F;
+  --opptrix-border-strong: rgba(60, 60, 67, 0.14);
   --opptrix-text: #1D1D1F;
   --opptrix-text-secondary: #6E6E73;
   --opptrix-text-tertiary: #AEAEB2;
+  --opptrix-success: #34C759;
+  --opptrix-success-soft: rgba(52, 199, 89, 0.1);
+  --opptrix-warning: #FF9500;
+  --opptrix-warning-soft: rgba(255, 149, 0, 0.1);
+  --opptrix-error: #FF3B30;
+  --opptrix-error-soft: rgba(255, 59, 48, 0.1);
+  --opptrix-info-soft: rgba(29, 29, 31, 0.06);
+  --opptrix-input-bg: #F5F5F7;
+  --opptrix-input-bg-hover: #EBEBED;
+  --opptrix-input-bg-focus: #FFFFFF;
+  --opptrix-input-border: transparent;
+  --opptrix-input-border-focus: #1D1D1F;
+  --opptrix-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
+  --opptrix-focus-border: rgba(60, 60, 67, 0.18);
+  --opptrix-composer-float-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), 0 4px 12px rgba(0, 0, 0, 0.04);
+  --opptrix-composer-float-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.07), 0 6px 16px rgba(0, 0, 0, 0.05);
+  --opptrix-composer-float-shadow-focus: 0 2px 8px rgba(0, 0, 0, 0.08), 0 8px 20px rgba(0, 0, 0, 0.06);
+  --opptrix-popover-border-color: rgba(60, 60, 67, 0.14);
+  --opptrix-popover-shadow: 0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03);
+  --opptrix-glass-panel-border-color: rgba(60, 60, 67, 0.12);
+  --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065);
+  --opptrix-settings-panel-border-color: #E5E5EA;
+  --opptrix-glass-surface-bg: rgba(255, 255, 255, 0.72);
+  --opptrix-glass-surface-border: rgba(60, 60, 67, 0.12);
+  --opptrix-overlay-sidebar-hover: #F2F2F7;
+  --opptrix-overlay-sidebar-selected: #F2F2F7;
   --opptrix-motion-fast: 140ms;
   --opptrix-motion-normal: 220ms;
   --opptrix-ease: cubic-bezier(0.4, 0, 0.2, 1);
-  --opptrix-focus-ring: 2px solid #1D1D1F;
+  --opptrix-focus-ring: 2px solid var(--opptrix-input-border-focus);
   --opptrix-focus-offset: 2px;
-  --opptrix-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
-  --opptrix-focus-border: rgba(60, 60, 67, 0.18);
-  --opptrix-glass-panel-border: rgba(60, 60, 67, 0.12);
-  --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065);
+  --opptrix-glass-panel-border: var(--opptrix-glass-panel-border-color);
   --opptrix-active-opacity: 0.72;
-  --opptrix-overlay-sidebar-hover: #F2F2F7;
-  --opptrix-overlay-sidebar-selected: #F2F2F7;
+}
+
+[data-theme="dark"] {
+  --opptrix-accent: #F5F5F7;
+  --opptrix-accent-hover: #FFFFFF;
+  --opptrix-accent-soft: rgba(255, 255, 255, 0.08);
+  --opptrix-accent-muted: #3A3A3C;
+  --opptrix-accent-foreground: #1C1C1E;
+  --opptrix-canvas: #1C1C1E;
+  --opptrix-canvas-alt: #2C2C2E;
+  --opptrix-canvas-muted: #3A3A3C;
+  --opptrix-surface: #2C2C2E;
+  --opptrix-surface-muted: rgba(44, 44, 46, 0.55);
+  --opptrix-surface-hover: rgba(58, 58, 60, 0.72);
+  --opptrix-surface-glass: rgba(44, 44, 46, 0.72);
+  --opptrix-glass: rgba(44, 44, 46, 0.45);
+  --opptrix-glass-strong: rgba(58, 58, 60, 0.62);
+  --opptrix-glass-nav-selected: rgba(72, 72, 74, 0.72);
+  --opptrix-sidebar-glass: rgba(44, 44, 46, 0.45);
+  --opptrix-sidebar-selected: rgba(72, 72, 74, 0.72);
+  --opptrix-user-bubble: #2C2C2E;
+  --opptrix-gray-100: #2C2C2E;
+  --opptrix-gray-200: #3A3A3C;
+  --opptrix-gray-300: #48484A;
+  --opptrix-separator: rgba(255, 255, 255, 0.06);
+  --opptrix-separator-strong: rgba(255, 255, 255, 0.11);
+  --opptrix-border: rgba(255, 255, 255, 0.08);
+  --opptrix-border-strong: rgba(255, 255, 255, 0.14);
+  --opptrix-text: #F5F5F7;
+  --opptrix-text-secondary: #AEAEB2;
+  --opptrix-text-tertiary: #6E6E73;
+  --opptrix-success: #30D158;
+  --opptrix-success-soft: rgba(48, 209, 88, 0.14);
+  --opptrix-warning: #FF9F0A;
+  --opptrix-warning-soft: rgba(255, 159, 10, 0.14);
+  --opptrix-error: #FF453A;
+  --opptrix-error-soft: rgba(255, 69, 58, 0.14);
+  --opptrix-info-soft: rgba(255, 255, 255, 0.06);
+  --opptrix-input-bg: #2C2C2E;
+  --opptrix-input-bg-hover: #3A3A3C;
+  --opptrix-input-bg-focus: #48484A;
+  --opptrix-input-border: transparent;
+  --opptrix-input-border-focus: #F5F5F7;
+  --opptrix-focus-glow: 0 0 0 3px rgba(255, 255, 255, 0.12);
+  --opptrix-focus-border: rgba(255, 255, 255, 0.18);
+  --opptrix-composer-float-shadow: 0 1px 4px rgba(0, 0, 0, 0.28), 0 4px 12px rgba(0, 0, 0, 0.22);
+  --opptrix-composer-float-shadow-hover: 0 2px 6px rgba(0, 0, 0, 0.32), 0 6px 16px rgba(0, 0, 0, 0.26);
+  --opptrix-composer-float-shadow-focus: 0 2px 8px rgba(0, 0, 0, 0.36), 0 8px 20px rgba(0, 0, 0, 0.30);
+  --opptrix-popover-border-color: rgba(255, 255, 255, 0.14);
+  --opptrix-popover-shadow: 0 2px 8px rgba(0, 0, 0, 0.32), 0 1px 2px rgba(0, 0, 0, 0.24);
+  --opptrix-glass-panel-border-color: rgba(255, 255, 255, 0.12);
+  --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.28), 0 4px 14px rgba(0, 0, 0, 0.32);
+  --opptrix-settings-panel-border-color: #3A3A3C;
+  --opptrix-glass-surface-bg: rgba(44, 44, 46, 0.72);
+  --opptrix-glass-surface-border: rgba(255, 255, 255, 0.12);
+  --opptrix-overlay-sidebar-hover: #3A3A3C;
+  --opptrix-overlay-sidebar-selected: #48484A;
 }
 
 html.opptrix-desktop {
@@ -64,19 +161,19 @@ html.opptrix-electron {
 html.opptrix-electron.opptrix-electron-startup,
 html.opptrix-electron.opptrix-electron-startup body,
 html.opptrix-electron.opptrix-electron-startup #root {
-  background: #F5F5F7 !important;
+  background: var(--opptrix-canvas-alt) !important;
 }
 
 html.opptrix-electron.opptrix-electron-startup .opptrix-app-shell,
 html.opptrix-electron.opptrix-electron-startup .fui-FluentProvider,
 html.opptrix-electron.opptrix-electron-startup #root > * {
-  background: #F5F5F7 !important;
+  background: var(--opptrix-canvas-alt) !important;
 }
 
 html.opptrix-electron.opptrix-electron-startup .opptrix-app-main,
 html.opptrix-electron.opptrix-electron-startup .opptrix-chat-panel,
 html.opptrix-electron.opptrix-electron-startup .opptrix-chat-title-bar {
-  background: #F5F5F7 !important;
+  background: var(--opptrix-canvas-alt) !important;
 }
 
 html.opptrix-electron:not(.opptrix-electron-startup),
@@ -92,7 +189,7 @@ html.opptrix-electron #root > * {
 }
 
 html.opptrix-electron .opptrix-app-main {
-  background: #FFFFFF !important;
+  background: var(--opptrix-canvas) !important;
 }
 
 html.opptrix-electron .opptrix-settings-host {
@@ -104,26 +201,26 @@ html.opptrix-electron .opptrix-settings-content {
   min-width: 0 !important;
   width: 100% !important;
   height: 100% !important;
-  background: #FFFFFF !important;
+  background: var(--opptrix-canvas) !important;
 }
 
 html.opptrix-electron .opptrix-chat-panel,
 html.opptrix-electron .opptrix-settings-panel {
-  background: #FFFFFF;
+  background: var(--opptrix-canvas);
   border: none;
   border-radius: 0;
 }
 
 html.opptrix-electron .opptrix-chat-title-bar {
-  background: #FFFFFF !important;
-  border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
   pointer-events: none;
   -webkit-app-region: no-drag;
 }
 
 html.opptrix-electron .opptrix-news-title-bar {
-  background: #FFFFFF !important;
-  border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -138,8 +235,8 @@ html.opptrix-electron .opptrix-news-title-drag {
 }
 
 html.opptrix-electron .opptrix-right-panel-title-bar {
-  background: #FFFFFF !important;
-  border-bottom: 1px solid rgba(60, 60, 67, 0.11) !important;
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
   position: relative;
   z-index: 1200;
   pointer-events: none;
@@ -159,13 +256,26 @@ html.opptrix-electron .opptrix-panel-title-no-drag {
 }
 
 html.opptrix-electron .opptrix-right-panel {
-  background: #FFFFFF !important;
+  background: var(--opptrix-canvas) !important;
 }
 
 html.opptrix-electron .opptrix-glass-sidebar {
-  background: rgba(255, 255, 255, 0.10) !important;
+  background: var(--opptrix-sidebar-glass) !important;
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
+}
+
+[data-theme="dark"] html.opptrix-electron .opptrix-glass-sidebar {
+  background: var(--opptrix-canvas-alt) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] .opptrix-overlay-sidebar {
+  background: var(--opptrix-canvas-alt) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+  box-shadow: 2px 0 16px rgba(0, 0, 0, 0.28) !important;
 }
 
 .opptrix-chat-scroll {
@@ -177,7 +287,7 @@ html.opptrix-electron .opptrix-glass-sidebar {
 }
 
 .opptrix-chat-scroll::-webkit-scrollbar-thumb {
-  background: rgba(60, 60, 67, 0.14);
+  background: var(--opptrix-separator-strong);
   border-radius: 999px;
 }
 
@@ -220,15 +330,15 @@ html.opptrix-electron .opptrix-glass-sidebar {
 }
 
 html.opptrix-electron .opptrix-settings-search-shell {
-  background: rgba(255, 255, 255, 0.35);
+  background: var(--opptrix-glass);
 }
 
 html.opptrix-electron .opptrix-settings-search-shell:hover:not(:focus-within) {
-  background: rgba(255, 255, 255, 0.42);
+  background: var(--opptrix-glass-strong);
 }
 
 html.opptrix-electron .opptrix-settings-search-shell:focus-within {
-  background: rgba(255, 255, 255, 0.52);
+  background: var(--opptrix-surface-hover);
 }
 
 html.opptrix-electron .opptrix-settings-search .fui-Input,
@@ -302,11 +412,11 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
 }
 
 .opptrix-input-shell:hover:not(:focus-within) {
-  background-color: #EBEBED;
+  background-color: var(--opptrix-input-bg-hover);
 }
 
 .opptrix-input-shell:focus-within {
-  background-color: #FFFFFF;
+  background-color: var(--opptrix-input-bg-focus);
   border-color: var(--opptrix-focus-border);
   box-shadow: none;
   outline: none;
@@ -353,7 +463,9 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
 }
 
 .opptrix-composer-shell:focus-within {
-  border-color: var(--opptrix-focus-border) !important;
+  border-color: var(--opptrix-input-border-focus) !important;
+  background-color: var(--opptrix-canvas) !important;
+  box-shadow: var(--opptrix-focus-glow) !important;
   outline: none !important;
 }
 
@@ -423,12 +535,12 @@ select:focus-visible {
 
 .fui-Button--primary {
   background-color: var(--opptrix-accent) !important;
-  color: #FFFFFF !important;
+  color: var(--opptrix-accent-foreground, #FFFFFF) !important;
   border: none !important;
 }
 
 .fui-Button--primary:hover {
-  background-color: #000000 !important;
+  background-color: var(--opptrix-accent-hover) !important;
 }
 
 .fui-Button--secondary {
@@ -444,7 +556,7 @@ select:focus-visible {
 
 /* ── Dialog (Codex modal) ── */
 .opptrix-dialog-surface.fui-DialogSurface {
-  background: #FFFFFF !important;
+  background: var(--opptrix-canvas) !important;
   border: none !important;
   border-radius: 16px !important;
   padding: 0 !important;
@@ -473,10 +585,10 @@ select:focus-visible {
 
 /* ── Frosted glass dialog — matches MessageSelectionToolbar ── */
 .opptrix-glass-dialog-surface.fui-DialogSurface {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--opptrix-glass-surface-bg) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.55) !important;
+  border: 1px solid var(--opptrix-glass-surface-border) !important;
   border-radius: 16px !important;
   padding: 0 !important;
   max-width: 440px;
@@ -520,7 +632,7 @@ select:focus-visible {
 
 /* ── Frosted glass panel / dropdown — 对齐 OpptrixDropdownPanel / 选股策略 ── */
 .opptrix-glass-panel {
-  background: rgba(255, 255, 255, 0.72);
+  background: var(--opptrix-glass-surface-bg);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--opptrix-glass-panel-border);
@@ -529,7 +641,7 @@ select:focus-visible {
 
 .fui-PopoverSurface.opptrix-glass-panel,
 .fui-PopoverSurface.opptrix-glass-dropdown {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--opptrix-glass-surface-bg) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--opptrix-glass-panel-border) !important;
@@ -543,7 +655,7 @@ select:focus-visible {
 .fui-Dropdown__listbox.opptrix-glass-dropdown,
 .fui-Combobox__listbox.opptrix-glass-panel,
 .fui-Combobox__listbox.opptrix-glass-dropdown {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--opptrix-glass-surface-bg) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--opptrix-glass-panel-border) !important;
@@ -857,7 +969,7 @@ select:focus-visible {
 
 .opptrix-model-menu-popover.fui-MenuPopover,
 .opptrix-model-menu-popover {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--opptrix-glass-surface-bg) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
   border: 1px solid var(--opptrix-glass-panel-border) !important;
@@ -962,7 +1074,7 @@ select:focus-visible {
 
 .opptrix-skill-menu-popover.fui-MenuPopover,
 .opptrix-skill-menu-popover {
-  background: rgba(255, 255, 255, 0.72) !important;
+  background: var(--opptrix-glass-surface-bg) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
   border: 1px solid var(--opptrix-glass-panel-border) !important;

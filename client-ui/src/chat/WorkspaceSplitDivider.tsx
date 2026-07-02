@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import {
   DESKTOP_TITLEBAR_HEIGHT,
   WORKSPACE_SPLITTER_HIT_SLOP,
@@ -11,12 +11,12 @@ import {
 const FOCUS_FADE_PERCENT = 14
 
 function buildLineBackground(focusRatio: number | null): string {
-  const normal = opptrixTokens.separatorStrong
+  const normal = opptrixCssVars.separatorStrong
   if (focusRatio == null) return normal
 
   const y = focusRatio * 100
   const fade = FOCUS_FADE_PERCENT
-  const active = opptrixTokens.textTertiary
+  const active = opptrixCssVars.textTertiary
   const topFade = Math.max(0, y - fade)
   const bottomFade = Math.min(100, y + fade)
 
@@ -41,7 +41,7 @@ const useStyles = makeStyles({
     left: 0,
     width: `${WORKSPACE_SPLITTER_WIDTH}px`,
     pointerEvents: 'none',
-    backgroundColor: opptrixTokens.separatorStrong,
+    backgroundColor: opptrixCssVars.separatorStrong,
   },
   hitZone: {
     position: 'absolute',

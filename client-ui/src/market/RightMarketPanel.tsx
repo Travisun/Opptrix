@@ -11,7 +11,7 @@ import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -36,7 +36,7 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
   },
   titleBar: {
     flexShrink: 0,
@@ -47,8 +47,8 @@ const useStyles = makeStyles({
     gap: '0',
     paddingLeft: '0',
     paddingRight: '8px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
     zIndex: DESKTOP_Z_PANEL_TITLE,
   },

@@ -17,7 +17,7 @@ import { formatPct, formatPrice, normalizeCode, pctTone, resolveDisplayStockName
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
 
 function stopRowActionPointer(e: React.MouseEvent | React.PointerEvent) {
@@ -42,14 +42,14 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '6px',
     alignItems: 'center',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   searchInput: {
     flex: 1,
     minWidth: 0,
   },
   results: {
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     maxHeight: '140px',
     overflowY: 'auto',
     padding: `4px ${ITEM_BG_INSET}`,
@@ -74,12 +74,12 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   resultMeta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   list: {
     flex: 1,
@@ -109,23 +109,23 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
     width: '100%',
     boxSizing: 'border-box',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     cursor: 'pointer',
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   rowActive: {
     ...sidebarItemSelected,
     ':hover': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
-      backgroundColor: opptrixTokens.accentSoft,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   rowBody: {
@@ -148,14 +148,14 @@ const useStyles = makeStyles({
   },
   rowNote: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowRadar: {
     fontSize: '9px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -208,15 +208,15 @@ const useStyles = makeStyles({
   },
   metricPrice: {
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   retLabel: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontWeight: 500,
   },
   pctUp: { color: MARKET_UP, fontWeight: 600 },
   pctDown: { color: MARKET_DOWN, fontWeight: 600 },
-  pctFlat: { color: opptrixTokens.textTertiary },
+  pctFlat: { color: opptrixCssVars.textTertiary },
   rowActions: {
     position: 'absolute',
     right: 0,
@@ -244,20 +244,20 @@ const useStyles = makeStyles({
     border: 'none',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     cursor: 'pointer',
     lineHeight: 0,
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   empty: {
     padding: `12px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -266,8 +266,8 @@ const useStyles = makeStyles({
   footer: {
     padding: `6px ${CONTENT_PAD}`,
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
-    borderTop: `1px solid ${opptrixTokens.separator}`,
+    color: opptrixCssVars.textTertiary,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
@@ -277,7 +277,7 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,

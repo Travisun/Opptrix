@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { Tooltip, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { SessionContextRef } from '../types/chat'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { formatContextRefLabel, formatContextRefPreview } from '../utils/formatContextRefPreview'
 
 const useStyles = makeStyles({
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     wordBreak: 'break-word',
     fontSize: '12px',
     lineHeight: 1.5,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
 })
 

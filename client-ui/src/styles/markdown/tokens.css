@@ -84,3 +84,51 @@
   --opptrix-md-radius-pre: 8px;
   --opptrix-md-radius-mermaid: 8px;
 }
+
+[data-theme="dark"] .opptrix-md {
+  --opptrix-md-text: #F5F5F7;
+  --opptrix-md-text-muted: #AEAEB2;
+  --opptrix-md-text-subtle: #6E6E73;
+
+  --opptrix-md-link: #F5F5F7;
+  --opptrix-md-link-hover: #FFFFFF;
+  --opptrix-md-link-underline: rgba(255, 255, 255, 0.28);
+
+  --opptrix-md-code-bg: rgba(255, 255, 255, 0.08);
+  --opptrix-md-code-fg: #F5F5F7;
+  --opptrix-md-pre-bg: rgba(255, 255, 255, 0.05);
+  --opptrix-md-blockquote-fg: #AEAEB2;
+  --opptrix-md-blockquote-border: rgba(255, 255, 255, 0.14);
+  --opptrix-md-blockquote-bg: rgba(255, 255, 255, 0.04);
+  --opptrix-md-blockquote-border-nested: rgba(255, 255, 255, 0.1);
+  --opptrix-md-hr: rgba(255, 255, 255, 0.1);
+  --opptrix-md-table-header-fg: #F5F5F7;
+  --opptrix-md-table-cell-fg: #F5F5F7;
+  --opptrix-md-table-row-divider: rgba(255, 255, 255, 0.1);
+  --opptrix-md-table-copy-fg: #AEAEB2;
+  --opptrix-md-table-copy-fg-hover: #F5F5F7;
+  --opptrix-md-mermaid-bg: rgba(255, 255, 255, 0.04);
+  --opptrix-md-error: #FF453A;
+  --opptrix-md-error-border: rgba(255, 69, 58, 0.28);
+  --opptrix-md-strong-fg: #F5F5F7;
+  --opptrix-md-em-fg: #AEAEB2;
+  --opptrix-md-mark-bg: rgba(255, 159, 10, 0.18);
+  --opptrix-md-mark-fg: #F5F5F7;
+  --opptrix-md-del-fg: #6E6E73;
+  --opptrix-md-underline: rgba(255, 255, 255, 0.36);
+  --opptrix-md-tone-accent: #0A84FF;
+  --opptrix-md-pre-border: rgba(255, 255, 255, 0.08);
+  --opptrix-md-pre-lang-fg: #6E6E73;
+  --opptrix-md-kbd-bg: rgba(255, 255, 255, 0.08);
+  --opptrix-md-kbd-border: rgba(255, 255, 255, 0.12);
+  --opptrix-md-tag-neutral-bg: rgba(255, 255, 255, 0.08);
+  --opptrix-md-tag-neutral-fg: #AEAEB2;
+  --opptrix-md-tag-info-bg: rgba(255, 255, 255, 0.08);
+  --opptrix-md-tag-info-fg: #F5F5F7;
+  --opptrix-md-tag-success-bg: rgba(48, 209, 88, 0.14);
+  --opptrix-md-tag-success-fg: #30D158;
+  --opptrix-md-tag-warning-bg: rgba(255, 159, 10, 0.16);
+  --opptrix-md-tag-warning-fg: #FF9F0A;
+  --opptrix-md-tag-error-bg: rgba(255, 69, 58, 0.14);
+  --opptrix-md-tag-error-fg: #FF453A;
+}

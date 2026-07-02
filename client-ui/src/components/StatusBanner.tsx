@@ -1,5 +1,5 @@
 import { makeStyles, Text } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 
 const useStyles = makeStyles({
@@ -18,20 +18,20 @@ const useStyles = makeStyles({
     animationFillMode: 'both',
   },
   error: {
-    backgroundColor: opptrixTokens.errorSoft,
-    color: opptrixTokens.error,
+    backgroundColor: opptrixCssVars.errorSoft,
+    color: opptrixCssVars.error,
   },
   info: {
-    backgroundColor: opptrixTokens.infoSoft,
-    color: opptrixTokens.textSecondary,
+    backgroundColor: opptrixCssVars.infoSoft,
+    color: opptrixCssVars.textSecondary,
   },
   success: {
-    backgroundColor: opptrixTokens.successSoft,
-    color: opptrixTokens.success,
+    backgroundColor: opptrixCssVars.successSoft,
+    color: opptrixCssVars.success,
   },
   warning: {
-    backgroundColor: opptrixTokens.warningSoft,
-    color: opptrixTokens.warning,
+    backgroundColor: opptrixCssVars.warningSoft,
+    color: opptrixCssVars.warning,
   },
 })
 

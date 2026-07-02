@@ -2,7 +2,8 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { FluentProvider } from '@fluentui/react-components'
 import App from './App'
-import { opptrixTheme } from './theme/opptrixTheme'
+import { getOpptrixFluentTheme } from './theme/opptrixTheme'
+import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
 import './styles/global.css'
 
@@ -14,11 +15,20 @@ if (isElectron()) {
   document.documentElement.classList.add('opptrix-electron-startup')
 }
 
+function ThemedApp() {
+  const { resolvedScheme } = useTheme()
+  return (
+    <FluentProvider theme={getOpptrixFluentTheme(resolvedScheme)}>
+      <App />
+    </FluentProvider>
+  )
+}
+
 const root = ReactDOM.createRoot(document.getElementById('root')!)
 root.render(
   <React.StrictMode>
-    <FluentProvider theme={opptrixTheme}>
-      <App />
-    </FluentProvider>
+    <ThemeProvider>
+      <ThemedApp />
+    </ThemeProvider>
   </React.StrictMode>,
 )

@@ -16,7 +16,7 @@ import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import OpptrixTextarea from '../../components/opptrix/OpptrixTextarea'
 import { factorLabel } from '../../market/factorLabels'
 import type { CustomDiscoverStrategy, DiscoverStrategyDetail } from '../../types/schemas'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 export type StrategyDraft = {
   name: string
@@ -53,12 +53,12 @@ const useStyles = makeStyles({
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
   dialogIntro: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     marginTop: '4px',
   },
@@ -85,7 +85,7 @@ const useStyles = makeStyles({
   formSectionLabel: {
     fontSize: '12px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     letterSpacing: '-0.01em',
     lineHeight: 1.35,
   },
@@ -103,13 +103,13 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
   viewValue: {
     fontSize: '13px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'pre-wrap',
   },
   conditions: {
@@ -119,11 +119,11 @@ const useStyles = makeStyles({
   },
   conditionRow: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
     padding: '6px 10px',
     borderRadius: opptrixTokens.radiusSm,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   dialogFooter: {
     flexShrink: 0,
@@ -133,7 +133,7 @@ const useStyles = makeStyles({
     gap: '10px',
     paddingTop: '16px',
     marginTop: '16px',
-    borderTop: `1px solid ${opptrixTokens.separator}`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
   },
   dialogFooterStart: {
     marginRight: 'auto',

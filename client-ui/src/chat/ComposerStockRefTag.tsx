@@ -2,7 +2,7 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { WatchlistItem } from '../types/market'
 import { normalizeCode } from '../market/format'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   chipRow: {
@@ -13,8 +13,8 @@ const useStyles = makeStyles({
     height: '22px',
     marginTop: '1px',
     borderRadius: opptrixTokens.radiusFull,
-    backgroundColor: opptrixTokens.accentSoft,
-    color: opptrixTokens.accent,
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.accent,
     overflow: 'hidden',
     verticalAlign: 'middle',
   },
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
     padding: 0,
     margin: 0,
     border: 'none',
-    borderLeft: `1px solid ${opptrixTokens.accentMuted}`,
+    borderLeft: `1px solid ${opptrixCssVars.accentMuted}`,
     backgroundColor: 'transparent',
     color: 'inherit',
     opacity: 0.78,

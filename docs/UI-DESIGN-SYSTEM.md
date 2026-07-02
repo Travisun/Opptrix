@@ -192,9 +192,42 @@
 | textSecondary | `colorNeutralForeground2` |
 | textTertiary | `colorNeutralForeground3` |
 
-主题实现：`client-ui/src/theme/opptrixTheme.ts`
+主题实现：`client-ui/src/theme/opptrixTheme.ts`、`client-ui/src/theme/ThemeContext.tsx`
 
-## 9. 图标规范
+## 8.1 暗色模式与主题偏好
+
+用户可在 **设置 → 常规 → 外观** 选择：
+
+| `ThemePreference` | 说明 |
+|-------------------|------|
+| `system` | 跟随操作系统浅色/深色 |
+| `light` | 始终浅色 |
+| `dark` | 始终深色 |
+
+持久化：`localStorage` key `opptrix-theme-preference`。启动时 `index.html` 内联脚本读取偏好并设置 `html[data-theme]`，避免闪白。
+
+运行时桥接：
+
+- `document.documentElement.dataset.theme` → `light` | `dark`
+- CSS 变量 `--opptrix-*`（`global.css` + `applyCssVars`）
+- Griffel `makeStyles` 使用 `opptrixCssVars.*`（值为 `var(--opptrix-*)`），禁止新增静态 hex 字面量
+- `FluentProvider` 通过 `getOpptrixFluentTheme(resolvedScheme)` 切换
+
+### 暗色 palette（Apple 风格 monochrome）
+
+| Token | Light | Dark |
+|-------|-------|------|
+| `canvas` | `#FFFFFF` | `#1C1C1E` |
+| `canvasAlt` | `#F5F5F7` | `#2C2C2E` |
+| `textPrimary` | `#1D1D1F` | `#F5F5F7` |
+| `accent` | `#1D1D1F` | `#F5F5F7` |
+| `accentForeground` | `#FFFFFF` | `#1C1C1E` |
+| `surfaceGlass` / `glassSurfaceBg` | 白半透明 | `rgba(44,44,46,0.72)` |
+| `separator` / `border*` | 深灰低 alpha | 浅灰低 alpha |
+| `inputBg*` | 浅灰 | 抬升灰 `#3A3A3C` 等 |
+
+语义色（`success` / `warning` / `error`）保留色相，仅调整 `*Soft` 背景 alpha。Markdown 与 Mermaid 分别见 `styles/markdown/tokens.css`、`MermaidBlock.tsx`。
+
 
 - 库：`@fluentui/react-icons`
 - 风格：**Regular**（线型），禁用 Mixed/Filled 混用

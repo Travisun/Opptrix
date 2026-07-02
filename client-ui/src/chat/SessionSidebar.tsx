@@ -4,10 +4,11 @@ import {
 import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { isElectron } from '../platform/detect'
+import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 
@@ -22,7 +23,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   sidebarWeb: {
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   panelShell: {
     flexShrink: 0,
@@ -55,6 +56,9 @@ const useStyles = makeStyles({
   sidebarElectron: {
     backgroundColor: 'transparent',
   },
+  sidebarElectronSolid: {
+    backgroundColor: opptrixCssVars.canvasAlt,
+  },
   sidebarTopElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT + 4}px`,
     boxSizing: 'border-box',
@@ -74,8 +78,8 @@ const useStyles = makeStyles({
     transitionProperty: 'transform',
     transitionDuration: motion.slow,
     transitionTimingFunction: motion.easeOut,
-    backgroundColor: opptrixTokens.canvas,
-    borderLeft: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    borderLeft: `1px solid ${opptrixCssVars.separator}`,
   },
   sidebarDrawerOpen: {
     transform: 'translateX(0)',
@@ -91,13 +95,13 @@ const useStyles = makeStyles({
     marginBottom: '6px',
   },
   menuRowActive: {
-    backgroundColor: opptrixTokens.accentSoft,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   menuIcon: sidebarTopMenuIcon,
   sectionLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '6px 14px 2px',
@@ -117,10 +121,10 @@ const useStyles = makeStyles({
     padding: '5px 10px',
     minHeight: '30px',
     borderRadius: opptrixTokens.radiusMd,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     ...ghostInteractive,
     ':hover': {
-      backgroundColor: opptrixTokens.surfaceHover,
+      backgroundColor: opptrixCssVars.surfaceHover,
     },
   },
   itemActive: {
@@ -146,7 +150,7 @@ const useStyles = makeStyles({
   },
   itemDate: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1,
     whiteSpace: 'nowrap',
     transitionProperty: 'opacity',
@@ -176,7 +180,7 @@ const useStyles = makeStyles({
     padding: '32px 16px',
     textAlign: 'center',
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.6,
   },
   footer: {
@@ -186,7 +190,7 @@ const useStyles = makeStyles({
   settingsBtn: {
     width: '100%',
     justifyContent: 'flex-start',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontWeight: 500,
     minHeight: '32px',
     paddingTop: '5px',
@@ -212,7 +216,7 @@ const useStyles = makeStyles({
     minWidth: '36px',
     height: '36px',
     borderRadius: opptrixTokens.radiusMd,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
 })
 
@@ -241,9 +245,11 @@ export default function SessionSidebar({
   onSelect, onNew, onDelete, onOpenSettings, onOpenNewsCenter, onClose,
 }: SessionSidebarProps) {
   const s = useStyles()
+  const { resolvedScheme } = useTheme()
   const isDrawer = mode === 'drawer'
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
+  const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
 
   const handleSelect = (id: string) => {
     onSelect(id)
@@ -354,8 +360,9 @@ export default function SessionSidebar({
         isDrawer && drawerOpen && s.sidebarDrawerOpen,
         !electronChrome && !isDrawer && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
+        electronChrome && resolvedScheme === 'dark' && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
-        electronChrome && 'opptrix-glass-sidebar',
+        sidebarGlass && 'opptrix-glass-sidebar',
         !isDrawer && 'opptrix-sidebar-edge',
       )}
     >

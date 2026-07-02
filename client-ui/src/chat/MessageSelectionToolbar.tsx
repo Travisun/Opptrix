@@ -12,7 +12,7 @@ import {
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MarkdownMessage from './MarkdownMessage'
 import type { EphemeralAskTurn, MessageSelection } from '../types/chat'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { useRotatingPhrase } from '../hooks/useRotatingPhrase'
 
@@ -80,7 +80,7 @@ const useStyles = makeStyles({
     border: 'none',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontSize: '12px',
     fontWeight: 500,
     cursor: 'pointer',
@@ -95,7 +95,7 @@ const useStyles = makeStyles({
   },
   btnIcon: {
     fontSize: '14px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   iconBtn: {
     width: '28px',
@@ -133,9 +133,9 @@ const useStyles = makeStyles({
     fontSize: '12px',
     lineHeight: 1.45,
     fontFamily: 'inherit',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     '::placeholder': {
-      color: opptrixTokens.textTertiary,
+      color: opptrixCssVars.textTertiary,
     },
   },
   sendBtn: {
@@ -161,7 +161,7 @@ const useStyles = makeStyles({
     maxWidth: '92%',
     padding: '6px 10px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.userBubble,
+    backgroundColor: opptrixCssVars.userBubble,
     fontSize: '12px',
     lineHeight: 1.45,
     whiteSpace: 'pre-wrap',
@@ -171,7 +171,7 @@ const useStyles = makeStyles({
     alignSelf: 'stretch',
     fontSize: '12px',
     lineHeight: 1.55,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     wordBreak: 'break-word',
   },
   turnFooter: {
@@ -186,10 +186,10 @@ const useStyles = makeStyles({
     padding: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     ':hover': {
-      color: opptrixTokens.textSecondary,
+      color: opptrixCssVars.textSecondary,
     },
   },
   composerRow: {
@@ -212,15 +212,15 @@ const useStyles = makeStyles({
     fontSize: '12px',
     lineHeight: 1.45,
     fontFamily: 'inherit',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     '::placeholder': {
-      color: opptrixTokens.textTertiary,
+      color: opptrixCssVars.textTertiary,
     },
   },
   loadingLine: {
     fontSize: '12px',
     lineHeight: '28px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     padding: '0 8px',
     whiteSpace: 'nowrap',
     overflow: 'hidden',

@@ -1,6 +1,6 @@
 import { Text, makeStyles } from '@fluentui/react-components'
 import { BookOpenRegular, NewsRegular } from '@fluentui/react-icons'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -11,7 +11,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     padding: '32px 24px',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     boxSizing: 'border-box',
   },
   content: {
@@ -28,11 +28,11 @@ const useStyles = makeStyles({
     width: '48px',
     height: '48px',
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     marginBottom: '2px',
     '& svg': {
@@ -42,13 +42,13 @@ const useStyles = makeStyles({
   title: {
     fontSize: '15px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
     letterSpacing: '-0.01em',
   },
   hint: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
 })

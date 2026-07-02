@@ -6,15 +6,15 @@ import {
 } from '@fluentui/react-components'
 import { EyeRegular, EyeOffRegular } from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   group: {
-    border: opptrixTokens.settingsPanelBorder,
+    border: opptrixCssVars.settingsPanelBorder,
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
   row: {
@@ -49,12 +49,12 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   rowDesc: {
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.55,
   },
   rowControl: {
@@ -75,11 +75,11 @@ const useStyles = makeStyles({
     },
   },
   rowTopBorder: {
-    borderTop: `1px solid ${opptrixTokens.gray200}`,
+    borderTop: `1px solid ${opptrixCssVars.gray200}`,
   },
   rowDivider: {
     height: '1px',
-    backgroundColor: opptrixTokens.separator,
+    backgroundColor: opptrixCssVars.separator,
     margin: '0 18px',
   },
   panelHeader: {
@@ -94,7 +94,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   inlineInput: {
@@ -131,13 +131,13 @@ const useStyles = makeStyles({
     width: '36px',
     height: '36px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.gray200,
+    backgroundColor: opptrixCssVars.gray200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
     fontSize: '14px',
     fontWeight: 650,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     flexShrink: 0,
   },
   modelsDialogSurface: {
@@ -148,7 +148,7 @@ const useStyles = makeStyles({
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   modelsDialogContent: {
     display: 'flex',
@@ -159,7 +159,7 @@ const useStyles = makeStyles({
   modelPopoverTitle: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
   },
@@ -173,7 +173,7 @@ const useStyles = makeStyles({
   modelPopoverItem: {
     fontSize: '13px',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
   },
   rowActions: {
@@ -203,7 +203,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     flexShrink: 0,
-    borderLeft: `1px solid ${opptrixTokens.separator}`,
+    borderLeft: `1px solid ${opptrixCssVars.separator}`,
   },
   credentialActionBtn: {
     minHeight: '30px',
@@ -231,17 +231,17 @@ const useStyles = makeStyles({
     textAlign: 'left',
     borderRadius: 0,
     border: 'none',
-    borderTop: `1px solid ${opptrixTokens.gray200}`,
+    borderTop: `1px solid ${opptrixCssVars.gray200}`,
     transitionProperty: 'background-color, color, border-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     ':hover': {
-      backgroundColor: opptrixTokens.gray100,
-      color: opptrixTokens.textPrimary,
-      borderTopColor: opptrixTokens.borderStrong,
+      backgroundColor: opptrixCssVars.gray100,
+      color: opptrixCssVars.textPrimary,
+      borderTopColor: opptrixCssVars.borderStrong,
     },
     ':focus-visible': {
-      borderTopColor: opptrixTokens.borderStrong,
+      borderTopColor: opptrixCssVars.borderStrong,
     },
   },
   actionRowFlush: {

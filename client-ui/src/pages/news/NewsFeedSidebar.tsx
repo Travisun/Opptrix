@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Spinner, Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { NewsGroupedFeed } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import NewsArticleList from './NewsArticleList'
 import NewsFeedFilterBar from './NewsFeedFilterBar'
 import type { FeedArticle, FeedGroup, FeedSubscription } from '../../types/schemas'
@@ -13,13 +13,13 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     minHeight: 0,
     height: '100%',
-    backgroundColor: opptrixTokens.canvas,
-    borderRight: `1px solid ${opptrixTokens.separatorStrong}`,
+    backgroundColor: opptrixCssVars.canvas,
+    borderRight: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
   chrome: {
     flexShrink: 0,
-    backgroundColor: opptrixTokens.canvas,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tabs: {
     padding: '6px 10px 0',

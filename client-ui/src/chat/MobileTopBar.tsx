@@ -5,7 +5,7 @@ import {
 import { ChatAddRegular } from './chatIcons'
 import type { AvailableModel } from '../types/chat'
 import ModelSelector from './ModelSelector'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, hairlineBottom } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 
@@ -16,7 +16,7 @@ const useStyles = makeStyles({
     gap: '4px',
     padding: '6px 8px',
     paddingTop: 'max(6px, env(safe-area-inset-top))',
-    backgroundColor: opptrixTokens.surface,
+    backgroundColor: opptrixCssVars.surface,
     ...hairlineBottom,
     flexShrink: 0,
     zIndex: 10,
@@ -26,7 +26,7 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     flexShrink: 0,
   },
   center: {
@@ -40,14 +40,14 @@ const useStyles = makeStyles({
   title: {
     fontSize: '17px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   subtitle: {
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -62,7 +62,7 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     minWidth: '44px',
     height: '44px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   statusDot: {
     width: '6px',
@@ -70,8 +70,8 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusFull,
     flexShrink: 0,
   },
-  statusOk: { backgroundColor: opptrixTokens.success },
-  statusErr: { backgroundColor: opptrixTokens.error },
+  statusOk: { backgroundColor: opptrixCssVars.success },
+  statusErr: { backgroundColor: opptrixCssVars.error },
 })
 
 interface MobileTopBarProps {

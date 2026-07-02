@@ -22,7 +22,7 @@ import {
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import TradeDateField, { todayTradeDate } from './TradeDateField'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive } from '../theme/mixins'
 
 type DialogTab = 'records' | 'trade'
@@ -88,7 +88,7 @@ const useStyles = makeStyles({
     width: '32px',
     height: '4px',
     borderRadius: opptrixTokens.radiusFull,
-    backgroundColor: opptrixTokens.borderStrong,
+    backgroundColor: opptrixCssVars.borderStrong,
     margin: '8px auto 0',
     flexShrink: 0,
   },
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   sub: {
     fontSize: '11px',
     fontWeight: 500,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   closeBtn: {
     ...nativeIconInteractive,
@@ -131,7 +131,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   drawerBody: {
@@ -167,7 +167,7 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontWeight: 600,
     lineHeight: 1.3,
   },
@@ -175,7 +175,7 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   fieldBlock: {
@@ -187,7 +187,7 @@ const useStyles = makeStyles({
   fieldLabel: {
     fontSize: '10px',
     fontWeight: 650,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.04em',
   },
   tabRow: {
@@ -202,7 +202,7 @@ const useStyles = makeStyles({
   tabBtn: {
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontSize: '11px',
     fontWeight: 500,
     padding: '0 10px',
@@ -213,12 +213,12 @@ const useStyles = makeStyles({
     ...ghostInteractive,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   tabBtnActive: {
     backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     boxShadow: '0 1px 3px rgba(0, 0, 0, 0.08)',
   },
   panel: {
@@ -280,7 +280,7 @@ const useStyles = makeStyles({
   feeHint: {
     gridColumn: '1 / -1',
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
   },
   tradeList: {
@@ -312,19 +312,19 @@ const useStyles = makeStyles({
     width: '26px',
     height: '26px',
     borderRadius: opptrixTokens.radiusFull,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 0,
     flexShrink: 0,
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   emptyTrades: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '10px 2px',
     textAlign: 'center',
   },

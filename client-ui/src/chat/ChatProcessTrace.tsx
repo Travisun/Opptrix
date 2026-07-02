@@ -7,7 +7,7 @@ import {
   SparkleRegular,
 } from '@fluentui/react-icons'
 import type { ChatToolStep } from '../types/chatProgress'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 
 const useStyles = makeStyles({
@@ -37,7 +37,7 @@ const useStyles = makeStyles({
   },
   stepRow: {
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     overflow: 'hidden',
   },
   stepHead: {
@@ -60,7 +60,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '15px',
     width: '16px',
     height: '16px',
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '14px',
     width: '14px',
     height: '14px',
@@ -80,11 +80,11 @@ const useStyles = makeStyles({
     minWidth: 0,
     fontSize: '13px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   stepLabelRunning: {
-    color: opptrixTokens.textPrimary,
-    backgroundImage: `linear-gradient(90deg, ${opptrixTokens.textSecondary} 0%, ${opptrixTokens.textPrimary} 45%, ${opptrixTokens.textSecondary} 90%)`,
+    color: opptrixCssVars.textPrimary,
+    backgroundImage: `linear-gradient(90deg, ${opptrixCssVars.textSecondary} 0%, ${opptrixCssVars.textPrimary} 45%, ${opptrixCssVars.textSecondary} 90%)`,
     backgroundSize: '220% 100%',
     backgroundClip: 'text',
     WebkitBackgroundClip: 'text',
@@ -109,7 +109,7 @@ const useStyles = makeStyles({
   detailBlock: {
     fontSize: '11px',
     lineHeight: 1.5,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -119,7 +119,7 @@ const useStyles = makeStyles({
   thinkingSnippet: {
     fontSize: '12px',
     lineHeight: 1.55,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   },
@@ -320,7 +320,7 @@ export default function ChatProcessTrace({
 
       {showHistorySnippet && (
         <details>
-          <summary style={{ fontSize: 12, color: opptrixTokens.textTertiary, cursor: 'pointer' }}>
+          <summary style={{ fontSize: 12, color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
             查看分析思路
           </summary>
           <Text className={s.thinkingSnippet} block>

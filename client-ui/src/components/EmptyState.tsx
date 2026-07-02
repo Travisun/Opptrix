@@ -1,15 +1,15 @@
 import { makeStyles, Text } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     padding: '48px 24px',
     textAlign: 'center',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '13px',
-    backgroundColor: opptrixTokens.surfaceMuted,
+    backgroundColor: opptrixCssVars.surfaceMuted,
     borderRadius: opptrixTokens.radiusLg,
-    border: `1px dashed ${opptrixTokens.border}`,
+    border: `1px dashed ${opptrixCssVars.border}`,
   },
 })
 

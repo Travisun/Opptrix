@@ -8,7 +8,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
 import { factorLabel } from './factorLabels'
 import { normalizeCode } from './format'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { research } from '../api/client'
 import type { DiscoverSessionState } from './useDiscoverSession'
@@ -38,20 +38,20 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD} 6px`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
   },
   headHint: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tabList: {
     minHeight: '32px',
@@ -74,7 +74,7 @@ const useStyles = makeStyles({
   },
   runHint: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   progressBlock: {
@@ -82,52 +82,52 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '6px',
     padding: `6px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   progressMeta: {
     display: 'flex',
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '10px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   progressPct: {
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   dbBanner: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     fontSize: '10px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
   },
   regimeBanner: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     fontSize: '10px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
-    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   regimeHeadline: {
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     marginBottom: '2px',
   },
   regimeIndicators: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     marginBottom: '3px',
   },
   summary: {
     flexShrink: 0,
     padding: `8px ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -135,16 +135,16 @@ const useStyles = makeStyles({
   summaryTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   summaryText: {
     fontSize: '10px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   stats: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   list: {
     flex: 1,
@@ -164,7 +164,7 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixTokens.accentSoft },
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowMain: {
     minWidth: 0,
@@ -181,20 +181,20 @@ const useStyles = makeStyles({
   rowName: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowCode: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   rankBadge: {
     fontSize: '10px',
     fontWeight: 650,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontVariantNumeric: 'tabular-nums',
   },
   matchScore: {
@@ -206,11 +206,11 @@ const useStyles = makeStyles({
   thesis: {
     fontSize: '10px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   highlights: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   rowActions: {
@@ -223,7 +223,7 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px',
     borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
@@ -231,15 +231,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     ...ghostInteractive,
     ':hover': {
-      color: opptrixTokens.textPrimary,
-      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixCssVars.textPrimary,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   empty: {
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
   },
   historyList: {
@@ -260,11 +260,11 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixTokens.surfaceHover },
+    ':hover': { backgroundColor: opptrixCssVars.surfaceHover },
   },
   historyRowActive: {
-    backgroundColor: opptrixTokens.accentSoft,
-    ':hover': { backgroundColor: opptrixTokens.accentSoft },
+    backgroundColor: opptrixCssVars.accentSoft,
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   historyMain: {
     minWidth: 0,
@@ -275,14 +275,14 @@ const useStyles = makeStyles({
   historyTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   historyMeta: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   historyActions: {
@@ -294,7 +294,7 @@ const useStyles = makeStyles({
   deleteBtn: {
     border: 'none',
     background: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px',
     borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
@@ -302,14 +302,14 @@ const useStyles = makeStyles({
     alignItems: 'center',
     ...ghostInteractive,
     ':hover': {
-      color: opptrixTokens.error,
-      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixCssVars.error,
+      backgroundColor: opptrixCssVars.accentSoft,
     },
   },
   error: {
     padding: `8px ${CONTENT_PAD}`,
     fontSize: '11px',
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
   },
 })
 

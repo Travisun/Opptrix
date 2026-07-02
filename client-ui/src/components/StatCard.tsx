@@ -1,5 +1,5 @@
 import { makeStyles, Text, Tooltip } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -7,25 +7,25 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '4px',
     padding: `${opptrixTokens.radiusMd} 14px`,
-    backgroundColor: opptrixTokens.surface,
+    backgroundColor: opptrixCssVars.surface,
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
+    border: `1px solid ${opptrixCssVars.separator}`,
     minWidth: '110px',
   },
   label: {
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   value: {
     fontSize: '24px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.2,
   },
   unit: {
     fontSize: '12px',
     fontWeight: 400,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     marginLeft: '4px',
   },
 })

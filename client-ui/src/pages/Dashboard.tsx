@@ -7,7 +7,7 @@ import PageShell from '../components/PageShell'
 import StatCard from '../components/StatCard'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   stats: {
@@ -23,27 +23,27 @@ const useStyles = makeStyles({
   module: {
     cursor: 'pointer',
     padding: '16px',
-    backgroundColor: opptrixTokens.surface,
+    backgroundColor: opptrixCssVars.surface,
     borderRadius: opptrixTokens.radiusGrouped,
-    border: `1px solid ${opptrixTokens.separator}`,
+    border: `1px solid ${opptrixCssVars.separator}`,
     transition: 'background-color 150ms ease',
     ':hover': {
-      backgroundColor: opptrixTokens.surfaceMuted,
+      backgroundColor: opptrixCssVars.surfaceMuted,
     },
   },
   moduleIcon: {
     marginBottom: '12px',
-    color: opptrixTokens.accent,
+    color: opptrixCssVars.accent,
   },
   moduleTitle: {
     fontSize: '16px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     marginBottom: '4px',
   },
   moduleDesc: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
 })
 
@@ -75,7 +75,7 @@ export default function Dashboard({ navigate }: Props) {
       </div>
 
       {globalStock && (
-        <Text style={{ fontSize: 13, color: opptrixTokens.textSecondary }}>
+        <Text style={{ fontSize: 13, color: opptrixCssVars.textSecondary }}>
           当前标的：<strong>{globalStock.name}({globalStock.code})</strong> — 建议进入「个股研究」
         </Text>
       )}

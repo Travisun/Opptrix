@@ -32,7 +32,7 @@ import {
 import type { MarketDataSyncState } from '../../types/market'
 import { SettingsGroup, SettingsCredentialRow, SettingsPanelHeader, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const POLL_MS = 2000
 
@@ -81,7 +81,7 @@ const useStyles = makeStyles({
   },
   packageHint: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
   },
   statsGrid: {
@@ -95,11 +95,11 @@ const useStyles = makeStyles({
     },
   },
   statLabel: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '11px',
   },
   statValue: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     fontSize: '12px',
@@ -118,7 +118,7 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '11px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
   },
   progressJob: {
@@ -130,12 +130,12 @@ const useStyles = makeStyles({
     flexShrink: 0,
     fontVariantNumeric: 'tabular-nums',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   logShell: {
-    border: opptrixTokens.settingsPanelBorder,
+    border: opptrixCssVars.settingsPanelBorder,
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     height: `${LOG_HEIGHT}px`,
     overflow: 'hidden',
     display: 'flex',
@@ -144,10 +144,10 @@ const useStyles = makeStyles({
   logHead: {
     flexShrink: 0,
     padding: '5px 10px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.3,
   },
   logBody: {
@@ -161,7 +161,7 @@ const useStyles = makeStyles({
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: '10px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
     overscrollBehavior: 'contain',
@@ -181,7 +181,7 @@ const useStyles = makeStyles({
   },
   syncHint: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
     paddingLeft: '2px',
   },
@@ -200,11 +200,11 @@ const useStyles = makeStyles({
     lineHeight: 1.35,
   },
   bootstrapLabel: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 500,
   },
   bootstrapMeta: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     fontSize: '10px',
   },
@@ -212,7 +212,7 @@ const useStyles = makeStyles({
     color: '#248A3D',
   },
   bootstrapIconPending: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   packageCallout: {
     display: 'flex',
@@ -220,11 +220,11 @@ const useStyles = makeStyles({
     gap: '6px',
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
     fontSize: '11px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   packageActions: {
     display: 'flex',
@@ -249,7 +249,7 @@ const useStyles = makeStyles({
     gap: '4px',
     fontSize: '11px',
     lineHeight: 1.45,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   dialogMetaRow: {
     display: 'flex',
@@ -257,7 +257,7 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   dialogMetaValue: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
   },

@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -23,11 +23,11 @@ const useStyles = makeStyles({
     width: '40px',
     height: '40px',
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     '& svg': {
       fontSize: '20px',
@@ -43,7 +43,7 @@ const useStyles = makeStyles({
   title: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
   },
   titleCompact: {
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
   hintCompact: {

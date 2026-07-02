@@ -1,4 +1,4 @@
-import { opptrixTokens } from './tokens'
+import { opptrixCssVars, opptrixTokens } from './tokens'
 
 export const motion = {
   fast: '140ms',
@@ -10,7 +10,7 @@ export const motion = {
 
 /** Keyboard focus ring — buttons, links, icon controls */
 export const focusRing = {
-  outline: `${opptrixTokens.focusRingWidth} solid ${opptrixTokens.inputBorderFocus}`,
+  outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
   outlineOffset: opptrixTokens.focusRingOffset,
 } as const
 
@@ -28,16 +28,16 @@ export const interactiveTransition = {
 /** Input / select container — hover + focus-within glow on shell */
 export const inputShellInteractive = {
   ...interactiveTransition,
-  backgroundColor: opptrixTokens.inputBg,
+  backgroundColor: opptrixCssVars.inputBg,
   border: `1px solid transparent`,
   borderRadius: opptrixTokens.radiusMd,
   boxShadow: 'none',
   ':hover': {
-    backgroundColor: opptrixTokens.inputBgHover,
+    backgroundColor: opptrixCssVars.inputBgHover,
   },
   ':focus-within': {
-    backgroundColor: opptrixTokens.inputBgFocus,
-    borderColor: opptrixTokens.borderStrong,
+    backgroundColor: opptrixCssVars.inputBgFocus,
+    borderColor: opptrixCssVars.borderStrong,
     boxShadow: 'none',
   },
 } as const
@@ -46,18 +46,18 @@ export const inputShellInteractive = {
 export const inputSurface = inputShellInteractive
 
 export const glassPanel = {
-  backgroundColor: opptrixTokens.glass,
+  backgroundColor: opptrixCssVars.glass,
   backdropFilter: opptrixTokens.glassBlur,
   WebkitBackdropFilter: opptrixTokens.glassBlur,
 } as const
 
 /** 下拉浮层 / 面板 — 毛玻璃（与 Dialog、MessageSelectionToolbar 一致） */
 export const glassDropdown = {
-  backgroundColor: 'rgba(255, 255, 255, 0.72)',
+  backgroundColor: opptrixCssVars.glassSurfaceBg,
   backdropFilter: 'blur(16px) saturate(160%)',
   WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-  border: opptrixTokens.glassPanelBorder,
-  boxShadow: opptrixTokens.glassPanelShadow,
+  border: opptrixCssVars.glassPanelBorder,
+  boxShadow: opptrixCssVars.glassPanelShadow,
 } as const
 
 /** 毛玻璃浮层基础类 — 见 docs/UI-DESIGN-SYSTEM.md §5.1 */
@@ -70,7 +70,7 @@ export const OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS = 'opptrix-glass-dropdown oppt
 export const glassDropdownClassName = OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS
 
 export const contentPanel = {
-  backgroundColor: opptrixTokens.canvas,
+  backgroundColor: opptrixCssVars.canvas,
   borderRadius: opptrixTokens.radiusLg,
   border: 'none',
   boxShadow: 'none',
@@ -78,7 +78,7 @@ export const contentPanel = {
 } as const
 
 export const panelFloat = {
-  backgroundColor: opptrixTokens.surfaceGlass,
+  backgroundColor: opptrixCssVars.surfaceGlass,
   backdropFilter: 'blur(12px)',
   WebkitBackdropFilter: 'blur(12px)',
   borderRadius: opptrixTokens.radiusLg,
@@ -88,16 +88,16 @@ export const panelFloat = {
 
 export const composerSurface = {
   ...interactiveTransition,
-  backgroundColor: opptrixTokens.canvas,
+  backgroundColor: opptrixCssVars.canvas,
   borderRadius: opptrixTokens.radiusXl,
-  border: `1px solid ${opptrixTokens.border}`,
+  border: `1px solid ${opptrixCssVars.border}`,
   boxShadow: 'none',
   ':hover': {
-    borderColor: opptrixTokens.borderStrong,
+    borderColor: opptrixCssVars.borderStrong,
   },
   ':focus-within': {
-    borderColor: opptrixTokens.borderStrong,
-    backgroundColor: opptrixTokens.canvas,
+    borderColor: opptrixCssVars.borderStrong,
+    backgroundColor: opptrixCssVars.canvas,
     boxShadow: 'none',
   },
 }
@@ -108,7 +108,7 @@ export const ghostInteractive = {
   borderRadius: opptrixTokens.radiusMd,
   backgroundColor: 'transparent',
   ':hover': {
-    backgroundColor: opptrixTokens.surfaceHover,
+    backgroundColor: opptrixCssVars.surfaceHover,
   },
   ':active': {
     opacity: opptrixTokens.activeOpacity,
@@ -120,17 +120,17 @@ export const primaryInteractive = {
   ...interactiveTransition,
   border: 'none',
   borderRadius: opptrixTokens.radiusMd,
-  backgroundColor: opptrixTokens.accent,
-  color: '#FFFFFF',
+  backgroundColor: opptrixCssVars.accent,
+  color: opptrixCssVars.accentForeground,
   ':hover': {
-    backgroundColor: opptrixTokens.accentHover,
+    backgroundColor: opptrixCssVars.accentHover,
   },
   ':active': {
     opacity: 0.88,
   },
   ':disabled': {
     opacity: 0.35,
-    backgroundColor: opptrixTokens.accent,
+    backgroundColor: opptrixCssVars.accent,
   },
   ...focusVisibleRing,
 } as const
@@ -139,10 +139,10 @@ export const secondaryInteractive = {
   ...interactiveTransition,
   border: 'none',
   borderRadius: opptrixTokens.radiusMd,
-  backgroundColor: opptrixTokens.canvasAlt,
-  color: opptrixTokens.textPrimary,
+  backgroundColor: opptrixCssVars.canvasAlt,
+  color: opptrixCssVars.textPrimary,
   ':hover': {
-    backgroundColor: opptrixTokens.canvasMuted,
+    backgroundColor: opptrixCssVars.canvasMuted,
   },
   ':active': {
     opacity: opptrixTokens.activeOpacity,
@@ -157,9 +157,9 @@ export const nativeIconInteractive = {
   border: 'none',
   background: 'none',
   cursor: 'pointer',
-  color: opptrixTokens.textSecondary,
+  color: opptrixCssVars.textSecondary,
   ':hover': {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   ':active': {
     opacity: opptrixTokens.activeOpacity,
@@ -168,7 +168,7 @@ export const nativeIconInteractive = {
 } as const
 
 export const surfaceGrouped = {
-  backgroundColor: opptrixTokens.canvasAlt,
+  backgroundColor: opptrixCssVars.canvasAlt,
   borderRadius: opptrixTokens.radiusGrouped,
   border: 'none',
   boxShadow: 'none',
@@ -200,7 +200,7 @@ export const messageBubble = {
 } as const
 
 export const sidebarItemSelected = {
-  backgroundColor: opptrixTokens.glassNavSelected,
+  backgroundColor: opptrixCssVars.glassNavSelected,
   border: 'none',
   boxShadow: 'none',
 } as const
@@ -220,7 +220,7 @@ export const sidebarTopMenuRow = {
   cursor: 'pointer',
   border: 'none',
   backgroundColor: 'transparent',
-  color: opptrixTokens.textPrimary,
+  color: opptrixCssVars.textPrimary,
   fontSize: '13px',
   fontWeight: 500,
   width: 'calc(100% - 20px)',
@@ -229,6 +229,6 @@ export const sidebarTopMenuRow = {
 } as const
 
 export const sidebarTopMenuIcon = {
-  color: opptrixTokens.textSecondary,
+  color: opptrixCssVars.textSecondary,
   flexShrink: 0,
 } as const

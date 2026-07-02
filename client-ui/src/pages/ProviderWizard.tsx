@@ -12,7 +12,7 @@ import {
   type ProviderPreset, type PublicProvider,
 } from '../api/client'
 import { useSettingsToast } from './settings/SettingsToast'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
@@ -30,12 +30,12 @@ const useStyles = makeStyles({
     flex: 1,
     height: '3px',
     borderRadius: '999px',
-    backgroundColor: opptrixTokens.separator,
+    backgroundColor: opptrixCssVars.separator,
     transitionProperty: 'background-color',
     transitionDuration: '200ms',
   },
   stepActive: {
-    backgroundColor: opptrixTokens.accent,
+    backgroundColor: opptrixCssVars.accent,
   },
   scroll: {
     flex: 1,
@@ -59,12 +59,12 @@ const useStyles = makeStyles({
     fontSize: '16px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.25,
   },
   stepDesc: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
   formGrid: {
@@ -76,7 +76,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
-    border: `1px solid ${opptrixTokens.border}`,
+    border: `1px solid ${opptrixCssVars.border}`,
     borderRadius: opptrixTokens.radiusMd,
     padding: '4px 12px',
     maxHeight: '200px',
@@ -89,7 +89,7 @@ const useStyles = makeStyles({
     padding: '10px 0',
     minHeight: '40px',
     cursor: 'pointer',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': {
       borderBottom: 'none',
     },
@@ -111,7 +111,7 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     gap: '10px',
     flexShrink: 0,
-    borderTop: `1px solid ${opptrixTokens.separator}`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
     marginTop: '2px',
     paddingTop: '16px',
   },
@@ -120,7 +120,7 @@ const useStyles = makeStyles({
   },
   statusLine: {
     fontSize: '13px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -128,7 +128,7 @@ const useStyles = makeStyles({
   },
   emptyModels: {
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 0',
   },
@@ -394,7 +394,7 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
 
               {discoverHint && (
                 <div className={s.statusLine}>
-                  <Text style={{ fontSize: 13, color: opptrixTokens.textSecondary }}>
+                  <Text style={{ fontSize: 13, color: opptrixCssVars.textSecondary }}>
                     {discoverHint}
                   </Text>
                 </div>

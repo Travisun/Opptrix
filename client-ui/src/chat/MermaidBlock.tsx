@@ -1,17 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import { useTheme } from '../theme/ThemeContext'
 
 interface Props {
   code: string
 }
 
 let mermaidReady: Promise<typeof import('mermaid').default> | null = null
+let mermaidTheme: 'neutral' | 'dark' | null = null
 
-function loadMermaid() {
-  if (!mermaidReady) {
+function loadMermaid(theme: 'neutral' | 'dark') {
+  if (!mermaidReady || mermaidTheme !== theme) {
+    mermaidTheme = theme
     mermaidReady = import('mermaid').then(mod => {
       mod.default.initialize({
         startOnLoad: false,
-        theme: 'neutral',
+        theme,
         securityLevel: 'loose',
         fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
       })
@@ -24,6 +27,8 @@ function loadMermaid() {
 export default function MermaidBlock({ code }: Props) {
   const hostRef = useRef<HTMLDivElement>(null)
   const [err, setErr] = useState('')
+  const { resolvedScheme } = useTheme()
+  const mermaidThemeName = resolvedScheme === 'dark' ? 'dark' : 'neutral'
 
   useEffect(() => {
     let cancelled = false
@@ -33,7 +38,7 @@ export default function MermaidBlock({ code }: Props) {
     setErr('')
     host.innerHTML = ''
 
-    loadMermaid()
+    loadMermaid(mermaidThemeName)
       .then(async mermaid => {
         if (cancelled) return
         const id = `mermaid-${Math.random().toString(36).slice(2, 10)}`
@@ -53,7 +58,7 @@ export default function MermaidBlock({ code }: Props) {
       })
 
     return () => { cancelled = true }
-  }, [code])
+  }, [code, mermaidThemeName])
 
   if (err) {
     return (

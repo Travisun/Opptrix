@@ -20,7 +20,7 @@ import {
   type StrategyDraft,
 } from './DiscoverStrategyDialogs'
 import { useSettingsToast } from './SettingsToast'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
   value: '价值',
@@ -69,13 +69,13 @@ const useStyles = makeStyles({
     gap: '12px',
     padding: '10px 18px',
     minHeight: '44px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   panelHeaderTitle: {
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   listScroll: {
@@ -94,7 +94,7 @@ const useStyles = makeStyles({
     minHeight: '44px',
   },
   rowTopBorder: {
-    borderTop: `1px solid ${opptrixTokens.gray200}`,
+    borderTop: `1px solid ${opptrixCssVars.gray200}`,
   },
   rowMain: {
     flex: 1,
@@ -107,7 +107,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -115,7 +115,7 @@ const useStyles = makeStyles({
   },
   rowDesc: {
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -135,19 +135,19 @@ const useStyles = makeStyles({
     padding: '2px 8px',
   },
   tagBuiltin: {
-    color: opptrixTokens.textSecondary,
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    color: opptrixCssVars.textSecondary,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   tagCustom: {
-    color: opptrixTokens.accent,
-    border: `1px solid ${opptrixTokens.accentMuted}`,
-    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixCssVars.accent,
+    border: `1px solid ${opptrixCssVars.accentMuted}`,
+    backgroundColor: opptrixCssVars.accentSoft,
   },
   empty: {
     padding: '16px 18px',
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
 })
 

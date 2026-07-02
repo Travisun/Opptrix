@@ -14,7 +14,7 @@ import {
   INDUSTRY_STATS_POLL_MS,
   shouldUseLiveIndustryQuotes,
 } from './chartLiveRefresh'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD} 8px`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -53,7 +53,7 @@ const useStyles = makeStyles({
   headTitle: {
     fontSize: '12px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -61,13 +61,13 @@ const useStyles = makeStyles({
   },
   headHint: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tabList: {
     minHeight: '32px',
@@ -83,7 +83,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     flexShrink: 0,
   },
   searchInput: {
@@ -93,7 +93,7 @@ const useStyles = makeStyles({
   iconBtn: {
     border: 'none',
     background: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,
@@ -102,7 +102,7 @@ const useStyles = makeStyles({
   },
   meta: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   list: {
     flex: 1,
@@ -118,7 +118,7 @@ const useStyles = makeStyles({
     padding: `10px ${ITEM_BG_INSET}`,
   },
   listItem: {
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   row: {
@@ -145,7 +145,7 @@ const useStyles = makeStyles({
   industryName: {
     fontSize: '12px',
     fontWeight: 500,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -161,21 +161,21 @@ const useStyles = makeStyles({
   stockName: {
     fontSize: '12px',
     fontWeight: 500,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stockMeta: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stat: {
     fontSize: '10px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     textAlign: 'right',
     whiteSpace: 'nowrap',
   },
@@ -197,7 +197,7 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   quotePct: {
     fontSize: '10px',
@@ -206,7 +206,7 @@ const useStyles = makeStyles({
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
-  pctFlat: { color: opptrixTokens.textTertiary },
+  pctFlat: { color: opptrixCssVars.textTertiary },
   chainPane: {
     flex: 1,
     minHeight: 0,
@@ -230,11 +230,11 @@ const useStyles = makeStyles({
   chainSectionTitle: {
     fontSize: '11px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   chainText: {
     fontSize: '11px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     whiteSpace: 'pre-wrap',
   },
@@ -244,7 +244,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '32px',
     gap: '8px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '11px',
   },
 })
@@ -512,7 +512,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
             : '了解这个行业上下游有哪些环节与代表公司'}
         </Text>
           {detailTab === 'stocks' && stocksError ? (
-            <Text className={s.meta} style={{ color: opptrixTokens.error }}>{stocksError}</Text>
+            <Text className={s.meta} style={{ color: opptrixCssVars.error }}>{stocksError}</Text>
           ) : null}
         </div>
 
@@ -672,7 +672,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
         {tradeDate && tradeDate !== quoteDate ? (
           <Text className={s.meta}>因子日期 {tradeDate}</Text>
         ) : null}
-        {error ? <Text className={s.meta} style={{ color: opptrixTokens.error }}>{error}</Text> : null}
+        {error ? <Text className={s.meta} style={{ color: opptrixCssVars.error }}>{error}</Text> : null}
       </div>
 
       <div className={mergeClasses(s.list, filtered.length === 0 && s.listCentered)}>

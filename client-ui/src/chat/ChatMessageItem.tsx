@@ -8,7 +8,7 @@ import {
 import type { ChatDisplayMessage } from '../types/chat'
 import MarkdownMessage from './MarkdownMessage'
 import ChatProcessTrace from './ChatProcessTrace'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
@@ -43,8 +43,8 @@ const useStyles = makeStyles({
     maxWidth: '100%',
     padding: '11px 15px',
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.userBubble,
-    color: opptrixTokens.textPrimary,
+    backgroundColor: opptrixCssVars.userBubble,
+    color: opptrixCssVars.textPrimary,
     whiteSpace: 'pre-wrap',
   },
   userBubbleMobile: {
@@ -53,7 +53,7 @@ const useStyles = makeStyles({
   assistantBubble: {
     maxWidth: '100%',
     padding: '2px 0',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   toolTags: {
     display: 'flex',
@@ -63,8 +63,8 @@ const useStyles = makeStyles({
   },
   toolBadge: {
     border: 'none',
-    backgroundColor: opptrixTokens.canvasAlt,
-    color: opptrixTokens.textSecondary,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusFull,
     fontSize: '11px',
     fontFamily: 'ui-monospace, monospace',
@@ -87,7 +87,7 @@ const useStyles = makeStyles({
   time: {
     fontSize: '11px',
     lineHeight: 1,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     userSelect: 'none',
   },
@@ -99,7 +99,7 @@ const useStyles = makeStyles({
     margin: 0,
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     opacity: 0,
     pointerEvents: 'none',
@@ -107,7 +107,7 @@ const useStyles = makeStyles({
     transitionDuration: '0.15s',
     transitionTimingFunction: 'ease',
     ':hover': {
-      color: opptrixTokens.textSecondary,
+      color: opptrixCssVars.textSecondary,
     },
     ':focus-visible': {
       opacity: 1,
@@ -242,7 +242,7 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
           <details style={{ marginTop: 12 }}>
             <summary style={{
               fontSize: 12,
-              color: opptrixTokens.textTertiary,
+              color: opptrixCssVars.textTertiary,
               cursor: 'pointer',
               userSelect: 'none',
             }}

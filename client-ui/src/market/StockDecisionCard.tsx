@@ -5,7 +5,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import type { StockMoneyFlowItem } from '../types/market'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import {
   INSTITUTION_LEGEND,
   SCORE_GRADE_LEGEND,
@@ -40,7 +40,7 @@ const useStyles = makeStyles({
   sectionTitle: {
     fontSize: '10px',
     fontWeight: 650,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
   },
@@ -52,8 +52,8 @@ const useStyles = makeStyles({
   metric: {
     padding: '5px 6px',
     borderRadius: opptrixTokens.radiusSm,
-    backgroundColor: opptrixTokens.canvas,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -61,13 +61,13 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.3,
     overflow: 'hidden',
@@ -75,13 +75,13 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   toneExcellent: { color: '#248A3D' },
-  toneGood: { color: opptrixTokens.success },
-  toneNeutral: { color: opptrixTokens.textPrimary },
-  toneCaution: { color: opptrixTokens.warning },
-  toneRisk: { color: opptrixTokens.error },
+  toneGood: { color: opptrixCssVars.success },
+  toneNeutral: { color: opptrixCssVars.textPrimary },
+  toneCaution: { color: opptrixCssVars.warning },
+  toneRisk: { color: opptrixCssVars.error },
   toneBullish: { color: '#FF3B30' },
   toneBearish: { color: '#34C759' },
-  toneMuted: { color: opptrixTokens.textTertiary },
+  toneMuted: { color: opptrixCssVars.textTertiary },
   bulletList: {
     display: 'flex',
     flexDirection: 'column',
@@ -90,23 +90,23 @@ const useStyles = makeStyles({
   bullet: {
     fontSize: '11px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     paddingLeft: '10px',
     position: 'relative',
     '::before': {
       content: '"·"',
       position: 'absolute',
       left: 0,
-      color: opptrixTokens.textTertiary,
+      color: opptrixCssVars.textTertiary,
     },
   },
   bulletPositive: {
     color: '#248A3D',
-    '::before': { color: opptrixTokens.success },
+    '::before': { color: opptrixCssVars.success },
   },
   bulletRisk: {
     color: '#C93400',
-    '::before': { color: opptrixTokens.error },
+    '::before': { color: opptrixCssVars.error },
   },
   signalRow: {
     display: 'grid',
@@ -115,12 +115,12 @@ const useStyles = makeStyles({
     alignItems: 'center',
     padding: '5px 6px',
     borderRadius: opptrixTokens.radiusSm,
-    backgroundColor: opptrixTokens.canvas,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   signalName: {
     fontSize: '10px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -128,12 +128,12 @@ const useStyles = makeStyles({
   signalDir: {
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     flexShrink: 0,
   },
   signalConf: {
     fontSize: '10px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontVariantNumeric: 'tabular-nums',
     flexShrink: 0,
   },
@@ -157,16 +157,16 @@ const useStyles = makeStyles({
     gap: '4px',
     padding: '6px 8px',
     borderRadius: opptrixTokens.radiusSm,
-    backgroundColor: opptrixTokens.canvas,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   guideText: {
     fontSize: '10px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   guideHighlight: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 600,
   },
   guideValue: {
@@ -174,12 +174,12 @@ const useStyles = makeStyles({
   },
   emptyHint: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '2px',
   },
   error: {
     fontSize: '11px',
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
     padding: '2px',
   },
   headRow: {
@@ -194,18 +194,18 @@ const useStyles = makeStyles({
     gap: '10px',
     padding: '12px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvas,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   idleTitle: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
   idleDesc: {
     fontSize: '10px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   stepBanner: {
     display: 'flex',
@@ -213,8 +213,8 @@ const useStyles = makeStyles({
     gap: '6px',
     padding: '8px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvasAlt,
-    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   stepHead: {
     width: '100%',
@@ -231,13 +231,13 @@ const useStyles = makeStyles({
     flex: 1,
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   stepHeadTextError: {
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
   },
   stepBody: {
     display: 'flex',
@@ -250,11 +250,11 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '9px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   stepDone: { color: '#248A3D' },
-  stepRunning: { color: opptrixTokens.textPrimary, fontWeight: 600 },
-  stepError: { color: opptrixTokens.error },
+  stepRunning: { color: opptrixCssVars.textPrimary, fontWeight: 600 },
+  stepError: { color: opptrixCssVars.error },
 })
 
 export interface StockDiscussPayload {
@@ -377,8 +377,8 @@ function AnalysisStepBanner({
           {label}
         </Text>
         {expanded
-          ? <ChevronDownRegular fontSize={12} color={opptrixTokens.textTertiary} />
-          : <ChevronRightRegular fontSize={12} color={opptrixTokens.textTertiary} />}
+          ? <ChevronDownRegular fontSize={12} color={opptrixCssVars.textTertiary} />
+          : <ChevronRightRegular fontSize={12} color={opptrixCssVars.textTertiary} />}
       </button>
       {expanded && (
         <div className={s.stepBody}>

@@ -6,11 +6,30 @@
   <meta name="apple-mobile-web-app-capable" content="yes" />
   <meta name="apple-mobile-web-app-status-bar-style" content="default" />
   <meta name="mobile-web-app-capable" content="yes" />
-  <meta name="theme-color" content="#F2F2F7" />
+  <meta name="theme-color" content="#F5F5F7" />
   <title>Opptrix — 你的A股投研助手</title>
-  <style>
-    html, body { background: #f5f5f7; }
-  </style>
+  <script>
+    (function () {
+      var KEY = 'opptrix-theme-preference';
+      var pref = 'system';
+      try {
+        var raw = localStorage.getItem(KEY);
+        if (raw === 'light' || raw === 'dark' || raw === 'system') pref = raw;
+      } catch (e) {}
+      var dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+      var scheme = pref === 'dark' ? 'dark' : pref === 'light' ? 'light' : (dark ? 'dark' : 'light');
+      var root = document.documentElement;
+      root.dataset.theme = scheme;
+      var bg = scheme === 'dark' ? '#1C1C1E' : '#F5F5F7';
+      var canvas = scheme === 'dark' ? '#1C1C1E' : '#FFFFFF';
+      root.style.background = bg;
+      var style = document.createElement('style');
+      style.textContent = 'html,body{background:' + bg + '!important;color:' + (scheme === 'dark' ? '#F5F5F7' : '#1D1D1F') + ';}';
+      document.head.appendChild(style);
+      var meta = document.querySelector('meta[name="theme-color"]');
+      if (meta) meta.setAttribute('content', canvas);
+    })();
+  </script>
 </head>
 <body>
   <div id="root"></div>

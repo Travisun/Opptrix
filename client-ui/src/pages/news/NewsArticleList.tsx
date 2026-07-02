@@ -2,7 +2,7 @@ import { useEffect, useState, type UIEvent } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { BookOpenRegular, ChevronDownRegular, ChevronRightRegular, NewsRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 import { formatRelativeTime, stripHtml } from './newsUtils'
 
@@ -23,7 +23,7 @@ const useStyles = makeStyles({
   sectionHead: {
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
     padding: '8px 8px 3px',
   },
@@ -46,7 +46,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
     lineHeight: 1.35,
   },
@@ -54,7 +54,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     fontSize: '10px',
     fontWeight: 500,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     opacity: 0.75,
   },
   row: {
@@ -66,22 +66,22 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
     ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixTokens.accentSoft },
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowCompact: {
     padding: '6px 8px',
     gap: '2px',
   },
   rowActive: {
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     ':hover': {
-      backgroundColor: opptrixTokens.canvasMuted,
+      backgroundColor: opptrixCssVars.canvasMuted,
     },
   },
   title: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     display: '-webkit-box',
     WebkitLineClamp: 2,
@@ -90,12 +90,12 @@ const useStyles = makeStyles({
   },
   meta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   summary: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
     display: '-webkit-box',
     WebkitLineClamp: 2,
@@ -107,7 +107,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '12px',
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
 })
 
@@ -248,8 +248,8 @@ export default function NewsArticleList({
                     onClick={() => toggleSection(sec.key)}
                   >
                     {collapsed
-                      ? <ChevronRightRegular fontSize={11} color={opptrixTokens.textTertiary} />
-                      : <ChevronDownRegular fontSize={11} color={opptrixTokens.textTertiary} />}
+                      ? <ChevronRightRegular fontSize={11} color={opptrixCssVars.textTertiary} />
+                      : <ChevronDownRegular fontSize={11} color={opptrixCssVars.textTertiary} />}
                     <Text className={s.sectionHeadLabel} block>{sec.label}</Text>
                     <span className={s.sectionHeadCount}>{sec.articles.length}</span>
                   </button>

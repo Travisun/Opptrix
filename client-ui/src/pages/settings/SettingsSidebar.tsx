@@ -11,9 +11,10 @@ import {
   SettingsRegular,
   TranslateRegular,
 } from '@fluentui/react-icons'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
 import { isElectron } from '../../platform/detect'
+import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
@@ -43,10 +44,13 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   sidebarWeb: {
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   sidebarElectron: {
     backgroundColor: 'transparent',
+  },
+  sidebarElectronSolid: {
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   sidebarTopElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT + 4}px`,
@@ -57,7 +61,7 @@ const useStyles = makeStyles({
     width: '100%',
     minWidth: 'unset',
     height: 'auto',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
   },
   searchWrap: {
     padding: '8px 12px 6px',
@@ -101,7 +105,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontSize: '13px',
     fontWeight: 500,
     width: '100%',
@@ -125,12 +129,12 @@ const useStyles = makeStyles({
     ...sidebarItemSelected,
   },
   navIcon: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   navIconOverlay: sidebarTopMenuIcon,
   navIconActive: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
   },
 })
 
@@ -153,8 +157,10 @@ export default function SettingsSidebar({
   active, onSelect, onBack, search, onSearchChange, isMobile = false,
 }: SettingsSidebarProps) {
   const s = useStyles()
+  const { resolvedScheme } = useTheme()
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isMobile && !isOverlay
+  const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
@@ -169,7 +175,7 @@ export default function SettingsSidebar({
       {!isMobile && (
         <div className={mergeClasses(s.searchWrap, isOverlay && s.searchWrapOverlay)}>
           <div className={mergeClasses(s.searchShell, 'opptrix-input-shell', 'opptrix-settings-search-shell')}>
-            <SearchRegular fontSize={14} color={opptrixTokens.textTertiary} />
+            <SearchRegular fontSize={14} color={opptrixCssVars.textTertiary} />
             <Input
               className="opptrix-settings-search"
               appearance="filled-darker"
@@ -237,8 +243,9 @@ export default function SettingsSidebar({
         isMobile && s.sidebarMobile,
         !electronChrome && !isMobile && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
+        electronChrome && resolvedScheme === 'dark' && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
-        electronChrome && 'opptrix-glass-sidebar',
+        sidebarGlass && 'opptrix-glass-sidebar',
         'opptrix-sidebar-edge',
       )}
     >

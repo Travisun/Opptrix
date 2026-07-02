@@ -1,6 +1,6 @@
 import { makeStyles, Text, mergeClasses } from '@fluentui/react-components'
 import type { ReactNode } from 'react'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive } from '../../theme/mixins'
 
 const useStyles = makeStyles({
@@ -14,7 +14,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
   control: {
@@ -33,7 +33,7 @@ const useStyles = makeStyles({
   },
   hint: {
     fontSize: '13px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     marginTop: '-2px',
   },

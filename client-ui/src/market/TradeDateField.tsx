@@ -6,7 +6,7 @@ import {
   mergeClasses,
 } from '@fluentui/react-components'
 import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { OpptrixPopoverPanel } from '../components/opptrix/OpptrixDropdownPanel'
 
@@ -69,13 +69,13 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: 0,
     margin: 0,
     cursor: 'pointer',
     lineHeight: 0,
     ':hover': {
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   surface: {
@@ -99,17 +99,17 @@ const useStyles = makeStyles({
     border: 'none',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'transparent',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     cursor: 'pointer',
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
   monthLabel: {
     fontSize: '12px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     letterSpacing: '-0.02em',
   },
   weekdayRow: {
@@ -121,7 +121,7 @@ const useStyles = makeStyles({
   weekday: {
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: '20px',
   },
@@ -135,7 +135,7 @@ const useStyles = makeStyles({
     border: 'none',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'transparent',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontSize: '11px',
     fontWeight: 500,
     lineHeight: '28px',
@@ -162,7 +162,7 @@ const useStyles = makeStyles({
     boxShadow: `inset 0 0 0 1px rgba(29, 29, 31, 0.18)`,
   },
   dayCellDisabled: {
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     opacity: 0.45,
     cursor: 'not-allowed',
     ':hover': {
@@ -179,7 +179,7 @@ const useStyles = makeStyles({
     border: 'none',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     fontSize: '11px',
     fontWeight: 600,
     padding: '0 10px',
@@ -187,7 +187,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     ':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.1)',
-      color: opptrixTokens.textPrimary,
+      color: opptrixCssVars.textPrimary,
     },
   },
 })

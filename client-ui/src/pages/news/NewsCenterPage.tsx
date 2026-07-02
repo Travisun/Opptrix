@@ -3,7 +3,7 @@ import { ArrowSyncRegular, SettingsRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import { electronPlatform } from '../../platform/detect'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -23,7 +23,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     minHeight: 0,
     height: '100%',
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
   },
   electronTitleBar: {
@@ -34,8 +34,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '8px',
     paddingLeft: '12px',
-    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
-    backgroundColor: opptrixTokens.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
+    backgroundColor: opptrixCssVars.canvas,
     position: 'relative',
   },
   electronTitleBarMac: {
@@ -52,13 +52,13 @@ const useStyles = makeStyles({
     fontSize: '13px',
     fontWeight: 500,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
   titleBarMeta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
   },
   toolbarMeta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   toolbarActions: {
@@ -85,12 +85,12 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '10px',
     padding: '10px 16px',
-    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
+    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
   webTitle: {
     fontSize: '15px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     flex: 1,
   },
   body: {

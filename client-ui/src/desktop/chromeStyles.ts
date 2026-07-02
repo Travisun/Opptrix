@@ -3,7 +3,7 @@ import {
   DESKTOP_TITLEBAR_HEIGHT,
   DESKTOP_TRAFFIC_LIGHT_INSET,
 } from './constants'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 /** Unified window background for Electron desktop */
 export const electronAppBg = 'transparent'
@@ -42,7 +42,7 @@ export const electronNoDrag = {
 export const electronToolbarTitle = {
   fontSize: '13px',
   fontWeight: 600,
-  color: opptrixTokens.textSecondary,
+  color: opptrixCssVars.textSecondary,
   letterSpacing: '-0.01em',
 }
 
@@ -53,9 +53,9 @@ export const electronIconBtnCompact = {
 }
 
 export const electronSidebarSurface = {
-  backgroundColor: opptrixTokens.sidebarGlass,
-  backdropFilter: opptrixTokens.sidebarGlassBlur,
-  WebkitBackdropFilter: opptrixTokens.sidebarGlassBlur,
+  backgroundColor: opptrixCssVars.sidebarGlass,
+  backdropFilter: opptrixCssVars.sidebarGlassBlur,
+  WebkitBackdropFilter: opptrixCssVars.sidebarGlassBlur,
 }
 
 export const electronChromeFooter = {

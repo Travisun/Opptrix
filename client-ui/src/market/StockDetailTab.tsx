@@ -25,7 +25,7 @@ import TradingViewChart from './TradingViewChart'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import StockTrendTab from './StockTrendTab'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 type DetailTab = 'analysis' | 'chart' | 'trend' | 'basic' | 'company' | 'news' | 'f10'
@@ -42,7 +42,7 @@ const useStyles = makeStyles({
   hero: {
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD} 5px`,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
@@ -65,14 +65,14 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   code: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   quoteMain: {
@@ -82,9 +82,9 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   manageBtn: {
-    border: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
-    color: opptrixTokens.textSecondary,
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusSm,
     fontSize: '10px',
     fontWeight: 600,
@@ -115,7 +115,7 @@ const useStyles = makeStyles({
   },
   pctUp: { color: '#FF3B30' },
   pctDown: { color: '#34C759' },
-  pctFlat: { color: opptrixTokens.textTertiary },
+  pctFlat: { color: opptrixCssVars.textTertiary },
   heroGrid: {
     display: 'grid',
     gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
@@ -130,13 +130,13 @@ const useStyles = makeStyles({
   },
   heroLabel: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   heroValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -144,8 +144,8 @@ const useStyles = makeStyles({
   },
   prepBanner: {
     flexShrink: 0,
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
-    backgroundColor: opptrixTokens.canvasAlt,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   prepHead: {
     width: '100%',
@@ -169,14 +169,14 @@ const useStyles = makeStyles({
   prepHeadText: {
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   prepHeadTextError: {
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
   },
   prepBody: {
     display: 'flex',
@@ -187,12 +187,12 @@ const useStyles = makeStyles({
   prepTitle: {
     fontSize: '10px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   prepHint: {
     fontSize: '9px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   prepActions: {
@@ -212,23 +212,23 @@ const useStyles = makeStyles({
     justifyContent: 'space-between',
     gap: '8px',
     fontSize: '9px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   prepStepDone: {
     color: '#248A3D',
   },
   prepStepRunning: {
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontWeight: 600,
   },
   prepStepError: {
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
   },
   tabBar: {
     flexShrink: 0,
     padding: `0 ${CONTENT_PAD}`,
     minHeight: '28px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     overflowX: 'auto',
     scrollbarWidth: 'none',
     '&::-webkit-scrollbar': { display: 'none' },
@@ -275,7 +275,7 @@ const useStyles = makeStyles({
   sectionTitle: {
     fontSize: '10px',
     fontWeight: 650,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.06em',
     textTransform: 'uppercase',
   },
@@ -292,7 +292,7 @@ const useStyles = makeStyles({
   metric: {
     padding: '5px 6px',
     borderRadius: opptrixTokens.radiusSm,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -300,13 +300,13 @@ const useStyles = makeStyles({
   },
   metricLabel: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.3,
     overflow: 'hidden',
@@ -316,7 +316,7 @@ const useStyles = makeStyles({
   prose: {
     fontSize: '11px',
     lineHeight: 1.55,
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'pre-wrap',
   },
   tagRow: {
@@ -328,8 +328,8 @@ const useStyles = makeStyles({
     fontSize: '10px',
     padding: '1px 6px',
     borderRadius: opptrixTokens.radiusFull,
-    backgroundColor: opptrixTokens.accentSoft,
-    color: opptrixTokens.textSecondary,
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.textSecondary,
   },
   list: {
     display: 'flex',
@@ -337,7 +337,7 @@ const useStyles = makeStyles({
     gap: '0',
     borderRadius: opptrixTokens.radiusSm,
     overflow: 'hidden',
-    border: `1px solid ${opptrixTokens.separator}`,
+    border: `1px solid ${opptrixCssVars.separator}`,
   },
   flatList: {
     display: 'flex',
@@ -349,39 +349,39 @@ const useStyles = makeStyles({
     gap: '6px',
     alignItems: 'start',
     padding: '5px 0',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   listDate: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.4,
   },
   listTitle: {
     fontSize: '11px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     textDecoration: 'none',
-    ':hover': { color: opptrixTokens.accent },
+    ':hover': { color: opptrixCssVars.accent },
   },
   tableHead: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tableHeadCell: {
     fontSize: '10px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
   },
   tableRow: {
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) repeat(3, minmax(0, 0.75fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   tableRowWide: {
@@ -389,7 +389,7 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
   tableHeadWide: {
@@ -397,11 +397,11 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'minmax(0, 1.2fr) repeat(4, minmax(0, 0.7fr))',
     gap: '4px',
     padding: '4px 0',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tableCell: {
     fontSize: '10px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -409,14 +409,14 @@ const useStyles = makeStyles({
   },
   tableCellName: {
     fontSize: '10px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   emptyHint: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '8px 2px',
   },
   center: {
@@ -425,7 +425,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     padding: '24px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     fontSize: '12px',
   },
 })

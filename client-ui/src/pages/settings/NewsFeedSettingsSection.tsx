@@ -34,7 +34,7 @@ import {
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
-import { opptrixTokens } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
 import {
   buildSubscriptionExportFile,
@@ -56,9 +56,9 @@ const SETTINGS_SAVE_MS = 500
 
 const useStyles = makeStyles({
   listPanel: {
-    border: opptrixTokens.settingsPanelBorder,
+    border: opptrixCssVars.settingsPanelBorder,
     borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
     height: '360px',
     display: 'flex',
@@ -72,11 +72,11 @@ const useStyles = makeStyles({
     gap: '12px',
     padding: '10px 14px',
     minHeight: '44px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   listHeaderMeta: {
     fontSize: '12px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     flex: 1,
     minWidth: 0,
@@ -102,7 +102,7 @@ const useStyles = makeStyles({
     gap: '10px',
     padding: '5px 12px',
     minHeight: '34px',
-    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': {
       borderBottom: 'none',
     },
@@ -117,7 +117,7 @@ const useStyles = makeStyles({
   listRowTitle: {
     fontSize: '13px',
     fontWeight: 600,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -125,7 +125,7 @@ const useStyles = makeStyles({
   },
   listRowMeta: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   listRowControls: {
@@ -144,19 +144,19 @@ const useStyles = makeStyles({
   sectionLabel: {
     fontSize: '11px',
     fontWeight: 600,
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '0 2px 8px',
   },
   saveHint: {
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     padding: '4px 2px 0',
     minHeight: '16px',
   },
   saveHintActive: {
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
   },
   emptyBlock: {
     flex: 1,
@@ -171,12 +171,12 @@ const useStyles = makeStyles({
   emptyTitle: {
     fontSize: '13px',
     fontWeight: 650,
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     marginBottom: '6px',
   },
   emptyDesc: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
   dialogBody: {
@@ -187,15 +187,15 @@ const useStyles = makeStyles({
   },
   dialogHint: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
   preview: {
     fontSize: '12px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixTokens.canvasAlt,
+    backgroundColor: opptrixCssVars.canvasAlt,
     lineHeight: 1.45,
   },
   dialogActions: {
@@ -216,7 +216,7 @@ const useStyles = makeStyles({
   },
   updateTime: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
   },
   subMeta: {
@@ -226,7 +226,7 @@ const useStyles = makeStyles({
   },
   subError: {
     fontSize: '11px',
-    color: opptrixTokens.error,
+    color: opptrixCssVars.error,
     lineHeight: 1.4,
   },
   urlToggle: {
@@ -237,13 +237,13 @@ const useStyles = makeStyles({
     border: 'none',
     background: 'none',
     fontSize: '11px',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     textAlign: 'left',
     lineHeight: 1.45,
     maxWidth: '100%',
     ':hover': {
-      color: opptrixTokens.textSecondary,
+      color: opptrixCssVars.textSecondary,
     },
   },
   urlToggleLabel: {
@@ -253,19 +253,19 @@ const useStyles = makeStyles({
   },
   urlFull: {
     fontSize: '11px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.4,
     wordBreak: 'break-all',
     userSelect: 'text',
   },
   importSummary: {
     fontSize: '13px',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.55,
   },
   importHint: {
     fontSize: '12px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
 })

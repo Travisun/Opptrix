@@ -13,7 +13,7 @@ import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
 import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMessageSelection'
-import { opptrixTokens } from '../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { isElectron } from '../platform/detect'
 import ChromeToolButton from '../desktop/ChromeToolButton'
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     height: '100%',
     minWidth: 0,
-    backgroundColor: opptrixTokens.canvas,
+    backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
     position: 'relative',
   },
@@ -111,8 +111,8 @@ const useStyles = makeStyles({
     height: '40px',
     padding: 0,
     boxSizing: 'border-box',
-    backgroundColor: opptrixTokens.canvas,
-    borderBottom: `1px solid ${opptrixTokens.separatorStrong}`,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
   headerInner: {
     maxWidth: opptrixTokens.chatThreadMaxWidth,
@@ -139,7 +139,7 @@ const useStyles = makeStyles({
     fontSize: '14px',
     fontWeight: 500,
     letterSpacing: '-0.01em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
@@ -173,18 +173,18 @@ const useStyles = makeStyles({
   },
   welcomeBrandLetter: {
     display: 'inline-block',
-    color: opptrixTokens.textTertiary,
+    color: opptrixCssVars.textTertiary,
     animationName: {
       '0%, 100%': {
-        color: opptrixTokens.textTertiary,
+        color: opptrixCssVars.textTertiary,
         opacity: 0.45,
       },
       '35%': {
-        color: opptrixTokens.textPrimary,
+        color: opptrixCssVars.textPrimary,
         opacity: 1,
       },
       '55%': {
-        color: opptrixTokens.textSecondary,
+        color: opptrixCssVars.textSecondary,
         opacity: 0.78,
       },
     },
@@ -196,12 +196,12 @@ const useStyles = makeStyles({
     fontSize: '17px',
     fontWeight: 650,
     letterSpacing: '-0.02em',
-    color: opptrixTokens.textPrimary,
+    color: opptrixCssVars.textPrimary,
     animationDelay: '0.55s',
   },
   welcomeSub: {
     fontSize: '14px',
-    color: opptrixTokens.textSecondary,
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.6,
     maxWidth: '36ch',
     animationDelay: '0.75s',
