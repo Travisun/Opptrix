@@ -4,7 +4,10 @@
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
-  "author": "Opptrix contributors",
+  "author": {
+    "name": "催书书",
+    "email": "imsorich@foxmail.com"
+  },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -17,9 +20,18 @@
     "build:dir": "node scripts/prebuild.mjs && electron-builder --dir"
   },
   "build": {
-    "appId": "com.opptrix.desktop",
+    "appId": "com.cuishushu.app.opptrix.desktop",
     "productName": "Opptrix",
+    "copyright": "Copyright © 2026 催书书",
     "electronVersion": "35.7.5",
+    "protocols": [
+      {
+        "name": "Opptrix Link",
+        "schemes": [
+          "opptrix"
+        ]
+      }
+    ],
     "publish": [
       {
         "provider": "github",
@@ -54,18 +66,59 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "build/icons/logo-app.png",
+      "icon": "build/icons/icon.icns",
+      "artifactName": "${productName}-${version}-${arch}.${ext}",
+      "hardenedRuntime": true,
+      "gatekeeperAssess": false,
+      "entitlements": "resources/entitlements.mac.plist",
+      "entitlementsInherit": "resources/entitlements.mac.inherit.plist",
+      "darkModeSupport": true,
       "extendInfo": {
         "CFBundleDisplayName": "Opptrix",
-        "CFBundleName": "Opptrix"
+        "CFBundleName": "Opptrix",
+        "CFBundleSpokenName": "Opptrix",
+        "CFBundleGetInfoString": "Opptrix 你的A股投研助手",
+        "NSHumanReadableCopyright": "Copyright © 2026 催书书",
+        "NSUserNotificationUsageDescription": "Opptrix 需要在后台向你发送版本更新、任务完成等本地通知。",
+        "NSHighResolutionCapable": true,
+        "ITSAppUsesNonExemptEncryption": false,
+        "LSApplicationCategoryType": "public.app-category.finance",
+        "NSSupportsAutomaticTermination": false,
+        "NSSupportsSuddenTermination": false,
+        "NSAppTransportSecurity": {
+          "NSAllowsLocalNetworking": true
+        }
       },
       "target": [
         "dmg",
         "zip"
-      ]
+      ],
+      "dmg": {
+        "title": "安装 Opptrix ${version}",
+        "icon": "build/icons/icon.icns",
+        "iconSize": 96,
+        "window": {
+          "width": 540,
+          "height": 380
+        },
+        "contents": [
+          {
+            "x": 140,
+            "y": 200
+          },
+          {
+            "x": 400,
+            "y": 200,
+            "type": "link",
+            "path": "/Applications"
+          }
+        ]
+      }
     },
     "win": {
       "icon": "build/icons/logo-app.png",
+      "legalTrademarks": "Opptrix",
+      "publisherName": "催书书",
       "target": [
         "nsis"
       ]
@@ -73,15 +126,25 @@
     "nsis": {
       "shortcutName": "Opptrix",
       "oneClick": false,
-      "allowToChangeInstallationDirectory": true
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icons/logo-app.png",
+      "uninstallerIcon": "build/icons/logo-app.png",
+      "installerHeaderIcon": "build/icons/logo-app.png",
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true
     },
     "linux": {
       "icon": "build/icons/linux",
       "category": "Office;Finance",
+      "synopsis": "你的A股投研助手",
+      "description": "Opptrix 桌面端：聊天投研、个股研究、新闻订阅与本地数据分析。",
       "desktop": {
         "Name": "Opptrix",
         "Comment": "你的A股投研助手",
-        "StartupWMClass": "Opptrix"
+        "GenericName": "投研助手",
+        "Keywords": "股票;投研;A股;财经;",
+        "StartupWMClass": "Opptrix",
+        "MimeType": "x-scheme-handler/opptrix;"
       },
       "target": [
         "AppImage",

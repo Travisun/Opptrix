@@ -1,5 +1,6 @@
 const path = require('path')
 const { app, BrowserWindow } = require('electron')
+const { showLocalNotification } = require('./notifications.cjs')
 
 function loadAutoUpdater() {
   try {
@@ -110,6 +111,24 @@ function initUpdater({ version }) {
       percent: 100,
       message: `新版本 ${info.version} 已就绪，重启后即可完成更新`,
     })
+
+    const focusedWindow = BrowserWindow.getAllWindows().find(
+      (win) => !win.isDestroyed() && win.isVisible() && win.isFocused(),
+    )
+    if (!focusedWindow) {
+      showLocalNotification({
+        title: 'Opptrix 更新已就绪',
+        body: `新版本 ${info.version} 已下载，点击打开应用并重启更新。`,
+        tag: 'app-update',
+        onClick: () => {
+          const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed())
+          if (!win) return
+          if (win.isMinimized()) win.restore()
+          win.show()
+          win.focus()
+        },
+      })
+    }
   })
 
   autoUpdater.on('error', (err) => {

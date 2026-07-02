@@ -32,6 +32,7 @@ import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
+import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 
@@ -323,6 +324,29 @@ export default function ChatApp() {
       handleToggleChatColumn()
     }
   }, [canToggleChatColumn, chatVisible, handleToggleChatColumn])
+
+  const handleProtocolChat = useCallback(async (sessionId?: string) => {
+    restoreChatColumn()
+    closeDrawer()
+    navigate('chat')
+    if (!sessionId) return
+    try {
+      await loadSession(sessionId)
+    } catch {
+      setError('无法打开链接中的对话，可能已被删除')
+    }
+  }, [closeDrawer, loadSession, navigate, restoreChatColumn])
+
+  const handleProtocolNews = useCallback((articleId?: string) => {
+    if (articleId) setNewsFeedSelectedId(articleId)
+    openNewsCenter()
+  }, [openNewsCenter])
+
+  useDesktopShell({
+    openChat: handleProtocolChat,
+    openSettings: openSettings,
+    openNews: handleProtocolNews,
+  })
 
   const handleNew = async () => {
     restoreChatColumn()

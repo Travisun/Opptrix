@@ -20,10 +20,8 @@ jobs:
           # macOS 分架构各打一包（sidecar 含 better-sqlite3 等原生模块，不能靠 Universal 外壳兼容 Intel）
           - os: macos-latest
             electron_arch: arm64
-            unsigned_mac: true
           - os: macos-latest
             electron_arch: x64
-            unsigned_mac: true
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -48,9 +46,23 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Disable macOS code signing (unsigned build)
-        if: matrix.unsigned_mac == true
-        run: echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+      - name: Verify macOS signing secrets
+        if: runner.os == 'macOS'
+        run: |
+          missing=0
+          for key in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
+            if [ -z "${!key:-}" ]; then
+              echo "::error::Missing secret: $key (required for signed + notarized macOS builds)"
+              missing=1
+            fi
+          done
+          exit "$missing"
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build and publish desktop
         run: |

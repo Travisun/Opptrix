@@ -41,5 +41,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('window-fullscreen-changed', handler)
     return () => ipcRenderer.removeListener('window-fullscreen-changed', handler)
   },
+  onProtocolOpen: (callback) => {
+    const handler = (_event, payload) => callback(payload)
+    ipcRenderer.on('opptrix-protocol', handler)
+    return () => ipcRenderer.removeListener('opptrix-protocol', handler)
+  },
+  notificationIsSupported: () => ipcRenderer.invoke('notification-is-supported'),
+  notificationGetPermission: () => ipcRenderer.invoke('notification-get-permission'),
+  notificationRequestPermission: () => ipcRenderer.invoke('notification-request-permission'),
+  showLocalNotification: (payload) => ipcRenderer.invoke('notification-show', payload),
   signalShellReady: () => ipcRenderer.send('shell-ready'),
 })

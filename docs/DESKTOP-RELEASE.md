@@ -203,6 +203,18 @@ npm run build:desktop -- --publish always
 
 用户数据（SQLite、配置等）一般在用户目录，整包替换 **不会** 清空对话与设置。
 
+### 自定义链接 `opptrix://`
+
+安装包会在 **macOS / Windows / Linux** 注册 `opptrix://` 协议处理器。示例：
+
+| 链接 | 行为 |
+|------|------|
+| `opptrix://chat?session={id}` | 打开指定对话 |
+| `opptrix://settings?section=news_feed` | 打开设置页 |
+| `opptrix://news?article={id}` | 打开新闻中心并选中文章 |
+
+关闭主窗口后应用可**缩到系统托盘**继续运行；更新就绪等事件会尝试发送**本地通知**（需在系统设置中允许通知）。
+
 ---
 
 ## 7. 平台差异与签名
@@ -227,7 +239,8 @@ npm run build:desktop -- --publish always
    | `APPLE_TEAM_ID` | 开发者团队 10 位 ID |
 
 3. 在 [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) 中 **删除** `Disable macOS code signing` 这一步（否则不会签名）。
-4. 重新打 `desktop-v*` 标签发布。
+4. 项目已内置公证用 entitlements（`apps/desktop/resources/entitlements.mac.plist` 及 `.inherit.plist`），覆盖 Electron 主进程与 sidecar 子进程的原生模块加载；**不要**在签名时移除。
+5. 重新打 `desktop-v*` 标签发布。
 
 `electron-builder` 检测到 `CSC_*` 后会自动签名；提供 `APPLE_*` 时会尝试公证。本地 Mac 若 Keychain 已有证书，也可直接 `npm run build:desktop` 无需导 p12。
 

@@ -8,6 +8,20 @@ const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
 const { initUpdater, registerUpdaterIpc } = require('./updater.cjs')
 const {
+  deliverProtocolUrl,
+  findProtocolUrl,
+  flushPendingProtocolUrl,
+  installProtocolHandlers,
+  registerProtocolIpc,
+  setProtocolDeliverHandler,
+} = require('./protocol.cjs')
+const {
+  configureNotificationIdentity,
+  registerNotificationIpc,
+  requestNotificationPermission,
+} = require('./notifications.cjs')
+const { attachCloseToTray, createTray, destroyTray, hasTray } = require('./tray.cjs')
+const {
   getTranslationStatus,
   getTranslationModels,
   ensureTranslationDownloadDir,
@@ -25,8 +39,11 @@ const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 const MIN_SPLASH_MS = 2200
 const SPLASH_HTML = path.join(__dirname, 'splash.html')
 const SPLASH_CANVAS = '#F5F5F7'
+const APP_ID = require('../package.json').build?.appId
 
 app.setName(APP_NAME)
+/** @type {boolean} */
+app.isQuitting = false
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let serverProcess = null
@@ -229,6 +246,35 @@ function getMainWindow() {
   return null
 }
 
+function focusMainWindow() {
+  const win = getMainWindow()
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
+    return
+  }
+  void openMainWindowFromMenu()
+}
+
+function deliverProtocolPayload(payload) {
+  const win = getMainWindow()
+  if (win && !win.isDestroyed() && !win.webContents.isDestroyed()) {
+    win.webContents.send('opptrix-protocol', payload)
+    focusMainWindow()
+  }
+}
+
+function quitApp() {
+  app.isQuitting = true
+  stopSidecar()
+  destroyTray()
+  app.quit()
+}
+
+setProtocolDeliverHandler(deliverProtocolPayload)
+installProtocolHandlers(app, { focusMainWindow })
+
 function buildMainWindowOptions() {
   /** @type {import('electron').BrowserWindowConstructorOptions} */
   const options = {
@@ -278,6 +324,11 @@ function attachMainWindowHandlers(win) {
   win.webContents.on('did-finish-load', notifyFullscreen)
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
+  })
+
+  attachCloseToTray(win, {
+    enabled: app.isPackaged,
+    shouldQuit: () => app.isQuitting === true,
   })
 
   setOpaqueWindowBackground(win)
@@ -482,6 +533,10 @@ function registerWindowIpc() {
   })
 
   registerUpdaterIpc(ipcMain)
+  registerProtocolIpc(ipcMain)
+  registerNotificationIpc(ipcMain, {
+    onNotificationClick: () => focusMainWindow(),
+  })
 }
 
 function setupDesktopChrome() {
@@ -496,10 +551,26 @@ function setupDesktopChrome() {
 }
 
 app.whenReady().then(async () => {
+  configureNotificationIdentity(APP_ID)
   applyAppIcon(app)
   setupDesktopChrome()
   registerWindowIpc()
+  createTray({
+    onShowMainWindow: () => {
+      void openMainWindowFromMenu()
+    },
+    onQuit: quitApp,
+  })
   await bootstrapApp()
+
+  const launchUrl = findProtocolUrl()
+  if (launchUrl) deliverProtocolUrl(launchUrl)
+  else flushPendingProtocolUrl()
+
+  if (app.isPackaged) {
+    void requestNotificationPermission()
+  }
+
   void preloadTranslationModel(repoRoot())
   void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
     for (const win of BrowserWindow.getAllWindows()) {
@@ -513,16 +584,21 @@ app.whenReady().then(async () => {
   app.on('activate', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
       await bootstrapApp()
+    } else {
+      focusMainWindow()
     }
   })
 })
 
 app.on('window-all-closed', () => {
+  if (app.isPackaged && hasTray()) return
   stopSidecar()
   app.quit()
 })
 
 app.on('before-quit', () => {
+  app.isQuitting = true
+  destroyTray()
   stopSidecar()
   void disposeTranslation()
 })

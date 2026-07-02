@@ -21,6 +21,20 @@ const LINUX_SIZES = [
   { size: 512, source: 'logo@512.png' },
 ]
 
+/** Apple iconset naming — used by iconutil for .icns (Dock / Finder / About). */
+const MAC_ICONSET_ENTRIES = [
+  { file: 'icon_16x16.png', source: 'logo@16.png' },
+  { file: 'icon_16x16@2x.png', source: 'logo@32.png' },
+  { file: 'icon_32x32.png', source: 'logo@32.png' },
+  { file: 'icon_32x32@2x.png', source: 'logo@64.png' },
+  { file: 'icon_128x128.png', source: 'logo@128.png' },
+  { file: 'icon_128x128@2x.png', source: 'logo@256.png' },
+  { file: 'icon_256x256.png', source: 'logo@256.png' },
+  { file: 'icon_256x256@2x.png', source: 'logo@512.png' },
+  { file: 'icon_512x512.png', source: 'logo@512.png' },
+  { file: 'icon_512x512@2x.png', source: 'logo.png' },
+]
+
 function assertSource() {
   const master = path.join(SOURCE_DIR, 'logo.png')
   if (!fs.existsSync(master)) {
@@ -71,13 +85,45 @@ function stageLinuxIcons() {
   }
 }
 
+function createMacIcns() {
+  if (process.platform !== 'darwin') {
+    console.log('Skipping .icns generation (iconutil requires macOS); electron-builder will convert PNG on Mac CI.')
+    return
+  }
+
+  const iconsetDir = path.join(OUT_DIR, 'icon.iconset')
+  fs.rmSync(iconsetDir, { recursive: true, force: true })
+  fs.mkdirSync(iconsetDir, { recursive: true })
+
+  for (const entry of MAC_ICONSET_ENTRIES) {
+    const src = path.join(SOURCE_DIR, entry.source)
+    if (!fs.existsSync(src)) {
+      throw new Error(`Missing macOS icon source: ${src}`)
+    }
+    copyFile(src, path.join(iconsetDir, entry.file))
+  }
+
+  const icnsPath = path.join(OUT_DIR, 'icon.icns')
+  fs.rmSync(icnsPath, { force: true })
+  const result = spawnSync('iconutil', ['-c', 'icns', iconsetDir, '-o', icnsPath], {
+    stdio: 'pipe',
+    encoding: 'utf8',
+  })
+  fs.rmSync(iconsetDir, { recursive: true, force: true })
+  if (result.status !== 0) {
+    throw new Error(`iconutil failed: ${result.stderr || result.stdout || 'unknown error'}`)
+  }
+}
+
 assertSource()
 fs.rmSync(OUT_DIR, { recursive: true, force: true })
 fs.mkdirSync(OUT_DIR, { recursive: true })
 const masterIcon = path.join(SOURCE_DIR, 'logo.png')
 copyFile(masterIcon, path.join(OUT_DIR, 'logo.png'))
 createAppIcon(masterIcon, path.join(OUT_DIR, 'logo-app.png'))
+createMacIcns()
 copyFile(path.join(OUT_DIR, 'logo-app.png'), path.join(DESKTOP_ROOT, 'electron', 'about-logo.png'))
 copyFile(path.join(SOURCE_DIR, 'logo@128.png'), path.join(DESKTOP_ROOT, 'electron', 'splash-logo.png'))
 stageLinuxIcons()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
+

@@ -29,6 +29,11 @@ declare global {
       onTranslationDownloadProgress?: (callback: (progress: TranslationDownloadProgress) => void) => () => void
       onTranslationProgress?: (callback: (progress: TranslationProgress) => void) => () => void
       onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
+      onProtocolOpen?: (callback: (payload: OpptrixProtocolPayload) => void) => () => void
+      notificationIsSupported?: () => Promise<boolean>
+      notificationGetPermission?: () => Promise<NotificationPermissionState>
+      notificationRequestPermission?: () => Promise<NotificationPermissionState>
+      showLocalNotification?: (payload: LocalNotificationPayload) => Promise<boolean>
       signalShellReady?: () => void
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
@@ -145,6 +150,23 @@ export type AppUpdateStatus = {
   version?: string | null
   percent?: number
   message?: string | null
+}
+
+export type NotificationPermissionState = 'default' | 'granted' | 'denied'
+
+export type LocalNotificationPayload = {
+  title: string
+  body?: string
+  silent?: boolean
+  tag?: string
+}
+
+export type OpptrixProtocolPayload = {
+  url: string
+  host: string
+  pathname: string
+  route: string
+  params: Record<string, string>
 }
 
 export function isElectron(): boolean {
