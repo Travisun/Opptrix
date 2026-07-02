@@ -463,9 +463,9 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
 }
 
 .opptrix-composer-shell:focus-within {
-  border-color: var(--opptrix-input-border-focus) !important;
+  border-color: var(--opptrix-border-strong) !important;
   background-color: var(--opptrix-canvas) !important;
-  box-shadow: var(--opptrix-focus-glow) !important;
+  box-shadow: var(--opptrix-composer-float-shadow-focus) !important;
   outline: none !important;
 }
 
@@ -581,6 +581,29 @@ select:focus-visible {
   padding: 0 !important;
   margin: 0 !important;
   overflow: visible !important;
+}
+
+/* Workspace search — flush body, borderless inline input */
+.opptrix-workspace-search-dialog.fui-DialogBody {
+  padding: 0 !important;
+  gap: 0 !important;
+}
+
+.opptrix-workspace-search-shell .fui-Input,
+.opptrix-workspace-search-shell .fui-Input__input {
+  flex: 1;
+  min-width: 0;
+  border: none !important;
+  box-shadow: none !important;
+  background: transparent !important;
+  padding: 0 !important;
+  font-size: 13px;
+}
+
+.opptrix-workspace-search-shell .fui-Input::before,
+.opptrix-workspace-search-shell .fui-Input::after,
+.opptrix-workspace-search-shell .fui-Input__underline {
+  display: none !important;
 }
 
 /* ── Frosted glass dialog — matches MessageSelectionToolbar ── */
@@ -1181,6 +1204,11 @@ select:focus-visible {
   }
 
   .opptrix-session-item:hover .opptrix-session-delete {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .opptrix-session-item:hover .opptrix-session-archive {
     opacity: 1;
     pointer-events: auto;
   }

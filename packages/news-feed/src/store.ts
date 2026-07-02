@@ -30,6 +30,12 @@ const ARTICLE_NS = 'news_article'
 const LEGACY_CACHE_NS = 'news_cache'
 const LEGACY_CACHE_ID = 'merged'
 
+let articlePersistHook: ((article: FeedArticle) => void) | null = null
+
+export function setNewsArticlePersistHook(hook: ((article: FeedArticle) => void) | null) {
+  articlePersistHook = hook
+}
+
 function emptyIndex(): NewsFeedIndex {
   return { refreshed_at: null, subscription_meta: {}, article_order: [] }
 }
@@ -352,6 +358,7 @@ export class NewsFeedStore {
         : article.id
       const stored = article.id === canonicalId ? article : { ...article, id: canonicalId }
       this.store.setDocument(ARTICLE_NS, canonicalId, stored)
+      articlePersistHook?.(stored)
     }
     this.applyRetentionPolicy()
   }
@@ -474,6 +481,13 @@ export class NewsFeedStore {
   getArticle(id: string): FeedArticle | undefined {
     this.ensureMigrated()
     return this.getArticleDoc(id) ?? undefined
+  }
+
+  listArticleIds(): string[] {
+    this.ensureMigrated()
+    const index = this.readIndexDocument()
+    if (index.article_order.length) return index.article_order
+    return this.store.listDocumentIds(ARTICLE_NS)
   }
 }
 

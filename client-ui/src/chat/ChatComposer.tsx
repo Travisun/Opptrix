@@ -116,8 +116,8 @@ const useStyles = makeStyles({
     },
     ':focus-within': {
       backgroundColor: opptrixCssVars.canvas,
-      borderColor: opptrixCssVars.inputBorderFocus,
-      boxShadow: opptrixCssVars.focusGlow,
+      borderColor: opptrixCssVars.borderStrong,
+      boxShadow: opptrixCssVars.composerFloatShadowFocus,
     },
   },
   inputRow: {

@@ -58,7 +58,7 @@ npm run dev
 ## LLM 配置
 
 1. 启动 server 后打开 **设置** 页，或
-2. 直接编辑 `apps/server/data/config.json`：
+2. 参考 [example/config/app-config.example.json](../example/config/app-config.example.json) 编辑 `apps/server/data/config.json`（旧路径，首次会迁移入库）：
 
 ```json
 {

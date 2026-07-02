@@ -1,7 +1,8 @@
+import { useState, useRef } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -11,6 +12,8 @@ import { isElectron } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
+import AppUpdateNotice from '../desktop/AppUpdateNotice'
+import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 
@@ -142,7 +145,7 @@ const useStyles = makeStyles({
   itemTrailing: {
     position: 'relative',
     flexShrink: 0,
-    width: '40px',
+    width: '52px',
     height: '18px',
     display: 'flex',
     alignItems: 'center',
@@ -167,6 +170,23 @@ const useStyles = makeStyles({
     lineHeight: 0,
     position: 'absolute',
     right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    opacity: 0,
+    pointerEvents: 'none',
+    '@media (hover: none)': {
+      opacity: 1,
+      pointerEvents: 'auto',
+    },
+  },
+  itemArchive: {
+    ...nativeIconInteractive,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 0,
+    position: 'absolute',
+    right: '18px',
     top: '50%',
     transform: 'translateY(-50%)',
     opacity: 0,
@@ -230,6 +250,8 @@ interface SessionSidebarProps {
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
+  onArchive: (id: string, folderId: string) => void
+  onOpenSearch: () => void
   onOpenSettings: () => void
   onOpenNewsCenter: () => void
   onClose?: () => void
@@ -242,7 +264,7 @@ function formatDate(iso: string) {
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat',
-  onSelect, onNew, onDelete, onOpenSettings, onOpenNewsCenter, onClose,
+  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onClose,
 }: SessionSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
@@ -250,6 +272,9 @@ export default function SessionSidebar({
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
   const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
+  const [archiveMenu, setArchiveMenu] = useState<{ sessionId: string; anchor: HTMLElement } | null>(null)
+  const archiveAnchorRef = useRef<HTMLElement | null>(null)
+  archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
   const handleSelect = (id: string) => {
     onSelect(id)
@@ -267,6 +292,11 @@ export default function SessionSidebar({
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
+      </button>
+
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onOpenSearch}>
+        <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>搜索</span>
       </button>
 
       <button
@@ -310,6 +340,17 @@ export default function SessionSidebar({
                 <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
                 <button
                   type="button"
+                  className={mergeClasses(s.itemArchive, 'opptrix-session-archive', 'opptrix-focusable')}
+                  onClick={e => {
+                    e.stopPropagation()
+                    setArchiveMenu({ sessionId: sess.id, anchor: e.currentTarget })
+                  }}
+                  aria-label="归档对话"
+                >
+                  <ArchiveRegular fontSize={14} />
+                </button>
+                <button
+                  type="button"
                   className={mergeClasses(s.itemDelete, 'opptrix-session-delete', 'opptrix-focusable')}
                   onClick={e => { e.stopPropagation(); onDelete(sess.id) }}
                   aria-label="删除对话"
@@ -323,10 +364,21 @@ export default function SessionSidebar({
       </div>
 
       <div className={s.footer}>
+        <AppUpdateNotice />
         <OpptrixButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
           设置
         </OpptrixButton>
       </div>
+
+      <SessionArchiveFolderMenu
+        open={archiveMenu != null}
+        anchorRef={archiveAnchorRef}
+        onClose={() => setArchiveMenu(null)}
+        onSelect={folderId => {
+          if (archiveMenu) onArchive(archiveMenu.sessionId, folderId)
+          setArchiveMenu(null)
+        }}
+      />
     </>
   )
 

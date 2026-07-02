@@ -6,6 +6,7 @@ const { APP_NAME, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
+const { initUpdater, registerUpdaterIpc } = require('./updater.cjs')
 const {
   getTranslationStatus,
   getTranslationModels,
@@ -127,6 +128,7 @@ function sidecarEnv(root) {
     ...process.env,
     SERVE_UI: '1',
     OPPTRIX_DESKTOP: '1',
+    OPPTRIX_APP_VERSION: VERSION,
     STOCK_RESEARCH_HOST: API_HOST,
     STOCK_RESEARCH_PORT: API_PORT,
     UI_DIST_PATH: uiDist(root),
@@ -478,6 +480,8 @@ function registerWindowIpc() {
       }
     })
   })
+
+  registerUpdaterIpc(ipcMain)
 }
 
 function setupDesktopChrome() {
@@ -504,6 +508,7 @@ app.whenReady().then(async () => {
       }
     }
   })
+  initUpdater({ version: VERSION })
 
   app.on('activate', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) {

@@ -18,8 +18,14 @@ import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
+import {
+  searchSettingsEntries,
+  settingsSectionLabel,
+  type SettingsSearchEntry,
+} from './settingsSearchIndex'
+import type { SettingsSection } from './settingsTypes'
 
-export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'translation' | 'multimodal' | 'about'
+export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
@@ -136,6 +142,54 @@ const useStyles = makeStyles({
   navIconActive: {
     color: opptrixCssVars.textPrimary,
   },
+  searchResults: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    padding: '2px 8px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '1px',
+  },
+  searchResultsOverlay: {
+    padding: '2px 0 16px',
+  },
+  searchHit: {
+    ...ghostInteractive,
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    gap: '1px',
+    width: '100%',
+    padding: '6px 8px',
+    borderRadius: opptrixTokens.radiusMd,
+    border: 'none',
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+  },
+  searchHitTitle: {
+    fontSize: '13px',
+    fontWeight: 500,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
+  searchHitMeta: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.35,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+    maxWidth: '100%',
+  },
+  searchEmpty: {
+    padding: '16px 10px',
+    fontSize: '12px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    textAlign: 'center',
+  },
 })
 
 interface SettingsSidebarProps {
@@ -147,6 +201,7 @@ interface SettingsSidebarProps {
   onBack?: () => void
   search: string
   onSearchChange: (value: string) => void
+  dynamicSearchEntries?: SettingsSearchEntry[]
   isMobile?: boolean
 }
 
@@ -154,7 +209,7 @@ export default function SettingsSidebar({
   mode = 'panel',
   visible = true,
   onClose,
-  active, onSelect, onBack, search, onSearchChange, isMobile = false,
+  active, onSelect, onBack, search, onSearchChange, dynamicSearchEntries = [], isMobile = false,
 }: SettingsSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
@@ -162,11 +217,29 @@ export default function SettingsSidebar({
   const electronChrome = isElectron() && !isMobile && !isOverlay
   const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
 
+  const searchActive = Boolean(search.trim()) && !isMobile
+
+  const searchHits = useMemo(
+    () => searchSettingsEntries(search, dynamicSearchEntries),
+    [search, dynamicSearchEntries],
+  )
+
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase()
     if (!q) return NAV
-    return NAV.filter(item => item.label.toLowerCase().includes(q))
-  }, [search])
+    const matched = new Set(searchHits.map(hit => hit.section))
+    return NAV.filter(item => matched.has(item.id))
+  }, [search, searchHits])
+
+  const pickSection = (section: SettingsSection) => {
+    onSelect(section)
+    if (isOverlay) onClose?.()
+  }
+
+  const pickSearchHit = (hit: SettingsSearchEntry) => {
+    pickSection(hit.section)
+    onSearchChange('')
+  }
 
   const body = (
     <>
@@ -188,8 +261,32 @@ export default function SettingsSidebar({
         </div>
       )}
 
-      <nav className={mergeClasses(s.nav, isOverlay && s.navOverlay, isMobile && s.navMobile, 'opptrix-scroll')}>
-        {filtered.map(item => {
+      <nav className={mergeClasses(
+        searchActive ? s.searchResults : s.nav,
+        isOverlay && (searchActive ? s.searchResultsOverlay : s.navOverlay),
+        isMobile && s.navMobile,
+        'opptrix-scroll',
+      )}>
+        {searchActive && searchHits.length === 0 && (
+          <div className={s.searchEmpty}>没有匹配的设置项</div>
+        )}
+
+        {searchActive && searchHits.map(hit => (
+          <button
+            key={`${hit.section}-${hit.group ?? ''}-${hit.title}`}
+            type="button"
+            className={mergeClasses(s.searchHit, 'opptrix-focusable')}
+            onClick={() => pickSearchHit(hit)}
+          >
+            <span className={s.searchHitTitle}>{hit.title}</span>
+            <span className={s.searchHitMeta}>
+              {[settingsSectionLabel(hit.section), hit.group].filter(Boolean).join(' · ')}
+              {hit.desc ? ` · ${hit.desc}` : ''}
+            </span>
+          </button>
+        ))}
+
+        {!searchActive && filtered.map(item => {
           const Icon = item.icon
           const isActive = active === item.id
           return (
@@ -204,7 +301,7 @@ export default function SettingsSidebar({
                 isActive && 'opptrix-settings-nav-item-active',
                 'opptrix-focusable',
               )}
-              onClick={() => onSelect(item.id)}
+              onClick={() => pickSection(item.id)}
             >
               <Icon
                 className={mergeClasses(
@@ -275,7 +372,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'multimodal':
       return '配置图片 OCR、语音转写与文章媒体自动提取策略'
     case 'about':
-      return '应用版本与运行说明'
+      return '了解产品用途、访问主页与反馈问题'
     default:
       return ''
   }

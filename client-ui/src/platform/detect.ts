@@ -15,6 +15,10 @@ declare global {
       }) => Promise<string>
       openExternalUrl?: (url: string) => Promise<boolean>
       clientVersion?: () => Promise<string>
+      appUpdateGetStatus?: () => Promise<AppUpdateStatus>
+      appUpdateCheck?: () => Promise<AppUpdateStatus>
+      appUpdateInstall?: () => Promise<boolean>
+      onAppUpdateStatus?: (callback: (status: AppUpdateStatus) => void) => () => void
       translationGetStatus?: () => Promise<TranslationEngineStatus>
       translationGetModels?: () => Promise<TranslationModelsResult>
       translationGetDownloadDir?: () => Promise<string>
@@ -124,6 +128,23 @@ export type TranslationProgress = {
   translatedText?: string
   translatedTitle?: string
   done?: boolean
+}
+
+export type AppUpdateState =
+  | 'idle'
+  | 'checking'
+  | 'available'
+  | 'downloading'
+  | 'ready'
+  | 'not-available'
+  | 'error'
+
+export type AppUpdateStatus = {
+  state: AppUpdateState
+  currentVersion?: string | null
+  version?: string | null
+  percent?: number
+  message?: string | null
 }
 
 export function isElectron(): boolean {

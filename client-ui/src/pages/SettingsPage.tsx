@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Text, Spinner, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
@@ -9,19 +9,21 @@ import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
 } from './settings/SettingsSidebar'
+import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
+import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
 } from './settings/SettingsPrimitives'
 import {
-  getConfig, patchConfig, deleteProvider, getHealth,
+  getConfig, patchConfig, deleteProvider, getHealth, listDiscoverStrategies, news,
   type AppConfig, type PublicProvider,
 } from '../api/client'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
@@ -178,23 +180,6 @@ const useStyles = makeStyles({
   saveHintActive: {
     color: opptrixCssVars.textSecondary,
   },
-  aboutProse: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    maxWidth: '52ch',
-    paddingTop: '4px',
-  },
-  aboutProseFlush: {
-    maxWidth: 'none',
-  },
-  aboutTitle: {
-    fontSize: '15px',
-    fontWeight: 600,
-    letterSpacing: '-0.02em',
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.45,
-  },
   aboutMeta: {
     fontSize: '14px',
     color: opptrixCssVars.textSecondary,
@@ -325,6 +310,8 @@ function SettingsPageView({
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [strategyNames, setStrategyNames] = useState<string[]>([])
+  const [newsSearchEntries, setNewsSearchEntries] = useState<SettingsSearchEntry[]>([])
   const [scorecard, setScorecard] = useState('综合评估')
   const [loading, setLoading] = useState(true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -347,6 +334,30 @@ function SettingsPageView({
     refresh()
       .catch(() => toast.showError('无法读取后端配置，请确认服务已启动'))
       .finally(() => setLoading(false))
+    listDiscoverStrategies()
+      .then(res => setStrategyNames(res.strategies.map(item => item.name)))
+      .catch(() => setStrategyNames([]))
+    news.listSubscriptions()
+      .then(res => {
+        const entries: SettingsSearchEntry[] = []
+        for (const sub of res.subscriptions) {
+          entries.push({
+            section: 'news_feed',
+            group: '订阅源',
+            title: sub.title,
+            desc: sub.url,
+          })
+        }
+        for (const group of res.groups) {
+          entries.push({
+            section: 'news_feed',
+            group: '订阅分组',
+            title: group.title,
+          })
+        }
+        setNewsSearchEntries(entries)
+      })
+      .catch(() => setNewsSearchEntries([]))
   }, [refresh, toast])
 
   useEffect(() => {
@@ -412,6 +423,27 @@ function SettingsPageView({
   }
 
   const providers = config?.providers ?? []
+
+  const dynamicSearchEntries = useMemo((): SettingsSearchEntry[] => {
+    const entries: SettingsSearchEntry[] = []
+    for (const p of providers) {
+      entries.push({
+        section: 'models',
+        title: p.name,
+        desc: '模型提供商',
+        keywords: [p.base_url, ...p.models],
+      })
+    }
+    for (const name of strategyNames) {
+      entries.push({
+        section: 'discover_strategies',
+        title: name,
+        desc: '选股策略',
+      })
+    }
+    entries.push(...newsSearchEntries)
+    return entries
+  }, [providers, strategyNames, newsSearchEntries])
 
   const saveHintText = (() => {
     switch (saveState) {
@@ -552,17 +584,7 @@ function SettingsPageView({
         return <MultimodalSettingsSection />
 
       case 'about':
-        return (
-          <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
-            <Text className={s.aboutTitle} block>Opptrix · 你的A股投研助手</Text>
-            <Text className={s.aboutMeta} block>
-              21 投研工具 · 多会话 · Function Calling · 多模型提供商。
-            </Text>
-            <Text className={s.aboutMeta} block>
-              本地运行，数据与 API Key 保存在本机服务端。
-            </Text>
-          </div>
-        )
+        return <AboutSettingsSection contentFlush={contentFlush} />
 
       default:
         return null
@@ -582,6 +604,7 @@ function SettingsPageView({
           onBack={onBack}
           search={search}
           onSearchChange={setSearch}
+          dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
         />
       )}
@@ -595,6 +618,7 @@ function SettingsPageView({
           onBack={onBack}
           search={search}
           onSearchChange={setSearch}
+          dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
         />
       )}

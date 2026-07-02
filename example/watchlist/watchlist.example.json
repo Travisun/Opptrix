@@ -1,0 +1,28 @@
+{
+  "items": [
+    {
+      "code": "600519",
+      "name": "贵州茅台",
+      "industry": "白酒",
+      "note": "示例：消费龙头",
+      "addedAt": "2026-01-01T00:00:00.000Z",
+      "addedPrice": null
+    },
+    {
+      "code": "300750",
+      "name": "宁德时代",
+      "industry": "电池",
+      "note": "示例：新能源",
+      "addedAt": "2026-01-01T00:00:00.000Z",
+      "addedPrice": null
+    },
+    {
+      "code": "000001",
+      "name": "平安银行",
+      "industry": "银行",
+      "note": "示例：金融",
+      "addedAt": "2026-01-01T00:00:00.000Z",
+      "addedPrice": null
+    }
+  ]
+}

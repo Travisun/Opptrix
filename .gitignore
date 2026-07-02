@@ -45,3 +45,6 @@ llms/*.gguf
 logs/
 data/cache/
 outputs/
+
+# Local trials when using example/ configs
+example/runtime-local/

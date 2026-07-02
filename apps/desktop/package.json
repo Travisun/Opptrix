@@ -19,6 +19,14 @@
   "build": {
     "appId": "com.opptrix.desktop",
     "productName": "Opptrix",
+    "electronVersion": "35.7.5",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Travisun",
+        "repo": "Opptrix"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -26,11 +34,13 @@
       "electron/**/*",
       "package.json",
       "build/icons/**/*",
+      "build/updater-deps/node_modules/**/*",
       "!node_modules/**/*",
       "node_modules/node-llama-cpp/**/*"
     ],
     "asarUnpack": [
-      "**/node_modules/node-llama-cpp/**"
+      "**/node_modules/node-llama-cpp/**",
+      "**/build/updater-deps/**"
     ],
     "icon": "build/icons/logo-app.png",
     "extraResources": [
@@ -84,6 +94,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "node-llama-cpp": "^3.19.0"
   }
 }

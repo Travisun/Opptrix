@@ -22,11 +22,17 @@ import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
+import { registerSearchRoutes } from './search-routes.js'
 import { startNewsFeedScheduler } from '@opptrix/news-feed'
 import { startEnrichmentScheduler } from '@opptrix/article-enrichment'
+import { setSessionPersistHooks } from '@opptrix/agent'
+import { setNewsArticlePersistHook, getArticle } from '@opptrix/news-feed'
+import { getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
+import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
+const APP_VERSION = process.env.OPPTRIX_APP_VERSION ?? '0.6.0'
 
 const hub = new ResearchHub()
 hub.initMarketDataAutoSync()
@@ -41,7 +47,7 @@ const serverAppContext = {
   getAppSettings: async () => publicConfig(cfg),
   getProjectInfo: async () => ({
     app: 'Opptrix',
-    version: '0.6.0',
+    version: APP_VERSION,
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
     project_root: resolveProjectRoot(),
@@ -58,6 +64,20 @@ agent = new AgentEngine(hub, {
   defaultScorecard: cfg.default_scorecard,
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
+})
+
+setSessionPersistHooks({
+  onPersist: syncSessionSearchIndex,
+  onDelete: removeSessionSearchIndex,
+})
+
+setNewsArticlePersistHook(article => {
+  syncNewsSearchIndex(article, getEnrichmentStore().get(article.id))
+})
+
+setEnrichmentPersistHook(doc => {
+  const article = getArticle(doc.article_id)
+  if (article) syncNewsSearchIndex(article, doc)
 })
 
 const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 })
@@ -91,7 +111,7 @@ app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
 
 app.get('/api/health', async () => ({
   status: 'ok',
-  version: '0.6.0',
+  version: APP_VERSION,
   runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
   desktop: process.env.OPPTRIX_DESKTOP === '1',
   llm_configured: agent.llmConfigured,
@@ -746,6 +766,7 @@ let serveUi = false
 async function bootstrap() {
   await registerNewsRoutes(app)
   await registerEnrichmentRoutes(app)
+  registerSearchRoutes(app, hub, agent)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
   serveUi = shouldServeUi()

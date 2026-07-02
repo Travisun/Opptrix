@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { ChatMessage } from './llm/provider.js'
 import type { ChatToolStep } from './chat-progress.js'
+import { SessionArchiveFolderStore } from './archive-folders.js'
 
 export type { ChatToolStep }
 
@@ -14,6 +15,8 @@ export interface SessionMeta {
   updatedAt: string
   /** providerId:modelName */
   model?: string
+  archivedAt?: string | null
+  archiveFolderId?: string | null
 }
 
 export interface DisplayMessage {
@@ -71,9 +74,21 @@ function previewText(content: string, max = 72): string {
   return oneLine.length <= max ? oneLine : `${oneLine.slice(0, max)}…`
 }
 
+let sessionPersistHook: ((record: SessionRecord) => void) | null = null
+let sessionDeleteHook: ((sessionId: string) => void) | null = null
+
+export function setSessionPersistHooks(hooks: {
+  onPersist?: (record: SessionRecord) => void
+  onDelete?: (sessionId: string) => void
+}) {
+  sessionPersistHook = hooks.onPersist ?? null
+  sessionDeleteHook = hooks.onDelete ?? null
+}
+
 function writeRecord(record: SessionRecord) {
   record.updatedAt = new Date().toISOString()
   getUserDataStore().setDocument(NAMESPACE, record.id, record)
+  sessionPersistHook?.(record)
 }
 
 function migrateTurns(record: SessionRecord): SessionRecord {
@@ -105,18 +120,55 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
   return migrateTurns(record)
 }
 
+function toMeta(raw: SessionRecord): SessionMeta {
+  return {
+    id: raw.id,
+    title: raw.title,
+    createdAt: raw.createdAt,
+    updatedAt: raw.updatedAt,
+    model: raw.model,
+    archivedAt: raw.archivedAt ?? null,
+    archiveFolderId: raw.archiveFolderId ?? null,
+  }
+}
+
+function isArchived(record: SessionRecord): boolean {
+  return Boolean(record.archivedAt)
+}
+
 export class SessionStore {
+  private folderStore = new SessionArchiveFolderStore()
+
+  listArchiveFolders() {
+    return this.folderStore.ensureDefaults()
+  }
+
+  /** Active (non-archived) sessions for sidebar */
+  listActive(): SessionMeta[] {
+    return this.listAll().filter(s => !s.archivedAt)
+  }
+
+  /** @deprecated Use listActive — kept for compatibility */
   list(): SessionMeta[] {
+    return this.listActive()
+  }
+
+  listAll(): SessionMeta[] {
     const sessions = getUserDataStore()
       .listDocuments<SessionRecord>(NAMESPACE)
-      .map(raw => ({
-        id: raw.id,
-        title: raw.title,
-        createdAt: raw.createdAt,
-        updatedAt: raw.updatedAt,
-        model: raw.model,
-      }))
+      .map(toMeta)
     return sessions.sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  }
+
+  listArchivedGrouped(): Array<{ folder: import('./archive-folders.js').SessionArchiveFolder; sessions: SessionMeta[] }> {
+    const folders = this.folderStore.ensureDefaults()
+    const archived = this.listAll().filter(s => s.archivedAt)
+    return folders.map(folder => ({
+      folder,
+      sessions: archived
+        .filter(s => (s.archiveFolderId || 'other') === folder.id)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    })).filter(g => g.sessions.length > 0)
   }
 
   get(id: string): SessionRecord | null {
@@ -146,6 +198,27 @@ export class SessionStore {
 
   delete(id: string) {
     getUserDataStore().deleteDocument(NAMESPACE, id)
+    sessionDeleteHook?.(id)
+  }
+
+  archive(id: string, folderId: string): SessionRecord | null {
+    const record = this.get(id)
+    if (!record || isArchived(record)) return null
+    const folder = this.folderStore.get(folderId) ?? this.folderStore.get('other')
+    if (!folder) return null
+    record.archivedAt = new Date().toISOString()
+    record.archiveFolderId = folder.id
+    writeRecord(record)
+    return record
+  }
+
+  unarchive(id: string): SessionRecord | null {
+    const record = this.get(id)
+    if (!record || !isArchived(record)) return null
+    record.archivedAt = null
+    record.archiveFolderId = null
+    writeRecord(record)
+    return record
   }
 
   rename(id: string, title: string) {

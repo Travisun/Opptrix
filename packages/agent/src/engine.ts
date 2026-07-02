@@ -100,7 +100,27 @@ export class AgentEngine {
   }
 
   listSessions() {
-    return this.sessions.list()
+    return this.sessions.listActive()
+  }
+
+  listAllSessions() {
+    return this.sessions.listAll()
+  }
+
+  listArchivedSessionsGrouped() {
+    return this.sessions.listArchivedGrouped()
+  }
+
+  listSessionArchiveFolders() {
+    return this.sessions.listArchiveFolders()
+  }
+
+  archiveSession(id: string, folderId: string) {
+    return this.sessions.archive(id, folderId)
+  }
+
+  unarchiveSession(id: string) {
+    return this.sessions.unarchive(id)
   }
 
   getSession(id: string) {

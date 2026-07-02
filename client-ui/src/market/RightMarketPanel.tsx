@@ -118,6 +118,8 @@ interface Props {
   chromeToolbarReserve?: number
   /** Right panel occupies full workspace width (chat column hidden). */
   panelFullWidth?: boolean
+  focusStockCode?: string | null
+  onFocusStockConsumed?: () => void
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
   onDiscussInChat?: (payload: StockDiscussPayload) => void
@@ -128,6 +130,8 @@ export default function RightMarketPanel({
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
   panelFullWidth = false,
+  focusStockCode = null,
+  onFocusStockConsumed,
   onToggleRightPanel,
   onToggleChatColumn,
   onDiscussInChat,
@@ -198,6 +202,12 @@ export default function RightMarketPanel({
     setSelected(item)
     setTab('detail')
   }, [items, holdingsByCode])
+
+  useEffect(() => {
+    if (!focusStockCode) return
+    handlePortfolioSelect(focusStockCode)
+    onFocusStockConsumed?.()
+  }, [focusStockCode, handlePortfolioSelect, onFocusStockConsumed])
 
   const detailStock = useMemo(() => {
     if (!selected) return null

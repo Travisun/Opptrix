@@ -7,6 +7,15 @@ export interface SessionMeta {
   updatedAt: string
   /** providerId:modelName */
   model?: string
+  archivedAt?: string | null
+  archiveFolderId?: string | null
+}
+
+export interface SessionArchiveFolder {
+  id: string
+  title: string
+  sortOrder: number
+  isDefault: boolean
 }
 
 export interface AvailableModel {

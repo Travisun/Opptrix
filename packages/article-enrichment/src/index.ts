@@ -1,6 +1,6 @@
 export { scanHtmlMedia, type ScannedMedia, type MediaKind } from './html-media-scan.js'
 export { fetchMediaToCache } from './media-fetch.js'
-export { EnrichmentStore, getEnrichmentStore } from './enrichment-store.js'
+export { EnrichmentStore, getEnrichmentStore, setEnrichmentPersistHook } from './enrichment-store.js'
 export {
   enrichArticle,
   queueArticleEnrichment,
