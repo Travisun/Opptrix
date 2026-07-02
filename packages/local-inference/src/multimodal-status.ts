@@ -4,9 +4,9 @@ import {
   getLlamaCppToolsDir,
   probeMtmdCliPath,
 } from './vision/mtmd-binary.js'
+import { isWhisperModelInstalled } from './whisper/whisper-runtime.js'
 import { resolveVisionModelPaths } from './catalog/installed.js'
 import { getWhisperModelsDir } from './paths.js'
-import fs from 'node:fs'
 
 const require = createRequire(import.meta.url)
 
@@ -35,16 +35,6 @@ export type MultimodalRuntimeStatus = {
   canEnrichOffline: boolean
 }
 
-function isWhisperModelCached(modelName: string): boolean {
-  try {
-    const files = fs.readdirSync(getWhisperModelsDir())
-    const key = modelName.toLowerCase()
-    return files.some(name => name.toLowerCase().includes(key))
-  } catch {
-    return false
-  }
-}
-
 export function getMultimodalRuntimeStatus(
   repoRoot?: string,
   whisperModel = 'tiny',
@@ -63,7 +53,7 @@ export function getMultimodalRuntimeStatus(
   const modelInstalled = Boolean(visionPaths?.modelPath)
   const mmprojInstalled = Boolean(visionPaths?.mmprojPath)
   const mtmdReady = Boolean(mtmdPath)
-  const whisperReady = isWhisperModelCached(whisperModel)
+  const whisperReady = isWhisperModelInstalled(whisperModel)
   const ffmpegReady = Boolean(ffmpegPath)
 
   return {

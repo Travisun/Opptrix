@@ -4,6 +4,8 @@ export { EnrichmentStore, getEnrichmentStore } from './enrichment-store.js'
 export {
   enrichArticle,
   queueArticleEnrichment,
+  canEnrichWithSettings,
+  isRemoteVisionConfigured,
   type EnrichmentProgress,
 } from './enrichment-engine.js'
 export {

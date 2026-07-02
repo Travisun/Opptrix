@@ -1,11 +1,11 @@
 import { getArticle, getNewsSettings } from '@opptrix/news-feed'
-import { BOOTSTRAP_MODEL_IDS, bootstrapModels } from '@opptrix/local-inference'
-import { queueArticleEnrichment } from './enrichment-engine.js'
+import { queueArticleEnrichment, canEnrichWithSettings } from './enrichment-engine.js'
 import { getEnrichmentStore } from './enrichment-store.js'
+import { getMultimodalRuntimeStatus, whisperRuntime } from '@opptrix/local-inference'
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
 let schedulerRunning = false
-let modelsBootstrapped = false
+let whisperBootstrapped = false
 
 export function startEnrichmentScheduler(tickMs = 90_000, repoRoot?: string): void {
   if (schedulerTimer) return
@@ -14,13 +14,13 @@ export function startEnrichmentScheduler(tickMs = 90_000, repoRoot?: string): vo
     if (schedulerRunning) return
     schedulerRunning = true
     try {
-      if (!modelsBootstrapped) {
-        modelsBootstrapped = true
-        void bootstrapModels(BOOTSTRAP_MODEL_IDS).catch(() => {})
-        void import('@opptrix/local-inference').then(m => m.whisperRuntime.ensureModel('tiny')).catch(() => {})
+      const settings = getNewsSettings()
+      if (!whisperBootstrapped && settings.enrichment?.enabled) {
+        whisperBootstrapped = true
+        const whisperModel = settings.enrichment.offline_whisper_model?.trim() || 'tiny'
+        void whisperRuntime.ensureModel(whisperModel).catch(() => {})
       }
 
-      const settings = getNewsSettings()
       if (!settings.enrichment?.enabled || settings.enrichment.processing_mode !== 'background') return
 
       const { getNewsFeedStore } = await import('@opptrix/news-feed')

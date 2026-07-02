@@ -14,7 +14,7 @@ import {
   getEnrichmentStore,
   queueArticleEnrichment,
 } from '@opptrix/article-enrichment'
-import { resolveProjectRoot } from '@opptrix/agent'
+import { resolveProjectRoot } from '@opptrix/shared'
 import { ok, fail, type ResearchResult } from '@opptrix/shared'
 
 type NewsListView = 'timeline' | 'group' | 'source'

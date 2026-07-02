@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ChatRegular, SlideMultimediaRegular, TranslateRegular } from '@fluentui/react-icons'
+import { ChatRegular, ImageRegular, TranslateRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
 import { openExternalUrl } from '../../platform/openUrl'
 import { isElectron } from '../../platform/detect'
@@ -371,7 +371,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               >
                 {enrichment.enriching
                   ? <Spinner size="extra-tiny" />
-                  : <SlideMultimediaRegular fontSize={14} />}
+                  : <ImageRegular fontSize={14} />}
               </button>
             </>
           )}

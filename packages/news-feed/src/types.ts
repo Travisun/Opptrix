@@ -159,7 +159,7 @@ export const DEFAULT_ENRICHMENT_SETTINGS: NewsEnrichmentSettings = {
   extract_images: true,
   extract_audio: true,
   extract_video: true,
-  service_mode: 'offline',
+  service_mode: 'remote',
   offline_vision_model: '__auto__',
   offline_whisper_model: 'tiny',
   remote_provider_id: null,

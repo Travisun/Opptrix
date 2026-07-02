@@ -1,6 +1,6 @@
 export * from './types.js'
 export { ok, fail, elapsedSince } from './result.js'
-export { resolveUserDataRoot, isDesktopRuntime } from './paths.js'
+export { resolveUserDataRoot, isDesktopRuntime, resolveProjectRoot } from './paths.js'
 export {
   computeMarketRegime,
   computeMaPositionPct,

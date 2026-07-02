@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
+import { isDesktopRuntime, resolveProjectRoot, resolveUserDataRoot } from '@opptrix/shared'
 
 const DATA_ROOT = resolveUserDataRoot()
 
@@ -31,22 +31,7 @@ export interface AgentAppContext {
   getProjectInfo?(): Promise<Record<string, unknown>>
 }
 
-export function resolveProjectRoot(start = process.cwd()): string {
-  let dir = path.resolve(start)
-  for (let i = 0; i < 10; i++) {
-    const pkgPath = path.join(dir, 'package.json')
-    if (fs.existsSync(pkgPath)) {
-      try {
-        const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { name?: string; workspaces?: unknown }
-        if (pkg.name === 'opptrix' || pkg.workspaces) return dir
-      } catch { /* continue */ }
-    }
-    const parent = path.dirname(dir)
-    if (parent === dir) break
-    dir = parent
-  }
-  return process.cwd()
-}
+export { resolveProjectRoot } from '@opptrix/shared'
 
 export function getDataLayerPaths() {
   return {

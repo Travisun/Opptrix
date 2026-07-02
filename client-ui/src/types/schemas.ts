@@ -484,16 +484,10 @@ export interface MultimodalRuntimeStatus {
 export interface MultimodalStatusResponse {
   settings: NewsEnrichmentSettings
   runtime: MultimodalRuntimeStatus
-  visionCatalog: Array<{
-    id: string
-    name: string
-    filename: string
-    purpose: string
-    installed: boolean
-    sizeBytes: number
-  }>
   remoteConfigured: boolean
   remoteProviderName: string | null
+  canEnrichImages: boolean
+  canEnrichSpeech: boolean
   canEnrich: boolean
 }
 

@@ -6,13 +6,15 @@ import type {
 } from '@opptrix/news-feed'
 import {
   ffmpegRuntime,
-  visionRuntime,
   whisperRuntime,
 } from '@opptrix/local-inference'
 import { scanHtmlMedia, type ScannedMedia } from './html-media-scan.js'
 import { fetchMediaToCache } from './media-fetch.js'
 import { getEnrichmentStore } from './enrichment-store.js'
-import fs from 'node:fs'
+import {
+  extractImageWithRemoteLlm,
+  resolveRemoteVisionLlm,
+} from './remote-image.js'
 import path from 'node:path'
 import { ensureDirAsync, getMediaCacheDir } from '@opptrix/local-inference'
 
@@ -27,7 +29,7 @@ export type EnrichmentProgress = {
 
 const DERIVED_LABEL: Record<ArticleDerivedSegment['kind'], string> = {
   html_text: '',
-  image_ocr: '【图片内容】',
+  image_ocr: '【图片摘要】',
   audio_asr: '【音频转写】',
   video_asr: '【视频转写】',
 }
@@ -48,50 +50,81 @@ function emptyEnrichment(articleId: string): ArticleEnrichment {
   }
 }
 
+/** 图片仅走远程视觉模型；未配置远程时不会进入处理队列 */
+export function isRemoteVisionConfigured(settings: NewsEnrichmentSettings): boolean {
+  return resolveRemoteVisionLlm(settings) !== null
+}
+
+export function canEnrichWithSettings(settings: NewsEnrichmentSettings, ffmpegReady: boolean): {
+  images: boolean
+  speech: boolean
+  any: boolean
+} {
+  if (!settings.enabled) {
+    return { images: false, speech: false, any: false }
+  }
+  const images = settings.extract_images && isRemoteVisionConfigured(settings)
+  const speech = ffmpegReady && (settings.extract_audio || settings.extract_video)
+  return { images, speech, any: images || speech }
+}
+
 async function processImage(
   item: ScannedMedia,
-  repoRoot?: string,
+  settings: NewsEnrichmentSettings,
+  article: FeedArticle,
 ): Promise<ArticleDerivedSegment> {
+  const remoteLlm = resolveRemoteVisionLlm(settings)
+  if (!remoteLlm) {
+    throw new Error('未配置远程视觉模型，跳过图片处理')
+  }
+
   const localPath = await fetchMediaToCache(item)
-  const text = await visionRuntime.extractImageText(localPath, repoRoot)
+  const text = await extractImageWithRemoteLlm(localPath, remoteLlm, article.title)
+
   return {
     id: item.id,
     kind: 'image_ocr',
-    text: labelText('image_ocr', text),
+    text: labelText('image_ocr', text || '（未能识别有效内容）'),
     anchor: { media_src: item.src, insert: 'after_media' },
-    model: 'smolvlm-256m',
+    model: remoteLlm.model,
     created_at: new Date().toISOString(),
   }
 }
 
-async function processAudio(item: ScannedMedia): Promise<ArticleDerivedSegment> {
+async function processAudio(
+  item: ScannedMedia,
+  whisperModel: string,
+): Promise<ArticleDerivedSegment> {
   const localPath = await fetchMediaToCache(item)
-  await whisperRuntime.ensureModel('tiny')
+  await whisperRuntime.ensureModel(whisperModel)
   const wavPath = path.join(getMediaCacheDir(), `${item.id.replace(':', '_')}.wav`)
   await ffmpegRuntime.extractAudioWav(localPath, wavPath)
-  const result = await whisperRuntime.transcribe(wavPath, 'tiny')
+  const result = await whisperRuntime.transcribe(wavPath, whisperModel)
   return {
     id: item.id,
     kind: 'audio_asr',
     text: labelText('audio_asr', result.text || '（未识别到语音）'),
     anchor: { media_src: item.src, insert: 'after_media' },
-    model: 'whisper-tiny',
+    model: `whisper-${whisperModel}`,
     created_at: new Date().toISOString(),
   }
 }
 
-async function processVideo(item: ScannedMedia): Promise<ArticleDerivedSegment> {
+async function processVideo(
+  item: ScannedMedia,
+  whisperModel: string,
+): Promise<ArticleDerivedSegment> {
   const localPath = await fetchMediaToCache(item)
-  await whisperRuntime.ensureModel('tiny')
+  await whisperRuntime.ensureModel(whisperModel)
   const wavPath = path.join(getMediaCacheDir(), `${item.id.replace(':', '_')}.wav`)
   await ffmpegRuntime.extractAudioWav(localPath, wavPath)
-  const result = await whisperRuntime.transcribe(wavPath, 'tiny')
+  const result = await whisperRuntime.transcribe(wavPath, whisperModel)
   return {
     id: item.id,
     kind: 'video_asr',
     text: labelText('video_asr', result.text || '（未识别到语音）'),
     anchor: { media_src: item.src, insert: 'after_media' },
-    model: 'whisper-tiny',
+    model: `whisper-${whisperModel}`,
     created_at: new Date().toISOString(),
   }
 }
@@ -100,8 +133,11 @@ function filterMedia(
   items: ScannedMedia[],
   settings: NewsEnrichmentSettings,
 ): ScannedMedia[] {
+  const remoteVision = isRemoteVisionConfigured(settings)
   return items.filter(item => {
-    if (item.kind === 'image') return settings.extract_images
+    if (item.kind === 'image') {
+      return settings.extract_images && remoteVision
+    }
     if (item.kind === 'audio') return settings.extract_audio
     if (item.kind === 'video') return settings.extract_video
     return false
@@ -118,6 +154,7 @@ export async function enrichArticle(
 ): Promise<ArticleEnrichment> {
   const store = getEnrichmentStore()
   const articleId = article.id
+  const whisperModel = options.settings.offline_whisper_model?.trim() || 'tiny'
   const started = {
     ...emptyEnrichment(articleId),
     status: 'running' as const,
@@ -137,7 +174,9 @@ export async function enrichArticle(
     phase: 'scan',
     current: 0,
     total: media.length,
-    message: `发现 ${media.length} 个媒体项`,
+    message: media.length > 0
+      ? `发现 ${media.length} 个媒体项`
+      : '无可处理媒体（图片需配置远程视觉模型）',
   })
 
   for (let i = 0; i < media.length; i += 1) {
@@ -151,11 +190,11 @@ export async function enrichArticle(
     })
     try {
       if (item.kind === 'image') {
-        segments.push(await processImage(item, options.repoRoot))
+        segments.push(await processImage(item, options.settings, article))
       } else if (item.kind === 'audio') {
-        segments.push(await processAudio(item))
+        segments.push(await processAudio(item, whisperModel))
       } else {
-        segments.push(await processVideo(item))
+        segments.push(await processVideo(item, whisperModel))
       }
     } catch (e) {
       errors.push({

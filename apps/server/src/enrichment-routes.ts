@@ -4,14 +4,12 @@ import { loadConfig } from './config.js'
 import {
   getEnrichmentStore,
   queueArticleEnrichment,
+  canEnrichWithSettings,
   type EnrichmentProgress,
 } from '@opptrix/article-enrichment'
 import {
   getMultimodalRuntimeStatus,
   whisperRuntime,
-  MODEL_CATALOG,
-  listInstalledGgufModels,
-  isCatalogModelInstalled,
 } from '@opptrix/local-inference'
 import { resolveProjectRoot } from '@opptrix/agent'
 
@@ -34,18 +32,6 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
       repoRoot,
       settings.enrichment.offline_whisper_model,
     )
-    const installed = listInstalledGgufModels(repoRoot)
-    const installedNames = new Set(installed.map(item => item.filename))
-    const visionCatalog = MODEL_CATALOG
-      .filter(item => item.purpose === 'vision' || item.purpose === 'vision_mmproj')
-      .map(item => ({
-        id: item.id,
-        name: item.name,
-        filename: item.filename,
-        purpose: item.purpose,
-        installed: isCatalogModelInstalled(item, installedNames),
-        sizeBytes: item.sizeBytes,
-      }))
 
     const cfg = loadConfig()
     const remoteProvider = settings.enrichment.remote_provider_id
@@ -55,24 +41,16 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
       settings.enrichment.remote_provider_id && settings.enrichment.remote_model,
     )
 
-    const visionReady = runtime.vision.modelInstalled
-      && runtime.vision.mmprojInstalled
-      && (runtime.vision.mtmdReady || runtime.vision.mtmdSupported)
-    const speechReady = runtime.ffmpeg.ready
-      && (runtime.whisper.ready || settings.enrichment.service_mode === 'remote')
-    const canEnrich = settings.enrichment.enabled && (
-      settings.enrichment.service_mode === 'remote'
-        ? remoteConfigured
-        : visionReady && speechReady
-    )
+    const caps = canEnrichWithSettings(settings.enrichment, runtime.ffmpeg.ready)
 
     return {
       settings: settings.enrichment,
       runtime,
-      visionCatalog,
       remoteConfigured,
       remoteProviderName: remoteProvider?.name ?? null,
-      canEnrich,
+      canEnrichImages: caps.images,
+      canEnrichSpeech: caps.speech,
+      canEnrich: caps.any,
     }
   })
 
@@ -81,9 +59,16 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
     const modelName = settings.enrichment.offline_whisper_model || 'tiny'
     try {
       await whisperRuntime.ensureModel(modelName)
-      return { ok: true, modelName }
+      const runtime = getMultimodalRuntimeStatus(resolveProjectRoot(), modelName)
+      return {
+        ok: true,
+        modelName,
+        ready: runtime.whisper.ready,
+        modelsDir: runtime.whisper.modelsDir,
+      }
     } catch (e) {
-      return reply.code(400).send({ error: e instanceof Error ? e.message : String(e) })
+      const message = e instanceof Error ? e.message : String(e)
+      return reply.code(400).send({ error: message })
     }
   })
 

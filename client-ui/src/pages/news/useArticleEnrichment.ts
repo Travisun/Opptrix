@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { news } from '../api/client'
-import type { ArticleEnrichment, FeedArticle } from '../types/schemas'
+import { news } from '../../api/client'
+import type { ArticleEnrichment, FeedArticle } from '../../types/schemas'
 
 type EnrichmentProgress = {
   phase: string

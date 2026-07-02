@@ -16,7 +16,6 @@
     "@opptrix/t-strategy": "*",
     "@opptrix/skills": "*",
     "@opptrix/news-feed": "*",
-    "@opptrix/article-enrichment": "*",
-    "@opptrix/agent": "*"
+    "@opptrix/article-enrichment": "*"
   }
 }

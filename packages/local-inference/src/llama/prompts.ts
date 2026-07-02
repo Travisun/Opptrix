@@ -26,8 +26,23 @@ export function buildHtmlTranslatePrompt(sourceHtml: string, targetLang = 'Chine
   ].join('\n')
 }
 
-export function buildImageOcrPrompt(): string {
-  return 'Extract all visible text in this image. Output plain text only, preserve line breaks. No explanation.'
+export function buildImageDescribePrompt(articleTitle?: string): string {
+  const titleHint = articleTitle?.trim()
+    ? `\n文章标题（供理解语境）：${articleTitle.trim()}`
+    : ''
+  return [
+    '你正在为财经资讯读者提取图片信息。请用中文输出，包含：',
+    '1. 图片类型（如数据图表、截图、照片、信息图）',
+    '2. 与报道相关的关键信息（数据、结论、人物、事件，不要编造）',
+    '3. 图中可见的重要文字（按原文摘录；看不清则写「文字不清晰」）',
+    '要求：客观简洁，不要输出乱码、无意义符号或英文提示词；若无有效信息则只写「（未能识别有效内容）」。',
+    titleHint,
+  ].join('\n')
+}
+
+/** @deprecated 使用 buildImageDescribePrompt */
+export function buildImageOcrPrompt(articleTitle?: string): string {
+  return buildImageDescribePrompt(articleTitle)
 }
 
 export function cleanTranslationOutput(raw: string, sourceText: string): string {

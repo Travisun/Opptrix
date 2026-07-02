@@ -2,7 +2,8 @@ import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
 import { globalInferenceQueue } from '../runtime/job-queue.js'
-import { buildImageOcrPrompt } from '../llama/prompts.js'
+import { buildImageDescribePrompt } from '../llama/prompts.js'
+import { cleanVisionOutput } from './image-quality.js'
 import { resolveVisionModelPaths } from '../catalog/installed.js'
 import { resolveMtmdCli } from './mtmd-binary.js'
 
@@ -19,8 +20,8 @@ function runMtmdCli(
       '--mmproj', mmprojPath,
       '--image', imagePath,
       '-p', prompt,
-      '-n', '512',
-      '--temp', '0.1',
+      '-n', '768',
+      '--temp', '0.15',
     ]
     const binDir = path.dirname(binary)
     const child = spawn(binary, args, {
@@ -45,7 +46,11 @@ function runMtmdCli(
 }
 
 export class VisionRuntime {
-  async extractImageText(imagePath: string, repoRoot?: string): Promise<string> {
+  async extractImageText(
+    imagePath: string,
+    repoRoot?: string,
+    articleTitle?: string,
+  ): Promise<string> {
     return globalInferenceQueue.enqueue(async () => {
       if (!fs.existsSync(imagePath)) {
         throw new Error('图片文件不存在')
@@ -57,9 +62,9 @@ export class VisionRuntime {
       }
 
       const cli = await resolveMtmdCli()
-      const prompt = buildImageOcrPrompt()
+      const prompt = buildImageDescribePrompt(articleTitle)
       const raw = await runMtmdCli(cli, paths.modelPath, paths.mmprojPath, imagePath, prompt)
-      return raw.replace(/\s+/g, ' ').trim()
+      return cleanVisionOutput(raw, prompt) || '（未能识别有效内容）'
     })
   }
 }
