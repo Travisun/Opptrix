@@ -33,4 +33,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
     ipcRenderer.on('window-fullscreen-changed', handler)
     return () => ipcRenderer.removeListener('window-fullscreen-changed', handler)
   },
+  signalShellReady: () => ipcRenderer.send('shell-ready'),
 })

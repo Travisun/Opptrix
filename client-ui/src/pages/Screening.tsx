@@ -1,9 +1,10 @@
 import { useState } from 'react'
 import {
   makeStyles, tokens, Text, Button, SearchBox, Spinner,
-  Badge, ProgressBar, Dropdown, Option, Input,
+  Badge, ProgressBar, Input,
 } from '@fluentui/react-components'
 import { FilterRegular, AddRegular, DismissRegular } from '@fluentui/react-icons'
+import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
 import { research } from '../api/client'
 import type { ScreeningData } from '../types/schemas'
 
@@ -70,14 +71,14 @@ export default function Screening({ navigate, setGlobalStock }: Props) {
       {/* Condition builder */}
       {conditions.map((c, i) => (
         <div key={i} className={s.condRow}>
-          <Dropdown size="small" value={c.factor} style={{ width: 140 }}
+          <OpptrixSelect size="small" value={c.factor} style={{ width: 140 }}
             onOptionSelect={(_, d) => updateCond(i, 'factor', d.optionValue || c.factor)}>
-            {FACTOR_OPTIONS.map(f => <Option key={f} value={f}>{f}</Option>)}
-          </Dropdown>
-          <Dropdown size="small" value={c.op} style={{ width: 60 }}
+            {FACTOR_OPTIONS.map(f => <OpptrixOption key={f} value={f}>{f}</OpptrixOption>)}
+          </OpptrixSelect>
+          <OpptrixSelect size="small" value={c.op} style={{ width: 60 }}
             onOptionSelect={(_, d) => updateCond(i, 'op', d.optionValue || c.op)}>
-            {OP_OPTIONS.map(o => <Option key={o} value={o}>{o}</Option>)}
-          </Dropdown>
+            {OP_OPTIONS.map(o => <OpptrixOption key={o} value={o}>{o}</OpptrixOption>)}
+          </OpptrixSelect>
           <Input size="small" placeholder="值" value={c.value}
             onChange={(_, d) => updateCond(i, 'value', d.value || '')}
             style={{ width: 80 }} />

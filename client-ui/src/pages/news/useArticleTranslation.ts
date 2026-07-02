@@ -31,12 +31,33 @@ export function useArticleTranslation(article: FeedArticle | null) {
     ? articleLikelyNeedsChineseTranslation(`${article.title}\n${plainBody}`)
     : false
 
-  useEffect(() => {
+  const refreshStatus = useCallback(() => {
     if (!isElectron() || !window.electronAPI?.translationGetStatus) return
     void window.electronAPI.translationGetStatus().then(setStatus).catch(() => {
       setStatus(null)
     })
   }, [])
+
+  useEffect(() => {
+    refreshStatus()
+  }, [refreshStatus])
+
+  useEffect(() => {
+    if (!isElectron()) return
+    const onFocus = () => refreshStatus()
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [refreshStatus])
+
+  useEffect(() => {
+    if (!isElectron()) return
+    const unsubscribe = window.electronAPI?.onTranslationDownloadProgress?.(progress => {
+      if (progress.status === 'completed' || progress.status === 'error') {
+        refreshStatus()
+      }
+    })
+    return unsubscribe
+  }, [refreshStatus])
 
   useEffect(() => {
     setViewMode('original')
@@ -109,7 +130,16 @@ export function useArticleTranslation(article: FeedArticle | null) {
     }
   }, [article, plainBody])
 
-  const available = Boolean(isElectron() && status?.canTranslate)
+  const available = Boolean(
+    isElectron()
+    && status
+    && (
+      status.canTranslate
+      || status.localAvailable
+      || status.modelFound
+      || status.remoteConfigured
+    ),
+  )
   const canTranslate = available && likelyForeign && !translating
   const hasTranslation = Boolean(
     translating

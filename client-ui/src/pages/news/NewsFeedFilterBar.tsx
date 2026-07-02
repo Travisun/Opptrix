@@ -7,9 +7,6 @@ import TradeDateField from '../../market/TradeDateField'
 import type { FeedGroup, FeedSubscription } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
 import { opptrixTokens } from '../../theme/tokens'
-import { glassDropdownClassName } from '../../theme/mixins'
-
-const GLASS_LISTBOX = `${glassDropdownClassName} opptrix-news-filter-listbox`
 
 const useStyles = makeStyles({
   bar: {
@@ -147,7 +144,6 @@ export default function NewsFeedFilterBar({
               className={s.filterField}
               size="small"
               selectedOptions={[groupFilterId]}
-              listbox={{ className: GLASS_LISTBOX }}
               positioning={{ autoSize: 'width' }}
               onOptionSelect={(_, d) => {
                 const v = d.optionValue
@@ -165,7 +161,6 @@ export default function NewsFeedFilterBar({
               className={s.filterField}
               size="small"
               selectedOptions={[sourceFilterId]}
-              listbox={{ className: GLASS_LISTBOX }}
               positioning={{ autoSize: 'width' }}
               onOptionSelect={(_, d) => {
                 const v = d.optionValue

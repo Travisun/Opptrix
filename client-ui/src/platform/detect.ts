@@ -25,6 +25,7 @@ declare global {
       onTranslationDownloadProgress?: (callback: (progress: TranslationDownloadProgress) => void) => () => void
       onTranslationProgress?: (callback: (progress: TranslationProgress) => void) => () => void
       onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
+      signalShellReady?: () => void
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
   }

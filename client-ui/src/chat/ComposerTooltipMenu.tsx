@@ -10,6 +10,7 @@ import {
 import { createPortal } from 'react-dom'
 import { mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
+import { OPPTRIX_GLASS_PANEL_CLASS } from '../theme/mixins'
 
 export type ComposerTooltipAlign = 'start' | 'end'
 
@@ -136,7 +137,7 @@ export default function ComposerTooltipMenu({
   return createPortal(
     <div
       ref={panelRef}
-      className="opptrix-composer-tooltip-menu opptrix-glass-panel"
+      className={mergeClasses('opptrix-composer-tooltip-menu', OPPTRIX_GLASS_PANEL_CLASS)}
       style={{
         ...style,
         width: menuWidth,

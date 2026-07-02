@@ -43,6 +43,8 @@ body {
   --opptrix-focus-offset: 2px;
   --opptrix-focus-glow: 0 0 0 3px rgba(29, 29, 31, 0.10);
   --opptrix-focus-border: rgba(60, 60, 67, 0.18);
+  --opptrix-glass-panel-border: rgba(60, 60, 67, 0.12);
+  --opptrix-glass-panel-shadow: 0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065);
   --opptrix-active-opacity: 0.72;
   --opptrix-overlay-sidebar-hover: #F2F2F7;
   --opptrix-overlay-sidebar-selected: #F2F2F7;
@@ -59,9 +61,27 @@ html.opptrix-electron {
   --opptrix-chrome-bg: transparent;
 }
 
-html.opptrix-electron,
-html.opptrix-electron body,
-html.opptrix-electron #root {
+html.opptrix-electron.opptrix-electron-startup,
+html.opptrix-electron.opptrix-electron-startup body,
+html.opptrix-electron.opptrix-electron-startup #root {
+  background: #F5F5F7 !important;
+}
+
+html.opptrix-electron.opptrix-electron-startup .opptrix-app-shell,
+html.opptrix-electron.opptrix-electron-startup .fui-FluentProvider,
+html.opptrix-electron.opptrix-electron-startup #root > * {
+  background: #F5F5F7 !important;
+}
+
+html.opptrix-electron.opptrix-electron-startup .opptrix-app-main,
+html.opptrix-electron.opptrix-electron-startup .opptrix-chat-panel,
+html.opptrix-electron.opptrix-electron-startup .opptrix-chat-title-bar {
+  background: #F5F5F7 !important;
+}
+
+html.opptrix-electron:not(.opptrix-electron-startup),
+html.opptrix-electron:not(.opptrix-electron-startup) body,
+html.opptrix-electron:not(.opptrix-electron-startup) #root {
   background: transparent !important;
 }
 
@@ -498,13 +518,13 @@ select:focus-visible {
   overflow: visible !important;
 }
 
-/* ── Frosted glass panel / dropdown — 发现策略选择、浮层面板等 ── */
+/* ── Frosted glass panel / dropdown — 对齐 OpptrixDropdownPanel / 选股策略 ── */
 .opptrix-glass-panel {
   background: rgba(255, 255, 255, 0.72);
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(0, 0, 0, 0.06);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08);
+  border: 1px solid var(--opptrix-glass-panel-border);
+  box-shadow: var(--opptrix-glass-panel-shadow);
 }
 
 .fui-PopoverSurface.opptrix-glass-panel,
@@ -512,42 +532,31 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid var(--opptrix-glass-panel-border) !important;
+  box-shadow: var(--opptrix-glass-panel-shadow) !important;
   border-radius: var(--opptrix-radius-lg, 14px);
   box-sizing: border-box;
 }
 
-/* Fluent Dropdown：毛玻璃加在 PopoverSurface，Listbox 透明 */
-.fui-PopoverSurface:has(.opptrix-glass-dropdown),
-.fui-PopoverSurface:has(.opptrix-news-filter-listbox) {
+/* Fluent Dropdown / Combobox：浮层即 Listbox 本体（无 Popover 包裹），须直接上毛玻璃 */
+.fui-Dropdown__listbox.opptrix-glass-panel,
+.fui-Dropdown__listbox.opptrix-glass-dropdown,
+.fui-Combobox__listbox.opptrix-glass-panel,
+.fui-Combobox__listbox.opptrix-glass-dropdown {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%);
   -webkit-backdrop-filter: blur(16px) saturate(160%);
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
-  border-radius: var(--opptrix-radius-lg, 14px);
+  border: 1px solid var(--opptrix-glass-panel-border) !important;
+  box-shadow: var(--opptrix-glass-panel-shadow) !important;
+  border-radius: var(--opptrix-radius-lg, 14px) !important;
   padding: 4px;
-  overflow: hidden;
-  box-sizing: border-box;
-}
-
-.opptrix-glass-dropdown.fui-Listbox,
-.opptrix-news-filter-listbox.fui-Listbox,
-.fui-PopoverSurface:has(.opptrix-glass-dropdown) .fui-Listbox,
-.fui-PopoverSurface:has(.opptrix-news-filter-listbox) .fui-Listbox {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
-  padding: 0;
   max-height: min(280px, 42vh);
   overflow-x: hidden;
   overflow-y: auto;
-  border-radius: 0;
+  box-sizing: border-box;
 }
 
-.opptrix-glass-dropdown .fui-Option,
-.opptrix-news-filter-listbox.fui-Listbox .fui-Option {
+.opptrix-glass-dropdown .fui-Option {
   border-radius: var(--opptrix-radius-md, 10px);
   min-height: 32px;
   font-size: 11px;
@@ -556,14 +565,11 @@ select:focus-visible {
 }
 
 .opptrix-glass-dropdown .fui-Option:hover,
-.opptrix-news-filter-listbox.fui-Listbox .fui-Option:hover,
-.opptrix-glass-dropdown .fui-Option[data-activedescendant-focusvisible],
-.opptrix-news-filter-listbox.fui-Listbox .fui-Option[data-activedescendant-focusvisible] {
+.opptrix-glass-dropdown .fui-Option[data-activedescendant-focusvisible] {
   background-color: rgba(29, 29, 31, 0.07);
 }
 
-.opptrix-glass-dropdown .fui-Option[aria-selected='true'],
-.opptrix-news-filter-listbox.fui-Listbox .fui-Option[aria-selected='true'] {
+.opptrix-glass-dropdown .fui-Option[aria-selected='true'] {
   background-color: rgba(29, 29, 31, 0.07);
 }
 
@@ -854,8 +860,8 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid var(--opptrix-glass-panel-border) !important;
+  box-shadow: var(--opptrix-glass-panel-shadow) !important;
   overflow: hidden !important;
 }
 
@@ -959,8 +965,8 @@ select:focus-visible {
   background: rgba(255, 255, 255, 0.72) !important;
   backdrop-filter: blur(16px) saturate(160%) !important;
   -webkit-backdrop-filter: blur(16px) saturate(160%) !important;
-  border: 1px solid rgba(0, 0, 0, 0.06) !important;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.08) !important;
+  border: 1px solid var(--opptrix-glass-panel-border) !important;
+  box-shadow: var(--opptrix-glass-panel-shadow) !important;
 }
 
 .opptrix-skill-menu-popover .fui-MenuList {

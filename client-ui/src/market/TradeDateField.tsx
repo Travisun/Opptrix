@@ -2,13 +2,13 @@ import { useCallback, useMemo, useRef, useState } from 'react'
 import {
   Input,
   Popover,
-  PopoverSurface,
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
 import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import { opptrixTokens } from '../theme/tokens'
-import { ghostInteractive, glassDropdownClassName } from '../theme/mixins'
+import { ghostInteractive } from '../theme/mixins'
+import { OpptrixPopoverPanel } from '../components/opptrix/OpptrixDropdownPanel'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
@@ -288,8 +288,8 @@ export default function TradeDateField({
         positioning={{ target: anchorRef.current ?? undefined, position: 'below', align: 'start' }}
         trapFocus
       >
-        <PopoverSurface
-          className={mergeClasses(s.surface, glassDropdownClassName)}
+        <OpptrixPopoverPanel
+          className={s.surface}
           anchor={anchorRef.current ?? undefined}
         >
           <div className={s.header}>
@@ -341,7 +341,7 @@ export default function TradeDateField({
               今天
             </button>
           </div>
-        </PopoverSurface>
+        </OpptrixPopoverPanel>
       </Popover>
     </>
   )

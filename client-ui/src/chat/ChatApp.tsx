@@ -150,6 +150,23 @@ export default function ChatApp() {
   } = useAppNavigation('chat')
 
   const electronChrome = isElectron() && !isMobile
+
+  useEffect(() => {
+    if (!electronChrome) return
+    let cancelled = false
+    const outer = requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled) return
+        document.documentElement.classList.remove('opptrix-electron-startup')
+        window.electronAPI?.signalShellReady?.()
+      })
+    })
+    return () => {
+      cancelled = true
+      cancelAnimationFrame(outer)
+    }
+  }, [electronChrome])
+
   const macFullscreen = useElectronFullscreen()
   const chromeToolbarReserve = electronChrome && !sidebarInlineVisible
     ? desktopChromeToolbarReserve(macFullscreen)

@@ -107,6 +107,9 @@ export const opptrixTokens = {
   shadowSelected: 'none',
   popoverBorder: '1px solid rgba(60, 60, 67, 0.14)',
   popoverShadow: '0 2px 8px rgba(0, 0, 0, 0.05), 0 1px 2px rgba(0, 0, 0, 0.03)',
+  /** 毛玻璃浮层 — 下拉 / Popover / 自定义面板（见 UI-DESIGN-SYSTEM §5.1） */
+  glassPanelBorder: '1px solid rgba(60, 60, 67, 0.12)',
+  glassPanelShadow: '0 1px 2px rgba(0, 0, 0, 0.04), 0 4px 14px rgba(0, 0, 0, 0.065)',
   settingsPanelBorder: '1px solid #E5E5EA',
 
   /** @deprecated use gray100 */

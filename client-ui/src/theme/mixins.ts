@@ -56,12 +56,18 @@ export const glassDropdown = {
   backgroundColor: 'rgba(255, 255, 255, 0.72)',
   backdropFilter: 'blur(16px) saturate(160%)',
   WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-  border: `1px solid ${opptrixTokens.separator}`,
-  boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+  border: opptrixTokens.glassPanelBorder,
+  boxShadow: opptrixTokens.glassPanelShadow,
 } as const
 
-/** 全局类名 — 发现策略、新闻筛选、日期选择等下拉浮层 */
-export const glassDropdownClassName = 'opptrix-glass-dropdown opptrix-glass-panel opptrix-scroll'
+/** 毛玻璃浮层基础类 — 见 docs/UI-DESIGN-SYSTEM.md §5.1 */
+export const OPPTRIX_GLASS_PANEL_CLASS = 'opptrix-glass-panel'
+
+/** Fluent Dropdown Listbox / 选项列表浮层 */
+export const OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS = 'opptrix-glass-dropdown opptrix-glass-panel opptrix-scroll'
+
+/** @deprecated 使用 OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS */
+export const glassDropdownClassName = OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS
 
 export const contentPanel = {
   backgroundColor: opptrixTokens.canvas,

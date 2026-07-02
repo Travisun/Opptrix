@@ -63,8 +63,8 @@ const useStyles = makeStyles({
   metaAction: {
     display: 'inline-flex',
     alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
+    gap: '4px',
+    padding: '2px 6px',
     margin: 0,
     border: 'none',
     backgroundColor: 'transparent',
@@ -78,6 +78,11 @@ const useStyles = makeStyles({
       color: opptrixTokens.accent,
       backgroundColor: opptrixTokens.accentSoft,
     },
+  },
+  metaActionLabel: {
+    fontSize: '11px',
+    fontWeight: 500,
+    lineHeight: 1.2,
   },
   body: {
     flex: 1,
@@ -349,32 +354,6 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </a>
             </>
           )}
-          {isElectron() && enrichment.available && (
-            <>
-              <span className={s.metaSep} aria-hidden>·</span>
-              <button
-                type="button"
-                className={mergeClasses(
-                  s.metaAction,
-                  (!enrichment.canEnrich && !enrichment.hasExtraction) && s.metaActionDisabled,
-                )}
-                title={enrichment.hasExtraction ? '查看媒体提取内容' : '提取图片与音视频文字'}
-                aria-label="媒体信息提取"
-                disabled={!enrichment.canEnrich && !enrichment.hasExtraction}
-                onClick={() => {
-                  if (enrichment.hasExtraction) {
-                    enrichment.setShowExtracted(v => !v)
-                    return
-                  }
-                  void enrichment.enrich()
-                }}
-              >
-                {enrichment.enriching
-                  ? <Spinner size="extra-tiny" />
-                  : <ImageRegular fontSize={14} />}
-              </button>
-            </>
-          )}
           {isElectron() && translation.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
@@ -402,6 +381,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
                 {translation.translating
                   ? <Spinner size="extra-tiny" />
                   : <TranslateRegular fontSize={14} />}
+                <span className={s.metaActionLabel}>翻译</span>
               </button>
             </>
           )}
@@ -429,6 +409,33 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </button>
             </div>
           )}
+          {isElectron() && enrichment.available && (
+            <>
+              <span className={s.metaSep} aria-hidden>·</span>
+              <button
+                type="button"
+                className={mergeClasses(
+                  s.metaAction,
+                  (!enrichment.canEnrich && !enrichment.hasExtraction) && s.metaActionDisabled,
+                )}
+                title={enrichment.hasExtraction ? '查看媒体解析结果' : '解析文章中的图片与音视频'}
+                aria-label="媒体解析"
+                disabled={!enrichment.canEnrich && !enrichment.hasExtraction}
+                onClick={() => {
+                  if (enrichment.hasExtraction) {
+                    enrichment.setShowExtracted(v => !v)
+                    return
+                  }
+                  void enrichment.enrich()
+                }}
+              >
+                {enrichment.enriching
+                  ? <Spinner size="extra-tiny" />
+                  : <ImageRegular fontSize={14} />}
+                <span className={s.metaActionLabel}>媒体解析</span>
+              </button>
+            </>
+          )}
           {onDiscussArticle && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
@@ -440,13 +447,15 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
                 onClick={() => onDiscussArticle(article)}
               >
                 <ChatRegular fontSize={14} />
+                <span className={s.metaActionLabel}>加入聊天</span>
               </button>
             </>
           )}
         </div>
       </div>
       {(progressLabel || translation.error || enrichment.progressLabel || enrichment.error
-        || (!translation.available && isElectron())) && (
+        || (!translation.available && isElectron())
+        || (!translation.canTranslate && translation.available && !translation.hasTranslation && isElectron())) && (
         <Text
           block
           className={mergeClasses(
@@ -460,7 +469,9 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
             || progressLabel
             || (!translation.available && isElectron()
               ? '翻译不可用：请在设置 → 翻译中下载离线模型或配置远程大模型'
-              : '')}
+              : !translation.canTranslate && translation.available && !translation.hasTranslation
+                ? '内容主要为中文，通常无需翻译'
+                : '')}
         </Text>
       )}
       <div

@@ -11,6 +11,7 @@ if (isDesktopApp()) {
 }
 if (isElectron()) {
   document.documentElement.classList.add('opptrix-electron')
+  document.documentElement.classList.add('opptrix-electron-startup')
 }
 
 const root = ReactDOM.createRoot(document.getElementById('root')!)

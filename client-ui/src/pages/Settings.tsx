@@ -1,10 +1,11 @@
 import { useState, useEffect } from 'react'
 import {
-  Text, Button, Input, Dropdown, Option, Switch, Spinner,
+  Text, Button, Input, Switch, Spinner,
 } from '@fluentui/react-components'
 import PageShell from '../components/PageShell'
 import SectionCard from '../components/SectionCard'
 import StatusBanner from '../components/StatusBanner'
+import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
 import { getConfig, saveConfig, getHealth } from '../api/client'
 import { useApp } from '../context/AppContext'
 
@@ -79,21 +80,21 @@ export default function Settings() {
       <SectionCard title="LLM 提供商">
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Text style={{ width: 80, fontSize: 12 }}>提供商</Text>
-          <Dropdown size="small" value={provider} style={{ width: 160 }}
+          <OpptrixSelect size="small" value={provider} style={{ width: 160 }}
             onOptionSelect={(_, d) => setProvider(d.optionValue || provider)}>
-            <Option value="DeepSeek">DeepSeek</Option>
-            <Option value="OpenAI">OpenAI</Option>
-          </Dropdown>
+            <OpptrixOption value="DeepSeek">DeepSeek</OpptrixOption>
+            <OpptrixOption value="OpenAI">OpenAI</OpptrixOption>
+          </OpptrixSelect>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Text style={{ width: 80, fontSize: 12 }}>模型</Text>
-          <Dropdown size="small" value={model} style={{ width: 200 }}
+          <OpptrixSelect size="small" value={model} style={{ width: 200 }}
             onOptionSelect={(_, d) => setModel(d.optionValue || model)}>
-            <Option value="deepseek-chat">deepseek-chat</Option>
-            <Option value="deepseek-coder">deepseek-coder</Option>
-            <Option value="gpt-4o">gpt-4o</Option>
-            <Option value="gpt-4o-mini">gpt-4o-mini</Option>
-          </Dropdown>
+            <OpptrixOption value="deepseek-chat">deepseek-chat</OpptrixOption>
+            <OpptrixOption value="deepseek-coder">deepseek-coder</OpptrixOption>
+            <OpptrixOption value="gpt-4o">gpt-4o</OpptrixOption>
+            <OpptrixOption value="gpt-4o-mini">gpt-4o-mini</OpptrixOption>
+          </OpptrixSelect>
         </div>
         <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
           <Text style={{ width: 80, fontSize: 12 }}>评分卡</Text>

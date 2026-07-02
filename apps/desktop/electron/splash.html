@@ -30,6 +30,7 @@
         justify-content: center;
         min-height: 100vh;
         background: var(--canvas);
+        transition: opacity 180ms ease-out;
         font-family:
           -apple-system,
           BlinkMacSystemFont,
@@ -123,11 +124,19 @@
         }
       }
 
+      body.splash-exit {
+        opacity: 0;
+      }
+
       @media (prefers-reduced-motion: reduce) {
         .brand span {
           animation: none;
           color: var(--text-mid);
           opacity: 0.8;
+        }
+
+        body.splash-exit {
+          transition: none;
         }
       }
     </style>

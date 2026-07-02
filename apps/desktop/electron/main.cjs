@@ -23,6 +23,7 @@ const API_HOST = '127.0.0.1'
 const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 const MIN_SPLASH_MS = 2200
 const SPLASH_HTML = path.join(__dirname, 'splash.html')
+const SPLASH_CANVAS = '#F5F5F7'
 
 app.setName(APP_NAME)
 
@@ -31,6 +32,9 @@ let serverProcess = null
 /** @type {import('electron').BrowserWindow | null} */
 let mainWindow = null
 let splashShownAt = 0
+/** @type {(() => void) | null} */
+let resolveShellReady = null
+let shellReadyPending = false
 
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms))
@@ -42,6 +46,61 @@ async function waitForSplashMinimum() {
   if (elapsed < MIN_SPLASH_MS) {
     await wait(MIN_SPLASH_MS - elapsed)
   }
+}
+
+function setOpaqueWindowBackground(win) {
+  if (win.isDestroyed()) return
+  win.setBackgroundColor(SPLASH_CANVAS)
+}
+
+function enableMacWindowTransparency(win) {
+  if (process.platform !== 'darwin' || win.isDestroyed()) return
+  win.setBackgroundColor('#00000000')
+}
+
+async function fadeSplashOut(win) {
+  if (win.isDestroyed() || win.webContents.isDestroyed()) return
+  try {
+    await win.webContents.executeJavaScript(`
+      document.body.classList.add('splash-exit');
+    `)
+    await wait(200)
+  } catch {
+    /* splash already gone */
+  }
+}
+
+function waitForShellReady(win, timeoutMs = 8000) {
+  return new Promise((resolve) => {
+    if (win.isDestroyed()) {
+      resolve()
+      return
+    }
+    if (shellReadyPending) {
+      shellReadyPending = false
+      resolve()
+      return
+    }
+    const timer = setTimeout(() => {
+      resolveShellReady = null
+      resolve()
+    }, timeoutMs)
+    resolveShellReady = () => {
+      clearTimeout(timer)
+      resolveShellReady = null
+      resolve()
+    }
+  })
+}
+
+function notifyShellReady(webContents) {
+  const win = BrowserWindow.fromWebContents(webContents)
+  if (!win || win !== mainWindow) return
+  if (resolveShellReady) {
+    resolveShellReady()
+    return
+  }
+  shellReadyPending = true
 }
 
 function repoRoot() {
@@ -219,9 +278,7 @@ function attachMainWindowHandlers(win) {
     if (mainWindow === win) mainWindow = null
   })
 
-  if (process.platform === 'darwin') {
-    win.setBackgroundColor('#00000000')
-  }
+  setOpaqueWindowBackground(win)
 }
 
 function createMainWindow() {
@@ -261,7 +318,34 @@ async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
   await waitForAppUi()
   if (enforceMinSplash) await waitForSplashMinimum()
 
-  await win.loadURL(appUrl())
+  await fadeSplashOut(win)
+  setOpaqueWindowBackground(win)
+
+  const shellReady = waitForShellReady(win)
+
+  await new Promise((resolve, reject) => {
+    const onLoad = () => {
+      cleanup()
+      resolve()
+    }
+    const onFail = (_event, code, desc) => {
+      cleanup()
+      reject(new Error(desc || `load failed (${code})`))
+    }
+    const cleanup = () => {
+      win.webContents.removeListener('did-finish-load', onLoad)
+      win.webContents.removeListener('did-fail-load', onFail)
+    }
+    win.webContents.once('did-finish-load', onLoad)
+    win.webContents.once('did-fail-load', onFail)
+    win.loadURL(appUrl()).catch((err) => {
+      cleanup()
+      reject(err)
+    })
+  })
+
+  await shellReady
+  enableMacWindowTransparency(win)
 
   if (!win.isVisible()) {
     await new Promise((resolve) => {
@@ -300,6 +384,10 @@ async function openMainWindowFromMenu() {
 }
 
 function registerWindowIpc() {
+  ipcMain.on('shell-ready', (event) => {
+    notifyShellReady(event.sender)
+  })
+
   ipcMain.on('window-minimize', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.minimize()
   })

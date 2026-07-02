@@ -208,6 +208,11 @@ async function getTranslationStatus(repoRoot, settingsOverride = null) {
   const modelFamily = modelPath ? detectModelFamily(modelPath) : null
   const remoteConfigured = Boolean(translation.remote_provider_id && translation.remote_model)
   const localReady = Boolean(chatSession && modelPath && loadedModelPath === modelPath)
+  const offlineModelAvailable = Boolean(modelPath)
+  const serviceMode = translation.service_mode ?? 'offline'
+  const canTranslate = serviceMode === 'remote'
+    ? remoteConfigured
+    : offlineModelAvailable || remoteConfigured
 
   return {
     supported: true,
@@ -218,13 +223,13 @@ async function getTranslationStatus(repoRoot, settingsOverride = null) {
     ready: localReady,
     loading: Boolean(loadingPromise || preloadPromise),
     lastError: lastLoadError,
-    serviceMode: translation.service_mode ?? 'offline',
+    serviceMode,
     offlineModel: preferredModel,
     remoteConfigured,
-    localAvailable: Boolean(modelPath),
+    localAvailable: offlineModelAvailable,
     download: getDownloadState(),
     downloading: isDownloadActive(),
-    canTranslate: localReady || remoteConfigured,
+    canTranslate,
     downloadDir: getDefaultDownloadDir(),
   }
 }

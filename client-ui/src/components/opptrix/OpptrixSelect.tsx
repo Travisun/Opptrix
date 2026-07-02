@@ -1,5 +1,6 @@
 import { Children, isValidElement, useMemo, type ReactElement, type ReactNode } from 'react'
 import { Dropdown, Option, type DropdownProps } from '@fluentui/react-components'
+import { mergeOpptrixDropdownListboxProps } from './OpptrixDropdownPanel'
 
 type Props = Omit<DropdownProps, 'appearance'>
 
@@ -51,6 +52,7 @@ export default function OpptrixSelect({
   size = 'medium',
   value,
   selectedOptions,
+  listbox,
   style,
   ...props
 }: Props) {
@@ -71,6 +73,7 @@ export default function OpptrixSelect({
       size={size}
       style={{ width: '100%', ...style }}
       selectedOptions={selectedOptions}
+      listbox={mergeOpptrixDropdownListboxProps(listbox)}
       {...(displayValue !== undefined ? { value: displayValue } : {})}
       {...props}
     >

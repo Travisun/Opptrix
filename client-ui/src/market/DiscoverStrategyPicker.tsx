@@ -3,7 +3,8 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChevronDownRegular, ChevronUpRegular } from '@fluentui/react-icons'
 import type { DiscoverStrategyOption, DiscoverStrategySource } from '../types/schemas'
 import { opptrixTokens } from '../theme/tokens'
-import { ghostInteractive, glassDropdown, motion, focusVisibleRing } from '../theme/mixins'
+import { ghostInteractive, motion, focusVisibleRing } from '../theme/mixins'
+import { OpptrixDropdownPanel } from '../components/opptrix/OpptrixDropdownPanel'
 
 const SOURCE_LABEL: Record<DiscoverStrategySource, string> = {
   builtin: '内置',
@@ -89,21 +90,12 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixTokens.accentMuted}`,
     backgroundColor: opptrixTokens.accentSoft,
   },
-  panel: {
+  panelAnchor: {
     position: 'absolute',
     top: 'calc(100% + 6px)',
     left: 0,
     width: '100%',
     zIndex: 30,
-    maxHeight: 'min(280px, 42vh)',
-    overflowY: 'auto',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-    padding: '4px',
-    borderRadius: opptrixTokens.radiusLg,
-    boxSizing: 'border-box',
-    ...glassDropdown,
   },
   menuItem: {
     display: 'flex',
@@ -249,8 +241,8 @@ export default function DiscoverStrategyPicker({
       </button>
 
       {open && (
-        <div
-          className={mergeClasses(s.panel, 'opptrix-glass-panel', 'opptrix-scroll')}
+        <OpptrixDropdownPanel
+          className={s.panelAnchor}
           role="listbox"
           aria-label="策略列表"
         >
@@ -289,7 +281,7 @@ export default function DiscoverStrategyPicker({
               暂无策略，请先在设置 → 选股策略中添加
             </Text>
           )}
-        </div>
+        </OpptrixDropdownPanel>
       )}
     </div>
   )
