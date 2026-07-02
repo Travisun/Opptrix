@@ -16,14 +16,18 @@
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
-    "build": "node scripts/prebuild.mjs && electron-builder",
-    "build:dir": "node scripts/prebuild.mjs && electron-builder --dir"
+    "build": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false",
+    "build:dir": "node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false",
+    "build:local": "CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false",
+    "verify:runtime": "node scripts/verify-runtime.mjs"
   },
   "build": {
     "appId": "com.cuishushu.app.opptrix.desktop",
     "productName": "Opptrix",
     "copyright": "Copyright © 2026 催书书",
     "electronVersion": "35.7.5",
+    "npmRebuild": false,
+    "nodeGypRebuild": false,
     "protocols": [
       {
         "name": "Opptrix Link",
@@ -92,28 +96,28 @@
       "target": [
         "dmg",
         "zip"
-      ],
-      "dmg": {
-        "title": "安装 Opptrix ${version}",
-        "icon": "build/icons/icon.icns",
-        "iconSize": 96,
-        "window": {
-          "width": 540,
-          "height": 380
+      ]
+    },
+    "dmg": {
+      "title": "安装 Opptrix ${version}",
+      "icon": "build/icons/icon.icns",
+      "iconSize": 96,
+      "window": {
+        "width": 540,
+        "height": 380
+      },
+      "contents": [
+        {
+          "x": 140,
+          "y": 200
         },
-        "contents": [
-          {
-            "x": 140,
-            "y": 200
-          },
-          {
-            "x": 400,
-            "y": 200,
-            "type": "link",
-            "path": "/Applications"
-          }
-        ]
-      }
+        {
+          "x": 400,
+          "y": 200,
+          "type": "link",
+          "path": "/Applications"
+        }
+      ]
     },
     "win": {
       "icon": "build/icons/logo-app.png",

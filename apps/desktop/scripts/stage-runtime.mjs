@@ -1,16 +1,33 @@
 #!/usr/bin/env node
 /**
  * Stage a self-contained Node runtime for the desktop sidecar (production bundle).
+ * Native modules are rebuilt for Electron's embedded Node (ELECTRON_RUN_AS_NODE sidecar).
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
+import {
+  electronRebuildEnv,
+  hostMatchesTarget,
+  resolveRuntimeTarget,
+  runNodeScript,
+  runNpm,
+} from './lib/runtime-target.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../../..')
-const STAGE = path.join(REPO_ROOT, 'apps/desktop/runtime-stage')
+const DESKTOP_ROOT = path.join(REPO_ROOT, 'apps/desktop')
+const STAGE = path.join(DESKTOP_ROOT, 'runtime-stage')
 const SERVER_PKG_PATH = path.join(REPO_ROOT, 'apps/server/package.json')
+
+const DESKTOP_PKG = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
+const ELECTRON_VERSION = DESKTOP_PKG.build?.electronVersion
+if (!ELECTRON_VERSION) {
+  throw new Error('apps/desktop/package.json missing build.electronVersion')
+}
+
+const target = resolveRuntimeTarget()
 
 function rm(dir) {
   fs.rmSync(dir, { recursive: true, force: true })
@@ -62,6 +79,34 @@ function collectServerNpmDeps() {
   return deps
 }
 
+function ensureFfmpegStatic() {
+  const stageDir = path.join(STAGE, 'node_modules/ffmpeg-static')
+  const stageBinary = path.join(stageDir, 'ffmpeg')
+  if (fs.existsSync(stageBinary)) return
+
+  const installJs = path.join(stageDir, 'install.js')
+  if (!fs.existsSync(installJs)) {
+    console.warn('ffmpeg-static not installed in runtime-stage')
+    return
+  }
+
+  if (hostMatchesTarget(target)) {
+    const rootFfmpeg = path.join(REPO_ROOT, 'node_modules/ffmpeg-static')
+    const rootBinary = path.join(rootFfmpeg, 'ffmpeg')
+    if (fs.existsSync(rootBinary)) {
+      console.log('Seeding ffmpeg-static from workspace (matching host arch)…')
+      fs.cpSync(rootFfmpeg, stageDir, { recursive: true, force: true })
+      if (fs.existsSync(stageBinary)) return
+    }
+  }
+
+  console.log(`Downloading ffmpeg-static for ${target.platform}-${target.arch}…`)
+  const dl = runNodeScript(installJs, { cwd: stageDir, target })
+  if (dl.status !== 0) {
+    console.error('ffmpeg-static install failed — sidecar audio/video features may be unavailable')
+  }
+}
+
 rm(STAGE)
 fs.mkdirSync(STAGE, { recursive: true })
 
@@ -86,39 +131,28 @@ for (const pkg of workspacePackages) {
   deps[`@opptrix/${pkg}`] = `file:./packages/${pkg}`
 }
 
-const pkgJson = {
+fs.writeFileSync(path.join(STAGE, 'package.json'), JSON.stringify({
   name: 'opptrix-desktop-runtime',
   private: true,
   type: 'module',
   dependencies: deps,
-}
+}, null, 2))
 
-fs.writeFileSync(path.join(STAGE, 'package.json'), JSON.stringify(pkgJson, null, 2))
-
-console.log('Installing desktop runtime dependencies…')
-const runtimeArch = process.env.OPPTRIX_RUNTIME_ARCH?.trim()
-const installArgs = ['install', '--omit=dev', '--no-audit', '--no-fund']
-const useRosettaX64 = process.platform === 'darwin'
-  && runtimeArch === 'x64'
-  && process.arch === 'arm64'
-
-const install = spawnSync(
-  useRosettaX64 ? 'arch' : 'npm',
-  useRosettaX64 ? ['-x86_64', 'npm', ...installArgs] : installArgs,
-  {
-    cwd: STAGE,
-    stdio: 'inherit',
-    shell: false,
-    env: {
-      ...process.env,
-      ...(runtimeArch ? { npm_config_arch: runtimeArch } : {}),
-    },
-  },
+console.log(`Installing runtime deps (${target.platform}-${target.arch})…`)
+const install = runNpm(
+  ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts'],
+  { cwd: STAGE, target },
 )
 if (install.status !== 0) process.exit(install.status ?? 1)
 
-if (runtimeArch) {
-  console.log(`Runtime staged for macOS ${runtimeArch} at ${STAGE}`)
-} else {
-  console.log(`Runtime staged at ${STAGE}`)
-}
+ensureFfmpegStatic()
+
+console.log(`Rebuilding native modules for Electron ${ELECTRON_VERSION} (${target.platform}-${target.arch})…`)
+const rebuild = runNpm(['rebuild'], {
+  cwd: STAGE,
+  target,
+  extraEnv: electronRebuildEnv(ELECTRON_VERSION, target),
+})
+if (rebuild.status !== 0) process.exit(rebuild.status ?? 1)
+
+console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)
