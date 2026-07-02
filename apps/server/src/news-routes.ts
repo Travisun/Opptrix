@@ -21,7 +21,9 @@ import {
   validateFeedUrl,
   type FeedSubscription,
   type NewsSettings,
+  type NewsTranslationSettings,
 } from '@opptrix/news-feed'
+import { translateArticleRemote } from './translation-remote.js'
 
 export async function registerNewsRoutes(app: FastifyInstance) {
   app.get('/api/news/settings', async () => ({
@@ -34,8 +36,41 @@ export async function registerNewsRoutes(app: FastifyInstance) {
       refresh_interval_min: req.body?.refresh_interval_min ?? cur.refresh_interval_min,
       retention_years: req.body?.retention_years ?? cur.retention_years,
       max_articles: req.body?.max_articles !== undefined ? req.body.max_articles : cur.max_articles,
+      translation: {
+        ...cur.translation,
+        ...(req.body?.translation ?? {}),
+      },
     })
     return { settings: next }
+  })
+
+  app.post<{
+    Body: {
+      articleId?: string
+      title?: string
+      bodyText?: string
+      segments?: Array<{ id: string; text: string; kind?: 'text' | 'html' }>
+      targetLang?: string
+      translation?: Partial<NewsTranslationSettings>
+    }
+  }>('/api/news/translate', async (req, reply) => {
+    const settings = getNewsSettings()
+    const translation = {
+      ...settings.translation,
+      ...(req.body?.translation ?? {}),
+    }
+    try {
+      const result = await translateArticleRemote({
+        articleId: req.body?.articleId ?? '',
+        title: req.body?.title,
+        bodyText: req.body?.bodyText,
+        segments: req.body?.segments,
+        targetLang: req.body?.targetLang,
+      }, translation)
+      return result
+    } catch (e) {
+      return reply.code(400).send({ error: e instanceof Error ? e.message : String(e) })
+    }
   })
 
   app.get('/api/news/groups', async () => ({

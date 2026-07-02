@@ -37,6 +37,10 @@ apps/server/data/
 .opptrix/
 .a_stock_layer/
 
+# Local LLM weights (place HY-MT GGUF here; not committed)
+apps/server/llms/*.gguf
+llms/*.gguf
+
 # Logs & cache
 logs/
 data/cache/

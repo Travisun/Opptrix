@@ -13,6 +13,7 @@ import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
+import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
@@ -444,6 +445,9 @@ function SettingsPageView({
 
       case 'news_feed':
         return <NewsFeedSettingsSection />
+
+      case 'translation':
+        return <TranslationSettingsSection />
 
       case 'about':
         return (

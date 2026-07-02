@@ -25,7 +25,12 @@
     "files": [
       "electron/**/*",
       "package.json",
-      "build/icons/**/*"
+      "build/icons/**/*",
+      "!node_modules/**/*",
+      "node_modules/node-llama-cpp/**/*"
+    ],
+    "asarUnpack": [
+      "**/node_modules/node-llama-cpp/**"
     ],
     "icon": "build/icons/logo-app.png",
     "extraResources": [
@@ -77,5 +82,8 @@
   "devDependencies": {
     "electron": "^35.0.0",
     "electron-builder": "^25.1.8"
+  },
+  "dependencies": {
+    "node-llama-cpp": "^3.19.0"
   }
 }

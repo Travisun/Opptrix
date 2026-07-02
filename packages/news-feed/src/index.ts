@@ -271,7 +271,7 @@ export type {
   SubscriptionExportItem,
   SubscriptionImportResult,
 } from './subscription-transfer.js'
-export { normalizeNewsSettings, selectRetainedArticles } from './retention.js'
+export { normalizeNewsSettings, normalizeTranslationSettings, selectRetainedArticles } from './retention.js'
 export {
   normalizeArticleTitle,
   articleTitleDedupeKey,

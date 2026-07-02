@@ -403,6 +403,16 @@ export interface NewsSettings {
   refresh_interval_min: number
   retention_years: number
   max_articles: number | null
+  translation: NewsTranslationSettings
+}
+
+export type TranslationServiceMode = 'offline' | 'remote'
+
+export interface NewsTranslationSettings {
+  service_mode: TranslationServiceMode
+  offline_model: string
+  remote_provider_id: string | null
+  remote_model: string | null
 }
 
 export interface FeedPageResult {

@@ -9,6 +9,41 @@ export function stripHtml(html: string): string {
   return html.replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
 }
 
+/** 将 RSS HTML 转为保留段落的纯文本，兼容无标签的纯文本正文 */
+export function htmlToPlainArticleText(html: string): string {
+  const raw = String(html ?? '').trim()
+  if (!raw) return ''
+  if (!raw.includes('<')) return raw.replace(/\r\n/g, '\n').trim()
+
+  let out = raw
+    .replace(/<script[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[\s\S]*?<\/style>/gi, '')
+    .replace(/<br\s*\/?>/gi, '\n')
+    .replace(/<\/(p|div|li|h[1-6]|blockquote|tr|section|article)>/gi, '\n\n')
+  out = out.replace(/<[^>]+>/g, '')
+  out = out
+    .replace(/&nbsp;/gi, ' ')
+    .replace(/&amp;/gi, '&')
+    .replace(/&lt;/gi, '<')
+    .replace(/&gt;/gi, '>')
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/gi, "'")
+
+  return out
+    .replace(/\r\n/g, '\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n[ \t]+/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .replace(/[ \t]{2,}/g, ' ')
+    .trim()
+}
+
+export function buildFeedArticleBodyText(article: FeedArticle): string {
+  const raw = article.content_html || article.summary || ''
+  const text = htmlToPlainArticleText(raw)
+  return text || article.title
+}
+
 /** 剥离危险标签，用于 RSS HTML 正文展示 */
 export function sanitizeFeedHtml(html: string): string {
   let out = html
@@ -180,8 +215,12 @@ export function formatSubscriptionUrlShort(url: string): string {
   }
 }
 
-export function buildFeedArticleBodyText(article: FeedArticle): string {
-  return stripHtml(article.content_html || article.summary || '') || article.title
+/** 正文是否可能需要译为中文（启发式：CJK 占比低） */
+export function articleLikelyNeedsChineseTranslation(text: string): boolean {
+  const stripped = text.replace(/\s+/g, '')
+  if (!stripped) return false
+  const cjk = (stripped.match(/[\u4e00-\u9fff\u3400-\u4dbf\uf900-\ufaff]/g) ?? []).length
+  return cjk / stripped.length < 0.3
 }
 
 export function feedArticleToContextRef(article: FeedArticle): SessionArticleContextRef {

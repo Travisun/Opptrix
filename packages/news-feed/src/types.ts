@@ -34,12 +34,24 @@ export interface FeedArticle {
   source_title: string
 }
 
+export type TranslationServiceMode = 'offline' | 'remote'
+
+export interface NewsTranslationSettings {
+  /** 离线优先：本地模型可用时用本地，否则回退远程 */
+  service_mode: TranslationServiceMode
+  /** `__auto__` = 自动匹配 HY-MT；或指定已安装 GGUF 文件名 */
+  offline_model: string
+  remote_provider_id: string | null
+  remote_model: string | null
+}
+
 export interface NewsSettings {
   refresh_interval_min: number
   /** 保留文章的最长年数；0 = 不按时间裁剪 */
   retention_years: number
   /** 全局文章数量上限；null = 不限制数量 */
   max_articles: number | null
+  translation: NewsTranslationSettings
 }
 
 export interface SubscriptionFetchMeta {
@@ -83,10 +95,18 @@ export interface ValidateFeedResult {
   error?: string
 }
 
+export const DEFAULT_TRANSLATION_SETTINGS: NewsTranslationSettings = {
+  service_mode: 'offline',
+  offline_model: '__auto__',
+  remote_provider_id: null,
+  remote_model: null,
+}
+
 export const DEFAULT_NEWS_SETTINGS: NewsSettings = {
   refresh_interval_min: 15,
   retention_years: 3,
   max_articles: null,
+  translation: DEFAULT_TRANSLATION_SETTINGS,
 }
 
 export const FEED_PAGE_SIZE = 20

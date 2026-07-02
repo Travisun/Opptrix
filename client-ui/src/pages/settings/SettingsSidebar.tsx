@@ -8,6 +8,7 @@ import {
   NewsRegular,
   SearchRegular,
   SettingsRegular,
+  TranslateRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -16,7 +17,7 @@ import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
 
-export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'about'
+export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'translation' | 'about'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
@@ -25,6 +26,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'market_data', label: '基础数据', icon: DatabaseRegular },
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
+  { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'about', label: '关于', icon: InfoRegular },
 ]
 
@@ -259,6 +261,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '查看内置策略、管理自编策略与复制编辑'
     case 'news_feed':
       return '管理 RSS 订阅与资讯更新频率'
+    case 'translation':
+      return '配置新闻阅读的离线翻译与远程大模型回退'
     case 'about':
       return '应用版本与运行说明'
     default:

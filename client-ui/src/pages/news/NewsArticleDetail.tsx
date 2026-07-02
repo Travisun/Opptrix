@@ -1,11 +1,17 @@
 import { useEffect, useRef } from 'react'
-import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ChatRegular } from '@fluentui/react-icons'
+import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { ChatRegular, TranslateRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
 import { openExternalUrl } from '../../platform/openUrl'
+import { isElectron } from '../../platform/detect'
 import { opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
-import { enhanceFeedMedia, formatRelativeTime, sanitizeFeedHtml, stripHtml } from './newsUtils'
+import {
+  applyReaderTranslationView,
+  prepareArticleTranslation,
+} from './articleTranslationLayout'
+import { enhanceFeedMedia, formatRelativeTime, sanitizeFeedHtml, stripHtml, buildFeedArticleBodyText } from './newsUtils'
+import { useArticleTranslation } from './useArticleTranslation'
 
 const useStyles = makeStyles({
   root: {
@@ -152,6 +158,57 @@ const useStyles = makeStyles({
     maxWidth: '100%',
     minWidth: 0,
   },
+  metaActionDisabled: {
+    opacity: 0.35,
+    cursor: 'default',
+    ':hover': {
+      color: opptrixTokens.accent,
+      backgroundColor: 'transparent',
+    },
+  },
+  viewToggle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '2px',
+    marginLeft: '2px',
+  },
+  viewToggleBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minWidth: '32px',
+    height: '20px',
+    padding: '0 7px',
+    margin: 0,
+    border: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvas,
+    color: opptrixTokens.textTertiary,
+    fontSize: '10px',
+    lineHeight: 1,
+    cursor: 'pointer',
+    borderRadius: opptrixTokens.radiusSm,
+    ...ghostInteractive,
+    ':hover': {
+      backgroundColor: opptrixTokens.accentSoft,
+      color: opptrixTokens.textPrimary,
+    },
+  },
+  viewToggleBtnActive: {
+    borderColor: opptrixTokens.accentSoft,
+    backgroundColor: opptrixTokens.accentSoft,
+    color: opptrixTokens.accent,
+    fontWeight: 600,
+  },
+  translateHint: {
+    flexShrink: 0,
+    padding: '6px 20px 0',
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.4,
+  },
+  translateError: {
+    color: opptrixTokens.error,
+  },
   empty: {
     flex: 1,
     display: 'flex',
@@ -169,28 +226,64 @@ type Props = {
   onDiscussArticle?: (article: FeedArticle) => void
 }
 
+function escapeHtml(text: string): string {
+  return text
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+}
+
+function wrapPlainTextHtml(text: string): string {
+  const normalized = text.replace(/\r\n/g, '\n').trim()
+  if (!normalized) return ''
+  const paragraphs = normalized.split(/\n{2,}/).map(part => part.trim()).filter(Boolean)
+  const parts = paragraphs.length ? paragraphs : [normalized]
+  return parts.map(part => `<p>${escapeHtml(part)}</p>`).join('')
+}
+
 export default function NewsArticleDetail({ article, onDiscussArticle }: Props) {
   const s = useStyles()
   const contentRef = useRef<HTMLDivElement>(null)
   const mountedHtmlKey = useRef('')
+  const translation = useArticleTranslation(article)
 
   const raw = article?.content_html || article?.summary || ''
   const html = article ? sanitizeFeedHtml(raw) : ''
   const hasHtml = html.includes('<')
   const htmlKey = article ? `${article.id}\0${html}` : ''
+  const plainFallback = stripHtml(html) || '暂无正文，可点击上方原文链接查看。'
+  const displayTitle = translation.viewMode === 'translated' && translation.translatedTitle
+    ? translation.translatedTitle
+    : article?.title
 
   useEffect(() => {
     const el = contentRef.current
-    if (!el || !hasHtml) {
+    if (!el || !article) {
       if (el) el.innerHTML = ''
       mountedHtmlKey.current = ''
       return
     }
     if (mountedHtmlKey.current === htmlKey) return
     mountedHtmlKey.current = htmlKey
-    el.innerHTML = html
+
+    if (hasHtml) {
+      el.innerHTML = html
+    } else if (plainFallback) {
+      el.innerHTML = wrapPlainTextHtml(plainFallback)
+    } else {
+      el.innerHTML = ''
+    }
     enhanceFeedMedia(el)
-  }, [hasHtml, html, htmlKey])
+  }, [article, hasHtml, html, htmlKey, plainFallback])
+
+  useEffect(() => {
+    const el = contentRef.current
+    if (!el || !translation.hasTranslation) return
+
+    applyReaderTranslationView(el, translation.viewMode, translation.translatedBlocks, translation.translationLayout)
+    enhanceFeedMedia(el)
+  }, [translation.viewMode, translation.translatedBlocks, translation.translationLayout, translation.hasTranslation, htmlKey])
 
   if (!article) {
     return (
@@ -200,10 +293,18 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
     )
   }
 
+  const progressLabel = translation.translating && translation.progress
+    ? `正在翻译 ${translation.progress.current}/${translation.progress.total}…`
+    : translation.translating && !translation.status?.ready
+      ? '正在加载翻译模型，首次约需十几秒…'
+      : translation.translating
+        ? '准备翻译…'
+        : ''
+
   return (
     <div className={s.root}>
       <div className={s.head}>
-        <Text className={s.title} block>{article.title}</Text>
+        <Text className={s.title} block>{displayTitle}</Text>
         <div className={s.metaRow}>
           <Text className={s.meta}>{article.source_title}</Text>
           <span className={s.metaSep} aria-hidden>·</span>
@@ -222,6 +323,60 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </a>
             </>
           )}
+          {isElectron() && translation.available && (
+            <>
+              <span className={s.metaSep} aria-hidden>·</span>
+              <button
+                type="button"
+                className={mergeClasses(
+                  s.metaAction,
+                  (!translation.canTranslate && !translation.hasTranslation) && s.metaActionDisabled,
+                )}
+                title={translation.likelyForeign ? '翻译为中文' : '内容主要为中文'}
+                aria-label="翻译为中文"
+                disabled={!translation.canTranslate && !translation.hasTranslation}
+                onClick={() => {
+                  if (translation.hasTranslation) {
+                    translation.setViewMode('translated')
+                    return
+                  }
+                  const el = contentRef.current
+                  if (!el) return
+                  const plainBody = buildFeedArticleBodyText(article)
+                  const prepare = prepareArticleTranslation(el, plainBody)
+                  void translation.translate(prepare)
+                }}
+              >
+                {translation.translating
+                  ? <Spinner size="extra-tiny" />
+                  : <TranslateRegular fontSize={14} />}
+              </button>
+            </>
+          )}
+          {translation.hasTranslation && (
+            <div className={s.viewToggle}>
+              <button
+                type="button"
+                className={mergeClasses(
+                  s.viewToggleBtn,
+                  translation.viewMode === 'original' && s.viewToggleBtnActive,
+                )}
+                onClick={() => translation.setViewMode('original')}
+              >
+                原文
+              </button>
+              <button
+                type="button"
+                className={mergeClasses(
+                  s.viewToggleBtn,
+                  translation.viewMode === 'translated' && s.viewToggleBtnActive,
+                )}
+                onClick={() => translation.setViewMode('translated')}
+              >
+                译文
+              </button>
+            </div>
+          )}
           {onDiscussArticle && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
@@ -238,6 +393,18 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           )}
         </div>
       </div>
+      {(progressLabel || translation.error || (!translation.available && isElectron())) && (
+        <Text
+          block
+          className={mergeClasses(s.translateHint, translation.error && s.translateError)}
+        >
+          {translation.error
+            || progressLabel
+            || (!translation.available && isElectron()
+              ? '翻译不可用：请在设置 → 翻译中下载离线模型或配置远程大模型'
+              : '')}
+        </Text>
+      )}
       <div
         className={mergeClasses(
           s.body,
@@ -253,11 +420,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           if (href) openExternalUrl(href, event)
         }}
       >
-        {hasHtml ? (
-          <div ref={contentRef} className={s.content} />
-        ) : (
-          <Text block>{stripHtml(html) || '暂无正文，可点击上方原文链接查看。'}</Text>
-        )}
+        <div ref={contentRef} className={s.content} />
       </div>
     </div>
   )

@@ -1,8 +1,25 @@
-import type { FeedArticle, NewsSettings } from './types.js'
-import { DEFAULT_NEWS_SETTINGS } from './types.js'
+import type { FeedArticle, NewsSettings, NewsTranslationSettings } from './types.js'
+import { DEFAULT_NEWS_SETTINGS, DEFAULT_TRANSLATION_SETTINGS } from './types.js'
 
 /** 单次 RSS 拉取解析的最大条目（仅限制网络解析，不限制本地存储） */
 export const MAX_ARTICLES_PER_FETCH = 200
+
+export function normalizeTranslationSettings(
+  raw?: Partial<NewsTranslationSettings> | null,
+): NewsTranslationSettings {
+  const merged = { ...DEFAULT_TRANSLATION_SETTINGS, ...raw }
+  const offlineModel = String(merged.offline_model ?? '__auto__').trim() || '__auto__'
+  const remoteModel = merged.remote_model == null
+    ? null
+    : String(merged.remote_model).trim() || null
+
+  return {
+    service_mode: merged.service_mode === 'remote' ? 'remote' : 'offline',
+    offline_model: offlineModel,
+    remote_provider_id: merged.remote_provider_id ?? null,
+    remote_model: remoteModel,
+  }
+}
 
 export function normalizeNewsSettings(raw?: Partial<NewsSettings> | null): NewsSettings {
   const merged = { ...DEFAULT_NEWS_SETTINGS, ...raw }
@@ -17,6 +34,7 @@ export function normalizeNewsSettings(raw?: Partial<NewsSettings> | null): NewsS
     max_articles: maxRaw == null || maxRaw <= 0
       ? null
       : Math.min(1_000_000, Math.floor(maxRaw)),
+    translation: normalizeTranslationSettings(merged.translation),
   }
 }
 

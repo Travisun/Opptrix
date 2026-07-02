@@ -6,6 +6,17 @@ const { APP_NAME, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
+const {
+  getTranslationStatus,
+  getTranslationModels,
+  ensureTranslationDownloadDir,
+  startTranslationModelDownload,
+  cancelTranslationModelDownload,
+  translateArticle,
+  preloadTranslationModel,
+  maybeBootstrapOfflineModelDownloads,
+  disposeTranslation,
+} = require('./translation-service.cjs')
 
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
@@ -338,6 +349,47 @@ function registerWindowIpc() {
     await shell.openExternal(target)
     return true
   })
+
+  ipcMain.handle('translation-get-status', async () => {
+    return getTranslationStatus(repoRoot())
+  })
+
+  ipcMain.handle('translation-get-models', async () => {
+    return getTranslationModels(repoRoot())
+  })
+
+  ipcMain.handle('translation-get-download-dir', async () => {
+    return ensureTranslationDownloadDir()
+  })
+
+  ipcMain.handle('translation-open-download-dir', async () => {
+    const dir = await ensureTranslationDownloadDir()
+    const err = await shell.openPath(dir)
+    if (err) throw new Error(`无法打开目录：${err}`)
+    return dir
+  })
+
+  ipcMain.handle('translation-start-download', async (event, modelId) => {
+    const sender = event.sender
+    return startTranslationModelDownload(repoRoot(), String(modelId ?? ''), progress => {
+      if (!sender.isDestroyed()) {
+        sender.send('translation-download-progress', progress)
+      }
+    })
+  })
+
+  ipcMain.handle('translation-cancel-download', async () => {
+    return cancelTranslationModelDownload()
+  })
+
+  ipcMain.handle('translation-translate-article', async (event, payload) => {
+    const sender = event.sender
+    return translateArticle(repoRoot(), payload, progress => {
+      if (!sender.isDestroyed()) {
+        sender.send('translation-progress', progress)
+      }
+    })
+  })
 }
 
 function setupDesktopChrome() {
@@ -356,6 +408,14 @@ app.whenReady().then(async () => {
   setupDesktopChrome()
   registerWindowIpc()
   await bootstrapApp()
+  void preloadTranslationModel(repoRoot())
+  void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (!win.isDestroyed()) {
+        win.webContents.send('translation-download-progress', progress)
+      }
+    }
+  })
 
   app.on('activate', async () => {
     if (!mainWindow || mainWindow.isDestroyed()) {
@@ -371,4 +431,5 @@ app.on('window-all-closed', () => {
 
 app.on('before-quit', () => {
   stopSidecar()
+  void disposeTranslation()
 })

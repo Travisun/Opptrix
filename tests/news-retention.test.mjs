@@ -17,6 +17,8 @@ test('normalizeNewsSettings defaults to 3 years and unlimited count', () => {
   const s = normalizeNewsSettings({ refresh_interval_min: 15 })
   assert.equal(s.retention_years, 3)
   assert.equal(s.max_articles, null)
+  assert.equal(s.translation.service_mode, 'offline')
+  assert.equal(s.translation.offline_model, '__auto__')
 })
 
 test('selectRetainedArticles drops articles older than retention years', () => {
