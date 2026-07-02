@@ -50,6 +50,8 @@ interface Props {
   electronChrome?: boolean
   chatColumnVisible?: boolean
   chromeToolbarReserve?: number
+  focusStockCode?: string | null
+  onFocusStockConsumed?: () => void
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
   onDiscussInChat?: (payload: StockDiscussPayload) => void
@@ -63,6 +65,8 @@ export default function RightPanel({
   electronChrome = false,
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
+  focusStockCode = null,
+  onFocusStockConsumed,
   onToggleRightPanel,
   onToggleChatColumn,
   onDiscussInChat,
@@ -97,6 +101,8 @@ export default function RightPanel({
           chatColumnVisible={chatColumnVisible}
           chromeToolbarReserve={chromeToolbarReserve}
           panelFullWidth={fullWidth}
+          focusStockCode={focusStockCode}
+          onFocusStockConsumed={onFocusStockConsumed}
           onToggleRightPanel={visible ? onToggleRightPanel : undefined}
           onToggleChatColumn={visible ? onToggleChatColumn : undefined}
           onDiscussInChat={visible ? onDiscussInChat : undefined}

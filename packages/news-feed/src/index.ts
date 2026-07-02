@@ -28,7 +28,7 @@ import {
 
 export * from './types.js'
 export { resolveFeedUrl } from './url.js'
-export { getNewsFeedStore, NewsFeedStore } from './store.js'
+export { getNewsFeedStore, NewsFeedStore, setNewsArticlePersistHook } from './store.js'
 export { startNewsFeedScheduler, stopNewsFeedScheduler } from './scheduler.js'
 
 export interface FeedUrlInput {

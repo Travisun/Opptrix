@@ -220,6 +220,7 @@ interface ChatViewProps {
   title?: string
   sessionId?: string | null
   welcomeEpoch?: number
+  chatScrollEpoch?: number
   messages: ChatDisplayMessage[]
   contextRef?: SessionContextRef | null
   input: string
@@ -255,7 +256,7 @@ interface ChatViewProps {
 }
 
 export default function ChatView({
-  title = '新对话', sessionId = null, welcomeEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
+  title = '新对话', sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -394,6 +395,17 @@ export default function ChatView({
     el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
 
+  const scrollToMessageStart = useCallback((messageIndex: number, behavior: ScrollBehavior = 'auto') => {
+    const container = chatBoxRef.current
+    if (!container) return
+    const el = container.querySelector(`[data-message-index="${messageIndex}"]`)
+    if (!(el instanceof HTMLElement)) return
+    const containerRect = container.getBoundingClientRect()
+    const elRect = el.getBoundingClientRect()
+    const elTopInContainer = elRect.top - containerRect.top + container.scrollTop
+    container.scrollTo({ top: Math.max(0, elTopInContainer - 12), behavior })
+  }, [])
+
   const scrollMessageStartToCenter = useCallback((messageIndex: number) => {
     const container = chatBoxRef.current
     if (!container) return
@@ -439,6 +451,14 @@ export default function ChatView({
 
     prevLoadingRef.current = loading
   }, [messages, loading, liveTrace, scrollToBottom, scrollMessageStartToCenter])
+
+  useEffect(() => {
+    if (!chatScrollEpoch || !sessionId || loading || liveTrace || messages.length === 0) return
+    const idx = messages.length - 1
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(() => scrollToMessageStart(idx, 'auto'))
+    })
+  }, [chatScrollEpoch, sessionId, loading, liveTrace, messages.length, scrollToMessageStart])
 
   const handleSubmit = (text?: string) => {
     stickToBottomRef.current = true

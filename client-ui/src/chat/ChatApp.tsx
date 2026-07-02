@@ -12,6 +12,7 @@ import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
+  archiveSession,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -21,6 +22,8 @@ import type { ChatLiveTrace } from '../types/chatProgress'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { feedArticleToContextRef } from '../pages/news/newsUtils'
+import { setNewsFeedSelectedId } from '../pages/news/newsFeedSession'
+import WorkspaceSearchDialog, { type WorkspaceSearchAction } from './WorkspaceSearchDialog'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
@@ -224,6 +227,9 @@ export default function ChatApp() {
   const chatAbortRef = useRef<AbortController | null>(null)
   const stoppingRef = useRef(false)
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
+  const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
+  const [searchOpen, setSearchOpen] = useState(false)
+  const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
 
   const refreshModels = useCallback(async () => {
@@ -266,6 +272,7 @@ export default function ChatApp() {
     setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
     setError('')
+    setChatScrollEpoch(epoch => epoch + 1)
   }, [])
 
   useEffect(() => {
@@ -366,6 +373,64 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '删除失败')
     }
   }
+
+  const handleArchive = async (id: string, folderId: string) => {
+    try {
+      await archiveSession(id, folderId)
+      const list = await refreshSessions()
+      setSessions(list)
+      if (activeId === id) {
+        if (list.length > 0) {
+          await loadSession(list[0].id)
+        } else {
+          setActiveId(null)
+          setMessages([])
+          setContextRef(null)
+          setSessionModelState(undefined)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '归档失败')
+    }
+  }
+
+  const handleOpenSearch = useCallback(() => {
+    closeDrawer()
+    setSearchOpen(true)
+  }, [closeDrawer])
+
+  const handleSearchAction = useCallback(async (action: WorkspaceSearchAction) => {
+    if (action.type === 'session') {
+      restoreChatColumn()
+      closeDrawer()
+      try {
+        await loadSession(action.sessionId)
+        if (view !== 'chat') navigate('chat')
+      } catch (e) {
+        setError(e instanceof Error ? e.message : '加载对话失败')
+      }
+      return
+    }
+    if (action.type === 'stock') {
+      restoreChatColumn()
+      setFocusStockCode(action.code)
+      if (!rightPanelVisible) handleToggleRightPanel()
+      if (view !== 'chat') navigate('chat')
+      return
+    }
+    if (action.type === 'news') {
+      setNewsFeedSelectedId(action.articleId)
+      navigate('news')
+    }
+  }, [
+    loadSession,
+    navigate,
+    restoreChatColumn,
+    closeDrawer,
+    rightPanelVisible,
+    handleToggleRightPanel,
+    view,
+  ])
 
   const handleStop = useCallback(async () => {
     if (!loading || stoppingRef.current) return
@@ -657,12 +722,19 @@ export default function ChatApp() {
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
+    onArchive: handleArchive,
+    onOpenSearch: handleOpenSearch,
     onOpenSettings: () => { openSettings() },
     onOpenNewsCenter: openNewsCenter,
   }
 
   return (
     <>
+      <WorkspaceSearchDialog
+        open={searchOpen}
+        onClose={() => setSearchOpen(false)}
+        onAction={handleSearchAction}
+      />
       {electronChrome && sidebarOverlayMode && !overlaySidebarOpen && (
         <OverlaySidebarEdgeTrigger
           enabled
@@ -793,6 +865,7 @@ export default function ChatApp() {
                     title={activeSession?.title ?? '新对话'}
                     sessionId={activeId}
                     welcomeEpoch={welcomeEpoch}
+                    chatScrollEpoch={chatScrollEpoch}
                     messages={messages}
                     contextRef={contextRef}
                     input={input}
@@ -841,6 +914,8 @@ export default function ChatApp() {
                 electronChrome={electronChrome}
                 chatColumnVisible={chatVisible}
                 chromeToolbarReserve={chromeToolbarReserve}
+                focusStockCode={focusStockCode}
+                onFocusStockConsumed={() => setFocusStockCode(null)}
                 onToggleRightPanel={handleToggleRightPanel}
                 onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
                 onDiscussInChat={handleStockDiscuss}

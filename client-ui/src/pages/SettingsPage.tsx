@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Text, Spinner, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
@@ -9,6 +9,7 @@ import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
 } from './settings/SettingsSidebar'
+import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
@@ -21,7 +22,7 @@ import {
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
 } from './settings/SettingsPrimitives'
 import {
-  getConfig, patchConfig, deleteProvider, getHealth,
+  getConfig, patchConfig, deleteProvider, getHealth, listDiscoverStrategies, news,
   type AppConfig, type PublicProvider,
 } from '../api/client'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
@@ -325,6 +326,8 @@ function SettingsPageView({
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
+  const [strategyNames, setStrategyNames] = useState<string[]>([])
+  const [newsSearchEntries, setNewsSearchEntries] = useState<SettingsSearchEntry[]>([])
   const [scorecard, setScorecard] = useState('综合评估')
   const [loading, setLoading] = useState(true)
   const [saveState, setSaveState] = useState<SaveState>('idle')
@@ -347,6 +350,30 @@ function SettingsPageView({
     refresh()
       .catch(() => toast.showError('无法读取后端配置，请确认服务已启动'))
       .finally(() => setLoading(false))
+    listDiscoverStrategies()
+      .then(res => setStrategyNames(res.strategies.map(item => item.name)))
+      .catch(() => setStrategyNames([]))
+    news.listSubscriptions()
+      .then(res => {
+        const entries: SettingsSearchEntry[] = []
+        for (const sub of res.subscriptions) {
+          entries.push({
+            section: 'news_feed',
+            group: '订阅源',
+            title: sub.title,
+            desc: sub.url,
+          })
+        }
+        for (const group of res.groups) {
+          entries.push({
+            section: 'news_feed',
+            group: '订阅分组',
+            title: group.title,
+          })
+        }
+        setNewsSearchEntries(entries)
+      })
+      .catch(() => setNewsSearchEntries([]))
   }, [refresh, toast])
 
   useEffect(() => {
@@ -412,6 +439,27 @@ function SettingsPageView({
   }
 
   const providers = config?.providers ?? []
+
+  const dynamicSearchEntries = useMemo((): SettingsSearchEntry[] => {
+    const entries: SettingsSearchEntry[] = []
+    for (const p of providers) {
+      entries.push({
+        section: 'models',
+        title: p.name,
+        desc: '模型提供商',
+        keywords: [p.base_url, ...p.models],
+      })
+    }
+    for (const name of strategyNames) {
+      entries.push({
+        section: 'discover_strategies',
+        title: name,
+        desc: '选股策略',
+      })
+    }
+    entries.push(...newsSearchEntries)
+    return entries
+  }, [providers, strategyNames, newsSearchEntries])
 
   const saveHintText = (() => {
     switch (saveState) {
@@ -582,6 +630,7 @@ function SettingsPageView({
           onBack={onBack}
           search={search}
           onSearchChange={setSearch}
+          dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
         />
       )}
@@ -595,6 +644,7 @@ function SettingsPageView({
           onBack={onBack}
           search={search}
           onSearchChange={setSearch}
+          dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
         />
       )}

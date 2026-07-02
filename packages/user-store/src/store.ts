@@ -3,6 +3,19 @@ import os from 'node:os'
 import path from 'node:path'
 import Database from 'better-sqlite3'
 import { resolveUserDataRoot } from '@opptrix/shared'
+import {
+  clearFtsNews,
+  clearFtsSessions,
+  deleteFtsNews,
+  deleteFtsSession,
+  initFtsSchema,
+  searchFtsNews,
+  searchFtsSessions,
+  upsertFtsNews,
+  upsertFtsSession,
+  type FtsNewsRow,
+  type FtsSessionRow,
+} from './fts.js'
 
 const DB_FILE = 'opptrix.db'
 
@@ -53,6 +66,15 @@ export class UserDataStore {
       CREATE INDEX IF NOT EXISTS idx_documents_namespace_updated
         ON documents(namespace, updated_at DESC);
     `)
+    initFtsSchema(this.db)
+  }
+
+  getMetaFlag(key: string): boolean {
+    return this.hasMigration(key)
+  }
+
+  setMetaFlag(key: string) {
+    this.markMigration(key)
   }
 
   private hasMigration(key: string): boolean {
@@ -164,6 +186,38 @@ export class UserDataStore {
       'SELECT id FROM documents WHERE namespace = ? ORDER BY updated_at DESC',
     ).all(namespace) as { id: string }[]
     return rows.map(row => row.id)
+  }
+
+  indexSessionSearch(row: FtsSessionRow) {
+    upsertFtsSession(this.db, row)
+  }
+
+  removeSessionSearch(sessionId: string) {
+    deleteFtsSession(this.db, sessionId)
+  }
+
+  searchSessions(query: string, opts?: { limit?: number; includeArchived?: boolean }) {
+    return searchFtsSessions(this.db, query, opts)
+  }
+
+  clearSessionSearchIndex() {
+    clearFtsSessions(this.db)
+  }
+
+  indexNewsSearch(row: FtsNewsRow) {
+    upsertFtsNews(this.db, row)
+  }
+
+  removeNewsSearch(articleId: string) {
+    deleteFtsNews(this.db, articleId)
+  }
+
+  searchNews(query: string, limit?: number) {
+    return searchFtsNews(this.db, query, limit)
+  }
+
+  clearNewsSearchIndex() {
+    clearFtsNews(this.db)
   }
 }
 

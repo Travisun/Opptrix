@@ -15,7 +15,7 @@
     "@opptrix/article-enrichment": "*",
     "@opptrix/local-inference": "*",
     "@opptrix/news-feed": "*",
-    "@opptrix/research-hub": "*",
+    "@opptrix/search-hub": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
     "fastify": "^5.2.0",

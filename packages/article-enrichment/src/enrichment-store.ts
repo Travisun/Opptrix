@@ -3,6 +3,12 @@ import type { ArticleEnrichment } from '@opptrix/news-feed'
 
 const NS = 'news_enrichment'
 
+let persistHook: ((doc: ArticleEnrichment) => void) | null = null
+
+export function setEnrichmentPersistHook(hook: ((doc: ArticleEnrichment) => void) | null) {
+  persistHook = hook
+}
+
 export class EnrichmentStore {
   private get store() {
     return getUserDataStore()
@@ -14,6 +20,7 @@ export class EnrichmentStore {
 
   save(doc: ArticleEnrichment): ArticleEnrichment {
     this.store.setDocument(NS, doc.article_id, doc)
+    persistHook?.(doc)
     return doc
   }
 

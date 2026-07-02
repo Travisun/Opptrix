@@ -625,6 +625,50 @@ export async function deleteSession(id: string) {
   return jsonFetch<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' })
 }
 
+export async function listSessionArchiveFolders() {
+  return jsonFetch<{ folders: import('../types/chat').SessionArchiveFolder[] }>('/sessions/archive-folders')
+}
+
+export async function archiveSession(id: string, folderId: string) {
+  return jsonFetch<{ session: SessionMeta }>(`/sessions/${id}/archive`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ folderId }),
+  })
+}
+
+export async function unarchiveSession(id: string) {
+  return jsonFetch<{ session: SessionMeta }>(`/sessions/${id}/unarchive`, {
+    method: 'POST',
+  })
+}
+
+export type SearchHit =
+  | { kind: 'session'; id: string; title: string; snippet: string; archived: boolean; archiveFolderId?: string | null; updatedAt: string }
+  | { kind: 'stock'; code: string; name: string; industry: string; market: string }
+  | { kind: 'news'; id: string; title: string; snippet: string; pubDate: string; sourceTitle: string }
+
+export interface SearchBrowseResult {
+  recent: SessionMeta[]
+  archived: Array<{ folderId: string; title: string; sessions: SessionMeta[] }>
+}
+
+export interface UnifiedSearchResult {
+  query: string
+  sessions: Extract<SearchHit, { kind: 'session' }>[]
+  stocks: Extract<SearchHit, { kind: 'stock' }>[]
+  news: Extract<SearchHit, { kind: 'news' }>[]
+}
+
+export async function searchWorkspace(q: string, limit = 20) {
+  const params = new URLSearchParams({ q, limit: String(limit) })
+  return jsonFetch<UnifiedSearchResult>(`/search?${params}`)
+}
+
+export async function browseWorkspaceSearch() {
+  return jsonFetch<SearchBrowseResult>('/search/browse')
+}
+
 export async function forkSession(sessionId: string, messageIndex: number) {
   return jsonFetch<{
     session: SessionMeta
