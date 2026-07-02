@@ -21,7 +21,7 @@ test('normalizeNewsSettings defaults to 3 years and unlimited count', () => {
   assert.equal(s.translation.offline_model, '__auto__')
   assert.equal(s.enrichment.enabled, true)
   assert.equal(s.enrichment.processing_mode, 'on_demand')
-  assert.equal(s.enrichment.service_mode, 'offline')
+  assert.equal(s.enrichment.service_mode, 'remote')
 })
 
 test('selectRetainedArticles drops articles older than retention years', () => {
