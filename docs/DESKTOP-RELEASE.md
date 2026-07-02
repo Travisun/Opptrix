@@ -39,18 +39,21 @@
 
 ## 3. 各平台产物格式与命名
 
-`electron-builder` 的 `productName` 为 **Opptrix**。在版本 `0.6.1`、当前默认配置下，典型文件名如下（架构以 CI 实际构建为准，Apple 运行器一般为 `arm64`，Ubuntu 为 `x64`/`amd64`）：
+`electron-builder` 的 `productName` 为 **Opptrix**。在版本 `0.6.1`、当前默认配置下，典型文件名如下：
 
-### macOS
+### macOS（Universal：Intel + Apple Silicon 合一）
+
+CI 在 `macos-latest` 上构建 **universal** 包，同一份安装包同时支持 **Intel（x64）** 与 **Apple Silicon（arm64）**，无需用户自行选择架构。
 
 | 用途 | 格式 | 典型文件名 | 是否自动更新必需 |
 |------|------|------------|------------------|
-| 首次安装 / 手动分发 | `.dmg` | `Opptrix-0.6.1-arm64.dmg` | 否（给人下载安装） |
-| **自动更新** | `.zip` | `Opptrix-0.6.1-arm64-mac.zip` | **是** |
+| 首次安装 / 手动分发 | `.dmg` | `Opptrix-0.6.1-universal.dmg` | 否（给人下载安装） |
+| **自动更新** | `.zip` | `Opptrix-0.6.1-universal-mac.zip` | **是** |
 | 更新元数据 | `.yml` | `latest-mac.yml` | **是** |
 | 差分（可选） | `.blockmap` | `*.blockmap` | 建议保留 |
 
-> macOS 自动更新依赖 **zip + latest-mac.yml**，仅有 dmg 无法完成热更新。
+> macOS 自动更新依赖 **zip + latest-mac.yml**，仅有 dmg 无法完成热更新。  
+> 配置见 `apps/desktop/package.json` → `mac.target` 的 `arch: ["universal"]`。
 
 ### Windows
 
@@ -101,7 +104,7 @@ git tag desktop-v0.6.1
 git push origin desktop-v0.6.1
 ```
 
-推送 `desktop-v*` 标签后，GitHub Actions 会在 **Windows / Ubuntu** 两个 runner 上并行执行（**不含 macOS**，Mac 包需本地构建后补传）：
+推送 `desktop-v*` 标签后，GitHub Actions 会在 **macOS / Windows / Ubuntu** 三个 runner 上并行执行：
 
 ```bash
 npm ci
@@ -110,12 +113,12 @@ npm run build:desktop -- --publish always
 
 `electron-builder` 会：
 
-1. 构建当前平台安装包；
-2. 生成 `latest.yml`（Windows）或 `latest-linux.yml`（Linux）；
+1. 构建当前平台安装包（Mac 为 **Universal**，含 Intel + ARM）；
+2. 生成 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`；
 3. 创建或更新 **同名 GitHub Release**（与标签 `desktop-v0.6.1` 关联）；
 4. 上传该平台产物与 yml。
 
-Win / Linux job 全部成功后，Release 上应有对应安装包与 yml。**macOS** 用户需从 Release 下载你本地构建的 `.dmg` / `.zip`（或你后续补传的 `latest-mac.yml` 与 zip），否则 Mac 客户端无法通过自动更新获取新版本。
+三端 job 全部成功后，Release 上应同时存在三套安装包与三份 yml。
 
 ### 4.3 在 GitHub 上核对 Release
 
@@ -124,6 +127,11 @@ Win / Linux job 全部成功后，Release 上应有对应安装包与 yml。**ma
 确认附件至少包含：
 
 ```text
+# macOS（CI 自动，Universal = Intel + Apple Silicon）
+Opptrix-{version}-universal.dmg
+Opptrix-{version}-universal-mac.zip
+latest-mac.yml
+
 # Windows（CI 自动）
 Opptrix Setup {version}.exe
 latest.yml
@@ -132,11 +140,6 @@ latest.yml
 Opptrix-{version}.AppImage
 opptrix_{version}_amd64.deb
 latest-linux.yml
-
-# macOS（可选，本地构建后手动上传）
-Opptrix-{version}-arm64.dmg
-Opptrix-{version}-arm64-mac.zip
-latest-mac.yml
 ```
 
 （另可有 `.blockmap` 等辅助文件。）
@@ -204,9 +207,29 @@ npm run build:desktop -- --publish always
 
 ### macOS
 
-- 配置同时产出 `dmg`（分发）与 `zip`（更新）。
-- **强烈建议** 配置 Apple 开发者证书与公证（Notarization），否则首次安装与更新后可能遭 Gatekeeper 拦截。
-- 未签名时仍可发布，但需在 Release Notes 中说明系统安全提示的处理方式。
+- 构建 **Universal** 包（`arch: ["universal"]`），**Intel Mac 与 Apple Silicon 共用同一安装包**。
+- 同时产出 `dmg`（分发）与 `zip`（更新）。
+- CI 默认 **未签名**（`CSC_IDENTITY_AUTO_DISCOVERY=false`），内测可用；正式发布建议配置签名与公证。
+
+#### 在 CI 中配置 Apple 签名（推荐）
+
+1. [Apple Developer](https://developer.apple.com) 账号，创建 **Developer ID Application** 证书，导出 `.p12`。
+2. 在 GitHub 仓库 **Settings → Secrets and variables → Actions** 添加：
+
+   | Secret | 说明 |
+   |--------|------|
+   | `CSC_LINK` | `.p12` 文件的 Base64（`base64 -i cert.p12 \| pbcopy`） |
+   | `CSC_KEY_PASSWORD` | 导出 p12 时的密码 |
+   | `APPLE_ID` | 苹果 ID 邮箱（公证） |
+   | `APPLE_APP_SPECIFIC_PASSWORD` | [App 专用密码](https://appleid.apple.com) |
+   | `APPLE_TEAM_ID` | 开发者团队 10 位 ID |
+
+3. 在 [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) 中 **删除** `Disable macOS code signing` 这一步（否则不会签名）。
+4. 重新打 `desktop-v*` 标签发布。
+
+`electron-builder` 检测到 `CSC_*` 后会自动签名；提供 `APPLE_*` 时会尝试公证。本地 Mac 若 Keychain 已有证书，也可直接 `npm run build:desktop` 无需导 p12。
+
+未签名时：用户可能需 **右键 → 打开**，Mac 自动更新体验也会变差。
 
 ### Windows
 
@@ -233,10 +256,14 @@ npm run build:desktop -- --publish always
 - Release 是否包含 `*-mac.zip` 与 `latest-mac.yml`（仅有 dmg 不够）；
 - yml 内 `version` 是否大于客户端当前版本。
 
+### Q：Intel Mac 和 M 系列 Mac 要发两个包吗？
+
+- **不用**。当前配置为 **Universal** 单包，Intel（x64）与 Apple Silicon（arm64）均可安装同一 `dmg` / `zip`。
+- 仅当刻意改为 `arch: ["arm64"]` 时才会抛弃 Intel 存量用户，**请勿**在生产发布中只打 arm64。
+
 ### Q：能否只发 Windows、暂不发 Mac？
 
-- **可以**。当前 CI 默认只构建 **Windows + Linux**；Mac 可在本机执行 `npm run build:desktop -- --publish always` 后补传到同一 Release。
-- 未上传 Mac 产物时，**Mac 用户无法自动更新**，但仍可手动下载安装（若你提供了 dmg/zip）。
+- 可以临时改 workflow 矩阵去掉 `macos-latest`；未构建时 Mac 用户收不到自动更新。
 
 ### Q：能否只发 Windows、暂不发 Linux？
 
@@ -258,8 +285,8 @@ npm run build:desktop -- --publish always
 ```text
 [ ] apps/desktop/package.json version = X.Y.Z
 [ ] git tag desktop-vX.Y.Z 已推送
-[ ] CI Win / Linux job 均成功（Mac 若需要则本地补传）
-[ ] Release 附件含 Windows + Linux 安装包与 latest.yml / latest-linux.yml
+[ ] CI macOS / Windows / Linux job 均成功
+[ ] Release 附件含 Universal Mac 包 + latest-mac.yml，以及 Win / Linux 产物与 yml
 [ ] Release Notes 已填写
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
 ```

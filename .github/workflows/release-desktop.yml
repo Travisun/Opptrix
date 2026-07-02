@@ -14,8 +14,11 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # macOS 不在 CI 中构建；需在本地 Mac 打包后手动上传到同一 GitHub Release（见 docs/DESKTOP-RELEASE.md）
-        os: [windows-latest, ubuntu-latest]
+        include:
+          - os: windows-latest
+          - os: ubuntu-latest
+          - os: macos-latest
+            unsigned_mac: true
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout
@@ -40,7 +43,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Universal 包（Intel + Apple Silicon）。配置 Apple 签名 Secrets 后删除本步，见 docs/DESKTOP-RELEASE.md
+      - name: Disable macOS code signing (unsigned build)
+        if: matrix.unsigned_mac == true
+        run: echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+
       - name: Build and publish desktop
         run: npm run build:desktop -- --publish always
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
