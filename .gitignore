@@ -30,6 +30,7 @@ Thumbs.db
 .env
 .env.local
 *.key
+certs/
 api_keys.txt
 apps/server/data/
 
