@@ -14,7 +14,8 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [macos-latest, windows-latest, ubuntu-latest]
+        # macOS 不在 CI 中构建；需在本地 Mac 打包后手动上传到同一 GitHub Release（见 docs/DESKTOP-RELEASE.md）
+        os: [windows-latest, ubuntu-latest]
     runs-on: ${{ matrix.os }}
     steps:
       - name: Checkout

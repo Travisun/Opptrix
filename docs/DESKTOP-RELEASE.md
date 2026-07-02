@@ -101,7 +101,7 @@ git tag desktop-v0.6.1
 git push origin desktop-v0.6.1
 ```
 
-推送 `desktop-v*` 标签后，GitHub Actions 会在 **macOS / Windows / Ubuntu** 三个 runner 上并行执行：
+推送 `desktop-v*` 标签后，GitHub Actions 会在 **Windows / Ubuntu** 两个 runner 上并行执行（**不含 macOS**，Mac 包需本地构建后补传）：
 
 ```bash
 npm ci
@@ -111,11 +111,11 @@ npm run build:desktop -- --publish always
 `electron-builder` 会：
 
 1. 构建当前平台安装包；
-2. 生成 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`；
+2. 生成 `latest.yml`（Windows）或 `latest-linux.yml`（Linux）；
 3. 创建或更新 **同名 GitHub Release**（与标签 `desktop-v0.6.1` 关联）；
 4. 上传该平台产物与 yml。
 
-三端 job 全部成功后，Release 上应同时存在三套的安装包与三份 yml。
+Win / Linux job 全部成功后，Release 上应有对应安装包与 yml。**macOS** 用户需从 Release 下载你本地构建的 `.dmg` / `.zip`（或你后续补传的 `latest-mac.yml` 与 zip），否则 Mac 客户端无法通过自动更新获取新版本。
 
 ### 4.3 在 GitHub 上核对 Release
 
@@ -124,19 +124,19 @@ npm run build:desktop -- --publish always
 确认附件至少包含：
 
 ```text
-# macOS
-Opptrix-{version}-arm64.dmg
-Opptrix-{version}-arm64-mac.zip
-latest-mac.yml
-
-# Windows
+# Windows（CI 自动）
 Opptrix Setup {version}.exe
 latest.yml
 
-# Linux
+# Linux（CI 自动）
 Opptrix-{version}.AppImage
 opptrix_{version}_amd64.deb
 latest-linux.yml
+
+# macOS（可选，本地构建后手动上传）
+Opptrix-{version}-arm64.dmg
+Opptrix-{version}-arm64-mac.zip
+latest-mac.yml
 ```
 
 （另可有 `.blockmap` 等辅助文件。）
@@ -235,7 +235,12 @@ npm run build:desktop -- --publish always
 
 ### Q：能否只发 Windows、暂不发 Mac？
 
-- 可以，但 Mac 用户会一直显示无更新；**不要** 上传错误的 yml 或半成品。
+- **可以**。当前 CI 默认只构建 **Windows + Linux**；Mac 可在本机执行 `npm run build:desktop -- --publish always` 后补传到同一 Release。
+- 未上传 Mac 产物时，**Mac 用户无法自动更新**，但仍可手动下载安装（若你提供了 dmg/zip）。
+
+### Q：能否只发 Windows、暂不发 Linux？
+
+- 可以临时改 workflow 矩阵，只保留 `windows-latest`；未构建的平台用户同样收不到自动更新。
 
 ### Q：版本号写错怎么办
 
@@ -253,8 +258,8 @@ npm run build:desktop -- --publish always
 ```text
 [ ] apps/desktop/package.json version = X.Y.Z
 [ ] git tag desktop-vX.Y.Z 已推送
-[ ] CI 三平台 job 均成功
-[ ] Release 附件含三套安装包 + latest-mac.yml + latest.yml + latest-linux.yml
+[ ] CI Win / Linux job 均成功（Mac 若需要则本地补传）
+[ ] Release 附件含 Windows + Linux 安装包与 latest.yml / latest-linux.yml
 [ ] Release Notes 已填写
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
 ```
