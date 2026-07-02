@@ -877,6 +877,42 @@ export const news = {
   getArticle: (id: string) =>
     newsJsonFetch<{ article: FeedArticle }>(`/news/articles/${encodeURIComponent(id)}`),
 
+  getArticleEnrichment: (id: string) =>
+    newsJsonFetch<{ enrichment: import('../types/schemas').ArticleEnrichment | null }>(
+      `/news/articles/${encodeURIComponent(id)}/enrichment`,
+    ),
+
+  enrichArticle: (id: string) =>
+    newsJsonFetch<{ job_id: string; article_id: string }>(
+      `/news/articles/${encodeURIComponent(id)}/enrich`,
+      { method: 'POST' },
+    ),
+
+  getEnrichmentJob: (jobId: string) =>
+    newsJsonFetch<{
+      job: {
+        articleId: string
+        status: 'running' | 'completed' | 'failed'
+        progress: {
+          articleId: string
+          phase: string
+          current: number
+          total: number
+          message?: string
+        } | null
+        error?: string
+      }
+      enrichment: import('../types/schemas').ArticleEnrichment | null
+    }>(`/news/enrichment/jobs/${encodeURIComponent(jobId)}`),
+
+  getMultimodalStatus: () =>
+    newsJsonFetch<import('../types/schemas').MultimodalStatusResponse>('/news/multimodal/status'),
+
+  ensureWhisperModel: () =>
+    newsJsonFetch<{ ok: boolean; modelName: string }>('/news/multimodal/whisper/ensure', {
+      method: 'POST',
+    }),
+
   refresh: () =>
     newsJsonFetch<{
       refreshed: number

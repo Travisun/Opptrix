@@ -124,7 +124,7 @@ export class ResearchHub {
         case 'news_groups_list': return newsGroupsList(t0)
         case 'news_sources_list': return newsSourcesList(t0)
         case 'news_articles_list': return newsArticlesList(params, t0)
-        case 'news_article_detail': return newsArticleDetail(params, t0)
+        case 'news_article_detail': return await newsArticleDetail(params, t0)
         case 'tushare_config': return ok(publicTushareConfig(), 'Tushare 配置', t0)
         case 'tushare_config_save': return this.tushareConfigSave(params, t0)
         case 'tushare_test': return this.tushareTest(params, t0)

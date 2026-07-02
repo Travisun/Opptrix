@@ -14,6 +14,7 @@ import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
+import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
@@ -448,6 +449,9 @@ function SettingsPageView({
 
       case 'translation':
         return <TranslationSettingsSection />
+
+      case 'multimodal':
+        return <MultimodalSettingsSection />
 
       case 'about':
         return (

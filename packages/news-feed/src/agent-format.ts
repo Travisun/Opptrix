@@ -1,4 +1,4 @@
-import type { FeedArticle } from './types.js'
+import type { ArticleEnrichment, FeedArticle } from './types.js'
 
 /** 压缩正文供 Agent 消费：去 HTML、合并空白与换行以节约 token */
 export function compressNewsTextForAgent(raw: string): string {
@@ -30,8 +30,15 @@ export function summarizeArticleForAgent(article: FeedArticle) {
   }
 }
 
-export function formatArticleDetailForAgent(article: FeedArticle) {
-  const bodyRaw = article.content_html || article.summary || ''
+export function formatArticleDetailForAgent(
+  article: FeedArticle,
+  enrichment?: ArticleEnrichment | null,
+) {
+  let bodyRaw = article.content_html || article.summary || ''
+  if (enrichment?.segments?.length) {
+    const derived = enrichment.segments.map(s => s.text).filter(Boolean).join('\n\n')
+    bodyRaw = `${bodyRaw}\n\n${derived}`
+  }
   const summaryRaw = article.summary || ''
   return {
     id: article.id,
@@ -43,5 +50,6 @@ export function formatArticleDetailForAgent(article: FeedArticle) {
     guid: article.guid,
     body_text: compressNewsTextForAgent(bodyRaw),
     summary_text: summaryRaw ? compressNewsTextForAgent(summaryRaw) : undefined,
+    enrichment_status: enrichment?.status,
   }
 }

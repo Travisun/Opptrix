@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ChatRegular, TranslateRegular } from '@fluentui/react-icons'
+import { ChatRegular, SlideMultimediaRegular, TranslateRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
 import { openExternalUrl } from '../../platform/openUrl'
 import { isElectron } from '../../platform/detect'
@@ -12,6 +12,7 @@ import {
 } from './articleTranslationLayout'
 import { enhanceFeedMedia, formatRelativeTime, sanitizeFeedHtml, stripHtml, buildFeedArticleBodyText } from './newsUtils'
 import { useArticleTranslation } from './useArticleTranslation'
+import { useArticleEnrichment } from './useArticleEnrichment'
 
 const useStyles = makeStyles({
   root: {
@@ -209,6 +210,30 @@ const useStyles = makeStyles({
   translateError: {
     color: opptrixTokens.error,
   },
+  extractedBlock: {
+    marginTop: '20px',
+    paddingTop: '16px',
+    borderTop: `1px solid ${opptrixTokens.separator}`,
+  },
+  extractedHeading: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: opptrixTokens.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    marginBottom: '10px',
+  },
+  extractedSegment: {
+    marginBottom: '14px',
+    padding: '10px 12px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixTokens.canvasAlt,
+    fontSize: '14px',
+    lineHeight: 1.65,
+    color: opptrixTokens.textPrimary,
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+  },
   empty: {
     flex: 1,
     display: 'flex',
@@ -247,6 +272,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
   const contentRef = useRef<HTMLDivElement>(null)
   const mountedHtmlKey = useRef('')
   const translation = useArticleTranslation(article)
+  const enrichment = useArticleEnrichment(article)
 
   const raw = article?.content_html || article?.summary || ''
   const html = article ? sanitizeFeedHtml(raw) : ''
@@ -323,6 +349,32 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
               </a>
             </>
           )}
+          {isElectron() && enrichment.available && (
+            <>
+              <span className={s.metaSep} aria-hidden>·</span>
+              <button
+                type="button"
+                className={mergeClasses(
+                  s.metaAction,
+                  (!enrichment.canEnrich && !enrichment.hasExtraction) && s.metaActionDisabled,
+                )}
+                title={enrichment.hasExtraction ? '查看媒体提取内容' : '提取图片与音视频文字'}
+                aria-label="媒体信息提取"
+                disabled={!enrichment.canEnrich && !enrichment.hasExtraction}
+                onClick={() => {
+                  if (enrichment.hasExtraction) {
+                    enrichment.setShowExtracted(v => !v)
+                    return
+                  }
+                  void enrichment.enrich()
+                }}
+              >
+                {enrichment.enriching
+                  ? <Spinner size="extra-tiny" />
+                  : <SlideMultimediaRegular fontSize={14} />}
+              </button>
+            </>
+          )}
           {isElectron() && translation.available && (
             <>
               <span className={s.metaSep} aria-hidden>·</span>
@@ -393,12 +445,18 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           )}
         </div>
       </div>
-      {(progressLabel || translation.error || (!translation.available && isElectron())) && (
+      {(progressLabel || translation.error || enrichment.progressLabel || enrichment.error
+        || (!translation.available && isElectron())) && (
         <Text
           block
-          className={mergeClasses(s.translateHint, translation.error && s.translateError)}
+          className={mergeClasses(
+            s.translateHint,
+            (translation.error || enrichment.error) && s.translateError,
+          )}
         >
           {translation.error
+            || enrichment.error
+            || enrichment.progressLabel
             || progressLabel
             || (!translation.available && isElectron()
               ? '翻译不可用：请在设置 → 翻译中下载离线模型或配置远程大模型'
@@ -421,6 +479,14 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
         }}
       >
         <div ref={contentRef} className={s.content} />
+        {enrichment.showExtracted && enrichment.enrichment?.segments?.length ? (
+          <div className={s.extractedBlock}>
+            <Text className={s.extractedHeading} block>媒体提取</Text>
+            {enrichment.enrichment.segments.map(seg => (
+              <div key={seg.id} className={s.extractedSegment}>{seg.text}</div>
+            ))}
+          </div>
+        ) : null}
       </div>
     </div>
   )

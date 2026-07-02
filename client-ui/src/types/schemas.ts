@@ -399,11 +399,27 @@ export interface FeedArticle {
   source_title: string
 }
 
+export interface NewsEnrichmentSettings {
+  enabled: boolean
+  processing_mode: 'on_demand' | 'background'
+  /** @deprecated */
+  auto_on_refresh?: boolean
+  extract_images: boolean
+  extract_audio: boolean
+  extract_video: boolean
+  service_mode: 'offline' | 'remote'
+  offline_vision_model: string
+  offline_whisper_model: string
+  remote_provider_id: string | null
+  remote_model: string | null
+}
+
 export interface NewsSettings {
   refresh_interval_min: number
   retention_years: number
   max_articles: number | null
   translation: NewsTranslationSettings
+  enrichment: NewsEnrichmentSettings
 }
 
 export type TranslationServiceMode = 'offline' | 'remote'
@@ -413,6 +429,72 @@ export interface NewsTranslationSettings {
   offline_model: string
   remote_provider_id: string | null
   remote_model: string | null
+}
+
+export type DerivedSegmentKind = 'html_text' | 'image_ocr' | 'audio_asr' | 'video_asr'
+
+export interface ArticleDerivedSegment {
+  id: string
+  kind: DerivedSegmentKind
+  text: string
+  lang?: string
+  confidence?: number
+  anchor: {
+    media_src?: string
+    block_id?: string
+    insert: 'after_media' | 'figcaption' | 'append_block'
+  }
+  model?: string
+  created_at: string
+}
+
+export type ArticleEnrichmentStatus = 'pending' | 'running' | 'ready' | 'partial' | 'failed'
+
+export interface ArticleEnrichment {
+  article_id: string
+  status: ArticleEnrichmentStatus
+  segments: ArticleDerivedSegment[]
+  errors?: Array<{ segment_id: string; message: string }>
+  updated_at: string
+  version: 1
+}
+
+export interface MultimodalRuntimeStatus {
+  platform: string
+  ffmpeg: { ready: boolean; path: string | null }
+  vision: {
+    modelInstalled: boolean
+    mmprojInstalled: boolean
+    modelName: string | null
+    mmprojName: string | null
+    mtmdSupported: boolean
+    mtmdReady: boolean
+    mtmdPath: string | null
+    mtmdRelease: string
+    mtmdToolsDir: string
+  }
+  whisper: {
+    modelName: string
+    ready: boolean
+    modelsDir: string
+  }
+  canEnrichOffline: boolean
+}
+
+export interface MultimodalStatusResponse {
+  settings: NewsEnrichmentSettings
+  runtime: MultimodalRuntimeStatus
+  visionCatalog: Array<{
+    id: string
+    name: string
+    filename: string
+    purpose: string
+    installed: boolean
+    sizeBytes: number
+  }>
+  remoteConfigured: boolean
+  remoteProviderName: string | null
+  canEnrich: boolean
 }
 
 export interface FeedPageResult {

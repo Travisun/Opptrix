@@ -10,6 +10,11 @@ import {
   listSubscriptions,
   shouldAutoRefresh,
 } from '@opptrix/news-feed'
+import {
+  getEnrichmentStore,
+  queueArticleEnrichment,
+} from '@opptrix/article-enrichment'
+import { resolveProjectRoot } from '@opptrix/agent'
 import { ok, fail, type ResearchResult } from '@opptrix/shared'
 
 type NewsListView = 'timeline' | 'group' | 'source'
@@ -145,14 +150,36 @@ export function newsArticlesList(params: Record<string, unknown>, t0: number): R
   }, `资讯列表 ${page.articles.length} 条`, t0)
 }
 
-export function newsArticleDetail(params: Record<string, unknown>, t0: number): ResearchResult {
+export async function newsArticleDetail(params: Record<string, unknown>, t0: number): Promise<ResearchResult> {
   const articleId = typeof params.article_id === 'string' ? params.article_id.trim() : ''
   if (!articleId) return fail('article_id 必填', t0)
 
   const article = getArticle(articleId)
   if (!article) return fail(`未找到文章 id=${articleId}`, t0)
 
-  const detail = formatArticleDetailForAgent(article)
+  const settings = getNewsSettings()
+  let enrichment = getEnrichmentStore().get(articleId) ?? null
+
+  if (settings.enrichment.enabled && settings.enrichment.processing_mode === 'on_demand') {
+    const needsEnrich = !enrichment
+      || enrichment.status === 'pending'
+      || (enrichment.status === 'failed' && !enrichment.segments.length)
+    if (needsEnrich && enrichment?.status !== 'running') {
+      try {
+        enrichment = await queueArticleEnrichment(
+          article,
+          settings.enrichment,
+          resolveProjectRoot(),
+        )
+      } catch {
+        /* 按需提取失败时仍返回 HTML 正文 */
+      }
+    }
+  } else if (enrichment?.status === 'running') {
+    enrichment = getEnrichmentStore().get(articleId) ?? enrichment
+  }
+
+  const detail = formatArticleDetailForAgent(article, enrichment)
   if (!detail.body_text && !detail.summary_text) {
     return ok({
       ...detail,

@@ -21,7 +21,9 @@ import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 import { registerNewsRoutes } from './news-routes.js'
+import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { startNewsFeedScheduler } from '@opptrix/news-feed'
+import { startEnrichmentScheduler } from '@opptrix/article-enrichment'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -743,7 +745,9 @@ let serveUi = false
 
 async function bootstrap() {
   await registerNewsRoutes(app)
+  await registerEnrichmentRoutes(app)
   startNewsFeedScheduler()
+  startEnrichmentScheduler(90_000, resolveProjectRoot())
   serveUi = shouldServeUi()
   if (serveUi) {
     serveUi = await registerStaticUi(app)

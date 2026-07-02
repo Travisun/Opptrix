@@ -1,5 +1,5 @@
-import type { FeedArticle, NewsSettings, NewsTranslationSettings } from './types.js'
-import { DEFAULT_NEWS_SETTINGS, DEFAULT_TRANSLATION_SETTINGS } from './types.js'
+import type { FeedArticle, NewsEnrichmentSettings, NewsSettings, NewsTranslationSettings } from './types.js'
+import { DEFAULT_ENRICHMENT_SETTINGS, DEFAULT_NEWS_SETTINGS, DEFAULT_TRANSLATION_SETTINGS } from './types.js'
 
 /** 单次 RSS 拉取解析的最大条目（仅限制网络解析，不限制本地存储） */
 export const MAX_ARTICLES_PER_FETCH = 200
@@ -21,6 +21,34 @@ export function normalizeTranslationSettings(
   }
 }
 
+export function normalizeEnrichmentSettings(
+  raw?: Partial<NewsEnrichmentSettings> | null,
+): NewsEnrichmentSettings {
+  const merged = { ...DEFAULT_ENRICHMENT_SETTINGS, ...raw }
+  let processingMode = merged.processing_mode
+  if (processingMode !== 'on_demand' && processingMode !== 'background') {
+    processingMode = merged.auto_on_refresh === true ? 'background' : 'on_demand'
+  }
+  const offlineVision = String(merged.offline_vision_model ?? '__auto__').trim() || '__auto__'
+  const offlineWhisper = String(merged.offline_whisper_model ?? 'tiny').trim() || 'tiny'
+  const remoteModel = merged.remote_model == null
+    ? null
+    : String(merged.remote_model).trim() || null
+
+  return {
+    enabled: merged.enabled !== false,
+    processing_mode: processingMode,
+    extract_images: merged.extract_images !== false,
+    extract_audio: merged.extract_audio !== false,
+    extract_video: merged.extract_video !== false,
+    service_mode: merged.service_mode === 'remote' ? 'remote' : 'offline',
+    offline_vision_model: offlineVision,
+    offline_whisper_model: offlineWhisper,
+    remote_provider_id: merged.remote_provider_id ?? null,
+    remote_model: remoteModel,
+  }
+}
+
 export function normalizeNewsSettings(raw?: Partial<NewsSettings> | null): NewsSettings {
   const merged = { ...DEFAULT_NEWS_SETTINGS, ...raw }
   const retention = merged.retention_years
@@ -35,6 +63,7 @@ export function normalizeNewsSettings(raw?: Partial<NewsSettings> | null): NewsS
       ? null
       : Math.min(1_000_000, Math.floor(maxRaw)),
     translation: normalizeTranslationSettings(merged.translation),
+    enrichment: normalizeEnrichmentSettings(merged.enrichment),
   }
 }
 

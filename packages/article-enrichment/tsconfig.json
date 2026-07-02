@@ -1,0 +1,14 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "composite": true,
+    "outDir": "dist",
+    "rootDir": "src"
+  },
+  "references": [
+    { "path": "../local-inference" },
+    { "path": "../news-feed" },
+    { "path": "../user-store" }
+  ],
+  "include": ["src/**/*"]
+}

@@ -69,7 +69,7 @@ test('news hub tools list and fetch article detail', async () => {
   const bySource = newsArticlesList({ view: 'source', subscription_id: sub.id, limit: 10 }, t0)
   assert.equal(bySource.data.articles.length, 1)
 
-  const detail = newsArticleDetail({ article_id: article.id }, t0)
+  const detail = await newsArticleDetail({ article_id: article.id }, t0)
   assert.equal(detail.success, true)
   assert.equal(detail.data.body_text, '正文 第二段')
   assert.equal(detail.data.summary_text, '摘要 段落')

@@ -40,6 +40,10 @@ export async function registerNewsRoutes(app: FastifyInstance) {
         ...cur.translation,
         ...(req.body?.translation ?? {}),
       },
+      enrichment: {
+        ...cur.enrichment,
+        ...(req.body?.enrichment ?? {}),
+      },
     })
     return { settings: next }
   })

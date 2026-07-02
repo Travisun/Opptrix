@@ -36,6 +36,63 @@ export interface FeedArticle {
 
 export type TranslationServiceMode = 'offline' | 'remote'
 
+export type DerivedSegmentKind =
+  | 'html_text'
+  | 'image_ocr'
+  | 'audio_asr'
+  | 'video_asr'
+
+export interface ArticleDerivedSegment {
+  id: string
+  kind: DerivedSegmentKind
+  text: string
+  lang?: string
+  confidence?: number
+  anchor: {
+    media_src?: string
+    block_id?: string
+    insert: 'after_media' | 'figcaption' | 'append_block'
+  }
+  model?: string
+  created_at: string
+}
+
+export type ArticleEnrichmentStatus = 'pending' | 'running' | 'ready' | 'partial' | 'failed'
+
+export interface ArticleEnrichment {
+  article_id: string
+  status: ArticleEnrichmentStatus
+  segments: ArticleDerivedSegment[]
+  errors?: Array<{ segment_id: string; message: string }>
+  updated_at: string
+  version: 1
+}
+
+export type EnrichmentProcessingMode = 'on_demand' | 'background'
+
+export type MultimodalServiceMode = 'offline' | 'remote'
+
+export interface NewsEnrichmentSettings {
+  enabled: boolean
+  /**
+   * on_demand：Agent 首次读正文或阅读器手动触发时再提取
+   * background：RSS 刷新后在后台全量排队处理
+   */
+  processing_mode: EnrichmentProcessingMode
+  /** @deprecated 使用 processing_mode；true 等价于 background */
+  auto_on_refresh?: boolean
+  extract_images: boolean
+  extract_audio: boolean
+  extract_video: boolean
+  service_mode: MultimodalServiceMode
+  /** `__auto__` 或已安装 SmolVLM GGUF 文件名 */
+  offline_vision_model: string
+  /** 本地 Whisper 模型名，如 tiny */
+  offline_whisper_model: string
+  remote_provider_id: string | null
+  remote_model: string | null
+}
+
 export interface NewsTranslationSettings {
   /** 离线优先：本地模型可用时用本地，否则回退远程 */
   service_mode: TranslationServiceMode
@@ -52,6 +109,7 @@ export interface NewsSettings {
   /** 全局文章数量上限；null = 不限制数量 */
   max_articles: number | null
   translation: NewsTranslationSettings
+  enrichment: NewsEnrichmentSettings
 }
 
 export interface SubscriptionFetchMeta {
@@ -95,6 +153,19 @@ export interface ValidateFeedResult {
   error?: string
 }
 
+export const DEFAULT_ENRICHMENT_SETTINGS: NewsEnrichmentSettings = {
+  enabled: true,
+  processing_mode: 'on_demand',
+  extract_images: true,
+  extract_audio: true,
+  extract_video: true,
+  service_mode: 'offline',
+  offline_vision_model: '__auto__',
+  offline_whisper_model: 'tiny',
+  remote_provider_id: null,
+  remote_model: null,
+}
+
 export const DEFAULT_TRANSLATION_SETTINGS: NewsTranslationSettings = {
   service_mode: 'offline',
   offline_model: '__auto__',
@@ -107,6 +178,7 @@ export const DEFAULT_NEWS_SETTINGS: NewsSettings = {
   retention_years: 3,
   max_articles: null,
   translation: DEFAULT_TRANSLATION_SETTINGS,
+  enrichment: DEFAULT_ENRICHMENT_SETTINGS,
 }
 
 export const FEED_PAGE_SIZE = 20

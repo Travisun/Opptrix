@@ -55,10 +55,19 @@ const TRANSLATION_MODEL_CATALOG = [
     family: 'smolvlm',
     purpose: 'vision',
   },
+  {
+    id: 'smolvlm-mmproj-q8',
+    name: 'SmolVLM-256M mmproj Q8_0',
+    filename: 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf',
+    urls: buildHfDownloadUrls('ggml-org/SmolVLM-256M-Instruct-GGUF', 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf'),
+    sizeBytes: 103_769_856,
+    family: 'smolvlm',
+    purpose: 'vision',
+  },
 ]
 
-/** 应用启动时后台预拉取的默认模型（翻译 + 视觉备用） */
-const BOOTSTRAP_MODEL_IDS = ['hy-mt-q4', 'smolvlm-q8']
+/** 应用启动时后台预拉取的默认模型（翻译 + 视觉 + mmproj） */
+const BOOTSTRAP_MODEL_IDS = ['hy-mt-q4', 'smolvlm-q8', 'smolvlm-mmproj-q8']
 
 function listSearchDirs(repoRoot) {
   return [
@@ -115,7 +124,10 @@ function isCatalogModelInstalled(item, installedNames) {
   }
 
   if (family === 'smolvlm') {
-    return [...installedNames].some(name => /smolvlm/i.test(name))
+    if (/mmproj/i.test(filename)) {
+      return [...installedNames].some(name => /mmproj/i.test(name) && /smolvlm/i.test(name))
+    }
+    return [...installedNames].some(name => /smolvlm/i.test(name) && !/mmproj/i.test(name))
   }
 
   return false

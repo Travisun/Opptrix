@@ -4,6 +4,7 @@ import {
   BotRegular,
   ChartMultipleRegular,
   DatabaseRegular,
+  ImageRegular,
   InfoRegular,
   NewsRegular,
   SearchRegular,
@@ -17,7 +18,7 @@ import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
 
-export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'translation' | 'about'
+export type SettingsSection = 'general' | 'models' | 'market_data' | 'discover_strategies' | 'news_feed' | 'translation' | 'multimodal' | 'about'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
@@ -27,6 +28,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
+  { id: 'multimodal', label: '多模态', icon: ImageRegular },
   { id: 'about', label: '关于', icon: InfoRegular },
 ]
 
@@ -263,6 +265,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理 RSS 订阅与资讯更新频率'
     case 'translation':
       return '配置新闻阅读的离线翻译与远程大模型回退'
+    case 'multimodal':
+      return '配置图片 OCR、语音转写与文章媒体自动提取策略'
     case 'about':
       return '应用版本与运行说明'
     default:

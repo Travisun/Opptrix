@@ -1,0 +1,729 @@
+import { useCallback, useEffect, useRef, useState } from 'react'
+import {
+  ProgressBar,
+  Spinner,
+  Text,
+  makeStyles,
+  mergeClasses,
+} from '@fluentui/react-components'
+import {
+  ArrowDownloadRegular,
+  CheckmarkCircleRegular,
+  DismissRegular,
+} from '@fluentui/react-icons'
+import { getConfig, news, type PublicProvider } from '../../api/client'
+import type {
+  MultimodalStatusResponse,
+  NewsEnrichmentSettings,
+  NewsSettings,
+} from '../../types/schemas'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
+import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
+import {
+  SettingsGroup,
+  SettingsRow,
+  SettingsStaticBlock,
+  SettingsTextField,
+} from './SettingsPrimitives'
+import { useSettingsToast } from './SettingsToast'
+import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
+import { opptrixTokens } from '../../theme/tokens'
+import { ghostInteractive } from '../../theme/mixins'
+import {
+  isElectron,
+  type TranslationDownloadProgress,
+} from '../../platform/detect'
+
+const SETTINGS_SAVE_MS = 500
+
+const DEFAULT_ENRICHMENT: NewsEnrichmentSettings = {
+  enabled: true,
+  processing_mode: 'on_demand',
+  extract_images: true,
+  extract_audio: true,
+  extract_video: true,
+  service_mode: 'offline',
+  offline_vision_model: '__auto__',
+  offline_whisper_model: 'tiny',
+  remote_provider_id: null,
+  remote_model: null,
+}
+
+const useStyles = makeStyles({
+  hint: {
+    fontSize: '12px',
+    color: opptrixTokens.textSecondary,
+    lineHeight: 1.55,
+    padding: '0 2px',
+  },
+  sectionBlock: { marginTop: '20px' },
+  sectionLabel: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: opptrixTokens.textTertiary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.04em',
+    flexShrink: 0,
+  },
+  sectionLabelSpaced: { padding: '0 2px 8px' },
+  sectionHeaderRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    padding: '0 2px 8px',
+  },
+  sectionHeaderLeft: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minWidth: 0,
+    flex: 1,
+  },
+  saveHint: {
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    padding: '4px 2px 0',
+    minHeight: '16px',
+  },
+  saveHintActive: { color: opptrixTokens.textSecondary },
+  listPanel: {
+    border: opptrixTokens.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixTokens.canvas,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
+  },
+  listScroll: {
+    maxHeight: '220px',
+    overflowY: 'auto',
+    overscrollBehavior: 'contain',
+  },
+  listRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '8px 14px',
+    minHeight: '38px',
+    borderBottom: `1px solid ${opptrixTokens.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  listRowMain: { flex: 1, minWidth: 0 },
+  listRowTitle: {
+    fontSize: '13px',
+    fontWeight: 600,
+    color: opptrixTokens.textPrimary,
+    lineHeight: 1.35,
+  },
+  listRowMeta: {
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.4,
+    marginTop: '2px',
+  },
+  statusBadge: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    fontSize: '11px',
+    color: opptrixTokens.textSecondary,
+    whiteSpace: 'nowrap',
+    flexShrink: 0,
+  },
+  statusReady: { color: opptrixTokens.success },
+  statusWarn: { color: opptrixTokens.warning },
+  intervalSelect: { minWidth: '160px' },
+  remoteModelSelect: { minWidth: '220px' },
+  toolStatusGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '0',
+  },
+  progressBlock: {
+    padding: '10px 14px 12px',
+    borderTop: `1px solid ${opptrixTokens.separator}`,
+    backgroundColor: opptrixTokens.canvasAlt,
+  },
+  progressTopRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    justifyContent: 'space-between',
+    gap: '12px',
+  },
+  progressPct: {
+    fontSize: '12px',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  progressBarTrack: { width: '100%', minHeight: '6px', marginTop: '8px' },
+  panelFooter: {
+    fontSize: '11px',
+    color: opptrixTokens.textTertiary,
+    lineHeight: 1.5,
+    padding: '8px 2px 0',
+  },
+  panelFooterDir: {
+    display: 'block',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: '11px',
+    color: opptrixTokens.accent,
+    wordBreak: 'break-all',
+    marginTop: '4px',
+    padding: 0,
+    border: 'none',
+    background: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+    textDecoration: 'underline',
+    ...ghostInteractive,
+  },
+})
+
+type SaveState = 'idle' | 'pending' | 'saved' | 'error'
+
+function formatBytes(bytes: number): string {
+  if (!bytes || bytes <= 0) return '—'
+  const units = ['B', 'KB', 'MB', 'GB']
+  let value = bytes
+  let unit = 0
+  while (value >= 1024 && unit < units.length - 1) {
+    value /= 1024
+    unit += 1
+  }
+  return `${value.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`
+}
+
+function formatDownloadProgress(progress: TranslationDownloadProgress | null | undefined): string {
+  if (!progress?.totalBytes) return ''
+  return `${Math.min(100, Math.round((progress.receivedBytes / progress.totalBytes) * 100))}%`
+}
+
+export default function MultimodalSettingsSection() {
+  const s = useStyles()
+  const toast = useSettingsToast()
+  const [loading, setLoading] = useState(true)
+  const [settings, setSettings] = useState<NewsSettings>({
+    refresh_interval_min: 15,
+    retention_years: 3,
+    max_articles: null,
+    translation: {
+      service_mode: 'offline',
+      offline_model: '__auto__',
+      remote_provider_id: null,
+      remote_model: null,
+    },
+    enrichment: DEFAULT_ENRICHMENT,
+  })
+  const [providers, setProviders] = useState<PublicProvider[]>([])
+  const [mmStatus, setMmStatus] = useState<MultimodalStatusResponse | null>(null)
+  const [download, setDownload] = useState<TranslationDownloadProgress | null>(null)
+  const [downloadDir, setDownloadDir] = useState<string | null>(null)
+  const [whisperEnsuring, setWhisperEnsuring] = useState(false)
+  const [saveState, setSaveState] = useState<SaveState>('idle')
+  const skipSettingsSave = useRef(true)
+  const settingsBaseline = useRef<NewsEnrichmentSettings | null>(null)
+
+  const refreshStatus = useCallback(async () => {
+    const status = await news.getMultimodalStatus()
+    setMmStatus(status)
+    if (isElectron()) {
+      const dir = await window.electronAPI?.translationGetDownloadDir?.()
+      if (dir) setDownloadDir(dir)
+    }
+  }, [])
+
+  const load = useCallback(async () => {
+    setLoading(true)
+    try {
+      const [st, cfg] = await Promise.all([
+        news.getSettings(),
+        getConfig().catch(() => null),
+      ])
+      setSettings(st.settings)
+      settingsBaseline.current = st.settings.enrichment
+      skipSettingsSave.current = true
+      setProviders(cfg?.providers ?? [])
+      await refreshStatus()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '加载失败')
+    } finally {
+      setLoading(false)
+    }
+  }, [refreshStatus, toast])
+
+  useEffect(() => { void load() }, [load])
+
+  useEffect(() => {
+    if (!isElectron()) return
+    const unsubscribe = window.electronAPI?.onTranslationDownloadProgress?.(progress => {
+      setDownload(progress)
+      if (progress.status === 'completed') {
+        toast.showSuccess('模型已下载完成')
+        void refreshStatus()
+      }
+      if (progress.status === 'error') {
+        toast.showError(progress.error ?? '模型下载失败')
+      }
+    })
+    return unsubscribe
+  }, [refreshStatus, toast])
+
+  useDebouncedEffect(() => {
+    if (loading || skipSettingsSave.current) {
+      skipSettingsSave.current = false
+      return
+    }
+    const baseline = settingsBaseline.current
+    if (!baseline) return
+    const next = settings.enrichment
+    if (JSON.stringify(baseline) === JSON.stringify(next)) return
+
+    setSaveState('pending')
+    news.saveSettings({ enrichment: next })
+      .then(resp => {
+        setSettings(resp.settings)
+        settingsBaseline.current = resp.settings.enrichment
+        setSaveState('saved')
+        toast.showSuccess('已保存')
+        void refreshStatus()
+        window.setTimeout(() => setSaveState('idle'), 2000)
+      })
+      .catch((e: unknown) => {
+        setSaveState('error')
+        toast.showError(e instanceof Error ? e.message : '保存失败')
+      })
+  }, [settings.enrichment, loading, refreshStatus, toast], SETTINGS_SAVE_MS)
+
+  const selectedProvider = providers.find(p => p.id === settings.enrichment.remote_provider_id) ?? null
+  const providerModels = selectedProvider?.models ?? []
+  const runtime = mmStatus?.runtime
+  const visionReady = Boolean(
+    runtime?.vision.modelInstalled
+    && runtime?.vision.mmprojInstalled
+    && (runtime?.vision.mtmdReady || runtime?.vision.mtmdSupported),
+  )
+
+  const handleDownloadVision = async (modelId: string) => {
+    if (!window.electronAPI?.translationStartDownload) {
+      toast.showError('请在桌面版中下载离线模型')
+      return
+    }
+    try {
+      await window.electronAPI.translationStartDownload(modelId)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '下载失败')
+    }
+  }
+
+  const handleEnsureWhisper = async () => {
+    setWhisperEnsuring(true)
+    try {
+      await news.ensureWhisperModel()
+      toast.showSuccess('语音模型已就绪（首次转写时将自动完成下载）')
+      await refreshStatus()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '语音模型准备失败')
+    } finally {
+      setWhisperEnsuring(false)
+    }
+  }
+
+  const saveHintText = saveState === 'pending' ? '保存中…' : saveState === 'saved' ? '已保存' : ''
+
+  const engineHint = (() => {
+    if (!settings.enrichment.enabled) return '多模态提取已关闭，阅读器与 Agent 将只使用文章正文 HTML。'
+    if (settings.enrichment.service_mode === 'remote') {
+      return mmStatus?.remoteConfigured
+        ? `将使用远程模型（${mmStatus.remoteProviderName ?? '已配置'}）处理媒体内容。`
+        : '请先在下方选择支持多模态的远程提供商与模型。'
+    }
+    if (mmStatus?.canEnrich) return '本地多模态服务已就绪，可按需或后台自动提取图片与音视频文字。'
+    if (visionReady && runtime?.ffmpeg.ready) {
+      return '视觉模型已安装；OCR 工具将在首次使用时自动下载。语音模型可在下方预下载。'
+    }
+    return '请下载下方列出的离线模型，或配置远程多模态服务。'
+  })()
+
+  if (loading) return <Spinner size="tiny" label="加载多模态设置…" />
+
+  return (
+    <>
+      <Text className={s.hint} block>{engineHint}</Text>
+
+      <div className={s.sectionBlock}>
+        <Text className={mergeClasses(s.sectionLabel, s.sectionLabelSpaced)} block>处理策略</Text>
+        <SettingsGroup>
+          <SettingsRow
+            title="启用媒体提取"
+            desc="从文章中的图片、音频、视频提取可读文字，供阅读与 Agent 使用"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                selectedOptions={[settings.enrichment.enabled ? 'on' : 'off']}
+                onOptionSelect={(_, d) => {
+                  setSettings(prev => ({
+                    ...prev,
+                    enrichment: { ...prev.enrichment, enabled: d.optionValue === 'on' },
+                  }))
+                }}
+              >
+                <OpptrixOption value="on">开启</OpptrixOption>
+                <OpptrixOption value="off">关闭</OpptrixOption>
+              </OpptrixSelect>
+            )}
+          />
+          <SettingsRow
+            title="处理时机"
+            desc="按需：首次由 Agent 读取或阅读器手动触发；后台：RSS 更新后自动排队全量处理"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                selectedOptions={[settings.enrichment.processing_mode]}
+                onOptionSelect={(_, d) => {
+                  const mode = d.optionValue === 'background' ? 'background' : 'on_demand'
+                  setSettings(prev => ({
+                    ...prev,
+                    enrichment: { ...prev.enrichment, processing_mode: mode },
+                  }))
+                }}
+              >
+                <OpptrixOption value="on_demand">按需处理（默认）</OpptrixOption>
+                <OpptrixOption value="background">后台全量自动</OpptrixOption>
+              </OpptrixSelect>
+            )}
+          />
+          <SettingsRow
+            title="提取范围"
+            desc="选择要识别的媒体类型"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                selectedOptions={[
+                  [
+                    settings.enrichment.extract_images && 'img',
+                    settings.enrichment.extract_audio && 'aud',
+                    settings.enrichment.extract_video && 'vid',
+                  ].filter(Boolean).join(',') || 'none',
+                ]}
+                onOptionSelect={(_, d) => {
+                  const val = d.optionValue ?? ''
+                  setSettings(prev => ({
+                    ...prev,
+                    enrichment: {
+                      ...prev.enrichment,
+                      extract_images: val.includes('img') || val === 'all',
+                      extract_audio: val.includes('aud') || val === 'all',
+                      extract_video: val.includes('vid') || val === 'all',
+                    },
+                  }))
+                }}
+              >
+                <OpptrixOption value="img,aud,vid">图片 + 音频 + 视频</OpptrixOption>
+                <OpptrixOption value="img">仅图片</OpptrixOption>
+                <OpptrixOption value="aud,vid">仅音视频</OpptrixOption>
+                <OpptrixOption value="img,aud">图片 + 音频</OpptrixOption>
+              </OpptrixSelect>
+            )}
+            last
+          />
+        </SettingsGroup>
+        <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
+          {saveHintText}
+        </Text>
+      </div>
+
+      <div className={s.sectionBlock}>
+        <Text className={mergeClasses(s.sectionLabel, s.sectionLabelSpaced)} block>服务类型</Text>
+        <SettingsGroup>
+          <SettingsRow
+            title="多模态服务"
+            desc="离线使用本机 SmolVLM 与 Whisper；远程使用已配置的大模型（需支持视觉/语音）"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                selectedOptions={[settings.enrichment.service_mode]}
+                onOptionSelect={(_, d) => {
+                  const mode = d.optionValue === 'remote' ? 'remote' : 'offline'
+                  setSettings(prev => ({
+                    ...prev,
+                    enrichment: { ...prev.enrichment, service_mode: mode },
+                  }))
+                }}
+              >
+                <OpptrixOption value="offline">本地离线</OpptrixOption>
+                <OpptrixOption value="remote">远程大模型</OpptrixOption>
+              </OpptrixSelect>
+            )}
+            last
+          />
+        </SettingsGroup>
+      </div>
+
+      {settings.enrichment.service_mode === 'offline' && (
+        <>
+          <div className={s.sectionBlock}>
+            <div className={s.sectionHeaderRow}>
+              <div className={s.sectionHeaderLeft}>
+                <Text className={s.sectionLabel}>图片 OCR</Text>
+                <span className={mergeClasses(s.statusBadge, visionReady && s.statusReady)}>
+                  {visionReady
+                    ? <><CheckmarkCircleRegular fontSize={14} /> 已就绪</>
+                    : <span className={s.statusWarn}>待配置</span>}
+                </span>
+              </div>
+            </div>
+            <div className={s.listPanel}>
+              <div className={s.toolStatusGrid}>
+                <div className={s.listRow}>
+                  <div className={s.listRowMain}>
+                    <Text className={s.listRowTitle} block>SmolVLM 视觉模型</Text>
+                    <Text className={s.listRowMeta} block>
+                      {runtime?.vision.modelName ?? '未安装'}
+                      {runtime?.vision.mmprojName ? ` + ${runtime.vision.mmprojName}` : ''}
+                    </Text>
+                  </div>
+                  <span className={mergeClasses(
+                    s.statusBadge,
+                    runtime?.vision.modelInstalled && runtime?.vision.mmprojInstalled && s.statusReady,
+                  )}>
+                    {runtime?.vision.modelInstalled && runtime?.vision.mmprojInstalled
+                      ? '已安装'
+                      : '未安装'}
+                  </span>
+                </div>
+                <div className={s.listRow}>
+                  <div className={s.listRowMain}>
+                    <Text className={s.listRowTitle} block>llama-mtmd-cli（OCR 命令行）</Text>
+                    <Text className={s.listRowMeta} block>
+                      {runtime?.vision.mtmdReady
+                        ? '已缓存，可直接使用'
+                        : runtime?.vision.mtmdSupported
+                          ? `首次 OCR 时自动下载（${runtime.vision.mtmdRelease}）`
+                          : `当前平台 ${runtime?.platform ?? ''} 暂不支持自动安装`}
+                    </Text>
+                  </div>
+                  <span className={mergeClasses(s.statusBadge, runtime?.vision.mtmdReady && s.statusReady)}>
+                    {runtime?.vision.mtmdReady ? '已就绪' : runtime?.vision.mtmdSupported ? '按需下载' : '不可用'}
+                  </span>
+                </div>
+              </div>
+              {isElectron() && (
+                <div className={mergeClasses(s.listScroll, 'opptrix-scroll')}>
+                  {(mmStatus?.visionCatalog ?? []).map(item => (
+                    <div key={item.id} className={s.listRow}>
+                      <div className={s.listRowMain}>
+                        <Text className={s.listRowTitle} block>{item.name}</Text>
+                        <Text className={s.listRowMeta} block>
+                          {formatBytes(item.sizeBytes)}{item.installed ? ' · 已安装' : ''}
+                        </Text>
+                      </div>
+                      {item.installed ? (
+                        <span className={mergeClasses(s.statusBadge, s.statusReady)}>
+                          <CheckmarkCircleRegular fontSize={14} /> 已安装
+                        </span>
+                      ) : (
+                        <OpptrixButton
+                          variant="secondary"
+                          size="small"
+                          icon={<ArrowDownloadRegular fontSize={12} />}
+                          disabled={download?.status === 'downloading'}
+                          onClick={() => { void handleDownloadVision(item.id) }}
+                        >
+                          下载
+                        </OpptrixButton>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              )}
+              {download?.status === 'downloading' && (
+                <div className={s.progressBlock}>
+                  <div className={s.progressTopRow}>
+                    <Text className={s.listRowTitle} block>正在下载 {download.filename}</Text>
+                    <span className={s.progressPct}>{formatDownloadProgress(download)}</span>
+                  </div>
+                  <ProgressBar
+                    className={s.progressBarTrack}
+                    value={download.totalBytes > 0 ? download.receivedBytes / download.totalBytes : undefined}
+                    thickness="medium"
+                    color="brand"
+                    shape="rounded"
+                  />
+                  <OpptrixButton
+                    variant="ghost"
+                    size="small"
+                    icon={<DismissRegular fontSize={12} />}
+                    onClick={() => { void window.electronAPI?.translationCancelDownload?.() }}
+                  >
+                    取消
+                  </OpptrixButton>
+                </div>
+              )}
+            </div>
+            <Text className={s.panelFooter} block>
+              图片 OCR 需要 SmolVLM 主模型与 mmproj 各一份；命令行工具首次使用时自动安装到用户目录。
+              {downloadDir && (
+                <button
+                  type="button"
+                  className={s.panelFooterDir}
+                  onClick={() => { void window.electronAPI?.translationOpenDownloadDir?.() }}
+                >
+                  {downloadDir}
+                </button>
+              )}
+            </Text>
+          </div>
+
+          <div className={s.sectionBlock}>
+            <div className={s.sectionHeaderRow}>
+              <div className={s.sectionHeaderLeft}>
+                <Text className={s.sectionLabel}>语音转写</Text>
+                <span className={mergeClasses(
+                  s.statusBadge,
+                  runtime?.ffmpeg.ready && runtime?.whisper.ready && s.statusReady,
+                )}>
+                  {runtime?.ffmpeg.ready && runtime?.whisper.ready
+                    ? <><CheckmarkCircleRegular fontSize={14} /> 已就绪</>
+                    : '待配置'}
+                </span>
+              </div>
+            </div>
+            <div className={s.listPanel}>
+              <div className={s.listRow}>
+                <div className={s.listRowMain}>
+                  <Text className={s.listRowTitle} block>ffmpeg（音视频解码）</Text>
+                  <Text className={s.listRowMeta} block>
+                    {runtime?.ffmpeg.ready ? '已内置' : '未找到，请检查安装'}
+                  </Text>
+                </div>
+                <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg.ready && s.statusReady)}>
+                  {runtime?.ffmpeg.ready ? '已就绪' : '不可用'}
+                </span>
+              </div>
+              <div className={s.listRow}>
+                <div className={s.listRowMain}>
+                  <Text className={s.listRowTitle} block>
+                    Whisper {settings.enrichment.offline_whisper_model}
+                  </Text>
+                  <Text className={s.listRowMeta} block>
+                    {runtime?.whisper.ready
+                      ? '模型已缓存'
+                      : '首次转写时自动下载（约 75 MB）'}
+                  </Text>
+                </div>
+                {!runtime?.whisper.ready ? (
+                  <OpptrixButton
+                    variant="secondary"
+                    size="small"
+                    disabled={whisperEnsuring}
+                    onClick={() => { void handleEnsureWhisper() }}
+                  >
+                    {whisperEnsuring ? '准备中…' : '预下载'}
+                  </OpptrixButton>
+                ) : (
+                  <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>
+                )}
+              </div>
+            </div>
+            {runtime?.whisper.modelsDir && (
+              <Text className={s.panelFooter} block>
+                语音模型目录：{runtime.whisper.modelsDir}
+              </Text>
+            )}
+          </div>
+        </>
+      )}
+
+      {settings.enrichment.service_mode === 'remote' && (
+        <div className={s.sectionBlock}>
+          <Text className={mergeClasses(s.sectionLabel, s.sectionLabelSpaced)} block>远程多模态</Text>
+          <SettingsGroup>
+            {providers.length === 0 ? (
+              <SettingsStaticBlock>
+                <Text block style={{ fontSize: '13px', color: opptrixTokens.textSecondary, lineHeight: 1.55 }}>
+                  请先在「模型」页添加支持图片理解的 OpenAI 兼容接口，再选择用于媒体提取的提供商与模型。
+                </Text>
+              </SettingsStaticBlock>
+            ) : (
+              <>
+                <SettingsRow
+                  title="提供商"
+                  control={(
+                    <OpptrixSelect
+                      className={s.remoteModelSelect}
+                      size="small"
+                      selectedOptions={[settings.enrichment.remote_provider_id ?? '']}
+                      onOptionSelect={(_, d) => {
+                        const providerId = d.optionValue || null
+                        const provider = providers.find(p => p.id === providerId)
+                        setSettings(prev => ({
+                          ...prev,
+                          enrichment: {
+                            ...prev.enrichment,
+                            remote_provider_id: providerId,
+                            remote_model: provider?.models[0] ?? null,
+                          },
+                        }))
+                      }}
+                    >
+                      <OpptrixOption value="">未选择</OpptrixOption>
+                      {providers.map(p => (
+                        <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
+                      ))}
+                    </OpptrixSelect>
+                  )}
+                />
+                <SettingsRow
+                  title="模型名称"
+                  stack
+                  control={providerModels.length > 0 ? (
+                    <OpptrixSelect
+                      className={s.remoteModelSelect}
+                      size="small"
+                      selectedOptions={[settings.enrichment.remote_model ?? '']}
+                      onOptionSelect={(_, d) => {
+                        setSettings(prev => ({
+                          ...prev,
+                          enrichment: {
+                            ...prev.enrichment,
+                            remote_model: d.optionValue || null,
+                          },
+                        }))
+                      }}
+                    >
+                      <OpptrixOption value="">未选择</OpptrixOption>
+                      {providerModels.map(model => (
+                        <OpptrixOption key={model} value={model}>{model}</OpptrixOption>
+                      ))}
+                    </OpptrixSelect>
+                  ) : (
+                    <SettingsTextField
+                      value={settings.enrichment.remote_model ?? ''}
+                      onChange={value => {
+                        setSettings(prev => ({
+                          ...prev,
+                          enrichment: {
+                            ...prev.enrichment,
+                            remote_model: value.trim() || null,
+                          },
+                        }))
+                      }}
+                      placeholder="输入模型名称"
+                    />
+                  )}
+                  last
+                />
+              </>
+            )}
+          </SettingsGroup>
+        </div>
+      )}
+    </>
+  )
+}

@@ -23,7 +23,22 @@
 
 桌面版设置页可一键下载；默认经 **hf-mirror** 拉取（国内更稳），失败时自动回退 Hugging Face 官方源。也可通过 `OPPTRIX_HF_MIRROR` 自定义镜像地址。
 
-首次启动会在后台依次预拉 **HY-MT Q4_K_M**（翻译）与 **SmolVLM Q8_0**（视觉备用），已存在的模型不会重复下载。
+首次启动会在后台依次预拉 **HY-MT Q4_K_M**（翻译）、**SmolVLM Q8_0** 与 **mmproj**（视觉 OCR）、并准备 **Whisper Tiny**（音视频转写）。
+
+## 文章富化（OCR / 转写）
+
+服务端 `@opptrix/article-enrichment` 会在后台扫描文章 HTML 中的图片、音频、视频：
+
+- **图片** → SmolVLM OCR（首次使用时自动从 llama.cpp 官方 release 下载 `llama-mtmd-cli` 到 `~/.opptrix/llama-cpp-tools/`，无需手动安装；也可用 `OPPTRIX_LLAMA_MTMD_CLI` 覆盖）
+- **音频** → ffmpeg 归一化 + Whisper Tiny 转写
+- **视频** → ffmpeg 抽取音轨 + Whisper Tiny 转写
+
+派生文本以 `【图片内容】` / `【音频转写】` / `【视频转写】` 标注，存入 `user-store`（`news_enrichment`），供 Agent 与后续翻译合并为纯文字层。
+
+API：
+
+- `GET /api/news/articles/:id/enrichment`
+- `POST /api/news/articles/:id/enrich`
 
 ## 使用
 
