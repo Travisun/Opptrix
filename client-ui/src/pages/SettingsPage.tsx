@@ -16,6 +16,7 @@ import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSett
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
+import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
   SettingsGroup, SettingsRow, SettingsStaticBlock,
@@ -28,7 +29,6 @@ import {
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
-import { useAppUpdate } from '../hooks/useAppUpdate'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
 import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
@@ -180,23 +180,6 @@ const useStyles = makeStyles({
   saveHintActive: {
     color: opptrixCssVars.textSecondary,
   },
-  aboutProse: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    maxWidth: '52ch',
-    paddingTop: '4px',
-  },
-  aboutProseFlush: {
-    maxWidth: 'none',
-  },
-  aboutTitle: {
-    fontSize: '15px',
-    fontWeight: 600,
-    letterSpacing: '-0.02em',
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.45,
-  },
   aboutMeta: {
     fontSize: '14px',
     color: opptrixCssVars.textSecondary,
@@ -324,8 +307,6 @@ function SettingsPageView({
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
   const [section, setSection] = useState<SettingsSection>(initialSection ?? 'general')
   const [search, setSearch] = useState('')
-  const { status: updateStatus, checkNow, installUpdate } = useAppUpdate()
-  const [clientVersion, setClientVersion] = useState<string | null>(null)
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
@@ -346,11 +327,6 @@ function SettingsPageView({
     skipScorecardSave.current = true
     setScorecard(baseline)
     return cfg
-  }, [])
-
-  useEffect(() => {
-    if (!isElectron()) return
-    void window.electronAPI?.clientVersion?.().then(version => setClientVersion(version ?? null))
   }, [])
 
   useEffect(() => {
@@ -608,47 +584,7 @@ function SettingsPageView({
         return <MultimodalSettingsSection />
 
       case 'about':
-        return (
-          <>
-            <div className={mergeClasses(s.aboutProse, contentFlush && s.aboutProseFlush)}>
-              <Text className={s.aboutTitle} block>Opptrix · 你的A股投研助手</Text>
-              <Text className={s.aboutMeta} block>
-                21 投研工具 · 多会话 · Function Calling · 多模型提供商。
-              </Text>
-              <Text className={s.aboutMeta} block>
-                本地运行，数据与 API Key 保存在本机服务端。
-              </Text>
-            </div>
-            {isElectron() && (
-              <div className={s.sectionBlock}>
-                <Text className={s.sectionLabel} block>应用更新</Text>
-                <SettingsGroup>
-                  <SettingsRow
-                    title="当前版本"
-                    desc={clientVersion ? `v${clientVersion}` : '读取版本中…'}
-                    control={(
-                      <OpptrixButton variant="secondary" onClick={() => { void checkNow() }}>
-                        检查更新
-                      </OpptrixButton>
-                    )}
-                  />
-                  {updateStatus.state === 'ready' && (
-                    <SettingsRow
-                      title={`新版本 v${updateStatus.version ?? ''} 已就绪`}
-                      desc="重启应用即可完成更新"
-                      control={(
-                        <OpptrixButton variant="primary" onClick={() => { void installUpdate() }}>
-                          重启更新
-                        </OpptrixButton>
-                      )}
-                      last
-                    />
-                  )}
-                </SettingsGroup>
-              </div>
-            )}
-          </>
-        )
+        return <AboutSettingsSection contentFlush={contentFlush} />
 
       default:
         return null

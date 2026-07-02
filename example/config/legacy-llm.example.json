@@ -1,0 +1,10 @@
+{
+  "llm": {
+    "provider": "DeepSeek",
+    "model": "deepseek-chat",
+    "api_key": "",
+    "base_url": "https://api.deepseek.com"
+  },
+  "default_scorecard": "综合评估",
+  "default_top_n": 20
+}

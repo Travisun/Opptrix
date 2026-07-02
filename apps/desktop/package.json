@@ -19,6 +19,7 @@
   "build": {
     "appId": "com.opptrix.desktop",
     "productName": "Opptrix",
+    "electronVersion": "35.7.5",
     "publish": [
       {
         "provider": "github",
@@ -33,11 +34,13 @@
       "electron/**/*",
       "package.json",
       "build/icons/**/*",
+      "build/updater-deps/node_modules/**/*",
       "!node_modules/**/*",
       "node_modules/node-llama-cpp/**/*"
     ],
     "asarUnpack": [
-      "**/node_modules/node-llama-cpp/**"
+      "**/node_modules/node-llama-cpp/**",
+      "**/build/updater-deps/**"
     ],
     "icon": "build/icons/logo-app.png",
     "extraResources": [

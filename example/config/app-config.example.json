@@ -1,0 +1,21 @@
+{
+  "providers": [
+    {
+      "id": "00000000-0000-4000-8000-000000000001",
+      "name": "DeepSeek",
+      "base_url": "https://api.deepseek.com",
+      "api_key": "",
+      "models": ["deepseek-chat", "deepseek-reasoner"]
+    },
+    {
+      "id": "00000000-0000-4000-8000-000000000002",
+      "name": "OpenAI 兼容",
+      "base_url": "https://api.openai.com/v1",
+      "api_key": "",
+      "models": ["gpt-4o-mini"]
+    }
+  ],
+  "default_model": "00000000-0000-4000-8000-000000000001:deepseek-chat",
+  "default_scorecard": "综合评估",
+  "default_top_n": 20
+}

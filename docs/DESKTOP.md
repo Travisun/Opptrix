@@ -63,9 +63,11 @@ npm run build:desktop
 
 Stages a self-contained Node runtime under `apps/desktop/runtime-stage/`, bundles it as Electron extra resources, and produces:
 
-- macOS: `.dmg` / `.zip`
-- Windows: `.msi` (NSIS)
+- macOS: `.dmg` / `.zip`（自动更新依赖 zip）
+- Windows: NSIS 安装包（`.exe`）
 - Linux: `.AppImage` / `.deb`
+
+**发布与自动更新**（版本号、产物命名、GitHub Releases 上传、三端兼容）见 **[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)**。
 
 The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 

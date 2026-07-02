@@ -122,9 +122,11 @@ Opptrix/
 git clone https://github.com/Travisun/Opptrix.git
 cd Opptrix
 npm install              # 仅在仓库根目录执行
-cp .env.example .env     # 填入 LLM_API_KEY（对话功能需要）
+cp example/startup/env.example .env   # 或 cp .env.example .env；填入 LLM_API_KEY
 npm run build            # 编译 packages + client-ui
 ```
+
+更多示例配置（数据源、新闻订阅、关注列表）见 **[example/](./example/)**。
 
 ### 开发模式（Web）
 
@@ -162,6 +164,7 @@ npm run test:ci          # run tests only (after build; same as CI)
 
 | 位置 | 用途 |
 |------|------|
+| [example/](./example/) | **示例配置**：启动环境、LLM、数据源、新闻、关注列表 |
 | `.env` | `LLM_API_KEY`、`LLM_MODEL`、`STOCK_RESEARCH_PORT` 等（见 `.env.example`） |
 | `apps/server/data/config.json` | UI 设置页持久化的 LLM 与默认值 |
 | `~/.opptrix/portfolio.json` | 模拟交易账本 |
@@ -193,6 +196,7 @@ npm run test:ci          # run tests only (after build; same as CI)
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发者 | 日常命令、调试、FAQ |
 | [docs/API.md](docs/API.md) | 集成方 | REST 与 Hub features |
 | [docs/DESKTOP.md](docs/DESKTOP.md) | 桌面开发者 | Electron 构建与发布 |
+| [docs/DESKTOP-RELEASE.md](docs/DESKTOP-RELEASE.md) | 发布维护者 | 桌面版本号、三端产物命名与 GitHub 发布 |
 | [docs/UI-DESIGN-SYSTEM.md](docs/UI-DESIGN-SYSTEM.md) | 前端 | Token、组件、Markdown |
 | [docs/UI-LAYOUT.md](docs/UI-LAYOUT.md) | 前端 | 布局与页面模板 |
 | [packages/README.md](packages/README.md) | 开发者 | 各 workspace 包职责 |

@@ -372,7 +372,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'multimodal':
       return '配置图片 OCR、语音转写与文章媒体自动提取策略'
     case 'about':
-      return '应用版本与运行说明'
+      return '了解产品用途、访问主页与反馈问题'
     default:
       return ''
   }

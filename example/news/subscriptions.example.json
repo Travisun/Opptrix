@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "subscriptions": [
+    {
+      "url": "https://feedx.net/rss/cls.xml",
+      "title": "财联社电报"
+    },
+    {
+      "url": "https://feedx.net/rss/idaily.xml",
+      "title": "每日经济新闻"
+    }
+  ]
+}

@@ -30,9 +30,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
-  { section: 'about', title: '关于', desc: '应用版本与运行说明' },
+  { section: 'about', title: '关于', desc: '产品说明、项目主页与问题反馈' },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
   { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
+  { section: 'about', title: '项目主页', desc: 'GitHub 仓库与文档', keywords: ['github', '官网', '主页', '源代码'] },
+  { section: 'about', title: '反馈问题', desc: '报告缺陷或提议功能', keywords: ['bug', 'issue', '建议', '功能缺陷'] },
+  { section: 'about', title: '安全漏洞', desc: '按安全政策报告安全问题', keywords: ['漏洞', 'security', '安全政策'] },
 
   // 常规
   { section: 'general', group: '外观', title: '主题', desc: '浅色深色跟随系统', keywords: ['theme', 'dark', 'light', '暗黑', '深色', '浅色', '外观'] },
@@ -90,7 +93,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', group: '音视频转写', title: 'Whisper', desc: '语音转写模型', keywords: ['语音', '转写', 'ASR'] },
 
   // 关于
-  { section: 'about', title: '关于 Opptrix', desc: '应用版本与运行说明', keywords: ['版本', '投研助手'] },
+  { section: 'about', title: '关于 Opptrix', desc: '产品说明、项目主页与问题反馈', keywords: ['版本', '投研助手', '开源'] },
 ]
 
 const SECTION_LABEL: Record<SettingsSection, string> = {

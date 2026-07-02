@@ -1,5 +1,22 @@
+const path = require('path')
 const { app, BrowserWindow } = require('electron')
-const { autoUpdater } = require('electron-updater')
+
+function loadAutoUpdater() {
+  try {
+    return require('electron-updater').autoUpdater
+  } catch {
+    const staged = path.join(__dirname, '../build/updater-deps/node_modules/electron-updater')
+    return require(staged).autoUpdater
+  }
+}
+
+/** @type {import('electron-updater').AppUpdater | null} */
+let autoUpdater = null
+try {
+  autoUpdater = loadAutoUpdater()
+} catch (err) {
+  console.error('[updater] failed to load electron-updater:', err)
+}
 
 /** @type {import('./updater.types').AppUpdateStatus} */
 let status = {
@@ -25,6 +42,15 @@ function setStatus(patch) {
 
 function initUpdater({ version }) {
   status.currentVersion = version
+
+  if (!autoUpdater) {
+    setStatus({
+      state: 'not-available',
+      currentVersion: version,
+      message: null,
+    })
+    return
+  }
 
   if (!app.isPackaged) {
     setStatus({
@@ -111,7 +137,7 @@ function registerUpdaterIpc(ipcMain) {
   ipcMain.handle('app-update-get-status', async () => status)
 
   ipcMain.handle('app-update-check', async () => {
-    if (!app.isPackaged) return status
+    if (!app.isPackaged || !autoUpdater) return status
     setStatus({ state: 'checking', message: '正在检查更新…' })
     try {
       await autoUpdater.checkForUpdates()
@@ -125,7 +151,7 @@ function registerUpdaterIpc(ipcMain) {
   })
 
   ipcMain.handle('app-update-install', async () => {
-    if (!app.isPackaged || status.state !== 'ready') return false
+    if (!app.isPackaged || !autoUpdater || status.state !== 'ready') return false
     autoUpdater.quitAndInstall(false, true)
     return true
   })
