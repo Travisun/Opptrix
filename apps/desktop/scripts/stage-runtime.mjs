@@ -96,11 +96,29 @@ const pkgJson = {
 fs.writeFileSync(path.join(STAGE, 'package.json'), JSON.stringify(pkgJson, null, 2))
 
 console.log('Installing desktop runtime dependencies…')
-const install = spawnSync('npm', ['install', '--omit=dev', '--no-audit', '--no-fund'], {
-  cwd: STAGE,
-  stdio: 'inherit',
-  shell: true,
-})
+const runtimeArch = process.env.OPPTRIX_RUNTIME_ARCH?.trim()
+const installArgs = ['install', '--omit=dev', '--no-audit', '--no-fund']
+const useRosettaX64 = process.platform === 'darwin'
+  && runtimeArch === 'x64'
+  && process.arch === 'arm64'
+
+const install = spawnSync(
+  useRosettaX64 ? 'arch' : 'npm',
+  useRosettaX64 ? ['-x86_64', 'npm', ...installArgs] : installArgs,
+  {
+    cwd: STAGE,
+    stdio: 'inherit',
+    shell: false,
+    env: {
+      ...process.env,
+      ...(runtimeArch ? { npm_config_arch: runtimeArch } : {}),
+    },
+  },
+)
 if (install.status !== 0) process.exit(install.status ?? 1)
 
-console.log(`Runtime staged at ${STAGE}`)
+if (runtimeArch) {
+  console.log(`Runtime staged for macOS ${runtimeArch} at ${STAGE}`)
+} else {
+  console.log(`Runtime staged at ${STAGE}`)
+}

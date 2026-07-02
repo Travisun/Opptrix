@@ -41,19 +41,19 @@
 
 `electron-builder` 的 `productName` 为 **Opptrix**。在版本 `0.6.1`、当前默认配置下，典型文件名如下：
 
-### macOS（Universal：Intel + Apple Silicon 合一）
+### macOS（分架构：Intel x64 与 Apple Silicon arm64）
 
-CI 在 `macos-latest` 上构建 **universal** 包，同一份安装包同时支持 **Intel（x64）** 与 **Apple Silicon（arm64）**，无需用户自行选择架构。
+**不使用 Universal 单包。** `electron-builder` 虽支持 `arch: ["universal"]`，但 Opptrix 桌面端 sidecar（`runtime-stage`）依赖 **better-sqlite3、node-llama-cpp** 等原生 `.node` 模块；这些模块按**构建机架构**编译进 `extraResources`，Universal 外壳无法让 Intel Mac 运行 arm64 原生库。
 
-| 用途 | 格式 | 典型文件名 | 是否自动更新必需 |
-|------|------|------------|------------------|
-| 首次安装 / 手动分发 | `.dmg` | `Opptrix-0.6.1-universal.dmg` | 否（给人下载安装） |
-| **自动更新** | `.zip` | `Opptrix-0.6.1-universal-mac.zip` | **是** |
-| 更新元数据 | `.yml` | `latest-mac.yml` | **是** |
-| 差分（可选） | `.blockmap` | `*.blockmap` | 建议保留 |
+因此 CI **分别构建两包**，`electron-updater` 会按用户 CPU 架构下载对应 zip：
 
-> macOS 自动更新依赖 **zip + latest-mac.yml**，仅有 dmg 无法完成热更新。  
-> 配置见 `apps/desktop/package.json` → `mac.target` 的 `arch: ["universal"]`。
+| 用途 | 格式 | 典型文件名 | 适用机器 |
+|------|------|------------|----------|
+| 首次安装 | `.dmg` | `Opptrix-0.6.1-x64.dmg` / `Opptrix-0.6.1-arm64.dmg` | Intel / Apple Silicon |
+| **自动更新** | `.zip` | `Opptrix-0.6.1-x64-mac.zip` / `Opptrix-0.6.1-arm64-mac.zip` | 同上 |
+| 更新元数据 | `.yml` | `latest-mac.yml`（含多架构条目） | **是** |
+
+> macOS 自动更新依赖 **zip + latest-mac.yml**。在 Apple Silicon CI runner 上打 x64 包时，sidecar 通过 Rosetta 执行 `arch -x86_64 npm install` 安装 x64 原生依赖。
 
 ### Windows
 
@@ -113,7 +113,7 @@ npm run build:desktop -- --publish always
 
 `electron-builder` 会：
 
-1. 构建当前平台安装包（Mac 为 **Universal**，含 Intel + ARM）；
+1. 构建当前平台安装包（Mac 为 **x64 与 arm64 各一包**）；
 2. 生成 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`；
 3. 创建或更新 **同名 GitHub Release**（与标签 `desktop-v0.6.1` 关联）；
 4. 上传该平台产物与 yml。
@@ -127,9 +127,11 @@ npm run build:desktop -- --publish always
 确认附件至少包含：
 
 ```text
-# macOS（CI 自动，Universal = Intel + Apple Silicon）
-Opptrix-{version}-universal.dmg
-Opptrix-{version}-universal-mac.zip
+# macOS（CI 自动，分架构）
+Opptrix-{version}-x64.dmg
+Opptrix-{version}-x64-mac.zip
+Opptrix-{version}-arm64.dmg
+Opptrix-{version}-arm64-mac.zip
 latest-mac.yml
 
 # Windows（CI 自动）
@@ -207,7 +209,7 @@ npm run build:desktop -- --publish always
 
 ### macOS
 
-- 构建 **Universal** 包（`arch: ["universal"]`），**Intel Mac 与 Apple Silicon 共用同一安装包**。
+- **分架构发布**（`x64` + `arm64`），Intel 与 Apple Silicon 各一份；**不用 Universal 单包**（见 §3 说明）。
 - 同时产出 `dmg`（分发）与 `zip`（更新）。
 - CI 默认 **未签名**（`CSC_IDENTITY_AUTO_DISCOVERY=false`），内测可用；正式发布建议配置签名与公证。
 
@@ -258,8 +260,8 @@ npm run build:desktop -- --publish always
 
 ### Q：Intel Mac 和 M 系列 Mac 要发两个包吗？
 
-- **不用**。当前配置为 **Universal** 单包，Intel（x64）与 Apple Silicon（arm64）均可安装同一 `dmg` / `zip`。
-- 仅当刻意改为 `arch: ["arm64"]` 时才会抛弃 Intel 存量用户，**请勿**在生产发布中只打 arm64。
+- **是，应发 x64 与 arm64 两包**（同一 Release 下），客户端按 CPU 自动选。不要用 Universal 单包糊弄原生 sidecar 依赖。
+- Universal 只适合几乎没有原生 `.node` 依赖的纯 Electron 应用；Opptrix sidecar 含 SQLite / 本地推理库，Universal 极易在 Intel 上启动失败。
 
 ### Q：能否只发 Windows、暂不发 Mac？
 
@@ -285,8 +287,8 @@ npm run build:desktop -- --publish always
 ```text
 [ ] apps/desktop/package.json version = X.Y.Z
 [ ] git tag desktop-vX.Y.Z 已推送
-[ ] CI macOS / Windows / Linux job 均成功
-[ ] Release 附件含 Universal Mac 包 + latest-mac.yml，以及 Win / Linux 产物与 yml
+[ ] CI macOS（x64 + arm64）/ Windows / Linux job 均成功
+[ ] Release 附件含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
 [ ] Release Notes 已填写
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
 ```
