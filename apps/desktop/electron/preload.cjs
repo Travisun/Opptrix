@@ -11,6 +11,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   writeBinaryFile: (payload) => ipcRenderer.invoke('write-binary-file', payload),
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
   clientVersion: () => ipcRenderer.invoke('client-version'),
+  appUpdateGetStatus: () => ipcRenderer.invoke('app-update-get-status'),
+  appUpdateCheck: () => ipcRenderer.invoke('app-update-check'),
+  appUpdateInstall: () => ipcRenderer.invoke('app-update-install'),
+  onAppUpdateStatus: (callback) => {
+    const handler = (_event, status) => callback(status)
+    ipcRenderer.on('app-update-status', handler)
+    return () => ipcRenderer.removeListener('app-update-status', handler)
+  },
   translationGetStatus: () => ipcRenderer.invoke('translation-get-status'),
   translationGetModels: () => ipcRenderer.invoke('translation-get-models'),
   translationGetDownloadDir: () => ipcRenderer.invoke('translation-get-download-dir'),

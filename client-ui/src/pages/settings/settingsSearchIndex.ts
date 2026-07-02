@@ -31,6 +31,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
   { section: 'about', title: '关于', desc: '应用版本与运行说明' },
+  { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
+  { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
 
   // 常规
   { section: 'general', group: '外观', title: '主题', desc: '浅色深色跟随系统', keywords: ['theme', 'dark', 'light', '暗黑', '深色', '浅色', '外观'] },

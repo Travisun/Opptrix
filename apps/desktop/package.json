@@ -19,6 +19,13 @@
   "build": {
     "appId": "com.opptrix.desktop",
     "productName": "Opptrix",
+    "publish": [
+      {
+        "provider": "github",
+        "owner": "Travisun",
+        "repo": "Opptrix"
+      }
+    ],
     "directories": {
       "output": "release"
     },
@@ -84,6 +91,7 @@
     "electron-builder": "^25.1.8"
   },
   "dependencies": {
+    "electron-updater": "^6.6.2",
     "node-llama-cpp": "^3.19.0"
   }
 }

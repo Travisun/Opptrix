@@ -32,6 +32,7 @@ import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex }
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
+const APP_VERSION = process.env.OPPTRIX_APP_VERSION ?? '0.6.0'
 
 const hub = new ResearchHub()
 hub.initMarketDataAutoSync()
@@ -46,7 +47,7 @@ const serverAppContext = {
   getAppSettings: async () => publicConfig(cfg),
   getProjectInfo: async () => ({
     app: 'Opptrix',
-    version: '0.6.0',
+    version: APP_VERSION,
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
     project_root: resolveProjectRoot(),
@@ -110,7 +111,7 @@ app.get<{ Params: { code: string } }>('/api/stock/:code/prep', async (req) => {
 
 app.get('/api/health', async () => ({
   status: 'ok',
-  version: '0.6.0',
+  version: APP_VERSION,
   runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
   desktop: process.env.OPPTRIX_DESKTOP === '1',
   llm_configured: agent.llmConfigured,

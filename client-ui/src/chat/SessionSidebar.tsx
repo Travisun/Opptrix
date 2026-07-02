@@ -12,6 +12,7 @@ import { isElectron } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
+import AppUpdateNotice from '../desktop/AppUpdateNotice'
 import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
@@ -363,6 +364,7 @@ export default function SessionSidebar({
       </div>
 
       <div className={s.footer}>
+        <AppUpdateNotice />
         <OpptrixButton className={s.settingsBtn} variant="ghost" icon={<SettingsRegular />} onClick={onOpenSettings}>
           设置
         </OpptrixButton>
