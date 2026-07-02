@@ -28,6 +28,20 @@ npm run clean        # 删除各包 dist 与 client-ui/dist
 
 内部包 scope 仍为 `@opptrix/*`，对外品牌为 **Opptrix**。
 
+## 构建失败：`Cannot find type definition file for 'node'`
+
+说明根目录 **未安装完整 devDependencies**（常见于刚 clone、只装了部分 workspace、或删过 `node_modules`）。
+
+在仓库根目录执行：
+
+```bash
+npm install
+# 或 CI / 干净环境：
+npm ci
+```
+
+然后再运行 `npm run build` / `npm run build:packages`。`@types/node` 与 `typescript` 声明在根 `package.json` 的 `devDependencies` 中，必须由根目录安装。
+
 ## 日常开发
 
 一条命令同时启动 API 后台与 Vite 前端：
