@@ -37,7 +37,7 @@
 | **搜索** | 工作区 / 聊天 `@` → `searchInstruments` | `searchStocks` 保留兼容 |
 | **右栏** | capability gate + `CrossMarketDetailTab` | `IndustryTab` 仍 CN-only（已标注） |
 | **图表** | 非 CN → `instrument_chart`；CN 分时仍 `stockChart` | 按设计保留 CN intraday 例外 |
-| **格式化** | `formatPriceForMarket` / `formatCompactNumberForMarket` | 全站 CrossMarket 已接入 |
+| **格式化** | `formatPriceForMarket` / `formatCompactNumberForMarket` | CrossMarket + 关注列表/备注抽屉已接入 |
 
 **结论**：应用主路径 **InstrumentRef-first**；行业页与报价格式化仍为 CN 遗留面。
 
@@ -143,7 +143,7 @@ interface DiscoverProfileDefinition {
 - [x] `gateInstrumentEvaluation(ref)` facade（CN 实现，其他 not_supported）
 - [x] Regime：`market_regime` 支持 `profile_scope=cn|us`；US 基于 SPY 动量 stub
 - [x] t-strategy：`gatherStrategyData(ref)` + `quickAssess` 可选 InstrumentRef
-- [ ] t-strategy：Hub `strategySignal` 传 InstrumentRef（仍 CN-only gate）
+- [x] t-strategy：Hub `strategySignal` 传 InstrumentRef（仍 CN-only gate）
 
 ### Phase C — 数据层参数化
 
@@ -155,15 +155,15 @@ interface DiscoverProfileDefinition {
 - [x] `syncRegionalQuotes` — jp/hk/kr_quotes 经 US adapter 写入截面
 - [x] Engine：`queryInstrumentData(ref, cap)` 收敛 DataEngine 入口
 - [x] HK/JP/KR Yahoo regional provider + `regionalRealtime/Kline`
-- [ ] DataEngine 旧 `us*`/`crypto*` 方法标记 deprecated 并逐步内联
+- [x] Hub / sync / t-strategy 主路径改经 `queryInstrumentData`；legacy `us*`/`crypto*`/`regional*` 已 @deprecated
 
 ### Phase D — 日韩港扩展
 
 - [x] `jp_equity` / `kr_equity` / `hk_equity` discover（list_filter 模板）
 - [x] Agent 区域 screen / mining 工具 wired
 - [x] HK `discover_mine` capability 对齐 JP/KR
-- [ ] JP/KR normalizer + 交易日历
-- [ ] Provider（Tiingo/FMP/本地 vendor）替换种子列表
+- [ ] JP/KR normalizer + 交易日历（normalizer + 本地时区 tradeDate + 静态假日历 MVP 已接）
+- [ ] Provider 列表 API（Yahoo search 补充 JP/KR/HK 列表已接；Tiingo/FMP 等待替）
 - [ ] 可选：简单 momentum scorecard（非 CN 因子库）
 
 ---
@@ -288,6 +288,12 @@ client-ui/src/types/instrument.ts # UnifiedInstrumentQuote
 | 2026-07-03 | A | `API.md` instrument REST 章节 | done |
 | 2026-07-03 | C/D | Yahoo regional provider + `queryInstrumentData` + regional router | done |
 | 2026-07-03 | A | `formatPriceForMarket` + CrossMarket 接入 | done |
-| — | C | us*/crypto* deprecated 内联 | pending |
-| — | D | Vendor list 替换种子 + normalizer + 交易日历 | pending |
+| 2026-07-03 | A | 关注列表 / FollowStockDialog 按 market 格式化 | done |
+| 2026-07-03 | B | Hub `strategySignal` 解析 InstrumentRef + quickAssess(ref) | done |
+| 2026-07-03 | — | `279cccf` push origin/main | done |
+| 2026-07-03 | C | `queryInstrumentData` 收敛 Hub/sync/t-strategy；regional calendar | done |
+| 2026-07-03 | C | `queryInstrumentData` 扩展 profile/financials/stock_list | done |
+| 2026-07-03 | D | regional 假日历 MVP + Yahoo search 列表补充 | done |
+| — | C | us*/crypto* list/profile 等未纳入 queryInstrument 的 API | done |
+| — | D | Tiingo/FMP vendor + 动态假日历维护 | pending |
 

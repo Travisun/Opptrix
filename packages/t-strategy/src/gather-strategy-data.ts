@@ -17,21 +17,9 @@ async function fetchRealtimeRow(
   engine: AshareEngine,
   ref: InstrumentRef,
 ): Promise<StockRealtime | null> {
-  if (ref.market === 'US') {
-    const r = await engine.usRealtime(ref.symbol)
-    return r.success ? (r.data?.[0] as StockRealtime | undefined) ?? null : null
-  }
-  if (ref.market === 'JP' || ref.market === 'KR' || ref.market === 'HK') {
-    const market = ref.market
-    const r = await engine.regionalRealtime(market, ref.symbol)
-    return r.success ? (r.data?.[0] as StockRealtime | undefined) ?? null : null
-  }
-  if (ref.market === 'CRYPTO') {
-    const pair = ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
-    const r = await engine.cryptoRealtime(pair)
-    return r.success ? (r.data?.[0] as StockRealtime | undefined) ?? null : null
-  }
-  return null
+  if (ref.market === 'CN') return null
+  const r = await engine.queryInstrumentData(ref, 'realtime')
+  return r.success ? (r.data?.[0] as StockRealtime | undefined) ?? null : null
 }
 
 async function fetchKlines(
@@ -39,21 +27,9 @@ async function fetchKlines(
   ref: InstrumentRef,
   count = 120,
 ): Promise<StockKline[]> {
-  if (ref.market === 'US') {
-    const r = await engine.usKline(ref.symbol, count)
-    return r.success ? ((r.data ?? []) as StockKline[]) : []
-  }
-  if (ref.market === 'JP' || ref.market === 'KR' || ref.market === 'HK') {
-    const market = ref.market
-    const r = await engine.regionalKline(market, ref.symbol, count)
-    return r.success ? ((r.data ?? []) as StockKline[]) : []
-  }
-  if (ref.market === 'CRYPTO') {
-    const pair = ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
-    const r = await engine.cryptoKline(pair, count)
-    return r.success ? ((r.data ?? []) as StockKline[]) : []
-  }
-  return []
+  if (ref.market === 'CN') return []
+  const r = await engine.queryInstrumentData(ref, 'kline', { count })
+  return r.success ? ((r.data ?? []) as StockKline[]) : []
 }
 
 /** 非 CN 标的 — 价格 + 日 K + 指标，不含 A 股宏观字段 */

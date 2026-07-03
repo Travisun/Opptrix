@@ -13,7 +13,7 @@ import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import { followReturnPct } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { formatPct, formatPrice, normalizeCode, pctTone, resolveDisplayStockName, hasCjkText } from './format'
+import { formatPct, formatPriceForMarket, normalizeCode, pctTone, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -606,7 +606,7 @@ export default function WatchlistTab({
               >
                 <div className={mergeClasses(s.rowQuote, 'opptrix-follow-quote')}>
                   <span className={s.quotePrimary}>
-                    <span className={s.metricPrice}>{formatPrice(quote?.price ?? null)}</span>
+                    <span className={s.metricPrice}>{formatPriceForMarket(ref.market, quote?.price ?? null)}</span>
                     <span className={mergeClasses(dayTone === 'up' && s.pctUp, dayTone === 'down' && s.pctDown, dayTone === 'flat' && s.pctFlat)}>
                       {formatPct(quote?.changePct ?? null, 1)}
                     </span>

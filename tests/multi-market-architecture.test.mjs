@@ -159,7 +159,7 @@ test('regional list seeds sync writes instruments', async () => {
   const engine = new MarketDataSyncEngine(store, new MarketDataEngine())
   await engine.sync({ jobs: ['jp_list'], mode: 'full' })
 
-  assert.equal(store.countRegionalEquityInstruments('JP'), getRegionalListSeeds('JP').length)
+  assert.ok(store.countRegionalEquityInstruments('JP') >= getRegionalListSeeds('JP').length)
   const toyota = store.db.prepare(`
     SELECT name FROM instruments WHERE market = 'JP' AND code = ?
   `).get('7203')
@@ -191,4 +191,36 @@ test('toYahooFinanceSymbol maps regional codes', async () => {
   assert.equal(toYahooFinanceSymbol('JP', '7203'), '7203.T')
   assert.equal(toYahooFinanceSymbol('KR', '5930'), '005930.KS')
   assert.equal(toYahooFinanceSymbol('HK', '00700'), '0700.HK')
+})
+
+test('normalizeRegionalSymbol and regionalTodayString', async () => {
+  const { normalizeRegionalSymbol } = await import('../packages/a-stock-layer/dist/utils/regional-symbol.js')
+  const { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday } = await import('../packages/a-stock-layer/dist/utils/regional-calendar.js')
+  assert.equal(normalizeRegionalSymbol('KR', '5930'), '005930')
+  assert.equal(normalizeRegionalSymbol('HK', '700'), '00700')
+  assert.match(regionalTodayString('JP'), /^\d{4}-\d{2}-\d{2}$/)
+  assert.equal(typeof isRegionalTradingWeekday('HK'), 'boolean')
+  assert.equal(isRegionalHoliday('JP', '2026-01-01'), true)
+  assert.equal(isRegionalTradingDay('JP', new Date('2026-01-01T03:00:00Z')), false)
+})
+
+test('yahooQuoteToRegionalItem maps exchange suffix', async () => {
+  const { yahooQuoteToRegionalItem } = await import('../packages/a-stock-layer/dist/utils/regional-list-vendor.js')
+  const item = yahooQuoteToRegionalItem('JP', {
+    symbol: '7203.T',
+    longname: 'Toyota Motor',
+    quoteType: 'EQUITY',
+  })
+  assert.equal(item?.code, '7203')
+  assert.equal(item?.name, 'Toyota Motor')
+  assert.equal(yahooQuoteToRegionalItem('JP', { symbol: 'AAPL', quoteType: 'EQUITY' }), null)
+})
+
+test('parseYahooSearchQuotes extracts symbols', async () => {
+  const { parseYahooSearchQuotes } = await import('../packages/a-stock-layer/dist/utils/yahoo-search.js')
+  const rows = parseYahooSearchQuotes({
+    quotes: [{ symbol: '0700.HK', longname: 'Tencent', quoteType: 'EQUITY' }],
+  })
+  assert.equal(rows.length, 1)
+  assert.equal(rows[0].symbol, '0700.HK')
 })

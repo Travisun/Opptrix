@@ -31,6 +31,14 @@ import {
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
+export type InstrumentDataCapability =
+  | 'realtime'
+  | 'kline'
+  | 'snapshot'
+  | 'profile'
+  | 'financials'
+  | 'stock_list'
+
 /** Multi-market data engine — provider fallback + cache (canonical name: MarketDataEngine) */
 export class MarketDataEngine {
   readonly registry = new DriverRegistry()
@@ -500,11 +508,13 @@ export class MarketDataEngine {
 
   // ── US equities (Phase 2) ──
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'realtime')` */
   usRealtime(symbol: string) {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, sym)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'kline')` */
   usKline(symbol: string, count = 180) {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped(
@@ -513,20 +523,24 @@ export class MarketDataEngine {
     )
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'profile')` */
   usProfile(symbol: string) {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, sym)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'stock_list')` */
   usStockList(keyword = '') {
     return this.qScoped('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, 'US', keyword)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'financials')` */
   usFinancials(symbol: string, reportDate = '', reportType = 'annual') {
     const sym = normalizeUsSymbol(symbol)
     return this.qScoped('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, sym, reportDate, reportType)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'US', ... }, 'snapshot')` */
   async usSnapshot(symbol: string) {
     const sym = normalizeUsSymbol(symbol)
     const [profile, quote, klines] = await Promise.all([
@@ -548,10 +562,12 @@ export class MarketDataEngine {
 
   // ── JP / KR / HK equities ──
 
+  /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'realtime')` */
   regionalRealtime(market: RegionalEquityMarket, symbol: string) {
     return this.qScoped(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, symbol)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'kline')` */
   regionalKline(market: RegionalEquityMarket, symbol: string, count = 180) {
     return this.qScoped(
       market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true,
@@ -559,6 +575,7 @@ export class MarketDataEngine {
     )
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'snapshot')` */
   async regionalSnapshot(market: RegionalEquityMarket, symbol: string) {
     const [quote, klines] = await Promise.all([
       this.regionalRealtime(market, symbol),
@@ -579,40 +596,57 @@ export class MarketDataEngine {
   /** DataEngine 收敛入口 — 按 InstrumentRef + capability 路由 */
   queryInstrumentData(
     ref: InstrumentRef,
-    capability: 'realtime' | 'kline' | 'snapshot',
-    opts?: { count?: number },
+    capability: InstrumentDataCapability,
+    opts?: {
+      count?: number
+      keyword?: string
+      reportDate?: string
+      reportType?: string
+    },
   ) {
     if (ref.market === 'CN' && ref.assetClass === 'EQUITY') {
       if (capability === 'realtime') return this.realtime(ref.symbol)
       if (capability === 'kline') return this.kline(ref.symbol, opts?.count ?? 120)
-      return this.realtime(ref.symbol)
+      if (capability === 'snapshot') return this.realtime(ref.symbol)
+      return Promise.resolve({ success: false, error: `CN 不支持 capability: ${capability}` })
     }
     if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
       if (capability === 'realtime') return this.usRealtime(ref.symbol)
       if (capability === 'kline') return this.usKline(ref.symbol, opts?.count ?? 120)
-      return this.usSnapshot(ref.symbol)
+      if (capability === 'snapshot') return this.usSnapshot(ref.symbol)
+      if (capability === 'profile') return this.usProfile(ref.symbol)
+      if (capability === 'financials') {
+        return this.usFinancials(ref.symbol, opts?.reportDate ?? '', opts?.reportType ?? 'annual')
+      }
+      if (capability === 'stock_list') return this.usStockList(opts?.keyword ?? '')
+      return Promise.resolve({ success: false, error: `US 不支持 capability: ${capability}` })
     }
     if (isRegionalEquityMarket(ref.market)) {
       if (capability === 'realtime') return this.regionalRealtime(ref.market, ref.symbol)
       if (capability === 'kline') return this.regionalKline(ref.market, ref.symbol, opts?.count ?? 120)
-      return this.regionalSnapshot(ref.market, ref.symbol)
+      if (capability === 'snapshot') return this.regionalSnapshot(ref.market, ref.symbol)
+      return Promise.resolve({ success: false, error: `${ref.market} 不支持 capability: ${capability}` })
     }
     if (ref.market === 'CRYPTO') {
       const pair = ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
       if (capability === 'realtime') return this.cryptoRealtime(pair)
       if (capability === 'kline') return this.cryptoKline(pair, opts?.count ?? 120)
-      return this.cryptoSnapshot(pair)
+      if (capability === 'snapshot') return this.cryptoSnapshot(pair)
+      if (capability === 'stock_list') return this.cryptoList(opts?.keyword ?? '')
+      return Promise.resolve({ success: false, error: `Crypto 不支持 capability: ${capability}` })
     }
     return Promise.resolve({ success: false, error: `不支持的市场 ${ref.market}` })
   }
 
   // ── Crypto SPOT (Phase 3) ──
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'CRYPTO', ... }, 'realtime')` */
   cryptoRealtime(pair: string) {
     const sym = parseCryptoPair(pair)?.pair ?? pair
     return this.qCrypto<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', 'crypto_realtime', true, sym)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'CRYPTO', ... }, 'kline')` */
   cryptoKline(pair: string, count = 180) {
     const sym = parseCryptoPair(pair)?.pair ?? pair
     return this.qCrypto<StockKline>(
@@ -621,10 +655,12 @@ export class MarketDataEngine {
     )
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'CRYPTO', ... }, 'stock_list')` */
   cryptoList(keyword = '') {
     return this.qCrypto<StockListItem>(Capability.STOCK_LIST, 'stockList', 'stock_list', true, 'CRYPTO', keyword)
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market: 'CRYPTO', ... }, 'snapshot')` */
   async cryptoSnapshot(pair: string) {
     const sym = parseCryptoPair(pair)?.pair ?? pair
     const [quote, klines] = await Promise.all([

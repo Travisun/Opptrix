@@ -12,7 +12,7 @@ import { DismissRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { PortfolioTradeItem } from '../types/schemas'
-import { formatCompactNumber, formatPct, formatPrice, pctTone } from './format'
+import { formatCompactNumberForMarket, formatPct, formatPriceForMarket, pctTone } from './format'
 import { resolveWatchlistInstrument } from './instrument'
 import {
   calcHoldingFromTrades,
@@ -384,9 +384,11 @@ export default function FollowStockDialog({
     date: '',
   })
 
-  const tradeCode = stock ? resolveWatchlistInstrument(stock).market === 'CN'
-    ? stock.code.padStart(6, '0')
-    : stock.code
+  const stockRef = stock ? resolveWatchlistInstrument(stock) : null
+  const tradeCode = stockRef
+    ? stockRef.market === 'CN'
+      ? stock.code.padStart(6, '0')
+      : stock.code
     : ''
 
   const finishClose = useCallback(() => {
@@ -579,7 +581,7 @@ export default function FollowStockDialog({
             <div className={s.metrics}>
               <div className={s.metric}>
                 <span className={s.metricLabel}>现价</span>
-                <span className={s.metricValue}>{formatPrice(currentPrice)}</span>
+                <span className={s.metricValue}>{formatPriceForMarket(stockRef?.market, currentPrice)}</span>
               </div>
               <div className={s.metric}>
                 <span className={s.metricLabel}>关注收益</span>
@@ -694,7 +696,7 @@ export default function FollowStockDialog({
                   />
                   {previewFees && tradeForm.shares && tradeForm.price && (
                     <Text className={s.feeHint}>
-                      预估成交额 {formatCompactNumber(estimateTradeAmount(Number(tradeForm.shares), Number(tradeForm.price)))}
+                      预估成交额 {formatCompactNumberForMarket(stockRef?.market, estimateTradeAmount(Number(tradeForm.shares), Number(tradeForm.price)))}
                       {' · '}
                       费用约 {previewFees.totalFee.toFixed(2)}（佣金+过户{tradeForm.side === 'sell' ? '+印花税' : ''}）
                     </Text>
@@ -725,7 +727,7 @@ export default function FollowStockDialog({
                           <div className={s.tradeMain}>
                             <span>{t.tradeDate} · {t.shares} 股 @ {t.price.toFixed(2)}</span>
                             <span className={s.sub}>
-                              成交额 {formatCompactNumber(t.amount)} · 费用 {t.totalFee.toFixed(2)}
+                              成交额 {formatCompactNumberForMarket(stockRef?.market, t.amount)} · 费用 {t.totalFee.toFixed(2)}
                             </span>
                           </div>
                           <button

@@ -1,5 +1,6 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import { isBseCode, isTushareEnabled, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
+import { isBseCode, isTushareEnabled, discoverRegionalListFromYahoo, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
+import type { InstrumentRef } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
@@ -23,6 +24,22 @@ import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from './tushare-bulk.js'
 import { getRegionalListSeeds, isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
+
+function equityInstrumentRef(
+  market: 'US' | 'JP' | 'KR' | 'HK',
+  code: string,
+): InstrumentRef {
+  const symbol = market === 'US' ? code : normalizeRegionalSymbol(market, code)
+  return { market, assetClass: 'EQUITY', symbol }
+}
+
+function cryptoInstrumentRef(code: string): InstrumentRef {
+  const pair = parseCryptoPair(code)
+  if (pair) {
+    return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair.base, quote: pair.quote }
+  }
+  return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: code, quote: 'USDT' }
+}
 
 export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
 
@@ -697,9 +714,15 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(() => this.de.usStockList(), 'default')
+    const resp = await this.callApi(
+      () => this.de.queryInstrumentData(
+        { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
+        'stock_list',
+      ),
+      'default',
+    )
     if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'usStockList failed')
+      throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
     }
 
     let total = resp.data.length
@@ -749,8 +772,11 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'us_quotes', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.usRealtime(code), 'default')
-        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'usRealtime failed')
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(equityInstrumentRef('US', code), 'realtime'),
+          'default',
+        )
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')
         this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
         this.markDone('us_quotes', code, tradeDate)
         success++
@@ -778,9 +804,15 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(() => this.de.cryptoList(), 'default')
+    const resp = await this.callApi(
+      () => this.de.queryInstrumentData(
+        { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' },
+        'stock_list',
+      ),
+      'default',
+    )
     if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'cryptoList failed')
+      throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
     }
 
     let total = resp.data.length
@@ -810,7 +842,7 @@ export class MarketDataSyncEngine {
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
-  /** HK/JP/KR list sync — MVP 种子列表；后续可接 vendor API */
+  /** HK/JP/KR list sync — 种子列表 + Yahoo search 补充 */
   private async syncRegionalList(
     runId: number,
     job: string,
@@ -832,24 +864,50 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const seeds = getRegionalListSeeds(market)
-    let total = seeds.length
+    const byCode = new Map<string, { code: string; name: string; exchange?: string | null; industry?: string }>()
+    for (const item of getRegionalListSeeds(market)) {
+      const code = normalizeRegionalSymbol(market, String(item.code ?? '').trim())
+      if (!code) continue
+      byCode.set(code, {
+        code,
+        name: String(item.name ?? code),
+        exchange: item.exchange ?? null,
+        industry: item.industry,
+      })
+    }
+
+    try {
+      const online = await this.callApi(() => discoverRegionalListFromYahoo(market), 'default')
+      for (const item of online) {
+        if (!byCode.has(item.code)) {
+          byCode.set(item.code, {
+            code: item.code,
+            name: item.name,
+            exchange: item.exchange ?? null,
+            industry: item.industry,
+          })
+        }
+      }
+    } catch {
+      options.onLog?.(`${job}: Yahoo 列表补充离线，仅写入种子`)
+    }
+
+    const rows = [...byCode.values()]
+    let total = rows.length
     if (options.maxStocks) total = Math.min(total, options.maxStocks)
     let success = 0
-    for (const [i, item] of seeds.entries()) {
+    for (const [i, item] of rows.entries()) {
       if (options.maxStocks && i >= options.maxStocks) break
-      const code = String(item.code ?? '').trim()
-      if (!code) continue
       this.store.upsertInstrument({
-        code,
+        code: item.code,
         market,
         assetClass: 'EQUITY',
-        name: String(item.name ?? code),
+        name: item.name,
         exchange: item.exchange ?? null,
         status: 'active',
         extra: item.industry ? JSON.stringify({ industry: item.industry }) : null,
       })
-      this.markDone(job, code, '')
+      this.markDone(job, item.code, '')
       success++
       if (i % 20 === 0) {
         options.onProgress?.({ job, current: i + 1, total })
@@ -859,7 +917,7 @@ export class MarketDataSyncEngine {
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
-  /** HK/JP/KR quotes — 经 US adapter 拉取实时价写入 stock_quotes_daily */
+  /** HK/JP/KR quotes — Yahoo regional provider 写入 stock_quotes_daily */
   private async syncRegionalQuotes(
     runId: number,
     job: string,
@@ -871,7 +929,7 @@ export class MarketDataSyncEngine {
     }
     const market = regionalQuotesJobMarket(job)!
     const cfg = this.cfg(job, options)
-    const tradeDate = usTodayString()
+    const tradeDate = regionalTodayString(market)
     const universe = this.regionalCodes(market, options)
     const codes = this.pendingRegionalCodes(job, market, options, mode, tradeDate, cfg.ttlDays)
 
@@ -890,10 +948,10 @@ export class MarketDataSyncEngine {
       options.onProgress?.({ job, current: index + 1, total: codes.length })
       try {
         const resp = await this.callApi(
-          () => this.de.regionalRealtime(market, code),
+          () => this.de.queryInstrumentData(equityInstrumentRef(market, code), 'realtime'),
           'default',
         )
-        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'regionalRealtime failed')
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')
         this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
         this.markDone(job, code, tradeDate)
         success++
@@ -931,8 +989,11 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'crypto_quotes', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.cryptoRealtime(code), 'default')
-        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'cryptoRealtime failed')
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(cryptoInstrumentRef(code), 'realtime'),
+          'default',
+        )
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')
         this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
         this.markDone('crypto_quotes', code, tradeDate)
         success++

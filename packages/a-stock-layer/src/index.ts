@@ -1,6 +1,7 @@
 export {
   MarketDataEngine,
   AshareEngine,
+  type InstrumentDataCapability,
   Capability, CACHE_TYPE, DriverRegistry, Cache,
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
   normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice,
@@ -71,6 +72,21 @@ export {
   isUsPostMarket,
 } from './utils/us-market.js'
 export type { UsQuoteSession } from './utils/us-market.js'
+export {
+  normalizeRegionalSymbol,
+  toYahooFinanceSymbol,
+  isRegionalEquityMarket,
+} from './utils/regional-symbol.js'
+export type { RegionalEquityMarket } from './utils/regional-symbol.js'
+export { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday, regionalHolidaysForYear } from './utils/regional-calendar.js'
+export { parseYahooSearchQuotes, fetchYahooFinanceSearch, type YahooSearchQuote } from './utils/yahoo-search.js'
+export {
+  discoverRegionalListFromYahoo,
+  yahooQuoteToRegionalItem,
+  type RegionalListVendorItem,
+} from './utils/regional-list-vendor.js'
+export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
+export type { CryptoPairRef } from './utils/crypto-market.js'
 export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 
 export type {

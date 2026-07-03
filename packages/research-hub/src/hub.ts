@@ -1,4 +1,5 @@
 import { MarketDataEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+  parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
@@ -52,6 +53,24 @@ import {
   type InstrumentRouteHandlers,
 } from './instrument-router.js'
 
+function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRef {
+  const p = parseCryptoPair(pair)
+  if (p) {
+    return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: p.base, quote: p.quote }
+  }
+  return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair, quote: 'USDT' }
+}
+
+function instrumentQueryError(r: { success: boolean }, fallback: string): string {
+  if ('error' in r && r.error) return String(r.error)
+  return fallback
+}
+
+function instrumentQueryData<T>(r: { success: boolean }): T | undefined {
+  if (!r.success || !('data' in r)) return undefined
+  return r.data as T
+}
+
 interface WatchlistRadarItem {
   code: string
   name: string
@@ -101,7 +120,7 @@ export class ResearchHub {
         case 'institution_rating': return this.institutionRating(String(params.code), params.groups as string[] | undefined, t0)
         case 'institution_report': return this.institutionReport(String(params.code), params.groups as string[] | undefined, t0)
         case 'screening': return this.screening(params, t0)
-        case 'strategy_signal': return this.strategySignal(String(params.code), t0)
+        case 'strategy_signal': return this.strategySignal(params, t0)
         case 'trend_brief': return this.trendBrief(String(params.code), params, t0)
         case 'strategy_verify': return this.strategyVerify(params, t0)
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
@@ -555,13 +574,18 @@ export class ResearchHub {
     return ok({ trade_date: tradeDate ?? null, items }, `批量快照 ${items.length} 只`, t0)
   }
 
-  private async strategySignal(code: string, t0: number) {
-    if (!isLikelyCnEquityInput(code)) {
+  private async strategySignal(params: Record<string, unknown>, t0: number) {
+    const code = String(params.code ?? '')
+    const ref = parseInstrumentRef(params.instrument ?? params)
+      ?? (isLikelyCnEquityInput(code)
+        ? { market: 'CN' as const, assetClass: 'EQUITY' as const, symbol: code }
+        : null)
+    if (!ref || ref.market !== 'CN') {
       return fail('多空倾向暂仅支持 A 股与 A 股 ETF', t0)
     }
-    const normalized = normalizeCode(code)
+    const normalized = normalizeCode(ref.symbol || code)
     if (isCnEtfCode(normalized)) {
-      const technical = await quickAssess(this.de, normalized)
+      const technical = await quickAssess(this.de, normalized, ref)
       const card = this.marketData.etfScorecard(normalized)
       const radarHint = card?.total_score != null ? ` · 决策雷达 ${card.total_score} 分` : ''
       return ok({
@@ -571,7 +595,7 @@ export class ResearchHub {
         etf_scorecard: card,
       }, `${normalized} ${technical.summary}${radarHint}`, t0)
     }
-    const data = await quickAssess(this.de, normalized)
+    const data = await quickAssess(this.de, normalized, ref)
     return ok({ ...data, asset_class: 'EQUITY' as const, scorecard_name: '综合评估' }, `${normalized} ${data.summary}`, t0)
   }
 
@@ -740,9 +764,14 @@ export class ResearchHub {
   private async marketRegimeUs(t0: number) {
     let klines: Array<{ close: number; amount?: number | null }> = []
     try {
-      const kl = await this.de.usKline('SPY', 280)
-      if (kl.success && kl.data?.length) {
-        klines = (kl.data as Array<{ close: number; amount?: number | null }>).map(k => ({
+      const kl = await this.de.queryInstrumentData(
+        { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
+        'kline',
+        { count: 280 },
+      )
+      const rows = instrumentQueryData<Array<{ close: number; amount?: number | null }>>(kl)
+      if (rows?.length) {
+        klines = rows.map(k => ({
           close: k.close,
           amount: k.amount,
         }))
@@ -1844,15 +1873,21 @@ export class ResearchHub {
   }
 
   private async usRealtime(symbol: string, t0: number) {
-    const r = await this.de.usRealtime(symbol)
-    if (!r.success) return fail(r.error ?? '美股行情获取失败', t0)
-    return ok(r.data?.[0] ?? null, `${symbol} 美股行情`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol },
+      'realtime',
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股行情获取失败'), t0)
+    return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} 美股行情`, t0)
   }
 
   private async regionalRealtime(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
-    const r = await this.de.regionalRealtime(market, symbol)
-    if (!r.success) return fail(r.error ?? `${market} 行情获取失败`, t0)
-    return ok(r.data?.[0] ?? null, `${symbol} ${market} 行情`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market, assetClass: 'EQUITY', symbol },
+      'realtime',
+    )
+    if (!r.success) return fail(instrumentQueryError(r, `${market} 行情获取失败`), t0)
+    return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} ${market} 行情`, t0)
   }
 
   private async regionalKline(
@@ -1862,48 +1897,77 @@ export class ResearchHub {
     t0: number,
   ) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.regionalKline(market, symbol, count)
-    if (!r.success) return fail(r.error ?? `${market} K 线获取失败`, t0)
-    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market, assetClass: 'EQUITY', symbol },
+      'kline',
+      { count },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, `${market} K 线获取失败`), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ symbol, items, count: items.length }, `K 线 ${items.length} 根`, t0)
   }
 
   private async regionalSnapshot(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
-    const r = await this.de.regionalSnapshot(market, symbol)
+    const r = await this.de.queryInstrumentData(
+      { market, assetClass: 'EQUITY', symbol },
+      'snapshot',
+    )
     if (!r.success) return fail(`${market} 快照获取失败`, t0)
-    return ok(r.data, `${market} 快照`, t0)
+    return ok(instrumentQueryData(r), `${market} 快照`, t0)
   }
 
   private async usKline(symbol: string, params: Record<string, unknown>, t0: number) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.usKline(symbol, count)
-    if (!r.success) return fail(r.error ?? '美股 K 线获取失败', t0)
-    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol },
+      'kline',
+      { count },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股 K 线获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ symbol, items, count: items.length }, `K 线 ${items.length} 根`, t0)
   }
 
   private async usProfile(symbol: string, t0: number) {
-    const r = await this.de.usProfile(symbol)
-    if (!r.success) return fail(r.error ?? '美股概况获取失败', t0)
-    return ok(r.data?.[0] ?? null, `${symbol} 概况`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol },
+      'profile',
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股概况获取失败'), t0)
+    return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} 概况`, t0)
   }
 
   private async usFinancials(symbol: string, params: Record<string, unknown>, t0: number) {
     const reportType = params.report_type != null ? String(params.report_type) : 'annual'
-    const r = await this.de.usFinancials(symbol, String(params.report_date ?? ''), reportType)
-    if (!r.success) return fail(r.error ?? '美股财报获取失败', t0)
-    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `财报 ${r.data?.length ?? 0} 期`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol },
+      'financials',
+      { reportDate: String(params.report_date ?? ''), reportType },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股财报获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ symbol, items, count: items.length }, `财报 ${items.length} 期`, t0)
   }
 
   private async usSnapshot(symbol: string, t0: number) {
-    const r = await this.de.usSnapshot(symbol)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol },
+      'snapshot',
+    )
     if (!r.success) return fail('美股快照获取失败', t0)
-    return ok(r.data, '美股快照', t0)
+    return ok(instrumentQueryData(r), '美股快照', t0)
   }
 
   private async usStockList(params: Record<string, unknown>, t0: number) {
     const keyword = params.keyword != null ? String(params.keyword) : ''
-    const r = await this.de.usStockList(keyword)
-    if (!r.success) return fail(r.error ?? '美股列表获取失败', t0)
-    return ok({ items: r.data ?? [], count: r.data?.length ?? 0 }, `美股列表 ${r.data?.length ?? 0} 条`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
+      'stock_list',
+      { keyword },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股列表获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ items, count: items.length }, `美股列表 ${items.length} 条`, t0)
   }
 
   private async localUsList(params: Record<string, unknown>, t0: number) {
@@ -1923,9 +1987,13 @@ export class ResearchHub {
     if (local.length) {
       return ok({ items: local, count: local.length, source: 'local' }, `美股搜索 ${local.length} 条`, t0)
     }
-    const r = await this.de.usStockList(keyword)
-    if (!r.success) return fail(r.error ?? '美股搜索失败', t0)
-    const items = (r.data ?? []).map(raw => {
+    const r = await this.de.queryInstrumentData(
+      { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
+      'stock_list',
+      { keyword },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, '美股搜索失败'), t0)
+    const items = (instrumentQueryData<unknown[]>(r) ?? []).map(raw => {
       const row = raw as { code?: string; name?: string; market?: string }
       return {
         code: String(row.code ?? ''),
@@ -1937,29 +2005,35 @@ export class ResearchHub {
   }
 
   private async cryptoRealtime(pair: string, t0: number) {
-    const r = await this.de.cryptoRealtime(pair)
-    if (!r.success) return fail(r.error ?? 'Crypto 行情获取失败', t0)
-    return ok(r.data?.[0] ?? null, `${pair} 行情`, t0)
+    const r = await this.de.queryInstrumentData(cryptoRefFromPair(pair), 'realtime')
+    if (!r.success) return fail(instrumentQueryError(r, 'Crypto 行情获取失败'), t0)
+    return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${pair} 行情`, t0)
   }
 
   private async cryptoKline(pair: string, params: Record<string, unknown>, t0: number) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.cryptoKline(pair, count)
-    if (!r.success) return fail(r.error ?? 'Crypto K 线获取失败', t0)
-    return ok({ pair, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+    const r = await this.de.queryInstrumentData(cryptoRefFromPair(pair), 'kline', { count })
+    if (!r.success) return fail(instrumentQueryError(r, 'Crypto K 线获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ pair, items, count: items.length }, `K 线 ${items.length} 根`, t0)
   }
 
   private async cryptoSnapshot(pair: string, t0: number) {
-    const r = await this.de.cryptoSnapshot(pair)
+    const r = await this.de.queryInstrumentData(cryptoRefFromPair(pair), 'snapshot')
     if (!r.success) return fail('Crypto 快照获取失败', t0)
-    return ok(r.data, 'Crypto 快照', t0)
+    return ok(instrumentQueryData(r), 'Crypto 快照', t0)
   }
 
   private async cryptoList(params: Record<string, unknown>, t0: number) {
     const keyword = params.keyword != null ? String(params.keyword) : ''
-    const r = await this.de.cryptoList(keyword)
-    if (!r.success) return fail(r.error ?? 'Crypto 列表获取失败', t0)
-    return ok({ items: r.data ?? [], count: r.data?.length ?? 0 }, `Crypto 列表 ${r.data?.length ?? 0} 条`, t0)
+    const r = await this.de.queryInstrumentData(
+      { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' },
+      'stock_list',
+      { keyword },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, 'Crypto 列表获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok({ items, count: items.length }, `Crypto 列表 ${items.length} 条`, t0)
   }
 
   private async localCryptoList(params: Record<string, unknown>, t0: number) {
@@ -1979,9 +2053,13 @@ export class ResearchHub {
     if (local.length) {
       return ok({ items: local, count: local.length, source: 'local' }, `Crypto 搜索 ${local.length} 条`, t0)
     }
-    const r = await this.de.cryptoList(keyword)
-    if (!r.success) return fail(r.error ?? 'Crypto 搜索失败', t0)
-    const items = (r.data ?? []).map(raw => {
+    const r = await this.de.queryInstrumentData(
+      { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' },
+      'stock_list',
+      { keyword },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, 'Crypto 搜索失败'), t0)
+    const items = (instrumentQueryData<unknown[]>(r) ?? []).map(raw => {
       const row = raw as { code?: string; name?: string; market?: string }
       return {
         code: String(row.code ?? ''),
