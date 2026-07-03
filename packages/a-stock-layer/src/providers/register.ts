@@ -3,6 +3,7 @@ import { TushareDriver } from './tushare/driver.js'
 import { PolygonDriver } from './polygon/driver.js'
 import { TiingoDriver } from './tiingo/driver.js'
 import { FmpDriver } from './fmp/driver.js'
+import { TickflowDriver } from './tickflow/driver.js'
 
 /** Register built-in data providers (official API-key services only). */
 export function registerAllDrivers(registry: DriverRegistry) {
@@ -11,6 +12,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new PolygonDriver(),
     new TiingoDriver(),
     new FmpDriver(),
+    new TickflowDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -18,5 +20,5 @@ export function registerAllDrivers(registry: DriverRegistry) {
 
 export {
   TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver,
+  PolygonDriver, TiingoDriver, FmpDriver, TickflowDriver,
 }

@@ -3,12 +3,14 @@ import { TUSHARE_MANIFEST } from './tushare/manifest.js'
 import { POLYGON_MANIFEST } from './polygon/manifest.js'
 import { TIINGO_MANIFEST } from './tiingo/manifest.js'
 import { FMP_MANIFEST } from './fmp/manifest.js'
+import { TICKFLOW_MANIFEST } from './tickflow/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
 export { POLYGON_SETTINGS } from './polygon/settings.js'
 export { TIINGO_SETTINGS } from './tiingo/settings.js'
 export { FMP_SETTINGS } from './fmp/settings.js'
+export { TICKFLOW_SETTINGS } from './tickflow/settings.js'
 
 /** Static built-in manifests — registered into ManifestRegistry by ProviderLoader.registerBuiltins() */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -16,6 +18,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   POLYGON_MANIFEST,
   TIINGO_MANIFEST,
   FMP_MANIFEST,
+  TICKFLOW_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */

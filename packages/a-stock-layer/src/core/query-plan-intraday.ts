@@ -3,7 +3,7 @@ import { Capability } from './capabilities.js'
 import type { IntradayTrendFetchResult } from '../utils/intraday-trends.js'
 import type { StockMarket } from '../utils/helpers.js'
 
-/** Intraday sessions — licensed providers only (currently none for CN intraday). */
+/** Intraday sessions — licensed providers with INTRADAY_TICK (e.g. TickFlow for CN). */
 export async function executeIntradaySessionsPlan(
   registry: DriverRegistry,
   code: string,
@@ -16,7 +16,7 @@ export async function executeIntradaySessionsPlan(
   }
   return {
     success: false,
-    error: '暂无合规分时数据源，请在设置中配置 Tushare Token 或等待后续接入',
+    error: '暂无分时数据。请在设置 → 数据源中启用 TickFlow 并配置 API Key。',
   }
 }
 

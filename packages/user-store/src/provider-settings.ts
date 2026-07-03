@@ -288,3 +288,7 @@ export function fmpSecretsOk(extra: Record<string, unknown>, envKey = ''): boole
 export function tiingoSecretsOk(extra: Record<string, unknown>, envToken = ''): boolean {
   return !!String(extra.apiToken ?? envToken).trim()
 }
+
+export function tickflowSecretsOk(extra: Record<string, unknown>, envKey = ''): boolean {
+  return !!String(extra.apiKey ?? envKey).trim()
+}

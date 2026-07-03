@@ -10,10 +10,12 @@ import { TUSHARE_MANIFEST } from './tushare/manifest.js'
 import { POLYGON_MANIFEST } from './polygon/manifest.js'
 import { TIINGO_MANIFEST } from './tiingo/manifest.js'
 import { FMP_MANIFEST } from './fmp/manifest.js'
+import { TICKFLOW_MANIFEST } from './tickflow/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testPolygonConnection } from './polygon/api/client.js'
 import { testTiingoConnection } from './tiingo/api/client.js'
 import { testFmpConnection } from './fmp/api/client.js'
+import { testTickflowConnection } from './tickflow/api/client.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
 import {
@@ -24,7 +26,7 @@ import {
   validateProviderJson,
 } from './provider-module-types.js'
 
-const BUILTIN_MANIFESTS = [TUSHARE_MANIFEST, POLYGON_MANIFEST, TIINGO_MANIFEST, FMP_MANIFEST]
+const BUILTIN_MANIFESTS = [TUSHARE_MANIFEST, POLYGON_MANIFEST, TIINGO_MANIFEST, FMP_MANIFEST, TICKFLOW_MANIFEST]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {
   const raw = mod.driver
@@ -86,6 +88,15 @@ export class ProviderLoader {
         overrides?.apiKey ?? extra.apiKey ?? process.env.FMP_API_KEY ?? process.env.OPPTRIX_FMP_API_KEY ?? '',
       ).trim()
       return testFmpConnection(apiKey)
+    })
+    this.testHooks.set('tickflow', async ({ overrides, extra }) => {
+      const apiKey = String(
+        overrides?.apiKey ?? extra.apiKey ?? process.env.TICKFLOW_API_KEY ?? process.env.OPPTRIX_TICKFLOW_API_KEY ?? '',
+      ).trim()
+      const baseUrl = String(
+        overrides?.baseUrl ?? extra.baseUrl ?? process.env.TICKFLOW_BASE_URL ?? process.env.OPPTRIX_TICKFLOW_BASE_URL ?? '',
+      ).trim()
+      return testTickflowConnection(apiKey, baseUrl || undefined)
     })
   }
 
