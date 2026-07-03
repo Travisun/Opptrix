@@ -17,7 +17,7 @@ import {
   buildUnifiedInstrumentTools,
   CHAT_MCP_TOOL_NAMES,
 } from './unified-mcp-tools.js'
-import { buildAgentSystemRules } from '@opptrix/shared'
+import { buildAgentSystemRules, instrumentRefsFromList, normalizeInstrumentHubParams, resolveInstrumentFromParams } from '@opptrix/shared'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -132,7 +132,10 @@ export class ToolRegistry {
           code: { type: 'string', description: '6位股票代码，如 600519' },
           scorecard: { type: 'string', description: '评分卡名称，默认综合评估' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('stock_diagnosis', { code: a.code, scorecard: a.scorecard ?? '综合评估' }),
+        handler: (a: Record<string, unknown>) => d('instrument_evaluation', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          scorecard: a.scorecard ?? '综合评估',
+        }),
       },
       {
         name: 'screen_stocks', category: '选股',
@@ -259,7 +262,9 @@ export class ToolRegistry {
         parameters: S({
           codes: { type: 'array', description: '股票代码列表，建议不超过80' },
         }, ['codes']),
-        handler: (a: Record<string, unknown>) => d('batch_stock_snapshots', { codes: a.codes }),
+        handler: (a: Record<string, unknown>) => d('instrument_batch_snapshots', {
+          instruments: instrumentRefsFromList(a.codes, 'CN'),
+        }),
       },
       {
         name: 'get_market_db_sync_state', category: '本地数据',
@@ -285,7 +290,9 @@ export class ToolRegistry {
         parameters: S({
           codes: { type: 'array', description: '股票代码列表' },
         }, ['codes']),
-        handler: (a: Record<string, unknown>) => d('stock_quotes', { codes: a.codes }),
+        handler: (a: Record<string, unknown>) => d('instrument_quotes', {
+          instruments: instrumentRefsFromList(a.codes, 'CN'),
+        }),
       },
       {
         name: 'get_watchlist', category: '组合管理',
@@ -308,13 +315,17 @@ export class ToolRegistry {
           code: { type: 'string', description: '6位股票代码' },
           count: { type: 'number', description: 'K线根数，默认90，最大240' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('stock_kline', { code: a.code, count: a.count ?? 90 }),
+        handler: (a: Record<string, unknown>) => d('instrument_chart', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          period: 'daily',
+          count: a.count ?? 90,
+        }),
       },
       {
         name: 'get_stock_cyq', category: '本地数据',
         description: '获取单股筹码分布（CYQ）',
         parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('stock_cyq', { code: a.code }),
+        handler: (a: Record<string, unknown>) => d('instrument_cyq', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'get_stock_chart', category: '本地数据',
@@ -324,13 +335,17 @@ export class ToolRegistry {
           period: { type: 'string', description: '周期：daily/weekly/monthly/1m/5m 等' },
           count: { type: 'number', description: '返回条数，0 为默认' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('stock_chart', { code: a.code, period: a.period ?? 'daily', count: a.count ?? 0 }),
+        handler: (a: Record<string, unknown>) => d('instrument_chart', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          period: a.period ?? 'daily',
+          count: a.count ?? 0,
+        }),
       },
       {
         name: 'get_stock_detail', category: '本地数据',
         description: '获取单股详情：行情、基本面、财务、新闻、资金流等聚合',
         parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('stock_detail', { code: a.code }),
+        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'get_etf_list', category: '本地数据',
@@ -503,9 +518,10 @@ export class ToolRegistry {
         parameters: S({
           symbol: { type: 'string', description: '美股 ticker，如 AAPL' },
         }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('us_realtime', {
-          symbol: a.symbol ?? a.code,
-        }),
+        handler: (a: Record<string, unknown>) => {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: a.symbol ?? a.code })
+          return d('instrument_quotes', { instruments: ref ? [ref] : [] })
+        },
       },
       {
         name: 'get_us_stock_kline', category: '本地数据',
@@ -514,8 +530,9 @@ export class ToolRegistry {
           symbol: { type: 'string', description: '美股 ticker' },
           count: { type: 'number', description: 'K 线根数，默认 180' },
         }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('us_kline', {
-          symbol: a.symbol ?? a.code,
+        handler: (a: Record<string, unknown>) => d('instrument_chart', {
+          ...normalizeInstrumentHubParams({ market: 'US', symbol: a.symbol ?? a.code }),
+          period: 'daily',
           count: a.count ?? 180,
         }),
       },
@@ -527,7 +544,7 @@ export class ToolRegistry {
       },
       {
         name: 'get_us_stock_financials', category: '本地数据',
-        description: '美股财报摘要（营收、净利、EPS、ROE 等；需 Polygon 已配置）',
+        description: '美股财报摘要（营收、净利、EPS、ROE 等；需 TickFlow 已配置）',
         parameters: S({
           symbol: { type: 'string', description: '美股 ticker' },
           report_type: { type: 'string', description: 'annual 或 quarter，默认 annual' },
@@ -541,7 +558,10 @@ export class ToolRegistry {
         name: 'get_us_stock_snapshot', category: '本地数据',
         description: '单只美股快照：概况、行情、近期 K 线',
         parameters: S({ symbol: { type: 'string', description: '美股 ticker' } }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('us_snapshot', { symbol: a.symbol ?? a.code }),
+        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({
+          market: 'US',
+          symbol: a.symbol ?? a.code,
+        })),
       },
       {
         name: 'search_us_stocks', category: '通用',
@@ -553,7 +573,10 @@ export class ToolRegistry {
         name: 'get_crypto_quote', category: '本地数据',
         description: 'Crypto 交易对实时行情（如 BTC/USDT）',
         parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
-        handler: (a: Record<string, unknown>) => d('crypto_realtime', { pair: a.pair ?? a.symbol }),
+        handler: (a: Record<string, unknown>) => {
+          const ref = resolveInstrumentFromParams({ code: a.pair ?? a.symbol })
+          return d('instrument_quotes', { instruments: ref ? [ref] : [] })
+        },
       },
       {
         name: 'get_crypto_kline', category: '本地数据',
@@ -562,13 +585,17 @@ export class ToolRegistry {
           pair: { type: 'string', description: '交易对，如 BTC/USDT' },
           count: { type: 'number', description: 'K 线根数，默认 180' },
         }, ['pair']),
-        handler: (a: Record<string, unknown>) => d('crypto_kline', { pair: a.pair ?? a.symbol, count: a.count }),
+        handler: (a: Record<string, unknown>) => d('instrument_chart', {
+          ...normalizeInstrumentHubParams({ code: a.pair ?? a.symbol }),
+          period: 'daily',
+          count: a.count ?? 180,
+        }),
       },
       {
         name: 'get_crypto_snapshot', category: '本地数据',
         description: 'Crypto 交易对快照：行情 + 近期 K 线',
         parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
-        handler: (a: Record<string, unknown>) => d('crypto_snapshot', { pair: a.pair ?? a.symbol }),
+        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({ code: a.pair ?? a.symbol })),
       },
       {
         name: 'search_crypto_pairs', category: '通用',
@@ -595,7 +622,7 @@ export class ToolRegistry {
         name: 'get_strategy_signal', category: '策略',
         description: '获取单股 9 策略融合信号（看多/看空/中性）',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('strategy_signal', { code: a.code }),
+        handler: (a: Record<string, unknown>) => d('instrument_strategy_signal', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'institution_rating', category: '个股分析',
@@ -604,7 +631,10 @@ export class ToolRegistry {
           code: { type: 'string', description: '股票代码' },
           groups: { type: 'array', description: '可选机构分组过滤' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('institution_rating', { code: a.code, groups: a.groups }),
+        handler: (a: Record<string, unknown>) => d('instrument_institution_rating', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          groups: a.groups,
+        }),
       },
       {
         name: 'get_closing_report', category: '报告',
@@ -636,8 +666,10 @@ export class ToolRegistry {
           checkpoints: { type: 'number', description: '验证点数' },
           forward_days: { type: 'number', description: '持有天数' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('strategy_verify', {
-          code: a.code, checkpoints: a.checkpoints ?? 30, forward_days: a.forward_days ?? 5,
+        handler: (a: Record<string, unknown>) => d('instrument_strategy_verify', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          checkpoints: a.checkpoints ?? 30,
+          forward_days: a.forward_days ?? 5,
         }),
       },
       {
@@ -662,7 +694,10 @@ export class ToolRegistry {
           code: { type: 'string', description: '股票代码' },
           groups: { type: 'array', description: '机构分组' },
         }, ['code']),
-        handler: (a: Record<string, unknown>) => d('institution_report', { code: a.code, groups: a.groups }),
+        handler: (a: Record<string, unknown>) => d('instrument_institution_report', {
+          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
+          groups: a.groups,
+        }),
       },
       {
         name: 'industry_mining', category: '报告',
@@ -731,7 +766,7 @@ export class ToolRegistry {
         name: 'get_latest_evaluation', category: '通用',
         description: '读取本地最近一次的因子评估快照',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('latest_evaluation', { code: a.code }),
+        handler: (a: Record<string, unknown>) => d('latest_evaluation', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'get_portfolio_holdings', category: '组合管理',

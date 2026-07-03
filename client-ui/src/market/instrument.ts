@@ -63,6 +63,11 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
   return { market: 'CN', assetClass: 'EQUITY', symbol: normalizeCode(input) }
 }
 
+/** CN A-share / ETF instrument ref from a bare code or alias string. */
+export function cnEquityRef(code: string): InstrumentRef {
+  return parseInstrumentInput(code)
+}
+
 export function displayCodeFromInstrument(ref: InstrumentRef): string {
   if (ref.market === 'CRYPTO' && ref.quote) return `${ref.symbol}/${ref.quote}`
   if (ref.market === 'CN') return normalizeCode(ref.symbol)

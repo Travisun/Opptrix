@@ -377,7 +377,7 @@ const PACK_UI: {
   {
     id: 'us',
     label: '美股',
-    desc: '开启后同步美股列表与本地行情截面（需 Polygon 或 Yahoo 回退）',
+    desc: '开启后同步美股列表与本地行情截面（需 TickFlow API Key）',
     countKey: 'us',
     optional: true,
   },

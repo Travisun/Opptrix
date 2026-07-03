@@ -25,6 +25,7 @@ export interface PublicProviderRuntime {
   effectivePriority: number
   manifestDefaultPriority: number
   secretsConfigured: Record<string, boolean>
+  secretPreviews?: Record<string, string>
   canEnable: boolean
   values: Record<string, unknown>
   settingsFields: ProviderSettingsField[]

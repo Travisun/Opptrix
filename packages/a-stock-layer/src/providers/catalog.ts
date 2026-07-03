@@ -23,14 +23,20 @@ const TUSHARE_ENV = process.env.TUSHARE_TOKEN ?? ''
 function maskSecretFields(
   extra: Record<string, unknown>,
   fields: ProviderSettingsField[],
-): { values: Record<string, unknown>; secretsConfigured: Record<string, boolean> } {
+): { values: Record<string, unknown>; secretsConfigured: Record<string, boolean>; secretPreviews: Record<string, string> } {
   const values: Record<string, unknown> = {}
   const secretsConfigured: Record<string, boolean> = {}
+  const secretPreviews: Record<string, string> = {}
   for (const field of fields) {
     if (field.type === 'secret') {
-      const raw = extra[field.key]
-      secretsConfigured[field.key] = !!String(raw ?? '').trim()
-      values[field.key] = ''
+      const raw = String(extra[field.key] ?? '').trim()
+      secretsConfigured[field.key] = !!raw
+      values[field.key] = raw
+      if (raw) {
+        secretPreviews[field.key] = raw.length >= 8
+          ? `${raw.slice(0, 4)}…${raw.slice(-4)}`
+          : '已配置'
+      }
     } else if (field.key in extra) {
       values[field.key] = extra[field.key]
     } else if (field.default !== undefined) {
@@ -40,7 +46,24 @@ function maskSecretFields(
   for (const [key, value] of Object.entries(extra)) {
     if (!(key in values)) values[key] = value
   }
-  return { values, secretsConfigured }
+  return { values, secretsConfigured, secretPreviews }
+}
+
+/** Keys stored in provider_settings.extra_json — not top-level columns like enabled. */
+function normalizeProviderExtraPatch(
+  fields: ProviderSettingsField[],
+  raw?: Record<string, unknown>,
+): Record<string, unknown> | undefined {
+  if (!raw) return undefined
+  const allowed = new Set(
+    fields.filter(f => f.key !== 'enabled').map(f => f.key),
+  )
+  const extra: Record<string, unknown> = {}
+  for (const [key, value] of Object.entries(raw)) {
+    if (!allowed.has(key) || value === undefined) continue
+    extra[key] = value
+  }
+  return Object.keys(extra).length ? extra : undefined
 }
 
 export class ProviderCatalogService {
@@ -60,7 +83,7 @@ export class ProviderCatalogService {
       const fields = manifest.settings?.fields ?? []
       const secretsOk = this.configStore.secretsOk(manifest.providerId, runtime)
       const effective = this.configStore.effectivePriority(manifest.providerId, manifest.defaultPriority)
-      const { values, secretsConfigured } = maskSecretFields(runtime.extra, fields)
+      const { values, secretsConfigured, secretPreviews } = maskSecretFields(runtime.extra, fields)
       for (const field of fields) {
         if (field.key === 'enabled' && field.type === 'boolean') {
           values.enabled = runtime.enabled
@@ -77,6 +100,7 @@ export class ProviderCatalogService {
         effectivePriority: effective,
         manifestDefaultPriority: manifest.defaultPriority,
         secretsConfigured,
+        secretPreviews,
         canEnable: secretsOk || !this.configStore.requiresSecrets(manifest.providerId),
         values,
         settingsFields: fields,
@@ -130,13 +154,26 @@ export class ProviderCatalogService {
     const manifest = getProviderManifest(providerId)
     if (!manifest) throw new Error(`未知数据源: ${providerId}`)
 
+    const fields = manifest.settings?.fields ?? []
     const current = this.configStore.getRuntime(providerId)
+    const extra = normalizeProviderExtraPatch(fields, patch.extra)
+    if (extra && providerId === 'tickflow') {
+      delete extra.baseUrl
+    }
+
+    let enabled = patch.enabled ?? current.enabled
+    if (extra && fields.some(
+      field => field.type === 'secret' && String(extra[field.key] ?? '').trim(),
+    )) {
+      enabled = true
+    }
+
     this.configStore.save(providerId, {
-      enabled: patch.enabled ?? current.enabled,
+      enabled,
       priorityMode: patch.priorityMode ?? current.priorityMode,
       priority: patch.priority !== undefined ? patch.priority : current.priority,
       sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : current.sortOrder,
-      extra: patch.extra,
+      extra,
     })
 
     this.registry.refreshPriorities(this.configStore)

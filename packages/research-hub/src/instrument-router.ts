@@ -1,10 +1,12 @@
 import type { ResearchResult } from '@opptrix/shared'
 import {
   fail,
+  hasApplicationCapability,
   instrumentDisplayCode,
-  instrumentRefFromParams,
+  instrumentRefsFromList,
   parseInstrumentRef,
   resolveInstrumentCapabilities,
+  resolveInstrumentFromParams,
   type InstrumentRef,
   type UnifiedInstrumentQuote,
 } from '@opptrix/shared'
@@ -30,6 +32,9 @@ export type InstrumentRouteHandlers = {
   usKline: (symbol: string, count: number) => Promise<ResearchResult>
   regionalKline: (market: 'JP' | 'KR' | 'HK', symbol: string, count: number) => Promise<ResearchResult>
   cryptoKline: (pair: string, count: number) => Promise<ResearchResult>
+  stockCyq: (code: string) => Promise<ResearchResult>
+  institutionRating: (code: string, groups?: string[]) => Promise<ResearchResult>
+  institutionReport: (code: string, groups?: string[]) => Promise<ResearchResult>
   searchLocalInstruments: (
     keyword: string,
     limit: number,
@@ -56,7 +61,7 @@ export async function routeInstrumentSnapshot(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
 ): Promise<ResearchResult> {
-  const ref = instrumentRefFromParams(params)
+  const ref = resolveInstrumentFromParams(params)
   if (!ref) return fail('instrument 或 market+symbol 必填')
   const caps = resolveInstrumentCapabilities(ref)
   if (!caps.capabilities.includes('snapshot')) {
@@ -86,12 +91,15 @@ export async function routeInstrumentQuotes(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
 ): Promise<ResearchResult> {
-  const rawList = params.instruments ?? params.refs
-  const refs: InstrumentRef[] = []
+  const rawList = params.instruments ?? params.refs ?? params.codes
+  let refs: InstrumentRef[] = []
   if (Array.isArray(rawList)) {
-    for (const item of rawList) {
-      const ref = parseInstrumentRef(item)
-      if (ref) refs.push(ref)
+    refs = instrumentRefsFromList(rawList)
+    if (!refs.length) {
+      for (const item of rawList) {
+        const ref = parseInstrumentRef(item)
+        if (ref) refs.push(ref)
+      }
     }
   }
   if (!refs.length) return fail('instruments 必填')
@@ -140,17 +148,19 @@ export async function routeInstrumentChart(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
 ): Promise<ResearchResult> {
-  const ref = instrumentRefFromParams(params)
+  const ref = resolveInstrumentFromParams(params)
   if (!ref) return fail('instrument 必填')
-  if (!resolveInstrumentCapabilities(ref).capabilities.includes('chart_daily')) {
+  const period = String(params.period ?? 'daily')
+  const count = params.count != null ? Number(params.count) : 120
+  const before = String(params.before ?? '')
+  const tail = params.tail != null ? Number(params.tail) : 0
+  const capKey = period === 'intraday' ? 'chart_intraday' : 'chart_daily'
+  if (!resolveInstrumentCapabilities(ref).capabilities.includes(capKey)) {
     return fail('该标的类型暂不支持图表')
   }
 
-  const period = String(params.period ?? 'daily')
-  const count = params.count != null ? Number(params.count) : 120
-
   if (ref.market === 'CN') {
-    return handlers.stockChart(ref.symbol, period, count, '', 0, ref.exchange)
+    return handlers.stockChart(ref.symbol, period, count, before, tail, ref.exchange)
   }
   if (ref.market === 'US') {
     return handlers.usKline(ref.symbol, count)
@@ -176,8 +186,49 @@ export async function routeInstrumentSearch(
 }
 
 export function routeInstrumentCapabilities(params: Record<string, unknown>): ResearchResult {
-  const ref = instrumentRefFromParams(params)
+  const ref = resolveInstrumentFromParams(params)
   if (!ref) return fail('instrument 必填')
   const caps = resolveInstrumentCapabilities(ref)
   return { success: true, message: '标的能力', data: caps, elapsed: 0 }
+}
+
+export async function routeInstrumentCyq(
+  params: Record<string, unknown>,
+  handlers: InstrumentRouteHandlers,
+): Promise<ResearchResult> {
+  const ref = resolveInstrumentFromParams(params)
+  if (!ref) return fail('instrument 或 market+symbol 必填')
+  if (!hasApplicationCapability(ref, 'cyq')) {
+    return fail('该标的暂不支持筹码分布')
+  }
+  if (ref.market !== 'CN') return fail('筹码分布仅支持 A 股')
+  return handlers.stockCyq(ref.symbol)
+}
+
+export async function routeInstrumentInstitutionRating(
+  params: Record<string, unknown>,
+  handlers: InstrumentRouteHandlers,
+): Promise<ResearchResult> {
+  const ref = resolveInstrumentFromParams(params)
+  if (!ref) return fail('instrument 或 market+symbol 必填')
+  if (!hasApplicationCapability(ref, 'institution_rating')) {
+    return fail('该标的暂不支持机构评级')
+  }
+  if (ref.market !== 'CN') return fail('机构评级仅支持 A 股')
+  const groups = Array.isArray(params.groups) ? params.groups.map(String) : undefined
+  return handlers.institutionRating(ref.symbol, groups)
+}
+
+export async function routeInstrumentInstitutionReport(
+  params: Record<string, unknown>,
+  handlers: InstrumentRouteHandlers,
+): Promise<ResearchResult> {
+  const ref = resolveInstrumentFromParams(params)
+  if (!ref) return fail('instrument 或 market+symbol 必填')
+  if (!hasApplicationCapability(ref, 'institution_rating')) {
+    return fail('该标的暂不支持机构研报')
+  }
+  if (ref.market !== 'CN') return fail('机构研报仅支持 A 股')
+  const groups = Array.isArray(params.groups) ? params.groups.map(String) : undefined
+  return handlers.institutionReport(ref.symbol, groups)
 }

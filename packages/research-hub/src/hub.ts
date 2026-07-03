@@ -33,10 +33,11 @@ import {
   type DiscoverStrategyProfile,
   isLikelyCnEquityInput,
   gateInstrumentAnalytics,
-  hasApplicationCapability,
-  instrumentRefFromParams,
-  parseInstrumentRef,
+  resolveInstrumentFromParams,
+  normalizeInstrumentHubParams,
+  instrumentRefsFromList,
   type InstrumentRef,
+  type InstrumentHubCapability,
 } from '@opptrix/shared'
 import {
   quickAssess,
@@ -59,6 +60,9 @@ import {
 import {
   routeInstrumentCapabilities,
   routeInstrumentChart,
+  routeInstrumentCyq,
+  routeInstrumentInstitutionRating,
+  routeInstrumentInstitutionReport,
   routeInstrumentQuotes,
   routeInstrumentSearch,
   routeInstrumentSnapshot,
@@ -141,26 +145,49 @@ export class ResearchHub {
       switch (feature) {
         case 'stock_diagnosis': {
           const ref = this.resolveInstrumentRefFromParams(params)
-          if (ref) return this.instrumentEvaluation(params, t0)
+          if (ref) return this.dispatchInstrumentCapability('evaluation', params, t0)
           return this.stockDiagnosis(String(params.code), String(params.scorecard ?? '综合评估'), t0)
         }
-        case 'institution_rating': return this.institutionRating(String(params.code), params.groups as string[] | undefined, t0)
-        case 'institution_report': return this.institutionReport(String(params.code), params.groups as string[] | undefined, t0)
+        case 'institution_rating':
+          return this.dispatchInstrumentCapability('institution_rating', normalizeInstrumentHubParams(params), t0)
+        case 'institution_report':
+          return this.dispatchInstrumentCapability('institution_report', normalizeInstrumentHubParams(params), t0)
         case 'screening': return this.screening(params, t0)
         case 'strategy_signal': return this.instrumentStrategySignal(params, t0)
         case 'instrument_evaluation': return this.instrumentEvaluation(params, t0)
         case 'instrument_strategy_signal': return this.instrumentStrategySignal(params, t0)
         case 'instrument_indicators': return this.instrumentIndicators(params, t0)
         case 'instrument_strategy_verify': return this.instrumentStrategyVerify(params, t0)
-        case 'trend_brief': return this.trendBrief(String(params.code), params, t0)
-        case 'strategy_verify': return this.strategyVerify(params, t0)
+        case 'trend_brief': {
+          const ref = resolveInstrumentFromParams(params)
+          if (ref && ref.market !== 'CN') {
+            return fail('趋势研判暂仅支持 A 股', t0)
+          }
+          const code = ref?.symbol ?? String(params.code ?? '')
+          return this.trendBrief(code, params, t0)
+        }
+        case 'strategy_verify': {
+          const ref = resolveInstrumentFromParams(params)
+          if (ref) return this.dispatchInstrumentCapability('strategy_verify', { ...params, instrument: ref }, t0)
+          return this.strategyVerify(params, t0)
+        }
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
         case 'industry_mining': return this.industryMining(String(params.industry), t0)
         case 'industry_mermaid': return this.industryMermaid(String(params.industry), t0)
         case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
-        case 'search_stocks': return this.searchStocks(String(params.keyword), t0)
-        case 'stock_quotes': return this.stockQuotes(params.codes as string[] | undefined, t0)
+        case 'search_stocks':
+          return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
+        case 'stock_quotes': {
+          const refs = instrumentRefsFromList(params.codes)
+          if (refs.some(r => r.market !== 'CN')) {
+            return this.instrumentQuotes({ instruments: refs.length ? refs : params.codes, ...params }, t0)
+          }
+          const cnCodes = refs.length
+            ? refs.map(r => r.symbol)
+            : (params.codes as string[] | undefined)
+          return this.stockQuotes(cnCodes, t0)
+        }
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
         case 'watchlist_save': return this.watchlistSave(params, t0)
@@ -183,20 +210,22 @@ export class ResearchHub {
         case 'batch_stock_snapshots': return this.instrumentBatchSnapshots(params, t0)
         case 'instrument_batch_snapshots': return this.instrumentBatchSnapshots(params, t0)
         case 'instrument_cyq': return this.instrumentCyq(params, t0)
-        case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
-        case 'stock_cyq': return this.stockCyq(String(params.code), t0)
-        case 'stock_chart': return this.stockChart(
-          String(params.code),
-          String(params.period ?? 'daily'),
-          Number(params.count ?? 0),
-          String(params.before ?? ''),
-          Number(params.tail ?? 0),
-          typeof params.market === 'string' ? params.market : undefined,
-          t0,
-        )
-        case 'stock_detail': return this.stockDetail(String(params.code), t0)
+        case 'instrument_institution_rating': return this.instrumentInstitutionRating(params, t0)
+        case 'instrument_institution_report': return this.instrumentInstitutionReport(params, t0)
+        case 'stock_kline':
+          return this.instrumentChart(normalizeInstrumentHubParams({ ...params, period: 'daily' }), t0)
+        case 'stock_cyq':
+          return this.instrumentCyq(normalizeInstrumentHubParams(params), t0)
+        case 'stock_chart':
+          return this.instrumentChart(normalizeInstrumentHubParams(params), t0)
+        case 'stock_detail':
+          return this.instrumentSnapshot(normalizeInstrumentHubParams(params), t0)
         case 'backtest': return this.runBacktest(params, t0)
-        case 'latest_evaluation': return this.latestEvaluation(String(params.code), params, t0)
+        case 'latest_evaluation': {
+          const ref = resolveInstrumentFromParams(params)
+          const code = ref?.symbol ?? String(params.code ?? '')
+          return this.latestEvaluation(code, ref ? { ...params, instrument: ref } : params, t0)
+        }
         case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
@@ -220,7 +249,13 @@ export class ResearchHub {
         case 'provider_reload': return await this.providerReload(params, t0)
         case 'provider_installed_list': return this.providerInstalledList(t0)
         case 'etf_list': return this.etfList(params, t0)
-        case 'etf_snapshot': return this.etfSnapshot(String(params.code ?? ''), t0)
+        case 'etf_snapshot': {
+          const code = String(params.code ?? '').trim()
+          const ref = resolveInstrumentFromParams({ ...params, code, market: 'CN' })
+            ?? (code ? { market: 'CN' as const, assetClass: 'ETF' as const, symbol: code } : null)
+          if (!ref) return fail('code 必填', t0)
+          return this.dispatchInstrumentCapability('snapshot', { ...params, instrument: ref }, t0)
+        }
         case 'etf_nav': return this.etfNav(String(params.code ?? ''), t0)
         case 'etf_holdings': return this.etfHoldings(String(params.code ?? ''), t0)
         case 'local_etf_list': return await this.localEtfList(params, t0)
@@ -248,17 +283,49 @@ export class ResearchHub {
         case 'local_hk_screen_schema': return this.localHkScreenSchema(t0)
         case 'local_hk_screen': return this.localHkScreen(params, t0)
         case 'search_etfs': return await this.searchEtfs(params, t0)
-        case 'us_realtime': return await this.usRealtime(String(params.symbol ?? params.code ?? ''), t0)
-        case 'us_kline': return await this.usKline(String(params.symbol ?? params.code ?? ''), params, t0)
-        case 'us_profile': return await this.usProfile(String(params.symbol ?? params.code ?? ''), t0)
-        case 'us_financials': return await this.usFinancials(String(params.symbol ?? params.code ?? ''), params, t0)
-        case 'us_snapshot': return await this.usSnapshot(String(params.symbol ?? params.code ?? ''), t0)
+        case 'us_realtime': {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          if (!ref) return fail('symbol 必填', t0)
+          return this.instrumentQuotes({ instruments: [ref] }, t0)
+        }
+        case 'us_kline': {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          if (!ref) return fail('symbol 必填', t0)
+          return this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
+        }
+        case 'us_profile': {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          if (!ref) return fail('symbol 必填', t0)
+          return this.usProfile(ref.symbol, t0)
+        }
+        case 'us_financials': {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          if (!ref) return fail('symbol 必填', t0)
+          return this.usFinancials(ref.symbol, params, t0)
+        }
+        case 'us_snapshot': {
+          const ref = resolveInstrumentFromParams({ market: 'US', symbol: params.symbol ?? params.code })
+          if (!ref) return fail('symbol 必填', t0)
+          return this.instrumentSnapshot({ instrument: ref }, t0)
+        }
         case 'us_stock_list': return await this.usStockList(params, t0)
         case 'local_us_list': return await this.localUsList(params, t0)
         case 'search_us_stocks': return await this.searchUsStocks(params, t0)
-        case 'crypto_realtime': return await this.cryptoRealtime(String(params.pair ?? params.symbol ?? ''), t0)
-        case 'crypto_kline': return await this.cryptoKline(String(params.pair ?? params.symbol ?? ''), params, t0)
-        case 'crypto_snapshot': return await this.cryptoSnapshot(String(params.pair ?? params.symbol ?? ''), t0)
+        case 'crypto_realtime': {
+          const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
+          if (!ref) return fail('pair 必填', t0)
+          return this.instrumentQuotes({ instruments: [ref] }, t0)
+        }
+        case 'crypto_kline': {
+          const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
+          if (!ref) return fail('pair 必填', t0)
+          return this.instrumentChart({ instrument: ref, count: params.count ?? 120, period: 'daily' }, t0)
+        }
+        case 'crypto_snapshot': {
+          const ref = resolveInstrumentFromParams({ market: 'CRYPTO', pair: params.pair ?? params.symbol })
+          if (!ref) return fail('pair 必填', t0)
+          return this.instrumentSnapshot({ instrument: ref }, t0)
+        }
         case 'crypto_list': return await this.cryptoList(params, t0)
         case 'local_crypto_list': return await this.localCryptoList(params, t0)
         case 'search_crypto_pairs': return await this.searchCryptoPairs(params, t0)
@@ -624,31 +691,49 @@ export class ResearchHub {
   }
 
   private async instrumentCyq(params: Record<string, unknown>, t0: number) {
-    const ref = this.resolveInstrumentRefFromParams(params)
-    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
-    if (!hasApplicationCapability(ref, 'cyq')) {
-      return fail('该标的暂不支持筹码分布', t0)
-    }
-    if (ref.market !== 'CN') {
-      return fail('筹码分布仅支持 A 股', t0)
-    }
-    return this.stockCyq(ref.symbol, t0)
+    return routeInstrumentCyq(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentInstitutionRating(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentInstitutionRating(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentInstitutionReport(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentInstitutionReport(params, this.instrumentRouteHandlers(t0))
   }
 
   private resolveInstrumentRefFromParams(params: Record<string, unknown>): InstrumentRef | null {
-    const fromParams = instrumentRefFromParams(params)
-    if (fromParams) return fromParams
-    const code = String(params.code ?? '').trim()
-    if (!code) return null
-    if (isLikelyCnEquityInput(code)) {
-      const normalized = normalizeCode(code)
-      return {
-        market: 'CN',
-        assetClass: isCnEtfCode(normalized) ? 'ETF' : 'EQUITY',
-        symbol: normalized,
-      }
+    return resolveInstrumentFromParams(params)
+  }
+
+  /** Central instrument capability dispatch — routes to instrument_* handlers */
+  private async dispatchInstrumentCapability(
+    cap: InstrumentHubCapability,
+    params: Record<string, unknown>,
+    t0: number,
+  ): Promise<ResearchResult> {
+    const normalized = normalizeInstrumentHubParams(params)
+    switch (cap) {
+      case 'snapshot': return this.instrumentSnapshot(normalized, t0)
+      case 'quotes': return this.instrumentQuotes(normalized, t0)
+      case 'chart':
+      case 'chart_intraday':
+        return this.instrumentChart(
+          cap === 'chart_intraday' ? { ...normalized, period: 'intraday' } : normalized,
+          t0,
+        )
+      case 'capabilities': return this.instrumentCapabilities(normalized, t0)
+      case 'search': return this.instrumentSearch(normalized, t0)
+      case 'cyq': return this.instrumentCyq(normalized, t0)
+      case 'institution_rating': return this.instrumentInstitutionRating(normalized, t0)
+      case 'institution_report': return this.instrumentInstitutionReport(normalized, t0)
+      case 'evaluation': return this.instrumentEvaluation(normalized, t0)
+      case 'strategy_signal': return this.instrumentStrategySignal(normalized, t0)
+      case 'indicators': return this.instrumentIndicators(normalized, t0)
+      case 'strategy_verify': return this.instrumentStrategyVerify(normalized, t0)
+      case 'batch_snapshots': return this.instrumentBatchSnapshots(normalized, t0)
+      default: return fail(`未知 capability: ${cap}`, t0)
     }
-    return parseInstrumentRef(params.instrument ?? params)
   }
 
   private instrumentAnalyticsHandlers(t0: number): InstrumentAnalyticsRouteHandlers {
@@ -1916,6 +2001,9 @@ export class ResearchHub {
       usKline: (symbol, count) => this.usKline(symbol, { count }, t0),
       regionalKline: (market, symbol, count) => this.regionalKline(market, symbol, { count }, t0),
       cryptoKline: (pair, count) => this.cryptoKline(pair, { count }, t0),
+      stockCyq: code => this.stockCyq(code, t0),
+      institutionRating: (code, groups) => this.institutionRating(code, groups, t0),
+      institutionReport: (code, groups) => this.institutionReport(code, groups, t0),
       searchLocalInstruments: (keyword, limit, markets) => {
         const m = markets as import('@opptrix/shared').Market[] | undefined
         return Promise.resolve(this.searchLocalInstruments({ keyword, limit, markets: m }, t0))
@@ -2309,7 +2397,7 @@ export class ResearchHub {
   }
 
   private async latestEvaluation(code: string, params: Record<string, unknown>, t0: number) {
-    const ref = parseInstrumentRef(params.instrument ?? params)
+    const ref = resolveInstrumentFromParams(params)
       ?? (isLikelyCnEquityInput(code)
         ? { market: 'CN' as const, assetClass: 'EQUITY' as const, symbol: code }
         : null)

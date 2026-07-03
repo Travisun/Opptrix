@@ -94,6 +94,8 @@ const TOOL_LABELS: Record<string, string> = {
   verify_instrument_strategy: '验证策略历史表现',
   get_instrument_latest_evaluation: '读取评估缓存',
   get_instrument_cyq: '分析筹码分布',
+  get_instrument_institution_rating: '汇总机构评级',
+  get_instrument_institution_report: '生成机构评级报告',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -160,6 +162,8 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       return ref ? `分析 ${ref} 策略信号` : '分析策略信号'
     case 'institution_rating':
     case 'institution_report':
+    case 'get_instrument_institution_rating':
+    case 'get_instrument_institution_report':
       return ref ? `汇总 ${ref} 机构观点` : base
     case 'strategy_verify':
     case 'strategy_verify_report':

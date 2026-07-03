@@ -51,6 +51,7 @@ function rowToModel(row: {
   try {
     extra = JSON.parse(row.extra_json) as Record<string, unknown>
   } catch { /* empty */ }
+  delete extra.enabled
   return {
     providerId: row.provider_id,
     enabled: row.enabled !== 0,
@@ -132,6 +133,7 @@ export class ProviderSettingsRepository {
         if (value !== undefined) extra[key] = value
       }
     }
+    delete extra.enabled
     const next: ProviderSettingsRow = {
       providerId,
       enabled: patch.enabled ?? current.enabled,
@@ -275,18 +277,6 @@ export function computeEffectivePriority(
 
 export function tushareSecretsOk(extra: Record<string, unknown>, envToken = ''): boolean {
   return !!String(extra.token ?? envToken).trim()
-}
-
-export function polygonSecretsOk(extra: Record<string, unknown>, envKey = ''): boolean {
-  return !!String(extra.apiKey ?? envKey).trim()
-}
-
-export function fmpSecretsOk(extra: Record<string, unknown>, envKey = ''): boolean {
-  return !!String(extra.apiKey ?? envKey).trim()
-}
-
-export function tiingoSecretsOk(extra: Record<string, unknown>, envToken = ''): boolean {
-  return !!String(extra.apiToken ?? envToken).trim()
 }
 
 export function tickflowSecretsOk(extra: Record<string, unknown>, envKey = ''): boolean {

@@ -79,6 +79,79 @@ import type {
   PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
+import { cnEquityRef } from '../market/instrument'
+import type { InstrumentRef, UnifiedInstrumentQuote } from '../types/instrument'
+import type {
+  ChartPeriod,
+  ChipDistributionPoint,
+  MarketQuote,
+  OhlcChartBar,
+  StockChartData,
+  StockDetailData,
+  StockKlineBar,
+  StockKlineData,
+  StockQuotesData,
+} from '../types/market'
+
+const INSTRUMENT_JSON_HEADERS = { 'Content-Type': 'application/json' } as const
+
+type InstrumentEnvelope<T> = { success: boolean; data?: T; message?: string }
+
+function toApiResponse<T>(feature: string, resp: InstrumentEnvelope<T>, fallback: T): ApiResponse<T> {
+  return {
+    success: resp.success,
+    feature,
+    data: (resp.success && resp.data != null ? resp.data : fallback) as T,
+    message: resp.message,
+  }
+}
+
+function unifiedQuoteToMarketQuote(q: UnifiedInstrumentQuote): MarketQuote {
+  return {
+    code: q.code,
+    name: q.name,
+    price: q.price,
+    changePct: q.change_pct,
+    pe: null,
+    pb: null,
+    turnoverRate: null,
+    volume: q.volume,
+    amount: q.amount,
+  }
+}
+
+async function postInstrument<T>(
+  path: string,
+  body: Record<string, unknown>,
+  signal?: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT,
+): Promise<InstrumentEnvelope<T>> {
+  return jsonFetch<InstrumentEnvelope<T>>(
+    path,
+    {
+      method: 'POST',
+      headers: INSTRUMENT_JSON_HEADERS,
+      body: JSON.stringify(body),
+      signal,
+    },
+    timeoutMs,
+  )
+}
+
+function ohlcBarsToKlines(code: string, bars: StockChartData['bars']): StockKlineBar[] {
+  return (bars as OhlcChartBar[]).map(bar => ({
+    code,
+    date: bar.time,
+    open: bar.open,
+    close: bar.close,
+    high: bar.high,
+    low: bar.low,
+    volume: bar.volume,
+    amount: bar.amount,
+    changePct: bar.changePct,
+    turnoverRate: bar.turnoverRate,
+  }))
+}
 
 export const research = {
   diagnose: (code: string, scorecard?: string) =>
@@ -145,39 +218,91 @@ export const research = {
   searchStocks: (keyword: string) =>
     apiCall<SearchStocksData>('search_stocks', { keyword }),
 
-  stockQuotes: (codes: string[]) =>
-    apiCall<import('../types/market').StockQuotesData>('stock_quotes', { codes }),
+  stockQuotes: async (codes: string[]) => {
+    const instruments = codes.map(c => cnEquityRef(c))
+    const resp = await postInstrument<{ quotes: UnifiedInstrumentQuote[] }>(
+      '/instruments/quotes',
+      { instruments },
+    )
+    return toApiResponse<StockQuotesData>(
+      'stock_quotes',
+      resp.success && resp.data?.quotes
+        ? { ...resp, data: { quotes: resp.data.quotes.map(unifiedQuoteToMarketQuote) } }
+        : resp,
+      { quotes: [] },
+    )
+  },
 
   watchlistRadar: (codes: string[], signal?: AbortSignal) =>
     apiCall<import('../types/schemas').WatchlistRadarData>('watchlist_radar', { codes }, { signal }, 15000),
 
-  stockKline: (code: string, count = 90) =>
-    apiCall<import('../types/market').StockKlineData>('stock_kline', { code, count }),
+  stockKline: async (code: string, count = 90) => {
+    const instrument = cnEquityRef(code)
+    const resp = await postInstrument<StockChartData>(
+      '/instruments/chart',
+      { instrument, period: 'daily', count },
+    )
+    if (!resp.success || !resp.data) {
+      return toApiResponse<StockKlineData>('stock_kline', resp, { code, klines: [] })
+    }
+    return {
+      success: true,
+      feature: 'stock_kline',
+      data: { code, klines: ohlcBarsToKlines(code, resp.data.bars) },
+      message: resp.message,
+    }
+  },
 
-  stockChart: (
+  stockChart: async (
     code: string,
-    period: import('../types/market').ChartPeriod,
+    period: ChartPeriod,
     count?: number,
     signal?: AbortSignal,
     before?: string,
     tail?: number,
-  ) =>
-    apiCall<import('../types/market').StockChartData>(
-      'stock_chart',
-      { code, period, count, before, tail },
-      { signal },
-    ),
+  ) => {
+    const instrument = cnEquityRef(code)
+    const body: Record<string, unknown> = { instrument, period }
+    if (count != null) body.count = count
+    if (before) body.before = before
+    if (tail != null) body.tail = tail
+    const resp = await postInstrument<StockChartData>('/instruments/chart', body, signal)
+    return toApiResponse<StockChartData>('stock_chart', resp, {
+      code,
+      name: code,
+      period,
+      preClose: null,
+      isTradingDay: false,
+      bars: [],
+      indicators: [],
+    })
+  },
 
-  stockCyq: (code: string, signal?: AbortSignal) =>
-    apiCall<{ code: string; rows: import('../types/market').ChipDistributionPoint[]; latest: import('../types/market').ChipDistributionPoint }>(
-      'stock_cyq',
-      { code },
-      { signal },
-      15000,
-    ),
+  stockCyq: async (code: string, signal?: AbortSignal) => {
+    const instrument = cnEquityRef(code)
+    const resp = await postInstrument<{
+      code: string
+      rows: ChipDistributionPoint[]
+      latest: ChipDistributionPoint
+    }>('/instruments/cyq', { instrument }, signal, 15000)
+    return toApiResponse('stock_cyq', resp, {
+      code,
+      rows: [],
+      latest: { date: '', benefitPart: 0, avgCost: 0, cost90Low: 0, cost90High: 0, cost90Con: 0, cost70Low: 0, cost70High: 0, cost70Con: 0 },
+    })
+  },
 
-  stockDetail: (code: string) =>
-    apiCall<import('../types/market').StockDetailData>('stock_detail', { code }),
+  stockDetail: async (code: string) => {
+    const instrument = cnEquityRef(code)
+    const resp = await postInstrument<StockDetailData>('/instruments/snapshot', { instrument })
+    return toApiResponse<StockDetailData>('stock_detail', resp, {
+      code,
+      name: code,
+      quote: null,
+      profile: null,
+      financial: null,
+    })
+  },
 
   etfList: (code = '') =>
     apiCall<{ items: import('../types/market').EtfListItem[]; count: number; source?: string }>(
@@ -231,33 +356,54 @@ export const research = {
       counts: { cn_stocks: number; cn_etfs: number; us: number; crypto: number }
     } }>('/instruments/summary'),
 
-  instrumentSnapshot: (instrument: import('../types/instrument').InstrumentRef, signal?: AbortSignal) =>
-    jsonFetch<{ success: boolean; data?: unknown; message?: string }>(
-      '/instruments/snapshot',
-      { method: 'POST', body: JSON.stringify({ instrument }), signal },
-    ),
+  instrumentSnapshot: (instrument: InstrumentRef, signal?: AbortSignal) =>
+    postInstrument<unknown>('/instruments/snapshot', { instrument }, signal),
 
-  instrumentQuotes: (instruments: import('../types/instrument').InstrumentRef[], signal?: AbortSignal) =>
-    jsonFetch<{ success: boolean; data?: { quotes: import('../types/instrument').UnifiedInstrumentQuote[] }; message?: string }>(
+  instrumentQuotes: (instruments: InstrumentRef[], signal?: AbortSignal) =>
+    postInstrument<{ quotes: UnifiedInstrumentQuote[] }>(
       '/instruments/quotes',
-      { method: 'POST', body: JSON.stringify({ instruments }), signal },
+      { instruments },
+      signal,
     ),
 
   instrumentChart: (
-    instrument: import('../types/instrument').InstrumentRef,
-    period: 'daily' | 'weekly' | 'monthly' | 'intraday' = 'daily',
+    instrument: InstrumentRef,
+    period: ChartPeriod | 'daily' | 'weekly' | 'monthly' | 'intraday' = 'daily',
     count = 120,
     signal?: AbortSignal,
-  ) =>
-    jsonFetch<{ success: boolean; data?: unknown; message?: string }>(
-      '/instruments/chart',
-      { method: 'POST', body: JSON.stringify({ instrument, period, count }), signal },
+    before?: string,
+    tail?: number,
+  ) => {
+    const body: Record<string, unknown> = { instrument, period, count }
+    if (before) body.before = before
+    if (tail != null) body.tail = tail
+    return postInstrument<unknown>('/instruments/chart', body, signal)
+  },
+
+  instrumentCapabilities: (instrument: InstrumentRef, signal?: AbortSignal) =>
+    postInstrument<import('../types/instrument').InstrumentCapabilitySet>(
+      '/instruments/capabilities',
+      { instrument },
+      signal,
     ),
 
-  instrumentCapabilities: (instrument: import('../types/instrument').InstrumentRef, signal?: AbortSignal) =>
-    jsonFetch<{ success: boolean; data?: import('../types/instrument').InstrumentCapabilitySet; message?: string }>(
-      '/instruments/capabilities',
-      { method: 'POST', body: JSON.stringify({ instrument }), signal },
+  instrumentCyq: (instrument: InstrumentRef, signal?: AbortSignal) =>
+    postInstrument<{
+      code: string
+      rows: ChipDistributionPoint[]
+      latest: ChipDistributionPoint
+    }>('/instruments/cyq', { instrument }, signal, 15000),
+
+  instrumentInstitutionRating: (
+    instrument: InstrumentRef,
+    groups?: string[],
+    signal?: AbortSignal,
+  ) =>
+    postInstrument<InstitutionRatingData>(
+      '/instruments/institution-rating',
+      { instrument, ...(groups?.length ? { groups } : {}) },
+      signal,
+      20000,
     ),
 
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
@@ -668,7 +814,7 @@ export async function saveProviderConfig(
     extra?: Record<string, unknown>
   },
 ) {
-  return jsonFetch<{ success: boolean; data: import('../types/provider').PublicProviderRuntime; message?: string }>(
+  const resp = await jsonFetch<{ success: boolean; data: import('../types/provider').PublicProviderRuntime; message?: string }>(
     `/data/providers/${encodeURIComponent(providerId)}/config`,
     {
       method: 'PUT',
@@ -676,6 +822,10 @@ export async function saveProviderConfig(
       body: JSON.stringify(payload),
     },
   )
+  if (!resp.success || !resp.data) {
+    throw new Error(resp.message ?? '保存失败')
+  }
+  return resp.data
 }
 
 export async function reorderProviderCatalog(marketGroup: string, providerIds: string[]) {
@@ -723,7 +873,7 @@ export async function saveProviderBindingOverride(
 }
 
 export async function testProviderConfig(providerId: string, extra?: Record<string, unknown>) {
-  return jsonFetch<{ success: boolean; data: { ok: boolean; message: string }; message?: string }>(
+  const resp = await jsonFetch<{ success: boolean; data: { ok: boolean; message: string }; message?: string }>(
     `/data/providers/${encodeURIComponent(providerId)}/test`,
     {
       method: 'POST',
@@ -731,6 +881,10 @@ export async function testProviderConfig(providerId: string, extra?: Record<stri
       body: JSON.stringify(extra ?? {}),
     },
   )
+  if (!resp.data) {
+    throw new Error(resp.message ?? '测试连接失败')
+  }
+  return resp
 }
 
 export async function listInstalledProviders() {

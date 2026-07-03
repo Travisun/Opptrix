@@ -1,18 +1,20 @@
 import { DriverRegistry } from '../core/registry.js'
 import { TushareDriver } from './tushare/driver.js'
-import { PolygonDriver } from './polygon/driver.js'
-import { TiingoDriver } from './tiingo/driver.js'
-import { FmpDriver } from './fmp/driver.js'
 import { TickflowDriver } from './tickflow/driver.js'
+import { BinanceDriver } from './binance/driver.js'
+import { OkxDriver } from './okx/driver.js'
+import { BaostockDriver } from './baostock/driver.js'
+import { ZzshareDriver } from './zzshare/driver.js'
 
-/** Register built-in data providers (official API-key services only). */
+/** Register built-in data providers (Tushare, TickFlow, Binance, OKX, Baostock, Zzshare). */
 export function registerAllDrivers(registry: DriverRegistry) {
   const drivers = [
     new TushareDriver(),
-    new PolygonDriver(),
-    new TiingoDriver(),
-    new FmpDriver(),
     new TickflowDriver(),
+    new BinanceDriver(),
+    new OkxDriver(),
+    new BaostockDriver(),
+    new ZzshareDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -20,5 +22,9 @@ export function registerAllDrivers(registry: DriverRegistry) {
 
 export {
   TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver, TickflowDriver,
+  TickflowDriver,
+  BinanceDriver,
+  OkxDriver,
+  BaostockDriver,
+  ZzshareDriver,
 }

@@ -1,8 +1,9 @@
-/** US equity providers — Phase 4 market shim re-export */
+/** US / global equity providers — TickFlow shim */
 export {
-  PolygonDriver,
-  TiingoDriver,
-  FmpDriver,
+  TickflowDriver,
+  testTickflowConnection,
+  loadTickflowConfig,
+  isTickflowEnabled,
   normalizeUsSymbol,
   isValidUsSymbol,
   usTodayString,

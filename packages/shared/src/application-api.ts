@@ -9,6 +9,10 @@ export const APPLICATION_HUB_FEATURES = {
   instrumentChart: 'instrument_chart',
   instrumentSearch: 'instrument_search',
   instrumentCapabilities: 'instrument_capabilities',
+  instrumentCyq: 'instrument_cyq',
+  instrumentInstitutionRating: 'instrument_institution_rating',
+  instrumentInstitutionReport: 'instrument_institution_report',
+  instrumentBatchSnapshots: 'instrument_batch_snapshots',
 
   /** 发现 / 策略 */
   discoverProfiles: 'discover_profiles',

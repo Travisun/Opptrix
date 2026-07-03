@@ -15,18 +15,13 @@ const DEFAULTS: TickflowRuntimeConfig = {
   baseUrl: TICKFLOW_DEFAULT_BASE_URL,
 }
 
-function normalizeBaseUrl(raw: string): string {
-  const trimmed = raw.trim()
-  return (trimmed || TICKFLOW_DEFAULT_BASE_URL).replace(/\/$/, '')
-}
-
 export function loadTickflowConfig(): TickflowRuntimeConfig {
   try {
     const row = getProviderConfigStore().getRuntime('tickflow')
     return {
       enabled: row.enabled,
       apiKey: String(row.extra.apiKey ?? DEFAULTS.apiKey).trim(),
-      baseUrl: normalizeBaseUrl(String(row.extra.baseUrl ?? DEFAULTS.baseUrl)),
+      baseUrl: TICKFLOW_DEFAULT_BASE_URL,
     }
   } catch {
     return { ...DEFAULTS }

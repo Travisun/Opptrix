@@ -16,6 +16,11 @@ import { normalizeUsSymbol } from './utils/us-market.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
 import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
+import {
+  resolveInstrumentQueryPlan,
+  unsupportedInstrumentCapabilityMessage,
+  type InstrumentDataCapability,
+} from './core/instrument-query.js'
 import type {
   Dividend, DragonTiger, GlobalIndex, IndexKline, IndexRealtime,
   LimitUpDown, MarketMoneyFlow, MoneyFlow, NewsItem, SectorMoneyFlow,
@@ -32,13 +37,7 @@ import {
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
-export type InstrumentDataCapability =
-  | 'realtime'
-  | 'kline'
-  | 'snapshot'
-  | 'profile'
-  | 'financials'
-  | 'stock_list'
+export type { InstrumentDataCapability } from './core/instrument-query.js'
 
 /** Multi-market data engine — provider fallback + cache (canonical name: MarketDataEngine) */
 export class MarketDataEngine {
@@ -564,7 +563,7 @@ export class MarketDataEngine {
     }
   }
 
-  /** DataEngine 收敛入口 — 按 InstrumentRef + capability 路由 */
+  /** DataEngine 收敛入口 — 按 InstrumentRef + capability 经 Registry 路由 */
   queryInstrumentData(
     ref: InstrumentRef,
     capability: InstrumentDataCapability,
@@ -573,41 +572,47 @@ export class MarketDataEngine {
       keyword?: string
       reportDate?: string
       reportType?: string
+      period?: string
     },
   ) {
-    if (ref.market === 'CN' && ref.assetClass === 'EQUITY') {
-      if (capability === 'realtime') return this.realtime(ref.symbol)
-      if (capability === 'kline') return this.kline(ref.symbol, opts?.count ?? 120)
-      if (capability === 'snapshot') return this.realtime(ref.symbol)
-      return Promise.resolve({ success: false, error: `CN 不支持 capability: ${capability}` })
+    const plan = resolveInstrumentQueryPlan(ref, capability, opts)
+    if (!plan) {
+      return Promise.resolve({
+        success: false,
+        error: unsupportedInstrumentCapabilityMessage(ref, capability),
+      })
     }
-    if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
-      if (capability === 'realtime') return this.usRealtime(ref.symbol)
-      if (capability === 'kline') return this.usKline(ref.symbol, opts?.count ?? 120)
-      if (capability === 'snapshot') return this.usSnapshot(ref.symbol)
-      if (capability === 'profile') return this.usProfile(ref.symbol)
-      if (capability === 'financials') {
-        return this.usFinancials(ref.symbol, opts?.reportDate ?? '', opts?.reportType ?? 'annual')
-      }
-      if (capability === 'stock_list') return this.usStockList(opts?.keyword ?? '')
-      return Promise.resolve({ success: false, error: `US 不支持 capability: ${capability}` })
+
+    switch (plan.kind) {
+      case 'cn_realtime':
+        return this.realtime(plan.symbol)
+      case 'cn_kline':
+        if (plan.period && plan.period !== 'daily') {
+          return this.kline(plan.symbol, plan.period, '', '', plan.count)
+        }
+        return this.kline(plan.symbol, plan.count)
+      case 'composite_snapshot':
+        if (plan.market === 'US') return this.usSnapshot(plan.symbol)
+        if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
+        if (isRegionalEquityMarket(plan.market)) {
+          return this.regionalSnapshot(plan.market, plan.symbol)
+        }
+        return Promise.resolve({ success: false, error: `不支持 snapshot: ${plan.market}` })
+      case 'registry':
+        return this.qScoped(
+          plan.market,
+          plan.assetClass,
+          plan.capability,
+          plan.method,
+          plan.useCache,
+          ...plan.args,
+        )
+      default:
+        return Promise.resolve({
+          success: false,
+          error: unsupportedInstrumentCapabilityMessage(ref, capability),
+        })
     }
-    if (isRegionalEquityMarket(ref.market)) {
-      if (capability === 'realtime') return this.regionalRealtime(ref.market, ref.symbol)
-      if (capability === 'kline') return this.regionalKline(ref.market, ref.symbol, opts?.count ?? 120)
-      if (capability === 'snapshot') return this.regionalSnapshot(ref.market, ref.symbol)
-      if (capability === 'stock_list') return this.regionalStockList(ref.market, opts?.keyword ?? '')
-      return Promise.resolve({ success: false, error: `${ref.market} 不支持 capability: ${capability}` })
-    }
-    if (ref.market === 'CRYPTO') {
-      const pair = ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
-      if (capability === 'realtime') return this.cryptoRealtime(pair)
-      if (capability === 'kline') return this.cryptoKline(pair, opts?.count ?? 120)
-      if (capability === 'snapshot') return this.cryptoSnapshot(pair)
-      if (capability === 'stock_list') return this.cryptoList(opts?.keyword ?? '')
-      return Promise.resolve({ success: false, error: `Crypto 不支持 capability: ${capability}` })
-    }
-    return Promise.resolve({ success: false, error: `不支持的市场 ${ref.market}` })
   }
 
   // ── Crypto SPOT (Phase 3) ──
@@ -789,17 +794,21 @@ export * from './core/schema.js'
 export { BaseDriver, CAP_METHOD } from './providers/common/base.js'
 export {
   TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver,
+  TickflowDriver,
+  BinanceDriver,
+  OkxDriver,
+  BaostockDriver,
+  ZzshareDriver,
   registerAllDrivers,
 } from './providers/register.js'
 export { loadTushareConfig, isTushareEnabled, saveTushareConfig, publicTushareConfig } from './providers/tushare/config.js'
 export { testTushareConnection } from './providers/tushare/api/client.js'
-export { testPolygonConnection } from './providers/polygon/api/client.js'
-export { testTiingoConnection } from './providers/tiingo/api/client.js'
-export { testFmpConnection } from './providers/fmp/api/client.js'
-export { loadPolygonConfig, isPolygonEnabled } from './providers/polygon/config.js'
-export { loadTiingoConfig, isTiingoEnabled } from './providers/tiingo/config.js'
-export { loadFmpConfig, isFmpEnabled } from './providers/fmp/config.js'
+export { testTickflowConnection } from './providers/tickflow/api/client.js'
+export { testBaostockConnection } from './providers/baostock/api/client.js'
+export { testZzshareConnection } from './providers/zzshare/api/client.js'
+export { loadTickflowConfig, isTickflowEnabled } from './providers/tickflow/config.js'
+export { loadBaostockConfig, isBaostockEnabled } from './providers/baostock/config.js'
+export { loadZzshareConfig, isZzshareEnabled } from './providers/zzshare/config.js'
 export { getProviderConfigStore, ProviderConfigStore } from './providers/config-store.js'
 export { ProviderCatalogService, createProviderCatalog } from './providers/catalog.js'
 export { PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest } from './providers/manifests.js'

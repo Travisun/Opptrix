@@ -1,4 +1,3 @@
-import { httpGet } from '../../../utils/http.js'
 import { loadTickflowConfig, TICKFLOW_DEFAULT_BASE_URL } from '../config.js'
 
 export type TickflowRegion = 'CN' | 'US' | 'HK'
@@ -226,14 +225,20 @@ export class TickflowClient {
   }
 
   async get(path: string, query: Record<string, QueryValue> = {}): Promise<Record<string, unknown>> {
-    const url = this.url(path)
+    const qs = new URLSearchParams(this.queryParams(query))
+    const suffix = qs.toString()
+    const url = suffix ? `${this.url(path)}?${suffix}` : this.url(path)
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 20000)
     try {
-      return await httpGet(url, this.queryParams(query), 20000, this.headers())
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      if (msg.includes('HTTP 401')) throw new Error('TickFlow API Key 无效或未授权')
-      if (msg.includes('HTTP 429')) throw new Error('TickFlow 请求过于频繁，请稍后再试')
-      throw e
+      const resp = await fetch(url, {
+        method: 'GET',
+        headers: this.headers(),
+        signal: controller.signal,
+      })
+      return this.handleResponse(resp)
+    } finally {
+      clearTimeout(timer)
     }
   }
 
@@ -372,11 +377,10 @@ export class TickflowClient {
 
 export async function testTickflowConnection(
   apiKey: string,
-  baseUrl?: string,
 ): Promise<{ ok: boolean; message: string }> {
   const key = apiKey.trim()
   if (!key) return { ok: false, message: 'API Key 未配置' }
-  const client = new TickflowClient(key, (baseUrl?.trim() || TICKFLOW_DEFAULT_BASE_URL).replace(/\/$/, ''))
+  const client = new TickflowClient(key, TICKFLOW_DEFAULT_BASE_URL)
   try {
     const json = await client.getExchanges()
     const data = json.data

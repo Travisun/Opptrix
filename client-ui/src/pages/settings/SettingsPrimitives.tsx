@@ -192,6 +192,18 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     boxSizing: 'border-box',
   },
+  credentialWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+    width: '100%',
+  },
+  credentialHint: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    paddingLeft: '2px',
+  },
   credentialInput: {
     flex: '1 1 0',
     minWidth: 0,
@@ -342,6 +354,8 @@ export function SettingsCredentialRow({
   saveDisabled = false,
   testDisabled = false,
   revealWhenFilled = false,
+  configured = false,
+  preview,
 }: {
   value: string
   onChange: (value: string) => void
@@ -354,10 +368,13 @@ export function SettingsCredentialRow({
   testDisabled?: boolean
   /** 为 true 时，加载已有密钥后自动明文展示 */
   revealWhenFilled?: boolean
+  configured?: boolean
+  preview?: string
 }) {
   const s = useStyles()
   const userToggledVisibility = useRef(false)
   const [visible, setVisible] = useState(false)
+  const showConfiguredHint = configured && !value.trim()
 
   useEffect(() => {
     if (revealWhenFilled && value && !userToggledVisibility.current) {
@@ -366,47 +383,54 @@ export function SettingsCredentialRow({
   }, [value, revealWhenFilled])
 
   return (
-    <div className={mergeClasses(s.credentialCombo, 'opptrix-input-shell', 'opptrix-settings-inline-input', 'opptrix-credential-combo')}>
-      <Input
-        className={mergeClasses(s.credentialInput, 'opptrix-settings-field-input')}
-        appearance="filled-darker"
-        size="medium"
-        type={visible ? 'text' : 'password'}
-        value={value}
-        placeholder={placeholder}
-        onChange={(_, d) => onChange(d.value ?? '')}
-      />
-      <div className={s.credentialSegment}>
-        <OpptrixButton
-          variant="icon"
-          aria-label={visible ? '隐藏密钥' : '显示密钥'}
-          icon={visible ? <EyeOffRegular fontSize={16} /> : <EyeRegular fontSize={16} />}
-          onClick={() => {
-            userToggledVisibility.current = true
-            setVisible(v => !v)
-          }}
+    <div className={s.credentialWrap}>
+      <div className={mergeClasses(s.credentialCombo, 'opptrix-input-shell', 'opptrix-settings-inline-input', 'opptrix-credential-combo')}>
+        <Input
+          className={mergeClasses(s.credentialInput, 'opptrix-settings-field-input')}
+          appearance="filled-darker"
+          size="medium"
+          type={visible ? 'text' : 'password'}
+          value={value}
+          placeholder={placeholder}
+          onChange={(_, d) => onChange(d.value ?? '')}
         />
+        <div className={s.credentialSegment}>
+          <OpptrixButton
+            variant="icon"
+            aria-label={visible ? '隐藏密钥' : '显示密钥'}
+            icon={visible ? <EyeOffRegular fontSize={16} /> : <EyeRegular fontSize={16} />}
+            onClick={() => {
+              userToggledVisibility.current = true
+              setVisible(v => !v)
+            }}
+          />
+        </div>
+        <div className={s.credentialSegment}>
+          <OpptrixButton
+            variant="ghost"
+            className={s.credentialActionBtn}
+            disabled={testing || testDisabled}
+            onClick={onTest}
+          >
+            {testing ? '测试中…' : '测试'}
+          </OpptrixButton>
+        </div>
+        <div className={s.credentialSegment}>
+          <OpptrixButton
+            variant="primary"
+            className={s.credentialSaveBtn}
+            disabled={saving || saveDisabled}
+            onClick={onSave}
+          >
+            {saving ? '保存中…' : '保存'}
+          </OpptrixButton>
+        </div>
       </div>
-      <div className={s.credentialSegment}>
-        <OpptrixButton
-          variant="ghost"
-          className={s.credentialActionBtn}
-          disabled={testing || testDisabled}
-          onClick={onTest}
-        >
-          {testing ? '测试中…' : '测试'}
-        </OpptrixButton>
-      </div>
-      <div className={s.credentialSegment}>
-        <OpptrixButton
-          variant="primary"
-          className={s.credentialSaveBtn}
-          disabled={saving || saveDisabled}
-          onClick={onSave}
-        >
-          {saving ? '保存中…' : '保存'}
-        </OpptrixButton>
-      </div>
+      {showConfiguredHint && (
+        <Text className={s.credentialHint} block>
+          {preview ? `当前密钥：${preview}。如需更换，输入新 Key 后点保存。` : '密钥已保存在本机，如需更换请输入新 Key 后点保存。'}
+        </Text>
+      )}
     </div>
   )
 }

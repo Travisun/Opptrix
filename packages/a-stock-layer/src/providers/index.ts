@@ -42,8 +42,9 @@ export {
 export type { InstalledProviderEntry, InstalledProvidersIndex } from './installer.js'
 
 export * from './tushare/index.js'
-export * from './polygon/index.js'
-export * from './tiingo/index.js'
-export * from './fmp/index.js'
 export * from './tickflow/index.js'
+export * from './binance/index.js'
+export * from './okx/index.js'
+export * from './baostock/index.js'
+export * from './zzshare/index.js'
 export * from './tdx/index.js'

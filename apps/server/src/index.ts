@@ -631,6 +631,21 @@ app.post<{ Body: Record<string, unknown> }>('/api/instruments/capabilities', asy
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/cyq', async (req) => {
+  const r = await hub.dispatch('instrument_cyq', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/institution-rating', async (req) => {
+  const r = await hub.dispatch('instrument_institution_rating', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/institution-report', async (req) => {
+  const r = await hub.dispatch('instrument_institution_report', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.get('/api/us/screen/schema', async () => {
   const r = await hub.dispatch('local_us_screen_schema', {})
   return { success: r.success, data: r.data, message: r.message }

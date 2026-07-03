@@ -1,5 +1,5 @@
 /** 数据层 / 分析工具元数据：用途说明与调用规范（OpenAI tools + MCP 共用） */
-import { discoverMiningToolNamesForProfile, isDiscoverStrategyProfile } from '@opptrix/shared'
+import { discoverMiningToolNamesForProfile, INSTRUMENT_HUB_FEATURE, isDiscoverStrategyProfile } from '@opptrix/shared'
 import { UNIFIED_MINING_INSTRUMENT_TOOLS } from './unified-mcp-tools.js'
 
 export interface ToolMeta {
@@ -96,14 +96,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: '可选 trade_date；行业级聚合，不替代单股 detail。',
   },
   batch_stock_snapshots: {
-    hubFeature: 'batch_stock_snapshots',
+    hubFeature: INSTRUMENT_HUB_FEATURE.batch_snapshots,
     miningEligible: true,
     deprecated: true,
     usageGuide: '初选后批量获取候选截面（行业、评分、PE/PB、关键因子）；挖掘前首选批量工具。',
     compliance: 'codes 数组一次传入，建议 ≤ 80；禁止对同一 codes 列表重复调用；跨市场请用 batch_instrument_snapshots。',
   },
   get_stock_quotes: {
-    hubFeature: 'stock_quotes',
+    hubFeature: INSTRUMENT_HUB_FEATURE.quotes,
     miningEligible: true,
     deprecated: true,
     usageGuide: '需要最新价、涨跌幅、量比等盘中字段；snapshots 不含实时价时补充。',
@@ -122,28 +122,28 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: 'codes 批量或省略；适合 5–30 只；深度分析仍须 get_stock_detail。',
   },
   get_stock_kline: {
-    hubFeature: 'stock_kline',
+    hubFeature: INSTRUMENT_HUB_FEATURE.chart,
     miningEligible: true,
     deprecated: true,
     usageGuide: '验证趋势、动量、技术形态；策略含动量/突破/均线逻辑时使用。',
     compliance: '单股；count ≤ 240；勿对全部候选逐只拉取，仅对 shortlisted 使用。',
   },
   get_stock_cyq: {
-    hubFeature: 'stock_cyq',
+    hubFeature: INSTRUMENT_HUB_FEATURE.cyq,
     miningEligible: true,
     deprecated: true,
     usageGuide: '筹码分布、获利盘、成本区分析；适合短线/博弈或估值辅助。',
     compliance: '单股深度；仅对最终 3–8 只候选调用；请改用 get_instrument_cyq。',
   },
   get_stock_chart: {
-    hubFeature: 'stock_chart',
+    hubFeature: INSTRUMENT_HUB_FEATURE.chart,
     miningEligible: true,
     deprecated: true,
     usageGuide: '需要多周期 K 线（周/月/分钟）时使用；日 K 优先 get_instrument_chart。',
     compliance: '单股；指定 period；控制 count 避免超大响应。',
   },
   get_stock_detail: {
-    hubFeature: 'stock_detail',
+    hubFeature: INSTRUMENT_HUB_FEATURE.snapshot,
     miningEligible: true,
     deprecated: true,
     usageGuide: 'snapshots/雷达信息不足时的深度聚合：财务、新闻、资金流、股东、F10 摘要等。',
@@ -204,14 +204,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: '只读 schema。',
   },
   get_us_stock_quote: {
-    hubFeature: 'us_realtime',
+    hubFeature: INSTRUMENT_HUB_FEATURE.quotes,
     miningEligible: true,
     deprecated: true,
     usageGuide: '获取单只美股实时/近收盘行情（价量、涨跌幅）；需 symbol 如 AAPL。',
-    compliance: 'symbol 为美股 ticker；Polygon 未配置时走 Yahoo 回退。',
+    compliance: 'symbol 为美股 ticker；需 TickFlow 已配置。',
   },
   get_us_stock_kline: {
-    hubFeature: 'us_kline',
+    hubFeature: INSTRUMENT_HUB_FEATURE.chart,
     miningEligible: true,
     deprecated: true,
     usageGuide: '美股日 K 线序列；验证趋势或动量时使用。',
@@ -221,18 +221,18 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'us_profile',
     miningEligible: true,
     deprecated: true,
-    usageGuide: '美股公司概况（交易所、行业、市值等）；需 Polygon 已配置。',
+    usageGuide: '美股公司概况（交易所、行业、市值等）；需 TickFlow 已配置。',
     compliance: '单只 symbol；无 Profile 时说明数据源限制。',
   },
   get_us_stock_financials: {
     hubFeature: 'us_financials',
     miningEligible: true,
     deprecated: true,
-    usageGuide: '美股财报摘要（Polygon financials）；annual/quarter 可选。',
-    compliance: '单只 symbol；需 Polygon API Key；YoY 字段暂为空。',
+    usageGuide: '美股财报摘要（TickFlow financials）；annual/quarter 可选。',
+    compliance: '单只 symbol；需 TickFlow API Key；YoY 字段暂为空。',
   },
   get_us_stock_snapshot: {
-    hubFeature: 'us_snapshot',
+    hubFeature: INSTRUMENT_HUB_FEATURE.snapshot,
     miningEligible: true,
     deprecated: true,
     usageGuide: '单只美股聚合快照：概况 + 行情 + 近期 K 线；分析美股首选入口。',
@@ -246,21 +246,21 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: 'keyword ≥1 字符；结果 symbol 用于 get_instrument_snapshot。',
   },
   get_crypto_quote: {
-    hubFeature: 'crypto_realtime',
+    hubFeature: INSTRUMENT_HUB_FEATURE.quotes,
     miningEligible: true,
     deprecated: true,
     usageGuide: 'Crypto 交易对实时行情（7×24）；如 BTC/USDT。',
     compliance: 'pair 必填；支持 BTC/USDT、BTC-USDT、BTCUSDT 写法。',
   },
   get_crypto_kline: {
-    hubFeature: 'crypto_kline',
+    hubFeature: INSTRUMENT_HUB_FEATURE.chart,
     miningEligible: true,
     deprecated: true,
     usageGuide: 'Crypto 日 K 线；7×24 市场，缓存 TTL 较短。',
     compliance: 'pair 必填；count 默认 180。',
   },
   get_crypto_snapshot: {
-    hubFeature: 'crypto_snapshot',
+    hubFeature: INSTRUMENT_HUB_FEATURE.snapshot,
     miningEligible: true,
     deprecated: true,
     usageGuide: 'Crypto 聚合快照：行情 + 近期 K 线；分析 Crypto 首选入口。',
@@ -400,10 +400,22 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: '单只只读；无缓存时再调用 evaluate_instrument。',
   },
   get_instrument_cyq: {
-    hubFeature: 'instrument_cyq',
+    hubFeature: INSTRUMENT_HUB_FEATURE.cyq,
     miningEligible: true,
     usageGuide: `A 股筹码分布（获利盘、成本区）；仅 CN 市场。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；market 须为 CN；仅对最终 3–8 只候选调用。',
+  },
+  get_instrument_institution_rating: {
+    hubFeature: INSTRUMENT_HUB_FEATURE.institution_rating,
+    miningEligible: true,
+    usageGuide: `28 家机构风格共识；基本面/估值研究需外部观点时使用；仅 A 股。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只 InstrumentRef；market 须为 CN；可选 groups 过滤；勿编造机构观点。',
+  },
+  get_instrument_institution_report: {
+    hubFeature: INSTRUMENT_HUB_FEATURE.institution_report,
+    miningEligible: false,
+    usageGuide: `机构评级完整文本报告；仅 A 股。${INSTRUMENT_REF_USAGE}`,
+    compliance: '长文本；仅用户明确要求深度报告时调用；market 须为 CN。',
   },
   search_stocks: {
     hubFeature: 'search_stocks',
@@ -413,7 +425,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: 'keyword ≥ 2 字符；结果来自本地 market.db；请改用 search_local_instruments（markets: CN）。',
   },
   evaluate_stock: {
-    hubFeature: 'stock_diagnosis',
+    hubFeature: INSTRUMENT_HUB_FEATURE.evaluation,
     miningEligible: true,
     deprecated: true,
     usageGuide: '对单股做评分卡因子评估与综合打分；需要量化 match_score 依据时使用。',
@@ -427,14 +439,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: '单股只读；无缓存时再调用 evaluate_stock。',
   },
   get_strategy_signal: {
-    hubFeature: 'strategy_signal',
+    hubFeature: INSTRUMENT_HUB_FEATURE.strategy_signal,
     miningEligible: true,
     deprecated: true,
     usageGuide: '9 策略融合方向信号，辅助判断多空倾向与策略匹配度。',
     compliance: '单股；信号为研究参考，非买卖指令。',
   },
   strategy_verify: {
-    hubFeature: 'strategy_verify',
+    hubFeature: INSTRUMENT_HUB_FEATURE.strategy_verify,
     miningEligible: true,
     deprecated: true,
     usageGuide: '验证历史信号胜率与 forward 收益，支撑 thesis 可信度；跨市场请用 verify_instrument_strategy。',
@@ -454,13 +466,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
     compliance: '文本报告；非结构化挖掘首选。',
   },
   institution_rating: {
-    hubFeature: 'institution_rating',
+    hubFeature: INSTRUMENT_HUB_FEATURE.institution_rating,
     miningEligible: true,
     usageGuide: '28 家机构风格共识；基本面/估值研究需外部观点时使用。',
     compliance: '单股；可选 groups 过滤；勿编造机构观点。',
   },
   institution_report: {
-    hubFeature: 'institution_report',
+    hubFeature: INSTRUMENT_HUB_FEATURE.institution_report,
     miningEligible: true,
     usageGuide: '机构评级完整文本报告。',
     compliance: '长文本；仅用户明确要求深度报告时调用。',

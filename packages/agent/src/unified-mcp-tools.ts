@@ -1,5 +1,7 @@
 /** 跨市场 InstrumentRef 统一 MCP 工具 — 经 ResearchHub instrument_* 路由 */
 
+import { normalizeInstrumentHubParams } from '@opptrix/shared'
+
 export interface JsonSchema {
   type: 'object'
   properties: Record<string, {
@@ -66,16 +68,7 @@ export const INSTRUMENT_REF_SCHEMA: JsonSchema['properties'] = {
 }
 
 function resolveInstrumentParams(args: Record<string, unknown>): Record<string, unknown> {
-  if (args.instrument && typeof args.instrument === 'object') {
-    return { instrument: args.instrument }
-  }
-  const flat: Record<string, unknown> = {}
-  if (args.market != null) flat.market = args.market
-  if (args.symbol != null) flat.symbol = args.symbol
-  if (args.assetClass != null) flat.assetClass = args.assetClass
-  if (args.quote != null) flat.quote = args.quote
-  if (args.exchange != null) flat.exchange = args.exchange
-  return flat
+  return normalizeInstrumentHubParams(args)
 }
 
 function legacyCodeFrom(args: Record<string, unknown>): string | undefined {
@@ -100,6 +93,8 @@ export const UNIFIED_INSTRUMENT_TOOL_NAMES = [
   'verify_instrument_strategy',
   'get_instrument_latest_evaluation',
   'get_instrument_cyq',
+  'get_instrument_institution_rating',
+  'get_instrument_institution_report',
 ] as const
 
 export const UNIFIED_MINING_INSTRUMENT_TOOLS = [
@@ -297,6 +292,34 @@ export function buildUnifiedInstrumentTools(
       description: '获取 A 股筹码分布（获利盘、成本区）；仅 CN 市场支持，使用 InstrumentRef',
       parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
       handler: (a) => d('instrument_cyq', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_instrument_institution_rating',
+      category: '跨市场标的',
+      description: '28 家机构风格综合评级与共识；仅 A 股支持，使用 InstrumentRef',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        code: { type: 'string', description: '兼容旧写法：A 股 6 位代码（推荐改用 instrument 或 market+symbol）' },
+        groups: { type: 'array', description: '可选机构分组过滤' },
+      }),
+      handler: (a) => d('instrument_institution_rating', {
+        ...resolveInstrumentParams({ ...a, code: legacyCodeFrom(a) }),
+        groups: a.groups,
+      }),
+    },
+    {
+      name: 'get_instrument_institution_report',
+      category: '跨市场标的',
+      description: '机构评级完整文本报告；仅 A 股支持，使用 InstrumentRef',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        code: { type: 'string', description: '兼容旧写法：A 股 6 位代码（推荐改用 instrument 或 market+symbol）' },
+        groups: { type: 'array', description: '可选机构分组过滤' },
+      }),
+      handler: (a) => d('instrument_institution_report', {
+        ...resolveInstrumentParams({ ...a, code: legacyCodeFrom(a) }),
+        groups: a.groups,
+      }),
     },
   ]
 }

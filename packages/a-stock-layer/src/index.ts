@@ -6,7 +6,7 @@ export {
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
   normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice,
   TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver,
+  TickflowDriver, BinanceDriver, OkxDriver, BaostockDriver, ZzshareDriver,
   getProviderConfigStore, ProviderConfigStore, ProviderCatalogService, createProviderCatalog,
   PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest,
   ProviderLoader, createProviderLoader, getProviderLoader,
@@ -55,6 +55,40 @@ export {
 } from './providers/tushare/index.js'
 export type { TushareRuntimeConfig, PublicTushareConfig, TushareRow } from './providers/tushare/index.js'
 
+export {
+  testTickflowConnection,
+  loadTickflowConfig,
+  isTickflowEnabled,
+  TICKFLOW_MANIFEST,
+  TICKFLOW_SETTINGS,
+} from './providers/tickflow/index.js'
+
+export {
+  BINANCE_MANIFEST,
+  BINANCE_SETTINGS,
+} from './providers/binance/index.js'
+
+export {
+  OKX_MANIFEST,
+  OKX_SETTINGS,
+} from './providers/okx/index.js'
+
+export {
+  testBaostockConnection,
+  loadBaostockConfig,
+  isBaostockEnabled,
+  BAOSTOCK_MANIFEST,
+  BAOSTOCK_SETTINGS,
+} from './providers/baostock/index.js'
+
+export {
+  testZzshareConnection,
+  loadZzshareConfig,
+  isZzshareEnabled,
+  ZZSHARE_MANIFEST,
+  ZZSHARE_SETTINGS,
+} from './providers/zzshare/index.js'
+
 export { TdxClient, tdxClient, TdxDailyBarReader, readTdxDayFile, toTdxSymbol, isIndexCode, toTdxMarketId, patchNodetdxBjMarket, tdxMinuteIndexToTime, transformTdxMinutePoints } from './providers/tdx/index.js'
 
 export { PortfolioManager } from './portfolio/manager.js'
@@ -100,7 +134,13 @@ export {
 } from './utils/regional-stock-list.js'
 export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
 export type { CryptoPairRef } from './utils/crypto-market.js'
-export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
+export {
+  resolveInstrumentQueryPlan,
+  unsupportedInstrumentCapabilityMessage,
+  type InstrumentQueryOpts,
+  type InstrumentQueryPlan,
+} from './core/instrument-query.js'
+export { resolveInstrumentFromParams, instrumentRefsFromList, normalizeInstrumentHubParams, instrumentProviderSymbol } from '@opptrix/shared'
 
 export type {
   MoneyFlow, IndexRealtime, IndexKline, MarketMoneyFlow, SectorMoneyFlow,

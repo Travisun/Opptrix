@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   Input,
   Switch,
@@ -74,6 +74,20 @@ function missingRequiredLabel(provider: PublicProviderRuntime, fields: ProviderS
   return `还有 ${missing.length} 项必填尚未完成`
 }
 
+function isExtraStorageField(field: ProviderSettingsField): boolean {
+  return field.key !== 'enabled'
+}
+
+function readSecretValues(provider: PublicProviderRuntime): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const field of provider.settingsFields) {
+    if (field.type !== 'secret' || !provider.secretsConfigured[field.key]) continue
+    const raw = String(provider.values[field.key] ?? '').trim()
+    if (raw) out[field.key] = raw
+  }
+  return out
+}
+
 export function ProviderSettingsForm({
   provider,
   onSaved,
@@ -84,22 +98,32 @@ export function ProviderSettingsForm({
   const s = useStyles()
   const toast = useSettingsToast()
   const [draft, setDraft] = useState<Record<string, unknown>>(() => ({ ...provider.values }))
-  const [secrets, setSecrets] = useState<Record<string, string>>({})
+  const [secrets, setSecrets] = useState<Record<string, string>>(() => readSecretValues(provider))
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
 
-  const secretFields = useMemo(
-    () => provider.settingsFields.filter(f => f.type === 'secret'),
+  useEffect(() => {
+    setDraft({ ...provider.values })
+    setSecrets(readSecretValues(provider))
+  }, [provider.providerId, provider.updatedAt])
+
+  const extraStorageFields = useMemo(
+    () => provider.settingsFields.filter(isExtraStorageField),
     [provider.settingsFields],
   )
+
+  const secretFields = useMemo(
+    () => extraStorageFields.filter(f => f.type === 'secret'),
+    [extraStorageFields],
+  )
   const plainFields = useMemo(
-    () => provider.settingsFields.filter(f => f.type !== 'secret' && isExpandableSettingsField(f)),
-    [provider.settingsFields],
+    () => extraStorageFields.filter(f => f.type !== 'secret' && isExpandableSettingsField(f)),
+    [extraStorageFields],
   )
 
   const buildExtra = () => {
     const extra: Record<string, unknown> = {}
-    for (const field of provider.settingsFields) {
+    for (const field of extraStorageFields) {
       if (field.type === 'secret') {
         const trimmed = (secrets[field.key] ?? '').trim()
         if (trimmed) extra[field.key] = trimmed
@@ -127,17 +151,41 @@ export function ProviderSettingsForm({
         return true
       }
     }
-    return secretFields.some(f => (secrets[f.key] ?? '').trim().length > 0)
+    return secretFields.some(f => {
+      const next = (secrets[f.key] ?? '').trim()
+      const current = String(provider.values[f.key] ?? '').trim()
+      return next !== current
+    })
   }, [draft, plainFields, provider.values, secretFields, secrets])
 
   const canSave = hasPendingChanges || plainFields.some(f => fieldConfigured(provider, f))
 
   const handleSave = async () => {
+    const extra = buildExtra()
+    const hasSecretChanges = secretFields.some(f => {
+      const next = (secrets[f.key] ?? '').trim()
+      const current = String(provider.values[f.key] ?? '').trim()
+      return next !== current
+    })
+    if (hasSecretChanges && !extra) {
+      toast.showError('请先填写 API Key 后再保存')
+      return
+    }
+    if (!extra && !hasPendingChanges) {
+      toast.showError('没有可保存的更改')
+      return
+    }
     setSaving(true)
     try {
-      await saveProviderConfig(provider.providerId, { extra: buildExtra() })
-      toast.showSuccess('设置已保存')
-      setSecrets({})
+      const saved = await saveProviderConfig(provider.providerId, extra ? { extra } : {})
+      const savedSecrets = secretFields.filter(f => (secrets[f.key] ?? '').trim().length > 0)
+      if (savedSecrets.length > 0) {
+        const missing = savedSecrets.filter(f => !saved.secretsConfigured[f.key])
+        if (missing.length > 0) {
+          throw new Error('密钥未能写入本地配置，请重试')
+        }
+      }
+      toast.showSuccess(hasSecretChanges ? '密钥已保存，数据源已自动启用' : '设置已保存')
       onSaved()
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '保存失败')
@@ -241,11 +289,7 @@ export function ProviderSettingsForm({
               <SettingsCredentialRow
                 value={secrets[field.key] ?? ''}
                 onChange={v => setSecrets(prev => ({ ...prev, [field.key]: v }))}
-                placeholder={
-                  provider.secretsConfigured[field.key]
-                    ? (field.placeholder ?? '留空则保留现有密钥')
-                    : (field.placeholder ?? '粘贴 API Key 或 Token')
-                }
+                placeholder={field.placeholder ?? '粘贴 API Key 或 Token'}
                 testing={testing}
                 saving={saving}
                 testDisabled={!provider.supportsTest}
