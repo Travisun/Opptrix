@@ -1,6 +1,6 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import { isBseCode, isTushareEnabled, discoverRegionalListFromYahoo, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
-import type { InstrumentRef } from '@opptrix/shared'
+import { isBseCode, isTushareEnabled, isRegionalTradingDay, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
+import type { InstrumentRef, QueryResult, StockListItem, StockRealtime } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
@@ -23,7 +23,7 @@ import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from './tushare-bulk.js'
-import { getRegionalListSeeds, isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
+import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -39,6 +39,23 @@ function cryptoInstrumentRef(code: string): InstrumentRef {
     return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair.base, quote: pair.quote }
   }
   return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: code, quote: 'USDT' }
+}
+
+function deStockListQuery(
+  de: AshareEngine,
+  market: 'US' | 'CRYPTO' | 'JP' | 'KR' | 'HK',
+  keyword = '',
+): Promise<QueryResult<StockListItem[]>> {
+  const ref: InstrumentRef = market === 'US'
+    ? { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' }
+    : market === 'CRYPTO'
+      ? { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' }
+      : { market, assetClass: 'EQUITY', symbol: '0000' }
+  return de.queryInstrumentData(ref, 'stock_list', { keyword }) as Promise<QueryResult<StockListItem[]>>
+}
+
+function deRealtimeQuery(de: AshareEngine, ref: InstrumentRef): Promise<QueryResult<StockRealtime[]>> {
+  return de.queryInstrumentData(ref, 'realtime') as Promise<QueryResult<StockRealtime[]>>
 }
 
 export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
@@ -714,13 +731,7 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(
-      () => this.de.queryInstrumentData(
-        { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
-        'stock_list',
-      ),
-      'default',
-    )
+    const resp = await this.callApi(() => deStockListQuery(this.de, 'US'), 'default')
     if (!resp.success || !resp.data?.length) {
       throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
     }
@@ -773,7 +784,7 @@ export class MarketDataSyncEngine {
       options.onProgress?.({ job: 'us_quotes', current: index + 1, total: codes.length })
       try {
         const resp = await this.callApi(
-          () => this.de.queryInstrumentData(equityInstrumentRef('US', code), 'realtime'),
+          () => deRealtimeQuery(this.de, equityInstrumentRef('US', code)),
           'default',
         )
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')
@@ -804,13 +815,7 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(
-      () => this.de.queryInstrumentData(
-        { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' },
-        'stock_list',
-      ),
-      'default',
-    )
+    const resp = await this.callApi(() => deStockListQuery(this.de, 'CRYPTO'), 'default')
     if (!resp.success || !resp.data?.length) {
       throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
     }
@@ -842,7 +847,7 @@ export class MarketDataSyncEngine {
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
-  /** HK/JP/KR list sync — 种子列表 + Yahoo search 补充 */
+  /** HK/JP/KR list sync — Provider STOCK_LIST → instruments */
   private async syncRegionalList(
     runId: number,
     job: string,
@@ -864,50 +869,29 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const byCode = new Map<string, { code: string; name: string; exchange?: string | null; industry?: string }>()
-    for (const item of getRegionalListSeeds(market)) {
-      const code = normalizeRegionalSymbol(market, String(item.code ?? '').trim())
-      if (!code) continue
-      byCode.set(code, {
-        code,
-        name: String(item.name ?? code),
-        exchange: item.exchange ?? null,
-        industry: item.industry,
-      })
+    const resp = await this.callApi(() => deStockListQuery(this.de, market), 'default')
+    if (!resp.success || !resp.data?.length) {
+      throw new Error(resp.error ?? `${market} STOCK_LIST provider failed`)
     }
 
-    try {
-      const online = await this.callApi(() => discoverRegionalListFromYahoo(market), 'default')
-      for (const item of online) {
-        if (!byCode.has(item.code)) {
-          byCode.set(item.code, {
-            code: item.code,
-            name: item.name,
-            exchange: item.exchange ?? null,
-            industry: item.industry,
-          })
-        }
-      }
-    } catch {
-      options.onLog?.(`${job}: Yahoo 列表补充离线，仅写入种子`)
-    }
-
-    const rows = [...byCode.values()]
-    let total = rows.length
+    let total = resp.data.length
     if (options.maxStocks) total = Math.min(total, options.maxStocks)
     let success = 0
-    for (const [i, item] of rows.entries()) {
+    for (const [i, item] of resp.data.entries()) {
       if (options.maxStocks && i >= options.maxStocks) break
+      const code = normalizeRegionalSymbol(market, String(item.code ?? '').trim())
+      if (!code) continue
+      const raw = item as StockListItem
       this.store.upsertInstrument({
-        code: item.code,
+        code,
         market,
         assetClass: 'EQUITY',
-        name: item.name,
-        exchange: item.exchange ?? null,
+        name: String(raw.name ?? code),
+        exchange: null,
         status: 'active',
-        extra: item.industry ? JSON.stringify({ industry: item.industry }) : null,
+        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
       })
-      this.markDone(job, item.code, '')
+      this.markDone(job, code, '')
       success++
       if (i % 20 === 0) {
         options.onProgress?.({ job, current: i + 1, total })
@@ -929,6 +913,10 @@ export class MarketDataSyncEngine {
     }
     const market = regionalQuotesJobMarket(job)!
     const cfg = this.cfg(job, options)
+    if (!isRegionalTradingDay(market)) {
+      this.finishJobEmpty(runId, job, options, `${market} 今日休市，跳过 ${job}`)
+      return
+    }
     const tradeDate = regionalTodayString(market)
     const universe = this.regionalCodes(market, options)
     const codes = this.pendingRegionalCodes(job, market, options, mode, tradeDate, cfg.ttlDays)
@@ -948,7 +936,7 @@ export class MarketDataSyncEngine {
       options.onProgress?.({ job, current: index + 1, total: codes.length })
       try {
         const resp = await this.callApi(
-          () => this.de.queryInstrumentData(equityInstrumentRef(market, code), 'realtime'),
+          () => deRealtimeQuery(this.de, equityInstrumentRef(market, code)),
           'default',
         )
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')
@@ -990,7 +978,7 @@ export class MarketDataSyncEngine {
       options.onProgress?.({ job: 'crypto_quotes', current: index + 1, total: codes.length })
       try {
         const resp = await this.callApi(
-          () => this.de.queryInstrumentData(cryptoInstrumentRef(code), 'realtime'),
+          () => deRealtimeQuery(this.de, cryptoInstrumentRef(code)),
           'default',
         )
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'queryInstrumentData failed')

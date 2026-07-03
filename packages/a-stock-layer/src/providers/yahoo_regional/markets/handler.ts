@@ -2,6 +2,7 @@ import type { StockKline, StockRealtime } from '@opptrix/shared'
 import { MarketHandlerShell } from '../../common/driver-factory.js'
 import type { RegionalEquityMarket } from '../../../utils/regional-symbol.js'
 import { normalizeRegionalSymbol, toYahooFinanceSymbol } from '../../../utils/regional-symbol.js'
+import { fetchRegionalStockListFromYahoo, regionalSeedStockList } from '../../../utils/regional-stock-list.js'
 import { fetchYahooChart, parseYahooKlines, parseYahooRealtime } from '../../../utils/yahoo-chart.js'
 
 export class YahooRegionalMarketHandler extends MarketHandlerShell {
@@ -43,6 +44,23 @@ export class YahooRegionalMarketHandler extends MarketHandlerShell {
       return parseYahooKlines(json as Record<string, unknown>, this.displayCode(symbol), count)
     } catch {
       return null
+    }
+  }
+
+  async stockList(_market?: string, keyword = '') {
+    try {
+      const rows = await fetchRegionalStockListFromYahoo(this.regionalMarket, { keyword })
+      return rows.length ? rows : null
+    } catch {
+      const fallback = regionalSeedStockList(this.regionalMarket)
+      if (!keyword.trim()) return fallback.length ? fallback : null
+      const kw = keyword.trim().toUpperCase()
+      const filtered = fallback.filter(row =>
+        row.code.toUpperCase().includes(kw)
+        || row.name.toUpperCase().includes(kw)
+        || row.industry.toUpperCase().includes(kw),
+      )
+      return filtered.length ? filtered : null
     }
   }
 }

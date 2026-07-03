@@ -7,6 +7,7 @@ import { regionalEquityBindings } from '../common/bindings.js'
 export const YAHOO_REGIONAL_CAPS = [
   Capability.STOCK_REALTIME,
   Capability.STOCK_KLINE,
+  Capability.STOCK_LIST,
 ]
 
 export function yahooRegionalSpec(market: 'JP' | 'KR' | 'HK'): ProviderManifestSpec {

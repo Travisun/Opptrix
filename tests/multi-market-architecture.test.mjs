@@ -142,6 +142,13 @@ test('gateInstrumentEvaluation — CN equity supported, US not', () => {
   assert.equal(hasApplicationCapability({ market: 'HK', assetClass: 'EQUITY', symbol: '00700' }, 'discover_mine'), true)
 })
 
+test('regional list seeds provide at least 50 per market', async () => {
+  const { getRegionalListSeedCount } = await import('../packages/market-data/dist/sync/regional-list-seeds.js')
+  assert.ok(getRegionalListSeedCount('JP') >= 50)
+  assert.ok(getRegionalListSeedCount('KR') >= 50)
+  assert.ok(getRegionalListSeedCount('HK') >= 50)
+})
+
 test('regional list seeds sync writes instruments', async () => {
   const { mkdtempSync, rmSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
@@ -204,16 +211,23 @@ test('normalizeRegionalSymbol and regionalTodayString', async () => {
   assert.equal(isRegionalTradingDay('JP', new Date('2026-01-01T03:00:00Z')), false)
 })
 
-test('yahooQuoteToRegionalItem maps exchange suffix', async () => {
-  const { yahooQuoteToRegionalItem } = await import('../packages/a-stock-layer/dist/utils/regional-list-vendor.js')
-  const item = yahooQuoteToRegionalItem('JP', {
+test('yahoo regional provider declares STOCK_LIST capability', async () => {
+  const { YAHOO_REGIONAL_CAPS } = await import('../packages/a-stock-layer/dist/providers/yahoo_regional/manifest.js')
+  const { Capability } = await import('../packages/a-stock-layer/dist/core/capabilities.js')
+  assert.ok(YAHOO_REGIONAL_CAPS.includes(Capability.STOCK_LIST))
+})
+
+test('yahooQuoteToRegionalStockRow maps exchange suffix', async () => {
+  const { yahooQuoteToRegionalStockRow } = await import('../packages/a-stock-layer/dist/utils/regional-stock-list.js')
+  const item = yahooQuoteToRegionalStockRow('JP', {
     symbol: '7203.T',
     longname: 'Toyota Motor',
     quoteType: 'EQUITY',
   })
   assert.equal(item?.code, '7203')
   assert.equal(item?.name, 'Toyota Motor')
-  assert.equal(yahooQuoteToRegionalItem('JP', { symbol: 'AAPL', quoteType: 'EQUITY' }), null)
+  assert.equal(item?.market, 'JP')
+  assert.equal(yahooQuoteToRegionalStockRow('JP', { symbol: 'AAPL', quoteType: 'EQUITY' }), null)
 })
 
 test('parseYahooSearchQuotes extracts symbols', async () => {

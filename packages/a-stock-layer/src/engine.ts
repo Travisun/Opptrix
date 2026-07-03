@@ -575,6 +575,13 @@ export class MarketDataEngine {
     )
   }
 
+  /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'stock_list')` */
+  regionalStockList(market: RegionalEquityMarket, keyword = '') {
+    return this.qScoped(
+      market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, market, keyword,
+    )
+  }
+
   /** @deprecated Prefer `queryInstrumentData({ market, ... }, 'snapshot')` */
   async regionalSnapshot(market: RegionalEquityMarket, symbol: string) {
     const [quote, klines] = await Promise.all([
@@ -625,6 +632,7 @@ export class MarketDataEngine {
       if (capability === 'realtime') return this.regionalRealtime(ref.market, ref.symbol)
       if (capability === 'kline') return this.regionalKline(ref.market, ref.symbol, opts?.count ?? 120)
       if (capability === 'snapshot') return this.regionalSnapshot(ref.market, ref.symbol)
+      if (capability === 'stock_list') return this.regionalStockList(ref.market, opts?.keyword ?? '')
       return Promise.resolve({ success: false, error: `${ref.market} 不支持 capability: ${capability}` })
     }
     if (ref.market === 'CRYPTO') {

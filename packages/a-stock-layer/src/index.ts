@@ -81,10 +81,15 @@ export type { RegionalEquityMarket } from './utils/regional-symbol.js'
 export { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday, regionalHolidaysForYear } from './utils/regional-calendar.js'
 export { parseYahooSearchQuotes, fetchYahooFinanceSearch, type YahooSearchQuote } from './utils/yahoo-search.js'
 export {
-  discoverRegionalListFromYahoo,
-  yahooQuoteToRegionalItem,
-  type RegionalListVendorItem,
-} from './utils/regional-list-vendor.js'
+  getRegionalEquitySeeds,
+  getRegionalEquitySeedCount,
+  type RegionalEquitySeed,
+} from './data/regional-equity-seeds.js'
+export {
+  fetchRegionalStockListFromYahoo,
+  regionalSeedStockList,
+  yahooQuoteToRegionalStockRow,
+} from './utils/regional-stock-list.js'
 export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
 export type { CryptoPairRef } from './utils/crypto-market.js'
 export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'

@@ -8,38 +8,39 @@
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **主轴** | `DISCOVER_PROFILE_REGISTRY` 驱动 prescreen / mining 工具组 | t-strategy / regime 仍 CN 为主 |
+| **主轴** | `DISCOVER_PROFILE_REGISTRY` 驱动 prescreen / mining 工具组 | 深度 scorecard / t-strategy 仍 CN 为主（产品设计） |
 | **CN 股票** | 因子 prescreen + scorecard + t-strategy + 市况 regime | — |
 | **CN ETF** | 本地筛选 + 决策雷达 + Agent 挖掘 | — |
-| **US / Crypto** | 列表筛选 + registry 挖掘工具 + Agent | 无 scorecard / regime |
-| **HK / JP / KR** | 7 profile 登记；list_filter + 区域挖掘工具组 | 无跨市场 scorecard |
-| **Scorecard** | `gateInstrumentEvaluation(ref)` facade（CN 股票） | US/JP 等返回 not_supported |
-| **t-strategy** | ETF 已跳过 CN 宏观字段 | 仍不可用于 US/JP |
+| **US / Crypto** | 列表筛选 + registry 挖掘 + SPY regime stub | 无 CN 级 scorecard |
+| **HK / JP / KR** | 7 profile；list_filter + 区域挖掘；Yahoo 行情 | 无跨市场 scorecard |
+| **Scorecard** | `gateInstrumentEvaluation(ref)` facade | 非 CN 返回 not_supported |
+| **t-strategy** | CN 完整；`gatherStrategyData(ref)` 支持跨市场技术字段 | `strategy_signal` 产品 gate 仍 CN |
 
-**结论**：Discover **prescreen / mining prompt 已 registry 化**；Evaluation 有统一 gate，深度评估仍 CN-only。
+**结论**：Discover **prescreen / mining 已 registry 化**；深度评估与策略信号 intentionally CN-only。
 
 ### 1.2 数据层
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **Instrument** | `InstrumentRef` + SQLite `instruments`（CN/US/Crypto/HK/JP/KR） | — |
-| **Provider** | §6.4 Registry；JP/KR/HK 快照经 US adapter 复用 | 独立 regional provider |
-| **本地库** | CN 深；US/Crypto 浅；**JP/KR/HK MVP 种子列表 sync** | 区域 quotes sync、normalizer |
-| **Pack** | `pack-registry` 六市场 + supplement 导出 | Engine 未完全 `queryInstrument` 收敛 |
+| **Instrument** | `InstrumentRef` + SQLite 六市场 | — |
+| **Provider** | Yahoo regional（JP/KR/HK）+ US/Crypto 既有 provider | Tiingo/FMP 作 list 主源（可选） |
+| **本地库** | CN 深；US/Crypto 浅；**JP/KR/HK 各 50 种子 + Yahoo 补充** | 全市场 universe 仍小于 CN |
+| **Pack / Sync** | `queryInstrumentData` 收敛；区域 quotes 休市日跳过 | 动态 exchange 假日历维护 |
+| **Engine** | `profile` / `financials` / `stock_list` capability 已纳入 | legacy 方法仍作内部 shim |
 
-**结论**：数据层 **pack / screen / readiness 已参数化**；区域 **list 有种子**，quotes 与 vendor 仍待接。
+**结论**：数据层 **pack / screen / sync 已参数化**；区域 list 达 MVP 可用规模，正式 vendor 替换为增强项。
 
 ### 1.3 应用层（聊天 / 搜索 / 右栏）
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **API** | `instrument_*` Hub + REST；关注列表 `instrument_quotes` | `API.md` 待补 instrument 章节 |
+| **API** | `instrument_*` Hub + REST + `API.md` 章节 | — |
 | **搜索** | 工作区 / 聊天 `@` → `searchInstruments` | `searchStocks` 保留兼容 |
-| **右栏** | capability gate + `CrossMarketDetailTab` | `IndustryTab` 仍 CN-only（已标注） |
-| **图表** | 非 CN → `instrument_chart`；CN 分时仍 `stockChart` | 按设计保留 CN intraday 例外 |
-| **格式化** | `formatPriceForMarket` / `formatCompactNumberForMarket` | CrossMarket + 关注列表/备注抽屉已接入 |
+| **右栏** | capability gate + `CrossMarketDetailTab` | `IndustryTab` CN-only（已标注，符合产品） |
+| **图表** | 非 CN → `instrument_chart`；CN 分时仍 `stockChart` | — |
+| **格式化** | `formatPriceForMarket` — CrossMarket + 关注列表/备注抽屉 | `PortfolioTab` 仍 CN（组合仅 A 股） |
 
-**结论**：应用主路径 **InstrumentRef-first**；行业页与报价格式化仍为 CN 遗留面。
+**结论**：应用主路径 **InstrumentRef-first**；行业页与组合页为 CN 遗留面，与 capability 矩阵一致。
 
 ---
 
@@ -151,8 +152,8 @@ interface DiscoverProfileDefinition {
 - [x] 泛化 `localListScreen(store, packId, query)` + `regional-equity-screen`
 - [x] Readiness context：`jp_count` / `kr_count` / `hk_count`
 - [x] HK pack + discover profile + supplement 导出
-- [x] `syncRegionalList` — JP/KR/HK MVP 种子列表写入 `instruments`
-- [x] `syncRegionalQuotes` — jp/hk/kr_quotes 经 US adapter 写入截面
+- [x] `syncRegionalList` — JP/KR/HK 各 50 只种子 + Yahoo 补充
+- [x] `syncRegionalQuotes` — jp/hk/kr_quotes；休市日跳过
 - [x] Engine：`queryInstrumentData(ref, cap)` 收敛 DataEngine 入口
 - [x] HK/JP/KR Yahoo regional provider + `regionalRealtime/Kline`
 - [x] Hub / sync / t-strategy 主路径改经 `queryInstrumentData`；legacy `us*`/`crypto*`/`regional*` 已 @deprecated
@@ -162,8 +163,8 @@ interface DiscoverProfileDefinition {
 - [x] `jp_equity` / `kr_equity` / `hk_equity` discover（list_filter 模板）
 - [x] Agent 区域 screen / mining 工具 wired
 - [x] HK `discover_mine` capability 对齐 JP/KR
-- [ ] JP/KR normalizer + 交易日历（normalizer + 本地时区 tradeDate + 静态假日历 MVP 已接）
-- [ ] Provider 列表 API（Yahoo search 补充 JP/KR/HK 列表已接；Tiingo/FMP 等待替）
+- [x] JP/KR/HK normalizer + 交易日历（本地时区 tradeDate + 静态假日历 + sync 休市跳过）
+- [x] Provider 列表：`yahoo_jp/kr/hk` 登记 `STOCK_LIST`；`jp_list` 经 Provider 灌库
 - [ ] 可选：简单 momentum scorecard（非 CN 因子库）
 
 ---
@@ -265,8 +266,8 @@ client-ui/src/types/instrument.ts # UnifiedInstrumentQuote
 
 - ~~工作区 `MarketDataSettingsSection` 导出/导入仅 us/crypto 包~~（已支持 hk/jp/kr 补充包）
 - ~~`apps/server` pack 校验扩展 hk/jp/kr~~（prepare / export 已对齐 Hub）
-- US/JP 统一 scorecard facade（`gateInstrumentEvaluation` 已就位，深度评估待实现）
-- 按 market 的 quote formatter（万/亿 vs K/M/B）
+- US/JP 统一 scorecard facade（`gateInstrumentEvaluation` 已就位，深度评估待产品需求）
+- ~~按 market 的 quote formatter~~（CrossMarket + 关注列表已接入；组合页仍 CN）
 
 ---
 
@@ -294,6 +295,8 @@ client-ui/src/types/instrument.ts # UnifiedInstrumentQuote
 | 2026-07-03 | C | `queryInstrumentData` 收敛 Hub/sync/t-strategy；regional calendar | done |
 | 2026-07-03 | C | `queryInstrumentData` 扩展 profile/financials/stock_list | done |
 | 2026-07-03 | D | regional 假日历 MVP + Yahoo search 列表补充 | done |
-| — | C | us*/crypto* list/profile 等未纳入 queryInstrument 的 API | done |
+| 2026-07-03 | D | 区域种子扩至 50/市场 + Yahoo 搜索增强 + sync 休市跳过 | done |
+| 2026-07-03 | A | 文档 §1 现状表与实现对齐 | done |
 | — | D | Tiingo/FMP vendor + 动态假日历维护 | pending |
+| — | B | 非 CN momentum scorecard（可选） | pending |
 
