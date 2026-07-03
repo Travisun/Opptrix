@@ -1,4 +1,5 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
+import { isCnEtfCode } from '@opptrix/a-stock-layer'
 import type { StockKline } from '@opptrix/shared'
 import type { StrategyData } from './base.js'
 import { computeAll } from './indicators.js'
@@ -12,6 +13,7 @@ function toBars(klines: StockKline[]) {
 
 export async function gatherAll(engine: AshareEngine, code: string): Promise<StrategyData> {
   const data: StrategyData = { code }
+  const isEtf = isCnEtfCode(code)
 
   const rt = await engine.realtime(code)
   if (rt.success && rt.data?.[0]) {
@@ -27,6 +29,10 @@ export async function gatherAll(engine: AshareEngine, code: string): Promise<Str
   if (kl.success && kl.data && kl.data.length >= 30) {
     data.klineDaily = toBars(kl.data)
     data.indicators = computeAll(kl.data)
+  }
+
+  if (isEtf) {
+    return data
   }
 
   const pf = await engine.profile(code)

@@ -1,4 +1,6 @@
-import type { MarketDataPackId } from './market-data-packs.js'
+import type { MarketDataPackConfig, MarketDataPackId } from './market-data-packs.js'
+import { MARKET_PACK_LABELS } from './market-data-packs.js'
+import type { MarketRegimeKind } from './market-regime.js'
 
 /** 挖掘/评分策略适用的资产 Profile（策略层主轴，非裸 market） */
 export type DiscoverStrategyProfile =
@@ -75,6 +77,170 @@ export function listDiscoverProfileMeta() {
     description: DISCOVER_PROFILE_DESCRIPTIONS[id],
     requires_pack: DISCOVER_PROFILE_REQUIRES_PACK[id],
     factor_count: discoverFactorsForProfile(id).length,
-    mining_ready: id === 'cn_equity' || id === 'cn_etf',
+    mining_ready: isDiscoverProfileMiningReady(id),
   }))
+}
+
+export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): boolean {
+  return profile === 'cn_equity' || profile === 'cn_etf'
+}
+
+export type DiscoverReadinessMode = 'local' | 'online' | 'blocked'
+
+export interface DiscoverProfileReadinessContext {
+  packs: MarketDataPackConfig
+  stock_count: number
+  etf_count: number
+  us_count: number
+  crypto_count: number
+  cn_is_ready: boolean
+}
+
+export interface DiscoverProfileReadiness {
+  profile: DiscoverStrategyProfile
+  ready: boolean
+  mode: DiscoverReadinessMode
+  message: string
+  action: string | null
+}
+
+function packDisabledMessage(pack: MarketDataPackId): string {
+  return `${MARKET_PACK_LABELS[pack]}数据包未开启`
+}
+
+function packDisabledAction(pack: MarketDataPackId): string {
+  return `请前往 设置 → 市场数据，开启「${MARKET_PACK_LABELS[pack]}」并完成数据准备`
+}
+
+/** 挖掘前数据包 / 本地库门禁（纯函数，供 Hub 与 Agent 共用） */
+export function assessDiscoverProfileReadiness(
+  profile: DiscoverStrategyProfile,
+  ctx: DiscoverProfileReadinessContext,
+): DiscoverProfileReadiness {
+  const packId = DISCOVER_PROFILE_REQUIRES_PACK[profile]
+
+  if (!isDiscoverProfileMiningReady(profile)) {
+    const base: DiscoverProfileReadiness = {
+      profile,
+      ready: false,
+      mode: 'blocked',
+      message: `${DISCOVER_PROFILE_LABELS[profile]}挖掘策略筹备中`,
+      action: '请关注后续版本更新',
+    }
+    if (packId && !ctx.packs[packId].enabled) {
+      return { ...base, message: packDisabledMessage(packId), action: packDisabledAction(packId) }
+    }
+    if (profile === 'us_equity' && ctx.us_count < 1) {
+      return {
+        ...base,
+        message: '本地尚无美股列表',
+        action: packDisabledAction('us'),
+      }
+    }
+    if (profile === 'crypto_spot' && ctx.crypto_count < 1) {
+      return {
+        ...base,
+        message: '本地尚无 Crypto 交易对列表',
+        action: packDisabledAction('crypto'),
+      }
+    }
+    return base
+  }
+
+  if (packId && !ctx.packs[packId].enabled) {
+    return {
+      profile,
+      ready: false,
+      mode: 'blocked',
+      message: packDisabledMessage(packId),
+      action: packDisabledAction(packId),
+    }
+  }
+
+  if (profile === 'cn_equity') {
+    if (ctx.cn_is_ready) {
+      return {
+        profile,
+        ready: true,
+        mode: 'local',
+        message: '本地因子库已就绪，将使用本地初选',
+        action: null,
+      }
+    }
+    return {
+      profile,
+      ready: true,
+      mode: 'online',
+      message: '本地因子库未完全就绪，初选将在线扫描（耗时更长）',
+      action: '建议前往 设置 → 市场数据 完成 A 股同步，以加速挖掘',
+    }
+  }
+
+  if (profile === 'cn_etf') {
+    if (ctx.etf_count < 1) {
+      return {
+        profile,
+        ready: false,
+        mode: 'blocked',
+        message: '本地尚无 ETF 数据，无法初选',
+        action: '请前往 设置 → 市场数据，完成 ETF 列表与净值同步（etf_list / etf_nav）',
+      }
+    }
+    return {
+      profile,
+      ready: true,
+      mode: 'local',
+      message: `本地 ETF ${ctx.etf_count} 只，将按决策雷达评分初选`,
+      action: null,
+    }
+  }
+
+  return {
+    profile,
+    ready: false,
+    mode: 'blocked',
+    message: '暂不支持该资产类型挖掘',
+    action: null,
+  }
+}
+
+export function assessAllDiscoverProfileReadiness(
+  ctx: DiscoverProfileReadinessContext,
+): DiscoverProfileReadiness[] {
+  return DISCOVER_PROFILE_ORDER.map(profile => assessDiscoverProfileReadiness(profile, ctx))
+}
+
+/** 内置策略 id → Profile（自编策略以存储的 profile 为准） */
+export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrategyProfile {
+  if (strategyId.startsWith('etf_')) return 'cn_etf'
+  return 'cn_equity'
+}
+
+/** A 股 ETF 挖掘 — 按指数市况映射的参考策略（宽基配置视角） */
+export const ETF_REGIME_STRATEGY_IDS: Record<MarketRegimeKind, string[]> = {
+  panic: ['etf_low_premium', 'etf_broad_base'],
+  cautious: ['etf_broad_base', 'etf_low_premium'],
+  neutral: ['etf_broad_base', 'etf_scale_core'],
+  euphoria: ['etf_scale_core', 'etf_low_premium'],
+}
+
+export const ETF_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
+  panic: '市场波动加大，可优先折溢价接近净值的宽基 ETF；留意流动性与跟踪误差。',
+  cautious: '宜选规模适中、折溢价温和的宽基 ETF 做底仓观察。',
+  neutral: '可按均衡思路筛选宽基与大盘流动性 ETF。',
+  euphoria: '情绪偏热，优先大盘高流动性 ETF，折溢价不宜过高。',
+}
+
+/** 市况推荐策略 id — 按当前挖掘 Profile 过滤 */
+export function resolveRegimeStrategyIds(
+  profile: DiscoverStrategyProfile,
+  regime: MarketRegimeKind,
+  equitySuggestedIds: string[],
+): string[] {
+  if (profile === 'cn_etf') return ETF_REGIME_STRATEGY_IDS[regime]
+  if (profile === 'cn_equity') {
+    const filtered = equitySuggestedIds.filter(id => inferBuiltinStrategyProfile(id) === 'cn_equity')
+    return filtered.length ? filtered : equitySuggestedIds
+  }
+  return []
 }

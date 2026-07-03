@@ -191,8 +191,34 @@ app.get('/api/discover/jobs', async () => {
   return { jobs: listDiscoverJobs(40) }
 })
 
+app.get<{ Querystring: { profile?: string } }>('/api/discover/readiness', async (req, reply) => {
+  const raw = req.query.profile?.trim()
+  if (raw && !isDiscoverStrategyProfile(raw)) {
+    return reply.code(400).send({ error: 'invalid profile' })
+  }
+  const result = await hub.dispatch('discover_profile_readiness', {
+    profile: raw ?? undefined,
+  })
+  if (!result.success) {
+    return reply.code(500).send({ error: result.message || 'readiness check failed' })
+  }
+  return { success: true, data: result.data }
+})
+
 app.get('/api/discover/profiles', async () => {
   return { profiles: listDiscoverProfileMeta() }
+})
+
+app.get<{ Querystring: { profile: string } }>('/api/discover/scorecards', async (req, reply) => {
+  const profile = req.query.profile?.trim()
+  if (!profile || !isDiscoverStrategyProfile(profile)) {
+    return reply.code(400).send({ error: 'invalid profile' })
+  }
+  const result = await hub.dispatch('discover_scorecards', { profile })
+  if (!result.success) {
+    return reply.code(500).send({ error: result.message || 'scorecards failed' })
+  }
+  return { success: true, data: result.data }
 })
 
 app.get<{ Querystring: { profile?: string } }>('/api/discover/strategies', async (req, reply) => {

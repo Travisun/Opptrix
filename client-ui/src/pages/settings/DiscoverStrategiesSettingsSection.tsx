@@ -4,9 +4,11 @@ import { CopyRegular, EditRegular, EyeRegular } from '@fluentui/react-icons'
 import {
   getDiscoverStrategyDetail,
   listDiscoverStrategies,
+  getDiscoverReadiness,
 } from '../../api/client'
 import type {
   CustomDiscoverStrategy,
+  DiscoverProfileReadiness,
   DiscoverStrategyDetail,
   DiscoverStrategyProfile,
   DiscoverStrategyPublic,
@@ -190,6 +192,7 @@ export default function DiscoverStrategiesSettingsSection() {
   const [builtinDetail, setBuiltinDetail] = useState<DiscoverStrategyDetail | null>(null)
   const [loadingDetail, setLoadingDetail] = useState(false)
   const [draft, setDraft] = useState<StrategyDraft>(EMPTY_CUSTOM)
+  const [readiness, setReadiness] = useState<DiscoverProfileReadiness | null>(null)
 
   const { strategies: customStrategies, saveStrategy, removeStrategy } = useCustomDiscoverStrategies()
 
@@ -197,6 +200,17 @@ export default function DiscoverStrategiesSettingsSection() {
     void listDiscoverStrategies(profile).then(resp => {
       setBuiltinList(resp.strategies ?? [])
     }).catch(() => {})
+  }, [profile])
+
+  useEffect(() => {
+    let cancelled = false
+    void getDiscoverReadiness(profile).then(resp => {
+      if (cancelled || !resp.data || !('profile' in resp.data)) return
+      setReadiness(resp.data)
+    }).catch(() => {
+      if (!cancelled) setReadiness(null)
+    })
+    return () => { cancelled = true }
   }, [profile])
 
   useEffect(() => {
@@ -325,7 +339,7 @@ export default function DiscoverStrategiesSettingsSection() {
           <Text className={s.panelHeaderTitle} block>策略库</Text>
           <OpptrixButton
             variant="secondary"
-            disabled={!isDiscoverProfileMiningReady(profile)}
+            disabled={!isDiscoverProfileMiningReady(profile) || readiness?.ready === false}
             onClick={() => setEditTarget({ mode: 'create' })}
           >
             新建自编
@@ -335,6 +349,19 @@ export default function DiscoverStrategiesSettingsSection() {
           <div style={{ padding: '10px 18px 8px' }}>
             <DiscoverProfileTabList selected={profile} onSelect={setProfile} compact />
           </div>
+          {readiness && (
+            <Text
+              className={s.empty}
+              block
+              style={{
+                paddingTop: 0,
+                color: readiness.ready ? undefined : opptrixCssVars.textSecondary,
+              }}
+            >
+              {readiness.message}
+              {readiness.action && !readiness.ready ? ` ${readiness.action}` : ''}
+            </Text>
+          )}
           {!isDiscoverProfileMiningReady(profile) && listItems.length === 0 ? (
             <Text className={s.empty} block>
               该资产类型的内置策略筹备中；开启对应数据包后可关注后续更新。

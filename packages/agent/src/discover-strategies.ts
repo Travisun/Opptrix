@@ -1,4 +1,5 @@
 import type { DiscoverStrategyProfile, MarketDataPackId } from '@opptrix/shared'
+import { ETF_SCORECARD_NAME, isDiscoverProfileMiningReady } from '@opptrix/shared'
 import type { DiscoverParsedPlan, DiscoverScreenCondition } from './discover.js'
 
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
@@ -47,7 +48,7 @@ function cnEtf(s: StrategyCore): DiscoverStrategy {
     applicableProfiles: ['cn_etf'],
     requiresPack: ['cn'],
     planMode: 'builtin',
-    scorecard: s.scorecard || 'ETF决策雷达',
+    scorecard: s.scorecard || ETF_SCORECARD_NAME,
   }
 }
 
@@ -342,7 +343,7 @@ export function listDiscoverStrategiesPublic(profile?: DiscoverStrategyProfile) 
     profile: primaryDiscoverProfile(s),
     applicable_profiles: s.applicableProfiles,
     requires_pack: s.requiresPack,
-    mining_ready: s.applicableProfiles.some(p => p === 'cn_equity' || p === 'cn_etf'),
+    mining_ready: s.applicableProfiles.some(isDiscoverProfileMiningReady),
   }))
 }
 

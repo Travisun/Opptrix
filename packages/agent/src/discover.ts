@@ -1,5 +1,10 @@
 import type { DiscoverStrategyProfile } from '@opptrix/shared'
-import { defaultDiscoverProfile, discoverFactorsForProfile } from '@opptrix/shared'
+import {
+  defaultDiscoverProfile,
+  discoverFactorsForProfile,
+  resolveDiscoverScorecard,
+  type DiscoverProfileReadiness,
+} from '@opptrix/shared'
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
@@ -172,7 +177,8 @@ function formatEtfCandidateTable(
   return rows.map((r, i) => {
     const prem = r.premium_rate != null ? `${r.premium_rate.toFixed(2)}%` : '—'
     const scale = r.scale_yi != null ? `${r.scale_yi.toFixed(1)}亿` : '—'
-    return `${i + 1}. ${r.code} ${r.name} | 折溢价:${prem} | 规模:${scale}`
+    const score = r.key_factors.etf_score != null ? `雷达${r.key_factors.etf_score.toFixed(0)}` : '—'
+    return `${i + 1}. ${r.code} ${r.name} | 雷达:${score} | 折溢价:${prem} | 规模:${scale}`
   }).join('\n')
 }
 
@@ -200,6 +206,8 @@ export class DiscoverRunner {
     if (!strategy) throw new Error(`未知策略: ${strategyId}`)
 
     const profile = primaryDiscoverProfile(strategy)
+    await this.assertProfileReady(profile)
+
     const llm = this.registry.createLlm(modelRef)
     if (!llm) throw new Error('LLM 未配置，请在设置中添加模型提供商')
 
@@ -231,7 +239,7 @@ export class DiscoverRunner {
       plan,
       prompt,
       llm,
-      scorecard: strategy.scorecard,
+      scorecard: resolveDiscoverScorecard(profile, strategy.scorecard) ?? strategy.scorecard,
       onProgress,
       signal,
     })
@@ -248,6 +256,8 @@ export class DiscoverRunner {
     const text = prompt.trim()
     if (!text) throw new Error('请输入选股策略描述')
 
+    await this.assertProfileReady(profile)
+
     const llm = this.registry.createLlm(modelRef)
     if (!llm) throw new Error('LLM 未配置，请在设置中添加模型提供商')
 
@@ -260,7 +270,7 @@ export class DiscoverRunner {
       plan,
       prompt: text,
       llm,
-      scorecard: profile === 'cn_etf' ? 'ETF决策雷达' : '综合评估',
+      scorecard: resolveDiscoverScorecard(profile) ?? '综合评估',
       onProgress,
       signal,
     })
@@ -277,6 +287,7 @@ export class DiscoverRunner {
   }): Promise<DiscoverResult> {
     const { strategyId, plan, prompt, llm, scorecard, onProgress, signal } = input
     const profile = plan.profile ?? defaultDiscoverProfile()
+    const effectiveScorecard = resolveDiscoverScorecard(profile, scorecard) ?? scorecard
 
     const throwIfAborted = () => {
       if (signal?.aborted) throw new Error('已取消')
@@ -285,15 +296,15 @@ export class DiscoverRunner {
     onProgress({
       phase: 'prescreen',
       message: profile === 'cn_etf'
-        ? `ETF 初选：${plan.conditions.length} 条条件，最多 ${plan.prescreen_top_n} 只…`
+        ? `ETF 初选：${plan.conditions.length} 条条件 + 决策雷达评分，最多 ${plan.prescreen_top_n} 只…`
         : `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`,
       percent: 25,
     })
     throwIfAborted()
 
     const { screenData, candidates } = profile === 'cn_etf'
-      ? await this.prescreenEtf(plan)
-      : await this.prescreenEquity(plan, scorecard)
+      ? await this.prescreenEtf(plan, msg => onProgress({ phase: 'prescreen', message: msg, percent: 32 }))
+      : await this.prescreenEquity(plan, effectiveScorecard)
     throwIfAborted()
 
     if (!candidates.length) {
@@ -385,7 +396,18 @@ export class DiscoverRunner {
     return { screenData, candidates: screenData.items ?? [] }
   }
 
-  private async prescreenEtf(plan: DiscoverParsedPlan) {
+  private async assertProfileReady(profile: DiscoverStrategyProfile) {
+    const resp = await this.hub.dispatch('discover_profile_readiness', { profile })
+    if (!resp.success || !resp.data) {
+      throw new Error(resp.message || '无法检查挖掘数据就绪状态')
+    }
+    const row = resp.data as DiscoverProfileReadiness
+    if (!row.ready) {
+      throw new Error(row.action ? `${row.message}。${row.action}` : row.message)
+    }
+  }
+
+  private async prescreenEtf(plan: DiscoverParsedPlan, onMsg?: (message: string) => void) {
     const screenResp = await this.hub.dispatch(
       'local_etf_screen',
       etfConditionsToQuery(plan.conditions, plan.prescreen_top_n),
@@ -403,15 +425,58 @@ export class DiscoverRunner {
         scale_yi: number | null
       }>
     }
-    const candidates: PrescreenCandidate[] = (data.items ?? []).map(item => ({
+    const screened = (data.items ?? []).map(item => ({
       code: item.code,
       name: item.name,
-      total_score: item.premium_rate != null ? Math.max(0, 100 - Math.abs(item.premium_rate) * 10) : 50,
-      key_factors: {
-        ...(item.premium_rate != null ? { premium_rate: item.premium_rate } : {}),
-        ...(item.scale_yi != null ? { scale_yi: item.scale_yi } : {}),
-      },
+      premium_rate: item.premium_rate,
+      scale_yi: item.scale_yi,
     }))
+
+    onMsg?.(`ETF 条件命中 ${screened.length} 只，决策雷达评分中…`)
+
+    const scored: PrescreenCandidate[] = []
+    for (const item of screened) {
+      let totalScore = 50
+      const key_factors: Record<string, number> = {}
+      if (item.premium_rate != null) key_factors.premium_rate = item.premium_rate
+      if (item.scale_yi != null) key_factors.scale_yi = item.scale_yi
+
+      try {
+        const scResp = await this.hub.dispatch('etf_scorecard', { code: item.code })
+        if (scResp.success && scResp.data) {
+          const card = scResp.data as {
+            total_score: number | null
+            grade: string | null
+            name?: string
+          }
+          if (card.total_score != null && Number.isFinite(card.total_score)) {
+            totalScore = card.total_score
+            key_factors.etf_score = card.total_score
+          }
+          scored.push({
+            code: item.code,
+            name: card.name ?? item.name,
+            total_score: totalScore,
+            key_factors,
+          })
+          continue
+        }
+      } catch { /* fallback below */ }
+
+      if (item.premium_rate != null) {
+        totalScore = Math.max(0, 100 - Math.abs(item.premium_rate) * 10)
+        key_factors.etf_score = totalScore
+      }
+      scored.push({
+        code: item.code,
+        name: item.name,
+        total_score: totalScore,
+        key_factors,
+      })
+    }
+
+    scored.sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
+    const candidates = scored.slice(0, plan.prescreen_top_n)
     const screenData = {
       total_scanned: data.total_universe,
       passed: data.passed,

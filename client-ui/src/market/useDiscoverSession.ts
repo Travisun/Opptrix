@@ -20,7 +20,7 @@ export interface DiscoverSessionState {
   selectedStrategyId: string | null
   refreshHistory: () => Promise<void>
   selectStrategy: (id: string) => void
-  runStrategy: (strategyId: string) => Promise<void>
+  runStrategy: (strategyId: string, profile?: import('../types/schemas').DiscoverStrategyProfile) => Promise<void>
   runCustomStrategy: (opts: {
     id: string
     name: string
@@ -116,7 +116,10 @@ export function useDiscoverSession(): DiscoverSessionState {
     return () => stopPoll()
   }, [activeJobId, running, pollJob, stopPoll])
 
-  const runStrategy = useCallback(async (strategyId: string) => {
+  const runStrategy = useCallback(async (
+    strategyId: string,
+    profile?: import('../types/schemas').DiscoverStrategyProfile,
+  ) => {
     stopPoll()
     setRunning(true)
     setError('')
@@ -134,6 +137,7 @@ export function useDiscoverSession(): DiscoverSessionState {
         percent: 2,
         strategy_id: strategyId,
         strategy_name: '',
+        profile,
         prompt: '',
         model: null,
         started_at: new Date().toISOString(),
@@ -176,6 +180,7 @@ export function useDiscoverSession(): DiscoverSessionState {
         percent: 2,
         strategy_id: opts.id,
         strategy_name: opts.name,
+        profile: opts.profile,
         prompt: opts.prompt,
         model: null,
         started_at: new Date().toISOString(),

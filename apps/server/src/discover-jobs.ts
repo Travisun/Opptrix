@@ -4,8 +4,10 @@ import { fileURLToPath } from 'node:url'
 import { randomUUID } from 'node:crypto'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { AgentEngine } from '@opptrix/agent'
-import { getDiscoverStrategy } from '@opptrix/agent'
+import { getDiscoverStrategy, primaryDiscoverProfile } from '@opptrix/agent'
 import type { DiscoverPhase, DiscoverProgress, DiscoverResult } from '@opptrix/agent'
+import type { DiscoverStrategyProfile } from '@opptrix/shared'
+import { defaultDiscoverProfile } from '@opptrix/shared'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const LEGACY_STORE_PATH = path.resolve(__dirname, '../data/discover-jobs.json')
@@ -21,6 +23,7 @@ export interface DiscoverJobSnapshot {
   percent: number
   strategy_id: string
   strategy_name: string
+  profile: DiscoverStrategyProfile
   prompt: string
   model: string | null
   started_at: string
@@ -140,6 +143,7 @@ export function startDiscoverJob(
   const id = randomUUID()
   const now = new Date().toISOString()
   const prompt = `${strategy.name}：${strategy.description}`
+  const profile = primaryDiscoverProfile(strategy)
 
   const job: DiscoverJobSnapshot = {
     id,
@@ -149,6 +153,7 @@ export function startDiscoverJob(
     percent: 0,
     strategy_id: strategyId,
     strategy_name: strategy.name,
+    profile,
     prompt,
     model: model?.trim() || null,
     started_at: now,
@@ -206,7 +211,7 @@ export function startDiscoverCustomJob(
   strategyName: string,
   strategyId: string,
   model?: string,
-  profile?: import('@opptrix/shared').DiscoverStrategyProfile,
+  profile: DiscoverStrategyProfile = defaultDiscoverProfile(),
 ): DiscoverJobSnapshot {
   const text = prompt.trim()
   if (!text) throw new Error('请输入选股策略描述')
@@ -223,6 +228,7 @@ export function startDiscoverCustomJob(
     percent: 0,
     strategy_id: strategyId,
     strategy_name: strategyName.trim() || '自建策略',
+    profile,
     prompt: text,
     model: model?.trim() || null,
     started_at: now,

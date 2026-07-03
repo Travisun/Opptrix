@@ -1,6 +1,6 @@
 import { MarketDataEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
-  loadTushareConfig, saveTushareConfig, isBseCode,
+  loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
 } from '@opptrix/a-stock-layer'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -16,6 +16,16 @@ import { getMarketDataService } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, type ResearchResult,
+  assessAllDiscoverProfileReadiness,
+  assessDiscoverProfileReadiness,
+  isDiscoverStrategyProfile,
+  resolveRegimeStrategyIds,
+  ETF_REGIME_DETAIL,
+  listScorecardsForProfile,
+  resolveScorecardName,
+  scorecardProfileFromDiscover,
+  type DiscoverProfileReadinessContext,
+  type DiscoverStrategyProfile,
 } from '@opptrix/shared'
 import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
@@ -96,6 +106,8 @@ export class ResearchHub {
         case 'market_data_packs': return this.marketDataPacks(t0)
         case 'market_data_packs_save': return this.marketDataPacksSave(params, t0)
         case 'market_data_pack_prepare': return this.marketDataPackPrepare(params, t0)
+        case 'discover_profile_readiness': return this.discoverProfileReadiness(params, t0)
+        case 'discover_scorecards': return this.discoverScorecards(params, t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
         case 'market_regime': return this.marketRegime(t0)
@@ -268,10 +280,49 @@ export class ResearchHub {
       config,
       counts: {
         cn_stocks: status.stock_count,
+        cn_etfs: status.etf_count,
         us: status.us_count,
         crypto: status.crypto_count,
       },
     }, '市场数据包', t0)
+  }
+
+  private discoverReadinessContext(): DiscoverProfileReadinessContext {
+    const status = this.marketData.status()
+    return {
+      packs: this.marketData.marketPackConfig(),
+      stock_count: status.stock_count,
+      etf_count: status.etf_count,
+      us_count: status.us_count,
+      crypto_count: status.crypto_count,
+      cn_is_ready: status.is_ready,
+    }
+  }
+
+  private discoverScorecards(params: Record<string, unknown>, t0: number) {
+    const profileRaw = String(params.profile ?? '').trim()
+    if (!profileRaw || !isDiscoverStrategyProfile(profileRaw)) {
+      return fail('profile 须为 cn_equity 或 cn_etf', t0)
+    }
+    const scorecardProfile = scorecardProfileFromDiscover(profileRaw)
+    if (!scorecardProfile) {
+      return ok({ profile: profileRaw, scorecards: [], default: null }, '暂无评分卡', t0)
+    }
+    const scorecards = listScorecardsForProfile(scorecardProfile)
+    return ok({
+      profile: profileRaw,
+      scorecards,
+      default: resolveScorecardName(scorecardProfile),
+    }, '挖掘评分卡列表', t0)
+  }
+
+  private discoverProfileReadiness(params: Record<string, unknown>, t0: number) {
+    const ctx = this.discoverReadinessContext()
+    const profileRaw = String(params.profile ?? '').trim()
+    if (profileRaw && isDiscoverStrategyProfile(profileRaw)) {
+      return ok(assessDiscoverProfileReadiness(profileRaw, ctx), '挖掘就绪状态', t0)
+    }
+    return ok({ items: assessAllDiscoverProfileReadiness(ctx) }, '挖掘就绪状态', t0)
   }
 
   private marketDataPacksSave(params: Record<string, unknown>, t0: number) {
@@ -473,8 +524,20 @@ export class ResearchHub {
   }
 
   private async strategySignal(code: string, t0: number) {
-    const data = await quickAssess(this.de, code)
-    return ok(data, `${code} ${data.summary}`, t0)
+    const normalized = normalizeCode(code)
+    if (isCnEtfCode(normalized)) {
+      const technical = await quickAssess(this.de, normalized)
+      const card = this.marketData.etfScorecard(normalized)
+      const radarHint = card?.total_score != null ? ` · 决策雷达 ${card.total_score} 分` : ''
+      return ok({
+        ...technical,
+        asset_class: 'ETF' as const,
+        scorecard_name: 'ETF决策雷达',
+        etf_scorecard: card,
+      }, `${normalized} ${technical.summary}${radarHint}`, t0)
+    }
+    const data = await quickAssess(this.de, normalized)
+    return ok({ ...data, asset_class: 'EQUITY' as const, scorecard_name: '综合评估' }, `${normalized} ${data.summary}`, t0)
   }
 
   private async trendBrief(code: string, params: Record<string, unknown>, t0: number) {
@@ -616,8 +679,15 @@ export class ResearchHub {
       price_percentile_250d: computePricePercentile(klineBars, 250),
     })
 
+    const suggestedByProfile = {
+      cn_equity: resolveRegimeStrategyIds('cn_equity', snapshot.regime, snapshot.suggested_strategy_ids),
+      cn_etf: resolveRegimeStrategyIds('cn_etf', snapshot.regime, snapshot.suggested_strategy_ids),
+    } satisfies Partial<Record<DiscoverStrategyProfile, string[]>>
+
     return ok({
       ...snapshot,
+      suggested_by_profile: suggestedByProfile,
+      etf_regime_detail: ETF_REGIME_DETAIL[snapshot.regime],
       timestamp: new Date().toISOString(),
     }, snapshot.headline, t0)
   }

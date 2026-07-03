@@ -66,6 +66,16 @@ export interface DiscoverProfileMeta {
   mining_ready: boolean
 }
 
+export type DiscoverReadinessMode = 'local' | 'online' | 'blocked'
+
+export interface DiscoverProfileReadiness {
+  profile: DiscoverStrategyProfile
+  ready: boolean
+  mode: DiscoverReadinessMode
+  message: string
+  action: string | null
+}
+
 export interface DiscoverStrategyPublic {
   id: string
   name: string
@@ -149,6 +159,8 @@ export interface MarketRegimeData {
   headline: string
   detail: string
   suggested_strategy_ids: string[]
+  suggested_by_profile?: Partial<Record<DiscoverStrategyProfile, string[]>>
+  etf_regime_detail?: string
   indicators: MarketRegimeIndicators
   timestamp?: string
 }
@@ -178,6 +190,7 @@ export interface DiscoverRunResult {
     prescreen_top_n: number
     final_top_n: number
     refinement_notes: string
+    profile?: DiscoverStrategyProfile
   }
   prescreen: {
     scanned: number
@@ -197,6 +210,7 @@ export interface DiscoverJobSnapshot {
   percent: number
   strategy_id: string
   strategy_name: string
+  profile?: DiscoverStrategyProfile
   prompt: string
   model: string | null
   started_at: string

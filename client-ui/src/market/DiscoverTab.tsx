@@ -1,13 +1,18 @@
 import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { ProgressBar, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { AddRegular, ArrowRightRegular, DeleteRegular } from '@fluentui/react-icons'
-import { listDiscoverStrategies, getHealth } from '../api/client'
-import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyProfile, DiscoverStrategyPublic, MarketRegimeData } from '../types/schemas'
+import { listDiscoverStrategies, getHealth, getDiscoverReadiness } from '../api/client'
+import type { DiscoverJobSnapshot, DiscoverProfileReadiness, DiscoverStrategyOption, DiscoverStrategyProfile, DiscoverStrategyPublic, MarketRegimeData } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
 import DiscoverProfileTabList, { isDiscoverProfileMiningReady } from './DiscoverProfileTabList'
-import { defaultDiscoverProfile } from './discoverProfiles'
+import {
+  defaultDiscoverProfile,
+  DISCOVER_PROFILE_LABELS,
+  regimeDetailForProfile,
+  regimeSuggestedIds,
+} from './discoverProfiles'
 import { factorLabel } from './factorLabels'
 import { normalizeCode } from './format'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -365,7 +370,9 @@ function formatHistoryMeta(job: DiscoverJobSnapshot): string {
   const status = STATUS_LABEL[job.status] ?? job.status
   const count = job.result?.items.length
   const countText = count != null ? ` · ${count} 只` : ''
-  return `${time} · ${status}${countText}`
+  const profileLabel = job.profile ? DISCOVER_PROFILE_LABELS[job.profile] : null
+  const profileText = profileLabel ? ` · ${profileLabel}` : ''
+  return `${time}${profileText} · ${status}${countText}`
 }
 
 function toBuiltinOptions(list: DiscoverStrategyPublic[]): DiscoverStrategyOption[] {
@@ -385,9 +392,12 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panelTab, setPanelTab] = useState<DiscoverPanelTab>('results')
-  const [dbReady, setDbReady] = useState<boolean | null>(null)
   const [llmReady, setLlmReady] = useState<boolean | null>(null)
   const [marketRegime, setMarketRegime] = useState<MarketRegimeData | null>(null)
+  const [readiness, setReadiness] = useState<DiscoverProfileReadiness | null>(null)
+  const [readinessByProfile, setReadinessByProfile] = useState<
+    Partial<Record<DiscoverStrategyProfile, DiscoverProfileReadiness>>
+  >({})
 
   const { strategies: customStrategies } = useCustomDiscoverStrategies()
 
@@ -425,6 +435,29 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
   useEffect(() => {
     let cancelled = false
+    void getDiscoverReadiness().then(resp => {
+      if (cancelled || !resp.data || !('items' in resp.data)) return
+      const map: Partial<Record<DiscoverStrategyProfile, DiscoverProfileReadiness>> = {}
+      for (const item of resp.data.items) map[item.profile] = item
+      setReadinessByProfile(map)
+    }).catch(() => {})
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    void getDiscoverReadiness(profile).then(resp => {
+      if (cancelled || !resp.data || !('profile' in resp.data)) return
+      setReadiness(resp.data)
+      setReadinessByProfile(prev => ({ ...prev, [profile]: resp.data as DiscoverProfileReadiness }))
+    }).catch(() => {
+      if (!cancelled) setReadiness(null)
+    })
+    return () => { cancelled = true }
+  }, [profile])
+
+  useEffect(() => {
+    let cancelled = false
     void listDiscoverStrategies(profile).then(resp => {
       if (cancelled) return
       const list = resp.strategies ?? []
@@ -444,10 +477,6 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
   useEffect(() => {
     let cancelled = false
-    void research.marketDbStatus().then(resp => {
-      if (cancelled || !resp.success || !resp.data) return
-      setDbReady(resp.data.is_ready)
-    }).catch(() => {})
     void getHealth().then(h => {
       if (cancelled) return
       setLlmReady(Boolean(h.llm_configured))
@@ -471,7 +500,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
         profile: custom.profile ?? profile,
       })
     } else {
-      void runStrategy(selectedId)
+      void runStrategy(selectedId, profile)
     }
   }
 
@@ -497,18 +526,31 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
   const regimeHint = useMemo(() => {
     if (!marketRegime) return null
-    if (!selectedId) return marketRegime.detail
-    const suggested = marketRegime.suggested_strategy_ids
-    if (!suggested.length) return marketRegime.detail
+    if (profile === 'cn_etf') {
+      const suggested = regimeSuggestedIds(marketRegime, 'cn_etf')
+      const base = regimeDetailForProfile(marketRegime, 'cn_etf')
+      if (!selectedId) return base
+      if (suggested.includes(selectedId)) return `当前市况与所选 ETF 策略较契合。${base}`
+      const first = builtinList.find(st => st.id === suggested[0])
+      if (!first) return base
+      return `${base} 可优先考虑「${first.name}」。`
+    }
+    if (profile !== 'cn_equity') return null
+    if (!selectedId) return regimeDetailForProfile(marketRegime, 'cn_equity')
+    const suggested = regimeSuggestedIds(marketRegime, 'cn_equity')
+    const detail = regimeDetailForProfile(marketRegime, 'cn_equity')
+    if (!suggested.length) return detail
     if (suggested.includes(selectedId)) {
-      return `当前市况与所选策略较契合。${marketRegime.detail}`
+      return `当前市况与所选策略较契合。${detail}`
     }
     const first = builtinList.find(st => st.id === suggested[0])
-    if (!first) return marketRegime.detail
-    return `${marketRegime.detail} 可优先考虑「${first.name}」。`
-  }, [marketRegime, selectedId, builtinList])
+    if (!first) return detail
+    return `${detail} 可优先考虑「${first.name}」。`
+  }, [marketRegime, selectedId, builtinList, profile])
 
   const handleLoadHistory = (histJob: DiscoverJobSnapshot) => {
+    const histProfile = histJob.profile ?? histJob.result?.plan?.profile
+    if (histProfile) setProfile(histProfile)
     loadHistoryJob(histJob)
     setPanelTab('results')
   }
@@ -527,12 +569,21 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           selected={profile}
           onSelect={setProfile}
           disabled={running}
+          readinessByProfile={readinessByProfile}
         />
         <Text className={s.headHint} block>
           {profileMiningReady
             ? '选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。'
             : '该资产类型的挖掘策略筹备中，可先开启对应数据包或关注后续更新。'}
         </Text>
+        {readiness && (
+          <div className={readiness.ready ? s.dbBanner : s.regimeBanner}>
+            <Text block>{readiness.message}</Text>
+            {readiness.action && !readiness.ready && (
+              <Text block style={{ marginTop: 2 }}>{readiness.action}</Text>
+            )}
+          </div>
+        )}
         {profileMiningReady ? (
           <>
         <DiscoverStrategyPicker
@@ -546,7 +597,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           <OpptrixButton
             className={s.runBtn}
             variant="primary"
-            disabled={running || !selectedId}
+            disabled={running || !selectedId || readiness?.ready === false}
             onClick={handleRun}
           >
             {running ? '挖掘中…' : '开始挖掘'}
@@ -559,19 +610,23 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
             {profile === 'cn_etf'
-              ? (dbReady ? '加载条件 → ETF 初选 → 精选标的' : 'ETF 库未就绪时将提示同步')
-              : (dbReady ? '解析条件 → 因子初选 → 精选标的' : '初选库未就绪时将在线扫描')}
+              ? '加载条件 → ETF 初选 → 决策雷达排序 → 精选标的'
+              : readiness?.mode === 'online'
+                ? '解析条件 → 在线初选 → 精选标的'
+                : '解析条件 → 因子初选 → 精选标的'}
             {llmReady === false ? ' · 需配置大模型' : ''}
           </Text>
         </div>
           </>
+        ) : readiness?.action ? (
+          <Text className={s.headHint} block>{readiness.action}</Text>
         ) : null}
-        {marketRegime && profile === 'cn_equity' && (
+        {marketRegime && (profile === 'cn_equity' || profile === 'cn_etf') && (
           <div className={s.regimeBanner}>
             <Text className={s.regimeHeadline} block>
-              {marketRegime.headline}
+              {profile === 'cn_etf' ? '宽基 ETF 配置参考' : marketRegime.headline}
             </Text>
-            {regimeIndicators && (
+            {profile === 'cn_equity' && regimeIndicators && (
               <Text className={s.regimeIndicators} block>
                 {regimeIndicators}
               </Text>
@@ -596,12 +651,6 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       <div className={s.body}>
       {panelTab === 'results' && (
         <>
-      {dbReady === false && (
-        <Text className={s.dbBanner} block>
-          初选数据库尚未就绪。建议打开设置 → 基础数据完成构建。
-        </Text>
-      )}
-
       {(running || job) && (
         <div className={s.progressBlock}>
           <div className={s.progressMeta}>

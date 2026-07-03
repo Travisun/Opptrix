@@ -484,6 +484,15 @@ export async function listDiscoverProfiles() {
   return jsonFetch<{ profiles: import('../types/schemas').DiscoverProfileMeta[] }>('/discover/profiles')
 }
 
+export async function getDiscoverReadiness(profile?: import('../types/schemas').DiscoverStrategyProfile) {
+  const qs = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+  return jsonFetch<{
+    success: boolean
+    data: import('../types/schemas').DiscoverProfileReadiness
+      | { items: import('../types/schemas').DiscoverProfileReadiness[] }
+  }>(`/discover/readiness${qs}`)
+}
+
 export async function listDiscoverStrategies(profile?: import('../types/schemas').DiscoverStrategyProfile) {
   const qs = profile ? `?profile=${encodeURIComponent(profile)}` : ''
   return jsonFetch<{ strategies: import('../types/schemas').DiscoverStrategyPublic[] }>(`/discover/strategies${qs}`)

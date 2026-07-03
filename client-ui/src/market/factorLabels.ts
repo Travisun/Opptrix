@@ -45,6 +45,7 @@ export const FACTOR_LABELS: Record<string, string> = {
   premium_rate: '折溢价率',
   scale_yi: '规模（亿元）',
   nav: '单位净值',
+  etf_score: '决策雷达分',
 }
 
 export function factorLabel(key: string): string | null {
