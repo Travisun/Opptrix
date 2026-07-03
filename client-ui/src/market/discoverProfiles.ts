@@ -36,11 +36,16 @@ export function defaultDiscoverProfile(): DiscoverStrategyProfile {
 }
 
 export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'cn_equity' || profile === 'cn_etf'
+  return profile === 'cn_equity'
+    || profile === 'cn_etf'
+    || profile === 'us_equity'
+    || profile === 'crypto_spot'
 }
 
 export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrategyProfile {
   if (strategyId.startsWith('etf_')) return 'cn_etf'
+  if (strategyId.startsWith('us_')) return 'us_equity'
+  if (strategyId.startsWith('crypto_')) return 'crypto_spot'
   return 'cn_equity'
 }
 

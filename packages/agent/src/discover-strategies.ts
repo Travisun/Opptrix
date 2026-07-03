@@ -21,6 +21,8 @@ export interface DiscoverStrategy {
   applicableProfiles: DiscoverStrategyProfile[]
   requiresPack: MarketDataPackId[]
   planMode: DiscoverPlanMode
+  /** 美股 / Crypto 本地列表筛选参数（builtin 策略） */
+  screen_params?: Record<string, string>
 }
 
 const C = (factor: string, op: DiscoverScreenCondition['op'], value: number): DiscoverScreenCondition =>
@@ -49,6 +51,29 @@ function cnEtf(s: StrategyCore): DiscoverStrategy {
     requiresPack: ['cn'],
     planMode: 'builtin',
     scorecard: s.scorecard || ETF_SCORECARD_NAME,
+  }
+}
+
+function usEquity(s: Omit<StrategyCore, 'conditions'> & { conditions?: DiscoverScreenCondition[]; screen_params?: Record<string, string> }): DiscoverStrategy {
+  return {
+    ...s,
+    conditions: s.conditions ?? [],
+    applicableProfiles: ['us_equity'],
+    requiresPack: ['us'],
+    planMode: 'builtin',
+    screen_params: s.screen_params,
+  }
+}
+
+function cryptoSpot(s: Omit<StrategyCore, 'conditions'> & { conditions?: DiscoverScreenCondition[]; screen_params?: Record<string, string> }): DiscoverStrategy {
+  return {
+    ...s,
+    conditions: s.conditions ?? [],
+    applicableProfiles: ['crypto_spot'],
+    requiresPack: ['crypto'],
+    planMode: 'builtin',
+    scorecard: s.scorecard || '综合评估',
+    screen_params: s.screen_params,
   }
 }
 
@@ -316,6 +341,61 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
     ],
     refinement_notes: '关注跟踪指数代表性；提示行业/主题 ETF 与宽基的风险差异。',
   }),
+  usEquity({
+    id: 'us_broad_universe',
+    name: '美股广谱观察',
+    category: 'balanced',
+    tagline: '本地美股列表 · 广谱初筛',
+    methodology: '基于本地 us_list 同步结果，按 ticker 排序取广谱样本，Agent 结合行情与公司概况精选。',
+    description: '从本地美股库中广谱初选，适合建立美股观察池与主题研究起点。',
+    scorecard: '综合评估',
+    prescreen_top_n: 80,
+    final_top_n: 15,
+    conditions: [],
+    refinement_notes: '优先流动性好、业务清晰的大中盘；回避 OTC 与信息极度匮乏标的。',
+  }),
+  usEquity({
+    id: 'us_tech_focus',
+    name: '美股科技聚焦',
+    category: 'growth',
+    tagline: 'Technology 行业 · 本地筛选',
+    methodology: '本地 instruments.extra.industry 含 Technology 的美股列表，Agent 结合 snapshot 与财报摘要解读。',
+    description: '聚焦科技行业美股，适合跟踪软件、半导体、互联网等主题。',
+    scorecard: '综合评估',
+    prescreen_top_n: 60,
+    final_top_n: 12,
+    conditions: [],
+    screen_params: { industry_contains: 'Technology' },
+    refinement_notes: '区分平台型与周期型科技；提示估值与盈利质量差异，勿推荐买卖。',
+  }),
+  cryptoSpot({
+    id: 'crypto_usdt_majors',
+    name: 'USDT 主流对',
+    category: 'momentum',
+    tagline: 'USDT 计价 · 本地交易对池',
+    methodology: '本地 Crypto instruments 中 USDT 计价对，Agent 结合行情与 K 线做研究解读。',
+    description: '从本地 USDT 交易对中初选，适合观察主流 Crypto 标的。',
+    scorecard: '综合评估',
+    prescreen_top_n: 60,
+    final_top_n: 12,
+    conditions: [],
+    screen_params: { quote: 'USDT' },
+    refinement_notes: '优先流动性与认知度较高的基础币；提示 7×24 波动与杠杆风险，勿推荐买卖。',
+  }),
+  cryptoSpot({
+    id: 'crypto_btc_quote',
+    name: 'BTC 计价对',
+    category: 'balanced',
+    tagline: 'BTC 计价 · 本地筛选',
+    methodology: '本地 BTC 计价交易对列表，适合观察以 BTC 为锚的 alt 生态。',
+    description: '筛选 BTC 计价交易对，适合研究 BTC 生态相关标的。',
+    scorecard: '综合评估',
+    prescreen_top_n: 40,
+    final_top_n: 10,
+    conditions: [],
+    screen_params: { quote: 'BTC' },
+    refinement_notes: '注意小市值 alt 流动性；仅研究与数据解读，勿推荐买卖。',
+  }),
 ]
 
 export function primaryDiscoverProfile(strategy: DiscoverStrategy): DiscoverStrategyProfile {
@@ -354,7 +434,11 @@ export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string
     .join('；')
   const assetHint = profile === 'cn_etf'
     ? 'A 股 ETF（折溢价%、规模亿元）'
-    : 'A 股股票（本地因子库）'
+    : profile === 'us_equity'
+      ? '美股（本地列表 keyword / industry_contains）'
+      : profile === 'crypto_spot'
+        ? 'Crypto 交易对（keyword / quote / base_contains）'
+        : 'A 股股票（本地因子库）'
   return [
     `【策略】${strategy.name}`,
     `【资产类型】${assetHint}`,
@@ -365,7 +449,11 @@ export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string
     `【规模】初选约 ${strategy.prescreen_top_n} 只，最终精选 ${strategy.final_top_n} 只。`,
     profile === 'cn_etf'
       ? '请输出用于本地 ETF 筛选的量化 conditions（1-5 条），因子仅限 premium_rate、scale_yi；保留 refinement_notes。'
-      : '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
+      : profile === 'us_equity'
+        ? '请输出 screen_params（keyword 和/或 industry_contains 至少一项），保留 refinement_notes。'
+        : profile === 'crypto_spot'
+          ? '请输出 screen_params（keyword、quote 或 base_contains 至少一项），保留 refinement_notes。'
+          : '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
   ].filter(Boolean).join('\n')
 }
 
@@ -377,5 +465,6 @@ export function strategyToPlan(strategy: DiscoverStrategy): DiscoverParsedPlan {
     final_top_n: strategy.final_top_n,
     refinement_notes: strategy.refinement_notes,
     profile: primaryDiscoverProfile(strategy),
+    screen_params: strategy.screen_params,
   }
 }

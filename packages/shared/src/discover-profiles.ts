@@ -49,14 +49,22 @@ export const CN_ETF_DISCOVER_FACTORS = [
   'premium_rate', 'scale_yi', 'nav',
 ] as const
 
+/** 美股挖掘 — 本地列表筛选字段 */
+export const US_DISCOVER_FILTERS = [
+  'keyword', 'industry_contains',
+] as const
+
+/** Crypto 挖掘 — 本地交易对筛选字段 */
+export const CRYPTO_DISCOVER_FILTERS = [
+  'keyword', 'quote', 'base_contains',
+] as const
+
 export function discoverFactorsForProfile(profile: DiscoverStrategyProfile): readonly string[] {
   switch (profile) {
     case 'cn_etf': return CN_ETF_DISCOVER_FACTORS
+    case 'us_equity': return US_DISCOVER_FILTERS
+    case 'crypto_spot': return CRYPTO_DISCOVER_FILTERS
     case 'cn_equity':
-    case 'us_equity':
-      return CN_EQUITY_DISCOVER_FACTORS
-    case 'crypto_spot':
-      return ['momentum_1m', 'momentum_3m', 'volume_ratio']
     default:
       return CN_EQUITY_DISCOVER_FACTORS
   }
@@ -82,7 +90,10 @@ export function listDiscoverProfileMeta() {
 }
 
 export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'cn_equity' || profile === 'cn_etf'
+  return profile === 'cn_equity'
+    || profile === 'cn_etf'
+    || profile === 'us_equity'
+    || profile === 'crypto_spot'
 }
 
 export type DiscoverReadinessMode = 'local' | 'online' | 'blocked'
@@ -118,34 +129,6 @@ export function assessDiscoverProfileReadiness(
   ctx: DiscoverProfileReadinessContext,
 ): DiscoverProfileReadiness {
   const packId = DISCOVER_PROFILE_REQUIRES_PACK[profile]
-
-  if (!isDiscoverProfileMiningReady(profile)) {
-    const base: DiscoverProfileReadiness = {
-      profile,
-      ready: false,
-      mode: 'blocked',
-      message: `${DISCOVER_PROFILE_LABELS[profile]}挖掘策略筹备中`,
-      action: '请关注后续版本更新',
-    }
-    if (packId && !ctx.packs[packId].enabled) {
-      return { ...base, message: packDisabledMessage(packId), action: packDisabledAction(packId) }
-    }
-    if (profile === 'us_equity' && ctx.us_count < 1) {
-      return {
-        ...base,
-        message: '本地尚无美股列表',
-        action: packDisabledAction('us'),
-      }
-    }
-    if (profile === 'crypto_spot' && ctx.crypto_count < 1) {
-      return {
-        ...base,
-        message: '本地尚无 Crypto 交易对列表',
-        action: packDisabledAction('crypto'),
-      }
-    }
-    return base
-  }
 
   if (packId && !ctx.packs[packId].enabled) {
     return {
@@ -195,6 +178,44 @@ export function assessDiscoverProfileReadiness(
     }
   }
 
+  if (profile === 'us_equity') {
+    if (ctx.us_count < 1) {
+      return {
+        profile,
+        ready: false,
+        mode: 'blocked',
+        message: '本地尚无美股列表',
+        action: packDisabledAction('us'),
+      }
+    }
+    return {
+      profile,
+      ready: true,
+      mode: 'local',
+      message: `本地美股 ${ctx.us_count} 只，将按列表筛选初选`,
+      action: null,
+    }
+  }
+
+  if (profile === 'crypto_spot') {
+    if (ctx.crypto_count < 1) {
+      return {
+        profile,
+        ready: false,
+        mode: 'blocked',
+        message: '本地尚无 Crypto 交易对列表',
+        action: packDisabledAction('crypto'),
+      }
+    }
+    return {
+      profile,
+      ready: true,
+      mode: 'local',
+      message: `本地 Crypto ${ctx.crypto_count} 对，将按交易对筛选初选`,
+      action: null,
+    }
+  }
+
   return {
     profile,
     ready: false,
@@ -213,6 +234,8 @@ export function assessAllDiscoverProfileReadiness(
 /** 内置策略 id → Profile（自编策略以存储的 profile 为准） */
 export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrategyProfile {
   if (strategyId.startsWith('etf_')) return 'cn_etf'
+  if (strategyId.startsWith('us_')) return 'us_equity'
+  if (strategyId.startsWith('crypto_')) return 'crypto_spot'
   return 'cn_equity'
 }
 

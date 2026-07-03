@@ -16,7 +16,7 @@ import {
   primaryDiscoverProfile,
   strategyToPlan,
 } from './discover-strategies.js'
-import { DATA_LAYER_MINING_TOOL_NAMES } from './tool-meta.js'
+import { discoverMiningToolNames } from './tool-meta.js'
 
 export type DiscoverPhase = 'parsing' | 'prescreen' | 'mining' | 'done' | 'error'
 
@@ -39,6 +39,8 @@ export interface DiscoverParsedPlan {
   final_top_n: number
   refinement_notes: string
   profile: DiscoverStrategyProfile
+  /** 美股 / Crypto 本地列表筛选（keyword、quote 等） */
+  screen_params?: Record<string, string>
 }
 
 export interface DiscoverFinalItem {
@@ -70,6 +72,25 @@ export interface DiscoverResult {
 
 const ALLOWED_OPS = new Set(['>', '<', '>=', '<=', '='])
 
+function isFilterDiscoverProfile(profile: DiscoverStrategyProfile): boolean {
+  return profile === 'us_equity' || profile === 'crypto_spot'
+}
+
+function extractScreenParams(
+  raw: Record<string, unknown>,
+  profile: DiscoverStrategyProfile,
+): Record<string, string> {
+  const allowed = new Set(discoverFactorsForProfile(profile))
+  const out: Record<string, string> = {}
+  if (raw.screen_params && typeof raw.screen_params === 'object') {
+    for (const [key, value] of Object.entries(raw.screen_params as Record<string, unknown>)) {
+      const trimmed = String(value ?? '').trim()
+      if (allowed.has(key) && trimmed) out[key] = trimmed
+    }
+  }
+  return out
+}
+
 function extractJsonObject(text: string): Record<string, unknown> | null {
   const trimmed = text.trim()
   try {
@@ -98,6 +119,24 @@ function normalizePlan(
   prompt: string,
   profile: DiscoverStrategyProfile = defaultDiscoverProfile(),
 ): DiscoverParsedPlan {
+  const prescreen_top_n = Math.min(120, Math.max(20, Number(raw.prescreen_top_n) || 60))
+  const final_top_n = Math.min(30, Math.max(5, Number(raw.final_top_n) || 15))
+  const base = {
+    strategy_title: String(raw.strategy_title ?? '').trim() || prompt.slice(0, 24) || '定制选股',
+    prescreen_top_n,
+    final_top_n,
+    refinement_notes: String(raw.refinement_notes ?? raw.refinement_focus ?? '').trim() || prompt,
+    profile,
+  }
+
+  if (isFilterDiscoverProfile(profile)) {
+    const screen_params = extractScreenParams(raw, profile)
+    if (!Object.keys(screen_params).length) {
+      throw new Error('AI 未生成有效筛选条件')
+    }
+    return { ...base, conditions: [], screen_params }
+  }
+
   const allowedFactors = new Set(discoverFactorsForProfile(profile))
   const conditions: DiscoverScreenCondition[] = []
   if (Array.isArray(raw.conditions)) {
@@ -116,17 +155,7 @@ function normalizePlan(
     throw new Error('AI 未生成有效筛选条件')
   }
 
-  const prescreen_top_n = Math.min(120, Math.max(20, Number(raw.prescreen_top_n) || 60))
-  const final_top_n = Math.min(30, Math.max(5, Number(raw.final_top_n) || 15))
-
-  return {
-    strategy_title: String(raw.strategy_title ?? '').trim() || prompt.slice(0, 24) || '定制选股',
-    conditions,
-    prescreen_top_n,
-    final_top_n,
-    refinement_notes: String(raw.refinement_notes ?? raw.refinement_focus ?? '').trim() || prompt,
-    profile,
-  }
+  return { ...base, conditions }
 }
 
 function etfConditionsToQuery(
@@ -182,11 +211,49 @@ function formatEtfCandidateTable(
   }).join('\n')
 }
 
+function formatUsCandidateTable(
+  rows: Array<{ code: string; name: string; exchange: string | null }>,
+): string {
+  return rows.map((r, i) => `${i + 1}. ${r.code} ${r.name ?? '—'} | ${r.exchange ?? '—'}`).join('\n')
+}
+
+function formatCryptoCandidateTable(
+  rows: Array<{ code: string; name: string; base: string; quote: string }>,
+): string {
+  return rows.map((r, i) => `${i + 1}. ${r.code} ${r.name ?? '—'} | ${r.base}/${r.quote}`).join('\n')
+}
+
+function localScreenParamsFromPlan(plan: DiscoverParsedPlan): Record<string, unknown> {
+  return {
+    top_n: plan.prescreen_top_n,
+    sort_by: 'code',
+    sort_order: 'asc',
+    ...plan.screen_params,
+  }
+}
+
+function prescreenProgressMessage(plan: DiscoverParsedPlan): string {
+  const profile = plan.profile ?? defaultDiscoverProfile()
+  if (profile === 'cn_etf') {
+    return `ETF 初选：${plan.conditions.length} 条条件 + 决策雷达评分，最多 ${plan.prescreen_top_n} 只…`
+  }
+  if (profile === 'us_equity') {
+    const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
+    return `美股初选：${filters}，最多 ${plan.prescreen_top_n} 只…`
+  }
+  if (profile === 'crypto_spot') {
+    const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
+    return `Crypto 初选：${filters}，最多 ${plan.prescreen_top_n} 对…`
+  }
+  return `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`
+}
+
 type PrescreenCandidate = {
   code: string
   name: string
   total_score: number
   key_factors: Record<string, number>
+  exchange?: string | null
 }
 
 export class DiscoverRunner {
@@ -295,16 +362,19 @@ export class DiscoverRunner {
 
     onProgress({
       phase: 'prescreen',
-      message: profile === 'cn_etf'
-        ? `ETF 初选：${plan.conditions.length} 条条件 + 决策雷达评分，最多 ${plan.prescreen_top_n} 只…`
-        : `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`,
+      message: prescreenProgressMessage(plan),
       percent: 25,
     })
     throwIfAborted()
 
-    const { screenData, candidates } = profile === 'cn_etf'
+    const prescreenResult = profile === 'cn_etf'
       ? await this.prescreenEtf(plan, msg => onProgress({ phase: 'prescreen', message: msg, percent: 32 }))
-      : await this.prescreenEquity(plan, effectiveScorecard)
+      : profile === 'us_equity'
+        ? await this.prescreenUs(plan)
+        : profile === 'crypto_spot'
+          ? await this.prescreenCrypto(plan)
+          : await this.prescreenEquity(plan, effectiveScorecard)
+    const { screenData, candidates } = prescreenResult
     throwIfAborted()
 
     if (!candidates.length) {
@@ -486,6 +556,61 @@ export class DiscoverRunner {
     return { screenData, candidates }
   }
 
+  private async prescreenUs(plan: DiscoverParsedPlan) {
+    const screenResp = await this.hub.dispatch('local_us_screen', localScreenParamsFromPlan(plan))
+    if (!screenResp.success || !screenResp.data) {
+      throw new Error(screenResp.message || '美股初选失败')
+    }
+    const data = screenResp.data as {
+      total_universe: number
+      passed: number
+      items: Array<{ code: string; name: string | null; exchange: string | null }>
+    }
+    const candidates: PrescreenCandidate[] = (data.items ?? []).map(item => ({
+      code: item.code,
+      name: item.name ?? item.code,
+      total_score: 50,
+      key_factors: {},
+      exchange: item.exchange,
+    }))
+    return {
+      screenData: {
+        total_scanned: data.total_universe,
+        passed: data.passed,
+        trade_date: null as string | null,
+        source: 'local' as const,
+      },
+      candidates,
+    }
+  }
+
+  private async prescreenCrypto(plan: DiscoverParsedPlan) {
+    const screenResp = await this.hub.dispatch('local_crypto_screen', localScreenParamsFromPlan(plan))
+    if (!screenResp.success || !screenResp.data) {
+      throw new Error(screenResp.message || 'Crypto 初选失败')
+    }
+    const data = screenResp.data as {
+      total_universe: number
+      passed: number
+      items: Array<{ code: string; name: string | null; base: string; quote: string }>
+    }
+    const candidates: PrescreenCandidate[] = (data.items ?? []).map(item => ({
+      code: item.code,
+      name: item.name ?? item.code,
+      total_score: 50,
+      key_factors: {},
+    }))
+    return {
+      screenData: {
+        total_scanned: data.total_universe,
+        passed: data.passed,
+        trade_date: null as string | null,
+        source: 'local' as const,
+      },
+      candidates,
+    }
+  }
+
   private async resolvePlan(
     llm: NonNullable<ReturnType<ProviderRegistry['createLlm']>>,
     prompt: string,
@@ -499,7 +624,13 @@ export class DiscoverRunner {
           ? prompt
           : `${prompt}\n\n上次解析未得到有效 conditions，请严格输出 1-5 条可用因子条件 JSON。`
         const plan = await this.parsePlan(llm, userPrompt, profile)
-        if (!plan.conditions.length) throw new Error('conditions 为空')
+        if (isFilterDiscoverProfile(profile)) {
+          if (!plan.screen_params || !Object.keys(plan.screen_params).length) {
+            throw new Error('screen_params 为空')
+          }
+        } else if (!plan.conditions.length) {
+          throw new Error('conditions 为空')
+        }
         return {
           ...plan,
           strategy_title: plan.strategy_title || hints?.strategy_title || prompt.slice(0, 24) || '定制选股',
@@ -520,17 +651,31 @@ export class DiscoverRunner {
     profile: DiscoverStrategyProfile = defaultDiscoverProfile(),
   ): Promise<DiscoverParsedPlan> {
     const factorList = discoverFactorsForProfile(profile).join(', ')
-    const assetLabel = profile === 'cn_etf' ? 'A 股 ETF 筛选' : 'A 股选股策略'
+    const assetLabel = profile === 'cn_etf'
+      ? 'A 股 ETF 筛选'
+      : profile === 'us_equity'
+        ? '美股列表筛选'
+        : profile === 'crypto_spot'
+          ? 'Crypto 交易对筛选'
+          : 'A 股选股策略'
+    const jsonHint = isFilterDiscoverProfile(profile)
+      ? '{"strategy_title":"标题","screen_params":{"keyword":"AAPL"},"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
+      : '{"strategy_title":"标题","conditions":[{"factor":"pe","op":"<=","value":25}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
+    const rules = isFilterDiscoverProfile(profile)
+      ? `screen_params 至少 1 项；可用字段：${factorList}；不要输出 conditions。`
+      : 'conditions 1-5 条；op 为 > >= < <= =；数值为合理量化近似；参考因子示例可调整但需符合策略意图。'
     const messages: ChatMessage[] = [
       {
         role: 'system',
         content: [
           `你是 ${assetLabel}解析器。将用户或预置策略描述转为 JSON，不要输出其它文字。`,
-          '必须根据策略语义推导量化条件，禁止套用与策略无关的固定模板。',
-          `可用因子：${factorList}`,
+          '必须根据策略语义推导筛选条件，禁止套用与策略无关的固定模板。',
+          isFilterDiscoverProfile(profile)
+            ? `可用筛选字段：${factorList}`
+            : `可用因子：${factorList}`,
           'JSON 格式：',
-          '{"strategy_title":"标题","conditions":[{"factor":"pe","op":"<=","value":25}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}',
-          '规则：conditions 1-5 条；op 为 > >= < <= =；数值为合理量化近似；参考因子示例可调整但需符合策略意图。',
+          jsonHint,
+          `规则：${rules}`,
         ].join('\n'),
       },
       { role: 'user', content: prompt },
@@ -553,6 +698,8 @@ export class DiscoverRunner {
   ): Promise<{ strategy_summary: string; items: Array<Partial<DiscoverFinalItem> & { code: string; name: string }> }> {
     const profile = plan.profile ?? defaultDiscoverProfile()
     const isEtf = profile === 'cn_etf'
+    const isUs = profile === 'us_equity'
+    const isCrypto = profile === 'crypto_spot'
 
     let candidateTable: string
     if (isEtf) {
@@ -563,6 +710,22 @@ export class DiscoverRunner {
         scale_yi: c.key_factors.scale_yi ?? null,
         key_factors: c.key_factors,
       })))
+    } else if (isUs) {
+      candidateTable = formatUsCandidateTable(candidates.map(c => ({
+        code: c.code,
+        name: c.name,
+        exchange: c.exchange ?? null,
+      })))
+    } else if (isCrypto) {
+      candidateTable = formatCryptoCandidateTable(candidates.map(c => {
+        const parts = c.code.includes('/') ? c.code.split('/') : [c.code, 'USDT']
+        return {
+          code: c.code,
+          name: c.name,
+          base: parts[0] ?? c.code,
+          quote: parts[1] ?? 'USDT',
+        }
+      }))
     } else {
       const codes = candidates.map(c => c.code)
       let enriched = candidates.map(c => ({
@@ -595,12 +758,12 @@ export class DiscoverRunner {
       strategy_summary: '策略执行摘要',
       items: [{
         rank: 1,
-        code: isEtf ? '510300' : '600519',
-        name: isEtf ? '沪深300ETF' : '贵州茅台',
+        code: isEtf ? '510300' : isUs ? 'AAPL' : isCrypto ? 'BTC/USDT' : '600519',
+        name: isEtf ? '沪深300ETF' : isUs ? 'Apple' : isCrypto ? 'Bitcoin' : '贵州茅台',
         match_score: 90,
         thesis: '符合策略的核心逻辑',
-        highlights: isEtf ? ['折溢价 0.2%', '规模 800亿'] : ['PE 18x', 'ROE 30%'],
-        risks: isEtf ? ['跟踪误差'] : ['行业景气波动'],
+        highlights: isEtf ? ['折溢价 0.2%', '规模 800亿'] : isUs ? ['Technology', '大市值'] : isCrypto ? ['USDT 计价', '高流动性'] : ['PE 18x', 'ROE 30%'],
+        risks: isEtf ? ['跟踪误差'] : isUs ? ['汇率与宏观波动'] : isCrypto ? ['7×24 高波动'] : ['行业景气波动'],
       }],
     }, null, 0)
 
@@ -612,7 +775,25 @@ export class DiscoverRunner {
         outputSchema,
         `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究解读。`,
       ].join('\n')
-      : [
+      : isUs
+        ? [
+          '你是 Opptrix 美股挖掘 Agent。候选来自本地 us_list 初选。',
+          '可调用：get_market_db_status、get_local_us_screen_schema、screen_local_us_stocks、search_us_stocks、get_us_stock_snapshot、get_us_stock_profile、get_us_stock_financials、get_us_stock_kline',
+          '禁止编造数字；禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的深入。',
+          '只能从候选列表中选股。最终必须输出严格 JSON：',
+          outputSchema,
+          `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
+        ].join('\n')
+        : isCrypto
+          ? [
+            '你是 Opptrix Crypto 挖掘 Agent。候选来自本地 crypto_list 初选。',
+            '可调用：get_market_db_status、get_local_crypto_screen_schema、screen_local_crypto_pairs、search_crypto_pairs、get_crypto_snapshot、get_crypto_kline、get_crypto_quote',
+            '禁止编造数字；7×24 市场波动大，仅做研究解读。只能从候选列表中选交易对。',
+            '最终必须输出严格 JSON：',
+            outputSchema,
+            `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖。`,
+          ].join('\n')
+          : [
         '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
         '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
         '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_stock_snapshots',
@@ -639,7 +820,7 @@ export class DiscoverRunner {
       },
     ]
 
-    const broker = await McpToolBroker.create(this.tools, DATA_LAYER_MINING_TOOL_NAMES)
+    const broker = await McpToolBroker.create(this.tools, discoverMiningToolNames(profile))
     const openAiTools = await broker.openAiTools()
 
     const MAX_ROUNDS = 6

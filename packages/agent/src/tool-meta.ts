@@ -243,6 +243,30 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '搜索 Crypto 交易对；本地 instruments 已同步时优先本地。',
     compliance: 'keyword ≥1 字符；结果 pair 用于 get_crypto_snapshot。',
   },
+  get_local_us_screen_schema: {
+    hubFeature: 'local_us_screen_schema',
+    miningEligible: false,
+    usageGuide: 'screen_local_us_stocks 前先读本地美股筛选维度说明。',
+    compliance: '只读 schema；需 us_list 已同步。',
+  },
+  screen_local_us_stocks: {
+    hubFeature: 'local_us_screen',
+    miningEligible: true,
+    usageGuide: '按 ticker/公司名、行业关键词筛选本地美股列表。',
+    compliance: 'top_n ≤200；本地 us_count=0 时勿调用。',
+  },
+  get_local_crypto_screen_schema: {
+    hubFeature: 'local_crypto_screen_schema',
+    miningEligible: false,
+    usageGuide: 'screen_local_crypto_pairs 前先读本地 Crypto 筛选维度说明。',
+    compliance: '只读 schema；需 crypto_list 已同步。',
+  },
+  screen_local_crypto_pairs: {
+    hubFeature: 'local_crypto_screen',
+    miningEligible: true,
+    usageGuide: '按 keyword、quote（USDT/USDC/BTC 等）、base_contains 筛选本地交易对。',
+    compliance: 'top_n ≤200；本地 crypto_count=0 时勿调用。',
+  },
   search_stocks: {
     hubFeature: 'search_stocks',
     miningEligible: true,
@@ -411,6 +435,34 @@ export const TOOL_META: Record<string, ToolMeta> = {
 export const DATA_LAYER_MINING_TOOL_NAMES = Object.entries(TOOL_META)
   .filter(([, m]) => m.miningEligible)
   .map(([name]) => name) as readonly string[]
+
+const US_MINING_TOOL_NAMES = [
+  'get_market_db_status',
+  'get_local_us_screen_schema',
+  'screen_local_us_stocks',
+  'search_us_stocks',
+  'get_us_stock_snapshot',
+  'get_us_stock_profile',
+  'get_us_stock_financials',
+  'get_us_stock_kline',
+  'get_us_stock_quote',
+] as const
+
+const CRYPTO_MINING_TOOL_NAMES = [
+  'get_market_db_status',
+  'get_local_crypto_screen_schema',
+  'screen_local_crypto_pairs',
+  'search_crypto_pairs',
+  'get_crypto_snapshot',
+  'get_crypto_kline',
+  'get_crypto_quote',
+] as const
+
+export function discoverMiningToolNames(profile: string): readonly string[] {
+  if (profile === 'us_equity') return US_MINING_TOOL_NAMES
+  if (profile === 'crypto_spot') return CRYPTO_MINING_TOOL_NAMES
+  return DATA_LAYER_MINING_TOOL_NAMES
+}
 
 export function formatToolDescription(
   description: string,

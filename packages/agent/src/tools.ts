@@ -406,6 +406,41 @@ export class ToolRegistry {
         handler: () => d('etf_scorecard_schema', {}),
       },
       {
+        name: 'get_local_us_screen_schema', category: '本地数据',
+        description: '本地美股列表筛选维度说明（keyword、行业等）',
+        parameters: S({}),
+        handler: () => d('local_us_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_us_stocks', category: '本地数据',
+        description: '本地美股列表筛选：按 ticker/公司名、行业关键词过滤',
+        parameters: S({
+          keyword: { type: 'string', description: 'ticker 或公司名关键词' },
+          industry_contains: { type: 'string', description: '行业关键词' },
+          sort_by: { type: 'string', description: 'code | name' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_us_screen', a),
+      },
+      {
+        name: 'get_local_crypto_screen_schema', category: '本地数据',
+        description: '本地 Crypto 交易对筛选维度说明（quote、base 等）',
+        parameters: S({}),
+        handler: () => d('local_crypto_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_crypto_pairs', category: '本地数据',
+        description: '本地 Crypto 交易对筛选：按 keyword、quote、base_contains 过滤',
+        parameters: S({
+          keyword: { type: 'string', description: '交易对或名称关键词' },
+          quote: { type: 'string', description: '计价币，如 USDT、BTC' },
+          base_contains: { type: 'string', description: '基础币前缀，如 BTC、ETH' },
+          sort_by: { type: 'string', description: 'code | name | quote' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_crypto_screen', a),
+      },
+      {
         name: 'get_us_stock_quote', category: '本地数据',
         description: '获取单只美股实时行情',
         parameters: S({
