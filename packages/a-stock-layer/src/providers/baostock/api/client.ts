@@ -158,9 +158,13 @@ function formatTimestamp(date: Date): string {
 }
 
 export class BaostockClient {
+  private static readonly LOGIN_RETRY_MS = 30_000
+
   private socket: Socket | null = null
   private userId = 'anonymous'
   private loggedIn = false
+  /** 连接/登录失败后短时内快速失败，避免详情页并行请求各等 15s */
+  private loginUnavailableUntil = 0
   private readonly perPage: number
   /** Baostock 单连接请求-响应协议；并发读会在 Socket 上堆叠 data/end/error 监听器 */
   private opTail: Promise<unknown> = Promise.resolve()
@@ -192,10 +196,23 @@ export class BaostockClient {
 
   async ensureSession(): Promise<void> {
     if (this.loggedIn && this.socket) return
-    const login = await this.login()
-    if (login.error_code !== BSERR_SUCCESS) {
-      throw new BaostockApiError(login.error_msg || '登录失败', login.error_code)
+    if (Date.now() < this.loginUnavailableUntil) {
+      throw new BaostockApiError('Baostock 暂时不可用')
     }
+    try {
+      const login = await this.login()
+      if (login.error_code !== BSERR_SUCCESS) {
+        this.markLoginUnavailable()
+        throw new BaostockApiError(login.error_msg || '登录失败', login.error_code)
+      }
+    } catch (err) {
+      if (!(err instanceof BaostockApiError)) this.markLoginUnavailable()
+      throw err
+    }
+  }
+
+  private markLoginUnavailable(): void {
+    this.loginUnavailableUntil = Date.now() + BaostockClient.LOGIN_RETRY_MS
   }
 
   async login(
@@ -220,8 +237,17 @@ export class BaostockClient {
         }
       }
 
+      if (Date.now() < this.loginUnavailableUntil) {
+        return { error_code: '10002999', error_msg: 'Baostock 暂时不可用' }
+      }
+
       await this.disconnect()
-      this.socket = await connectSocket()
+      try {
+        this.socket = await connectSocket()
+      } catch (err) {
+        this.markLoginUnavailable()
+        throw err
+      }
       this.userId = userId
 
       const body = ['login', userId, password, String(options)].join(MESSAGE_SPLIT)
@@ -238,6 +264,7 @@ export class BaostockClient {
         result.user_id = parts[3]
         this.loggedIn = true
       } else {
+        this.markLoginUnavailable()
         await this.disconnect()
       }
 

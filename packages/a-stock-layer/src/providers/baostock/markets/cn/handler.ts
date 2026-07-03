@@ -285,9 +285,11 @@ export class BaostockCnHandler extends MarketHandlerShell {
         this.collectSeasonRows(client, bsCode, (y, q) => client.queryCashFlowData(bsCode, y, q), yearsBack),
       ])
       const mapped = mergeFinancialSummary(code, profit, growth, dupont, operation, cashflow)
-      const filtered = reportType === 'quarter' || reportType === 'quarterly'
-        ? mapped.filter(r => r.reportType === 'quarter')
-        : mapped.filter(r => r.reportType === 'annual')
+      const filtered = reportType === 'all'
+        ? mapped
+        : reportType === 'quarter' || reportType === 'quarterly'
+          ? mapped.filter(r => r.reportType === 'quarter')
+          : mapped.filter(r => r.reportType === 'annual')
       return filtered.length ? filtered : null
     })
   }

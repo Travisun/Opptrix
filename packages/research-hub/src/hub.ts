@@ -1226,24 +1226,39 @@ export class ResearchHub {
     }
   }
 
+  /** 详情页次要字段（财务/新闻/分红等）超时后降级为空，避免 Baostock 慢连阻塞整页 */
+  private stockDetailOptional<T>(
+    promise: Promise<{ success: boolean; data?: T[] | null }>,
+    timeoutMs = 6000,
+  ): Promise<{ success: boolean; data?: T[] | null }> {
+    return Promise.race([
+      promise,
+      new Promise<{ success: false }>(resolve => {
+        setTimeout(() => resolve({ success: false }), timeoutMs)
+      }),
+    ])
+  }
+
   private async stockDetail(code: string, t0: number) {
     void this.marketData.hydrateStocks([normalizeCode(code)], 'detail').catch(() => {})
 
-    const [quoteR, profileR, financialR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
+    const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
       this.stockRealtime(code),
       this.de.profile(code),
-      this.de.financials(code),
-      this.de.financials(code, '', 'all'),
-      this.de.news(code, 1, 20),
-      this.de.dividend(code),
-      this.de.moneyFlow(code),
-      this.de.shareholders(code),
+      this.stockDetailOptional(this.de.financials(code, '', 'all')),
+      this.stockDetailOptional(this.de.news(code, 1, 20)),
+      this.stockDetailOptional(this.de.dividend(code)),
+      this.stockDetailOptional(this.de.moneyFlow(code)),
+      this.stockDetailOptional(this.de.shareholders(code)),
     ])
 
     const quoteRaw = quoteR.data?.[0] ?? null
     const quote = this.mergeQuoteWithLocal(code, quoteRaw)
     const profile = profileR.data?.[0] ?? null
-    const financial = financialR.data?.[0] ?? null
+    const financialHistory = financialAllR.data ?? []
+    const financial = financialHistory.find(row => row.reportType === 'annual')
+      ?? financialHistory[0]
+      ?? null
     const name = this.resolveStockName(
       code,
       quote?.name,
@@ -1257,7 +1272,7 @@ export class ResearchHub {
       quote,
       profile,
       financial,
-      financialHistory: financialAllR.data ?? [],
+      financialHistory,
       news: newsR.data ?? [],
       dividends: dividendR.data ?? [],
       moneyFlow: moneyFlowR.data ?? [],
