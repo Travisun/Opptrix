@@ -19,7 +19,7 @@ export const EFINANCE_CAPS = [
 export const EFINANCE_SPEC: ProviderManifestSpec = {
   id: 'efinance',
   title: 'efinance',
-  subtitle: '东财 HTTP 封装',
+  subtitle: '东方财富网公开行情接口（封装层）',
   marketGroup: 'CN',
   defaultPriority: 80,
   capabilities: EFINANCE_CAPS,
@@ -37,5 +37,5 @@ export const EFINANCE_SPEC: ProviderManifestSpec = {
 }
 
 export const EFINANCE_MANIFEST = providerManifestEntry(
-  'efinance', 'efinance', '东财 HTTP 封装', 'CN', 80, EFINANCE_SETTINGS,
+  'efinance', 'efinance', '东方财富网公开行情接口（封装层）', 'CN', 80, EFINANCE_SETTINGS,
 )

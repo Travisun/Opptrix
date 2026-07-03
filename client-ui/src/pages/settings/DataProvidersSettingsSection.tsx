@@ -69,7 +69,7 @@ export default function DataProvidersSettingsSection() {
 
       <div className={tab === 'providers' ? s.tabPanel : s.tabPanelHidden}>
         <Text className={s.tabHint} block>
-          为各数据源配置 API Key，并通过开关控制是否参与行情拉取。
+          为各数据源配置连接信息，并通过开关控制是否参与行情拉取。
         </Text>
         <ProviderCatalogListPanel
           catalog={catalog}

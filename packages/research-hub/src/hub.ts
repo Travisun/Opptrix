@@ -1,9 +1,10 @@
 import { MarketDataEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
-  pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
+  pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
 } from '@opptrix/a-stock-layer'
+import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
 import type { StockListItem } from '@opptrix/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
@@ -214,6 +215,10 @@ export class ResearchHub {
         case 'provider_test': return this.providerTest(params, t0)
         case 'provider_binding_overrides': return this.providerBindingOverrides(params, t0)
         case 'provider_binding_override_save': return this.providerBindingOverrideSave(params, t0)
+        case 'provider_rescan': return await this.providerRescan(t0)
+        case 'provider_uninstall': return await this.providerUninstall(params, t0)
+        case 'provider_reload': return await this.providerReload(params, t0)
+        case 'provider_installed_list': return this.providerInstalledList(t0)
         case 'etf_list': return this.etfList(params, t0)
         case 'etf_snapshot': return this.etfSnapshot(String(params.code ?? ''), t0)
         case 'etf_nav': return this.etfNav(String(params.code ?? ''), t0)
@@ -978,21 +983,6 @@ export class ResearchHub {
     for (const [code, meta] of metaBatch) {
       if (meta.name && meta.name !== code) this.stockNameCache.set(code, meta.name)
     }
-
-    const stillMissing = missing.filter(c => this.resolveStockName(c) === c)
-    await Promise.all(stillMissing.map(async code => {
-      if (this.resolveStockName(code) !== code) return
-      try {
-        const found = await searchQuote(code, 5)
-        const items = found == null ? [] : (Array.isArray(found) ? found : [found])
-        const hit = items.find(q => normalizeCode(q.code) === code)
-        if (hit?.name && hit.name !== code) {
-          this.stockNameCache.set(code, hit.name)
-        }
-      } catch {
-        /* ignore lookup errors */
-      }
-    }))
   }
 
   private async stockQuotes(codes: string[] | undefined, t0: number) {
@@ -1724,6 +1714,60 @@ export class ResearchHub {
     } catch (e) {
       return fail(String(e), t0)
     }
+  }
+
+  private async providerRescan(t0: number) {
+    try {
+      const providers = await this.de.rescanProviders()
+      return ok(
+        { providers, providersDir: resolveProvidersDir() },
+        providers.length ? `已发现 ${providers.length} 个扩展数据源` : '未发现扩展数据源',
+        t0,
+      )
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private async providerUninstall(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? params.id ?? '').trim()
+    if (!id) return fail('provider_id 必填', t0)
+    try {
+      const removed = this.de.providerLoader.uninstall(id)
+      if (!removed) return fail(`未找到扩展数据源：${id}`, t0)
+      this.de.clearCacheForProvider(id)
+      return ok({ providerId: id }, '已移除扩展数据源', t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private async providerReload(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? params.id ?? '').trim()
+    if (!id) return fail('provider_id 必填', t0)
+    try {
+      const record = await this.de.reloadProvider(id)
+      if (!record) return fail(`无法重新加载数据源：${id}`, t0)
+      return ok(record, '已重新加载', t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private providerInstalledList(t0: number) {
+    const items = this.de.listInstalledProviders().map(record => ({
+      providerId: record.providerId,
+      version: record.version,
+      title: record.title,
+      installedAt: record.installedAt,
+      loaded: record.loaded,
+      marketGroup: record.marketGroup,
+    }))
+    return ok(
+      { providers: items, providersDir: resolveProvidersDir() },
+      items.length ? `已发现 ${items.length} 个扩展数据源` : '可将插件放入扩展目录后重新扫描',
+      t0,
+    )
   }
 
   private async etfList(params: Record<string, unknown>, t0: number) {

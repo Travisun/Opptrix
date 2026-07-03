@@ -1,22 +1,34 @@
 import { resolveUserDataRoot } from '@opptrix/shared'
-import type { ProviderSettingsPatch, ProviderSettingsRow, ProviderBindingOverrideRow, ProviderBindingOverridePatch } from '@opptrix/shared'
-import {
-  computeEffectivePriority,
-  getUserDataStore,
-  polygonSecretsOk,
-  fmpSecretsOk,
-  tiingoSecretsOk,
-  tushareSecretsOk,
-} from '@opptrix/user-store'
+import type { ProviderSettingsPatch, ProviderSettingsRow, ProviderBindingOverrideRow, ProviderBindingOverridePatch, ProviderSettingsField } from '@opptrix/shared'
+import { computeEffectivePriority, getUserDataStore } from '@opptrix/user-store'
 import path from 'node:path'
 import { getProviderManifest } from './manifests.js'
 
-const TUSHARE_ENV_TOKEN = process.env.TUSHARE_TOKEN ?? ''
-const POLYGON_ENV_KEY = process.env.POLYGON_API_KEY ?? process.env.OPPTRIX_POLYGON_API_KEY ?? ''
-const FMP_ENV_KEY = process.env.FMP_API_KEY ?? process.env.OPPTRIX_FMP_API_KEY ?? ''
-const TIINGO_ENV_TOKEN = process.env.TIINGO_API_TOKEN ?? process.env.OPPTRIX_TIINGO_API_TOKEN ?? ''
+function fieldKeyToEnvSuffix(key: string): string {
+  return key.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase()
+}
 
-const SECRET_REQUIRED = new Set(['tushare', 'polygon', 'tiingo', 'fmp'])
+function resolveSecretFieldValue(
+  providerId: string,
+  field: ProviderSettingsField,
+  extra: Record<string, unknown>,
+): string {
+  const fromExtra = String(extra[field.key] ?? '').trim()
+  if (fromExtra) return fromExtra
+
+  const suffix = fieldKeyToEnvSuffix(field.key)
+  const candidates = [
+    `OPPTRIX_${providerId.toUpperCase()}_${suffix}`,
+    `${providerId.toUpperCase()}_${suffix}`,
+    `OPPTRIX_${providerId.toUpperCase()}_${field.key.toUpperCase()}`,
+    `${providerId.toUpperCase()}_${field.key.toUpperCase()}`,
+  ]
+  for (const envKey of candidates) {
+    const val = process.env[envKey]?.trim()
+    if (val) return val
+  }
+  return ''
+}
 
 export class ProviderConfigStore {
   getRuntime(providerId: string): ProviderSettingsRow {
@@ -51,23 +63,21 @@ export class ProviderConfigStore {
   }
 
   secretsOk(providerId: string, runtime: ProviderSettingsRow): boolean {
-    if (providerId === 'tushare') {
-      return tushareSecretsOk(runtime.extra, TUSHARE_ENV_TOKEN)
-    }
-    if (providerId === 'polygon') {
-      return polygonSecretsOk(runtime.extra, POLYGON_ENV_KEY)
-    }
-    if (providerId === 'tiingo') {
-      return tiingoSecretsOk(runtime.extra, TIINGO_ENV_TOKEN)
-    }
-    if (providerId === 'fmp') {
-      return fmpSecretsOk(runtime.extra, FMP_ENV_KEY)
+    const manifest = getProviderManifest(providerId)
+    const fields = manifest?.settings?.fields ?? []
+    const requiredSecrets = fields.filter(f => f.type === 'secret' && f.required !== false)
+    if (!requiredSecrets.length) return true
+
+    for (const field of requiredSecrets) {
+      if (!resolveSecretFieldValue(providerId, field, runtime.extra)) return false
     }
     return true
   }
 
   requiresSecrets(providerId: string): boolean {
-    return SECRET_REQUIRED.has(providerId)
+    const manifest = getProviderManifest(providerId)
+    const fields = manifest?.settings?.fields ?? []
+    return fields.some(f => f.type === 'secret' && f.required !== false)
   }
 
   effectivePriority(providerId: string, manifestDefault?: number): number {

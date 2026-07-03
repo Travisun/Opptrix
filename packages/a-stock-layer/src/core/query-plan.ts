@@ -5,8 +5,7 @@ import type { DriverRegistry } from './registry.js'
 import type { BaseDriver } from '../providers/common/base.js'
 import { bindingKey } from './bindings.js'
 import { isCnEtfCode } from './instrument.js'
-import { isBse920Code, normalizeCode } from '../utils/helpers.js'
-import { isTushareEnabled } from '../providers/tushare/config.js'
+import { normalizeCode } from '../utils/helpers.js'
 import {
   normalizePreOpenRealtimeQuote,
 } from '../utils/quote-normalize.js'
@@ -26,8 +25,6 @@ export interface QueryPlan {
   assetClass: AssetClass
   capability: Capability
   strategy: QueryPlanStrategy
-  /** Explicit provider order — overrides registry priority for this plan */
-  overrideChain?: readonly string[]
 }
 
 export interface QueryExecutionContext {
@@ -41,31 +38,7 @@ export interface QueryExecutionContext {
   assetClass?: AssetClass
 }
 
-/** TDX before EastMoney for daily OHLC; Tushare bulk when configured. */
-const CN_DAILY_KLINE_CHAIN = [
-  'tushare',
-  'tdx',
-  'efinance',
-  'tencent',
-  'sina',
-  'netease',
-  'csindex',
-  'tonghuashun',
-  'cninfo',
-  'stats-gov',
-  'guba',
-  'xueqiu',
-  'eastmoney',
-] as const
-
-const CN_MINUTE_KLINE_CHAIN = [
-  'tdx',
-  'eastmoney',
-  'efinance',
-  'tencent',
-  'sina',
-] as const
-
+/** CN query plans — provider order comes from registry priority + user settings. */
 export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
   cn_equity_stock_kline_daily: {
     id: 'cn_equity_stock_kline_daily',
@@ -73,7 +46,6 @@ export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
     assetClass: 'EQUITY',
     capability: Capability.STOCK_KLINE,
     strategy: 'sequential',
-    overrideChain: CN_DAILY_KLINE_CHAIN,
   },
   cn_equity_stock_kline_minute: {
     id: 'cn_equity_stock_kline_minute',
@@ -81,7 +53,6 @@ export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
     assetClass: 'EQUITY',
     capability: Capability.STOCK_KLINE,
     strategy: 'sequential',
-    overrideChain: CN_MINUTE_KLINE_CHAIN,
   },
   cn_equity_stock_realtime_batch: {
     id: 'cn_equity_stock_realtime_batch',
@@ -89,7 +60,6 @@ export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
     assetClass: 'EQUITY',
     capability: Capability.STOCK_REALTIME,
     strategy: 'merge',
-    overrideChain: ['tushare', 'tdx', 'eastmoney', 'tencent', 'sina', 'efinance'],
   },
   cn_index_index_kline: {
     id: 'cn_index_index_kline',
@@ -97,7 +67,6 @@ export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
     assetClass: 'INDEX',
     capability: Capability.INDEX_KLINE,
     strategy: 'sequential',
-    overrideChain: ['tushare', 'tdx', 'efinance', 'tencent', 'eastmoney'],
   },
 }
 
@@ -147,47 +116,16 @@ export class QueryPlanExecutor {
         market: plan.market,
         assetClass: ctx.assetClass ?? plan.assetClass,
         args: JSON.stringify(ctx.args),
-      })
+      }, result.source)
     }
     return result
   }
 
-  private driver(name: string): BaseDriver | undefined {
-    return this.registry.get(name) as BaseDriver | undefined
-  }
-
+  /** Registry-ordered providers for this plan (priority + enabled + runtime gates). */
   private resolveDrivers(plan: QueryPlan, ctx: QueryExecutionContext): BaseDriver[] {
     const assetClass = ctx.assetClass ?? resolveAssetClassFromArgs(ctx.args, plan.assetClass)
     const bound = this.registry.getProvidersWithFallback(plan.market, assetClass, plan.capability) as BaseDriver[]
-    const boundNames = new Set(bound.map(d => d.name))
-
-    const chain = plan.overrideChain
-      ? [...plan.overrideChain]
-      : bound.map(d => d.name)
-
-    const drivers: BaseDriver[] = []
-    const seen = new Set<string>()
-    for (const name of chain) {
-      if (seen.has(name)) continue
-      const driver = this.driver(name)
-      if (!driver?.supports(plan.capability)) continue
-      if (!boundNames.has(name) && plan.market === 'CN' && assetClass === 'ETF') {
-        const equityBound = this.registry.getProviders(plan.market, 'EQUITY', plan.capability)
-        if (!equityBound.some(d => d.name === name)) continue
-      } else if (!boundNames.has(name) && !plan.overrideChain) {
-        continue
-      } else if (!boundNames.has(name) && plan.overrideChain) {
-        // overrideChain may list providers valid on sibling asset class (EQUITY fallback for ETF)
-        const equityBound = this.registry.getProviders(plan.market, 'EQUITY', plan.capability)
-        if (!equityBound.some(d => d.name === name)) continue
-      }
-      if (!isProviderRunnable(driver, this.registry)) continue
-      seen.add(name)
-      drivers.push(driver)
-    }
-
-    if (!drivers.length && bound.length) return bound.filter(d => isProviderRunnable(d, this.registry))
-    return drivers
+    return bound.filter(d => d.supports(plan.capability) && isProviderRunnable(d, this.registry))
   }
 
   private async executeSequential<T>(
@@ -202,14 +140,6 @@ export class QueryPlanExecutor {
 
     let lastError = ''
     for (const driver of drivers) {
-      if (plan.id === 'cn_equity_stock_kline_daily' || plan.id === 'cn_index_index_kline') {
-        const code = String(ctx.args[0] ?? '')
-        if (driver.name === 'tushare') {
-          if (!isTushareEnabled()) continue
-          if (plan.id === 'cn_equity_stock_kline_daily' && isBse920Code(normalizeCode(code))) continue
-        }
-      }
-
       const fn = (driver as unknown as Record<string, unknown>)[ctx.method] as
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
@@ -253,43 +183,18 @@ export class QueryPlanExecutor {
       }
     }
 
-    const tushareEligible = isTushareEnabled()
-      ? normalized.filter(c => !isBse920Code(c))
-      : []
-
-    if (tushareEligible.length) {
-      const tushare = this.driver('tushare')
-      if (tushare?.batchRealtime && isProviderRunnable(tushare, this.registry)) {
-        try {
-          pushRows(await tushare.batchRealtime(tushareEligible) as StockRealtime[] | null)
-        } catch { /* next */ }
-      }
-    }
-
-    const missingAfterTushare = normalized.filter(c => !seen.has(c))
-    if (missingAfterTushare.length) {
-      const tdx = this.driver('tdx')
-      if (tdx?.batchRealtime && isProviderRunnable(tdx, this.registry)) {
-        try {
-          pushRows(await tdx.batchRealtime(missingAfterTushare.filter(c => !seen.has(c))) as StockRealtime[] | null)
-        } catch { /* next */ }
-      }
-    }
-
-    const stillMissing = normalized.filter(c => !seen.has(c))
-    if (stillMissing.length) {
-      const rest = this.resolveDrivers(plan, ctx).filter(d => d.name !== 'tushare' && d.name !== 'tdx')
-      for (const driver of rest) {
-        const batch = stillMissing.filter(c => !seen.has(c))
-        if (!batch.length) break
-        const fn = driver.batchRealtime as (
-          codes: string[],
-          markets?: Record<string, import('../utils/helpers.js').StockMarket | undefined>,
-        ) => Promise<StockRealtime[] | null>
-        try {
-          pushRows(await fn(batch, markets))
-        } catch { /* next */ }
-      }
+    const drivers = this.resolveDrivers(plan, ctx)
+    for (const driver of drivers) {
+      const batch = normalized.filter(c => !seen.has(c))
+      if (!batch.length) break
+      const fn = driver.batchRealtime as (
+        codes: string[],
+        markets?: Record<string, import('../utils/helpers.js').StockMarket | undefined>,
+      ) => Promise<StockRealtime[] | null> | undefined
+      if (typeof fn !== 'function') continue
+      try {
+        pushRows(await fn(batch, markets))
+      } catch { /* try next provider */ }
     }
 
     if (!results.length) return { success: false, error: 'batchRealtime failed' }

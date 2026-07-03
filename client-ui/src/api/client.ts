@@ -733,6 +733,38 @@ export async function testProviderConfig(providerId: string, extra?: Record<stri
   )
 }
 
+export async function listInstalledProviders() {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: import('../types/provider').InstalledProvidersResponse
+    message?: string
+  }>('/data/providers/installed')
+  if (!resp.data?.providers) throw new Error(resp.message ?? '无法读取扩展数据源')
+  return resp.data
+}
+
+export async function rescanProviders() {
+  return jsonFetch<{
+    success: boolean
+    data?: import('../types/provider').InstalledProvidersResponse
+    message?: string
+  }>('/data/providers/rescan', { method: 'POST' })
+}
+
+export async function uninstallInstalledProvider(providerId: string) {
+  return jsonFetch<{ success: boolean; data?: { providerId: string }; message?: string }>(
+    `/data/providers/installed/${encodeURIComponent(providerId)}`,
+    { method: 'DELETE' },
+  )
+}
+
+export async function reloadInstalledProvider(providerId: string) {
+  return jsonFetch<{ success: boolean; data?: unknown; message?: string }>(
+    `/data/providers/installed/${encodeURIComponent(providerId)}/reload`,
+    { method: 'POST' },
+  )
+}
+
 export async function portfolioTrade(payload: {
   code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string
 }) {

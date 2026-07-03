@@ -43,6 +43,20 @@ export interface ProviderCatalogResponse {
   groups: ProviderCatalogGroup[]
 }
 
+export interface InstalledProviderSummary {
+  providerId: string
+  version: string
+  title: string
+  installedAt: string
+  loaded: boolean
+  marketGroup?: string
+}
+
+export interface InstalledProvidersResponse {
+  providers: InstalledProviderSummary[]
+  providersDir?: string
+}
+
 export interface PublicProviderBindingOverride {
   market: string
   assetClass: string

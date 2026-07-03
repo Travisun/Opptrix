@@ -62,7 +62,7 @@ export const EASTMONEY_CAPS = [
 export const EASTMONEY_SPEC: ProviderManifestSpec = {
   id: 'eastmoney',
   title: '东方财富',
-  subtitle: 'A 股主数据源',
+  subtitle: '东方财富网公开行情接口（网站同源）',
   marketGroup: 'CN',
   defaultPriority: 100,
   capabilities: EASTMONEY_CAPS,
@@ -71,5 +71,5 @@ export const EASTMONEY_SPEC: ProviderManifestSpec = {
 }
 
 export const EASTMONEY_MANIFEST = providerManifestEntry(
-  'eastmoney', '东方财富', 'A 股主数据源', 'CN', 100, EASTMONEY_SETTINGS,
+  'eastmoney', '东方财富', '东方财富网公开行情接口（网站同源）', 'CN', 100, EASTMONEY_SETTINGS,
 )

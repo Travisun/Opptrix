@@ -28,7 +28,7 @@ export const DEFAULT_TTL: Record<string, number> = {
   crypto_kline: 300,
 }
 
-interface Entry { data: unknown; expires: number }
+interface Entry { data: unknown; expires: number; source?: string }
 
 /** In-memory + JSON file persistent cache (aaashare Cache port) */
 export class Cache {
@@ -72,13 +72,32 @@ export class Cache {
     return e.data as T
   }
 
-  set(cacheType: string, data: unknown, method: string, params: Record<string, unknown>) {
+  set(
+    cacheType: string,
+    data: unknown,
+    method: string,
+    params: Record<string, unknown>,
+    source?: string,
+  ) {
     const ttl = DEFAULT_TTL[cacheType] ?? 3600
     if (ttl <= 0) return
     this.store.set(this.key(cacheType, method, params), {
-      data, expires: Date.now() + ttl * 1000,
+      data, expires: Date.now() + ttl * 1000, source,
     })
     this.persist()
+  }
+
+  /** Drop cached rows produced by a specific provider (reload / uninstall). */
+  clearBySource(source: string) {
+    let n = 0
+    for (const [k, e] of this.store.entries()) {
+      if (e.source === source) {
+        this.store.delete(k)
+        n++
+      }
+    }
+    if (n) this.persist()
+    return n
   }
 
   clearType(cacheType: string) {

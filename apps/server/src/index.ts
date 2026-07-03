@@ -1,4 +1,7 @@
 import { randomUUID } from 'node:crypto'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import Fastify from 'fastify'
 import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { ResearchHub } from '@opptrix/research-hub'
@@ -441,6 +444,28 @@ app.post<{
     market_group: body.market_group,
     provider_ids: body.provider_ids,
   })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/data/providers/installed', async () => {
+  const r = await hub.dispatch('provider_installed_list', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post('/api/data/providers/rescan', async () => {
+  const r = await hub.dispatch('provider_rescan', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.delete<{ Params: { id: string } }>('/api/data/providers/installed/:id', async (req, reply) => {
+  const r = await hub.dispatch('provider_uninstall', { provider_id: req.params.id })
+  if (!r.success) return reply.code(404).send({ success: false, message: r.message })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Params: { id: string } }>('/api/data/providers/installed/:id/reload', async (req, reply) => {
+  const r = await hub.dispatch('provider_reload', { provider_id: req.params.id })
+  if (!r.success) return reply.code(400).send({ success: false, message: r.message })
   return { success: r.success, data: r.data, message: r.message }
 })
 

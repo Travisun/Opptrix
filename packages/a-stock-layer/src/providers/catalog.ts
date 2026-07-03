@@ -9,11 +9,8 @@ import type {
 } from '@opptrix/shared'
 import type { DriverRegistry } from '../core/registry.js'
 import { Capability } from '../core/capabilities.js'
-import { testTushareConnection } from './tushare/api/client.js'
-import { testPolygonConnection } from './polygon/api/client.js'
-import { testTiingoConnection } from './tiingo/api/client.js'
-import { testFmpConnection } from './fmp/api/client.js'
 import { ProviderConfigStore, getProviderConfigStore } from './config-store.js'
+import { getProviderLoader } from './loader.js'
 import {
   MARKET_GROUP_LABELS,
   MARKET_GROUP_ORDER,
@@ -180,30 +177,27 @@ export class ProviderCatalogService {
   }
 
   async testConnection(providerId: string, overrides?: Record<string, unknown>) {
-    if (providerId === 'tushare') {
-      const runtime = this.configStore.getRuntime(providerId)
-      const token = String(overrides?.token ?? runtime.extra.token ?? TUSHARE_ENV).trim()
-      return testTushareConnection(token)
+    const loader = getProviderLoader()
+    const hook = loader?.getTestConnectionHook(providerId)
+    const runtime = this.configStore.getRuntime(providerId)
+
+    if (hook) {
+      return hook({
+        providerId,
+        overrides,
+        extra: runtime.extra,
+      })
     }
-    if (providerId === 'polygon') {
-      const runtime = this.configStore.getRuntime(providerId)
-      const apiKey = String(overrides?.apiKey ?? runtime.extra.apiKey ?? process.env.POLYGON_API_KEY ?? '').trim()
-      return testPolygonConnection(apiKey)
+
+    const manifest = getProviderManifest(providerId)
+    if (manifest?.settings?.supportsTest) {
+      const secretsOk = this.configStore.secretsOk(providerId, runtime)
+      if (!secretsOk) {
+        return { ok: false, message: '请先填写必需的密钥后再测试连接' }
+      }
+      return { ok: true, message: '密钥已配置' }
     }
-    if (providerId === 'tiingo') {
-      const runtime = this.configStore.getRuntime(providerId)
-      const apiToken = String(
-        overrides?.apiToken ?? runtime.extra.apiToken ?? process.env.TIINGO_API_TOKEN ?? '',
-      ).trim()
-      return testTiingoConnection(apiToken)
-    }
-    if (providerId === 'fmp') {
-      const runtime = this.configStore.getRuntime(providerId)
-      const apiKey = String(
-        overrides?.apiKey ?? runtime.extra.apiKey ?? process.env.FMP_API_KEY ?? '',
-      ).trim()
-      return testFmpConnection(apiKey)
-    }
+
     return { ok: true, message: '该数据源无需连接测试' }
   }
 

@@ -14,15 +14,19 @@ import {
   ChevronUpRegular,
   ReOrderRegular,
 } from '@fluentui/react-icons'
-import type { ProviderCatalogGroup, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
+import type { InstalledProviderSummary, ProviderCatalogGroup, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
 import {
   getProviderCatalog,
+  listInstalledProviders,
+  rescanProviders,
+  reloadInstalledProvider,
   reorderProviderCatalog,
   saveProviderConfig,
-  testProviderConfig,
+  uninstallInstalledProvider,
 } from '../../api/client'
-import { SettingsCredentialRow } from './SettingsPrimitives'
+import { ProviderSettingsForm } from './ProviderSettingsForm'
 import { useSettingsToast } from './SettingsToast'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { motion } from '../../theme/mixins'
 
@@ -154,6 +158,24 @@ const useListStyles = makeStyles({
     fontSize: '12px',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
+  },
+  installedRow: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '6px 12px',
+    minHeight: '36px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': {
+      borderBottom: 'none',
+    },
+  },
+  installedActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    flexShrink: 0,
   },
 })
 
@@ -379,77 +401,147 @@ function providerStatusMeta(provider: PublicProviderRuntime, marketLabel: string
   const parts: string[] = []
   if (marketLabel) parts.push(marketLabel)
   if (provider.subtitle?.trim()) parts.push(provider.subtitle.trim())
-  const secretField = provider.settingsFields.find(f => f.type === 'secret')
-  if (secretField) {
-    parts.push(provider.secretsConfigured[secretField.key] ? '密钥已配置' : '尚未配置密钥')
+
+  const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
+  if (requiredSecrets.length) {
+    const configured = requiredSecrets.filter(f => provider.secretsConfigured[f.key]).length
+    parts.push(configured === requiredSecrets.length
+      ? '密钥已配置'
+      : `密钥 ${configured}/${requiredSecrets.length}`)
+  } else if (provider.settingsFields.some(f => f.type === 'secret')) {
+    const anySecret = provider.settingsFields.some(
+      f => f.type === 'secret' && provider.secretsConfigured[f.key],
+    )
+    parts.push(anySecret ? '密钥已配置' : '尚未配置密钥')
   }
+
+  if (provider.settingsFields.some(f => f.type !== 'secret')) {
+    parts.push(`${provider.settingsFields.length} 项可配置`)
+  }
+
   return parts.join(' · ')
 }
 
-function ProviderCredentialExpand({
-  provider,
-  onSaved,
-}: {
-  provider: PublicProviderRuntime
-  onSaved: () => void
-}) {
+function InstalledProvidersSection({ onChanged }: { onChanged: () => void }) {
+  const s = useListStyles()
   const toast = useSettingsToast()
-  const [token, setToken] = useState('')
-  const [saving, setSaving] = useState(false)
-  const [testing, setTesting] = useState(false)
+  const [items, setItems] = useState<InstalledProviderSummary[]>([])
+  const [providersDir, setProvidersDir] = useState('')
+  const [loading, setLoading] = useState(true)
+  const [busyId, setBusyId] = useState<string | null>(null)
+  const [scanning, setScanning] = useState(false)
 
-  const tokenField = provider.settingsFields.find(f => f.type === 'secret')
-  if (!tokenField) return null
-
-  const tokenConfigured = provider.secretsConfigured[tokenField.key]
-
-  const buildExtra = () => {
-    const trimmed = token.trim()
-    if (!trimmed) return undefined
-    return { [tokenField.key]: trimmed }
-  }
-
-  const handleSave = async () => {
-    setSaving(true)
+  const refresh = useCallback(async () => {
     try {
-      await saveProviderConfig(provider.providerId, { extra: buildExtra() })
-      toast.showSuccess('密钥已保存')
-      setToken('')
-      onSaved()
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '保存失败')
+      const data = await listInstalledProviders()
+      setItems(data.providers)
+      setProvidersDir(data.providersDir ?? '')
+    } catch {
+      setItems([])
+      setProvidersDir('')
     } finally {
-      setSaving(false)
+      setLoading(false)
+    }
+  }, [])
+
+  useEffect(() => {
+    void refresh()
+  }, [refresh])
+
+  const handleRescan = async () => {
+    setScanning(true)
+    try {
+      const resp = await rescanProviders()
+      const data = resp.data
+      if (data?.providers) {
+        setItems(data.providers)
+        setProvidersDir(data.providersDir ?? providersDir)
+      }
+      toast.showSuccess(resp.message ?? '已重新扫描')
+      onChanged()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '扫描失败')
+    } finally {
+      setScanning(false)
     }
   }
 
-  const handleTest = async () => {
-    if (!provider.supportsTest) return
-    setTesting(true)
+  if (loading) return null
+
+  const handleReload = async (providerId: string) => {
+    setBusyId(providerId)
     try {
-      const resp = await testProviderConfig(provider.providerId, buildExtra())
-      const result = resp.data
-      if (result?.ok) toast.showSuccess(result.message)
-      else toast.showError(`测试失败：${result?.message ?? '未知错误'}`)
+      await reloadInstalledProvider(providerId)
+      toast.showSuccess('已重新加载')
+      await refresh()
+      onChanged()
     } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '测试连接失败')
+      toast.showError(e instanceof Error ? e.message : '重新加载失败')
     } finally {
-      setTesting(false)
+      setBusyId(null)
+    }
+  }
+
+  const handleUninstall = async (providerId: string, title: string) => {
+    setBusyId(providerId)
+    try {
+      await uninstallInstalledProvider(providerId)
+      toast.showSuccess(`已移除「${title}」`)
+      await refresh()
+      onChanged()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '卸载失败')
+    } finally {
+      setBusyId(null)
     }
   }
 
   return (
-    <SettingsCredentialRow
-      value={token}
-      onChange={setToken}
-      placeholder={tokenField.placeholder ?? '粘贴 API Key 或 Token'}
-      testing={testing}
-      saving={saving}
-      testDisabled={!provider.supportsTest}
-      saveDisabled={!token.trim() && !tokenConfigured}
-      onTest={() => { void handleTest() }}
-      onSave={() => { void handleSave() }}
-    />
+    <div className={s.sectionBlock}>
+      <div className={s.listPanel} style={{ height: 'auto', maxHeight: items.length ? '220px' : 'none' }}>
+        <div className={s.listHeader}>
+          <Text className={s.listHeaderMeta} block>
+            {providersDir
+              ? `扩展数据源：将插件文件夹放入 ${providersDir}，保存后会自动扫描（约 1 秒内）`
+              : '扩展数据源：将插件文件夹放入用户数据目录下的 providers 文件夹'}
+          </Text>
+          <OpptrixButton variant="ghost" disabled={scanning} onClick={() => { void handleRescan() }}>
+            {scanning ? '扫描中…' : '重新扫描'}
+          </OpptrixButton>
+        </div>
+        {items.length > 0 && (
+        <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+          {items.map(item => (
+            <div key={item.providerId} className={s.installedRow}>
+              <div className={s.listRowMain}>
+                <Text className={s.listRowTitle} block title={item.title}>{item.title}</Text>
+                <Text className={s.listRowMeta} block>
+                  v{item.version}
+                  {item.loaded ? ' · 已加载' : ' · 未加载'}
+                </Text>
+              </div>
+              <div className={s.installedActions}>
+                <OpptrixButton
+                  variant="ghost"
+                  disabled={busyId === item.providerId}
+                  onClick={() => { void handleReload(item.providerId) }}
+                >
+                  重新加载
+                </OpptrixButton>
+                <OpptrixButton
+                  variant="ghost"
+                  disabled={busyId === item.providerId}
+                  onClick={() => { void handleUninstall(item.providerId, item.title) }}
+                >
+                  移除
+                </OpptrixButton>
+              </div>
+            </div>
+          ))}
+        </div>
+        )}
+      </div>
+    </div>
   )
 }
 
@@ -467,12 +559,11 @@ function ProviderListRow({
   const [expanded, setExpanded] = useState(false)
   const [toggling, setToggling] = useState(false)
 
-  const secretField = provider.settingsFields.find(f => f.type === 'secret')
-  const hasCredential = secretField != null
+  const hasSettings = provider.settingsFields.length > 0
 
   const handleToggleEnabled = async (checked: boolean) => {
     if (checked && !provider.canEnable) {
-      toast.showError('请先配置 API Key 后再启用')
+      toast.showError('请先完成必填配置后再启用')
       return
     }
     setToggling(true)
@@ -488,14 +579,14 @@ function ProviderListRow({
   }
 
   return (
-    <div className={mergeClasses(s.listRow, expanded && hasCredential && s.listRowExpanded)}>
+    <div className={mergeClasses(s.listRow, expanded && hasSettings && s.listRowExpanded)}>
       <div className={s.listRowTop}>
         <div className={s.listRowMain}>
           <Text className={s.listRowTitle} block title={provider.title}>{provider.title}</Text>
           <Text className={s.listRowMeta} block>
             {providerStatusMeta(provider, marketLabel)}
           </Text>
-          {hasCredential && (
+          {hasSettings && (
             <button
               type="button"
               className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
@@ -505,7 +596,7 @@ function ProviderListRow({
               {expanded
                 ? <ChevronDownRegular fontSize={11} />
                 : <ChevronRightRegular fontSize={11} />}
-              <span>{expanded ? '收起密钥设置' : '配置 API Key'}</span>
+              <span>{expanded ? '收起设置' : '配置连接'}</span>
             </button>
           )}
         </div>
@@ -518,9 +609,9 @@ function ProviderListRow({
           />
         </div>
       </div>
-      {expanded && hasCredential && (
+      {expanded && hasSettings && (
         <div className={s.credentialExpand}>
-          <ProviderCredentialExpand provider={provider} onSaved={onSaved} />
+          <ProviderSettingsForm provider={provider} onSaved={onSaved} />
         </div>
       )}
     </div>
@@ -552,25 +643,28 @@ export function ProviderCatalogListPanel({
   }
 
   return (
-    <div className={s.listPanel}>
-      <div className={s.listHeader}>
-        <Text className={s.listHeaderMeta} block>
-          {enabledCount > 0
-            ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
-            : '配置 API Key 并启用数据源，即可获取对应市场行情'}
-        </Text>
+    <>
+      <InstalledProvidersSection onChanged={onSaved} />
+      <div className={s.listPanel}>
+        <div className={s.listHeader}>
+          <Text className={s.listHeaderMeta} block>
+            {enabledCount > 0
+              ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
+              : '配置连接信息并启用数据源，即可获取对应市场行情'}
+          </Text>
+        </div>
+        <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+          {allProviders.map(({ provider, marketLabel }) => (
+            <ProviderListRow
+              key={provider.providerId}
+              provider={provider}
+              marketLabel={marketLabel}
+              onSaved={onSaved}
+            />
+          ))}
+        </div>
       </div>
-      <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-        {allProviders.map(({ provider, marketLabel }) => (
-          <ProviderListRow
-            key={provider.providerId}
-            provider={provider}
-            marketLabel={marketLabel}
-            onSaved={onSaved}
-          />
-        ))}
-      </div>
-    </div>
+    </>
   )
 }
 

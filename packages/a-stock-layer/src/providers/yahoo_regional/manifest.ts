@@ -11,15 +11,16 @@ export const YAHOO_REGIONAL_CAPS = [
 ]
 
 export function yahooRegionalSpec(market: 'JP' | 'KR' | 'HK'): ProviderManifestSpec {
-  const labels: Record<'JP' | 'KR' | 'HK', string> = {
-    JP: '日股',
-    KR: '韩股',
-    HK: '港股',
+  const labels: Record<'JP' | 'KR' | 'HK', { title: string; subtitle: string }> = {
+    JP: { title: 'Yahoo 财经 · 日股', subtitle: '日本股市行情（非官方接口）' },
+    KR: { title: 'Yahoo 财经 · 韩股', subtitle: '韩国股市行情（非官方接口）' },
+    HK: { title: 'Yahoo 财经 · 港股', subtitle: '香港股市行情（非官方接口）' },
   }
+  const { title, subtitle } = labels[market]
   return {
     id: `yahoo_${market.toLowerCase()}`,
-    title: 'Yahoo Finance',
-    subtitle: `${labels[market]}行情（非官方接口）`,
+    title,
+    subtitle,
     marketGroup: market,
     defaultPriority: 40,
     capabilities: YAHOO_REGIONAL_CAPS,
@@ -29,13 +30,13 @@ export function yahooRegionalSpec(market: 'JP' | 'KR' | 'HK'): ProviderManifestS
 }
 
 export const YAHOO_JP_MANIFEST = providerManifestEntry(
-  'yahoo_jp', 'Yahoo Finance', '日股行情（非官方接口）', 'JP', 40, yahooRegionalSettings('JP'),
+  'yahoo_jp', 'Yahoo 财经 · 日股', '日本股市行情（非官方接口）', 'JP', 40, yahooRegionalSettings('JP'),
 )
 export const YAHOO_KR_MANIFEST = providerManifestEntry(
-  'yahoo_kr', 'Yahoo Finance', '韩股行情（非官方接口）', 'KR', 40, yahooRegionalSettings('KR'),
+  'yahoo_kr', 'Yahoo 财经 · 韩股', '韩国股市行情（非官方接口）', 'KR', 40, yahooRegionalSettings('KR'),
 )
 export const YAHOO_HK_MANIFEST = providerManifestEntry(
-  'yahoo_hk', 'Yahoo Finance', '港股行情（非官方接口）', 'HK', 40, yahooRegionalSettings('HK'),
+  'yahoo_hk', 'Yahoo 财经 · 港股', '香港股市行情（非官方接口）', 'HK', 40, yahooRegionalSettings('HK'),
 )
 
 export function yahooRegionalManifests() {

@@ -5,7 +5,8 @@ import { CACHE_TYPE, Capability } from './core/capabilities.js'
 import { Cache } from './core/cache.js'
 import { DriverRegistry } from './core/registry.js'
 import { CAP_METHOD } from './providers/common/base.js'
-import { registerAllDrivers } from './providers/register.js'
+import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
+import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
 import { isCnEtfCode } from './core/instrument.js'
@@ -44,7 +45,9 @@ export class MarketDataEngine {
   readonly registry = new DriverRegistry()
   readonly cache = new Cache()
   readonly providerCatalog: ProviderCatalogService
+  readonly providerLoader: ProviderLoader
   private readonly queryPlans: QueryPlanExecutor
+  private providerDirWatcher?: ProviderDirWatcher
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
 
@@ -62,7 +65,16 @@ export class MarketDataEngine {
   constructor(autoDiscover = true) {
     const configStore = getProviderConfigStore()
     this.registry.bindConfigStore(configStore)
-    if (autoDiscover) registerAllDrivers(this.registry)
+    this.providerLoader = createProviderLoader(this.registry, configStore)
+    if (autoDiscover) {
+      this.providerLoader.registerBuiltins()
+      void this.providerLoader.loadInstalled()
+        .then(() => this.startProviderDirWatcher())
+        .catch(err => {
+          console.warn('[MarketDataEngine] loadInstalled failed:', err)
+          this.startProviderDirWatcher()
+        })
+    }
     this.registry.refreshPriorities(configStore)
     this.providerCatalog = createProviderCatalog(this.registry)
     this.queryPlans = new QueryPlanExecutor(this.registry, this.cache)
@@ -97,7 +109,7 @@ export class MarketDataEngine {
         const data = await fn.apply(driver, args)
         if (!data?.length) continue
         if (useCache && cacheType) {
-          this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) })
+          this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) }, driver.name)
         }
         return { success: true, data: data as T[], source: driver.name }
       } catch (e) {
@@ -230,7 +242,7 @@ export class MarketDataEngine {
     )
   }
 
-  /** Minute OHLC — TDX primary, EastMoney fallback when TDX unavailable. */
+  /** Minute OHLC — Tushare when configured (daily+ only; minute bars may be unavailable). */
   minuteKline(
     code: string,
     period: string,
@@ -261,58 +273,10 @@ export class MarketDataEngine {
         assetClass,
       },
     )
-    if (viaPlan.success && viaPlan.data?.length) return viaPlan
-    return this.eastmoneyMinuteFallback(code, period, count, startOffset, market)
+    return viaPlan
   }
 
-  /** 东财备选：1m 用 trends2+当日 kline，其余分钟周期走 kline API。 */
-  private async eastmoneyMinuteFallback(
-    code: string,
-    period: string,
-    count: number,
-    startOffset = 0,
-    market?: import('./utils/helpers.js').StockMarket,
-  ): Promise<QueryResult<StockKline[]>> {
-    const window = Math.min(count + startOffset, 800)
-    if (period === '1m') return this.eastmoney1mFallback(code, window, market)
-    return this.query<StockKline>(
-      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, period, '', '', window, market],
-    )
-  }
-
-  /** EastMoney 1m fallback when TDX offline — trends2 历史 + kline 当日。 */
-  private async eastmoney1mFallback(
-    code: string,
-    count: number,
-    market?: import('./utils/helpers.js').StockMarket,
-  ): Promise<QueryResult<StockKline[]>> {
-    const ndays = Math.min(5, Math.max(1, Math.ceil(count / 240)))
-    const trendR = await this.minuteTrendKline(code, ndays, 0, market)
-    if (!trendR.success || !trendR.data?.length) {
-      return this.query<StockKline>(
-        Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', count, market],
-      )
-    }
-    const klineR = await this.query<StockKline>(
-      Capability.STOCK_KLINE, 'kline', 'stock_kline', true, [code, '1m', '', '', 240, market],
-    )
-    let merged = trendR.data
-    if (klineR.success && klineR.data?.length) {
-      const latestDay = klineR.data[klineR.data.length - 1].date.slice(0, 10)
-      merged = [
-        ...trendR.data.filter(b => b.date.slice(0, 10) < latestDay),
-        ...klineR.data,
-      ]
-    }
-    return {
-      success: true,
-      data: merged.slice(-Math.min(count, 800)),
-      source: trendR.source ?? 'eastmoney',
-      cached: trendR.cached,
-    }
-  }
-
-  /** 1-minute multi-day history (EastMoney trends2 fallback; up to 5 sessions). */
+  /** 1-minute multi-day history — licensed providers only. */
   minuteTrendKline(
     code: string,
     ndays = 1,
@@ -443,7 +407,7 @@ export class MarketDataEngine {
     return this.q(Capability.INTRADAY_TICK, 'intradayTick', false, code, date)
   }
 
-  /** Multi-day intraday — TDX history + EastMoney today on trading days. */
+  /** Multi-day intraday — licensed providers only. */
   async fetchIntradaySessions(
     code: string,
     ndays = 5,
@@ -749,18 +713,36 @@ export class MarketDataEngine {
   clearCache(dataType?: string) {
     return dataType ? this.cache.clearType(dataType) : this.cache.clearAll()
   }
+  clearCacheForProvider(providerId: string) {
+    return this.cache.clearBySource(providerId) + this.cache.clearBySource('mixed')
+  }
+  private async onProvidersDirChanged() {
+    const prev = new Set(this.providerLoader.listInstalled().map(r => r.providerId))
+    await this.providerLoader.rescan()
+    const touched = new Set([...prev, ...this.providerLoader.listInstalled().map(r => r.providerId)])
+    for (const id of touched) this.clearCacheForProvider(id)
+  }
+  private startProviderDirWatcher() {
+    if (this.providerDirWatcher) return
+    this.providerDirWatcher = new ProviderDirWatcher(() => this.onProvidersDirChanged())
+    this.providerDirWatcher.start()
+  }
+  stopProviderDirWatcher() {
+    this.providerDirWatcher?.stop()
+    this.providerDirWatcher = undefined
+  }
   cacheStats() { return this.cache.stats() }
   listDrivers() { return this.registry.listDriverInfo() }
   listProviders() { return this.providerCatalog.listCatalog() }
   getProviderConfig(providerId: string) { return this.providerCatalog.getPublic(providerId) }
   saveProviderConfig(providerId: string, patch: Parameters<ProviderCatalogService['saveConfig']>[1]) {
     const result = this.providerCatalog.saveConfig(providerId, patch)
-    this.clearCache()
+    this.clearCacheForProvider(providerId)
     return result
   }
   reorderProviderMarketGroup(marketGroup: string, providerIds: string[]) {
     const result = this.providerCatalog.reorderMarketGroup(marketGroup, providerIds)
-    this.clearCache()
+    for (const id of providerIds) this.clearCacheForProvider(id)
     return result
   }
   listProviderBindingOverrides(providerId: string) {
@@ -774,11 +756,25 @@ export class MarketDataEngine {
     patch: import('@opptrix/shared').ProviderBindingOverridePatch,
   ) {
     const items = this.providerCatalog.saveBindingOverride(providerId, market, assetClass, capability, patch)
-    this.clearCache()
+    this.clearCacheForProvider(providerId)
     return items
   }
   testProviderConnection(providerId: string, overrides?: Record<string, unknown>) {
     return this.providerCatalog.testConnection(providerId, overrides)
+  }
+  async reloadProvider(providerId: string) {
+    this.clearCacheForProvider(providerId)
+    return this.providerLoader.reload(providerId)
+  }
+  async rescanProviders() {
+    const prev = new Set(this.providerLoader.listInstalled().map(r => r.providerId))
+    const loaded = await this.providerLoader.rescan()
+    const touched = new Set([...prev, ...loaded.map(r => r.providerId)])
+    for (const id of touched) this.clearCacheForProvider(id)
+    return loaded
+  }
+  listInstalledProviders() {
+    return this.providerLoader.listInstalled()
   }
   registerDriver(driver: Parameters<DriverRegistry['register']>[0]) { this.registry.register(driver) }
   unregisterDriver(name: string) { this.registry.unregister(name) }
@@ -792,10 +788,8 @@ export { Cache, DEFAULT_TTL } from './core/cache.js'
 export * from './core/schema.js'
 export { BaseDriver, CAP_METHOD } from './providers/common/base.js'
 export {
-  EastMoneyDriver, EfinanceDriver, TdxDriver, TencentDriver,
-  SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
-  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver, YahooUsDriver, BinanceDriver, OkxDriver,
+  TushareDriver,
+  PolygonDriver, TiingoDriver, FmpDriver,
   registerAllDrivers,
 } from './providers/register.js'
 export { loadTushareConfig, isTushareEnabled, saveTushareConfig, publicTushareConfig } from './providers/tushare/config.js'
@@ -809,6 +803,36 @@ export { loadFmpConfig, isFmpEnabled } from './providers/fmp/config.js'
 export { getProviderConfigStore, ProviderConfigStore } from './providers/config-store.js'
 export { ProviderCatalogService, createProviderCatalog } from './providers/catalog.js'
 export { PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest } from './providers/manifests.js'
+export {
+  ProviderLoader,
+  createProviderLoader,
+  getProviderLoader,
+} from './providers/loader.js'
+export { ManifestRegistry, getManifestRegistry } from './providers/manifest-registry.js'
+export {
+  packOppx,
+  unpackOppx,
+  inspectOppxPackage,
+  validateOppxSignature,
+  validatePluginDirectory,
+  suggestOppxFilename,
+  installFromOppx,
+  installFromDirectory,
+  uninstallProviderPlugin,
+  readInstalledIndex,
+  writeInstalledIndex,
+  listInstalledProviders,
+  providersRootDir,
+  installedIndexPath,
+  installedProviderDir,
+} from './providers/index.js'
+export type {
+  OppxPackageMetadata,
+  ProviderPluginManifest,
+  OppxPackageInspectResult,
+  InstalledProviderEntry,
+  InstalledProvidersIndex,
+} from './providers/index.js'
 export { normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice } from './utils/quote-normalize.js'
 export { computeIndicators } from './utils/indicators.js'
 export { computeChipDistribution, computeLatestChipProfile } from './utils/cyq.js'

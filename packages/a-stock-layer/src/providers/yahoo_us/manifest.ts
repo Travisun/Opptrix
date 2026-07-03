@@ -16,7 +16,7 @@ export const YAHOO_US_CAPS = [
 
 export const YAHOO_US_SPEC: ProviderManifestSpec = {
   id: 'yahoo_us',
-  title: 'Yahoo Finance',
+  title: 'Yahoo 财经 · 美股',
   subtitle: '美股行情回退（非官方接口）',
   marketGroup: 'US',
   defaultPriority: 45,
@@ -26,5 +26,5 @@ export const YAHOO_US_SPEC: ProviderManifestSpec = {
 }
 
 export const YAHOO_US_MANIFEST = providerManifestEntry(
-  'yahoo_us', 'Yahoo Finance', '美股行情回退（非官方接口）', 'US', 45, YAHOO_US_SETTINGS,
+  'yahoo_us', 'Yahoo 财经 · 美股', '美股行情回退（非官方接口）', 'US', 45, YAHOO_US_SETTINGS,
 )

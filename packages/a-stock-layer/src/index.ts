@@ -5,14 +5,24 @@ export {
   Capability, CACHE_TYPE, DriverRegistry, Cache,
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
   normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice,
-  EastMoneyDriver, EfinanceDriver, TdxDriver, TencentDriver,
-  SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
-  GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
-  PolygonDriver, TiingoDriver, FmpDriver, YahooUsDriver, BinanceDriver, OkxDriver,
+  TushareDriver,
+  PolygonDriver, TiingoDriver, FmpDriver,
   getProviderConfigStore, ProviderConfigStore, ProviderCatalogService, createProviderCatalog,
   PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest,
+  ProviderLoader, createProviderLoader, getProviderLoader,
+  ManifestRegistry, getManifestRegistry,
   QueryPlanExecutor, QUERY_PLANS, defaultCacheType, executeIntradaySessionsPlan,
 } from './engine.js'
+
+export {
+  installFromOppx,
+  installFromDirectory,
+  uninstallProviderPlugin,
+  listInstalledProviders as listInstalledProviderEntries,
+  providersRootDir,
+} from './providers/index.js'
+
+export type { InstalledProviderEntry, InstalledProvidersIndex } from './providers/installer.js'
 
 export type {
   QueryPlan,
@@ -46,8 +56,6 @@ export {
 export type { TushareRuntimeConfig, PublicTushareConfig, TushareRow } from './providers/tushare/index.js'
 
 export { TdxClient, tdxClient, TdxDailyBarReader, readTdxDayFile, toTdxSymbol, isIndexCode, toTdxMarketId, patchNodetdxBjMarket, tdxMinuteIndexToTime, transformTdxMinutePoints } from './providers/tdx/index.js'
-export { ef, stock as efStock, fund as efFund, bond as efBond, futures as efFutures, searchQuote } from './providers/efinance/index.js'
-export type { SearchQuote, EfRow } from './providers/efinance/index.js'
 
 export { PortfolioManager } from './portfolio/manager.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'

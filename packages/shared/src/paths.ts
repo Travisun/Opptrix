@@ -14,6 +14,11 @@ export function resolveUserDataRoot(): string {
   return NEW_ROOT
 }
 
+/** Installed provider plugins (~/.opptrix/providers) */
+export function resolveProvidersDir(): string {
+  return path.join(resolveUserDataRoot(), 'providers')
+}
+
 export function isDesktopRuntime(): boolean {
   return process.env.OPPTRIX_DESKTOP === '1' || process.env.OPPTRIX_DESKTOP === '1'
 }

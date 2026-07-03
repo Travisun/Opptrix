@@ -3,7 +3,6 @@ export {
   PolygonDriver,
   TiingoDriver,
   FmpDriver,
-  YahooUsDriver,
   normalizeUsSymbol,
   isValidUsSymbol,
   usTodayString,
