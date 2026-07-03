@@ -8,5 +8,5 @@ interface Props {
 }
 
 export default function UsDetailTab(props: Props) {
-  return <CrossMarketSnapshotDetail {...props} market="US" />
+  return <CrossMarketSnapshotDetail {...props} />
 }

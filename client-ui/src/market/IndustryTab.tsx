@@ -664,7 +664,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
 
       <div className={s.head}>
         <Text className={s.headHint}>
-          按行业查看涨跌与成分股，点行业名可进入详情，再点个股可看走势。
+          按 A 股行业查看涨跌与成分股，点行业名可进入详情，再点个股可看走势。
         </Text>
         {quoteStatusHint(quoteDate, useLiveList) ? (
           <Text className={s.meta}>{quoteStatusHint(quoteDate, useLiveList)}</Text>

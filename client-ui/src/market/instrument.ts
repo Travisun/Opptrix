@@ -1,5 +1,6 @@
 import type { WatchlistItem } from '../types/market'
 import type { DetailPanelKind, InstrumentRef, LocalInstrumentHit, Market } from '../types/instrument'
+import type { StockContext } from '../context/AppContext'
 import { isCnEtfCode, normalizeCode } from './format'
 
 const US_PREFIX = /^(US|NYSE|NASDAQ|AMEX):/i
@@ -64,8 +65,16 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
 
 export function displayCodeFromInstrument(ref: InstrumentRef): string {
   if (ref.market === 'CRYPTO' && ref.quote) return `${ref.symbol}/${ref.quote}`
-  if (ref.market === 'US' || ref.market === 'HK') return ref.symbol
-  return normalizeCode(ref.symbol)
+  if (ref.market === 'CN') return normalizeCode(ref.symbol)
+  return ref.symbol
+}
+
+export function isLikelyCnEquityInput(raw: string): boolean {
+  const s = String(raw).trim()
+  if (/^(US|HK|JP|KR|CRYPTO|NYSE|NASDAQ|AMEX|BINANCE|OKX):/i.test(s)) return false
+  if (s.includes('/')) return false
+  if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(s) && !/^\d+$/.test(s)) return false
+  return /^\d{1,6}$/.test(s)
 }
 
 export function formatInstrumentLabel(ref: InstrumentRef): string {
@@ -102,12 +111,39 @@ export function watchlistItemKey(item: WatchlistItem): string {
   return instrumentKey(resolveWatchlistInstrument(item))
 }
 
+export function toStockContext(
+  item: WatchlistItem | Pick<WatchlistItem, 'code' | 'name' | 'instrument'>,
+): StockContext {
+  const normalized = normalizeWatchlistItem({
+    code: item.code,
+    name: item.name,
+    instrument: item.instrument,
+  })
+  return {
+    code: normalized.code,
+    name: normalized.name,
+    instrument: normalized.instrument,
+  }
+}
+
+export function resolveStockContextInstrument(
+  stock: Pick<StockContext, 'code' | 'instrument'> | null | undefined,
+): InstrumentRef | null {
+  if (!stock) return null
+  if (stock.instrument) return stock.instrument
+  const code = stock.code?.trim()
+  if (!code) return null
+  return parseInstrumentInput(code)
+}
+
 export function detailPanelKind(ref: InstrumentRef): DetailPanelKind {
-  if (ref.market === 'US' || ref.market === 'HK') return 'us'
-  if (ref.market === 'CRYPTO') return 'crypto'
   if (ref.market === 'CN' && ref.assetClass === 'ETF') return 'cn-etf'
   if (ref.market === 'CN') return 'cn-equity'
-  return 'other'
+  if (ref.market === 'CRYPTO') return 'crypto'
+  if (ref.market === 'US' || ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
+    return 'cross-market'
+  }
+  return 'cross-market'
 }
 
 export function marketDisplayName(market: Market): string {

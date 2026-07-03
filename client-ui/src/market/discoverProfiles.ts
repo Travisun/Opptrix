@@ -9,6 +9,7 @@ export type DiscoverStrategyProfile =
   | 'crypto_spot'
   | 'jp_equity'
   | 'kr_equity'
+  | 'hk_equity'
 
 export type MarketRegimeKind = MarketRegimeData['regime']
 
@@ -19,6 +20,7 @@ export const DISCOVER_PROFILE_ORDER: DiscoverStrategyProfile[] = [
   'crypto_spot',
   'jp_equity',
   'kr_equity',
+  'hk_equity',
 ]
 
 export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = {
@@ -28,6 +30,7 @@ export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = 
   crypto_spot: 'Crypto',
   jp_equity: '日本股市',
   kr_equity: '韩国股市',
+  hk_equity: '港股',
 }
 
 export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, string> = {
@@ -37,6 +40,7 @@ export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, stri
   crypto_spot: 'Crypto 交易对筛选（需开启 Crypto 数据包）',
   jp_equity: '日股本地列表筛选（需开启日本数据包）',
   kr_equity: '韩股本地列表筛选（需开启韩国数据包）',
+  hk_equity: '港股本地列表筛选（需开启港股数据包）',
 }
 
 export function defaultDiscoverProfile(): DiscoverStrategyProfile {
@@ -50,6 +54,7 @@ export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): 
     || profile === 'crypto_spot'
     || profile === 'jp_equity'
     || profile === 'kr_equity'
+    || profile === 'hk_equity'
 }
 
 export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrategyProfile {
@@ -58,6 +63,7 @@ export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrateg
   if (strategyId.startsWith('crypto_')) return 'crypto_spot'
   if (strategyId.startsWith('jp_')) return 'jp_equity'
   if (strategyId.startsWith('kr_')) return 'kr_equity'
+  if (strategyId.startsWith('hk_')) return 'hk_equity'
   return 'cn_equity'
 }
 

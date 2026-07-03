@@ -48,6 +48,9 @@ export interface MarketDataPackageMetadata {
     bootstrap: MarketDbStatus['bootstrap']
     us_count?: number
     crypto_count?: number
+    jp_count?: number
+    kr_count?: number
+    hk_count?: number
     market_packs?: ReturnType<typeof loadMarketPackConfig>
   }
 }

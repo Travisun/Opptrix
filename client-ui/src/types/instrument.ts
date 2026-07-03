@@ -18,7 +18,7 @@ export interface InstrumentRef {
   quote?: string
 }
 
-export type DetailPanelKind = 'cn-equity' | 'cn-etf' | 'us' | 'crypto' | 'other'
+export type DetailPanelKind = 'cn-equity' | 'cn-etf' | 'crypto' | 'cross-market'
 
 export interface LocalInstrumentHit {
   code: string

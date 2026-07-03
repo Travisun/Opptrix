@@ -17,6 +17,7 @@ export type DiscoverMiningToolGroup =
   | 'crypto_spot'
   | 'jp_equity'
   | 'kr_equity'
+  | 'hk_equity'
   | 'none'
 
 export interface DiscoverProfileDefinition {
@@ -117,6 +118,20 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
     readinessCountKey: 'kr_count',
     strategyIdPrefix: 'kr_',
     localScreenFeature: 'local_kr_screen',
+  },
+  {
+    id: 'hk_equity',
+    label: '港股',
+    description: '港股本地列表筛选（需开启港股数据包）',
+    packId: 'hk',
+    prescreenMode: 'list_filter',
+    scorecardProfile: null,
+    miningToolGroup: 'hk_equity',
+    miningReady: true,
+    regimeAware: false,
+    readinessCountKey: 'hk_count',
+    strategyIdPrefix: 'hk_',
+    localScreenFeature: 'local_hk_screen',
   },
 ]
 

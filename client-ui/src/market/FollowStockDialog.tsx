@@ -12,7 +12,8 @@ import { DismissRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { WatchlistItem } from '../types/market'
 import type { PortfolioTradeItem } from '../types/schemas'
-import { formatCompactNumber, formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { formatCompactNumber, formatPct, formatPrice, pctTone } from './format'
+import { resolveWatchlistInstrument } from './instrument'
 import {
   calcHoldingFromTrades,
   estimateTradeAmount,
@@ -340,6 +341,8 @@ interface Props {
   stock: WatchlistItem | null
   currentPrice: number | null
   holding?: HoldingSnapshot | null
+  /** A 股持仓录入与盈亏；非 A 股仅备注与现价 */
+  portfolioEnabled?: boolean
   onClose: () => void
   onSaveNote: (code: string, note: string) => void
   loadTrades: (code: string) => Promise<PortfolioTradeItem[]>
@@ -358,6 +361,7 @@ export default function FollowStockDialog({
   stock,
   currentPrice,
   holding,
+  portfolioEnabled = true,
   onClose,
   onSaveNote,
   loadTrades,
@@ -380,7 +384,10 @@ export default function FollowStockDialog({
     date: '',
   })
 
-  const code = stock ? normalizeCode(stock.code) : ''
+  const tradeCode = stock ? resolveWatchlistInstrument(stock).market === 'CN'
+    ? stock.code.padStart(6, '0')
+    : stock.code
+    : ''
 
   const finishClose = useCallback(() => {
     if (!closingRef.current) return
@@ -435,9 +442,15 @@ export default function FollowStockDialog({
       price: currentPrice != null ? String(currentPrice) : prev.price,
       date: todayTradeDate(),
     }))
+    if (!portfolioEnabled) {
+      setTrades([])
+      setDialogTab('trade')
+      setLoadingTrades(false)
+      return undefined
+    }
     let cancelled = false
     setLoadingTrades(true)
-    void loadTrades(code).then(rows => {
+    void loadTrades(tradeCode).then(rows => {
       if (!cancelled) {
         setTrades(rows)
         setDialogTab(rows.length > 0 ? 'records' : 'trade')
@@ -446,7 +459,7 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingTrades(false)
     })
     return () => { cancelled = true }
-  }, [open, stock, code, currentPrice, loadTrades])
+  }, [open, stock, tradeCode, currentPrice, loadTrades, portfolioEnabled])
 
   useEffect(() => {
     if (!open || !stock) return undefined
@@ -517,7 +530,7 @@ export default function FollowStockDialog({
   const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct ?? localHolding?.totalPnlPct
   const holdTone = pctTone(holdPct)
   const followTone = pctTone(followPct)
-  const isHolding = (localHolding?.shares ?? holding?.shares ?? 0) > 0
+  const isHolding = portfolioEnabled && (localHolding?.shares ?? holding?.shares ?? 0) > 0
 
   return (
     <>
@@ -533,7 +546,7 @@ export default function FollowStockDialog({
           role="dialog"
           aria-modal="false"
           aria-hidden={!presented}
-          aria-label={`${stock.name} 持仓管理`}
+          aria-label={portfolioEnabled ? `${stock.name} 持仓管理` : `${stock.name} 关注备注`}
           onTransitionEnd={handleDrawerTransitionEnd}
         >
         <div className={s.handle} aria-hidden />
@@ -605,6 +618,14 @@ export default function FollowStockDialog({
               />
             </div>
 
+            {!portfolioEnabled && (
+              <Text className={s.sub}>
+                持仓录入与盈亏统计暂仅支持 A 股；此处可记录关注备注，并在上方查看现价与关注收益。
+              </Text>
+            )}
+
+            {portfolioEnabled && (
+            <>
             <div className={s.tabRow} role="tablist" aria-label="交易">
               <button
                 type="button"
@@ -722,6 +743,8 @@ export default function FollowStockDialog({
                 </div>
               )}
             </div>
+            </>
+            )}
           </div>
         </div>
       </div>

@@ -81,6 +81,22 @@ export function allPackIds(): MarketDataPackId[] {
   return PACK_REGISTRY.map(p => p.id)
 }
 
+/** 可单独导出/导入的补充数据包（不含 cn 完整库） */
+export const SUPPLEMENT_PACK_IDS = ['us', 'crypto', 'hk', 'jp', 'kr'] as const satisfies readonly Exclude<
+  MarketDataPackId,
+  'cn'
+>[]
+
+export type SupplementPackId = (typeof SUPPLEMENT_PACK_IDS)[number]
+
+export function isSupplementPackId(v: string): v is SupplementPackId {
+  return (SUPPLEMENT_PACK_IDS as readonly string[]).includes(v)
+}
+
+export function isMarketDataPackId(v: string): v is MarketDataPackId {
+  return (allPackIds() as readonly string[]).includes(v)
+}
+
 export function buildDefaultMarketPackConfig(): Record<MarketDataPackId, MarketDataPackEntry> {
   const out = {} as Record<MarketDataPackId, MarketDataPackEntry>
   for (const pack of PACK_REGISTRY) {

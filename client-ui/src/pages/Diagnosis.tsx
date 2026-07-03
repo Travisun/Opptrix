@@ -6,6 +6,8 @@ import {
 import { ArrowSyncRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
 import { getConfig, research } from '../api/client'
+import type { StockContext } from '../context/AppContext'
+import { parseInstrumentInput } from '../market/instrument'
 import type { StockDiagnosisData, InstitutionRatingData, StrategySignalData } from '../types/schemas'
 
 const useStyles = makeStyles({
@@ -44,8 +46,8 @@ const useStyles = makeStyles({
 })
 
 interface Props {
-  globalStock: { code: string; name: string } | null
-  setGlobalStock: (s: { code: string; name: string } | null) => void
+  globalStock: StockContext | null
+  setGlobalStock: (s: StockContext | null) => void
 }
 
 export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
@@ -75,7 +77,12 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
       if (d.success) setDiagnosis(d.data)
       if (r.success) setRatings(r.data)
       if (sg?.success) setSignals(sg.data)
-      setGlobalStock({ code: code.trim(), name: d.data?.name || '' })
+      const trimmed = code.trim()
+      setGlobalStock({
+        code: trimmed,
+        name: d.data?.name || globalStock?.name || '',
+        instrument: globalStock?.instrument ?? parseInstrumentInput(trimmed),
+      })
     } catch (e) {
       console.error(e)
     }

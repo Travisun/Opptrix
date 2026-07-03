@@ -234,6 +234,11 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
 
   return (
     <div className={s.root}>
+      <div style={{ flexShrink: 0, padding: `6px ${CONTENT_PAD} 0` }}>
+        <Text className={s.metricLabel} style={{ lineHeight: 1.45 }}>
+          组合盈亏与交易记录基于 A 股持仓；其他市场请在关注列表中查看详情。
+        </Text>
+      </div>
       {!empty && data ? (
         <div className={s.summary}>
           <div className={s.metric}>
@@ -267,7 +272,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
           <SidebarListEmpty
             icon={<BriefcaseRegular />}
             title="还没有持仓记录"
-            hint="在个股详情里录入买卖后，会在这里汇总市值与盈亏"
+            hint="在 A 股个股详情里录入买卖后，会在这里汇总市值与盈亏"
           />
         ) : (
           holdings.map((h) => {

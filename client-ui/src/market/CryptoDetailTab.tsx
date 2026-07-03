@@ -5,8 +5,9 @@ interface Props {
   stock: WatchlistItem
   localIndexed?: boolean | null
   loading?: boolean
+  onManage?: () => void
 }
 
 export default function CryptoDetailTab(props: Props) {
-  return <CrossMarketSnapshotDetail {...props} market="CRYPTO" />
+  return <CrossMarketSnapshotDetail {...props} />
 }

@@ -4,7 +4,7 @@ import {
 } from '@fluentui/react-components'
 import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
-import { hitToWatchlistItem } from '../market/instrument'
+import { hitToWatchlistItem, parseInstrumentInput, toStockContext, marketDisplayName } from '../market/instrument'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -51,14 +51,15 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
     try {
       const resp = await research.searchInstruments(q, 10)
       if (resp.success && resp.data?.items?.length) {
-        const first = hitToWatchlistItem(resp.data.items[0])
-        setGlobalStock({ code: first.code, name: first.name })
+        setGlobalStock(toStockContext(hitToWatchlistItem(resp.data.items[0])))
       } else {
-        setGlobalStock({ code: q, name: '' })
+        const ref = parseInstrumentInput(q)
+        setGlobalStock({ code: q, name: '', instrument: ref })
       }
       onNavigate('stock_research')
     } catch {
-      setGlobalStock({ code: q, name: '' })
+      const ref = parseInstrumentInput(q)
+      setGlobalStock({ code: q, name: '', instrument: ref })
       onNavigate('stock_research')
     }
     setSearching(false)
@@ -79,7 +80,12 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
       {globalStock && (
         <div className={s.stockChip}>
           <Badge appearance="filled" color="brand" size="small">{globalStock.code}</Badge>
-          <Text size={300}>{globalStock.name || '—'}</Text>
+          <Text size={300}>
+            {globalStock.name || '—'}
+            {globalStock.instrument && globalStock.instrument.market !== 'CN'
+              ? ` · ${marketDisplayName(globalStock.instrument.market)}`
+              : ''}
+          </Text>
           <Button appearance="subtle" size="small" icon={<DismissRegular />}
             onClick={() => setGlobalStock(null)} aria-label="清除标的" />
         </div>

@@ -7,8 +7,8 @@ import { useDiscoverSession } from './useDiscoverSession'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
 import EtfDetailTab from './EtfDetailTab'
-import UsDetailTab from './UsDetailTab'
 import CryptoDetailTab from './CryptoDetailTab'
+import CrossMarketDetailTab from './CrossMarketDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
 import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
@@ -176,10 +176,10 @@ export default function RightMarketPanel({
   }, [addItem])
 
   const handleManage = useCallback(async (item: WatchlistItem) => {
+    const ref = resolveWatchlistInstrument(item)
     setManageStock(item)
     try {
-      const ref = resolveWatchlistInstrument(item)
-      if (hasApplicationCapability(ref, 'batch_quote')) {
+      if (hasApplicationCapability(ref, 'batch_quote') || hasApplicationCapability(ref, 'quote')) {
         const resp = await research.instrumentQuotes([ref])
         setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
       } else {
@@ -195,12 +195,7 @@ export default function RightMarketPanel({
   }, [updateItem])
 
   const watchlistCodeSet = useMemo(
-    () => new Set(
-      items
-        .map(normalizeWatchlistItem)
-        .filter(item => resolveWatchlistInstrument(item).market === 'CN')
-        .map(item => normalizeCode(item.code)),
-    ),
+    () => new Set(items.map(item => watchlistItemKey(normalizeWatchlistItem(item)))),
     [items],
   )
 
@@ -388,11 +383,21 @@ export default function RightMarketPanel({
         </div>
         {tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
           <EtfDetailTab stock={detailStock} />
-        ) : tab === 'detail' && detailStock && detailKind === 'us' ? (
-          <UsDetailTab stock={detailStock} localIndexed={localIndexed} loading={localIndexLoading} />
         ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
-          <CryptoDetailTab stock={detailStock} localIndexed={localIndexed} loading={localIndexLoading} />
-        ) : tab === 'detail' && detailStock ? (
+          <CryptoDetailTab
+            stock={detailStock}
+            localIndexed={localIndexed}
+            loading={localIndexLoading}
+            onManage={() => { void handleManage(detailStock) }}
+          />
+        ) : tab === 'detail' && detailStock && detailKind === 'cross-market' ? (
+          <CrossMarketDetailTab
+            stock={detailStock}
+            localIndexed={localIndexed}
+            loading={localIndexLoading}
+            onManage={() => { void handleManage(detailStock) }}
+          />
+        ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
           <StockDetailTab
             stock={detailStock}
             isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}
@@ -407,6 +412,9 @@ export default function RightMarketPanel({
           stock={manageStock}
           currentPrice={dialogPrice}
           holding={manageHolding}
+          portfolioEnabled={manageStock
+            ? hasApplicationCapability(resolveWatchlistInstrument(manageStock), 'portfolio_pnl')
+            : false}
           onClose={() => {
             setManageStock(null)
             setDialogPrice(null)

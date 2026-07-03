@@ -63,6 +63,7 @@ export function discoverFactorsForProfile(profile: DiscoverStrategyProfile): rea
     case 'us_equity':
     case 'jp_equity':
     case 'kr_equity':
+    case 'hk_equity':
       return REGIONAL_EQUITY_DISCOVER_FILTERS
     case 'crypto_spot': return CRYPTO_DISCOVER_FILTERS
     case 'cn_equity':
@@ -230,6 +231,7 @@ export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrateg
   if (strategyId.startsWith('crypto_')) return 'crypto_spot'
   if (strategyId.startsWith('jp_')) return 'jp_equity'
   if (strategyId.startsWith('kr_')) return 'kr_equity'
+  if (strategyId.startsWith('hk_')) return 'hk_equity'
   return 'cn_equity'
 }
 

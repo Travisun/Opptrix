@@ -14,7 +14,12 @@ import {
   regimeSuggestedIds,
 } from './discoverProfiles'
 import { factorLabel } from './factorLabels'
-import { normalizeCode } from './format'
+import {
+  inferBuiltinStrategyProfile,
+  normalizeWatchlistItem,
+  parseInstrumentInput,
+  watchlistItemKey,
+} from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { research } from '../api/client'
@@ -335,6 +340,21 @@ const STATUS_LABEL: Record<DiscoverJobSnapshot['status'], string> = {
   done: '已完成',
   error: '失败',
   cancelled: '已取消',
+}
+
+function discoverResultWatchlistItem(
+  item: DiscoverRunResult['items'][0],
+  profile: DiscoverStrategyProfile,
+): WatchlistItem {
+  const prefix = profile === 'us_equity' ? 'US:'
+    : profile === 'jp_equity' ? 'JP:'
+      : profile === 'kr_equity' ? 'KR:'
+        : profile === 'crypto_spot' && !item.code.includes('/') ? 'CRYPTO:'
+          : ''
+  return normalizeWatchlistItem({
+    code: prefix ? `${prefix}${item.code}` : item.code,
+    name: item.name,
+  })
 }
 
 interface Props {
@@ -688,18 +708,19 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           </Text>
         )}
         {result?.items.map(item => {
-          const inWatchlist = watchlistCodes.has(normalizeCode(item.code))
+          const wlItem = discoverResultWatchlistItem(item, profile)
+          const inWatchlist = watchlistCodes.has(watchlistItemKey(wlItem))
           return (
             <div
               key={item.code}
               className={s.row}
               role="button"
               tabIndex={0}
-              onClick={() => onSelect({ code: item.code, name: item.name })}
+              onClick={() => onSelect(wlItem)}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
                   e.preventDefault()
-                  onSelect({ code: item.code, name: item.name })
+                  onSelect(wlItem)
                 }
               }}
             >
@@ -720,7 +741,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
                     className={s.iconBtn}
                     title="加入关注"
                     aria-label={`加入关注 ${item.name}`}
-                    onClick={e => { e.stopPropagation(); onAdd({ code: item.code, name: item.name }) }}
+                    onClick={e => { e.stopPropagation(); onAdd(wlItem) }}
                   >
                     <AddRegular fontSize={14} />
                   </button>
@@ -730,9 +751,9 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
                   className={s.iconBtn}
                   title="查看个股"
                   aria-label={`查看 ${item.name}`}
-                  onClick={e => {
+                    onClick={e => {
                     e.stopPropagation()
-                    onSelect({ code: item.code, name: item.name })
+                    onSelect(wlItem)
                   }}
                 >
                   <ArrowRightRegular fontSize={14} />

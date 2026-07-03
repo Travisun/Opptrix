@@ -7,6 +7,7 @@ export type DiscoverStrategyProfile =
   | 'crypto_spot'
   | 'jp_equity'
   | 'kr_equity'
+  | 'hk_equity'
 
 export const DISCOVER_STRATEGY_PROFILES: DiscoverStrategyProfile[] = [
   'cn_equity',
@@ -15,6 +16,7 @@ export const DISCOVER_STRATEGY_PROFILES: DiscoverStrategyProfile[] = [
   'crypto_spot',
   'jp_equity',
   'kr_equity',
+  'hk_equity',
 ]
 
 export function isDiscoverStrategyProfile(v: string): v is DiscoverStrategyProfile {

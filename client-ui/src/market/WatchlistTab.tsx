@@ -16,8 +16,9 @@ import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPrice, normalizeCode, pctTone, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { displayCodeFromInstrument, hitToWatchlistItem, resolveWatchlistInstrument } from './instrument'
+import { displayCodeFromInstrument, hitToWatchlistItem, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
 import { hasApplicationCapability } from './capabilities'
+import { normalizeCode } from './format'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
@@ -334,7 +335,7 @@ export default function WatchlistTab({
         const map: Record<string, MarketQuote> = {}
         for (const q of resp.data.quotes) {
           const code = displayCodeFromInstrument(q.instrument)
-          map[normalizeCode(code)] = {
+          map[code] = {
             code,
             name: q.name ?? code,
             price: q.price ?? null,
@@ -357,12 +358,17 @@ export default function WatchlistTab({
   }, [codes])
 
   const refreshRadar = useCallback(async () => {
-    if (!codes.length) {
+    const cnItems = items.filter(item => {
+      const ref = resolveWatchlistInstrument(item)
+      return ref.market === 'CN' && hasApplicationCapability(ref, 'scorecard')
+    })
+    if (!cnItems.length) {
       setRadar({})
       return
     }
+    const cnCodes = cnItems.map(item => normalizeCode(resolveWatchlistInstrument(item).symbol))
     try {
-      const resp = await research.watchlistRadar(codes)
+      const resp = await research.watchlistRadar(cnCodes)
       if (resp.success && resp.data?.items) {
         const map: Record<string, WatchlistRadarItem> = {}
         for (const row of resp.data.items) map[normalizeCode(row.code)] = row
@@ -371,7 +377,7 @@ export default function WatchlistTab({
     } catch {
       /* ignore transient radar errors */
     }
-  }, [codes])
+  }, [items])
 
   useEffect(() => {
     void refreshRadar()
@@ -381,16 +387,21 @@ export default function WatchlistTab({
 
   useEffect(() => {
     if (!selectedCode) return undefined
-    const code = normalizeCode(selectedCode)
+    const item = items.find(row => row.code === selectedCode || watchlistItemKey(row) === selectedCode)
+    if (!item) return undefined
+    const ref = resolveWatchlistInstrument(item)
+    if (!hasApplicationCapability(ref, 'strategy_signal')) return undefined
+    const key = item.code
+    const apiCode = normalizeCode(ref.symbol)
     let cancelled = false
-    void research.strategySignals(code).then(resp => {
+    void research.strategySignals(apiCode).then(resp => {
       if (cancelled || !resp.success || !resp.data?.summary) return
       setStrategyByCode(prev => (
-        prev[code] ? prev : { ...prev, [code]: resp.data!.summary }
+        prev[key] ? prev : { ...prev, [key]: resp.data!.summary }
       ))
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [selectedCode])
+  }, [selectedCode, items])
 
   useEffect(() => {
     void refreshQuotes()
@@ -529,6 +540,7 @@ export default function WatchlistTab({
           />
         )}
         {items.map(item => {
+          const ref = resolveWatchlistInstrument(item)
           const quote = quotes[item.code]
           const holding = holdingsByCode[item.code]
           const isHolding = (holding?.shares ?? 0) > 0
@@ -542,7 +554,7 @@ export default function WatchlistTab({
           const secondaryTone = showHoldReturn ? holdTone : followTone
           const secondaryLabel = showHoldReturn ? '持' : '关'
           const hasSecondary = secondaryPct != null
-          const radarRow = radar[item.code]
+          const radarRow = ref.market === 'CN' ? radar[normalizeCode(ref.symbol)] : undefined
           const radarLine = formatWatchlistRadarLine(
             item,
             radarRow,

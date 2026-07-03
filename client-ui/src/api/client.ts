@@ -395,10 +395,12 @@ export async function fetchCryptoSnapshot(pair: string, signal?: AbortSignal) {
   return resp.data
 }
 
+export type SupplementPackId = 'us' | 'crypto' | 'hk' | 'jp' | 'kr'
+
 export interface MarketDataPackageMetadata {
   app: string
   kind: string
-  pack_scope?: 'cn' | 'us' | 'crypto'
+  pack_scope?: 'cn' | 'us' | 'crypto' | 'hk' | 'jp' | 'kr'
   format_version: number
   exported_at: string
   schema_version: number
@@ -415,6 +417,11 @@ export interface MarketDataPackageMetadata {
     latest_factor_date: string | null
     is_ready: boolean
     bootstrap: import('../types/market').MarketDataSyncState['db_status']['bootstrap']
+    us_count?: number
+    crypto_count?: number
+    jp_count?: number
+    kr_count?: number
+    hk_count?: number
   }
 }
 
@@ -430,7 +437,7 @@ export type { ExportDestination, ExportPackageResult }
 
 const MARKET_PACKAGE_TIMEOUT = 300_000
 
-async function fetchMarketDataPackageBlob(pack?: 'us' | 'crypto'): Promise<{ blob: Blob; filename: string }> {
+async function fetchMarketDataPackageBlob(pack?: SupplementPackId): Promise<{ blob: Blob; filename: string }> {
   const qs = pack ? `?pack=${pack}` : ''
   const resp = await fetchWithTimeout(`${API_BASE}/market-data/export${qs}`, {}, MARKET_PACKAGE_TIMEOUT)
   if (!resp.ok) {
@@ -446,7 +453,7 @@ async function fetchMarketDataPackageBlob(pack?: 'us' | 'crypto'): Promise<{ blo
 
 export async function exportMarketDataPackageFile(
   destination: ExportDestination,
-  pack?: 'us' | 'crypto',
+  pack?: SupplementPackId,
 ): Promise<ExportPackageResult> {
   const { blob, filename } = await fetchMarketDataPackageBlob(pack)
   return saveMarketPackageBlob(blob, filename, destination)

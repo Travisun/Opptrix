@@ -3,7 +3,7 @@ import { getConfig, research } from '../api/client'
 import type { InstitutionRatingData, LatestEvalData, StrategySignalData } from '../types/schemas'
 import type { ChipDistributionPoint } from '../types/market'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { parseInstrumentInput, displayCodeFromInstrument } from './instrument'
+import { parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
 import { normalizeCode } from './format'
@@ -59,10 +59,10 @@ const STEP_HINTS: Record<string, string> = {
   radar: '正在整理估值分位与评分摘要…',
 }
 
-export function useStockAnalysis(code: string | null) {
+export function useStockAnalysis(code: string | null, instrument?: InstrumentRef | null) {
   const instrumentRef = useMemo(
-    () => (code ? parseInstrumentInput(code) : null),
-    [code],
+    () => instrument ?? (code ? parseInstrumentInput(code) : null),
+    [code, instrument],
   )
   const [status, setStatus] = useState<AnalysisJobStatus>('idle')
   const [steps, setSteps] = useState<AnalysisStep[]>(() => freshSteps(instrumentRef))
@@ -83,7 +83,7 @@ export function useStockAnalysis(code: string | null) {
 
   useEffect(() => {
     reset()
-  }, [code, reset])
+  }, [code, instrumentRef, reset])
 
   const start = useCallback(async (force = false) => {
     if (!code || status === 'running') return

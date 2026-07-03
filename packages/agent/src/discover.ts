@@ -78,6 +78,10 @@ function isFilterDiscoverProfile(profile: DiscoverStrategyProfile): boolean {
   return discoverPrescreenMode(profile) === 'list_filter'
 }
 
+function isRegionalEquityProfile(profile: DiscoverStrategyProfile): boolean {
+  return profile === 'jp_equity' || profile === 'kr_equity' || profile === 'hk_equity'
+}
+
 function extractScreenParams(
   raw: Record<string, unknown>,
   profile: DiscoverStrategyProfile,
@@ -715,6 +719,8 @@ export class DiscoverRunner {
     const isEtf = profile === 'cn_etf'
     const isUs = profile === 'us_equity'
     const isCrypto = profile === 'crypto_spot'
+    const isRegional = isRegionalEquityProfile(profile)
+    const regionalDef = isRegional ? getDiscoverProfileDefinition(profile) : undefined
 
     let candidateTable: string
     if (isEtf) {
@@ -725,7 +731,7 @@ export class DiscoverRunner {
         scale_yi: c.key_factors.scale_yi ?? null,
         key_factors: c.key_factors,
       })))
-    } else if (isUs) {
+    } else if (isUs || isRegional) {
       candidateTable = formatUsCandidateTable(candidates.map(c => ({
         code: c.code,
         name: c.name,
@@ -773,8 +779,8 @@ export class DiscoverRunner {
       strategy_summary: '策略执行摘要',
       items: [{
         rank: 1,
-        code: isEtf ? '510300' : isUs ? 'AAPL' : isCrypto ? 'BTC/USDT' : '600519',
-        name: isEtf ? '沪深300ETF' : isUs ? 'Apple' : isCrypto ? 'Bitcoin' : '贵州茅台',
+        code: isEtf ? '510300' : isUs ? 'AAPL' : isCrypto ? 'BTC/USDT' : isRegional ? '7203' : '600519',
+        name: isEtf ? '沪深300ETF' : isUs ? 'Apple' : isCrypto ? 'Bitcoin' : isRegional ? 'Toyota' : '贵州茅台',
         match_score: 90,
         thesis: '符合策略的核心逻辑',
         highlights: isEtf ? ['折溢价 0.2%', '规模 800亿'] : isUs ? ['Technology', '大市值'] : isCrypto ? ['USDT 计价', '高流动性'] : ['PE 18x', 'ROE 30%'],
@@ -799,7 +805,16 @@ export class DiscoverRunner {
           outputSchema,
           `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
         ].join('\n')
-        : isCrypto
+        : isRegional
+          ? [
+            `你是 Opptrix ${regionalDef?.label ?? profile}挖掘 Agent。候选来自本地列表初选。`,
+            '可调用：get_market_db_status、search_local_instruments，以及本 Profile 对应的 get_local_*_screen_schema / screen_local_*_stocks。',
+            '禁止编造数字；禁止调用 A 股专用工具（evaluate_stock、get_strategy_signal、batch_stock_snapshots 等）。',
+            '只能从候选列表中选股。最终必须输出严格 JSON：',
+            outputSchema,
+            `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
+          ].join('\n')
+          : isCrypto
           ? [
             '你是 Opptrix Crypto 挖掘 Agent。候选来自本地 crypto_list 初选。',
             '可调用：get_market_db_status、get_local_crypto_screen_schema、screen_local_crypto_pairs、search_crypto_pairs、get_crypto_snapshot、get_crypto_kline、get_crypto_quote',

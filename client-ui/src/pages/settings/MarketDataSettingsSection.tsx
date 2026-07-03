@@ -30,6 +30,7 @@ import {
   type MarketDataPackConfig,
   type MarketDataPacksState,
   type MarketDataPackageInspectResult,
+  type SupplementPackId,
 } from '../../api/client'
 import type { MarketDataSyncState } from '../../types/market'
 import { SettingsGroup, SettingsPanelHeader, SettingsStaticBlock } from './SettingsPrimitives'
@@ -333,6 +334,33 @@ function formatPreparedAt(iso: string | null | undefined): string {
   return `已准备 · ${d.toLocaleString('zh-CN')}`
 }
 
+const SUPPLEMENT_EXPORT_PACKS: { id: SupplementPackId; label: string }[] = [
+  { id: 'us', label: '美股' },
+  { id: 'crypto', label: 'Crypto' },
+  { id: 'hk', label: '港股' },
+  { id: 'jp', label: '日股' },
+  { id: 'kr', label: '韩股' },
+]
+
+function supplementPackLabel(scope?: string): string {
+  return SUPPLEMENT_EXPORT_PACKS.find(row => row.id === scope)?.label ?? '补充市场'
+}
+
+function supplementPackCount(
+  scope: string | undefined,
+  snapshot: NonNullable<MarketDataPackageInspectResult['metadata']>['snapshot'],
+): number | null {
+  if (!scope || !snapshot) return null
+  switch (scope) {
+    case 'us': return snapshot.us_count ?? null
+    case 'crypto': return snapshot.crypto_count ?? null
+    case 'hk': return snapshot.hk_count ?? null
+    case 'jp': return snapshot.jp_count ?? null
+    case 'kr': return snapshot.kr_count ?? null
+    default: return null
+  }
+}
+
 const PACK_UI: {
   id: keyof MarketDataPackConfig
   label: string
@@ -364,7 +392,7 @@ const PACK_UI: {
   {
     id: 'hk',
     label: '港股',
-    desc: '港股列表与行情（Provider 筹备中）',
+    desc: '开启后同步港股列表（本地筛选与挖掘）',
     countKey: 'hk',
     optional: true,
   },
@@ -495,7 +523,7 @@ export default function MarketDataSettingsSection() {
     }
   }
 
-  const handleExportPackage = async (pack?: 'us' | 'crypto') => {
+  const handleExportPackage = async (pack: SupplementPackId) => {
     let destination
     try {
       destination = await pickExportDestination()
@@ -777,7 +805,7 @@ export default function MarketDataSettingsSection() {
           <div className={s.packageBody}>
             <div className={s.packageCallout}>
               <Text block>
-                完整包（A 股）导入会覆盖本机基础数据并自动备份。美股 / Crypto 补充包仅合并对应市场列表与行情，不影响 A 股数据。
+                完整包（A 股）导入会覆盖本机基础数据并自动备份。美股 / Crypto / 港股 / 日股 / 韩股补充包仅合并对应市场列表与行情，不影响 A 股数据。
                 不含关注列表、自编策略、密钥、对话与持仓。
               </Text>
             </div>
@@ -789,20 +817,16 @@ export default function MarketDataSettingsSection() {
               >
                 {exporting ? '正在导出…' : '导出完整包…'}
               </OpptrixButton>
-              <OpptrixButton
-                variant="secondary"
-                disabled={exporting || running || importing}
-                onClick={() => { void handleExportPackage('us') }}
-              >
-                导出美股包…
-              </OpptrixButton>
-              <OpptrixButton
-                variant="secondary"
-                disabled={exporting || running || importing}
-                onClick={() => { void handleExportPackage('crypto') }}
-              >
-                导出 Crypto 包…
-              </OpptrixButton>
+              {SUPPLEMENT_EXPORT_PACKS.map(row => (
+                <OpptrixButton
+                  key={row.id}
+                  variant="secondary"
+                  disabled={exporting || running || importing}
+                  onClick={() => { void handleExportPackage(row.id) }}
+                >
+                  {`导出${row.label}包…`}
+                </OpptrixButton>
+              ))}
               <OpptrixButton
                 variant="secondary"
                 disabled={running || importing || importInspecting}
@@ -833,7 +857,7 @@ export default function MarketDataSettingsSection() {
               <div className={s.dialogMeta}>
                 <Text block>
                   {importPreview?.metadata?.kind === 'market_pack_supplement'
-                    ? `将合并 ${importPreview.metadata.pack_scope === 'us' ? '美股' : 'Crypto'} 补充数据到本机，A 股基础库不变。`
+                    ? `将合并 ${supplementPackLabel(importPreview.metadata.pack_scope)} 补充数据到本机，A 股基础库不变。`
                     : '将替换本机 A 股基础数据；关注列表、自编策略与模型设置不变。'}
                 </Text>
                 {importPreview?.metadata && (
@@ -845,8 +869,17 @@ export default function MarketDataSettingsSection() {
                       </span>
                     </div>
                     <div className={s.dialogMetaRow}>
-                      <span>股票数量</span>
-                      <span className={s.dialogMetaValue}>{importPreview.metadata.snapshot.stock_count}</span>
+                      <span>
+                        {importPreview.metadata.kind === 'market_pack_supplement'
+                          ? `${supplementPackLabel(importPreview.metadata.pack_scope)}数量`
+                          : '股票数量'}
+                      </span>
+                      <span className={s.dialogMetaValue}>
+                        {importPreview.metadata.kind === 'market_pack_supplement'
+                          ? (supplementPackCount(importPreview.metadata.pack_scope, importPreview.metadata.snapshot)
+                            ?? importPreview.metadata.snapshot.stock_count)
+                          : importPreview.metadata.snapshot.stock_count}
+                      </span>
                     </div>
                     <div className={s.dialogMetaRow}>
                       <span>指标更新到</span>

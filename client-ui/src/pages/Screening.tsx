@@ -36,7 +36,14 @@ const FACTOR_OPTIONS = ['roe', 'pe', 'pb', 'debt_ratio', 'gross_margin',
   'rsi_score', 'ma_position', 'volume_ratio']
 const OP_OPTIONS = ['>', '<', '>=', '<=', '=']
 
-interface Props { navigate: (r: string) => void; setGlobalStock: (s: any) => void }
+import { toStockContext } from '../market/instrument'
+import type { FeatureRoute } from '../types/schemas'
+import type { StockContext } from '../context/AppContext'
+
+interface Props {
+  navigate: (route: FeatureRoute) => void
+  setGlobalStock: (s: StockContext | null) => void
+}
 
 export default function Screening({ navigate, setGlobalStock }: Props) {
   const s = useStyles()
@@ -107,7 +114,7 @@ export default function Screening({ navigate, setGlobalStock }: Props) {
           {result.items.slice(0, 30).map(item => (
             <div key={item.code} className={s.tableRow}
               style={{ cursor: 'pointer' }}
-              onClick={() => { setGlobalStock({ code: item.code, name: item.name }); navigate('stock_research') }}>
+              onClick={() => { setGlobalStock(toStockContext({ code: item.code, name: item.name })); navigate('stock_research') }}>
               <Text>{item.code}</Text>
               <Text>{item.name}</Text>
               <Text style={{ fontWeight: 600, color: item.total_score >= 7 ? '#4caf50' : '#ff9800' }}>

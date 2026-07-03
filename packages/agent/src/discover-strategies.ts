@@ -1,5 +1,5 @@
 import type { DiscoverStrategyProfile, MarketDataPackId } from '@opptrix/shared'
-import { ETF_SCORECARD_NAME, isDiscoverProfileMiningReady } from '@opptrix/shared'
+import { ETF_SCORECARD_NAME, isDiscoverProfileMiningReady, discoverPrescreenMode } from '@opptrix/shared'
 import type { DiscoverParsedPlan, DiscoverScreenCondition } from './discover.js'
 
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
@@ -78,7 +78,7 @@ function cryptoSpot(s: Omit<StrategyCore, 'conditions'> & { conditions?: Discove
 }
 
 function regionalEquity(
-  profile: 'jp_equity' | 'kr_equity',
+  profile: 'jp_equity' | 'kr_equity' | 'hk_equity',
   pack: MarketDataPackId,
   s: Omit<StrategyCore, 'conditions'> & { conditions?: DiscoverScreenCondition[]; screen_params?: Record<string, string> },
 ): DiscoverStrategy {
@@ -438,6 +438,19 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
     conditions: [],
     refinement_notes: '优先流动性与业务清晰度；回避信息极度匮乏标的。',
   }),
+  regionalEquity('hk_equity', 'hk', {
+    id: 'hk_broad_universe',
+    name: '港股广谱观察',
+    category: 'balanced',
+    tagline: '本地港股列表 · 广谱初筛',
+    methodology: '基于本地 hk_list 同步结果，按代码排序取广谱样本，Agent 结合快照精选。',
+    description: '从本地港股库中广谱初选，适合建立港股市场观察池。',
+    scorecard: '综合评估',
+    prescreen_top_n: 80,
+    final_top_n: 15,
+    conditions: [],
+    refinement_notes: '优先流动性与业务清晰度；回避信息极度匮乏标的。',
+  }),
 ]
 
 export function primaryDiscoverProfile(strategy: DiscoverStrategy): DiscoverStrategyProfile {
@@ -480,7 +493,13 @@ export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string
       ? '美股（本地列表 keyword / industry_contains）'
       : profile === 'crypto_spot'
         ? 'Crypto 交易对（keyword / quote / base_contains）'
-        : 'A 股股票（本地因子库）'
+        : profile === 'jp_equity'
+          ? '日本股市（本地列表 keyword / industry_contains）'
+          : profile === 'kr_equity'
+            ? '韩国股市（本地列表 keyword / industry_contains）'
+            : profile === 'hk_equity'
+              ? '港股（本地列表 keyword / industry_contains）'
+              : 'A 股股票（本地因子库）'
   return [
     `【策略】${strategy.name}`,
     `【资产类型】${assetHint}`,
@@ -491,11 +510,9 @@ export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string
     `【规模】初选约 ${strategy.prescreen_top_n} 只，最终精选 ${strategy.final_top_n} 只。`,
     profile === 'cn_etf'
       ? '请输出用于本地 ETF 筛选的量化 conditions（1-5 条），因子仅限 premium_rate、scale_yi；保留 refinement_notes。'
-      : profile === 'us_equity'
+      : discoverPrescreenMode(profile) === 'list_filter'
         ? '请输出 screen_params（keyword 和/或 industry_contains 至少一项），保留 refinement_notes。'
-        : profile === 'crypto_spot'
-          ? '请输出 screen_params（keyword、quote 或 base_contains 至少一项），保留 refinement_notes。'
-          : '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
+        : '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
   ].filter(Boolean).join('\n')
 }
 

@@ -45,6 +45,12 @@ export function resolveInstrumentCapabilities(ref: InstrumentRef): InstrumentCap
   if (ref.market === 'US' || ref.market === 'HK') {
     return { market: ref.market, assetClass: 'EQUITY', capabilities: US_EQUITY, detailPanelKind: 'cross-market' }
   }
+  if (ref.market === 'JP') {
+    return { market: 'JP', assetClass: 'EQUITY', capabilities: JP_EQUITY, detailPanelKind: 'cross-market' }
+  }
+  if (ref.market === 'KR') {
+    return { market: 'KR', assetClass: 'EQUITY', capabilities: KR_EQUITY, detailPanelKind: 'cross-market' }
+  }
   if (ref.market === 'CRYPTO') {
     return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', capabilities: CRYPTO_SPOT, detailPanelKind: 'cross-market' }
   }

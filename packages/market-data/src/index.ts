@@ -9,7 +9,7 @@ import {
   patchMarketPackConfig as saveMarketPackPatch,
 } from './market-pack-settings.js'
 import { allJobsForEnabledPacks } from './sync/market-packs.js'
-import type { MarketDataPackConfig, MarketDataPackId } from '@opptrix/shared'
+import type { MarketDataPackConfig, MarketDataPackId, SupplementPackId } from '@opptrix/shared'
 import { hydrateStocks, type HydrateManifest } from './sync/hydrate.js'
 import {
   exportMarketDataPackage,
@@ -306,11 +306,11 @@ export class MarketDataService {
     return hydrateStocks(this.store, this.de, codes, manifest)
   }
 
-  async exportPackage(pack?: 'us' | 'crypto'): Promise<Buffer> {
+  async exportPackage(pack?: SupplementPackId): Promise<Buffer> {
     if (this.coordinator.isRunning()) {
       throw new Error('同步进行中，请稍后再导出')
     }
-    if (pack === 'us' || pack === 'crypto') {
+    if (pack) {
       return exportMarketDataPackSupplement(this.store, pack)
     }
     return exportMarketDataPackage(this.store)

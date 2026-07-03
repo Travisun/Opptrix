@@ -20,7 +20,7 @@ import {
 import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
-import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrategyProfile } from '@opptrix/shared'
+import { isDiscoverStrategyProfile, listDiscoverProfileMeta, isMarketDataPackId, isSupplementPackId, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
@@ -176,8 +176,8 @@ app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
   '/api/market-data/packs/:id/prepare',
   async (req, reply) => {
     const pack = req.params.id?.trim().toLowerCase()
-    if (pack !== 'cn' && pack !== 'us' && pack !== 'crypto') {
-      return reply.code(400).send({ error: 'pack must be cn, us, or crypto' })
+    if (!isMarketDataPackId(pack)) {
+      return reply.code(400).send({ error: 'pack must be cn, us, crypto, hk, jp, or kr' })
     }
     const result = await hub.dispatch('market_data_pack_prepare', {
       pack,
@@ -353,7 +353,7 @@ app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; backgrou
 app.get<{ Querystring: { pack?: string } }>('/api/market-data/export', async (req, reply) => {
   try {
     const packRaw = req.query.pack?.trim().toLowerCase()
-    const pack = packRaw === 'us' || packRaw === 'crypto' ? packRaw : undefined
+    const pack = packRaw && isSupplementPackId(packRaw) ? packRaw : undefined
     const svc = getMarketDataService()
     const buffer = await svc.exportPackage(pack)
     const inspect = svc.inspectPackage(buffer)

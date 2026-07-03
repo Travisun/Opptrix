@@ -94,3 +94,61 @@ test('market data package rejects plain sqlite file', async () => {
   const inspect = inspectMarketDataPackage(raw)
   assert.equal(inspect.valid, false)
 })
+
+test('supplement jp pack export and merge preserves regional instruments', async () => {
+  const {
+    exportMarketDataPackSupplement,
+    mergeMarketDataPackSupplement,
+  } = await import('../packages/market-data/dist/package-pack.js')
+
+  const sourcePath = join(dataDir, 'market-jp-source.db')
+  const targetPath = join(dataDir, 'market-jp-target.db')
+  const source = new MarketDataStore(sourcePath)
+  source.upsertInstrument({
+    code: '7203',
+    market: 'JP',
+    assetClass: 'EQUITY',
+    name: 'Toyota',
+  })
+  source.upsertStock({
+    code: '600519',
+    name: '贵州茅台',
+    market: 'SH',
+    industry: '白酒',
+    is_st: false,
+    status: 'active',
+  })
+
+  const pack = await exportMarketDataPackSupplement(source, 'jp')
+  source.close()
+
+  const inspect = inspectMarketDataPackage(pack)
+  assert.equal(inspect.valid, true)
+  assert.equal(inspect.metadata?.kind, 'market_pack_supplement')
+  assert.equal(inspect.metadata?.pack_scope, 'jp')
+  assert.equal(inspect.metadata?.snapshot.jp_count, 1)
+  assert.equal(inspect.metadata?.snapshot.stock_count, 0)
+
+  const target = new MarketDataStore(targetPath)
+  target.upsertStock({
+    code: '600519',
+    name: '贵州茅台',
+    market: 'SH',
+    industry: '白酒',
+    is_st: false,
+    status: 'active',
+  })
+  target.close()
+
+  process.env.OPPTRIX_MARKET_DB_PATH = targetPath
+  mergeMarketDataPackSupplement(pack, { dbPath: targetPath })
+
+  const reopened = new MarketDataStore(targetPath)
+  const cn = reopened.db.prepare(`SELECT code FROM stocks WHERE code = ?`).get('600519')
+  assert.ok(cn)
+  const jp = reopened.db.prepare(`
+    SELECT code FROM instruments WHERE market = 'JP' AND code = ?
+  `).get('7203')
+  assert.ok(jp)
+  reopened.close()
+})

@@ -269,6 +269,48 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '按 keyword、quote（USDT/USDC/BTC 等）、base_contains 筛选本地交易对。',
     compliance: 'top_n ≤200；本地 crypto_count=0 时勿调用。',
   },
+  get_local_jp_screen_schema: {
+    hubFeature: 'local_jp_screen_schema',
+    miningEligible: false,
+    usageGuide: 'screen_local_jp_stocks 前先读本地日股筛选维度说明。',
+    compliance: '只读 schema；需 jp_list 已同步。',
+  },
+  screen_local_jp_stocks: {
+    hubFeature: 'local_jp_screen',
+    miningEligible: true,
+    usageGuide: '按代码/公司名、行业关键词筛选本地日股列表。',
+    compliance: 'top_n ≤200；本地 jp_count=0 时勿调用。',
+  },
+  get_local_kr_screen_schema: {
+    hubFeature: 'local_kr_screen_schema',
+    miningEligible: false,
+    usageGuide: 'screen_local_kr_stocks 前先读本地韩股筛选维度说明。',
+    compliance: '只读 schema；需 kr_list 已同步。',
+  },
+  screen_local_kr_stocks: {
+    hubFeature: 'local_kr_screen',
+    miningEligible: true,
+    usageGuide: '按代码/公司名、行业关键词筛选本地韩股列表。',
+    compliance: 'top_n ≤200；本地 kr_count=0 时勿调用。',
+  },
+  get_local_hk_screen_schema: {
+    hubFeature: 'local_hk_screen_schema',
+    miningEligible: false,
+    usageGuide: 'screen_local_hk_stocks 前先读本地港股筛选维度说明。',
+    compliance: '只读 schema；需 hk_list 已同步。',
+  },
+  screen_local_hk_stocks: {
+    hubFeature: 'local_hk_screen',
+    miningEligible: true,
+    usageGuide: '按代码/公司名、行业关键词筛选本地港股列表。',
+    compliance: 'top_n ≤200；本地 hk_count=0 时勿调用。',
+  },
+  search_local_instruments: {
+    hubFeature: 'instrument_search',
+    miningEligible: true,
+    usageGuide: '跨市场本地标的搜索；JP/KR/HK 挖掘时用于补充候选或校验代码。',
+    compliance: 'keyword 必填；可用 markets 限定市场；勿替代 screen_local_* 初选。',
+  },
   search_stocks: {
     hubFeature: 'search_stocks',
     miningEligible: true,
@@ -462,7 +504,9 @@ const CRYPTO_MINING_TOOL_NAMES = [
 
 export function discoverMiningToolNames(profile: string): readonly string[] {
   if (isDiscoverStrategyProfile(profile)) {
-    return discoverMiningToolNamesForProfile(profile)
+    const names = discoverMiningToolNamesForProfile(profile)
+    if (names.length) return names
+    return []
   }
   return DATA_LAYER_MINING_TOOL_NAMES
 }

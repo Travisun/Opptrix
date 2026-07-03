@@ -1,6 +1,15 @@
 import type { DiscoverStrategyProfile } from './discover-profile-types.js'
 import { getDiscoverProfileDefinition } from './discover-profile-registry.js'
 
+const REGIONAL_MINING_TOOLS = [
+  'get_market_db_status',
+  'search_local_instruments',
+] as const
+
+function regionalMiningTools(schema: string, screen: string): readonly string[] {
+  return [...REGIONAL_MINING_TOOLS, schema, screen]
+}
+
 /** Agent 挖掘工具组 — 与 packages/agent tool-meta 对齐 */
 export const DISCOVER_MINING_TOOL_GROUPS = {
   cn_equity_full: [
@@ -16,7 +25,6 @@ export const DISCOVER_MINING_TOOL_GROUPS = {
     'evaluate_stock',
     'get_latest_evaluation',
     'get_strategy_signal',
-    'institution_rating',
     'get_stock_detail',
     'get_stock_chart',
     'get_stock_cyq',
@@ -52,20 +60,18 @@ export const DISCOVER_MINING_TOOL_GROUPS = {
     'get_crypto_kline',
     'get_crypto_quote',
   ],
-  jp_equity: [
-    'get_market_db_status',
+  jp_equity: regionalMiningTools(
     'get_local_jp_screen_schema',
     'screen_local_jp_stocks',
-    'search_us_stocks',
-    'get_us_stock_snapshot',
-  ],
-  kr_equity: [
-    'get_market_db_status',
+  ),
+  kr_equity: regionalMiningTools(
     'get_local_kr_screen_schema',
     'screen_local_kr_stocks',
-    'search_us_stocks',
-    'get_us_stock_snapshot',
-  ],
+  ),
+  hk_equity: regionalMiningTools(
+    'get_local_hk_screen_schema',
+    'screen_local_hk_stocks',
+  ),
 } as const satisfies Record<string, readonly string[]>
 
 export type DiscoverMiningToolGroupName = keyof typeof DISCOVER_MINING_TOOL_GROUPS
@@ -73,8 +79,8 @@ export type DiscoverMiningToolGroupName = keyof typeof DISCOVER_MINING_TOOL_GROU
 export function discoverMiningToolNamesForProfile(profile: DiscoverStrategyProfile): readonly string[] {
   const def = getDiscoverProfileDefinition(profile)
   if (!def || def.miningToolGroup === 'none') {
-    return DISCOVER_MINING_TOOL_GROUPS.cn_equity_full
+    return []
   }
   const group = def.miningToolGroup as DiscoverMiningToolGroupName
-  return DISCOVER_MINING_TOOL_GROUPS[group] ?? DISCOVER_MINING_TOOL_GROUPS.cn_equity_full
+  return DISCOVER_MINING_TOOL_GROUPS[group] ?? []
 }

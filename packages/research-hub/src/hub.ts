@@ -26,6 +26,7 @@ import {
   scorecardProfileFromDiscover,
   type DiscoverProfileReadinessContext,
   type DiscoverStrategyProfile,
+  isLikelyCnEquityInput,
 } from '@opptrix/shared'
 import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
@@ -550,6 +551,9 @@ export class ResearchHub {
   }
 
   private async strategySignal(code: string, t0: number) {
+    if (!isLikelyCnEquityInput(code)) {
+      return fail('多空倾向暂仅支持 A 股与 A 股 ETF', t0)
+    }
     const normalized = normalizeCode(code)
     if (isCnEtfCode(normalized)) {
       const technical = await quickAssess(this.de, normalized)
@@ -795,8 +799,13 @@ export class ResearchHub {
   /** Lightweight batch insights for watchlist rows — prefers local market DB, then SnapshotStore. */
   private async watchlistRadar(codes: string[] | undefined, t0: number) {
     const sourceCodes = codes?.length ? codes : this.de.watchlist.codes()
-    const normalized = [...new Set(sourceCodes.map(c => normalizeCode(String(c))).filter(Boolean))]
-    if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无关注', t0)
+    const normalized = [...new Set(
+      sourceCodes
+        .map(c => String(c).trim())
+        .filter(c => c && isLikelyCnEquityInput(c))
+        .map(c => normalizeCode(c)),
+    )]
+    if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无 A 股关注', t0)
 
     await this.fillMissingStockNames(normalized)
     void this.marketData.hydrateStocks(normalized, 'watchlist').catch(() => {})
@@ -1945,6 +1954,9 @@ export class ResearchHub {
   }
 
   private async latestEvaluation(code: string, params: Record<string, unknown>, t0: number) {
+    if (!isLikelyCnEquityInput(code)) {
+      return fail('评分卡暂仅支持 A 股标的', t0)
+    }
     const scorecardName = String(params.scorecard ?? 'G=B+M')
     const force = params.force === true
 

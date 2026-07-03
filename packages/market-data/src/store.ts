@@ -1160,7 +1160,9 @@ export class MarketDataStore {
   }): void {
     const code = row.market === 'US'
       ? normalizeUsSymbol(row.code)
-      : normalizeStockCode(row.code)
+      : row.market === 'CN'
+        ? normalizeStockCode(row.code)
+        : row.code.trim()
     const now = nowIso()
     this.db.prepare(`
       INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at)

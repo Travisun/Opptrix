@@ -24,6 +24,7 @@ import {
   valuationMetricTone,
 } from './decisionCardTone'
 import { useStockDecisionCard } from './useStockDecisionCard'
+import { resolveWatchlistInstrument } from './instrument'
 import { useStockAnalysis, type AnalysisStep } from './useStockAnalysis'
 
 const useStyles = makeStyles({
@@ -420,7 +421,7 @@ export default function StockDecisionCard({
 }: Props) {
   const s = useStyles()
   const [stepsExpanded, setStepsExpanded] = useState(false)
-  const analysis = useStockAnalysis(stock.code)
+  const analysis = useStockAnalysis(stock.code, resolveWatchlistInstrument(stock))
   const { data } = useStockDecisionCard(stock, analysis.raw, holding, price, moneyFlow, quotePe, quotePb)
 
   const handleDiscuss = (topic: DiscussTopic) => {

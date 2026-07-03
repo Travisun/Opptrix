@@ -1,9 +1,12 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import type { InstrumentRef } from '../types/instrument'
 import type { FeatureRoute } from '../types/schemas'
 
 export interface StockContext {
   code: string
   name: string
+  /** Multi-market identity — inferred from code when absent */
+  instrument?: InstrumentRef
 }
 
 export interface PageContext {

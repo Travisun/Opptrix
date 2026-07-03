@@ -1,7 +1,8 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import type { MarketDataPackId } from '@opptrix/shared'
+import type { SupplementPackId } from '@opptrix/shared'
+import { isSupplementPackId } from '@opptrix/shared'
 import { marketDbPath } from './paths.js'
 import { MarketDataStore } from './store.js'
 import { PACK_JOBS } from './sync/market-packs.js'
@@ -14,12 +15,21 @@ import {
   type MarketDataPackageMetadata,
 } from './package.js'
 
-export type SupplementPackId = Extract<MarketDataPackId, 'us' | 'crypto'>
+export type { SupplementPackId } from '@opptrix/shared'
 
 function packInstrumentFilter(pack: SupplementPackId): string {
-  return pack === 'us'
-    ? `market = 'US' AND asset_class = 'EQUITY'`
-    : `market = 'CRYPTO' AND asset_class = 'CRYPTO_SPOT'`
+  switch (pack) {
+    case 'us':
+      return `market = 'US' AND asset_class = 'EQUITY'`
+    case 'crypto':
+      return `market = 'CRYPTO' AND asset_class = 'CRYPTO_SPOT'`
+    case 'hk':
+      return `market = 'HK' AND asset_class = 'EQUITY'`
+    case 'jp':
+      return `market = 'JP' AND asset_class = 'EQUITY'`
+    case 'kr':
+      return `market = 'KR' AND asset_class = 'EQUITY'`
+  }
 }
 
 function packJobNames(pack: SupplementPackId): readonly string[] {
@@ -53,6 +63,35 @@ function buildScopedTempStore(source: MarketDataStore, pack: SupplementPackId): 
   return scoped
 }
 
+function scopedPackCounts(scoped: MarketDataStore, pack: SupplementPackId) {
+  const counts = {
+    stock_count: 0,
+    us_count: 0,
+    crypto_count: 0,
+    jp_count: 0,
+    kr_count: 0,
+    hk_count: 0,
+  }
+  switch (pack) {
+    case 'us':
+      counts.us_count = scoped.countUsInstruments()
+      break
+    case 'crypto':
+      counts.crypto_count = scoped.countCryptoInstruments()
+      break
+    case 'jp':
+      counts.jp_count = scoped.countRegionalEquityInstruments('JP')
+      break
+    case 'kr':
+      counts.kr_count = scoped.countRegionalEquityInstruments('KR')
+      break
+    case 'hk':
+      counts.hk_count = scoped.countRegionalEquityInstruments('HK')
+      break
+  }
+  return counts
+}
+
 export async function exportMarketDataPackSupplement(
   source: MarketDataStore,
   pack: SupplementPackId,
@@ -62,6 +101,7 @@ export async function exportMarketDataPackSupplement(
     const buffer = await exportMarketDataPackage(scoped)
     const parsed = inspectMarketDataPackage(buffer)
     if (!parsed.valid || !parsed.metadata) throw new Error(parsed.error ?? '导出失败')
+    const packCounts = scopedPackCounts(scoped, pack)
     const metadata: MarketDataPackageMetadata = {
       ...parsed.metadata,
       kind: PACKAGE_KIND_SUPPLEMENT,
@@ -69,9 +109,7 @@ export async function exportMarketDataPackSupplement(
       snapshot: {
         ...parsed.metadata.snapshot,
         is_ready: false,
-        stock_count: pack === 'us' ? 0 : parsed.metadata.snapshot.stock_count,
-        us_count: pack === 'us' ? scoped.countUsInstruments() : parsed.metadata.snapshot.us_count,
-        crypto_count: pack === 'crypto' ? scoped.countCryptoInstruments() : parsed.metadata.snapshot.crypto_count,
+        ...packCounts,
       },
     }
     return patchPackageMetadata(buffer, metadata)
@@ -106,7 +144,7 @@ export function mergeMarketDataPackSupplement(
     throw new Error('该文件不是市场补充包；完整库请使用「导入」覆盖导入')
   }
   const pack = preview.metadata.pack_scope
-  if (pack !== 'us' && pack !== 'crypto') {
+  if (!pack || !isSupplementPackId(pack)) {
     throw new Error('补充包缺少有效的 pack_scope')
   }
 

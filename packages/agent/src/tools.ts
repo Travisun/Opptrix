@@ -475,6 +475,33 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('local_kr_screen', a),
       },
       {
+        name: 'get_local_hk_screen_schema', category: '本地数据',
+        description: '本地港股列表筛选维度说明（keyword、行业等）',
+        parameters: S({}),
+        handler: () => d('local_hk_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_hk_stocks', category: '本地数据',
+        description: '本地港股列表筛选：按代码/公司名、行业关键词过滤',
+        parameters: S({
+          keyword: { type: 'string', description: '代码或公司名关键词' },
+          industry_contains: { type: 'string', description: '行业关键词' },
+          sort_by: { type: 'string', description: 'code | name' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_hk_screen', a),
+      },
+      {
+        name: 'search_local_instruments', category: '本地数据',
+        description: '跨市场本地标的搜索（CN/US/HK/JP/KR/Crypto instruments 表）',
+        parameters: S({
+          keyword: { type: 'string', description: '代码或名称关键词' },
+          limit: { type: 'number', description: '返回条数，默认 30' },
+          markets: { type: 'array', description: '可选市场过滤，如 US、JP' },
+        }, ['keyword']),
+        handler: (a: Record<string, unknown>) => d('instrument_search', a),
+      },
+      {
         name: 'get_us_stock_quote', category: '本地数据',
         description: '获取单只美股实时行情',
         parameters: S({

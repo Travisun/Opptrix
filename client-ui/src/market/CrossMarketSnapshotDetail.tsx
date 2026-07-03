@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { fetchCryptoSnapshot, fetchUsSnapshot } from '../api/client'
+import { EditRegular } from '@fluentui/react-icons'
+import { fetchCryptoSnapshot, fetchUsSnapshot, research } from '../api/client'
 import type { CryptoSnapshotData, UsSnapshotData, WatchlistItem } from '../types/market'
+import type { InstrumentRef } from '../types/instrument'
 import {
   formatCompactNumber,
   formatPct,
@@ -10,12 +12,14 @@ import {
   pctTone,
 } from './format'
 import {
-  formatInstrumentLabel,
   displayCodeFromInstrument,
+  formatInstrumentLabel,
   marketDisplayName,
   resolveWatchlistInstrument,
 } from './instrument'
+import { hasApplicationCapability } from './capabilities'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 
 const CONTENT_PAD = '15px'
 
@@ -37,8 +41,32 @@ const useStyles = makeStyles({
   titleRow: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'space-between',
     gap: '8px',
     minWidth: 0,
+  },
+  titleMain: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    minWidth: 0,
+    flex: 1,
+  },
+  manageBtn: {
+    border: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    color: opptrixCssVars.textSecondary,
+    borderRadius: opptrixTokens.radiusSm,
+    fontSize: '10px',
+    fontWeight: 600,
+    padding: '3px 7px',
+    cursor: 'pointer',
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '3px',
+    lineHeight: 1.2,
+    flexShrink: 0,
+    ...ghostInteractive,
   },
   name: {
     fontSize: '14px',
@@ -152,9 +180,10 @@ const useStyles = makeStyles({
 
 interface Props {
   stock: WatchlistItem
-  market: 'US' | 'CRYPTO'
+  instrumentRef?: InstrumentRef
   localIndexed?: boolean | null
   loading?: boolean
+  onManage?: () => void
 }
 
 function pctClass(s: ReturnType<typeof useStyles>, tone: ReturnType<typeof pctTone>) {
@@ -188,16 +217,29 @@ function MiniKline({ bars, className }: { bars: { close: number; changePct: numb
   )
 }
 
+async function loadSnapshot(ref: InstrumentRef): Promise<UsSnapshotData | CryptoSnapshotData> {
+  if (hasApplicationCapability(ref, 'snapshot')) {
+    const resp = await research.instrumentSnapshot(ref)
+    if (resp.success && resp.data && typeof resp.data === 'object') {
+      return resp.data as UsSnapshotData | CryptoSnapshotData
+    }
+  }
+  const symbol = displayCodeFromInstrument(ref)
+  if (ref.market === 'CRYPTO') return fetchCryptoSnapshot(symbol)
+  return fetchUsSnapshot(symbol)
+}
+
 export default function CrossMarketSnapshotDetail({
   stock,
-  market,
+  instrumentRef,
   localIndexed = null,
   loading = false,
+  onManage,
 }: Props) {
   const s = useStyles()
-  const ref = resolveWatchlistInstrument(stock)
+  const ref = instrumentRef ?? resolveWatchlistInstrument(stock)
   const label = marketDisplayName(ref.market)
-  const symbol = displayCodeFromInstrument(ref)
+  const isCrypto = ref.market === 'CRYPTO'
 
   const [snapshot, setSnapshot] = useState<UsSnapshotData | CryptoSnapshotData | null>(null)
   const [fetching, setFetching] = useState(false)
@@ -207,29 +249,27 @@ export default function CrossMarketSnapshotDetail({
     setFetching(true)
     setError(null)
     try {
-      const data = market === 'US'
-        ? await fetchUsSnapshot(symbol)
-        : await fetchCryptoSnapshot(symbol)
+      const data = await loadSnapshot(ref)
       setSnapshot(data)
     } catch (e) {
       setError(e instanceof Error ? e.message : '获取行情失败')
     } finally {
       setFetching(false)
     }
-  }, [market, symbol])
+  }, [ref])
 
   useEffect(() => {
     void load()
-    const ms = market === 'CRYPTO' ? 30_000 : 60_000
+    const ms = isCrypto ? 30_000 : 60_000
     const timer = window.setInterval(() => { void load() }, ms)
     return () => window.clearInterval(timer)
-  }, [load, market])
+  }, [load, isCrypto])
 
   const quote = snapshot && ('quote' in snapshot ? snapshot.quote : null)
   const klines = (snapshot && ('recentKlines' in snapshot ? snapshot.recentKlines : [])) ?? []
-  const profile = market === 'US' && snapshot && 'profile' in snapshot ? snapshot.profile : null
+  const profile = !isCrypto && snapshot && 'profile' in snapshot ? snapshot.profile : null
   const tone = pctTone(quote?.changePct)
-  const priceDigits = market === 'CRYPTO' && (quote?.price ?? 0) < 1 ? 4 : 2
+  const priceDigits = isCrypto && (quote?.price ?? 0) < 1 ? 4 : 2
 
   const industry = useMemo(() => {
     if (!profile || typeof profile !== 'object') return null
@@ -237,15 +277,31 @@ export default function CrossMarketSnapshotDetail({
     return typeof p.industry === 'string' ? p.industry : null
   }, [profile])
 
+  const footnote = isCrypto
+    ? 'Crypto 行情 7×24 更新，约每 30 秒自动刷新。'
+    : ref.market === 'US'
+      ? (quote && 'quoteSession' in quote && (quote.quoteSession === 'pre' || quote.quoteSession === 'post')
+        ? '当前为延长交易时段报价；盘中以常规时段为准。'
+        : '行情随交易时段更新，约每分钟自动刷新。')
+      : `${label}行情来自本地库或在线快照，约每分钟刷新；完整列表同步后可离线筛选与挖掘。`
+
   return (
     <div className={s.root}>
       <div className={s.hero}>
         <div className={s.titleRow}>
-          <Text className={s.name}>{stock.name || quote?.name || symbol}</Text>
-          <span className={s.badge}>{label}</span>
-          {market === 'US' && quote?.sessionLabel ? (
-            <span className={s.badge}>{quote.sessionLabel}</span>
-          ) : null}
+          <div className={s.titleMain}>
+            <Text className={s.name}>{stock.name || quote?.name || displayCodeFromInstrument(ref)}</Text>
+            <span className={s.badge}>{label}</span>
+            {!isCrypto && quote && 'sessionLabel' in quote && quote.sessionLabel ? (
+              <span className={s.badge}>{quote.sessionLabel}</span>
+            ) : null}
+          </div>
+          {onManage && (
+            <button type="button" className={s.manageBtn} onClick={onManage} aria-label="编辑关注备注">
+              <EditRegular fontSize={12} />
+              备注
+            </button>
+          )}
         </div>
         <Text size={200} style={{ color: opptrixCssVars.textTertiary }}>
           {formatInstrumentLabel(ref)}
@@ -282,18 +338,6 @@ export default function CrossMarketSnapshotDetail({
                   <Text className={s.statValue}>{formatCompactNumber(quote.volume)}</Text>
                 </>
               ) : null}
-              {market === 'US' && quote.preMarketPrice != null && quote.quoteSession === 'pre' ? (
-                <>
-                  <Text className={s.statLabel}>盘前价</Text>
-                  <Text className={s.statValue}>{formatPrice(quote.preMarketPrice, priceDigits)}</Text>
-                </>
-              ) : null}
-              {market === 'US' && quote.postMarketPrice != null && quote.quoteSession === 'post' ? (
-                <>
-                  <Text className={s.statLabel}>盘后价</Text>
-                  <Text className={s.statValue}>{formatPrice(quote.postMarketPrice, priceDigits)}</Text>
-                </>
-              ) : null}
             </div>
           </>
         ) : error ? (
@@ -316,16 +360,10 @@ export default function CrossMarketSnapshotDetail({
         ) : null}
         {localIndexed === false ? (
           <Text className={s.muted}>
-            本地库暂未收录该标的。可在「基础数据 → 市场数据包」中准备对应列表，便于 @ 引用与离线筛选。
+            本地库暂未收录该标的。可在「设置 → 基础数据 → 市场数据包」中准备对应列表，便于 @ 引用与离线筛选。
           </Text>
         ) : null}
-        <Text className={s.foot}>
-          {market === 'US'
-            ? (quote?.quoteSession === 'pre' || quote?.quoteSession === 'post'
-              ? '当前为延长交易时段报价；盘中以常规时段为准。'
-              : '美股行情随交易时段更新，约每分钟自动刷新。')
-            : 'Crypto 行情 7×24 更新，约每 30 秒自动刷新。'}
-        </Text>
+        <Text className={s.foot}>{footnote}</Text>
       </div>
     </div>
   )

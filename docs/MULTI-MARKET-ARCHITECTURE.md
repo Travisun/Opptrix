@@ -233,3 +233,27 @@ client-ui/src/types/instrument.ts # UnifiedInstrumentQuote
 ```
 
 后续 PR 应按 **Phase A → B → C → D** 顺序推进，每阶段保持 main 可发布。
+
+---
+
+## 9. 审计修复落地（2026-07-03）
+
+在 Phase A–D 基础上，已完成前端 + 策略层 P0/P1 修复（未单独发版 tag）：
+
+| 区域 | 内容 |
+|------|------|
+| **右栏路由** | `detailPanelKind` → `cross-market`；US/HK/JP/KR 统一 `CrossMarketDetailTab` + `instrumentSnapshot` |
+| **身份** | `watchlistItemKey` / `instrumentDisplayCode`；JP/KR 不再 A 股补零 |
+| **能力门控** | UI + Hub 双保险：`strategy_signal` / `watchlist_radar` / `latest_evaluation` / `portfolio_pnl` 仅 CN |
+| **Discover** | `hk_equity` profile；JP/KR/HK 独立挖掘工具组；禁止 CN 工具 fallback |
+| **上下文** | `StockContext.instrument`；顶栏搜索 / Agent 携带市场标签 |
+| **关注管理** | 非 A 股详情页「备注」入口；`FollowStockDialog` 分市场（备注 vs 持仓录入） |
+| **测试** | `tests/multi-market-architecture.test.mjs` — 7 profile、`isLikelyCnEquityInput`、HK 工具组 |
+
+**仍待后续 Phase**（非阻塞发布）：
+
+- ~~工作区 `MarketDataSettingsSection` 导出/导入仅 us/crypto 包~~（已支持 hk/jp/kr 补充包）
+- ~~`apps/server` pack 校验扩展 hk/jp/kr~~（prepare / export 已对齐 Hub）
+- US/JP 统一 scorecard facade
+- 按 market 的 quote formatter（万/亿 vs K/M/B）
+

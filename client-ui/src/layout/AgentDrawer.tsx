@@ -5,6 +5,7 @@ import {
 import { SendRegular, DeleteRegular, DismissRegular, BotRegular } from '@fluentui/react-icons'
 import { sendChat, resetChat } from '../api/client'
 import { useApp } from '../context/AppContext'
+import { formatInstrumentLabel, resolveStockContextInstrument } from '../market/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 interface ChatMessage {
@@ -152,7 +153,11 @@ export default function AgentDrawer() {
 
       <div className={s.context}>
         {globalStock
-          ? `${globalStock.name}(${globalStock.code})`
+          ? (() => {
+            const ref = resolveStockContextInstrument(globalStock)
+            const marketHint = ref && ref.market !== 'CN' ? ` · ${formatInstrumentLabel(ref)}` : ''
+            return `${globalStock.name}(${globalStock.code})${marketHint}`
+          })()
           : '未选择标的'}
         {pageContext.title ? ` · ${pageContext.title}` : ''}
       </div>

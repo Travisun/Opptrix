@@ -54,6 +54,9 @@ export type DiscoverStrategyProfile =
   | 'cn_etf'
   | 'us_equity'
   | 'crypto_spot'
+  | 'jp_equity'
+  | 'kr_equity'
+  | 'hk_equity'
 
 export type DiscoverStrategySource = 'builtin' | 'custom'
 
@@ -61,7 +64,7 @@ export interface DiscoverProfileMeta {
   id: DiscoverStrategyProfile
   label: string
   description: string
-  requires_pack: 'cn' | 'us' | 'crypto' | null
+  requires_pack: 'cn' | 'us' | 'crypto' | 'hk' | 'jp' | 'kr' | null
   factor_count: number
   mining_ready: boolean
 }
@@ -88,7 +91,7 @@ export interface DiscoverStrategyPublic {
   source: DiscoverStrategySource
   profile: DiscoverStrategyProfile
   applicable_profiles: DiscoverStrategyProfile[]
-  requires_pack: Array<'cn' | 'us' | 'crypto'>
+  requires_pack: Array<'cn' | 'us' | 'crypto' | 'hk' | 'jp' | 'kr'>
   mining_ready: boolean
 }
 
@@ -120,7 +123,7 @@ export interface DiscoverStrategyDetail {
   refinement_notes: string
   profile: DiscoverStrategyProfile
   applicable_profiles: DiscoverStrategyProfile[]
-  requires_pack: Array<'cn' | 'us' | 'crypto'>
+  requires_pack: Array<'cn' | 'us' | 'crypto' | 'hk' | 'jp' | 'kr'>
   source: 'builtin'
 }
 
