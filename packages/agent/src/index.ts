@@ -29,6 +29,10 @@ export {
 } from './discover-strategies.js'
 export { ToolRegistry, DISCOVER_MINING_TOOL_NAMES } from './tools.js'
 export {
+  CHAT_MCP_TOOL_NAMES,
+  UNIFIED_INSTRUMENT_TOOL_NAMES,
+} from './unified-mcp-tools.js'
+export {
   DATA_LAYER_MINING_TOOL_NAMES,
   TOOL_META,
   formatToolDescription,

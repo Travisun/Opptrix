@@ -19,7 +19,9 @@ async function fetchRealtimeRow(
 ): Promise<StockRealtime | null> {
   if (ref.market === 'CN') return null
   const r = await engine.queryInstrumentData(ref, 'realtime')
-  return r.success ? (r.data?.[0] as StockRealtime | undefined) ?? null : null
+  if (!r.success || !('data' in r) || !r.data) return null
+  const rows = r.data as StockRealtime[]
+  return rows[0] ?? null
 }
 
 async function fetchKlines(
@@ -29,7 +31,8 @@ async function fetchKlines(
 ): Promise<StockKline[]> {
   if (ref.market === 'CN') return []
   const r = await engine.queryInstrumentData(ref, 'kline', { count })
-  return r.success ? ((r.data ?? []) as StockKline[]) : []
+  if (!r.success || !('data' in r) || !r.data) return []
+  return r.data as StockKline[]
 }
 
 /** 非 CN 标的 — 价格 + 日 K + 指标，不含 A 股宏观字段 */

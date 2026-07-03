@@ -48,6 +48,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_local_screen_factors: '读取可用筛选因子',
   get_local_universe_screen_schema: '读取筛选维度说明',
   batch_stock_snapshots: '批量获取候选股快照',
+  batch_instrument_snapshots: '批量获取候选标的快照',
   get_stock_quotes: '获取实时行情',
   get_watchlist: '读取关注列表',
   get_watchlist_radar: '生成关注股雷达摘要',
@@ -83,6 +84,16 @@ const TOOL_LABELS: Record<string, string> = {
   get_app_settings: '读取应用设置',
   get_project_info: '读取项目路径信息',
   get_integration_status: '检查外部集成状态',
+  get_instrument_capabilities: '查询标的能力',
+  get_instrument_snapshot: '获取标的快照',
+  get_instrument_quotes: '获取标的行情',
+  get_instrument_chart: '获取标的 K 线',
+  get_instrument_indicators: '计算技术指标',
+  evaluate_instrument: '评估标的',
+  get_instrument_strategy_signal: '分析策略信号',
+  verify_instrument_strategy: '验证策略历史表现',
+  get_instrument_latest_evaluation: '读取评估缓存',
+  get_instrument_cyq: '分析筹码分布',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -97,6 +108,11 @@ function firstCode(args: Record<string, unknown>): string | null {
 
 function codesCount(args: Record<string, unknown>): number | null {
   if (Array.isArray(args.codes)) return args.codes.length
+  return null
+}
+
+function instrumentsCount(args: Record<string, unknown>): number | null {
+  if (Array.isArray(args.instruments)) return args.instruments.length
   return null
 }
 
@@ -152,6 +168,10 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'batch_stock_snapshots': {
       const n = codesCount(args)
       return n != null ? `批量获取 ${n} 只候选股快照` : '批量获取候选股快照'
+    }
+    case 'batch_instrument_snapshots': {
+      const n = instrumentsCount(args) ?? codesCount(args)
+      return n != null ? `批量获取 ${n} 只候选标的快照` : '批量获取候选标的快照'
     }
     case 'get_stock_quotes': {
       const n = codesCount(args)

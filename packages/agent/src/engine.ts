@@ -72,7 +72,7 @@ export class AgentEngine {
   /** 投研 MCP 工具经进程内 broker 暴露 */
   private mcpBroker() {
     if (!this.mcpBrokerPromise) {
-      this.mcpBrokerPromise = McpToolBroker.create(this.tools, null)
+      this.mcpBrokerPromise = McpToolBroker.create(this.tools, this.tools.chatToolNames())
     }
     return this.mcpBrokerPromise
   }

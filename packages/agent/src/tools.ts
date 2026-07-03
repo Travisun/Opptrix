@@ -13,6 +13,10 @@ import {
   formatToolDescription,
   type ToolMeta,
 } from './tool-meta.js'
+import {
+  buildUnifiedInstrumentTools,
+  CHAT_MCP_TOOL_NAMES,
+} from './unified-mcp-tools.js'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -87,6 +91,10 @@ export class ToolRegistry {
     return this.openAiTools(DATA_LAYER_MINING_TOOL_NAMES)
   }
 
+  chatToolNames(): readonly string[] {
+    return CHAT_MCP_TOOL_NAMES(this)
+  }
+
   async call(name: string, args: Record<string, unknown> = {}) {
     const tool = this.get(name)
     if (!tool) return { error: `Unknown tool: ${name}` }
@@ -100,13 +108,16 @@ export class ToolRegistry {
 
   systemPrompt() {
     return [
-      '你是 Opptrix 专业 A 股投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
+      '你是 Opptrix 专业多市场投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
       '规则：',
       '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
       '- 任务开始先 get_market_db_status；本地库不足时用在线工具或 trigger_market_db_sync（谨慎）',
-      '- 本地初选列表：先 get_local_universe_screen_schema 了解维度与数值格式，再用 screen_local_universe 组合筛选',
-      '- 按行业选股：先 list_local_industries 获取行业名称，再用 screen_local_industry_stocks 在行业内叠加因子/评分条件',
-      '- 批量用 codes 数组（batch_stock_snapshots、get_stock_quotes）；单股深度（get_stock_detail）仅对 shortlisted 标的',
+      '- 跨市场标的统一用 InstrumentRef（market + symbol）；不确定能力时先 get_instrument_capabilities',
+      '- 行情/快照/K 线：get_instrument_quotes / get_instrument_snapshot / get_instrument_chart；A 股初选后批量截面用 batch_instrument_snapshots',
+      '- 本地搜索：search_local_instruments（可用 markets 过滤市场；A 股替代 search_stocks）',
+      '- 指标/评估/策略：get_instrument_indicators / evaluate_instrument / get_instrument_strategy_signal；历史验证用 verify_instrument_strategy',
+      '- A 股筹码分布：get_instrument_cyq（仅 CN）；非 A 股 evaluate_instrument 为技术面评估（日K+指标），不含估值/资金流因子；A 股仍走完整因子评分卡',
+      '- A 股因子初选仍用 get_local_universe_screen_schema + screen_local_universe；按行业选股用 list_local_industries + screen_local_industry_stocks',
       '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
       '- 不推荐具体买卖，仅提供研究与数据解读',
       '- 可组合多个工具由浅入深补全数据',
@@ -128,7 +139,7 @@ export class ToolRegistry {
     const S = (properties: JsonSchema['properties'], required?: string[]): JsonSchema =>
       ({ type: 'object', properties, required })
 
-    return [
+    const tools: Omit<ToolDef, 'meta'>[] = [
       {
         name: 'evaluate_stock', category: '个股分析',
         description: '对单只股票做全面因子评估与评分卡打分',
@@ -755,7 +766,13 @@ export class ToolRegistry {
         parameters: S({}),
         handler: () => d('portfolio_summary', {}),
       },
-    ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
+    ]
+    const unifiedTools = buildUnifiedInstrumentTools(d, S)
+    const searchIdx = tools.findIndex(t => t.name === 'search_local_instruments')
+    const merged = searchIdx >= 0
+      ? [...tools.slice(0, searchIdx + 1), ...unifiedTools, ...tools.slice(searchIdx + 1)]
+      : [...tools, ...unifiedTools]
+    return merged.map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }
 
   private buildBasicTools(): ToolDef[] {

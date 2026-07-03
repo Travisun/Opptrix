@@ -799,11 +799,15 @@ export class DiscoverRunner {
       }))
 
       try {
-        const snapResp = await this.hub.dispatch('batch_stock_snapshots', { codes })
-        if (snapResp.success && Array.isArray(snapResp.data)) {
-          const byCode = new Map((
-            snapResp.data as Array<{ code: string; industry: string | null; pe: number | null }>
-          ).map(r => [r.code, r]))
+        const snapResp = await this.hub.dispatch('instrument_batch_snapshots', {
+          instruments: codes.map(code => ({ market: 'CN', assetClass: 'EQUITY', symbol: code })),
+        })
+        const payload = snapResp.success && snapResp.data && typeof snapResp.data === 'object'
+          ? snapResp.data as { items?: Array<{ code: string; industry: string | null; pe: number | null }> }
+          : null
+        const rows = Array.isArray(payload?.items) ? payload.items : []
+        if (rows.length) {
+          const byCode = new Map(rows.map(r => [r.code, r]))
           enriched = candidates.map(c => {
             const s = byCode.get(c.code)
             return {

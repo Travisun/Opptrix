@@ -13,6 +13,7 @@ export type ApplicationCapability =
   | 'scorecard'
   | 'factor_screen'
   | 'strategy_signal'
+  | 'technical_indicators'
   | 'institution_rating'
   | 'cyq'
   | 'money_flow'
@@ -39,19 +40,23 @@ const CN_ETF: ApplicationCapability[] = [
 ]
 
 const US_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
+  'technical_indicators', 'discover_mine',
 ]
 
 const CRYPTO_SPOT: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
+  'technical_indicators', 'discover_mine',
 ]
 
 const HK_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
+  'technical_indicators', 'discover_mine',
 ]
 
 const REGIONAL_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
+  'technical_indicators', 'discover_mine',
 ]
 
 function capabilityRow(

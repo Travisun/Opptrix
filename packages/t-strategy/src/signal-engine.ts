@@ -1,7 +1,6 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import type { InstrumentRef } from '@opptrix/shared'
-import type { StrategyData } from './base.js'
-import type { Signal } from './base.js'
+import type { InstrumentRef, StockKline } from '@opptrix/shared'
+import type { StrategyData, Signal } from './base.js'
 import { gatherFromKline } from './data.js'
 import { gatherStrategyData, gatherStrategyDataFromCode } from './gather-strategy-data.js'
 import { STRATEGY_LABELS, STRATEGY_REGISTRY, dominantDirection, fuseSignals } from './strategies.js'
@@ -22,14 +21,12 @@ export class SignalEngine {
   }
 }
 
-export async function quickAssess(de: AshareEngine, code: string, ref?: InstrumentRef) {
-  const data = ref
-    ? await gatherStrategyData(de, ref)
-    : await gatherStrategyDataFromCode(de, code)
-  const allSignals: Signal[] = []
+export function assessStrategyData(data: StrategyData, code = data.code) {
+  const allSignals = Object.values(STRATEGY_REGISTRY).flatMap(strat => {
+    try { return strat.analyze(data) } catch { return [] }
+  })
   const byStrategy = Object.entries(STRATEGY_REGISTRY).map(([key, strat]) => {
     const sigs = strat.analyze(data)
-    allSignals.push(...sigs)
     const dir = dominantDirection(sigs)
     return {
       name: STRATEGY_LABELS[key] ?? strat.displayName,
@@ -61,6 +58,13 @@ export async function quickAssess(de: AshareEngine, code: string, ref?: Instrume
   }
 }
 
+export async function quickAssess(de: AshareEngine, code: string, ref?: InstrumentRef) {
+  const data = ref
+    ? await gatherStrategyData(de, ref)
+    : await gatherStrategyDataFromCode(de, code)
+  return assessStrategyData(data, ref?.symbol ?? code)
+}
+
 interface StrategyPerf {
   name: string
   overall_win_rate: number
@@ -76,29 +80,46 @@ interface StrategyPerf {
   signal_freq: number
 }
 
+export interface StrategyVerificationResult {
+  code: string
+  name: string
+  checkpoints: number
+  forward_days: number
+  performances: StrategyPerf[]
+  avg_win_rate: number
+  best_strategy: { name: string; win_rate: number } | null
+  date_range?: [string, string]
+}
+
 function evalAtSlice(strategyKey: string, data: StrategyData) {
   const sigs = STRATEGY_REGISTRY[strategyKey].analyze(data)
   return fuseSignals(sigs).verdict
 }
 
-export async function verifyStrategy(de: AshareEngine, code: string, checkpoints = 30, forwardDays = 5) {
-  const rt = await de.realtime(code)
-  const name = rt.data?.[0]?.name ?? code
-  const kl = await de.kline(code, 400)
-  if (!kl.success || !kl.data || kl.data.length < 120) {
-    return {
-      code, name, checkpoints: 0, forward_days: forwardDays,
-      performances: Object.values(STRATEGY_LABELS).map(label => ({
-        name: label, overall_win_rate: 0, avg_return: 0, sharpe: null, signal_count: 0,
-        buy_signals: 0, sell_signals: 0, buy_win_rate: 0, sell_win_rate: 0,
-        precision: 0, recall: 0, signal_freq: 0,
-      })),
-      avg_win_rate: 0,
-      best_strategy: null,
-    }
+function emptyVerificationResult(code: string, name: string, forwardDays: number): StrategyVerificationResult {
+  return {
+    code, name, checkpoints: 0, forward_days: forwardDays,
+    performances: Object.values(STRATEGY_LABELS).map(label => ({
+      name: label, overall_win_rate: 0, avg_return: 0, sharpe: null, signal_count: 0,
+      buy_signals: 0, sell_signals: 0, buy_win_rate: 0, sell_win_rate: 0,
+      precision: 0, recall: 0, signal_freq: 0,
+    })),
+    avg_win_rate: 0,
+    best_strategy: null,
+  }
+}
+
+export function runStrategyVerification(
+  code: string,
+  name: string,
+  klines: StockKline[],
+  checkpoints = 30,
+  forwardDays = 5,
+): StrategyVerificationResult {
+  if (klines.length < 120) {
+    return emptyVerificationResult(code, name, forwardDays)
   }
 
-  const klines = kl.data
   const end = klines.length - forwardDays - 1
   const start = 120
   const indices: number[] = []
@@ -181,8 +202,18 @@ export async function verifyStrategy(de: AshareEngine, code: string, checkpoints
     performances,
     avg_win_rate: performances.reduce((a, p) => a + p.overall_win_rate, 0) / performances.length,
     best_strategy: best ? { name: best.name, win_rate: best.overall_win_rate } : null,
-    date_range: [klines[0].date, klines[klines.length - 1].date],
+    date_range: [klines[0].date, klines[klines.length - 1].date] as [string, string],
   }
+}
+
+export async function verifyStrategy(de: AshareEngine, code: string, checkpoints = 30, forwardDays = 5) {
+  const rt = await de.realtime(code)
+  const name = rt.data?.[0]?.name ?? code
+  const kl = await de.kline(code, 400)
+  if (!kl.success || !kl.data) {
+    return emptyVerificationResult(code, name, forwardDays)
+  }
+  return runStrategyVerification(code, name, kl.data, checkpoints, forwardDays)
 }
 
 export { STRATEGY_REGISTRY, STRATEGY_LABELS, listStrategies } from './strategies.js'

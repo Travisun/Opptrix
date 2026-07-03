@@ -1,5 +1,5 @@
 import type { InstrumentRef } from './market-data.js'
-import { hasApplicationCapability } from './instrument-capabilities.js'
+import { gateInstrumentAnalytics } from './instrument-analytics.js'
 
 export type InstrumentEvaluationStatus = 'supported' | 'not_supported'
 
@@ -8,15 +8,7 @@ export interface InstrumentEvaluationGate {
   reason?: string
 }
 
-/** 评估 facade 入口 — CN 股票走 EvaluationEngine，其他市场返回 not_supported */
+/** 评估 facade 入口 — 按 analytics profile 路由至因子评估 / ETF 雷达 / 技术分析 */
 export function gateInstrumentEvaluation(ref: InstrumentRef): InstrumentEvaluationGate {
-  if (hasApplicationCapability(ref, 'scorecard')) {
-    return { status: 'supported' }
-  }
-  return {
-    status: 'not_supported',
-    reason: ref.market === 'CN' && ref.assetClass === 'ETF'
-      ? 'ETF 请使用 ETF 决策雷达'
-      : '该市场暂不支持因子评估',
-  }
+  return gateInstrumentAnalytics(ref, 'evaluation')
 }

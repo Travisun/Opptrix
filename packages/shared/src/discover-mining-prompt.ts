@@ -15,8 +15,11 @@ export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): str
 }
 
 const CN_EQUITY_FORBIDDEN = [
-  'evaluate_stock', 'get_strategy_signal', 'batch_stock_snapshots',
-  'get_stock_detail', 'screen_local_universe',
+  'evaluate_stock', 'get_strategy_signal', 'batch_stock_snapshots', 'batch_instrument_snapshots',
+  'get_stock_cyq', 'search_stocks',
+  'get_stock_detail', 'get_stock_chart', 'screen_local_universe',
+  'get_us_stock_snapshot', 'get_us_stock_quote', 'get_us_stock_kline',
+  'get_crypto_snapshot', 'get_crypto_quote', 'get_crypto_kline',
 ].join('、')
 
 /** Agent 挖掘阶段 system prompt — 由 registry + miningToolGroup 驱动 */
@@ -54,11 +57,14 @@ export function buildDiscoverMiningSystemPrompt(input: {
       : group === 'us_equity'
         ? '美股'
         : label
+    const analyticsHint = 'shortlisted 候选可用 evaluate_instrument / get_instrument_strategy_signal / get_instrument_indicators 做技术分析与评估'
     const extra = group === 'crypto_spot'
-      ? '7×24 市场波动大，仅做研究解读。'
+      ? `7×24 市场波动大，仅做研究解读。 shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
       : group === 'us_equity'
-        ? '禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的深入。'
-        : `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。`
+        ? `禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 深入；${analyticsHint}。`
+        : group === 'jp_equity' || group === 'kr_equity' || group === 'hk_equity'
+          ? `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
+          : `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。`
     return [
       `你是 Opptrix ${packHint}挖掘 Agent。候选来自本地列表初选。`,
       toolLine,
@@ -71,12 +77,12 @@ export function buildDiscoverMiningSystemPrompt(input: {
     return [
       '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
       '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-      '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_stock_snapshots',
-      '2) 不足时对 shortlisted 单股：get_stock_detail / evaluate_stock / get_strategy_signal / institution_rating',
+      '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_instrument_snapshots',
+      '2) 不足时对 shortlisted 单股：get_instrument_snapshot / evaluate_instrument / get_instrument_strategy_signal / institution_rating',
       '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
       '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',
       toolLine,
-      '禁止编造数字；禁止对全部候选逐只 get_stock_detail。',
+      '禁止编造数字；禁止对全部候选逐只 get_instrument_snapshot。',
       footer.replace('必须输出严格 JSON', '必须输出严格 JSON（可用 ```json 包裹）'),
     ].join('\n')
   }

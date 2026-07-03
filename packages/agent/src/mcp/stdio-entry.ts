@@ -12,7 +12,7 @@ const registry = new ToolRegistry(hub, createDefaultAppContext())
 const miningOnly = process.argv.includes('--mining')
 
 void runMcpStdio(registry, {
-  toolNames: miningOnly ? DATA_LAYER_MINING_TOOL_NAMES : null,
+  toolNames: miningOnly ? DATA_LAYER_MINING_TOOL_NAMES : registry.chatToolNames(),
 }).catch(err => {
   console.error(err)
   process.exit(1)

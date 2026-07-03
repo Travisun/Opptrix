@@ -204,6 +204,40 @@ UI 规则：**先 `instrument_capabilities`，再决定渲染 StockDetailTab 还
 | `@opptrix/research-hub` | Hub dispatch + InstrumentRouter |
 | `client-ui` | capability mirror + 统一 instrument API |
 
+### 5.1 Agent MCP 工具
+
+聊天 Agent 与 Discover 挖掘共用 `ToolRegistry`，但 **默认暴露给 LLM 的工具集不同**：
+
+| 场景 | 白名单 | 说明 |
+|------|--------|------|
+| **聊天** | `CHAT_MCP_TOOL_NAMES(registry)` | 从 registry 全量工具中 **排除** `LEGACY_MARKET_DATA_TOOL_NAMES`（如 `get_us_stock_quote`、`get_crypto_quote`、部分 `get_stock_*`） |
+| **Discover 挖掘** | `discoverMiningToolNamesForProfile` → `DISCOVER_MINING_TOOL_GROUPS` | 非 CN profile 的行情补全使用 `UNIFIED_INSTRUMENT_MINING_TOOLS` |
+
+**统一 MCP 工具（InstrumentRef 入口，`packages/agent/src/unified-mcp-tools.ts`）**：
+
+| 工具 | 职责 |
+|------|------|
+| `get_instrument_capabilities` | 查询标的可用能力 |
+| `get_instrument_snapshot` | 单只聚合快照 |
+| `get_instrument_quotes` | 批量混合市场报价 |
+| `get_instrument_chart` | K 线 / 图表 |
+| `evaluate_instrument` | 评估：A 股因子评分卡 / 其他市场技术面 bundle |
+| `get_instrument_strategy_signal` | 9 策略融合多空倾向（全市场有日K者） |
+| `get_instrument_indicators` | 技术指标最新值与序列摘要 |
+| `verify_instrument_strategy` | 历史信号胜率验证（K 线回测） |
+
+**分析抽象层（`packages/shared/src/instrument-analytics.ts` + Hub `instrument-analytics-router.ts`）**：
+
+| 模式 | 市场 | 评估 | 策略 | 指标 |
+|------|------|------|------|------|
+| `cn_factor_scorecard` | CN 股票 | EvaluationEngine 因子评分 | 9 策略 + 宏观 | ✓ |
+| `cn_etf_scorecard` | CN ETF | ETF 决策雷达 | 9 策略 | ✓ |
+| `technical_bundle` | US/HK/JP/KR/Crypto | 技术面综合分 | 9 策略（K 线驱动） | ✓ |
+
+Discover 挖掘组（US / Crypto / JP / KR / HK）展开 **`UNIFIED_INSTRUMENT_MINING_TOOLS`**（行情四件套 + `UNIFIED_INSTRUMENT_ANALYTICS_TOOLS`）。**CN 挖掘与聊天已收敛至统一 `instrument_*` 工具**（含 `batch_instrument_snapshots`、`evaluate_instrument`、`get_instrument_cyq` 等）；legacy `get_stock_*` / `evaluate_stock` / `batch_stock_snapshots` 仍注册于 ToolRegistry 供内部兼容，默认聊天白名单不再暴露。
+
+旧版按市场拆分的 `get_us_stock_*`、`get_crypto_*` 等仍注册于 ToolRegistry 供内部兼容，**默认聊天白名单已不再暴露**；Agent 应优先引导 LLM 使用 `get_instrument_*` 与 `evaluate_instrument` / `get_instrument_strategy_signal`。
+
 ---
 
 ## 6. 反模式（扩展时避免）

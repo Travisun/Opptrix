@@ -31,10 +31,21 @@ import {
   type DiscoverProfileReadinessContext,
   type DiscoverStrategyProfile,
   isLikelyCnEquityInput,
-  gateInstrumentEvaluation,
+  gateInstrumentAnalytics,
+  hasApplicationCapability,
+  instrumentRefFromParams,
   parseInstrumentRef,
+  type InstrumentRef,
 } from '@opptrix/shared'
-import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
+import {
+  quickAssess,
+  verifyStrategy,
+  buildTrendBrief,
+  gatherStrategyData,
+  buildTechnicalEvaluation,
+  buildInstrumentIndicators,
+  verifyStrategyForRef,
+} from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
 import { formatVerificationReport, generateStrategyReport } from '@opptrix/t-strategy'
 import {
@@ -52,6 +63,17 @@ import {
   routeInstrumentSnapshot,
   type InstrumentRouteHandlers,
 } from './instrument-router.js'
+import {
+  routeInstrumentEvaluation,
+  routeInstrumentIndicators,
+  routeInstrumentStrategySignal,
+  routeInstrumentStrategyVerify,
+  type InstrumentAnalyticsRouteHandlers,
+} from './instrument-analytics-router.js'
+import {
+  routeInstrumentBatchSnapshots,
+  type InstrumentBatchRouteHandlers,
+} from './instrument-batch-router.js'
 
 function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRef {
   const p = parseCryptoPair(pair)
@@ -116,11 +138,19 @@ export class ResearchHub {
     const t0 = Date.now()
     try {
       switch (feature) {
-        case 'stock_diagnosis': return this.stockDiagnosis(String(params.code), String(params.scorecard ?? '综合评估'), t0)
+        case 'stock_diagnosis': {
+          const ref = this.resolveInstrumentRefFromParams(params)
+          if (ref) return this.instrumentEvaluation(params, t0)
+          return this.stockDiagnosis(String(params.code), String(params.scorecard ?? '综合评估'), t0)
+        }
         case 'institution_rating': return this.institutionRating(String(params.code), params.groups as string[] | undefined, t0)
         case 'institution_report': return this.institutionReport(String(params.code), params.groups as string[] | undefined, t0)
         case 'screening': return this.screening(params, t0)
-        case 'strategy_signal': return this.strategySignal(params, t0)
+        case 'strategy_signal': return this.instrumentStrategySignal(params, t0)
+        case 'instrument_evaluation': return this.instrumentEvaluation(params, t0)
+        case 'instrument_strategy_signal': return this.instrumentStrategySignal(params, t0)
+        case 'instrument_indicators': return this.instrumentIndicators(params, t0)
+        case 'instrument_strategy_verify': return this.instrumentStrategyVerify(params, t0)
         case 'trend_brief': return this.trendBrief(String(params.code), params, t0)
         case 'strategy_verify': return this.strategyVerify(params, t0)
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
@@ -149,7 +179,9 @@ export class ResearchHub {
         case 'list_screen_factors': return this.listScreenFactors(t0)
         case 'local_universe_screen_schema': return this.localUniverseScreenSchema(t0)
         case 'local_universe_screen': return this.localUniverseScreen(params, t0)
-        case 'batch_stock_snapshots': return this.batchStockSnapshots(params, t0)
+        case 'batch_stock_snapshots': return this.instrumentBatchSnapshots(params, t0)
+        case 'instrument_batch_snapshots': return this.instrumentBatchSnapshots(params, t0)
+        case 'instrument_cyq': return this.instrumentCyq(params, t0)
         case 'stock_kline': return this.stockKline(String(params.code), Number(params.count ?? 90), t0)
         case 'stock_cyq': return this.stockCyq(String(params.code), t0)
         case 'stock_chart': return this.stockChart(
@@ -574,29 +606,138 @@ export class ResearchHub {
     return ok({ trade_date: tradeDate ?? null, items }, `批量快照 ${items.length} 只`, t0)
   }
 
-  private async strategySignal(params: Record<string, unknown>, t0: number) {
-    const code = String(params.code ?? '')
-    const ref = parseInstrumentRef(params.instrument ?? params)
-      ?? (isLikelyCnEquityInput(code)
-        ? { market: 'CN' as const, assetClass: 'EQUITY' as const, symbol: code }
-        : null)
-    if (!ref || ref.market !== 'CN') {
-      return fail('多空倾向暂仅支持 A 股与 A 股 ETF', t0)
+  private instrumentBatchHandlers(t0: number): InstrumentBatchRouteHandlers {
+    return {
+      cnBatchSnapshots: async symbols => this.batchStockSnapshots({ codes: symbols }, t0),
+      batchQuotesOrSnapshots: async refs => this.instrumentQuotes({ instruments: refs }, t0),
     }
-    const normalized = normalizeCode(ref.symbol || code)
-    if (isCnEtfCode(normalized)) {
-      const technical = await quickAssess(this.de, normalized, ref)
-      const card = this.marketData.etfScorecard(normalized)
-      const radarHint = card?.total_score != null ? ` · 决策雷达 ${card.total_score} 分` : ''
-      return ok({
-        ...technical,
-        asset_class: 'ETF' as const,
-        scorecard_name: 'ETF决策雷达',
-        etf_scorecard: card,
-      }, `${normalized} ${technical.summary}${radarHint}`, t0)
+  }
+
+  private instrumentBatchSnapshots(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentBatchSnapshots(params, this.instrumentBatchHandlers(t0))
+  }
+
+  private async instrumentCyq(params: Record<string, unknown>, t0: number) {
+    const ref = this.resolveInstrumentRefFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    if (!hasApplicationCapability(ref, 'cyq')) {
+      return fail('该标的暂不支持筹码分布', t0)
     }
-    const data = await quickAssess(this.de, normalized, ref)
-    return ok({ ...data, asset_class: 'EQUITY' as const, scorecard_name: '综合评估' }, `${normalized} ${data.summary}`, t0)
+    if (ref.market !== 'CN') {
+      return fail('筹码分布仅支持 A 股', t0)
+    }
+    return this.stockCyq(ref.symbol, t0)
+  }
+
+  private resolveInstrumentRefFromParams(params: Record<string, unknown>): InstrumentRef | null {
+    const fromParams = instrumentRefFromParams(params)
+    if (fromParams) return fromParams
+    const code = String(params.code ?? '').trim()
+    if (!code) return null
+    if (isLikelyCnEquityInput(code)) {
+      const normalized = normalizeCode(code)
+      return {
+        market: 'CN',
+        assetClass: isCnEtfCode(normalized) ? 'ETF' : 'EQUITY',
+        symbol: normalized,
+      }
+    }
+    return parseInstrumentRef(params.instrument ?? params)
+  }
+
+  private instrumentAnalyticsHandlers(t0: number): InstrumentAnalyticsRouteHandlers {
+    return {
+      cnFactorEvaluation: async ref => this.stockDiagnosis(ref.symbol, '综合评估', t0),
+      cnEtfEvaluation: async ref => this.etfScorecard(ref.symbol, t0),
+      technicalEvaluation: async ref => {
+        const data = await gatherStrategyData(this.de, ref)
+        const evaluation = buildTechnicalEvaluation(data, ref)
+        return ok(evaluation, `${evaluation.name} 技术分析 ${evaluation.total_score} 分`, t0)
+      },
+      strategyAssess: async ref => {
+        const normalized = ref.market === 'CN' ? normalizeCode(ref.symbol) : ref.symbol
+        if (ref.market === 'CN' && isCnEtfCode(normalized)) {
+          const technical = await quickAssess(this.de, normalized, ref)
+          const card = this.marketData.etfScorecard(normalized)
+          const radarHint = card?.total_score != null ? ` · 决策雷达 ${card.total_score} 分` : ''
+          return ok({
+            ...technical,
+            asset_class: 'ETF' as const,
+            scorecard_name: 'ETF决策雷达',
+            etf_scorecard: card,
+          }, `${normalized} ${technical.summary}${radarHint}`, t0)
+        }
+        const data = await quickAssess(this.de, normalized, ref)
+        const scorecardName = ref.market === 'CN' ? '综合评估' : '技术分析'
+        const assetClass = ref.assetClass === 'ETF'
+          ? 'ETF'
+          : ref.assetClass === 'CRYPTO_SPOT'
+            ? 'CRYPTO'
+            : 'EQUITY'
+        return ok({
+          ...data,
+          asset_class: assetClass,
+          scorecard_name: scorecardName,
+        }, `${normalized} ${data.summary}`, t0)
+      },
+      buildIndicators: async ref => {
+        const data = await gatherStrategyData(this.de, ref)
+        const indicators = buildInstrumentIndicators(data)
+        return ok({
+          instrument: ref,
+          code: ref.symbol,
+          name: data.name ?? ref.symbol,
+          ...indicators,
+        }, `${data.name ?? ref.symbol} 技术指标`, t0)
+      },
+      strategyVerify: async (ref, checkpoints, forwardDays) => {
+        const data = await verifyStrategyForRef(this.de, ref, checkpoints, forwardDays)
+        return ok(data, '策略验证完成', t0)
+      },
+    }
+  }
+
+  private async instrumentEvaluation(params: Record<string, unknown>, t0: number) {
+    const ref = this.resolveInstrumentRefFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    const scorecard = String(params.scorecard ?? '综合评估')
+    return routeInstrumentEvaluation(
+      { ...params, instrument: ref },
+      {
+        ...this.instrumentAnalyticsHandlers(t0),
+        cnFactorEvaluation: async r => this.stockDiagnosis(r.symbol, scorecard, t0),
+      },
+    )
+  }
+
+  private async instrumentStrategySignal(params: Record<string, unknown>, t0: number) {
+    const ref = this.resolveInstrumentRefFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    return routeInstrumentStrategySignal(
+      { ...params, instrument: ref },
+      this.instrumentAnalyticsHandlers(t0),
+    )
+  }
+
+  private async instrumentIndicators(params: Record<string, unknown>, t0: number) {
+    const ref = this.resolveInstrumentRefFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    return routeInstrumentIndicators(
+      { ...params, instrument: ref },
+      this.instrumentAnalyticsHandlers(t0),
+    )
+  }
+
+  private async instrumentStrategyVerify(params: Record<string, unknown>, t0: number) {
+    const ref = this.resolveInstrumentRefFromParams(params)
+    if (ref) {
+      return routeInstrumentStrategyVerify(
+        { ...params, instrument: ref },
+        this.instrumentAnalyticsHandlers(t0),
+      )
+    }
+    const data = await verifyStrategy(this.de, String(params.code ?? ''), Number(params.checkpoints ?? 30))
+    return ok(data, '策略验证完成', t0)
   }
 
   private async trendBrief(code: string, params: Record<string, unknown>, t0: number) {
@@ -2109,7 +2250,7 @@ export class ResearchHub {
     if (!ref) {
       return fail('无法识别标的', t0)
     }
-    const gate = gateInstrumentEvaluation(ref)
+    const gate = gateInstrumentAnalytics(ref, 'evaluation')
     if (gate.status === 'not_supported') {
       return fail(gate.reason ?? '该市场暂不支持因子评估', t0)
     }

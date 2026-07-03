@@ -15,12 +15,16 @@ import {
   normalizeMarketDataPackConfig,
   allPackIds,
 } from '../packages/shared/dist/pack-registry.js'
-import { discoverMiningToolNamesForProfile } from '../packages/shared/dist/discover-mining-tools.js'
+import {
+  UNIFIED_INSTRUMENT_MINING_TOOLS,
+  discoverMiningToolNamesForProfile,
+} from '../packages/shared/dist/discover-mining-tools.js'
 import {
   buildDiscoverMiningSystemPrompt,
   discoverProfileAssetLabel,
 } from '../packages/shared/dist/discover-mining-prompt.js'
 import { gateInstrumentEvaluation } from '../packages/shared/dist/evaluate-instrument.js'
+import { gateInstrumentAnalytics, resolveInstrumentAnalyticsProfile } from '../packages/shared/dist/instrument-analytics.js'
 import { hasApplicationCapability } from '../packages/shared/dist/instrument-capabilities.js'
 import { isLikelyCnEquityInput } from '../packages/shared/dist/instrument-ref.js'
 import {
@@ -54,6 +58,8 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
 
   const jpTools = discoverMiningToolNamesForProfile('jp_equity')
   assert.ok(jpTools.includes('screen_local_jp_stocks'))
+  assert.ok(jpTools.includes('get_instrument_quotes'))
+  assert.ok(jpTools.includes('get_instrument_strategy_signal'))
   assert.ok(jpTools.includes('get_local_jp_screen_schema'))
   assert.ok(jpTools.includes('search_local_instruments'))
   assert.ok(!jpTools.includes('batch_stock_snapshots'))
@@ -133,13 +139,93 @@ test('discover mining system prompt is registry-driven', () => {
   assert.ok(prompt.includes('日本股市'))
   assert.ok(prompt.includes('screen_local_jp_stocks'))
   assert.ok(prompt.includes('search_local_instruments'))
+  assert.ok(prompt.includes('get_instrument_snapshot'))
+  assert.ok(prompt.includes('get_instrument_quotes'))
+  const callableLine = prompt.split('\n').find(line => line.startsWith('可调用：'))
+  assert.ok(callableLine?.includes('get_instrument_snapshot'))
+  assert.ok(!callableLine?.includes('get_us_stock'))
+  assert.match(prompt, /get_instrument_(snapshot|quotes|chart)/)
   assert.equal(discoverProfileAssetLabel('hk_equity'), '港股（本地列表 keyword / industry_contains）')
 })
 
-test('gateInstrumentEvaluation — CN equity supported, US not', () => {
+test('us_equity mining uses unified instrument tools not legacy US quote', () => {
+  const usTools = discoverMiningToolNamesForProfile('us_equity')
+  assert.ok(usTools.includes('get_instrument_snapshot'))
+  assert.ok(!usTools.includes('get_us_stock_quote'))
+  assert.ok(!usTools.includes('get_us_stock_snapshot'))
+  for (const tool of UNIFIED_INSTRUMENT_MINING_TOOLS) {
+    assert.ok(usTools.includes(tool), `expected us_equity mining to include ${tool}`)
+  }
+})
+
+test('UNIFIED_INSTRUMENT_MINING_TOOLS shared across non-CN discover groups', () => {
+  for (const profile of ['us_equity', 'crypto_spot', 'jp_equity', 'hk_equity']) {
+    const tools = discoverMiningToolNamesForProfile(profile)
+    for (const tool of UNIFIED_INSTRUMENT_MINING_TOOLS) {
+      assert.ok(tools.includes(tool), `${profile} should include ${tool}`)
+    }
+  }
+})
+
+test('cn_equity_full mining uses unified instrument batch and evaluation tools', () => {
+  const cnTools = discoverMiningToolNamesForProfile('cn_equity')
+  assert.ok(cnTools.includes('batch_instrument_snapshots'))
+  assert.ok(!cnTools.includes('batch_stock_snapshots'))
+  assert.ok(cnTools.includes('evaluate_instrument'))
+  assert.ok(!cnTools.includes('evaluate_stock'))
+})
+
+test('CHAT_MCP_TOOL_NAMES excludes legacy per-market tools', async () => {
+  const { CHAT_MCP_TOOL_NAMES, LEGACY_MARKET_DATA_TOOL_NAMES } = await import(
+    '../packages/agent/dist/unified-mcp-tools.js'
+  )
+  const registry = {
+    list: () => [
+      ...LEGACY_MARKET_DATA_TOOL_NAMES.map(name => ({ name })),
+      { name: 'batch_instrument_snapshots' },
+      { name: 'get_instrument_snapshot' },
+      { name: 'get_instrument_indicators' },
+      { name: 'get_market_db_status' },
+    ],
+  }
+  const chatTools = CHAT_MCP_TOOL_NAMES(registry)
+  assert.ok(chatTools.includes('get_instrument_snapshot'))
+  assert.ok(chatTools.includes('get_instrument_indicators'))
+  assert.ok(chatTools.includes('get_market_db_status'))
+  assert.ok(!chatTools.includes('get_us_stock_quote'))
+  assert.ok(!chatTools.includes('get_crypto_quote'))
+  assert.ok(!chatTools.includes('strategy_verify'))
+  assert.ok(!chatTools.includes('batch_stock_snapshots'))
+  assert.ok(chatTools.includes('batch_instrument_snapshots'))
+})
+
+test('discoverMiningToolNames in agent aligns with shared registry', async () => {
+  const { discoverMiningToolNames } = await import('../packages/agent/dist/tool-meta.js')
+  assert.deepEqual(discoverMiningToolNames('jp_equity'), discoverMiningToolNamesForProfile('jp_equity'))
+  assert.deepEqual(discoverMiningToolNames('us_equity'), discoverMiningToolNamesForProfile('us_equity'))
+})
+
+test('gateInstrumentEvaluation — CN equity supported, US technical bundle', () => {
   assert.equal(gateInstrumentEvaluation({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' }).status, 'supported')
-  assert.equal(gateInstrumentEvaluation({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' }).status, 'not_supported')
+  assert.equal(gateInstrumentEvaluation({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' }).status, 'supported')
   assert.equal(hasApplicationCapability({ market: 'HK', assetClass: 'EQUITY', symbol: '00700' }, 'discover_mine'), true)
+})
+
+test('gateInstrumentAnalytics — US strategy_signal supported', () => {
+  assert.equal(
+    gateInstrumentAnalytics({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' }, 'strategy_signal').status,
+    'supported',
+  )
+  assert.equal(
+    gateInstrumentAnalytics({ market: 'JP', assetClass: 'EQUITY', symbol: '7203' }, 'technical_indicators').status,
+    'supported',
+  )
+})
+
+test('gateInstrumentAnalytics — CN evaluation still cn_factor_scorecard', () => {
+  const ref = { market: 'CN', assetClass: 'EQUITY', symbol: '600519' }
+  assert.equal(gateInstrumentAnalytics(ref, 'evaluation').status, 'supported')
+  assert.equal(resolveInstrumentAnalyticsProfile(ref).mode, 'cn_factor_scorecard')
 })
 
 test('regional list seeds provide at least 50 per market', async () => {
