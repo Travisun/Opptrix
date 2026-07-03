@@ -1,5 +1,5 @@
 import type { DiscoverStrategyProfile, MarketDataPackId } from '@opptrix/shared'
-import { ETF_SCORECARD_NAME, isDiscoverProfileMiningReady, discoverPrescreenMode } from '@opptrix/shared'
+import { ETF_SCORECARD_NAME, isDiscoverProfileMiningReady, discoverPrescreenMode, discoverProfileAssetLabel } from '@opptrix/shared'
 import type { DiscoverParsedPlan, DiscoverScreenCondition } from './discover.js'
 
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
@@ -487,19 +487,7 @@ export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string
   const ref = strategy.conditions
     .map(c => `${c.factor} ${c.op} ${c.value}`)
     .join('；')
-  const assetHint = profile === 'cn_etf'
-    ? 'A 股 ETF（折溢价%、规模亿元）'
-    : profile === 'us_equity'
-      ? '美股（本地列表 keyword / industry_contains）'
-      : profile === 'crypto_spot'
-        ? 'Crypto 交易对（keyword / quote / base_contains）'
-        : profile === 'jp_equity'
-          ? '日本股市（本地列表 keyword / industry_contains）'
-          : profile === 'kr_equity'
-            ? '韩国股市（本地列表 keyword / industry_contains）'
-            : profile === 'hk_equity'
-              ? '港股（本地列表 keyword / industry_contains）'
-              : 'A 股股票（本地因子库）'
+  const assetHint = discoverProfileAssetLabel(profile)
   return [
     `【策略】${strategy.name}`,
     `【资产类型】${assetHint}`,

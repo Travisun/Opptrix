@@ -65,7 +65,7 @@
 | `search_stocks` | `keyword` | 股票搜索 |
 | `backtest` | 见 hub 实现 | 因子回测 |
 | `latest_evaluation` | `code`, `scorecard?`, `force?` | 最近评估；默认 `G=B+M`，返回 `gbm` B/M 子分 |
-| `market_regime` | — | 市况快照（发现页横幅）；见 [RIGHT-PANEL-RESEARCH-PLAN.md](./RIGHT-PANEL-RESEARCH-PLAN.md#市况判断-market_regime--外部宏观期权数据源后续) 待办 |
+| `market_regime` | `profile_scope?` (`cn` / `us`) | 市况快照（发现页横幅）；`us` 基于 SPY 动量 stub |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -98,7 +98,31 @@
 | GET | `/api/portfolio/summary` | 账本汇总 |
 | POST | `/api/portfolio/trade` | `{ code, shares, price, side?, date? }` |
 
-### 新闻订阅（RSS / RSSHub）
+### Instrument API（多市场统一）
+
+按 `InstrumentRef` 消费，与 Hub `instrument_*` feature 等价。请求体可传嵌套 `instrument: { market, assetClass, symbol }`，或扁平 `market` + `symbol`（及可选 `assetClass`）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/instruments/search` | `?q=` / `?keyword=`、`limit`、`markets`（逗号分隔） |
+| GET | `/api/instruments/summary` | 本地 instruments 各市场计数摘要 |
+| POST | `/api/instruments/snapshot` | 单标的快照 |
+| POST | `/api/instruments/quotes` | `{ instruments: InstrumentRef[] }` 批量报价 |
+| POST | `/api/instruments/chart` | `{ instrument, period?, count? }` 日/周/月 K |
+| POST | `/api/instruments/capabilities` | 返回 UI 能力矩阵（`detailPanelKind` 等） |
+
+示例：
+
+```json
+POST /api/instruments/snapshot
+{ "market": "JP", "assetClass": "EQUITY", "symbol": "7203" }
+```
+
+```json
+POST /api/research
+{ "feature": "instrument_quotes", "params": { "instruments": [{ "market": "US", "assetClass": "EQUITY", "symbol": "AAPL" }] } }
+```
+
 
 服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
 

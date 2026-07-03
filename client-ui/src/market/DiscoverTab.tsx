@@ -501,12 +501,18 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       if (cancelled) return
       setLlmReady(Boolean(h.llm_configured))
     }).catch(() => setLlmReady(false))
-    void research.marketRegime().then(resp => {
+    return () => { cancelled = true }
+  }, [])
+
+  useEffect(() => {
+    let cancelled = false
+    const scope = profile === 'us_equity' ? 'us' : 'cn'
+    void research.marketRegime(scope).then(resp => {
       if (cancelled || !resp.success || !resp.data) return
       setMarketRegime(resp.data)
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [])
+  }, [profile])
 
   const handleRun = () => {
     if (!selectedId) return
@@ -532,6 +538,13 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
     const ind = marketRegime?.indicators
     if (!ind) return null
     const parts: string[] = []
+    if (profile === 'us_equity') {
+      if (ind.index_m1m != null) parts.push(`SPY 1月 ${ind.index_m1m > 0 ? '+' : ''}${ind.index_m1m.toFixed(1)}%`)
+      if (ind.index_m6m != null) parts.push(`6月 ${ind.index_m6m > 0 ? '+' : ''}${ind.index_m6m.toFixed(1)}%`)
+      if (ind.hv20_pct != null) parts.push(`波动 ${ind.hv20_pct.toFixed(1)}%`)
+      if (ind.price_percentile_250d != null) parts.push(`分位 ${ind.price_percentile_250d.toFixed(0)}%`)
+      return parts.length ? parts.join(' · ') : null
+    }
     if (ind.marks_cycle) parts.push(`周期 ${ind.marks_cycle}`)
     if (ind.valuation_anchor) parts.push(`估值 ${ind.valuation_anchor}`)
     if (ind.sentiment_score != null) parts.push(`情绪 ${ind.sentiment_score}`)
@@ -542,7 +555,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       parts.push(`北向 ${sign}${ind.northbound_net_yi.toFixed(1)}亿`)
     }
     return parts.length ? parts.join(' · ') : null
-  }, [marketRegime])
+  }, [marketRegime, profile])
 
   const regimeHint = useMemo(() => {
     if (!marketRegime) return null
@@ -554,6 +567,16 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       const first = builtinList.find(st => st.id === suggested[0])
       if (!first) return base
       return `${base} 可优先考虑「${first.name}」。`
+    }
+    if (profile === 'us_equity') {
+      if (!selectedId) return regimeDetailForProfile(marketRegime, 'us_equity')
+      const suggested = regimeSuggestedIds(marketRegime, 'us_equity')
+      const detail = regimeDetailForProfile(marketRegime, 'us_equity')
+      if (!suggested.length) return detail
+      if (suggested.includes(selectedId)) return `当前市况与所选策略较契合。${detail}`
+      const first = builtinList.find(st => st.id === suggested[0])
+      if (!first) return detail
+      return `${detail} 可优先考虑「${first.name}」。`
     }
     if (profile !== 'cn_equity') return null
     if (!selectedId) return regimeDetailForProfile(marketRegime, 'cn_equity')
@@ -641,12 +664,16 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
         ) : readiness?.action ? (
           <Text className={s.headHint} block>{readiness.action}</Text>
         ) : null}
-        {marketRegime && (profile === 'cn_equity' || profile === 'cn_etf') && (
+        {marketRegime && (profile === 'cn_equity' || profile === 'cn_etf' || profile === 'us_equity') && (
           <div className={s.regimeBanner}>
             <Text className={s.regimeHeadline} block>
-              {profile === 'cn_etf' ? '宽基 ETF 配置参考' : marketRegime.headline}
+              {profile === 'cn_etf'
+                ? '宽基 ETF 配置参考'
+                : profile === 'us_equity'
+                  ? '美股市况参考'
+                  : marketRegime.headline}
             </Text>
-            {profile === 'cn_equity' && regimeIndicators && (
+            {(profile === 'cn_equity' || profile === 'us_equity') && regimeIndicators && (
               <Text className={s.regimeIndicators} block>
                 {regimeIndicators}
               </Text>

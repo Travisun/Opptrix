@@ -1,3 +1,4 @@
+/** A 股行业板块 — 仅 CN 市场；跨市场行业上下文见 instrument 能力矩阵 */
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Input, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowLeftRegular, BuildingRegular, DismissRegular, OrganizationRegular, SearchRegular } from '@fluentui/react-icons'

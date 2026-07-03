@@ -6,6 +6,7 @@ import {
   cnIndexBindings,
   cryptoSpotBindings,
   usEquityBindings,
+  regionalEquityBindings,
 } from '../../core/bindings.js'
 
 export function cnEquityEtfIndex(
@@ -42,4 +43,5 @@ export {
   cnIndexBindings,
   usEquityBindings,
   cryptoSpotBindings,
+  regionalEquityBindings,
 }

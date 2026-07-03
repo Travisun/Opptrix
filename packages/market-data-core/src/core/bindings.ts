@@ -77,3 +77,16 @@ export function cryptoSpotBindings(
     defaultPriority,
   }))
 }
+
+export function regionalEquityBindings(
+  market: 'JP' | 'KR' | 'HK',
+  capabilities: Capability[],
+  defaultPriority: number,
+): ProviderBinding[] {
+  return capabilities.map(capability => ({
+    market,
+    assetClass: 'EQUITY',
+    capability,
+    defaultPriority,
+  }))
+}

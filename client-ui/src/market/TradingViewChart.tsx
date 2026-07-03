@@ -270,7 +270,8 @@ interface Props {
 export default function TradingViewChart({ code, expanded = false, active = true }: Props) {
   const s = useStyles()
   const instrumentRef = useMemo(() => parseInstrumentInput(code), [code])
-  const cnEquityChart = instrumentRef.market === 'CN' && instrumentRef.assetClass === 'EQUITY'
+  const cnEquityChart = hasApplicationCapability(instrumentRef, 'chart_intraday')
+    || (instrumentRef.market === 'CN' && instrumentRef.assetClass === 'EQUITY')
   const canChart = hasApplicationCapability(instrumentRef, 'chart_daily')
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])

@@ -4,6 +4,7 @@ import { POLYGON_MANIFEST } from './polygon/manifest.js'
 import { TIINGO_MANIFEST } from './tiingo/manifest.js'
 import { FMP_MANIFEST } from './fmp/manifest.js'
 import { YAHOO_US_MANIFEST } from './yahoo_us/manifest.js'
+import { yahooRegionalManifests } from './yahoo_regional/manifest.js'
 import { BINANCE_MANIFEST } from './binance/manifest.js'
 import { OKX_MANIFEST } from './okx/manifest.js'
 import { EASTMONEY_MANIFEST } from './eastmoney/manifest.js'
@@ -31,6 +32,7 @@ export const PROVIDER_MANIFESTS: ProviderManifest[] = [
   TIINGO_MANIFEST,
   FMP_MANIFEST,
   YAHOO_US_MANIFEST,
+  ...yahooRegionalManifests(),
   BINANCE_MANIFEST,
   OKX_MANIFEST,
   EASTMONEY_MANIFEST,

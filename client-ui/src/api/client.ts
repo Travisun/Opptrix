@@ -130,8 +130,8 @@ export const research = {
       tradeDate ? { trade_date: tradeDate } : {},
     ),
 
-  marketRegime: () =>
-    apiCall<import('../types/schemas').MarketRegimeData>('market_regime'),
+  marketRegime: (scope: 'cn' | 'us' = 'cn') =>
+    apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
 
   industryStocks: (industry: string, limit = 120) =>
     apiCall<{ trade_date: string; quote_date: string | null; industry: string; items: IndustryStockItem[] }>(

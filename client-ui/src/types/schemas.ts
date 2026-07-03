@@ -158,12 +158,14 @@ export interface MarketRegimeIndicators {
 }
 
 export interface MarketRegimeData {
+  scope?: 'cn' | 'us'
   regime: MarketRegimeKind
   headline: string
   detail: string
   suggested_strategy_ids: string[]
   suggested_by_profile?: Partial<Record<DiscoverStrategyProfile, string[]>>
   etf_regime_detail?: string
+  regime_note?: string
   indicators: MarketRegimeIndicators
   timestamp?: string
 }

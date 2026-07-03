@@ -3,6 +3,23 @@ export function formatPrice(value: number | null | undefined, digits = 2): strin
   return value.toFixed(digits)
 }
 
+/** 按市场格式化价格 — CN 保留小数；US/JP/KR/HK 同；Crypto 低价多小数位 */
+export function formatPriceForMarket(
+  market: string | undefined,
+  value: number | null | undefined,
+  digits?: number,
+): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  if (market === 'CRYPTO') {
+    const d = digits ?? (Math.abs(value) < 1 ? 4 : 2)
+    return value.toFixed(d)
+  }
+  if (market === 'JP' && Math.abs(value) >= 1000) {
+    return value.toLocaleString('en-US', { maximumFractionDigits: digits ?? 0 })
+  }
+  return value.toFixed(digits ?? 2)
+}
+
 export function formatPct(value: number | null | undefined, digits = 2): string {
   if (value == null || Number.isNaN(value)) return '—'
   const sign = value > 0 ? '+' : ''
@@ -15,6 +32,23 @@ export function formatCompactNumber(value: number | null | undefined): string {
   if (abs >= 1e8) return `${(value / 1e8).toFixed(2)}亿`
   if (abs >= 1e4) return `${(value / 1e4).toFixed(2)}万`
   return value.toFixed(2)
+}
+
+/** 按市场格式化大数 — 中文万/亿 vs 英文 K/M/B */
+export function formatCompactNumberForMarket(
+  market: string | undefined,
+  value: number | null | undefined,
+): string {
+  if (value == null || Number.isNaN(value)) return '—'
+  const abs = Math.abs(value)
+  const useWestern = market === 'US' || market === 'HK' || market === 'JP' || market === 'KR' || market === 'CRYPTO'
+  if (useWestern) {
+    if (abs >= 1e9) return `${(value / 1e9).toFixed(2)}B`
+    if (abs >= 1e6) return `${(value / 1e6).toFixed(2)}M`
+    if (abs >= 1e3) return `${(value / 1e3).toFixed(2)}K`
+    return value.toFixed(2)
+  }
+  return formatCompactNumber(value)
 }
 
 export function pctTone(value: number | null | undefined): 'up' | 'down' | 'flat' {

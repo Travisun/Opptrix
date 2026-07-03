@@ -21,7 +21,9 @@ const CRYPTO_SPOT: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
 ]
 
-const HK_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily']
+const HK_EQUITY: ApplicationCapability[] = [
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
+]
 
 const JP_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily', 'discover_mine']
 const KR_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily', 'discover_mine']
@@ -42,8 +44,11 @@ export function resolveInstrumentCapabilities(ref: InstrumentRef): InstrumentCap
   if (ref.market === 'CN') {
     return { market: 'CN', assetClass: 'EQUITY', capabilities: CN_EQUITY, detailPanelKind: 'cn-equity' }
   }
-  if (ref.market === 'US' || ref.market === 'HK') {
-    return { market: ref.market, assetClass: 'EQUITY', capabilities: US_EQUITY, detailPanelKind: 'cross-market' }
+  if (ref.market === 'US') {
+    return { market: 'US', assetClass: 'EQUITY', capabilities: US_EQUITY, detailPanelKind: 'cross-market' }
+  }
+  if (ref.market === 'HK') {
+    return { market: 'HK', assetClass: 'EQUITY', capabilities: HK_EQUITY, detailPanelKind: 'cross-market' }
   }
   if (ref.market === 'JP') {
     return { market: 'JP', assetClass: 'EQUITY', capabilities: JP_EQUITY, detailPanelKind: 'cross-market' }

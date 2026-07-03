@@ -2,44 +2,44 @@
 
 > 目标：在现有 CN / US / Crypto 能力之上，建立 **InstrumentRef 主轴 + 注册表 + 标准应用 API**，使日韩港股等横向扩展只需「登记 → 实现 adapter → 开 pack」，而非全栈复制 `stock_*` / `us_*` 分支。
 
-## 1. 现状评估（2026-07）
+## 1. 现状评估（2026-07-03 更新）
 
 ### 1.1 策略应用层
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **主轴** | `DiscoverStrategyProfile`（cn_equity / cn_etf / us_equity / crypto_spot） | 封闭 enum + 多处 `if (profile === …)` |
+| **主轴** | `DISCOVER_PROFILE_REGISTRY` 驱动 prescreen / mining 工具组 | t-strategy / regime 仍 CN 为主 |
 | **CN 股票** | 因子 prescreen + scorecard + t-strategy + 市况 regime | — |
 | **CN ETF** | 本地筛选 + 决策雷达 + Agent 挖掘 | — |
-| **US / Crypto** | 列表筛选 + Agent 挖掘（无 scorecard） | 无 regime；prescreen 无排序分 |
-| **HK** | 无 discover profile | Provider / pack 未接 |
-| **JP / KR** | 全栈未建模 | 类型、pack、provider、discover 皆无 |
-| **Scorecard** | `scorecard-registry` 路由 cn_equity / cn_etf | US/Crypto/JP 无统一评分 facade |
-| **t-strategy** | ETF 已跳过 CN 宏观字段 | 仍不可用于 US/JP；需 market-aware gather |
+| **US / Crypto** | 列表筛选 + registry 挖掘工具 + Agent | 无 scorecard / regime |
+| **HK / JP / KR** | 7 profile 登记；list_filter + 区域挖掘工具组 | 无跨市场 scorecard |
+| **Scorecard** | `gateInstrumentEvaluation(ref)` facade（CN 股票） | US/JP 等返回 not_supported |
+| **t-strategy** | ETF 已跳过 CN 宏观字段 | 仍不可用于 US/JP |
 
-**结论**：Profile 架构方向正确，但 **DiscoverRunner / tool-meta / regime** 仍为四路硬编码；扩展第五市场需改 6+ 包。
+**结论**：Discover **prescreen / mining prompt 已 registry 化**；Evaluation 有统一 gate，深度评估仍 CN-only。
 
 ### 1.2 数据层
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **Instrument** | `InstrumentRef` + SQLite `instruments` | `Market` 无 JP/KR；pack 仅 cn/us/crypto |
-| **Provider** | §6.4 三维 Registry `(market × assetClass × capability)` | HK 零 provider；Engine 大量 CN 默认 |
-| **本地库** | CN 深（因子/K线/ETF）；US/Crypto 浅（list + quotes） | 无 `jp_count` / `kr_count`；screen 每市场一份文件 |
-| **Pack** | 用户开关 + sync job 过滤 | `MarketDataPackId` 封闭；server 校验写死三 pack |
+| **Instrument** | `InstrumentRef` + SQLite `instruments`（CN/US/Crypto/HK/JP/KR） | — |
+| **Provider** | §6.4 Registry；JP/KR/HK 快照经 US adapter 复用 | 独立 regional provider |
+| **本地库** | CN 深；US/Crypto 浅；**JP/KR/HK MVP 种子列表 sync** | 区域 quotes sync、normalizer |
+| **Pack** | `pack-registry` 六市场 + supplement 导出 | Engine 未完全 `queryInstrument` 收敛 |
 
-**结论**：数据层 **骨架可扩展**（Registry + instruments 表），**执行路径未参数化**（Engine 方法族膨胀、validator 硬编码）。
+**结论**：数据层 **pack / screen / readiness 已参数化**；区域 **list 有种子**，quotes 与 vendor 仍待接。
 
 ### 1.3 应用层（聊天 / 搜索 / 右栏）
 
 | 维度 | 现状 | 缺口 |
 |------|------|------|
-| **API** | 双轨：`stock_*` hub + `/api/us/*` REST | 无统一 instrument API；关注列表仍调 CN quotes |
-| **搜索** | 工作区 CN stocks；聊天 `@` 用 `search_local_instruments` | 未统一 |
-| **右栏** | CN 全功能；US/Crypto 快照；HK 走 US 面板 | 图表 / 雷达 / 分析管线未 capability-gate |
-| **格式化** | `format.ts` 万/亿、手 | 未按 market 分 formatter |
+| **API** | `instrument_*` Hub + REST；关注列表 `instrument_quotes` | `API.md` 待补 instrument 章节 |
+| **搜索** | 工作区 / 聊天 `@` → `searchInstruments` | `searchStocks` 保留兼容 |
+| **右栏** | capability gate + `CrossMarketDetailTab` | `IndustryTab` 仍 CN-only（已标注） |
+| **图表** | 非 CN → `instrument_chart`；CN 分时仍 `stockChart` | 按设计保留 CN intraday 例外 |
+| **格式化** | `formatPriceForMarket` / `formatCompactNumberForMarket` | 全站 CrossMarket 已接入 |
 
-**结论**：`InstrumentRef` 已部分落地，**产品主路径仍 CN-first**。
+**结论**：应用主路径 **InstrumentRef-first**；行业页与报价格式化仍为 CN 遗留面。
 
 ---
 
@@ -121,38 +121,49 @@ interface DiscoverProfileDefinition {
 
 ## 3. 分域升级路线
 
-### Phase A — 应用 API 统一（当前迭代）
+### Phase A — 应用 API 统一
 
 - [x] shared 注册表与 capability 矩阵
 - [x] Hub `instrument_*` + InstrumentRouter
 - [x] REST `/api/instruments/*`
 - [x] client `research.instrumentSnapshot/Quotes/Chart/Capabilities`
-- [ ] 关注列表改用 `instrument_quotes`
-- [ ] `TradingViewChart` 经 `instrument_chart` 分支
-- [ ] 工作区搜索合并为 `instrument_search`
-- [ ] `useStockAnalysis` 经 `hasApplicationCapability` 门禁
+- [x] 关注列表改用 `instrument_quotes`
+- [x] `TradingViewChart` 非 CN 经 `instrument_chart`（CN 分时/分钟仍 `stockChart`）
+- [x] 工作区搜索 / 聊天 `@` 合并为 `searchInstruments`
+- [x] `useStockAnalysis` 经 `hasApplicationCapability` 门禁
+- [ ] `IndustryTab` 改 instrument 或保持 CN-only 并文档化（当前 CN-only + 标注）
+- [x] `API.md` 补充 instrument_* 章节
 
 ### Phase B — 策略层参数化
 
-- [ ] `DiscoverRunner` 读取 `DISCOVER_PROFILE_REGISTRY`，消除四路 prescreen 分支
-- [ ] `discoverMiningToolNames` 改读 registry `miningToolGroup`
-- [ ] `EvaluationEngine` 接口：`evaluate(ref: InstrumentRef)` facade（CN 实现，US 返回 not_supported）
-- [ ] Regime：`market_regime` 增加 `profile_scope` 或独立 `us_regime` stub
-- [ ] t-strategy：`gatherAll(ref)` 按 market 加载上下文
+- [x] `DiscoverRunner` prescreen 读 `discoverPrescreenMode` + `localScreenFeature`
+- [x] `discoverMiningToolNamesForProfile` 读 registry `miningToolGroup`
+- [x] `buildDiscoverMiningSystemPrompt` — Agent system prompt registry 驱动
+- [x] `discoverProfileAssetLabel` — 策略解析 / 执行提示统一
+- [x] `gateInstrumentEvaluation(ref)` facade（CN 实现，其他 not_supported）
+- [x] Regime：`market_regime` 支持 `profile_scope=cn|us`；US 基于 SPY 动量 stub
+- [x] t-strategy：`gatherStrategyData(ref)` + `quickAssess` 可选 InstrumentRef
+- [ ] t-strategy：Hub `strategySignal` 传 InstrumentRef（仍 CN-only gate）
 
 ### Phase C — 数据层参数化
 
-- [ ] `MarketDataPackId` 改为 registry 驱动（存 JSON 时向后兼容）
-- [ ] 泛化 `local*Screen(store, packId, query)` 替代 us/crypto 复制
-- [ ] Engine：`queryInstrument(ref, capability)` 收敛 `us*`/`crypto*` 方法族
-- [ ] Readiness context：`Record<PackId, number>` 替代固定四计数
-- [ ] HK pack + provider MVP
+- [x] `MarketDataPackId` registry 驱动（`pack-registry` 六市场）
+- [x] 泛化 `localListScreen(store, packId, query)` + `regional-equity-screen`
+- [x] Readiness context：`jp_count` / `kr_count` / `hk_count`
+- [x] HK pack + discover profile + supplement 导出
+- [x] `syncRegionalList` — JP/KR/HK MVP 种子列表写入 `instruments`
+- [x] `syncRegionalQuotes` — jp/hk/kr_quotes 经 US adapter 写入截面
+- [x] Engine：`queryInstrumentData(ref, cap)` 收敛 DataEngine 入口
+- [x] HK/JP/KR Yahoo regional provider + `regionalRealtime/Kline`
+- [ ] DataEngine 旧 `us*`/`crypto*` 方法标记 deprecated 并逐步内联
 
-### Phase D — 日韩扩展
+### Phase D — 日韩港扩展
 
+- [x] `jp_equity` / `kr_equity` / `hk_equity` discover（list_filter 模板）
+- [x] Agent 区域 screen / mining 工具 wired
+- [x] HK `discover_mine` capability 对齐 JP/KR
 - [ ] JP/KR normalizer + 交易日历
-- [ ] Provider（Tiingo/FMP/本地 vendor）+ list sync
-- [ ] `jp_equity` / `kr_equity` discover（复用 list_filter 模板）
+- [ ] Provider（Tiingo/FMP/本地 vendor）替换种子列表
 - [ ] 可选：简单 momentum scorecard（非 CN 因子库）
 
 ---
@@ -171,7 +182,7 @@ interface DiscoverProfileDefinition {
 | institution_rating | ✓ | — | — | — | — |
 | cyq / money_flow | ✓ | — | — | — | — |
 | industry_context | ✓ | — | — | — | — |
-| discover_mine | ✓ | ✓ | ✓ | — | ✓ |
+| discover_mine | ✓ | ✓ | ✓ | ✓ | ✓ |
 | portfolio_pnl | ✓ | — | 部分 | — | — |
 
 UI 规则：**先 `instrument_capabilities`，再决定渲染 StockDetailTab 还是 CrossMarketSnapshot，是否调用 `useStockAnalysis`。**
@@ -254,6 +265,29 @@ client-ui/src/types/instrument.ts # UnifiedInstrumentQuote
 
 - ~~工作区 `MarketDataSettingsSection` 导出/导入仅 us/crypto 包~~（已支持 hk/jp/kr 补充包）
 - ~~`apps/server` pack 校验扩展 hk/jp/kr~~（prepare / export 已对齐 Hub）
-- US/JP 统一 scorecard facade
+- US/JP 统一 scorecard facade（`gateInstrumentEvaluation` 已就位，深度评估待实现）
 - 按 market 的 quote formatter（万/亿 vs K/M/B）
+
+---
+
+## 10. 实施记录（living log）
+
+| 日期 | Phase | 内容 | 状态 |
+|------|-------|------|------|
+| 2026-07-03 | 基线 | `49ac0d8` 多市场骨架：InstrumentRef、pack registry、JP/KR discover MVP | done |
+| 2026-07-03 | A/B | `8b013a9` 审计修复：cross-market 右栏、CN API gate、HK profile、补充包 | done |
+| 2026-07-03 | A | Phase A 收尾：instrument_quotes / instrument_chart / capability gate 确认 | done |
+| 2026-07-03 | B | `discover-mining-prompt.ts` + DiscoverRunner registry 驱动 mining prompt | done |
+| 2026-07-03 | B | `evaluate-instrument.ts` + Hub `latestEvaluation` 经 `gateInstrumentEvaluation` | done |
+| 2026-07-03 | C | `syncRegionalList` + JP/KR/HK 各 20 只 MVP 种子 | done |
+| 2026-07-03 | D | HK `discover_mine` + batch_quote capability 对齐 | done |
+| 2026-07-03 | B | `market_regime` profile_scope + SPY 美股市况 stub | done |
+| 2026-07-03 | B | `gatherStrategyData(ref)` + t-strategy 导出 | done |
+| 2026-07-03 | C | `jp/hk/kr_quotes` sync + pack registry 对齐 | done |
+| 2026-07-03 | C | `queryInstrument` facade（research-hub） | done |
+| 2026-07-03 | A | `API.md` instrument REST 章节 | done |
+| 2026-07-03 | C/D | Yahoo regional provider + `queryInstrumentData` + regional router | done |
+| 2026-07-03 | A | `formatPriceForMarket` + CrossMarket 接入 | done |
+| — | C | us*/crypto* deprecated 内联 | pending |
+| — | D | Vendor list 替换种子 + normalizer + 交易日历 | pending |
 

@@ -12,8 +12,9 @@ import { isCnEtfCode } from './core/instrument.js'
 import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
 import { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
 import { normalizeUsSymbol } from './utils/us-market.js'
+import { isRegionalEquityMarket, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
-import type { AssetClass, Market } from '@opptrix/shared'
+import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 import type {
   Dividend, DragonTiger, GlobalIndex, IndexKline, IndexRealtime,
   LimitUpDown, MarketMoneyFlow, MoneyFlow, NewsItem, SectorMoneyFlow,
@@ -543,6 +544,66 @@ export class MarketDataEngine {
       },
       source: profile.source ?? quote.source ?? klines.source,
     }
+  }
+
+  // ── JP / KR / HK equities ──
+
+  regionalRealtime(market: RegionalEquityMarket, symbol: string) {
+    return this.qScoped(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, symbol)
+  }
+
+  regionalKline(market: RegionalEquityMarket, symbol: string, count = 180) {
+    return this.qScoped(
+      market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true,
+      symbol, 'daily', '', '', count,
+    )
+  }
+
+  async regionalSnapshot(market: RegionalEquityMarket, symbol: string) {
+    const [quote, klines] = await Promise.all([
+      this.regionalRealtime(market, symbol),
+      this.regionalKline(market, symbol, 10),
+    ])
+    return {
+      success: quote.success || klines.success,
+      data: {
+        code: symbol,
+        profile: null,
+        quote: quote.data?.[0] ?? null,
+        recentKlines: klines.data ?? [],
+      },
+      source: quote.source ?? klines.source,
+    }
+  }
+
+  /** DataEngine 收敛入口 — 按 InstrumentRef + capability 路由 */
+  queryInstrumentData(
+    ref: InstrumentRef,
+    capability: 'realtime' | 'kline' | 'snapshot',
+    opts?: { count?: number },
+  ) {
+    if (ref.market === 'CN' && ref.assetClass === 'EQUITY') {
+      if (capability === 'realtime') return this.realtime(ref.symbol)
+      if (capability === 'kline') return this.kline(ref.symbol, opts?.count ?? 120)
+      return this.realtime(ref.symbol)
+    }
+    if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
+      if (capability === 'realtime') return this.usRealtime(ref.symbol)
+      if (capability === 'kline') return this.usKline(ref.symbol, opts?.count ?? 120)
+      return this.usSnapshot(ref.symbol)
+    }
+    if (isRegionalEquityMarket(ref.market)) {
+      if (capability === 'realtime') return this.regionalRealtime(ref.market, ref.symbol)
+      if (capability === 'kline') return this.regionalKline(ref.market, ref.symbol, opts?.count ?? 120)
+      return this.regionalSnapshot(ref.market, ref.symbol)
+    }
+    if (ref.market === 'CRYPTO') {
+      const pair = ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
+      if (capability === 'realtime') return this.cryptoRealtime(pair)
+      if (capability === 'kline') return this.cryptoKline(pair, opts?.count ?? 120)
+      return this.cryptoSnapshot(pair)
+    }
+    return Promise.resolve({ success: false, error: `不支持的市场 ${ref.market}` })
   }
 
   // ── Crypto SPOT (Phase 3) ──

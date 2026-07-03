@@ -2,6 +2,7 @@ export {
   quickAssess, verifyStrategy, SignalEngine,
   STRATEGY_REGISTRY, STRATEGY_LABELS, listStrategies,
 } from './signal-engine.js'
+export { gatherStrategyData, gatherStrategyDataFromCode } from './gather-strategy-data.js'
 export {
   generateStrategyReport, formatVerificationReport, strategySummary,
 } from './reports.js'

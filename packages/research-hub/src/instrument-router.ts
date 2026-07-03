@@ -13,9 +13,11 @@ export type InstrumentRouteHandlers = {
   stockDetail: (code: string) => Promise<ResearchResult>
   etfSnapshot: (code: string) => Promise<ResearchResult>
   usSnapshot: (symbol: string) => Promise<ResearchResult>
+  regionalSnapshot: (market: 'JP' | 'KR' | 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
   stockQuotes: (codes: string[]) => Promise<ResearchResult>
   usRealtime: (symbol: string) => Promise<ResearchResult>
+  regionalRealtime: (market: 'JP' | 'KR' | 'HK', symbol: string) => Promise<ResearchResult>
   cryptoRealtime: (pair: string) => Promise<ResearchResult>
   stockChart: (
     code: string,
@@ -26,6 +28,7 @@ export type InstrumentRouteHandlers = {
     market?: string,
   ) => Promise<ResearchResult>
   usKline: (symbol: string, count: number) => Promise<ResearchResult>
+  regionalKline: (market: 'JP' | 'KR' | 'HK', symbol: string, count: number) => Promise<ResearchResult>
   cryptoKline: (pair: string, count: number) => Promise<ResearchResult>
   searchLocalInstruments: (
     keyword: string,
@@ -67,10 +70,11 @@ export async function routeInstrumentSnapshot(
     return handlers.stockDetail(ref.symbol)
   }
   if (ref.market === 'US' || ref.market === 'HK') {
-    return handlers.usSnapshot(ref.symbol)
+    if (ref.market === 'US') return handlers.usSnapshot(ref.symbol)
+    return handlers.regionalSnapshot('HK', ref.symbol)
   }
   if (ref.market === 'JP' || ref.market === 'KR') {
-    return handlers.usSnapshot(ref.symbol)
+    return handlers.regionalSnapshot(ref.market, ref.symbol)
   }
   if (ref.market === 'CRYPTO') {
     return handlers.cryptoSnapshot(instrumentDisplayCode(ref))
@@ -107,11 +111,16 @@ export async function routeInstrumentQuotes(
   }
 
   for (const ref of refs) {
-    if (ref.market === 'US' || ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
+    if (ref.market === 'US') {
       const resp = await handlers.usRealtime(ref.symbol)
       if (resp.success && resp.data && typeof resp.data === 'object') {
-        const row = resp.data as Record<string, unknown>
-        quotes.push(quoteFromCnRow(ref, row))
+        quotes.push(quoteFromCnRow(ref, resp.data as Record<string, unknown>))
+      }
+    }
+    if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
+      const resp = await handlers.regionalRealtime(ref.market, ref.symbol)
+      if (resp.success && resp.data && typeof resp.data === 'object') {
+        quotes.push(quoteFromCnRow(ref, resp.data as Record<string, unknown>))
       }
     }
     if (ref.market === 'CRYPTO') {
@@ -143,8 +152,11 @@ export async function routeInstrumentChart(
   if (ref.market === 'CN') {
     return handlers.stockChart(ref.symbol, period, count, '', 0, ref.exchange)
   }
-  if (ref.market === 'US' || ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
+  if (ref.market === 'US') {
     return handlers.usKline(ref.symbol, count)
+  }
+  if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
+    return handlers.regionalKline(ref.market, ref.symbol, count)
   }
   if (ref.market === 'CRYPTO') {
     return handlers.cryptoKline(instrumentDisplayCode(ref), count)

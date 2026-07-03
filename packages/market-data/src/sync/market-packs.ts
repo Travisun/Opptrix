@@ -16,9 +16,9 @@ export const CN_DEEP_JOBS = DEEP_SYNC_JOBS.filter(
 
 export const CN_PACK_JOBS = [...BOOTSTRAP_SYNC_JOBS, ...CN_DEEP_JOBS] as const
 
-export const HK_PACK_JOBS = ['hk_list'] as const
-export const JP_PACK_JOBS = ['jp_list'] as const
-export const KR_PACK_JOBS = ['kr_list'] as const
+export const HK_PACK_JOBS = ['hk_list', 'hk_quotes'] as const
+export const JP_PACK_JOBS = ['jp_list', 'jp_quotes'] as const
+export const KR_PACK_JOBS = ['kr_list', 'kr_quotes'] as const
 
 export const PACK_JOBS: Record<MarketDataPackId, readonly string[]> = {
   cn: CN_PACK_JOBS,

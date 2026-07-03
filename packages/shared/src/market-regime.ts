@@ -317,6 +317,36 @@ export function computeMarketRegime(input: MarketRegimeInputs): MarketRegimeSnap
   }
 }
 
+export type MarketRegimeScope = 'cn' | 'us'
+
+/** 从指数 K 线提取动量/波动输入 — 用于 US 等非 A 股市场况 stub */
+export function momentumRegimeInputsFromKlines(klines: KlineBar[]): MarketRegimeInputs {
+  let indexM6m: number | null = null
+  let indexM1m: number | null = null
+  if (klines.length >= 21) {
+    const last = klines[klines.length - 1]?.close
+    const m1Base = klines[Math.max(0, klines.length - 21)]?.close
+    if (last != null && m1Base != null && m1Base > 0) {
+      indexM1m = Math.round((last / m1Base - 1) * 1000) / 10
+    }
+  }
+  if (klines.length >= 121) {
+    const last = klines[klines.length - 1]?.close
+    const m6Base = klines[klines.length - 121]?.close
+    if (last != null && m6Base != null && m6Base > 0) {
+      indexM6m = Math.round((last / m6Base - 1) * 1000) / 10
+    }
+  }
+  return {
+    index_m6m: indexM6m,
+    index_m1m: indexM1m,
+    ma125_position_pct: computeMaPositionPct(klines, 125),
+    turnover_vs_20d: computeTurnoverVs20d(klines),
+    hv20_pct: computeHv20Pct(klines),
+    price_percentile_250d: computePricePercentile(klines, 250),
+  }
+}
+
 function buildDetail(base: string, ind: MarketRegimeIndicators): string {
   const hints: string[] = []
   if (ind.marks_cycle) hints.push(`周期：${ind.marks_cycle}`)

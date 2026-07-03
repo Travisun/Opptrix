@@ -50,7 +50,7 @@ export const PACK_REGISTRY: PackDefinition[] = [
     description: '港股列表与行情（Provider 筹备中，可先同步 instruments）',
     locked: false,
     defaultEnabled: false,
-    syncJobs: ['hk_list'],
+    syncJobs: ['hk_list', 'hk_quotes'],
     phase: 'partial',
   },
   {
@@ -59,7 +59,7 @@ export const PACK_REGISTRY: PackDefinition[] = [
     description: '日股列表与行情（MVP：本地 instruments 筛选 + Agent 挖掘）',
     locked: false,
     defaultEnabled: false,
-    syncJobs: ['jp_list'],
+    syncJobs: ['jp_list', 'jp_quotes'],
     phase: 'planned',
   },
   {
@@ -68,7 +68,7 @@ export const PACK_REGISTRY: PackDefinition[] = [
     description: '韩股列表与行情（MVP：本地 instruments 筛选 + Agent 挖掘）',
     locked: false,
     defaultEnabled: false,
-    syncJobs: ['kr_list'],
+    syncJobs: ['kr_list', 'kr_quotes'],
     phase: 'planned',
   },
 ]

@@ -15,18 +15,23 @@ import {
 import { getMarketDataService } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
-  computeTurnoverVs20d, computeHv20Pct, type ResearchResult,
+  computeTurnoverVs20d, computeHv20Pct, momentumRegimeInputsFromKlines,
+  type ResearchResult,
   assessAllDiscoverProfileReadiness,
   assessDiscoverProfileReadiness,
   isDiscoverStrategyProfile,
   resolveRegimeStrategyIds,
   ETF_REGIME_DETAIL,
+  US_REGIME_DETAIL,
+  type MarketRegimeScope,
   listScorecardsForProfile,
   resolveScorecardName,
   scorecardProfileFromDiscover,
   type DiscoverProfileReadinessContext,
   type DiscoverStrategyProfile,
   isLikelyCnEquityInput,
+  gateInstrumentEvaluation,
+  parseInstrumentRef,
 } from '@opptrix/shared'
 import { quickAssess, verifyStrategy, buildTrendBrief } from '@opptrix/t-strategy'
 import { serializeInstitutionData } from './serialize.js'
@@ -119,7 +124,7 @@ export class ResearchHub {
         case 'discover_scorecards': return this.discoverScorecards(params, t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
-        case 'market_regime': return this.marketRegime(t0)
+        case 'market_regime': return this.marketRegime(params, t0)
         case 'local_industry_list': return this.localIndustryList(params, t0)
         case 'local_industry_screen': return this.localIndustryScreen(params, t0)
         case 'list_screen_factors': return this.listScreenFactors(t0)
@@ -638,7 +643,15 @@ export class ResearchHub {
     return ok(data, data.title, t0)
   }
 
-  private async marketRegime(t0: number) {
+  private async marketRegime(params: Record<string, unknown>, t0: number) {
+    const scope = String(params.profile_scope ?? 'cn').toLowerCase() as MarketRegimeScope
+    if (scope === 'us') {
+      return this.marketRegimeUs(t0)
+    }
+    return this.marketRegimeCn(t0)
+  }
+
+  private async marketRegimeCn(t0: number) {
     const klines = this.marketData.localDailyKlines('000300', 280)
     const klineBars = klines.map(k => ({ close: k.close, amount: k.amount }))
 
@@ -715,9 +728,39 @@ export class ResearchHub {
     } satisfies Partial<Record<DiscoverStrategyProfile, string[]>>
 
     return ok({
+      scope: 'cn' as const,
       ...snapshot,
       suggested_by_profile: suggestedByProfile,
       etf_regime_detail: ETF_REGIME_DETAIL[snapshot.regime],
+      timestamp: new Date().toISOString(),
+    }, snapshot.headline, t0)
+  }
+
+  /** 美股市况 stub — 基于 SPY 动量/波动，不含 A 股广度/北向 */
+  private async marketRegimeUs(t0: number) {
+    let klines: Array<{ close: number; amount?: number | null }> = []
+    try {
+      const kl = await this.de.usKline('SPY', 280)
+      if (kl.success && kl.data?.length) {
+        klines = (kl.data as Array<{ close: number; amount?: number | null }>).map(k => ({
+          close: k.close,
+          amount: k.amount,
+        }))
+      }
+    } catch { /* offline */ }
+
+    const inputs = klines.length >= 21
+      ? momentumRegimeInputsFromKlines(klines)
+      : { index_m6m: null, index_m1m: null }
+    const snapshot = computeMarketRegime(inputs)
+    const usSuggested = resolveRegimeStrategyIds('us_equity', snapshot.regime, snapshot.suggested_strategy_ids)
+
+    return ok({
+      scope: 'us' as const,
+      ...snapshot,
+      detail: US_REGIME_DETAIL[snapshot.regime] ?? snapshot.detail,
+      suggested_by_profile: { us_equity: usSuggested },
+      regime_note: '基于 SPY 动量与波动率代理；不含 A 股广度、涨跌停与北向等指标。',
       timestamp: new Date().toISOString(),
     }, snapshot.headline, t0)
   }
@@ -1626,13 +1669,16 @@ export class ResearchHub {
       stockDetail: code => this.stockDetail(code, t0),
       etfSnapshot: code => this.etfSnapshot(code, t0),
       usSnapshot: symbol => this.usSnapshot(symbol, t0),
+      regionalSnapshot: (market, symbol) => this.regionalSnapshot(market, symbol, t0),
       cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
       stockQuotes: codes => this.stockQuotes(codes, t0),
       usRealtime: symbol => this.usRealtime(symbol, t0),
+      regionalRealtime: (market, symbol) => this.regionalRealtime(market, symbol, t0),
       cryptoRealtime: pair => this.cryptoRealtime(pair, t0),
       stockChart: (code, period, count, before, tail, market) =>
         this.stockChart(code, period, count, before, tail, market, t0),
       usKline: (symbol, count) => this.usKline(symbol, { count }, t0),
+      regionalKline: (market, symbol, count) => this.regionalKline(market, symbol, { count }, t0),
       cryptoKline: (pair, count) => this.cryptoKline(pair, { count }, t0),
       searchLocalInstruments: (keyword, limit, markets) => {
         const m = markets as import('@opptrix/shared').Market[] | undefined
@@ -1803,6 +1849,30 @@ export class ResearchHub {
     return ok(r.data?.[0] ?? null, `${symbol} 美股行情`, t0)
   }
 
+  private async regionalRealtime(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
+    const r = await this.de.regionalRealtime(market, symbol)
+    if (!r.success) return fail(r.error ?? `${market} 行情获取失败`, t0)
+    return ok(r.data?.[0] ?? null, `${symbol} ${market} 行情`, t0)
+  }
+
+  private async regionalKline(
+    market: 'JP' | 'KR' | 'HK',
+    symbol: string,
+    params: Record<string, unknown>,
+    t0: number,
+  ) {
+    const count = params.count != null ? Number(params.count) : 180
+    const r = await this.de.regionalKline(market, symbol, count)
+    if (!r.success) return fail(r.error ?? `${market} K 线获取失败`, t0)
+    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+  }
+
+  private async regionalSnapshot(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
+    const r = await this.de.regionalSnapshot(market, symbol)
+    if (!r.success) return fail(`${market} 快照获取失败`, t0)
+    return ok(r.data, `${market} 快照`, t0)
+  }
+
   private async usKline(symbol: string, params: Record<string, unknown>, t0: number) {
     const count = params.count != null ? Number(params.count) : 180
     const r = await this.de.usKline(symbol, count)
@@ -1954,13 +2024,22 @@ export class ResearchHub {
   }
 
   private async latestEvaluation(code: string, params: Record<string, unknown>, t0: number) {
-    if (!isLikelyCnEquityInput(code)) {
-      return fail('评分卡暂仅支持 A 股标的', t0)
+    const ref = parseInstrumentRef(params.instrument ?? params)
+      ?? (isLikelyCnEquityInput(code)
+        ? { market: 'CN' as const, assetClass: 'EQUITY' as const, symbol: code }
+        : null)
+    if (!ref) {
+      return fail('无法识别标的', t0)
     }
+    const gate = gateInstrumentEvaluation(ref)
+    if (gate.status === 'not_supported') {
+      return fail(gate.reason ?? '该市场暂不支持因子评估', t0)
+    }
+    const evalCode = ref.symbol || code
     const scorecardName = String(params.scorecard ?? 'G=B+M')
     const force = params.force === true
 
-    const stored = !force ? this.store.getLatest(code) : null
+    const stored = !force ? this.store.getLatest(evalCode) : null
     if (stored && stored.scorecardName === scorecardName) {
       const card = createScorecard(scorecardName)
       const gbm = computeGbmBreakdown(stored.dimensionScores, scorecardName)
@@ -1981,7 +2060,7 @@ export class ResearchHub {
       }, '最新评估（缓存）', t0)
     }
 
-    const snap = await this.ee.analyze(code)
+    const snap = await this.ee.analyze(evalCode)
     const card = createScorecard(scorecardName)
     await this.neutralizer.compute([snap as never])
     card.score([snap])

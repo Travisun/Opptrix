@@ -250,6 +250,21 @@ export const ETF_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
   euphoria: '情绪偏热，优先大盘高流动性 ETF，折溢价不宜过高。',
 }
 
+/** 美股挖掘 — 按 SPY 动量市况映射参考策略 */
+export const US_REGIME_STRATEGY_IDS: Record<MarketRegimeKind, string[]> = {
+  panic: ['us_broad_universe'],
+  cautious: ['us_broad_universe'],
+  neutral: ['us_broad_universe', 'us_tech_focus'],
+  euphoria: ['us_tech_focus'],
+}
+
+export const US_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
+  panic: 'SPY 回撤偏大，可优先广谱样本策略，精选流动性好、基本面清晰的标的。',
+  cautious: '动量偏弱，宜广谱初选后由 Agent 结合概况筛选。',
+  neutral: '可按广谱或科技聚焦策略在本地列表中初选。',
+  euphoria: '动量偏强，科技聚焦策略可配合 Agent 深挖，注意估值纪律。',
+}
+
 /** 市况推荐策略 id — 按当前挖掘 Profile 过滤 */
 export function resolveRegimeStrategyIds(
   profile: DiscoverStrategyProfile,
@@ -257,6 +272,7 @@ export function resolveRegimeStrategyIds(
   equitySuggestedIds: string[],
 ): string[] {
   if (profile === 'cn_etf') return ETF_REGIME_STRATEGY_IDS[regime]
+  if (profile === 'us_equity') return US_REGIME_STRATEGY_IDS[regime]
   if (profile === 'cn_equity') {
     const filtered = equitySuggestedIds.filter(id => inferBuiltinStrategyProfile(id) === 'cn_equity')
     return filtered.length ? filtered : equitySuggestedIds

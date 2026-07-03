@@ -6,8 +6,10 @@ import type { CryptoSnapshotData, UsSnapshotData, WatchlistItem } from '../types
 import type { InstrumentRef } from '../types/instrument'
 import {
   formatCompactNumber,
+  formatCompactNumberForMarket,
   formatPct,
   formatPrice,
+  formatPriceForMarket,
   formatSignedNumber,
   pctTone,
 } from './format'
@@ -209,7 +211,7 @@ function MiniKline({ bars, className }: { bars: { close: number; changePct: numb
             key={`${bar.close}-${i}`}
             className={mergeClasses(s.klineBar, down ? s.klineBarDown : undefined)}
             style={{ height: `${h}px` }}
-            title={formatPrice(bar.close)}
+            title={fmtPrice(bar.close)}
           />
         )
       })}
@@ -270,6 +272,7 @@ export default function CrossMarketSnapshotDetail({
   const profile = !isCrypto && snapshot && 'profile' in snapshot ? snapshot.profile : null
   const tone = pctTone(quote?.changePct)
   const priceDigits = isCrypto && (quote?.price ?? 0) < 1 ? 4 : 2
+  const fmtPrice = (v: number | null | undefined) => formatPriceForMarket(ref.market, v, priceDigits)
 
   const industry = useMemo(() => {
     if (!profile || typeof profile !== 'object') return null
@@ -311,7 +314,7 @@ export default function CrossMarketSnapshotDetail({
         ) : quote ? (
           <>
             <div className={s.quoteRow}>
-              <Text className={s.price}>{formatPrice(quote.price, priceDigits)}</Text>
+              <Text className={s.price}>{fmtPrice(quote.price)}</Text>
               <Text className={mergeClasses(s.change, pctClass(s, tone))}>
                 {formatSignedNumber(quote.change ?? null, priceDigits)}
               </Text>
@@ -321,21 +324,21 @@ export default function CrossMarketSnapshotDetail({
             </div>
             <div className={s.heroGrid}>
               <Text className={s.statLabel}>今开</Text>
-              <Text className={s.statValue}>{formatPrice(quote.open ?? null, priceDigits)}</Text>
+              <Text className={s.statValue}>{fmtPrice(quote.open ?? null)}</Text>
               <Text className={s.statLabel}>最高</Text>
-              <Text className={s.statValue}>{formatPrice(quote.high ?? null, priceDigits)}</Text>
+              <Text className={s.statValue}>{fmtPrice(quote.high ?? null)}</Text>
               <Text className={s.statLabel}>最低</Text>
-              <Text className={s.statValue}>{formatPrice(quote.low ?? null, priceDigits)}</Text>
+              <Text className={s.statValue}>{fmtPrice(quote.low ?? null)}</Text>
               {quote.marketCap != null ? (
                 <>
                   <Text className={s.statLabel}>市值</Text>
-                  <Text className={s.statValue}>{formatCompactNumber(quote.marketCap)}</Text>
+                  <Text className={s.statValue}>{formatCompactNumberForMarket(ref.market, quote.marketCap)}</Text>
                 </>
               ) : null}
               {quote.volume != null ? (
                 <>
                   <Text className={s.statLabel}>成交量</Text>
-                  <Text className={s.statValue}>{formatCompactNumber(quote.volume)}</Text>
+                  <Text className={s.statValue}>{formatCompactNumberForMarket(ref.market, quote.volume)}</Text>
                 </>
               ) : null}
             </div>

@@ -6,6 +6,7 @@ export {
   cnIndexBindings,
   usEquityBindings,
   cryptoSpotBindings,
+  regionalEquityBindings,
   bindingKey,
   CN_ETF_CAPABILITIES,
 } from './core/bindings.js'

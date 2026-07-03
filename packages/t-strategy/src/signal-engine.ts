@@ -1,14 +1,18 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
+import type { InstrumentRef } from '@opptrix/shared'
 import type { StrategyData } from './base.js'
 import type { Signal } from './base.js'
-import { gatherAll, gatherFromKline } from './data.js'
+import { gatherFromKline } from './data.js'
+import { gatherStrategyData, gatherStrategyDataFromCode } from './gather-strategy-data.js'
 import { STRATEGY_LABELS, STRATEGY_REGISTRY, dominantDirection, fuseSignals } from './strategies.js'
 
 export class SignalEngine {
   constructor(private engine: AshareEngine) {}
 
-  async analyze(code: string) {
-    const data = await gatherAll(this.engine, code)
+  async analyze(code: string, ref?: InstrumentRef) {
+    const data = ref
+      ? await gatherStrategyData(this.engine, ref)
+      : await gatherStrategyDataFromCode(this.engine, code)
     const allSignals: Signal[] = []
     for (const strategy of Object.values(STRATEGY_REGISTRY)) {
       try { allSignals.push(...strategy.analyze(data)) } catch { /* skip */ }
@@ -18,8 +22,10 @@ export class SignalEngine {
   }
 }
 
-export async function quickAssess(de: AshareEngine, code: string) {
-  const data = await gatherAll(de, code)
+export async function quickAssess(de: AshareEngine, code: string, ref?: InstrumentRef) {
+  const data = ref
+    ? await gatherStrategyData(de, ref)
+    : await gatherStrategyDataFromCode(de, code)
   const allSignals: Signal[] = []
   const byStrategy = Object.entries(STRATEGY_REGISTRY).map(([key, strat]) => {
     const sigs = strat.analyze(data)

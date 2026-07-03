@@ -15,6 +15,7 @@ import { PolygonDriver } from './polygon/driver.js'
 import { TiingoDriver } from './tiingo/driver.js'
 import { FmpDriver } from './fmp/driver.js'
 import { YahooUsDriver } from './yahoo_us/driver.js'
+import { createYahooRegionalDrivers } from './yahoo_regional/register.js'
 import { BinanceDriver } from './binance/driver.js'
 import { OkxDriver } from './okx/driver.js'
 import { EfinanceDriver } from './efinance/driver.js'
@@ -40,6 +41,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new NeteaseDriver(),
     new XueqiuDriver(),
     new YahooUsDriver(),
+    ...createYahooRegionalDrivers(),
     new OkxDriver(),
   ]
   for (const d of drivers) registry.register(d)

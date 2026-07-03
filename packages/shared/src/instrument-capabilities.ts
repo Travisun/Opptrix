@@ -47,7 +47,7 @@ const CRYPTO_SPOT: ApplicationCapability[] = [
 ]
 
 const HK_EQUITY: ApplicationCapability[] = [
-  'quote', 'snapshot', 'chart_daily',
+  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'discover_mine',
 ]
 
 const REGIONAL_EQUITY: ApplicationCapability[] = [

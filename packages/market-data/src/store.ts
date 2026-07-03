@@ -153,9 +153,9 @@ export class MarketDataStore {
       const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap'])
       const usJobs = new Set(['us_list'])
       const cryptoJobs = new Set(['crypto_list'])
-      const jpJobs = new Set(['jp_list'])
-      const krJobs = new Set(['kr_list'])
-      const hkJobs = new Set(['hk_list'])
+      const jpJobs = new Set(['jp_list', 'jp_quotes'])
+      const krJobs = new Set(['kr_list', 'kr_quotes'])
+      const hkJobs = new Set(['hk_list', 'hk_quotes'])
       const baseCount = cryptoJobs.has(row.job_name)
         ? cryptoCount
         : usJobs.has(row.job_name)
@@ -1403,6 +1403,13 @@ export class MarketDataStore {
       ? `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = 'US' AND status = 'active' ORDER BY code`
       : `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = 'US' ORDER BY code`
     return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+  }
+
+  listRegionalCodes(market: 'JP' | 'KR' | 'HK', activeOnly = true): string[] {
+    const sql = activeOnly
+      ? `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = ? AND status = 'active' ORDER BY code`
+      : `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = ? ORDER BY code`
+    return (this.db.prepare(sql).all(market) as { code: string }[]).map(r => r.code)
   }
 
   searchUsInstruments(keyword: string, limit = 30): { code: string; name: string | null }[] {

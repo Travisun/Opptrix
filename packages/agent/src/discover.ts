@@ -5,6 +5,8 @@ import {
   discoverPrescreenMode,
   getDiscoverProfileDefinition,
   resolveDiscoverScorecard,
+  buildDiscoverMiningSystemPrompt,
+  discoverProfileAssetLabel,
   type DiscoverProfileReadiness,
 } from '@opptrix/shared'
 import type { ResearchHub } from '@opptrix/research-hub'
@@ -78,8 +80,52 @@ function isFilterDiscoverProfile(profile: DiscoverStrategyProfile): boolean {
   return discoverPrescreenMode(profile) === 'list_filter'
 }
 
-function isRegionalEquityProfile(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'jp_equity' || profile === 'kr_equity' || profile === 'hk_equity'
+function miningOutputExample(profile: DiscoverStrategyProfile): {
+  code: string
+  name: string
+  highlights: string[]
+  risks: string[]
+} {
+  const group = getDiscoverProfileDefinition(profile)?.miningToolGroup
+  if (profile === 'cn_etf' || group === 'cn_etf') {
+    return {
+      code: '510300',
+      name: '沪深300ETF',
+      highlights: ['折溢价 0.2%', '规模 800亿'],
+      risks: ['跟踪误差'],
+    }
+  }
+  if (group === 'us_equity') {
+    return {
+      code: 'AAPL',
+      name: 'Apple',
+      highlights: ['Technology', '大市值'],
+      risks: ['汇率与宏观波动'],
+    }
+  }
+  if (group === 'crypto_spot') {
+    return {
+      code: 'BTC/USDT',
+      name: 'Bitcoin',
+      highlights: ['USDT 计价', '高流动性'],
+      risks: ['7×24 高波动'],
+    }
+  }
+  if (group === 'jp_equity') {
+    return { code: '7203', name: 'Toyota', highlights: ['汽车龙头', '大市值'], risks: ['汇率与宏观波动'] }
+  }
+  if (group === 'kr_equity') {
+    return { code: '005930', name: 'Samsung', highlights: ['半导体', '大市值'], risks: ['行业周期波动'] }
+  }
+  if (group === 'hk_equity') {
+    return { code: '00700', name: 'Tencent', highlights: ['互联网龙头', '大市值'], risks: ['政策与流动性'] }
+  }
+  return {
+    code: '600519',
+    name: '贵州茅台',
+    highlights: ['PE 18x', 'ROE 30%'],
+    risks: ['行业景气波动'],
+  }
 }
 
 function extractScreenParams(
@@ -670,13 +716,7 @@ export class DiscoverRunner {
     profile: DiscoverStrategyProfile = defaultDiscoverProfile(),
   ): Promise<DiscoverParsedPlan> {
     const factorList = discoverFactorsForProfile(profile).join(', ')
-    const assetLabel = profile === 'cn_etf'
-      ? 'A 股 ETF 筛选'
-      : profile === 'us_equity'
-        ? '美股列表筛选'
-        : profile === 'crypto_spot'
-          ? 'Crypto 交易对筛选'
-          : 'A 股选股策略'
+    const assetLabel = discoverProfileAssetLabel(profile)
     const jsonHint = isFilterDiscoverProfile(profile)
       ? '{"strategy_title":"标题","screen_params":{"keyword":"AAPL"},"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
       : '{"strategy_title":"标题","conditions":[{"factor":"pe","op":"<=","value":25}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
@@ -716,14 +756,12 @@ export class DiscoverRunner {
     signal?: AbortSignal,
   ): Promise<{ strategy_summary: string; items: Array<Partial<DiscoverFinalItem> & { code: string; name: string }> }> {
     const profile = plan.profile ?? defaultDiscoverProfile()
-    const isEtf = profile === 'cn_etf'
-    const isUs = profile === 'us_equity'
-    const isCrypto = profile === 'crypto_spot'
-    const isRegional = isRegionalEquityProfile(profile)
-    const regionalDef = isRegional ? getDiscoverProfileDefinition(profile) : undefined
+    const def = getDiscoverProfileDefinition(profile)
+    const prescreenMode = discoverPrescreenMode(profile)
+    const miningGroup = def?.miningToolGroup
 
     let candidateTable: string
-    if (isEtf) {
+    if (prescreenMode === 'etf_screen') {
       candidateTable = formatEtfCandidateTable(candidates.map(c => ({
         code: c.code,
         name: c.name,
@@ -731,23 +769,28 @@ export class DiscoverRunner {
         scale_yi: c.key_factors.scale_yi ?? null,
         key_factors: c.key_factors,
       })))
-    } else if (isUs || isRegional) {
-      candidateTable = formatUsCandidateTable(candidates.map(c => ({
-        code: c.code,
-        name: c.name,
-        exchange: c.exchange ?? null,
-      })))
-    } else if (isCrypto) {
-      candidateTable = formatCryptoCandidateTable(candidates.map(c => {
-        const parts = c.code.includes('/') ? c.code.split('/') : [c.code, 'USDT']
-        return {
+    } else if (prescreenMode === 'list_filter') {
+      if (miningGroup === 'crypto_spot') {
+        candidateTable = formatCryptoCandidateTable(candidates.map(c => {
+          const parts = c.code.includes('/') ? c.code.split('/') : [c.code, 'USDT']
+          return {
+            code: c.code,
+            name: c.name,
+            base: parts[0] ?? c.code,
+            quote: parts[1] ?? 'USDT',
+          }
+        }))
+      } else if (miningGroup === 'us_equity' || miningGroup === 'jp_equity'
+        || miningGroup === 'kr_equity' || miningGroup === 'hk_equity') {
+        candidateTable = formatUsCandidateTable(candidates.map(c => ({
           code: c.code,
           name: c.name,
-          base: parts[0] ?? c.code,
-          quote: parts[1] ?? 'USDT',
-        }
-      }))
-    } else {
+          exchange: c.exchange ?? null,
+        })))
+      } else {
+        throw new Error('该资产类型暂不支持挖掘初选')
+      }
+    } else if (prescreenMode === 'factor_screen') {
       const codes = candidates.map(c => c.code)
       let enriched = candidates.map(c => ({
         ...c,
@@ -773,69 +816,29 @@ export class DiscoverRunner {
       } catch { /* optional enrichment */ }
 
       candidateTable = formatEquityCandidateTable(enriched)
+    } else {
+      throw new Error('该资产类型暂不支持挖掘初选')
     }
 
+    const example = miningOutputExample(profile)
     const outputSchema = JSON.stringify({
       strategy_summary: '策略执行摘要',
       items: [{
         rank: 1,
-        code: isEtf ? '510300' : isUs ? 'AAPL' : isCrypto ? 'BTC/USDT' : isRegional ? '7203' : '600519',
-        name: isEtf ? '沪深300ETF' : isUs ? 'Apple' : isCrypto ? 'Bitcoin' : isRegional ? 'Toyota' : '贵州茅台',
+        code: example.code,
+        name: example.name,
         match_score: 90,
         thesis: '符合策略的核心逻辑',
-        highlights: isEtf ? ['折溢价 0.2%', '规模 800亿'] : isUs ? ['Technology', '大市值'] : isCrypto ? ['USDT 计价', '高流动性'] : ['PE 18x', 'ROE 30%'],
-        risks: isEtf ? ['跟踪误差'] : isUs ? ['汇率与宏观波动'] : isCrypto ? ['7×24 高波动'] : ['行业景气波动'],
+        highlights: example.highlights,
+        risks: example.risks,
       }],
     }, null, 0)
 
-    const systemPrompt = isEtf
-      ? [
-        '你是 Opptrix ETF 挖掘 Agent。策略条件已完成本地 ETF 初选。',
-        '可调用：get_market_db_status、get_local_etf_screen_schema、screen_local_etfs、get_etf_scorecard、get_etf_snapshot、get_etf_nav、get_etf_holdings',
-        '禁止编造数字；只能从候选列表中选 ETF。最终输出严格 JSON：',
-        outputSchema,
-        `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究解读。`,
-      ].join('\n')
-      : isUs
-        ? [
-          '你是 Opptrix 美股挖掘 Agent。候选来自本地 us_list 初选。',
-          '可调用：get_market_db_status、get_local_us_screen_schema、screen_local_us_stocks、search_us_stocks、get_us_stock_snapshot、get_us_stock_profile、get_us_stock_financials、get_us_stock_kline',
-          '禁止编造数字；禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的深入。',
-          '只能从候选列表中选股。最终必须输出严格 JSON：',
-          outputSchema,
-          `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
-        ].join('\n')
-        : isRegional
-          ? [
-            `你是 Opptrix ${regionalDef?.label ?? profile}挖掘 Agent。候选来自本地列表初选。`,
-            '可调用：get_market_db_status、search_local_instruments，以及本 Profile 对应的 get_local_*_screen_schema / screen_local_*_stocks。',
-            '禁止编造数字；禁止调用 A 股专用工具（evaluate_stock、get_strategy_signal、batch_stock_snapshots 等）。',
-            '只能从候选列表中选股。最终必须输出严格 JSON：',
-            outputSchema,
-            `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
-          ].join('\n')
-          : isCrypto
-          ? [
-            '你是 Opptrix Crypto 挖掘 Agent。候选来自本地 crypto_list 初选。',
-            '可调用：get_market_db_status、get_local_crypto_screen_schema、screen_local_crypto_pairs、search_crypto_pairs、get_crypto_snapshot、get_crypto_kline、get_crypto_quote',
-            '禁止编造数字；7×24 市场波动大，仅做研究解读。只能从候选列表中选交易对。',
-            '最终必须输出严格 JSON：',
-            outputSchema,
-            `最终 items 不超过 ${plan.final_top_n}，按 match_score 降序。不要推荐买卖。`,
-          ].join('\n')
-          : [
-        '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
-        '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-        '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_stock_snapshots',
-        '2) 不足时对 shortlisted 单股：get_stock_detail / evaluate_stock / get_strategy_signal / institution_rating',
-        '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
-        '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',
-        '禁止编造数字；禁止对全部候选逐只 get_stock_detail。',
-        '只能从候选列表中选股。最终必须输出严格 JSON（可用 ```json 包裹），格式：',
-        outputSchema,
-        `最终 items 数量不超过 ${plan.final_top_n}，按 match_score 降序。`,
-        '不要推荐买卖，仅研究与数据解读。',
-      ].join('\n')
+    const systemPrompt = buildDiscoverMiningSystemPrompt({
+      profile,
+      finalTopN: plan.final_top_n,
+      outputSchema,
+    })
 
     const messages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },

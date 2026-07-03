@@ -22,6 +22,7 @@ import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from './tushare-bulk.js'
+import { getRegionalListSeeds, isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
 
 export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
 
@@ -171,7 +172,12 @@ export class MarketDataSyncEngine {
           case 'hk_list':
           case 'jp_list':
           case 'kr_list':
-            await this.syncRegionalListStub(runId, job, options, mode)
+            await this.syncRegionalList(runId, job, options, mode)
+            break
+          case 'hk_quotes':
+          case 'jp_quotes':
+          case 'kr_quotes':
+            await this.syncRegionalQuotes(runId, job, options, mode)
             break
           case 'financials':
             await this.syncFinancials(runId, mode, options, 'annual')
@@ -264,6 +270,38 @@ export class MarketDataSyncEngine {
     const all = this.store.listCryptoCodes(true)
     if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
     return all
+  }
+
+  private regionalCodes(market: 'JP' | 'KR' | 'HK', options: SyncOptions): string[] {
+    const all = this.store.listRegionalCodes(market, true)
+    if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
+    return all
+  }
+
+  private pendingRegionalCodes(
+    job: string,
+    market: 'JP' | 'KR' | 'HK',
+    options: SyncOptions,
+    mode: SyncMode,
+    scopeKey: string,
+    ttlDays?: number,
+  ): string[] {
+    const all = this.regionalCodes(market, options)
+    return all.filter(code => {
+      const errored = this.store.isJobError(job, code, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, code, scopeKey)) return false
+        if (errored) return false
+        return true
+      }
+      if (mode === 'full') return true
+      if (this.store.isJobDone(job, code, scopeKey)) {
+        const syncedAt = this.store.jobProgressSyncedAt(job, code, scopeKey)
+        if (shouldRefresh(syncedAt, ttlDays, mode)) return true
+        return false
+      }
+      return true
+    })
   }
 
   private pendingCryptoCodes(
@@ -772,22 +810,105 @@ export class MarketDataSyncEngine {
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
   }
 
-  /** HK/JP/KR list sync — Provider 筹备中，先占位并标记 cursor */
-  private async syncRegionalListStub(
+  /** HK/JP/KR list sync — MVP 种子列表；后续可接 vendor API */
+  private async syncRegionalList(
     runId: number,
     job: string,
     options: SyncOptions,
     mode: SyncMode,
   ): Promise<void> {
+    if (!isRegionalListJob(job)) {
+      throw new Error(`未知区域列表任务: ${job}`)
+    }
+    const market = regionalListJobMarket(job)!
     const cfg = this.cfg(job, options)
-    if (mode === 'incremental' && cfg.ttlDays) {
+    const existing = this.store.countRegionalEquityInstruments(market)
+
+    if (mode === 'incremental' && cfg.ttlDays && existing > 0) {
       const last = this.store.getCursorLastSuccess(job)
       if (last && daysSince(last) < cfg.ttlDays) {
         this.finishJobEmpty(runId, job, options, `${job} 在 TTL 内，跳过`)
         return
       }
     }
-    this.finishJobEmpty(runId, job, options, `${job} Provider 筹备中，暂无新增标的`)
+
+    const seeds = getRegionalListSeeds(market)
+    let total = seeds.length
+    if (options.maxStocks) total = Math.min(total, options.maxStocks)
+    let success = 0
+    for (const [i, item] of seeds.entries()) {
+      if (options.maxStocks && i >= options.maxStocks) break
+      const code = String(item.code ?? '').trim()
+      if (!code) continue
+      this.store.upsertInstrument({
+        code,
+        market,
+        assetClass: 'EQUITY',
+        name: String(item.name ?? code),
+        exchange: item.exchange ?? null,
+        status: 'active',
+        extra: item.industry ? JSON.stringify({ industry: item.industry }) : null,
+      })
+      this.markDone(job, code, '')
+      success++
+      if (i % 20 === 0) {
+        options.onProgress?.({ job, current: i + 1, total })
+      }
+    }
+    options.onProgress?.({ job, current: success, total })
+    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  /** HK/JP/KR quotes — 经 US adapter 拉取实时价写入 stock_quotes_daily */
+  private async syncRegionalQuotes(
+    runId: number,
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+  ): Promise<void> {
+    if (!isRegionalQuotesJob(job)) {
+      throw new Error(`未知区域行情任务: ${job}`)
+    }
+    const market = regionalQuotesJobMarket(job)!
+    const cfg = this.cfg(job, options)
+    const tradeDate = usTodayString()
+    const universe = this.regionalCodes(market, options)
+    const codes = this.pendingRegionalCodes(job, market, options, mode, tradeDate, cfg.ttlDays)
+
+    if (codes.length === 0) {
+      const hint = universe.length === 0
+        ? `尚无 ${market} 列表，请先准备 ${market} 数据包`
+        : `今日 ${market} 截面已齐，跳过`
+      this.finishJobEmpty(runId, job, options, hint)
+      return
+    }
+
+    let success = 0
+    let error = 0
+
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job, current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(
+          () => this.de.regionalRealtime(market, code),
+          'default',
+        )
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'regionalRealtime failed')
+        this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
+        this.markDone(job, code, tradeDate)
+        success++
+      } catch (e) {
+        error++
+        this.markError(job, code, tradeDate)
+        this.store.logError(runId, job, code, e instanceof Error ? e.message : String(e))
+      }
+    })
+
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
   }
 
   private async syncCryptoQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
