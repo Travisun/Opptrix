@@ -324,3 +324,39 @@ test('parseYahooSearchQuotes extracts symbols', async () => {
   assert.equal(rows.length, 1)
   assert.equal(rows[0].symbol, '0700.HK')
 })
+
+test('inferNewsSourceHints maps group titles to markets', async () => {
+  const { inferNewsSourceHints, scoreNewsItemForInstrument } = await import('../packages/shared/dist/news-source-hints.js')
+  const cn = inferNewsSourceHints('A股要闻')
+  assert.ok(cn.market_hints.includes('CN'))
+  assert.ok(cn.relevance > 0)
+  const us = inferNewsSourceHints('美股科技 RSS')
+  assert.ok(us.market_hints.includes('US'))
+  const score = scoreNewsItemForInstrument(
+    { market: 'JP', assetClass: 'EQUITY', symbol: '7203' },
+    { title: '日股晨报', sort_order: 0 },
+  )
+  assert.ok(score > 0.5)
+})
+
+test('agent system rules include analysis and news playbooks', async () => {
+  const { buildAgentSystemRules, instrumentAnalysisStepsForRef } = await import('../packages/shared/dist/agent-prompt-guide.js')
+  const rules = buildAgentSystemRules()
+  assert.ok(rules.includes('【标的分析路径'))
+  assert.ok(rules.includes('【资讯调阅'))
+  assert.ok(rules.includes('market_hints'))
+  const cnSteps = instrumentAnalysisStepsForRef({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' })
+  assert.ok(cnSteps.includes('evaluate_instrument'))
+  const usSteps = instrumentAnalysisStepsForRef({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' })
+  assert.ok(usSteps.includes('get_instrument_indicators'))
+})
+
+test('discover factor_screen prompt includes news retrieval playbook', () => {
+  const prompt = buildDiscoverMiningSystemPrompt({
+    profile: 'cn_equity',
+    finalTopN: 10,
+    outputSchema: '{}',
+  })
+  assert.ok(prompt.includes('【资讯调阅'))
+  assert.ok(prompt.includes('list_news_groups'))
+})

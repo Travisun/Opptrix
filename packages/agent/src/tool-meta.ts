@@ -522,31 +522,31 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_news_center_status: {
     hubFeature: 'news_center_status',
     miningEligible: false,
-    usageGuide: '用户询问订阅资讯、RSS 要闻或新闻中心内容前调用；确认数据是否已刷新、订阅规模与文章总量。',
+    usageGuide: '用户询问订阅资讯、RSS 要闻或新闻中心内容前调用；确认数据是否已刷新、订阅规模与文章总量。有标的上下文时，下一步按标的 market 选分组。',
     compliance: '只读；无参数；stale=true 时告知用户列表可能不是最新，勿编造文章。',
   },
   list_news_groups: {
     hubFeature: 'news_groups_list',
     miningEligible: false,
-    usageGuide: '需要按用户自定义分组浏览资讯时，先获取 group_id；与 list_news_articles(view=group) 配合。',
-    compliance: '只读；分组 id 须原样传入 list_news_articles；未分组订阅用 group_id=__ungrouped__。',
+    usageGuide: '按标的类型选资讯分组：阅读返回的 market_hints 与 relevance，优先与标的 market 一致的分组（如 CN 标的→含「A股/沪深」分组）；不足时交叉查 MACRO/GLOBAL 分组。',
+    compliance: '只读；分组 id 须原样传入 list_news_articles；未分组订阅用 group_id=__ungrouped__；同一任务最多调用 1 次。',
   },
   list_news_sources: {
     hubFeature: 'news_sources_list',
     miningEligible: false,
-    usageGuide: '需要按订阅源（Twitter、媒体 RSS 等）筛选文章时，先获取 subscription_id。',
-    compliance: '只读；subscription_id 须来自本工具返回；与 list_news_articles(view=source) 配合。',
+    usageGuide: '在已选分组内按 market_hints / title 关键词筛选 enabled 来源；与 list_news_articles(view=source) 配合；优先 relevance 高的来源。',
+    compliance: '只读；subscription_id 须来自本工具返回；同一任务最多调用 1 次。',
   },
   list_news_articles: {
     hubFeature: 'news_articles_list',
     miningEligible: false,
-    usageGuide: '浏览资讯时间线、某分组或某来源下的文章标题与短摘要；用户问「订阅里有什么」「最近要闻」时使用。需正文再调 get_news_article。',
+    usageGuide: '标的相关资讯：优先 view=group + 最匹配 group_id；信息不足时交叉调阅 MACRO/GLOBAL 分组或 view=timeline 兜底。用户问「订阅里有什么」且无标的时用 timeline。',
     compliance: '只读；limit ≤50；view=group 须 group_id，view=source 须 subscription_id；列表无正文，禁止臆造 article_id；翻页用 cursor。',
   },
   get_news_article: {
     hubFeature: 'news_article_detail',
     miningEligible: false,
-    usageGuide: '用户点名某条资讯、需要读全文或做深度解读时，用 list 返回的 article_id 拉取正文。',
+    usageGuide: '仅对 list 筛出的最相关 1–3 篇拉正文做深度解读；用户点名某条资讯时使用。',
     compliance: 'article_id 必填且须来自 list_news_articles；只读；正文已压缩空白；无正文时可能仅返回标题。',
   },
   get_current_time: {

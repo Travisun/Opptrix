@@ -14,7 +14,7 @@ import {
   getEnrichmentStore,
   queueArticleEnrichment,
 } from '@opptrix/article-enrichment'
-import { resolveProjectRoot } from '@opptrix/shared'
+import { resolveProjectRoot, inferNewsSourceHints } from '@opptrix/shared'
 import { ok, fail, type ResearchResult } from '@opptrix/shared'
 
 type NewsListView = 'timeline' | 'group' | 'source'
@@ -63,12 +63,13 @@ export function newsGroupsList(t0: number): ResearchResult {
     title: g.title,
     sort_order: g.sort_order,
     subscription_count: subs.filter(s => s.group_id === g.id).length,
+    ...inferNewsSourceHints(g.title),
   }))
   const ungroupedCount = subs.filter(s => !s.group_id).length
   return ok({
     groups: items,
     ungrouped_subscription_count: ungroupedCount,
-    hint: '按分组浏览文章时 list_news_articles 传 view=group 与 group_id；未分组订阅用 group_id=__ungrouped__',
+    hint: '按分组浏览文章时 list_news_articles 传 view=group 与 group_id；未分组订阅用 group_id=__ungrouped__；market_hints 供 Agent 按标的 market 优先选择',
   }, `资讯分组 ${items.length} 个`, t0)
 }
 
@@ -86,10 +87,11 @@ export function newsSourcesList(t0: number): ResearchResult {
     group_title: s.group_id ? groupTitle.get(s.group_id) ?? null : null,
     last_fetched_at: s.last_fetched_at ?? null,
     last_error: s.last_error ?? null,
+    ...inferNewsSourceHints(s.title, s.url),
   }))
   return ok({
     sources: items,
-    hint: '按来源浏览文章时 list_news_articles 传 view=source 与 subscription_id',
+    hint: '按来源浏览文章时 list_news_articles 传 view=source 与 subscription_id；market_hints/relevance 供 Agent 按标的优先筛选来源',
   }, `资讯来源 ${items.length} 个`, t0)
 }
 

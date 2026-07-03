@@ -2,6 +2,7 @@ import type { DiscoverStrategyProfile } from './discover-profile-types.js'
 import { getDiscoverProfileDefinition } from './discover-profile-registry.js'
 import { discoverMiningToolNamesForProfile } from './discover-mining-tools.js'
 import { discoverPrescreenMode } from './discover-profiles.js'
+import { buildInstrumentAnalysisPlaybook, buildNewsRetrievalPlaybook } from './agent-prompt-guide.js'
 
 /** 策略解析 / 执行提示中的资产类型描述 */
 export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): string {
@@ -57,7 +58,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
       : group === 'us_equity'
         ? '美股'
         : label
-    const analyticsHint = 'shortlisted 候选可用 evaluate_instrument / get_instrument_strategy_signal / get_instrument_indicators 做技术分析与评估'
+    const analyticsHint = 'shortlisted 候选按标的 market 选用 evaluate_instrument / get_instrument_strategy_signal / get_instrument_indicators；资讯需求按【资讯调阅】优先匹配分组 market_hints'
     const extra = group === 'crypto_spot'
       ? `7×24 市场波动大，仅做研究解读。 shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
       : group === 'us_equity'
@@ -81,6 +82,9 @@ export function buildDiscoverMiningSystemPrompt(input: {
       '2) 不足时对 shortlisted 单股：get_instrument_snapshot / evaluate_instrument / get_instrument_strategy_signal / institution_rating',
       '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
       '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',
+      '5) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
+      buildInstrumentAnalysisPlaybook(),
+      buildNewsRetrievalPlaybook(),
       toolLine,
       '禁止编造数字；禁止对全部候选逐只 get_instrument_snapshot。',
       footer.replace('必须输出严格 JSON', '必须输出严格 JSON（可用 ```json 包裹）'),

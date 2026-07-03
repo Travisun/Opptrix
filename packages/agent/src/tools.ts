@@ -17,6 +17,7 @@ import {
   buildUnifiedInstrumentTools,
   CHAT_MCP_TOOL_NAMES,
 } from './unified-mcp-tools.js'
+import { buildAgentSystemRules } from '@opptrix/shared'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -109,23 +110,7 @@ export class ToolRegistry {
   systemPrompt() {
     return [
       '你是 Opptrix 专业多市场投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
-      '规则：',
-      '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
-      '- 任务开始先 get_market_db_status；本地库不足时用在线工具或 trigger_market_db_sync（谨慎）',
-      '- 跨市场标的统一用 InstrumentRef（market + symbol）；不确定能力时先 get_instrument_capabilities',
-      '- 行情/快照/K 线：get_instrument_quotes / get_instrument_snapshot / get_instrument_chart；A 股初选后批量截面用 batch_instrument_snapshots',
-      '- 本地搜索：search_local_instruments（可用 markets 过滤市场；A 股替代 search_stocks）',
-      '- 指标/评估/策略：get_instrument_indicators / evaluate_instrument / get_instrument_strategy_signal；历史验证用 verify_instrument_strategy',
-      '- A 股筹码分布：get_instrument_cyq（仅 CN）；非 A 股 evaluate_instrument 为技术面评估（日K+指标），不含估值/资金流因子；A 股仍走完整因子评分卡',
-      '- A 股因子初选仍用 get_local_universe_screen_schema + screen_local_universe；按行业选股用 list_local_industries + screen_local_industry_stocks',
-      '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
-      '- 不推荐具体买卖，仅提供研究与数据解读',
-      '- 可组合多个工具由浅入深补全数据',
-      '- 用户关注列表用 get_watchlist；实盘持仓用 get_portfolio_holdings / portfolio_summary；交易流水用 portfolio_trades',
-      '- 资讯订阅（新闻中心 RSS）：先 get_news_center_status；list_news_groups / list_news_sources 查分组与来源；list_news_articles 按时间线/分组/来源浏览（仅摘要）；正文用 get_news_article(article_id)',
-      '- 报告日期与时区用 get_current_time；环境/版本用 get_system_info；默认评分卡与模型用 get_app_settings；数据目录与项目路径用 get_project_info',
-      '- 外部集成（Tushare）状态用 get_integration_status',
-      '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
+      buildAgentSystemRules(),
     ].join('\n')
   }
 
