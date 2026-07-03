@@ -151,7 +151,7 @@ export function useStockMention(items: WatchlistItem[]) {
     moveActive,
     selectActive,
     applySelection,
-    clampActiveIndex: clampMentionActiveIndex,
+    clampActiveIndex,
     setActiveIndex,
     setMentionActiveIndex: setActiveIndex,
   }

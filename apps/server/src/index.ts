@@ -430,6 +430,20 @@ app.get('/api/data/providers', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{
+  Body: {
+    market_group: string
+    provider_ids: string[]
+  }
+}>('/api/data/providers/reorder', async (req) => {
+  const body = req.body ?? { market_group: '', provider_ids: [] as string[] }
+  const r = await hub.dispatch('provider_reorder', {
+    market_group: body.market_group,
+    provider_ids: body.provider_ids,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.get<{ Params: { id: string } }>('/api/data/providers/:id/config', async (req) => {
   const r = await hub.dispatch('provider_config', { provider_id: req.params.id })
   return { success: r.success, data: r.data, message: r.message }
@@ -441,6 +455,7 @@ app.put<{
     enabled?: boolean
     priority_mode?: 'manifest' | 'custom'
     priority?: number | null
+    sort_order?: number | null
     extra?: Record<string, unknown>
   }
 }>('/api/data/providers/:id/config', async (req) => {
@@ -450,6 +465,7 @@ app.put<{
     enabled: body.enabled,
     priority_mode: body.priority_mode,
     priority: body.priority,
+    sort_order: body.sort_order,
     extra: body.extra,
   })
   return { success: r.success, data: r.data, message: r.message }

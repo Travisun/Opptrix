@@ -112,11 +112,11 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
     boxShadow: 'none',
     ':hover': {
-      borderColor: opptrixCssVars.borderStrong,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
     },
     ':focus-within': {
       backgroundColor: opptrixCssVars.canvas,
-      borderColor: opptrixCssVars.borderStrong,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
       boxShadow: opptrixCssVars.composerFloatShadowFocus,
     },
   },
@@ -281,13 +281,13 @@ export default function ChatComposer({
     moveActive: moveMentionActive,
     selectActive: selectMentionActive,
     applySelection: applyMentionSelection,
-    clampActiveIndex: clampMentionActiveIndex,
+    clampActiveIndex,
     setMentionActiveIndex,
   } = useStockMention(watchlistItems)
 
   useEffect(() => {
-    clampMentionActiveIndex()
-  }, [clampMentionActiveIndex, mentionMatches.length])
+    clampActiveIndex()
+  }, [clampActiveIndex, mentionMatches.length])
 
   const syncHeight = useCallback(() => {
     const el = textareaRef.current

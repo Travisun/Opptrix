@@ -10,6 +10,7 @@ import {
   SearchRegular,
   SettingsRegular,
   TranslateRegular,
+  ServerRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -32,6 +33,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'models', label: '模型', icon: BotRegular },
   { id: 'market_data', label: '基础数据', icon: DatabaseRegular },
+  { id: 'data_providers', label: '数据源', icon: ServerRegular },
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
@@ -362,7 +364,9 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'models':
       return '配置 LLM 提供商与可用模型'
     case 'market_data':
-      return '本地行情库、数据源与同步'
+      return '本地行情库、同步与导入导出'
+    case 'data_providers':
+      return '管理各市场行情与资讯数据提供商'
     case 'discover_strategies':
       return '查看内置策略、管理自编策略与复制编辑'
     case 'news_feed':

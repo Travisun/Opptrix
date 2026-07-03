@@ -5,6 +5,7 @@
 import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { resolveElectronExecutable } from './ensure-electron.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
@@ -50,10 +51,11 @@ process.on('SIGTERM', () => {
 await waitForUrl(`http://127.0.0.1:${process.env.STOCK_RESEARCH_PORT ?? 8711}/api/health`)
 await waitForUrl('http://127.0.0.1:5173')
 
-const electron = spawn('npx', ['electron', '.'], {
+const electronPath = resolveElectronExecutable()
+const electron = spawn(electronPath, ['.'], {
   cwd: DESKTOP_ROOT,
   stdio: 'inherit',
-  shell: true,
+  shell: false,
   env: {
     ...process.env,
     VITE_DESKTOP: '1',

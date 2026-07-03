@@ -664,6 +664,7 @@ export async function saveProviderConfig(
     enabled?: boolean
     priority_mode?: 'manifest' | 'custom'
     priority?: number | null
+    sort_order?: number | null
     extra?: Record<string, unknown>
   },
 ) {
@@ -675,6 +676,20 @@ export async function saveProviderConfig(
       body: JSON.stringify(payload),
     },
   )
+}
+
+export async function reorderProviderCatalog(marketGroup: string, providerIds: string[]) {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: import('../types/provider').ProviderCatalogResponse
+    message?: string
+  }>('/data/providers/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ market_group: marketGroup, provider_ids: providerIds }),
+  })
+  if (!resp.data) throw new Error(resp.message ?? '无法更新优先级')
+  return resp.data
 }
 
 export async function getProviderBindingOverrides(providerId: string) {

@@ -13,6 +13,10 @@ if (isDesktopApp()) {
 if (isElectron()) {
   document.documentElement.classList.add('opptrix-electron')
   document.documentElement.classList.add('opptrix-electron-startup')
+  window.setTimeout(() => {
+    document.documentElement.classList.remove('opptrix-electron-startup')
+    window.electronAPI?.signalShellReady?.()
+  }, 6000)
 }
 
 function ThemedApp() {

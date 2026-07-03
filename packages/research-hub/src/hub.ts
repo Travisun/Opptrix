@@ -210,6 +210,7 @@ export class ResearchHub {
         case 'provider_list': return ok(this.de.listProviders(), '数据源列表', t0)
         case 'provider_config': return this.providerConfig(params, t0)
         case 'provider_config_save': return this.providerConfigSave(params, t0)
+        case 'provider_reorder': return this.providerReorder(params, t0)
         case 'provider_test': return this.providerTest(params, t0)
         case 'provider_binding_overrides': return this.providerBindingOverrides(params, t0)
         case 'provider_binding_override_save': return this.providerBindingOverrideSave(params, t0)
@@ -1653,10 +1654,31 @@ export class ResearchHub {
         priority: params.priority !== undefined
           ? (params.priority === null ? null : Number(params.priority))
           : undefined,
+        sortOrder: params.sort_order !== undefined
+          ? (params.sort_order === null ? null : Number(params.sort_order))
+          : undefined,
         extra: (params.extra as Record<string, unknown> | undefined)
           ?? (params.token !== undefined ? { token: String(params.token).trim() } : undefined),
       })
       return ok(saved, '已保存', t0)
+    } catch (e) {
+      return fail(String(e), t0)
+    }
+  }
+
+  private providerReorder(params: Record<string, unknown>, t0: number) {
+    const marketGroup = String(params.market_group ?? params.marketGroup ?? '')
+    const providerIds = Array.isArray(params.provider_ids)
+      ? params.provider_ids.map(String)
+      : Array.isArray(params.providerIds)
+        ? params.providerIds.map(String)
+        : []
+    if (!marketGroup || !providerIds.length) {
+      return fail('market_group 与 provider_ids 必填', t0)
+    }
+    try {
+      const catalog = this.de.reorderProviderMarketGroup(marketGroup, providerIds)
+      return ok(catalog, '优先级已更新', t0)
     } catch (e) {
       return fail(String(e), t0)
     }

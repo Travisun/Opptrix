@@ -126,6 +126,7 @@ export class ProviderCatalogService {
       enabled?: boolean
       priorityMode?: 'manifest' | 'custom'
       priority?: number | null
+      sortOrder?: number | null
       extra?: Record<string, unknown>
     },
   ): PublicProviderRuntime {
@@ -137,6 +138,7 @@ export class ProviderCatalogService {
       enabled: patch.enabled ?? current.enabled,
       priorityMode: patch.priorityMode ?? current.priorityMode,
       priority: patch.priority !== undefined ? patch.priority : current.priority,
+      sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : current.sortOrder,
       extra: patch.extra,
     })
 
@@ -144,6 +146,37 @@ export class ProviderCatalogService {
     const pub = this.getPublic(providerId)
     if (!pub) throw new Error(`保存后无法读取: ${providerId}`)
     return pub
+  }
+
+  reorderMarketGroup(marketGroup: string, providerIds: string[]): ProviderCatalogResponse {
+    const catalog = this.listCatalog()
+    const group = catalog.groups.find(g => g.marketGroup === marketGroup)
+    if (!group) throw new Error(`未知市场: ${marketGroup}`)
+
+    const existingIds = new Set(group.providers.map(p => p.providerId))
+    if (providerIds.length !== group.providers.length) {
+      throw new Error('排序列表不完整')
+    }
+    for (const id of providerIds) {
+      if (!existingIds.has(id)) {
+        throw new Error(`数据源 ${id} 不属于 ${marketGroup}`)
+      }
+    }
+
+    const n = providerIds.length
+    for (let i = 0; i < n; i++) {
+      const providerId = providerIds[i]!
+      const current = this.configStore.getRuntime(providerId)
+      this.configStore.save(providerId, {
+        enabled: current.enabled,
+        priorityMode: 'custom',
+        priority: (n - i) * 10,
+        sortOrder: i,
+      })
+    }
+
+    this.registry.refreshPriorities(this.configStore)
+    return this.listCatalog()
   }
 
   async testConnection(providerId: string, overrides?: Record<string, unknown>) {

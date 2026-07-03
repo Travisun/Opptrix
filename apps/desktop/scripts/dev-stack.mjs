@@ -24,7 +24,7 @@ await waitForHealth()
 const vite = spawn('npm', ['run', 'dev', '-w', 'opptrix-client'], {
   cwd: REPO_ROOT,
   stdio: 'inherit',
-  shell: true,
+  shell: false,
   env: {
     ...process.env,
     API_PROXY_TARGET: 'http://127.0.0.1:8711',

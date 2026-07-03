@@ -34,7 +34,6 @@ import {
 } from '../../api/client'
 import type { MarketDataSyncState } from '../../types/market'
 import { SettingsGroup, SettingsPanelHeader, SettingsStaticBlock } from './SettingsPrimitives'
-import ProviderSettingsCatalog from './ProviderSettingsCatalog'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
@@ -42,7 +41,7 @@ const POLL_MS = 2000
 
 const LOG_HEIGHT = 148
 
-type MarketDataTab = 'source' | 'status' | 'sync' | 'package'
+type MarketDataTab = 'status' | 'sync' | 'package'
 
 const SYNC_MODE_LABEL: Record<string, string> = {
   incremental: '增量',
@@ -645,15 +644,10 @@ export default function MarketDataSettingsSection() {
           selectedValue={tab}
           onTabSelect={(_, data) => setTab(data.value as MarketDataTab)}
         >
-          <Tab value="source">数据源</Tab>
           <Tab value="status">库状态</Tab>
           <Tab value="sync">同步</Tab>
           <Tab value="package">导入导出</Tab>
         </TabList>
-      </div>
-
-      <div className={tab === 'source' ? s.tabPanel : s.tabPanelHidden}>
-        <ProviderSettingsCatalog />
       </div>
 
       <div className={tab === 'status' ? s.tabPanel : s.tabPanelHidden}>

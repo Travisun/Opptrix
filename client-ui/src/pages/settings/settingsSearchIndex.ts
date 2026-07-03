@@ -25,7 +25,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   // 分类
   { section: 'general', title: '常规', desc: '管理默认评分卡与后端连接状态' },
   { section: 'models', title: '模型', desc: '配置 LLM 提供商与可用模型' },
-  { section: 'market_data', title: '基础数据', desc: '本地行情库、数据源与同步' },
+  { section: 'market_data', title: '基础数据', desc: '本地行情库、同步与导入导出' },
+  { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商' },
   { section: 'discover_strategies', title: '选股策略', desc: '查看内置策略、管理自编策略与复制编辑' },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
@@ -47,9 +48,13 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'models', title: '添加模型提供商', keywords: ['新增', '添加'] },
   { section: 'models', title: '编辑模型提供商', keywords: ['修改'] },
 
+  // 数据源
+  { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
+  { section: 'data_providers', group: 'A 股', title: 'API Token', desc: '粘贴 Token', keywords: ['token', '密钥'] },
+  { section: 'data_providers', title: '数据源优先级', keywords: ['priority', '回退', '启用'] },
+  { section: 'data_providers', title: '能力绑定', keywords: ['binding', 'override'] },
+
   // 基础数据
-  { section: 'market_data', group: '数据源', title: 'Tushare Pro', keywords: ['tushare', '行情源'] },
-  { section: 'market_data', group: '数据源', title: 'API Token', desc: '粘贴 Token', keywords: ['token', '密钥'] },
   { section: 'market_data', group: '库状态', title: '库状态', keywords: ['股票', '公告', '指标', '档案', '股东', '就绪'] },
   { section: 'market_data', group: '库状态', title: '股票池', keywords: ['universe'] },
   { section: 'market_data', group: '库状态', title: '最新估值', keywords: ['quotes', '估值'] },
@@ -101,6 +106,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   general: '常规',
   models: '模型',
   market_data: '基础数据',
+  data_providers: '数据源',
   discover_strategies: '选股策略',
   news_feed: '新闻订阅',
   translation: '翻译',
