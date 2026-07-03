@@ -141,6 +141,7 @@ export {
   type InstrumentQueryPlan,
 } from './core/instrument-query.js'
 export { resolveInstrumentFromParams, instrumentRefsFromList, normalizeInstrumentHubParams, instrumentProviderSymbol } from '@opptrix/shared'
+export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 
 export type {
   MoneyFlow, IndexRealtime, IndexKline, MarketMoneyFlow, SectorMoneyFlow,
