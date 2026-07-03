@@ -10,6 +10,20 @@
 
 **Opptrix** 是一款开源的 **你的A股投研助手**：用自然语言提问，由大模型调用 **40+ MCP 投研工具** 获取行情、因子、机构观点与策略信号，再生成结构化中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
 
+---
+
+## 💬 技术交流群
+
+使用问题、功能建议、贡献讨论，欢迎扫码加入 **Opptrix 技术交流群**（微信）：
+
+<p align="center">
+  <img src="wx_group.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="280" />
+</p>
+
+<p align="center"><sub>群聊：Opptrix 技术交流群 · 扫码加入后可在群内交流使用与开发问题</sub></p>
+
+---
+
 > 🤖 **协作者 / Vibe Coding**：请先阅读 **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** — 单文件说明项目用途、目录地图、架构约束与设计规范，供 Cursor / Codex 等 Agent 直接加载。
 
 <p align="center">
@@ -17,6 +31,8 @@
 </p>
 
 <p align="center"><sub>主界面：多会话聊天、Agent 工具链路与右侧关注/个股 K 线面板（桌面与 Web 共用同一套 UI）</sub></p>
+
+<p align="center"><sub><strong>特别声明：</strong>上图仅为产品功能演示截图，<strong>不构成任何投资建议或个股推荐</strong>；界面中所示行情、分析与标的均为演示数据，<strong>非真实市场数据</strong>，请勿作为实际投资决策依据。</sub></p>
 
 ---
 

@@ -1,4 +1,5 @@
 import type { CustomDiscoverStrategy } from '../types/schemas'
+import { defaultDiscoverProfile } from './discoverProfiles'
 import {
   fetchCustomDiscoverStrategies,
   saveCustomDiscoverStrategies,
@@ -16,6 +17,7 @@ function normalizeCustomStrategy(row: CustomDiscoverStrategy): CustomDiscoverStr
     tagline,
     methodology: row.methodology ?? '',
     refinement_notes: row.refinement_notes ?? '',
+    profile: row.profile ?? defaultDiscoverProfile(),
     copied_from: row.copied_from ?? null,
   }
 }
@@ -58,6 +60,7 @@ export function saveCustomDiscoverStrategy(
     description,
     methodology: input.methodology?.trim() ?? existing?.methodology ?? '',
     refinement_notes: input.refinement_notes?.trim() ?? existing?.refinement_notes ?? '',
+    profile: input.profile ?? existing?.profile ?? defaultDiscoverProfile(),
     copied_from: input.copied_from ?? existing?.copied_from ?? null,
     created_at: existing?.created_at ?? now,
     updated_at: now,

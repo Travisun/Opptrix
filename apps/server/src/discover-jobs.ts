@@ -206,6 +206,7 @@ export function startDiscoverCustomJob(
   strategyName: string,
   strategyId: string,
   model?: string,
+  profile?: import('@opptrix/shared').DiscoverStrategyProfile,
 ): DiscoverJobSnapshot {
   const text = prompt.trim()
   if (!text) throw new Error('请输入选股策略描述')
@@ -247,7 +248,7 @@ export function startDiscoverCustomJob(
     }
 
     try {
-      const result = await agent.discover.run(text, onProgress, model, ac.signal)
+      const result = await agent.discover.run(text, onProgress, model, ac.signal, profile)
       patchJob(id, {
         status: 'done',
         phase: 'done',

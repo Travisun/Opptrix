@@ -42,6 +42,9 @@ export const FACTOR_LABELS: Record<string, string> = {
   dcf_margin: 'DCF估值偏离',
   residual_income_margin: '剩余收益估值偏离',
   relative_value: '相对估值偏离',
+  premium_rate: '折溢价率',
+  scale_yi: '规模（亿元）',
+  nav: '单位净值',
 }
 
 export function factorLabel(key: string): string | null {

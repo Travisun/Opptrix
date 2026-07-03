@@ -480,8 +480,13 @@ export async function setUserPreference<T>(key: string, value: T) {
   })
 }
 
-export async function listDiscoverStrategies() {
-  return jsonFetch<{ strategies: import('../types/schemas').DiscoverStrategyPublic[] }>('/discover/strategies')
+export async function listDiscoverProfiles() {
+  return jsonFetch<{ profiles: import('../types/schemas').DiscoverProfileMeta[] }>('/discover/profiles')
+}
+
+export async function listDiscoverStrategies(profile?: import('../types/schemas').DiscoverStrategyProfile) {
+  const qs = profile ? `?profile=${encodeURIComponent(profile)}` : ''
+  return jsonFetch<{ strategies: import('../types/schemas').DiscoverStrategyPublic[] }>(`/discover/strategies${qs}`)
 }
 
 export async function getDiscoverStrategyDetail(id: string) {
@@ -489,7 +494,12 @@ export async function getDiscoverStrategyDetail(id: string) {
 }
 
 export async function startDiscoverRun(
-  opts: { strategy_id: string } | { custom_prompt: string; custom_name?: string; custom_id?: string },
+  opts: { strategy_id: string } | {
+    custom_prompt: string
+    custom_name?: string
+    custom_id?: string
+    profile?: import('../types/schemas').DiscoverStrategyProfile
+  },
   model?: string,
 ) {
   const body = 'strategy_id' in opts
@@ -498,6 +508,7 @@ export async function startDiscoverRun(
       custom_prompt: opts.custom_prompt,
       custom_name: opts.custom_name,
       custom_id: opts.custom_id,
+      profile: opts.profile,
       model,
     }
   const resp = await fetchWithTimeout(`${API_BASE}/discover/run`, {

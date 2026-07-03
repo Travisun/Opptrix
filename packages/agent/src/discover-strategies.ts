@@ -1,36 +1,58 @@
+import type { DiscoverStrategyProfile, MarketDataPackId } from '@opptrix/shared'
 import type { DiscoverParsedPlan, DiscoverScreenCondition } from './discover.js'
 
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
+
+export type DiscoverPlanMode = 'llm' | 'builtin'
 
 export interface DiscoverStrategy {
   id: string
   name: string
   category: DiscoverStrategyCategory
-  /** 一句话说明 */
   tagline: string
-  /** 方法论出处与学术/投行参考 */
   methodology: string
-  /** 执行说明（展示给用户） */
   description: string
   scorecard: string
   prescreen_top_n: number
   final_top_n: number
-  /** 参考因子示例（展示与 AI 提示）；实际执行条件由 LLM 解析策略文本生成 */
   conditions: DiscoverScreenCondition[]
-  /** Agent 挖掘阶段的侧重点（预编译，非用户输入） */
   refinement_notes: string
+  applicableProfiles: DiscoverStrategyProfile[]
+  requiresPack: MarketDataPackId[]
+  planMode: DiscoverPlanMode
 }
 
 const C = (factor: string, op: DiscoverScreenCondition['op'], value: number): DiscoverScreenCondition =>
   ({ factor, op, value })
 
-/** 观察池通用门槛（写入 refinement_notes，与本地初选 exclude_st / 市值过滤配合） */
 const WATCHLIST_GATE =
   '排除 ST、流动性不足与壳股；优先日均成交额与市值达标的可研究标的；回避立案调查与重大诚信风险。'
 
-/** 预编译选股策略 — 综合经典价值投资、GARP、学术因子与投行框架 */
+type StrategyCore = Omit<DiscoverStrategy, 'applicableProfiles' | 'requiresPack' | 'planMode'> & {
+  planMode?: DiscoverPlanMode
+}
+
+function cnEquity(s: StrategyCore): DiscoverStrategy {
+  return {
+    ...s,
+    applicableProfiles: ['cn_equity'],
+    requiresPack: ['cn'],
+    planMode: s.planMode ?? 'llm',
+  }
+}
+
+function cnEtf(s: StrategyCore): DiscoverStrategy {
+  return {
+    ...s,
+    applicableProfiles: ['cn_etf'],
+    requiresPack: ['cn'],
+    planMode: 'builtin',
+    scorecard: s.scorecard || 'ETF决策雷达',
+  }
+}
+
 export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
-  {
+  cnEquity({
     id: 'graham_margin',
     name: '格雷厄姆安全边际',
     category: 'value',
@@ -47,8 +69,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('roe', '>=', 8),
     ],
     refinement_notes: '优先行业龙头与盈利稳定性；回避 ST 与高杠杆周期股；匹配度需体现安全边际与现金流质量。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'buffett_moat',
     name: '巴菲特护城河',
     category: 'quality',
@@ -66,8 +88,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('net_profit_yoy', '>=', 0),
     ],
     refinement_notes: `优先 ROE 连续三年稳定、毛利率领先、行业地位明确的龙头；区分周期景气与真护城河。${WATCHLIST_GATE}`,
-  },
-  {
+  }),
+  cnEquity({
     id: 'lynch_garp',
     name: '林奇 GARP',
     category: 'growth',
@@ -84,8 +106,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('pe', '<=', 40),
     ],
     refinement_notes: '平衡成长速度与估值；优先盈利增速可延续、行业景气度向上的标的。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'fama_french_quality',
     name: 'Fama-French 质量因子',
     category: 'quality',
@@ -102,8 +124,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('gross_margin', '>=', 20),
     ],
     refinement_notes: '强调盈利质量与资本结构；优先因子一致性高、非单一季度脉冲的标的。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'msci_quality',
     name: 'MSCI 质量蓝筹',
     category: 'quality',
@@ -120,8 +142,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('debt_ratio', '<=', 55),
     ],
     refinement_notes: '优先市值与流动性较好、行业龙头；关注 ROE 趋势改善而非单季异常。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'jegadeesh_momentum',
     name: 'Jegadeesh 动量',
     category: 'momentum',
@@ -137,8 +159,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('volume_ratio', '>=', 1.1),
     ],
     refinement_notes: '优先趋势连贯、量价配合；回避涨幅过大且估值极端透支的标的；提示动量回撤风险。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'low_vol_value',
     name: '低波价值',
     category: 'balanced',
@@ -155,8 +177,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('debt_ratio', '<=', 60),
     ],
     refinement_notes: '优先分红稳定、波动相对较低的价值股；兼顾估值安全边际。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'earnings_acceleration',
     name: '盈利加速',
     category: 'growth',
@@ -172,8 +194,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('roe_trend', '>', 0),
     ],
     refinement_notes: '区分一次性收益与主业增长；优先营收与利润同步改善的标的。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'smart_flow',
     name: '量能共振',
     category: 'momentum',
@@ -189,8 +211,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('momentum_3m', '>', 0),
     ],
     refinement_notes: '优先放量上涨且基本面无重大瑕疵；明确提示短线波动与流动性风险。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'all_weather',
     name: '全天候均衡',
     category: 'balanced',
@@ -207,8 +229,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('debt_ratio', '<=', 65),
     ],
     refinement_notes: '在各因子维度无极端短板；优先综合评分高、行业分散的标的组合。',
-  },
-  {
+  }),
+  cnEquity({
     id: 'gbm_core',
     name: 'G=B+M 核心池',
     category: 'balanced',
@@ -226,8 +248,8 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('volume_ratio', '>=', 0.8),
     ],
     refinement_notes: `B 高 M 低→观察名单；B 低 M 高→偏交易；综合 G 分高者优先。${WATCHLIST_GATE}`,
-  },
-  {
+  }),
+  cnEquity({
     id: 'fear_rebound',
     name: '恐慌反弹',
     category: 'contrarian',
@@ -244,42 +266,70 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
       C('volume_ratio', '>=', 1.2),
     ],
     refinement_notes: `区分基本面恶化与情绪性杀跌；优先盈利质量尚可、行业非系统性衰退的标的。${WATCHLIST_GATE}`,
-  },
+  }),
+  cnEtf({
+    id: 'etf_low_premium',
+    name: '低折溢价优选',
+    category: 'value',
+    tagline: '贴近净值 · 折溢价可控',
+    methodology: 'ETF 配置核心逻辑：折溢价接近 0 时买卖成本更低；配合一定规模门槛。',
+    description: '在本地 ETF 库中筛选折溢价偏离较小、规模达标的 ETF，适合底仓与定投研究。',
+    scorecard: 'ETF决策雷达',
+    prescreen_top_n: 60,
+    final_top_n: 12,
+    conditions: [
+      C('premium_rate', '<=', 0.5),
+      C('scale_yi', '>=', 5),
+    ],
+    refinement_notes: '优先宽基与主流行业 ETF；折溢价极端时提示交易时机风险；结合决策雷达同类相对维度。',
+  }),
+  cnEtf({
+    id: 'etf_scale_core',
+    name: '大盘流动性核心',
+    category: 'quality',
+    tagline: '规模优先 · 流动性与跟踪稳定性',
+    methodology: '参考机构 ETF 配置：规模与成交额决定冲击成本；大盘 ETF 优先。',
+    description: '筛选规模较大、流动性较好的 A 股 ETF，适合核心配置与工具型研究。',
+    scorecard: 'ETF决策雷达',
+    prescreen_top_n: 50,
+    final_top_n: 10,
+    conditions: [
+      C('scale_yi', '>=', 20),
+      C('premium_rate', '<=', 1),
+    ],
+    refinement_notes: '优先沪深300、中证500、红利等主流宽基；同类 ETF 对比费率与跟踪误差。',
+  }),
+  cnEtf({
+    id: 'etf_broad_base',
+    name: '宽基均衡池',
+    category: 'balanced',
+    tagline: '宽基 ETF · 折溢价 + 规模均衡',
+    methodology: '宽基指数 ETF 分散配置思路：规模适中、折溢价温和、同类可比。',
+    description: '均衡筛选宽基类 ETF，适合观察池与资产配置初筛。',
+    scorecard: 'ETF决策雷达',
+    prescreen_top_n: 40,
+    final_top_n: 8,
+    conditions: [
+      C('scale_yi', '>=', 10),
+      C('premium_rate', '<=', 0.8),
+    ],
+    refinement_notes: '关注跟踪指数代表性；提示行业/主题 ETF 与宽基的风险差异。',
+  }),
 ]
+
+export function primaryDiscoverProfile(strategy: DiscoverStrategy): DiscoverStrategyProfile {
+  return strategy.applicableProfiles[0] ?? 'cn_equity'
+}
 
 export function getDiscoverStrategy(id: string): DiscoverStrategy | undefined {
   return DISCOVER_STRATEGIES.find(s => s.id === id)
 }
 
-/** 将策略全文组装为 LLM 解析输入（不直接套用 conditions 执行） */
-export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string {
-  const ref = strategy.conditions
-    .map(c => `${c.factor} ${c.op} ${c.value}`)
-    .join('；')
-  return [
-    `【策略】${strategy.name}`,
-    `【方法论】${strategy.methodology}`,
-    `【执行说明】${strategy.description}`,
-    `【挖掘侧重】${strategy.refinement_notes}`,
-    ref ? `【参考因子示例（可按策略语义调整阈值）】${ref}` : '',
-    `【规模】初选约 ${strategy.prescreen_top_n} 只，最终精选 ${strategy.final_top_n} 只。`,
-    '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
-  ].filter(Boolean).join('\n')
-}
-
-/** @deprecated 仅用于兼容；执行请使用 buildStrategyExecutionPrompt + LLM 解析 */
-export function strategyToPlan(strategy: DiscoverStrategy): DiscoverParsedPlan {
-  return {
-    strategy_title: strategy.name,
-    conditions: strategy.conditions,
-    prescreen_top_n: strategy.prescreen_top_n,
-    final_top_n: strategy.final_top_n,
-    refinement_notes: strategy.refinement_notes,
-  }
-}
-
-export function listDiscoverStrategiesPublic() {
-  return DISCOVER_STRATEGIES.map(s => ({
+export function listDiscoverStrategiesPublic(profile?: DiscoverStrategyProfile) {
+  const list = profile
+    ? DISCOVER_STRATEGIES.filter(s => s.applicableProfiles.includes(profile))
+    : DISCOVER_STRATEGIES
+  return list.map(s => ({
     id: s.id,
     name: s.name,
     category: s.category,
@@ -289,5 +339,42 @@ export function listDiscoverStrategiesPublic() {
     final_top_n: s.final_top_n,
     condition_count: s.conditions.length,
     source: 'builtin' as const,
+    profile: primaryDiscoverProfile(s),
+    applicable_profiles: s.applicableProfiles,
+    requires_pack: s.requiresPack,
+    mining_ready: s.applicableProfiles.some(p => p === 'cn_equity' || p === 'cn_etf'),
   }))
+}
+
+export function buildStrategyExecutionPrompt(strategy: DiscoverStrategy): string {
+  const profile = primaryDiscoverProfile(strategy)
+  const ref = strategy.conditions
+    .map(c => `${c.factor} ${c.op} ${c.value}`)
+    .join('；')
+  const assetHint = profile === 'cn_etf'
+    ? 'A 股 ETF（折溢价%、规模亿元）'
+    : 'A 股股票（本地因子库）'
+  return [
+    `【策略】${strategy.name}`,
+    `【资产类型】${assetHint}`,
+    `【方法论】${strategy.methodology}`,
+    `【执行说明】${strategy.description}`,
+    `【挖掘侧重】${strategy.refinement_notes}`,
+    ref ? `【参考因子示例（可按策略语义调整阈值）】${ref}` : '',
+    `【规模】初选约 ${strategy.prescreen_top_n} 只，最终精选 ${strategy.final_top_n} 只。`,
+    profile === 'cn_etf'
+      ? '请输出用于本地 ETF 筛选的量化 conditions（1-5 条），因子仅限 premium_rate、scale_yi；保留 refinement_notes。'
+      : '请根据策略语义输出用于本地因子库初筛的量化 conditions（1-5 条），并保留 refinement_notes。',
+  ].filter(Boolean).join('\n')
+}
+
+export function strategyToPlan(strategy: DiscoverStrategy): DiscoverParsedPlan {
+  return {
+    strategy_title: strategy.name,
+    conditions: strategy.conditions,
+    prescreen_top_n: strategy.prescreen_top_n,
+    final_top_n: strategy.final_top_n,
+    refinement_notes: strategy.refinement_notes,
+    profile: primaryDiscoverProfile(strategy),
+  }
 }

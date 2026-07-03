@@ -20,6 +20,7 @@ import {
 import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
+import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
@@ -190,8 +191,17 @@ app.get('/api/discover/jobs', async () => {
   return { jobs: listDiscoverJobs(40) }
 })
 
-app.get('/api/discover/strategies', async () => {
-  return { strategies: listDiscoverStrategiesPublic() }
+app.get('/api/discover/profiles', async () => {
+  return { profiles: listDiscoverProfileMeta() }
+})
+
+app.get<{ Querystring: { profile?: string } }>('/api/discover/strategies', async (req, reply) => {
+  const raw = req.query.profile?.trim()
+  if (raw && !isDiscoverStrategyProfile(raw)) {
+    return reply.code(400).send({ error: 'invalid profile' })
+  }
+  const profile = raw as DiscoverStrategyProfile | undefined
+  return { strategies: listDiscoverStrategiesPublic(profile) }
 })
 
 app.get('/api/discover/custom-strategies', async () => {
@@ -242,18 +252,25 @@ app.get<{ Params: { id: string } }>('/api/discover/strategies/:id', async (req, 
       final_top_n: strategy.final_top_n,
       conditions: strategy.conditions,
       refinement_notes: strategy.refinement_notes,
+      profile: strategy.applicableProfiles[0],
+      applicable_profiles: strategy.applicableProfiles,
+      requires_pack: strategy.requiresPack,
       source: 'builtin' as const,
     },
   }
 })
 
-app.post<{ Body: { strategy_id?: string; custom_prompt?: string; custom_name?: string; custom_id?: string; model?: string } }>(
+app.post<{ Body: { strategy_id?: string; custom_prompt?: string; custom_name?: string; custom_id?: string; profile?: string; model?: string } }>(
   '/api/discover/run',
   async (req, reply) => {
     if (!agent.llmConfigured) return reply.code(503).send({ error: 'LLM 未配置' })
     const strategyId = req.body?.strategy_id?.trim()
     const customPrompt = req.body?.custom_prompt?.trim()
     const model = req.body?.model
+    const rawProfile = req.body?.profile?.trim()
+    const profile = rawProfile && isDiscoverStrategyProfile(rawProfile)
+      ? rawProfile
+      : undefined
     try {
       if (strategyId) {
         const job = startDiscoverJob(agent, strategyId, model)
@@ -262,7 +279,7 @@ app.post<{ Body: { strategy_id?: string; custom_prompt?: string; custom_name?: s
       if (customPrompt) {
         const customId = req.body?.custom_id?.trim() || `custom_${Date.now()}`
         const customName = req.body?.custom_name?.trim() || '自建策略'
-        const job = startDiscoverCustomJob(agent, customPrompt, customName, customId, model)
+        const job = startDiscoverCustomJob(agent, customPrompt, customName, customId, model, profile)
         return { job_id: job.id, status: job.status, phase: job.phase, message: job.message }
       }
       return reply.code(400).send({ error: 'strategy_id or custom_prompt required' })

@@ -1,6 +1,9 @@
 import { randomUUID } from 'node:crypto'
 import { getUserDataStore } from '@opptrix/user-store'
 
+import type { DiscoverStrategyProfile } from '@opptrix/shared'
+import { defaultDiscoverProfile } from '@opptrix/shared'
+
 const NAMESPACE = 'discover_custom_strategy'
 
 export interface CustomDiscoverStrategyRecord {
@@ -11,6 +14,7 @@ export interface CustomDiscoverStrategyRecord {
   methodology: string
   refinement_notes: string
   prompt: string
+  profile: DiscoverStrategyProfile
   copied_from?: string | null
   created_at: string
   updated_at: string
@@ -27,6 +31,7 @@ function normalize(row: CustomDiscoverStrategyRecord): CustomDiscoverStrategyRec
     tagline,
     methodology: row.methodology ?? '',
     refinement_notes: row.refinement_notes ?? '',
+    profile: row.profile ?? defaultDiscoverProfile(),
     copied_from: row.copied_from ?? null,
   }
 }
@@ -66,6 +71,7 @@ export function upsertCustomDiscoverStrategy(
     description,
     methodology: input.methodology?.trim() ?? existing?.methodology ?? '',
     refinement_notes: input.refinement_notes?.trim() ?? existing?.refinement_notes ?? '',
+    profile: input.profile ?? existing?.profile ?? defaultDiscoverProfile(),
     copied_from: input.copied_from ?? existing?.copied_from ?? null,
     created_at: existing?.created_at ?? now,
     updated_at: now,

@@ -20,8 +20,12 @@ export {
   DISCOVER_STRATEGIES,
   getDiscoverStrategy,
   listDiscoverStrategiesPublic,
+  primaryDiscoverProfile,
+  buildStrategyExecutionPrompt,
+  strategyToPlan,
   type DiscoverStrategy,
   type DiscoverStrategyCategory,
+  type DiscoverPlanMode,
 } from './discover-strategies.js'
 export { ToolRegistry, DISCOVER_MINING_TOOL_NAMES } from './tools.js'
 export {

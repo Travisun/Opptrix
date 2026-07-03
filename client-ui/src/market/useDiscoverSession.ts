@@ -21,7 +21,12 @@ export interface DiscoverSessionState {
   refreshHistory: () => Promise<void>
   selectStrategy: (id: string) => void
   runStrategy: (strategyId: string) => Promise<void>
-  runCustomStrategy: (opts: { id: string; name: string; prompt: string }) => Promise<void>
+  runCustomStrategy: (opts: {
+    id: string
+    name: string
+    prompt: string
+    profile?: import('../types/schemas').DiscoverStrategyProfile
+  }) => Promise<void>
   cancelRun: () => Promise<void>
   loadHistoryJob: (job: DiscoverJobSnapshot) => void
   deleteHistoryJob: (jobId: string) => Promise<boolean>
@@ -143,7 +148,12 @@ export function useDiscoverSession(): DiscoverSessionState {
     }
   }, [stopPoll])
 
-  const runCustomStrategy = useCallback(async (opts: { id: string; name: string; prompt: string }) => {
+  const runCustomStrategy = useCallback(async (opts: {
+    id: string
+    name: string
+    prompt: string
+    profile?: import('../types/schemas').DiscoverStrategyProfile
+  }) => {
     stopPoll()
     setRunning(true)
     setError('')
@@ -155,6 +165,7 @@ export function useDiscoverSession(): DiscoverSessionState {
         custom_prompt: opts.prompt,
         custom_name: opts.name,
         custom_id: opts.id,
+        profile: opts.profile,
       })
       setActiveJobId(start.job_id)
       setJob({

@@ -49,7 +49,22 @@ export interface ScreeningData {
 
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
 
+export type DiscoverStrategyProfile =
+  | 'cn_equity'
+  | 'cn_etf'
+  | 'us_equity'
+  | 'crypto_spot'
+
 export type DiscoverStrategySource = 'builtin' | 'custom'
+
+export interface DiscoverProfileMeta {
+  id: DiscoverStrategyProfile
+  label: string
+  description: string
+  requires_pack: 'cn' | 'us' | 'crypto' | null
+  factor_count: number
+  mining_ready: boolean
+}
 
 export interface DiscoverStrategyPublic {
   id: string
@@ -61,6 +76,10 @@ export interface DiscoverStrategyPublic {
   final_top_n: number
   condition_count: number
   source: DiscoverStrategySource
+  profile: DiscoverStrategyProfile
+  applicable_profiles: DiscoverStrategyProfile[]
+  requires_pack: Array<'cn' | 'us' | 'crypto'>
+  mining_ready: boolean
 }
 
 export interface CustomDiscoverStrategy {
@@ -71,6 +90,7 @@ export interface CustomDiscoverStrategy {
   description: string
   methodology: string
   refinement_notes: string
+  profile: DiscoverStrategyProfile
   copied_from: string | null
   created_at: string
   updated_at: string
@@ -88,6 +108,9 @@ export interface DiscoverStrategyDetail {
   final_top_n: number
   conditions: Array<{ factor: string; op: string; value: number }>
   refinement_notes: string
+  profile: DiscoverStrategyProfile
+  applicable_profiles: DiscoverStrategyProfile[]
+  requires_pack: Array<'cn' | 'us' | 'crypto'>
   source: 'builtin'
 }
 
@@ -98,6 +121,7 @@ export interface DiscoverStrategyOption {
   tagline: string
   source: DiscoverStrategySource
   category?: DiscoverStrategyCategory
+  profile?: DiscoverStrategyProfile
   meta?: string
 }
 

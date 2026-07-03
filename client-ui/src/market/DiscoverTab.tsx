@@ -2,10 +2,12 @@ import { useEffect, useMemo, useState, type MouseEvent } from 'react'
 import { ProgressBar, Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { AddRegular, ArrowRightRegular, DeleteRegular } from '@fluentui/react-icons'
 import { listDiscoverStrategies, getHealth } from '../api/client'
-import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyPublic, MarketRegimeData } from '../types/schemas'
+import type { DiscoverJobSnapshot, DiscoverStrategyOption, DiscoverStrategyProfile, DiscoverStrategyPublic, MarketRegimeData } from '../types/schemas'
 import type { WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import DiscoverStrategyPicker from './DiscoverStrategyPicker'
+import DiscoverProfileTabList, { isDiscoverProfileMiningReady } from './DiscoverProfileTabList'
+import { defaultDiscoverProfile } from './discoverProfiles'
 import { factorLabel } from './factorLabels'
 import { normalizeCode } from './format'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -379,6 +381,7 @@ function toBuiltinOptions(list: DiscoverStrategyPublic[]): DiscoverStrategyOptio
 
 export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }: Props) {
   const s = useStyles()
+  const [profile, setProfile] = useState<DiscoverStrategyProfile>(defaultDiscoverProfile())
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [selectedId, setSelectedId] = useState<string | null>(null)
   const [panelTab, setPanelTab] = useState<DiscoverPanelTab>('results')
@@ -405,24 +408,42 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
 
   const strategyOptions = useMemo((): DiscoverStrategyOption[] => {
     const builtins = toBuiltinOptions(builtinList)
-    const customs = customStrategies.map(st => ({
-      id: st.id,
-      name: st.name,
-      tagline: st.tagline,
-      source: 'custom' as const,
-      meta: '自编策略',
-    }))
+    const customs = customStrategies
+      .filter(st => (st.profile ?? defaultDiscoverProfile()) === profile)
+      .map(st => ({
+        id: st.id,
+        name: st.name,
+        tagline: st.tagline,
+        source: 'custom' as const,
+        profile: st.profile ?? defaultDiscoverProfile(),
+        meta: '自编策略',
+      }))
     return [...builtins, ...customs]
-  }, [builtinList, customStrategies])
+  }, [builtinList, customStrategies, profile])
+
+  const profileMiningReady = isDiscoverProfileMiningReady(profile)
 
   useEffect(() => {
     let cancelled = false
-    void listDiscoverStrategies().then(resp => {
+    void listDiscoverStrategies(profile).then(resp => {
       if (cancelled) return
       const list = resp.strategies ?? []
       setBuiltinList(list)
-      setSelectedId(prev => prev ?? list[0]?.id ?? null)
+      setSelectedId(prev => {
+        if (prev && list.some(item => item.id === prev)) return prev
+        return list[0]?.id ?? null
+      })
     }).catch(() => {})
+    return () => { cancelled = true }
+  }, [profile])
+
+  useEffect(() => {
+    if (strategyOptions.some(o => o.id === selectedId)) return
+    setSelectedId(strategyOptions[0]?.id ?? null)
+  }, [strategyOptions, selectedId])
+
+  useEffect(() => {
+    let cancelled = false
     void research.marketDbStatus().then(resp => {
       if (cancelled || !resp.success || !resp.data) return
       setDbReady(resp.data.is_ready)
@@ -443,7 +464,12 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
     setPanelTab('results')
     const custom = customStrategies.find(st => st.id === selectedId)
     if (custom) {
-      void runCustomStrategy({ id: custom.id, name: custom.name, prompt: custom.prompt })
+      void runCustomStrategy({
+        id: custom.id,
+        name: custom.name,
+        prompt: custom.prompt,
+        profile: custom.profile ?? profile,
+      })
     } else {
       void runStrategy(selectedId)
     }
@@ -497,9 +523,18 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
   return (
     <div className={mergeClasses(s.root, 'opptrix-discover-tab')}>
       <div className={s.head}>
+        <DiscoverProfileTabList
+          selected={profile}
+          onSelect={setProfile}
+          disabled={running}
+        />
         <Text className={s.headHint} block>
-          选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。
+          {profileMiningReady
+            ? '选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。'
+            : '该资产类型的挖掘策略筹备中，可先开启对应数据包或关注后续更新。'}
         </Text>
+        {profileMiningReady ? (
+          <>
         <DiscoverStrategyPicker
           strategies={strategyOptions}
           selectedId={selectedId}
@@ -523,11 +558,15 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           )}
           {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
-            {dbReady ? '解析条件 → 因子初选 → 精选标的' : '初选库未就绪时将在线扫描'}
+            {profile === 'cn_etf'
+              ? (dbReady ? '加载条件 → ETF 初选 → 精选标的' : 'ETF 库未就绪时将提示同步')
+              : (dbReady ? '解析条件 → 因子初选 → 精选标的' : '初选库未就绪时将在线扫描')}
             {llmReady === false ? ' · 需配置大模型' : ''}
           </Text>
         </div>
-        {marketRegime && (
+          </>
+        ) : null}
+        {marketRegime && profile === 'cn_equity' && (
           <div className={s.regimeBanner}>
             <Text className={s.regimeHeadline} block>
               {marketRegime.headline}

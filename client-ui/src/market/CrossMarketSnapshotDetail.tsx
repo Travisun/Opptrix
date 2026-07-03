@@ -226,7 +226,7 @@ export default function CrossMarketSnapshotDetail({
   }, [load, market])
 
   const quote = snapshot && ('quote' in snapshot ? snapshot.quote : null)
-  const klines = snapshot && ('recentKlines' in snapshot ? snapshot.recentKlines : []) ?? []
+  const klines = (snapshot && ('recentKlines' in snapshot ? snapshot.recentKlines : [])) ?? []
   const profile = market === 'US' && snapshot && 'profile' in snapshot ? snapshot.profile : null
   const tone = pctTone(quote?.changePct)
   const priceDigits = market === 'CRYPTO' && (quote?.price ?? 0) < 1 ? 4 : 2

@@ -25,6 +25,7 @@ export type StrategyDraft = {
   methodology: string
   refinement_notes: string
   prompt: string
+  profile: import('../../types/schemas').DiscoverStrategyProfile
   copied_from: string | null
 }
 

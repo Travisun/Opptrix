@@ -8,10 +8,13 @@ import {
 import type {
   CustomDiscoverStrategy,
   DiscoverStrategyDetail,
+  DiscoverStrategyProfile,
   DiscoverStrategyPublic,
 } from '../../types/schemas'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { factorLabel } from '../../market/factorLabels'
+import DiscoverProfileTabList, { isDiscoverProfileMiningReady } from '../../market/DiscoverProfileTabList'
+import { defaultDiscoverProfile } from '../../market/discoverProfiles'
 import { useCustomDiscoverStrategies } from '../../market/useCustomDiscoverStrategies'
 import { SettingsGroup } from './SettingsPrimitives'
 import {
@@ -45,6 +48,7 @@ const EMPTY_CUSTOM: StrategyDraft = {
   methodology: '',
   refinement_notes: '',
   prompt: '',
+  profile: defaultDiscoverProfile(),
   copied_from: null,
 }
 
@@ -169,6 +173,7 @@ function customFromBuiltin(detail: DiscoverStrategyDetail): CustomDiscoverStrate
     methodology: detail.methodology,
     refinement_notes: detail.refinement_notes,
     prompt,
+    profile: detail.profile ?? defaultDiscoverProfile(),
     copied_from: detail.id,
     created_at: now,
     updated_at: now,
@@ -178,6 +183,7 @@ function customFromBuiltin(detail: DiscoverStrategyDetail): CustomDiscoverStrate
 export default function DiscoverStrategiesSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
+  const [profile, setProfile] = useState<DiscoverStrategyProfile>(defaultDiscoverProfile())
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [viewTarget, setViewTarget] = useState<ViewTarget>(null)
   const [editTarget, setEditTarget] = useState<EditTarget>(null)
@@ -188,10 +194,10 @@ export default function DiscoverStrategiesSettingsSection() {
   const { strategies: customStrategies, saveStrategy, removeStrategy } = useCustomDiscoverStrategies()
 
   useEffect(() => {
-    void listDiscoverStrategies().then(resp => {
+    void listDiscoverStrategies(profile).then(resp => {
       setBuiltinList(resp.strategies ?? [])
     }).catch(() => {})
-  }, [])
+  }, [profile])
 
   useEffect(() => {
     if (!viewTarget || viewTarget.kind !== 'builtin') {
@@ -212,8 +218,11 @@ export default function DiscoverStrategiesSettingsSection() {
     if (editTarget.mode === 'create') {
       setDraft({
         ...EMPTY_CUSTOM,
+        profile,
         name: '新建自编策略',
-        prompt: '描述你的选股逻辑，例如：低 PE 且 ROE>12% 的价值股，精选 15 只',
+        prompt: profile === 'cn_etf'
+          ? '描述你的 ETF 筛选逻辑，例如：折溢价小于 0.5%、规模大于 10 亿'
+          : '描述你的选股逻辑，例如：低 PE 且 ROE>12% 的价值股，精选 15 只',
       })
       return
     }
@@ -226,10 +235,11 @@ export default function DiscoverStrategiesSettingsSection() {
         methodology: custom.methodology,
         refinement_notes: custom.refinement_notes,
         prompt: custom.prompt,
+        profile: custom.profile ?? defaultDiscoverProfile(),
         copied_from: custom.copied_from,
       })
     }
-  }, [editTarget, customStrategies])
+  }, [editTarget, customStrategies, profile])
 
   const listItems = useMemo<ListItem[]>(() => {
     const builtins = builtinList.map(b => ({
@@ -238,14 +248,16 @@ export default function DiscoverStrategiesSettingsSection() {
       name: b.name,
       meta: `${CATEGORY_LABEL[b.category]} · 参考 ${b.condition_count} 条因子`,
     }))
-    const customs = customStrategies.map(c => ({
-      kind: 'custom' as const,
-      id: c.id,
-      name: c.name,
-      meta: c.tagline || '自编策略',
-    }))
+    const customs = customStrategies
+      .filter(c => (c.profile ?? defaultDiscoverProfile()) === profile)
+      .map(c => ({
+        kind: 'custom' as const,
+        id: c.id,
+        name: c.name,
+        meta: c.tagline || '自编策略',
+      }))
     return [...customs, ...builtins]
-  }, [builtinList, customStrategies])
+  }, [builtinList, customStrategies, profile])
 
   const viewCustom = viewTarget?.kind === 'custom'
     ? customStrategies.find(c => c.id === viewTarget.id) ?? null
@@ -311,11 +323,23 @@ export default function DiscoverStrategiesSettingsSection() {
       <SettingsGroup className={s.group}>
         <div className={s.panelHeader}>
           <Text className={s.panelHeaderTitle} block>策略库</Text>
-          <OpptrixButton variant="secondary" onClick={() => setEditTarget({ mode: 'create' })}>
+          <OpptrixButton
+            variant="secondary"
+            disabled={!isDiscoverProfileMiningReady(profile)}
+            onClick={() => setEditTarget({ mode: 'create' })}
+          >
             新建自编
           </OpptrixButton>
         </div>
         <div className={mergeClasses(s.listScroll, 'opptrix-scroll')}>
+          <div style={{ padding: '10px 18px 8px' }}>
+            <DiscoverProfileTabList selected={profile} onSelect={setProfile} compact />
+          </div>
+          {!isDiscoverProfileMiningReady(profile) && listItems.length === 0 ? (
+            <Text className={s.empty} block>
+              该资产类型的内置策略筹备中；开启对应数据包后可关注后续更新。
+            </Text>
+          ) : null}
           {listItems.map((item, idx) => (
             <div
               key={`${item.kind}:${item.id}`}
