@@ -65,7 +65,7 @@ npm run dev
 | 新增 Hub feature | `packages/research-hub/src/hub.ts` |
 | 新增 REST | `apps/server/src/index.ts` |
 | 新增 Agent tool | `packages/agent/src/tools.ts` |
-| 新增数据源 | `packages/a-stock-layer/src/drivers/` |
+| 新增数据源 | `packages/a-stock-layer/src/drivers/`（架构见 [DATA-LAYER.md](./DATA-LAYER.md)，进度见 [DATA-LAYER-PROGRESS.md](./DATA-LAYER-PROGRESS.md)） |
 | 新增因子 | `packages/stock-eval/src/factors/` |
 | 新页面 / 聊天 UI | `client-ui/src/chat/` 或 `client-ui/src/pages/` |
 

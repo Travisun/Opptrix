@@ -8,7 +8,8 @@
   "references": [
     { "path": "../shared" },
     { "path": "../a-stock-layer" },
-    { "path": "../stock-eval" }
+    { "path": "../stock-eval" },
+    { "path": "../user-store" }
   ],
   "include": ["src/**/*"]
 }

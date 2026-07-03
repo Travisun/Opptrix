@@ -17,7 +17,7 @@
   "dependencies": {
     "@opptrix/agent": "*",
     "@opptrix/article-enrichment": "*",
-    "@opptrix/market-data": "*",
+    "@opptrix/market-data-store": "*",
     "@opptrix/news-feed": "*",
     "@opptrix/user-store": "*"
   }

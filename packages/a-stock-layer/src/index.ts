@@ -1,10 +1,23 @@
 export {
-  AshareEngine, Capability, CACHE_TYPE, DriverRegistry, Cache,
+  MarketDataEngine,
+  AshareEngine,
+  Capability, CACHE_TYPE, DriverRegistry, Cache,
   BaseDriver, CAP_METHOD, computeIndicators, registerAllDrivers,
   normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice,
-  EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
+  EastMoneyDriver, EfinanceDriver, TdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
   GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
+  PolygonDriver, TiingoDriver, FmpDriver, YahooUsDriver, BinanceDriver, OkxDriver,
+  getProviderConfigStore, ProviderConfigStore, ProviderCatalogService, createProviderCatalog,
+  PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest,
+  QueryPlanExecutor, QUERY_PLANS, defaultCacheType, executeIntradaySessionsPlan,
+} from './engine.js'
+
+export type {
+  QueryPlan,
+  QueryPlanId,
+  QueryPlanStrategy,
+  QueryExecutionContext,
 } from './engine.js'
 
 export type { IntradayTrendBar, IntradayTrendFetchResult, IntradayTrendSession } from './utils/intraday-trends.js'
@@ -26,30 +39,39 @@ export {
 } from './utils/helpers.js'
 
 export {
-  loadTushareConfig, saveTushareConfig, publicTushareConfig, isTushareEnabled,
-  tushareConfigPath,
-} from './tushare/config.js'
-export { testTushareConnection } from './tushare/client.js'
-export type { TushareRuntimeConfig, PublicTushareConfig } from './tushare/config.js'
+  loadTushareConfig, saveTushareConfig, publicTushareConfig, isTushareEnabled, tushareConfigPath,
+  testTushareConnection, TushareClient, toTsCode, fromTsCode,
+} from './providers/tushare/index.js'
+export type { TushareRuntimeConfig, PublicTushareConfig, TushareRow } from './providers/tushare/index.js'
+
+export { TdxClient, tdxClient, TdxDailyBarReader, readTdxDayFile, toTdxSymbol, isIndexCode, toTdxMarketId, patchNodetdxBjMarket, tdxMinuteIndexToTime, transformTdxMinutePoints } from './providers/tdx/index.js'
+export { ef, stock as efStock, fund as efFund, bond as efBond, futures as efFutures, searchQuote } from './providers/efinance/index.js'
+export type { SearchQuote, EfRow } from './providers/efinance/index.js'
 
 export { PortfolioManager } from './portfolio/manager.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
 export { WatchlistManager } from './watchlist/manager.js'
 export type { WatchlistItem } from './watchlist/models.js'
+export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
 
-export { TdxClient, tdxClient } from './tdx/client.js'
-export { TdxDailyBarReader, readTdxDayFile } from './tdx/day-reader.js'
-export { toTdxSymbol, isIndexCode } from './tdx/symbol.js'
-export { toTdxMarketId, patchNodetdxBjMarket } from './tdx/market-id.js'
-export { tdxMinuteIndexToTime, transformTdxMinutePoints } from './tdx/intraday.js'
-export { ef, stock as efStock, fund as efFund, bond as efBond, futures as efFutures } from './efinance/index.js'
-export { searchQuote } from './efinance/utils.js'
-export type { SearchQuote } from './efinance/utils.js'
 export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, secXueqiuSymbol } from './utils/helpers.js'
-export { TushareClient } from './tushare/client.js'
-export { toTsCode, fromTsCode } from './tushare/codes.js'
-export type { Efinance } from './efinance/index.js'
-export type { EfRow } from './efinance/common.js'
+export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
+export {
+  normalizeUsSymbol,
+  isValidUsSymbol,
+  usTodayString,
+  isUsMarketOpen,
+  isUsTradingWeekday,
+  isUsTradingDay,
+  isNyseHoliday,
+  nyseHolidaysForYear,
+  resolveUsQuoteSession,
+  usQuoteSessionLabel,
+  isUsPreMarket,
+  isUsPostMarket,
+} from './utils/us-market.js'
+export type { UsQuoteSession } from './utils/us-market.js'
+export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 
 export type {
   MoneyFlow, IndexRealtime, IndexKline, MarketMoneyFlow, SectorMoneyFlow,

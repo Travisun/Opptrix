@@ -6,6 +6,9 @@ import PortfolioTab from './PortfolioTab'
 import { useDiscoverSession } from './useDiscoverSession'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
+import EtfDetailTab from './EtfDetailTab'
+import UsDetailTab from './UsDetailTab'
+import CryptoDetailTab from './CryptoDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
 import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
@@ -27,6 +30,12 @@ import {
 import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
 import { normalizeCode } from './format'
+import {
+  detailPanelKind,
+  normalizeWatchlistItem,
+  resolveWatchlistInstrument,
+  watchlistItemKey,
+} from './instrument'
 
 type MarketTab = 'watchlist' | 'discover' | 'industry' | 'portfolio' | 'detail'
 
@@ -150,6 +159,8 @@ export default function RightMarketPanel({
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
   const [dialogPrice, setDialogPrice] = useState<number | null>(null)
+  const [localIndexed, setLocalIndexed] = useState<boolean | null>(null)
+  const [localIndexLoading, setLocalIndexLoading] = useState(false)
 
   const selectedCode = selected?.code ?? null
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
@@ -178,9 +189,49 @@ export default function RightMarketPanel({
   }, [updateItem])
 
   const watchlistCodeSet = useMemo(
-    () => new Set(items.map(item => normalizeCode(item.code))),
+    () => new Set(
+      items
+        .map(normalizeWatchlistItem)
+        .filter(item => resolveWatchlistInstrument(item).market === 'CN')
+        .map(item => normalizeCode(item.code)),
+    ),
     [items],
   )
+
+  const detailStock = useMemo(() => {
+    if (!selected) return null
+    const key = watchlistItemKey(normalizeWatchlistItem(selected))
+    return items.find(item => watchlistItemKey(normalizeWatchlistItem(item)) === key)
+      ?? normalizeWatchlistItem(selected)
+  }, [items, selected])
+
+  const detailKind = useMemo(() => {
+    if (!detailStock) return null
+    return detailPanelKind(resolveWatchlistInstrument(detailStock))
+  }, [detailStock])
+
+  useEffect(() => {
+    if (!detailStock || detailKind === 'cn-equity' || detailKind === 'cn-etf') {
+      setLocalIndexed(null)
+      setLocalIndexLoading(false)
+      return
+    }
+    let cancelled = false
+    setLocalIndexLoading(true)
+    void research.searchInstruments(detailStock.code, 5)
+      .then(resp => {
+        if (cancelled) return
+        const hits = resp.data?.items ?? []
+        setLocalIndexed(hits.some(h => h.code.toUpperCase() === detailStock.code.toUpperCase()))
+      })
+      .catch(() => {
+        if (!cancelled) setLocalIndexed(null)
+      })
+      .finally(() => {
+        if (!cancelled) setLocalIndexLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [detailStock, detailKind])
 
   const handleDiscoverSelect = useCallback((item: WatchlistItem) => {
     setSelected(item)
@@ -192,13 +243,12 @@ export default function RightMarketPanel({
   }, [addItem])
 
   const handlePortfolioSelect = useCallback((code: string) => {
-    const normalized = normalizeCode(code)
-    const fromList = items.find(item => normalizeCode(item.code) === normalized)
-    const holding = holdingsByCode[normalized]
-    const item: WatchlistItem = fromList ?? {
-      code: normalized,
-      name: holding?.name ?? normalized,
-    }
+    const fromList = items.find(item => item.code === code || normalizeCode(item.code) === normalizeCode(code))
+    const holding = holdingsByCode[normalizeCode(code)] ?? holdingsByCode[code]
+    const item: WatchlistItem = fromList ?? normalizeWatchlistItem({
+      code,
+      name: holding?.name ?? code,
+    })
     setSelected(item)
     setTab('detail')
   }, [items, holdingsByCode])
@@ -208,11 +258,6 @@ export default function RightMarketPanel({
     handlePortfolioSelect(focusStockCode)
     onFocusStockConsumed?.()
   }, [focusStockCode, handlePortfolioSelect, onFocusStockConsumed])
-
-  const detailStock = useMemo(() => {
-    if (!selected) return null
-    return items.find(item => item.code === selected.code) ?? selected
-  }, [items, selected])
 
   const manageHolding = manageStock
     ? holdingsByCode[normalizeCode(manageStock.code)] ?? null
@@ -335,7 +380,13 @@ export default function RightMarketPanel({
             onSelect={handlePortfolioSelect}
           />
         </div>
-        {tab === 'detail' && (
+        {tab === 'detail' && detailStock && detailKind === 'cn-etf' ? (
+          <EtfDetailTab stock={detailStock} />
+        ) : tab === 'detail' && detailStock && detailKind === 'us' ? (
+          <UsDetailTab stock={detailStock} localIndexed={localIndexed} loading={localIndexLoading} />
+        ) : tab === 'detail' && detailStock && detailKind === 'crypto' ? (
+          <CryptoDetailTab stock={detailStock} localIndexed={localIndexed} loading={localIndexLoading} />
+        ) : tab === 'detail' && detailStock ? (
           <StockDetailTab
             stock={detailStock}
             isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}
@@ -343,7 +394,7 @@ export default function RightMarketPanel({
             onManage={detailStock ? () => { void handleManage(detailStock) } : undefined}
             onDiscussInChat={onDiscussInChat}
           />
-        )}
+        ) : null}
 
         <FollowStockDialog
           open={!!manageStock}

@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 4
+export const SCHEMA_VERSION = 6
 
 export const MIGRATION_SQL = `
 PRAGMA journal_mode = WAL;
@@ -354,4 +354,111 @@ CREATE TABLE IF NOT EXISTS stock_klines_daily (
 
 CREATE INDEX IF NOT EXISTS idx_klines_code_date ON stock_klines_daily(code, trade_date DESC);
 CREATE INDEX IF NOT EXISTS idx_klines_date ON stock_klines_daily(trade_date);
+`
+
+export const MIGRATION_V5_SQL = `
+CREATE TABLE IF NOT EXISTS instruments (
+  code TEXT PRIMARY KEY,
+  market TEXT NOT NULL,
+  asset_class TEXT NOT NULL,
+  name TEXT,
+  exchange TEXT,
+  list_date TEXT,
+  delist_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  extra TEXT,
+  updated_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_instruments_market_class ON instruments(market, asset_class);
+CREATE INDEX IF NOT EXISTS idx_instruments_symbol ON instruments(code);
+
+CREATE TABLE IF NOT EXISTS etf_profiles (
+  code TEXT PRIMARY KEY,
+  profile_json TEXT NOT NULL,
+  updated_at TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS etf_nav_daily (
+  code TEXT NOT NULL,
+  trade_date TEXT NOT NULL,
+  nav REAL,
+  acc_nav REAL,
+  change_pct REAL,
+  premium_rate REAL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (code, trade_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_etf_nav_code_date ON etf_nav_daily(code, trade_date DESC);
+
+CREATE TABLE IF NOT EXISTS etf_holdings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  code TEXT NOT NULL,
+  report_date TEXT NOT NULL,
+  holding_symbol TEXT NOT NULL,
+  holding_name TEXT,
+  weight REAL,
+  shares REAL,
+  market_value REAL,
+  synced_at TEXT NOT NULL
+);
+
+CREATE INDEX IF NOT EXISTS idx_etf_holdings_code ON etf_holdings(code, report_date DESC);
+`
+
+/** v6 — instruments/stocks unified views + backfill CN EQUITY */
+export const MIGRATION_V6_SQL = `
+INSERT OR IGNORE INTO instruments (code, market, asset_class, name, exchange, list_date, status, extra, updated_at)
+SELECT
+  code,
+  'CN',
+  'EQUITY',
+  name,
+  market,
+  listing_date,
+  status,
+  json_object(
+    'industry', industry,
+    'industry_csrc', industry_csrc,
+    'is_st', is_st
+  ),
+  updated_at
+FROM stocks;
+
+CREATE VIEW IF NOT EXISTS v_instruments_unified AS
+SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+FROM instruments
+UNION ALL
+SELECT
+  s.code,
+  'CN' AS market,
+  'EQUITY' AS asset_class,
+  s.name,
+  s.market AS exchange,
+  s.listing_date AS list_date,
+  NULL AS delist_date,
+  s.status,
+  json_object(
+    'industry', s.industry,
+    'industry_csrc', s.industry_csrc,
+    'is_st', s.is_st
+  ) AS extra,
+  s.updated_at
+FROM stocks s
+WHERE NOT EXISTS (SELECT 1 FROM instruments i WHERE i.code = s.code);
+
+CREATE VIEW IF NOT EXISTS v_cn_equity_stocks AS
+SELECT
+  u.code,
+  u.name,
+  u.exchange AS market,
+  json_extract(u.extra, '$.industry') AS industry,
+  json_extract(u.extra, '$.industry_csrc') AS industry_csrc,
+  u.list_date AS listing_date,
+  CAST(COALESCE(json_extract(u.extra, '$.is_st'), 0) AS INTEGER) AS is_st,
+  u.status,
+  u.updated_at
+FROM v_instruments_unified u
+WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
 `

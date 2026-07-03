@@ -1,5 +1,5 @@
 import type { WatchlistItem } from '../types/market'
-import { normalizeCode } from '../market/format'
+import { formatInstrumentLabel, normalizeWatchlistItem, resolveWatchlistInstrument, watchlistItemKey } from '../market/instrument'
 
 /** 发送时将输入框标签 + 正文合成为 Agent 可读消息 */
 export function composeComposerMessage(text: string, refs: WatchlistItem[]): string {
@@ -7,7 +7,12 @@ export function composeComposerMessage(text: string, refs: WatchlistItem[]): str
   if (!refs.length) return body
 
   const subject = refs
-    .map(r => `${r.name}(${normalizeCode(r.code)})`)
+    .map(r => {
+      const item = normalizeWatchlistItem(r)
+      const ref = resolveWatchlistInstrument(item)
+      const label = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
+      return `${item.name}(${label})`
+    })
     .join('、')
 
   if (!body) return `请分析${subject}`
@@ -15,11 +20,12 @@ export function composeComposerMessage(text: string, refs: WatchlistItem[]): str
 }
 
 export function stockRefKey(item: WatchlistItem): string {
-  return normalizeCode(item.code)
+  return watchlistItemKey(normalizeWatchlistItem(item))
 }
 
 export function mergeStockRef(existing: WatchlistItem[], item: WatchlistItem): WatchlistItem[] {
-  const key = stockRefKey(item)
-  if (existing.some(r => stockRefKey(r) === key)) return existing
-  return [...existing, item]
+  const row = normalizeWatchlistItem(item)
+  const key = watchlistItemKey(row)
+  if (existing.some(r => watchlistItemKey(normalizeWatchlistItem(r)) === key)) return existing
+  return [...existing, row]
 }

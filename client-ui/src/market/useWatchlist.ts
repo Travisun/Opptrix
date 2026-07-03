@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { fetchWatchlist, saveWatchlist } from '../api/client'
 import type { WatchlistItem } from '../types/market'
-import { normalizeCode } from './format'
+import { normalizeWatchlistItem, watchlistItemKey } from './instrument'
 
 const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '600519', name: '贵州茅台', industry: '白酒' },
@@ -9,15 +9,8 @@ const DEFAULT_ITEMS: WatchlistItem[] = [
   { code: '300750', name: '宁德时代', industry: '电池' },
 ]
 
-function normalizeItem(item: WatchlistItem): WatchlistItem {
-  return {
-    code: normalizeCode(item.code),
-    name: item.name,
-    industry: item.industry,
-    note: item.note?.trim() || undefined,
-    addedAt: item.addedAt,
-    addedPrice: item.addedPrice ?? null,
-  }
+function itemKey(item: WatchlistItem): string {
+  return watchlistItemKey(normalizeWatchlistItem(item))
 }
 
 export function useWatchlist() {
@@ -33,9 +26,9 @@ export function useWatchlist() {
         if (cancelled) return
         if (remote.items.length > 0) {
           skipNextSync.current = true
-          setItems(remote.items.map(normalizeItem))
+          setItems(remote.items.map(normalizeWatchlistItem))
         } else {
-          const seeded = DEFAULT_ITEMS.map(row => normalizeItem({
+          const seeded = DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
             ...row,
             addedAt: new Date().toISOString(),
           }))
@@ -45,7 +38,7 @@ export function useWatchlist() {
         }
       } catch {
         if (!cancelled) {
-          setItems(DEFAULT_ITEMS.map(row => normalizeItem({
+          setItems(DEFAULT_ITEMS.map(row => normalizeWatchlistItem({
             ...row,
             addedAt: new Date().toISOString(),
           })))
@@ -67,35 +60,35 @@ export function useWatchlist() {
   }, [items])
 
   const addItem = useCallback((item: WatchlistItem, opts?: { addedPrice?: number | null }) => {
-    const code = normalizeCode(item.code)
+    const row = normalizeWatchlistItem(item)
+    const key = itemKey(row)
     const now = new Date().toISOString()
     setItems(prev => {
-      if (prev.some(x => x.code === code)) return prev
-      return [normalizeItem({
-        ...item,
-        code,
-        addedAt: item.addedAt ?? now,
-        addedPrice: opts?.addedPrice ?? item.addedPrice ?? null,
+      if (prev.some(x => itemKey(x) === key)) return prev
+      return [normalizeWatchlistItem({
+        ...row,
+        addedAt: row.addedAt ?? now,
+        addedPrice: opts?.addedPrice ?? row.addedPrice ?? null,
       }), ...prev]
     })
   }, [])
 
   const updateItem = useCallback((code: string, patch: Partial<WatchlistItem>) => {
-    const normalized = normalizeCode(code)
-    setItems(prev => prev.map(item => (
-      item.code === normalized ? normalizeItem({ ...item, ...patch, code: normalized }) : item
-    )))
+    setItems(prev => prev.map(item => {
+      const key = itemKey(item)
+      const match = item.code === code || itemKey({ ...item, code }) === itemKey({ ...item, code, ...patch })
+      if (!match && item.code !== code) return item
+      return normalizeWatchlistItem({ ...item, ...patch, code: patch.code ?? item.code })
+    }))
   }, [])
 
   const removeItem = useCallback((code: string) => {
-    const normalized = normalizeCode(code)
-    setItems(prev => prev.filter(item => item.code !== normalized))
+    setItems(prev => prev.filter(item => item.code !== code && itemKey(item) !== code))
   }, [])
 
   const reorderItem = useCallback((code: string, direction: 'up' | 'down') => {
-    const normalized = normalizeCode(code)
     setItems(prev => {
-      const index = prev.findIndex(item => item.code === normalized)
+      const index = prev.findIndex(item => item.code === code)
       if (index < 0) return prev
       const nextIndex = direction === 'up' ? index - 1 : index + 1
       if (nextIndex < 0 || nextIndex >= prev.length) return prev

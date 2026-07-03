@@ -1,6 +1,11 @@
 import { mergeClasses } from '@fluentui/react-components'
 import type { WatchlistItem } from '../types/market'
-import { normalizeCode } from '../market/format'
+import {
+  formatInstrumentLabel,
+  normalizeWatchlistItem,
+  resolveWatchlistInstrument,
+  watchlistItemKey,
+} from '../market/instrument'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
@@ -34,34 +39,37 @@ export default function ComposerStockMentionList({
       align="start"
       width={COMPOSER_MENU_WIDTH.stockMention}
       maxHeight={220}
-      title="引用关注股票"
-      ariaLabel="引用关注股票"
+      title="引用标的"
+      ariaLabel="引用标的"
       onClose={onClose}
     >
       {!items.length ? (
         <div className="opptrix-composer-tooltip-menu__empty">
           {query
-            ? '没有匹配的关注股票，请先在右侧面板添加关注'
-            : '暂无关注股票，请先在右侧面板添加'}
+            ? '没有匹配的标的，可尝试 US:AAPL、CRYPTO:BTC/USDT 或 6 位 A 股代码'
+            : '输入 @ 搜索关注列表或本地 instruments'}
         </div>
       ) : (
         items.map((item, index) => {
+          const row = normalizeWatchlistItem(item)
+          const ref = resolveWatchlistInstrument(row)
+          const codeLabel = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
           const active = index === activeIndex
           return (
             <ComposerTooltipMenuItem
-              key={item.code}
+              key={watchlistItemKey(row)}
               active={active}
               onMouseEnter={() => onHover(index)}
-              onClick={() => onSelect(item)}
+              onClick={() => onSelect(row)}
             >
               <span className="opptrix-composer-tooltip-menu__item-main">
-                <span className="opptrix-composer-tooltip-menu__item-title">{item.name}</span>
-                {item.industry ? (
-                  <span className="opptrix-composer-tooltip-menu__item-meta">{item.industry}</span>
+                <span className="opptrix-composer-tooltip-menu__item-title">{row.name}</span>
+                {row.industry ? (
+                  <span className="opptrix-composer-tooltip-menu__item-meta">{row.industry}</span>
                 ) : null}
               </span>
               <span className="opptrix-composer-tooltip-menu__item-code">
-                {normalizeCode(item.code)}
+                {codeLabel}
               </span>
             </ComposerTooltipMenuItem>
           )

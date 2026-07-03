@@ -46,6 +46,12 @@ export interface StockRealtime {
   amplitude?: number | null
   volumeRatio?: number | null
   timestamp?: string
+  /** US equities — trading session for displayed price */
+  quoteSession?: 'pre' | 'regular' | 'post' | 'closed'
+  /** User-facing session label (e.g. 盘前 / 盘中) */
+  sessionLabel?: string
+  preMarketPrice?: number | null
+  postMarketPrice?: number | null
 }
 
 export interface StockKline {

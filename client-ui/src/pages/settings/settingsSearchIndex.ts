@@ -56,6 +56,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'market_data', group: '库状态', title: '日 K 线', keywords: ['kline', 'K线'] },
   { section: 'market_data', group: '库状态', title: '财务指标', keywords: ['fundamentals', '财报'] },
   { section: 'market_data', group: '库状态', title: '筛股评分', keywords: ['factor', '因子'] },
+  { section: 'market_data', group: '库状态', title: '市场数据包', desc: 'A股 美股 Crypto 分包', keywords: ['美股', 'crypto', '数据包', '准备'] },
   { section: 'market_data', group: '同步', title: '数据同步', desc: '开始同步行情基础数据', keywords: ['同步', '增量', '全量'] },
   { section: 'market_data', group: '同步', title: '同步日志', keywords: ['日志'] },
   { section: 'market_data', group: '导入导出', title: '导入导出', desc: '行情基础数据包', keywords: ['opmd', '备份', '换机', '导出', '导入'] },

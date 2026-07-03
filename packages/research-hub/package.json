@@ -10,7 +10,7 @@
   "dependencies": {
     "@opptrix/shared": "*",
     "@opptrix/a-stock-layer": "*",
-    "@opptrix/market-data": "*",
+    "@opptrix/market-data-store": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/institutions": "*",
     "@opptrix/t-strategy": "*",

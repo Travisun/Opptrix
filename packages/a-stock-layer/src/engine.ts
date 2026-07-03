@@ -4,8 +4,16 @@ import type {
 import { CACHE_TYPE, Capability } from './core/capabilities.js'
 import { Cache } from './core/cache.js'
 import { DriverRegistry } from './core/registry.js'
-import { CAP_METHOD } from './drivers/base.js'
-import { registerAllDrivers } from './drivers/register.js'
+import { CAP_METHOD } from './providers/common/base.js'
+import { registerAllDrivers } from './providers/register.js'
+import { getProviderConfigStore } from './providers/config-store.js'
+import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
+import { isCnEtfCode } from './core/instrument.js'
+import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
+import { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
+import { normalizeUsSymbol } from './utils/us-market.js'
+import { parseCryptoPair } from './utils/crypto-market.js'
+import type { AssetClass, Market } from '@opptrix/shared'
 import type {
   Dividend, DragonTiger, GlobalIndex, IndexKline, IndexRealtime,
   LimitUpDown, MarketMoneyFlow, MoneyFlow, NewsItem, SectorMoneyFlow,
@@ -14,15 +22,7 @@ import type {
 import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
-import { tdxClient } from './tdx/client.js'
-import {
-  hasIntradaySessionOnDate,
-  mergeIntradaySessions,
-} from './tdx/intraday.js'
-import type { IntradayTrendFetchResult } from './utils/intraday-trends.js'
-import { cnTodayString, shouldPreferTodayIntraday } from './utils/market-session.js'
-import { isTushareEnabled } from './tushare/config.js'
-import { isBse920Code, normalizeCode } from './utils/helpers.js'
+import { normalizeCode } from './utils/helpers.js'
 import {
   normalizePreOpenRealtimeQuote,
   normalizePreOpenRealtimeQuotes,
@@ -30,10 +30,12 @@ import {
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
-/** aaashare AshareEngine — multi-driver fallback + cache */
-export class AshareEngine {
+/** Multi-market data engine — provider fallback + cache (canonical name: MarketDataEngine) */
+export class MarketDataEngine {
   readonly registry = new DriverRegistry()
   readonly cache = new Cache()
+  readonly providerCatalog: ProviderCatalogService
+  private readonly queryPlans: QueryPlanExecutor
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
 
@@ -49,10 +51,17 @@ export class AshareEngine {
     return this._watchlist
   }
   constructor(autoDiscover = true) {
+    const configStore = getProviderConfigStore()
+    this.registry.bindConfigStore(configStore)
     if (autoDiscover) registerAllDrivers(this.registry)
+    this.registry.refreshPriorities(configStore)
+    this.providerCatalog = createProviderCatalog(this.registry)
+    this.queryPlans = new QueryPlanExecutor(this.registry, this.cache)
   }
 
-  private async query<T>(
+  private async queryScoped<T>(
+    market: Market,
+    assetClass: AssetClass,
     cap: Capability,
     method: string,
     cacheType: string,
@@ -60,14 +69,14 @@ export class AshareEngine {
     args: unknown[],
   ): Promise<QueryResult<T[]>> {
     if (useCache && cacheType) {
-      const params = { method, args: JSON.stringify(args) }
+      const params = { method, market, assetClass, args: JSON.stringify(args) }
       const cached = this.cache.get<T[]>(cacheType, method, params)
       if (cached) return { success: true, data: cached, source: 'cache', cached: true }
     }
 
-    const drivers = this.registry.getDriversForCapability(cap)
+    const drivers = this.registry.getProvidersWithFallback(market, assetClass, cap)
     if (!drivers.length) {
-      return { success: false, error: `没有可用的 driver 支持 [${cap}]` }
+      return { success: false, error: `没有可用的 provider 支持 [${market}/${assetClass}/${cap}]` }
     }
 
     let lastError = ''
@@ -79,14 +88,46 @@ export class AshareEngine {
         const data = await fn.apply(driver, args)
         if (!data?.length) continue
         if (useCache && cacheType) {
-          this.cache.set(cacheType, data, method, { method, args: JSON.stringify(args) })
+          this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) })
         }
         return { success: true, data: data as T[], source: driver.name }
       } catch (e) {
         lastError = `${driver.name}: ${e}`
       }
     }
-    return { success: false, error: `所有 driver 均失败: ${lastError}` }
+    return { success: false, error: `所有 provider 均失败: ${lastError}` }
+  }
+
+  private async query<T>(
+    cap: Capability,
+    method: string,
+    cacheType: string,
+    useCache: boolean,
+    args: unknown[],
+  ): Promise<QueryResult<T[]>> {
+    return this.queryScoped('CN', 'EQUITY', cap, method, cacheType, useCache, args)
+  }
+
+  private qScoped<T>(
+    market: Market,
+    assetClass: AssetClass,
+    cap: Capability,
+    method: string,
+    useCache: boolean,
+    ...args: unknown[]
+  ) {
+    const cacheType = CACHE_TYPE[cap] ?? method
+    return this.queryScoped<T>(market, assetClass, cap, method, cacheType, useCache, args)
+  }
+
+  private qCrypto<T>(
+    cap: Capability,
+    method: string,
+    cacheType: string,
+    useCache: boolean,
+    ...args: unknown[]
+  ) {
+    return this.queryScoped<T>('CRYPTO', 'CRYPTO_SPOT', cap, method, cacheType, useCache, args)
   }
 
   private q<T>(cap: Capability, method: string, useCache: boolean, ...args: unknown[]) {
@@ -96,7 +137,8 @@ export class AshareEngine {
 
   // ── Core market data ──
   realtime(code: string, market?: import('./utils/helpers.js').StockMarket): Promise<QueryResult<StockRealtime[]>> {
-    return this.q<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
+    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    return this.qScoped<StockRealtime>('CN', assetClass, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
     })
@@ -144,52 +186,21 @@ export class AshareEngine {
     codes: string[],
     markets?: Record<string, import('./utils/helpers.js').StockMarket | undefined>,
   ): Promise<QueryResult<StockRealtime[]>> {
-    if (!codes.length) return { success: false, error: 'codes empty' }
-
-    const normalized = codes.map(c => normalizeCode(c))
-    const results: StockRealtime[] = []
-    const seen = new Set<string>()
-
-    const pushRows = (rows: StockRealtime[] | null | undefined) => {
-      if (!rows?.length) return
-      for (const row of rows) {
-        const key = normalizeCode(row.code)
-        if (seen.has(key)) continue
-        seen.add(key)
-        results.push(normalizePreOpenRealtimeQuote({ ...row, code: key }))
-      }
-    }
-
-    const tushareEligible = isTushareEnabled()
-      ? normalized.filter(c => !isBse920Code(c))
-      : []
-    if (tushareEligible.length) {
-      const viaDriver = await this.q<StockRealtime>(
-        Capability.STOCK_REALTIME, 'batchRealtime', false, tushareEligible,
-      )
-      if (viaDriver.success) pushRows(viaDriver.data)
-    }
-
-    const missing = normalized.filter(c => !seen.has(c))
-    if (missing.length) {
-      try {
-        pushRows(await tdxClient.batchRealtime(missing))
-      } catch { /* driver fallback */ }
-    }
-
-    const stillMissing = normalized.filter(c => !seen.has(c))
-    if (stillMissing.length) {
-      const viaQ = await this.q<StockRealtime>(
-        Capability.STOCK_REALTIME, 'batchRealtime', false, stillMissing, markets,
-      )
-      if (viaQ.success) pushRows(viaQ.data)
-    }
-
-    if (!results.length) return { success: false, error: 'batchRealtime failed' }
-    return { success: true, data: results, source: 'mixed', cached: false }
+    const assetClass = codes.some(c => isCnEtfCode(String(c))) ? 'ETF' : 'EQUITY'
+    return this.queryPlans.execute<StockRealtime>(
+      this.queryPlans.getPlan('cn_equity_stock_realtime_batch'),
+      {
+        method: 'batchRealtime',
+        cacheType: defaultCacheType(Capability.STOCK_REALTIME, 'batchRealtime'),
+        useCache: false,
+        args: [codes, markets],
+        assetClass,
+        mergeKey: item => normalizeCode(String((item as StockRealtime).code)),
+      },
+    )
   }
 
-  private async fetchDailyKline(
+  private fetchDailyKline(
     code: string,
     count: number,
     startOffset = 0,
@@ -197,51 +208,17 @@ export class AshareEngine {
     market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
     const want = Math.max(1, count)
-    const bse920 = isBse920Code(normalizeCode(code))
-    if (isTushareEnabled() && !bse920) {
-      const viaDriver = await this.query<StockKline>(
-        Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
-        [code, period, '', '', want, market],
-      )
-      if (viaDriver.success && viaDriver.data?.length) return viaDriver
-    }
-    try {
-      const rows = await this.fetchTdxBars(code, period, want, startOffset)
-      if (rows?.length) {
-        return { success: true, data: rows, source: 'mootdx', cached: false }
-      }
-    } catch { /* driver fallback */ }
-    return this.query<StockKline>(
-      Capability.STOCK_KLINE, 'kline', 'stock_kline', true,
-      [code, period, '', '', want, market],
+    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    return this.queryPlans.execute<StockKline>(
+      this.queryPlans.getPlan('cn_equity_stock_kline_daily'),
+      {
+        method: 'kline',
+        cacheType: defaultCacheType(Capability.STOCK_KLINE, 'stock_kline'),
+        useCache: true,
+        args: [code, period, '', '', want, market, startOffset],
+        assetClass,
+      },
     )
-  }
-
-  /** TDX bars — paginate when count > 800. */
-  private async fetchTdxBars(
-    code: string,
-    period: string,
-    count: number,
-    startOffset = 0,
-  ): Promise<StockKline[] | null> {
-    if (count <= 800) {
-      return tdxClient.kline(code, period, '', '', count, startOffset)
-    }
-    const chunks: StockKline[] = []
-    let remaining = count
-    let offset = startOffset
-    while (remaining > 0) {
-      const n = Math.min(800, remaining)
-      const part = await tdxClient.kline(code, period, '', '', n, offset)
-      if (!part?.length) break
-      chunks.unshift(...part)
-      remaining -= part.length
-      offset += part.length
-      if (part.length < n) break
-    }
-    if (!chunks.length) return null
-    chunks.sort((a, b) => a.date.localeCompare(b.date))
-    return chunks.slice(-count)
   }
 
   /** Minute OHLC — TDX primary, EastMoney fallback when TDX unavailable. */
@@ -264,13 +241,18 @@ export class AshareEngine {
     startOffset: number,
     market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
-    try {
-      const tdxRows = await tdxClient.kline(code, period, '', '', count, startOffset)
-      if (tdxRows?.length) {
-        return { success: true, data: tdxRows, source: 'mootdx', cached: false }
-      }
-    } catch { /* EastMoney fallback */ }
-
+    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const viaPlan = await this.queryPlans.execute<StockKline>(
+      this.queryPlans.getPlan('cn_equity_stock_kline_minute'),
+      {
+        method: 'kline',
+        cacheType: defaultCacheType(Capability.STOCK_KLINE, 'stock_kline'),
+        useCache: true,
+        args: [code, period, '', '', count, market, startOffset],
+        assetClass,
+      },
+    )
+    if (viaPlan.success && viaPlan.data?.length) return viaPlan
     return this.eastmoneyMinuteFallback(code, period, count, startOffset, market)
   }
 
@@ -353,26 +335,21 @@ export class AshareEngine {
     return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, args)
   }
 
-  private async fetchIndexKline(
+  private fetchIndexKline(
     code: string,
     count: number,
     period = 'daily',
   ): Promise<QueryResult<IndexKline[]>> {
     const want = Math.max(1, count)
-    if (isTushareEnabled()) {
-      const viaDriver = await this.query<IndexKline>(
-        Capability.INDEX_KLINE, 'indexKline', 'index_kline', true,
-        [code, period, '', '', want],
-      )
-      if (viaDriver.success && viaDriver.data?.length) return viaDriver
-    }
-    try {
-      const rows = await tdxClient.indexKline(code, period, '', '', want)
-      if (rows?.length) return { success: true, data: rows, source: 'mootdx', cached: false }
-    } catch { /* driver fallback */ }
-    return this.query<IndexKline>(
-      Capability.INDEX_KLINE, 'indexKline', 'index_kline', true,
-      [code, period, '', '', want],
+    return this.queryPlans.execute<IndexKline>(
+      this.queryPlans.getPlan('cn_index_index_kline'),
+      {
+        method: 'indexKline',
+        cacheType: defaultCacheType(Capability.INDEX_KLINE, 'index_kline'),
+        useCache: true,
+        args: [code, period, '', '', want],
+        assetClass: 'INDEX',
+      },
     )
   }
 
@@ -463,60 +440,9 @@ export class AshareEngine {
     ndays = 5,
     market?: import('./utils/helpers.js').StockMarket,
   ) {
-    const today = cnTodayString()
-    const preferToday = shouldPreferTodayIntraday()
-
-    let tdx: IntradayTrendFetchResult | null = null
-    try {
-      tdx = await tdxClient.fetchIntradaySessions(code, ndays, market)
-    } catch { /* EastMoney supplement */ }
-
-    const em = await this.fetchEastmoneyIntradaySessions(code, ndays, market)
-
-    if (preferToday && em && hasIntradaySessionOnDate(em.sessions, today)) {
-      const emToday = em.sessions.find(row => row.sessionDate === today)!
-      const tdxHistory = (tdx?.sessions ?? []).filter(row => row.sessionDate !== today)
-      const merged = mergeIntradaySessions(
-        [...tdxHistory, emToday],
-        em.apiPreClose ?? tdx?.apiPreClose ?? null,
-      )
-      if (merged.sessions.length) {
-        const source = hasIntradaySessionOnDate(tdx?.sessions ?? [], today) ? 'mootdx' : 'eastmoney'
-        return { success: true as const, data: merged, source }
-      }
-    }
-
-    if (tdx?.sessions.length) {
-      return { success: true as const, data: tdx, source: 'mootdx' }
-    }
-    if (em?.sessions.length) {
-      return { success: true as const, data: em, source: 'eastmoney' }
-    }
-    return { success: false as const, error: '分时数据获取失败' }
+    return executeIntradaySessionsPlan(this.registry, code, ndays, market)
   }
 
-  private async fetchEastmoneyIntradaySessions(
-    code: string,
-    ndays = 5,
-    market?: import('./utils/helpers.js').StockMarket,
-  ): Promise<IntradayTrendFetchResult | null> {
-    const drivers = this.registry.getDriversForCapability(Capability.INTRADAY_TICK)
-    for (const driver of drivers) {
-      const fn = (driver as { fetchIntradaySessions?: (c: string, n?: number, m?: 'SH' | 'SZ' | 'BJ') => Promise<unknown> })
-        .fetchIntradaySessions
-      if (typeof fn !== 'function') continue
-      try {
-        const data = await fn.call(driver, code, ndays, market)
-        if (data && typeof data === 'object' && 'sessions' in data) {
-          const sessions = (data as IntradayTrendFetchResult).sessions
-          if (sessions?.length) return data as IntradayTrendFetchResult
-        }
-      } catch {
-        /* try next driver */
-      }
-    }
-    return null
-  }
   indexConstituents(indexCode: string): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.INDEX_CONST, 'indexConstituents', true, indexCode)
   }
@@ -532,9 +458,129 @@ export class AshareEngine {
   convertibleBonds(): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.CONVERTIBLE_BOND, 'convertibleBonds', false)
   }
-  etfData(etfCode = ''): Promise<QueryResult<Record<string, unknown>[]>> {
-    return this.q(Capability.ETF_DATA, 'etfData', true, etfCode)
+  etfData(etfCode = '') {
+    return this.etfList(etfCode)
   }
+
+  etfList(etfCode = '') {
+    return this.qScoped('CN', 'ETF', Capability.ETF_LIST, 'etfList', true, 'CN', etfCode)
+  }
+
+  etfProfile(etfCode: string) {
+    return this.qScoped('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, etfCode)
+  }
+
+  etfNav(etfCode: string) {
+    return this.qScoped('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, etfCode)
+  }
+
+  etfHoldings(etfCode: string) {
+    return this.qScoped('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, etfCode)
+  }
+
+  async etfSnapshot(etfCode: string) {
+    const code = normalizeCode(etfCode)
+    const [profile, nav, quote] = await Promise.all([
+      this.etfProfile(code),
+      this.etfNav(code),
+      this.realtime(code),
+    ])
+    return {
+      success: profile.success || nav.success || quote.success,
+      data: {
+        code,
+        profile: profile.data?.[0] ?? null,
+        nav: nav.data?.[0] ?? null,
+        quote: quote.data?.[0] ?? null,
+      },
+      source: profile.source ?? nav.source ?? quote.source,
+    }
+  }
+
+  // ── US equities (Phase 2) ──
+
+  usRealtime(symbol: string) {
+    const sym = normalizeUsSymbol(symbol)
+    return this.qScoped('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, sym)
+  }
+
+  usKline(symbol: string, count = 180) {
+    const sym = normalizeUsSymbol(symbol)
+    return this.qScoped(
+      'US', 'EQUITY', Capability.STOCK_KLINE, 'kline', true,
+      sym, 'daily', '', '', count,
+    )
+  }
+
+  usProfile(symbol: string) {
+    const sym = normalizeUsSymbol(symbol)
+    return this.qScoped('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, sym)
+  }
+
+  usStockList(keyword = '') {
+    return this.qScoped('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, 'US', keyword)
+  }
+
+  usFinancials(symbol: string, reportDate = '', reportType = 'annual') {
+    const sym = normalizeUsSymbol(symbol)
+    return this.qScoped('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, sym, reportDate, reportType)
+  }
+
+  async usSnapshot(symbol: string) {
+    const sym = normalizeUsSymbol(symbol)
+    const [profile, quote, klines] = await Promise.all([
+      this.usProfile(sym),
+      this.usRealtime(sym),
+      this.usKline(sym, 10),
+    ])
+    return {
+      success: profile.success || quote.success || klines.success,
+      data: {
+        code: sym,
+        profile: profile.data?.[0] ?? null,
+        quote: quote.data?.[0] ?? null,
+        recentKlines: klines.data ?? [],
+      },
+      source: profile.source ?? quote.source ?? klines.source,
+    }
+  }
+
+  // ── Crypto SPOT (Phase 3) ──
+
+  cryptoRealtime(pair: string) {
+    const sym = parseCryptoPair(pair)?.pair ?? pair
+    return this.qCrypto<StockRealtime>(Capability.STOCK_REALTIME, 'realtime', 'crypto_realtime', true, sym)
+  }
+
+  cryptoKline(pair: string, count = 180) {
+    const sym = parseCryptoPair(pair)?.pair ?? pair
+    return this.qCrypto<StockKline>(
+      Capability.STOCK_KLINE, 'kline', 'crypto_kline', true,
+      sym, 'daily', '', '', count,
+    )
+  }
+
+  cryptoList(keyword = '') {
+    return this.qCrypto<StockListItem>(Capability.STOCK_LIST, 'stockList', 'stock_list', true, 'CRYPTO', keyword)
+  }
+
+  async cryptoSnapshot(pair: string) {
+    const sym = parseCryptoPair(pair)?.pair ?? pair
+    const [quote, klines] = await Promise.all([
+      this.cryptoRealtime(sym),
+      this.cryptoKline(sym, 10),
+    ])
+    return {
+      success: quote.success || klines.success,
+      data: {
+        pair: sym,
+        quote: quote.data?.[0] ?? null,
+        recentKlines: klines.data ?? [],
+      },
+      source: quote.source ?? klines.source,
+    }
+  }
+
   managerInfo(code: string): Promise<QueryResult<Record<string, unknown>[]>> {
     return this.q(Capability.MANAGER_INFO, 'managerInfo', true, code)
   }
@@ -600,21 +646,72 @@ export class AshareEngine {
   }
   cacheStats() { return this.cache.stats() }
   listDrivers() { return this.registry.listDriverInfo() }
+  listProviders() { return this.providerCatalog.listCatalog() }
+  getProviderConfig(providerId: string) { return this.providerCatalog.getPublic(providerId) }
+  saveProviderConfig(providerId: string, patch: Parameters<ProviderCatalogService['saveConfig']>[1]) {
+    const result = this.providerCatalog.saveConfig(providerId, patch)
+    this.clearCache()
+    return result
+  }
+  listProviderBindingOverrides(providerId: string) {
+    return this.providerCatalog.listPublicBindingOverrides(providerId)
+  }
+  saveProviderBindingOverride(
+    providerId: string,
+    market: string,
+    assetClass: string,
+    capability: string,
+    patch: import('@opptrix/shared').ProviderBindingOverridePatch,
+  ) {
+    const items = this.providerCatalog.saveBindingOverride(providerId, market, assetClass, capability, patch)
+    this.clearCache()
+    return items
+  }
+  testProviderConnection(providerId: string, overrides?: Record<string, unknown>) {
+    return this.providerCatalog.testConnection(providerId, overrides)
+  }
   registerDriver(driver: Parameters<DriverRegistry['register']>[0]) { this.registry.register(driver) }
   unregisterDriver(name: string) { this.registry.unregister(name) }
 }
 
-export { Capability, CACHE_TYPE } from './core/capabilities.js'
+export { MarketDataEngine as AshareEngine }
+
 export { DriverRegistry } from './core/registry.js'
-export { Cache } from './core/cache.js'
+export { Capability, CACHE_TYPE } from './core/capabilities.js'
+export { Cache, DEFAULT_TTL } from './core/cache.js'
 export * from './core/schema.js'
-export { BaseDriver, CAP_METHOD } from './drivers/base.js'
+export { BaseDriver, CAP_METHOD } from './providers/common/base.js'
 export {
-  EastMoneyDriver, EfinanceDriver, MootdxDriver, PytdxDriver, TencentDriver,
+  EastMoneyDriver, EfinanceDriver, TdxDriver, TencentDriver,
   SinaDriver, TonghuashunDriver, NeteaseDriver, XueqiuDriver,
   GubaDriver, CninfoDriver, CsindexDriver, StatsGovDriver, TushareDriver,
+  PolygonDriver, TiingoDriver, FmpDriver, YahooUsDriver, BinanceDriver, OkxDriver,
   registerAllDrivers,
-} from './drivers/register.js'
+} from './providers/register.js'
+export { loadTushareConfig, isTushareEnabled, saveTushareConfig, publicTushareConfig } from './providers/tushare/config.js'
+export { testTushareConnection } from './providers/tushare/api/client.js'
+export { testPolygonConnection } from './providers/polygon/api/client.js'
+export { testTiingoConnection } from './providers/tiingo/api/client.js'
+export { testFmpConnection } from './providers/fmp/api/client.js'
+export { loadPolygonConfig, isPolygonEnabled } from './providers/polygon/config.js'
+export { loadTiingoConfig, isTiingoEnabled } from './providers/tiingo/config.js'
+export { loadFmpConfig, isFmpEnabled } from './providers/fmp/config.js'
+export { getProviderConfigStore, ProviderConfigStore } from './providers/config-store.js'
+export { ProviderCatalogService, createProviderCatalog } from './providers/catalog.js'
+export { PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest } from './providers/manifests.js'
 export { normalizePreOpenRealtimeQuote, normalizePreOpenRealtimeQuotes, isMissingLivePrice } from './utils/quote-normalize.js'
 export { computeIndicators } from './utils/indicators.js'
 export { computeChipDistribution, computeLatestChipProfile } from './utils/cyq.js'
+export {
+  QueryPlanExecutor,
+  QUERY_PLANS,
+  defaultCacheType,
+} from './core/query-plan.js'
+export type {
+  QueryPlan,
+  QueryPlanId,
+  QueryPlanStrategy,
+  QueryExecutionContext,
+} from './core/query-plan.js'
+export { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
+export { fetchTdxKlinePaginated } from './providers/tdx/kline-paginate.js'

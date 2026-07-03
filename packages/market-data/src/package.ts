@@ -5,6 +5,8 @@ import path from 'node:path'
 import { gunzipSync, gzipSync } from 'node:zlib'
 import type Database from 'better-sqlite3'
 import { SCHEMA_VERSION } from './schema.js'
+import type { MarketDataPackId } from '@opptrix/shared'
+import { loadMarketPackConfig } from './market-pack-settings.js'
 import type { MarketDbStatus } from './store.js'
 import { marketDbPath } from './paths.js'
 import { MarketDataStore } from './store.js'
@@ -14,6 +16,8 @@ export const PACKAGE_MAGIC = 'OPMD'
 export const PACKAGE_FORMAT_VERSION = 1
 export const MIN_SUPPORTED_PACKAGE_FORMAT_VERSION = 1
 export const PACKAGE_KIND = 'market_bootstrap' as const
+export const PACKAGE_KIND_SUPPLEMENT = 'market_pack_supplement' as const
+export type MarketDataPackageKind = typeof PACKAGE_KIND | typeof PACKAGE_KIND_SUPPLEMENT
 export const PACKAGE_APP_ID = 'opptrix' as const
 export const PACKAGE_FILE_EXTENSION = '.opmd'
 export const PACKAGE_MIME = 'application/vnd.opptrix.market-data+opmd'
@@ -23,11 +27,13 @@ const SQLITE_MAGIC = 'SQLite format 3'
 
 export interface MarketDataPackageMetadata {
   app: typeof PACKAGE_APP_ID
-  kind: typeof PACKAGE_KIND
+  kind: MarketDataPackageKind
   format_version: number
   exported_at: string
   schema_version: number
   pack_signature: string
+  /** Supplemental pack scope — only for market_pack_supplement */
+  pack_scope?: MarketDataPackId
   compatible: {
     min_format_version: number
     max_format_version: number
@@ -40,6 +46,9 @@ export interface MarketDataPackageMetadata {
     latest_factor_date: string | null
     is_ready: boolean
     bootstrap: MarketDbStatus['bootstrap']
+    us_count?: number
+    crypto_count?: number
+    market_packs?: ReturnType<typeof loadMarketPackConfig>
   }
 }
 
@@ -84,6 +93,9 @@ function buildMetadata(status: MarketDbStatus, payloadSha256: Buffer): MarketDat
       latest_factor_date: status.latest_factor_date,
       is_ready: status.is_ready,
       bootstrap: status.bootstrap,
+      us_count: status.us_count,
+      crypto_count: status.crypto_count,
+      market_packs: loadMarketPackConfig(),
     },
   }
 }
@@ -147,8 +159,8 @@ function validateMetadata(metadata: MarketDataPackageMetadata, payloadSha256: Bu
   if (metadata.app !== PACKAGE_APP_ID) {
     throw new Error('该数据包不是 Opptrix 导出的基础数据包')
   }
-  if (metadata.kind !== PACKAGE_KIND) {
-    throw new Error('数据包类型不匹配（需要个股基础数据库）')
+  if (metadata.kind !== PACKAGE_KIND && metadata.kind !== PACKAGE_KIND_SUPPLEMENT) {
+    throw new Error('数据包类型不匹配（需要个股基础数据库或市场补充包）')
   }
   if (metadata.format_version < MIN_SUPPORTED_PACKAGE_FORMAT_VERSION) {
     throw new Error(`数据包格式过旧（v${metadata.format_version}），请升级 Opptrix 后重试`)

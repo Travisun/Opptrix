@@ -1,3 +1,5 @@
+import type { InstrumentRef } from '@opptrix/shared'
+
 export interface WatchlistItem {
   code: string
   name: string
@@ -5,4 +7,6 @@ export interface WatchlistItem {
   note?: string
   addedAt?: string
   addedPrice?: number | null
+  /** Explicit market identity — inferred from code when absent (legacy) */
+  instrument?: InstrumentRef
 }

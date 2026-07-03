@@ -337,6 +337,154 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('stock_detail', { code: a.code }),
       },
       {
+        name: 'get_etf_list', category: '本地数据',
+        description: '获取 A 股 ETF 列表（本地优先，含代码、名称、净值摘要）',
+        parameters: S({
+          code: { type: 'string', description: '可选，6 位 ETF 代码过滤单只' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_etf_list', {
+          ...(a.code ? { code: a.code } : {}),
+        }),
+      },
+      {
+        name: 'search_etfs', category: '通用',
+        description: '按代码或名称搜索 A 股 ETF',
+        parameters: S({
+          keyword: { type: 'string', description: '搜索关键词' },
+        }, ['keyword']),
+        handler: (a: Record<string, unknown>) => d('search_etfs', { keyword: a.keyword }),
+      },
+      {
+        name: 'get_etf_snapshot', category: '本地数据',
+        description: '单只 ETF 快照：概况、净值、实时行情',
+        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
+        handler: (a: Record<string, unknown>) => d('etf_snapshot', { code: a.code }),
+      },
+      {
+        name: 'get_etf_nav', category: '本地数据',
+        description: 'ETF 历史净值与溢价率',
+        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
+        handler: (a: Record<string, unknown>) => d('local_etf_nav', { code: a.code }),
+      },
+      {
+        name: 'get_etf_holdings', category: '本地数据',
+        description: 'ETF 最新披露持仓与权重',
+        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
+        handler: (a: Record<string, unknown>) => d('local_etf_holdings', { code: a.code }),
+      },
+      {
+        name: 'get_local_etf_screen_schema', category: '本地数据',
+        description: '本地 ETF 筛选维度说明（溢价率、规模、跟踪指数等）',
+        parameters: S({}),
+        handler: () => d('local_etf_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_etfs', category: '本地数据',
+        description: '本地 ETF 筛选：按折溢价率、规模（亿元）、跟踪指数等条件过滤',
+        parameters: S({
+          min_premium_rate: { type: 'number', description: '折溢价率下限（%）' },
+          max_premium_rate: { type: 'number', description: '折溢价率上限（%）' },
+          min_scale_yi: { type: 'number', description: '规模下限（亿元）' },
+          max_scale_yi: { type: 'number', description: '规模上限（亿元）' },
+          keyword: { type: 'string', description: '代码或名称关键词' },
+          tracking_index_contains: { type: 'string', description: '跟踪指数关键词' },
+          sort_by: { type: 'string', description: 'premium_rate | scale_yi | nav | code | name' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_etf_screen', a),
+      },
+      {
+        name: 'get_etf_scorecard', category: '本地数据',
+        description: '单只 A 股 ETF 决策雷达：折溢价、规模流动性、费率、净值稳健与同类对比（0–100 分）',
+        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
+        handler: (a: Record<string, unknown>) => d('etf_scorecard', { code: a.code }),
+      },
+      {
+        name: 'get_etf_scorecard_schema', category: '本地数据',
+        description: 'ETF 决策雷达评分维度与权重说明',
+        parameters: S({}),
+        handler: () => d('etf_scorecard_schema', {}),
+      },
+      {
+        name: 'get_us_stock_quote', category: '本地数据',
+        description: '获取单只美股实时行情',
+        parameters: S({
+          symbol: { type: 'string', description: '美股 ticker，如 AAPL' },
+        }, ['symbol']),
+        handler: (a: Record<string, unknown>) => d('us_realtime', {
+          symbol: a.symbol ?? a.code,
+        }),
+      },
+      {
+        name: 'get_us_stock_kline', category: '本地数据',
+        description: '获取美股日 K 线',
+        parameters: S({
+          symbol: { type: 'string', description: '美股 ticker' },
+          count: { type: 'number', description: 'K 线根数，默认 180' },
+        }, ['symbol']),
+        handler: (a: Record<string, unknown>) => d('us_kline', {
+          symbol: a.symbol ?? a.code,
+          count: a.count ?? 180,
+        }),
+      },
+      {
+        name: 'get_us_stock_profile', category: '本地数据',
+        description: '获取美股公司概况',
+        parameters: S({ symbol: { type: 'string', description: '美股 ticker' } }, ['symbol']),
+        handler: (a: Record<string, unknown>) => d('us_profile', { symbol: a.symbol ?? a.code }),
+      },
+      {
+        name: 'get_us_stock_financials', category: '本地数据',
+        description: '美股财报摘要（营收、净利、EPS、ROE 等；需 Polygon 已配置）',
+        parameters: S({
+          symbol: { type: 'string', description: '美股 ticker' },
+          report_type: { type: 'string', description: 'annual 或 quarter，默认 annual' },
+        }, ['symbol']),
+        handler: (a: Record<string, unknown>) => d('us_financials', {
+          symbol: a.symbol ?? a.code,
+          report_type: a.report_type,
+        }),
+      },
+      {
+        name: 'get_us_stock_snapshot', category: '本地数据',
+        description: '单只美股快照：概况、行情、近期 K 线',
+        parameters: S({ symbol: { type: 'string', description: '美股 ticker' } }, ['symbol']),
+        handler: (a: Record<string, unknown>) => d('us_snapshot', { symbol: a.symbol ?? a.code }),
+      },
+      {
+        name: 'search_us_stocks', category: '通用',
+        description: '搜索美股（ticker 或公司名）',
+        parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
+        handler: (a: Record<string, unknown>) => d('search_us_stocks', { keyword: a.keyword }),
+      },
+      {
+        name: 'get_crypto_quote', category: '本地数据',
+        description: 'Crypto 交易对实时行情（如 BTC/USDT）',
+        parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
+        handler: (a: Record<string, unknown>) => d('crypto_realtime', { pair: a.pair ?? a.symbol }),
+      },
+      {
+        name: 'get_crypto_kline', category: '本地数据',
+        description: 'Crypto 交易对日 K 线',
+        parameters: S({
+          pair: { type: 'string', description: '交易对，如 BTC/USDT' },
+          count: { type: 'number', description: 'K 线根数，默认 180' },
+        }, ['pair']),
+        handler: (a: Record<string, unknown>) => d('crypto_kline', { pair: a.pair ?? a.symbol, count: a.count }),
+      },
+      {
+        name: 'get_crypto_snapshot', category: '本地数据',
+        description: 'Crypto 交易对快照：行情 + 近期 K 线',
+        parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
+        handler: (a: Record<string, unknown>) => d('crypto_snapshot', { pair: a.pair ?? a.symbol }),
+      },
+      {
+        name: 'search_crypto_pairs', category: '通用',
+        description: '搜索 Crypto 交易对（base 或 pair 名）',
+        parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
+        handler: (a: Record<string, unknown>) => d('search_crypto_pairs', { keyword: a.keyword }),
+      },
+      {
         name: 'analyze_portfolio', category: '组合管理',
         description: '分析持仓组合的因子暴露与综合评分',
         parameters: S({

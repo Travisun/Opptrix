@@ -7,7 +7,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
-import { getMarketDataService, suggestPackageFilename } from '@opptrix/market-data'
+import { getMarketDataService, suggestPackageFilename, suggestPackFilename } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { cancelSessionChat, clearSessionChat, registerSessionChat } from './session-chat-runs.js'
@@ -154,6 +154,38 @@ app.get('/api/market-data/sync-state', async () => {
   return { success: result.success, data: result.data, message: result.message }
 })
 
+app.get('/api/market-data/packs', async () => {
+  const result = await hub.dispatch('market_data_packs', {})
+  return { success: result.success, data: result.data, message: result.message }
+})
+
+app.patch<{ Body: { patch?: Record<string, { enabled?: boolean }> } }>(
+  '/api/market-data/packs',
+  async (req, reply) => {
+    const patch = req.body?.patch
+    if (!patch || typeof patch !== 'object') {
+      return reply.code(400).send({ error: 'patch required' })
+    }
+    const result = await hub.dispatch('market_data_packs_save', { patch })
+    return { success: result.success, data: result.data, message: result.message }
+  },
+)
+
+app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
+  '/api/market-data/packs/:id/prepare',
+  async (req, reply) => {
+    const pack = req.params.id?.trim().toLowerCase()
+    if (pack !== 'cn' && pack !== 'us' && pack !== 'crypto') {
+      return reply.code(400).send({ error: 'pack must be cn, us, or crypto' })
+    }
+    const result = await hub.dispatch('market_data_pack_prepare', {
+      pack,
+      force: req.body?.force === true,
+    })
+    return { success: result.success, data: result.data, message: result.message }
+  },
+)
+
 app.get('/api/discover/jobs', async () => {
   return { jobs: listDiscoverJobs(40) }
 })
@@ -275,12 +307,16 @@ app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; backgrou
   },
 )
 
-app.get('/api/market-data/export', async (_req, reply) => {
+app.get<{ Querystring: { pack?: string } }>('/api/market-data/export', async (req, reply) => {
   try {
+    const packRaw = req.query.pack?.trim().toLowerCase()
+    const pack = packRaw === 'us' || packRaw === 'crypto' ? packRaw : undefined
     const svc = getMarketDataService()
-    const buffer = await svc.exportPackage()
+    const buffer = await svc.exportPackage(pack)
     const inspect = svc.inspectPackage(buffer)
-    const filename = suggestPackageFilename(inspect.metadata)
+    const filename = pack
+      ? suggestPackFilename(pack, inspect.metadata)
+      : suggestPackageFilename(inspect.metadata)
     return reply
       .header('Content-Type', 'application/vnd.opptrix.market-data+opmd')
       .header('Content-Disposition', `attachment; filename="${filename}"`)
@@ -343,6 +379,256 @@ app.post<{ Body: { enabled?: boolean; token?: string } }>('/api/tushare/config',
 
 app.post<{ Body: { token?: string } }>('/api/tushare/test', async (req) => {
   const r = await hub.dispatch('tushare_test', { token: req.body?.token })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/data/providers', async () => {
+  const r = await hub.dispatch('provider_list', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { id: string } }>('/api/data/providers/:id/config', async (req) => {
+  const r = await hub.dispatch('provider_config', { provider_id: req.params.id })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{
+  Params: { id: string }
+  Body: {
+    enabled?: boolean
+    priority_mode?: 'manifest' | 'custom'
+    priority?: number | null
+    extra?: Record<string, unknown>
+  }
+}>('/api/data/providers/:id/config', async (req) => {
+  const body = req.body ?? {}
+  const r = await hub.dispatch('provider_config_save', {
+    provider_id: req.params.id,
+    enabled: body.enabled,
+    priority_mode: body.priority_mode,
+    priority: body.priority,
+    extra: body.extra,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { id: string } }>('/api/data/providers/:id/bindings', async (req) => {
+  const r = await hub.dispatch('provider_binding_overrides', { provider_id: req.params.id })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{
+  Params: { id: string }
+  Body: {
+    market: string
+    asset_class: string
+    capability: string
+    enabled?: boolean | null
+    priority?: number | null
+  }
+}>('/api/data/providers/:id/bindings', async (req) => {
+  const body = req.body ?? {}
+  const r = await hub.dispatch('provider_binding_override_save', {
+    provider_id: req.params.id,
+    market: body.market,
+    asset_class: body.asset_class,
+    capability: body.capability,
+    enabled: body.enabled,
+    priority: body.priority,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{
+  Params: { id: string }
+  Body: Record<string, unknown>
+}>('/api/data/providers/:id/test', async (req) => {
+  const r = await hub.dispatch('provider_test', {
+    provider_id: req.params.id,
+    ...req.body,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { code?: string; limit?: string } }>('/api/etf/list', async (req) => {
+  const r = await hub.dispatch('local_etf_list', {
+    code: req.query.code,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { code: string } }>('/api/etf/:code/snapshot', async (req) => {
+  const r = await hub.dispatch('etf_snapshot', { code: req.params.code })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { code: string }; Querystring: { limit?: string } }>('/api/etf/:code/nav', async (req) => {
+  const r = await hub.dispatch('local_etf_nav', {
+    code: req.params.code,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { code: string }; Querystring: { limit?: string } }>('/api/etf/:code/holdings', async (req) => {
+  const r = await hub.dispatch('local_etf_holdings', {
+    code: req.params.code,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/etf/search', async (req) => {
+  const r = await hub.dispatch('search_etfs', {
+    keyword: req.query.keyword ?? req.query.q,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/etf/screen/schema', async () => {
+  const r = await hub.dispatch('local_etf_screen_schema', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/etf/screen', async (req) => {
+  const r = await hub.dispatch('local_etf_screen', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { code: string } }>('/api/etf/:code/scorecard', async (req) => {
+  const r = await hub.dispatch('etf_scorecard', { code: req.params.code })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/etf/scorecard/schema', async () => {
+  const r = await hub.dispatch('etf_scorecard_schema', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string; markets?: string } }>(
+  '/api/instruments/search',
+  async (req) => {
+    const markets = req.query.markets
+      ? req.query.markets.split(',').map(s => s.trim()).filter(Boolean)
+      : undefined
+    const r = await hub.dispatch('search_local_instruments', {
+      keyword: req.query.keyword ?? req.query.q,
+      limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+      markets,
+    })
+    return { success: r.success, data: r.data, message: r.message }
+  },
+)
+
+app.get('/api/instruments/summary', async () => {
+  const r = await hub.dispatch('local_instruments_summary', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/us/screen/schema', async () => {
+  const r = await hub.dispatch('local_us_screen_schema', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/us/screen', async (req) => {
+  const r = await hub.dispatch('local_us_screen', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { keyword?: string; limit?: string } }>('/api/us/list', async (req) => {
+  const r = await hub.dispatch('local_us_list', {
+    keyword: req.query.keyword,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { symbol: string } }>('/api/us/:symbol/snapshot', async (req) => {
+  const r = await hub.dispatch('us_snapshot', { symbol: req.params.symbol })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { symbol: string } }>('/api/us/:symbol/quote', async (req) => {
+  const r = await hub.dispatch('us_realtime', { symbol: req.params.symbol })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { symbol: string }; Querystring: { count?: string } }>('/api/us/:symbol/kline', async (req) => {
+  const r = await hub.dispatch('us_kline', {
+    symbol: req.params.symbol,
+    count: req.query.count != null ? Number(req.query.count) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { symbol: string } }>('/api/us/:symbol/profile', async (req) => {
+  const r = await hub.dispatch('us_profile', { symbol: req.params.symbol })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { symbol: string }; Querystring: { report_type?: string; report_date?: string } }>(
+  '/api/us/:symbol/financials',
+  async (req) => {
+    const r = await hub.dispatch('us_financials', {
+      symbol: req.params.symbol,
+      report_type: req.query.report_type,
+      report_date: req.query.report_date,
+    })
+    return { success: r.success, data: r.data, message: r.message }
+  },
+)
+
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/us/search', async (req) => {
+  const r = await hub.dispatch('search_us_stocks', {
+    keyword: req.query.keyword ?? req.query.q,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get('/api/crypto/screen/schema', async () => {
+  const r = await hub.dispatch('local_crypto_screen_schema', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/crypto/screen', async (req) => {
+  const r = await hub.dispatch('local_crypto_screen', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { keyword?: string; limit?: string } }>('/api/crypto/list', async (req) => {
+  const r = await hub.dispatch('local_crypto_list', {
+    keyword: req.query.keyword,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { pair: string } }>('/api/crypto/:pair/snapshot', async (req) => {
+  const r = await hub.dispatch('crypto_snapshot', { pair: decodeURIComponent(req.params.pair) })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { pair: string } }>('/api/crypto/:pair/quote', async (req) => {
+  const r = await hub.dispatch('crypto_realtime', { pair: decodeURIComponent(req.params.pair) })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Params: { pair: string }; Querystring: { count?: string } }>('/api/crypto/:pair/kline', async (req) => {
+  const r = await hub.dispatch('crypto_kline', {
+    pair: decodeURIComponent(req.params.pair),
+    count: req.query.count != null ? Number(req.query.count) : undefined,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/crypto/search', async (req) => {
+  const r = await hub.dispatch('search_crypto_pairs', {
+    keyword: req.query.keyword ?? req.query.q,
+    limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+  })
   return { success: r.success, data: r.data, message: r.message }
 })
 

@@ -179,6 +179,58 @@ export const research = {
   stockDetail: (code: string) =>
     apiCall<import('../types/market').StockDetailData>('stock_detail', { code }),
 
+  etfList: (code = '') =>
+    apiCall<{ items: import('../types/market').EtfListItem[]; count: number; source?: string }>(
+      'local_etf_list',
+      code ? { code } : {},
+    ),
+
+  etfSnapshot: (code: string, signal?: AbortSignal) =>
+    apiCall<import('../types/market').EtfSnapshotData>('etf_snapshot', { code }, { signal }, 20000),
+
+  etfNav: (code: string, signal?: AbortSignal) =>
+    apiCall<{ code: string; items: import('../types/market').EtfNavPoint[]; source?: string }>(
+      'local_etf_nav',
+      { code },
+      { signal },
+      20000,
+    ),
+
+  etfHoldings: (code: string, signal?: AbortSignal) =>
+    apiCall<{ code: string; items: import('../types/market').EtfHoldingRow[]; source?: string }>(
+      'local_etf_holdings',
+      { code },
+      { signal },
+      20000,
+    ),
+
+  etfScorecard: (code: string, signal?: AbortSignal) =>
+    apiCall<import('../types/market').EtfScorecardData>(
+      'etf_scorecard',
+      { code },
+      { signal },
+      20000,
+    ),
+
+  searchEtfs: (keyword: string, signal?: AbortSignal) =>
+    apiCall<{ items: import('../types/market').EtfListItem[]; count: number; source?: string }>(
+      'search_etfs',
+      { keyword },
+      { signal },
+    ),
+
+  searchInstruments: (keyword: string, limit = 20, signal?: AbortSignal) =>
+    jsonFetch<{ success: boolean; data?: { items: import('../types/instrument').LocalInstrumentHit[]; count: number } }>(
+      `/instruments/search?keyword=${encodeURIComponent(keyword)}&limit=${limit}`,
+      { signal },
+    ),
+
+  instrumentsSummary: () =>
+    jsonFetch<{ success: boolean; data?: {
+      summary: Array<{ market: string; assetClass: string; count: number }>
+      counts: { cn_stocks: number; cn_etfs: number; us: number; crypto: number }
+    } }>('/instruments/summary'),
+
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
@@ -240,9 +292,77 @@ export async function startMarketDataSync(options: { force?: boolean } = {}) {
   })
 }
 
+export interface MarketDataPackEntry {
+  enabled: boolean
+  prepared_at?: string | null
+}
+
+export interface MarketDataPackConfig {
+  cn: MarketDataPackEntry
+  us: MarketDataPackEntry
+  crypto: MarketDataPackEntry
+}
+
+export interface MarketDataPacksState {
+  config: MarketDataPackConfig
+  counts: {
+    cn_stocks: number
+    us: number
+    crypto: number
+  }
+}
+
+export async function getMarketDataPacks() {
+  const resp = await jsonFetch<{ success: boolean; data: MarketDataPacksState }>('/market-data/packs')
+  if (!resp.data) throw new Error('无法读取市场数据包设置')
+  return resp.data
+}
+
+export async function patchMarketDataPacks(
+  patch: Partial<Record<'us' | 'crypto', { enabled?: boolean }>>,
+) {
+  return jsonFetch<{ success: boolean; data: { config: MarketDataPackConfig }; message?: string }>(
+    '/market-data/packs',
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ patch }),
+    },
+  )
+}
+
+export async function prepareMarketDataPack(pack: 'us' | 'crypto' | 'cn', force = false) {
+  return jsonFetch<{ success: boolean; message?: string }>(`/market-data/packs/${pack}/prepare`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ force }),
+  })
+}
+
+export async function fetchUsSnapshot(symbol: string, signal?: AbortSignal) {
+  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').UsSnapshotData }>(
+    `/us/${encodeURIComponent(symbol)}/snapshot`,
+    { signal },
+    20000,
+  )
+  if (!resp.data) throw new Error('无法获取美股快照')
+  return resp.data
+}
+
+export async function fetchCryptoSnapshot(pair: string, signal?: AbortSignal) {
+  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').CryptoSnapshotData }>(
+    `/crypto/${encodeURIComponent(pair)}/snapshot`,
+    { signal },
+    20000,
+  )
+  if (!resp.data) throw new Error('无法获取 Crypto 快照')
+  return resp.data
+}
+
 export interface MarketDataPackageMetadata {
   app: string
   kind: string
+  pack_scope?: 'cn' | 'us' | 'crypto'
   format_version: number
   exported_at: string
   schema_version: number
@@ -274,8 +394,9 @@ export type { ExportDestination, ExportPackageResult }
 
 const MARKET_PACKAGE_TIMEOUT = 300_000
 
-async function fetchMarketDataPackageBlob(): Promise<{ blob: Blob; filename: string }> {
-  const resp = await fetchWithTimeout(`${API_BASE}/market-data/export`, {}, MARKET_PACKAGE_TIMEOUT)
+async function fetchMarketDataPackageBlob(pack?: 'us' | 'crypto'): Promise<{ blob: Blob; filename: string }> {
+  const qs = pack ? `?pack=${pack}` : ''
+  const resp = await fetchWithTimeout(`${API_BASE}/market-data/export${qs}`, {}, MARKET_PACKAGE_TIMEOUT)
   if (!resp.ok) {
     const err = await resp.json().catch(() => ({})) as { error?: string }
     throw new Error(err.error || `导出失败（${resp.status}）`)
@@ -283,14 +404,15 @@ async function fetchMarketDataPackageBlob(): Promise<{ blob: Blob; filename: str
   const blob = await resp.blob()
   const cd = resp.headers.get('Content-Disposition') ?? ''
   const match = /filename="([^"]+)"/.exec(cd)
-  const filename = match?.[1] ?? 'opptrix-market.opmd'
+  const filename = match?.[1] ?? (pack ? `opptrix-market-${pack}.opmd` : 'opptrix-market.opmd')
   return { blob, filename }
 }
 
 export async function exportMarketDataPackageFile(
   destination: ExportDestination,
+  pack?: 'us' | 'crypto',
 ): Promise<ExportPackageResult> {
-  const { blob, filename } = await fetchMarketDataPackageBlob()
+  const { blob, filename } = await fetchMarketDataPackageBlob(pack)
   return saveMarketPackageBlob(blob, filename, destination)
 }
 
@@ -465,6 +587,72 @@ export async function testTushareConfig(token?: string) {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(token ? { token } : {}),
   })
+}
+
+export async function getProviderCatalog() {
+  const resp = await jsonFetch<{ success: boolean; data: import('../types/provider').ProviderCatalogResponse }>('/data/providers')
+  if (!resp.data) throw new Error('无法读取数据源列表')
+  return resp.data
+}
+
+export async function saveProviderConfig(
+  providerId: string,
+  payload: {
+    enabled?: boolean
+    priority_mode?: 'manifest' | 'custom'
+    priority?: number | null
+    extra?: Record<string, unknown>
+  },
+) {
+  return jsonFetch<{ success: boolean; data: import('../types/provider').PublicProviderRuntime; message?: string }>(
+    `/data/providers/${encodeURIComponent(providerId)}/config`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export async function getProviderBindingOverrides(providerId: string) {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: { providerId: string; items: import('../types/provider').PublicProviderBindingOverride[] }
+  }>(`/data/providers/${encodeURIComponent(providerId)}/bindings`)
+  if (!resp.data?.items) throw new Error('无法读取能力级优先级')
+  return resp.data.items
+}
+
+export async function saveProviderBindingOverride(
+  providerId: string,
+  payload: {
+    market: string
+    asset_class: string
+    capability: string
+    enabled?: boolean | null
+    priority?: number | null
+  },
+) {
+  return jsonFetch<{
+    success: boolean
+    data?: { providerId: string; items: import('../types/provider').PublicProviderBindingOverride[] }
+    message?: string
+  }>(`/data/providers/${encodeURIComponent(providerId)}/bindings`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function testProviderConfig(providerId: string, extra?: Record<string, unknown>) {
+  return jsonFetch<{ success: boolean; data: { ok: boolean; message: string }; message?: string }>(
+    `/data/providers/${encodeURIComponent(providerId)}/test`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(extra ?? {}),
+    },
+  )
 }
 
 export async function portfolioTrade(payload: {

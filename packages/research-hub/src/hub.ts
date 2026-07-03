@@ -1,7 +1,6 @@
-import {
-  AshareEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+import { MarketDataEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode, searchQuote,
-  loadTushareConfig, saveTushareConfig, publicTushareConfig, testTushareConnection, isBseCode,
+  loadTushareConfig, saveTushareConfig, isBseCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
 } from '@opptrix/a-stock-layer'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
@@ -13,7 +12,7 @@ import {
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
-import { getMarketDataService } from '@opptrix/market-data'
+import { getMarketDataService } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, type ResearchResult,
@@ -45,7 +44,7 @@ interface WatchlistRadarItem {
 
 /** Unified research hub — single entry for feature dispatch */
 export class ResearchHub {
-  readonly de = new AshareEngine()
+  readonly de = new MarketDataEngine()
   readonly ee = new EvaluationEngine(this.de)
   readonly store = new SnapshotStore()
   readonly neutralizer = new IndustryNeutralizer(this.de)
@@ -94,6 +93,9 @@ export class ResearchHub {
         case 'market_db_status': return this.marketDbStatus(t0)
         case 'market_db_sync': return this.marketDbSync(params, t0)
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
+        case 'market_data_packs': return this.marketDataPacks(t0)
+        case 'market_data_packs_save': return this.marketDataPacksSave(params, t0)
+        case 'market_data_pack_prepare': return this.marketDataPackPrepare(params, t0)
         case 'market_industry_stats': return this.marketIndustryStats(params, t0)
         case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
         case 'market_regime': return this.marketRegime(t0)
@@ -125,9 +127,47 @@ export class ResearchHub {
         case 'news_sources_list': return newsSourcesList(t0)
         case 'news_articles_list': return newsArticlesList(params, t0)
         case 'news_article_detail': return await newsArticleDetail(params, t0)
-        case 'tushare_config': return ok(publicTushareConfig(), 'Tushare 配置', t0)
+        case 'tushare_config': return ok(this.de.providerCatalog.tusharePublicLegacy(), 'Tushare 配置', t0)
         case 'tushare_config_save': return this.tushareConfigSave(params, t0)
         case 'tushare_test': return this.tushareTest(params, t0)
+        case 'provider_list': return ok(this.de.listProviders(), '数据源列表', t0)
+        case 'provider_config': return this.providerConfig(params, t0)
+        case 'provider_config_save': return this.providerConfigSave(params, t0)
+        case 'provider_test': return this.providerTest(params, t0)
+        case 'provider_binding_overrides': return this.providerBindingOverrides(params, t0)
+        case 'provider_binding_override_save': return this.providerBindingOverrideSave(params, t0)
+        case 'etf_list': return this.etfList(params, t0)
+        case 'etf_snapshot': return this.etfSnapshot(String(params.code ?? ''), t0)
+        case 'etf_nav': return this.etfNav(String(params.code ?? ''), t0)
+        case 'etf_holdings': return this.etfHoldings(String(params.code ?? ''), t0)
+        case 'local_etf_list': return await this.localEtfList(params, t0)
+        case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
+        case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
+        case 'local_etf_screen_schema': return this.localEtfScreenSchema(t0)
+        case 'local_etf_screen': return this.localEtfScreen(params, t0)
+        case 'etf_scorecard': return this.etfScorecard(String(params.code ?? ''), t0)
+        case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
+        case 'search_local_instruments': return this.searchLocalInstruments(params, t0)
+        case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
+        case 'local_us_screen_schema': return this.localUsScreenSchema(t0)
+        case 'local_us_screen': return this.localUsScreen(params, t0)
+        case 'local_crypto_screen_schema': return this.localCryptoScreenSchema(t0)
+        case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
+        case 'search_etfs': return await this.searchEtfs(params, t0)
+        case 'us_realtime': return await this.usRealtime(String(params.symbol ?? params.code ?? ''), t0)
+        case 'us_kline': return await this.usKline(String(params.symbol ?? params.code ?? ''), params, t0)
+        case 'us_profile': return await this.usProfile(String(params.symbol ?? params.code ?? ''), t0)
+        case 'us_financials': return await this.usFinancials(String(params.symbol ?? params.code ?? ''), params, t0)
+        case 'us_snapshot': return await this.usSnapshot(String(params.symbol ?? params.code ?? ''), t0)
+        case 'us_stock_list': return await this.usStockList(params, t0)
+        case 'local_us_list': return await this.localUsList(params, t0)
+        case 'search_us_stocks': return await this.searchUsStocks(params, t0)
+        case 'crypto_realtime': return await this.cryptoRealtime(String(params.pair ?? params.symbol ?? ''), t0)
+        case 'crypto_kline': return await this.cryptoKline(String(params.pair ?? params.symbol ?? ''), params, t0)
+        case 'crypto_snapshot': return await this.cryptoSnapshot(String(params.pair ?? params.symbol ?? ''), t0)
+        case 'crypto_list': return await this.cryptoList(params, t0)
+        case 'local_crypto_list': return await this.localCryptoList(params, t0)
+        case 'search_crypto_pairs': return await this.searchCryptoPairs(params, t0)
         case 'strategy_report': return this.strategyReport(String(params.code), t0)
         default: return fail(`Unknown feature: ${feature}`, t0)
       }
@@ -221,6 +261,37 @@ export class ResearchHub {
     return ok(this.marketData.syncState(), '同步状态', t0)
   }
 
+  private marketDataPacks(t0: number) {
+    const config = this.marketData.marketPackConfig()
+    const status = this.marketData.status()
+    return ok({
+      config,
+      counts: {
+        cn_stocks: status.stock_count,
+        us: status.us_count,
+        crypto: status.crypto_count,
+      },
+    }, '市场数据包', t0)
+  }
+
+  private marketDataPacksSave(params: Record<string, unknown>, t0: number) {
+    const patch = params.patch as Record<string, { enabled?: boolean }> | undefined
+    if (!patch || typeof patch !== 'object') return fail('缺少 patch', t0)
+    const config = this.marketData.updateMarketPackConfig(patch)
+    return ok({ config }, '已保存', t0)
+  }
+
+  private async marketDataPackPrepare(params: Record<string, unknown>, t0: number) {
+    const pack = String(params.pack ?? '').trim().toLowerCase()
+    if (pack !== 'cn' && pack !== 'us' && pack !== 'crypto') {
+      return fail('pack 须为 cn、us 或 crypto', t0)
+    }
+    const force = params.force === true
+    const result = await this.marketData.prepareMarketPack(pack, force)
+    const msg = result.started ? '数据包准备已在后台启动' : '同步任务进行中'
+    return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
+  }
+
   private async marketDbSync(params: Record<string, unknown>, t0: number) {
     const force = params.force === true
     const modeRaw = params.mode != null ? String(params.mode) : 'auto'
@@ -232,10 +303,11 @@ export class ResearchHub {
     let planLabel: string
 
     if (force || modeRaw === 'full') {
+      const enabledJobs = this.marketData.planSync(true).jobs
       const r = await this.marketData.sync({
         mode: 'full',
         maxStocks,
-        jobs,
+        jobs: jobs ?? [...enabledJobs],
         force: true,
         profile,
         background: true,
@@ -801,7 +873,7 @@ export class ResearchHub {
 
   private mergeQuoteWithLocal(
     code: string,
-    quoteRaw: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0] | null,
+    quoteRaw: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0] | null,
   ) {
     const normalizedCode = normalizeCode(code)
     const normalized = quoteRaw ? normalizePreOpenRealtimeQuote(quoteRaw) : null
@@ -847,7 +919,7 @@ export class ResearchHub {
     }
   }
 
-  private enrichQuote(quote: NonNullable<Awaited<ReturnType<AshareEngine['realtime']>>['data']>[0]) {
+  private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
     const price = quote.price
     const preClose = quote.preClose
     const derivedChange = price != null && preClose != null ? price - preClose : null
@@ -1227,20 +1299,418 @@ export class ResearchHub {
   private tushareConfigSave(params: Record<string, unknown>, t0: number) {
     const current = loadTushareConfig()
     const tokenRaw = params.token
-    const saved = saveTushareConfig({
+    const saved = this.de.providerCatalog.saveTushareLegacy({
       enabled: params.enabled === true,
       token: tokenRaw === undefined || tokenRaw === null
         ? current.token
         : String(tokenRaw).trim(),
     })
     this.de.clearCache()
-    return ok(publicTushareConfig(saved), 'Tushare 配置已保存', t0)
+    return ok(saved, 'Tushare 配置已保存', t0)
   }
 
   private async tushareTest(params: Record<string, unknown>, t0: number) {
     const token = params.token != null ? String(params.token).trim() : loadTushareConfig().token
-    const result = await testTushareConnection(token)
+    const result = await this.de.providerCatalog.testConnection('tushare', { token })
     return ok(result, result.ok ? result.message : `连接失败: ${result.message}`, t0)
+  }
+
+  private providerConfig(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? '')
+    const pub = this.de.getProviderConfig(id)
+    if (!pub) return fail(`未知数据源: ${id}`, t0)
+    return ok(pub, '数据源配置', t0)
+  }
+
+  private providerConfigSave(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? '')
+    try {
+      const saved = this.de.saveProviderConfig(id, {
+        enabled: params.enabled === undefined ? undefined : params.enabled === true,
+        priorityMode: params.priority_mode === 'custom'
+          ? 'custom'
+          : params.priority_mode === 'manifest'
+            ? 'manifest'
+            : undefined,
+        priority: params.priority !== undefined
+          ? (params.priority === null ? null : Number(params.priority))
+          : undefined,
+        extra: (params.extra as Record<string, unknown> | undefined)
+          ?? (params.token !== undefined ? { token: String(params.token).trim() } : undefined),
+      })
+      return ok(saved, '已保存', t0)
+    } catch (e) {
+      return fail(String(e), t0)
+    }
+  }
+
+  private async providerTest(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? '')
+    try {
+      const result = await this.de.testProviderConnection(id, params as Record<string, unknown>)
+      return ok(result, result.ok ? result.message : `连接失败: ${result.message}`, t0)
+    } catch (e) {
+      return fail(String(e), t0)
+    }
+  }
+
+  private providerBindingOverrides(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? '')
+    if (!id) return fail('provider_id 必填', t0)
+    const items = this.de.listProviderBindingOverrides(id)
+    return ok({ providerId: id, items }, `绑定 override ${items.length} 条`, t0)
+  }
+
+  private providerBindingOverrideSave(params: Record<string, unknown>, t0: number) {
+    const id = String(params.provider_id ?? '')
+    const market = String(params.market ?? '')
+    const assetClass = String(params.asset_class ?? params.assetClass ?? '')
+    const capability = String(params.capability ?? '')
+    if (!id || !market || !assetClass || !capability) {
+      return fail('provider_id / market / asset_class / capability 必填', t0)
+    }
+    try {
+      const items = this.de.saveProviderBindingOverride(id, market, assetClass, capability, {
+        enabled: params.enabled === undefined
+          ? undefined
+          : params.enabled === null
+            ? null
+            : params.enabled === true || params.enabled === 1 || params.enabled === 'true',
+        priority: params.priority !== undefined
+          ? (params.priority === null || params.priority === '' ? null : Number(params.priority))
+          : undefined,
+      })
+      return ok({ providerId: id, items }, '已保存能力级优先级', t0)
+    } catch (e) {
+      return fail(String(e), t0)
+    }
+  }
+
+  private async etfList(params: Record<string, unknown>, t0: number) {
+    const code = params.code != null ? String(params.code) : ''
+    const r = await this.de.etfList(code)
+    if (!r.success) return fail(r.error ?? 'ETF 列表获取失败', t0)
+    return ok(r.data, `ETF 列表 ${r.data?.length ?? 0} 条`, t0)
+  }
+
+  private async etfSnapshot(code: string, t0: number) {
+    const r = await this.de.etfSnapshot(code)
+    if (!r.success) return fail('ETF 快照获取失败', t0)
+    return ok(r.data, 'ETF 快照', t0)
+  }
+
+  private async etfNav(code: string, t0: number) {
+    const r = await this.de.etfNav(code)
+    if (!r.success) return fail(r.error ?? 'ETF 净值获取失败', t0)
+    return ok(r.data, `ETF 净值 ${r.data?.length ?? 0} 条`, t0)
+  }
+
+  private async etfHoldings(code: string, t0: number) {
+    const r = await this.de.etfHoldings(code)
+    if (!r.success) return fail(r.error ?? 'ETF 持仓获取失败', t0)
+    return ok(r.data, `ETF 持仓 ${r.data?.length ?? 0} 条`, t0)
+  }
+
+  private async localEtfList(params: Record<string, unknown>, t0: number) {
+    const limit = params.limit != null ? Number(params.limit) : 5000
+    const items = this.marketData.listLocalEtfs(limit)
+    if (items.length) {
+      return ok({ items, count: items.length, source: 'local' }, `本地 ETF ${items.length} 只`, t0)
+    }
+    return this.etfList(params, t0)
+  }
+
+  private async localEtfNav(code: string, params: Record<string, unknown>, t0: number) {
+    const limit = params.limit != null ? Number(params.limit) : 120
+    const local = this.marketData.localEtfNav(code, limit)
+    if (local.length) {
+      return ok({ code, items: local, source: 'local' }, `本地 ETF 净值 ${local.length} 条`, t0)
+    }
+    return this.etfNav(code, t0)
+  }
+
+  private async localEtfHoldings(code: string, params: Record<string, unknown>, t0: number) {
+    const limit = params.limit != null ? Number(params.limit) : 100
+    const local = this.marketData.localEtfHoldings(code, limit)
+    if (local.length) {
+      return ok({ code, items: local, source: 'local' }, `本地 ETF 持仓 ${local.length} 条`, t0)
+    }
+    return this.etfHoldings(code, t0)
+  }
+
+  private localEtfScreenSchema(t0: number) {
+    return ok(this.marketData.etfScreenSchema(), '本地 ETF 筛选维度说明', t0)
+  }
+
+  private localEtfScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if (status.etf_count < 1) {
+      return fail('本地 ETF 库为空，请先完成 etf_list / etf_nav 同步', t0)
+    }
+    try {
+      const data = this.marketData.etfScreen({
+        min_premium_rate: params.min_premium_rate != null ? Number(params.min_premium_rate) : undefined,
+        max_premium_rate: params.max_premium_rate != null ? Number(params.max_premium_rate) : undefined,
+        min_scale_yi: params.min_scale_yi != null ? Number(params.min_scale_yi) : undefined,
+        max_scale_yi: params.max_scale_yi != null ? Number(params.max_scale_yi) : undefined,
+        keyword: params.keyword as string | undefined,
+        tracking_index_contains: params.tracking_index_contains as string | undefined,
+        fund_type_contains: params.fund_type_contains as string | undefined,
+        sort_by: params.sort_by as 'premium_rate' | 'scale_yi' | 'nav' | 'code' | 'name' | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      })
+      return ok({
+        source: 'local',
+        total_universe: data.total_universe,
+        passed: data.passed,
+        items: data.items,
+      }, `ETF 筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private etfScorecard(code: string, t0: number) {
+    const trimmed = code.trim()
+    if (!trimmed) return fail('code 必填', t0)
+    const status = this.marketData.status()
+    if (status.etf_count < 1) {
+      return fail('本地 ETF 库为空，请先完成 etf_list / etf_nav 同步', t0)
+    }
+    const data = this.marketData.etfScorecard(trimmed)
+    if (!data) return fail(`未找到 ETF ${trimmed}，请确认代码或先同步 etf_list`, t0)
+    const scoreLabel = data.total_score != null ? `${data.total_score} 分` : '待评估'
+    return ok(data, `${data.name} ETF 决策雷达 ${scoreLabel}`, t0)
+  }
+
+  private etfScorecardSchema(t0: number) {
+    return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达维度说明', t0)
+  }
+
+  private searchLocalInstruments(params: Record<string, unknown>, t0: number) {
+    const keyword = String(params.keyword ?? params.q ?? '').trim()
+    if (keyword.length < 1) return fail('keyword 必填', t0)
+    const limit = params.limit != null ? Number(params.limit) : 30
+    const markets = Array.isArray(params.markets)
+      ? params.markets.map(String) as import('@opptrix/shared').Market[]
+      : undefined
+    const items = this.marketData.searchLocalInstruments(keyword, limit, markets)
+    return ok({ items, count: items.length, source: 'local' }, `本地标的搜索 ${items.length} 条`, t0)
+  }
+
+  private localInstrumentsSummary(t0: number) {
+    const summary = this.marketData.localInstrumentsSummary()
+    const status = this.marketData.status()
+    return ok({
+      summary,
+      counts: {
+        cn_stocks: status.stock_count,
+        cn_etfs: status.etf_count,
+        us: status.us_count,
+        crypto: status.crypto_count ?? 0,
+      },
+    }, '本地 instruments 汇总', t0)
+  }
+
+  private localUsScreenSchema(t0: number) {
+    return ok(this.marketData.usScreenSchema(), '本地美股筛选维度说明', t0)
+  }
+
+  private localUsScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if ((status.us_count ?? 0) < 1) {
+      return fail('本地美股库为空，请先完成 us_list 同步', t0)
+    }
+    try {
+      const data = this.marketData.usScreen({
+        keyword: params.keyword as string | undefined,
+        industry_contains: params.industry_contains as string | undefined,
+        sort_by: params.sort_by as 'code' | 'name' | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      })
+      return ok({
+        source: 'local',
+        total_universe: data.total_universe,
+        passed: data.passed,
+        items: data.items,
+      }, `美股筛选 ${data.total_universe} 只，命中 ${data.passed} 只`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private localCryptoScreenSchema(t0: number) {
+    return ok(this.marketData.cryptoScreenSchema(), 'Crypto 本地筛选维度说明', t0)
+  }
+
+  private localCryptoScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    if ((status.crypto_count ?? 0) < 1) {
+      return fail('本地 Crypto 库为空，请先完成 crypto_list 同步', t0)
+    }
+    try {
+      const data = this.marketData.cryptoScreen({
+        keyword: params.keyword as string | undefined,
+        quote: params.quote as string | undefined,
+        base_contains: params.base_contains as string | undefined,
+        sort_by: params.sort_by as 'code' | 'name' | 'quote' | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      })
+      return ok({
+        source: 'local',
+        total_universe: data.total_universe,
+        passed: data.passed,
+        available_quotes: data.available_quotes,
+        items: data.items,
+      }, `Crypto 筛选 ${data.total_universe} 对，命中 ${data.passed} 对`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private async searchEtfs(params: Record<string, unknown>, t0: number) {
+    const keyword = String(params.keyword ?? params.q ?? '').trim()
+    if (keyword.length < 1) return fail('keyword 必填', t0)
+    const limit = params.limit != null ? Number(params.limit) : 30
+    const local = this.marketData.searchLocalEtfs(keyword, limit)
+    if (local.length) {
+      return ok({ items: local, count: local.length, source: 'local' }, `ETF 搜索 ${local.length} 条`, t0)
+    }
+    const r = await this.de.etfList(keyword)
+    if (!r.success) return fail(r.error ?? 'ETF 搜索失败', t0)
+    const items = (r.data ?? []).map(row => {
+      const it = row as Record<string, unknown>
+      return { code: String(it.code ?? ''), name: String(it.name ?? '') }
+    })
+    return ok({ items, count: items.length, source: 'online' }, `ETF 搜索 ${items.length} 条`, t0)
+  }
+
+  private async usRealtime(symbol: string, t0: number) {
+    const r = await this.de.usRealtime(symbol)
+    if (!r.success) return fail(r.error ?? '美股行情获取失败', t0)
+    return ok(r.data?.[0] ?? null, `${symbol} 美股行情`, t0)
+  }
+
+  private async usKline(symbol: string, params: Record<string, unknown>, t0: number) {
+    const count = params.count != null ? Number(params.count) : 180
+    const r = await this.de.usKline(symbol, count)
+    if (!r.success) return fail(r.error ?? '美股 K 线获取失败', t0)
+    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+  }
+
+  private async usProfile(symbol: string, t0: number) {
+    const r = await this.de.usProfile(symbol)
+    if (!r.success) return fail(r.error ?? '美股概况获取失败', t0)
+    return ok(r.data?.[0] ?? null, `${symbol} 概况`, t0)
+  }
+
+  private async usFinancials(symbol: string, params: Record<string, unknown>, t0: number) {
+    const reportType = params.report_type != null ? String(params.report_type) : 'annual'
+    const r = await this.de.usFinancials(symbol, String(params.report_date ?? ''), reportType)
+    if (!r.success) return fail(r.error ?? '美股财报获取失败', t0)
+    return ok({ symbol, items: r.data ?? [], count: r.data?.length ?? 0 }, `财报 ${r.data?.length ?? 0} 期`, t0)
+  }
+
+  private async usSnapshot(symbol: string, t0: number) {
+    const r = await this.de.usSnapshot(symbol)
+    if (!r.success) return fail('美股快照获取失败', t0)
+    return ok(r.data, '美股快照', t0)
+  }
+
+  private async usStockList(params: Record<string, unknown>, t0: number) {
+    const keyword = params.keyword != null ? String(params.keyword) : ''
+    const r = await this.de.usStockList(keyword)
+    if (!r.success) return fail(r.error ?? '美股列表获取失败', t0)
+    return ok({ items: r.data ?? [], count: r.data?.length ?? 0 }, `美股列表 ${r.data?.length ?? 0} 条`, t0)
+  }
+
+  private async localUsList(params: Record<string, unknown>, t0: number) {
+    const limit = params.limit != null ? Number(params.limit) : 5000
+    const items = this.marketData.listLocalUsEquities(limit)
+    if (items.length) {
+      return ok({ items, count: items.length, source: 'local' }, `本地美股 ${items.length} 只`, t0)
+    }
+    return this.usStockList(params, t0)
+  }
+
+  private async searchUsStocks(params: Record<string, unknown>, t0: number) {
+    const keyword = String(params.keyword ?? params.q ?? '').trim()
+    if (keyword.length < 1) return fail('keyword 必填', t0)
+    const limit = params.limit != null ? Number(params.limit) : 30
+    const local = this.marketData.searchLocalUsEquities(keyword, limit)
+    if (local.length) {
+      return ok({ items: local, count: local.length, source: 'local' }, `美股搜索 ${local.length} 条`, t0)
+    }
+    const r = await this.de.usStockList(keyword)
+    if (!r.success) return fail(r.error ?? '美股搜索失败', t0)
+    const items = (r.data ?? []).map(raw => {
+      const row = raw as { code?: string; name?: string; market?: string }
+      return {
+        code: String(row.code ?? ''),
+        name: String(row.name ?? row.code ?? ''),
+        market: row.market ?? 'US',
+      }
+    })
+    return ok({ items, count: items.length, source: 'online' }, `美股搜索 ${items.length} 条`, t0)
+  }
+
+  private async cryptoRealtime(pair: string, t0: number) {
+    const r = await this.de.cryptoRealtime(pair)
+    if (!r.success) return fail(r.error ?? 'Crypto 行情获取失败', t0)
+    return ok(r.data?.[0] ?? null, `${pair} 行情`, t0)
+  }
+
+  private async cryptoKline(pair: string, params: Record<string, unknown>, t0: number) {
+    const count = params.count != null ? Number(params.count) : 180
+    const r = await this.de.cryptoKline(pair, count)
+    if (!r.success) return fail(r.error ?? 'Crypto K 线获取失败', t0)
+    return ok({ pair, items: r.data ?? [], count: r.data?.length ?? 0 }, `K 线 ${r.data?.length ?? 0} 根`, t0)
+  }
+
+  private async cryptoSnapshot(pair: string, t0: number) {
+    const r = await this.de.cryptoSnapshot(pair)
+    if (!r.success) return fail('Crypto 快照获取失败', t0)
+    return ok(r.data, 'Crypto 快照', t0)
+  }
+
+  private async cryptoList(params: Record<string, unknown>, t0: number) {
+    const keyword = params.keyword != null ? String(params.keyword) : ''
+    const r = await this.de.cryptoList(keyword)
+    if (!r.success) return fail(r.error ?? 'Crypto 列表获取失败', t0)
+    return ok({ items: r.data ?? [], count: r.data?.length ?? 0 }, `Crypto 列表 ${r.data?.length ?? 0} 条`, t0)
+  }
+
+  private async localCryptoList(params: Record<string, unknown>, t0: number) {
+    const limit = params.limit != null ? Number(params.limit) : 5000
+    const items = this.marketData.listLocalCryptoPairs(limit)
+    if (items.length) {
+      return ok({ items, count: items.length, source: 'local' }, `本地 Crypto ${items.length} 对`, t0)
+    }
+    return this.cryptoList(params, t0)
+  }
+
+  private async searchCryptoPairs(params: Record<string, unknown>, t0: number) {
+    const keyword = String(params.keyword ?? params.q ?? '').trim()
+    if (keyword.length < 1) return fail('keyword 必填', t0)
+    const limit = params.limit != null ? Number(params.limit) : 30
+    const local = this.marketData.searchLocalCryptoPairs(keyword, limit)
+    if (local.length) {
+      return ok({ items: local, count: local.length, source: 'local' }, `Crypto 搜索 ${local.length} 条`, t0)
+    }
+    const r = await this.de.cryptoList(keyword)
+    if (!r.success) return fail(r.error ?? 'Crypto 搜索失败', t0)
+    const items = (r.data ?? []).map(raw => {
+      const row = raw as { code?: string; name?: string; market?: string }
+      return {
+        code: String(row.code ?? ''),
+        name: String(row.name ?? row.code ?? ''),
+        market: row.market ?? 'CRYPTO',
+      }
+    })
+    return ok({ items, count: items.length, source: 'online' }, `Crypto 搜索 ${items.length} 条`, t0)
   }
 
   private async strategyReport(code: string, t0: number) {

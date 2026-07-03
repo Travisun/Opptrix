@@ -2,6 +2,9 @@ import type { MarketDbStatus } from '../store.js'
 import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, DAILY_SYNC_JOBS, SYNC_JOB_CONFIG } from './config.js'
 import type { SyncMode } from './engine.js'
 import { daysSince } from '../utils.js'
+import { loadMarketPackConfig } from '../market-pack-settings.js'
+import { CRYPTO_PACK_JOBS, filterJobsByMarketPacks, jobsForMarketPack, US_PACK_JOBS } from './market-packs.js'
+import type { MarketDataPackId } from '@opptrix/shared'
 
 export interface SyncPlan {
   mode: SyncMode
@@ -24,9 +27,14 @@ function jobNeedsRefresh(job: string, lastSync: Record<string, string | null>): 
   return daysSince(last) >= cfg.ttlDays
 }
 
-/** True if any daily-essential job is past its TTL cursor. */
+/** Daily refresh after bootstrap ready — respects enabled optional packs. */
 export function dailyJobsNeedRefresh(status: MarketDbStatus): boolean {
-  return DAILY_SYNC_JOBS.some(job => jobNeedsRefresh(job, status.last_sync))
+  const packs = loadMarketPackConfig()
+  const daily = filterJobsByMarketPacks(DAILY_SYNC_JOBS, packs)
+  if (daily.some(job => jobNeedsRefresh(job, status.last_sync))) return true
+  if (packs.us.enabled && US_PACK_JOBS.some(job => jobNeedsRefresh(job, status.last_sync))) return true
+  if (packs.crypto.enabled && CRYPTO_PACK_JOBS.some(job => jobNeedsRefresh(job, status.last_sync))) return true
+  return false
 }
 
 /**
@@ -40,28 +48,35 @@ export function resolveSyncPlan(
   status: MarketDbStatus,
   session?: SyncSessionHint | null,
 ): SyncPlan {
+  const packs = loadMarketPackConfig()
   const hasProgress = Object.values(status.job_progress).some(p => p.done > 0)
   const interrupted = session?.status === 'interrupted' || session?.status === 'partial'
 
   if (interrupted || (!status.is_ready && status.stock_count > 0 && hasProgress)) {
     return {
       mode: 'resume',
-      jobs: BOOTSTRAP_SYNC_JOBS,
+      jobs: filterJobsByMarketPacks(BOOTSTRAP_SYNC_JOBS, packs),
       label: '接续同步',
     }
   }
 
   if (status.is_ready) {
+    const daily = filterJobsByMarketPacks(DAILY_SYNC_JOBS, packs)
+    const optional: string[] = []
+    if (packs.us.enabled) optional.push(...US_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
+    if (packs.crypto.enabled) {
+      optional.push(...CRYPTO_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
+    }
     return {
       mode: 'incremental',
-      jobs: DAILY_SYNC_JOBS,
+      jobs: [...new Set([...daily, ...optional])],
       label: '增量更新',
     }
   }
 
   return {
     mode: 'incremental',
-    jobs: BOOTSTRAP_SYNC_JOBS,
+    jobs: filterJobsByMarketPacks(BOOTSTRAP_SYNC_JOBS, packs),
     label: status.stock_count > 0 ? '增量同步' : '首次同步',
   }
 }
@@ -100,7 +115,16 @@ export function resolveAutoBootPlan(
 
   const plan = resolveSyncPlan(status, session)
   if (plan.mode === 'resume' && session) {
-    return { ...plan, jobs: resolveResumeJobs(session) }
+    return { ...plan, jobs: filterJobsByMarketPacks(resolveResumeJobs(session), loadMarketPackConfig()) }
   }
   return plan
+}
+
+export function resolveMarketPackSyncPlan(pack: MarketDataPackId, force = false): SyncPlan {
+  const jobs = [...jobsForMarketPack(pack)]
+  return {
+    mode: force ? 'full' : 'incremental',
+    jobs,
+    label: force ? `准备${pack}数据包（全量）` : `准备${pack}数据包`,
+  }
 }

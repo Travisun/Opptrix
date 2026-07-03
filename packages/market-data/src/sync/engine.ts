@@ -1,5 +1,5 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import { isBseCode, isTushareEnabled, resolveMarket } from '@opptrix/a-stock-layer'
+import { isBseCode, isTushareEnabled, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
@@ -25,6 +25,8 @@ import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from 
 
 export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
 
+import type { MarketDataPackId } from '@opptrix/shared'
+
 export type SyncMode = 'full' | 'incremental' | 'resume'
 
 export interface SyncProgress {
@@ -37,6 +39,8 @@ export interface SyncProgress {
 export interface SyncOptions {
   mode?: SyncMode
   jobs?: string[]
+  /** When set, coordinator marks pack prepared after successful sync */
+  marketPack?: MarketDataPackId
   concurrency?: number
   delayMs?: number
   apiGapMs?: number
@@ -140,6 +144,30 @@ export class MarketDataSyncEngine {
           case 'profiles':
             await this.syncProfiles(runId, mode, options)
             break
+          case 'etf_list':
+            await this.syncEtfList(runId, options, mode)
+            break
+          case 'etf_nav':
+            await this.syncEtfNav(runId, mode, options)
+            break
+          case 'etf_holdings':
+            await this.syncEtfHoldings(runId, mode, options)
+            break
+          case 'etf_kline_bootstrap':
+            await this.syncEtfKlineBootstrap(runId, mode, options)
+            break
+          case 'us_list':
+            await this.syncUsList(runId, options, mode)
+            break
+          case 'us_quotes':
+            await this.syncUsQuotes(runId, mode, options)
+            break
+          case 'crypto_list':
+            await this.syncCryptoList(runId, options, mode)
+            break
+          case 'crypto_quotes':
+            await this.syncCryptoQuotes(runId, mode, options)
+            break
           case 'financials':
             await this.syncFinancials(runId, mode, options, 'annual')
             break
@@ -219,6 +247,68 @@ export class MarketDataSyncEngine {
     const all = this.store.listStockCodes(true)
     if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
     return all
+  }
+
+  private usCodes(options: SyncOptions): string[] {
+    const all = this.store.listUsCodes(true)
+    if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
+    return all
+  }
+
+  private cryptoCodes(options: SyncOptions): string[] {
+    const all = this.store.listCryptoCodes(true)
+    if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
+    return all
+  }
+
+  private pendingCryptoCodes(
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+    scopeKey: string,
+    ttlDays?: number,
+  ): string[] {
+    const all = this.cryptoCodes(options)
+    return all.filter(code => {
+      const errored = this.store.isJobError(job, code, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, code, scopeKey)) return false
+        if (errored) return false
+        return true
+      }
+      if (mode === 'full') return true
+      if (this.store.isJobDone(job, code, scopeKey)) {
+        const syncedAt = this.store.jobProgressSyncedAt(job, code, scopeKey)
+        if (shouldRefresh(syncedAt, ttlDays, mode)) return true
+        return false
+      }
+      return true
+    })
+  }
+
+  private pendingUsCodes(
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+    scopeKey: string,
+    ttlDays?: number,
+  ): string[] {
+    const all = this.usCodes(options)
+    return all.filter(code => {
+      const errored = this.store.isJobError(job, code, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, code, scopeKey)) return false
+        if (errored) return false
+        return true
+      }
+      if (mode === 'full') return true
+      if (this.store.isJobDone(job, code, scopeKey)) {
+        const syncedAt = this.store.jobProgressSyncedAt(job, code, scopeKey)
+        if (shouldRefresh(syncedAt, ttlDays, mode)) return true
+        return false
+      }
+      return true
+    })
   }
 
   private shouldRunJobInIncremental(job: string): boolean {
@@ -375,6 +465,371 @@ export class MarketDataSyncEngine {
       success++
     }
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  private etfCodes(options: SyncOptions): string[] {
+    const all = this.store.listEtfCodes(true)
+    if (options.maxStocks && options.maxStocks > 0) return all.slice(0, options.maxStocks)
+    return all
+  }
+
+  private async syncEtfList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
+    const cfg = this.cfg('etf_list', options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess('etf_list')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'etf_list', options, 'ETF 列表在 TTL 内，跳过')
+        return
+      }
+    }
+
+    const resp = await this.callApi(() => this.de.etfList(), 'default')
+    if (!resp.success || !resp.data?.length) {
+      throw new Error(resp.error ?? 'etfList failed')
+    }
+
+    let total = resp.data.length
+    if (options.maxStocks) total = Math.min(total, options.maxStocks)
+    let success = 0
+    for (const [i, item] of resp.data.entries()) {
+      if (options.maxStocks && i >= options.maxStocks) break
+      const raw = item as Record<string, unknown>
+      const code = normalizeStockCode(String(raw.code ?? ''))
+      if (!code) continue
+      this.store.upsertInstrument({
+        code,
+        market: 'CN',
+        assetClass: 'ETF',
+        name: String(raw.name ?? ''),
+        exchange: resolveMarket(code),
+        status: 'active',
+      })
+      this.store.upsertEtfProfile(code, raw)
+      this.markDone('etf_list', code, '')
+      success++
+      if (i % 50 === 0) {
+        options.onProgress?.({ job: 'etf_list', current: i + 1, total })
+      }
+    }
+    options.onProgress?.({ job: 'etf_list', current: success, total })
+    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  private async syncEtfNav(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('etf_nav', options)
+    const codes = this.pendingEtfCodes('etf_nav', options, mode, '', cfg.ttlDays, code =>
+      mode === 'incremental' && !shouldRefresh(this.store.etfNavSyncedAt(code), cfg.ttlDays, mode),
+    )
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'etf_nav', options, 'ETF 净值均在 TTL 内，跳过')
+      return
+    }
+    let success = 0
+    let error = 0
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'etf_nav', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(() => this.de.etfNav(code), 'default')
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'etfNav failed')
+        const rows = resp.data.map(row => {
+          const r = row as Record<string, unknown>
+          return {
+            date: String(r.date ?? ''),
+            nav: typeof r.nav === 'number' ? r.nav : null,
+            accNav: typeof r.accNav === 'number' ? r.accNav : null,
+            changePct: typeof r.changePct === 'number' ? r.changePct : null,
+            premiumRate: typeof r.premiumRate === 'number' ? r.premiumRate : null,
+          }
+        })
+        this.store.replaceEtfNav(code, rows)
+        this.markDone('etf_nav', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('etf_nav', code, '')
+        this.store.logError(runId, 'etf_nav', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private async syncEtfHoldings(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('etf_holdings', options)
+    const codes = this.pendingEtfCodes('etf_holdings', options, mode, '', cfg.ttlDays, code =>
+      mode === 'incremental' && !shouldRefresh(this.store.etfHoldingsSyncedAt(code), cfg.ttlDays, mode),
+    )
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'etf_holdings', options, 'ETF 持仓均在 TTL 内，跳过')
+      return
+    }
+    let success = 0
+    let error = 0
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'etf_holdings', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(() => this.de.etfHoldings(code), 'default')
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'etfHoldings failed')
+        const rows = resp.data.map(row => {
+          const r = row as Record<string, unknown>
+          return {
+            reportDate: String(r.reportDate ?? ''),
+            holdingSymbol: String(r.holdingSymbol ?? ''),
+            holdingName: r.holdingName != null ? String(r.holdingName) : null,
+            weight: typeof r.weight === 'number' ? r.weight : null,
+            shares: typeof r.shares === 'number' ? r.shares : null,
+            marketValue: typeof r.marketValue === 'number' ? r.marketValue : null,
+          }
+        })
+        this.store.replaceEtfHoldings(code, rows)
+        this.markDone('etf_holdings', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('etf_holdings', code, '')
+        this.store.logError(runId, 'etf_holdings', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private async syncEtfKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('etf_kline_bootstrap', options)
+    const codes = this.pendingEtfCodes('etf_kline_bootstrap', options, mode, '', cfg.ttlDays)
+    if (codes.length === 0) {
+      this.finishJobEmpty(runId, 'etf_kline_bootstrap', options, 'ETF K 线均在 TTL 内，跳过')
+      return
+    }
+    let success = 0
+    let error = 0
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'etf_kline_bootstrap', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(
+          () => this.de.kline(code, KLINE_BOOTSTRAP_DAYS),
+          'default',
+        )
+        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'kline failed')
+        const bars = resp.data.map(bar => ({
+          tradeDate: String(bar.date ?? '').slice(0, 10),
+          code: normalizeStockCode(code),
+          open: bar.open ?? null,
+          high: bar.high ?? null,
+          low: bar.low ?? null,
+          close: bar.close ?? null,
+          volume: bar.volume ?? null,
+          amount: bar.amount ?? null,
+          changePct: bar.changePct ?? null,
+        })).filter(b => b.tradeDate)
+        if (bars.length) this.store.bulkUpsertKlines(bars)
+        this.markDone('etf_kline_bootstrap', code, '')
+        success++
+      } catch (e) {
+        error++
+        this.markError('etf_kline_bootstrap', code, '')
+        this.store.logError(runId, 'etf_kline_bootstrap', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private async syncUsList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
+    const cfg = this.cfg('us_list', options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess('us_list')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'us_list', options, '美股列表在 TTL 内，跳过')
+        return
+      }
+    }
+
+    const resp = await this.callApi(() => this.de.usStockList(), 'default')
+    if (!resp.success || !resp.data?.length) {
+      throw new Error(resp.error ?? 'usStockList failed')
+    }
+
+    let total = resp.data.length
+    if (options.maxStocks) total = Math.min(total, options.maxStocks)
+    let success = 0
+    for (const [i, item] of resp.data.entries()) {
+      if (options.maxStocks && i >= options.maxStocks) break
+      const raw = item as { code?: string; name?: string; market?: string; industry?: string }
+      const code = String(raw.code ?? '').trim().toUpperCase()
+      if (!code) continue
+      this.store.upsertInstrument({
+        code,
+        market: 'US',
+        assetClass: 'EQUITY',
+        name: String(raw.name ?? code),
+        exchange: null,
+        status: 'active',
+        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
+      })
+      this.markDone('us_list', code, '')
+      success++
+      if (i % 100 === 0) {
+        options.onProgress?.({ job: 'us_list', current: i + 1, total })
+      }
+    }
+    options.onProgress?.({ job: 'us_list', current: success, total })
+    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  private async syncUsQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('us_quotes', options)
+    const tradeDate = usTodayString()
+    const universe = this.usCodes(options)
+    const codes = this.pendingUsCodes('us_quotes', options, mode, tradeDate, cfg.ttlDays)
+
+    if (codes.length === 0) {
+      const hint = universe.length === 0
+        ? '尚无美股列表，请先准备美股数据包'
+        : '今日美股截面已齐，跳过'
+      this.finishJobEmpty(runId, 'us_quotes', options, hint)
+      return
+    }
+
+    let success = 0
+    let error = 0
+
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'us_quotes', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(() => this.de.usRealtime(code), 'default')
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'usRealtime failed')
+        this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
+        this.markDone('us_quotes', code, tradeDate)
+        success++
+      } catch (e) {
+        error++
+        this.markError('us_quotes', code, tradeDate)
+        this.store.logError(runId, 'us_quotes', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private async syncCryptoList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
+    const cfg = this.cfg('crypto_list', options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess('crypto_list')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'crypto_list', options, 'Crypto 列表在 TTL 内，跳过')
+        return
+      }
+    }
+
+    const resp = await this.callApi(() => this.de.cryptoList(), 'default')
+    if (!resp.success || !resp.data?.length) {
+      throw new Error(resp.error ?? 'cryptoList failed')
+    }
+
+    let total = resp.data.length
+    if (options.maxStocks) total = Math.min(total, options.maxStocks)
+    let success = 0
+    for (const [i, item] of resp.data.entries()) {
+      if (options.maxStocks && i >= options.maxStocks) break
+      const raw = item as { code?: string; name?: string; market?: string; industry?: string }
+      const code = String(raw.code ?? '').trim().toUpperCase()
+      if (!code) continue
+      this.store.upsertInstrument({
+        code,
+        market: 'CRYPTO',
+        assetClass: 'CRYPTO_SPOT',
+        name: String(raw.name ?? code),
+        exchange: 'binance',
+        status: 'active',
+        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
+      })
+      this.markDone('crypto_list', code, '')
+      success++
+      if (i % 100 === 0) {
+        options.onProgress?.({ job: 'crypto_list', current: i + 1, total })
+      }
+    }
+    options.onProgress?.({ job: 'crypto_list', current: success, total })
+    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  private async syncCryptoQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('crypto_quotes', options)
+    const tradeDate = new Date().toISOString().slice(0, 10)
+    const universe = this.cryptoCodes(options)
+    const codes = this.pendingCryptoCodes('crypto_quotes', options, mode, tradeDate, cfg.ttlDays)
+
+    if (codes.length === 0) {
+      const hint = universe.length === 0
+        ? '尚无 Crypto 列表，请先准备 Crypto 数据包'
+        : '今日 Crypto 截面已齐，跳过'
+      this.finishJobEmpty(runId, 'crypto_quotes', options, hint)
+      return
+    }
+
+    let success = 0
+    let error = 0
+
+    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
+      options.onProgress?.({ job: 'crypto_quotes', current: index + 1, total: codes.length })
+      try {
+        const resp = await this.callApi(() => this.de.cryptoRealtime(code), 'default')
+        if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'cryptoRealtime failed')
+        this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
+        this.markDone('crypto_quotes', code, tradeDate)
+        success++
+      } catch (e) {
+        error++
+        this.markError('crypto_quotes', code, tradeDate)
+        this.store.logError(runId, 'crypto_quotes', code, e instanceof Error ? e.message : String(e))
+      }
+    })
+
+    this.store.finishRun(runId, error ? 'partial' : 'success', {
+      total: codes.length,
+      success,
+      error,
+    })
+  }
+
+  private pendingEtfCodes(
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+    scopeKey: string,
+    ttlDays?: number,
+    extraSkip?: (code: string) => boolean,
+  ): string[] {
+    const all = this.etfCodes(options)
+    return all.filter(code => {
+      if (extraSkip?.(code)) return false
+      const errored = this.store.isJobError(job, code, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, code, scopeKey)) return false
+        if (errored) return false
+        return true
+      }
+      if (mode === 'full') return true
+      if (this.store.isJobDone(job, code, scopeKey) && ttlDays) {
+        const last = this.store.getCursorLastSuccess(job)
+        if (last && daysSince(last) < ttlDays) return false
+      }
+      return true
+    })
   }
 
   private async syncQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {

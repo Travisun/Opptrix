@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /** Quick probe: TDX intraday for SH / SZ / BJ vs EastMoney fallback path. */
 import { AshareEngine } from '../dist/engine.js'
-import { tdxClient } from '../dist/tdx/client.js'
+import { tdxClient } from '../dist/providers/tdx/client.js'
 
 const cases = [
   { code: '600519', label: '沪A 茅台' },

@@ -1,7 +1,12 @@
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { WatchlistItem } from '../types/market'
-import { normalizeCode } from '../market/format'
+import {
+  formatInstrumentLabel,
+  marketDisplayName,
+  normalizeWatchlistItem,
+  resolveWatchlistInstrument,
+} from '../market/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
@@ -70,13 +75,19 @@ interface Props {
 
 export default function ComposerStockRefTag({ item, onRemove }: Props) {
   const s = useStyles()
-  const code = normalizeCode(item.code)
+  const row = normalizeWatchlistItem(item)
+  const ref = resolveWatchlistInstrument(row)
+  const codeLabel = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
+  const market = ref.market !== 'CN' ? marketDisplayName(ref.market) : null
 
   return (
     <span className={mergeClasses(s.chipRow, 'opptrix-composer-stock-ref')}>
-      <span className={s.chipLabel} title={`${item.name} ${code}`}>
-        <span className={s.chipText}>{item.name}</span>
-        <span className={s.chipCode}>{code}</span>
+      <span className={s.chipLabel} title={`${row.name} ${codeLabel}`}>
+        <span className={s.chipText}>{row.name}</span>
+        {market ? (
+          <span className={s.chipCode}>{market}</span>
+        ) : null}
+        <span className={s.chipCode}>{codeLabel}</span>
       </span>
       <button
         type="button"

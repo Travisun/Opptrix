@@ -4,6 +4,10 @@ import path from 'node:path'
 import Database from 'better-sqlite3'
 import { resolveUserDataRoot } from '@opptrix/shared'
 import {
+  initProviderSettingsSchema,
+  ProviderSettingsRepository,
+} from './provider-settings.js'
+import {
   clearFtsNews,
   clearFtsSessions,
   deleteFtsNews,
@@ -22,13 +26,21 @@ const DB_FILE = 'opptrix.db'
 export class UserDataStore {
   private static inst: UserDataStore | null = null
   private db: Database.Database
+  readonly providerSettings: ProviderSettingsRepository
 
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
+    initProviderSettingsSchema(this.db)
+    this.providerSettings = new ProviderSettingsRepository(this.db)
     this.initSchema()
     this.migrateFromLegacyFiles()
+    this.providerSettings.migrateFromLegacy(
+      key => this.hasMigration(key),
+      key => this.markMigration(key),
+      (ns, id) => this.getDocument(ns, id),
+    )
   }
 
   static getInstance(): UserDataStore {

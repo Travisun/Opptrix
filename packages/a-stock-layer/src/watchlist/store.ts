@@ -1,23 +1,9 @@
 import { getUserDataStore } from '@opptrix/user-store'
 import type { WatchlistItem } from './models.js'
+import { normalizeWatchlistItem, watchlistItemKey } from './instrument.js'
 
 const NAMESPACE = 'watchlist'
 const DOC_ID = 'default'
-
-function normalizeCode(code: string) {
-  return code.replace(/\D/g, '').padStart(6, '0').slice(-6)
-}
-
-function normalizeItem(item: WatchlistItem): WatchlistItem {
-  return {
-    code: normalizeCode(item.code),
-    name: item.name?.trim() || item.code,
-    industry: item.industry?.trim() || undefined,
-    note: item.note?.trim() || undefined,
-    addedAt: item.addedAt,
-    addedPrice: item.addedPrice ?? null,
-  }
-}
 
 export class WatchlistStore {
   private static inst: WatchlistStore | null = null
@@ -36,7 +22,7 @@ export class WatchlistStore {
     try {
       const raw = getUserDataStore().getDocument<{ items?: WatchlistItem[] }>(NAMESPACE, DOC_ID)
       if (Array.isArray(raw?.items)) {
-        return raw.items.map(normalizeItem)
+        return raw.items.map(normalizeWatchlistItem)
       }
     } catch { /* reset */ }
     return []
@@ -53,10 +39,11 @@ export class WatchlistStore {
   replace(items: WatchlistItem[]) {
     const seen = new Set<string>()
     this.items = items
-      .map(normalizeItem)
+      .map(normalizeWatchlistItem)
       .filter(item => {
-        if (seen.has(item.code)) return false
-        seen.add(item.code)
+        const key = watchlistItemKey(item)
+        if (seen.has(key)) return false
+        seen.add(key)
         return true
       })
     this.save()

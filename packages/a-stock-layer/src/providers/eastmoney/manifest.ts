@@ -1,0 +1,75 @@
+import { Capability } from '../../core/capabilities.js'
+import { type ProviderManifestSpec } from '../common/types.js'
+import { providerManifestEntry } from '../common/manifest.js'
+import { EASTMONEY_SETTINGS } from './settings.js'
+import {
+  cnEquityBindings, cnEtfBindings, cnIndexBindings, usEquityBindings, cryptoSpotBindings, cnEquityEtfIndex, cnFullSplit,
+} from '../common/bindings.js'
+
+export const EASTMONEY_CAPS = [
+      Capability.STOCK_REALTIME,
+      Capability.STOCK_KLINE,
+      Capability.STOCK_MONEY_FLOW,
+      Capability.INDEX_REALTIME,
+      Capability.INDEX_KLINE,
+      Capability.MARKET_MONEY_FLOW,
+      Capability.SECTOR_MONEY_FLOW,
+      Capability.STOCK_PROFILE,
+      Capability.SHAREHOLDER,
+      Capability.FINANCIAL_SUMMARY,
+      Capability.NEWS,
+      Capability.SENTIMENT,
+      Capability.DRAGON_TIGER,
+      Capability.MARGIN_TRADE,
+      Capability.DIVIDEND,
+      Capability.BALANCE_SHEET,
+      Capability.INCOME_STMT,
+      Capability.CASH_FLOW,
+      Capability.INST_HOLDING,
+      Capability.BLOCK_TRADE,
+      Capability.LOCKUP_EXPIRY,
+      Capability.SHARE_PLEDGE,
+      Capability.INTRADAY_TICK,
+      Capability.STOCK_LIST,
+      Capability.INDEX_CONST,
+      Capability.INSIDER_TRADE,
+      Capability.PERF_FORECAST,
+      Capability.TRADE_CALENDAR,
+      Capability.LIMIT_UPDOWN,
+      Capability.MARKET_BREADTH,
+      Capability.IPO_DATA,
+      Capability.CONVERTIBLE_BOND,
+      Capability.ETF_DATA,
+      Capability.MANAGER_INFO,
+      Capability.SHAREHOLDER_PLAN,
+      Capability.BUYBACK,
+      Capability.GLOBAL_INDEX,
+      Capability.EXCHANGE_RATE,
+      Capability.MACRO_INDICATOR,
+      Capability.MAIN_BUSINESS,
+      Capability.TOP_CUSTOMER,
+      Capability.ACTUAL_CONTROLLER,
+      Capability.SUBSIDIARY,
+      Capability.RELATED_PARTY,
+      Capability.RD_INVESTMENT,
+      Capability.MERGER_ACQUISITION,
+      Capability.EMPLOYEE_COMP,
+      Capability.INSTITUTIONAL_VISIT,
+      Capability.PEER_COMPANY,
+      Capability.CHIP_DISTRIBUTION,
+    ]
+
+export const EASTMONEY_SPEC: ProviderManifestSpec = {
+  id: 'eastmoney',
+  title: '东方财富',
+  subtitle: 'A 股主数据源',
+  marketGroup: 'CN',
+  defaultPriority: 100,
+  capabilities: EASTMONEY_CAPS,
+  bindingsFor: (p) => cnFullSplit(EASTMONEY_CAPS, p),
+  settings: EASTMONEY_SETTINGS,
+}
+
+export const EASTMONEY_MANIFEST = providerManifestEntry(
+  'eastmoney', '东方财富', 'A 股主数据源', 'CN', 100, EASTMONEY_SETTINGS,
+)

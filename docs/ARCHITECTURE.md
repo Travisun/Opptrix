@@ -37,12 +37,17 @@ research-hub
 agent, server
 ```
 
-## 数据层 `@opptrix/a-stock-layer`
+## 数据层
 
-- **AshareEngine**：统一 facade，按 capability 自动在 14 个内置 driver 间回退。
+> 多市场演进设计见 **[DATA-LAYER.md](./DATA-LAYER.md)**（Provider 抽象、Instrument 模型、ETF/美股/币圈路线图）。
+
+### 在线层 `@opptrix/a-stock-layer`（→ `MarketDataEngine`）
+
+- **AshareEngine**：统一 facade，按 capability 自动在 14 个内置 **Provider**（现名 driver）间回退。
 - **TDX**：纯 Node TCP 客户端，替代原 pytdx/mootdx。
 - **efinance**：EastMoney HTTP 封装，用于部分行情与基本面。
 - **PortfolioManager**：读写 `~/.opptrix/portfolio.json`。
+- **规划**：Driver → `DataProvider` 接口；Registry 增加 `(market, assetClass, capability)` 三维索引；Provider 内按 `markets/<m>/` 分文件维护；**设置页数据源 Tab 自动发现 Provider 配置**（见 [DATA-LAYER.md §6–§7](./DATA-LAYER.md)）。
 
 ## 评估层 `@opptrix/stock-eval`
 
@@ -68,10 +73,10 @@ agent, server
 
 新增能力时：在 `packages/research-hub/src/hub.ts` 增加 `case`，必要时在 `apps/server/src/index.ts` 暴露 REST，并在 `packages/agent/src/tools.ts` 注册 tool。
 
-## 本地数据层 `@opptrix/market-data`
+## 本地挖掘层 `@opptrix/market-data`
 
-- **MarketDataStore**：SQLite 持久化全市场因子、K 线、行业映射等。
-- **MarketDataSyncEngine**：从 `AshareEngine` 拉取并入库；支持增量/全量计划（`sync/plan.ts`）。
+- **MarketDataStore**：SQLite 持久化 A 股因子、K 线、行业映射等（规划扩展 `instruments` / ETF 表，见 [DATA-LAYER.md §8](./DATA-LAYER.md#8-a-股-etf-专项设计phase-1-优先)）。
+- **MarketDataSyncEngine**：从在线 Engine 拉取并入库；支持增量/全量计划（`sync/plan.ts`）。
 - **查询面**：本地选股、行业列表、决策雷达、批量快照等，供 Hub 与 MCP 工具调用。
 
 ## 前端 `client-ui`

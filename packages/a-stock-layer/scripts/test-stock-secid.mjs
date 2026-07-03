@@ -2,7 +2,7 @@ import {
   resolveStockSecId,
   resolveStockMarketCode,
 } from '../dist/utils/helpers.js'
-import { toTdxSymbol } from '../dist/tdx/symbol.js'
+import { toTdxSymbol } from '../dist/providers/tdx/symbol.js'
 
 const cases = [
   { code: '600519', market: 'SH', expect: '1.600519', label: '沪市主板' },

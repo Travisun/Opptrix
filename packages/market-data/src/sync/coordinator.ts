@@ -1,5 +1,6 @@
-import type { MarketDataStore } from '../store.js'
-import type { MarketDbStatus } from '../store.js'
+import { markMarketPackPrepared } from '../market-pack-settings.js'
+import type { MarketDbStatus, MarketDataStore } from '../store.js'
+import { jobsForMarketPack } from './market-packs.js'
 import { MarketDataSyncEngine, ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, type SyncMode, type SyncOptions } from './engine.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
@@ -256,6 +257,12 @@ export class MarketSyncCoordinator {
         options.jobs,
         this.store.getStatus(),
       )
+      const pack = options.marketPack
+      if (pack) {
+        const packJobs = [...jobsForMarketPack(pack)]
+        const packFailed = packJobs.some(j => String(result.jobs[j] ?? '').startsWith('failed'))
+        if (!packFailed) markMarketPackPrepared(pack)
+      }
       let msg: string
       if (failed > 0) {
         msg = `同步结束，${failed} 个任务失败`

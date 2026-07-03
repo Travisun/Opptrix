@@ -8,6 +8,8 @@ export interface WatchlistItem {
   addedAt?: string
   /** Reference price when added — for follow return */
   addedPrice?: number | null
+  /** Multi-market identity — inferred from code when absent */
+  instrument?: import('./instrument').InstrumentRef
 }
 
 export interface MarketQuote {
@@ -236,10 +238,129 @@ export interface StockDetailData {
   shareholders?: StockShareholderData | null
 }
 
+export interface EtfProfileData {
+  code: string
+  name?: string
+  nav?: number | null
+  changePct?: number | null
+  premiumRate?: number | null
+  fundType?: string
+  trackingIndex?: string
+  manager?: string
+  expenseRatio?: number | null
+  totalShares?: number | null
+  listingDate?: string
+  benchmark?: string
+  scale?: number | null
+}
+
+export interface EtfNavPoint {
+  code?: string
+  date: string
+  nav?: number | null
+  accNav?: number | null
+  changePct?: number | null
+  premiumRate?: number | null
+}
+
+export interface EtfHoldingRow {
+  code?: string
+  reportDate: string
+  holdingSymbol: string
+  holdingName?: string
+  weight?: number | null
+  shares?: number | null
+  marketValue?: number | null
+}
+
+export interface EtfSnapshotData {
+  code: string
+  profile: EtfProfileData | null
+  nav: EtfNavPoint | null
+  quote: MarketQuote | null
+}
+
+export interface EtfScorecardDimension {
+  key: string
+  label: string
+  weight: number
+  score: number | null
+  value: string | null
+  hint: string | null
+}
+
+export interface EtfScorecardData {
+  code: string
+  name: string
+  scorecard: string
+  total_score: number | null
+  grade: string | null
+  dimensions: EtfScorecardDimension[]
+  highlights: string[]
+  risks: string[]
+  source: 'local'
+  data_as_of: string | null
+}
+
+export interface CrossMarketQuote {
+  code: string
+  name?: string
+  price: number | null
+  changePct: number | null
+  change?: number | null
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  volume?: number | null
+  marketCap?: number | null
+  quoteSession?: 'pre' | 'regular' | 'post' | 'closed'
+  sessionLabel?: string
+  preMarketPrice?: number | null
+  postMarketPrice?: number | null
+}
+
+export interface CrossMarketKlineBar {
+  code?: string
+  date: string
+  open: number
+  close: number
+  high: number
+  low: number
+  volume: number
+  changePct: number | null
+}
+
+export interface UsSnapshotData {
+  code: string
+  profile: Record<string, unknown> | null
+  quote: CrossMarketQuote | null
+  recentKlines: CrossMarketKlineBar[]
+}
+
+export interface CryptoSnapshotData {
+  pair: string
+  quote: CrossMarketQuote | null
+  recentKlines: CrossMarketKlineBar[]
+}
+
+export interface EtfListItem {
+  code: string
+  name: string
+  nav?: number | null
+  changePct?: number | null
+  premiumRate?: number | null
+  fundType?: string
+  trackingIndex?: string
+  manager?: string
+}
+
 export interface MarketDbStatusData {
   db_path: string
   schema_version: number
   stock_count: number
+  etf_count?: number
+  us_count?: number
+  crypto_count?: number
   latest_trade_date: string | null
   latest_factor_date: string | null
   profile_count: number

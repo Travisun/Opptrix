@@ -120,15 +120,18 @@ Opptrix/
 
 ### 4.3 数据层
 
-**在线层** `@opptrix/a-stock-layer`：
+完整架构与多市场演进见 **[DATA-LAYER.md](./DATA-LAYER.md)**。
 
-- `AshareEngine`：按 capability 在多个 driver 间自动回退
-- 内置 driver：东财、efinance、TDX（mootdx/pytdx）、腾讯、新浪、同花顺、网易、雪球、股吧、巨潮、中证指数、统计局、Tushare 等（见 `drivers/register.ts`）
+**在线层** `@opptrix/a-stock-layer`（规划更名为 `MarketDataEngine` + `DataProvider`）：
+
+- `AshareEngine`：按 capability 在多个 Provider（现名 driver）间自动回退
+- 内置 Provider：东财、efinance、TDX（mootdx/pytdx）、腾讯、新浪、同花顺、网易、雪球、股吧、巨潮、中证指数、统计局、Tushare 等（见 `drivers/register.ts`）
 - 组合账本：`~/.opptrix/portfolio.json`
+- **扩展方向**：A 股 ETF 行情/挖掘（Phase 1）→ 美股 → 虚拟货币；新增源 = 一个 Provider module（`providers/<id>/`）+ `bindings()` + 可选 `settings()` 自描述；配置在设置页 **基础数据 → 数据源** 按市场分组自动出现
 
-**本地层** `@opptrix/market-data`：
+**本地挖掘层** `@opptrix/market-data`：
 
-- SQLite 存储全市场因子、K 线、行业映射等
+- SQLite 存储 A 股因子、K 线、行业映射等（ETF / 多市场 schema 见 DATA-LAYER §8）
 - `MarketDataSyncEngine` 从在线层同步；支持设置页触发与 Agent 工具 `trigger_market_db_sync`
 - 本地筛选、行业列表、决策雷达等 **优先走本地库**，降低延迟与源站压力
 
@@ -181,7 +184,7 @@ npm run serve               # 生产预览
 | 新增 Hub feature | `packages/research-hub/src/hub.ts` |
 | 新增 REST 端点 | `apps/server/src/index.ts` |
 | 新增 Agent/MCP 工具 | `packages/agent/src/tools.ts` + `tool-meta.ts` |
-| 新增数据源 | `packages/a-stock-layer/src/drivers/` + `register.ts` |
+| 新增数据源 | `packages/a-stock-layer/src/drivers/` + `register.ts`（规范见 [DATA-LAYER.md §12](./DATA-LAYER.md#12-新增-provider-检查清单)） |
 | 新增因子 | `packages/stock-eval/src/factors/` |
 | 本地库查询/同步 | `packages/market-data/src/` |
 | 聊天 UI | `client-ui/src/chat/` |

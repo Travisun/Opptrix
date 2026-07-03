@@ -16,6 +16,7 @@
     "audit:apis": "npm run build && node scripts/audit-apis.mjs"
   },
   "dependencies": {
+    "@opptrix/market-data-core": "*",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*",
     "nodetdx": "^4.2.6"

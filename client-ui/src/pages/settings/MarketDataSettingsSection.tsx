@@ -19,18 +19,21 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import {
   exportMarketDataPackageFile,
   formatExportResultMessage,
+  getMarketDataPacks,
   getMarketDataSyncState,
-  getTushareConfig,
   importMarketDataPackageFile,
   inspectMarketDataPackageFile,
+  patchMarketDataPacks,
   pickExportDestination,
-  saveTushareConfig,
+  prepareMarketDataPack,
   startMarketDataSync,
-  testTushareConfig,
+  type MarketDataPackConfig,
+  type MarketDataPacksState,
   type MarketDataPackageInspectResult,
 } from '../../api/client'
 import type { MarketDataSyncState } from '../../types/market'
-import { SettingsGroup, SettingsCredentialRow, SettingsPanelHeader, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
+import { SettingsGroup, SettingsPanelHeader, SettingsStaticBlock } from './SettingsPrimitives'
+import ProviderSettingsCatalog from './ProviderSettingsCatalog'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
@@ -267,6 +270,41 @@ const useStyles = makeStyles({
     gap: '8px',
     paddingTop: '4px',
   },
+  packRow: {
+    display: 'grid',
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gap: '8px 12px',
+    alignItems: 'center',
+    padding: '6px 0',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    '&:last-child': {
+      borderBottom: 'none',
+    },
+  },
+  packTitle: {
+    fontSize: '12px',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
+  packDesc: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.4,
+    marginTop: '2px',
+  },
+  packMeta: {
+    fontSize: '10px',
+    color: opptrixCssVars.textSecondary,
+    marginTop: '4px',
+    fontVariantNumeric: 'tabular-nums',
+  },
+  packActions: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'flex-end',
+    gap: '6px',
+  },
 })
 
 function formatCoveragePercent(
@@ -288,17 +326,53 @@ function formatCoveragePercent(
   return '—'
 }
 
+function formatPreparedAt(iso: string | null | undefined): string {
+  if (!iso) return '尚未准备'
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return '尚未准备'
+  return `已准备 · ${d.toLocaleString('zh-CN')}`
+}
+
+const PACK_UI: {
+  id: keyof MarketDataPackConfig
+  label: string
+  desc: string
+  countKey: keyof MarketDataPacksState['counts']
+  optional: boolean
+}[] = [
+  {
+    id: 'cn',
+    label: 'A 股',
+    desc: '默认开启：股票池、行情、因子与 ETF 等本地挖掘数据',
+    countKey: 'cn_stocks',
+    optional: false,
+  },
+  {
+    id: 'us',
+    label: '美股',
+    desc: '开启后同步美股列表与本地行情截面（需 Polygon 或 Yahoo 回退）',
+    countKey: 'us',
+    optional: true,
+  },
+  {
+    id: 'crypto',
+    label: 'Crypto',
+    desc: '开启后同步 Crypto 交易对列表（公开 API，无需密钥）',
+    countKey: 'crypto',
+    optional: true,
+  },
+]
+
 export default function MarketDataSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
   const [tab, setTab] = useState<MarketDataTab>('status')
   const [state, setState] = useState<MarketDataSyncState | null>(null)
+  const [packs, setPacks] = useState<MarketDataPacksState | null>(null)
+  const [packSaving, setPackSaving] = useState<string | null>(null)
+  const [packPreparing, setPackPreparing] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [starting, setStarting] = useState(false)
-  const [tsEnabled, setTsEnabled] = useState(false)
-  const [tsToken, setTsToken] = useState('')
-  const [tsSaving, setTsSaving] = useState(false)
-  const [tsTesting, setTsTesting] = useState(false)
   const [syncActive, setSyncActive] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [importing, setImporting] = useState(false)
@@ -310,31 +384,25 @@ export default function MarketDataSettingsSection() {
   const logRef = useRef<HTMLPreElement>(null)
   const pollRef = useRef<number | null>(null)
 
-  const refreshTushare = useCallback(async () => {
-    const ts = await getTushareConfig()
-    setTsEnabled(ts.enabled)
-    setTsToken(ts.token ?? '')
-    return ts
-  }, [])
-
   const refreshSync = useCallback(async () => {
-    const data = await getMarketDataSyncState()
+    const [data, packData] = await Promise.all([
+      getMarketDataSyncState(),
+      getMarketDataPacks().catch(() => null),
+    ])
     setState(data)
+    if (packData) setPacks(packData)
     setSyncActive(!!data.running)
     return data
   }, [])
 
   const refresh = useCallback(async () => {
-    const errors: string[] = []
-    await refreshTushare().catch(e => {
-      errors.push(e instanceof Error ? e.message : '无法读取数据源配置')
-    })
-    await refreshSync().catch(e => {
-      errors.push(e instanceof Error ? e.message : '无法读取库状态')
-    })
-    if (errors.length) toast.showError(errors[0])
+    try {
+      await refreshSync()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '无法读取库状态')
+    }
     setLoading(false)
-  }, [refreshSync, refreshTushare, toast])
+  }, [refreshSync, toast])
 
   useEffect(() => {
     void refresh()
@@ -363,6 +431,35 @@ export default function MarketDataSettingsSection() {
     if (nearBottom) el.scrollTop = el.scrollHeight
   }, [state?.logs])
 
+  const handlePackToggle = async (pack: 'us' | 'crypto', enabled: boolean) => {
+    setPackSaving(pack)
+    try {
+      const resp = await patchMarketDataPacks({ [pack]: { enabled } })
+      if (resp.data?.config) {
+        setPacks(prev => (prev ? { ...prev, config: resp.data!.config } : prev))
+      }
+      toast.showSuccess(enabled ? '已开启，可点击「准备数据」下载' : '已关闭，本地已有数据仍保留')
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setPackSaving(null)
+    }
+  }
+
+  const handlePreparePack = async (pack: 'us' | 'crypto') => {
+    setPackPreparing(pack)
+    try {
+      setSyncActive(true)
+      const resp = await prepareMarketDataPack(pack)
+      toast.showSuccess(resp.message || '准备任务已启动')
+      await refreshSync()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '启动失败')
+    } finally {
+      setPackPreparing(null)
+    }
+  }
+
   const handleStart = async () => {
     setStarting(true)
     try {
@@ -377,40 +474,7 @@ export default function MarketDataSettingsSection() {
     }
   }
 
-  const handleSaveTushare = async () => {
-    setTsSaving(true)
-    try {
-      const resp = await saveTushareConfig({
-        enabled: tsEnabled,
-        token: tsToken.trim(),
-      })
-      setTsToken(resp.data.token ?? tsToken.trim())
-      toast.showSuccess(resp.message || '已保存')
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '保存失败')
-    } finally {
-      setTsSaving(false)
-    }
-  }
-
-  const handleTestTushare = async () => {
-    setTsTesting(true)
-    try {
-      const resp = await testTushareConfig(tsToken.trim() || undefined)
-      const result = resp.data
-      if (result.ok) {
-        toast.showSuccess(result.message)
-      } else {
-        toast.showError(`测试失败：${result.message}`)
-      }
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '测试连接失败')
-    } finally {
-      setTsTesting(false)
-    }
-  }
-
-  const handleExportPackage = async () => {
+  const handleExportPackage = async (pack?: 'us' | 'crypto') => {
     let destination
     try {
       destination = await pickExportDestination()
@@ -422,13 +486,17 @@ export default function MarketDataSettingsSection() {
 
     setExporting(true)
     try {
-      const result = await exportMarketDataPackageFile(destination)
+      const result = await exportMarketDataPackageFile(destination, pack)
       toast.showSuccess(formatExportResultMessage(result))
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '导出失败')
     } finally {
       setExporting(false)
     }
+  }
+
+  const handleExportFullPackage = async () => {
+    await handleExportPackage()
   }
 
   const resetImportDialog = () => {
@@ -536,36 +604,7 @@ export default function MarketDataSettingsSection() {
       </div>
 
       <div className={tab === 'source' ? s.tabPanel : s.tabPanelHidden}>
-        <SettingsGroup>
-          <SettingsPanelHeader
-            title="Tushare Pro"
-            action={(
-              <Switch
-                checked={tsEnabled}
-                onChange={(_, d) => setTsEnabled(!!d.checked)}
-                aria-label="启用 Tushare"
-              />
-            )}
-          />
-          <SettingsRow
-            title="API Token"
-            stack
-            control={(
-              <SettingsCredentialRow
-                value={tsToken}
-                onChange={setTsToken}
-                placeholder="粘贴 Token"
-                testing={tsTesting}
-                saving={tsSaving}
-                testDisabled={!tsToken.trim()}
-                saveDisabled={!tsToken.trim()}
-                onTest={() => { void handleTestTushare() }}
-                onSave={() => { void handleSaveTushare() }}
-              />
-            )}
-            last
-          />
-        </SettingsGroup>
+        <ProviderSettingsCatalog />
       </div>
 
       <div className={tab === 'status' ? s.tabPanel : s.tabPanelHidden}>
@@ -598,6 +637,49 @@ export default function MarketDataSettingsSection() {
                 ))}
               </div>
             )}
+          </SettingsStaticBlock>
+        </SettingsGroup>
+        <SettingsGroup>
+          <SettingsPanelHeader title="市场数据包" />
+          <SettingsStaticBlock>
+            <Text className={s.syncHint} block>
+              默认仅同步 A 股基础数据；需要美股或 Crypto 时再开启并准备对应数据包。
+            </Text>
+            {PACK_UI.map(item => {
+              const entry = packs?.config?.[item.id]
+              const count = packs?.counts?.[item.countKey] ?? (item.id === 'cn' ? db?.stock_count : item.id === 'us' ? db?.us_count : db?.crypto_count) ?? 0
+              const enabled = item.optional ? entry?.enabled === true : true
+              return (
+                <div key={item.id} className={s.packRow}>
+                  <div>
+                    <Text className={s.packTitle} block>{item.label}</Text>
+                    <Text className={s.packDesc} block>{item.desc}</Text>
+                    <Text className={s.packMeta} block>
+                      {`${count} 条 · ${item.optional ? formatPreparedAt(entry?.prepared_at) : '随 A 股同步维护'}`}
+                    </Text>
+                  </div>
+                  <div className={s.packActions}>
+                    {item.optional ? (
+                      <Switch
+                        checked={enabled}
+                        disabled={packSaving === item.id || running}
+                        onChange={(_, d) => { void handlePackToggle(item.id as 'us' | 'crypto', !!d.checked) }}
+                        aria-label={`开启 ${item.label} 数据包`}
+                      />
+                    ) : null}
+                    {item.optional && enabled ? (
+                      <OpptrixButton
+                        variant="secondary"
+                        disabled={running || packPreparing === item.id}
+                        onClick={() => { void handlePreparePack(item.id as 'us' | 'crypto') }}
+                      >
+                        {packPreparing === item.id ? '准备中…' : '准备数据'}
+                      </OpptrixButton>
+                    ) : null}
+                  </div>
+                </div>
+              )
+            })}
           </SettingsStaticBlock>
         </SettingsGroup>
       </div>
@@ -674,17 +756,31 @@ export default function MarketDataSettingsSection() {
           <div className={s.packageBody}>
             <div className={s.packageCallout}>
               <Text block>
-                仅含行情与筛股用的基础数据，不含关注列表、自编策略、密钥、对话与持仓。
-                导入会覆盖本机数据并自动备份；换机导入可省去长时间首次同步。
+                完整包（A 股）导入会覆盖本机基础数据并自动备份。美股 / Crypto 补充包仅合并对应市场列表与行情，不影响 A 股数据。
+                不含关注列表、自编策略、密钥、对话与持仓。
               </Text>
             </div>
             <div className={s.packageActions}>
               <OpptrixButton
                 variant="secondary"
                 disabled={exporting || running || importing}
-                onClick={() => { void handleExportPackage() }}
+                onClick={() => { void handleExportFullPackage() }}
               >
-                {exporting ? '正在导出…' : '导出…'}
+                {exporting ? '正在导出…' : '导出完整包…'}
+              </OpptrixButton>
+              <OpptrixButton
+                variant="secondary"
+                disabled={exporting || running || importing}
+                onClick={() => { void handleExportPackage('us') }}
+              >
+                导出美股包…
+              </OpptrixButton>
+              <OpptrixButton
+                variant="secondary"
+                disabled={exporting || running || importing}
+                onClick={() => { void handleExportPackage('crypto') }}
+              >
+                导出 Crypto 包…
               </OpptrixButton>
               <OpptrixButton
                 variant="secondary"
@@ -714,7 +810,11 @@ export default function MarketDataSettingsSection() {
             <DialogTitle className={s.dialogTitle}>确认导入</DialogTitle>
             <DialogContent>
               <div className={s.dialogMeta}>
-                <Text block>将替换本机基础数据；关注列表、自编策略与模型设置不变。</Text>
+                <Text block>
+                  {importPreview?.metadata?.kind === 'market_pack_supplement'
+                    ? `将合并 ${importPreview.metadata.pack_scope === 'us' ? '美股' : 'Crypto'} 补充数据到本机，A 股基础库不变。`
+                    : '将替换本机 A 股基础数据；关注列表、自编策略与模型设置不变。'}
+                </Text>
                 {importPreview?.metadata && (
                   <>
                     <div className={s.dialogMetaRow}>

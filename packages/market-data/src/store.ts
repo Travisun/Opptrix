@@ -1,7 +1,7 @@
 import Database from 'better-sqlite3'
-import { parseStockMarket, type StockMarket } from '@opptrix/a-stock-layer'
+import { parseStockMarket, type StockMarket, normalizeUsSymbol } from '@opptrix/a-stock-layer'
 import { marketDbPath } from './paths.js'
-import { migrate, nowIso, todayTradeDate, daysSince } from './utils.js'
+import { migrate, nowIso, todayTradeDate, daysSince, normalizeStockCode } from './utils.js'
 
 export interface JobProgressSummary {
   done: number
@@ -13,6 +13,9 @@ export interface MarketDbStatus {
   db_path: string
   schema_version: number
   stock_count: number
+  etf_count: number
+  us_count: number
+  crypto_count: number
   latest_trade_date: string | null
   latest_factor_date: string | null
   profile_count: number
@@ -46,8 +49,10 @@ export interface BootstrapReadiness {
 
 export class MarketDataStore {
   readonly db: Database.Database
+  readonly dbPath: string
 
   constructor(dbPath = marketDbPath()) {
+    this.dbPath = dbPath
     this.db = new Database(dbPath)
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
@@ -107,6 +112,9 @@ export class MarketDataStore {
 
   getStatus(): MarketDbStatus {
     const stockCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const etfCount = this.countEtfInstruments()
+    const usCount = this.countUsInstruments()
+    const cryptoCount = this.countCryptoInstruments()
     const profileCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_profiles').get() as { c: number }).c
     const partnerCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_partners').get() as { c: number }).c
     const segmentCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_business_segments').get() as { c: number }).c
@@ -136,10 +144,20 @@ export class MarketDataStore {
       GROUP BY job_name
     `).all() as { job_name: string; done: number; error: number }[]
     for (const row of progressRows) {
+      const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap'])
+      const usJobs = new Set(['us_list'])
+      const cryptoJobs = new Set(['crypto_list'])
+      const baseCount = cryptoJobs.has(row.job_name)
+        ? cryptoCount
+        : usJobs.has(row.job_name)
+          ? usCount
+          : etfJobs.has(row.job_name)
+            ? etfCount
+            : stockCount
       jobProgress[row.job_name] = {
         done: row.done,
         error: row.error,
-        pending: Math.max(0, stockCount - row.done),
+        pending: Math.max(0, baseCount - row.done),
       }
     }
 
@@ -152,6 +170,9 @@ export class MarketDataStore {
       db_path: this.db.name,
       schema_version: schemaVersion,
       stock_count: stockCount,
+      etf_count: etfCount,
+      us_count: usCount,
+      crypto_count: cryptoCount,
       latest_trade_date: latestQuote.d,
       latest_factor_date: latestFactor.d,
       profile_count: profileCount,
@@ -386,25 +407,39 @@ export class MarketDataStore {
       status: row.status ?? 'active',
       updated_at: ts,
     })
+    this.upsertInstrument({
+      code: row.code,
+      market: 'CN',
+      assetClass: 'EQUITY',
+      name: row.name,
+      exchange: row.market ?? null,
+      listDate: row.listing_date ?? null,
+      status: row.status ?? 'active',
+      extra: JSON.stringify({
+        industry: row.industry ?? null,
+        industry_csrc: row.industry_csrc ?? null,
+        is_st: row.is_st ? 1 : 0,
+      }),
+    })
   }
 
   listStockCodes(activeOnly = true): string[] {
     const sql = activeOnly
-      ? `SELECT code FROM stocks WHERE status = 'active' ORDER BY code`
-      : `SELECT code FROM stocks ORDER BY code`
+      ? `SELECT code FROM v_cn_equity_stocks WHERE status = 'active' ORDER BY code`
+      : `SELECT code FROM v_cn_equity_stocks ORDER BY code`
     return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
   }
 
   stockMeta(code: string): { code: string; name: string; industry: string | null } | null {
     const row = this.db.prepare(
-      'SELECT code, name, industry FROM stocks WHERE code = ?',
+      'SELECT code, name, industry FROM v_cn_equity_stocks WHERE code = ?',
     ).get(code) as { code: string; name: string; industry: string | null } | undefined
     return row ?? null
   }
 
   stockMarket(code: string): StockMarket | null {
     const row = this.db.prepare(
-      'SELECT market FROM stocks WHERE code = ?',
+      'SELECT market FROM v_cn_equity_stocks WHERE code = ?',
     ).get(code) as { market: string | null } | undefined
     return parseStockMarket(row?.market)
   }
@@ -415,7 +450,7 @@ export class MarketDataStore {
     if (!normalized.length) return out
     const placeholders = normalized.map(() => '?').join(',')
     const rows = this.db.prepare(
-      `SELECT code, market FROM stocks WHERE code IN (${placeholders})`,
+      `SELECT code, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
     ).all(...normalized) as { code: string; market: string | null }[]
     for (const row of rows) {
       const market = parseStockMarket(row.market)
@@ -430,7 +465,7 @@ export class MarketDataStore {
     if (!normalized.length) return out
     const placeholders = normalized.map(() => '?').join(',')
     const rows = this.db.prepare(
-      `SELECT code, name, industry FROM stocks WHERE code IN (${placeholders})`,
+      `SELECT code, name, industry FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
     ).all(...normalized) as { code: string; name: string; industry: string | null }[]
     for (const row of rows) out.set(row.code, row)
     return out
@@ -1092,6 +1127,318 @@ export class MarketDataStore {
       SELECT message FROM sync_logs ORDER BY id DESC LIMIT ?
     `).all(limit) as { message: string }[]
     return rows.reverse().map(r => r.message)
+  }
+
+  upsertInstrument(row: {
+    code: string
+    market: string
+    assetClass: string
+    name?: string | null
+    exchange?: string | null
+    listDate?: string | null
+    delistDate?: string | null
+    status?: string | null
+    extra?: string | null
+  }): void {
+    const code = row.market === 'US'
+      ? normalizeUsSymbol(row.code)
+      : normalizeStockCode(row.code)
+    const now = nowIso()
+    this.db.prepare(`
+      INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(code) DO UPDATE SET
+        market = excluded.market,
+        asset_class = excluded.asset_class,
+        name = COALESCE(excluded.name, instruments.name),
+        exchange = COALESCE(excluded.exchange, instruments.exchange),
+        list_date = COALESCE(excluded.list_date, instruments.list_date),
+        delist_date = COALESCE(excluded.delist_date, instruments.delist_date),
+        status = COALESCE(excluded.status, instruments.status),
+        extra = COALESCE(excluded.extra, instruments.extra),
+        updated_at = excluded.updated_at
+    `).run(
+      code,
+      row.market,
+      row.assetClass,
+      row.name ?? null,
+      row.exchange ?? null,
+      row.listDate ?? null,
+      row.delistDate ?? null,
+      row.status ?? 'active',
+      row.extra ?? null,
+      now,
+    )
+  }
+
+  upsertEtfProfile(code: string, profile: Record<string, unknown>): void {
+    const normalized = normalizeStockCode(code)
+    const now = nowIso()
+    this.db.prepare(`
+      INSERT INTO etf_profiles (code, profile_json, updated_at)
+      VALUES (?, ?, ?)
+      ON CONFLICT(code) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at
+    `).run(normalized, JSON.stringify(profile), now)
+  }
+
+  listEtfInstruments(limit = 5000): { code: string; name: string | null; market: string }[] {
+    return this.db.prepare(`
+      SELECT code, name, market FROM instruments
+      WHERE asset_class = 'ETF' AND market = 'CN'
+      ORDER BY code
+      LIMIT ?
+    `).all(limit) as { code: string; name: string | null; market: string }[]
+  }
+
+  listEtfCodes(activeOnly = true): string[] {
+    const sql = activeOnly
+      ? `SELECT code FROM instruments WHERE asset_class = 'ETF' AND market = 'CN' AND status = 'active' ORDER BY code`
+      : `SELECT code FROM instruments WHERE asset_class = 'ETF' AND market = 'CN' ORDER BY code`
+    return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+  }
+
+  etfNavSyncedAt(code: string): string | null {
+    const row = this.db.prepare(
+      'SELECT MAX(synced_at) AS synced_at FROM etf_nav_daily WHERE code = ?',
+    ).get(normalizeStockCode(code)) as { synced_at: string | null } | undefined
+    return row?.synced_at ?? null
+  }
+
+  etfHoldingsSyncedAt(code: string): string | null {
+    const row = this.db.prepare(
+      'SELECT MAX(synced_at) AS synced_at FROM etf_holdings WHERE code = ?',
+    ).get(normalizeStockCode(code)) as { synced_at: string | null } | undefined
+    return row?.synced_at ?? null
+  }
+
+  replaceEtfNav(code: string, rows: Array<{
+    date: string
+    nav?: number | null
+    accNav?: number | null
+    changePct?: number | null
+    premiumRate?: number | null
+  }>): number {
+    const normalized = normalizeStockCode(code)
+    const ts = nowIso()
+    const del = this.db.prepare('DELETE FROM etf_nav_daily WHERE code = ?').run(normalized)
+    const stmt = this.db.prepare(`
+      INSERT INTO etf_nav_daily (code, trade_date, nav, acc_nav, change_pct, premium_rate, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `)
+    const tx = this.db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        const d = String(r.date ?? '').slice(0, 10)
+        if (!d) continue
+        stmt.run(
+          normalized,
+          d,
+          r.nav ?? null,
+          r.accNav ?? null,
+          r.changePct ?? null,
+          r.premiumRate ?? null,
+          ts,
+        )
+      }
+    })
+    tx(rows)
+    return del.changes + rows.length
+  }
+
+  getEtfNavHistory(code: string, limit = 120): Array<{
+    date: string
+    nav: number | null
+    accNav: number | null
+    changePct: number | null
+    premiumRate: number | null
+  }> {
+    const rows = this.db.prepare(`
+      SELECT trade_date, nav, acc_nav, change_pct, premium_rate
+      FROM etf_nav_daily WHERE code = ?
+      ORDER BY trade_date DESC LIMIT ?
+    `).all(normalizeStockCode(code), limit) as Array<{
+      trade_date: string
+      nav: number | null
+      acc_nav: number | null
+      change_pct: number | null
+      premium_rate: number | null
+    }>
+    return rows.map(r => ({
+      date: r.trade_date,
+      nav: r.nav,
+      accNav: r.acc_nav,
+      changePct: r.change_pct,
+      premiumRate: r.premium_rate,
+    }))
+  }
+
+  replaceEtfHoldings(code: string, rows: Array<{
+    reportDate: string
+    holdingSymbol: string
+    holdingName?: string | null
+    weight?: number | null
+    shares?: number | null
+    marketValue?: number | null
+  }>): number {
+    const normalized = normalizeStockCode(code)
+    const ts = nowIso()
+    this.db.prepare('DELETE FROM etf_holdings WHERE code = ?').run(normalized)
+    const stmt = this.db.prepare(`
+      INSERT INTO etf_holdings (code, report_date, holding_symbol, holding_name, weight, shares, market_value, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+    `)
+    let n = 0
+    for (const r of rows) {
+      const rd = String(r.reportDate ?? '').slice(0, 10)
+      const sym = String(r.holdingSymbol ?? '').trim()
+      if (!rd || !sym) continue
+      stmt.run(
+        normalized,
+        rd,
+        sym,
+        r.holdingName ?? null,
+        r.weight ?? null,
+        r.shares ?? null,
+        r.marketValue ?? null,
+        ts,
+      )
+      n++
+    }
+    return n
+  }
+
+  getEtfHoldings(code: string, limit = 100): Array<{
+    reportDate: string
+    holdingSymbol: string
+    holdingName: string | null
+    weight: number | null
+    shares: number | null
+    marketValue: number | null
+  }> {
+    const rows = this.db.prepare(`
+      SELECT report_date, holding_symbol, holding_name, weight, shares, market_value
+      FROM etf_holdings WHERE code = ?
+      ORDER BY report_date DESC, weight DESC
+      LIMIT ?
+    `).all(normalizeStockCode(code), limit) as Array<{
+      report_date: string
+      holding_symbol: string
+      holding_name: string | null
+      weight: number | null
+      shares: number | null
+      market_value: number | null
+    }>
+    return rows.map(r => ({
+      reportDate: r.report_date,
+      holdingSymbol: r.holding_symbol,
+      holdingName: r.holding_name,
+      weight: r.weight,
+      shares: r.shares,
+      marketValue: r.market_value,
+    }))
+  }
+
+  searchEtfInstruments(keyword: string, limit = 30): { code: string; name: string | null }[] {
+    const kw = keyword.trim()
+    if (kw.length < 1) return []
+    const like = `%${kw}%`
+    return this.db.prepare(`
+      SELECT code, name FROM instruments
+      WHERE asset_class = 'ETF' AND market = 'CN'
+        AND (code LIKE ? OR name LIKE ?)
+      ORDER BY code
+      LIMIT ?
+    `).all(like, like, limit) as { code: string; name: string | null }[]
+  }
+
+  getEtfProfile(code: string): Record<string, unknown> | null {
+    const row = this.db.prepare('SELECT profile_json FROM etf_profiles WHERE code = ?').get(
+      normalizeStockCode(code),
+    ) as { profile_json: string } | undefined
+    if (!row) return null
+    try {
+      return JSON.parse(row.profile_json) as Record<string, unknown>
+    } catch {
+      return null
+    }
+  }
+
+  countEtfInstruments(): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'ETF' AND market = 'CN'
+    `).get() as { c: number }
+    return row.c
+  }
+
+  listUsInstruments(limit = 5000): { code: string; name: string | null; market: string; exchange: string | null }[] {
+    return this.db.prepare(`
+      SELECT code, name, market, exchange FROM instruments
+      WHERE asset_class = 'EQUITY' AND market = 'US'
+      ORDER BY code
+      LIMIT ?
+    `).all(limit) as { code: string; name: string | null; market: string; exchange: string | null }[]
+  }
+
+  listUsCodes(activeOnly = true): string[] {
+    const sql = activeOnly
+      ? `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = 'US' AND status = 'active' ORDER BY code`
+      : `SELECT code FROM instruments WHERE asset_class = 'EQUITY' AND market = 'US' ORDER BY code`
+    return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+  }
+
+  searchUsInstruments(keyword: string, limit = 30): { code: string; name: string | null }[] {
+    const kw = keyword.trim().toUpperCase()
+    if (kw.length < 1) return []
+    const like = `%${kw}%`
+    return this.db.prepare(`
+      SELECT code, name FROM instruments
+      WHERE asset_class = 'EQUITY' AND market = 'US'
+        AND (code LIKE ? OR UPPER(name) LIKE ?)
+      ORDER BY code
+      LIMIT ?
+    `).all(like, like, limit) as { code: string; name: string | null }[]
+  }
+
+  countUsInstruments(): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'US'
+    `).get() as { c: number }
+    return row.c
+  }
+
+  listCryptoCodes(activeOnly = true): string[] {
+    const sql = activeOnly
+      ? `SELECT code FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO' AND status = 'active' ORDER BY code`
+      : `SELECT code FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO' ORDER BY code`
+    return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+  }
+
+  listCryptoInstruments(limit = 5000): { code: string; name: string | null; market: string; exchange: string | null }[] {
+    return this.db.prepare(`
+      SELECT code, name, market, exchange FROM instruments
+      WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
+      ORDER BY code
+      LIMIT ?
+    `).all(limit) as { code: string; name: string | null; market: string; exchange: string | null }[]
+  }
+
+  searchCryptoInstruments(keyword: string, limit = 30): { code: string; name: string | null }[] {
+    const kw = keyword.trim().toUpperCase()
+    if (kw.length < 1) return []
+    const like = `%${kw}%`
+    return this.db.prepare(`
+      SELECT code, name FROM instruments
+      WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
+        AND (code LIKE ? OR UPPER(name) LIKE ?)
+      ORDER BY code
+      LIMIT ?
+    `).all(like, like, limit) as { code: string; name: string | null }[]
+  }
+
+  countCryptoInstruments(): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
+    `).get() as { c: number }
+    return row.c
   }
 }
 

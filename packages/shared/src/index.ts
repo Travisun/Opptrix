@@ -1,4 +1,8 @@
 export * from './types.js'
+export * from './market-data.js'
+export * from './market-data-packs.js'
+export * from './provider-binding.js'
+export * from './provider-settings.js'
 export { ok, fail, elapsedSince } from './result.js'
 export { resolveUserDataRoot, isDesktopRuntime, resolveProjectRoot } from './paths.js'
 export {

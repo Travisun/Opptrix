@@ -1,0 +1,11 @@
+import { applyManifestSpec } from '../common/driver-factory.js'
+import { EASTMONEY_SPEC } from './manifest.js'
+import { EastMoneyMarketHandler } from './markets/cn/handler.js'
+import { mixEastMoneyResearch } from './markets/cn/research.js'
+import { mixEastMoneyChain } from './markets/cn/chain.js'
+
+export class EastMoneyDriver extends EastMoneyMarketHandler {}
+
+applyManifestSpec(EastMoneyDriver, EASTMONEY_SPEC)
+mixEastMoneyResearch(EastMoneyDriver)
+mixEastMoneyChain(EastMoneyDriver)
