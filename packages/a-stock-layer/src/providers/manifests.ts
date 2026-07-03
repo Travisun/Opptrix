@@ -61,8 +61,10 @@ export const MARKET_GROUP_LABELS: Record<MarketGroup, string> = {
   CN: 'A 股',
   US: '美股',
   HK: '港股',
+  JP: '日本股市',
+  KR: '韩国股市',
   CRYPTO: '加密货币',
   GLOBAL: '全球 / 宏观',
 }
 
-export const MARKET_GROUP_ORDER: MarketGroup[] = ['CN', 'US', 'HK', 'CRYPTO', 'GLOBAL']
+export const MARKET_GROUP_ORDER: MarketGroup[] = ['CN', 'US', 'HK', 'JP', 'KR', 'CRYPTO', 'GLOBAL']

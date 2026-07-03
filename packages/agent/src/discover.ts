@@ -2,6 +2,8 @@ import type { DiscoverStrategyProfile } from '@opptrix/shared'
 import {
   defaultDiscoverProfile,
   discoverFactorsForProfile,
+  discoverPrescreenMode,
+  getDiscoverProfileDefinition,
   resolveDiscoverScorecard,
   type DiscoverProfileReadiness,
 } from '@opptrix/shared'
@@ -73,7 +75,7 @@ export interface DiscoverResult {
 const ALLOWED_OPS = new Set(['>', '<', '>=', '<=', '='])
 
 function isFilterDiscoverProfile(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'us_equity' || profile === 'crypto_spot'
+  return discoverPrescreenMode(profile) === 'list_filter'
 }
 
 function extractScreenParams(
@@ -245,6 +247,11 @@ function prescreenProgressMessage(plan: DiscoverParsedPlan): string {
     const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
     return `Crypto 初选：${filters}，最多 ${plan.prescreen_top_n} 对…`
   }
+  if (isFilterDiscoverProfile(profile)) {
+    const label = getDiscoverProfileDefinition(profile)?.label ?? profile
+    const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
+    return `${label}初选：${filters}，最多 ${plan.prescreen_top_n} 只…`
+  }
   return `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`
 }
 
@@ -367,13 +374,14 @@ export class DiscoverRunner {
     })
     throwIfAborted()
 
-    const prescreenResult = profile === 'cn_etf'
+    const mode = discoverPrescreenMode(profile)
+    const prescreenResult = mode === 'etf_screen'
       ? await this.prescreenEtf(plan, msg => onProgress({ phase: 'prescreen', message: msg, percent: 32 }))
-      : profile === 'us_equity'
-        ? await this.prescreenUs(plan)
-        : profile === 'crypto_spot'
-          ? await this.prescreenCrypto(plan)
-          : await this.prescreenEquity(plan, effectiveScorecard)
+      : mode === 'list_filter'
+        ? await this.prescreenListFilter(profile, plan)
+        : mode === 'factor_screen'
+          ? await this.prescreenEquity(plan, effectiveScorecard)
+          : (() => { throw new Error('该资产类型暂不支持挖掘初选') })()
     const { screenData, candidates } = prescreenResult
     throwIfAborted()
 
@@ -556,15 +564,18 @@ export class DiscoverRunner {
     return { screenData, candidates }
   }
 
-  private async prescreenUs(plan: DiscoverParsedPlan) {
-    const screenResp = await this.hub.dispatch('local_us_screen', localScreenParamsFromPlan(plan))
+  private async prescreenListFilter(profile: DiscoverStrategyProfile, plan: DiscoverParsedPlan) {
+    const def = getDiscoverProfileDefinition(profile)
+    const feature = def?.localScreenFeature
+    if (!feature) throw new Error('缺少本地筛选接口')
+    const screenResp = await this.hub.dispatch(feature, localScreenParamsFromPlan(plan))
     if (!screenResp.success || !screenResp.data) {
-      throw new Error(screenResp.message || '美股初选失败')
+      throw new Error(screenResp.message || `${def?.label ?? profile}初选失败`)
     }
     const data = screenResp.data as {
       total_universe: number
       passed: number
-      items: Array<{ code: string; name: string | null; exchange: string | null }>
+      items: Array<{ code: string; name: string | null; exchange?: string | null }>
     }
     const candidates: PrescreenCandidate[] = (data.items ?? []).map(item => ({
       code: item.code,
@@ -582,6 +593,10 @@ export class DiscoverRunner {
       },
       candidates,
     }
+  }
+
+  private async prescreenUs(plan: DiscoverParsedPlan) {
+    return this.prescreenListFilter('us_equity', plan)
   }
 
   private async prescreenCrypto(plan: DiscoverParsedPlan) {

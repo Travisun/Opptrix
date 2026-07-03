@@ -16,6 +16,8 @@ import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPrice, normalizeCode, pctTone, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
+import { displayCodeFromInstrument, hitToWatchlistItem, resolveWatchlistInstrument } from './instrument'
+import { hasApplicationCapability } from './capabilities'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, sidebarItemSelected } from '../theme/mixins'
@@ -326,10 +328,24 @@ export default function WatchlistTab({
     }
     setLoadingQuotes(true)
     try {
-      const resp = await research.stockQuotes(codes)
+      const instruments = items.map(resolveWatchlistInstrument)
+      const resp = await research.instrumentQuotes(instruments)
       if (resp.success && resp.data?.quotes) {
         const map: Record<string, MarketQuote> = {}
-        for (const q of resp.data.quotes) map[normalizeCode(q.code)] = q
+        for (const q of resp.data.quotes) {
+          const code = displayCodeFromInstrument(q.instrument)
+          map[normalizeCode(code)] = {
+            code,
+            name: q.name ?? code,
+            price: q.price ?? null,
+            changePct: q.change_pct ?? null,
+            pe: null,
+            pb: null,
+            turnoverRate: null,
+            volume: q.volume ?? null,
+            amount: q.amount ?? null,
+          }
+        }
         setQuotes(map)
         setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
       }
@@ -418,13 +434,9 @@ export default function WatchlistTab({
     const timer = window.setTimeout(async () => {
       setSearching(true)
       try {
-        const resp = await research.searchStocks(q)
+        const resp = await research.searchInstruments(q, 20)
         if (cancelled) return
-        const hits = (resp.data?.results ?? []).map(row => ({
-          code: normalizeCode(row.code),
-          name: row.name,
-          industry: row.industry,
-        }))
+        const hits = (resp.data?.items ?? []).map(hitToWatchlistItem)
         setSearchHits(hits)
       } catch {
         if (!cancelled) setSearchHits([])
@@ -487,8 +499,11 @@ export default function WatchlistTab({
               onClick={async () => {
                 let addedPrice: number | null = null
                 try {
-                  const q = await research.stockQuotes([hit.code])
-                  addedPrice = q.data?.quotes?.[0]?.price ?? null
+                  const ref = resolveWatchlistInstrument(hit)
+                  if (hasApplicationCapability(ref, 'batch_quote')) {
+                    const q = await research.instrumentQuotes([ref])
+                    addedPrice = q.data?.quotes?.[0]?.price ?? null
+                  }
                 } catch { /* ignore */ }
                 onAdd(hit, { addedPrice })
                 setKeyword('')

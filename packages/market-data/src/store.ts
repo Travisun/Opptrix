@@ -16,6 +16,9 @@ export interface MarketDbStatus {
   etf_count: number
   us_count: number
   crypto_count: number
+  jp_count: number
+  kr_count: number
+  hk_count: number
   latest_trade_date: string | null
   latest_factor_date: string | null
   profile_count: number
@@ -115,6 +118,9 @@ export class MarketDataStore {
     const etfCount = this.countEtfInstruments()
     const usCount = this.countUsInstruments()
     const cryptoCount = this.countCryptoInstruments()
+    const jpCount = this.countRegionalEquityInstruments('JP')
+    const krCount = this.countRegionalEquityInstruments('KR')
+    const hkCount = this.countRegionalEquityInstruments('HK')
     const profileCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_profiles').get() as { c: number }).c
     const partnerCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_partners').get() as { c: number }).c
     const segmentCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_business_segments').get() as { c: number }).c
@@ -147,13 +153,22 @@ export class MarketDataStore {
       const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap'])
       const usJobs = new Set(['us_list'])
       const cryptoJobs = new Set(['crypto_list'])
+      const jpJobs = new Set(['jp_list'])
+      const krJobs = new Set(['kr_list'])
+      const hkJobs = new Set(['hk_list'])
       const baseCount = cryptoJobs.has(row.job_name)
         ? cryptoCount
         : usJobs.has(row.job_name)
           ? usCount
-          : etfJobs.has(row.job_name)
-            ? etfCount
-            : stockCount
+          : jpJobs.has(row.job_name)
+            ? jpCount
+            : krJobs.has(row.job_name)
+              ? krCount
+              : hkJobs.has(row.job_name)
+                ? hkCount
+                : etfJobs.has(row.job_name)
+                  ? etfCount
+                  : stockCount
       jobProgress[row.job_name] = {
         done: row.done,
         error: row.error,
@@ -173,6 +188,9 @@ export class MarketDataStore {
       etf_count: etfCount,
       us_count: usCount,
       crypto_count: cryptoCount,
+      jp_count: jpCount,
+      kr_count: krCount,
+      hk_count: hkCount,
       latest_trade_date: latestQuote.d,
       latest_factor_date: latestFactor.d,
       profile_count: profileCount,
@@ -1438,6 +1456,13 @@ export class MarketDataStore {
     const row = this.db.prepare(`
       SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
     `).get() as { c: number }
+    return row.c
+  }
+
+  countRegionalEquityInstruments(market: 'JP' | 'KR' | 'HK'): number {
+    const row = this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = ?
+    `).get(market) as { c: number }
     return row.c
   }
 }

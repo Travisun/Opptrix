@@ -5,6 +5,8 @@ import { isCnEtfCode, normalizeCode } from './format'
 const US_PREFIX = /^(US|NYSE|NASDAQ|AMEX):/i
 const CRYPTO_PREFIX = /^(CRYPTO|BINANCE|OKX):/i
 const HK_PREFIX = /^HK:/i
+const JP_PREFIX = /^JP:/i
+const KR_PREFIX = /^KR:/i
 
 export function parseInstrumentInput(raw: string): InstrumentRef {
   const input = raw.trim()
@@ -30,6 +32,14 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
   if (HK_PREFIX.test(input)) {
     const sym = input.replace(HK_PREFIX, '').toUpperCase()
     return { market: 'HK', assetClass: 'EQUITY', symbol: sym }
+  }
+  if (JP_PREFIX.test(input)) {
+    const sym = input.replace(JP_PREFIX, '').toUpperCase()
+    return { market: 'JP', assetClass: 'EQUITY', symbol: sym }
+  }
+  if (KR_PREFIX.test(input)) {
+    const sym = input.replace(KR_PREFIX, '').toUpperCase()
+    return { market: 'KR', assetClass: 'EQUITY', symbol: sym }
   }
   if (/^\d+$/.test(input) && input.length <= 6) {
     const sym = normalizeCode(input)
@@ -105,6 +115,8 @@ export function marketDisplayName(market: Market): string {
     case 'CN': return 'A股'
     case 'US': return '美股'
     case 'HK': return '港股'
+    case 'JP': return '日股'
+    case 'KR': return '韩股'
     case 'CRYPTO': return 'Crypto'
     default: return market
   }

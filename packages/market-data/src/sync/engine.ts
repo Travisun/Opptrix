@@ -168,6 +168,11 @@ export class MarketDataSyncEngine {
           case 'crypto_quotes':
             await this.syncCryptoQuotes(runId, mode, options)
             break
+          case 'hk_list':
+          case 'jp_list':
+          case 'kr_list':
+            await this.syncRegionalListStub(runId, job, options, mode)
+            break
           case 'financials':
             await this.syncFinancials(runId, mode, options, 'annual')
             break
@@ -765,6 +770,24 @@ export class MarketDataSyncEngine {
     }
     options.onProgress?.({ job: 'crypto_list', current: success, total })
     this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  }
+
+  /** HK/JP/KR list sync — Provider 筹备中，先占位并标记 cursor */
+  private async syncRegionalListStub(
+    runId: number,
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+  ): Promise<void> {
+    const cfg = this.cfg(job, options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess(job)
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, job, options, `${job} 在 TTL 内，跳过`)
+        return
+      }
+    }
+    this.finishJobEmpty(runId, job, options, `${job} Provider 筹备中，暂无新增标的`)
   }
 
   private async syncCryptoQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {

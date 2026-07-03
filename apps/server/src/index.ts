@@ -570,6 +570,26 @@ app.get('/api/instruments/summary', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/snapshot', async (req) => {
+  const r = await hub.dispatch('instrument_snapshot', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/quotes', async (req) => {
+  const r = await hub.dispatch('instrument_quotes', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/chart', async (req) => {
+  const r = await hub.dispatch('instrument_chart', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/capabilities', async (req) => {
+  const r = await hub.dispatch('instrument_capabilities', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.get('/api/us/screen/schema', async () => {
   const r = await hub.dispatch('local_us_screen_schema', {})
   return { success: r.success, data: r.data, message: r.message }

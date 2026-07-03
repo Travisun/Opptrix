@@ -36,6 +36,7 @@ import {
   resolveWatchlistInstrument,
   watchlistItemKey,
 } from './instrument'
+import { hasApplicationCapability } from './capabilities'
 
 type MarketTab = 'watchlist' | 'discover' | 'industry' | 'portfolio' | 'detail'
 
@@ -177,8 +178,13 @@ export default function RightMarketPanel({
   const handleManage = useCallback(async (item: WatchlistItem) => {
     setManageStock(item)
     try {
-      const resp = await research.stockQuotes([item.code])
-      setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
+      const ref = resolveWatchlistInstrument(item)
+      if (hasApplicationCapability(ref, 'batch_quote')) {
+        const resp = await research.instrumentQuotes([ref])
+        setDialogPrice(resp.data?.quotes?.[0]?.price ?? null)
+      } else {
+        setDialogPrice(null)
+      }
     } catch {
       setDialogPrice(null)
     }

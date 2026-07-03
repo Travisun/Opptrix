@@ -231,6 +231,35 @@ export const research = {
       counts: { cn_stocks: number; cn_etfs: number; us: number; crypto: number }
     } }>('/instruments/summary'),
 
+  instrumentSnapshot: (instrument: import('../types/instrument').InstrumentRef, signal?: AbortSignal) =>
+    jsonFetch<{ success: boolean; data?: unknown; message?: string }>(
+      '/instruments/snapshot',
+      { method: 'POST', body: JSON.stringify({ instrument }), signal },
+    ),
+
+  instrumentQuotes: (instruments: import('../types/instrument').InstrumentRef[], signal?: AbortSignal) =>
+    jsonFetch<{ success: boolean; data?: { quotes: import('../types/instrument').UnifiedInstrumentQuote[] }; message?: string }>(
+      '/instruments/quotes',
+      { method: 'POST', body: JSON.stringify({ instruments }), signal },
+    ),
+
+  instrumentChart: (
+    instrument: import('../types/instrument').InstrumentRef,
+    period: 'daily' | 'weekly' | 'monthly' | 'intraday' = 'daily',
+    count = 120,
+    signal?: AbortSignal,
+  ) =>
+    jsonFetch<{ success: boolean; data?: unknown; message?: string }>(
+      '/instruments/chart',
+      { method: 'POST', body: JSON.stringify({ instrument, period, count }), signal },
+    ),
+
+  instrumentCapabilities: (instrument: import('../types/instrument').InstrumentRef, signal?: AbortSignal) =>
+    jsonFetch<{ success: boolean; data?: import('../types/instrument').InstrumentCapabilitySet; message?: string }>(
+      '/instruments/capabilities',
+      { method: 'POST', body: JSON.stringify({ instrument }), signal },
+    ),
+
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
@@ -301,14 +330,21 @@ export interface MarketDataPackConfig {
   cn: MarketDataPackEntry
   us: MarketDataPackEntry
   crypto: MarketDataPackEntry
+  hk: MarketDataPackEntry
+  jp: MarketDataPackEntry
+  kr: MarketDataPackEntry
 }
 
 export interface MarketDataPacksState {
   config: MarketDataPackConfig
   counts: {
     cn_stocks: number
+    cn_etfs: number
     us: number
     crypto: number
+    jp: number
+    kr: number
+    hk: number
   }
 }
 
@@ -319,7 +355,7 @@ export async function getMarketDataPacks() {
 }
 
 export async function patchMarketDataPacks(
-  patch: Partial<Record<'us' | 'crypto', { enabled?: boolean }>>,
+  patch: Partial<Record<'us' | 'crypto' | 'hk' | 'jp' | 'kr', { enabled?: boolean }>>,
 ) {
   return jsonFetch<{ success: boolean; data: { config: MarketDataPackConfig }; message?: string }>(
     '/market-data/packs',
@@ -331,7 +367,7 @@ export async function patchMarketDataPacks(
   )
 }
 
-export async function prepareMarketDataPack(pack: 'us' | 'crypto' | 'cn', force = false) {
+export async function prepareMarketDataPack(pack: 'us' | 'crypto' | 'cn' | 'hk' | 'jp' | 'kr', force = false) {
   return jsonFetch<{ success: boolean; message?: string }>(`/market-data/packs/${pack}/prepare`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

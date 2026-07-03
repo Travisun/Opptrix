@@ -3,8 +3,9 @@
 ## 设计原则
 
 1. **单一调度入口**：所有投研能力经 `ResearchHub.dispatch(feature, params)` 路由，HTTP 层与 Agent tools 共用同一实现。
-2. **纯 Node 运行时**：数据抓取、TDX 协议、因子计算、报告生成均在 TypeScript 中完成，无 Python 桥接。
-3. **Web 与桌面并存**：`client-ui` 为 Vite SPA；生产环境由 `@opptrix/server` 托管 `client-ui/dist`。可选 **Electron 桌面壳**（`apps/desktop`）加载同一 UI，API 以本机 sidecar 运行。详见 [DESKTOP.md](./DESKTOP.md)。
+2. **InstrumentRef 主轴**：新能力优先走 `instrument_*` 标准 feature（快照 / 报价 / 图表 / 搜索 / 能力查询），市场特化 feature 作为 adapter 保留。详见 **[MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)**。
+3. **纯 Node 运行时**：数据抓取、TDX 协议、因子计算、报告生成均在 TypeScript 中完成，无 Python 桥接。
+4. **Web 与桌面并存**：`client-ui` 为 Vite SPA；生产环境由 `@opptrix/server` 托管 `client-ui/dist`。可选 **Electron 桌面壳**（`apps/desktop`）加载同一 UI，API 以本机 sidecar 运行。详见 [DESKTOP.md](./DESKTOP.md)。
 
 ## 请求流
 
@@ -39,7 +40,7 @@ agent, server
 
 ## 数据层
 
-> 多市场演进设计见 **[DATA-LAYER.md](./DATA-LAYER.md)**（Provider 抽象、Instrument 模型、ETF/美股/币圈路线图）。
+> 多市场演进设计见 **[DATA-LAYER.md](./DATA-LAYER.md)**（Provider 抽象、Instrument 模型）与 **[MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)**（注册表、标准 API、日韩扩展路线）。
 
 ### 在线层 `@opptrix/a-stock-layer`（→ `MarketDataEngine`）
 

@@ -37,6 +37,14 @@ import {
   newsGroupsList,
   newsSourcesList,
 } from './news-hub.js'
+import {
+  routeInstrumentCapabilities,
+  routeInstrumentChart,
+  routeInstrumentQuotes,
+  routeInstrumentSearch,
+  routeInstrumentSnapshot,
+  type InstrumentRouteHandlers,
+} from './instrument-router.js'
 
 interface WatchlistRadarItem {
   code: string
@@ -161,10 +169,21 @@ export class ResearchHub {
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
         case 'search_local_instruments': return this.searchLocalInstruments(params, t0)
         case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
+        case 'instrument_snapshot': return this.instrumentSnapshot(params, t0)
+        case 'instrument_quotes': return this.instrumentQuotes(params, t0)
+        case 'instrument_chart': return this.instrumentChart(params, t0)
+        case 'instrument_search': return this.instrumentSearch(params, t0)
+        case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
         case 'local_us_screen_schema': return this.localUsScreenSchema(t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen_schema': return this.localCryptoScreenSchema(t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
+        case 'local_jp_screen_schema': return this.localJpScreenSchema(t0)
+        case 'local_jp_screen': return this.localJpScreen(params, t0)
+        case 'local_kr_screen_schema': return this.localKrScreenSchema(t0)
+        case 'local_kr_screen': return this.localKrScreen(params, t0)
+        case 'local_hk_screen_schema': return this.localHkScreenSchema(t0)
+        case 'local_hk_screen': return this.localHkScreen(params, t0)
         case 'search_etfs': return await this.searchEtfs(params, t0)
         case 'us_realtime': return await this.usRealtime(String(params.symbol ?? params.code ?? ''), t0)
         case 'us_kline': return await this.usKline(String(params.symbol ?? params.code ?? ''), params, t0)
@@ -283,6 +302,9 @@ export class ResearchHub {
         cn_etfs: status.etf_count,
         us: status.us_count,
         crypto: status.crypto_count,
+        jp: status.jp_count ?? 0,
+        kr: status.kr_count ?? 0,
+        hk: status.hk_count ?? 0,
       },
     }, '市场数据包', t0)
   }
@@ -295,6 +317,9 @@ export class ResearchHub {
       etf_count: status.etf_count,
       us_count: status.us_count,
       crypto_count: status.crypto_count,
+      jp_count: status.jp_count ?? 0,
+      kr_count: status.kr_count ?? 0,
+      hk_count: status.hk_count ?? 0,
       cn_is_ready: status.is_ready,
     }
   }
@@ -334,11 +359,12 @@ export class ResearchHub {
 
   private async marketDataPackPrepare(params: Record<string, unknown>, t0: number) {
     const pack = String(params.pack ?? '').trim().toLowerCase()
-    if (pack !== 'cn' && pack !== 'us' && pack !== 'crypto') {
-      return fail('pack 须为 cn、us 或 crypto', t0)
+    const allowed = new Set(['cn', 'us', 'crypto', 'hk', 'jp', 'kr'])
+    if (!allowed.has(pack)) {
+      return fail('pack 须为 cn、us、crypto、hk、jp 或 kr', t0)
     }
     const force = params.force === true
-    const result = await this.marketData.prepareMarketPack(pack, force)
+    const result = await this.marketData.prepareMarketPack(pack as import('@opptrix/shared').MarketDataPackId, force)
     const msg = result.started ? '数据包准备已在后台启动' : '同步任务进行中'
     return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
   }
@@ -1579,8 +1605,51 @@ export class ResearchHub {
         cn_etfs: status.etf_count,
         us: status.us_count,
         crypto: status.crypto_count ?? 0,
+        jp: status.jp_count ?? 0,
+        kr: status.kr_count ?? 0,
+        hk: status.hk_count ?? 0,
       },
     }, '本地 instruments 汇总', t0)
+  }
+
+  private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {
+    return {
+      stockDetail: code => this.stockDetail(code, t0),
+      etfSnapshot: code => this.etfSnapshot(code, t0),
+      usSnapshot: symbol => this.usSnapshot(symbol, t0),
+      cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
+      stockQuotes: codes => this.stockQuotes(codes, t0),
+      usRealtime: symbol => this.usRealtime(symbol, t0),
+      cryptoRealtime: pair => this.cryptoRealtime(pair, t0),
+      stockChart: (code, period, count, before, tail, market) =>
+        this.stockChart(code, period, count, before, tail, market, t0),
+      usKline: (symbol, count) => this.usKline(symbol, { count }, t0),
+      cryptoKline: (pair, count) => this.cryptoKline(pair, { count }, t0),
+      searchLocalInstruments: (keyword, limit, markets) => {
+        const m = markets as import('@opptrix/shared').Market[] | undefined
+        return Promise.resolve(this.searchLocalInstruments({ keyword, limit, markets: m }, t0))
+      },
+    }
+  }
+
+  private async instrumentSnapshot(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentSnapshot(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentQuotes(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentQuotes(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentChart(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentChart(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private async instrumentSearch(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentSearch(params, this.instrumentRouteHandlers(t0))
+  }
+
+  private instrumentCapabilities(params: Record<string, unknown>, t0: number) {
+    return routeInstrumentCapabilities(params)
   }
 
   private localUsScreenSchema(t0: number) {
@@ -1639,6 +1708,67 @@ export class ResearchHub {
     } catch (e) {
       return fail(e instanceof Error ? e.message : String(e), t0)
     }
+  }
+
+  private localRegionalScreen(
+    market: 'JP' | 'KR' | 'HK',
+    label: string,
+    count: number,
+    params: Record<string, unknown>,
+    t0: number,
+  ) {
+    if (count < 1) {
+      return fail(`本地${label}库为空，请先完成 ${market.toLowerCase()}_list 同步`, t0)
+    }
+    try {
+      const query = {
+        keyword: params.keyword as string | undefined,
+        industry_contains: params.industry_contains as string | undefined,
+        sort_by: params.sort_by as 'code' | 'name' | undefined,
+        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
+        top_n: params.top_n != null ? Number(params.top_n) : undefined,
+      }
+      const data = market === 'JP'
+        ? this.marketData.jpScreen(query)
+        : market === 'KR'
+          ? this.marketData.krScreen(query)
+          : this.marketData.hkScreen(query)
+      return ok({
+        source: 'local',
+        total_universe: data.total_universe,
+        passed: data.passed,
+        items: data.items,
+      }, `${label}筛选 ${data.total_universe} 只，命中 ${data.passed} 只`, t0)
+    } catch (e) {
+      return fail(e instanceof Error ? e.message : String(e), t0)
+    }
+  }
+
+  private localJpScreenSchema(t0: number) {
+    return ok(this.marketData.jpScreenSchema(), '本地日股筛选维度说明', t0)
+  }
+
+  private localJpScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    return this.localRegionalScreen('JP', '日股', status.jp_count ?? 0, params, t0)
+  }
+
+  private localKrScreenSchema(t0: number) {
+    return ok(this.marketData.krScreenSchema(), '本地韩股筛选维度说明', t0)
+  }
+
+  private localKrScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    return this.localRegionalScreen('KR', '韩股', status.kr_count ?? 0, params, t0)
+  }
+
+  private localHkScreenSchema(t0: number) {
+    return ok(this.marketData.hkScreenSchema(), '本地港股筛选维度说明', t0)
+  }
+
+  private localHkScreen(params: Record<string, unknown>, t0: number) {
+    const status = this.marketData.status()
+    return this.localRegionalScreen('HK', '港股', status.hk_count ?? 0, params, t0)
   }
 
   private async searchEtfs(params: Record<string, unknown>, t0: number) {

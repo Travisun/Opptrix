@@ -1,4 +1,6 @@
 /** 数据层 / 分析工具元数据：用途说明与调用规范（OpenAI tools + MCP 共用） */
+import { discoverMiningToolNamesForProfile, isDiscoverStrategyProfile } from '@opptrix/shared'
+
 export interface ToolMeta {
   usageGuide: string
   compliance: string
@@ -459,8 +461,9 @@ const CRYPTO_MINING_TOOL_NAMES = [
 ] as const
 
 export function discoverMiningToolNames(profile: string): readonly string[] {
-  if (profile === 'us_equity') return US_MINING_TOOL_NAMES
-  if (profile === 'crypto_spot') return CRYPTO_MINING_TOOL_NAMES
+  if (isDiscoverStrategyProfile(profile)) {
+    return discoverMiningToolNamesForProfile(profile)
+  }
   return DATA_LAYER_MINING_TOOL_NAMES
 }
 

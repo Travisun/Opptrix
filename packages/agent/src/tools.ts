@@ -441,6 +441,40 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('local_crypto_screen', a),
       },
       {
+        name: 'get_local_jp_screen_schema', category: '本地数据',
+        description: '本地日股列表筛选维度说明（keyword、行业等）',
+        parameters: S({}),
+        handler: () => d('local_jp_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_jp_stocks', category: '本地数据',
+        description: '本地日股列表筛选：按代码/公司名、行业关键词过滤',
+        parameters: S({
+          keyword: { type: 'string', description: '代码或公司名关键词' },
+          industry_contains: { type: 'string', description: '行业关键词' },
+          sort_by: { type: 'string', description: 'code | name' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_jp_screen', a),
+      },
+      {
+        name: 'get_local_kr_screen_schema', category: '本地数据',
+        description: '本地韩股列表筛选维度说明（keyword、行业等）',
+        parameters: S({}),
+        handler: () => d('local_kr_screen_schema', {}),
+      },
+      {
+        name: 'screen_local_kr_stocks', category: '本地数据',
+        description: '本地韩股列表筛选：按代码/公司名、行业关键词过滤',
+        parameters: S({
+          keyword: { type: 'string', description: '代码或公司名关键词' },
+          industry_contains: { type: 'string', description: '行业关键词' },
+          sort_by: { type: 'string', description: 'code | name' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_kr_screen', a),
+      },
+      {
         name: 'get_us_stock_quote', category: '本地数据',
         description: '获取单只美股实时行情',
         parameters: S({

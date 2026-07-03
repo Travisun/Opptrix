@@ -51,6 +51,15 @@ import { buildEtfScorecardSchema, computeEtfScorecard } from './query/etf-scorec
 import { searchLocalInstruments, listLocalInstrumentsSummary } from './query/search-instruments.js'
 import { buildLocalUsScreenSchema, localUsScreen, type LocalUsScreenQuery } from './query/us-screen.js'
 import { buildLocalCryptoScreenSchema, localCryptoScreen, type LocalCryptoScreenQuery } from './query/crypto-screen.js'
+import {
+  buildLocalHkScreenSchema,
+  buildLocalJpScreenSchema,
+  buildLocalKrScreenSchema,
+  localHkScreen,
+  localJpScreen,
+  localKrScreen,
+  type LocalJpScreenQuery,
+} from './query/regional-equity-screen.js'
 import { listScreenFactors } from './query/factors.js'
 
 export class MarketDataService {
@@ -197,6 +206,30 @@ export class MarketDataService {
 
   cryptoScreenSchema() {
     return buildLocalCryptoScreenSchema()
+  }
+
+  jpScreen(query: LocalJpScreenQuery) {
+    return localJpScreen(this.store, query)
+  }
+
+  jpScreenSchema() {
+    return buildLocalJpScreenSchema()
+  }
+
+  krScreen(query: LocalJpScreenQuery) {
+    return localKrScreen(this.store, query)
+  }
+
+  krScreenSchema() {
+    return buildLocalKrScreenSchema()
+  }
+
+  hkScreen(query: LocalJpScreenQuery) {
+    return localHkScreen(this.store, query)
+  }
+
+  hkScreenSchema() {
+    return buildLocalHkScreenSchema()
   }
 
   industryStocks(industry: string, tradeDate?: string, limit = 120) {

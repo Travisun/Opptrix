@@ -1,8 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { getConfig, research } from '../api/client'
 import type { InstitutionRatingData, LatestEvalData, StrategySignalData } from '../types/schemas'
 import type { ChipDistributionPoint } from '../types/market'
 import type { WatchlistRadarItem } from '../types/schemas'
+import { parseInstrumentInput, displayCodeFromInstrument } from './instrument'
+import { hasApplicationCapability } from './capabilities'
+import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
 import { normalizeCode } from './format'
 import type { RawDecisionPayload } from './useStockDecisionCard'
 
@@ -22,14 +25,26 @@ function stepPercent(steps: AnalysisStep[]): number {
   return Math.min(99, Math.round(((done + running * 0.4) / steps.length) * 100))
 }
 
-function freshSteps(): AnalysisStep[] {
-  return [
-    { id: 'eval', label: 'G=B+M 评分', status: 'pending', message: null },
-    { id: 'strategy', label: '多空倾向', status: 'pending', message: null },
-    { id: 'institution', label: '研报观点', status: 'pending', message: null },
-    { id: 'cyq', label: '筹码分布', status: 'pending', message: null },
-    { id: 'radar', label: '估值与评分', status: 'pending', message: null },
-  ]
+const STEP_CAPS: Record<string, ApplicationCapability> = {
+  eval: 'scorecard',
+  strategy: 'strategy_signal',
+  institution: 'institution_rating',
+  cyq: 'cyq',
+  radar: 'scorecard',
+}
+
+const STEP_DEFS = [
+  { id: 'eval', label: 'G=B+M 评分' },
+  { id: 'strategy', label: '多空倾向' },
+  { id: 'institution', label: '研报观点' },
+  { id: 'cyq', label: '筹码分布' },
+  { id: 'radar', label: '估值与评分' },
+]
+
+function freshSteps(ref: InstrumentRef | null): AnalysisStep[] {
+  return STEP_DEFS
+    .filter(def => !ref || hasApplicationCapability(ref, STEP_CAPS[def.id]!))
+    .map(def => ({ ...def, status: 'pending' as const, message: null }))
 }
 
 function isAbort(e: unknown): boolean {
@@ -45,8 +60,12 @@ const STEP_HINTS: Record<string, string> = {
 }
 
 export function useStockAnalysis(code: string | null) {
+  const instrumentRef = useMemo(
+    () => (code ? parseInstrumentInput(code) : null),
+    [code],
+  )
   const [status, setStatus] = useState<AnalysisJobStatus>('idle')
-  const [steps, setSteps] = useState<AnalysisStep[]>(freshSteps())
+  const [steps, setSteps] = useState<AnalysisStep[]>(() => freshSteps(instrumentRef))
   const [percent, setPercent] = useState(0)
   const [raw, setRaw] = useState<RawDecisionPayload | null>(null)
   const [error, setError] = useState('')
@@ -56,11 +75,11 @@ export function useStockAnalysis(code: string | null) {
     abortRef.current?.abort()
     abortRef.current = null
     setStatus('idle')
-    setSteps(freshSteps())
+    setSteps(freshSteps(instrumentRef))
     setPercent(0)
     setRaw(null)
     setError('')
-  }, [])
+  }, [instrumentRef])
 
   useEffect(() => {
     reset()
@@ -69,11 +88,16 @@ export function useStockAnalysis(code: string | null) {
   const start = useCallback(async (force = false) => {
     if (!code || status === 'running') return
     if (!force && status === 'done' && raw) return
+    if (!instrumentRef || !steps.length) {
+      setError('该标的暂不支持投研分析')
+      setStatus('error')
+      return
+    }
 
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
-    let currentSteps = freshSteps()
+    let currentSteps = freshSteps(instrumentRef)
     setSteps(currentSteps)
     setPercent(0)
     setRaw(null)
@@ -93,6 +117,7 @@ export function useStockAnalysis(code: string | null) {
       hint: string,
       task: () => Promise<{ ok: boolean; message: string }>,
     ) => {
+      if (!currentSteps.some(s => s.id === stepId)) return true
       currentSteps = currentSteps.map(s =>
         s.id === stepId ? { ...s, status: 'running', message: hint } : s,
       )
@@ -179,7 +204,7 @@ export function useStockAnalysis(code: string | null) {
     } finally {
       if (abortRef.current === controller) abortRef.current = null
     }
-  }, [code, status, raw])
+  }, [code, status, raw, instrumentRef, steps.length])
 
   useEffect(() => () => { abortRef.current?.abort() }, [])
 

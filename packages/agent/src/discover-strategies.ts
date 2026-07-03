@@ -77,6 +77,22 @@ function cryptoSpot(s: Omit<StrategyCore, 'conditions'> & { conditions?: Discove
   }
 }
 
+function regionalEquity(
+  profile: 'jp_equity' | 'kr_equity',
+  pack: MarketDataPackId,
+  s: Omit<StrategyCore, 'conditions'> & { conditions?: DiscoverScreenCondition[]; screen_params?: Record<string, string> },
+): DiscoverStrategy {
+  return {
+    ...s,
+    conditions: s.conditions ?? [],
+    applicableProfiles: [profile],
+    requiresPack: [pack],
+    planMode: 'builtin',
+    scorecard: s.scorecard || '综合评估',
+    screen_params: s.screen_params,
+  }
+}
+
 export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
   cnEquity({
     id: 'graham_margin',
@@ -395,6 +411,32 @@ export const DISCOVER_STRATEGIES: DiscoverStrategy[] = [
     conditions: [],
     screen_params: { quote: 'BTC' },
     refinement_notes: '注意小市值 alt 流动性；仅研究与数据解读，勿推荐买卖。',
+  }),
+  regionalEquity('jp_equity', 'jp', {
+    id: 'jp_broad_universe',
+    name: '日股广谱观察',
+    category: 'balanced',
+    tagline: '本地日股列表 · 广谱初筛',
+    methodology: '基于本地 jp_list 同步结果，按代码排序取广谱样本，Agent 结合快照精选。',
+    description: '从本地日股库中广谱初选，适合建立日本市场观察池。',
+    scorecard: '综合评估',
+    prescreen_top_n: 80,
+    final_top_n: 15,
+    conditions: [],
+    refinement_notes: '优先流动性与业务清晰度；回避信息极度匮乏标的。',
+  }),
+  regionalEquity('kr_equity', 'kr', {
+    id: 'kr_broad_universe',
+    name: '韩股广谱观察',
+    category: 'balanced',
+    tagline: '本地韩股列表 · 广谱初筛',
+    methodology: '基于本地 kr_list 同步结果，按代码排序取广谱样本，Agent 结合快照精选。',
+    description: '从本地韩股库中广谱初选，适合建立韩国市场观察池。',
+    scorecard: '综合评估',
+    prescreen_top_n: 80,
+    final_top_n: 15,
+    conditions: [],
+    refinement_notes: '优先流动性与业务清晰度；回避信息极度匮乏标的。',
   }),
 ]
 

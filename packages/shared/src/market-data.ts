@@ -1,6 +1,6 @@
 /** Multi-market instrument identifiers — DATA-LAYER §4 */
 
-export type Market = 'CN' | 'US' | 'HK' | 'CRYPTO'
+export type Market = 'CN' | 'US' | 'HK' | 'CRYPTO' | 'JP' | 'KR'
 
 export type AssetClass =
   | 'EQUITY'

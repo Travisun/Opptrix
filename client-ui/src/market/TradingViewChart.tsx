@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
+import { parseInstrumentInput } from './instrument'
+import { hasApplicationCapability } from './capabilities'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
 import { buildChartSeries, periodLabel } from './chartSeries'
@@ -267,6 +269,9 @@ interface Props {
 
 export default function TradingViewChart({ code, expanded = false, active = true }: Props) {
   const s = useStyles()
+  const instrumentRef = useMemo(() => parseInstrumentInput(code), [code])
+  const cnEquityChart = instrumentRef.market === 'CN' && instrumentRef.assetClass === 'EQUITY'
+  const canChart = hasApplicationCapability(instrumentRef, 'chart_daily')
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
@@ -326,14 +331,34 @@ export default function TradingViewChart({ code, expanded = false, active = true
     setError('')
 
     try {
-      const resp = await research.stockChart(
-        code,
-        nextPeriod,
-        count,
-        signal,
-        opts?.before,
-        opts?.tail,
-      )
+      if (!canChart && !cnEquityChart) {
+        setError('该标的暂不支持图表')
+        if (!hasChart) setData(null)
+        return
+      }
+
+      const useStockApi = cnEquityChart
+        && (isIntradayPeriod(nextPeriod) || isMinuteOhlcPeriod(nextPeriod)
+          || nextPeriod === 'daily' || nextPeriod === 'weekly' || nextPeriod === 'monthly')
+
+      const resp = useStockApi
+        ? await research.stockChart(
+          code,
+          nextPeriod,
+          count,
+          signal,
+          opts?.before,
+          opts?.tail,
+        )
+        : await research.instrumentChart(
+          instrumentRef,
+          nextPeriod === 'weekly' ? 'weekly' : nextPeriod === 'monthly' ? 'monthly' : 'daily',
+          count,
+          signal,
+        ).then(r => ({
+          ...r,
+          data: r.data as StockChartData | undefined,
+        }))
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (!resp.success || !resp.data) {
         setError(resp.message || '图表加载失败')
@@ -376,7 +401,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
         setRefreshing(false)
       }
     }
-  }, [code])
+  }, [code, instrumentRef, cnEquityChart, canChart])
 
   const handleNeedHistory = useCallback(() => {
     const now = Date.now()
@@ -440,6 +465,11 @@ export default function TradingViewChart({ code, expanded = false, active = true
   }, [period, active, data?.isTradingDay, loadChart])
 
   useEffect(() => {
+    if (!cnEquityChart) {
+      setIntradayAvailable(false)
+      if (isIntradayPeriod(period) || isMinuteOhlcPeriod(period)) setPeriod('daily')
+      return undefined
+    }
     const controller = new AbortController()
     research.stockChart(code, 'intraday', undefined, controller.signal)
       .then(resp => {
@@ -448,7 +478,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
       })
       .catch(() => {})
     return () => { controller.abort() }
-  }, [code])
+  }, [code, cnEquityChart, period])
 
   useEffect(() => {
     if (!data || !mainRef.current || !volumeRef.current || !macdRef.current) return undefined
@@ -555,7 +585,8 @@ export default function TradingViewChart({ code, expanded = false, active = true
       <div className={s.toolbar}>
         <div className={s.periodGroup}>
           {PERIODS.map(item => {
-            const disabled = item.tradingOnly && !intradayAvailable && item.id === 'intraday'
+            const disabled = (!cnEquityChart && (isIntradayPeriod(item.id) || isMinuteOhlcPeriod(item.id)))
+              || (item.tradingOnly && !intradayAvailable && item.id === 'intraday')
             const activeTab = period === item.id
             return (
               <button

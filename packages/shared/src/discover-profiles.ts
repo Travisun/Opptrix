@@ -1,42 +1,35 @@
 import type { MarketDataPackConfig, MarketDataPackId } from './market-data-packs.js'
 import { MARKET_PACK_LABELS } from './market-data-packs.js'
 import type { MarketRegimeKind } from './market-regime.js'
+import {
+  DISCOVER_PROFILE_REGISTRY,
+  getDiscoverProfileDefinition,
+  type DiscoverPrescreenMode,
+} from './discover-profile-registry.js'
+import {
+  type DiscoverStrategyProfile,
+  DISCOVER_STRATEGY_PROFILES,
+  isDiscoverStrategyProfile,
+} from './discover-profile-types.js'
 
-/** 挖掘/评分策略适用的资产 Profile（策略层主轴，非裸 market） */
-export type DiscoverStrategyProfile =
-  | 'cn_equity'
-  | 'cn_etf'
-  | 'us_equity'
-  | 'crypto_spot'
+export type { DiscoverStrategyProfile } from './discover-profile-types.js'
+export { isDiscoverStrategyProfile } from './discover-profile-types.js'
 
-export const DISCOVER_PROFILE_ORDER: DiscoverStrategyProfile[] = [
-  'cn_equity',
-  'cn_etf',
-  'us_equity',
-  'crypto_spot',
-]
+export const DISCOVER_PROFILE_ORDER: DiscoverStrategyProfile[] = DISCOVER_PROFILE_REGISTRY.map(
+  row => row.id,
+) as DiscoverStrategyProfile[]
 
-export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = {
-  cn_equity: 'A 股股票',
-  cn_etf: 'A 股 ETF',
-  us_equity: '美股',
-  crypto_spot: 'Crypto',
-}
+export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = Object.fromEntries(
+  DISCOVER_PROFILE_REGISTRY.map(row => [row.id, row.label]),
+) as Record<DiscoverStrategyProfile, string>
 
-export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, string> = {
-  cn_equity: '全 A 股票池 · 本地因子库初选与 AI 精选',
-  cn_etf: 'ETF 折溢价、规模与同类对比 · 决策雷达',
-  us_equity: '美股本地列表筛选（需开启美股数据包）',
-  crypto_spot: 'Crypto 交易对筛选（需开启 Crypto 数据包）',
-}
+export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, string> = Object.fromEntries(
+  DISCOVER_PROFILE_REGISTRY.map(row => [row.id, row.description]),
+) as Record<DiscoverStrategyProfile, string>
 
-/** 策略执行所需的数据包；null 表示不依赖 pack 开关 */
-export const DISCOVER_PROFILE_REQUIRES_PACK: Record<DiscoverStrategyProfile, MarketDataPackId | null> = {
-  cn_equity: 'cn',
-  cn_etf: 'cn',
-  us_equity: 'us',
-  crypto_spot: 'crypto',
-}
+export const DISCOVER_PROFILE_REQUIRES_PACK: Record<DiscoverStrategyProfile, MarketDataPackId | null> = Object.fromEntries(
+  DISCOVER_PROFILE_REGISTRY.map(row => [row.id, row.packId]),
+) as Record<DiscoverStrategyProfile, MarketDataPackId | null>
 
 /** A 股股票挖掘 — 本地因子初选白名单 */
 export const CN_EQUITY_DISCOVER_FACTORS = [
@@ -59,10 +52,18 @@ export const CRYPTO_DISCOVER_FILTERS = [
   'keyword', 'quote', 'base_contains',
 ] as const
 
+/** 区域股票挖掘 — 本地列表筛选字段（US/JP/KR 共用） */
+export const REGIONAL_EQUITY_DISCOVER_FILTERS = [
+  'keyword', 'industry_contains',
+] as const
+
 export function discoverFactorsForProfile(profile: DiscoverStrategyProfile): readonly string[] {
   switch (profile) {
     case 'cn_etf': return CN_ETF_DISCOVER_FACTORS
-    case 'us_equity': return US_DISCOVER_FILTERS
+    case 'us_equity':
+    case 'jp_equity':
+    case 'kr_equity':
+      return REGIONAL_EQUITY_DISCOVER_FILTERS
     case 'crypto_spot': return CRYPTO_DISCOVER_FILTERS
     case 'cn_equity':
     default:
@@ -70,12 +71,12 @@ export function discoverFactorsForProfile(profile: DiscoverStrategyProfile): rea
   }
 }
 
-export function defaultDiscoverProfile(): DiscoverStrategyProfile {
-  return 'cn_equity'
+export function discoverPrescreenMode(profile: DiscoverStrategyProfile): DiscoverPrescreenMode {
+  return getDiscoverProfileDefinition(profile)?.prescreenMode ?? 'blocked'
 }
 
-export function isDiscoverStrategyProfile(v: string): v is DiscoverStrategyProfile {
-  return (DISCOVER_PROFILE_ORDER as readonly string[]).includes(v)
+export function defaultDiscoverProfile(): DiscoverStrategyProfile {
+  return 'cn_equity'
 }
 
 export function listDiscoverProfileMeta() {
@@ -90,10 +91,7 @@ export function listDiscoverProfileMeta() {
 }
 
 export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'cn_equity'
-    || profile === 'cn_etf'
-    || profile === 'us_equity'
-    || profile === 'crypto_spot'
+  return getDiscoverProfileDefinition(profile)?.miningReady ?? false
 }
 
 export type DiscoverReadinessMode = 'local' | 'online' | 'blocked'
@@ -104,7 +102,16 @@ export interface DiscoverProfileReadinessContext {
   etf_count: number
   us_count: number
   crypto_count: number
+  jp_count: number
+  kr_count: number
+  hk_count: number
   cn_is_ready: boolean
+}
+
+function readinessCount(ctx: DiscoverProfileReadinessContext, profile: DiscoverStrategyProfile): number {
+  const key = getDiscoverProfileDefinition(profile)?.readinessCountKey
+  if (!key) return 0
+  return ctx[key] ?? 0
 }
 
 export interface DiscoverProfileReadiness {
@@ -128,9 +135,10 @@ export function assessDiscoverProfileReadiness(
   profile: DiscoverStrategyProfile,
   ctx: DiscoverProfileReadinessContext,
 ): DiscoverProfileReadiness {
-  const packId = DISCOVER_PROFILE_REQUIRES_PACK[profile]
+  const def = getDiscoverProfileDefinition(profile)
+  const packId = def?.packId ?? DISCOVER_PROFILE_REQUIRES_PACK[profile]
 
-  if (packId && !ctx.packs[packId].enabled) {
+  if (packId && !ctx.packs[packId]?.enabled) {
     return {
       profile,
       ready: false,
@@ -178,40 +186,24 @@ export function assessDiscoverProfileReadiness(
     }
   }
 
-  if (profile === 'us_equity') {
-    if (ctx.us_count < 1) {
+  const prescreen = def?.prescreenMode
+  if (prescreen === 'list_filter') {
+    const count = readinessCount(ctx, profile)
+    const label = DISCOVER_PROFILE_LABELS[profile]
+    if (count < 1) {
       return {
         profile,
         ready: false,
         mode: 'blocked',
-        message: '本地尚无美股列表',
-        action: packDisabledAction('us'),
+        message: `本地尚无${label}列表`,
+        action: packId ? packDisabledAction(packId) : null,
       }
     }
     return {
       profile,
       ready: true,
       mode: 'local',
-      message: `本地美股 ${ctx.us_count} 只，将按列表筛选初选`,
-      action: null,
-    }
-  }
-
-  if (profile === 'crypto_spot') {
-    if (ctx.crypto_count < 1) {
-      return {
-        profile,
-        ready: false,
-        mode: 'blocked',
-        message: '本地尚无 Crypto 交易对列表',
-        action: packDisabledAction('crypto'),
-      }
-    }
-    return {
-      profile,
-      ready: true,
-      mode: 'local',
-      message: `本地 Crypto ${ctx.crypto_count} 对，将按交易对筛选初选`,
+      message: `本地${label} ${count} 只，将按列表筛选初选`,
       action: null,
     }
   }
@@ -236,6 +228,8 @@ export function inferBuiltinStrategyProfile(strategyId: string): DiscoverStrateg
   if (strategyId.startsWith('etf_')) return 'cn_etf'
   if (strategyId.startsWith('us_')) return 'us_equity'
   if (strategyId.startsWith('crypto_')) return 'crypto_spot'
+  if (strategyId.startsWith('jp_')) return 'jp_equity'
+  if (strategyId.startsWith('kr_')) return 'kr_equity'
   return 'cn_equity'
 }
 

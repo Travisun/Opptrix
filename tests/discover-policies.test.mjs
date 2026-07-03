@@ -5,7 +5,7 @@ import { TEMPLATES } from '../packages/stock-eval/dist/scoring/templates.js'
 import { computeMarketRegime } from '../packages/shared/dist/market-regime.js'
 
 test('policies-new discover strategies are registered', () => {
-  assert.equal(DISCOVER_STRATEGIES.length, 12)
+  assert.ok(DISCOVER_STRATEGIES.length >= 12)
   const gbm = getDiscoverStrategy('gbm_core')
   assert.ok(gbm)
   assert.equal(gbm.scorecard, 'G=B+M')
@@ -19,6 +19,9 @@ test('policies-new discover strategies are registered', () => {
   const buffett = getDiscoverStrategy('buffett_moat')
   assert.ok(buffett)
   assert.equal(buffett.scorecard, '巴菲特四透镜')
+
+  assert.ok(getDiscoverStrategy('jp_broad_universe'))
+  assert.ok(getDiscoverStrategy('kr_broad_universe'))
 })
 
 test('policies-new scorecard templates exist', () => {

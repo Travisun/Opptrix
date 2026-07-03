@@ -4,6 +4,7 @@ import {
 } from '@fluentui/react-components'
 import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
+import { hitToWatchlistItem } from '../market/instrument'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -48,9 +49,9 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
     if (!q) return
     setSearching(true)
     try {
-      const resp = await research.searchStocks(q)
-      if (resp.success && resp.data.results.length > 0) {
-        const first = resp.data.results[0]
+      const resp = await research.searchInstruments(q, 10)
+      if (resp.success && resp.data?.items?.length) {
+        const first = hitToWatchlistItem(resp.data.items[0])
         setGlobalStock({ code: first.code, name: first.name })
       } else {
         setGlobalStock({ code: q, name: '' })

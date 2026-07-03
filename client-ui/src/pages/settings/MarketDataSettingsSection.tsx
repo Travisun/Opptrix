@@ -361,6 +361,27 @@ const PACK_UI: {
     countKey: 'crypto',
     optional: true,
   },
+  {
+    id: 'hk',
+    label: '港股',
+    desc: '港股列表与行情（Provider 筹备中）',
+    countKey: 'hk',
+    optional: true,
+  },
+  {
+    id: 'jp',
+    label: '日本股市',
+    desc: '日股列表与本地筛选（MVP）',
+    countKey: 'jp',
+    optional: true,
+  },
+  {
+    id: 'kr',
+    label: '韩国股市',
+    desc: '韩股列表与本地筛选（MVP）',
+    countKey: 'kr',
+    optional: true,
+  },
 ]
 
 export default function MarketDataSettingsSection() {
@@ -431,7 +452,7 @@ export default function MarketDataSettingsSection() {
     if (nearBottom) el.scrollTop = el.scrollHeight
   }, [state?.logs])
 
-  const handlePackToggle = async (pack: 'us' | 'crypto', enabled: boolean) => {
+  const handlePackToggle = async (pack: 'us' | 'crypto' | 'hk' | 'jp' | 'kr', enabled: boolean) => {
     setPackSaving(pack)
     try {
       const resp = await patchMarketDataPacks({ [pack]: { enabled } })
@@ -446,7 +467,7 @@ export default function MarketDataSettingsSection() {
     }
   }
 
-  const handlePreparePack = async (pack: 'us' | 'crypto') => {
+  const handlePreparePack = async (pack: 'us' | 'crypto' | 'hk' | 'jp' | 'kr') => {
     setPackPreparing(pack)
     try {
       setSyncActive(true)
@@ -647,7 +668,7 @@ export default function MarketDataSettingsSection() {
             </Text>
             {PACK_UI.map(item => {
               const entry = packs?.config?.[item.id]
-              const count = packs?.counts?.[item.countKey] ?? (item.id === 'cn' ? db?.stock_count : item.id === 'us' ? db?.us_count : db?.crypto_count) ?? 0
+              const count = packs?.counts?.[item.countKey] ?? 0
               const enabled = item.optional ? entry?.enabled === true : true
               return (
                 <div key={item.id} className={s.packRow}>
@@ -663,7 +684,7 @@ export default function MarketDataSettingsSection() {
                       <Switch
                         checked={enabled}
                         disabled={packSaving === item.id || running}
-                        onChange={(_, d) => { void handlePackToggle(item.id as 'us' | 'crypto', !!d.checked) }}
+                        onChange={(_, d) => { void handlePackToggle(item.id as 'us' | 'crypto' | 'hk' | 'jp' | 'kr', !!d.checked) }}
                         aria-label={`开启 ${item.label} 数据包`}
                       />
                     ) : null}
@@ -671,7 +692,7 @@ export default function MarketDataSettingsSection() {
                       <OpptrixButton
                         variant="secondary"
                         disabled={running || packPreparing === item.id}
-                        onClick={() => { void handlePreparePack(item.id as 'us' | 'crypto') }}
+                        onClick={() => { void handlePreparePack(item.id as 'us' | 'crypto' | 'hk' | 'jp' | 'kr') }}
                       >
                         {packPreparing === item.id ? '准备中…' : '准备数据'}
                       </OpptrixButton>

@@ -16,10 +16,17 @@ export const CN_DEEP_JOBS = DEEP_SYNC_JOBS.filter(
 
 export const CN_PACK_JOBS = [...BOOTSTRAP_SYNC_JOBS, ...CN_DEEP_JOBS] as const
 
+export const HK_PACK_JOBS = ['hk_list'] as const
+export const JP_PACK_JOBS = ['jp_list'] as const
+export const KR_PACK_JOBS = ['kr_list'] as const
+
 export const PACK_JOBS: Record<MarketDataPackId, readonly string[]> = {
   cn: CN_PACK_JOBS,
   us: US_PACK_JOBS,
   crypto: CRYPTO_PACK_JOBS,
+  hk: HK_PACK_JOBS,
+  jp: JP_PACK_JOBS,
+  kr: KR_PACK_JOBS,
 }
 
 const JOB_TO_PACK = new Map<string, MarketDataPackId>()
@@ -44,8 +51,9 @@ export function filterJobsByMarketPacks(
 
 export function enabledMarketPackIds(config: MarketDataPackConfig): MarketDataPackId[] {
   const out: MarketDataPackId[] = ['cn']
-  if (config.us.enabled) out.push('us')
-  if (config.crypto.enabled) out.push('crypto')
+  for (const pack of ['us', 'crypto', 'hk', 'jp', 'kr'] as const) {
+    if (config[pack]?.enabled) out.push(pack)
+  }
   return out
 }
 
