@@ -24,7 +24,7 @@ import {
   saveProviderConfig,
   uninstallInstalledProvider,
 } from '../../api/client'
-import { ProviderSettingsForm } from './ProviderSettingsForm'
+import { ProviderSettingsForm, isExpandableSettingsField } from './ProviderSettingsForm'
 import { useSettingsToast } from './SettingsToast'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
@@ -415,8 +415,9 @@ function providerStatusMeta(provider: PublicProviderRuntime, marketLabel: string
     parts.push(anySecret ? '密钥已配置' : '尚未配置密钥')
   }
 
-  if (provider.settingsFields.some(f => f.type !== 'secret')) {
-    parts.push(`${provider.settingsFields.length} 项可配置`)
+  const expandableCount = provider.settingsFields.filter(isExpandableSettingsField).length
+  if (expandableCount > 0) {
+    parts.push(`${expandableCount} 项可配置`)
   }
 
   return parts.join(' · ')
@@ -559,7 +560,7 @@ function ProviderListRow({
   const [expanded, setExpanded] = useState(false)
   const [toggling, setToggling] = useState(false)
 
-  const hasSettings = provider.settingsFields.length > 0
+  const hasSettings = provider.settingsFields.some(isExpandableSettingsField)
 
   const handleToggleEnabled = async (checked: boolean) => {
     if (checked && !provider.canEnable) {

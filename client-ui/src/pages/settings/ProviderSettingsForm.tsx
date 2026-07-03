@@ -13,6 +13,11 @@ import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSe
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
 
+/** Row header already has the enable Switch — skip duplicate schema field. */
+export function isExpandableSettingsField(field: ProviderSettingsField): boolean {
+  return !(field.type === 'boolean' && field.key === 'enabled')
+}
+
 const useStyles = makeStyles({
   root: {
     display: 'flex',
@@ -88,7 +93,7 @@ export function ProviderSettingsForm({
     [provider.settingsFields],
   )
   const plainFields = useMemo(
-    () => provider.settingsFields.filter(f => f.type !== 'secret'),
+    () => provider.settingsFields.filter(f => f.type !== 'secret' && isExpandableSettingsField(f)),
     [provider.settingsFields],
   )
 
