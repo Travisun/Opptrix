@@ -368,6 +368,9 @@ export class MarketDataEngine {
   stockList(market = 'all'): Promise<QueryResult<StockListItem[]>> {
     return this.q(Capability.STOCK_LIST, 'stockList', true, market)
   }
+  stockBasic(code = '', listStatus = 'L'): Promise<QueryResult<StockListItem[]>> {
+    return this.q(Capability.STOCK_BASIC, 'stockBasic', true, code, listStatus)
+  }
   limitUpdown(date = ''): Promise<QueryResult<LimitUpDown[]>> {
     return this.q(Capability.LIMIT_UPDOWN, 'limitUpdown', false, date)
   }

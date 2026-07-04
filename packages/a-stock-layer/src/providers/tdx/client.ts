@@ -4,6 +4,7 @@ import type { IntradayTrendFetchResult } from '../../utils/intraday-trends.js'
 import { cnTodayString } from '../../utils/market-session.js'
 import { normalizeCode } from '../../utils/helpers.js'
 import type { StockMarket } from '../../utils/helpers.js'
+import { tdxThrottle } from './api/rate-limit.js'
 import {
   intradayProbeDates,
   isPlausibleIntradaySession,
@@ -203,19 +204,21 @@ export class TdxClient {
   }
 
   private async withApi<T>(fn: (api: import('nodetdx').TdxMarketApi) => Promise<T>): Promise<T | null> {
-    for (let attempt = 0; attempt < 2; attempt++) {
-      if (!(await this.ensureConnected()) || !this.api) return null
-      try {
-        const result = await Promise.race([
-          fn(this.api),
-          sleep(API_CALL_MS).then(() => null),
-        ])
-        if (result != null) return result
-      } catch { /* reconnect below */ }
-      this.bumpPreferredHost()
-      this.destroyApi()
-    }
-    return null
+    return tdxThrottle(async () => {
+      for (let attempt = 0; attempt < 2; attempt++) {
+        if (!(await this.ensureConnected()) || !this.api) return null
+        try {
+          const result = await Promise.race([
+            fn(this.api),
+            sleep(API_CALL_MS).then(() => null),
+          ])
+          if (result != null) return result
+        } catch { /* reconnect below */ }
+        this.bumpPreferredHost()
+        this.destroyApi()
+      }
+      return null
+    })
   }
 
   private bumpPreferredHost() {

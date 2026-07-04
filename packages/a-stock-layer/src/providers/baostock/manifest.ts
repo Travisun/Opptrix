@@ -6,6 +6,7 @@ import { cnEquityEtfIndex } from '../common/bindings.js'
 
 export const BAOSTOCK_CAPS = [
   Capability.STOCK_KLINE,
+  Capability.STOCK_BASIC,
   Capability.STOCK_LIST,
   Capability.STOCK_PROFILE,
   Capability.INDEX_KLINE,

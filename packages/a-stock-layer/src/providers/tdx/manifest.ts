@@ -11,25 +11,32 @@ export const TDX_CAPS = [
   Capability.STOCK_KLINE,
   Capability.INDEX_REALTIME,
   Capability.INDEX_KLINE,
+  Capability.INTRADAY_TICK,
 ]
 
 export const TDX_SPEC: ProviderManifestSpec = {
   id: 'tdx',
   title: '通达信 TCP',
-  subtitle: '纯 Node 通达信协议行情（原 mootdx / pytdx 合一）',
+  subtitle: '代用户连接通达信行情服务器 · 限速 2 秒/次，无并发',
   marketGroup: 'CN',
   defaultPriority: 90,
   capabilities: TDX_CAPS,
   bindingsFor: (p) => [
-    ...cnEquityBindings([Capability.STOCK_REALTIME, Capability.STOCK_KLINE], p),
+    ...cnEquityBindings(
+      [Capability.STOCK_REALTIME, Capability.STOCK_KLINE, Capability.INTRADAY_TICK],
+      p,
+    ),
     ...cnEtfBindings(p).filter(b =>
-      b.capability === Capability.STOCK_REALTIME || b.capability === Capability.STOCK_KLINE,
+      b.capability === Capability.STOCK_REALTIME
+      || b.capability === Capability.STOCK_KLINE
+      || b.capability === Capability.INTRADAY_TICK,
     ),
     ...cnIndexBindings([Capability.INDEX_REALTIME, Capability.INDEX_KLINE], p),
   ],
   settings: TDX_SETTINGS,
+  supportsTest: true,
 }
 
 export const TDX_MANIFEST = providerManifestEntry(
-  'tdx', '通达信 TCP', '纯 Node 通达信协议行情', 'CN', 90, TDX_SETTINGS,
+  'tdx', '通达信 TCP', '代用户连接通达信行情服务器 · 限速 2 秒/次，无并发', 'CN', 90, TDX_SETTINGS,
 )

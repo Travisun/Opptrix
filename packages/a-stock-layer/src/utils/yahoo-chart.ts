@@ -1,8 +1,5 @@
 import type { StockKline, StockRealtime } from '@opptrix/shared'
-import { httpGet } from './http.js'
 import { usDateFromMs, usQuoteSessionLabel, resolveUsQuoteSession, type UsQuoteSession } from './us-market.js'
-
-const YAHOO_CHART = 'https://query1.finance.yahoo.com/v8/finance/chart'
 
 function n(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -17,14 +14,6 @@ function yahooMarketSession(meta: Record<string, unknown>): UsQuoteSession {
   if (state.includes('POST')) return 'post'
   if (state === 'CLOSED') return 'closed'
   return resolveUsQuoteSession()
-}
-
-export async function fetchYahooChart(yahooSymbol: string, range: string, interval: string) {
-  const url = `${YAHOO_CHART}/${encodeURIComponent(yahooSymbol)}`
-  return httpGet(url, { interval, range }, 15000, {
-    Referer: 'https://finance.yahoo.com/',
-    Accept: 'application/json',
-  })
 }
 
 export function parseYahooRealtime(

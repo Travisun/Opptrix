@@ -242,8 +242,15 @@ export class ZzshareCnHandler extends MarketHandlerShell {
   }
 
   async stockList(_market = 'all'): Promise<StockListItem[] | null> {
+    return this.stockBasic('', 'L')
+  }
+
+  async stockBasic(code = '', listStatus = 'L'): Promise<StockListItem[] | null> {
     return this.withClient(async client => {
-      const rows = await client.stock_basic({ list_status: 'L' })
+      const query: { list_status: string; ts_code?: string } = { list_status: listStatus || 'L' }
+      const bare = normalizeCode(code)
+      if (bare) query.ts_code = toTsCode(bare)
+      const rows = await client.stock_basic(query)
       const items = mapZzshareStockBasicRows(rows)
       for (const item of items) this.nameCache.set(item.code, item.name)
       return items.length ? items : null

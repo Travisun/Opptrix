@@ -1,67 +1,120 @@
-import { Capability } from '../../../../core/capabilities.js'
-import type { IndexKline, StockKline } from '../../../../core/schema.js'
+import type { IndexKline, IndexRealtime, StockKline, StockListItem, StockRealtime } from '../../../../core/schema.js'
+import { normalizeCode, resolveMarket, safeFloat } from '../../../../utils/helpers.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
-import { isBseCode, normalizeCode } from '../../../../utils/helpers.js'
-
-const HEADERS = {
-  'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)',
-  Referer: 'https://money.163.com/',
-}
-
-function neteaseCode(code: string) {
-  const c = normalizeCode(code)
-  if (isBseCode(c)) return `2${c}`
-  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `0${c}`
-  return `1${c}`
-}
-
-function parseCsv(text: string, code: string) {
-  const lines = text.trim().split('\n')
-  if (lines.length < 2) return null
-  const headers = lines[0].split(',')
-  const idx = (name: string) => headers.findIndex(h => h.includes(name))
-  const results: StockKline[] = []
-  for (let i = 1; i < lines.length; i++) {
-    const cols = lines[i].split(',')
-    const close = Number(cols[idx('收盘价')] ?? cols[3])
-    if (!close || close <= 0) continue
-    results.push({
-      code: normalizeCode(code),
-      date: (cols[idx('日期')] ?? cols[0]).slice(0, 10),
-      open: Number(cols[idx('开盘价')] ?? cols[1]) || close,
-      close,
-      high: Number(cols[idx('最高价')] ?? cols[4]) || close,
-      low: Number(cols[idx('最低价')] ?? cols[5]) || close,
-      volume: Number(cols[idx('成交量')] ?? cols[8]) || 0,
-      amount: Number(cols[idx('成交金额')] ?? cols[9]) || 0,
-      changePct: Number(cols[idx('涨跌幅')] ?? '') || null,
-      turnoverRate: null,
-    })
-  }
-  return results.length ? results : null
-}
+import { getNeteaseClient } from '../../api/client.js'
+import { toNeteaseCode } from '../../api/symbols.js'
+import { parseNeteaseKlineCsv } from '../../normalize/kline.js'
+import { mapFeedIndexQuote, mapFeedQuote } from '../../normalize/quote.js'
 
 export class NeteaseMarketHandler extends MarketHandlerShell {
 
-  private async fetchKline(code: string, start = '', end = '') {
-    const params = new URLSearchParams({ code: neteaseCode(code) })
-    if (start) params.set('start', start.replace(/-/g, ''))
-    if (end) params.set('end', end.replace(/-/g, ''))
-    const resp = await fetch(`https://quotes.money.163.com/service/chddata.html?${params}`, { headers: HEADERS })
-    const buf = await resp.arrayBuffer()
-    return new TextDecoder('gbk').decode(buf)
-  }
-
   async kline(code: string, period = 'daily', start = '', end = '') {
     if (period !== 'daily') return null
-    const text = await this.fetchKline(code, start, end)
-    if (!text?.includes('日期')) return null
-    return parseCsv(text, code)
+    try {
+      const text = await getNeteaseClient().fetchHistoricalKlineCsv(code, start, end)
+      if (!text.includes('日期')) return null
+      return parseNeteaseKlineCsv(text, code)
+    } catch {
+      return null
+    }
   }
 
   async indexKline(code: string, period = 'daily', start = '', end = '') {
     const rows = await this.kline(code, period, start, end)
     return rows as IndexKline[] | null
+  }
+
+  async realtime(code: string) {
+    try {
+      const neteaseCode = toNeteaseCode(code)
+      const feed = await getNeteaseClient().fetchFeedQuotes([neteaseCode])
+      const item = feed[neteaseCode]
+      if (!item) return null
+      return [mapFeedQuote(item, code)]
+    } catch {
+      return null
+    }
+  }
+
+  async batchRealtime(codes: string[]) {
+    if (!codes.length) return null
+    try {
+      const pairs = codes.map(c => ({ code: c, neteaseCode: toNeteaseCode(c) }))
+      const feed = await getNeteaseClient().fetchFeedQuotes(pairs.map(p => p.neteaseCode))
+      const results: StockRealtime[] = []
+      for (const pair of pairs) {
+        const item = feed[pair.neteaseCode]
+        if (item) results.push(mapFeedQuote(item, pair.code))
+      }
+      return results.length ? results : null
+    } catch {
+      return null
+    }
+  }
+
+  async indexRealtime(code: string) {
+    try {
+      const neteaseCode = toNeteaseCode(code)
+      const feed = await getNeteaseClient().fetchFeedQuotes([neteaseCode])
+      const item = feed[neteaseCode]
+      if (!item) return null
+      return [mapFeedIndexQuote(item, code)]
+    } catch {
+      return null
+    }
+  }
+
+  async stockList(_market = 'all') {
+    try {
+      const all: StockListItem[] = []
+      for (let page = 1; page <= 10; page += 1) {
+        const batch = await getNeteaseClient().fetchStockListPage(page, 500)
+        if (!batch.length) break
+        for (const row of batch) {
+          const symbol = String(row.SYMBOL ?? row.CODE ?? row.code ?? '')
+          const code = normalizeCode(symbol.slice(-6) || symbol)
+          if (!/^\d{6}$/.test(code)) continue
+          all.push({
+            code,
+            name: String(row.NAME ?? row.SNAME ?? row.name ?? ''),
+            market: resolveMarket(code),
+            industry: String(row.INDUSTRY ?? row.industry ?? ''),
+          })
+        }
+        if (batch.length < 500) break
+      }
+      return all.length ? all : null
+    } catch {
+      return null
+    }
+  }
+
+  async marketBreadth(_date = '') {
+    try {
+      const feed = await getNeteaseClient().fetchMarketBreadthSnapshot()
+      const rankUp = feed.RANK_AUP as Record<string, unknown> | undefined
+      const rankDown = feed.RANK_ADOWN as Record<string, unknown> | undefined
+      const shRank = feed.HSRANK_COUNT_SHA as Record<string, unknown> | undefined
+      const szRank = feed.HSRANK_COUNT_SZA as Record<string, unknown> | undefined
+      const up = safeFloat(rankUp?.price ?? rankUp?.volume)
+      const down = safeFloat(rankDown?.price ?? rankDown?.volume)
+      const shTotal = safeFloat(shRank?.price)
+      const szTotal = safeFloat(szRank?.price)
+      const total = (shTotal ?? 0) + (szTotal ?? 0)
+      if (up == null && down == null && !total) return null
+      const flat = total && up != null && down != null
+        ? Math.max(0, total - up - down)
+        : 0
+      return [{
+        date: _date || new Date().toISOString().slice(0, 10),
+        up: up ?? 0,
+        down: down ?? 0,
+        flat,
+        total: total || ((up ?? 0) + (down ?? 0) + flat),
+      }]
+    } catch {
+      return null
+    }
   }
 
 }

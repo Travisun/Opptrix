@@ -40,6 +40,10 @@ export const EASTMONEY_CAPS = [
       Capability.IPO_DATA,
       Capability.CONVERTIBLE_BOND,
       Capability.ETF_DATA,
+      Capability.ETF_LIST,
+      Capability.ETF_PROFILE,
+      Capability.ETF_HOLDINGS,
+      Capability.ETF_NAV,
       Capability.MANAGER_INFO,
       Capability.SHAREHOLDER_PLAN,
       Capability.BUYBACK,
@@ -62,14 +66,15 @@ export const EASTMONEY_CAPS = [
 export const EASTMONEY_SPEC: ProviderManifestSpec = {
   id: 'eastmoney',
   title: '东方财富',
-  subtitle: '东方财富网公开行情接口（网站同源）',
+  subtitle: '代用户浏览东方财富网站 · 限速 2 秒/次，无并发',
   marketGroup: 'CN',
   defaultPriority: 100,
   capabilities: EASTMONEY_CAPS,
   bindingsFor: (p) => cnFullSplit(EASTMONEY_CAPS, p),
   settings: EASTMONEY_SETTINGS,
+  supportsTest: true,
 }
 
 export const EASTMONEY_MANIFEST = providerManifestEntry(
-  'eastmoney', '东方财富', '东方财富网公开行情接口（网站同源）', 'CN', 100, EASTMONEY_SETTINGS,
+  'eastmoney', '东方财富', '代用户浏览东方财富网站 · 限速 2 秒/次，无并发', 'CN', 100, EASTMONEY_SETTINGS,
 )

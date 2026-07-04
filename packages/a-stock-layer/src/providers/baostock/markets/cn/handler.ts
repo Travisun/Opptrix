@@ -23,6 +23,7 @@ import {
   mapIncomeStatementRecords,
   mapIndexConstituentRows,
   mapProfileRow,
+  mapStockBasicRows,
   mapStockListRows,
   mergeDividendResults,
   mergeFinancialSummary,
@@ -132,6 +133,17 @@ export class BaostockCnHandler extends MarketHandlerShell {
       const res = await client.queryAllStock(day)
       if (res.error_code !== '0') return null
       const items = mapStockListRows(res)
+      for (const item of items) this.nameCache.set(item.code, item.name)
+      return items.length ? items : null
+    })
+  }
+
+  async stockBasic(code = '', _listStatus = 'L'): Promise<StockListItem[] | null> {
+    return this.withClient(async client => {
+      const bsCode = code ? toBaostockCode(code) : ''
+      const res = await client.queryStockBasic(bsCode)
+      if (res.error_code !== '0') return null
+      const items = mapStockBasicRows(res)
       for (const item of items) this.nameCache.set(item.code, item.name)
       return items.length ? items : null
     })

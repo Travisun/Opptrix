@@ -7,20 +7,26 @@ import {
 } from '../common/bindings.js'
 
 export const CNINFO_CAPS = [
-      Capability.NEWS,
-    ]
+  Capability.NEWS,
+]
 
 export const CNINFO_SPEC: ProviderManifestSpec = {
   id: 'cninfo',
   title: '巨潮资讯',
-  subtitle: '公告新闻',
+  subtitle: '法定披露公告 · 代用户浏览（支持分类/日期/PDF 链接 · 限速 2 秒/次）',
   marketGroup: 'CN',
-  defaultPriority: 25,
+  defaultPriority: 92,
   capabilities: CNINFO_CAPS,
   bindingsFor: (p) => cnEquityBindings(CNINFO_CAPS, p),
   settings: CNINFO_SETTINGS,
+  supportsTest: true,
 }
 
 export const CNINFO_MANIFEST = providerManifestEntry(
-  'cninfo', '巨潮资讯', '公告新闻', 'CN', 25, CNINFO_SETTINGS,
+  'cninfo',
+  '巨潮资讯',
+  '法定披露公告 · 代用户浏览（支持分类/日期/PDF 链接 · 限速 2 秒/次）',
+  'CN',
+  92,
+  CNINFO_SETTINGS,
 )

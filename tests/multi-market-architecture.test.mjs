@@ -297,10 +297,10 @@ test('normalizeRegionalSymbol and regionalTodayString', async () => {
   assert.equal(isRegionalTradingDay('JP', new Date('2026-01-01T03:00:00Z')), false)
 })
 
-test('yahoo regional provider declares STOCK_LIST capability', async () => {
-  const { YAHOO_REGIONAL_CAPS } = await import('../packages/a-stock-layer/dist/providers/yahoo_regional/manifest.js')
+test('yfinance provider declares regional STOCK_LIST capability', async () => {
+  const { YFINANCE_CAPS } = await import('../packages/a-stock-layer/dist/providers/yfinance/manifest.js')
   const { Capability } = await import('../packages/a-stock-layer/dist/core/capabilities.js')
-  assert.ok(YAHOO_REGIONAL_CAPS.includes(Capability.STOCK_LIST))
+  assert.ok(YFINANCE_CAPS.includes(Capability.STOCK_LIST))
 })
 
 test('yahooQuoteToRegionalStockRow maps exchange suffix', async () => {

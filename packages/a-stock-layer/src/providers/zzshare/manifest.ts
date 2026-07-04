@@ -7,6 +7,7 @@ import { ZZSHARE_SETTINGS } from './settings.js'
 export const ZZSHARE_CAPS = [
   Capability.STOCK_KLINE,
   Capability.STOCK_REALTIME,
+  Capability.STOCK_BASIC,
   Capability.STOCK_LIST,
   Capability.STOCK_PROFILE,
   Capability.INDEX_KLINE,

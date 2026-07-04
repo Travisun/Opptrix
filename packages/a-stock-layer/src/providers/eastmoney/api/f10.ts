@@ -1,14 +1,15 @@
 import type { Dividend, FinancialSummary, StockProfile } from '../../../core/schema.js'
-import { httpGet } from '../../../utils/http.js'
 import { isBseCode, normalizeCode, resolveMarket, safeFloat } from '../../../utils/helpers.js'
+import {
+  EMWEB_HEADERS,
+  SEC_HEADERS,
+  eastmoneyGet,
+} from './client.js'
 
 const EMWEB_BASE = 'https://emweb.securities.eastmoney.com/PC_HSF10'
 export const SEC_DC_API = 'https://datacenter.eastmoney.com/securities/api/data/v1/get'
 export const LEGACY_DC_API = 'https://datacenter-web.eastmoney.com/api/data/v1/get'
 const SEC_API = SEC_DC_API
-
-const EMWEB_HEADERS = { Referer: 'https://emweb.securities.eastmoney.com/' }
-const SEC_HEADERS = { Referer: 'https://data.eastmoney.com/' }
 
 export function toEmWebCode(code: string): string {
   const c = normalizeCode(code)
@@ -41,7 +42,7 @@ export async function fetchDataCenterReport(
 ): Promise<Record<string, unknown>[]> {
   const upgraded = upgradeDataCenterFilter(filter)
   try {
-    const secJson = await httpGet(SEC_DC_API, {
+    const secJson = await eastmoneyGet(SEC_DC_API, {
       reportName,
       columns,
       filter: upgraded,
@@ -59,7 +60,7 @@ export async function fetchDataCenterReport(
   } catch { /* fall through */ }
 
   try {
-    const legacyJson = await httpGet(LEGACY_DC_API, {
+    const legacyJson = await eastmoneyGet(LEGACY_DC_API, {
       reportName,
       columns,
       filter,
@@ -104,7 +105,7 @@ export async function fetchDragonTigerDetails(date = '') {
 
 export async function fetchTradeCalendar(year = new Date().getFullYear()) {
   try {
-    const json = await httpGet('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+    const json = await eastmoneyGet('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
       secid: '1.000001',
       klt: '101',
       fqt: '0',
@@ -126,7 +127,7 @@ export async function fetchTradeCalendar(year = new Date().getFullYear()) {
 
 export async function fetchNorthMoneyFlowSnapshot() {
   try {
-    const json = await httpGet('https://push2.eastmoney.com/api/qt/kamt/get', {
+    const json = await eastmoneyGet('https://push2.eastmoney.com/api/qt/kamt/get', {
       fields1: 'f1,f2,f3,f4',
       fields2: 'f51,f52,f53,f54,f55,f56',
     }, 15000, SEC_HEADERS)
@@ -164,7 +165,7 @@ export async function fetchEmWebPage<T extends Record<string, unknown>>(
   code: string,
 ): Promise<T | null> {
   try {
-    const json = await httpGet(
+    const json = await eastmoneyGet(
       `${EMWEB_BASE}/${segment}/PageAjax`,
       { code: toEmWebCode(code) },
       15000,
@@ -183,7 +184,7 @@ export async function fetchSecuritiesReport(
   sortColumns = 'REPORT_DATE',
 ): Promise<Record<string, unknown>[]> {
   try {
-    const json = await httpGet(SEC_API, {
+    const json = await eastmoneyGet(SEC_API, {
       reportName,
       columns: 'ALL',
       pageNumber: '1',
@@ -254,10 +255,10 @@ export async function fetchF10Profile(
   circulatingMarketCap?: number | null,
 ): Promise<StockProfile[] | null> {
   const c = normalizeCode(code)
-  const [survey, concepts] = await Promise.all([
-    fetchEmWebPage<{ jbzl?: Record<string, unknown>[]; fxxg?: Record<string, unknown>[] }>('CompanySurvey', c),
-    fetchEmWebPage<{ ssbk?: Record<string, unknown>[]; hxtc?: Record<string, unknown>[] }>('CoreConception', c),
-  ])
+  const [survey, concepts] = [
+    await fetchEmWebPage<{ jbzl?: Record<string, unknown>[]; fxxg?: Record<string, unknown>[] }>('CompanySurvey', c),
+    await fetchEmWebPage<{ ssbk?: Record<string, unknown>[]; hxtc?: Record<string, unknown>[] }>('CoreConception', c),
+  ]
   const base = survey?.jbzl?.[0]
   if (!base) return null
 

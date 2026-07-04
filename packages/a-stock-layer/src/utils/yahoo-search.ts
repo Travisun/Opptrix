@@ -1,7 +1,3 @@
-import { httpGet } from './http.js'
-
-const YAHOO_SEARCH = 'https://query2.finance.yahoo.com/v1/finance/search'
-
 export interface YahooSearchQuote {
   symbol: string
   shortname?: string
@@ -27,22 +23,4 @@ export function parseYahooSearchQuotes(json: Record<string, unknown>): YahooSear
     })
   }
   return out
-}
-
-export async function fetchYahooFinanceSearch(q: string, count = 25): Promise<YahooSearchQuote[]> {
-  const raw = await httpGet(
-    YAHOO_SEARCH,
-    {
-      q,
-      quotesCount: String(count),
-      newsCount: '0',
-      enableFuzzyQuery: 'false',
-    },
-    15000,
-    {
-      Referer: 'https://finance.yahoo.com/',
-      Accept: 'application/json',
-    },
-  )
-  return parseYahooSearchQuotes(raw as Record<string, unknown>)
 }

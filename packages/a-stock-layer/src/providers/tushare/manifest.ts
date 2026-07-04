@@ -7,6 +7,7 @@ import {
 } from '../common/bindings.js'
 
 export const TUSHARE_CAPS = [
+      Capability.STOCK_BASIC,
       Capability.STOCK_LIST,
       Capability.STOCK_REALTIME,
       Capability.STOCK_KLINE,

@@ -121,14 +121,13 @@ export {
 } from './utils/regional-symbol.js'
 export type { RegionalEquityMarket } from './utils/regional-symbol.js'
 export { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday, regionalHolidaysForYear } from './utils/regional-calendar.js'
-export { parseYahooSearchQuotes, fetchYahooFinanceSearch, type YahooSearchQuote } from './utils/yahoo-search.js'
+export { parseYahooSearchQuotes, type YahooSearchQuote } from './utils/yahoo-search.js'
 export {
   getRegionalEquitySeeds,
   getRegionalEquitySeedCount,
   type RegionalEquitySeed,
 } from './data/regional-equity-seeds.js'
 export {
-  fetchRegionalStockListFromYahoo,
   regionalSeedStockList,
   yahooQuoteToRegionalStockRow,
 } from './utils/regional-stock-list.js'

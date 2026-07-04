@@ -94,8 +94,10 @@ export interface NewsItem {
   title: string
   date: string
   url?: string
+  pdfUrl?: string
   source?: string
   type?: string
+  category?: string
 }
 
 export interface SentimentData {

@@ -61,12 +61,19 @@ export class TushareMarketHandler extends MarketHandlerShell {
   }
 
   async stockList(_market = 'all'): Promise<StockListItem[] | null> {
+    return this.stockBasic('', 'L')
+  }
+
+  async stockBasic(code = '', listStatus = 'L'): Promise<StockListItem[] | null> {
     const client = this.client()
     if (!client) return null
     try {
+      const params: Record<string, string> = { list_status: listStatus || 'L' }
+      const bare = normalizeCode(code)
+      if (bare) params.ts_code = toTsCode(bare)
       const rows = await client.queryAll(
         'stock_basic',
-        { list_status: 'L' },
+        params,
         'ts_code,symbol,name,area,industry,market,list_date',
       )
       const items = mapStockListRows(rows)

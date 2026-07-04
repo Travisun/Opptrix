@@ -4,7 +4,7 @@ import type {
   NewsItem, SectorMoneyFlow, StockKline, StockListItem, StockProfile,
   StockRealtime, SentimentData,
 } from '../../../../core/schema.js'
-import { httpGet } from '../../../../utils/http.js'
+import { EASTMONEY_QUOTE_HEADERS, eastmoneyGet } from '../../api/client.js'
 import {
   normalizeChangePct, normalizeCode, normalizeKlineDateTime, normalizePrice, resolveMarket, resolveSecId, resolveStockSecId, safeFloat,
   type StockMarket,
@@ -52,7 +52,7 @@ function emQuoteDelta(v: unknown): number | null {
 export class EastMoneyMarketHandler extends MarketHandlerShell {
 
   protected async getData(url: string, params: Record<string, string>) {
-    const json = await httpGet(url, params)
+    const json = await eastmoneyGet(url, params, 15000, EASTMONEY_QUOTE_HEADERS)
     return (json?.data as Record<string, unknown>) ?? null
   }
 
@@ -324,10 +324,10 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
   async news(code: string, page = 1, pageSize = 20) {
     try {
       const c = normalizeCode(code)
-      const json = await httpGet('https://np-anotice-stock.eastmoney.com/api/security/ann', {
+      const json = await eastmoneyGet('https://np-anotice-stock.eastmoney.com/api/security/ann', {
         sr: '-1', page_size: String(pageSize), page_index: String(page),
         ann_type: 'A', client_source: 'web', stock_list: c,
-      })
+      }, 15000, EASTMONEY_QUOTE_HEADERS)
       const list = (json?.data as { list?: Record<string, unknown>[] })?.list ?? []
       if (!list.length) return null
       return list.map(it => ({
@@ -381,12 +381,12 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
       let total = Number.POSITIVE_INFINITY
 
       while (data.length < total) {
-        const json = await httpGet(LIST_URL, {
+        const json = await eastmoneyGet(LIST_URL, {
           pn: String(page), pz: String(pageSize), po: '1', np: '1',
           fields: 'f12,f14,f100',
           fltt: '2', invt: '2',
           fs,
-        })
+        }, 15000, EASTMONEY_QUOTE_HEADERS)
         const block = json?.data as {
           diff?: Record<string, unknown> | Record<string, unknown>[]
           total?: number
@@ -417,13 +417,13 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
 
   async limitUpdown(date = '') {
     try {
-      const json = await httpGet(LIST_URL, {
+      const json = await eastmoneyGet(LIST_URL, {
         pn: '1', pz: '200', po: '1', np: '1',
         fields: 'f12,f14,f3,f128',
         fltt: '2', invt: '2',
         fs: 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23',
         fid: 'f3',
-      })
+      }, 15000, EASTMONEY_QUOTE_HEADERS)
       const raw = (json?.data as { diff?: Record<string, unknown>[] | Record<string, unknown> })?.diff
       const diff = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : []
       const results: LimitUpDown[] = []
@@ -451,10 +451,10 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
       const fs = sectorType === 'concept'
         ? 'm:90+t:3'
         : 'm:90+t:2'
-      const json = await httpGet(SECTOR_FLOW_URL, {
+      const json = await eastmoneyGet(SECTOR_FLOW_URL, {
         pn: '1', pz: '50', po: '1', np: '1',
         fields: 'f12,f14,f3,f62', fltt: '2', invt: '2', fs, fid: 'f62',
-      })
+      }, 15000, EASTMONEY_QUOTE_HEADERS)
       const raw = (json?.data as { diff?: Record<string, unknown>[] | Record<string, unknown> })?.diff
       const diff = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : []
       const results: SectorMoneyFlow[] = (diff as Record<string, unknown>[]).map(it => ({
@@ -477,18 +477,54 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
   }
 
   async marketBreadth(_date = '') {
-    const list = await this.stockList()
-    if (!list?.length) return null
-    let up = 0, down = 0, flat = 0
-    for (const s of list.slice(0, 500)) {
-      const r = await this.realtime(s.code)
-      const pct = r?.[0]?.changePct
-      if (pct == null) continue
-      if (pct > 0) up++
-      else if (pct < 0) down++
-      else flat++
-    }
-    return [{ date: new Date().toISOString().slice(0, 10), up, down, flat, total: up + down + flat }]
+    try {
+      const fs = 'm:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23,m:0+t:81+s:2048'
+      let up = 0
+      let down = 0
+      let flat = 0
+      let page = 1
+      const pageSize = 500
+      let total = Number.POSITIVE_INFINITY
+
+      while ((page - 1) * pageSize < total && page <= 30) {
+        const json = await eastmoneyGet(LIST_URL, {
+          pn: String(page),
+          pz: String(pageSize),
+          po: '1',
+          np: '1',
+          fields: 'f3',
+          fltt: '2',
+          invt: '2',
+          fs,
+        }, 15000, EASTMONEY_QUOTE_HEADERS)
+        const block = json?.data as {
+          diff?: Record<string, unknown> | Record<string, unknown>[]
+          total?: number
+        } | undefined
+        const raw = block?.diff
+        const diff = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : []
+        if (typeof block?.total === 'number') total = block.total
+        if (!diff.length) break
+        for (const item of diff as Record<string, unknown>[]) {
+          const pct = safeFloat(item.f3)
+          if (pct == null) continue
+          if (pct > 0) up += 1
+          else if (pct < 0) down += 1
+          else flat += 1
+        }
+        page += 1
+      }
+
+      const counted = up + down + flat
+      if (!counted) return null
+      return [{
+        date: _date || new Date().toISOString().slice(0, 10),
+        up,
+        down,
+        flat,
+        total: counted,
+      }]
+    } catch { return null }
   }
 
   async tradeCalendar(year = 0) {
@@ -517,19 +553,49 @@ export class EastMoneyMarketHandler extends MarketHandlerShell {
     } catch { return null }
   }
 
-  async globalIndex(_code = '') {
-    const indices = [
-      { code: '000001', name: '上证指数' }, { code: '399001', name: '深证成指' },
-      { code: '399006', name: '创业板指' }, { code: '000300', name: '沪深300' },
-    ]
-    const results = []
-    for (const idx of indices) {
-      const r = await this.indexRealtime(idx.code)
-      if (r?.[0]) results.push({
-        code: idx.code, name: idx.name, price: r[0].price, changePct: r[0].changePct, market: 'CN',
-      })
-    }
-    return results.length ? results : null
+  async globalIndex(code = '') {
+    try {
+      const catalog = [
+        { secid: '100.HSI', code: 'HSI', name: '恒生指数', market: 'HK' },
+        { secid: '100.DJI', code: 'DJI', name: '道琼斯工业', market: 'US' },
+        { secid: '100.NDX', code: 'NDX', name: '纳斯达克', market: 'US' },
+        { secid: '100.SPX', code: 'SPX', name: '标普500', market: 'US' },
+        { secid: '100.N225', code: 'N225', name: '日经225', market: 'JP' },
+        { secid: '1.000001', code: '000001', name: '上证指数', market: 'CN' },
+        { secid: '0.399001', code: '399001', name: '深证成指', market: 'CN' },
+        { secid: '0.399006', code: '399006', name: '创业板指', market: 'CN' },
+      ]
+      const wanted = String(code ?? '').trim().toUpperCase()
+      const targets = wanted
+        ? catalog.filter(item => item.code === wanted || item.code === normalizeCode(wanted))
+        : catalog
+      if (!targets.length) return null
+
+      const json = await eastmoneyGet('https://push2.eastmoney.com/api/qt/ulist.np/get', {
+        secids: targets.map(item => item.secid).join(','),
+        fields: 'f12,f14,f2,f3,f4,f18,f20',
+        fltt: '2',
+        invt: '2',
+      }, 15000, EASTMONEY_QUOTE_HEADERS)
+      const raw = (json?.data as { diff?: Record<string, unknown>[] | Record<string, unknown> })?.diff
+      const rows = raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : []
+      if (!rows.length) return null
+
+      const results = []
+      for (let i = 0; i < rows.length; i += 1) {
+        const meta = targets[i]
+        const row = rows[i] as Record<string, unknown>
+        if (!meta || !row) continue
+        results.push({
+          code: meta.code,
+          name: String(row.f14 ?? meta.name),
+          price: safeFloat(row.f2),
+          changePct: normalizeChangePct(row.f3),
+          market: meta.market,
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
   }
 
 }

@@ -1,4 +1,4 @@
-export { TdxDriver } from './driver.js'
+export { TdxDriver, testTdxConnection } from './driver.js'
 export { TDX_MANIFEST, TDX_SPEC } from './manifest.js'
 export { TDX_SETTINGS } from './settings.js'
 export { TdxProtocolDriver } from './protocol.js'

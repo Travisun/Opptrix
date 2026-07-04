@@ -45,6 +45,7 @@ export abstract class BaseDriver {
   dragonTiger?(date?: string): Promise<unknown[] | null> | unknown[] | null
   marginTrade?(code: string): Promise<unknown[] | null> | unknown[] | null
   dividend?(code: string): Promise<unknown[] | null> | unknown[] | null
+  stockBasic?(code?: string, listStatus?: string): Promise<unknown[] | null> | unknown[] | null
   stockList?(market?: string): Promise<unknown[] | null> | unknown[] | null
   limitUpdown?(date?: string): Promise<unknown[] | null> | unknown[] | null
   marketBreadth?(date?: string): Promise<unknown[] | null> | unknown[] | null
@@ -80,6 +81,7 @@ export const CAP_METHOD: Partial<Record<Capability, string>> = {
   [Capability.DRAGON_TIGER]: 'dragonTiger',
   [Capability.MARGIN_TRADE]: 'marginTrade',
   [Capability.DIVIDEND]: 'dividend',
+  [Capability.STOCK_BASIC]: 'stockBasic',
   [Capability.STOCK_LIST]: 'stockList',
   [Capability.LIMIT_UPDOWN]: 'limitUpdown',
   [Capability.MARKET_BREADTH]: 'marketBreadth',

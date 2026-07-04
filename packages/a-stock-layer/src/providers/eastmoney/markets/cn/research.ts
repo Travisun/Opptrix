@@ -1,4 +1,4 @@
-import { httpGet } from '../../../../utils/http.js'
+import { EASTMONEY_QUOTE_HEADERS, eastmoneyGet } from '../../api/client.js'
 import { normalizeCode, resolveSecId, safeFloat } from '../../../../utils/helpers.js'
 import { parseTrend2IntradayLine } from '../../../../utils/intraday-trends.js'
 import { fetchF10Financials, fetchF10Profile, fetchF10Shareholders } from '../../api/f10.js'
@@ -180,9 +180,9 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
 
   p.indexConstituents = async function indexConstituents(indexCode: string) {
     try {
-      const json = await httpGet('https://push2.eastmoney.com/api/qt/slist/get', {
+      const json = await eastmoneyGet('https://push2.eastmoney.com/api/qt/slist/get', {
         fltt: '2', invt: '2', fields: 'f12,f14,f100,f3', type: '3', secids: resolveSecId(indexCode),
-      })
+      }, 15000, EASTMONEY_QUOTE_HEADERS)
       const raw = (json?.data as { diff?: Record<string, unknown>[] | Record<string, unknown> })?.diff
       const items = (raw ? (Array.isArray(raw) ? raw : Object.values(raw)) : []) as Record<string, unknown>[]
       if (!items.length) return null

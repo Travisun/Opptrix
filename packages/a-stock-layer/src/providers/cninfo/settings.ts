@@ -1,8 +1,18 @@
-import { enabledOnlySettings } from '../common/settings.js'
+import type { MarketGroup, ProviderSettingsDefinition } from '@opptrix/shared'
 
-export const CNINFO_SETTINGS = enabledOnlySettings(
-  'cninfo',
-  '巨潮资讯',
-  'CN',
-  { keywords: ['cninfo', '巨潮资讯'] },
-)
+export const CNINFO_SETTINGS: ProviderSettingsDefinition = {
+  providerId: 'cninfo',
+  title: '巨潮资讯',
+  marketGroup: 'CN' as MarketGroup,
+  keywords: ['cninfo', '巨潮资讯', '公告', '披露'],
+  enableAffectsPriority: true,
+  supportsTest: true,
+  fields: [
+    {
+      key: 'enabled',
+      type: 'boolean',
+      label: '启用',
+      default: true,
+    },
+  ],
+}
