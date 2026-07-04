@@ -37,6 +37,7 @@ export abstract class BaseDriver {
   indexKline?(code: string, period?: string, start?: string, end?: string): Promise<unknown[] | null> | unknown[] | null
   marketMoneyFlow?(direction?: string): Promise<unknown[] | null> | unknown[] | null
   sectorMoneyFlow?(sectorType?: string): Promise<unknown[] | null> | unknown[] | null
+  sectorList?(plateType?: string): Promise<unknown[] | null> | unknown[] | null
   profile?(code: string): Promise<unknown[] | null> | unknown[] | null
   shareholders?(code: string, reportDate?: string): Promise<unknown[] | null> | unknown[] | null
   financials?(code: string, reportDate?: string, reportType?: string): Promise<unknown[] | null> | unknown[] | null
@@ -53,7 +54,18 @@ export abstract class BaseDriver {
   exchangeRate?(pair?: string): Promise<unknown[] | null> | unknown[] | null
   tradeCalendar?(year?: number): Promise<unknown[] | null> | unknown[] | null
   cashFlow?(code: string, reportDate?: string): Promise<unknown[] | null> | unknown[] | null
+  balanceSheet?(code: string, reportDate?: string): Promise<unknown[] | null> | unknown[] | null
+  incomeStatement?(code: string, reportDate?: string): Promise<unknown[] | null> | unknown[] | null
+  instHolding?(code: string): Promise<unknown[] | null> | unknown[] | null
+  blockTrade?(code: string): Promise<unknown[] | null> | unknown[] | null
+  lockupExpiry?(code: string): Promise<unknown[] | null> | unknown[] | null
+  sharePledge?(code: string): Promise<unknown[] | null> | unknown[] | null
+  intradayTick?(code: string, date?: string): Promise<unknown[] | null> | unknown[] | null
   indexConstituents?(indexCode: string): Promise<unknown[] | null> | unknown[] | null
+  insiderTrade?(code: string): Promise<unknown[] | null> | unknown[] | null
+  perfForecast?(code: string): Promise<unknown[] | null> | unknown[] | null
+  ipoData?(): Promise<unknown[] | null> | unknown[] | null
+  convertibleBonds?(): Promise<unknown[] | null> | unknown[] | null
   macroIndicator?(indicator?: string): Promise<unknown[] | null> | unknown[] | null
   chipDistribution?(code: string, adjust?: string): Promise<unknown[] | null> | unknown[] | null
   chipProfile?(code: string, adjust?: string): Promise<unknown[] | null> | unknown[] | null
@@ -62,6 +74,19 @@ export abstract class BaseDriver {
   etfProfile?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
   etfHoldings?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
   etfNav?(etfCode: string): Promise<unknown[] | null> | unknown[] | null
+  managerInfo?(code: string): Promise<unknown[] | null> | unknown[] | null
+  shareholderPlans?(code: string): Promise<unknown[] | null> | unknown[] | null
+  buyback?(code: string): Promise<unknown[] | null> | unknown[] | null
+  mainBusiness?(code: string): Promise<unknown[] | null> | unknown[] | null
+  topCustomerSupplier?(code: string, direction?: string): Promise<unknown[] | null> | unknown[] | null
+  actualController?(code: string): Promise<unknown[] | null> | unknown[] | null
+  subsidiaries?(code: string): Promise<unknown[] | null> | unknown[] | null
+  relatedPartyTrades?(code: string): Promise<unknown[] | null> | unknown[] | null
+  rdInvestment?(code: string): Promise<unknown[] | null> | unknown[] | null
+  maEvents?(code: string): Promise<unknown[] | null> | unknown[] | null
+  employeeComposition?(code: string): Promise<unknown[] | null> | unknown[] | null
+  institutionalVisits?(code: string): Promise<unknown[] | null> | unknown[] | null
+  peerCompanies?(code: string): Promise<unknown[] | null> | unknown[] | null
 }
 
 /** Map Capability → driver method name */
@@ -73,6 +98,7 @@ export const CAP_METHOD: Partial<Record<Capability, string>> = {
   [Capability.INDEX_KLINE]: 'indexKline',
   [Capability.MARKET_MONEY_FLOW]: 'marketMoneyFlow',
   [Capability.SECTOR_MONEY_FLOW]: 'sectorMoneyFlow',
+  [Capability.SECTOR_LIST]: 'sectorList',
   [Capability.STOCK_PROFILE]: 'profile',
   [Capability.SHAREHOLDER]: 'shareholders',
   [Capability.FINANCIAL_SUMMARY]: 'financials',

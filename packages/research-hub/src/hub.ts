@@ -330,6 +330,19 @@ export class ResearchHub {
         case 'local_crypto_list': return await this.localCryptoList(params, t0)
         case 'search_crypto_pairs': return await this.searchCryptoPairs(params, t0)
         case 'strategy_report': return this.strategyReport(String(params.code), t0)
+        case 'provider_custom_methods': {
+          const providerId = params.provider_id ? String(params.provider_id) : undefined
+          return ok(this.de.listCustomMethods(providerId), '自定义方法列表', t0)
+        }
+        case 'provider_invoke_custom': {
+          const pid = String(params.provider_id ?? '')
+          const method = String(params.method ?? '')
+          const args = Array.isArray(params.args) ? params.args : []
+          return this.de.invokeCustomMethod(pid, method, args)
+            .then(r => r.success
+              ? ok(r.data, `${pid}.${method}`, t0)
+              : fail(r.error ?? '调用失败', t0))
+        }
         default: return fail(`Unknown feature: ${feature}`, t0)
       }
     } catch (e) {

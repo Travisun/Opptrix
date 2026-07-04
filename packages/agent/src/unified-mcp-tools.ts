@@ -321,5 +321,49 @@ export function buildUnifiedInstrumentTools(
         groups: a.groups,
       }),
     },
+    {
+      name: 'list_enabled_providers',
+      category: '数据源扩展',
+      description: '查询当前已启用的数据源列表（provider_id、名称、优先级、支持的能力）。调用自定义方法前先确认目标 provider 是否可用',
+      parameters: S({}),
+      handler: () => d('provider_list', {}),
+    },
+    {
+      name: 'list_provider_custom_methods',
+      category: '数据源扩展',
+      description: '查询所有数据源的可用自定义方法（如板块概念、宏观数据、情绪指标等）。返回方法名、说明、参数和示例。可按 provider_id 过滤',
+      parameters: S({
+        provider_id: {
+          type: 'string',
+          description: '可选，按数据源过滤（如 baostock、zzshare）。不填返回全部',
+        },
+      }),
+      handler: (a) => d('provider_custom_methods', { provider_id: a.provider_id }),
+    },
+    {
+      name: 'invoke_provider_custom_method',
+      category: '数据源扩展',
+      description: '调用数据源的自定义方法。先用 list_provider_custom_methods 查看可用方法和参数，再用此工具调用',
+      parameters: S({
+        provider_id: {
+          type: 'string',
+          description: '数据源 ID（如 baostock、zzshare）',
+        },
+        method: {
+          type: 'string',
+          description: '方法名（如 bsStockConcept、zzSentimentMarketTopN）',
+        },
+        args: {
+          type: 'array',
+          description: '参数数组，按方法定义的参数顺序传入',
+          items: { type: 'string' },
+        },
+      }, ['provider_id', 'method']),
+      handler: (a) => d('provider_invoke_custom', {
+        provider_id: a.provider_id,
+        method: a.method,
+        args: a.args ?? [],
+      }),
+    },
   ]
 }

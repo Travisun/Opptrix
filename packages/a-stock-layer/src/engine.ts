@@ -6,6 +6,9 @@ import { Cache } from './core/cache.js'
 import { DriverRegistry } from './core/registry.js'
 import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
+import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
+import { validateResponse } from './core/data-validator.js'
+import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
@@ -87,6 +90,7 @@ export class MarketDataEngine {
     cacheType: string,
     useCache: boolean,
     args: unknown[],
+    providerTimeoutMs = 15_000,
   ): Promise<QueryResult<T[]>> {
     if (useCache && cacheType) {
       const params = { method, market, assetClass, args: JSON.stringify(args) }
@@ -99,23 +103,74 @@ export class MarketDataEngine {
       return { success: false, error: `没有可用的 provider 支持 [${market}/${assetClass}/${cap}]` }
     }
 
+    const health = getProviderHealthTracker()
+    const capStr = String(cap)
     let lastError = ''
+
     for (const driver of drivers) {
+      // Circuit breaker: skip unhealthy provider×capability
+      if (health.shouldSkip(driver.name, capStr)) {
+        const h = health.getHealth(driver.name, capStr)
+        if (h?.state === 'open') {
+          lastError = `${driver.name}: 熔断中 (连续失败${h.consecutiveFails}次, ${Math.max(0, Math.ceil((h.cooldownUntil - Date.now()) / 1000))}s后重试)`
+        }
+        continue
+      }
+
       const fn = (driver as unknown as Record<string, unknown>)[method] as
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
+
       try {
-        const data = await fn.apply(driver, args)
-        if (!data?.length) continue
+        // Provider-level timeout wrapper
+        const data = await this.withProviderTimeout(
+          () => fn.apply(driver, args) as Promise<unknown[] | null>,
+          providerTimeoutMs,
+          driver.name,
+        )
+
+        // Data quality validation — rejects empty/invalid responses
+        if (!data?.length) {
+          health.recordInvalidResponse(driver.name, capStr)
+          continue
+        }
+
+        const validation = validateResponse(cap, data)
+        if (!validation.valid) {
+          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          continue
+        }
+
+        health.recordSuccess(driver.name, capStr)
         if (useCache && cacheType) {
           this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) }, driver.name)
         }
         return { success: true, data: data as T[], source: driver.name }
       } catch (e) {
-        lastError = `${driver.name}: ${e}`
+        const msg = e instanceof Error ? e.message : String(e)
+        lastError = `${driver.name}: ${msg}`
+        health.recordFailure(driver.name, capStr, msg)
       }
     }
     return { success: false, error: `所有 provider 均失败: ${lastError}` }
+  }
+
+  /** Wrap a provider call with a timeout — distinguishes timeout from other errors. */
+  private withProviderTimeout<T>(
+    fn: () => Promise<T>,
+    timeoutMs: number,
+    providerName: string,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        reject(new Error(`provider ${providerName} 超时 (${timeoutMs}ms)`))
+      }, timeoutMs)
+
+      fn().then(
+        val => { clearTimeout(timer); resolve(val) },
+        err => { clearTimeout(timer); reject(err) },
+      )
+    })
   }
 
   private async query<T>(
@@ -330,6 +385,9 @@ export class MarketDataEngine {
   }
   sectorMoneyFlow(sectorType = 'industry'): Promise<QueryResult<SectorMoneyFlow[]>> {
     return this.q(Capability.SECTOR_MONEY_FLOW, 'sectorMoneyFlow', true, sectorType)
+  }
+  sectorList(plateType = '14'): Promise<QueryResult<Record<string, unknown>[]>> {
+    return this.q(Capability.SECTOR_LIST, 'sectorList', true, plateType)
   }
 
   // ── Research data ──
@@ -786,6 +844,80 @@ export class MarketDataEngine {
   }
   registerDriver(driver: Parameters<DriverRegistry['register']>[0]) { this.registry.register(driver) }
   unregisterDriver(name: string) { this.registry.unregister(name) }
+
+  // ── Provider health / circuit breaker ──
+
+  /** Get health snapshot for all provider×capability combinations. */
+  providerHealth(): HealthSnapshot {
+    return getProviderHealthTracker().getAll()
+  }
+
+  /** Reset health for a specific provider (or all if no args). */
+  resetProviderHealth(providerId?: string, capability?: string) {
+    getProviderHealthTracker().reset(providerId, capability)
+  }
+
+  /** Force-close a tripped circuit for a provider×capability. */
+  forceCloseProviderCircuit(providerId: string, capability: string) {
+    getProviderHealthTracker().forceClose(providerId, capability)
+  }
+
+  /** Prune stale health entries. */
+  pruneStaleHealth(): number {
+    return getProviderHealthTracker().prune()
+  }
+
+  // ── Provider custom methods ──
+
+  /** List all available custom methods across providers (or for a specific provider). */
+  listCustomMethods(providerId?: string): ProviderCustomMethods[] {
+    return listProviderCustomMethods(providerId)
+  }
+
+  /** Invoke a custom method on a specific provider. Returns the raw result or error. */
+  async invokeCustomMethod(
+    providerId: string,
+    methodName: string,
+    args: unknown[] = [],
+  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+    const def = findCustomMethod(providerId, methodName)
+    if (!def) {
+      return { success: false, error: `未知的自定义方法: ${providerId}.${methodName}` }
+    }
+
+    const driver = this.registry.get(providerId) as Record<string, unknown> | undefined
+    if (!driver) {
+      return { success: false, error: `Provider ${providerId} 未注册` }
+    }
+
+    const fn = driver[methodName] as ((...a: unknown[]) => Promise<unknown>) | undefined
+    if (typeof fn !== 'function') {
+      return { success: false, error: `Provider ${providerId} 未实现 ${methodName}` }
+    }
+
+    try {
+      const health = getProviderHealthTracker()
+      const capStr = `custom:${methodName}`
+
+      if (health.shouldSkip(providerId, capStr)) {
+        return { success: false, error: `${providerId} 当前熔断中，请稍后重试` }
+      }
+
+      const result = await this.withProviderTimeout(
+        () => fn.apply(driver, args),
+        15_000,
+        providerId,
+      )
+
+      health.recordSuccess(providerId, capStr)
+      return { success: true, data: result }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      const health = getProviderHealthTracker()
+      health.recordFailure(providerId, `custom:${methodName}`, msg)
+      return { success: false, error: msg }
+    }
+  }
 }
 
 export { MarketDataEngine as AshareEngine }
@@ -795,6 +927,20 @@ export { Capability, CACHE_TYPE } from './core/capabilities.js'
 export { Cache, DEFAULT_TTL } from './core/cache.js'
 export * from './core/schema.js'
 export { BaseDriver, CAP_METHOD } from './providers/common/base.js'
+export {
+  ProviderHealthTracker,
+  getProviderHealthTracker,
+  CircuitState,
+  FAILURE_THRESHOLD,
+  BASE_COOLDOWN_MS,
+  MAX_COOLDOWN_MS,
+} from './core/provider-health.js'
+export type { InterfaceHealth, HealthSnapshot } from './core/provider-health.js'
+export {
+  listProviderCustomMethods,
+  findCustomMethod,
+} from './core/custom-methods.js'
+export type { CustomMethodDef, CustomMethodParam, ProviderCustomMethods } from './core/custom-methods.js'
 export {
   TushareDriver,
   TickflowDriver,

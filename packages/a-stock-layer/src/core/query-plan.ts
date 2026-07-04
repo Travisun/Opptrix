@@ -10,6 +10,8 @@ import {
   normalizePreOpenRealtimeQuote,
 } from '../utils/quote-normalize.js'
 import type { StockRealtime } from '@opptrix/shared'
+import { getProviderHealthTracker } from './provider-health.js'
+import { validateResponse } from './data-validator.js'
 
 export type QueryPlanStrategy = 'sequential' | 'merge' | 'race'
 
@@ -138,17 +140,41 @@ export class QueryPlanExecutor {
       return { success: false, error: `没有可用的 provider 支持 [${key}]` }
     }
 
+    const health = getProviderHealthTracker()
+    const capStr = String(plan.capability)
     let lastError = ''
+
     for (const driver of drivers) {
+      if (health.shouldSkip(driver.name, capStr)) {
+        const h = health.getHealth(driver.name, capStr)
+        if (h?.state === 'open') {
+          lastError = `${driver.name}: 熔断中 (连续失败${h.consecutiveFails}次)`
+        }
+        continue
+      }
+
       const fn = (driver as unknown as Record<string, unknown>)[ctx.method] as
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
       try {
         const data = await fn.apply(driver, ctx.args)
-        if (!data?.length) continue
+        if (!data?.length) {
+          health.recordInvalidResponse(driver.name, capStr)
+          continue
+        }
+
+        const validation = validateResponse(plan.capability, data)
+        if (!validation.valid) {
+          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          continue
+        }
+
+        health.recordSuccess(driver.name, capStr)
         return { success: true, data: data as T[], source: driver.name, cached: false }
       } catch (e) {
-        lastError = `${driver.name}: ${e}`
+        const msg = e instanceof Error ? e.message : String(e)
+        lastError = `${driver.name}: ${msg}`
+        health.recordFailure(driver.name, capStr, msg)
       }
     }
     return { success: false, error: `所有 provider 均失败: ${lastError}` }
@@ -184,7 +210,12 @@ export class QueryPlanExecutor {
     }
 
     const drivers = this.resolveDrivers(plan, ctx)
+    const health = getProviderHealthTracker()
+    const capStr = String(plan.capability)
+
     for (const driver of drivers) {
+      if (health.shouldSkip(driver.name, capStr)) continue
+
       const batch = normalized.filter(c => !seen.has(c))
       if (!batch.length) break
       const fn = driver.batchRealtime as (
@@ -193,8 +224,24 @@ export class QueryPlanExecutor {
       ) => Promise<StockRealtime[] | null> | undefined
       if (typeof fn !== 'function') continue
       try {
-        pushRows(await fn(batch, markets))
-      } catch { /* try next provider */ }
+        const result = await fn(batch, markets)
+        if (!result?.length) {
+          health.recordInvalidResponse(driver.name, capStr)
+          continue
+        }
+
+        const validation = validateResponse(plan.capability, result)
+        if (!validation.valid) {
+          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          continue
+        }
+
+        health.recordSuccess(driver.name, capStr)
+        pushRows(result)
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e)
+        health.recordFailure(driver.name, capStr, msg)
+      }
     }
 
     if (!results.length) return { success: false, error: 'batchRealtime failed' }
