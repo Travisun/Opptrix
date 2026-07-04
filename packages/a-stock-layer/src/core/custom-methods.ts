@@ -34,7 +34,7 @@ export interface ProviderCustomMethods {
 
 // ── Built-in declarations ──
 
-const EASTMONEY_CUSTOM: CustomMethodDef[] = [
+const BAOSTOCK_CUSTOM: CustomMethodDef[] = [
   {
     method: 'bsStockConcept',
     description: '查询股票所属概念板块（如 "锂电池"、"人工智能"）',
@@ -179,9 +179,185 @@ const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
+const EASTMONEY_EXTRA_CUSTOM: CustomMethodDef[] = [
+  {
+    method: 'boardConceptList',
+    description: '概念板块列表（含涨跌幅、领涨股）',
+    params: [],
+    example: '{"provider":"eastmoney","method":"boardConceptList","args":[]}',
+  },
+  {
+    method: 'boardIndustryList',
+    description: '行业板块列表（含涨跌幅、领涨股）',
+    params: [],
+  },
+  {
+    method: 'boardRegionList',
+    description: '地域板块列表',
+    params: [],
+  },
+  {
+    method: 'boardConceptCons',
+    description: '概念板块成分股',
+    params: [
+      { name: 'boardCode', type: 'string', description: '板块代码，如 BK0818', required: true },
+    ],
+  },
+  {
+    method: 'ztPool',
+    description: '涨停股池（当日涨停股票列表）',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYYMMDD，默认今日' },
+    ],
+  },
+  {
+    method: 'hsgtNorthFlow',
+    description: '沪深港通北向资金净流入（近30日）',
+    params: [],
+  },
+  {
+    method: 'hotRank',
+    description: '东财个股热搜排名 Top100',
+    params: [],
+  },
+]
+
+const MISC_DATA_CUSTOM: CustomMethodDef[] = [
+  {
+    method: 'lhbDetail',
+    description: '龙虎榜详情（营业部买卖明细）',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
+    ],
+    example: '{"provider":"misc-data","method":"lhbDetail","args":["2026-07-04"]}',
+  },
+  {
+    method: 'lhbJgStatistic',
+    description: '龙虎榜机构席位统计',
+    params: [],
+  },
+  {
+    method: 'lhbStockStatistic',
+    description: '个股龙虎榜历史统计',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'gdfxHoldingCount',
+    description: '股东户数变动 Top100（散户筹码集中度）',
+    params: [],
+  },
+  {
+    method: 'gdfxHoldingDetail',
+    description: '个股股东户数历史详情',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'marketValuation',
+    description: '全市场估值指标（PE/PB/股息率）',
+    params: [],
+  },
+  {
+    method: 'stockALgPe',
+    description: 'A股等权重市盈率历史（乐咕）',
+    params: [],
+  },
+  {
+    method: 'stockALgPb',
+    description: 'A股等权重市净率历史（乐咕）',
+    params: [],
+  },
+  {
+    method: 'stockBuffettIndex',
+    description: '巴菲特指标（A股总市值/GDP）',
+    params: [],
+  },
+  {
+    method: 'sseSummary',
+    description: '上交所市场总貌（市值、市盈率、上市公司数）',
+    params: [],
+  },
+  {
+    method: 'szseSummary',
+    description: '深交所市场总貌',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYYMMDD' },
+    ],
+  },
+  {
+    method: 'sseDealDaily',
+    description: '上交所每日概况（挂牌数、市值、成交额）',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYYMMDD' },
+    ],
+  },
+  {
+    method: 'profitForecast',
+    description: '个股盈利预测（EPS/营收/净利润）',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'institutionRecommend',
+    description: '机构推荐汇总（买入/增持/中性/减持）',
+    params: [],
+  },
+  {
+    method: 'ipoApply',
+    description: '新股申购与中签',
+    params: [],
+  },
+  {
+    method: 'marginDetailSse',
+    description: '沪市融资融券明细',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
+    ],
+  },
+  {
+    method: 'dividendDetail',
+    description: '个股分红配送历史',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'lockupExpiry',
+    description: '限售解禁（近期可解禁股票）',
+    params: [
+      { name: 'code', type: 'string', description: '可选股票代码' },
+    ],
+  },
+  {
+    method: 'buyback',
+    description: '股票回购数据',
+    params: [],
+  },
+  {
+    method: 'blockTradeDetail',
+    description: '大宗交易每日明细',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
+    ],
+  },
+  {
+    method: 'shareStructure',
+    description: '个股股本结构',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+]
+
 const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
-  { providerId: 'baostock', methods: EASTMONEY_CUSTOM },
+  { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
+  { providerId: 'eastmoney', methods: EASTMONEY_EXTRA_CUSTOM },
+  { providerId: 'misc-data', methods: MISC_DATA_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {

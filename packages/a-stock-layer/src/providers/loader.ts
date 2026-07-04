@@ -19,6 +19,7 @@ import { TDX_MANIFEST } from './tdx/manifest.js'
 import { NETEASE_MANIFEST } from './netease/manifest.js'
 import { SINA_MANIFEST } from './sina/manifest.js'
 import { YFINANCE_MANIFEST } from './yfinance/manifest.js'
+import { MISC_DATA_MANIFEST } from './misc-data/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
 import { testBaostockConnection } from './baostock/api/client.js'
@@ -30,6 +31,7 @@ import { testTdxConnection } from './tdx/api/client.js'
 import { testNeteaseConnection } from './netease/api/client.js'
 import { testSinaConnection } from './sina/api/client.js'
 import { testYfinanceConnection } from './yfinance/api/client.js'
+import { testMiscDataConnection } from './misc-data/driver.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
 import {
@@ -54,6 +56,7 @@ const BUILTIN_MANIFESTS = [
   NETEASE_MANIFEST,
   SINA_MANIFEST,
   YFINANCE_MANIFEST,
+  MISC_DATA_MANIFEST,
 ]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {
@@ -124,6 +127,7 @@ export class ProviderLoader {
     this.testHooks.set('netease', async () => testNeteaseConnection())
     this.testHooks.set('sina', async () => testSinaConnection())
     this.testHooks.set('yfinance', async () => testYfinanceConnection())
+    this.testHooks.set('misc-data', async () => testMiscDataConnection())
   }
 
   getTestConnectionHook(providerId: string): ProviderTestConnectionHook | undefined {

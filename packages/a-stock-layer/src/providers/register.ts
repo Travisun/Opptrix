@@ -12,6 +12,7 @@ import { TdxDriver } from './tdx/driver.js'
 import { NeteaseDriver } from './netease/driver.js'
 import { SinaDriver } from './sina/driver.js'
 import { YfinanceDriver } from './yfinance/driver.js'
+import { MiscDataDriver } from './misc-data/driver.js'
 
 /** Register built-in data providers. */
 export function registerAllDrivers(registry: DriverRegistry) {
@@ -29,6 +30,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new NeteaseDriver(),
     new SinaDriver(),
     new YfinanceDriver(),
+    new MiscDataDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -48,4 +50,5 @@ export {
   NeteaseDriver,
   SinaDriver,
   YfinanceDriver,
+  MiscDataDriver,
 }
