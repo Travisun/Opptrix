@@ -718,6 +718,120 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
+  /**
+   * AKShare 接口: forex_spot_em
+   * 对应 Python: akshare.forex.forex_em.forex_spot_em
+   * 数据源: https://push2.eastmoney.com/api/qt/clist/get
+   * @returns {Array<{rank: number, code: string, name: string, latest: number, change: number, changePercent: number, open: number, high: number, low: number, preClose: number}>} 外汇实时行情列表
+   * 数据清洗: fs 过滤 m:119,m:120,m:133 覆盖全部外汇市场，f-field 映射为语义化属性，数值类型转换
+   */
+  p.forexSpotEm = async function forexSpotEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const params = {
+        np: '1', fltt: '2', invt: '2',
+        fs: 'm:119,m:120,m:133',
+        fields: 'f12,f13,f14,f1,f2,f4,f3,f152,f17,f18,f15,f16',
+        fid: 'f3', pn: '1', pz: '100', po: '1', dect: '1',
+        wbp2u: '|0|0|0|web',
+      }
+      const json = await eastmoneyGet('https://push2.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
+      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.f12 ?? ''),
+        name: String(it.f14 ?? ''),
+        latest: safeFloat(it.f2),
+        change: safeFloat(it.f4),
+        changePercent: safeFloat(it.f3),
+        open: safeFloat(it.f17),
+        high: safeFloat(it.f15),
+        low: safeFloat(it.f16),
+        preClose: safeFloat(it.f18),
+      }))
+    } catch { return null }
+  }
+
+  /** 外汇品种 → 东财 market code 映射（对应 akshare/forex/cons.py symbol_market_map） */
+  const forexMarketMap: Record<string, number> = {
+    USDCNH: 133, EURCNYC: 120, GBPCNYC: 120, JPYCNYC: 120, HKDCNYC: 120,
+    CADCNYC: 120, AUDCNYC: 120, NZDCNYC: 120, SGDCNYC: 120, CHFCNYC: 120,
+    CNYRUBC: 120, CNYSARC: 120, CNYAEDC: 120, CNYTRYC: 120, CNYMOPC: 120,
+    CNYTHBC: 120, CNYKRWC: 120, CNYMXNC: 120, CNYMYRC: 120, CNYZARC: 120,
+    CNYDKKC: 120, CNYNOKC: 120, CNYHUFC: 120, CNYPLNC: 120, CNYSEKC: 120,
+    EURUSD: 119, GBPUSD: 119, USDJPY: 119, USDCHF: 119, AUDUSD: 119,
+    NZDUSD: 119, USDCAD: 119, USDSGD: 119, USDHKD: 119, USDTRY: 119,
+    USDMXN: 119, USDZAR: 119, USDPLN: 119, USDHUF: 119, USDCZK: 119,
+    USDSEK: 119, USDNOK: 119, USDDKK: 119, USDTHB: 119, USDINR: 119,
+    USDKRW: 119, USDIDR: 119, USDBRL: 119, USDSAR: 119, USDARS: 119,
+    USDRUB: 119, USDEUR: 119, USDGBP: 119, EURGBP: 119, EURJPY: 119,
+    EURCHF: 119, EURCAD: 119, EURAUD: 119, EURNZD: 119, EURSGD: 119,
+    EURHKD: 119, EURTRY: 119, EURPLN: 119, EURHUF: 119, EURCZK: 119,
+    EURSEK: 119, EURNOK: 119, EURDKK: 119, GBPJPY: 119, GBPCHF: 119,
+    GBPCAD: 119, GBPAUD: 119, GBPNZD: 119, GBPSGD: 119, GBPHKD: 119,
+    GBPPLN: 119, GBPZAR: 119, AUDCAD: 119, AUDCHF: 119, AUDJPY: 119,
+    AUDNZD: 119, AUDSGD: 119, AUDHKD: 119, AUDEUR: 119, AUDGBP: 119,
+    NZDCAD: 119, NZDCHF: 119, NZDJPY: 119, NZDSGD: 119, NZDHKD: 119,
+    NZDGBP: 119, NZDEUR: 119, NZDAUD: 119, CADCHF: 119,
+    CADJPY: 119, CADAUD: 119, CADGBP: 119, CADSGD: 119,
+    CADHKD: 119, CADEUR: 119, CADUSD: 119, CADNZD: 119, CHFJPY: 119,
+    CHFGBP: 119, CHFAUD: 119, CHFNZD: 119, CHFCAD: 119, CHFSGD: 119,
+    CHFHKD: 119, CHFEUR: 119, CHFUSD: 119, CHFZAR: 119, SGDJPY: 119,
+    SGDAUD: 119, SGDGBP: 119, SGDEUR: 119, SGDCAD: 119, SGDCHF: 119,
+    SGDNZD: 119, SGDHKD: 119, SGDUSD: 119, HKDJPY: 119, HKDSGD: 119,
+    HKDGBP: 119, HKDEUR: 119, HKDCHF: 119, HKDUSD: 119, HKDNZD: 119,
+    HKDCAD: 119, HKDAUD: 119, GBPEUR: 119, SEKEUR: 119, SEKUSD: 119,
+    NOKUSD: 119, NOKEUR: 119, DKKUSD: 119, DKKEUR: 119, CZKEUR: 119,
+    CZKUSD: 119, THBUSD: 119, INRUSD: 119, HUFUSD: 119, HUFEUR: 119,
+    MXNUSD: 119, ZARGBP: 119, ZARUSD: 119, ZAREUR: 119, ZARCHF: 119,
+    TRYUSD: 119, TRYEUR: 119, TRYJPY: 119, SARUSD: 119,
+    JPYUSD: 119, JPYEUR: 119, JPYGBP: 119, JPYCHF: 119, JPYAUD: 119,
+    JPYCAD: 119, JPYNZD: 119, JPYSGD: 119, JPYHKD: 119, JPYTRY: 119,
+    JPYCNH: 133, CNHUSD: 133, CNHEUR: 133, CNHGBP: 133, CNHJPY: 133,
+    CNHAUD: 133, CNHCAD: 133, CNHCHF: 133, CNHHKD: 133, CNHNZD: 133,
+    CNHSGD: 133, HKDCNH: 133, EURCNH: 133, GBPCNH: 133, AUDCNH: 133,
+    CADCNH: 133, CHFCNH: 133, NZDCNH: 133, SGDCNH: 133,
+    PLNGBP: 119, PLNEUR: 119, PLNUSD: 119,
+    JPYZAR: 119,
+  }
+
+  /**
+   * AKShare 接口: forex_hist_em
+   * 对应 Python: akshare.forex.forex_em.forex_hist_em
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param symbol - 品种代码，如 'USDCNH'；可通过 forexSpotEm() 获取所有可查询历史行情的品种代码
+   * @returns {Array<{date: string, code: string, name: string, open: number, latest: number, high: number, low: number, amplitude: number}>} 外汇历史K线数据数组
+   * 数据清洗: 通过 forexMarketMap 将品种代码映射为 secid (market_code.symbol)，解析逗号分隔的 kline 字段
+   */
+  p.forexHistEm = async function forexHistEm(symbol = 'USDCNH'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const marketCode = forexMarketMap[symbol.toUpperCase()]
+      if (marketCode == null) return null
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: `${marketCode}.${symbol.toUpperCase()}`,
+        klt: '101', fqt: '1', lmt: '50000', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: 'f057cbcbce2a86e2866ab8877db1d059',
+        forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      const code = data?.code as string ?? symbol.toUpperCase()
+      const name = data?.name as string ?? ''
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', code, name,
+          open: safeFloat(p[1]), latest: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          amplitude: safeFloat(p[7]),
+        }
+      })
+    } catch { return null }
+  }
+
   // ═══════════════════════════════════════════════════════════════
   // FUND APIS — verified against .akshare-ref/akshare/fund/
   // ═══════════════════════════════════════════════════════════════
@@ -3882,6 +3996,8 @@ declare module '../../driver.js' {
     buyback(code: string): Promise<Record<string, unknown>[] | null>
     macroIndicator(indicator?: string): Promise<Record<string, unknown>[] | null>
     exchangeRate(pair?: string): Promise<Record<string, unknown>[] | null>
+    forexSpotEm(): Promise<Record<string, unknown>[] | null>
+    forexHistEm(symbol?: string): Promise<Record<string, unknown>[] | null>
     fundNameEm(): Promise<Record<string, unknown>[] | null>
     fundPurchaseEm(): Promise<Record<string, unknown>[] | null>
     fundEtfSpotEm(): Promise<Record<string, unknown>[] | null>

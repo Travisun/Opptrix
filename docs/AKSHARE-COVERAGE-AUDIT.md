@@ -149,18 +149,39 @@
 
 ---
 
+## 外汇数据（11 接口）— 100% 已实现
+
+| AKShare 函数 | 数据源 | Provider | 说明 |
+|---|---|---|---|
+| `forex_spot_em` | 东方财富 push2 | eastmoney research.ts | 外汇实时行情 |
+| `forex_hist_em` | 东方财富 push2his | eastmoney research.ts | 外汇历史行情 |
+| `currency_boc_sina` | 新浪 | misc-data handler | 中行人民币牌价 |
+| `currency_boc_safe` | 外汇管理局 | misc-data handler | 人民币汇率中间价 |
+| `fx_spot_quote` | chinamoney | misc-data handler | 人民币外汇即期报价 |
+| `fx_swap_quote` | chinamoney | misc-data handler | 人民币外汇远掉报价 |
+| `fx_c_swap_cm` | chinamoney.org | misc-data handler | C-Swap 定盘曲线 |
+| `fx_pair_quote` | chinamoney | misc-data handler | 外币对即期报价 |
+| `currency_pair_map` | investing.com | misc-data handler | 指定币种货币对 |
+| `macro_fx_sentiment` | jin10 datacenter | misc-data handler | 投机情绪报告 |
+| `fx_quote_baidu` | 百度股市通 | misc-data handler | 外汇行情报价 |
+
+---
+
 ## 汇总
 
 | 页面 | 总接口 | 已实现 | 未实现 | 覆盖率 |
 |------|--------|--------|--------|--------|
 | 利率数据 | 14 | 14 | 0 | 100% |
 | 期货数据 | 54 | 54 | 0 | 100% |
-| **合计** | **68** | **68** | **0** | **100%** |
+| 债券数据 | 42 | 42 | 0 | 100% |
+| 外汇数据 | 11 | 11 | 0 | 100% |
+| **合计** | **121** | **121** | **0** | **100%** |
 
 ## 实现位置
 
-| Provider | 新增方法数 | 文件 |
-|----------|-----------|------|
+| Provider | 方法数 | 文件 |
+|----------|--------|------|
 | stats_gov | 6 | `providers/stats_gov/markets/global/handler.ts` |
-| eastmoney | 8 | `providers/eastmoney/markets/cn/research.ts` |
-| misc-data | 54 | `providers/misc-data/markets/cn/handler.ts` |
+| eastmoney | 10 | `providers/eastmoney/markets/cn/research.ts` |
+| misc-data | 63 | `providers/misc-data/markets/cn/handler.ts` |
+| misc-data (债券) | 42 | `providers/misc-data/markets/cn/handler.ts` |

@@ -5640,4 +5640,407 @@ export class MiscDataHandler extends MarketHandlerShell {
       })
     } catch { return null }
   }
+
+  // ── 外汇数据 ──
+
+  /**
+   * AKShare 接口: currency_boc_sina
+   * 对应 Python: akshare.currency.currency_china_bank_sina.currency_boc_sina
+   * 数据源: https://biz.finance.sina.com.cn/forex/forex.php
+   * @param symbol - 货币中文名称，如 '美元'、'欧元'、'英镑'、'日元' 等
+   * @param startDate - 起始日期，格式 "YYYYMMDD"
+   * @param endDate - 结束日期，格式 "YYYYMMDD"
+   * @returns 中行人民币牌价历史数据列表，每项含 date(日期)、buyPrice(中行汇买价)、
+   *          cashBuyPrice(中行钞买价)、sellPrice(中行钞卖价/汇卖价)、midPrice(央行中间价)
+   * 数据清洗: 先通过 _currency_boc_sina_map 获取货币 symbol→code 映射(GBK 编码页面)，
+   *           再分页请求 HTML 表格，pd.read_html 解析；JS 实现使用正则提取 <tr>/<td>
+   */
+  async currencyBocSina(symbol: string, startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol || !startDate || !endDate) return null
+    const fmtDate = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+    try {
+      // Step 1: get currency code mapping
+      const mapResp = await fetch(`http://biz.finance.sina.com.cn/forex/forex.php?startdate=${fmtDate(startDate)}&enddate=${fmtDate(endDate)}&money_code=EUR&type=0`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const mapText = await mapResp.text()
+      const optionRegex = /<option\s+value="([^"]+)"[^>]*>([^<]+)<\/option>/gi
+      const codeMap: Record<string, string> = {}
+      let m: RegExpExecArray | null
+      while ((m = optionRegex.exec(mapText)) !== null) {
+        codeMap[m[2].trim()] = m[1]
+      }
+      const code = codeMap[symbol]
+      if (!code) return null
+
+      // Step 2: fetch data page by page
+      const results: Record<string, unknown>[] = []
+      for (let page = 1; page <= 10; page++) {
+        const resp = await fetch(`http://biz.finance.sina.com.cn/forex/forex.php?money_code=${code}&type=0&startdate=${fmtDate(startDate)}&enddate=${fmtDate(endDate)}&page=${page}&call_type=ajax`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(15000),
+        })
+        const html = await resp.text()
+        const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+        let trMatch = trRegex.exec(html)
+        while (trMatch) {
+          const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(c => c[1].replace(/<[^>]+>/g, '').trim())
+          if (cells.length >= 5 && /\d{4}/.test(cells[0])) {
+            results.push({
+              date: cells[0],
+              buyPrice: safeFloat(cells[1]),
+              cashBuyPrice: safeFloat(cells[2]),
+              sellPrice: safeFloat(cells[3]),
+              midPrice: safeFloat(cells[4]),
+            })
+          }
+          trMatch = trRegex.exec(html)
+        }
+        const hasNextPage = html.includes(`page=${page + 1}`)
+        if (!hasNextPage) break
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: currency_boc_safe
+   * 对应 Python: akshare.currency.currency_safe.currency_boc_safe
+   * 数据源: https://www.safe.gov.cn/safe/rmbhlzjj/index.html
+   * @returns 人民币汇率中间价列表，每项含 date(日期)、usd(美元)、eur(欧元)、
+   *          jpy(日元)、hkd(港元)、gbp(英镑) 等全部 25 种货币中间价
+   * 数据清洗: POST 查询 safe.gov.cn RMBQuery.do 接口获取最新数据，
+   *           解析 HTML 表格提取表头和数据行；Python 版先下载历史 Excel 再合并最新数据，
+   *           JS 实现简化为直接查询 POST 接口
+   */
+  async currencyBocSafe(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const now = new Date()
+      const endDate = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}`
+      const oneYearAgo = new Date(now)
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      const startDate = `${oneYearAgo.getFullYear()}-${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}-${String(oneYearAgo.getDate()).padStart(2, '0')}`
+
+      const resp = await fetch('https://www.safe.gov.cn/AppStructured/hlw/RMBQuery.do', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0',
+        },
+        body: new URLSearchParams({ startDate, endDate, queryYN: 'true' }).toString(),
+        signal: AbortSignal.timeout(30000),
+      })
+      const html = await resp.text()
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      const results: Record<string, unknown>[] = []
+      let headerCols: string[] = []
+      let trMatch = trRegex.exec(html)
+      let isHeader = true
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<t[dh][^>]*>([\s\S]*?)<\/t[dh]>/gi)].map(c => c[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 2) { trMatch = trRegex.exec(html); continue }
+        if (isHeader && cells.some(c => /日期|货币/.test(c))) {
+          headerCols = cells
+          isHeader = false
+          trMatch = trRegex.exec(html); continue
+        }
+        if (isHeader) { trMatch = trRegex.exec(html); continue }
+        const row: Record<string, unknown> = { date: cells[0] }
+        for (let i = 1; i < cells.length && i < headerCols.length; i++) {
+          const key = headerCols[i]?.toLowerCase()?.replace(/\s+/g, '') ?? `col${i}`
+          row[key] = safeFloat(cells[i])
+        }
+        results.push(row)
+        trMatch = trRegex.exec(html)
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fx_spot_quote
+   * 对应 Python: akshare.fx.fx_quote.fx_spot_quote
+   * 数据源: http://www.chinamoney.com.cn/chinese/mkdatapfx/
+   *          API: http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sp-quot.json
+   * @returns 人民币外汇即期报价列表，每项含 pair(货币对)、bidPrice(买报价)、askPrice(卖报价)
+   * 数据清洗: POST 请求 chinamoney JSON API，取 records 数组，
+   *           提取 ccyPair/bidPrc/askPrc 字段并转数值
+   */
+  async fxSpotQuote(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const t = String(Date.now())
+      const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sp-quot.json', {
+        method: 'POST',
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `t=${t}`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = (json?.records ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        pair: it.ccyPair ?? '',
+        bidPrice: safeFloat(it.bidPrc),
+        askPrice: safeFloat(it.askPrc),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fx_swap_quote
+   * 对应 Python: akshare.fx.fx_quote.fx_swap_quote
+   * 数据源: https://www.chinamoney.com.cn/chinese/index.html
+   *          API: http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sw-quot.json
+   * @returns 人民币外汇远掉报价列表，每项含 pair(货币对)、w1(1周)、m1(1月)、
+   *          m3(3月)、m6(6月)、m9(9月)、y1(1年)
+   * 数据清洗: POST 请求 chinamoney JSON API，取 records 数组，
+   *           提取 ccyPair 及各期限 label_1W~label_1Y 字段
+   */
+  async fxSwapQuote(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const t = String(Date.now())
+      const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sw-quot.json', {
+        method: 'POST',
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `t=${t}`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = (json?.records ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        pair: it.ccyPair ?? '',
+        w1: safeFloat(it.label_1W),
+        m1: safeFloat(it.label_1M),
+        m3: safeFloat(it.label_3M),
+        m6: safeFloat(it.label_6M),
+        m9: safeFloat(it.label_9M),
+        y1: safeFloat(it.label_1Y),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fx_c_swap_cm
+   * 对应 Python: akshare.fx.fx_c_swap_cm.fx_c_swap_cm
+   * 数据源: https://www.chinamoney.org.cn/chinese/bkcurvfsw
+   *          API: https://www.chinamoney.org.cn/r/cms/www/chinamoney/data/fx/fx-c-sw-curv-USD.CNY.json
+   * @returns 外汇掉期 C-Swap 定盘曲线列表，每项含 datetime(日期时间)、
+   *          tenor(期限品种)、swapPoints(掉期点 Pips)、dataSource(掉期点数据源)、
+   *          fullRate(全价汇率)
+   * 数据清洗: POST 请求 chinamoney.org.cn JSON API，取 records 数组，
+   *           映射 curveTime/tenor/swapPnt/dataSource/swapAllPrc 字段；
+   *           Python 版需要 LegacySSLAdapter 处理旧版 TLS，Node fetch 默认支持
+   */
+  async fxC_swapCm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const t = String(Date.now())
+      const resp = await fetch('https://www.chinamoney.org.cn/r/cms/www/chinamoney/data/fx/fx-c-sw-curv-USD.CNY.json', {
+        method: 'POST',
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `t=${t}`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = (json?.records ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        datetime: it.curveTime ?? '',
+        tenor: it.tenor ?? '',
+        swapPoints: safeFloat(it.swapPnt),
+        dataSource: it.dataSource ?? '',
+        fullRate: safeFloat(it.swapAllPrc),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fx_pair_quote
+   * 对应 Python: akshare.fx.fx_quote.fx_pair_quote
+   * 数据源: http://www.chinamoney.com.cn/chinese/mkdatapfx/
+   *          API: http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/cpair-quot.json
+   * @returns 外币对即期报价列表，每项含 pair(货币对)、bidPrice(买报价)、askPrice(卖报价)
+   * 数据清洗: POST 请求 chinamoney JSON API，取 records 数组，
+   *           提取 ccyPair/bidPrc/askPrc 字段并转数值
+   */
+  async fxPairQuote(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const t = String(Date.now())
+      const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/cpair-quot.json', {
+        method: 'POST',
+        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: `t=${t}`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = (json?.records ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        pair: it.ccyPair ?? '',
+        bidPrice: safeFloat(it.bidPrc),
+        askPrice: safeFloat(it.askPrc),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: currency_pair_map
+   * 对应 Python: akshare.currency.currency_investing.currency_pair_map
+   * 数据源: https://cn.investing.com/currencies/single-currency-crosses
+   * @param symbol - 货币中文名称，如 '人民币'、'美元'、'欧元' 等
+   * @returns 指定货币的所有可获取货币对列表，每项含 name(货币对名称)、code(货币对代码)
+   * 数据清洗: 先遍历 investing.com 5 个区域(region_ID=4,1,8,7,6)获取 region→currency 映射，
+   *           再通过 Service/currency 端点获取该货币所有交叉对；Python 版使用 BeautifulSoup，
+   *           JS 实现使用正则解析 HTML
+   */
+  async currencyPairMap(symbol: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    const invHeaders: Record<string, string> = {
+      'Accept': 'application/json, text/javascript, */*; q=0.01',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+      'X-Requested-With': 'XMLHttpRequest',
+      'Referer': 'https://cn.investing.com/currencies/single-currency-crosses',
+    }
+    try {
+      const regionIds = ['4', '1', '8', '7', '6']
+      const nameIdMap: Record<string, string> = {}
+      for (const regionId of regionIds) {
+        const resp = await fetch(`https://cn.investing.com/currencies/Service/region?region_ID=${regionId}&currency_ID=false`, {
+          headers: invHeaders, signal: AbortSignal.timeout(10000),
+        })
+        const html = await resp.text()
+        const tagRegex = /data-sml-id="([^"]+)"[^>]*(?:(?!title=)[\s\S])*?<i>([^<]+)<\/i>/gi
+        let tm: RegExpExecArray | null
+        while ((tm = tagRegex.exec(html)) !== null) {
+          const continentId = tm[1]
+          const name = tm[2].trim()
+          nameIdMap[name] = `${continentId}-${regionId}`
+        }
+      }
+      const regionCurrency = nameIdMap[symbol]
+      if (!regionCurrency) return null
+      const [currencyId, regId] = regionCurrency.split('-')
+
+      const resp = await fetch(`https://cn.investing.com/currencies/Service/currency?region_ID=${regId}&currency_ID=${currencyId}`, {
+        headers: invHeaders, signal: AbortSignal.timeout(10000),
+      })
+      const html = await resp.text()
+      const linkRegex = /<a[^>]*href="[^"]*\/([^/"]+)"[^>]*title="([^"]+)"/gi
+      const results: Record<string, unknown>[] = []
+      let lm: RegExpExecArray | null
+      while ((lm = linkRegex.exec(html)) !== null) {
+        results.push({ name: lm[2].replace(/\s+/g, '-'), code: lm[1] })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: macro_fx_sentiment
+   * 对应 Python: akshare.economic.macro_other.macro_fx_sentiment
+   * 数据源: https://datacenter.jin10.com/reportType/dc_ssi_trends
+   *          API: https://datacenter-api.jin10.com/sentiment/datas
+   * @param startDate - 起始日期，格式 "YYYYMMDD"
+   * @param endDate - 结束日期，格式 "YYYYMMDD"
+   * @returns 外汇投机情绪报告列表，每项含 date(日期)、AUDJPY、AUDUSD、EURAUD、
+   *          EURGBP、EURJPY、EURUSD、GBPJPY、GBPUSD、NZDUSD、USDCAD、
+   *          USDCHF、USDJPY、XAUUSD（共 13 个品种多空仓位比例）
+   * 数据清洗: GET 请求 Jin10 API，返回 data.values 转置为行数组，
+   *           日期从 "YYYY-MM-DD" 格式提取，其余字段转数值
+   */
+  async macroFxSentiment(startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
+    if (!startDate || !endDate) return null
+    const fmtDate = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+    try {
+      const resp = await fetch(`https://datacenter-api.jin10.com/sentiment/datas?start_date=${fmtDate(startDate)}&end_date=${fmtDate(endDate)}&currency_pair=`, {
+        headers: {
+          'accept': '*/*',
+          'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'cache-control': 'no-cache',
+          'origin': 'https://datacenter.jin10.com',
+          'pragma': 'no-cache',
+          'referer': 'https://datacenter.jin10.com/reportType/dc_ssi_trends',
+          'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'x-app-id': 'rU6QIu7JHe2gOUeR',
+          'x-csrf-token': '',
+          'x-version': '1.0.0',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const values = data?.values as Record<string, Record<string, unknown>> | undefined
+      if (!values) return null
+      const results: Record<string, unknown>[] = []
+      for (const [dateStr, pairs] of Object.entries(values)) {
+        const row: Record<string, unknown> = { date: dateStr }
+        for (const [pair, val] of Object.entries(pairs as Record<string, unknown>)) {
+          row[pair] = safeFloat(val)
+        }
+        results.push(row)
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fx_quote_baidu
+   * 对应 Python: akshare.fx.fx_quote_baidu.fx_quote_baidu
+   * 数据源: https://finance.baidu.com/top/foreign-rmb
+   *          API: https://finance.pae.baidu.com/api/getforeignrank
+   * @param symbol - 货币基准，'人民币' 或 '美元'
+   * @param token - 百度 acs-token，需从目标网站复制
+   * @returns 百度股市通外汇行情列表，每项含 code(代码)、name(名称)、
+   *          latest(最新价)、change(涨跌额)、changePercent(涨跌幅)
+   * 数据清洗: 循环分页请求(每页20条)，从 ResultCode=0 判断正常；
+   *           嵌套 list 字段解析为列，删除 market/list/status/icon1/icon2/financeType 列；
+   *           涨跌幅去掉 % 后除以 100 转小数
+   */
+  async fxQuoteBaidu(symbol: string, token: string): Promise<Record<string, unknown>[] | null> {
+    const symbolMap: Record<string, string> = { '人民币': 'rmb', '美元': 'dollar' }
+    const type = symbolMap[symbol]
+    if (!type) return null
+    try {
+      const results: Record<string, unknown>[] = []
+      let page = 0
+      while (true) {
+        const resp = await fetch(`https://finance.pae.baidu.com/api/getforeignrank?type=${type}&pn=${page}&rn=20&finClientType=pc`, {
+          headers: {
+            'Accept': 'application/json, text/plain, */*',
+            'Accept-Language': 'zh-CN,zh;q=0.9',
+            'Origin': 'https://finance.baidu.com',
+            'Referer': 'https://finance.baidu.com/',
+            'acs-token': token,
+          },
+          signal: AbortSignal.timeout(10000),
+        })
+        const json = await resp.json() as Record<string, unknown>
+        if (json.ResultCode !== '0') break
+        const result = json.Result as Record<string, unknown>[] | undefined
+        if (!result?.length) break
+        for (const item of result) {
+          const list = item.list as Record<string, unknown>[][] | undefined
+          if (!list?.length) continue
+          const headers = list[0]?.map(String) ?? []
+          const values = list[1] ?? []
+          const row: Record<string, unknown> = {}
+          for (let i = 0; i < headers.length; i++) {
+            row[headers[i]] = values[i]
+          }
+          results.push({
+            code: row['代码'] ?? row['code'] ?? '',
+            name: row['名称'] ?? row['name'] ?? '',
+            latest: safeFloat(row['最新价'] ?? row['latest']),
+            change: safeFloat(row['涨跌额'] ?? row['change']),
+            changePercent: safeFloat(String(row['涨跌幅'] ?? row['changePercent'] ?? '').replace('%', '')),
+          })
+        }
+        if (result.length < 20) break
+        page += 20
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
 }
