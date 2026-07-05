@@ -6520,4 +6520,132 @@ export class MiscDataHandler extends MarketHandlerShell {
       price: safeFloat(it[1]),
     }))
   }
+
+  // ── 加密货币数据 ──
+
+  /**
+   * AKShare 接口: crypto_js_spot
+   * 数据源: https://datacenter.jin10.com/reportType/dc_bitcoin_current
+   * @returns 加密货币实时行情列表，每项含 market(市场)、symbol(币种)、
+   *          latest(最新价)、change(涨跌额)、changePercent(涨跌幅)、
+   *          high24(24小时最高)、low24(24小时最低)、volume24(24小时成交量)、
+   *          updateTime(更新时间)
+   * 数据清洗: 从 Jin10 数据中心 API 获取，json.data 数组直接映射字段名；
+   *           通过 safeFloat 转为数值
+   */
+  async cryptoJsSpot(): Promise<Record<string, unknown>[] | null> {
+    const json = await httpGet(
+      'https://datacenter.jin10.com/reportType/dc_bitcoin_current',
+      {},
+      15000,
+      {
+        Referer: 'https://www.jin10.com/',
+        'x-app-id': 'bVBF4FyRTn5NJF5n',
+      },
+    )
+    if (!json?.data) return null
+    const data = json.data as Record<string, unknown>[]
+    if (!Array.isArray(data) || !data.length) return null
+    return data.map(it => ({
+      market: String(it.market ?? ''),
+      symbol: String(it.symbol ?? ''),
+      latest: safeFloat(it.latest),
+      change: safeFloat(it.change),
+      changePercent: safeFloat(it.changePercent),
+      high24: safeFloat(it.high24),
+      low24: safeFloat(it.low24),
+      volume24: safeFloat(it.volume24),
+      updateTime: String(it.updateTime ?? ''),
+    }))
+  }
+
+  /**
+   * AKShare 接口: crypto_bitcoin_hold_report
+   * 对应 Python: akshare.crypto.crypto_hold.crypto_bitcoin_hold_report
+   * 数据源: https://datacenter-api.jin10.com/bitcoin_treasuries/list
+   * @returns 比特币持仓报告列表，每项含 code(代码)、companyNameEn(公司英文名)、
+   *          companyNameCn(公司中文名)、country(国家/地区)、marketCap(市值)、
+   *          btcRatio(比特币占市值比重)、costBasis(持仓成本)、
+   *          holdingRatio(持仓占比)、holdings(持仓量)、
+   *          holdingValue(当日持仓市值)、queryDate(查询日期)、
+   *          announcementUrl(公告链接)、category(分类)、multiplier(倍数)
+   * 数据清洗: 从 Jin10 API 获取 bitcoin_treasuries/list，取 data.values 数组；
+   *           原始数组为固定顺序元组，按索引映射到命名字段
+   */
+  async cryptoBitcoinHoldReport(): Promise<Record<string, unknown>[] | null> {
+    const json = await httpGet(
+      'https://datacenter-api.jin10.com/bitcoin_treasuries/list',
+      {},
+      15000,
+      {
+        'X-App-Id': 'lnFP5lxse24wPgtY',
+        'X-Version': '1.0.0',
+      },
+    )
+    const values = (json?.data as { values?: unknown[][] })?.values
+    if (!values?.length) return null
+    return values.map(row => {
+      const r = row as unknown[]
+      return {
+        code: String(r[0] ?? ''),
+        companyNameEn: String(r[1] ?? ''),
+        country: String(r[2] ?? ''),
+        marketCap: safeFloat(r[3]),
+        btcRatio: safeFloat(r[4]),
+        costBasis: safeFloat(r[5]),
+        holdingRatio: safeFloat(r[6]),
+        holdings: safeFloat(r[7]),
+        holdingValue: safeFloat(r[8]),
+        queryDate: String(r[9] ?? '').slice(0, 10),
+        announcementUrl: String(r[10] ?? ''),
+        category: String(r[12] ?? ''),
+        multiplier: safeFloat(r[13]),
+        companyNameCn: String(r[15] ?? ''),
+      }
+    })
+  }
+
+  /**
+   * AKShare 接口: crypto_bitcoin_cme
+   * 对应 Python: akshare.crypto.crypto_bitcoin_cme.crypto_bitcoin_cme
+   * 数据源: https://datacenter-api.jin10.com/reports/list
+   * @param date - 查询日期，格式 "YYYYMMDD"，默认当天
+   * @returns 芝加哥商业交易所(CME)比特币成交量报告列表，每项含
+   *          commodity(商品)、type(类型)、electronicContracts(电子交易合约)、
+   *          pitContracts(场内成交合约)、otcContracts(场外成交合约)、
+   *          volume(成交量)、openInterest(未平仓合约)、positionChange(持仓变化)
+   * 数据清洗: 从 Jin10 API 获取 reports/list，category=cme, attr_id=4；
+   *           返回 data.values 数组，data.keys 提供列名映射；
+   *           date 参数转为 YYYY-MM-DD 格式传入
+   */
+  async cryptoBitcoinCme(date?: string): Promise<Record<string, unknown>[] | null> {
+    const now = new Date()
+    const d = date || `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const formattedDate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+    const json = await httpGet(
+      'https://datacenter-api.jin10.com/reports/list',
+      { category: 'cme', date: formattedDate, attr_id: '4' },
+      15000,
+      {
+        Referer: 'https://datacenter.jin10.com/',
+        'x-app-id': 'rU6QIu7JHe2gOUeR',
+        'x-version': '1.0.0',
+      },
+    )
+    const values = (json?.data as { values?: unknown[][] })?.values
+    if (!values?.length) return null
+    return values.map(row => {
+      const r = row as unknown[]
+      return {
+        commodity: String(r[0] ?? ''),
+        type: String(r[1] ?? ''),
+        electronicContracts: safeFloat(r[2]),
+        pitContracts: safeFloat(r[3]),
+        otcContracts: safeFloat(r[4]),
+        volume: safeFloat(r[5]),
+        openInterest: safeFloat(r[6]),
+        positionChange: safeFloat(r[7]),
+      }
+    })
+  }
 }
