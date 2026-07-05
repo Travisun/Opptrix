@@ -29,12 +29,12 @@ async function dcGet(params: Record<string, string>): Promise<Record<string, unk
   }
 }
 
-async function httpGet(url: string, params?: Record<string, string>): Promise<Record<string, unknown> | null> {
+async function httpGet(url: string, params?: Record<string, string>, timeoutMs = 15000, extraHeaders?: Record<string, string>): Promise<Record<string, unknown> | null> {
   try {
-    const fullUrl = params ? `${url}?${new URLSearchParams(params)}` : url
+    const fullUrl = params && Object.keys(params).length ? `${url}?${new URLSearchParams(params)}` : url
     const resp = await fetch(fullUrl, {
-      headers: HEADERS,
-      signal: AbortSignal.timeout(15000),
+      headers: extraHeaders ?? HEADERS,
+      signal: AbortSignal.timeout(timeoutMs),
     })
     return await resp.json() as Record<string, unknown>
   } catch {
@@ -1867,5 +1867,416 @@ export class MiscDataHandler extends MarketHandlerShell {
     const resp = json?.response as Record<string, unknown> | undefined
     if (!resp) return null
     return Object.entries(resp).map(([item, value]) => ({ item, value }))
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Bond Market Data (AKShare bond_* interfaces)
+  // ══════════════════════════════════════════════════════════════════
+
+  /**
+   * AKShare: bond_spot_quote
+   * ChinaMoney interbank bond market maker quotes.
+   * Data: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   */
+  async bondSpotQuote(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/SdsQutBondOfferList', {
+        pageNo: '1', pageSize: '500',
+      }, 15000, { Referer: 'https://www.chinamoney.com.cn/' })
+      const list = (json?.records ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!list.length) return null
+      return list.map(it => ({
+        institution: it.institutionName ?? it.instName ?? '',
+        bondName: it.bondName ?? it.secName ?? '',
+        bidNetPrice: safeFloat(it.bidPrice ?? it.bidNetPrice),
+        askNetPrice: safeFloat(it.askPrice ?? it.askNetPrice),
+        bidYield: safeFloat(it.bidYield),
+        askYield: safeFloat(it.askYield),
+        date: String(it.quoteDate ?? it.tradeDate ?? '').slice(0, 10),
+        source: 'ChinaMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_spot_deal
+   * ChinaMoney interbank bond spot market deals.
+   * Data: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   */
+  async bondSpotDeal(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/SdsQutBondDealList', {
+        pageNo: '1', pageSize: '500',
+      }, 15000, { Referer: 'https://www.chinamoney.com.cn/' })
+      const list = (json?.records ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!list.length) return null
+      return list.map(it => ({
+        bondName: it.bondName ?? it.secName ?? '',
+        dealNetPrice: safeFloat(it.dealPrice ?? it.dealNetPrice),
+        yield: safeFloat(it.yield ?? it.dealYield),
+        change: safeFloat(it.change),
+        weightedYield: safeFloat(it.weightedYield),
+        volume: safeFloat(it.volume ?? it.dealVolume),
+        date: String(it.tradeDate ?? '').slice(0, 10),
+        source: 'ChinaMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_info_cm
+   * ChinaMoney bond information query.
+   * Data: https://www.chinamoney.com.cn/chinese/scsjzqxx/
+   */
+  async bondInfoCm(params: { bondName?: string; bondCode?: string; bondType?: string; issueYear?: string } = {}): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/BondInfoList', {
+        pageNo: '1', pageSize: '100',
+        bondName: params.bondName ?? '', bondCode: params.bondCode ?? '',
+        bondType: params.bondType ?? '', issueYear: params.issueYear ?? '',
+      }, 15000, { Referer: 'https://www.chinamoney.com.cn/' })
+      const list = (json?.records ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!list.length) return null
+      return list.map(it => ({
+        bondShortName: it.bondShortName ?? '',
+        bondCode: it.bondCode ?? '',
+        issuer: it.issuerName ?? '',
+        bondType: it.bondType ?? '',
+        issueDate: String(it.issueDate ?? '').slice(0, 10),
+        rating: it.creditRating ?? '',
+        source: 'ChinaMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_china_yield
+   * ChinaBond yield curve data.
+   * Data: https://yield.chinabond.com.cn/
+   */
+  async bondChinaYield(startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://yield.chinabond.com.cn/cbweb-pbc-web/pbc/historyQuery', {
+        startDate, endDate, gjqx: '0', qxId: 'ycqx', locale: 'cn_ZH',
+      }, 15000, { Referer: 'https://yield.chinabond.com.cn/' })
+      const data = (json?.jsonList ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      const results: Record<string, unknown>[] = []
+      for (const curve of data) {
+        const curveName = String(curve['曲线名称'] ?? curve.curveName ?? '')
+        const date = String(curve['日期'] ?? curve.date ?? '').slice(0, 10)
+        const tenors = ['3月', '6月', '1年', '3年', '5年', '7年', '10年', '30年']
+        const values: Record<string, unknown> = {}
+        for (const t of tenors) {
+          const val = safeFloat(curve[t])
+          if (val != null) values[t] = val
+        }
+        results.push({ curveName, date, ...values, source: 'ChinaBond' })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_hs_spot
+   * Sina bond spot realtime quotes (SSE/SZSE).
+   * Data: https://vip.stock.finance.sina.com.cn/mkt/#hs_z
+   */
+  async bondZhHsSpot(startPage = '1', endPage = '5'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const results: Record<string, unknown>[] = []
+      for (let page = Number(startPage); page <= Number(endPage); page++) {
+        const json = await httpGet('https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQBondData', {
+          page: String(page), num: '80', sort: 'symbol', asc: '1', node: 'hs_z',
+        }, 15000, { Referer: 'https://vip.stock.finance.sina.com.cn/' })
+        if (!Array.isArray(json)) break
+        for (const it of json) {
+          results.push({
+            code: it.symbol ?? '', name: it.name ?? '',
+            price: safeFloat(it.trade), change: safeFloat(it.pricechange),
+            changePct: safeFloat(it.changepercent), bid: safeFloat(it.bid), ask: safeFloat(it.ask),
+            preClose: safeFloat(it.settlement), open: safeFloat(it.open),
+            high: safeFloat(it.high), low: safeFloat(it.low),
+            volume: Number(it.volume ?? 0), amount: Number(it.amount ?? 0),
+            source: 'Sina',
+          })
+        }
+        if (json.length < 80) break
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_hs_daily
+   * Sina bond daily historical data.
+   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   */
+  async bondZhHsDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData', {
+        symbol, scale: '240', ma: 'no', datalen: '1023',
+      }, 15000, { Referer: 'https://money.finance.sina.com.cn/' })
+      if (!Array.isArray(json)) return null
+      return json.map(it => ({
+        date: String(it.day ?? '').slice(0, 10),
+        open: safeFloat(it.open), high: safeFloat(it.high),
+        low: safeFloat(it.low), close: safeFloat(it.close),
+        volume: Number(it.volume ?? 0), source: 'Sina',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_hs_cov_spot
+   * Sina convertible bond realtime quotes.
+   * Data: https://vip.stock.finance.sina.com.cn/mkt/#hskzz_z
+   */
+  async bondZhHsCovSpot(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const results: Record<string, unknown>[] = []
+      for (let page = 1; page <= 10; page++) {
+        const json = await httpGet('https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQBondData', {
+          page: String(page), num: '80', sort: 'symbol', asc: '1', node: 'hskzz_z',
+        }, 15000, { Referer: 'https://vip.stock.finance.sina.com.cn/' })
+        if (!Array.isArray(json)) break
+        for (const it of json) {
+          results.push({
+            symbol: it.symbol ?? '', name: it.name ?? '',
+            trade: safeFloat(it.trade), priceChange: safeFloat(it.pricechange),
+            changePct: safeFloat(it.changepercent), volume: Number(it.volume ?? 0),
+            amount: Number(it.amount ?? 0), code: it.code ?? '',
+            tickTime: it.ticktime ?? '', source: 'Sina',
+          })
+        }
+        if (json.length < 80) break
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_hs_cov_daily
+   * Sina convertible bond daily historical data.
+   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   */
+  async bondZhHsCovDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData', {
+        symbol, scale: '240', ma: 'no', datalen: '1023',
+      }, 15000, { Referer: 'https://money.finance.sina.com.cn/' })
+      if (!Array.isArray(json)) return null
+      return json.map(it => ({
+        date: String(it.day ?? '').slice(0, 10),
+        open: safeFloat(it.open), high: safeFloat(it.high),
+        low: safeFloat(it.low), close: safeFloat(it.close),
+        volume: Number(it.volume ?? 0), source: 'Sina',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_cov
+   * EastMoney convertible bond list.
+   * Data: https://data.eastmoney.com/kzz/default.html
+   */
+  async bondZhCov(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_CB_LIST', columns: 'ALL',
+        pageNumber: '1', pageSize: '500', sortTypes: '-1', sortColumns: 'PUBLIC_START_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
+        applyDate: String(it.PUBLIC_START_DATE ?? '').slice(0, 10),
+        applyCode: String(it.APPLY_CODE ?? ''),
+        stockCode: String(it.CONVERT_STOCK_CODE ?? ''),
+        stockName: String(it.CONVERT_STOCK_NAME ?? ''),
+        stockPrice: safeFloat(it.CONVERT_STOCK_PRICE),
+        convertPrice: safeFloat(it.CONVERT_PRICE),
+        convertValue: safeFloat(it.CONVERT_VALUE),
+        bondPrice: safeFloat(it.LATEST_PRICE),
+        premiumRate: safeFloat(it.CONVERT_PREMIUM_RATE),
+        issueSize: safeFloat(it.ISSUE_SIZE),
+        rating: String(it.RATING ?? ''),
+        listDate: String(it.LISTING_DATE ?? '').slice(0, 10),
+        source: 'EastMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_cov_comparison
+   * EastMoney convertible bond comparison table.
+   * Data: https://quote.eastmoney.com/center/fullscreenlist.html#convertible_comparison
+   */
+  async bondCovComparison(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_CB_LIST', columns: 'ALL',
+        pageNumber: '1', pageSize: '500', sortTypes: '-1', sortColumns: 'PUBLIC_START_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
+        bondPrice: safeFloat(it.LATEST_PRICE),
+        bondChangePct: safeFloat(it.CHANGE_RATE),
+        stockCode: String(it.CONVERT_STOCK_CODE ?? ''),
+        stockName: String(it.CONVERT_STOCK_NAME ?? ''),
+        stockPrice: safeFloat(it.CONVERT_STOCK_PRICE),
+        stockChangePct: safeFloat(it.STOCK_CHANGE_RATE),
+        convertPrice: safeFloat(it.CONVERT_PRICE),
+        convertValue: safeFloat(it.CONVERT_VALUE),
+        premiumRate: safeFloat(it.CONVERT_PREMIUM_RATE),
+        pureBondPremiumRate: safeFloat(it.PURE_BOND_PREMIUM_RATE),
+        redeemTriggerPrice: safeFloat(it.REDEEM_TRIGGER_PRICE),
+        sellbackTriggerPrice: safeFloat(it.SELLBACK_TRIGGER_PRICE),
+        maturityRedeemPrice: safeFloat(it.MATURITY_REDEEM_PRICE),
+        pureBondValue: safeFloat(it.PURE_BOND_VALUE),
+        convertStartDate: String(it.CONVERT_START_DATE ?? '').slice(0, 8),
+        listDate: String(it.LISTING_DATE ?? '').slice(0, 8),
+        applyDate: String(it.PUBLIC_START_DATE ?? '').slice(0, 8),
+        source: 'EastMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_cov_value_analysis
+   * EastMoney convertible bond value analysis.
+   * Data: https://data.eastmoney.com/kzz/detail/
+   */
+  async bondZhCovValueAnalysis(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_CB_DAILYSTATISTICS', columns: 'ALL',
+        filter: `(SECURITY_CODE="${symbol}")`, pageNumber: '1', pageSize: '250',
+        sortTypes: '-1', sortColumns: 'TRADE_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        date: String(it.TRADE_DATE ?? '').slice(0, 10),
+        close: safeFloat(it.CLOSE_PRICE),
+        pureBondValue: safeFloat(it.PURE_BOND_VALUE),
+        convertValue: safeFloat(it.CONVERT_VALUE),
+        pureBondPremiumRate: safeFloat(it.PURE_BOND_PREMIUM_RATE),
+        convertPremiumRate: safeFloat(it.CONVERT_PREMIUM_RATE),
+        source: 'EastMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_cb_profile_sina
+   * Sina convertible bond profile details.
+   * Data: https://money.finance.sina.com.cn/bond/info/
+   */
+  async bondCbProfileSina(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CompanyProfile.getCompanyProfile', {
+        symbol,
+      }, 15000, { Referer: 'https://money.finance.sina.com.cn/' })
+      if (!json || typeof json !== 'object') return null
+      return Object.entries(json).map(([k, v]) => ({ item: k, value: String(v ?? '') }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_cb_summary_sina
+   * Sina convertible bond summary.
+   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   */
+  async bondCbSummarySina(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CompanyProfile.getCompanyProfile', {
+        symbol,
+      }, 15000, { Referer: 'https://money.finance.sina.com.cn/' })
+      if (!json || typeof json !== 'object') return null
+      return Object.entries(json).map(([k, v]) => ({ item: k, value: String(v ?? '') }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_debt_nafmii
+   * NAFMII interbank bond issuance data.
+   * Data: http://zhuce.nafmii.org.cn/fans/publicQuery/manager
+   */
+  async bondDebtNafmii(page = '1'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://www.nafmii.org.cn/fans/api/query', {
+        page, pageSize: '50', type: 'debt',
+      }, 15000, { Referer: 'https://www.nafmii.org.cn/' })
+      const list = (json?.result ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!list.length) return null
+      return list.map(it => ({
+        bondName: it.bondName ?? it.name ?? '',
+        type: it.type ?? it.category ?? '',
+        registration: it.registration ?? '',
+        amount: safeFloat(it.amount),
+        docNumber: it.docNumber ?? '',
+        updateDate: String(it.updateDate ?? '').slice(0, 10),
+        status: it.status ?? '',
+        source: 'NAFMII',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_buy_back_hist_em
+   * EastMoney bond buy-back historical data.
+   * Data: https://data.eastmoney.com/
+   */
+  async bondBuyBackHistEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_BUYBACK', columns: 'ALL',
+        pageNumber: '1', pageSize: '100', sortTypes: '-1', sortColumns: 'TRADE_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        code: String(it.SECURITY_CODE ?? ''),
+        name: String(it.SECURITY_NAME_ABBR ?? ''),
+        date: String(it.TRADE_DATE ?? '').slice(0, 10),
+        buyBackAmount: safeFloat(it.BUY_BACK_AMOUNT),
+        buyBackPrice: safeFloat(it.BUY_BACK_PRICE),
+        source: 'EastMoney',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare: bond_zh_us_rate
+   * China and US bond yield comparison.
+   * Data: https://data.eastmoney.com/
+   */
+  async bondZhUsRate(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_CHINA_US_RATE', columns: 'ALL',
+        pageNumber: '1', pageSize: '250', sortTypes: '-1', sortColumns: 'REPORT_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        date: String(it.REPORT_DATE ?? '').slice(0, 10),
+        cn1Y: safeFloat(it.CHINA_1Y),
+        cn10Y: safeFloat(it.CHINA_10Y),
+        us1Y: safeFloat(it.US_1Y),
+        us10Y: safeFloat(it.US_10Y),
+        spread10Y: safeFloat(it.SPREAD_10Y),
+        source: 'EastMoney',
+      }))
+    } catch { return null }
   }
 }
