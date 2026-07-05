@@ -2460,16 +2460,41 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_sh_buy_back_em / bond_sz_buy_back_em
-   * EastMoney bond buy-back for SH/SZ.
+   * AKShare: bond_sh_buy_back_em
+   * EastMoney Shanghai bond buy-back data.
    * Data: https://data.eastmoney.com/
    */
   async bondShBuyBackEm(): Promise<Record<string, unknown>[] | null> {
-    return this.bondBuyBackHistEm()
+    return this.fetchBondBuyBack('SSE')
   }
 
+  /**
+   * AKShare: bond_sz_buy_back_em
+   * EastMoney Shenzhen bond buy-back data.
+   */
   async bondSzBuyBackEm(): Promise<Record<string, unknown>[] | null> {
-    return this.bondBuyBackHistEm()
+    return this.fetchBondBuyBack('SZSE')
+  }
+
+  private async fetchBondBuyBack(exchange: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_BOND_BUYBACK', columns: 'ALL',
+        filter: exchange ? `(EXCHANGE="${exchange}")` : '',
+        pageNumber: '1', pageSize: '100', sortTypes: '-1', sortColumns: 'TRADE_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        code: String(it.SECURITY_CODE ?? ''),
+        name: String(it.SECURITY_NAME_ABBR ?? ''),
+        date: String(it.TRADE_DATE ?? '').slice(0, 10),
+        buyBackAmount: safeFloat(it.BUY_BACK_AMOUNT),
+        buyBackPrice: safeFloat(it.BUY_BACK_PRICE),
+        exchange, source: 'EastMoney',
+      }))
+    } catch { return null }
   }
 
   /**
@@ -2597,10 +2622,9 @@ export class MiscDataHandler extends MarketHandlerShell {
       const list = (json?.announcements ?? []) as Record<string, unknown>[]
       if (!list?.length) return null
       return list.map(it => ({
-        code: String(it.secCode ?? ''),
-        title: String(it.title ?? ''),
+        code: String(it.secCode ?? ''), title: String(it.title ?? ''),
         date: String(it.noticeDate ?? '').slice(0, 10),
-        source: 'Cninfo',
+        type: 'treasury', source: 'Cninfo',
       }))
     } catch { return null }
   }
@@ -2610,7 +2634,19 @@ export class MiscDataHandler extends MarketHandlerShell {
    * Cninfo corporate bond issuance.
    */
   async bondCorporateIssueCninfo(): Promise<Record<string, unknown>[] | null> {
-    return this.bondTreasureIssueCninfo()
+    try {
+      const json = await httpGet('https://www.cninfo.com.cn/new/hisAnnouncement/query', {
+        pageNum: '1', pageSize: '50', column: 'szse', tabName: 'fulltext',
+        category: 'category_qyzq;', isHLtitle: 'true',
+      }, 15000, { Referer: 'https://www.cninfo.com.cn/' })
+      const list = (json?.announcements ?? []) as Record<string, unknown>[]
+      if (!list?.length) return null
+      return list.map(it => ({
+        code: String(it.secCode ?? ''), title: String(it.title ?? ''),
+        date: String(it.noticeDate ?? '').slice(0, 10),
+        type: 'corporate', source: 'Cninfo',
+      }))
+    } catch { return null }
   }
 
   /**
@@ -2618,7 +2654,19 @@ export class MiscDataHandler extends MarketHandlerShell {
    * Cninfo convertible bond issuance.
    */
   async bondCovIssueCninfo(): Promise<Record<string, unknown>[] | null> {
-    return this.bondTreasureIssueCninfo()
+    try {
+      const json = await httpGet('https://www.cninfo.com.cn/new/hisAnnouncement/query', {
+        pageNum: '1', pageSize: '50', column: 'szse', tabName: 'fulltext',
+        category: 'category_kzz;', isHLtitle: 'true',
+      }, 15000, { Referer: 'https://www.cninfo.com.cn/' })
+      const list = (json?.announcements ?? []) as Record<string, unknown>[]
+      if (!list?.length) return null
+      return list.map(it => ({
+        code: String(it.secCode ?? ''), title: String(it.title ?? ''),
+        date: String(it.noticeDate ?? '').slice(0, 10),
+        type: 'convertible', source: 'Cninfo',
+      }))
+    } catch { return null }
   }
 
   /**
@@ -2626,7 +2674,19 @@ export class MiscDataHandler extends MarketHandlerShell {
    * Cninfo convertible bond stock issuance.
    */
   async bondCovStockIssueCninfo(): Promise<Record<string, unknown>[] | null> {
-    return this.bondTreasureIssueCninfo()
+    try {
+      const json = await httpGet('https://www.cninfo.com.cn/new/hisAnnouncement/query', {
+        pageNum: '1', pageSize: '50', column: 'szse', tabName: 'fulltext',
+        category: 'category_kzz;', isHLtitle: 'true',
+      }, 15000, { Referer: 'https://www.cninfo.com.cn/' })
+      const list = (json?.announcements ?? []) as Record<string, unknown>[]
+      if (!list?.length) return null
+      return list.map(it => ({
+        code: String(it.secCode ?? ''), title: String(it.title ?? ''),
+        date: String(it.noticeDate ?? '').slice(0, 10),
+        type: 'convertible_stock', source: 'Cninfo',
+      }))
+    } catch { return null }
   }
 
   /**
@@ -2634,7 +2694,19 @@ export class MiscDataHandler extends MarketHandlerShell {
    * Cninfo local government bond issuance.
    */
   async bondLocalGovernmentIssueCninfo(): Promise<Record<string, unknown>[] | null> {
-    return this.bondTreasureIssueCninfo()
+    try {
+      const json = await httpGet('https://www.cninfo.com.cn/new/hisAnnouncement/query', {
+        pageNum: '1', pageSize: '50', column: 'szse', tabName: 'fulltext',
+        category: 'category_dfzq;', isHLtitle: 'true',
+      }, 15000, { Referer: 'https://www.cninfo.com.cn/' })
+      const list = (json?.announcements ?? []) as Record<string, unknown>[]
+      if (!list?.length) return null
+      return list.map(it => ({
+        code: String(it.secCode ?? ''), title: String(it.title ?? ''),
+        date: String(it.noticeDate ?? '').slice(0, 10),
+        type: 'local_government', source: 'Cninfo',
+      }))
+    } catch { return null }
   }
 
   // ══ CBond index data ══
@@ -2645,9 +2717,13 @@ export class MiscDataHandler extends MarketHandlerShell {
    * Data: https://www.chinabond.com.cn/
    */
   async bondIndexGeneralCbond(): Promise<Record<string, unknown>[] | null> {
+    return this.fetchCbondIndex('0')
+  }
+
+  private async fetchCbondIndex(indexType: string): Promise<Record<string, unknown>[] | null> {
     try {
       const json = await httpGet('https://yield.chinabond.com.cn/cbweb-pbc-web/pbc/indexQuery', {
-        indexType: '0', locale: 'cn_ZH',
+        indexType, locale: 'cn_ZH',
       }, 15000, { Referer: 'https://www.chinabond.com.cn/' })
       const data = (json?.jsonList ?? []) as Record<string, unknown>[]
       if (!data?.length) return null
@@ -2666,7 +2742,7 @@ export class MiscDataHandler extends MarketHandlerShell {
    * ChinaBond available-for-sale bond index.
    */
   async bondAvailableIndexCbond(): Promise<Record<string, unknown>[] | null> {
-    return this.bondIndexGeneralCbond()
+    return this.fetchCbondIndex('1')
   }
 
   /**
@@ -2674,7 +2750,7 @@ export class MiscDataHandler extends MarketHandlerShell {
    * ChinaBond composite bond index.
    */
   async bondCompositeIndexCbond(): Promise<Record<string, unknown>[] | null> {
-    return this.bondIndexGeneralCbond()
+    return this.fetchCbondIndex('2')
   }
 
   /**
@@ -2682,7 +2758,7 @@ export class MiscDataHandler extends MarketHandlerShell {
    * ChinaBond new composite bond index.
    */
   async bondNewCompositeIndexCbond(): Promise<Record<string, unknown>[] | null> {
-    return this.bondIndexGeneralCbond()
+    return this.fetchCbondIndex('3')
   }
 
   /**
@@ -2690,7 +2766,7 @@ export class MiscDataHandler extends MarketHandlerShell {
    * ChinaBond treasury bond index.
    */
   async bondTreasuryIndexCbond(): Promise<Record<string, unknown>[] | null> {
-    return this.bondIndexGeneralCbond()
+    return this.fetchCbondIndex('4')
   }
 
   // ══ Sina government bond data ══
@@ -2819,11 +2895,36 @@ export class MiscDataHandler extends MarketHandlerShell {
    */
   async articleEpuIndex(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
-      const url = `https://www.policyuncertainty.com/${symbol.toLowerCase()}_epu_data.xlsx`
-      const resp = await fetch(url, { headers: HEADERS, signal: AbortSignal.timeout(15000) })
+      const countryMap: Record<string, string> = {
+        China: 'china', USA: 'us', Japan: 'japan', UK: 'uk', Germany: 'germany',
+        Australia: 'australia', Canada: 'canada', Europe: 'europe', India: 'india',
+        'South Korea': 'south-korea', France: 'france', Italy: 'italy',
+        Russia: 'russia', Spain: 'spain', Brazil: 'brazil',
+      }
+      const slug = countryMap[symbol] ?? symbol.toLowerCase()
+      const csvUrl = `https://www.policyuncertainty.com/${slug}_epu_data.csv`
+      const resp = await fetch(csvUrl, { headers: HEADERS, signal: AbortSignal.timeout(15000) })
       if (!resp.ok) return null
-      // XLSX parsing is complex; return raw data indicator
-      return [{ country: symbol, source: 'PolicyUncertainty', note: 'XLSX data requires parsing' }]
+      const text = await resp.text()
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 2) return null
+      // Parse CSV: year, month, value (first 3 columns)
+      const results: Record<string, unknown>[] = []
+      for (let i = 1; i < lines.length; i++) {
+        const cols = lines[i].split(',').map(c => c.trim())
+        if (cols.length < 3) continue
+        const year = Number(cols[0])
+        const month = Number(cols[1])
+        const value = safeFloat(cols[2])
+        if (!Number.isFinite(year) || !Number.isFinite(month)) continue
+        results.push({
+          country: symbol, year, month,
+          value: value ?? null,
+          date: `${year}-${String(month).padStart(2, '0')}`,
+          source: 'PolicyUncertainty',
+        })
+      }
+      return results.length ? results : null
     } catch { return null }
   }
 
@@ -2893,14 +2994,27 @@ export class MiscDataHandler extends MarketHandlerShell {
    * AKShare: energy_carbon_bj
    * Beijing carbon emission trading data.
    * Data: https://www.bjets.com.cn/article/jyxx/
+   * Parses HTML table: <tr><td>date</td><td>volume</td><td>price</td><td>amount</td></tr>
    */
   async energyCarbonBj(): Promise<Record<string, unknown>[] | null> {
     try {
-      const json = await httpGet('https://www.bjets.com.cn/article/jyxx/listhtml.html', {}, 15000, {
-        Referer: 'https://www.bjets.com.cn/',
+      const resp = await fetch('https://www.bjets.com.cn/article/jyxx/', {
+        headers: HEADERS, signal: AbortSignal.timeout(15000),
       })
-      // Parse HTML response
-      return [{ source: 'BJETS', region: '北京', note: 'HTML parsing required' }]
+      if (!resp.ok) return null
+      const html = await resp.text()
+      // Extract table rows: <tr><td>date</td><td>volume</td><td>price</td><td>amount</td></tr>
+      const rowRegex = /<tr>\s*<td>([\d-]+)<\/td>\s*<td>([\d,.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d,.]+)\([^)]*\)<\/td>\s*<\/tr>/g
+      const results: Record<string, unknown>[] = []
+      let match
+      while ((match = rowRegex.exec(html)) !== null) {
+        results.push({
+          date: match[1], volume: Number(match[2].replace(/,/g, '')),
+          avgPrice: safeFloat(match[3]), amount: safeFloat(match[4].replace(/,/g, '')),
+          region: '北京', source: 'BJETS',
+        })
+      }
+      return results.length ? results : null
     } catch { return null }
   }
 
@@ -2908,13 +3022,29 @@ export class MiscDataHandler extends MarketHandlerShell {
    * AKShare: energy_carbon_sz
    * Shenzhen carbon emission trading data.
    * Data: http://www.cerx.cn/dailynewsCN/index.htm
+   * Note: Site may be unreachable; returns null when down.
    */
   async energyCarbonSz(): Promise<Record<string, unknown>[] | null> {
     try {
-      const json = await httpGet('http://www.cerx.cn/dailynewsCN/index.htm', {}, 15000, {
-        Referer: 'http://www.cerx.cn/',
+      const resp = await fetch('http://www.cerx.cn/dailynewsCN/index.htm', {
+        headers: HEADERS, signal: AbortSignal.timeout(10000),
       })
-      return [{ source: 'CERX', region: '深圳', note: 'HTML parsing required' }]
+      if (!resp.ok) return null
+      const html = await resp.text()
+      // Parse HTML table rows: <td>date</td><td>index</td><td>open</td>...<td>volume</td><td>amount</td>
+      const rowRegex = /<tr>\s*<td>([\d-]+)<\/td>\s*<td>([^<]+)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<\/tr>/g
+      const results: Record<string, unknown>[] = []
+      let match
+      while ((match = rowRegex.exec(html)) !== null) {
+        results.push({
+          date: match[1], index: match[2],
+          open: safeFloat(match[3]), high: safeFloat(match[4]),
+          low: safeFloat(match[5]), avgPrice: safeFloat(match[6]),
+          close: safeFloat(match[7]), volume: Number(match[8]),
+          amount: safeFloat(match[9]), region: '深圳', source: 'CERX',
+        })
+      }
+      return results.length ? results : null
     } catch { return null }
   }
 
@@ -2925,10 +3055,24 @@ export class MiscDataHandler extends MarketHandlerShell {
    */
   async energyCarbonEu(): Promise<Record<string, unknown>[] | null> {
     try {
-      const json = await httpGet('http://www.cerx.cn/dailynewsOuter/index.htm', {}, 15000, {
-        Referer: 'http://www.cerx.cn/',
+      const resp = await fetch('http://www.cerx.cn/dailynewsOuter/index.htm', {
+        headers: HEADERS, signal: AbortSignal.timeout(10000),
       })
-      return [{ source: 'CERX', region: 'EU', note: 'HTML parsing required' }]
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rowRegex = /<tr>\s*<td>([\d-]+)<\/td>\s*<td>([^<]+)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+|-)<\/td>\s*<\/tr>/g
+      const results: Record<string, unknown>[] = []
+      let match
+      while ((match = rowRegex.exec(html)) !== null) {
+        results.push({
+          date: match[1], index: match[2],
+          open: safeFloat(match[3]), high: safeFloat(match[4]),
+          low: safeFloat(match[5]), avgPrice: safeFloat(match[6]),
+          close: safeFloat(match[7]), volume: safeFloat(match[8]),
+          amount: safeFloat(match[9]), region: 'EU', source: 'CERX',
+        })
+      }
+      return results.length ? results : null
     } catch { return null }
   }
 
@@ -2939,10 +3083,22 @@ export class MiscDataHandler extends MarketHandlerShell {
    */
   async energyCarbonHb(): Promise<Record<string, unknown>[] | null> {
     try {
-      const json = await httpGet('http://www.cerx.cn/dailynewsCN/index.htm', {}, 15000, {
-        Referer: 'http://www.cerx.cn/',
+      const resp = await fetch('http://www.cerx.cn/dailynewsCN/index.htm', {
+        headers: HEADERS, signal: AbortSignal.timeout(10000),
       })
-      return [{ source: 'CERX', region: '湖北', note: 'HTML parsing required' }]
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rowRegex = /<tr>\s*<td>([\d-]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<\/tr>/g
+      const results: Record<string, unknown>[] = []
+      let match
+      while ((match = rowRegex.exec(html)) !== null) {
+        results.push({
+          date: match[1], price: safeFloat(match[2]),
+          volume: safeFloat(match[3]), latest: safeFloat(match[4]),
+          change: safeFloat(match[5]), region: '湖北', source: 'CERX',
+        })
+      }
+      return results.length ? results : null
     } catch { return null }
   }
 
@@ -2950,13 +3106,49 @@ export class MiscDataHandler extends MarketHandlerShell {
    * AKShare: energy_carbon_gz
    * Guangzhou carbon emission trading data.
    * Data: http://www.cnemission.com/article/hqxx/
+   * Note: Primary source may be unavailable; falls back to EastMoney datacenter.
    */
   async energyCarbonGz(): Promise<Record<string, unknown>[] | null> {
     try {
-      const json = await httpGet('http://www.cnemission.com/article/hqxx/', {}, 15000, {
-        Referer: 'http://www.cnemission.com/',
+      // Try primary source first
+      const resp = await fetch('http://www.cnemission.com/article/hqxx/', {
+        headers: HEADERS, signal: AbortSignal.timeout(8000),
       })
-      return [{ source: 'CNEMISSION', region: '广州', note: 'HTML parsing required' }]
+      if (resp.ok) {
+        const html = await resp.text()
+        if (html.includes('404') || html.length < 500) throw new Error('unavailable')
+        const rowRegex = /<tr>\s*<td>([\d-]+)<\/td>\s*<td>([^<]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<td>([\d]+)<\/td>\s*<td>([\d.]+)<\/td>\s*<\/tr>/g
+        const results: Record<string, unknown>[] = []
+        let match
+        while ((match = rowRegex.exec(html)) !== null) {
+          results.push({
+            date: match[1], product: match[2],
+            open: safeFloat(match[3]), close: safeFloat(match[4]),
+            high: safeFloat(match[5]), low: safeFloat(match[6]),
+            change: safeFloat(match[7]), changePct: safeFloat(match[8]),
+            volume: Number(match[9]), amount: safeFloat(match[10]),
+            region: '广州', source: 'CNEMISSION',
+          })
+        }
+        if (results.length) return results
+      }
+      // Fallback: EastMoney datacenter for Guangzhou carbon
+      const json = await httpGet('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_CARBON_GZ', columns: 'ALL',
+        pageNumber: '1', pageSize: '500', sortTypes: '-1', sortColumns: 'TRADE_DATE',
+        source: 'WEB', client: 'WEB',
+      }, 15000, { Referer: 'https://data.eastmoney.com/' })
+      const list = (json?.result as { data?: Record<string, unknown>[] })?.data ?? []
+      if (!list.length) return null
+      return list.map(it => ({
+        date: String(it.TRADE_DATE ?? '').slice(0, 10),
+        product: String(it.PRODUCT ?? 'GDEA'),
+        open: safeFloat(it.OPEN_PRICE), close: safeFloat(it.CLOSE_PRICE),
+        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
+        change: safeFloat(it.CHANGE), changePct: safeFloat(it.CHANGE_RATE),
+        volume: Number(it.VOLUME ?? 0), amount: safeFloat(it.AMOUNT),
+        region: '广州', source: 'EastMoney',
+      }))
     } catch { return null }
   }
 
