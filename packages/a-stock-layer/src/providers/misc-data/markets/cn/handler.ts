@@ -6756,4 +6756,38 @@ export class MiscDataHandler extends MarketHandlerShell {
       return results.length ? results : null
     } catch { return null }
   }
+
+  // ── 高频数据 ──
+
+  /**
+   * AKShare 接口: hf_sp_500
+   * 对应 Python: akshare.hf.hf_sp500.hf_sp_500
+   * 数据源: https://github.com/FutureSharks/financial-data
+   * @param year - 年份，如 "2017"，仅支持 2012-2018
+   * @returns 标普500分钟K线数据，含 date/open/high/low/close/price
+   * 数据清洗: CSV 分号分隔解析，日期转 datetime，价格字段转 numeric
+   */
+  async hfSp500(year = '2017'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = `https://github.com/FutureSharks/financial-data/raw/master/pyfinancialdata/data/stocks/histdata/SPXUSD/DAT_ASCII_SPXUSD_M1_${year}.csv`
+      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) })
+      if (!resp.ok) return null
+      const text = await resp.text()
+      const lines = text.trim().split('\n')
+      if (!lines.length) return null
+
+      return lines.map(line => {
+        const parts = line.split(';')
+        if (parts.length < 5) return null
+        return {
+          date: parts[0]?.trim() ?? '',
+          open: safeFloat(parts[1]),
+          high: safeFloat(parts[2]),
+          low: safeFloat(parts[3]),
+          close: safeFloat(parts[4]),
+          price: safeFloat(parts[5]),
+        }
+      }).filter(Boolean) as Record<string, unknown>[]
+    } catch { return null }
+  }
 }
