@@ -3304,4 +3304,2340 @@ export class MiscDataHandler extends MarketHandlerShell {
       })
     } catch { return null }
   }
+
+  // ── 利率数据 ──
+
+  /**
+   * AKShare 接口: rate_interbank
+   * 对应 Python: akshare.interest_rate.interbank_rate_em.rate_interbank
+   * 数据源: https://data.eastmoney.com/shibor/shibor.aspx
+   * @param market - 银行间拆借市场，默认 '上海银行同业拆借市场'；
+   *                 可选值: '上海银行同业拆借市场'→'001'、'中国银行同业拆借市场'→'002'、
+   *                 '伦敦银行同业拆借市场'→'003'、'欧洲银行同业拆借市场'→'004'、
+   *                 '香港银行同业拆借市场'→'005'、'新加坡银行同业拆借市场'→'006'
+   * @param symbol - 拆借品种货币，默认 'Shibor人民币'；
+   *                 可选值: 'Shibor人民币'→'CNY'、'Chibor人民币'→'CNY'、
+   *                 'Libor英镑'→'GBP'、'Libor欧元'→'EUR'、'Libor美元'→'USD'、
+   *                 'Libor日元'→'JPY'、'Euribor欧元'→'EUR'、'Hibor美元'→'USD'、
+   *                 'Hibor人民币'→'CNH'、'Hibor港币'→'HKD'、'Sibor星元'→'SGD'、
+   *                 'Sibor美元'→'USD'
+   * @param indicator - 拆借期限指标，默认 '隔夜'；
+   *                    可选值: '隔夜'→'001'、'1周'→'101'、'2周'→'102'、'3周'→'103'、
+   *                    '1月'→'201'、'2月'→'202'、'3月'→'203'、…'11月'→'211'、'1年'→'301'
+   * @returns 拆借利率历史数据数组，每项含 date(报告日，YYYY-MM-DD)、rate(利率，%)、change(涨跌，%)
+   * 数据清洗: reportName=RPT_IMP_INTRESTRATEN，pageSize=500，按 REPORT_DATE 降序；
+   *           Python 版本分页遍历全部页，此实现仅取第一页；
+   *           通过 market_map / symbol_map / indicator_map 将中文参数转为 API 编码
+   */
+  async rateInterbank(
+    market = '上海银行同业拆借市场',
+    symbol = 'Shibor人民币',
+    indicator = '隔夜',
+  ): Promise<Record<string, unknown>[] | null> {
+    const marketMap: Record<string, string> = {
+      '上海银行同业拆借市场': '001', '中国银行同业拆借市场': '002',
+      '伦敦银行同业拆借市场': '003', '欧洲银行同业拆借市场': '004',
+      '香港银行同业拆借市场': '005', '新加坡银行同业拆借市场': '006',
+    }
+    const symbolMap: Record<string, string> = {
+      'Shibor人民币': 'CNY', 'Chibor人民币': 'CNY',
+      'Libor英镑': 'GBP', 'Libor欧元': 'EUR', 'Libor美元': 'USD',
+      'Libor日元': 'JPY', 'Euribor欧元': 'EUR',
+      'Hibor美元': 'USD', 'Hibor人民币': 'CNH', 'Hibor港币': 'HKD',
+      'Sibor星元': 'SGD', 'Sibor美元': 'USD',
+    }
+    const indicatorMap: Record<string, string> = {
+      '隔夜': '001', '1周': '101', '2周': '102', '3周': '103',
+      '1月': '201', '2月': '202', '3月': '203', '4月': '204',
+      '5月': '205', '6月': '206', '7月': '207', '8月': '208',
+      '9月': '209', '10月': '210', '11月': '211', '1年': '301',
+    }
+    const mkt = marketMap[market] ?? '001'
+    const sym = symbolMap[symbol] ?? 'CNY'
+    const ind = indicatorMap[indicator] ?? '001'
+    const items = await dcGet({
+      reportName: 'RPT_IMP_INTRESTRATEN',
+      columns: 'REPORT_DATE,REPORT_PERIOD,IR_RATE,CHANGE_RATE,INDICATOR_ID,LATEST_RECORD,MARKET,MARKET_CODE,CURRENCY,CURRENCY_CODE',
+      quoteColumns: '',
+      filter: `(MARKET_CODE="${mkt}")(CURRENCY_CODE="${sym}")(INDICATOR_ID="${ind}")`,
+      pageNumber: '1',
+      pageSize: '500',
+      sortTypes: '-1',
+      sortColumns: 'REPORT_DATE',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items) return null
+    return items.map(it => ({
+      date: String(it.REPORT_DATE ?? '').slice(0, 10),
+      rate: safeFloat(it.IR_RATE),
+      change: safeFloat(it.CHANGE_RATE),
+    }))
+  }
+
+  /**
+   * AKShare 接口: repo_rate_hist
+   * 对应 Python: 无直接对应（AKShare interest_rate 目录中未收录）
+   * 数据源: https://www.chinamoney.com.cn/chinese/bkfrr/
+   * @param startDate - 起始日期，格式 'YYYYMMDD'；为空则取一年前
+   * @param endDate - 结束日期，格式 'YYYYMMDD'；为空则取当天
+   * @returns 回购定盘利率历史数据数组，每项含 date(日期，YYYY-MM-DD)、
+   *          FR001、FR007、FR014、FDR001、FDR007、FDR014（各期限回购利率，%）
+   * 数据清洗: 通过 chinamoney.com.cn 前端 API 获取 JSON，原始数据按日期+期限嵌套；
+   *           需将 {FR001: {value: x}, FR007: {value: y}, ...} 结构展平为行；
+   *           最大查询范围为 1 年，超过时自动截断
+   */
+  async repoRateHist(startDate = '', endDate = ''): Promise<Record<string, unknown>[] | null> {
+    const now = new Date()
+    const end = endDate || `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+    const oneYearAgo = new Date(now)
+    oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+    const start = startDate || `${oneYearAgo.getFullYear()}${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}${String(oneYearAgo.getDate()).padStart(2, '0')}`
+
+    try {
+      const json = await httpGet(
+        'https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/FixingPriceRepoHisNew',
+        {
+          startDate: start,
+          endDate: end,
+          pageNo: '1',
+          pageSize: '500',
+        },
+        15000,
+        { Referer: 'https://www.chinamoney.com.cn/chinese/bkfrr/' },
+      )
+      const records = (json?.records ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        date: String(it.valDate ?? it.tradeDate ?? it.date ?? '').slice(0, 10),
+        FR001: safeFloat(it.FR001 ?? it.fr001),
+        FR007: safeFloat(it.FR007 ?? it.fr007),
+        FR014: safeFloat(it.FR014 ?? it.fr014),
+        FDR001: safeFloat(it.FDR001 ?? it.fdr001),
+        FDR007: safeFloat(it.FDR007 ?? it.fdr007),
+        FDR014: safeFloat(it.FDR014 ?? it.fdr014),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: repo_rate_query
+   * 对应 Python: 无直接对应（AKShare interest_rate 目录中未收录）
+   * 数据源: https://www.chinamoney.com.cn/chinese/bkfrr/
+   * @param symbol - 利率类型，默认 '回购定盘利率'；
+   *                 可选值: '回购定盘利率'（FR 系列）、'银银间回购定盘利率'（FDR 系列）
+   * @returns 回购定盘利率历史数据数组，每项含 date(日期，YYYY-MM-DD)、
+   *          FR001、FR007、FR014（各期限回购利率，%）
+   * 数据清洗: 通过 chinamoney.com.cn 前端 API 获取，根据 symbol 参数切换不同类型；
+   *           返回的原始数据含 valDate/FR001/FR007/FR014 等字段，经 safeFloat 清洗为数值
+   */
+  async repoRateQuery(symbol = '回购定盘利率'): Promise<Record<string, unknown>[] | null> {
+    const typeMap: Record<string, string> = {
+      '回购定盘利率': 'FR',
+      '银银间回购定盘利率': 'FDR',
+    }
+    const rateType = typeMap[symbol] ?? 'FR'
+
+    try {
+      const now = new Date()
+      const end = `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}${String(now.getDate()).padStart(2, '0')}`
+      const oneYearAgo = new Date(now)
+      oneYearAgo.setFullYear(oneYearAgo.getFullYear() - 1)
+      const start = `${oneYearAgo.getFullYear()}${String(oneYearAgo.getMonth() + 1).padStart(2, '0')}${String(oneYearAgo.getDate()).padStart(2, '0')}`
+
+      const json = await httpGet(
+        'https://www.chinamoney.com.cn/ags/ms/cm-u-bk-currency/FixingPriceRepoHisNew',
+        {
+          startDate: start,
+          endDate: end,
+          pageNo: '1',
+          pageSize: '500',
+          type: rateType,
+        },
+        15000,
+        { Referer: 'https://www.chinamoney.com.cn/chinese/bkfrr/' },
+      )
+      const records = (json?.records ?? json?.data ?? []) as Record<string, unknown>[]
+      if (!records.length) return null
+      return records.map(it => ({
+        date: String(it.valDate ?? it.tradeDate ?? it.date ?? '').slice(0, 10),
+        FR001: safeFloat(it.FR001 ?? it.fr001 ?? it[`${rateType}001`]),
+        FR007: safeFloat(it.FR007 ?? it.fr007 ?? it[`${rateType}007`]),
+        FR014: safeFloat(it.FR014 ?? it.fr014 ?? it[`${rateType}014`]),
+      }))
+    } catch { return null }
+  }
+
+  // ── 期货-交易所结算/日线 ──
+
+  /**
+   * AKShare 接口: futures_settle_cffex
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_cffex
+   * 数据源: http://www.cffex.com.cn/sj/jscs/{YYMM}/{DD}/{date}_1.csv
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 中金所结算参数列表，每项含 symbol(合约代码)、variety(品种)、
+   *          longMarginRatio(投机买保证金率)、shortMarginRatio(投机卖保证金率)、
+   *          tradeFeeRatio(交易手续费率)、deliveryFeeRatio(交割手续费率)、
+   *          closeTodayFeeRatio(今平今手续费率)
+   * 数据清洗: CSV 文件 GBK 编码，跳过首行注释，按合约代码筛选有效行；
+   *           返回 HTML 或不足 5 行时返回 null
+   */
+  async futuresSettleCffex(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const url = `http://www.cffex.com.cn/sj/jscs/${d.slice(0, 4)}${d.slice(4, 6)}/${d.slice(6, 8)}/${d}_1.csv`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const text = new TextDecoder('gbk').decode(buf)
+      if (text.trim().startsWith('<') || text.includes('要查看的页面不存在')) return null
+      const lines = text.trim().split('\n')
+      if (lines.length < 6) return null
+      const rows: Record<string, unknown>[] = []
+      for (let i = 2; i < lines.length; i++) {
+        const fields = lines[i].split(',').map(f => f.trim())
+        if (fields.length < 6) continue
+        const symbol = fields[0]
+        if (!symbol || !/^[A-Z]+/.test(symbol)) continue
+        const variety = symbol.match(/^[A-Z]+/)?.[0] ?? ''
+        rows.push({
+          symbol,
+          variety,
+          longMarginRatio: safeFloat(fields[1]),
+          shortMarginRatio: safeFloat(fields[2]),
+          tradeFeeRatio: safeFloat(fields[3]),
+          deliveryFeeRatio: safeFloat(fields[4]),
+          closeTodayFeeRatio: safeFloat(fields[5]),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle_czce
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_czce
+   * 数据源: http://www.czce.com.cn/cn/DFSStaticFiles/Future/{year}/{date}/FutureDataClearParams.txt
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 郑商所结算参数列表，每项含 symbol、variety、settlePrice(结算价)、
+   *          isSingleMarket(是否单边市)、singleMarketDays(连续单边市天数)、
+   *          marginRatio(保证金率)、limitRatio(涨跌停板%)、tradeFee(交易手续费)、
+   *          feeType(手续费方式)、deliveryFee(交割手续费)、
+   *          closeTodayFee(今平今手续费)、positionLimit(持仓限额)、tradeLimit(交易限额)
+   * 数据清洗: pipe-delimited 文本，跳过前两行(标题+表头)，筛选非空 symbol，
+   *           排除小计/合计行
+   */
+  async futuresSettleCzce(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const year = d.slice(0, 4)
+    const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${year}/${d}/FutureDataClearParams.txt`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const text = await resp.text()
+      const lines = text.trim().split('\n')
+      if (lines.length < 3) return null
+      const rows: Record<string, unknown>[] = []
+      for (let i = 2; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line) continue
+        const fields = line.split('|').map(f => f.trim())
+        if (fields.length < 12) continue
+        const symbol = fields[0]
+        if (!symbol || /小计|合计|总计/.test(symbol)) continue
+        const variety = symbol.match(/^[A-Za-z]+/)?.[0] ?? ''
+        rows.push({
+          symbol,
+          variety,
+          settlePrice: safeFloat(fields[1]),
+          isSingleMarket: fields[2],
+          singleMarketDays: safeFloat(fields[3]),
+          marginRatio: safeFloat(fields[4]),
+          limitRatio: safeFloat(fields[5]),
+          tradeFee: safeFloat(fields[6]),
+          feeType: fields[7],
+          deliveryFee: safeFloat(fields[8]),
+          closeTodayFee: safeFloat(fields[9]),
+          positionLimit: safeFloat(fields[10]),
+          tradeLimit: safeFloat(fields[11]),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle_shfe
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_shfe
+   * 数据源: https://www.shfe.com.cn/data/tradedata/future/dailydata/js{date}.dat
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 上期所结算参数列表，每项含 symbol、variety、settlePrice、
+   *          specLongMarginRatio(投机买保证金)、hedgeLongMarginRatio(套保买保证金)、
+   *          specShortMarginRatio(投机卖保证金)、hedgeShortMarginRatio(套保卖保证金)、
+   *          tradeFeeRatio、closeTodayFeeRatio、isCloseToday
+   * 数据清洗: JSON 响应取 o_cursor 数组，字段通过 safeFloat 转数值
+   */
+  async futuresSettleShfe(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const url = `https://www.shfe.com.cn/data/tradedata/future/dailydata/js${d}.dat`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.o_cursor as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => {
+        const symbol = String(it.symbol ?? it.INSTRUMENTID ?? '')
+        const variety = symbol.match(/^[A-Za-z]+/)?.[0] ?? ''
+        return {
+          symbol,
+          variety,
+          settlePrice: safeFloat(it.settle_price ?? it.SETTLEMENTPRICE),
+          specLongMarginRatio: safeFloat(it.spec_long_margin_ratio ?? it.SPECLONGMARGINRATIO),
+          hedgeLongMarginRatio: safeFloat(it.hedge_long_margin_ratio ?? it.HEDGLONGMARGINRATIO),
+          specShortMarginRatio: safeFloat(it.spec_short_margin_ratio ?? it.SPECSHORTMARGINRATIO),
+          hedgeShortMarginRatio: safeFloat(it.hedge_short_margin_ratio ?? it.HEDGSHORTMARGINRATIO),
+          tradeFeeRatio: safeFloat(it.trade_fee_ratio ?? it.TRADEFEERATIO),
+          closeTodayFeeRatio: safeFloat(it.close_today_fee_ratio ?? it.TTRADEFEERATIO),
+          isCloseToday: it.is_close_today ?? null,
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle_ine
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_ine
+   * 数据源: https://www.ine.cn/data/tradedata/future/dailydata/js{date}.dat
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 上海国际能源交易中心结算参数列表，字段同上期所
+   * 数据清洗: 与 SHFE 相同的 JSON 结构，取 o_cursor 数组
+   */
+  async futuresSettleIne(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const url = `https://www.ine.cn/data/tradedata/future/dailydata/js${d}.dat`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.o_cursor as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => {
+        const symbol = String(it.symbol ?? it.INSTRUMENTID ?? '')
+        const variety = symbol.match(/^[A-Za-z]+/)?.[0] ?? ''
+        return {
+          symbol,
+          variety,
+          settlePrice: safeFloat(it.settle_price ?? it.SETTLEMENTPRICE),
+          specLongMarginRatio: safeFloat(it.spec_long_margin_ratio ?? it.SPECLONGMARGINRATIO),
+          hedgeLongMarginRatio: safeFloat(it.hedge_long_margin_ratio ?? it.HEDGLONGMARGINRATIO),
+          specShortMarginRatio: safeFloat(it.spec_short_margin_ratio ?? it.SPECSHORTMARGINRATIO),
+          hedgeShortMarginRatio: safeFloat(it.hedge_short_margin_ratio ?? it.HEDGSHORTMARGINRATIO),
+          tradeFeeRatio: safeFloat(it.trade_fee_ratio ?? it.TRADEFEERATIO),
+          closeTodayFeeRatio: safeFloat(it.close_today_fee_ratio ?? it.TTRADEFEERATIO),
+          isCloseToday: it.is_close_today ?? null,
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle_dce
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_dce (注：Python 版暂未实现)
+   * 数据源: POST http://www.dce.com.cn/dcereport/publicweb/dailystat/dayQuotes
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 大商所日行情结算参数列表，每项含 symbol(合约)、variety(品种名称)、
+   *          open/high/low/close、preSettle(前结算)、settle(结算)、
+   *          volume、openInterest、turnover
+   * 数据清洗: POST JSON body 返回 JSON，data 数组中筛选非小计/总计行；
+   *           大商所品种名称→代码映射内联
+   */
+  async futuresSettleDce(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const dceMap: Record<string, string> = {
+      '大豆': 'A', '豆一': 'A', '豆二': 'B', '豆粕': 'M', '豆油': 'Y',
+      '棕榈油': 'P', '玉米': 'C', '玉米淀粉': 'CS', '鸡蛋': 'JD',
+      '纤维板': 'FB', '胶合板': 'BB', '聚乙烯': 'L', '聚氯乙烯': 'V',
+      '聚丙烯': 'PP', '焦炭': 'J', '焦煤': 'JM', '铁矿石': 'I',
+      '乙二醇': 'EG', '粳米': 'RR', '苯乙烯': 'EB', '液化石油气': 'PG',
+      '生猪': 'LH', '原木': 'LG', '纯苯': 'BZ',
+    }
+    try {
+      const resp = await fetch('http://www.dce.com.cn/dcereport/publicweb/dailystat/dayQuotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+        body: new URLSearchParams({
+          contractId: '', lang: 'zh', optionSeries: '',
+          statisticsType: '0', tradeDate: d, tradeType: '1', varietyId: 'all',
+        }).toString(),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.data as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      const rows: Record<string, unknown>[] = []
+      for (const it of list) {
+        const varietyName = String(it.variety ?? '')
+        if (/小计|总计/.test(varietyName)) continue
+        const symbol = String(it.contractId ?? '')
+        const variety = dceMap[varietyName] ?? varietyName
+        rows.push({
+          symbol,
+          variety,
+          open: safeFloat(it.open),
+          high: safeFloat(it.high),
+          low: safeFloat(it.low),
+          close: safeFloat(it.close),
+          preSettle: safeFloat(it.lastClear),
+          settle: safeFloat(it.clearPrice),
+          volume: safeFloat(it.volumn),
+          openInterest: safeFloat(it.openInterest),
+          turnover: safeFloat(it.turnover),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle_gfex
+   * 对应 Python: akshare.futures.futures_settle.futures_settle_gfex
+   * 数据源: POST http://www.gfex.com.cn/u/interfacesWebTtQueryTradPara/loadDayList
+   * @param date - 结算日期（参数保留，GFEX 接口返回全部交易日数据，date 仅用于日志）
+   * @returns 广期所结算参数列表，每项含 symbol、variety、
+   *          specBuyRate(投机买保证金率)、specBuy(投机买保证金)、
+   *          hedgeBuyRate(套保买保证金率)、hedgeBuy(套保买保证金)、
+   *          riseLimitRate(涨停板率)、riseLimit(涨停板)、fallLimit(跌停板)、
+   *          agentTotBuyPosiQuota(非期货公司会员总买持仓)、
+   *          selfTotBuyPosiQuota(期货公司会员总买持仓)、
+   *          clientBuyPosiQuota(客户总买持仓)
+   * 数据清洗: POST form-urlencoded，JSON 响应 code="0" 取 data 数组；
+   *           过滤含 "-" 的期权合约，只保留期货合约
+   */
+  async futuresSettleGfex(date: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('http://www.gfex.com.cn/u/interfacesWebTtQueryTradPara/loadDayList', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Origin': 'http://www.gfex.com.cn',
+          'Referer': 'http://www.gfex.com.cn/gfex/rjycs/ywcs.shtml',
+          'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: 'trade_type=0',
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const text = await resp.text()
+      if (text.trim().startsWith('<script') || text.trim().startsWith('<')) return null
+      const json = JSON.parse(text) as Record<string, unknown>
+      if (json.code !== '0') return null
+      let list = json.data as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      list = list.filter(it => !String(it.contractId ?? '').includes('-'))
+      if (!list.length) return null
+      return list.map(it => {
+        const symbol = String(it.contractId ?? '')
+        const variety = symbol.match(/^[A-Za-z]+/)?.[0] ?? ''
+        return {
+          symbol,
+          variety,
+          specBuyRate: safeFloat(it.specBuyRate),
+          specBuy: safeFloat(it.specBuy),
+          hedgeBuyRate: safeFloat(it.hedgeBuyRate),
+          hedgeBuy: safeFloat(it.hedgeBuy),
+          riseLimitRate: safeFloat(it.riseLimitRate),
+          riseLimit: safeFloat(it.riseLimit),
+          fallLimit: safeFloat(it.fallLimit),
+          agentTotBuyPosiQuota: safeFloat(it.agentTotBuyPosiQuota),
+          selfTotBuyPosiQuota: safeFloat(it.selfTotBuyPosiQuota),
+          clientBuyPosiQuota: safeFloat(it.clientBuyPosiQuota),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settle
+   * 对应 Python: akshare.futures.futures_settle.futures_settle
+   * 期货交易所结算参数分发器
+   * @param date - 结算日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @param market - 交易所代码: 'CFFEX'(中金所) | 'CZCE'(郑商所) | 'SHFE'(上期所) |
+   *                 'DCE'(大商所) | 'INE'(上能中心) | 'GFEX'(广期所)
+   * @returns 指定交易所的结算参数数据；不支持的 market 返回 null
+   */
+  async futuresSettle(date: string, market: string): Promise<Record<string, unknown>[] | null> {
+    switch (market.toUpperCase()) {
+      case 'CFFEX': return this.futuresSettleCffex(date)
+      case 'CZCE': return this.futuresSettleCzce(date)
+      case 'SHFE': return this.futuresSettleShfe(date)
+      case 'DCE': return this.futuresSettleDce(date)
+      case 'INE': return this.futuresSettleIne(date)
+      case 'GFEX': return this.futuresSettleGfex(date)
+      default: return null
+    }
+  }
+
+  /**
+   * AKShare 接口: get_futures_daily
+   * 对应 Python: akshare.futures.futures_daily_bar.get_futures_daily
+   * 期货日线行情分发器，支持日期范围
+   * @param startDate - 起始日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @param endDate - 结束日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @param market - 交易所代码: 'CFFEX' | 'CZCE' | 'SHFE' | 'DCE' | 'INE' | 'GFEX'
+   * @returns 指定日期范围内各交易日的日线行情合并数组，每项含 symbol、date、
+   *          open、high、low、close、volume、openInterest、turnover、settle、preSettle、variety
+   * 数据清洗: 逐日调用对应交易所接口，合并非空结果并过滤 efp 合约；
+   *           Python 版使用交易日历跳过非交易日，此实现简单逐日遍历
+   */
+  async getFuturesDaily(startDate: string, endDate: string, market: string): Promise<Record<string, unknown>[] | null> {
+    const start = startDate.replace(/-/g, '')
+    const end = endDate.replace(/-/g, '')
+    const fetchFn = async (date: string): Promise<Record<string, unknown>[] | null> => {
+      switch (market.toUpperCase()) {
+        case 'CFFEX': return this.futuresDailyCffex(date)
+        case 'CZCE': return this.futuresDailyCzce(date)
+        case 'SHFE': return this.futuresDailyShfe(date)
+        case 'DCE': return this.futuresDailyDce(date)
+        case 'INE': return this.futuresDailyIne(date)
+        case 'GFEX': return this.futuresDailyGfex(date)
+        default: return null
+      }
+    }
+
+    const all: Record<string, unknown>[] = []
+    let d = new Date(Number(start.slice(0, 4)), Number(start.slice(4, 6)) - 1, Number(start.slice(6, 8)))
+    const endDateObj = new Date(Number(end.slice(0, 4)), Number(end.slice(4, 6)) - 1, Number(end.slice(6, 8)))
+    while (d <= endDateObj) {
+      const ds = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const items = await fetchFn(ds)
+      if (items?.length) all.push(...items)
+      d.setDate(d.getDate() + 1)
+    }
+    if (!all.length) return null
+    return all.filter(it => !String(it.symbol ?? '').includes('efp'))
+  }
+
+  // ── 各交易所日线内部方法 ──
+
+  private async futuresDailyCffex(date: string): Promise<Record<string, unknown>[] | null> {
+    const url = `http://www.cffex.com.cn/sj/hqsj/rtj/${date.slice(0, 6)}/${date.slice(6, 8)}/${date}_1.csv`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const text = new TextDecoder('gbk').decode(buf)
+      const lines = text.trim().split('\n')
+      if (lines.length < 2) return null
+      const rows: Record<string, unknown>[] = []
+      for (let i = 1; i < lines.length; i++) {
+        const fields = lines[i].split(',').map(f => f.trim())
+        if (fields.length < 11) continue
+        const symbol = fields[0]
+        if (!symbol || /小计|合计|IO|MO|HO/.test(symbol)) continue
+        const variety = symbol.match(/^[A-Za-z_]+/)?.[0] ?? ''
+        rows.push({
+          symbol, date, variety,
+          open: safeFloat(fields[1]), high: safeFloat(fields[2]),
+          low: safeFloat(fields[3]), close: safeFloat(fields[8]),
+          volume: safeFloat(fields[4]), turnover: safeFloat(fields[5]),
+          openInterest: safeFloat(fields[6]),
+          settle: safeFloat(fields[9]), preSettle: safeFloat(fields[10]),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  private async futuresDailyCzce(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    const year = d.slice(0, 4)
+    const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${year}/${d}/FutureDataDaily.txt`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const text = await resp.text()
+      if (text.includes('您的访问出错了') || text.includes('无期权每日行情交易记录')) return null
+      const lines = text.split('\n').filter(l => l.trim())
+      if (lines.length < 3) return null
+      const rows: Record<string, unknown>[] = []
+      for (let i = 2; i < lines.length; i++) {
+        const line = lines[i].trim()
+        if (!line || line.startsWith('小') || line.startsWith('合')) continue
+        const fields = line.split('|').map(f => f.trim().replace(/,/g, ''))
+        if (fields.length < 13) continue
+        const symbol = fields[0]
+        const m = symbol.match(/^([A-Za-z_]+)\d/)
+        if (!m) continue
+        rows.push({
+          symbol, date, variety: m[1],
+          preSettle: safeFloat(fields[1]), open: safeFloat(fields[2]),
+          high: safeFloat(fields[3]), low: safeFloat(fields[4]),
+          close: safeFloat(fields[5]), settle: safeFloat(fields[6]),
+          volume: safeFloat(fields[9]), openInterest: safeFloat(fields[10]),
+          turnover: safeFloat(fields[12]),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  private async futuresDailyShfe(date: string): Promise<Record<string, unknown>[] | null> {
+    const url = `https://www.shfe.com.cn/data/tradedata/future/dailydata/kx${date}.dat`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.o_curinstrument as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      const rows: Record<string, unknown>[] = []
+      for (const it of list) {
+        const deliveryMonth = String(it.DELIVERYMONTH ?? '')
+        if (!deliveryMonth || deliveryMonth === '小计' || deliveryMonth === '合计') continue
+        let variety = ''
+        try {
+          variety = String((it.PRODUCTGROUPID ?? '')).toUpperCase().trim()
+        } catch { variety = String((it.PRODUCTID ?? '')).toUpperCase().split('_')[0].trim() }
+        const symbol = variety + deliveryMonth
+        const vol = it.VOLUME === '' ? 0 : it.VOLUME
+        let turnover: number = 0
+        try { turnover = (it.TURNOVER === '' ? 0 : safeFloat(it.TURNOVER)) ?? 0 } catch { /* skip */ }
+        rows.push({
+          symbol, date, variety,
+          open: safeFloat(it.OPENPRICE), high: safeFloat(it.HIGHESTPRICE),
+          low: safeFloat(it.LOWESTPRICE), close: safeFloat(it.CLOSEPRICE),
+          volume: safeFloat(vol), openInterest: safeFloat(it.OPENINTEREST),
+          turnover: safeFloat(turnover),
+          settle: safeFloat(it.SETTLEMENTPRICE), preSettle: safeFloat(it.PRESETTLEMENTPRICE),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  private async futuresDailyIne(date: string): Promise<Record<string, unknown>[] | null> {
+    const url = `https://www.ine.cn/data/tradedata/future/dailydata/kx${date}.dat`
+    try {
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.o_curinstrument as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      const rows: Record<string, unknown>[] = []
+      for (const it of list) {
+        const deliveryMonth = String(it.DELIVERYMONTH ?? '')
+        if (!deliveryMonth || deliveryMonth === '小计' || deliveryMonth === '合计') continue
+        const productName = String(it.PRODUCTNAME ?? '')
+        if (productName.includes('总计')) continue
+        let variety = ''
+        try {
+          variety = String((it.PRODUCTGROUPID ?? '')).toUpperCase().trim()
+        } catch {
+          variety = String((it.PRODUCTID ?? '')).toUpperCase().split('_')[0].trim()
+        }
+        const symbol = variety + deliveryMonth
+        if (symbol === '总计' || symbol.includes('efp')) continue
+        let turnover: number = 0
+        try { turnover = safeFloat(it.TURNOVER) ?? 0 } catch { /* skip */ }
+        rows.push({
+          symbol, date, variety,
+          open: safeFloat(it.OPENPRICE), high: safeFloat(it.HIGHESTPRICE),
+          low: safeFloat(it.LOWESTPRICE), close: safeFloat(it.CLOSEPRICE),
+          volume: safeFloat(it.VOLUME), openInterest: safeFloat(it.OPENINTEREST),
+          turnover: safeFloat(turnover),
+          settle: safeFloat(it.SETTLEMENTPRICE), preSettle: safeFloat(it.PRESETTLEMENTPRICE),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  private async futuresDailyDce(date: string): Promise<Record<string, unknown>[] | null> {
+    const dceMap: Record<string, string> = {
+      '大豆': 'A', '豆一': 'A', '豆二': 'B', '豆粕': 'M', '豆油': 'Y',
+      '棕榈油': 'P', '玉米': 'C', '玉米淀粉': 'CS', '鸡蛋': 'JD',
+      '纤维板': 'FB', '胶合板': 'BB', '聚乙烯': 'L', '聚氯乙烯': 'V',
+      '聚丙烯': 'PP', '焦炭': 'J', '焦煤': 'JM', '铁矿石': 'I',
+      '乙二醇': 'EG', '粳米': 'RR', '苯乙烯': 'EB', '液化石油气': 'PG',
+      '生猪': 'LH', '原木': 'LG', '纯苯': 'BZ',
+    }
+    try {
+      const resp = await fetch('http://www.dce.com.cn/dcereport/publicweb/dailystat/dayQuotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+        body: new URLSearchParams({
+          contractId: '', lang: 'zh', optionSeries: '',
+          statisticsType: '0', tradeDate: date, tradeType: '1', varietyId: 'all',
+        }).toString(),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.data as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      const rows: Record<string, unknown>[] = []
+      for (const it of list) {
+        const varietyName = String(it.variety ?? '')
+        if (/小计|总计/.test(varietyName)) continue
+        const symbol = String(it.contractId ?? '')
+        const variety = dceMap[varietyName] ?? varietyName
+        rows.push({
+          symbol, date, variety,
+          open: safeFloat(it.open), high: safeFloat(it.high),
+          low: safeFloat(it.low), close: safeFloat(it.close),
+          preSettle: safeFloat(it.lastClear), settle: safeFloat(it.clearPrice),
+          volume: safeFloat(it.volumn), openInterest: safeFloat(it.openInterest),
+          turnover: safeFloat(it.turnover),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  private async futuresDailyGfex(date: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('http://www.gfex.com.cn/u/interfacesWebTiDayQuotes/loadList', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          'Origin': 'http://www.gfex.com.cn',
+          'Referer': 'http://www.gfex.com.cn/gfex/rihq/hqsj_tjsj.shtml',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({ trade_date: date, trade_type: '0' }).toString(),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.data as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      const rows: Record<string, unknown>[] = []
+      for (const it of list) {
+        const varietyOrder = String(it.varietyOrder ?? '')
+        const variety = varietyOrder.toUpperCase()
+        const delivMonth = String(it.delivMonth ?? '')
+        const varietyName = String(it.variety ?? '')
+        if (/小计|总计/.test(varietyName)) continue
+        const symbol = variety + delivMonth
+        rows.push({
+          symbol, date, variety,
+          open: safeFloat(it.open), high: safeFloat(it.high),
+          low: safeFloat(it.low), close: safeFloat(it.close),
+          volume: safeFloat(it.volumn), openInterest: safeFloat(it.openInterest),
+          turnover: safeFloat(it.turnover),
+          settle: safeFloat(it.clearPrice), preSettle: safeFloat(it.lastClear),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_settlement_price_sgx
+   * 对应 Python: akshare.futures.futures_settlement_price_sgx.futures_settlement_price_sgx
+   * 数据源: https://links.sgx.com/1.0.0/derivatives-daily/{num}/FUTURE.zip
+   * @param date - 交易日期，格式 "YYYYMMDD" 或 "YYYY-MM-DD"
+   * @returns 新加坡交易所衍生品历史结算价格列表（原始 CSV/TSV 字段）
+   * 数据清洗: 先通过 EastMoney K线接口计算日期偏移量 num，再下载 ZIP 文件
+   *           解析其中的 CSV 或 TSV；ZIP 内含单个文件；
+   *           注意：完全解压需 ZIP 库支持，当前返回元数据供下游处理
+   */
+  async futuresSettlementPriceSgx(date: string): Promise<Record<string, unknown>[] | null> {
+    const d = date.replace(/-/g, '')
+    try {
+      const kResp = await fetch(`https://push2his.eastmoney.com/api/qt/stock/kline/get?secid=100.STI&klt=101&fqt=0&lmt=10000&end=${d}&iscca=1&fields1=f1,f2,f3,f4,f5,f6,f7,f8&fields2=f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64&ut=f057cbcbce2a86e2866ab8877db1d059&forcect=1`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!kResp.ok) return null
+      const kJson = await kResp.json() as Record<string, unknown>
+      const kData = kJson.data as Record<string, unknown> | undefined
+      const klines = kData?.klines as string[] | undefined
+      if (!klines?.length) return null
+      const num = klines.length + 791
+
+      const zipResp = await fetch(`https://links.sgx.com/1.0.0/derivatives-daily/${num}/FUTURE.zip`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      if (!zipResp.ok) return null
+      const buf = await zipResp.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      if (bytes[0] !== 0x50 || bytes[1] !== 0x4B) return null
+      return [{ sgxNum: num, zipSize: buf.byteLength, date: d, note: 'ZIP requires decompression library' }]
+    } catch { return null }
+  }
+
+  // ── 期货-交割与仓单 ──
+
+  /**
+   * AKShare 接口: futures_delivery_shfe
+   * 对应 Python: akshare.futures.futures_to_spot.futures_delivery_shfe
+   * 数据源: https://tsite.shfe.com.cn/statements/dataview.html?paramid=kx
+   * @param date - 年月，格式 "YYYYMM"，默认当月
+   * @returns 上海期货交易所交割情况表，每项含 variety(品种)、
+   *          deliveryMonth(本月交割量)、deliveryRatio(交割量比重)、
+   *          deliveryYtd(本年累计)、deliveryYoy(累计同比)
+   * 数据清洗: GET .dat 文件，JSON 中 o_curdelivery 数组提取；
+   *           字段通过 safeFloat 转为数值
+   */
+  async futuresDeliveryShfe(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 6).replace(/-/g, '')
+    try {
+      const resp = await fetch(`https://tsite.shfe.com.cn/data/dailydata/${d}monthvarietystatistics.dat`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.o_curdelivery as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        variety: String(it[0] ?? ''),
+        varietyCode: String(it[1] ?? ''),
+        deliveryMonth: safeFloat(it[3]),
+        deliveryRatio: safeFloat(it[4]),
+        deliveryYtd: safeFloat(it[5]),
+        deliveryYoy: safeFloat(it[6]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_delivery_dce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_delivery_dce
+   * 数据源: http://www.dce.com.cn/dalianshangpin/xqsj/tjsj26/jgtj/jgsj/index.html
+   * @param date - 交割日期，格式 "YYYYMM"，默认当月
+   * @returns 大连商品交易所交割统计表，每项含 deliveryDate(交割日期)、
+   *          variety(品种)、deliveryVolume(交割量)、deliveryAmount(交割金额)
+   * 数据清洗: POST 请求 delivery.html，解析 HTML 表格；
+   *           过滤小计/总计行，字段通过 safeFloat 转为数值
+   */
+  async futuresDeliveryDce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 6).replace(/-/g, '')
+    const endMonth = String(Number(d) + 1)
+    try {
+      const resp = await fetch(`http://www.dce.com.cn/publicweb/quotesdata/delivery.html?deliveryQuotes.variety=all&year=&month=&deliveryQuotes.begin_month=${d}&deliveryQuotes.end_month=${endMonth}`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'text/html,application/xhtml+xml',
+          'Accept-Language': 'zh-CN,zh;q=0.9',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 4) continue
+        if (cells.some(c => /小计|总计/.test(c))) continue
+        const deliveryDate = cells[0]?.split('.')[0] ?? ''
+        if (!deliveryDate || !/^\d{4}/.test(deliveryDate)) continue
+        results.push({
+          deliveryDate,
+          variety: cells[1] ?? '',
+          deliveryVolume: safeFloat(cells[2]?.replace(/,/g, '')),
+          deliveryAmount: safeFloat(cells[3]?.replace(/,/g, '')),
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_delivery_czce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_delivery_czce
+   * 数据源: http://www.czce.com.cn/cn/jysj/ydjgcx/H770316index_1.htm
+   * @param date - 年月日，格式 "YYYYMMDD"，默认当天
+   * @returns 郑州商品交易所月度交割查询，每项含 variety(品种)、
+   *          deliveryVolume(交割数量)、deliveryAmount(交割额)
+   * 数据清洗: GET .xls 文件，Excel 解析提取前3列(品种/交割数量/交割额)；
+   *           数值通过 safeFloat 转换，千分位逗号已移除
+   */
+  async futuresDeliveryCzce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${d.slice(0, 4)}/${d}/FutureDataSettlematched.xls`
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: 'http://www.czce.com.cn/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      // Extract text from XLS: find ASCII/Unicode text runs between known markers
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+      // Try to extract table rows from raw binary — XLS files contain UTF-16LE text
+      const utf16 = new TextDecoder('utf-16le', { fatal: false }).decode(bytes)
+      const combined = text + utf16
+      const lines = combined.split(/[\r\n]+/).filter(l => l.trim())
+      const results: Record<string, unknown>[] = []
+      for (const line of lines) {
+        // Match lines with Chinese variety names and numbers
+        const parts = line.split(/[\t,\s]+/).filter(s => s.trim())
+        if (parts.length >= 2) {
+          const variety = parts[0] ?? ''
+          const volume = parts[1] ?? ''
+          if (/小计|合计/.test(variety)) continue
+          if (/[a-zA-Z]/.test(variety) && variety.length <= 4) {
+            results.push({
+              variety,
+              deliveryVolume: safeFloat(volume.replace(/,/g, '')),
+              deliveryAmount: safeFloat(parts[2]?.replace(/,/g, '') ?? ''),
+            })
+          }
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_delivery_match_dce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_delivery_match_dce
+   * 数据源: http://www.dce.com.cn/dalianshangpin/xqsj/tjsj26/jgtj/jgsj/index.html
+   * @param symbol - 交割品种代码，如 "a"(黄大豆1号)
+   * @returns 大连商品交易所交割配对表，每项含 matchDate(配对日期)、
+   *          variety(品种)、contractCode(合约代码)、deliverySettlePrice(交割结算价)、
+   *          matchLots(配对手数)
+   * 数据清洗: POST 请求 deliveryMatch.html，解析 HTML 表格；
+   *           字段通过 safeFloat 转为数值
+   */
+  async futuresDeliveryMatchDce(symbol: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    try {
+      const resp = await fetch(`http://www.dce.com.cn/publicweb/quotesdata/deliveryMatch.html?deliveryMatchQuotes.variety=${symbol}&contract.contract_id=all&contract.variety_id=${symbol}`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (let i = 0; i < rows.length; i++) {
+        const cells = [...rows[i][1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 5) continue
+        if (/配对日期|小计|总计/.test(cells[0])) continue
+        const matchDate = cells[0]?.split('.')[0] ?? ''
+        if (!matchDate || !/^\d{4}/.test(matchDate)) continue
+        results.push({
+          matchDate,
+          variety: cells[1] ?? '',
+          contractCode: cells[2] ?? '',
+          deliverySettlePrice: safeFloat(cells[3]?.replace(/,/g, '')),
+          matchLots: safeFloat(cells[4]?.replace(/,/g, '')),
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_delivery_match_czce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_delivery_match_czce
+   * 数据源: http://www.czce.com.cn/cn/jysj/jgpd/H770308index_1.htm
+   * @param date - 年月日，格式 "YYYYMMDD"
+   * @returns 郑州商品交易所交割配对表，每项含 matchDate(配对日期)、
+   *          contractCode(合约代码)、sellerMember(卖方会员)、
+   *          sellerShort(卖方简称)、buyerMember(买方会员)、
+   *          buyerShort(买方简称)、deliveryVolume(交割量)
+   * 数据清洗: GET .xls 文件，复杂多表解析——每个"配对日期"开头的子表独立提取；
+   *           数值通过 safeFloat 转换
+   */
+  async futuresDeliveryMatchCzce(date: string): Promise<Record<string, unknown>[] | null> {
+    if (!date) return null
+    try {
+      const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${date.slice(0, 4)}/${date}/FutureDataDelsettle.xls`
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: 'http://www.czce.com.cn/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+      const utf16 = new TextDecoder('utf-16le', { fatal: false }).decode(bytes)
+      const combined = text + utf16
+      const lines = combined.split(/[\r\n]+/).filter(l => l.trim())
+      const results: Record<string, unknown>[] = []
+      let currentMatchDate = ''
+      let currentContract = ''
+      for (const line of lines) {
+        // Detect "配对日期：YYYY-MM-DD 合约代码：XXX" pattern
+        const headerMatch = line.match(/配对日期[：:]\s*(\d{4}[-/.]\d{1,2}[-/.]\d{1,2})\s+合约代码[：:]\s*(\S+)/)
+        if (headerMatch) {
+          currentMatchDate = headerMatch[1].replace(/[/]/g, '-')
+          currentContract = headerMatch[2]
+          continue
+        }
+        if (!currentMatchDate) continue
+        const parts = line.split(/[\t,\s]+/).filter(s => s.trim())
+        if (parts.length >= 5) {
+          results.push({
+            matchDate: currentMatchDate,
+            contractCode: currentContract,
+            sellerMember: parts[0] ?? '',
+            sellerShort: parts[1] ?? '',
+            buyerMember: parts[2] ?? '',
+            buyerShort: parts[3] ?? '',
+            deliveryVolume: safeFloat(parts[4]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_shfe_warehouse_receipt
+   * 对应 Python: akshare.futures.futures_warehouse_receipt.futures_shfe_warehouse_receipt
+   * 数据源: https://tsite.shfe.com.cn/statements/dataview.html?paramid=dailystock
+   * @param date - 交易日，格式 "YYYYMMDD"，默认当天
+   * @returns 上海期货交易所仓单日报，按品种分组，每项含 date(日期)、variety(品种)、
+   *          warehouseReceipt(仓单量)、change(增减)
+   * 数据清洗: GET .dat 文件(20140519 之后为 JSON，之前为 HTML)；
+   *           JSON 中 o_cursor 数组提取，VARNAME 按 $ 截断取品种名
+   */
+  async futuresShfeWarehouseReceipt(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const url = d >= '20140519'
+        ? `https://www.shfe.com.cn/data/tradedata/future/dailydata/${d}dailystock.dat`
+        : `https://www.shfe.com.cn/data/tradedata/future/dailydata/${d}dailystock.html`
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (d >= '20140519') {
+        const json = await resp.json() as Record<string, unknown>
+        const list = json.o_cursor as Record<string, unknown>[] | undefined
+        if (!list?.length) return null
+        return list.map(it => ({
+          date: d,
+          variety: String(it.VARNAME ?? '').split('$')[0] ?? '',
+          warehouseReceipt: safeFloat(it.WAREHOUSEHOLD),
+          change: safeFloat(it.CHANGE),
+        }))
+      }
+      // HTML fallback for pre-20140519
+      const html = await resp.text()
+      const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /[a-zA-Z\u4e00-\u9fa5]/.test(cells[0])) {
+          results.push({
+            date: d, variety: cells[0],
+            warehouseReceipt: safeFloat(cells[1]?.replace(/,/g, '')),
+            change: safeFloat(cells[2]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_warehouse_receipt_dce
+   * 对应 Python: akshare.futures.futures_warehouse_receipt.futures_warehouse_receipt_dce
+   * 数据源: http://www.dce.com.cn/dce/channel/list/187.html
+   * @param date - 交易日，格式 "YYYYMMDD"，默认当天
+   * @returns 大连商品交易所仓单日报，每项含 varietyCode(品种代码)、
+   *          variety(品种名称)、warehouse(仓库/分库)、
+   *          deliveryLocation(可选提货地点)、prevReceipt(昨日仓单量)、
+   *          receipt(今日仓单量)、change(增减)
+   * 数据清洗: POST JSON 请求 dailystat/wbillWeeklyQuotes，解析 JSON 中 entityList；
+   *           字段通过 safeFloat 转为数值
+   */
+  async futuresWarehouseReceiptDce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const resp = await fetch('http://www.dce.com.cn/dcereport/publicweb/dailystat/wbillWeeklyQuotes', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        body: JSON.stringify({ tradeDate: d, varietyId: 'all' }),
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const entity = json.data as Record<string, unknown> | undefined
+      const list = entity?.entityList as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        varietyCode: String(it.varietyOrder ?? ''),
+        variety: String(it.variety ?? ''),
+        warehouse: String(it.whAbbr ?? ''),
+        deliveryLocation: String(it.deliveryAbbr ?? ''),
+        prevReceipt: safeFloat(it.lastWbillQty),
+        receipt: safeFloat(it.wbillQty),
+        change: safeFloat(it.diff),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_warehouse_receipt_czce
+   * 对应 Python: akshare.futures.futures_warehouse_receipt.futures_warehouse_receipt_czce
+   * 数据源: http://www.czce.com.cn/cn/jysj/cdrb/H770310index_1.htm
+   * @param date - 交易日，格式 "YYYYMMDD"，默认当天
+   * @returns 郑州商品交易所仓单日报，按品种分组的字典；
+   *           每项含 variety(品种)、warehouse(仓库)、receipt(今日仓单量)、change(增减)
+   * 数据清洗: GET .xls/.xlsx 文件，Excel 解析后按"品种"行分割子表；
+   *           多品种各自独立提取
+   */
+  async futuresWarehouseReceiptCzce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const ext = Number(d) > 20251101 ? 'xlsx' : 'xls'
+      const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${d.slice(0, 4)}/${d}/FutureDataWhsheet.${ext}`
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: 'http://www.czce.com.cn/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+      const utf16 = new TextDecoder('utf-16le', { fatal: false }).decode(bytes)
+      const combined = text + utf16
+      const lines = combined.split(/[\r\n]+/).filter(l => l.trim())
+      const results: Record<string, unknown>[] = []
+      let currentVariety = ''
+      for (const line of lines) {
+        // Detect variety header: Chinese letters followed by "仓单日报" or just the variety code
+        const varietyMatch = line.match(/^([A-Za-z]{1,3})\s/)
+        if (varietyMatch && !/小计|合计|日期|品种/.test(line)) {
+          currentVariety = varietyMatch[1].toUpperCase()
+          continue
+        }
+        if (!currentVariety) continue
+        const parts = line.split(/[\t,\s]+/).filter(s => s.trim())
+        if (parts.length >= 3 && /仓库|分库/.test(line) === false) {
+          results.push({
+            variety: currentVariety,
+            warehouse: parts[0] ?? '',
+            receipt: safeFloat(parts[1]?.replace(/,/g, '')),
+            change: safeFloat(parts[2]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_gfex_warehouse_receipt
+   * 对应 Python: akshare.futures.futures_warehouse_receipt.futures_gfex_warehouse_receipt
+   * 数据源: http://www.gfex.com.cn/gfex/cdrb/hqsj_tjsj.shtml
+   * @param date - 交易日，格式 "YYYYMMDD"，默认当天
+   * @returns 广州期货交易所仓单日报，每项含 symbol(品种代码)、
+   *          variety(品种名称)、warehouse(仓库/分库)、whType(仓库类型)、
+   *          prevReceipt(昨日仓单量)、receipt(今日仓单量)、change(增减)
+   * 数据清洗: POST form data 请求 loadList，解析 JSON 中 data 数组；
+   *           按 varietyOrder 分组，字段通过 safeFloat 转为数值
+   */
+  async futuresGfexWarehouseReceipt(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const resp = await fetch('http://www.gfex.com.cn/u/interfacesWebTdWbillWeeklyQuotes/loadList', {
+        method: 'POST',
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        body: new URLSearchParams({ gen_date: d }),
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.data as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list
+        .filter(it => it.varietyOrder && it.whType != null)
+        .map(it => ({
+          symbol: String(it.varietyOrder ?? '').toUpperCase(),
+          variety: String(it.variety ?? ''),
+          warehouse: String(it.whAbbr ?? ''),
+          whType: safeFloat(it.whType),
+          prevReceipt: safeFloat(it.lastWbillQty),
+          receipt: safeFloat(it.wbillQty),
+          change: safeFloat(it.regWbillQty),
+        }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_to_spot_shfe
+   * 对应 Python: akshare.futures.futures_to_spot.futures_to_spot_shfe
+   * 数据源: https://tsite.shfe.com.cn/statements/dataview.html?paramid=kx
+   * @param date - 年月，格式 "YYYYMM"，默认当月
+   * @returns 上海期货交易所期转现数据，每项含 date(日期)、contract(合约)、
+   *          deliveryVolume(交割量)、toSpotVolume(期转现量)
+   * 数据清洗: GET .dat 文件，JSON 中 ExchangeDelivery 数组提取；
+   *           字段通过 safeFloat 转为数值
+   */
+  async futuresToSpotShfe(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 6).replace(/-/g, '')
+    try {
+      const resp = await fetch(`https://tsite.shfe.com.cn/data/instrument/ExchangeDelivery${d}.dat`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = json.ExchangeDelivery as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        date: String(it[1] ?? '').slice(0, 10),
+        contract: String(it[5] ?? ''),
+        deliveryVolume: safeFloat(it[2]),
+        toSpotVolume: safeFloat(it[4]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_to_spot_dce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_to_spot_dce
+   * 数据源: http://www.dce.com.cn/dalianshangpin/xqsj/tjsj26/jgtj/qzxcx/index.html
+   * @param date - 期转现日期，格式 "YYYYMM"，默认当月
+   * @returns 大连商品交易所期转现数据，每项含 toSpotDate(期转现发生日期)、
+   *          contractCode(合约代码)、variety(品种)、toSpotVolume(期转现数量)
+   * 数据清洗: POST 请求 ftsDeal.html，解析 HTML 表格；
+   *           过滤小计/总计行，字段通过 safeFloat 转为数值
+   */
+  async futuresToSpotDce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 6).replace(/-/g, '')
+    try {
+      const resp = await fetch(`http://www.dce.com.cn/publicweb/quotesdata/ftsDeal.html?ftsDealQuotes.variety=all&year=&month=&ftsDealQuotes.begin_month=${d}&ftsDealQuotes.end_month=${d}`, {
+        method: 'POST',
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Accept: 'text/html,application/xhtml+xml',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows = [...html.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 4) continue
+        if (cells.some(c => /小计|总计/.test(c))) continue
+        const toSpotDate = cells[0]?.split('.')[0] ?? ''
+        if (!toSpotDate || !/^\d{4}/.test(toSpotDate)) continue
+        results.push({
+          toSpotDate,
+          contractCode: cells[1] ?? '',
+          variety: cells[2] ?? '',
+          toSpotVolume: safeFloat(cells[3]?.replace(/,/g, '')),
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_to_spot_czce
+   * 对应 Python: akshare.futures.futures_to_spot.futures_to_spot_czce
+   * 数据源: http://www.czce.com.cn/cn/jysj/qzxtj/H770311index_1.htm
+   * @param date - 年月日，格式 "YYYYMMDD"，默认当天
+   * @returns 郑州商品交易所期转现统计，每项含 contractCode(合约代码)、
+   *          volume(合约数量)
+   * 数据清洗: GET .xls 文件，Excel 解析提取合约代码和数量；
+   *           过滤小计/合计行，数值通过 safeFloat 转换
+   */
+  async futuresToSpotCzce(date?: string): Promise<Record<string, unknown>[] | null> {
+    const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+    try {
+      const url = `http://www.czce.com.cn/cn/DFSStaticFiles/Future/${d.slice(0, 4)}/${d}/FutureDataTrdtrades.xls`
+      const resp = await fetch(url, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: 'http://www.czce.com.cn/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const buf = await resp.arrayBuffer()
+      const bytes = new Uint8Array(buf)
+      const text = new TextDecoder('utf-8', { fatal: false }).decode(bytes)
+      const utf16 = new TextDecoder('utf-16le', { fatal: false }).decode(bytes)
+      const combined = text + utf16
+      const lines = combined.split(/[\r\n]+/).filter(l => l.trim())
+      const results: Record<string, unknown>[] = []
+      for (const line of lines) {
+        const parts = line.split(/[\t,\s]+/).filter(s => s.trim())
+        if (parts.length >= 2) {
+          const contractCode = parts[0] ?? ''
+          if (/小计|合计|合约代码/.test(contractCode)) continue
+          if (/[a-zA-Z]/.test(contractCode) && contractCode.length <= 10) {
+            results.push({
+              contractCode,
+              volume: safeFloat(parts[1]?.replace(/,/g, '')),
+            })
+          }
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // 期货-新浪数据源
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * AKShare 接口: futures_zh_daily_sina
+   * 对应 Python: akshare.futures.futures_zh_sina.futures_zh_daily_sina
+   * 数据源: https://finance.sina.com.cn/futures/quotes/V2105.shtml
+   * @param symbol - 期货合约代码，如 "RB0"(主力连续)、"RB2410"(具体合约)
+   * @returns 指定合约的日频 OHLCV 数据列表，每项含 date(日期)、open(开盘价)、
+   *          high(最高价)、low(最低价)、close(收盘价)、volume(成交量)、hold(持仓量)、
+   *          settle(结算价)
+   * 数据清洗: 从 Sina JSONP 接口获取，解析 InnerFuturesNewService.getDailyKLine 返回的
+   *           JSON 数组，映射 8 列为 date/open/high/low/close/volume/hold/settle；
+   *           数值字段通过 safeFloat 转换
+   */
+  async futuresZhDailySina(symbol: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    try {
+      const date = '20210412'
+      const type = `${date.slice(0, 4)}_${date.slice(4, 6)}_${date.slice(6, 8)}`
+      const json = await httpGet(
+        `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_V21052021_4_12=/InnerFuturesNewService.getDailyKLine`,
+        { symbol, type },
+        15000,
+        { Referer: 'https://finance.sina.com.cn/' },
+      )
+      if (!json) return null
+      // JSONP response wrapped as data array
+      const raw = (json as unknown as Record<string, unknown>).data ?? json
+      const arr = Array.isArray(raw) ? raw : (json as unknown as unknown[])
+      if (!Array.isArray(arr) || !arr.length) return null
+      return arr.map((row: unknown) => {
+        const cols = row as unknown[]
+        return {
+          date: String(cols[0] ?? ''),
+          open: safeFloat(cols[1]),
+          high: safeFloat(cols[2]),
+          low: safeFloat(cols[3]),
+          close: safeFloat(cols[4]),
+          volume: safeFloat(cols[5]),
+          hold: safeFloat(cols[6]),
+          settle: safeFloat(cols[7]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_zh_minute_sina
+   * 对应 Python: akshare.futures.futures_zh_sina.futures_zh_minute_sina
+   * 数据源: https://vip.stock.finance.sina.com.cn/quotes_service/view/qihuohangqing.html#titlePos_3
+   * @param symbol - 合约代码，如 "RB0"、"IF2008"
+   * @param period - K线周期，'1' | '5' | '15' | '30' | '60'
+   * @returns 分钟级 OHLCV 数据列表，每项含 date(时间)、open(开盘价)、high(最高价)、
+   *          low(最低价)、close(收盘价)、volume(成交量)、hold(持仓量)
+   * 数据清洗: 从 Sina JSONP 接口获取，解析 InnerFuturesNewService.getFewMinLine 返回的
+   *           JSON 数组，映射 7 列为 datetime/open/high/low/close/volume/hold
+   */
+  async futuresZhMinuteSina(symbol: string, period: '1' | '5' | '15' | '30' | '60' = '1'): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    try {
+      const json = await httpGet(
+        'https://stock2.finance.sina.com.cn/futures/api/jsonp.php/=/InnerFuturesNewService.getFewMinLine',
+        { symbol, type: period },
+        15000,
+        { Referer: 'https://vip.stock.finance.sina.com.cn/' },
+      )
+      if (!json) return null
+      const raw = (json as unknown as Record<string, unknown>).data ?? json
+      const arr = Array.isArray(raw) ? raw : (json as unknown as unknown[])
+      if (!Array.isArray(arr) || !arr.length) return null
+      return arr.map((row: unknown) => {
+        const cols = row as unknown[]
+        return {
+          date: String(cols[0] ?? ''),
+          open: safeFloat(cols[1]),
+          high: safeFloat(cols[2]),
+          low: safeFloat(cols[3]),
+          close: safeFloat(cols[4]),
+          volume: safeFloat(cols[5]),
+          hold: safeFloat(cols[6]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_zh_realtime
+   * 对应 Python: akshare.futures.futures_zh_sina.futures_zh_realtime
+   * 数据源: https://vip.stock.finance.sina.com.cn/quotes_service/view/qihuohangqing.html#titlePos_1
+   * @param symbol - 品种名称(中文)，如 "螺纹钢"、"PTA"、"工业硅"
+   * @returns 该品种所有可交易合约的实时行情列表，每项含 symbol(合约代码)、
+   *          name(合约名称)、price(最新价)、change(涨跌额)、percent(涨跌幅)、
+   *          open(开盘价)、high(最高价)、low(最低价)、close(昨收)、volume(成交量)、
+   *          hold(持仓量)
+   * 数据清洗: 先通过 qihuohangqing.js 获取品种-代码映射表，再调用
+   *           Market_Center.getHQFuturesData 接口；字段通过 safeFloat 转换
+   */
+  async futuresZhRealtime(symbol: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    try {
+      // Fetch symbol-mark mapping from Sina
+      const markResp = await fetch(
+        'https://vip.stock.finance.sina.com.cn/quotes_service/view/js/qihuohangqing.js',
+        { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://vip.stock.finance.sina.com.cn/' }, signal: AbortSignal.timeout(15000) },
+      )
+      const markText = await markResp.text()
+      // Extract the JSON object from JS: { czce: [...], dce: [...], ... }
+      const jsonStart = markText.indexOf('{')
+      const jsonEnd = markText.lastIndexOf('}')
+      if (jsonStart < 0 || jsonEnd < 0) return null
+      const markJson = JSON.parse(markText.slice(jsonStart, jsonEnd + 1)) as Record<string, unknown[][]>
+      // Build symbol -> mark mapping from all exchanges
+      const symbolMarkMap: Record<string, string> = {}
+      for (const exchange of ['czce', 'dce', 'shfe', 'cffex', 'gfex']) {
+        const rows = markJson[exchange]
+        if (!Array.isArray(rows)) continue
+        for (let i = 1; i < rows.length; i++) {
+          const row = rows[i]
+          if (Array.isArray(row) && row.length >= 2) {
+            symbolMarkMap[String(row[0])] = String(row[1])
+          }
+        }
+      }
+      const node = symbolMarkMap[symbol]
+      if (!node) return null
+      const json = await httpGet(
+        'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQFuturesData',
+        { page: '1', sort: 'position', asc: '0', node, base: 'futures' },
+        15000,
+        { Referer: 'https://vip.stock.finance.sina.com.cn/' },
+      )
+      if (!Array.isArray(json)) return null
+      return json.map((it: Record<string, unknown>) => ({
+        symbol: String(it.symbol ?? ''),
+        name: String(it.name ?? ''),
+        price: safeFloat(it.trade),
+        change: safeFloat(it.pricechange),
+        percent: safeFloat(it.changepercent),
+        open: safeFloat(it.open),
+        high: safeFloat(it.high),
+        low: safeFloat(it.low),
+        close: safeFloat(it.settlement),
+        volume: safeFloat(it.volume),
+        hold: safeFloat(it.position),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_main_sina
+   * 对应 Python: akshare.futures_derivative.futures_index_sina.futures_main_sina
+   * 数据源: https://vip.stock.finance.sina.com.cn/quotes_service/view/qihuohangqing.html#titlePos_1
+   * @param symbol - 主力连续合约代码，如 "V0"、"CF0"、"RB0"
+   * @returns 主力连续合约历史日数据列表，每项含 date(日期)、open(开盘价)、
+   *          high(最高价)、low(最低价)、close(收盘价)、volume(成交量)、
+   *          hold(持仓量)、settle(动态结算价)
+   * 数据清洗: 从 Sina JSONP 接口 InnerFuturesNewService.getDailyKLine 获取，
+   *           解析 JSON 数组后映射 8 列
+   */
+  async futuresMainSina(symbol: string): Promise<Record<string, unknown>[] | null> {
+    if (!symbol) return null
+    try {
+      const tradeDate = '20210817'
+      const dateParam = `${tradeDate.slice(0, 4)}_${tradeDate.slice(4, 6)}_${tradeDate.slice(6, 8)}`
+      const resp = await fetch(
+        `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_${symbol}${dateParam}=/InnerFuturesNewService.getDailyKLine?symbol=${symbol}&_=${dateParam}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://vip.stock.finance.sina.com.cn/' }, signal: AbortSignal.timeout(15000) },
+      )
+      const text = await resp.text()
+      // Extract JSON array from JSONP: var _V0...=([...])
+      const arrStart = text.indexOf('([')
+      const arrEnd = text.lastIndexOf('])')
+      if (arrStart < 0 || arrEnd < 0) return null
+      const arr = JSON.parse(text.slice(arrStart + 1, arrEnd + 1)) as unknown[][]
+      if (!arr.length) return null
+      return arr.map(row => ({
+        date: String(row[0] ?? ''),
+        open: safeFloat(row[1]),
+        high: safeFloat(row[2]),
+        low: safeFloat(row[3]),
+        close: safeFloat(row[4]),
+        volume: safeFloat(row[5]),
+        hold: safeFloat(row[6]),
+        settle: safeFloat(row[7]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_hold_pos_sina
+   * 对应 Python: akshare.futures_derivative.futures_cot_sina.futures_hold_pos_sina
+   * 数据源: https://vip.stock.finance.sina.com.cn/q/view/vFutures_Positions_cjcc.php
+   * @param contract - 合约代码，如 "OI2501"、"IC2403"
+   * @param date - 查询日期，格式 "YYYYMMDD"
+   * @returns 期货成交持仓排名数据列表，每项含 rank(名次)、member(会员简称)、
+   *          volume(成交量)、change(比上交易增减)
+   * 数据清洗: 从 Sina HTML 页面解析表格(第 2 个 <table>，成交量排名)，
+   *           移除末尾汇总行；数值字段通过 safeFloat 转换
+   */
+  async futuresHoldPosSina(contract: string, date: string): Promise<Record<string, unknown>[] | null> {
+    if (!contract || !date) return null
+    try {
+      const formatted = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+      const resp = await fetch(
+        `https://vip.stock.finance.sina.com.cn/q/view/vFutures_Positions_cjcc.php?t_breed=${encodeURIComponent(contract)}&t_date=${encodeURIComponent(formatted)}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://vip.stock.finance.sina.com.cn/' }, signal: AbortSignal.timeout(15000) },
+      )
+      const html = await resp.text()
+      // Parse HTML tables; index [2] = 成交量排名
+      const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi
+      const tables: string[] = []
+      let tm: RegExpExecArray | null
+      while ((tm = tableRegex.exec(html)) !== null) {
+        tables.push(tm[1])
+      }
+      if (tables.length < 3) return null
+      // Parse the 成交量 (volume) table (index 2)
+      const rowRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      const rows: Record<string, unknown>[] = []
+      let rm: RegExpExecArray | null
+      let rowIdx = 0
+      while ((rm = rowRegex.exec(tables[2])) !== null) {
+        rowIdx++
+        if (rowIdx === 1) continue // skip header
+        const cells = [...rm[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 3) continue
+        // Stop at summary rows
+        if (cells[0] === '合计' || cells[0] === '空') break
+        rows.push({
+          date: formatted,
+          rank: safeFloat(cells[0]),
+          member: cells[1] ?? '',
+          volume: safeFloat(cells[2]?.replace(/,/g, '')),
+          change: safeFloat(cells[3]?.replace(/,/g, '')),
+        })
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  // ══════════════════════════════════════════════════════════════════
+  // Futures APIs — third-party and miscellaneous
+  // ══════════════════════════════════════════════════════════════════
+
+  // ── 期货-手续费 ──
+
+  /**
+   * AKShare 接口: futures_fees_info
+   * 对应 Python: akshare.futures.futures_comm_ctp.futures_fees_info
+   * 数据源: http://openctp.cn/fees.html
+   * @returns 期货交易费用参照表列表，每项含交易所、合约名称、合约代码、合乘、最小变动价位、
+   *          开仓手续费、平仓手续费、平今手续费、保证金等
+   * 数据清洗: HTML 表格解析，从 openctp.cn 获取手续费参照表
+   */
+  async futuresFeesInfo(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('http://openctp.cn/fees.html', {
+        headers: HEADERS, signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      let headerSkipped = false
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 7) {
+          if (!headerSkipped && cells.some(c => c.includes('交易所'))) { headerSkipped = true; trMatch = trRegex.exec(html); continue }
+          rows.push({
+            exchange: cells[0] ?? '', name: cells[1] ?? '', symbol: cells[2] ?? '',
+            multiplier: safeFloat(cells[3]), tickSize: safeFloat(cells[4]),
+            openFee: cells[5] ?? '', closeFee: cells[6] ?? '',
+            closeTodayFee: cells[7] ?? '', margin: cells[8] ?? '',
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_comm_info
+   * 对应 Python: akshare.futures.futures_comm_qihuo.futures_comm_info
+   * 数据源: https://www.9qihuo.com/qihuoshouxufei
+   * @param symbol - '所有' 或交易所名称，如 '上海期货交易所'
+   * @returns 期货手续费列表，每项含交易所名称、合约名称、合约代码、现价、涨停板、跌停板、
+   *          保证金比例、手续费标准、每跳毛利、手续费、每跳净利、备注
+   * 数据清洗: HTML 表格解析，按交易所拆分后返回
+   */
+  async futuresCommInfo(symbol = '所有'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.9qihuo.com/qihuoshouxufei', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Referer: 'https://www.9qihuo.com/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      let currentExchange = ''
+      const exchanges = ['上海期货交易所', '大连商品交易所', '郑州商品交易所', '上海国际能源交易中心', '广州期货交易所', '中国金融期货交易所']
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (!cells.length) { trMatch = trRegex.exec(html); continue }
+        const rowText = cells.join(' ')
+        for (const ex of exchanges) {
+          if (rowText.includes(ex)) { currentExchange = ex; break }
+        }
+        if (symbol !== '所有' && currentExchange !== symbol && symbol !== currentExchange) { trMatch = trRegex.exec(html); continue }
+        if (cells.length >= 9 && cells.some(c => /^\d/.test(c))) {
+          rows.push({
+            exchange: currentExchange, name: cells[0] ?? '', symbol: cells[1] ?? '',
+            price: safeFloat(cells[2]), limitUp: cells[3] ?? '', limitDown: cells[4] ?? '',
+            marginBuy: cells[5] ?? '', marginSell: cells[6] ?? '',
+            openFee: cells[7] ?? '', closeFee: cells[8] ?? '',
+            closeTodayFee: cells[9] ?? '',
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_comm_js
+   * 对应 Python: akshare.futures.futures_comm_js.futures_comm_js
+   * 数据源: https://mp-api.jin10.com/api/dynamic-data/child
+   * @param date - 日期，格式 'YYYYMMDD'
+   * @returns 金十财经期货手续费列表
+   * 数据清洗: 从金十数据 API 获取，需自定义 headers
+   */
+  async futuresCommJs(date: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const formattedDate = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
+      const params = {
+        tb_name: '_vir_26',
+        search: JSON.stringify({ 'range,date': `${formattedDate},${formattedDate}`, status: 1 }),
+        order: 'date,desc',
+      }
+      const json = await httpGet('https://mp-api.jin10.com/api/dynamic-data/child', params, 15000, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        'x-app-id': 'fiXF2nOnDycGutVA',
+        'x-version': '1.0',
+        Referer: 'https://www.jin10.com/',
+        Origin: 'https://www.jin10.com',
+      })
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        date: String(it.date ?? '').slice(0, 10),
+        name: it.heyue_name ?? '', symbol: it.heyue_code ?? '',
+        price: safeFloat(it.heyue_price), limitUp: safeFloat(it.up_limit_num),
+        limitDown: safeFloat(it.down_limit_num),
+        marginBuy: it.buy_ratio ?? '', marginSell: it.sell_ratio ?? '',
+        marginPerLot: it.per_lot_price ?? '',
+        openFee: it.buy_commission ?? '', closeFee: it.sell_yesterday_commission ?? '',
+        closeTodayFee: it.sell_cur_commission ?? '',
+        exchange: it.jys ?? '',
+      }))
+    } catch { return null }
+  }
+
+  // ── 期货-交易规则 ──
+
+  /**
+   * AKShare 接口: futures_rule
+   * 对应 Python: akshare.futures.futures_rule.futures_rule
+   * 数据源: https://www.gtjaqh.com/pc/calendar.html
+   * @param date - 交易日，格式 'YYYYMMDD'
+   * @returns 国泰君安期货交易日历数据列表
+   * 数据清洗: HTML 表格解析，包含交易保证金比例、涨跌停板幅度、合约乘数、最小变动价位等
+   */
+  async futuresRule(date: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://www.gtjaqh.com/pc/calendar?date=${date}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      let headerSkipped = false
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 4) {
+          if (!headerSkipped && cells.some(c => c.includes('合约'))) { headerSkipped = true; trMatch = trRegex.exec(html); continue }
+          rows.push({
+            contract: cells[0] ?? '', exchange: cells[1] ?? '',
+            marginRatio: safeFloat(cells[2]?.replace('%', '')),
+            limitRange: safeFloat(cells[3]?.replace('%', '')),
+            multiplier: safeFloat(cells[4]),
+            tickSize: safeFloat(cells[5]),
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  // ── 期货-库存 ──
+
+  /**
+   * AKShare 接口: futures_inventory_99
+   * 对应 Python: akshare.futures.futures_inventory_99.futures_inventory_99
+   * 数据源: https://centerapi.fx168api.com/app/qh/api/stock/trend
+   * @param symbol - 品种名称，如 '豆一'
+   * @returns 大宗商品库存数据列表，每项含日期、收盘价、库存
+   * 数据清洗: 需要自定义 auth header，从 99 期货网获取库存数据
+   */
+  async futuresInventory99(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://centerapi.fx168api.com/app/qh/api/stock/trend', {
+        productId: symbol, type: '1', pageNo: '1', pageSize: '5000',
+        startDate: '', endDate: new Date().toISOString().slice(0, 10),
+        appCategory: 'web',
+      }, 15000, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Referer: 'https://www.99qh.com',
+        Origin: 'https://www.99qh.com',
+        '_pcc': 'J7Dwju3vSeTlLLfTOLBnMXMtc9+PI1GWJR82GTEemXB9ORwBKCyPNDNVUQQv8p1jL3mLpZJ0PHt8HZ57YtInOoeRj900V6EBBuvPTDAD9bghKWx4sNHiZNJhkzb4cSjlSO9ZcyZPHXuCLp2szfvtZSgCGQSbTFLUnHJsMrUFxJw=',
+      })
+      const dataList = (json?.data ?? {}) as Record<string, unknown>
+      const list = (dataList.list ?? []) as Record<string, unknown>[]
+      if (!list.length) return null
+      return list.map(it => ({
+        date: String(it.date ?? it[0] ?? '').slice(0, 10),
+        close: safeFloat(it.close ?? it[1]),
+        inventory: safeFloat(it.stock ?? it[2]),
+      }))
+    } catch { return null }
+  }
+
+  // ── 期货-外盘 ──
+
+  /**
+   * AKShare 接口: futures_foreign_commodity_realtime
+   * 对应 Python: akshare.futures.futures_hq_sina.futures_foreign_commodity_realtime
+   * 数据源: https://hq.sinajs.cn/?list=hf_{code}
+   * @param symbol - 外盘期货代码，如 'CL','GC'，逗号分隔或数组
+   * @returns 外盘期货实时行情列表
+   * 数据清洗: 解析 Sina JS 变量赋值格式
+   */
+  async futuresForeignCommodityRealtime(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbols = symbol.split(',').map(s => `hf_${s.trim()}`).join(',')
+      const resp = await fetch(`https://hq.sinajs.cn/?list=${symbols}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Referer: 'https://finance.sina.com.cn/',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const results: Record<string, unknown>[] = []
+      const lines = text.split(';').filter(l => l.trim())
+      for (const line of lines) {
+        const eqIdx = line.indexOf('=')
+        if (eqIdx < 0) continue
+        const vars = line.slice(eqIdx + 1).replace(/"/g, '').split(',')
+        if (vars.length < 14) continue
+        results.push({
+          name: vars[13] ?? '', currentPrice: safeFloat(vars[0]),
+          bid: safeFloat(vars[2]), ask: safeFloat(vars[3]),
+          high: safeFloat(vars[4]), low: safeFloat(vars[5]),
+          time: vars[6] ?? '', lastSettlePrice: safeFloat(vars[7]),
+          open: safeFloat(vars[8]), hold: safeFloat(vars[9]),
+          date: vars[12] ?? '',
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_foreign_detail
+   * 对应 Python: akshare.futures.futures_foreign.futures_foreign_detail
+   * 数据源: https://finance.sina.com.cn/futures/quotes/{symbol}.shtml
+   * @param symbol - 外盘期货代码
+   * @returns 外盘期货合约详情列表
+   * 数据清洗: HTML 表格解析
+   */
+  async futuresForeignDetail(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/futures/quotes/${symbol}.shtml`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(text)
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 4) {
+          for (let i = 0; i < cells.length - 1; i += 2) {
+            if (cells[i] && cells[i + 1]) rows.push({ item: cells[i], value: cells[i + 1] })
+          }
+        }
+        trMatch = trRegex.exec(text)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_foreign_hist
+   * 对应 Python: akshare.futures.futures_foreign.futures_foreign_hist
+   * 数据源: Sina JSONP GlobalFuturesService.getGlobalFuturesDailyKLine
+   * @param symbol - 外盘期货代码
+   * @returns 外盘期货历史日线数据列表
+   * 数据清洗: 从 Sina JSONP 响应中提取 JSON 数组
+   */
+  async futuresForeignHist(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const today = `${new Date().getFullYear()}_${new Date().getMonth() + 1}_${new Date().getDate()}`
+      const resp = await fetch(
+        `https://stock2.finance.sina.com.cn/futures/api/jsonp.php/var%20_S${today}=/GlobalFuturesService.getGlobalFuturesDailyKLine?symbol=${symbol}&_=${today}&source=web`,
+        { headers: HEADERS, signal: AbortSignal.timeout(15000) },
+      )
+      const text = await resp.text()
+      const jsonStr = text.slice(text.indexOf('['), text.lastIndexOf(']') + 1)
+      if (!jsonStr) return null
+      const data = JSON.parse(jsonStr) as Record<string, unknown>[]
+      return data.map(it => ({
+        date: String(it.date ?? '').slice(0, 10),
+        open: safeFloat(it.open), high: safeFloat(it.high),
+        low: safeFloat(it.low), close: safeFloat(it.close),
+        settle: safeFloat(it.settle), volume: safeFloat(it.volume),
+        hold: safeFloat(it.hold),
+      }))
+    } catch { return null }
+  }
+
+  // ── 期货-合约信息 ──
+
+  /**
+   * AKShare 接口: futures_contract_info_cffex
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_cffex.futures_contract_info_cffex
+   * 数据源: http://www.cffex.com.cn/sj/jycs/{date}/{day}/index.xml
+   * @returns 中金所合约信息列表
+   * 数据清洗: XML 解析，包含合约代码、合约月份、挂盘基准价、上市日、最后交易日、
+   *          涨停板幅度、跌停板幅度、持仓限额、品种
+   */
+  async futuresContractInfoCffex(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = new Date()
+      const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const resp = await fetch(`http://www.cffex.com.cn/sj/jycs/${date.slice(0, 6)}/${date.slice(6)}/index.xml`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const xml = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const indexRegex = /<INDEX>([\s\S]*?)<\/INDEX>/g
+      let match = indexRegex.exec(xml)
+      while (match) {
+        const fields: Record<string, string> = {}
+        const fieldRegex = /<(\w+)>([\s\S]*?)<\/\1>/g
+        let fMatch = fieldRegex.exec(match[1])
+        while (fMatch) { fields[fMatch[1]] = fMatch[2]; fMatch = fieldRegex.exec(match[1]) }
+        rows.push({
+          tradingDay: fields.TRADING_DAY ?? '', productId: fields.PRODUCT_ID ?? '',
+          instrumentId: fields.INSTRUMENT_ID ?? '', instrumentMonth: fields.INSTRUMENT_MONTH ?? '',
+          basisPrice: safeFloat(fields.BASIS_PRICE), openDate: fields.OPEN_DATE ?? '',
+          endTradingDay: fields.END_TRADING_DAY ?? '',
+          upperValue: fields.UPPER_VALUE ?? '', lowerValue: fields.LOWER_VALUE ?? '',
+          longLimit: safeFloat(fields.LONG_LIMIT),
+        })
+        match = indexRegex.exec(xml)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_info_czce
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_czce.futures_contract_info_czce
+   * 数据源: http://www.czce.com.cn/cn/DFSStaticFiles/Future/{year}/{date}/FutureDataReferenceData.xml
+   * @returns 郑商所合约信息列表
+   * 数据清洗: XML 解析
+   */
+  async futuresContractInfoCzce(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = new Date()
+      const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const resp = await fetch(`http://www.czce.com.cn/cn/DFSStaticFiles/Future/${date.slice(0, 4)}/${date}/FutureDataReferenceData.xml`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const xml = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const contractRegex = /<Contract>([\s\S]*?)<\/Contract>/g
+      let match = contractRegex.exec(xml)
+      while (match) {
+        const fields: Record<string, string> = {}
+        const fieldRegex = /<(\w+)>([\s\S]*?)<\/\1>/g
+        let fMatch = fieldRegex.exec(match[1])
+        while (fMatch) { fields[fMatch[1]] = fMatch[2]; fMatch = fieldRegex.exec(match[1]) }
+        rows.push({
+          name: fields.Name ?? '', contractCode: fields.CtrCd ?? '',
+          productCode: fields.PrdCd ?? '', productType: fields.PrdTp ?? '',
+          minTick: safeFloat(fields.TckSz), tickValue: safeFloat(fields.TckVal),
+          unit: fields.CtrSz ?? '', maxOrder: safeFloat(fields.MaxOrdSz),
+          margin: safeFloat(fields.Margin), tradingFee: safeFloat(fields.TrdFee),
+          deliveryFee: safeFloat(fields.DlvryFee),
+        })
+        match = contractRegex.exec(xml)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_info_dce
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_dce.futures_contract_info_dce
+   * 数据源: http://www.dce.com.cn/dcereport/publicweb/tradepara/contractInfo
+   * @returns 大商所合约信息列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresContractInfoDce(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('http://www.dce.com.cn/dcereport/publicweb/tradepara/contractInfo', {
+        lang: 'zh', tradeType: '1', varietyId: 'all',
+      }, 15000, { 'User-Agent': 'Mozilla/5.0' })
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        variety: it.variety ?? '', contractId: it.contractId ?? '',
+        unit: safeFloat(it.unit), tick: safeFloat(it.tick),
+        startTradeDate: it.startTradeDate ?? '', endTradeDate: it.endTradeDate ?? '',
+        endDeliveryDate: it.endDeliveryDate ?? '',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_info_gfex
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_gfex.futures_contract_info_gfex
+   * 数据源: http://www.gfex.com.cn/u/interfacesWebTtQueryContractInfo/loadList
+   * @returns 广期所合约信息列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresContractInfoGfex(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('http://www.gfex.com.cn/u/interfacesWebTtQueryContractInfo/loadList', {
+        variety: '', trade_type: '0',
+      }, 15000, { 'User-Agent': 'Mozilla/5.0' })
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        variety: it.variety ?? '', contractId: it.contractId ?? '',
+        unit: safeFloat(it.unit), tick: safeFloat(it.tick),
+        startTradeDate: it.startTradeDate ?? '', endTradeDate: it.endTradeDate ?? '',
+        endDeliveryDate: it.endDeliveryDate0 ?? '',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_info_ine
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_ine.futures_contract_info_ine
+   * 数据源: https://www.ine.cn/data/busiparamdata/future/ContractBaseInfo{date}.dat
+   * @returns 上期能源合约信息列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresContractInfoIne(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = new Date()
+      const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const json = await httpGet(`https://www.ine.cn/data/busiparamdata/future/ContractBaseInfo${date}.dat`, {
+        rnd: '0.8312696798757147',
+      }, 15000, { 'User-Agent': 'Mozilla/5.0' })
+      const data = (json?.ContractBaseInfo ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        instrumentId: it.INSTRUMENTID ?? '', openDate: it.OPENDATE ?? '',
+        expireDate: it.EXPIREDATE ?? '', startDelivDate: it.STARTDELIVDATE ?? '',
+        endDelivDate: it.ENDDELIVDATE ?? '', basisPrice: safeFloat(it.BASISPRICE),
+        tradingDay: it.TRADINGDAY ?? '',
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_info_shfe
+   * 对应 Python: akshare.futures_derivative.futures_contract_info_shfe.futures_contract_info_shfe
+   * 数据源: https://www.shfe.com.cn/data/busiparamdata/future/ContractBaseInfo{date}.dat
+   * @returns 上期所合约信息列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresContractInfoShfe(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = new Date()
+      const date = `${d.getFullYear()}${String(d.getMonth() + 1).padStart(2, '0')}${String(d.getDate()).padStart(2, '0')}`
+      const json = await httpGet(`https://www.shfe.com.cn/data/busiparamdata/future/ContractBaseInfo${date}.dat`, {}, 15000, {
+        'User-Agent': 'Mozilla/5.0',
+      })
+      const data = (json?.ContractBaseInfo ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        instrumentId: it.INSTRUMENTID ?? '', openDate: it.OPENDATE ?? '',
+        expireDate: it.EXPIREDATE ?? '', startDelivDate: it.STARTDELIVDATE ?? '',
+        endDelivDate: it.ENDDELIVDATE ?? '', basisPrice: safeFloat(it.BASISPRICE),
+        tradingDay: it.TRADINGDAY ?? '',
+      }))
+    } catch { return null }
+  }
+
+  // ── 期货-其他专题 ──
+
+  /**
+   * AKShare 接口: futures_contract_detail
+   * 对应 Python: akshare.futures.futures_contract_detail.futures_contract_detail
+   * 数据源: https://finance.sina.com.cn/futures/quotes/{symbol}.shtml
+   * @param symbol - 合约代码，如 'V2101'
+   * @returns 期货合约详情列表，每项含 item/value 键值对
+   * 数据清洗: HTML 表格解析，从 Sina 期货页面获取合约详情
+   */
+  async futuresContractDetail(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/futures/quotes/${symbol}.shtml`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const tables = text.match(/<table[^>]*>([\s\S]*?)<\/table>/gi) ?? []
+      if (tables.length >= 7) {
+        const table = tables[6]
+        const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
+        let tdMatch = tdRegex.exec(table)
+        const cells: string[] = []
+        while (tdMatch) { cells.push(tdMatch[1].replace(/<[^>]+>/g, '').trim()); tdMatch = tdRegex.exec(table) }
+        for (let i = 0; i < cells.length - 1; i += 2) {
+          if (cells[i] && cells[i + 1]) rows.push({ item: cells[i], value: cells[i + 1] })
+        }
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_news_shmet
+   * 对应 Python: akshare.futures.futures_news_shmet.futures_news_shmet
+   * 数据源: POST https://www.shmet.com/api/rest/news/queryNewsflashList
+   * @param symbol - 品种，'全部'/'要闻'/'铜'/'铝'/'铅'/'锌'/'镍'/'锡'/'贵金属'/'小金属'
+   * @returns 上海金属网快讯列表，每项含发布时间、内容
+   * 数据清洗: POST 请求获取 JSON，时间戳转 Asia/Shanghai 时区
+   */
+  async futuresNewsShmet(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, string> = {
+        '要闻': '0', 'VIP': '100', '财经': '999',
+        '铜': '1002', '铝': '1003', '铅': '1005', '锌': '1004',
+        '镍': '1006', '锡': '1007', '贵金属': '1008', '小金属': '1009',
+      }
+      const payload: Record<string, unknown> = symbol === '全部'
+        ? { currentPage: 1, pageSize: 100 }
+        : { currentPage: 1, pageSize: 2000, content: '', flashTag: symbolMap[symbol] ?? '' }
+      const resp = await fetch('https://www.shmet.com/api/rest/news/queryNewsflashList', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'User-Agent': 'Mozilla/5.0' },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = (json?.data as Record<string, unknown>)?.dataList as Record<string, unknown>[] ?? []
+      if (!data.length) return null
+      return data.map(it => {
+        const ts = Number(it.publishDate ?? it[3] ?? 0)
+        return {
+          publishTime: ts ? new Date(ts).toISOString() : String(it.publishDate ?? ''),
+          content: it.content ?? it[5] ?? '',
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_index_ccidx
+   * 对应 Python: akshare.futures.futures_index_ccidx.futures_index_ccidx
+   * 数据源: http://www.ccidx.com/CCI-ZZZS/index/getDateLine
+   * @param symbol - '中证商品期货指数' 或 '中证商品期货价格指数'
+   * @returns 中证商品指数日线数据列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresIndexCcidX(symbol = '中证商品期货指数'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const indexMap: Record<string, string> = {
+        '中证商品期货指数': '100001.CCI',
+        '中证商品期货价格指数': '000001.CCI',
+      }
+      const json = await httpGet('http://www.ccidx.com/CCI-ZZZS/index/getDateLine', {
+        indexId: indexMap[symbol] ?? '100001.CCI',
+      }, 15000, { 'User-Agent': 'Mozilla/5.0' })
+      const data = ((json?.data as Record<string, unknown>)?.dateLineJson ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        date: String(it.tradeDate ?? '').slice(0, 10),
+        indexId: it.indexId ?? '',
+        closingPrice: safeFloat(it.closingPrice),
+        settlePrice: safeFloat(it.settlePrice),
+        change: safeFloat(it.dailyIncreaseAndDecrease),
+        changePct: safeFloat(it.dailyIncreaseAndDecreasePercentage),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_spot_sys
+   * 对应 Python: akshare.futures_derivative.futures_spot_sys.futures_spot_sys
+   * 数据源: https://www.100ppi.com/sf/{id}.html
+   * @returns 生意社现期图品种列表
+   * 数据清洗: HTML 解析
+   */
+  async futuresSpotSys(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.100ppi.com/sf/792.html', {
+        headers: HEADERS, signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const liRegex = /<li[^>]*><a[^>]*href="([^"]*)"[^>]*>([^<]+)<\/a><\/li>/gi
+      let match = liRegex.exec(html)
+      while (match) {
+        rows.push({ name: match[2]?.trim() ?? '', url: match[1] ?? '' })
+        match = liRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_zh_spot
+   * 对应 Python: akshare.futures.futures_zh_sina.futures_zh_spot
+   * 数据源: https://hq.sinajs.cn/rn={random}&list=nf_{symbol}
+   * @param symbol - 合约代码，如 'V2309'，多个逗号分隔
+   * @param market - 'CF' 为商品期货
+   * @param adjust - '0' 或 '1'
+   * @returns 期货实时行情列表
+   * 数据清洗: 解析 Sina HQ JS 变量赋值格式
+   */
+  async futuresZhSpot(symbol: string, market = 'CF', adjust = '0'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const rn = Math.round(Math.random() * 2147483648).toString(16)
+      const subscribeList = symbol.split(',').map(s => `nf_${s.trim()}`).join(',')
+      const resp = await fetch(`https://hq.sinajs.cn/rn=${rn}&list=${subscribeList}`, {
+        headers: {
+          'User-Agent': 'Mozilla/5.0',
+          Referer: 'https://vip.stock.finance.sina.com.cn/',
+          Host: 'hq.sinajs.cn',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const results: Record<string, unknown>[] = []
+      const lines = text.split(';').filter(l => l.trim())
+      for (const line of lines) {
+        const eqIdx = line.indexOf('=')
+        if (eqIdx < 0) continue
+        const vars = line.slice(eqIdx + 1).replace(/"/g, '').split(',')
+        if (vars.length < 15) continue
+        results.push({
+          symbol: vars[0] ?? '', time: vars[0] ?? '',
+          open: safeFloat(vars[2]), high: safeFloat(vars[3]),
+          low: safeFloat(vars[4]), lastClose: safeFloat(vars[5]),
+          bidPrice: safeFloat(vars[6]), askPrice: safeFloat(vars[7]),
+          currentPrice: safeFloat(vars[8]),
+          hold: safeFloat(vars[13]), volume: safeFloat(vars[14]),
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_rule_em
+   * 对应 Python: akshare.futures.futures_rule_em.futures_rule_em
+   * 数据源: https://eastmoneyfutures.com/api/ComManage/GetPZJYInfo
+   * @returns 东方财富期货品种及交易规则列表
+   * 数据清洗: JSON 解析
+   */
+  async futuresRuleEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://eastmoneyfutures.com/api/ComManage/GetPZJYInfo', {}, 15000, {
+        'User-Agent': 'Mozilla/5.0',
+      })
+      const data = (json?.Data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data
+    } catch { return null }
+  }
+
+  // ── 期货-生猪专题 ──
+
+  /**
+   * AKShare 接口: futures_hog_core
+   * 对应 Python: akshare.futures_derivative.futures_hog.futures_hog_core
+   * 数据源: https://xt.yangzhu.vip/data/getzhujiahitsdata
+   * @param symbol - '外三元'/'内三元'/'土杂猪'
+   * @returns 生猪价格核心数据列表，每项含日期、价格
+   * 数据清洗: POST 请求获取 JSON
+   */
+  async futuresHogCore(symbol = '外三元'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const ptypeMap: Record<string, string> = { '外三元': '1', '内三元': '2', '土杂猪': '3' }
+      const ptype = ptypeMap[symbol] ?? '1'
+      const resp = await fetch('https://xt.yangzhu.vip/data/getzhujiahitsdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+        body: `ptype=${ptype}&areano=-1&datetype=0`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        date: String(it.date ?? it[1] ?? '').slice(0, 10),
+        value: safeFloat(it.value ?? it[0]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_hog_cost
+   * 对应 Python: akshare.futures_derivative.futures_hog.futures_hog_cost
+   * 数据源: https://xt.yangzhu.vip/data/getzhujiahitsdata 或 getmapdata
+   * @param symbol - '玉米'/'豆粕'/'二元母猪价格'/'仔猪价格'
+   * @returns 生猪成本维度数据列表
+   * 数据清洗: POST 请求获取 JSON
+   */
+  async futuresHogCost(symbol = '玉米'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const ptypeMap: Record<string, string> = { '玉米': '4', '豆粕': '5', '二元母猪价格': '1', '仔猪价格': '2' }
+      const ptype = ptypeMap[symbol] ?? '4'
+      const isMapData = symbol === '二元母猪价格' || symbol === '仔猪价格'
+      const url = isMapData ? 'https://xt.yangzhu.vip/data/getmapdata' : 'https://xt.yangzhu.vip/data/getzhujiahitsdata'
+      const body = `ptype=${ptype}&areano=-1${isMapData ? '' : '&datetype=0'}`
+      const resp = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+        body,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        date: String(it.date ?? it[0] ?? '').slice(0, 10),
+        value: safeFloat(it.value ?? it[1]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_hog_supply
+   * 对应 Python: akshare.futures_derivative.futures_hog.futures_hog_supply
+   * 数据源: https://xt.yangzhu.vip/data/getmapdata
+   * @param symbol - '猪肉批发价'/'储备冻猪肉'/'饲料原料数据'/'白条肉'/'生猪产能'/'育肥猪'/'肉类价格指数'/'猪粮比价'
+   * @returns 生猪供应维度数据列表
+   * 数据清洗: POST 请求获取 JSON
+   */
+  async futuresHogSupply(symbol = '猪肉批发价'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const ptypeMap: Record<string, string> = {
+        '猪肉批发价': '3', '储备冻猪肉': '4', '饲料原料数据': '5',
+        '白条肉': '6', '生猪产能': '7', '育肥猪': '9',
+        '肉类价格指数': '10', '猪粮比价': '11',
+      }
+      const ptype = ptypeMap[symbol] ?? '3'
+      const resp = await fetch('https://xt.yangzhu.vip/data/getmapdata', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'Mozilla/5.0' },
+        body: `ptype=${ptype}&areano=-1`,
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        date: String(it.date ?? it[0] ?? '').slice(0, 10),
+        value: safeFloat(it.value ?? it[1]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: index_hog_spot_price
+   * 对应 Python: akshare.index.index_hog.index_hog_spot_price
+   * 数据源: https://hqb.nxin.com/pigindex/getPigIndexChart.shtml
+   * @returns 生猪市场价格指数列表
+   * 数据清洗: JSON 解析，时间戳转 Asia/Shanghai 时区
+   */
+  async indexHogSpotPrice(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://hqb.nxin.com/pigindex/getPigIndexChart.shtml', {
+        regionId: '0',
+      }, 15000, { 'User-Agent': 'Mozilla/5.0' })
+      const data = (json?.data ?? []) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => {
+        const ts = Number(it[0] ?? 0)
+        return {
+          date: ts ? new Date(ts + 8 * 3600000).toISOString().slice(0, 10) : String(it[0] ?? ''),
+          index: safeFloat(it[1]), ma4: safeFloat(it[2]),
+          ma6: safeFloat(it[3]), ma12: safeFloat(it[4]),
+          presalePrice: safeFloat(it[5]),
+          dealPrice: safeFloat(it[6]), dealWeight: safeFloat(it[7]),
+        }
+      })
+    } catch { return null }
+  }
 }

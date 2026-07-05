@@ -195,6 +195,14 @@ const GLOBAL_MAP: Record<string, Jin10Indicator> = {
   CH_GDP_YEARLY: { country: 'CH', reportType: 'dc_swiss_gdp_yoy', name: 'Switzerland GDP YoY', unit: '%' },
   CH_BANK_RATE: { country: 'CH', reportType: 'dc_swiss_interest_rate', name: 'SNB Interest Rate Decision', unit: '%' },
 
+  // Interest Rates
+  EU_INTERN_RATE: { country: 'EU', reportType: 'dc_euro_interest_rate', name: 'ECB Interest Rate Decision', unit: '%' },
+  NZ_INTERN_RATE: { country: 'NZ', reportType: 'dc_newzealand_interest_rate', name: 'RBNZ Interest Rate Decision', unit: '%' },
+  CN_INTERN_RATE: { country: 'CN', reportType: 'dc_china_interest_rate', name: 'PBOC Interest Rate Decision', unit: '%' },
+  RU_INTERN_RATE: { country: 'RU', reportType: 'dc_russia_interest_rate', name: 'CBR Interest Rate Decision', unit: '%' },
+  IN_INTERN_RATE: { country: 'IN', reportType: 'dc_india_interest_rate', name: 'RBI Interest Rate Decision', unit: '%' },
+  BR_INTERN_RATE: { country: 'BR', reportType: 'dc_brazil_interest_rate', name: 'COPOM Interest Rate Decision', unit: '%' },
+
   // Australia
   AU_RETAIL: { country: 'AU', reportType: 'dc_australia_retail_sales_mom', name: 'Australia Retail Sales MoM', unit: '%' },
   AU_TRADE_BALANCE: { country: 'AU', reportType: 'dc_australia_trade_balance', name: 'Australia Trade Balance', unit: '10B AUD' },
@@ -219,11 +227,12 @@ const GLOBAL_MAP: Record<string, Jin10Indicator> = {
 
 const GLOBAL_DEFAULTS = [
   'US_GDP', 'US_CPI', 'US_PPI', 'US_NON_FARM', 'US_UNEMPLOYMENT', 'US_FED_RATE',
-  'EU_GDP', 'EU_CPI', 'EU_PMI', 'EU_UNEMPLOYMENT',
+  'EU_GDP', 'EU_CPI', 'EU_PMI', 'EU_UNEMPLOYMENT', 'EU_INTERN_RATE',
   'JP_CPI', 'JP_UNEMPLOYMENT', 'JP_BANK_RATE',
   'UK_GDP_YEARLY', 'UK_CPI_YEARLY', 'UK_UNEMPLOYMENT', 'UK_BANK_RATE',
   'AU_CPI_YEARLY', 'AU_UNEMPLOYMENT', 'AU_BANK_RATE',
   'CA_CPI_YEARLY', 'CA_UNEMPLOYMENT', 'CA_BANK_RATE',
+  'CN_INTERN_RATE',
 ]
 
 export class StatsGovMarketHandler extends MarketHandlerShell {

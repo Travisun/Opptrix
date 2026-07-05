@@ -3453,8 +3453,404 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
         signal: AbortSignal.timeout(30000),
       })
       if (!resp.ok) return null
-      // XLS content — no native XLS parser available. Return null.
       return null
+    } catch { return null }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // FUTURES APIS — verified against .akshare-ref/akshare/futures/
+  // ═══════════════════════════════════════════════════════════════
+
+  /**
+   * AKShare 接口: futures_hist_em
+   * 对应 Python: akshare.futures.futures_hist_em.futures_hist_em (line 91)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param symbol - 期货品种名称，如 '热卷主连'、'焦煤2506'
+   * @param period - 周期，'daily'/'weekly'/'monthly'，默认 'daily'
+   * @param startDate - 开始日期，格式 'YYYYMMDD'，默认 '19900101'
+   * @param endDate - 结束日期，格式 'YYYYMMDD'，默认 '20500101'
+   * @returns 期货历史行情数组，包含 date, open, high, low, close, changeAmt, changePct, volume, amount, openInterest
+   * 数据清洗: 通过 futsse-static.eastmoney.com/redis 获取交易所品种映射表，解析 secid 后调用 kline API
+   */
+  p.futuresHistEm = async function futuresHistEm(symbol: string, period = 'daily', startDate = '19900101', endDate = '20500101'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const periodMap: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
+      // Step 1: fetch exchange-symbol mapping
+      const rootResp = await fetch('https://futsse-static.eastmoney.com/redis?msgid=gnweb', {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const rootJson = await rootResp.json() as Record<string, unknown>[]
+      const cContractMkt: Record<string, string> = {}
+      const cContractToCode: Record<string, string> = {}
+      const eSymbolMkt: Record<string, string> = {}
+      const cSymbolMkt: Record<string, string> = {}
+      for (const item of rootJson) {
+        const mktid = String(item.mktid ?? '')
+        const innerResp = await fetch(`https://futsse-static.eastmoney.com/redis?msgid=${mktid}`, {
+          headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+        })
+        const innerJson = await innerResp.json() as Record<string, unknown>[]
+        let num = 1
+        while (num <= innerJson.length) {
+          const listResp = await fetch(`https://futsse-static.eastmoney.com/redis?msgid=${mktid}_${num}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+          })
+          const listJson = await listResp.json() as Record<string, unknown>[]
+          for (const entry of listJson) {
+            const name = String(entry.name ?? '')
+            const code = String(entry.code ?? '')
+            const vcode = String(entry.vcode ?? '')
+            const vname = String(entry.vname ?? '')
+            cContractMkt[name] = mktid
+            cContractToCode[name] = code
+            eSymbolMkt[vcode] = mktid
+            cSymbolMkt[vname] = mktid
+          }
+          num++
+        }
+      }
+      // Step 2: resolve secid
+      let secId = ''
+      if (cContractMkt[symbol] && cContractToCode[symbol]) {
+        secId = `${cContractMkt[symbol]}.${cContractToCode[symbol]}`
+      } else {
+        const chars = symbol.match(/[\u4e00-\u9fa5a-zA-Z]+/)
+        const nums = symbol.match(/\d+/)
+        const symbolChar = chars?.[0] ?? ''
+        const numberStr = nums?.[0] ?? ''
+        if (/^[\u4e00-\u9fa5]+$/.test(symbolChar)) {
+          secId = `${cSymbolMkt[symbolChar] ?? ''}.${symbol}`
+        } else {
+          secId = `${eSymbolMkt[symbolChar] ?? ''}.${symbol}`
+        }
+      }
+      // Step 3: fetch kline
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: secId,
+        klt: periodMap[period] ?? '101',
+        fqt: '1', lmt: '10000', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: '7eea3edcaed734bea9cbfc24409ed989', forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      // filter by date range
+      const filtered = klines.filter(line => {
+        const d = line.split(',')[0] ?? ''
+        return d >= startDate && d <= endDate
+      })
+      return filtered.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', open: safeFloat(p[1]), high: safeFloat(p[3]),
+          low: safeFloat(p[4]), close: safeFloat(p[2]),
+          changeAmt: safeFloat(p[9]), changePct: safeFloat(p[8]),
+          volume: safeFloat(p[5]), amount: safeFloat(p[6]), openInterest: safeFloat(p[12]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_global_hist_em
+   * 对应 Python: akshare.futures.futures_hf_em.futures_global_hist_em (line 171)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param symbol - 全球期货品种代码，如 'HG00Y'、'CL00Y'
+   * @returns 全球期货历史行情数组，包含 date, code, name, open, close, high, low, volume, changePct, openInterest, dailyChange
+   * 数据清洗: 通过 __futures_global_hist_market_code 映射基础品种到市场 ID
+   */
+  p.futuresGlobalHistEm = async function futuresGlobalHistEm(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      // Extract base symbol (remove trailing digits)
+      let baseSymbol = ''
+      for (let i = 0; i < symbol.length; i++) {
+        if (symbol[i] >= '0' && symbol[i] <= '9') break
+        baseSymbol += symbol[i]
+      }
+      if (!baseSymbol) baseSymbol = symbol
+      // Market code mapping (mirrors __futures_global_hist_market_code)
+      const marketMap: Record<string, number> = {
+        HG: 101, GC: 101, SI: 101, QI: 101, QO: 101, MGC: 101, LTH: 101,
+        CL: 102, NG: 102, RB: 102, HO: 102, PA: 102, PL: 102, QM: 102,
+        ZW: 103, ZM: 103, ZS: 103, ZC: 103, XC: 103, XK: 103, XW: 103, YM: 103,
+        TY: 103, US: 103, EH: 103, ZL: 103, ZR: 103, ZO: 103, FV: 103,
+        TU: 103, UL: 103, NQ: 103, ES: 103,
+        TF: 104, RT: 104, CN: 104,
+        SB: 108, CT: 108, SF: 108,
+        LCPT: 109, LZNT: 109, LALT: 109, LTNT: 109, LLDT: 109, LNKT: 109,
+        MPM: 110, M: 112, B: 112, G: 112,
+      }
+      let marketCode = marketMap[baseSymbol] ?? 101
+      if (baseSymbol.startsWith('J')) marketCode = 111
+
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: `${marketCode}.${symbol}`,
+        klt: '101', fqt: '1', lmt: '6600', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: 'f057cbcbce2a86e2866ab8877db1d059', forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      const code = (data?.code as string) ?? symbol
+      const name = (data?.name as string) ?? ''
+      // Fix unsigned 32-bit daily change
+      const unsignedMax = 2 ** 32 - 1
+      const signedMax = 2 ** 31 - 1
+      return klines.map(line => {
+        const p = line.split(',')
+        let dailyChange = safeFloat(p[13])
+        if (dailyChange != null && dailyChange > signedMax) dailyChange = dailyChange - (unsignedMax + 1)
+        return {
+          date: p[0] ?? '', code, name,
+          open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          volume: safeFloat(p[5]), changePct: safeFloat(p[8]),
+          openInterest: safeFloat(p[12]), dailyChange,
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_global_spot_em
+   * 对应 Python: akshare.futures.futures_hf_em.futures_global_spot_em (line 87)
+   * 数据源: https://futsseapi.eastmoney.com/list/COMEX,NYMEX,COBOT,SGX,NYBOT,LME,MDEX,TOCOM,IPE
+   * @returns 全球期货实时行情数组，包含 rank, code, name, price, changeAmt, changePct, open, high, low, prevSettlement, volume, bidVolume, askVolume, openInterest
+   * 数据清洗: 分页获取所有数据，映射字段名（dm→code, p→price, zdf→changePct 等）
+   */
+  p.futuresGlobalSpotEm = async function futuresGlobalSpotEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = 'https://futsseapi.eastmoney.com/list/COMEX,NYMEX,COBOT,SGX,NYBOT,LME,MDEX,TOCOM,IPE'
+      const baseParams = {
+        orderBy: 'dm', sort: 'desc', pageSize: '20', pageIndex: '0',
+        token: '58b2fa8f54638b60b87d69b31969089c',
+        field: 'dm,sc,name,p,zsjd,zde,zdf,f152,o,h,l,zjsj,vol,wp,np,ccl',
+        blockName: 'callback',
+      }
+      const firstResp = await fetch(`${url}?${new URLSearchParams(baseParams)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const firstJson = await firstResp.json() as Record<string, unknown>
+      const totalNum = Number(firstJson.total ?? 0)
+      const totalPages = Math.ceil(totalNum / 20)
+      let allItems: Record<string, unknown>[] = [...(firstJson.list as Record<string, unknown>[] ?? [])]
+      for (let page = 1; page < totalPages; page++) {
+        try {
+          const resp = await fetch(`${url}?${new URLSearchParams({ ...baseParams, pageIndex: String(page) })}`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+          })
+          const json = await resp.json() as Record<string, unknown>
+          allItems = allItems.concat((json.list as Record<string, unknown>[] ?? []))
+        } catch { break }
+      }
+      if (!allItems.length) return null
+      return allItems.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.dm ?? ''), name: String(it.name ?? ''),
+        price: safeFloat(it.p), changeAmt: safeFloat(it.zde), changePct: safeFloat(it.zdf),
+        open: safeFloat(it.o), high: safeFloat(it.h), low: safeFloat(it.l),
+        prevSettlement: safeFloat(it.zjsj), volume: safeFloat(it.vol),
+        bidVolume: safeFloat(it.wp), askVolume: safeFloat(it.np),
+        openInterest: safeFloat(it.ccl),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_inventory_em
+   * 对应 Python: akshare.futures.futures_inventory_em.futures_inventory_em (line 14)
+   * 数据源: https://datacenter-web.eastmoney.com/api/data/v1/get (RPT_FUTU_POSITIONCODE + RPT_FUTU_STOCKDATA)
+   * @param symbol - 品种中文名称，如 'a'（大豆）、'cu'（铜），或中文名
+   * @returns 期货库存数据数组，包含 date, inventory, change；无数据时返回 null
+   * 数据清洗: 两步查询——先通过 RPT_FUTU_POSITIONCODE 获取品种代码映射，再通过 RPT_FUTU_STOCKDATA 获取库存数据
+   */
+  p.futuresInventoryEm = async function futuresInventoryEm(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      // Step 1: fetch symbol→product_id mapping
+      const codeItems = await dcAll(this, 'RPT_FUTU_POSITIONCODE', '(IS_MAINCODE="1")', '500')
+      if (!codeItems.length) return null
+      const nameMap: Record<string, string> = {}
+      const codeMap: Record<string, string> = {}
+      for (const it of codeItems) {
+        const tradeType = String(it.TRADE_TYPE ?? '')
+        const tradeCode = String(it.TRADE_CODE ?? '')
+        nameMap[tradeType] = tradeCode
+        codeMap[tradeCode] = tradeCode
+      }
+      const productId = nameMap[symbol] ?? codeMap[symbol] ?? symbol
+      // Step 2: fetch inventory data
+      const items = await (this as EM).getData('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_FUTU_STOCKDATA',
+        columns: 'SECURITY_CODE,TRADE_DATE,ON_WARRANT_NUM,ADDCHANGE',
+        filter: `(SECURITY_CODE="${productId}")(TRADE_DATE>='2020-10-28')`,
+        pageNumber: '1', pageSize: '500',
+        sortTypes: '-1', sortColumns: 'TRADE_DATE',
+        source: 'WEB', client: 'WEB',
+      })
+      const rows = (items as Record<string, unknown>)?.result as { data?: Record<string, unknown>[] } | undefined
+      if (!rows?.data?.length) return null
+      return rows.data.sort((a, b) => String(a.TRADE_DATE ?? '').localeCompare(String(b.TRADE_DATE ?? ''))).map(it => ({
+        date: String(it.TRADE_DATE ?? '').slice(0, 10),
+        inventory: safeFloat(it.ON_WARRANT_NUM),
+        change: safeFloat(it.ADDCHANGE),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_comex_inventory
+   * 对应 Python: akshare.futures.futures_comex_em.futures_comex_inventory (line 15)
+   * 数据源: https://datacenter-web.eastmoney.com/api/data/v1/get (RPT_FUTUOPT_GOLDSIL)
+   * @param symbol - '黄金' 或 '白银'
+   * @returns COMEX 库存数据数组，包含 date, storageTon, storageOunce；无数据时返回 null
+   * 数据清洗: 分页获取，映射 INDICATOR_ID1 到品种，解析 STORAGE_TON/STORAGE_OUNCE 字段
+   */
+  p.futuresComexInventory = async function futuresComexInventory(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, string> = { '黄金': 'EMI00069026', '白银': 'EMI00069027' }
+      const indicatorId = symbolMap[symbol]
+      if (!indicatorId) return null
+      const items = await (this as EM).getData('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+        reportName: 'RPT_FUTUOPT_GOLDSIL',
+        columns: 'ALL', sortColumns: 'REPORT_DATE', sortTypes: '-1',
+        pageSize: '500', pageNumber: '1',
+        filter: `(INDICATOR_ID1="${indicatorId}")(@STORAGE_TON<>"NULL")`,
+        source: 'WEB', client: 'WEB',
+      })
+      const result = (items as Record<string, unknown>)?.result as { data?: Record<string, unknown>[]; pages?: number } | undefined
+      if (!result?.data?.length) return null
+      let allData = [...result.data]
+      const totalPages = result.pages ?? 1
+      for (let page = 2; page <= totalPages; page++) {
+        try {
+          const pageItems = await (this as EM).getData('https://datacenter-web.eastmoney.com/api/data/v1/get', {
+            reportName: 'RPT_FUTUOPT_GOLDSIL',
+            columns: 'ALL', sortColumns: 'REPORT_DATE', sortTypes: '-1',
+            pageSize: '500', pageNumber: String(page),
+            filter: `(INDICATOR_ID1="${indicatorId}")(@STORAGE_TON<>"NULL")`,
+            source: 'WEB', client: 'WEB',
+          })
+          const pageResult = (pageItems as Record<string, unknown>)?.result as { data?: Record<string, unknown>[] } | undefined
+          if (pageResult?.data) allData = allData.concat(pageResult.data)
+        } catch { break }
+      }
+      return allData.sort((a, b) => String(a.REPORT_DATE ?? '').localeCompare(String(b.REPORT_DATE ?? ''))).map(it => ({
+        date: String(it.REPORT_DATE ?? '').slice(0, 10),
+        storageTon: safeFloat(it.STORAGE_TON),
+        storageOunce: safeFloat(it.STORAGE_OUNCE),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_contract_detail_em
+   * 对应 Python: akshare.futures.futures_contract_detail.futures_contract_detail_em (line 41)
+   * 数据源: https://futsse-static.eastmoney.com/redis?msgid={symbol}_info
+   * @param symbol - 合约代码，如 'v2602F'
+   * @returns 合约详情数组，包含 item/value 键值对；无数据时返回 null
+   * 数据清洗: 先从行情页提取内部 symbol，再通过 redis API 获取合约详情
+   */
+  p.futuresContractDetailEm = async function futuresContractDetailEm(symbol: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      // Step 1: fetch quote page to extract inner symbol
+      const pageResp = await fetch(`https://quote.eastmoney.com/qihuo/${symbol}.html`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const html = await pageResp.text()
+      const hrefMatch = html.match(/class="onet"[\s\S]*?<a[^>]*href="([^"]*?)"/)
+      if (!hrefMatch) return null
+      const href = hrefMatch[1]
+      const innerSymbol = href.split('#').pop()?.replace('futures_', '') ?? ''
+      if (!innerSymbol) return null
+      // Step 2: fetch contract detail
+      const resp = await fetch(`https://futsse-static.eastmoney.com/redis?msgid=${innerSymbol}_info`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const dataJson = await resp.json() as Record<string, string>
+      const columnMap: Record<string, string> = {
+        vname: '交易品种', vcode: '交易代码', jydw: '交易单位', bjdw: '报价单位',
+        market: '上市交易所', zxbddw: '最小变动价格', zdtbfd: '跌涨停板幅度',
+        hyjgyf: '合约交割月份', jysj: '交易时间', zhjyr: '最后交易日',
+        zhjgr: '最后交割日', jgpj: '交割品级', zcjybzj: '最初交易保证金', jgfs: '交割方式',
+      }
+      return Object.entries(dataJson).map(([key, value]) => ({
+        item: columnMap[key] ?? key, value: String(value ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_spot_stock
+   * 对应 Python: akshare.futures.futures_spot_stock_em.futures_spot_stock (line 15)
+   * 数据源: https://data.eastmoney.com/ifdata/xhgp.html (demjson decode)
+   * @returns 现货与股票上下游对应数据数组，包含 commodityName, prices, latestPrice, halfYearChangePct, producers, downstreamUsers；无数据时返回 null
+   * 数据清洗: 解析页面内嵌 pagedata JS 对象，提取 dates 和各板块 list 数据
+   */
+  p.futuresSpotStock = async function futuresSpotStock(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://data.eastmoney.com/ifdata/xhgp.html', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/90.0.4430.212 Safari/537.36',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+      const html = await resp.text()
+      const startMarker = 'pagedata'
+      const endMarker = '/newstatic/js/common/emdataview.js'
+      const startIdx = html.indexOf(startMarker)
+      const endIdx = html.indexOf(endMarker)
+      if (startIdx === -1 || endIdx === -1) return null
+      const rawStr = html.slice(startIdx, endIdx).trim()
+        .replace(/^pagedata=\s*/, '')
+        .replace(/;\s*$/, '')
+        .replace(/<\/script>[\s\S]*$/, '')
+      // Parse the JSON-like object (demjson handles relaxed JSON)
+      const pageData = JSON.parse(rawStr) as Record<string, unknown>
+      const dates = Object.values(pageData.dates as Record<string, string>) as string[]
+      const datas = pageData.datas as Record<string, unknown>[]
+      if (!datas?.length) return null
+      const results: Record<string, unknown>[] = []
+      for (const sectorData of datas) {
+        const sector = sectorData as { list?: Record<string, unknown>[] }
+        if (!sector.list) continue
+        for (const item of sector.list) {
+          const producers = Array.isArray(item.xyyhs) ? item.xyyhs.map((p: Record<string, unknown>) => String(p.name ?? '')).filter(Boolean).join(', ') : '-'
+          const downstream = Array.isArray(item.scss) ? item.scss.map((s: Record<string, unknown>) => String(s.name ?? '')).filter(Boolean).join(', ') : '-'
+          results.push({
+            commodityName: String(item.name ?? ''),
+            dates,
+            latestPrice: safeFloat(item.zxjg),
+            halfYearChangePct: safeFloat(item.jbnzdf),
+            producers, downstreamUsers: downstream,
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: futures_hq_subscribe_exchange_symbol
+   * 对应 Python: akshare.futures.futures_hq_sina.futures_hq_subscribe_exchange_symbol (line 58)
+   * 数据源: 静态映射表（新浪财经外盘期货品种对照表）
+   * @returns 外盘期货品种对照数组，包含 symbol（中文名称）和 code（代码）
+   * 数据清洗: 内存中的静态映射表，无需网络请求
+   */
+  p.futuresHqSubscribeExchangeSymbol = async function futuresHqSubscribeExchangeSymbol(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const dict: Record<string, string> = {
+        '新加坡铁矿石': 'FEF', '马棕油': 'FCPO', '日橡胶': 'RSS3', '美国原糖': 'RS',
+        'CME比特币期货': 'BTC', 'NYBOT-棉花': 'CT', 'LME镍3个月': 'NID', 'LME铅3个月': 'PBD',
+        'LME锡3个月': 'SND', 'LME锌3个月': 'ZSD', 'LME铝3个月': 'AHD', 'LME铜3个月': 'CAD',
+        'CBOT-黄豆': 'S', 'CBOT-小麦': 'W', 'CBOT-玉米': 'C', 'CBOT-黄豆油': 'BO',
+        'CBOT-黄豆粉': 'SM', '日本橡胶': 'TRB', 'COMEX铜': 'HG', 'NYMEX天然气': 'NG',
+        'NYMEX原油': 'CL', 'COMEX白银': 'SI', 'COMEX黄金': 'GC', 'CME-瘦肉猪': 'LHC',
+        '布伦特原油': 'OIL', '伦敦金': 'XAU', '伦敦银': 'XAG', '伦敦铂金': 'XPT',
+        '伦敦钯金': 'XPD', '欧洲碳排放': 'EUA',
+      }
+      return Object.entries(dict).map(([symbol, code]) => ({ symbol, code }))
     } catch { return null }
   }
 }
@@ -3560,5 +3956,13 @@ declare module '../../driver.js' {
     fundIndividualDetailInfoXq(code: string): Promise<Record<string, unknown>[] | null>
     fundIndividualProfitProbabilityXq(code: string): Promise<Record<string, unknown>[] | null>
     fundRatingJa(date: string): Promise<Record<string, unknown>[] | null>
+    futuresHistEm(symbol: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
+    futuresGlobalHistEm(symbol: string): Promise<Record<string, unknown>[] | null>
+    futuresGlobalSpotEm(): Promise<Record<string, unknown>[] | null>
+    futuresInventoryEm(symbol: string): Promise<Record<string, unknown>[] | null>
+    futuresComexInventory(symbol: string): Promise<Record<string, unknown>[] | null>
+    futuresContractDetailEm(symbol: string): Promise<Record<string, unknown>[] | null>
+    futuresSpotStock(): Promise<Record<string, unknown>[] | null>
+    futuresHqSubscribeExchangeSymbol(): Promise<Record<string, unknown>[] | null>
   }
 }
