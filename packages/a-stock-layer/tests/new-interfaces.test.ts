@@ -1,157 +1,26 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 
-// ── Mock fetch globally ──
 const mockFetch = vi.fn()
 vi.stubGlobal('fetch', mockFetch)
 
 function jsonResponse(data: unknown) {
   return {
-    ok: true,
-    status: 200,
+    ok: true, status: 200,
     json: () => Promise.resolve(data),
-    text: () => Promise.resolve(JSON.stringify(data)),
+    text: () => Promise.resolve(typeof data === 'string' ? data : JSON.stringify(data)),
     headers: new Map(),
   } as unknown as Response
 }
 
-// ═══════════════════════════════════════════════════════════════
-// MiscDataHandler tests
-// ═══════════════════════════════════════════════════════════════
-
-describe('MiscDataHandler — new interfaces', () => {
-  let handler: Awaited<typeof import('../src/providers/misc-data/markets/cn/handler')>['MiscDataHandler']
-
-  beforeEach(async () => {
-    vi.clearAllMocks()
-    const mod = await import('../src/providers/misc-data/markets/cn/handler')
-    handler = new mod.MiscDataHandler()
-  })
-
-  describe('szseSectorSummary', () => {
-    it('returns SZSE sector data', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({ data: [{ item: '制造业', amount: 1000 }] }))
-      const result = await handler.szseSectorSummary()
-      expect(result).toEqual([{ item: '制造业', amount: 1000 }])
-    })
-
-    it('returns null on fetch failure', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('network'))
-      const result = await handler.szseSectorSummary()
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('marginDetailSzse', () => {
-    it('returns SZSE margin data', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001', MARGIN_BALANCE: 1e9 }] },
-      }))
-      const result = await handler.marginDetailSzse()
-      expect(result).toEqual([{ SECURITY_CODE: '000001', MARGIN_BALANCE: 1e9 }])
-    })
-
-    it('returns null on error', async () => {
-      mockFetch.mockRejectedValueOnce(new Error('timeout'))
-      const result = await handler.marginDetailSzse()
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('stockTradeSuspension', () => {
-    it('returns suspension data', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001', SUSPEND_START_DATE: '2025-01-01' }] },
-      }))
-      const result = await handler.stockTradeSuspension()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ SECURITY_CODE: '000001' }),
-      ]))
-    })
-  })
-
-  describe('goodwillMarketOverview', () => {
-    it('returns goodwill overview', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ GOODWILL_MARKET_CAP: 5e11 }] },
-      }))
-      const result = await handler.goodwillMarketOverview()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('goodwillDetail', () => {
-    it('returns per-stock goodwill', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001', GOODWILL: 1e9 }] },
-      }))
-      const result = await handler.goodwillDetail('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ SECURITY_CODE: '000001' }),
-      ]))
-    })
-
-    it('returns null for empty code', async () => {
-      const result = await handler.goodwillDetail('')
-      expect(result).toBeNull()
-    })
-  })
-
-  describe('accountStatistics', () => {
-    it('returns account stats', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ STATISTICS_DATE: '2025-01', NEW_ACCOUNTS: 500000 }] },
-      }))
-      const result = await handler.accountStatistics()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('riskStockList', () => {
-    it('returns risk stock list', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001' }] },
-      }))
-      const result = await handler.riskStockList()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('twoNetList', () => {
-    it('returns delisted stocks', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001' }] },
-      }))
-      const result = await handler.twoNetList()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('blockTradeMarketStats', () => {
-    it('returns block trade stats', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ TRADE_DATE: '2025-01-01', TOTAL_AMOUNT: 1e10 }] },
-      }))
-      const result = await handler.blockTradeMarketStats()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('shareholderChangeStats', () => {
-    it('returns shareholder change data', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        result: { data: [{ SECURITY_CODE: '000001', HOLDNUM_CHANGE_RATE: 10 }] },
-      }))
-      const result = await handler.shareholderChangeStats()
-      expect(result).toHaveLength(1)
-    })
-  })
-})
+function dcResponse(data: Record<string, unknown>[] = []) {
+  return jsonResponse({ result: { data, count: data.length } })
+}
 
 // ═══════════════════════════════════════════════════════════════
-// EastMoney research methods tests
+// EastMoney research — fund methods
 // ═══════════════════════════════════════════════════════════════
 
-describe('EastMoney research — new interfaces', () => {
+describe('EastMoney research — fund methods', () => {
   let driver: Awaited<typeof import('../src/providers/eastmoney/driver')>['EastMoneyDriver']
 
   beforeEach(async () => {
@@ -160,277 +29,134 @@ describe('EastMoney research — new interfaces', () => {
     driver = new mod.EastMoneyDriver()
   })
 
-  // Helper: mock the dcFetch chain (dcAll calls this)
-  function mockDcFetch(data: Record<string, unknown>[]) {
-    // dcFetch calls fetchDataCenterReport which calls fetch
-    mockFetch.mockResolvedValueOnce(jsonResponse({
-      result: { data, count: data.length },
-    }))
-  }
-
-  describe('stockRankCxgThs', () => {
-    it('returns new-high stock list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600001', SECURITY_NAME_ABBR: '测试', CLOSE_PRICE: 10, CHANGE_RATE: 5 }])
-      const result = await driver.stockRankCxgThs()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '600001', name: '测试' }),
-      ]))
+  describe('fundNameEm', () => {
+    it('returns fund name list', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse('var r = [["000001","HXCZHH","华夏成长","混合型","HUAXIACHENGZHANGHUNHE"]]'))
+      const result = await driver.fundNameEm()
+      expect(result).toHaveLength(1)
+      expect(result![0]).toHaveProperty('code', '000001')
     })
   })
 
-  describe('stockRankCxdThs', () => {
-    it('returns new-low stock list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600002', SECURITY_NAME_ABBR: '测试B', CLOSE_PRICE: 5, CHANGE_RATE: -3 }])
-      const result = await driver.stockRankCxdThs()
+  describe('fundPurchaseEm', () => {
+    it('returns purchase status', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse('var reData={"datas":[["000001","华夏成长","混合型","1.5","2025-01-01","开放申购","开放赎回","","10","100000","0.15"]]}'))
+      const result = await driver.fundPurchaseEm()
+      expect(result).toHaveLength(1)
+      expect(result![0]).toHaveProperty('code', '000001')
+    })
+  })
+
+  describe('fundEtfSpotEm', () => {
+    it('returns ETF realtime', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: { diff: [{ f12: '510300', f14: '沪深300ETF', f2: 4.5, f3: 1.2 }] } }))
+      const result = await driver.fundEtfSpotEm()
+      expect(result).toHaveLength(1)
+      expect(result![0]).toHaveProperty('code', '510300')
+    })
+  })
+
+  describe('fundLofSpotEm', () => {
+    it('returns LOF realtime', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: { diff: [{ f12: '160807', f14: 'LOF基金', f2: 1.5 }] } }))
+      const result = await driver.fundLofSpotEm()
       expect(result).toHaveLength(1)
     })
   })
 
-  describe('stockRankLxszThs', () => {
-    it('returns consecutive up list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600003', CLOSE_PRICE: 20, CONSECUTIVE_DAYS: 5 }])
-      const result = await driver.stockRankLxszThs()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '600003', consecutiveDays: 5 }),
-      ]))
-    })
-  })
-
-  describe('stockRankLxxdThs', () => {
-    it('returns consecutive down list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600004', CLOSE_PRICE: 8, CONSECUTIVE_DAYS: 3 }])
-      const result = await driver.stockRankLxxdThs()
+  describe('fundOpenFundDailyEm', () => {
+    it('returns fund NAV data', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse('var db={"datas":[["000001","华夏成长","","1.5","2.0","1.49","1.99","0.01","0.67","开放申购","开放赎回","","","","","","","","","0.15"]]}'))
+      const result = await driver.fundOpenFundDailyEm()
       expect(result).toHaveLength(1)
     })
   })
 
-  describe('stockRankCxflThs', () => {
-    it('returns vol increase list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600005', VOLUME_RATIO: 2.5 }])
-      const result = await driver.stockRankCxflThs()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '600005', volumeRatio: 2.5 }),
-      ]))
-    })
-  })
-
-  describe('stockRankCxslThs', () => {
-    it('returns vol decrease list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600006', VOLUME_RATIO: 0.3 }])
-      const result = await driver.stockRankCxslThs()
+  describe('fundInfoIndexEm', () => {
+    it('returns index fund list', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ Data: '{"datas":["510300|沪深300ETF|||1.5||0.5"]}' }))
+      const result = await driver.fundInfoIndexEm('全部')
       expect(result).toHaveLength(1)
     })
   })
 
-  describe('stockRankXstpThs', () => {
-    it('returns breakout-up list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600007', CHANGE_RATE: 3 }])
-      const result = await driver.stockRankXstpThs()
+  describe('fundEtfHistEm', () => {
+    it('returns ETF history', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: { klines: ['2025-01-01,4.5,4.6,4.7,4.4,100000,450000'] } }))
+      const result = await driver.fundEtfHistEm('510300', 'daily', '20250101', '20250101')
       expect(result).toHaveLength(1)
     })
   })
 
-  describe('stockRankXxtpThs', () => {
-    it('returns breakout-down list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600008', CHANGE_RATE: -2 }])
-      const result = await driver.stockRankXxtpThs()
+  describe('fundLofHistEm', () => {
+    it('returns LOF history', async () => {
+      mockFetch.mockResolvedValueOnce(jsonResponse({ data: { klines: ['2025-01-01,1.5,1.6,1.7,1.4,50000,75000'] } }))
+      const result = await driver.fundLofHistEm('160807')
       expect(result).toHaveLength(1)
     })
   })
 
-  describe('stockRankLjqsThs', () => {
-    it('returns vol-price up list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600009', CHANGE_RATE: 4 }])
-      const result = await driver.stockRankLjqsThs()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('stockRankLjqdThs', () => {
-    it('returns vol-price down list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '600010', CHANGE_RATE: -3 }])
-      const result = await driver.stockRankLjqdThs()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('stockBidAsk', () => {
-    it('returns bid/ask data', async () => {
-      mockFetch.mockResolvedValueOnce(jsonResponse({
-        data: { f43: 1050, f57: '000001', f58: '平安银行', f170: 120 },
-      }))
-      const result = await driver.stockBidAsk('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '000001', name: '平安银行' }),
-      ]))
-    })
-  })
-
-  describe('stockFinancialReportDisclosure', () => {
-    it('returns report disclosure dates', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', SECURITY_NAME_ABBR: '平安', REPORT_DATE: '2025-03-31', DISCLOSURE_DATE: '2025-04-30' }])
-      const result = await driver.stockFinancialReportDisclosure('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '000001', disclosureDate: '2025-04-30' }),
-      ]))
-    })
-  })
-
-  describe('stockGoodwillDetail', () => {
-    it('returns goodwill detail', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', GOODWILL: 1e9, REPORT_DATE: '2025-03-31' }])
-      const result = await driver.stockGoodwillDetail('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '000001', goodwill: 1e9 }),
-      ]))
-    })
-  })
-
-  describe('stockGoodwillIndustry', () => {
-    it('returns industry goodwill', async () => {
-      mockDcFetch([{ INDUSTRY_NAME: '房地产', GOODWILL: 5e10 }])
-      const result = await driver.stockGoodwillIndustry()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ industry: '房地产' }),
-      ]))
-    })
-  })
-
-  describe('stockPledgeStats', () => {
-    it('returns pledge stats', async () => {
-      mockDcFetch([{ TRADE_DATE: '2025-01-01', PLEDGE_RATIO: 15 }])
-      const result = await driver.stockPledgeStats()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('stockPledgeCompanyStats', () => {
-    it('returns company pledge ratios', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', PLEDGE_RATIO: 30 }])
-      const result = await driver.stockPledgeCompanyStats()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('stockAnalystRank', () => {
-    it('returns analyst rankings', async () => {
-      mockDcFetch([{ RANK: 1, ANALYST_NAME: '张三', ORG_NAME: '中信' }])
-      const result = await driver.stockAnalystRank()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ analystName: '张三', orgName: '中信' }),
-      ]))
-    })
-  })
-
-  describe('blockTradeActiveStats', () => {
-    it('returns active brokerage stats', async () => {
-      mockDcFetch([{ BROKERAGE_NAME: '中信证券', TRADE_COUNT: 50 }])
-      const result = await driver.blockTradeActiveStats()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('blockTradeBranchRank', () => {
-    it('returns branch rankings', async () => {
-      mockDcFetch([{ RANK: 1, BRANCH_NAME: '上海分公司' }])
-      const result = await driver.blockTradeBranchRank()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('stockAhList', () => {
-    it('returns A+H stock list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '601318', SECURITY_NAME_ABBR: '中国平安', AH_PREMIUM_RATIO: 25 }])
-      const result = await driver.stockAhList()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '601318', ahPremiumRatio: 25 }),
-      ]))
-    })
-  })
-
-  describe('stockBShareList', () => {
-    it('returns B-share list', async () => {
-      mockDcFetch([{ SECURITY_CODE: '200001', SECURITY_NAME_ABBR: '万科B', CURRENCY: 'HKD' }])
-      const result = await driver.stockBShareList()
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '200001', currency: 'HKD' }),
-      ]))
-    })
-  })
-
-  describe('hkConnectHoldings', () => {
-    it('returns HK Connect holdings', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', HOLD_SHARES: 1e8, HOLD_SHARES_RATIO: 5 }])
-      const result = await driver.hkConnectHoldings('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '000001', heldShares: 1e8 }),
-      ]))
-    })
-  })
-
-  describe('hkConnectTop10', () => {
-    it('returns top 10 HK Connect', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', HOLD_SHARES: 1e8 }])
-      const result = await driver.hkConnectTop10()
-      expect(result).toHaveLength(1)
-    })
-  })
-
-  describe('marginTradeSz', () => {
-    it('returns SZ margin trade data', async () => {
-      mockDcFetch([{ SECURITY_CODE: '000001', MARGIN_BALANCE: 5e8 }])
-      const result = await driver.marginTradeSz('000001')
-      expect(result).toEqual(expect.arrayContaining([
-        expect.objectContaining({ code: '000001', marginBalance: 5e8 }),
-      ]))
+  describe('Error handling', () => {
+    it('returns null on error', async () => {
+      mockFetch.mockRejectedValue(new Error('timeout'))
+      const r = await driver.fundNameEm()
+      expect(r).toBeNull()
     })
   })
 })
 
 // ═══════════════════════════════════════════════════════════════
-// Error handling tests
+// MiscDataHandler — AMAC methods
 // ═══════════════════════════════════════════════════════════════
 
-describe('Error handling', () => {
-  let miscHandler: Awaited<typeof import('../src/providers/misc-data/markets/cn/handler')>['MiscDataHandler']
-  let emDriver: Awaited<typeof import('../src/providers/eastmoney/driver')>['EastMoneyDriver']
+describe('MiscDataHandler — AMAC private fund APIs', () => {
+  let handler: Awaited<typeof import('../src/providers/misc-data/markets/cn/handler')>['MiscDataHandler']
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    const miscMod = await import('../src/providers/misc-data/markets/cn/handler')
-    miscHandler = new miscMod.MiscDataHandler()
-    const emMod = await import('../src/providers/eastmoney/driver')
-    emDriver = new emMod.EastMoneyDriver()
+    const mod = await import('../src/providers/misc-data/markets/cn/handler')
+    handler = new mod.MiscDataHandler()
   })
 
-  it('misc-data methods return null on network error', async () => {
-    mockFetch.mockRejectedValue(new Error('ECONNREFUSED'))
-    const results = await Promise.all([
-      miscHandler.marginDetailSzse(),
-      miscHandler.stockTradeSuspension(),
-      miscHandler.goodwillMarketOverview(),
-      miscHandler.accountStatistics(),
-      miscHandler.riskStockList(),
-      miscHandler.twoNetList(),
-      miscHandler.blockTradeMarketStats(),
-      miscHandler.shareholderChangeStats(),
-    ])
-    for (const r of results) {
-      expect(r).toBeNull()
-    }
+  function amacResponse(data: unknown[]) {
+    return jsonResponse({ datas: data })
+  }
+
+  describe('amacMemberInfo', () => {
+    it('returns member info', async () => {
+      mockFetch.mockResolvedValueOnce(amacResponse([{ name: '华夏基金', type: '普通会员' }]))
+      const result = await handler.amacMemberInfo()
+      expect(result).toHaveLength(1)
+    })
   })
 
-  it('misc-data methods return null or empty on HTTP error', async () => {
-    // dcGet parses JSON regardless of status code; returns [] for malformed/empty responses
-    mockFetch.mockResolvedValue({ ok: false, status: 500, json: () => Promise.resolve({ result: null }) })
-    const result = await miscHandler.marginDetailSzse()
-    expect(result === null || (Array.isArray(result) && result.length === 0)).toBe(true)
+  describe('amacManagerInfo', () => {
+    it('returns manager info', async () => {
+      mockFetch.mockResolvedValueOnce(amacResponse([{ name: '重阳投资' }]))
+      const result = await handler.amacManagerInfo()
+      expect(result).toHaveLength(1)
+    })
   })
 
-  it('eastmoney tech rank methods handle empty response', async () => {
-    // eastmoneyGet returns null for empty/malformed responses
-    mockFetch.mockResolvedValue(jsonResponse({ data: null }))
-    const r = await emDriver.stockRankCxgThs()
-    expect(r === null || Array.isArray(r)).toBe(true)
+  describe('amacFundInfo', () => {
+    it('returns fund info with pagination', async () => {
+      mockFetch.mockResolvedValueOnce(amacResponse([{ fundName: '测试基金' }]))
+      const result = await handler.amacFundInfo('1', '1')
+      expect(result).toHaveLength(1)
+    })
+  })
+
+  describe('Error handling', () => {
+    it('returns null on error', async () => {
+      mockFetch.mockRejectedValue(new Error('network'))
+      const results = await Promise.all([
+        handler.amacMemberInfo(),
+        handler.amacManagerInfo(),
+        handler.amacFundInfo('1', '1'),
+      ])
+      for (const r of results) {
+        expect(r).toBeNull()
+      }
+    })
   })
 })

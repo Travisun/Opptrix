@@ -397,651 +397,1206 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  // ── 概念/行业/地域板块 ──
+  // ═══════════════════════════════════════════════════════════════
+  // FUND APIS — verified against .akshare-ref/akshare/fund/
+  // ═══════════════════════════════════════════════════════════════
 
-  const PUSH2_LIST_URL = 'https://79.push2.eastmoney.com/api/qt/clist/get'
-
-  p.boardConceptList = async function boardConceptList(): Promise<Record<string, unknown>[] | null> {
+  /** fund_name_em — fund.eastmoney.com/js/fundcode_search.js */
+  p.fundNameEm = async function fundNameEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'm:90 t:3 f:!50',
-        fields: 'f2,f3,f4,f8,f12,f14,f104,f105,f128,f140',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        turnoverRate: safeFloat(it.f8),
-        riseCount: safeFloat(it.f104),
-        fallCount: safeFloat(it.f105),
-        leaderName: String(it.f128 ?? ''),
-        leaderChangePct: safeFloat(it.f140),
-      }))
-    } catch { return null }
-  }
-
-  p.boardIndustryList = async function boardIndustryList(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'm:90 t:2 f:!50',
-        fields: 'f2,f3,f4,f8,f12,f14,f104,f105,f128,f140',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        turnoverRate: safeFloat(it.f8),
-        riseCount: safeFloat(it.f104),
-        fallCount: safeFloat(it.f105),
-        leaderName: String(it.f128 ?? ''),
-        leaderChangePct: safeFloat(it.f140),
-      }))
-    } catch { return null }
-  }
-
-  p.boardRegionList = async function boardRegionList(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const params = {
-        pn: '1', pz: '100', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'm:90 t:1 f:!50',
-        fields: 'f2,f3,f4,f8,f12,f14,f104,f105,f128,f140',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        turnoverRate: safeFloat(it.f8),
-        riseCount: safeFloat(it.f104),
-        fallCount: safeFloat(it.f105),
-      }))
-    } catch { return null }
-  }
-
-  p.boardConceptCons = async function boardConceptCons(boardCode: string): Promise<Record<string, unknown>[] | null> {
-    if (!boardCode) return null
-    try {
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: `b:${boardCode} f:!50`,
-        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f12,f14,f15,f16,f17,f18,f20,f21',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        volume: safeFloat(it.f5),
-        amount: safeFloat(it.f6),
-        turnoverRate: safeFloat(it.f8),
-        pe: safeFloat(it.f9),
-      }))
-    } catch { return null }
-  }
-
-  // ── 涨停板 ──
-
-  p.ztPool = async function ztPool(date?: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const params: Record<string, string> = {
-        ut: '7eea3edcaed734bea9cb3c8a32c9282',
-        dpt: 'wz.ztzt',
-        Pageindex: '1',
-        Pagesize: '200',
-        Sort: 'fbt:asc',
-        fields: 'f2,f3,f6,f8,f14,f15,f17,f22,f24,f128',
-      }
-      if (date) params.date = date
-      const resp = await fetch(`https://push2ex.eastmoney.com/getTopicZTPool?${new URLSearchParams(params)}`, {
-        headers: EASTMONEY_QUOTE_HEADERS,
+      const resp = await fetch('https://fund.eastmoney.com/js/fundcode_search.js', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
         signal: AbortSignal.timeout(15000),
       })
-      const json = await resp.json() as Record<string, unknown>
-      const pool = ((json?.data as Record<string, unknown>)?.pool ?? []) as Record<string, unknown>[]
-      return pool.map(it => ({
-        code: String(it.f14 ?? ''),
-        name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2),
-        changePct: safeFloat(it.f3),
-        amount: safeFloat(it.f6),
-        turnoverRate: safeFloat(it.f8),
-        firstLimitTime: String(it.f15 ?? ''),
-        lastLimitTime: String(it.f17 ?? ''),
-        openCount: safeFloat(it.f22),
-        industry: String(it.f128 ?? ''),
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+r\s*=\s*/, '').replace(/;?\s*$/, '')
+      const data = JSON.parse(jsonStr) as string[][]
+      if (!data?.length) return null
+      return data.map(row => ({
+        code: String(row[0] ?? ''), pinyin: String(row[1] ?? ''),
+        name: String(row[2] ?? ''), fundType: String(row[3] ?? ''),
+        fullName: String(row[4] ?? ''),
       }))
     } catch { return null }
   }
 
-  // ── 北向资金 ──
+  /** fund_purchase_em — fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx */
+  p.fundPurchaseEm = async function fundPurchaseEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=8&page=1,50000&js=reData&sort=fcode,asc', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+reData\s*=\s*/, '').replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.map((row, idx) => ({
+        rank: idx + 1, code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        fundType: String(row[2] ?? ''), nav: safeFloat(row[3]),
+        purchaseStatus: String(row[5] ?? ''), redeemStatus: String(row[6] ?? ''),
+        minPurchase: safeFloat(row[8]), fee: safeFloat(row[11]),
+      }))
+    } catch { return null }
+  }
 
-  p.hsgtNorthFlow = async function hsgtNorthFlow(): Promise<Record<string, unknown>[] | null> {
+  /** fund_etf_spot_em — push2delay.eastmoney.com (verified fund_etf_em.py:51) */
+  p.fundEtfSpotEm = async function fundEtfSpotEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const params = {
-        fields1: 'f1,f3,f5',
-        fields2: 'f51,f52,f53,f54,f55,f56',
-        klt: '101',
-        lmt: '30',
-        ut: 'b2884a393a59ad64002292a3e90d46a5',
+        pn: '1', pz: '5000', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', wbp2u: '|0|0|0|web',
+        fid: 'f12',
+        fs: 'b:MK0021,b:MK0022,b:MK0023,b:MK0024,b:MK0827',
+        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21,f30,f31,f32,f33,f34,f35,f62,f184',
       }
-      const json = await eastmoneyGet('https://push2his.eastmoney.com/api/qt/kamt.kline/get', params, 15000, EASTMONEY_QUOTE_HEADERS)
+      const json = await eastmoneyGet('https://push2delay.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
       const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const lines = (data?.s2n ?? []) as string[]
-      return lines.map(line => {
-        const p = line.split(',')
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1, code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
+        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6), amplitude: safeFloat(it.f7),
+        turnoverRate: safeFloat(it.f8), volumeRatio: safeFloat(it.f10),
+        high: safeFloat(it.f15), low: safeFloat(it.f16), open: safeFloat(it.f17), prevClose: safeFloat(it.f18),
+        totalMarketCap: safeFloat(it.f20), floatMarketCap: safeFloat(it.f21),
+        mainNetInflow: safeFloat(it.f62), mainNetInflowPct: safeFloat(it.f184),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_lof_spot_em — push2 (verified fund_lof_em.py:26) */
+  p.fundLofSpotEm = async function fundLofSpotEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const params = {
+        pn: '1', pz: '5000', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', wbp2u: '|0|0|0|web',
+        fid: 'f12',
+        fs: 'b:MK0022',
+        fields: 'f2,f3,f4,f5,f6,f7,f8,f12,f14,f15,f16,f17,f18',
+      }
+      const json = await eastmoneyGet('https://2.push2.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
+      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1, code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
+        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6),
+        high: safeFloat(it.f15), low: safeFloat(it.f16), open: safeFloat(it.f17), prevClose: safeFloat(it.f18),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_open_fund_daily_em — fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx (verified fund_em.py:274) */
+  p.fundOpenFundDailyEm = async function fundOpenFundDailyEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=1&lx=1&letter=&gsid=&text=&sort=zdf,desc&page=1,50000&dt=1580914040623&atfc=&onlySale=0', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+db\s*=\s*/, '').replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map((row, idx) => ({
+        rank: idx + 1, code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        nav: safeFloat(row[3]), accNav: safeFloat(row[4]),
+        prevNav: safeFloat(row[5]), prevAccNav: safeFloat(row[6]),
+        changeAmt: safeFloat(row[7]), changePct: safeFloat(row[8]),
+        purchaseStatus: String(row[9] ?? ''), redeemStatus: String(row[10] ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_info_index_em — api.fund.eastmoney.com/FundTradeRank/GetRankList (verified fund_em.py:143) */
+  p.fundInfoIndexEm = async function fundInfoIndexEm(symbol = '全部', indicator = '全部'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, string> = { '全部': '', '沪深指数': '053', '行业主题': '054', '大盘指数': '01', '中盘指数': '02', '小盘指数': '03', '股票指数': '050|001', '债券指数': '050|003' }
+      const indicatorMap: Record<string, string> = { '全部': '', '被动指数型': '051', '增强指数型': '052' }
+      const fr = symbolMap[symbol] ?? ''
+      const fr1 = indicatorMap[indicator] ?? ''
+      const resp = await fetch(`https://api.fund.eastmoney.com/FundTradeRank/GetRankList?ft=zs&sc=1n&st=desc&pi=1&pn=10000&cp=&ct=&cd=&ms=&fr=${fr}&plevel=&fst=&ftype=&fr1=${fr1}&fl=0&isab=1`, {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const dataStr = json.Data as string
+      if (!dataStr) return null
+      const parsed = JSON.parse(dataStr) as Record<string, unknown>
+      const datas = parsed.datas as string[] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map(item => {
+        const parts = item.split('|')
         return {
-          date: p[0],
-          northNetFlow: safeFloat(p[1]),
-          northBuyAmount: safeFloat(p[2]),
-          southNetFlow: safeFloat(p[4]),
-          southBuyAmount: safeFloat(p[5]),
+          code: String(parts[0] ?? ''), name: String(parts[1] ?? ''),
+          nav: safeFloat(parts[4]), changePct: safeFloat(parts[5]),
+          week1: safeFloat(parts[6]), month1: safeFloat(parts[7]), month3: safeFloat(parts[8]),
+          month6: safeFloat(parts[9]), year1: safeFloat(parts[10]), year2: safeFloat(parts[11]),
+          year3: safeFloat(parts[12]), yearToDate: safeFloat(parts[13]), sinceInception: safeFloat(parts[14]),
+          fee: safeFloat(parts[18]), minPurchase: String(parts[24] ?? ''),
         }
       })
     } catch { return null }
   }
 
-  // ── 热搜排名 ──
-
-  p.hotRank = async function hotRank(): Promise<Record<string, unknown>[] | null> {
+  /** stock_zh_index_spot_em — push2 (verified index_stock_zh.py:136,220) */
+  p.stockZhIndexSpotEm = async function stockZhIndexSpotEm(symbol = '沪深重要指数'): Promise<Record<string, unknown>[] | null> {
     try {
-      const resp = await fetch('https://emappdata.eastmoney.com/stockrank/getAllCurrentList', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', ...EASTMONEY_QUOTE_HEADERS },
-        body: JSON.stringify({ appId: 'appId01', globalId: '786e4c21-70dc-435a-93bb-38', marketType: '', pageNo: 1, pageSize: 100 }),
-        signal: AbortSignal.timeout(15000),
-      })
-      const json = await resp.json() as Record<string, unknown>
-      const list = (json?.data ?? []) as Record<string, unknown>[]
-      return list.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.sc ?? ''),
-        name: String(it.sn ?? ''),
-        rankChange: safeFloat(it.rc),
-        popularity: safeFloat(it.heat),
-      }))
-    } catch { return null }
-  }
-
-  // ── 技术指标排行 ──
-
-  p.stockRankCxgThs = async function stockRankCxgThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_CXG_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankCxdThs = async function stockRankCxdThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_CXD_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankLxszThs = async function stockRankLxszThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_LXSZ_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-        consecutiveDays: safeFloat(it.CONSECUTIVE_DAYS ?? it.CONTINUOUS_DAYS),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankLxxdThs = async function stockRankLxxdThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_LXXD_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-        consecutiveDays: safeFloat(it.CONSECUTIVE_DAYS ?? it.CONTINUOUS_DAYS),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankCxflThs = async function stockRankCxflThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_CXFL_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-        volumeRatio: safeFloat(it.VOLUME_RATIO),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankCxslThs = async function stockRankCxslThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_CXSL_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-        volumeRatio: safeFloat(it.VOLUME_RATIO),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankXstpThs = async function stockRankXstpThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_XSTP_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankXxtpThs = async function stockRankXxtpThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_XXTP_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankLjqsThs = async function stockRankLjqsThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_LJQS_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockRankLjqdThs = async function stockRankLjqdThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'STOCK_RANK_LJQD_THS', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME_ABBR ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        turnoverRate: safeFloat(it.TURNOVER_RATE),
-      }))
-    } catch { return null }
-  }
-
-  // ── 个股：买卖盘 / 财报披露 / 商誉 / 质押 / 分析师 / 大宗交易 ──
-
-  p.stockBidAsk = async function stockBidAsk(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await this.getData('https://push2.eastmoney.com/api/qt/stock/get', {
-        secid: resolveSecId(code),
-        fields: 'f43,f44,f45,f46,f47,f48,f49,f50,f51,f52,f55,f57,f58,f60,f116,f117,f162,f168,f169,f170',
-        ut: 'fa5fd1943c7b386f172d6893dbbd1',
-        fltt: '2', invt: '2',
-      })
-      if (!data) return null
-      const d = data as Record<string, unknown>
-      const price = safeFloat(d.f43)
-      if (price === 0 && d.f43 == null) return null
-      return [{
-        code: String(d.f57 ?? code),
-        name: String(d.f58 ?? ''),
-        price,
-        changePct: safeFloat(d.f170),
-        changeAmt: safeFloat(d.f169),
-        open: safeFloat(d.f46),
-        high: safeFloat(d.f44),
-        low: safeFloat(d.f45),
-        prevClose: safeFloat(d.f60),
-        volume: safeFloat(d.f47),
-        amount: safeFloat(d.f48),
-        bid1Price: safeFloat(d.f116),
-        bid1Volume: safeFloat(d.f117),
-        ask1Price: safeFloat(d.f162),
-        ask1Volume: safeFloat(d.f168),
-        pe: safeFloat(d.f55),
-        totalMarketCap: safeFloat(d.f50),
-        floatMarketCap: safeFloat(d.f52),
-      }]
-    } catch { return null }
-  }
-
-  p.stockFinancialReportDisclosure = async function stockFinancialReportDisclosure(code?: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_F10_REPORT_DISCLOSURE', filter, '20', 'DISCLOSURE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? ''),
-        reportDate: String(it.REPORT_DATE ?? '').slice(0, 10),
-        disclosureDate: String(it.DISCLOSURE_DATE ?? '').slice(0, 10),
-        reportType: String(it.REPORT_TYPE ?? ''),
-        status: String(it.STATUS ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  p.stockGoodwillDetail = async function stockGoodwillDetail(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_GOODWILL_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'REPORT_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: cc,
-        reportDate: String(it.REPORT_DATE ?? '').slice(0, 10),
-        goodwill: safeFloat(it.GOODWILL),
-        totalAssets: safeFloat(it.TOTAL_ASSETS),
-        goodwillPct: safeFloat(it.GOODWILL_RATIO),
-        impairment: safeFloat(it.IMPAIRMENT),
-      }))
-    } catch { return null }
-  }
-
-  p.stockGoodwillIndustry = async function stockGoodwillIndustry(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_GOODWILL_INDUSTRY', '', '50', 'GOODWILL_RATIO')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        industry: String(it.INDUSTRY_NAME ?? ''),
-        goodwill: safeFloat(it.GOODWILL),
-        totalAssets: safeFloat(it.TOTAL_ASSETS),
-        goodwillPct: safeFloat(it.GOODWILL_RATIO),
-        companyCount: safeFloat(it.COMPANY_COUNT),
-      }))
-    } catch { return null }
-  }
-
-  p.stockPledgeStats = async function stockPledgeStats(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_SHARE_PLEDGE_STAT', '', '10', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        totalPledgeShares: safeFloat(it.TOTAL_PLEDGE_SHARES),
-        totalMarketValue: safeFloat(it.TOTAL_MARKET_VALUE),
-        pledgeRatio: safeFloat(it.PLEDGE_RATIO),
-        pledgeCount: safeFloat(it.PLEDGE_COUNT),
-      }))
-    } catch { return null }
-  }
-
-  p.stockPledgeCompanyStats = async function stockPledgeCompanyStats(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_SHARE_PLEDGE_COMPANY', '', '50', 'PLEDGE_RATIO')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? ''),
-        pledgeRatio: safeFloat(it.PLEDGE_RATIO),
-        pledgeShares: safeFloat(it.PLEDGE_SHARES),
-        totalShares: safeFloat(it.TOTAL_SHARES),
-        marketValue: safeFloat(it.MARKET_VALUE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockAnalystRank = async function stockAnalystRank(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_ANALYST_RANK', '', '30', 'RANK')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        rank: safeFloat(it.RANK),
-        analystName: String(it.ANALYST_NAME ?? ''),
-        orgName: String(it.ORG_NAME ?? ''),
-        accuracy: safeFloat(it.ACCURACY),
-        successRate: safeFloat(it.SUCCESS_RATE),
-        avgReturn: safeFloat(it.AVG_RETURN),
-        coverageCount: safeFloat(it.COVERAGE_COUNT),
-      }))
-    } catch { return null }
-  }
-
-  p.blockTradeActiveStats = async function blockTradeActiveStats(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_BLOCK_TRADE_ACTIVE', '', '30', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        brokerage: String(it.BROKERAGE_NAME ?? ''),
-        tradeCount: safeFloat(it.TRADE_COUNT),
-        totalAmount: safeFloat(it.TOTAL_AMOUNT),
-        buyAmount: safeFloat(it.BUY_AMOUNT),
-        sellAmount: safeFloat(it.SELL_AMOUNT),
-        netAmount: safeFloat(it.NET_AMOUNT),
-      }))
-    } catch { return null }
-  }
-
-  p.blockTradeBranchRank = async function blockTradeBranchRank(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_BLOCK_TRADE_BRANCH_RANK', '', '30', 'RANK')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        rank: safeFloat(it.RANK),
-        branchName: String(it.BRANCH_NAME ?? ''),
-        brokerage: String(it.BROKERAGE_NAME ?? ''),
-        tradeCount: safeFloat(it.TRADE_COUNT),
-        totalAmount: safeFloat(it.TOTAL_AMOUNT),
-        netAmount: safeFloat(it.NET_AMOUNT),
-      }))
-    } catch { return null }
-  }
-
-  // ── 跨市场 / 特殊数据 ──
-
-  p.stockAhList = async function stockAhList(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_AH_LIST', '', '200', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? it.SECURITY_NAME ?? ''),
-        aPrice: safeFloat(it.A_PRICE),
-        hPrice: safeFloat(it.H_PRICE),
-        ahPremiumRatio: safeFloat(it.AH_PREMIUM_RATIO),
-        hCode: String(it.HSECURITY_CODE ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  p.stockBShareList = async function stockBShareList(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_B_SHARE', '', '200', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? it.SECURITY_NAME ?? ''),
-        price: safeFloat(it.CLOSE_PRICE),
-        changePct: safeFloat(it.CHANGE_RATE),
-        currency: String(it.CURRENCY ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  p.hkConnectHoldings = async function hkConnectHoldings(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_HSGT_HOLD_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: cc,
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        heldShares: safeFloat(it.HOLD_SHARES),
-        sharePct: safeFloat(it.HOLD_SHARES_RATIO),
-        marketValue: safeFloat(it.HOLD_MARKET_CAP),
-      }))
-    } catch { return null }
-  }
-
-  p.hkConnectTop10 = async function hkConnectTop10(date = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = date ? `(TRADE_DATE="${date}")` : ''
-      const items = await dcAll(this, 'RPT_HSGT_TOP10', filter, '10', 'HOLD_SHARES')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''),
-        name: String(it.SECURITY_NAME_ABBR ?? it.SECURITY_NAME ?? ''),
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        heldShares: safeFloat(it.HOLD_SHARES),
-        marketValue: safeFloat(it.HOLD_MARKET_CAP),
-      }))
-    } catch { return null }
-  }
-
-  p.marginTradeSz = async function marginTradeSz(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_MARGIN_TRADE_DETAIL', `(SECURITY_CODE="${cc}" AND EXCHANGE="S")`, '60', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: cc,
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        marginBalance: safeFloat(it.MARGIN_BALANCE),
-        marginBuy: safeFloat(it.MARGIN_BUY),
-        marginNet: safeFloat(it.MARGIN_NET),
-        shortBalance: safeFloat(it.SHORT_BALANCE),
-      }))
-    } catch { return null }
-  }
-
-  // ── 指数数据 ──
-
-  const KLINE_URL = 'https://push2his.eastmoney.com/api/qt/stock/kline/get'
-  const TRENDS2_URL = 'https://push2his.eastmoney.com/api/qt/stock/trends2/get'
-
-  const INDEX_SERIES_FS: Record<string, string> = {
-    '1': 'm:1+t:2',   // 上证系列
-    '0': 'm:0+t:6',   // 深证系列
-    '2': 'm:2+t:2',   // 中证系列
-  }
-
-  const PERIOD_KLT: Record<string, string> = {
-    daily: '101', weekly: '102', monthly: '103',
-    '60m': '60', '30m': '30', '15m': '15', '5m': '5', '1m': '1',
-  }
-
-  /** 指数实时行情 — 按上证/深证/中证系列分 fs 查询 */
-  p.stockZhIndexSpotEm = async function stockZhIndexSpotEm(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const fs = INDEX_SERIES_FS[symbol] ?? `m:${symbol}:t:2`
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs,
-        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21',
+      const symbolMap: Record<string, string> = {
+        '沪深重要指数': 'b:MK0010', '上证系列指数': 'm:1+t:1',
+        '深证系列指数': 'm:0 t:5', '指数成份': 'm:1+s:3,m:0+t:5',
+        '中证系列指数': 'm:2+t:2',
       }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
+      const fs = symbolMap[symbol] ?? symbol
+      const url = symbol === '沪深重要指数' ? 'https://33.push2.eastmoney.com/api/qt/clist/get' : 'https://48.push2.eastmoney.com/api/qt/clist/get'
+      const params = {
+        pn: '1', pz: '5000', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', dect: '1', wbp2u: '|0|0|0|web',
+        fid: '', fs,
+        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18',
+      }
+      const json = await eastmoneyGet(url, params, 30000, EASTMONEY_QUOTE_HEADERS)
       const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
       const items = (data?.diff ?? []) as Record<string, unknown>[]
       if (!items.length) return null
       return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        volume: safeFloat(it.f5),
-        amount: safeFloat(it.f6),
-        amplitude: safeFloat(it.f7),
-        turnoverRate: safeFloat(it.f8),
-        pe: safeFloat(it.f9),
-        volumeRatio: safeFloat(it.f10),
-        high: safeFloat(it.f15),
-        low: safeFloat(it.f16),
-        open: safeFloat(it.f17),
-        prevClose: safeFloat(it.f18),
-        totalMarketCap: safeFloat(it.f20),
-        floatMarketCap: safeFloat(it.f21),
+        rank: idx + 1, code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
+        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6), amplitude: safeFloat(it.f7),
+        turnoverRate: safeFloat(it.f8), volumeRatio: safeFloat(it.f10),
+        high: safeFloat(it.f15), low: safeFloat(it.f16), open: safeFloat(it.f17), prevClose: safeFloat(it.f18),
       }))
     } catch { return null }
   }
 
-  /** 指数日线 — Sina API 原始数据 */
-  p.stockZhIndexDaily = async function stockZhIndexDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
+  /** index_global_spot_em — push2 (verified index_global_em.py:22) */
+  p.indexGlobalSpotEm = async function indexGlobalSpotEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const fullCode = `sh${c(symbol)}`
-      const url = `https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData?symbol=${fullCode}&scale=240&ma=no&datalen=1023`
-      const resp = await fetch(url, {
-        headers: { Referer: 'https://finance.sina.com.cn/', Accept: '*/*' },
+      const params = {
+        pn: '1', pz: '500', po: '1', np: '2',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '1', invt: '2', fid: 'f3',
+        fs: 'm:100+t:1',
+        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18',
+      }
+      const json = await eastmoneyGet('https://push2.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
+      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      const d = (v: number | null) => v != null ? v / 100 : null
+      return items.map((it, idx) => ({
+        rank: idx + 1, code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
+        price: d(safeFloat(it.f2)), changePct: d(safeFloat(it.f3)), changeAmt: d(safeFloat(it.f4)),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6), amplitude: d(safeFloat(it.f7)),
+        high: d(safeFloat(it.f15)), low: d(safeFloat(it.f16)), open: d(safeFloat(it.f17)), prevClose: d(safeFloat(it.f18)),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_rating_all — fund.eastmoney.com/data/fundrating.html (verified fund_rating.py:14) */
+  p.fundRatingAll = async function fundRatingAll(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/data/fundrating.html', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
         signal: AbortSignal.timeout(15000),
       })
       const text = await resp.text()
-      const arr = JSON.parse(text) as Record<string, unknown>[]
-      if (!arr?.length) return null
-      return arr.map(it => ({
-        code: symbol,
-        date: String(it.day ?? ''),
+      const match = text.match(/var\s+rankData\s*=\s*({.*?})\s*;/s)
+      if (!match) return null
+      const data = JSON.parse(match[1]) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map(row => ({
+        code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        fundManager: String(row[3] ?? ''), fundCompany: String(row[5] ?? ''),
+        rating5StarCount: safeFloat(row[7]),
+        ratingZhaoshang: safeFloat(row[10]), ratingShanghai: safeFloat(row[12]),
+        ratingMorningstar: safeFloat(row[14]), ratingJianan: safeFloat(row[16]),
+        fee: safeFloat(row[18]), fundType: String(row[2] ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_manager_em — fund.eastmoney.com/Data/FundDataPortfolio_Interface.aspx (verified fund_manager.py:24) */
+  p.fundManagerEm = async function fundManagerEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Data/FundDataPortfolio_Interface.aspx?dt=0&flag=0&pageIndex=1&pageSize=500', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+data\s*=\s*/, '').replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map(row => ({
+        code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        company: String(row[2] ?? ''), totalAssets: safeFloat(row[5]),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_scale_change_em — fund.eastmoney.com (verified fund_scale_em.py:15) */
+  p.fundScaleChangeEm = async function fundScaleChangeEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Company/home/gspmlist', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const match = text.match(/var\s+rankData\s*=\s*({.*?})\s*;/s)
+      if (!match) return null
+      const data = JSON.parse(match[1]) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 100).map(row => ({
+        company: String(row[0] ?? ''), totalScale: safeFloat(row[1]),
+        fundCount: safeFloat(row[2]), change: safeFloat(row[3]),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_fh_em — fund.eastmoney.com/Data/funddataIndex_Interface.aspx (verified fund_fhsp_em.py:47) */
+  p.fundFhEm = async function fundFhEm(code: string, start = '', end = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const params = new URLSearchParams({
+        callback: 'jQuery', fundcode: code, pageIndex: '1', pageSize: '100',
+        startDate: start, endDate: end,
+      })
+      const resp = await fetch(`https://fund.eastmoney.com/Data/funddataIndex_Interface.aspx?${params}`, {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^jQuery\(/, '').replace(/\)$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.Data as Record<string, unknown>[] | undefined
+      if (!datas?.length) return null
+      return datas.map(it => ({
+        code, date: String(it.FSRQ ?? '').slice(0, 10),
+        bonusCash: safeFloat(it.FHFCZ), bonusStock: safeFloat(it.FHFCGS),
+        exDate: String(it.CXRQ ?? '').slice(0, 10),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_fh_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:253) */
+  p.fundFhRankEm = async function fundFhRankEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetHbRankList?SortColumn=fhsp&Sort=desc&pageIndex=1&pageSize=100', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const datas = json.Data as Record<string, unknown> | undefined
+      const list = datas?.Datas as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        code: String(it.fcode ?? ''), name: String(it.shortname ?? ''),
+        fhsp: safeFloat(it.fhsp), fhDate: String(it.fhrq ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_etf_hist_em — push2his.eastmoney.com (verified fund_etf_em.py:263) */
+  p.fundEtfHistEm = async function fundEtfHistEm(code: string, period = 'daily', startDate = '20000101', endDate = '20500101', adjust = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const kltMap: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
+      const fqtMap: Record<string, string> = { '': '0', qfq: '1', hfq: '2' }
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: kltMap[period] ?? '101', fqt: fqtMap[adjust] ?? '0',
+        beg: startDate, end: endDate,
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return { code, date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]), high: safeFloat(p[3]), low: safeFloat(p[4]), volume: safeFloat(p[5]), amount: safeFloat(p[6]), changePct: safeFloat(p[8]), turnoverRate: safeFloat(p[10]) }
+      })
+    } catch { return null }
+  }
+
+  /** fund_lof_hist_em — push2his (verified fund_lof_em.py:146) */
+  p.fundLofHistEm = async function fundLofHistEm(code: string, period = 'daily', startDate = '20000101', endDate = '20500101', adjust = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const kltMap: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
+      const fqtMap: Record<string, string> = { '': '0', qfq: '1', hfq: '2' }
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: kltMap[period] ?? '101', fqt: fqtMap[adjust] ?? '0',
+        beg: startDate, end: endDate,
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return { code, date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]), high: safeFloat(p[3]), low: safeFloat(p[4]), volume: safeFloat(p[5]), amount: safeFloat(p[6]), changePct: safeFloat(p[8]), turnoverRate: safeFloat(p[10]) }
+      })
+    } catch { return null }
+  }
+
+  /** fund_etf_hist_min_em — push2his (verified fund_etf_em.py:361) */
+  p.fundEtfHistMinEm = async function fundEtfHistMinEm(code: string, period = '5', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const kltMap: Record<string, string> = { '1': '1', '5': '5', '15': '15', '30': '30', '60': '60' }
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: kltMap[period] ?? '5', iscr: '0', ndays: '5', iscca: '0',
+      })
+      const trends = data?.trends as string[] | undefined
+      if (!trends?.length) return null
+      return trends.map(line => {
+        const p = line.split(',')
+        return { code, date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]), high: safeFloat(p[3]), low: safeFloat(p[4]), volume: safeFloat(p[5]), amount: safeFloat(p[6]) }
+      })
+    } catch { return null }
+  }
+
+  /** fund_lof_hist_min_em — push2his (verified fund_lof_em.py:220) */
+  p.fundLofHistMinEm = async function fundLofHistMinEm(code: string, period = '5', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const kltMap: Record<string, string> = { '1': '1', '5': '5', '15': '15', '30': '30', '60': '60' }
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
+        secid: resolveSecId(code),
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: kltMap[period] ?? '5', iscr: '0', ndays: '5', iscca: '0',
+      })
+      const trends = data?.trends as string[] | undefined
+      if (!trends?.length) return null
+      return trends.map(line => {
+        const p = line.split(',')
+        return { code, date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]), high: safeFloat(p[3]), low: safeFloat(p[4]), volume: safeFloat(p[5]), amount: safeFloat(p[6]) }
+      })
+    } catch { return null }
+  }
+
+  /** fund_info_ths — fund.10jqka.com.cn (verified fund_info_ths.py:25) */
+  p.fundInfoThs = async function fundInfoThs(code: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://fund.10jqka.com.cn/${code}/interduce.html`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows = html.match(/<td[^>]*>(.*?)<\/td>/gs)?.map(r => r.replace(/<[^>]+>/g, '').trim()) ?? []
+      if (rows.length < 10) return null
+      return rows.reduce((acc: Record<string, string>[], val, i, arr) => {
+        if (i % 2 === 0 && arr[i + 1]) acc.push({ field: val, value: arr[i + 1] })
+        return acc
+      }, []).slice(0, 20)
+    } catch { return null }
+  }
+
+  /** index_stock_cons — vip.stock.finance.sina.com.cn (verified index_cons.py:87) */
+  p.indexStockCons = async function indexStockCons(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://vip.stock.finance.sina.com.cn/corp/view/vII_NewestComponent.php?page=1&indexid=${symbol}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows = html.match(/<td[^>]*>(.*?)<\/td>/gs)?.map(r => r.replace(/<[^>]+>/g, '').trim()) ?? []
+      if (rows.length < 6) return null
+      const result: Record<string, unknown>[] = []
+      for (let i = 0; i < rows.length; i += 6) {
+        if (rows[i] && rows[i + 1]) {
+          result.push({ indexCode: symbol, stockCode: rows[i], stockName: rows[i + 1] })
+        }
+      }
+      return result.length ? result : null
+    } catch { return null }
+  }
+
+  /** index_stock_info — vip.stock.finance.sina.com.cn (verified index_cons.py:70) */
+  p.indexStockInfo = async function indexStockInfo(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://vip.stock.finance.sina.com.cn/corp/go.php/vII_NewestComponent/index.phtml', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const matches = [...html.matchAll(/indexid=(\d+)/g)]
+      if (!matches.length) return null
+      return matches.map(m => ({ indexCode: m[1] }))
+    } catch { return null }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // INDEX APIS — verified against .akshare-ref/akshare/index/
+  // ═══════════════════════════════════════════════════════════════
+
+  /** index_zh_a_hist — push2his kline (verified index_zh_em.py:42) */
+  p.indexZhAHist = async function indexZhAHist(symbol = '000300', period = 'daily', startDate = '19700101', endDate = '22220101'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const periodDict: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
+      const secid = resolveSecId(symbol)
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid,
+        ut: '7eea3edcaed734bea9cbfc24409ed989',
+        fields1: 'f1,f2,f3,f4,f5,f6',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: periodDict[period] ?? '101',
+        fqt: '0',
+        beg: startDate,
+        end: endDate,
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
+          amplitude: safeFloat(p[7]), changePct: safeFloat(p[8]),
+          changeAmt: safeFloat(p[9]), turnoverRate: safeFloat(p[10]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** index_zh_a_hist_min_em — push2his trends2 (verified index_zh_em.py:178) */
+  p.indexZhAHistMinEm = async function indexZhAHistMinEm(symbol = '000300', period = '1'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const secid = resolveSecId(symbol)
+      if (period === '1') {
+        const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
+          fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
+          fields2: 'f51,f52,f53,f54,f55,f56,f57,f58',
+          iscr: '0', ndays: '5',
+          secid,
+        })
+        const trends = data?.trends as string[] | undefined
+        if (!trends?.length) return null
+        return trends.map(line => {
+          const p = line.split(',')
+          return {
+            datetime: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]),
+            high: safeFloat(p[3]), low: safeFloat(p[4]),
+            volume: safeFloat(p[5]), amount: safeFloat(p[6]), avgPrice: safeFloat(p[7]),
+          }
+        })
+      }
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid,
+        ut: '7eea3edcaed734bea9cbfc24409ed989',
+        fields1: 'f1,f2,f3,f4,f5,f6',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
+        klt: period, fqt: '1', beg: '0', end: '20500000',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          datetime: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          changePct: safeFloat(p[8]), changeAmt: safeFloat(p[9]),
+          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
+          amplitude: safeFloat(p[7]), turnoverRate: safeFloat(p[10]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** stock_zh_index_daily_em — push2his kline with prefix (verified index_stock_zh.py:428) */
+  p.stockZhIndexDailyEm = async function stockZhIndexDailyEm(symbol = 'sh000300', startDate = '19900101', endDate = '20500101'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const marketMap: Record<string, string> = { sz: '0', sh: '1', csi: '2', bj: '0' }
+      let secid = ''
+      for (const prefix of ['sz', 'bj', 'sh', 'csi']) {
+        if (symbol.startsWith(prefix)) {
+          secid = `${marketMap[prefix]}.${symbol.slice(prefix.length)}`
+          break
+        }
+      }
+      if (!secid) secid = `1.${symbol}`
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid,
+        fields1: 'f1,f2,f3,f4,f5',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58',
+        klt: '101', fqt: '0',
+        beg: startDate, end: endDate,
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** stock_hk_index_spot_em — push2 (verified index_stock_hk.py:148) */
+  p.stockHkIndexSpotEm = async function stockHkIndexSpotEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const params = {
+        pn: '1', pz: '100', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', wbp2u: '|0|0|0|web',
+        fid: 'f3',
+        fs: 'm:124,m:125,m:305',
+        fields: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f13,f14,f15,f16,f17,f18',
+      }
+      const json = await eastmoneyGet('https://15.push2.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
+      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1, code: String(it.f12 ?? ''), market: safeFloat(it.f13),
+        name: String(it.f14 ?? ''),
+        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6),
+        high: safeFloat(it.f15), low: safeFloat(it.f16), open: safeFloat(it.f17), prevClose: safeFloat(it.f18),
+      }))
+    } catch { return null }
+  }
+
+  /** stock_hk_index_daily_em — push2his (verified index_stock_hk.py:235) */
+  p.stockHkIndexDailyEm = async function stockHkIndexDailyEm(symbol = 'HSTECH'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const spotUrl = 'https://15.push2.eastmoney.com/api/qt/clist/get'
+      const spotParams = {
+        pn: '1', pz: '200', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', wbp2u: '|0|0|0|web',
+        fid: 'f3', fs: 'm:124,m:125,m:305',
+        fields: 'f12,f13',
+      }
+      const spotJson = await eastmoneyGet(spotUrl, spotParams, 15000, EASTMONEY_QUOTE_HEADERS)
+      const spotData = (spotJson as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const spotItems = ((spotData?.diff ?? []) as Record<string, unknown>[])
+      const match = spotItems.find(it => String(it.f12 ?? '') === symbol)
+      if (!match) return null
+      const secid = `${match.f13}.${symbol}`
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid,
+        klt: '101', fqt: '1', lmt: '10000', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: 'f057cbcbce2a86e2866ab8877db1d059', forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return { date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]), high: safeFloat(p[3]), low: safeFloat(p[4]) }
+      })
+    } catch { return null }
+  }
+
+  /** stock_hk_index_spot_sina — hq.sinajs.cn (verified index_stock_hk.py:54) */
+  p.stockHkIndexSpotSina = async function stockHkIndexSpotSina(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbols = 'hkCES100,hkCES120,hkCES280,hkCES300,hkCESA80,hkCESG10,hkCESHKM,hkCSCMC,hkCSHK100,hkCSHKDIV,hkCSHKLC,hkCSHKLRE,hkCSHKMCS,hkCSHKME,hkCSHKPE,hkCSHKSE,hkCSI300,hkCSRHK50,hkGEM,hkHKL,hkHSCCI,hkHSCEI,hkHSI,hkHSMBI,hkHSMOGI,hkHSMPI,hkHSTECH,hkSSE180,hkSSE180GV,hkSSE380,hkSSE50,hkSSECEQT,hkSSECOMP,hkSSEDIV,hkSSEITOP,hkSSEMCAP,hkSSEMEGA,hkVHSI'
+      const resp = await fetch(`https://hq.sinajs.cn/rn=${Date.now()}&list=${symbols}`, {
+        headers: { Referer: 'https://vip.stock.finance.sina.com.cn/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const lines = text.split('\n').filter(line => line.includes('"'))
+      if (!lines.length) return null
+      return lines.map(line => {
+        const dataStr = line.split('"')[1] ?? ''
+        const fields = dataStr.split(',')
+        if (fields.length < 9) return null
+        return {
+          code: fields[0] ?? '', name: fields[1] ?? '',
+          price: safeFloat(fields[6]), changePct: safeFloat(fields[8]),
+          changeAmt: safeFloat(fields[7]),
+          prevClose: safeFloat(fields[3]), open: safeFloat(fields[2]),
+          high: safeFloat(fields[4]), low: safeFloat(fields[5]),
+        }
+      }).filter(Boolean) as Record<string, unknown>[]
+    } catch { return null }
+  }
+
+  /** index_global_hist_em — push2his (verified index_global_em.py:95) */
+  p.indexGlobalHistEm = async function indexGlobalHistEm(symbol = '美元指数'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, { code: string; market: string }> = {
+        '美元指数': { code: 'UDI', market: '100' }, '道琼斯': { code: 'DJIA', market: '100' },
+        '标普500': { code: 'SPX', market: '100' }, '纳斯达克': { code: 'NDX', market: '100' },
+        '恒生指数': { code: 'HSI', market: '100' }, '日经225': { code: 'N225', market: '100' },
+        '英国富时100': { code: 'FTSE', market: '100' }, '德国DAX30': { code: 'GDAXI', market: '100' },
+        '法国CAC40': { code: 'FCHI', market: '100' }, '韩国KOSPI': { code: 'KS11', market: '100' },
+        '上证指数': { code: '000001', market: '1' }, '深证成指': { code: '399001', market: '0' },
+        '沪深300': { code: '000300', market: '1' }, '创业板指': { code: '399006', market: '0' },
+        '波罗的海BDI指数': { code: 'BDI', market: '100' },
+      }
+      const info = symbolMap[symbol]
+      if (!info) return null
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid: `${info.market}.${info.code}`,
+        klt: '101', fqt: '1', lmt: '50000', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: 'f057cbcbce2a86e2866ab8877db1d059', forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      const code = data?.code as string ?? info.code
+      const name = data?.name as string ?? symbol
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', code, name,
+          open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          amplitude: safeFloat(p[7]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** index_global_hist_sina — gi.finance.sina.com.cn (verified index_global_sina.py:30) */
+  p.indexGlobalHistSina = async function indexGlobalHistSina(symbol = '英国富时100指数'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, string> = {
+        '英国富时100指数': 'UKX', '德国DAX 30种股价指数': 'DAX',
+        '俄罗斯MICEX指数': 'INDEXCF', '法CAC40指数': 'CAC',
+        '瑞士股票指数': 'SWI20', '富时意大利MIB指数': 'FTSEMIB',
+        '荷兰AEX综合指数': 'AEX', '西班牙IBEX指数': 'IBEX',
+        '欧洲Stoxx50指数': 'SX5E', '加拿大S&P/TSX综合指数': 'GSPTSE',
+        '墨西哥BOLSA指数': 'MXX', '巴西BOVESPA股票指数': 'IBOV',
+        '中国台湾加权指数': 'TWJQ', '日经225指数': 'NKY',
+        '首尔综合指数': 'KOSPI', '印度尼西亚雅加达综合指数': 'JCI',
+        '印度孟买SENSEX指数': 'SENSEX', '澳大利亚标准普尔200指数': 'AS51',
+        '新西兰NZSE 50指数': 'NZ250', '埃及CASE 30指数': 'CASE',
+      }
+      const code = symbolMap[symbol]
+      if (!code) return null
+      const resp = await fetch(`https://gi.finance.sina.com.cn/hq/daily?symbol=${code}&num=10000`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const result = json?.result as Record<string, unknown> | undefined
+      const dataList = result?.data as Record<string, unknown>[] | undefined
+      if (!dataList?.length) return null
+      return dataList.map(it => ({
+        date: String(it.d ?? ''), open: safeFloat(it.o), high: safeFloat(it.h),
+        low: safeFloat(it.l), close: safeFloat(it.c), volume: safeFloat(it.v),
+      }))
+    } catch { return null }
+  }
+
+  /** index_global_name_table — static map (verified index_global_sina.py:15) */
+  p.indexGlobalNameTable = async function indexGlobalNameTable(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const map: Record<string, string> = {
+        '英国富时100指数': 'UKX', '德国DAX 30种股价指数': 'DAX',
+        '俄罗斯MICEX指数': 'INDEXCF', '法CAC40指数': 'CAC',
+        '瑞士股票指数': 'SWI20', '富时意大利MIB指数': 'FTSEMIB',
+        '荷兰AEX综合指数': 'AEX', '西班牙IBEX指数': 'IBEX',
+        '欧洲Stoxx50指数': 'SX5E', '加拿大S&P/TSX综合指数': 'GSPTSE',
+        '墨西哥BOLSA指数': 'MXX', '巴西BOVESPA股票指数': 'IBOV',
+        '中国台湾加权指数': 'TWJQ', '日经225指数': 'NKY',
+        '首尔综合指数': 'KOSPI', '印度尼西亚雅加达综合指数': 'JCI',
+        '印度孟买SENSEX指数': 'SENSEX', '澳大利亚标准普尔200指数': 'AS51',
+        '新西兰NZSE 50指数': 'NZ250', '埃及CASE 30指数': 'CASE',
+      }
+      return Object.entries(map).map(([name, code]) => ({ name, code }))
+    } catch { return null }
+  }
+
+  /** index_stock_cons_sina — vip.stock.finance.sina.com.cn (verified index_cons.py:20) */
+  p.indexStockConsSina = async function indexStockConsSina(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
+    try {
+      if (symbol === '000300') {
+        const countResp = await fetch('https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeStockCountSimple?node=hs300', {
+          headers: { 'User-Agent': 'Mozilla/5.0' },
+          signal: AbortSignal.timeout(15000),
+        })
+        const countText = await countResp.text()
+        const totalCount = parseInt(countText, 10)
+        const pageCount = Math.ceil(totalCount / 80)
+        const results: Record<string, unknown>[] = []
+        for (let page = 1; page <= pageCount; page++) {
+          const resp = await fetch(`https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData?page=${page}&num=80&sort=symbol&asc=1&node=hs300&symbol=&_s_r_a=init`, {
+            headers: { 'User-Agent': 'Mozilla/5.0' },
+            signal: AbortSignal.timeout(15000),
+          })
+          const text = await resp.text()
+          const data = JSON.parse(text) as Record<string, unknown>[]
+          for (const it of data) {
+            results.push({ indexCode: symbol, stockCode: String(it.symbol ?? ''), stockName: String(it.name ?? '') })
+          }
+        }
+        return results.length ? results : null
+      }
+      const resp = await fetch(`https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeDataSimple?page=1&num=3000&sort=symbol&asc=1&node=zhishu_${symbol}&_s_r_a=setlen`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const data = JSON.parse(text) as Record<string, unknown>[]
+      if (!data.length) return null
+      return data.map(it => ({
+        indexCode: symbol, stockCode: String(it.symbol ?? ''), stockName: String(it.name ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** index_realtime_sw — swsresearch.com (verified index_research_sw.py:221) */
+  p.indexRealtimeSw = async function indexRealtimeSw(symbol = '二级行业'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const swHeaders = { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' }
+      if (symbol === '大类风格指数' || symbol === '金创指数') {
+        const resp = await fetch('https://www.swsresearch.com/insWechatSw/dflgOrJcIndex/pageList', {
+          method: 'POST', headers: { ...swHeaders, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ pageNo: 1, pageSize: 50, indexTypeName: symbol, sortField: '', rule: '', indexType: 1 }),
+          signal: AbortSignal.timeout(15000),
+        })
+        const json = await resp.json() as Record<string, unknown>
+        const data = json?.data as Record<string, unknown> | undefined
+        const list = data?.list as Record<string, unknown>[] | undefined
+        if (!list?.length) return null
+        return list.map(it => ({
+          code: String(it.swIndexCode ?? ''), name: String(it.swIndexName ?? ''),
+          prevClose: safeFloat(it.lastCloseIndex), changePct: safeFloat(it.lastMarkup),
+          yearChangePct: safeFloat(it.yearMarkup),
+        }))
+      }
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_publish/current/?page=1&page_size=50&indextype=${encodeURIComponent(symbol)}`, {
+        headers: swHeaders, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const results = data?.results as Record<string, unknown>[] | undefined
+      if (!results?.length) return null
+      return results.map(it => ({
+        code: String(Object.values(it)[0] ?? ''), name: String(Object.values(it)[1] ?? ''),
+        prevClose: safeFloat(Object.values(it)[2]), open: safeFloat(Object.values(it)[3]),
+        amount: safeFloat(Object.values(it)[4]), high: safeFloat(Object.values(it)[5]),
+        low: safeFloat(Object.values(it)[6]), price: safeFloat(Object.values(it)[7]),
+        volume: safeFloat(Object.values(it)[8]),
+      }))
+    } catch { return null }
+  }
+
+  /** index_hist_sw — swsresearch.com (verified index_research_sw.py:17) */
+  p.indexHistSw = async function indexHistSw(symbol = '801030', period = 'day'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const periodMap: Record<string, string> = { day: 'DAY', week: 'WEEK', month: 'MONTH' }
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_publish/trend/?swindexcode=${symbol}&period=${periodMap[period] ?? 'DAY'}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const dataList = json?.data as Record<string, unknown>[] | undefined
+      if (!dataList?.length) return null
+      return dataList.map(it => ({
+        code: String(it.swindexcode ?? ''), date: String(it.bargaindate ?? '').slice(0, 10),
+        close: safeFloat(it.closeindex), open: safeFloat(it.openindex),
+        high: safeFloat(it.maxindex), low: safeFloat(it.minindex),
+        volume: safeFloat(it.bargainamount), amount: safeFloat(it.bargainsum),
+      }))
+    } catch { return null }
+  }
+
+  /** index_min_sw — swsresearch.com (verified index_research_sw.py:81) */
+  p.indexMinSw = async function indexMinSw(symbol = '801001'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_publish/details/timelines/?swindexcode=${symbol}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const dataList = json?.data as Record<string, unknown>[] | undefined
+      if (!dataList?.length) return null
+      return dataList.map(it => ({
+        code: String(it.l1 ?? ''), name: String(it.l2 ?? ''),
+        price: safeFloat(it.l8), date: String(it.trading_date ?? '').slice(0, 10),
+        time: String(it.trading_time ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** index_component_sw — swsresearch.com (verified index_research_sw.py:127) */
+  p.indexComponentSw = async function indexComponentSw(symbol = '801001'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_publish/details/component_stocks/?swindexcode=${symbol}&page=1&page_size=10000`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const results = data?.results as Record<string, unknown>[] | undefined
+      if (!results?.length) return null
+      return results.map((it, idx) => ({
+        rank: idx + 1, stockCode: String(it.stockcode ?? ''), stockName: String(it.stockname ?? ''),
+        weight: safeFloat(it.newweight), inclusionDate: String(it.beginningdate ?? '').slice(0, 10),
+      }))
+    } catch { return null }
+  }
+
+  /** index_analysis_daily_sw — swsresearch.com (verified index_research_sw.py:285) */
+  p.indexAnalysisDailySw = async function indexAnalysisDailySw(symbol = '市场表征', startDate = '20240101', endDate = '20240131'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fmt = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_report/?page=1&page_size=50&index_type=${encodeURIComponent(symbol)}&start_date=${fmt(startDate)}&end_date=${fmt(endDate)}&type=DAY&swindexcode=all`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const results = data?.results as Record<string, unknown>[] | undefined
+      if (!results?.length) return null
+      return results.map(it => ({
+        code: String(it.swindexcode ?? ''), name: String(it.swindexname ?? ''),
+        date: String(it.bargaindate ?? '').slice(0, 10),
+        close: safeFloat(it.closeindex), volume: safeFloat(it.bargainamount),
+        changePct: safeFloat(it.markup), turnoverRate: safeFloat(it.turnoverrate),
+        pe: safeFloat(it.pe), pb: safeFloat(it.pb), avgPrice: safeFloat(it.meanprice),
+        amountPct: safeFloat(it.bargainsumrate), floatMktCap: safeFloat(it.negotiablessharesum1),
+        dividendYield: safeFloat(it.dp),
+      }))
+    } catch { return null }
+  }
+
+  /** index_analysis_weekly_sw — swsresearch.com (verified index_research_sw.py:389) */
+  p.indexAnalysisWeeklySw = async function indexAnalysisWeeklySw(symbol = '市场表征', date = '20241025'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fmt = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_reports/?page=1&page_size=50&index_type=${encodeURIComponent(symbol)}&bargaindate=${fmt(date)}&type=WEEK&swindexcode=all`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const results = data?.results as Record<string, unknown>[] | undefined
+      if (!results?.length) return null
+      return results.map(it => ({
+        code: String(it.swindexcode ?? ''), name: String(it.swindexname ?? ''),
+        date: String(it.bargaindate ?? '').slice(0, 10),
+        close: safeFloat(it.closeindex), volume: safeFloat(it.bargainamount),
+        changePct: safeFloat(it.markup), turnoverRate: safeFloat(it.turnoverrate),
+        pe: safeFloat(it.pe), pb: safeFloat(it.pb),
+      }))
+    } catch { return null }
+  }
+
+  /** index_analysis_monthly_sw — swsresearch.com (verified index_research_sw.py:464) */
+  p.indexAnalysisMonthlySw = async function indexAnalysisMonthlySw(symbol = '市场表征', date = '20240930'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fmt = (d: string) => `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
+      const resp = await fetch(`https://www.swsresearch.com/institute-sw/api/index_analysis/index_analysis_reports/?page=1&page_size=50&index_type=${encodeURIComponent(symbol)}&bargaindate=${fmt(date)}&type=MONTH&swindexcode=all`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      const results = data?.results as Record<string, unknown>[] | undefined
+      if (!results?.length) return null
+      return results.map(it => ({
+        code: String(it.swindexcode ?? ''), name: String(it.swindexname ?? ''),
+        date: String(it.bargaindate ?? '').slice(0, 10),
+        close: safeFloat(it.closeindex), volume: safeFloat(it.bargainamount),
+        changePct: safeFloat(it.markup), turnoverRate: safeFloat(it.turnoverrate),
+        pe: safeFloat(it.pe), pb: safeFloat(it.pb),
+      }))
+    } catch { return null }
+  }
+
+  // ── QVIX option volatility indices (optbbs.com CSV) ──
+
+  async function fetchOptbbsQvix(cols: number[]): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('http://1.optbbs.com/d/csv/d/k.csv', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const lines = text.trim().split('\n')
+      if (lines.length < 2) return null
+      return lines.slice(1).map(line => {
+        const fields = line.split(',')
+        return {
+          date: fields[cols[0]] ?? '',
+          open: safeFloat(fields[cols[1]]),
+          high: safeFloat(fields[cols[2]]),
+          low: safeFloat(fields[cols[3]]),
+          close: safeFloat(fields[cols[4]]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** index_option_50etf_qvix (verified index_option_qvix.py:28) */
+  p.indexOption50EtfQvix = async function indexOption50EtfQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 1, 2, 3, 4])
+  }
+
+  /** index_option_300etf_qvix (verified index_option_qvix.py:68) */
+  p.indexOption300EtfQvix = async function indexOption300EtfQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 9, 10, 11, 12])
+  }
+
+  /** index_option_500etf_qvix (verified index_option_qvix.py:108) */
+  p.indexOption500EtfQvix = async function indexOption500EtfQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 67, 68, 69, 70])
+  }
+
+  /** index_option_cyb_qvix (verified index_option_qvix.py:148) */
+  p.indexOptionCybQvix = async function indexOptionCybQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 71, 72, 73, 74])
+  }
+
+  /** index_option_kcb_qvix (verified index_option_qvix.py:188) */
+  p.indexOptionKcbQvix = async function indexOptionKcbQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 83, 84, 85, 86])
+  }
+
+  /** index_option_100etf_qvix (verified index_option_qvix.py:228) */
+  p.indexOption100EtfQvix = async function indexOption100EtfQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 75, 76, 77, 78])
+  }
+
+  /** index_option_300index_qvix (verified index_option_qvix.py:268) */
+  p.indexOption300IndexQvix = async function indexOption300IndexQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 17, 18, 19, 20])
+  }
+
+  /** index_option_1000index_qvix (verified index_option_qvix.py:308) */
+  p.indexOption1000IndexQvix = async function indexOption1000IndexQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 25, 26, 27, 28])
+  }
+
+  /** index_option_50index_qvix (verified index_option_qvix.py:348) */
+  p.indexOption50IndexQvix = async function indexOption50IndexQvix(): Promise<Record<string, unknown>[] | null> {
+    return fetchOptbbsQvix([0, 79, 80, 81, 82])
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // FUND APIS — batch 2 (verified against akshare Python sources)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** fund_aum_em — fund.eastmoney.com/Company/home/gspmlist (verified fund_aum_em.py:14) */
+  p.fundAumEm = async function fundAumEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Company/home/gspmlist?fundType=0', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 5 && /^\d+$/.test(cells[0])) {
+          const scaleStr = cells[3].replace(/,/g, '').split(/\s+/)[0]
+          rows.push({
+            rank: safeFloat(cells[0]),
+            company: cells[1],
+            establishedDate: cells[2],
+            totalScale: safeFloat(scaleStr),
+            fundCount: safeFloat(cells[4]),
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /** fund_aum_hist_em — fund.eastmoney.com/Company/home/HistoryScaleTable (verified fund_aum_em.py:64) */
+  p.fundAumHistEm = async function fundAumHistEm(year = String(new Date().getFullYear())): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://fund.eastmoney.com/Company/home/HistoryScaleTable?year=${year}`, {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 8 && /^\d+$/.test(cells[0])) {
+          rows.push({
+            rank: safeFloat(cells[0]),
+            company: cells[1],
+            totalScale: safeFloat(cells[2].replace(/,/g, '')),
+            stockType: safeFloat(cells[3].replace(/,/g, '')),
+            mixedType: safeFloat(cells[4].replace(/,/g, '')),
+            bondType: safeFloat(cells[5].replace(/,/g, '')),
+            indexType: safeFloat(cells[6].replace(/,/g, '')),
+            qdii: safeFloat(cells[7].replace(/,/g, '')),
+            moneyType: safeFloat(cells[8]?.replace(/,/g, '') ?? ''),
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /** fund_aum_trend_em — fund.eastmoney.com/Company/home/GetFundTotalScaleForChart (verified fund_aum_em.py:45) */
+  p.fundAumTrendEm = async function fundAumTrendEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/Company/home/GetFundTotalScaleForChart?fundType=0', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const dates = json.x as string[] | undefined
+      const values = json.y as number[] | undefined
+      if (!dates?.length || !values?.length) return null
+      return dates.map((d, i) => ({ date: d, value: safeFloat(values[i]) }))
+    } catch { return null }
+  }
+
+  /** fund_stock_position_lg — legulegu.com (verified fund_position_lg.py:15) */
+  p.fundStockPositionLg = async function fundStockPositionLg(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_stock&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
+        headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://legulegu.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>[]
+      if (!json?.length) return null
+      return json.map((it: Record<string, unknown>) => ({
+        date: String(it.date ?? '').slice(0, 10),
+        close: safeFloat(it.close),
+        position: safeFloat(it.position),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_balance_position_lg — legulegu.com (verified fund_position_lg.py:51) */
+  p.fundBalancePositionLg = async function fundBalancePositionLg(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_pingheng&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
+        headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://legulegu.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>[]
+      if (!json?.length) return null
+      return json.map((it: Record<string, unknown>) => ({
+        date: String(it.date ?? '').slice(0, 10),
+        close: safeFloat(it.close),
+        position: safeFloat(it.position),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_linghuo_position_lg — legulegu.com (verified fund_position_lg.py:89) */
+  p.fundLinghuoPositionLg = async function fundLinghuoPositionLg(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_linghuo&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
+        headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://legulegu.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>[]
+      if (!json?.length) return null
+      return json.map((it: Record<string, unknown>) => ({
+        date: String(it.date ?? '').slice(0, 10),
+        close: safeFloat(it.close),
+        position: safeFloat(it.position),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_etf_category_ths — fund.10jqka.com.cn (verified fund_etf_ths.py:15) */
+  p.fundEtfCategoryThs = async function fundEtfCategoryThs(symbol = 'ETF', date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const symbolMap: Record<string, string> = {
+        '股票型': 'gpx', '债券型': 'zqx', '混合型': 'hhx', 'ETF': 'ETF', 'LOF': 'LOF',
+        'QDII': 'QDII', '保本型': 'bbx', '指数型': 'zsx', '': 'all',
+      }
+      const innerSymbol = symbolMap[symbol] ?? 'ETF'
+      const innerDate = date ? `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}` : '0'
+      const resp = await fetch(`https://fund.10jqka.com.cn/data/Net/info/${innerSymbol}_rate_desc_${innerDate}_0_1_9999_0_0_0_jsonp_g.html`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.slice(2, -1)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const items = (data as Record<string, Record<string, Record<string, unknown>>>)?.data?.data
+      if (!items) return null
+      return (Object.values(items) as Record<string, unknown>[]).map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.code ?? ''),
+        name: String(it.name ?? ''),
+        nav: safeFloat(it.net),
+        accNav: safeFloat(it.totalnet),
+        prevNav: safeFloat(it.net1),
+        prevAccNav: safeFloat(it.totalnet1),
+        changeAmt: safeFloat(it.ranges),
+        changePct: safeFloat(it.rate),
+        sellStatus: String(it.shstat ?? ''),
+        buyStatus: String(it.sgstat ?? ''),
+        tradeDate: String(it.newdate ?? ''),
+        newNav: safeFloat(it.newnet),
+        newAccNav: safeFloat(it.newtotalnet),
+        fundType: String(it.typename ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_etf_spot_ths — fund.10jqka.com.cn (verified fund_etf_ths.py:110) */
+  p.fundEtfSpotThs = async function fundEtfSpotThs(date = ''): Promise<Record<string, unknown>[] | null> {
+    return p.fundEtfCategoryThs!.call(this, 'ETF', date)
+  }
+
+  /** fund_etf_dividend_sina — finance.sina.com.cn (verified fund_etf_sina.py:152) */
+  p.fundEtfDividendSina = async function fundEtfDividendSina(symbol = 'sh510050'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/realstock/company/${symbol}/hfq.js`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      if (!text.startsWith('var')) return null
+      const jsonStr = text.split('=')[1].trim().replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const items = (data?.data as unknown[] | undefined)
+      if (!items?.length) return null
+      return items
+        .filter((row: unknown) => Array.isArray(row) && row[0] !== '1900-01-01')
+        .map((row: unknown) => {
+          const r = row as unknown[]
+          return { date: String(r[0] ?? ''), dividend: safeFloat(r[3]) }
+        })
+    } catch { return null }
+  }
+
+  /** fund_etf_hist_sina — finance.sina.com.cn (verified fund_etf_sina.py:116) */
+  p.fundEtfHistSina = async function fundEtfHistSina(symbol = 'sh510050'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/realstock/company/${symbol}/hisdata_klc2/klc_kl.js`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const rawStr = text.split('=')[1]?.split(';')[0]?.replace(/"/g, '')
+      if (!rawStr) return null
+      const items = JSON.parse(rawStr) as Record<string, unknown>[]
+      if (!items?.length) return null
+      return items.map(it => ({
+        date: String(it.date ?? ''),
         open: safeFloat(it.open),
         high: safeFloat(it.high),
         low: safeFloat(it.low),
@@ -1051,3445 +1606,1302 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** 指数日线 — 东方财富 */
-  p.stockZhIndexDailyEm = async function stockZhIndexDailyEm(
-    symbol: string, startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
+  /** fund_etf_scale_sse — query.sse.com.cn (verified fund_etf_sse.py:13) */
+  p.fundEtfScaleSse = async function fundEtfScaleSse(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: resolveSecId(symbol),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: startDate ? startDate.replace(/-/g, '') : '19000101',
-        end: endDate ? endDate.replace(/-/g, '') : '20500101',
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const dataStr = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
+      const resp = await fetch(`https://query.sse.com.cn/commonQuery.do?isPagination=true&pageHelp.pageSize=10000&pageHelp.pageNo=1&pageHelp.beginPage=1&pageHelp.endPage=1&sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L&STAT_DATE=${dataStr}`, {
+        headers: { Referer: 'https://www.sse.com.cn/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
       })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  /** 指数历史行情 — 东方财富 K线（支持周期） */
-  p.indexZhAShist = async function indexZhAShist(
-    symbol: string, period = 'daily', startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: resolveSecId(symbol),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: PERIOD_KLT[period] ?? '101',
-        fqt: '1',
-        beg: startDate ? startDate.replace(/-/g, '') : '19000101',
-        end: endDate ? endDate.replace(/-/g, '') : '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-          changePct: p[8] != null ? safeFloat(p[8]) : null,
-        }
-      })
-    } catch { return null }
-  }
-
-  /** 指数分钟线 — 东方财富 trends2 */
-  p.indexZhAHistMinEm = async function indexZhAHistMinEm(
-    symbol: string, period = '5', startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      const klt = PERIOD_KLT[period] ?? period
-      const data = await (this as EM).getData(TRENDS2_URL, {
-        secid: resolveSecId(symbol),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt,
-        iscr: '0',
-        ndays: '5',
-        iscca: '0',
-      })
-      const trends = data?.trends as string[] | undefined
-      if (!trends?.length) return null
-      return trends.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  /** 港股指数实时行情 */
-  p.stockHkIndexSpotEm = async function stockHkIndexSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'm:128+t:1,m:128+t:2',
-        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      if (!items.length) return null
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        volume: safeFloat(it.f5),
-        amount: safeFloat(it.f6),
-        amplitude: safeFloat(it.f7),
-        turnoverRate: safeFloat(it.f8),
-        high: safeFloat(it.f15),
-        low: safeFloat(it.f16),
-        open: safeFloat(it.f17),
-        prevClose: safeFloat(it.f18),
-        totalMarketCap: safeFloat(it.f20),
-        floatMarketCap: safeFloat(it.f21),
+      const json = await resp.json() as Record<string, unknown>
+      const items = json?.result as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map(it => ({
+        code: String(it.SEC_CODE ?? ''),
+        name: String(it.SEC_NAME ?? ''),
+        etfType: String(it.ETF_TYPE ?? ''),
+        statDate: String(it.STAT_DATE ?? '').slice(0, 10),
+        shares: safeFloat(it.TOT_VOL),
       }))
     } catch { return null }
   }
 
-  /** 港股指数日线 — 东方财富 */
-  p.stockHkIndexDailyEm = async function stockHkIndexDailyEm(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: `128.${c(symbol)}`,
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: '19000101', end: '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  /** 全球指数实时行情 */
-  p.indexGlobalSpotEm = async function indexGlobalSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const params = {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'm:100+t:1',
-        fields: 'f2,f3,f4,f5,f6,f7,f8,f9,f10,f12,f14,f15,f16,f17,f18,f20,f21',
-      }
-      const json = await eastmoneyGet(PUSH2_LIST_URL, params, 15000, EASTMONEY_QUOTE_HEADERS)
-      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
-      const items = (data?.diff ?? []) as Record<string, unknown>[]
-      if (!items.length) return null
-      return items.map((it, idx) => ({
-        rank: idx + 1,
-        code: String(it.f12 ?? ''),
-        name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2),
-        changePct: safeFloat(it.f3),
-        changeAmt: safeFloat(it.f4),
-        volume: safeFloat(it.f5),
-        amount: safeFloat(it.f6),
-        amplitude: safeFloat(it.f7),
-        turnoverRate: safeFloat(it.f8),
-        high: safeFloat(it.f15),
-        low: safeFloat(it.f16),
-        open: safeFloat(it.f17),
-        prevClose: safeFloat(it.f18),
-        totalMarketCap: safeFloat(it.f20),
-        floatMarketCap: safeFloat(it.f21),
-      }))
-    } catch { return null }
-  }
-
-  /** 全球指数历史 — 东方财富 K线 */
-  p.indexGlobalHistEm = async function indexGlobalHistEm(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: `100.${c(symbol)}`,
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: '19000101', end: '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  /** 指数成分股 — dcAll */
-  p.indexStockCons = async function indexStockCons(indexCode: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_INDEX_COMPONENT', `(INDEX_CODE="${c(indexCode)}")`, '500', 'INDEX_CODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        indexCode,
-        stockCode: String(it.SECURITY_CODE ?? ''),
-        stockName: String(it.SECURITY_NAME_ABBR ?? it.SECURITY_NAME ?? ''),
-        weight: safeFloat(it.INDEX_WEIGHT ?? it.WEIGHT),
-        industry: String(it.INDUSTRY_NAME ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  /** 指数信息列表 — dcAll */
-  p.indexStockInfo = async function indexStockInfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_INDEX_INFO', '', '200', 'INDEX_CODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        indexCode: String(it.INDEX_CODE ?? ''),
-        indexName: String(it.INDEX_NAME_ABBR ?? it.INDEX_NAME ?? ''),
-        publisher: String(it.PUBLISHER ?? ''),
-        baseDate: String(it.BASE_DATE ?? '').slice(0, 10),
-        basePoint: safeFloat(it.BASE_POINT),
-        indexType: String(it.INDEX_TYPE ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  /** 指数PE估值 — dcAll */
-  p.indexStockPeLg = async function indexStockPeLg(indexCode: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_INDEX_PE', `(INDEX_CODE="${c(indexCode)}")`, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        indexCode,
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        pe: safeFloat(it.PE),
-        peTtm: safeFloat(it.PE_TTM),
-        pb: safeFloat(it.PB),
-        dividendYield: safeFloat(it.DIVIDEND_YIELD),
-      }))
-    } catch { return null }
-  }
-
-  /** 指数PB估值 — dcAll */
-  p.indexStockPbLg = async function indexStockPbLg(indexCode: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_INDEX_PB', `(INDEX_CODE="${c(indexCode)}")`, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        indexCode,
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        pb: safeFloat(it.PB),
-        pbMrq: safeFloat(it.PB_MRQ),
-        pe: safeFloat(it.PE),
-        dividendYield: safeFloat(it.DIVIDEND_YIELD),
-      }))
-    } catch { return null }
-  }
-
-  // ── 公募基金 ──
-
-  p.fundNameEm = async function fundNameEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_NAME', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), name: String(it.SHORT_NAME ?? ''),
-        fullName: String(it.FULL_NAME ?? ''), fundType: String(it.FUND_TYPE ?? ''),
-        establishDate: String(it.ESTABLISH_DATE ?? '').slice(0, 10),
-        manager: String(it.MANAGER ?? ''), custodian: String(it.CUSTODIAN ?? ''),
-      }))
-    } catch { return null }
-  }
-
-  p.fundPurchaseEm = async function fundPurchaseEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_PURCHASE', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), name: String(it.SHORT_NAME ?? ''),
-        purchaseStatus: String(it.PURCHASE_STATUS ?? ''),
-        purchaseFee: safeFloat(it.PURCHASE_FEE),
-        minPurchase: safeFloat(it.MIN_PURCHASE),
-      }))
-    } catch { return null }
-  }
-
-  p.fundEtfSpotEm = async function fundEtfSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await this.getData(PUSH2_LIST_URL, {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'b:MK0021',
-        fields: 'f2,f3,f4,f12,f14',
-      })
-      const items = ((data as Record<string, unknown>)?.diff ?? []) as Record<string, unknown>[]
-      if (!items.length) return null
-      return items.map((it) => ({
-        code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
-      }))
-    } catch { return null }
-  }
-
-  p.fundLofSpotEm = async function fundLofSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await this.getData(PUSH2_LIST_URL, {
-        pn: '1', pz: '500', po: '1', np: '1',
-        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
-        fltt: '2', invt: '2', fid: 'f3',
-        fs: 'b:MK0022',
-        fields: 'f2,f3,f4,f12,f14',
-      })
-      const items = ((data as Record<string, unknown>)?.diff ?? []) as Record<string, unknown>[]
-      if (!items.length) return null
-      return items.map((it) => ({
-        code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
-        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
-      }))
-    } catch { return null }
-  }
-
-  function fundHistFilter(code: string, period: string, startDate: string, endDate: string, adjust: string) {
-    let filter = `(SECURITY_CODE="${normalizeCode(code)}")`
-    if (startDate) filter += ` AND TRADE_DATE>="${startDate}"`
-    if (endDate) filter += ` AND TRADE_DATE<="${endDate}"`
-    if (period) filter += ` AND FREQUENCY="${period}"`
-    if (adjust) filter += ` AND ADJUST_TYPE="${adjust}"`
-    return filter
-  }
-
-  p.fundEtfHistEm = async function fundEtfHistEm(code: string, period = '', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = fundHistFilter(code, period, startDate, endDate, adjust)
-      const items = await dcAll(this, 'RPT_FUND_DAILY_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: normalizeCode(code),
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        open: safeFloat(it.OPEN_PRICE), high: safeFloat(it.HIGH_PRICE),
-        low: safeFloat(it.LOW_PRICE), close: safeFloat(it.CLOSE_PRICE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        changePct: safeFloat(it.CHANGE_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.fundLofHistEm = async function fundLofHistEm(code: string, period = '', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = fundHistFilter(code, period, startDate, endDate, adjust)
-      const items = await dcAll(this, 'RPT_FUND_DAILY_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: normalizeCode(code),
-        date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        open: safeFloat(it.OPEN_PRICE), high: safeFloat(it.HIGH_PRICE),
-        low: safeFloat(it.LOW_PRICE), close: safeFloat(it.CLOSE_PRICE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        changePct: safeFloat(it.CHANGE_RATE),
-      }))
-    } catch { return null }
-  }
-
-  function fundMinPeriodKlt(period: string): string {
-    const map: Record<string, string> = { '1': '1', '5': '5', '15': '15', '30': '30', '60': '60' }
-    return map[period] ?? '5'
-  }
-
-  p.fundEtfHistMinEm = async function fundEtfHistMinEm(code: string, period = '5', startDate = '', endDate = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const klt = fundMinPeriodKlt(period)
-      const data = await this.getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
-        secid: resolveSecId(code),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt,
-        iscr: '0', ndays: '1', iscca: '0',
-      })
-      const trends = data?.trends as string[] | undefined
-      if (!trends?.length) return null
-      const cc = normalizeCode(code)
-      let lines = trends.map(line => {
-        const bar = parseTrend2IntradayLine(line)
-        if (!bar) return null
-        return { code: cc, time: bar.time, price: bar.price, volume: bar.volume, amount: bar.amount }
-      }).filter(Boolean) as Record<string, unknown>[]
-      if (startDate) lines = lines.filter(l => String(l.time) >= startDate)
-      if (endDate) lines = lines.filter(l => String(l.time) <= endDate)
-      return lines.length ? lines : null
-    } catch { return null }
-  }
-
-  p.fundLofHistMinEm = async function fundLofHistMinEm(code: string, period = '5', startDate = '', endDate = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const klt = fundMinPeriodKlt(period)
-      const data = await this.getData('https://push2his.eastmoney.com/api/qt/stock/trends2/get', {
-        secid: resolveSecId(code),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt,
-        iscr: '0', ndays: '1', iscca: '0',
-      })
-      const trends = data?.trends as string[] | undefined
-      if (!trends?.length) return null
-      const cc = normalizeCode(code)
-      let lines = trends.map(line => {
-        const bar = parseTrend2IntradayLine(line)
-        if (!bar) return null
-        return { code: cc, time: bar.time, price: bar.price, volume: bar.volume, amount: bar.amount }
-      }).filter(Boolean) as Record<string, unknown>[]
-      if (startDate) lines = lines.filter(l => String(l.time) >= startDate)
-      if (endDate) lines = lines.filter(l => String(l.time) <= endDate)
-      return lines.length ? lines : null
-    } catch { return null }
-  }
-
-  p.fundInfoIndexEm = async function fundInfoIndexEm(symbol = '', indicator = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = ''
-      if (symbol) filter = `(INDEX_CODE="${symbol}")`
-      if (indicator) filter += filter ? ` AND INDICATOR="${indicator}"` : `(INDICATOR="${indicator}")`
-      const items = await dcAll(this, 'RPT_FUND_INDEX', filter, '500')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), name: String(it.SHORT_NAME ?? ''),
-        indexCode: String(it.INDEX_CODE ?? ''), indexName: String(it.INDEX_NAME ?? ''),
-        trackingError: safeFloat(it.TRACKING_ERROR),
-        infoRatio: safeFloat(it.INFO_RATIO),
-      }))
-    } catch { return null }
-  }
-
-  p.fundNavEm = async function fundNavEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = normalizeCode(code)
-      const items = await dcAll(this, 'RPT_FUND_NAV', `(FCODE="${cc}")`, '120', 'END_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: cc,
-        date: String(it.END_DATE ?? '').slice(0, 10),
-        nav: safeFloat(it.NAV ?? it.DWJZ),
-        accNav: safeFloat(it.ACC_NAV ?? it.LJJZ),
-        changePct: safeFloat(it.NAV_GR ?? it.RZDF),
-      }))
-    } catch { return null }
-  }
-
-  p.fundOpenFundDayEm = async function fundOpenFundDayEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = normalizeCode(code)
-      const items = await dcAll(this, 'RPT_FUND.openday', '', '100')
-      if (!items.length) return null
-      let result = items
-      if (cc) result = result.filter((it: Record<string, unknown>) => String(it.FCODE ?? '') === cc)
-      if (!result.length) return null
-      return result.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), name: String(it.SHORT_NAME ?? ''),
-        openDate: String(it.OPEN_DATE ?? it.TRADE_DATE ?? '').slice(0, 10),
-      }))
-    } catch { return null }
-  }
-
-  p.fundOpenFundDailyEm = async function fundOpenFundDailyEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = normalizeCode(code)
-      const filter = cc ? `(FCODE="${cc}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_DAILY', filter, '500', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), date: String(it.TRADE_DATE ?? '').slice(0, 10),
-        nav: safeFloat(it.NAV), accNav: safeFloat(it.ACC_NAV),
-        changePct: safeFloat(it.CHANGE_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.fundDividendEm = async function fundDividendEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = normalizeCode(code)
-      const filter = cc ? `(FCODE="${cc}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_DIVIDEND', filter, '200', 'ASSIGN_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), name: String(it.SHORT_NAME ?? ''),
-        assignDate: String(it.ASSIGN_DATE ?? '').slice(0, 10),
-        dividendPerUnit: safeFloat(it.DIVIDEND_PER_UNIT),
-        recordDate: String(it.RECORD_DATE ?? '').slice(0, 10),
-        payDate: String(it.PAY_DATE ?? '').slice(0, 10),
-      }))
-    } catch { return null }
-  }
-
-  p.fundManagerEm = async function fundManagerEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = normalizeCode(code)
-      const filter = cc ? `(FCODE="${cc}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_MANAGER', filter, '200', 'START_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.FCODE ?? ''), managerName: String(it.MANAGER_NAME ?? ''),
-        position: String(it.POSITION ?? ''),
-        startDate: String(it.START_DATE ?? '').slice(0, 10),
-        endDate: String(it.END_DATE ?? '').slice(0, 10),
-      }))
-    } catch { return null }
-  }
-
-  p.fundEtfCategoryThs = async function fundEtfCategoryThs(symbol = '', date = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = ''
-      if (symbol) filter = `(INDEX_CODE="${symbol}")`
-      if (date) filter += filter ? ` AND TRADE_DATE="${date}"` : `(TRADE_DATE="${date}")`
-      const items = await dcAll(this, 'RPT_FUND_ETF_THS', filter, '500', 'TRADE_DATE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME ?? ''),
-        category: String(it.CATEGORY ?? ''),
-        changePct: safeFloat(it.CHANGE_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.fundEtfSpotThs = async function fundEtfSpotThs(date = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = date ? `(TRADE_DATE="${date}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_ETF_SPOT_THS', filter, '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME ?? ''),
-        price: safeFloat(it.CLOSE_PRICE), changePct: safeFloat(it.CHANGE_RATE),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-      }))
-    } catch { return null }
-  }
-
-  // ── 基金/指数补充数据源 ──
-
-  p.fundInfoThs = async function fundInfoThs(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(symbol)
-      const items = await dcAll(this, 'RPT_FUND_INFO_THS', `(SECURITY_CODE="${cc}")`, '1')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME ?? it.SECURITY_NAME_ABBR ?? ''),
-        fundType: String(it.FUND_TYPE ?? ''),
-        establishDate: String(it.ESTABLISH_DATE ?? '').slice(0, 10),
-        manager: String(it.MANAGER ?? ''), custodian: String(it.CUSTODIAN ?? ''),
-        totalAssets: safeFloat(it.TOTAL_ASSETS),
-      }))
-    } catch { return null }
-  }
-
-  p.fundIndividualBasicInfoXq = async function fundIndividualBasicInfoXq(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(symbol)
-      const items = await dcAll(this, 'RPT_FUND_XQ_INFO', `(SECURITY_CODE="${cc}")`, '1')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME ?? it.SECURITY_NAME_ABBR ?? ''),
-        fundType: String(it.FUND_TYPE ?? ''),
-        manager: String(it.MANAGER ?? ''),
-        establishDate: String(it.ESTABLISH_DATE ?? '').slice(0, 10),
-        scale: safeFloat(it.TOTAL_ASSETS ?? it.FUND_SIZE),
-      }))
-    } catch { return null }
-  }
-
-  p.fundEtfCategorySina = async function fundEtfCategorySina(symbol = ''): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = symbol ? `(SECURITY_CODE="${c(symbol)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_ETF_SINA', filter, '500')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? ''), name: String(it.SECURITY_NAME ?? ''),
-        category: String(it.CATEGORY ?? it.ETF_TYPE ?? ''),
-        changePct: safeFloat(it.CHANGE_RATE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockZhIndexSpotSina = async function stockZhIndexSpotSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_INDEX_SINA_SPOT', '', '500')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? it.INDEX_CODE ?? ''),
-        name: String(it.SECURITY_NAME ?? it.INDEX_NAME ?? ''),
-        price: safeFloat(it.CLOSE_PRICE ?? it.PRICE),
-        changePct: safeFloat(it.CHANGE_RATE ?? it.CHANGE_PCT),
-        changeAmt: safeFloat(it.CHANGE_AMOUNT),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        open: safeFloat(it.OPEN_PRICE), prevClose: safeFloat(it.PREV_CLOSE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockZhIndexDailyTx = async function stockZhIndexDailyTx(
-    symbol: string, startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: resolveSecId(symbol),
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: startDate ? startDate.replace(/-/g, '') : '19000101',
-        end: endDate ? endDate.replace(/-/g, '') : '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  p.stockHkIndexSpotSina = async function stockHkIndexSpotSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_HK_INDEX_SINA', '', '100')
-      if (!items.length) return null
-      return items.map((it: Record<string, unknown>) => ({
-        code: String(it.SECURITY_CODE ?? it.INDEX_CODE ?? ''),
-        name: String(it.SECURITY_NAME ?? it.INDEX_NAME ?? ''),
-        price: safeFloat(it.CLOSE_PRICE ?? it.PRICE),
-        changePct: safeFloat(it.CHANGE_RATE ?? it.CHANGE_PCT),
-        changeAmt: safeFloat(it.CHANGE_AMOUNT),
-        volume: safeFloat(it.VOLUME), amount: safeFloat(it.AMOUNT),
-        high: safeFloat(it.HIGH_PRICE), low: safeFloat(it.LOW_PRICE),
-        open: safeFloat(it.OPEN_PRICE), prevClose: safeFloat(it.PREV_CLOSE),
-      }))
-    } catch { return null }
-  }
-
-  p.stockHkIndexDailySina = async function stockHkIndexDailySina(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: `128.${c(symbol)}`,
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: '19000101', end: '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  p.indexUsStockSina = async function indexUsStockSina(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: `105.${c(symbol)}`,
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: '19000101', end: '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  p.indexGlobalHistSina = async function indexGlobalHistSina(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const data = await (this as EM).getData(KLINE_URL, {
-        secid: `100.${c(symbol)}`,
-        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8,f9,f10,f11,f12,f13',
-        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61',
-        klt: '101', fqt: '1',
-        beg: '19000101', end: '20500101',
-      })
-      const klines = data?.klines as string[] | undefined
-      if (!klines?.length) return null
-      return klines.map(line => {
-        const p = line.split(',')
-        return {
-          code: symbol, date: p[0] ?? '',
-          open: safeFloat(p[1]), close: safeFloat(p[2]),
-          high: safeFloat(p[3]), low: safeFloat(p[4]),
-          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
-        }
-      })
-    } catch { return null }
-  }
-
-  // ── 公募基金：规模/概览/持仓/排行/评级/分红/费率 ──
-
-  p.fundAumEm = async function fundAumEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_AUM', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundAumHistEm = async function fundAumHistEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_AUM_HIST', filter, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundAumTrendEm = async function fundAumTrendEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_AUM_TREND', filter, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundOverviewEm = async function fundOverviewEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_OVERVIEW', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundOpenFundInfoEm = async function fundOpenFundInfoEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_OPEN_INFO', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundOpenFundRankEm = async function fundOpenFundRankEm(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = symbol ? `(FCODE="${c(symbol)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_OPEN_RANK', filter, '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundCfEm = async function fundCfEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_CF', filter, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundBalancePositionLg = async function fundBalancePositionLg(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_BALANCE_POSITION', filter, '120', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundStockPositionLg = async function fundStockPositionLg(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_STOCK_POSITION', filter, '120', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundLinghuoPositionLg = async function fundLinghuoPositionLg(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_LINGHUO_POSITION', filter, '120', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundPortfolioHoldEm = async function fundPortfolioHoldEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_PORTFOLIO_HOLD', filter, '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundPortfolioBondHoldEm = async function fundPortfolioBondHoldEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_PORTFOLIO_BOND', filter, '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundPortfolioChangeEm = async function fundPortfolioChangeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_PORTFOLIO_CHANGE', filter, '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundPortfolioIndustryAllocationEm = async function fundPortfolioIndustryAllocationEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_PORTFOLIO_INDUSTRY', filter, '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundHoldStructureEm = async function fundHoldStructureEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_HOLD_STRUCTURE', filter, '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundExchangeRankEm = async function fundExchangeRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_EXCHANGE_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundFhRankEm = async function fundFhRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_FH_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundLcxRankEm = async function fundLcxRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_LCX_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundMoneyRankEm = async function fundMoneyRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_MONEY_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundRatingAll = async function fundRatingAll(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_RATING_ALL', '', '100', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundRatingSh = async function fundRatingSh(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_RATING_SH', '', '100', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundRatingZs = async function fundRatingZs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_RATING_ZS', '', '100', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundRatingJa = async function fundRatingJa(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_RATING_JA', '', '100', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundFeeEm = async function fundFeeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_FEE', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundFhEm = async function fundFhEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_FH', filter, '100', 'ASSIGN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundDividendSina = async function fundDividendSina(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_DIVIDEND_SINA', filter, '100', 'ASSIGN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundScaleChangeEm = async function fundScaleChangeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_SCALE_CHANGE', filter, '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundScaleOpenSina = async function fundScaleOpenSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_SCALE_OPEN_SINA', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundScaleCloseSina = async function fundScaleCloseSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_SCALE_CLOSE_SINA', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundScaleDailySzse = async function fundScaleDailySzse(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_SCALE_DAILY_SZSE', '', '120', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundScaleStructuredSina = async function fundScaleStructuredSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_SCALE_STRUCTURED_SINA', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundEtfScaleSse = async function fundEtfScaleSse(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_ETF_SCALE_SSE', '', '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
+  /** fund_etf_scale_szse — fund.szse.cn (verified fund_etf_szse.py:15) */
   p.fundEtfScaleSzse = async function fundEtfScaleSzse(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_ETF_SCALE_SZSE', '', '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.szse.cn/api/report/ShowReport?SHOWTYPE=JSON&CATALOGID=1000_lf&TABKEY=tab1', {
+        headers: { Referer: 'https://fund.szse.cn/marketdata/fundslist/index.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const items = json?.data as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map(it => ({
+        code: String(it['基金代码'] ?? ''),
+        name: String(it['基金简称'] ?? ''),
+        category: String(it['基金类别'] ?? ''),
+        investType: String(it['投资类别'] ?? ''),
+        listingDate: String(it['上市日期'] ?? '').slice(0, 10),
+        shares: safeFloat(String(it['当前规模(份)'] ?? '').replace(/,/g, '')),
+        manager: String(it['基金管理人'] ?? ''),
+        nav: safeFloat(it['净值']),
+      }))
     } catch { return null }
   }
 
-  p.fundValueEstimationEm = async function fundValueEstimationEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_exchange_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:151) */
+  p.fundExchangeRankEm = async function fundExchangeRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_VALUE_ESTIMATION', filter, '100')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=fb&ft=ct&rs=&gs=0&sc=1nzf&st=desc&pi=1&pn=30000&v=0.1591891419018292', {
+        headers: { Referer: 'https://fund.eastmoney.com/fundguzhi.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.slice(text.indexOf('{'), -1)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map((item, idx) => {
+        const p = item.split(',')
+        return {
+          rank: idx + 1, code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+          navDate: String(p[3] ?? ''), nav: safeFloat(p[4]), accNav: safeFloat(p[5]),
+          week1: safeFloat(p[6]), month1: safeFloat(p[7]), month3: safeFloat(p[8]),
+          month6: safeFloat(p[9]), year1: safeFloat(p[10]), year2: safeFloat(p[11]),
+          year3: safeFloat(p[12]), yearToDate: safeFloat(p[13]), sinceInception: safeFloat(p[14]),
+        }
+      })
     } catch { return null }
   }
 
-  p.fundEtfDividendSina = async function fundEtfDividendSina(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_ETF_DIVIDEND_SINA', filter, '100', 'ASSIGN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundEtfHistSina = async function fundEtfHistSina(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_ETF_HIST_SINA', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
+  /** fund_money_fund_daily_em — fund.eastmoney.com/HBJJ_pjsyl.html (verified fund_em.py:588) */
   p.fundMoneyFundDailyEm = async function fundMoneyFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_MONEY_DAILY', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.eastmoney.com/HBJJ_pjsyl.html', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 5 && /^\d{6}$/.test(cells[0])) {
+          rows.push({
+            code: cells[0],
+            name: cells[1].replace(/基金吧档案/g, ''),
+            tenKUnitYield: safeFloat(cells[2]),
+            annualized7d: safeFloat(cells[3]),
+            nav: safeFloat(cells[4]),
+            dayChange: safeFloat(cells[7]),
+          })
+        }
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
     } catch { return null }
   }
 
-  p.fundMoneyFundInfoEm = async function fundMoneyFundInfoEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_money_rank_em — api.fund.eastmoney.com/FundRank/GetHbRankList (verified fund_rank_em.py:246) */
+  p.fundMoneyRankEm = async function fundMoneyRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_MONEY_INFO', filter, '100')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetHbRankList?intCompany=0&MinsgType=&IsSale=1&strSortCol=SYL_1N&orderType=desc&pageIndex=1&pageSize=10000', {
+        headers: { Referer: 'https://fund.eastmoney.com/fundguzhi.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const datas = json?.Data as Record<string, unknown>[] | undefined
+      if (!datas?.length) return null
+      return datas.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.fcode ?? ''), name: String(it.shortname ?? ''),
+        navDate: String(it.date ?? ''),
+        tenKUnitYield: safeFloat(it.mmy),
+        annualized7d: safeFloat(it.nnj),
+        annualized14d: safeFloat(it.nnj14),
+        annualized28d: safeFloat(it.nnj28),
+        month1: safeFloat(it.syl1y), month3: safeFloat(it.syl3y),
+        month6: safeFloat(it.syl6y), year1: safeFloat(it.syl1n),
+        year2: safeFloat(it.syl2n), year3: safeFloat(it.syl3n),
+        year5: safeFloat(it.syl5n), yearToDate: safeFloat(it.syljn),
+        sinceInception: safeFloat(it.syljs),
+      }))
     } catch { return null }
   }
 
+  /** fund_money_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:622) */
+  p.fundMoneyFundInfoEm = async function fundMoneyFundInfoEm(symbol = '000009'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
+        headers: { Referer: `https://fundf10.eastmoney.com/jjjz_${symbol}.html`, 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.LSJZList as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        date: String(it.FSRQ ?? '').slice(0, 10),
+        tenKUnitYield: safeFloat(it.DWJZ),
+        annualized7d: safeFloat(it.LJJZ),
+        buyStatus: String(it.SGZT ?? ''),
+        sellStatus: String(it.SHZT ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_fee_em — fundf10.eastmoney.com/jjfl_*.html (verified fund_fee_em.py:17) */
+  p.fundFeeEm = async function fundFeeEm(symbol: string, indicator = '运作费用'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://fundf10.eastmoney.com/jjfl_${symbol}.html`, {
+        headers: { Referer: 'https://fundf10.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const sections: Record<string, Record<string, unknown>[]> = {}
+      const h4Regex = /<h4[^>]*class="t"[^>]*>([\s\S]*?)<\/h4>/gi
+      const titles: string[] = []
+      let m = h4Regex.exec(html)
+      while (m) { titles.push(m[1].replace(/<[^>]+>/g, '').trim()); m = h4Regex.exec(html) }
+      const tableRegex = /<table[^>]*>([\s\S]*?)<\/table>/gi
+      const tables: string[][][] = []
+      let tm = tableRegex.exec(html)
+      while (tm) {
+        const rows = [...tm[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+          .map(tr => [...tr[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(td => td[1].replace(/<[^>]+>/g, '').trim()))
+          .filter(r => r.length > 0)
+        if (rows.length) tables.push(rows)
+        tm = tableRegex.exec(html)
+      }
+      for (let i = 0; i < titles.length && i < tables.length; i++) {
+        sections[titles[i]] = tables[i].map(r => {
+          const obj: Record<string, unknown> = {}
+          r.forEach((cell, j) => { obj[`col${j}`] = cell })
+          return obj
+        })
+      }
+      const data = sections[indicator]
+      if (!data?.length) return null
+      return data
+    } catch { return null }
+  }
+
+  /** fund_financial_fund_daily_em — api.fund.eastmoney.com/FundNetValue/GetLCJJJZ (verified fund_em.py:681) */
   p.fundFinancialFundDailyEm = async function fundFinancialFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_FINANCIAL_DAILY', '', '500', 'FCODE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://api.fund.eastmoney.com/FundNetValue/GetLCJJJZ?letter=&jjgsid=0&searchtext=&sort=ljjz,desc&page=1,100&AttentionCodes=&cycle=&OnlySale=1', {
+        headers: { Referer: 'https://fund.eastmoney.com/lcjj.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.List as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.fcode ?? ''), name: String(it.shortname ?? ''),
+        annRatePrev: safeFloat(it.actualsyi),
+        tenKUnitYield: safeFloat(it.mui),
+        annRate7d: safeFloat(it.syi),
+        buyStatus: String(it.kfr ?? ''),
+        cycle: String(it.cycle ?? ''),
+      }))
     } catch { return null }
   }
 
-  p.fundFinancialFundInfoEm = async function fundFinancialFundInfoEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_financial_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:754) */
+  p.fundFinancialFundInfoEm = async function fundFinancialFundInfoEm(symbol = '000134'): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_FINANCIAL_INFO', filter, '100')
-      if (!items.length) return null
-      return items
+      const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
+        headers: { Referer: `https://fundf10.eastmoney.com/jjjz_${symbol}.html`, 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.LSJZList as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        date: String(it.FSRQ ?? '').slice(0, 10),
+        nav: safeFloat(it.DWJZ),
+        accNav: safeFloat(it.LJJZ),
+        changePct: safeFloat(it.JZZZL),
+        buyStatus: String(it.SGZT ?? ''),
+        sellStatus: String(it.SHZT ?? ''),
+        dividend: String(it.FHSP ?? ''),
+      }))
     } catch { return null }
   }
 
+  /** fund_graded_fund_daily_em — fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx (verified fund_em.py:809) */
   p.fundGradedFundDailyEm = async function fundGradedFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_GRADED_DAILY', '', '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=1&lx=9&letter=&gsid=0&text=&sort=zdf,desc&page=1,10000&dt=1580914040623&atfc=', {
+        headers: { Referer: 'https://fund.eastmoney.com/fjjj.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+db\s*=\s*/, '').replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map((row, idx) => ({
+        rank: idx + 1, code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        nav: safeFloat(row[3]), accNav: safeFloat(row[4]),
+        prevNav: safeFloat(row[5]), prevAccNav: safeFloat(row[6]),
+        changeAmt: safeFloat(row[7]), changePct: safeFloat(row[8]),
+        marketPrice: safeFloat(row[9]), premiumRate: safeFloat(row[10]),
+      }))
     } catch { return null }
   }
 
-  p.fundGradedFundInfoEm = async function fundGradedFundInfoEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_graded_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:879) */
+  p.fundGradedFundInfoEm = async function fundGradedFundInfoEm(symbol = '150232'): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_GRADED_INFO', filter, '100')
-      if (!items.length) return null
-      return items
+      const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
+        headers: { Referer: `https://fundf10.eastmoney.com/jjjz_${symbol}.html`, 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.LSJZList as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        date: String(it.FSRQ ?? '').slice(0, 10),
+        nav: safeFloat(it.DWJZ),
+        accNav: safeFloat(it.LJJZ),
+        changePct: safeFloat(it.JZZZL),
+        buyStatus: String(it.SGZT ?? ''),
+        sellStatus: String(it.SHZT ?? ''),
+      }))
     } catch { return null }
   }
 
-  p.fundEtfFundDailyEm = async function fundEtfFundDailyEm(): Promise<Record<string, unknown>[] | null> {
+  /** fund_value_estimation_em — api.fund.eastmoney.com/FundGuZhi/GetFundGZList (verified fund_em.py:1042) */
+  p.fundValueEstimationEm = async function fundValueEstimationEm(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_ETF_DAILY', '', '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
+      const symbolMap: Record<string, number> = {
+        '全部': 1, '股票型': 2, '混合型': 3, '债券型': 4, '指数型': 5,
+        'QDII': 6, 'ETF联接': 7, 'LOF': 8, '场内交易基金': 9,
+      }
+      const type = symbolMap[symbol] ?? 1
+      const resp = await fetch(`https://api.fund.eastmoney.com/FundGuZhi/GetFundGZList?type=${type}&sort=3&orderType=desc&canbuy=0&pageIndex=1&pageSize=20000&_=${Date.now()}`, {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.list as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.fcode ?? ''), name: String(it.name ?? ''),
+        estNav: safeFloat(it.gsz),
+        estChangePct: safeFloat(it.gszzl),
+        actualNav: safeFloat(it.dwjz),
+        actualChangePct: safeFloat(it.jzzzl),
+        estError: safeFloat(it.gztime),
+      }))
     } catch { return null }
   }
 
-  p.fundEtfFundInfoEm = async function fundEtfFundInfoEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_lcx_rank_em — api.fund.eastmoney.com/FundRank/GetLcRankList (verified fund_rank_em.py:346) */
+  p.fundLcxRankEm = async function fundLcxRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_ETF_INFO', filter, '100')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetLcRankList?intCompany=0&MinsgType=undefined&IsSale=1&strSortCol=SYL_Z&orderType=desc&pageIndex=1&pageSize=50&FBQ=', {
+        headers: { Referer: 'https://fund.eastmoney.com/fundguzhi.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const datas = json?.Data as Record<string, unknown>[] | undefined
+      if (!datas?.length) return null
+      return datas.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.fcode ?? ''), name: String(it.shortname ?? ''),
+        navDate: String(it.date ?? ''),
+        tenKUnitYield: safeFloat(it.mmy),
+        annRate7d: safeFloat(it.nnj),
+        annRate14d: safeFloat(it.nnj14),
+        annRate28d: safeFloat(it.nnj28),
+        week1: safeFloat(it.syl1w), month1: safeFloat(it.syl1y),
+        month3: safeFloat(it.syl3y), month6: safeFloat(it.syl6y),
+        yearToDate: safeFloat(it.syljn), sinceInception: safeFloat(it.syljs),
+      }))
     } catch { return null }
   }
 
-  p.fundHkFundHistEm = async function fundHkFundHistEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_overview_em — fundf10.eastmoney.com/jbgk_*.html (verified fund_overview_em.py:15) */
+  p.fundOverviewEm = async function fundOverviewEm(symbol: string): Promise<Record<string, unknown> | null> {
     try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_HK_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch(`https://fundf10.eastmoney.com/jbgk_${symbol}.html`, {
+        headers: { Referer: 'https://fundf10.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const tds = [...html.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+      if (tds.length < 10) return null
+      const info: Record<string, string> = {}
+      for (let i = 0; i < tds.length - 1; i += 2) {
+        if (tds[i] && tds[i + 1]) info[tds[i]] = tds[i + 1]
+      }
+      return Object.keys(info).length ? info : null
     } catch { return null }
   }
 
-  p.fundHkRankEm = async function fundHkRankEm(): Promise<Record<string, unknown>[] | null> {
+  /** fund_open_fund_info_em — fund.eastmoney.com/pingzhongdata/*.js (verified fund_em.py:333) */
+  p.fundOpenFundInfoEm = async function fundOpenFundInfoEm(symbol: string, indicator = '单位净值走势'): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_HK_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
+      const resp = await fetch(`https://fund.eastmoney.com/pingzhongdata/${symbol}.js`, {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const varMap: Record<string, string> = {
+        '单位净值走势': 'Data_netWorthTrend',
+        '累计净值走势': 'Data_ACWorthTrend',
+        '同类排名走势': 'Data_rateInSimilarType',
+      }
+      const varName = varMap[indicator]
+      if (!varName) return null
+      const match = text.match(new RegExp(`var\\s+${varName}\\s*=\\s*(\\[[\\s\\S]*?\\]);`))
+      if (!match) return null
+      const data = JSON.parse(match[1]) as Record<string, unknown>[]
+      if (!data?.length) return null
+      return data.map(it => {
+        if (indicator === '同类排名走势') {
+          const x = it.x as number
+          return {
+            date: new Date(x).toISOString().slice(0, 10),
+            sameTypeRank: safeFloat(it.y),
+            totalRank: safeFloat(it.equityReturn),
+          }
+        }
+        const x = it.x as number
+        return {
+          date: new Date(x).toISOString().slice(0, 10),
+          nav: safeFloat(it.y),
+          changePct: safeFloat(it.equityReturn),
+        }
+      })
     } catch { return null }
   }
 
-  p.fundIndividualAchievementXq = async function fundIndividualAchievementXq(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_open_fund_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:33) */
+  p.fundOpenFundRankEm = async function fundOpenFundRankEm(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_XQ_ACHIEVEMENT', filter, '100')
-      if (!items.length) return null
-      return items
+      const typeMap: Record<string, [string, string]> = {
+        '全部': ['all', '1nzf'], '股票型': ['gp', '1nzf'], '混合型': ['hh', '1nzf'],
+        '债券型': ['zq', '1nzf'], '指数型': ['zs', '1nzf'], 'QDII': ['qdii', '1nzf'],
+        'FOF': ['fof', '1nzf'],
+      }
+      const [ft, sc] = typeMap[symbol] ?? typeMap['全部']
+      const now = new Date().toISOString().slice(0, 10)
+      const oneYearAgo = new Date(Date.now() - 365 * 86400000).toISOString().slice(0, 10)
+      const resp = await fetch(`https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=kf&ft=${ft}&rs=&gs=0&sc=${sc}&st=desc&sd=${oneYearAgo}&ed=${now}&qdii=&tabSubtype=,,,,,&pi=1&pn=30000&dx=1&v=0.1591891419018292`, {
+        headers: { Referer: 'https://fund.eastmoney.com/fundguzhi.html', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.slice(text.indexOf('{'), -1)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[] | undefined
+      if (!datas?.length) return null
+      return datas.slice(0, 500).map((item, idx) => {
+        const p = item.split(',')
+        return {
+          rank: idx + 1, code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+          navDate: String(p[3] ?? ''), nav: safeFloat(p[4]), accNav: safeFloat(p[5]),
+          changePct: safeFloat(p[6]), week1: safeFloat(p[7]), month1: safeFloat(p[8]),
+          month3: safeFloat(p[9]), month6: safeFloat(p[10]), year1: safeFloat(p[11]),
+          year2: safeFloat(p[12]), year3: safeFloat(p[13]), yearToDate: safeFloat(p[14]),
+          sinceInception: safeFloat(p[15]),
+        }
+      })
     } catch { return null }
   }
 
-  p.fundIndividualAnalysisXq = async function fundIndividualAnalysisXq(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_XQ_ANALYSIS', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundIndividualDetailHoldXq = async function fundIndividualDetailHoldXq(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_XQ_DETAIL_HOLD', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundIndividualDetailInfoXq = async function fundIndividualDetailInfoXq(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_XQ_DETAIL_INFO', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundIndividualProfitProbabilityXq = async function fundIndividualProfitProbabilityXq(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(FCODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_FUND_XQ_PROFIT', filter, '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundReportAssetAllocationCninfo = async function fundReportAssetAllocationCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_REPORT_ASSET', '', '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundReportIndustryAllocationCninfo = async function fundReportIndustryAllocationCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_REPORT_INDUSTRY', '', '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.fundReportStockCninfo = async function fundReportStockCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_FUND_REPORT_STOCK', '', '100', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
+  /** fund_new_found_em — fund.eastmoney.com/data/FundNewIssue.aspx (verified fund_init_em.py:15) */
   p.fundNewFoundEm = async function fundNewFoundEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_NEW_FOUND', '', '100', 'ESTABLISH_DATE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.eastmoney.com/data/FundNewIssue.aspx?t=xcln&sort=jzrgq,desc=&y=&page=1,50000&isbuy=1&v=0.4069919776543214', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const text = await resp.text()
+      const jsonStr = text.replace(/^var\s+newfunddata\s*=\s*/, '').replace(/;\s*$/, '')
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const datas = data?.datas as string[][] | undefined
+      if (!datas?.length) return null
+      return datas.map(row => ({
+        code: String(row[0] ?? ''), name: String(row[1] ?? ''),
+        company: String(row[2] ?? ''), fundType: String(row[4] ?? ''),
+        salePeriod: String(row[10] ?? ''),
+        raisedShares: safeFloat(row[5]),
+        establishedDate: String(row[6] ?? '').slice(0, 10),
+        sinceInception: safeFloat(row[7]?.replace(/,/g, '')),
+        manager: String(row[8] ?? ''),
+        buyStatus: String(row[9] ?? ''),
+        fee: safeFloat(row[18]?.replace(/%/g, '')),
+      }))
     } catch { return null }
   }
 
-  p.fundNewFoundThs = async function fundNewFoundThs(): Promise<Record<string, unknown>[] | null> {
+  /** fund_new_found_ths — fund.10jqka.com.cn/datacenter/xfjj/ (verified fund_init_ths.py:15) */
+  p.fundNewFoundThs = async function fundNewFoundThs(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_FUND_NEW_FOUND_THS', '', '100', 'ESTABLISH_DATE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch('https://fund.10jqka.com.cn/datacenter/xfjj/', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const startIdx = html.indexOf('jsonData=')
+      if (startIdx === -1) return null
+      const startBracket = html.indexOf('{', startIdx)
+      if (startBracket === -1) return null
+      let count = 0, endIdx = startBracket
+      for (let i = startBracket; i < html.length; i++) {
+        if (html[i] === '{') count++
+        else if (html[i] === '}') { count--; if (count === 0) { endIdx = i + 1; break } }
+      }
+      const data = JSON.parse(html.slice(startBracket, endIdx)) as Record<string, Record<string, unknown>>
+      let items = Object.values(data)
+      if (symbol === '发行中') items = items.filter(it => it.zzfx === 1)
+      else if (symbol === '将发行') items = items.filter(it => it.zzfx !== 1)
+      return items.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.code ?? ''), name: String(it.name ?? ''),
+        investType: String(it.type ?? ''), fundType: String(it.jjlx ?? ''),
+        investStyle: String(it.tzfg ?? ''),
+        startDate: String(it.start ?? '').slice(0, 10),
+        endDate: String(it.end ?? '').slice(0, 10),
+        orgName: String(it.orgname ?? ''),
+        manager: Array.isArray(it.manager) ? String(it.manager[0] ?? '') : String(it.manager ?? ''),
+        subscribeFee: safeFloat(it.zgrgfl),
+        minSubscribe: safeFloat(it.zdrg),
+      }))
     } catch { return null }
   }
 
-  p.reitsHistEm = async function reitsHistEm(code: string): Promise<Record<string, unknown>[] | null> {
+  /** fund_info_ths — fund.10jqka.com.cn (verified fund_info_ths.py:25, improved) */
+  p.fundInfoThs = async function fundInfoThs(code: string): Promise<Record<string, unknown> | null> {
     try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_REITS_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
+      const resp = await fetch(`https://fund.10jqka.com.cn/${code}/interduce.html`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const tds = [...html.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+      if (tds.length < 10) return null
+      const info: Record<string, string> = {}
+      for (let i = 0; i < tds.length - 1; i += 2) {
+        if (tds[i] && tds[i + 1]) info[tds[i]] = tds[i + 1]
+      }
+      return Object.keys(info).length ? info : null
     } catch { return null }
   }
 
+  // ═══════════════════════════════════════════════════════════════
+  // FUND APIS — batch 3 (verified against akshare Python sources)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** fund_rating_sh — fund.eastmoney.com/data/fundrating_3 (verified fund_rating.py:91) */
+  p.fundRatingSh = async function fundRatingSh(date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const dateFmt = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+      const resp = await fetch(`https://fund.eastmoney.com/data/fundrating_3_${dateFmt}.html`, {
+        headers: { Referer: 'https://fund.eastmoney.com/data/fundrating_3.html' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const match = html.match(/var\s+rankData\s*=\s*({.*?})\s*;/s)
+      if (match) {
+        const data = JSON.parse(match[1]) as Record<string, unknown>
+        const datas = data?.datas as string[] | undefined
+        if (datas?.length) {
+          return datas.slice(0, 500).map(item => {
+            const p = item.split('|')
+            return {
+              code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+              fundType: String(p[2] ?? ''), fundManager: String(p[3] ?? ''),
+              fundCompany: String(p[5] ?? ''),
+              rating3Year: safeFloat(p[7]), rating3YearChange: safeFloat(p[8]),
+              rating5Year: safeFloat(p[9]), rating5YearChange: safeFloat(p[10]),
+              nav: safeFloat(p[11]), navDate: String(p[12] ?? '').slice(0, 10),
+              changePct: safeFloat(p[13]),
+              year1: safeFloat(p[14]), year3: safeFloat(p[15]), year5: safeFloat(p[16]),
+              fee: safeFloat(p[17]),
+            }
+          })
+        }
+      }
+      const scriptMatch = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi)
+      if (!scriptMatch) return null
+      for (const s of scriptMatch) {
+        const inner = s.replace(/<[^>]+>/g, '')
+        const dataMatch = inner.match(/"([|_|]+)"/)
+        if (dataMatch && dataMatch[1].includes('|_')) {
+          const rows = dataMatch[1].split('|_').filter(Boolean)
+          if (rows.length) {
+            return rows.map(row => {
+              const p = row.split('|')
+              return {
+                code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+                fundType: String(p[2] ?? ''), fundManager: String(p[3] ?? ''),
+                fundCompany: String(p[5] ?? ''),
+                rating3Year: safeFloat(p[7]), rating3YearChange: safeFloat(p[8]),
+                rating5Year: safeFloat(p[9]), rating5YearChange: safeFloat(p[10]),
+                nav: safeFloat(p[11]), navDate: String(p[12] ?? '').slice(0, 10),
+                changePct: safeFloat(p[13]),
+                year1: safeFloat(p[14]), year3: safeFloat(p[15]), year5: safeFloat(p[16]),
+                fee: safeFloat(p[17]),
+              }
+            })
+          }
+        }
+      }
+      return null
+    } catch { return null }
+  }
+
+  /** fund_rating_zs — fund.eastmoney.com/data/fundrating_2 (verified fund_rating.py:189) */
+  p.fundRatingZs = async function fundRatingZs(date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const dateFmt = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+      const resp = await fetch(`https://fund.eastmoney.com/data/fundrating_2_${dateFmt}.html`, {
+        headers: { Referer: 'https://fund.eastmoney.com/data/fundrating_2.html' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const match = html.match(/var\s+rankData\s*=\s*({.*?})\s*;/s)
+      if (match) {
+        const data = JSON.parse(match[1]) as Record<string, unknown>
+        const datas = data?.datas as string[] | undefined
+        if (datas?.length) {
+          return datas.slice(0, 500).map(item => {
+            const p = item.split('|')
+            return {
+              code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+              fundManager: String(p[3] ?? ''), fundCompany: String(p[5] ?? ''),
+              rating3Year: safeFloat(p[7]), rating3YearChange: safeFloat(p[8]),
+              nav: safeFloat(p[9]), navDate: String(p[10] ?? '').slice(0, 10),
+              changePct: safeFloat(p[11]),
+              year1: safeFloat(p[12]), year3: safeFloat(p[13]), year5: safeFloat(p[14]),
+              fee: safeFloat(p[15]),
+            }
+          })
+        }
+      }
+      const scriptMatch = html.match(/<script[^>]*>([\s\S]*?)<\/script>/gi)
+      if (!scriptMatch) return null
+      for (const s of scriptMatch) {
+        const inner = s.replace(/<[^>]+>/g, '')
+        const dataMatch = inner.match(/"([|_|]+)"/)
+        if (dataMatch && dataMatch[1].includes('|_')) {
+          const rows = dataMatch[1].split('|_').filter(Boolean)
+          if (rows.length) {
+            return rows.map(row => {
+              const p = row.split('|')
+              return {
+                code: String(p[0] ?? ''), name: String(p[1] ?? ''),
+                fundManager: String(p[3] ?? ''), fundCompany: String(p[5] ?? ''),
+                rating3Year: safeFloat(p[7]), rating3YearChange: safeFloat(p[8]),
+                nav: safeFloat(p[9]), navDate: String(p[10] ?? '').slice(0, 10),
+                changePct: safeFloat(p[11]),
+                year1: safeFloat(p[12]), year3: safeFloat(p[13]), year5: safeFloat(p[14]),
+                fee: safeFloat(p[15]),
+              }
+            })
+          }
+        }
+      }
+      return null
+    } catch { return null }
+  }
+
+  /** fund_report_asset_allocation_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:161) */
+  p.fundReportAssetAllocationCninfo = async function fundReportAssetAllocationCninfo(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1114', {
+        method: 'POST',
+        headers: {
+          'Accept': '*/*',
+          'Accept-Encoding': 'gzip, deflate',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Host': 'webapi.cninfo.com.cn',
+          'Origin': 'https://webapi.cninfo.com.cn',
+          'Referer': 'https://webapi.cninfo.com.cn/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = json?.records as Record<string, unknown>[] | undefined
+      if (!records?.length) return null
+      return records.map(it => ({
+        reportDate: String(it.ENDDATE ?? '').slice(0, 10),
+        fundCoverage: safeFloat(it.F001N),
+        equityRatio: safeFloat(it.F006N),
+        bondRatio: safeFloat(it.F007N),
+        cashRatio: safeFloat(it.F008N),
+        netAssetScale: safeFloat(it.F005N),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_report_industry_allocation_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:97) */
+  p.fundReportIndustryAllocationCninfo = async function fundReportIndustryAllocationCninfo(date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const rdate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+      const resp = await fetch(`https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1113?rdate=${rdate}`, {
+        method: 'POST',
+        headers: {
+          'Accept': '*/*',
+          'Accept-Encoding': 'gzip, deflate',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Host': 'webapi.cninfo.com.cn',
+          'Origin': 'https://webapi.cninfo.com.cn',
+          'Referer': 'https://webapi.cninfo.com.cn/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = json?.records as Record<string, unknown>[] | undefined
+      if (!records?.length) return null
+      return records.map(it => ({
+        industryCode: String(it.F001V ?? ''),
+        industryName: String(it.F002V ?? ''),
+        reportDate: String(it.ENDDATE ?? '').slice(0, 10),
+        fundCoverage: safeFloat(it.F003N),
+        industryScale: safeFloat(it.F004N),
+        netAssetRatio: safeFloat(it.F005N),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_report_stock_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:30) */
+  p.fundReportStockCninfo = async function fundReportStockCninfo(date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const rdate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+      const resp = await fetch(`https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1112?rdate=${rdate}`, {
+        method: 'POST',
+        headers: {
+          'Accept': '*/*',
+          'Accept-Encoding': 'gzip, deflate',
+          'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'Host': 'webapi.cninfo.com.cn',
+          'Origin': 'https://webapi.cninfo.com.cn',
+          'Referer': 'https://webapi.cninfo.com.cn/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/132.0.0.0 Safari/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(30000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const records = json?.records as Record<string, unknown>[] | undefined
+      if (!records?.length) return null
+      return records.map(it => ({
+        stockCode: String(it.SECCODE ?? ''),
+        stockName: String(it.SECNAME ?? ''),
+        reportDate: String(it.ENDDATE ?? '').slice(0, 10),
+        fundCoverage: safeFloat(it.F001N),
+        totalShares: safeFloat(it.F002N),
+        totalMarketValue: safeFloat(it.F003N),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_scale_close_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:95) */
+  p.fundScaleCloseSina = async function fundScaleCloseSina(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = 'http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/IO.XSRV2.CallbackList[_bjN6KvXOkfPy2Bu]/NetValueReturn_Service.NetValueReturnClose'
+      const params = new URLSearchParams({
+        page: '1', num: '1000', sort: 'zmjgm', asc: '0', ccode: '', type2: '', type3: '',
+      })
+      const resp = await fetch(`${url}?${params}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const start = text.indexOf('({')
+      if (start === -1) return null
+      const jsonStr = text.slice(start + 1, -2)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const items = data?.data as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.symbol ?? ''), name: String(it.sname ?? ''),
+        nav: safeFloat(it.dwjz), totalScale: safeFloat(it.zmjgm),
+        totalShares: safeFloat(it.zjzfe), establishedDate: String(it.clrq ?? '').slice(0, 10),
+        manager: String(it.jjjl ?? ''), updateDate: String(it.jzrq ?? '').slice(0, 10),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_scale_daily_szse — www.szse.cn (verified fund_scale_szse.py:27) */
+  p.fundScaleDailySzse = async function fundScaleDailySzse(startDate = '', endDate = '', symbol = 'ETF'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const now = new Date()
+      const fmtDate = (d: string) => {
+        if (d) return `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6, 8)}`
+        return now.toISOString().slice(0, 10)
+      }
+      const start = fmtDate(startDate || new Date(now.getTime() - 7 * 86400000).toISOString().slice(0, 10).replace(/-/g, ''))
+      const end = fmtDate(endDate || now.toISOString().slice(0, 10).replace(/-/g, ''))
+      const symbolMap: Record<string, string> = { ETF: 'ETF', LOF: 'LOF', REITS: '不动产基金' }
+      const refererMap: Record<string, string> = {
+        ETF: 'https://www.szse.cn/market/fund/volume/etf/index.html',
+        LOF: 'https://www.szse.cn/market/fund/volume/lof/index.html',
+        REITS: 'https://www.szse.cn/market/fund/volume/reits/index.html',
+      }
+      const jjlb = symbolMap[symbol] ?? 'ETF'
+      const resp = await fetch(`https://www.szse.cn/api/report/ShowReport?SHOWTYPE=JSON&CATALOGID=scsj_fund_jjgm&TABKEY=tab1&txtStart=${start}&txtEnd=${end}&jjlb=${encodeURIComponent(jjlb)}&random=${Math.random()}`, {
+        headers: {
+          Referer: refererMap[symbol] ?? refererMap.ETF,
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const items = json?.data as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map(it => ({
+        date: String(it['日期'] ?? '').slice(0, 10),
+        code: String(it['基金代码'] ?? ''),
+        name: String(it['基金简称'] ?? ''),
+        shares: safeFloat(String(it['基金规模(份)'] ?? '').replace(/,/g, '')),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_scale_open_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:15) */
+  p.fundScaleOpenSina = async function fundScaleOpenSina(symbol = '股票型基金'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fundMap: Record<string, string> = {
+        '股票型基金': '2', '混合型基金': '1', '债券型基金': '3',
+        '货币型基金': '5', 'QDII基金': '6',
+      }
+      const type2 = fundMap[symbol] ?? '2'
+      const url = 'http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/IO.XSRV2.CallbackList[J2cW8KXheoWKdSHc]/NetValueReturn_Service.NetValueReturnOpen'
+      const params = new URLSearchParams({
+        page: '1', num: '10000', sort: 'zmjgm', asc: '0', ccode: '', type2, type3: '',
+      })
+      const resp = await fetch(`${url}?${params}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const start = text.indexOf('({')
+      if (start === -1) return null
+      const jsonStr = text.slice(start + 1, -2)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const items = data?.data as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.symbol ?? ''), name: String(it.sname ?? ''),
+        nav: safeFloat(it.dwjz), totalScale: safeFloat(it.zmjgm),
+        totalShares: safeFloat(it.zjzfe), establishedDate: String(it.clrq ?? '').slice(0, 10),
+        manager: String(it.jjjl ?? ''), updateDate: String(it.jzrq ?? '').slice(0, 10),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_scale_structured_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:166) */
+  p.fundScaleStructuredSina = async function fundScaleStructuredSina(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = 'http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/IO.XSRV2.CallbackList[cRrwseM7NWX68rDa]/NetValueReturn_Service.NetValueReturnCX'
+      const params = new URLSearchParams({
+        page: '1', num: '1000', sort: 'zmjgm', asc: '0', ccode: '', type2: '', type3: '',
+      })
+      const resp = await fetch(`${url}?${params}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const start = text.indexOf('({')
+      if (start === -1) return null
+      const jsonStr = text.slice(start + 1, -2)
+      const data = JSON.parse(jsonStr) as Record<string, unknown>
+      const items = data?.data as Record<string, unknown>[] | undefined
+      if (!items?.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.symbol ?? ''), name: String(it.sname ?? ''),
+        nav: safeFloat(it.dwjz), totalScale: safeFloat(it.zmjgm),
+        totalShares: safeFloat(it.zjzfe), establishedDate: String(it.clrq ?? '').slice(0, 10),
+        manager: String(it.jjjl ?? ''), updateDate: String(it.jzrq ?? '').slice(0, 10),
+      }))
+    } catch { return null }
+  }
+
+  /** reits_hist_em — push2his.eastmoney.com (verified reits_basic.py:116) */
+  p.reitsHistEm = async function reitsHistEm(symbol = '508097'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const spotParams = {
+        pn: '1', pz: '100', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', fid: 'f3',
+        fs: 'm:1 t:9 e:97,m:0 t:10 e:97',
+        fields: 'f12,f13',
+      }
+      const spotJson = await eastmoneyGet('https://95.push2.eastmoney.com/api/qt/clist/get', spotParams, 15000, EASTMONEY_QUOTE_HEADERS)
+      const spotData = (spotJson as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const spotItems = ((spotData?.diff ?? []) as Record<string, unknown>[])
+      const match = spotItems.find(it => String(it.f12 ?? '') === symbol)
+      if (!match) return null
+      const secid = `${match.f13}.${symbol}`
+      const data = await (this as EM).getData('https://push2his.eastmoney.com/api/qt/stock/kline/get', {
+        secid,
+        klt: '101', fqt: '1', lmt: '10000', end: '20500000', iscca: '1',
+        fields1: 'f1,f2,f3,f4,f5,f6,f7,f8',
+        fields2: 'f51,f52,f53,f54,f55,f56,f57,f58,f59,f60,f61,f62,f63,f64',
+        ut: 'f057cbcbce2a86e2866ab8877db1d059', forcect: '1',
+      })
+      const klines = data?.klines as string[] | undefined
+      if (!klines?.length) return null
+      return klines.map(line => {
+        const p = line.split(',')
+        return {
+          date: p[0] ?? '', open: safeFloat(p[1]), close: safeFloat(p[2]),
+          high: safeFloat(p[3]), low: safeFloat(p[4]),
+          volume: safeFloat(p[5]), amount: safeFloat(p[6]),
+          amplitude: safeFloat(p[7]), turnoverRate: safeFloat(p[10]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /** reits_realtime_em — 95.push2.eastmoney.com (verified reits_basic.py:45) */
   p.reitsRealtimeEm = async function reitsRealtimeEm(): Promise<Record<string, unknown>[] | null> {
     try {
-      const items = await dcAll(this, 'RPT_REITS_REALTIME', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 财务报表 ──
-
-  p.stockFinancialReportSina = async function stockFinancialReportSina(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_SINA', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialAbstract = async function stockFinancialAbstract(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_ABSTRACT', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialAbstractNewThs = async function stockFinancialAbstractNewThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_ABSTRACT_THS', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialAnalysisIndicator = async function stockFinancialAnalysisIndicator(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_INDICATOR', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialAnalysisIndicatorEm = async function stockFinancialAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_INDICATOR_EM', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialBenefitNewThs = async function stockFinancialBenefitNewThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_BENEFIT_THS', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialCashNewThs = async function stockFinancialCashNewThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_CASH_THS', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialDebtNewThs = async function stockFinancialDebtNewThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_DEBT_THS', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialHkReportEm = async function stockFinancialHkReportEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_HK_REPORT', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialHkAnalysisIndicatorEm = async function stockFinancialHkAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_HK_INDICATOR', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialUsReportEm = async function stockFinancialUsReportEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_US_REPORT', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFinancialUsAnalysisIndicatorEm = async function stockFinancialUsAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_FINANCIAL_US_INDICATOR', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLrbEm = async function stockLrbEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_LRB', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockXjllEm = async function stockXjllEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_XJLL', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZcfzEm = async function stockZcfzEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_ZCFZ', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZcfzBjEm = async function stockZcfzBjEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_ZCFZ_BJ', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockReportDisclosure = async function stockReportDisclosure(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_REPORT_DISCLOSURE', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockReportFundHold = async function stockReportFundHold(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_REPORT_FUND_HOLD', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockReportFundHoldDetail = async function stockReportFundHoldDetail(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_REPORT_FUND_HOLD_DETAIL', `(SECURITY_CODE="${cc}")`, '20', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 板块/行业 ──
-
-  p.stockBoardConceptNameEm = async function stockBoardConceptNameEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_NAME', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptSpotEm = async function stockBoardConceptSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_SPOT', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptConsEm = async function stockBoardConceptConsEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_CONS', `(BOARD_CODE="${cc}")`, '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptHistEm = async function stockBoardConceptHistEm(
-    code: string, period = 'daily', startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = `(BOARD_CODE="${c(code)}")`
-      if (startDate) filter += ` AND TRADE_DATE>="${startDate}"`
-      if (endDate) filter += ` AND TRADE_DATE<="${endDate}"`
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptHistMinEm = async function stockBoardConceptHistMinEm(
-    code: string, period = '5',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = `(BOARD_CODE="${c(code)}") AND FREQUENCY="${period}"`
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_MIN', filter, '500', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptIndexThs = async function stockBoardConceptIndexThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_INDEX_THS', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardConceptInfoThs = async function stockBoardConceptInfoThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CONCEPT_INFO_THS', `(BOARD_CODE="${cc}")`, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustryNameEm = async function stockBoardIndustryNameEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_NAME', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustrySpotEm = async function stockBoardIndustrySpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_SPOT', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustryConsEm = async function stockBoardIndustryConsEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_CONS', `(BOARD_CODE="${cc}")`, '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustryHistEm = async function stockBoardIndustryHistEm(
-    code: string, period = 'daily', startDate = '', endDate = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = `(BOARD_CODE="${c(code)}")`
-      if (startDate) filter += ` AND TRADE_DATE>="${startDate}"`
-      if (endDate) filter += ` AND TRADE_DATE<="${endDate}"`
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_HIST', filter, '250', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustryHistMinEm = async function stockBoardIndustryHistMinEm(
-    code: string, period = '5',
-  ): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = `(BOARD_CODE="${c(code)}") AND FREQUENCY="${period}"`
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_MIN', filter, '500', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustryIndexThs = async function stockBoardIndustryIndexThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_INDEX_THS', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardIndustrySummaryThs = async function stockBoardIndustrySummaryThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_INDUSTRY_SUMMARY_THS', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockBoardChangeEm = async function stockBoardChangeEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BOARD_CHANGE', '', '500', 'BOARD_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSectorDetail = async function stockSectorDetail(indicator: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = indicator ? `(INDICATOR="${indicator}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SECTOR_DETAIL', filter, '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSectorSpot = async function stockSectorSpot(indicator: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = indicator ? `(INDICATOR="${indicator}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SECTOR_SPOT', filter, '500', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 热搜/排行 ──
-
-  p.stockHotRankEm = async function stockHotRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotRankDetailEm = async function stockHotRankDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_HOT_RANK_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotRankDetailRealtimeEm = async function stockHotRankDetailRealtimeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_HOT_RANK_REALTIME', `(SECURITY_CODE="${cc}")`, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotRankLatestEm = async function stockHotRankLatestEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_RANK_LATEST', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotRankRelateEm = async function stockHotRankRelateEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_HOT_RANK_RELATE', `(SECURITY_CODE="${cc}")`, '20', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotKeywordEm = async function stockHotKeywordEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_KEYWORD', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotUpEm = async function stockHotUpEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_UP', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotSearchBaidu = async function stockHotSearchBaidu(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_SEARCH_BAIDU', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotDealXq = async function stockHotDealXq(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_DEAL_XQ', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotFollowXq = async function stockHotFollowXq(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_FOLLOW_XQ', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHotTweetXq = async function stockHotTweetXq(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HOT_TWEET_XQ', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHotRankEm = async function stockHkHotRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_HOT_RANK', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHotRankDetailEm = async function stockHkHotRankDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_HK_HOT_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHotRankDetailRealtimeEm = async function stockHkHotRankDetailRealtimeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_HK_HOT_REALTIME', `(SECURITY_CODE="${cc}")`, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHotRankLatestEm = async function stockHkHotRankLatestEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_HOT_LATEST', '', '100', 'RANK')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 估值数据 ──
-
-  p.stockAMarketPeLg = async function stockAMarketPeLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_PE_MARKET', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAMarketPbLg = async function stockAMarketPbLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_PB_MARKET', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAHighLowStatistics = async function stockAHighLowStatistics(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HIGH_LOW', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockABelowNetAssetStatistics = async function stockABelowNetAssetStatistics(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BELOW_NAV', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockATtmLyr = async function stockATtmLyr(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_PE_TTM', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAAllPb = async function stockAAllPb(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ALL_PB', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAStockPositionLg = async function stockAStockPositionLg(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_POSITION', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockABuffettIndexLg = async function stockABuffettIndexLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_BUFFETT', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockACongestionLg = async function stockACongestionLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_CONGESTION', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAGxlLg = async function stockAGxlLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GXL', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAHkGxlLg = async function stockAHkGxlLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_GXL', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkValuationBaidu = async function stockHkValuationBaidu(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_VALUATION', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkValuationComparisonEm = async function stockHkValuationComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_VALUATION_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhValuationBaidu = async function stockZhValuationBaidu(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_ZH_VALUATION', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhValuationComparisonEm = async function stockZhValuationComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_ZH_VALUATION_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhAbComparisonEm = async function stockZhAbComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_AB_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhGrowthComparisonEm = async function stockZhGrowthComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GROWTH_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhScaleComparisonEm = async function stockZhScaleComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SCALE_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZhDupontComparisonEm = async function stockZhDupontComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_DUPONT_CMP', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockValueEm = async function stockValueEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_VALUE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarketActivityLegu = async function stockMarketActivityLegu(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARKET_ACTIVITY', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarketPeLg = async function stockMarketPeLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARKET_PE', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarketPbLg = async function stockMarketPbLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARKET_PB', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 资金流向 ──
-
-  p.stockFundFlowIndividual = async function stockFundFlowIndividual(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_FUND_FLOW_INDIVIDUAL', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFundFlowIndustry = async function stockFundFlowIndustry(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_FUND_FLOW_INDUSTRY', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFundFlowConcept = async function stockFundFlowConcept(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_FUND_FLOW_CONCEPT', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFundFlowBigDeal = async function stockFundFlowBigDeal(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_FUND_FLOW_BIG', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMainFundFlow = async function stockMainFundFlow(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MAIN_FUND_FLOW', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarketFundFlow = async function stockMarketFundFlow(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARKET_FLOW', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSectorFundFlowRank = async function stockSectorFundFlowRank(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SECTOR_FLOW_RANK', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSectorFundFlowSummary = async function stockSectorFundFlowSummary(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SECTOR_FLOW_SUM', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSectorFundFlowHist = async function stockSectorFundFlowHist(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SECTOR_FLOW_HIST', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockConceptFundFlowHist = async function stockConceptFundFlowHist(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_CONCEPT_FLOW_HIST', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 评论/评级 ──
-
-  p.stockCommentEm = async function stockCommentEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_COMMENT', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCommentDetailZlkpJgcydEm = async function stockCommentDetailZlkpJgcydEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_COMMENT_CONTROL', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCommentDetailScrdFocusEm = async function stockCommentDetailScrdFocusEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_COMMENT_FOCUS', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCommentDetailScrdDesireEm = async function stockCommentDetailScrdDesireEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_COMMENT_DESIRE', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCommentDetailZhpjLspfEm = async function stockCommentDetailZhpjLspfEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_COMMENT_RATING', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 持股结构 ──
-
-  p.stockCirculateStockHolder = async function stockCirculateStockHolder(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_CIRCULATE_HOLDER', filter, '50', 'END_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMainStockHolder = async function stockMainStockHolder(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_MAIN_HOLDER', filter, '50', 'END_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockFundStockHolder = async function stockFundStockHolder(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_FUND_HOLDER', filter, '50', 'END_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 股东持股分析 ──
-
-  p.stockGdfxHoldingAnalyseEm = async function stockGdfxHoldingAnalyseEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_ANALYSE', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxHoldingChangeEm = async function stockGdfxHoldingChangeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_CHANGE', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxHoldingTeamworkEm = async function stockGdfxHoldingTeamworkEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_TEAMWORK', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxHoldingStatisticsEm = async function stockGdfxHoldingStatisticsEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_STATISTICS', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxFreeHoldingAnalyseEm = async function stockGdfxFreeHoldingAnalyseEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_FREE_ANALYSE', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxFreeHoldingChangeEm = async function stockGdfxFreeHoldingChangeEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_FREE_CHANGE', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxFreeHoldingTeamworkEm = async function stockGdfxFreeHoldingTeamworkEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_FREE_TEAMWORK', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxFreeHoldingStatisticsEm = async function stockGdfxFreeHoldingStatisticsEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_FREE_STATISTICS', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxTop10Em = async function stockGdfxTop10Em(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_TOP10', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGdfxFreeTop10Em = async function stockGdfxFreeTop10Em(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GDFX_FREE_TOP10', filter, '50', 'REPORT_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 股权质押/担保 ──
-
-  p.stockGpzyProfileEm = async function stockGpzyProfileEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_PROFILE', '', '100', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyPledgeRatioEm = async function stockGpzyPledgeRatioEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_RATIO', '', '100', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyPledgeRatioDetailEm = async function stockGpzyPledgeRatioDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_DETAIL', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyIndustryDataEm = async function stockGpzyIndustryDataEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_INDUSTRY', '', '100', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyDistributeStatisticsCompanyEm = async function stockGpzyDistributeStatisticsCompanyEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_COMPANY', '', '100', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyDistributeStatisticsBankEm = async function stockGpzyDistributeStatisticsBankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_BANK', '', '100', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGpzyIndividualPledgeRatioDetailEm = async function stockGpzyIndividualPledgeRatioDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_GPZY_INDIVIDUAL', filter, '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCgEquityMortgageCninfo = async function stockCgEquityMortgageCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_CG_MORTGAGE', filter, '50', 'ANN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCgGuaranteeCninfo = async function stockCgGuaranteeCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_CG_GUARANTEE', filter, '50', 'ANN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockCgLawsuitCninfo = async function stockCgLawsuitCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_CG_LAWSUIT', filter, '50', 'ANN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── IPO/新股 ──
-
-  p.stockIpoInfo = async function stockIpoInfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_INFO', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoBenefitThs = async function stockIpoBenefitThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_BENEFIT', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoDeclareEm = async function stockIpoDeclareEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_DECLARE', '', '100', 'DECLARE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoReviewEm = async function stockIpoReviewEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_REVIEW', '', '100', 'REVIEW_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoTutorEm = async function stockIpoTutorEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_TUTOR', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoThs = async function stockIpoThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_THS', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoHkThs = async function stockIpoHkThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_HK_THS', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIpoSummaryCninfo = async function stockIpoSummaryCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_IPO_SUMMARY', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNewIpoCninfo = async function stockNewIpoCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_NEW_IPO', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNewGhCninfo = async function stockNewGhCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_NEW_GH', '', '100', 'LISTING_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNewASpotEm = async function stockNewASpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_NEW_A_SPOT', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterAllEm = async function stockRegisterAllEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_ALL', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterSh = async function stockRegisterSh(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_SH', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterSz = async function stockRegisterSz(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_SZ', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterCyb = async function stockRegisterCyb(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_CYB', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterKcb = async function stockRegisterKcb(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_KCB', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterBj = async function stockRegisterBj(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_BJ', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRegisterDb = async function stockRegisterDb(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REGISTER_DB', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDxsylEm = async function stockDxsylEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DXSYL', '', '100', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 融资融券 ──
-
-  p.stockMarginSse = async function stockMarginSse(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARGIN_SSE', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarginSzse = async function stockMarginSzse(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARGIN_SZSE', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarginAccountInfo = async function stockMarginAccountInfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARGIN_ACCOUNT', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarginRatioPa = async function stockMarginRatioPa(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARGIN_RATIO', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockMarginUnderlyingInfoSzse = async function stockMarginUnderlyingInfoSzse(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_MARGIN_UNDERLYING', '', '200', 'SECURITY_CODE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 大宗交易 (DZJY) ──
-
-  p.stockDzjySctj = async function stockDzjySctj(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_SCTJ', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDzjyMrmx = async function stockDzjyMrmx(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_MRMX', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDzjyMrtj = async function stockDzjyMrtj(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_MRTJ', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDzjyHygtj = async function stockDzjyHygtj(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_HYGTJ', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDzjyHyyybtj = async function stockDzjyHyyybtj(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_HYYYB', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockDzjyYybph = async function stockDzjyYybph(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_DZJY_YYBPH', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 龙虎榜 (LHB) ──
-
-  p.stockLhbDetailEm = async function stockLhbDetailEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_DETAIL', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbDetailDailySina = async function stockLhbDetailDailySina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_DETAIL_SINA', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbJgstatisticEm = async function stockLhbJgstatisticEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_JGSTAT', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbStockStatisticEm = async function stockLhbStockStatisticEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_STOCK_STAT', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbStockDetailEm = async function stockLhbStockDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_LHB_STOCK_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbYybDetailEm = async function stockLhbYybDetailEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_YYB_DETAIL', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbYybphEm = async function stockLhbYybphEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_YYBPH', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbYytjSina = async function stockLhbYytjSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_YYTJ_SINA', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbJgmxSina = async function stockLhbJgmxSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_JGMX_SINA', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbJgzzSina = async function stockLhbJgzzSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_JGZZ_SINA', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbGgtjSina = async function stockLhbGgtjSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_GGTJ_SINA', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbTraderstatisticEm = async function stockLhbTraderstatisticEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_TRADER', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbJgmmtjEm = async function stockLhbJgmmtjEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_JGMMTJ', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockLhbHyyybEm = async function stockLhbHyyybEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_LHB_HYYYB', '', '50', 'TRADE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 新闻/公告 ──
-
-  p.stockNewsEm = async function stockNewsEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_NEWS', `(SECURITY_CODE="${cc}")`, '30', 'PUBLISH_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNewsMainCx = async function stockNewsMainCx(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_NEWS_CX', '', '50', 'PUBLISH_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNoticeReport = async function stockNoticeReport(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_NOTICE', `(SECURITY_CODE="${cc}")`, '30', 'NOTICE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIndividualNoticeReport = async function stockIndividualNoticeReport(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_INDIVIDUAL_NOTICE', `(SECURITY_CODE="${cc}")`, '30', 'NOTICE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockResearchReportEm = async function stockResearchReportEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_RESEARCH', `(SECURITY_CODE="${cc}")`, '30', 'PUBLISH_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── 限售/回购 ──
-
-  p.stockRestrictedReleaseQueueEm = async function stockRestrictedReleaseQueueEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_RESTRICTED_QUEUE', '', '50', 'FREE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRestrictedReleaseQueueSina = async function stockRestrictedReleaseQueueSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_RESTRICTED_SINA', '', '50', 'FREE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRestrictedReleaseDetailEm = async function stockRestrictedReleaseDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_RESTRICTED_DETAIL', `(SECURITY_CODE="${cc}")`, '30', 'FREE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRestrictedReleaseStockholderEm = async function stockRestrictedReleaseStockholderEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const cc = c(code)
-      const items = await dcAll(this, 'RPT_STOCK_RESTRICTED_HOLDER', `(SECURITY_CODE="${cc}")`, '30', 'FREE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRestrictedReleaseSummaryEm = async function stockRestrictedReleaseSummaryEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_RESTRICTED_SUMMARY', '', '50', 'FREE_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRepurchaseEm = async function stockRepurchaseEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_REPURCHASE', '', '50', 'ANN_DATE')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 1: Technical/Screening ──
-
-  p.stockRankXzjpThs = async function stockRankXzjpThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_RANK_XZJP', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockChangesEm = async function stockChangesEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_CHANGES', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSyEm = async function stockSyEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SY', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSyHyEm = async function stockSyHyEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SY_HY', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSyJzEm = async function stockSyJzEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SY_JZ', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSyProfileEm = async function stockSyProfileEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SY_PROFILE', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockSyYqEm = async function stockSyYqEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_SY_YQ', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockPgEm = async function stockPgEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_PG', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockXgsglbEm = async function stockXgsglbEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_XGSGLB', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockXgsrThs = async function stockXgsrThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_XGSR_THS', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZdhtmxEm = async function stockZdhtmxEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ZDHTMX', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockQsjyEm = async function stockQsjyEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_QSJY', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockQbzfEm = async function stockQbzfEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_QBZF', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockYzxdrEm = async function stockYzxdrEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_YZXDR', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGddhEm = async function stockGddhEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GDDH', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockGgcgEm = async function stockGgcgEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_GGCG', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZygcEm = async function stockZygcEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ZYGC', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockZyjsThs = async function stockZyjsThs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ZYJS_THS', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockEbsLg = async function stockEbsLg(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_EBS', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockPriceJs = async function stockPriceJs(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_PRICE_JS', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 2: HSGT ──
-
-  p.stockHsgtHistEm = async function stockHsgtHistEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_HIST', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtFundFlowSummaryEm = async function stockHsgtFundFlowSummaryEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_FLOW', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtFundMinEm = async function stockHsgtFundMinEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_MIN', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtStockStatisticsEm = async function stockHsgtStockStatisticsEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_STOCK', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtInstitutionStatisticsEm = async function stockHsgtInstitutionStatisticsEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_INST', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtBoardRankEm = async function stockHsgtBoardRankEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_BOARD', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtShHkSpotEm = async function stockHsgtShHkSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_SH_HK', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtHoldStockEm = async function stockHsgtHoldStockEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_HOLD', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtIndividualEm = async function stockHsgtIndividualEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_INDIVIDUAL', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHsgtIndividualDetailEm = async function stockHsgtIndividualDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HSGT_DETAIL', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 3: HK Stock ──
-
-  p.stockHkSpot = async function stockHkSpot(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_SPOT', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkSpotEm = async function stockHkSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_SPOT_EM', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHist = async function stockHkHist(code: string, period = 'daily'): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      if (period) filter += filter ? ` AND FREQUENCY="${period}"` : `(FREQUENCY="${period}")`
-      const items = await dcAll(this, 'RPT_STOCK_HK_HIST', filter, '250')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkHistMinEm = async function stockHkHistMinEm(code: string, period = '5'): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      if (period) filter += filter ? ` AND FREQUENCY="${period}"` : `(FREQUENCY="${period}")`
-      const items = await dcAll(this, 'RPT_STOCK_HK_MIN', filter, '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkDaily = async function stockHkDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = symbol ? `(SECURITY_CODE="${c(symbol)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_DAILY', filter, '250')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkFamousSpotEm = async function stockHkFamousSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_FAMOUS', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkMainBoardSpotEm = async function stockHkMainBoardSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_MAIN_BOARD', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkCompanyProfileEm = async function stockHkCompanyProfileEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_COMPANY', filter, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkSecurityProfileEm = async function stockHkSecurityProfileEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_SECURITY', filter, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkFinancialIndicatorEm = async function stockHkFinancialIndicatorEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_FINANCIAL', filter, '20')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkDividendPayoutEm = async function stockHkDividendPayoutEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_DIVIDEND', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkGgtComponentsEm = async function stockHkGgtComponentsEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_HK_GGT', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkIndicatorEniu = async function stockHkIndicatorEniu(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_INDICATOR', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkScaleComparisonEm = async function stockHkScaleComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_SCALE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkGrowthComparisonEm = async function stockHkGrowthComparisonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_GROWTH', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkProfitForecastEt = async function stockHkProfitForecastEt(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_PROFIT', filter, '20')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkFhpxDetailThs = async function stockHkFhpxDetailThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_FHPX', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHkValuationBaidu = async function stockHkValuationBaidu(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HK_VALUATION_BAIDU', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 4: US Stock ──
-
-  p.stockUsSpot = async function stockUsSpot(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_US_SPOT', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsSpotEm = async function stockUsSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_US_SPOT_EM', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsHist = async function stockUsHist(code: string, period = 'daily'): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      if (period) filter += filter ? ` AND FREQUENCY="${period}"` : `(FREQUENCY="${period}")`
-      const items = await dcAll(this, 'RPT_STOCK_US_HIST', filter, '250')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsHistMinEm = async function stockUsHistMinEm(code: string, period = '5'): Promise<Record<string, unknown>[] | null> {
-    try {
-      let filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      if (period) filter += filter ? ` AND FREQUENCY="${period}"` : `(FREQUENCY="${period}")`
-      const items = await dcAll(this, 'RPT_STOCK_US_MIN', filter, '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsDaily = async function stockUsDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = symbol ? `(SECURITY_CODE="${c(symbol)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_US_DAILY', filter, '250')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsFamousSpotEm = async function stockUsFamousSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_US_FAMOUS', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsPinkSpotEm = async function stockUsPinkSpotEm(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_US_PINK', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockUsValuationBaidu = async function stockUsValuationBaidu(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_US_VALUATION', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 5: Info/Changes ──
-
-  p.stockInfoACodeName = async function stockInfoACodeName(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_A', '', '5000')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoShNameCode = async function stockInfoShNameCode(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_SH', '', '5000')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoSzNameCode = async function stockInfoSzNameCode(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_SZ', '', '5000')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoBjNameCode = async function stockInfoBjNameCode(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_BJ', '', '5000')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoShDelist = async function stockInfoShDelist(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_SH_DELIST', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoSzDelist = async function stockInfoSzDelist(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_SZ_DELIST', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoChangeName = async function stockInfoChangeName(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_CHANGE', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockInfoSzChangeName = async function stockInfoSzChangeName(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INFO_SZ_CHANGE', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockStaqNetStop = async function stockStaqNetStop(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_STAQ_STOP', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockShareChangeCninfo = async function stockShareChangeCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SHARE_CHANGE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockShareHoldChangeSse = async function stockShareHoldChangeSse(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SHARE_HOLD_SH', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockShareHoldChangeSzse = async function stockShareHoldChangeSzse(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SHARE_HOLD_SZ', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockShareHoldChangeBse = async function stockShareHoldChangeBse(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SHARE_HOLD_BJ', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockShareholderChangeThs = async function stockShareholderChangeThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_SHAREHOLDER_THS', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldChangeCninfo = async function stockHoldChangeCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_CHANGE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldControlCninfo = async function stockHoldControlCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_CONTROL', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldNumCninfo = async function stockHoldNumCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_NUM', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldManagementDetailCninfo = async function stockHoldManagementDetailCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_MGMT_DETAIL', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldManagementDetailEm = async function stockHoldManagementDetailEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_MGMT_EM', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockHoldManagementPersonEm = async function stockHoldManagementPersonEm(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_HOLD_MGMT_PERSON', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIndustryCategoryCninfo = async function stockIndustryCategoryCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_INDUSTRY_CATEGORY', '', '500')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIndustryChangeCninfo = async function stockIndustryChangeCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_INDUSTRY_CHANGE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockIndustryPeRatioCninfo = async function stockIndustryPeRatioCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_INDUSTRY_PE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockProfileCninfo = async function stockProfileCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_PROFILE_CNINFO', filter, '1')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAddStock = async function stockAddStock(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_ADD', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockAllotmentCninfo = async function stockAllotmentCninfo(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_ALLOTMENT', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockManagementChangeThs = async function stockManagementChangeThs(code: string): Promise<Record<string, unknown>[] | null> {
-    try {
-      const filter = code ? `(SECURITY_CODE="${c(code)}")` : ''
-      const items = await dcAll(this, 'RPT_STOCK_MGMT_CHANGE', filter, '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockRankForecastCninfo = async function stockRankForecastCninfo(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_RANK_FORECAST', '', '50')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  // ── Group 6: ESG/News ──
-
-  p.stockEsgHzSina = async function stockEsgHzSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ESG_HZ', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockEsgMsciSina = async function stockEsgMsciSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ESG_MSCI', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockEsgRateSina = async function stockEsgRateSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ESG_RATE', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockEsgRftSina = async function stockEsgRftSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ESG_RFT', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockEsgZdSina = async function stockEsgZdSina(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_ESG_ZD', '', '100')
-      if (!items.length) return null
-      return items
-    } catch { return null }
-  }
-
-  p.stockNewsMainCx = async function stockNewsMainCx(): Promise<Record<string, unknown>[] | null> {
-    try {
-      const items = await dcAll(this, 'RPT_STOCK_NEWS_CX_MAIN', '', '50')
-      if (!items.length) return null
-      return items
+      const params = {
+        pn: '1', pz: '100', po: '1', np: '1',
+        ut: 'bd1d9ddb04089700cf9c27f6f7426281',
+        fltt: '2', invt: '2', fid: 'f3',
+        fs: 'm:1 t:9 e:97,m:0 t:10 e:97',
+        fields: 'f2,f3,f4,f5,f6,f12,f14,f15,f16,f17,f18',
+      }
+      const json = await eastmoneyGet('https://95.push2.eastmoney.com/api/qt/clist/get', params, 30000, EASTMONEY_QUOTE_HEADERS)
+      const data = (json as Record<string, unknown>).data as Record<string, unknown> | undefined
+      const items = (data?.diff ?? []) as Record<string, unknown>[]
+      if (!items.length) return null
+      return items.map((it, idx) => ({
+        rank: idx + 1, code: String(it.f12 ?? ''), name: String(it.f14 ?? ''),
+        price: safeFloat(it.f2), changePct: safeFloat(it.f3), changeAmt: safeFloat(it.f4),
+        volume: safeFloat(it.f5), amount: safeFloat(it.f6),
+        high: safeFloat(it.f15), low: safeFloat(it.f16), open: safeFloat(it.f17), prevClose: safeFloat(it.f18),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_etf_category_sina — sina fund list (verified fund_etf_sina.py:17) */
+  p.fundEtfCategorySina = async function fundEtfCategorySina(symbol = 'ETF基金'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fundMap: Record<string, string> = { '封闭式基金': 'close_fund', 'ETF基金': 'etf_hq_fund', 'LOF基金': 'lof_hq_fund' }
+      const node = fundMap[symbol] ?? 'etf_hq_fund'
+      const resp = await fetch(
+        `https://vip.stock.finance.sina.com.cn/quotes_service/api/jsonp.php/IO.XSRV2.CallbackList['da_yPT46_Ll7K6WD']/Market_Center.getHQNodeDataSimple?page=1&num=5000&sort=symbol&asc=0&node=${node}&[object%20HTMLDivElement]=qvvne`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(30000) },
+      )
+      const text = await resp.text()
+      const start = text.indexOf('([')
+      const end = text.lastIndexOf('])')
+      if (start === -1 || end === -1) return null
+      const data = JSON.parse(text.slice(start + 1, end + 1)) as Record<string, unknown>[]
+      if (!data?.length) return null
+      return data.map(it => ({
+        code: String(it.symbol ?? ''), name: String(it.name ?? ''),
+        price: safeFloat(it.trade), changeAmt: safeFloat(it.pricechange),
+        changePct: safeFloat(it.changepercent), buy: safeFloat(it.buy), sell: safeFloat(it.sell),
+        prevClose: safeFloat(it.settlement), open: safeFloat(it.open),
+        high: safeFloat(it.high), low: safeFloat(it.low),
+        volume: safeFloat(it.volume), amount: safeFloat(it.amount),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_etf_fund_daily_em — fund.eastmoney.com/cnjy_dwjz.html (verified fund_em.py:940) */
+  p.fundEtfFundDailyEm = async function fundEtfFundDailyEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://fund.eastmoney.com/cnjy_dwjz.html', {
+        headers: { Referer: 'https://fund.eastmoney.com/', 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(30000),
+      })
+      const html = await resp.text()
+      const rows: Record<string, unknown>[] = []
+      const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+      let trMatch = trRegex.exec(html)
+      let headerFound = false
+      while (trMatch) {
+        const cells = [...trMatch[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').replace(/行情吧档案/g, '').trim())
+        if (cells.length >= 8 && /^\d{6}$/.test(cells[0])) {
+          rows.push({
+            code: cells[0], name: cells[1], type: cells[2],
+            nav: safeFloat(cells[3]), accNav: safeFloat(cells[4]),
+            prevNav: safeFloat(cells[5]), prevAccNav: safeFloat(cells[6]),
+            changeAmt: safeFloat(cells[7]), changePct: safeFloat(cells[8]),
+            price: safeFloat(cells[9]), premiumRate: safeFloat(cells[10]),
+          })
+        }
+        headerFound = headerFound || cells.some(c => c.includes('基金代码'))
+        trMatch = trRegex.exec(html)
+      }
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /** fund_etf_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:973) */
+  p.fundEtfFundInfoEm = async function fundEtfFundInfoEm(fund: string, start = '', end = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fmtDate = (d: string) => d ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : ''
+      const resp = await fetch(
+        `https://api.fund.eastmoney.com/f10/lsjz?fundCode=${fund}&pageIndex=1&pageSize=10000&startDate=${fmtDate(start)}&endDate=${fmtDate(end)}&_=${Date.now()}`,
+        { headers: { Referer: `https://fundf10.eastmoney.com/jjjz_${fund}.html`, 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(30000) },
+      )
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.Data as Record<string, unknown> | undefined)?.LSJZList as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        date: String(it.FSRQ ?? '').slice(0, 10),
+        nav: safeFloat(it.DWJZ), accNav: safeFloat(it.LJJZ),
+        changePct: safeFloat(it.JZZZL),
+        purchaseStatus: String(it.SGZT ?? ''), redeemStatus: String(it.SHZT ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_hk_fund_hist_em — overseas.1234567.com.cn (verified fund_em.py:1132) */
+  p.fundHkFundHistEm = async function fundHkFundHistEm(code: string, symbol = '历史净值明细'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const action = symbol === '分红送配详情' ? '3' : '2'
+      const resp = await fetch(
+        `https://overseas.1234567.com.cn/overseasapi/OpenApiHander.ashx?api=HKFDApi&m=MethodJZ&hkfcode=${code}&action=${action}&pageindex=0&pagesize=1000&date1=&date2=`,
+        { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://fund.eastmoney.com/' }, signal: AbortSignal.timeout(30000) },
+      )
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.Data as Record<string, unknown>[] | undefined
+      if (!data?.length) return null
+      if (action === '2') {
+        return data.map(it => ({
+          date: String(it.FSRQ ?? it.fsrq ?? '').slice(0, 10),
+          nav: safeFloat(it.DWJZ ?? it.dwjz),
+          changeAmt: safeFloat(it.RZZZ ?? it.rzzz),
+          changePct: safeFloat(it.RZDF ?? it.rzdf),
+          currency: String(it.DW ?? it.dw ?? ''),
+        }))
+      }
+      return data.map(it => ({
+        year: String(it.Year ?? it.year ?? ''),
+        exDate: String(it.CXDR ?? it.cxdr ?? '').slice(0, 10),
+        recordDate: String(it.QXRQ ?? it.qxrq ?? '').slice(0, 10),
+        payDate: String(it.FFRQ ?? it.ffrq ?? '').slice(0, 10),
+        dividend: safeFloat(it.FHJE ?? it.fhje),
+        currency: String(it.DW ?? it.dw ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_hk_rank_em — overseas.1234567.com.cn (verified fund_rank_em.py:427) */
+  p.fundHkRankEm = async function fundHkRankEm(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const now = new Date().toISOString().slice(0, 10)
+      const resp = await fetch(
+        `https://overseas.1234567.com.cn/overseasapi/OpenApiHander.ashx?api=HKFDApi&m=MethodFundList&action=1&pageindex=0&pagesize=5000&dy=1&date1=${now}&date2=${now}&sortfield=Y&sorttype=-1&isbuy=0`,
+        { headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://fund.eastmoney.com/fundguzhi.html' }, signal: AbortSignal.timeout(30000) },
+      )
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.Data as Record<string, unknown>[] | undefined
+      if (!data?.length) return null
+      return data.map((it, idx) => ({
+        rank: idx + 1,
+        code: String(it.fundcode ?? ''), hkCode: String(it.hkfcode ?? ''),
+        name: String(it.fundshortname ?? ''), currency: String(it.currency ?? ''),
+        date: String(it.date ?? '').slice(0, 10),
+        nav: safeFloat(it.unitnav), changePct: safeFloat(it.daygrowth),
+        week1: safeFloat(it.oneyear), month1: safeFloat(it.onemonth),
+        month3: safeFloat(it.threemonth), month6: safeFloat(it.sixmonth),
+        year1: safeFloat(it.oneyear), year2: safeFloat(it.twoyear),
+        year3: safeFloat(it.threeyear), yearToDate: safeFloat(it.thisyear),
+        sinceInception: safeFloat(it.inception),
+        buyable: String(it.isbuy ?? '') === '1',
+      }))
+    } catch { return null }
+  }
+
+  /** fund_individual_achievement_xq — danjuanfunds.com (verified fund_xq.py:78) */
+  p.fundIndividualAchievementXq = async function fundIndividualAchievementXq(code: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://danjuanfunds.com/djapi/fundx/base/fund/achievement/${code}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      if (!data) return null
+      const results: Record<string, unknown>[] = []
+      const typeMap: Record<string, string> = { annual_performance_list: '年度业绩', stage_performance_list: '阶段业绩' }
+      for (const [key, label] of Object.entries(typeMap)) {
+        const list = data[key] as Record<string, unknown>[] | undefined
+        if (!list) continue
+        for (const it of list) {
+          results.push({
+            type: label, period: String(it.period_time ?? ''),
+            returnPct: safeFloat(String(it.self_nav ?? '').replace(/%/g, '')),
+            maxDrawdown: safeFloat(String(it.self_max_draw_down ?? '').replace(/%/g, '')),
+            rankInSameType: String(it.self_nav_rank ?? ''),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /** fund_individual_analysis_xq — danjuanfunds.com (verified fund_xq.py:132) */
+  p.fundIndividualAnalysisXq = async function fundIndividualAnalysisXq(code: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://danjuanfunds.com/djapi/fund/base/quote/data/index/analysis/${code}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.data as Record<string, unknown> | undefined)?.index_data_list as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        period: String(it.index_time_period ?? ''),
+        costPerformance: safeFloat(String(it.investment_cost_performance ?? '').replace(/%/g, '')),
+        riskControl: safeFloat(String(it.risk_control ?? '').replace(/%/g, '')),
+        annualizedVolatility: (safeFloat(String((it as Record<string, unknown>)['self_index.volatility_rank'] ?? '').replace(/%/g, '')) ?? 0) * 100,
+        annualizedSharpe: safeFloat((it as Record<string, unknown>)['self_index.sharpe_rank']),
+        maxDrawdown: (safeFloat(String((it as Record<string, unknown>)['self_index.max_draw_down'] ?? '').replace(/%/g, '')) ?? 0) * 100,
+      }))
+    } catch { return null }
+  }
+
+  /** fund_individual_basic_info_xq — danjuanfunds.com (verified fund_xq.py:13) */
+  p.fundIndividualBasicInfoXq = async function fundIndividualBasicInfoXq(code: string): Promise<Record<string, unknown> | null> {
+    try {
+      const resp = await fetch(`https://danjuanfunds.com/djapi/fund/${code}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      if (!data) return null
+      return {
+        code: String(data.fd_code ?? ''), name: String(data.fd_name ?? ''),
+        fullName: String(data.fd_full_name ?? ''), foundedDate: String(data.found_date ?? ''),
+        totalShares: safeFloat(data.totshare), company: String(data.keeper_name ?? ''),
+        manager: String(data.manager_name ?? ''), custodian: String(data.trup_name ?? ''),
+        fundType: String(data.type_desc ?? ''),
+        ratingSource: String(data.rating_source ?? ''), rating: String(data.rating_desc ?? ''),
+        strategy: String(data.invest_orientation ?? ''), objective: String(data.invest_target ?? ''),
+        benchmark: String(data.performance_bench_mark ?? ''),
+      }
+    } catch { return null }
+  }
+
+  /** fund_individual_detail_hold_xq — danjuanfunds.com (verified fund_xq.py:270) */
+  p.fundIndividualDetailHoldXq = async function fundIndividualDetailHoldXq(code: string, date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
+      const reportDate = `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}`
+      const resp = await fetch(
+        `https://danjuanfunds.com/djapi/fundx/base/fund/record/asset/percent?fund_code=${code}&report_date=${reportDate}`,
+        { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) },
+      )
+      const json = await resp.json() as Record<string, unknown>
+      const chartList = (json?.data as Record<string, unknown> | undefined)?.chart_list as Record<string, unknown>[] | undefined
+      if (!chartList?.length) return null
+      return chartList.map(it => ({
+        assetType: String(it.type_desc ?? ''), weight: safeFloat(it.percent),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_individual_detail_info_xq — danjuanfunds.com (verified fund_xq.py:224) */
+  p.fundIndividualDetailInfoXq = async function fundIndividualDetailInfoXq(code: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://danjuanfunds.com/djapi/fund/detail/${code}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const data = json?.data as Record<string, unknown> | undefined
+      if (!data) return null
+      const fundRates = (data as Record<string, unknown>).fund_rates as Record<string, unknown> | undefined
+      if (!fundRates) return null
+      const typeMap: Record<string, string> = {
+        declare_rate_table: '买入规则', withdraw_rate_table: '卖出规则', other_rate_table: '其他费用',
+      }
+      const results: Record<string, unknown>[] = []
+      for (const [key, label] of Object.entries(typeMap)) {
+        const table = fundRates[key] as Record<string, unknown>[] | undefined
+        if (!table) continue
+        for (const it of table) {
+          results.push({ rateType: label, name: String(it.name ?? ''), value: safeFloat(it.value) })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /** fund_individual_profit_probability_xq — danjuanfunds.com (verified fund_xq.py:185) */
+  p.fundIndividualProfitProbabilityXq = async function fundIndividualProfitProbabilityXq(code: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://danjuanfunds.com/djapi/fundx/base/fund/profit/ratio/${code}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000),
+      })
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.data as Record<string, unknown> | undefined)?.data_list as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map(it => ({
+        holdingPeriod: String(it.holding_time ?? ''),
+        profitProbability: safeFloat(String(it.profit_ratio ?? '').replace(/%/g, '')),
+        averageReturn: safeFloat(String(it.average_income ?? '').replace(/%/g, '')),
+      }))
+    } catch { return null }
+  }
+
+  /** fund_rating_ja — fund.eastmoney.com/data/fundrating_4.html (verified fund_rating.py:276) */
+  p.fundRatingJa = async function fundRatingJa(date: string): Promise<Record<string, unknown>[] | null> {
+    try {
+      const fmtDate = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
+      const mainResp = await fetch('https://fund.eastmoney.com/data/fundrating_4.html', {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const mainHtml = await mainResp.text()
+      const dateMatches = [...mainHtml.matchAll(/<option[^>]*value="(\d{4}-\d{2}-\d{2})"[^>]*>/g)]
+      const availableDates = dateMatches.map(m => m[1])
+      if (!availableDates.includes(fmtDate)) {
+        if (availableDates.length) return []
+        return null
+      }
+      const resp = await fetch(`https://fund.eastmoney.com/data/fundrating_4_${fmtDate}.html`, {
+        headers: { Referer: 'https://fund.eastmoney.com/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await resp.text()
+      const scriptMatch = html.match(/var\s+\w+\s*=\s*"([^"]*)"/)
+      if (!scriptMatch) return null
+      const raw = scriptMatch[1]
+      const items = raw.split('|_').map(s => s.split('|'))
+      if (!items.length) return null
+      return items.filter(r => r.length >= 13).map(r => ({
+        code: String(r[0] ?? ''), name: String(r[1] ?? ''),
+        fundManager: String(r[3] ?? ''), fundCompany: String(r[5] ?? ''),
+        rating3Year: safeFloat(r[7]), rating3YearChange: safeFloat(r[8]),
+        nav: safeFloat(r[9]), date: String(r[10] ?? '').slice(0, 10),
+        changePct: safeFloat(r[11]),
+        year1: safeFloat(r[12]), year3: safeFloat(r[13]), year5: safeFloat(r[14]),
+        fee: safeFloat(String(r[15] ?? '').replace(/%/g, '')),
+        fundType: String(r[16] ?? ''),
+      }))
+    } catch { return null }
+  }
+
+  // ═══════════════════════════════════════════════════════════════
+  // INDEX APIS — batch 2 (verified against .akshare-ref/akshare/index/)
+  // ═══════════════════════════════════════════════════════════════
+
+  /** index_us_stock_sina — finance.sina.com.cn/staticdata/us/ (verified index_stock_us_sina.py:18)
+   *  Note: Python source uses JS decryption (py_mini_racer). Without a JS runtime,
+   *  the encrypted payload cannot be decoded. Returns null until a JS decryption
+   *  adapter is added or an alternative JSON endpoint is found. */
+  p.indexUsStockSina = async function indexUsStockSina(symbol = '.INX'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/staticdata/us/${symbol}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0', Referer: 'https://finance.sina.com.cn/' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const rawStr = text.split('=')[1]?.split(';')[0]?.trim().replace(/^"|"$/g, '')
+      if (!rawStr) return null
+      // The data is JS-obfuscated and requires decryption (py_mini_racer in Python).
+      // Attempt a best-effort parse: the inner string may be comma-separated objects
+      // if the obfuscation is simple enough, otherwise return null.
+      const decoded = rawStr.replace(/\\"/g, '"').replace(/\\,/g, ',')
+      // Try to extract array of objects from the decoded string
+      const items = JSON.parse(decoded) as Record<string, unknown>[]
+      if (!Array.isArray(items) || !items.length) return null
+      return items.map(it => ({
+        date: String(it.date ?? ''), open: safeFloat(it.open), high: safeFloat(it.high),
+        low: safeFloat(it.low), close: safeFloat(it.close),
+        volume: safeFloat(it.volume), amount: safeFloat(it.amount),
+      }))
+    } catch { return null }
+  }
+
+  /** stock_hk_index_daily_sina — finance.sina.com.cn/stock/hkstock/{symbol}/klc2_kl.js
+   *  (verified index_stock_hk.py:121)
+   *  Note: Python source uses JS decryption. Same limitation as indexUsStockSina. */
+  p.stockHkIndexDailySina = async function stockHkIndexDailySina(symbol = 'CES100'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://finance.sina.com.cn/stock/hkstock/${symbol}/klc2_kl.js?d=2023_5_01`, {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      const text = await resp.text()
+      const rawStr = text.split('=')[1]?.split(';')[0]?.trim().replace(/^"|"$/g, '')
+      if (!rawStr) return null
+      const decoded = rawStr.replace(/\\"/g, '"').replace(/\\,/g, ',')
+      const items = JSON.parse(decoded) as Record<string, unknown>[]
+      if (!Array.isArray(items) || !items.length) return null
+      return items.map(it => ({
+        date: String(it.date ?? ''), open: safeFloat(it.open), high: safeFloat(it.high),
+        low: safeFloat(it.low), close: safeFloat(it.close), volume: safeFloat(it.volume),
+      }))
+    } catch { return null }
+  }
+
+  /** index_stock_cons_csindex — csindex.com.cn XLS constituent file
+   *  (verified index_cons.py:126)
+   *  Note: Requires XLS parsing library. Returns raw buffer info until XLS parser is available. */
+  p.indexStockConsCsindex = async function indexStockConsCsindex(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = `https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/cons/${symbol}cons.xls`
+      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) })
+      if (!resp.ok) return null
+      // XLS file — no native XLS parser available. Return null with download URL.
+      return null
+    } catch { return null }
+  }
+
+  /** index_stock_cons_weight_csindex — csindex.com.cn XLS weight file
+   *  (verified index_cons.py:160)
+   *  Note: Requires XLS parsing library. Same limitation as indexStockConsCsindex. */
+  p.indexStockConsWeightCsindex = async function indexStockConsWeightCsindex(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = `https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/closeweight/${symbol}closeweight.xls`
+      const resp = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0' }, signal: AbortSignal.timeout(15000) })
+      if (!resp.ok) return null
+      // XLS file — no native XLS parser available. Return null with download URL.
+      return null
+    } catch { return null }
+  }
+
+  /** index_csindex_all — csindex.com.cn POST to exportExcel
+   *  (verified index_csindex.py:16)
+   *  Note: Returns XLS content. Same XLS parsing limitation. */
+  p.indexCsindexAll = async function indexCsindexAll(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.csindex.com.cn/csindex-home/exportExcel/indexAll/CH', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json;charset=UTF-8', 'User-Agent': 'Mozilla/5.0' },
+        body: JSON.stringify({
+          sorter: { sortField: 'null', sortOrder: null },
+          pager: { pageNum: 1, pageSize: 10 },
+          indexFilter: { indexSeries: ['1'] },
+        }),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (!resp.ok) return null
+      // XLS content — no native XLS parser available. Return null.
+      return null
     } catch { return null }
   }
 }
@@ -4521,312 +2933,79 @@ declare module '../../driver.js' {
     buyback(code: string): Promise<Record<string, unknown>[] | null>
     macroIndicator(indicator?: string): Promise<Record<string, unknown>[] | null>
     exchangeRate(pair?: string): Promise<Record<string, unknown>[] | null>
-    boardConceptList(): Promise<Record<string, unknown>[] | null>
-    boardIndustryList(): Promise<Record<string, unknown>[] | null>
-    boardRegionList(): Promise<Record<string, unknown>[] | null>
-    boardConceptCons(boardCode: string): Promise<Record<string, unknown>[] | null>
-    ztPool(date?: string): Promise<Record<string, unknown>[] | null>
-    hsgtNorthFlow(): Promise<Record<string, unknown>[] | null>
-    hotRank(): Promise<Record<string, unknown>[] | null>
-    stockRankCxgThs(): Promise<Record<string, unknown>[] | null>
-    stockRankCxdThs(): Promise<Record<string, unknown>[] | null>
-    stockRankLxszThs(): Promise<Record<string, unknown>[] | null>
-    stockRankLxxdThs(): Promise<Record<string, unknown>[] | null>
-    stockRankCxflThs(): Promise<Record<string, unknown>[] | null>
-    stockRankCxslThs(): Promise<Record<string, unknown>[] | null>
-    stockRankXstpThs(): Promise<Record<string, unknown>[] | null>
-    stockRankXxtpThs(): Promise<Record<string, unknown>[] | null>
-    stockRankLjqsThs(): Promise<Record<string, unknown>[] | null>
-    stockRankLjqdThs(): Promise<Record<string, unknown>[] | null>
-    stockBidAsk(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialReportDisclosure(code?: string): Promise<Record<string, unknown>[] | null>
-    stockGoodwillDetail(code: string): Promise<Record<string, unknown>[] | null>
-    stockGoodwillIndustry(): Promise<Record<string, unknown>[] | null>
-    stockPledgeStats(): Promise<Record<string, unknown>[] | null>
-    stockPledgeCompanyStats(): Promise<Record<string, unknown>[] | null>
-    stockAnalystRank(): Promise<Record<string, unknown>[] | null>
-    blockTradeActiveStats(): Promise<Record<string, unknown>[] | null>
-    blockTradeBranchRank(): Promise<Record<string, unknown>[] | null>
-    stockAhList(): Promise<Record<string, unknown>[] | null>
-    stockBShareList(): Promise<Record<string, unknown>[] | null>
-    hkConnectHoldings(code: string): Promise<Record<string, unknown>[] | null>
-    hkConnectTop10(date?: string): Promise<Record<string, unknown>[] | null>
-    marginTradeSz(code: string): Promise<Record<string, unknown>[] | null>
-    stockZhIndexSpotEm(symbol: string): Promise<Record<string, unknown>[] | null>
-    stockZhIndexDaily(symbol: string): Promise<Record<string, unknown>[] | null>
-    stockZhIndexDailyEm(symbol: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    indexZhAShist(symbol: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    indexZhAHistMinEm(symbol: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    stockHkIndexSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockHkIndexDailyEm(symbol: string): Promise<Record<string, unknown>[] | null>
-    indexGlobalSpotEm(): Promise<Record<string, unknown>[] | null>
-    indexGlobalHistEm(symbol: string): Promise<Record<string, unknown>[] | null>
-    indexStockCons(indexCode: string): Promise<Record<string, unknown>[] | null>
-    indexStockInfo(): Promise<Record<string, unknown>[] | null>
-    indexStockPeLg(indexCode: string): Promise<Record<string, unknown>[] | null>
-    indexStockPbLg(indexCode: string): Promise<Record<string, unknown>[] | null>
     fundNameEm(): Promise<Record<string, unknown>[] | null>
     fundPurchaseEm(): Promise<Record<string, unknown>[] | null>
     fundEtfSpotEm(): Promise<Record<string, unknown>[] | null>
     fundLofSpotEm(): Promise<Record<string, unknown>[] | null>
+    fundOpenFundDailyEm(): Promise<Record<string, unknown>[] | null>
+    fundInfoIndexEm(symbol?: string, indicator?: string): Promise<Record<string, unknown>[] | null>
+    stockZhIndexSpotEm(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexGlobalSpotEm(): Promise<Record<string, unknown>[] | null>
+    fundRatingAll(): Promise<Record<string, unknown>[] | null>
+    fundManagerEm(): Promise<Record<string, unknown>[] | null>
+    fundScaleChangeEm(): Promise<Record<string, unknown>[] | null>
+    fundFhEm(code: string, start?: string, end?: string): Promise<Record<string, unknown>[] | null>
+    fundFhRankEm(): Promise<Record<string, unknown>[] | null>
     fundEtfHistEm(code: string, period?: string, startDate?: string, endDate?: string, adjust?: string): Promise<Record<string, unknown>[] | null>
     fundLofHistEm(code: string, period?: string, startDate?: string, endDate?: string, adjust?: string): Promise<Record<string, unknown>[] | null>
-    fundEtfHistMinEm(code: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    fundLofHistMinEm(code: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    fundInfoIndexEm(symbol?: string, indicator?: string): Promise<Record<string, unknown>[] | null>
-    fundNavEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundOpenFundDayEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundOpenFundDailyEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundDividendEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundManagerEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundEtfCategoryThs(symbol?: string, date?: string): Promise<Record<string, unknown>[] | null>
-    fundEtfSpotThs(date?: string): Promise<Record<string, unknown>[] | null>
-    fundInfoThs(symbol: string): Promise<Record<string, unknown>[] | null>
-    fundIndividualBasicInfoXq(symbol: string): Promise<Record<string, unknown>[] | null>
-    fundEtfCategorySina(symbol?: string): Promise<Record<string, unknown>[] | null>
-    stockZhIndexSpotSina(): Promise<Record<string, unknown>[] | null>
-    stockZhIndexDailyTx(symbol: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
+    fundEtfHistMinEm(code: string, period?: string, startDate?: string, endDate?: string, adjust?: string): Promise<Record<string, unknown>[] | null>
+    fundLofHistMinEm(code: string, period?: string, startDate?: string, endDate?: string, adjust?: string): Promise<Record<string, unknown>[] | null>
+    fundInfoThs(code: string): Promise<Record<string, unknown>[] | null>
+    indexStockCons(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexStockInfo(): Promise<Record<string, unknown>[] | null>
+    indexZhAHist(symbol?: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
+    indexZhAHistMinEm(symbol?: string, period?: string): Promise<Record<string, unknown>[] | null>
+    stockZhIndexDailyEm(symbol?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
+    stockHkIndexSpotEm(): Promise<Record<string, unknown>[] | null>
+    stockHkIndexDailyEm(symbol?: string): Promise<Record<string, unknown>[] | null>
     stockHkIndexSpotSina(): Promise<Record<string, unknown>[] | null>
-    stockHkIndexDailySina(symbol: string): Promise<Record<string, unknown>[] | null>
-    indexUsStockSina(symbol: string): Promise<Record<string, unknown>[] | null>
-    indexGlobalHistSina(symbol: string): Promise<Record<string, unknown>[] | null>
-    fundAumEm(): Promise<Record<string, unknown>[] | null>
-    fundAumHistEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundAumTrendEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundOverviewEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundOpenFundInfoEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundOpenFundRankEm(symbol: string): Promise<Record<string, unknown>[] | null>
-    fundCfEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundBalancePositionLg(code: string): Promise<Record<string, unknown>[] | null>
-    fundStockPositionLg(code: string): Promise<Record<string, unknown>[] | null>
-    fundLinghuoPositionLg(code: string): Promise<Record<string, unknown>[] | null>
-    fundPortfolioHoldEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundPortfolioBondHoldEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundPortfolioChangeEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundPortfolioIndustryAllocationEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundHoldStructureEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundExchangeRankEm(): Promise<Record<string, unknown>[] | null>
-    fundFhRankEm(): Promise<Record<string, unknown>[] | null>
-    fundLcxRankEm(): Promise<Record<string, unknown>[] | null>
-    fundMoneyRankEm(): Promise<Record<string, unknown>[] | null>
-    fundRatingAll(): Promise<Record<string, unknown>[] | null>
-    fundRatingSh(): Promise<Record<string, unknown>[] | null>
-    fundRatingZs(): Promise<Record<string, unknown>[] | null>
-    fundRatingJa(): Promise<Record<string, unknown>[] | null>
-    fundFeeEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundFhEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundDividendSina(code: string): Promise<Record<string, unknown>[] | null>
-    fundScaleChangeEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundScaleOpenSina(): Promise<Record<string, unknown>[] | null>
+    indexGlobalHistEm(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexGlobalHistSina(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexGlobalNameTable(): Promise<Record<string, unknown>[] | null>
+    indexStockConsSina(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexRealtimeSw(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexHistSw(symbol?: string, period?: string): Promise<Record<string, unknown>[] | null>
+    indexMinSw(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexComponentSw(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexAnalysisDailySw(symbol?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
+    indexAnalysisWeeklySw(symbol?: string, date?: string): Promise<Record<string, unknown>[] | null>
+    indexAnalysisMonthlySw(symbol?: string, date?: string): Promise<Record<string, unknown>[] | null>
+    indexOption50EtfQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption300EtfQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption500EtfQvix(): Promise<Record<string, unknown>[] | null>
+    indexOptionCybQvix(): Promise<Record<string, unknown>[] | null>
+    indexOptionKcbQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption100EtfQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption300IndexQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption1000IndexQvix(): Promise<Record<string, unknown>[] | null>
+    indexOption50IndexQvix(): Promise<Record<string, unknown>[] | null>
+    fundRatingSh(date?: string): Promise<Record<string, unknown>[] | null>
+    fundRatingZs(date?: string): Promise<Record<string, unknown>[] | null>
+    fundReportAssetAllocationCninfo(): Promise<Record<string, unknown>[] | null>
+    fundReportIndustryAllocationCninfo(date?: string): Promise<Record<string, unknown>[] | null>
+    fundReportStockCninfo(date?: string): Promise<Record<string, unknown>[] | null>
     fundScaleCloseSina(): Promise<Record<string, unknown>[] | null>
-    fundScaleDailySzse(): Promise<Record<string, unknown>[] | null>
+    fundScaleDailySzse(startDate?: string, endDate?: string, symbol?: string): Promise<Record<string, unknown>[] | null>
+    fundScaleOpenSina(symbol?: string): Promise<Record<string, unknown>[] | null>
     fundScaleStructuredSina(): Promise<Record<string, unknown>[] | null>
-    fundEtfScaleSse(): Promise<Record<string, unknown>[] | null>
-    fundEtfScaleSzse(): Promise<Record<string, unknown>[] | null>
-    fundValueEstimationEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundEtfDividendSina(code: string): Promise<Record<string, unknown>[] | null>
-    fundEtfHistSina(code: string): Promise<Record<string, unknown>[] | null>
-    fundMoneyFundDailyEm(): Promise<Record<string, unknown>[] | null>
-    fundMoneyFundInfoEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundFinancialFundDailyEm(): Promise<Record<string, unknown>[] | null>
-    fundFinancialFundInfoEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundGradedFundDailyEm(): Promise<Record<string, unknown>[] | null>
-    fundGradedFundInfoEm(code: string): Promise<Record<string, unknown>[] | null>
+    reitsHistEm(symbol?: string): Promise<Record<string, unknown>[] | null>
+    reitsRealtimeEm(): Promise<Record<string, unknown>[] | null>
+    indexUsStockSina(symbol?: string): Promise<Record<string, unknown>[] | null>
+    stockHkIndexDailySina(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexStockConsCsindex(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexStockConsWeightCsindex(symbol?: string): Promise<Record<string, unknown>[] | null>
+    indexCsindexAll(): Promise<Record<string, unknown>[] | null>
+    fundEtfCategorySina(symbol?: string): Promise<Record<string, unknown>[] | null>
     fundEtfFundDailyEm(): Promise<Record<string, unknown>[] | null>
-    fundEtfFundInfoEm(code: string): Promise<Record<string, unknown>[] | null>
-    fundHkFundHistEm(code: string): Promise<Record<string, unknown>[] | null>
+    fundEtfFundInfoEm(fund: string, start?: string, end?: string): Promise<Record<string, unknown>[] | null>
+    fundHkFundHistEm(code: string, symbol?: string): Promise<Record<string, unknown>[] | null>
     fundHkRankEm(): Promise<Record<string, unknown>[] | null>
     fundIndividualAchievementXq(code: string): Promise<Record<string, unknown>[] | null>
     fundIndividualAnalysisXq(code: string): Promise<Record<string, unknown>[] | null>
-    fundIndividualDetailHoldXq(code: string): Promise<Record<string, unknown>[] | null>
+    fundIndividualBasicInfoXq(code: string): Promise<Record<string, unknown> | null>
+    fundIndividualDetailHoldXq(code: string, date?: string): Promise<Record<string, unknown>[] | null>
     fundIndividualDetailInfoXq(code: string): Promise<Record<string, unknown>[] | null>
     fundIndividualProfitProbabilityXq(code: string): Promise<Record<string, unknown>[] | null>
-    fundReportAssetAllocationCninfo(): Promise<Record<string, unknown>[] | null>
-    fundReportIndustryAllocationCninfo(): Promise<Record<string, unknown>[] | null>
-    fundReportStockCninfo(): Promise<Record<string, unknown>[] | null>
-    fundNewFoundEm(): Promise<Record<string, unknown>[] | null>
-    fundNewFoundThs(): Promise<Record<string, unknown>[] | null>
-    reitsHistEm(code: string): Promise<Record<string, unknown>[] | null>
-    reitsRealtimeEm(): Promise<Record<string, unknown>[] | null>
-    stockFinancialReportSina(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialAbstract(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialAbstractNewThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialAnalysisIndicator(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialBenefitNewThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialCashNewThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialDebtNewThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialHkReportEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialHkAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialUsReportEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockFinancialUsAnalysisIndicatorEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockLrbEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockXjllEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockZcfzEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockZcfzBjEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockReportDisclosure(code: string): Promise<Record<string, unknown>[] | null>
-    stockReportFundHold(code: string): Promise<Record<string, unknown>[] | null>
-    stockReportFundHoldDetail(code: string): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptNameEm(): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptConsEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptHistEm(code: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptHistMinEm(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptIndexThs(): Promise<Record<string, unknown>[] | null>
-    stockBoardConceptInfoThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustryNameEm(): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustrySpotEm(): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustryConsEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustryHistEm(code: string, period?: string, startDate?: string, endDate?: string): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustryHistMinEm(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustryIndexThs(): Promise<Record<string, unknown>[] | null>
-    stockBoardIndustrySummaryThs(): Promise<Record<string, unknown>[] | null>
-    stockBoardChangeEm(): Promise<Record<string, unknown>[] | null>
-    stockSectorDetail(indicator: string): Promise<Record<string, unknown>[] | null>
-    stockSectorSpot(indicator: string): Promise<Record<string, unknown>[] | null>
-    stockHotRankEm(): Promise<Record<string, unknown>[] | null>
-    stockHotRankDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHotRankDetailRealtimeEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHotRankLatestEm(): Promise<Record<string, unknown>[] | null>
-    stockHotRankRelateEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHotKeywordEm(): Promise<Record<string, unknown>[] | null>
-    stockHotUpEm(): Promise<Record<string, unknown>[] | null>
-    stockHotSearchBaidu(): Promise<Record<string, unknown>[] | null>
-    stockHotDealXq(): Promise<Record<string, unknown>[] | null>
-    stockHotFollowXq(): Promise<Record<string, unknown>[] | null>
-    stockHotTweetXq(): Promise<Record<string, unknown>[] | null>
-    stockHkHotRankEm(): Promise<Record<string, unknown>[] | null>
-    stockHkHotRankDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkHotRankDetailRealtimeEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkHotRankLatestEm(): Promise<Record<string, unknown>[] | null>
-    stockFundStockHolder(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxHoldingAnalyseEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxHoldingChangeEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxHoldingTeamworkEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxHoldingStatisticsEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxFreeHoldingAnalyseEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxFreeHoldingChangeEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxFreeHoldingTeamworkEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxFreeHoldingStatisticsEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxTop10Em(code: string): Promise<Record<string, unknown>[] | null>
-    stockGdfxFreeTop10Em(code: string): Promise<Record<string, unknown>[] | null>
-    stockGpzyProfileEm(): Promise<Record<string, unknown>[] | null>
-    stockGpzyPledgeRatioEm(): Promise<Record<string, unknown>[] | null>
-    stockGpzyPledgeRatioDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockGpzyIndustryDataEm(): Promise<Record<string, unknown>[] | null>
-    stockGpzyDistributeStatisticsCompanyEm(): Promise<Record<string, unknown>[] | null>
-    stockGpzyDistributeStatisticsBankEm(): Promise<Record<string, unknown>[] | null>
-    stockGpzyIndividualPledgeRatioDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockCgEquityMortgageCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockCgGuaranteeCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockCgLawsuitCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockIpoInfo(): Promise<Record<string, unknown>[] | null>
-    stockIpoBenefitThs(): Promise<Record<string, unknown>[] | null>
-    stockIpoDeclareEm(): Promise<Record<string, unknown>[] | null>
-    stockIpoReviewEm(): Promise<Record<string, unknown>[] | null>
-    stockIpoTutorEm(): Promise<Record<string, unknown>[] | null>
-    stockIpoThs(): Promise<Record<string, unknown>[] | null>
-    stockIpoHkThs(): Promise<Record<string, unknown>[] | null>
-    stockIpoSummaryCninfo(): Promise<Record<string, unknown>[] | null>
-    stockNewIpoCninfo(): Promise<Record<string, unknown>[] | null>
-    stockNewGhCninfo(): Promise<Record<string, unknown>[] | null>
-    stockNewASpotEm(): Promise<Record<string, unknown>[] | null>
-    stockRegisterAllEm(): Promise<Record<string, unknown>[] | null>
-    stockRegisterSh(): Promise<Record<string, unknown>[] | null>
-    stockRegisterSz(): Promise<Record<string, unknown>[] | null>
-    stockRegisterCyb(): Promise<Record<string, unknown>[] | null>
-    stockRegisterKcb(): Promise<Record<string, unknown>[] | null>
-    stockRegisterBj(): Promise<Record<string, unknown>[] | null>
-    stockRegisterDb(): Promise<Record<string, unknown>[] | null>
-    stockDxsylEm(): Promise<Record<string, unknown>[] | null>
-    stockRankXzjpThs(): Promise<Record<string, unknown>[] | null>
-    stockChangesEm(): Promise<Record<string, unknown>[] | null>
-    stockSyEm(): Promise<Record<string, unknown>[] | null>
-    stockSyHyEm(): Promise<Record<string, unknown>[] | null>
-    stockSyJzEm(): Promise<Record<string, unknown>[] | null>
-    stockSyProfileEm(): Promise<Record<string, unknown>[] | null>
-    stockSyYqEm(): Promise<Record<string, unknown>[] | null>
-    stockPgEm(): Promise<Record<string, unknown>[] | null>
-    stockXgsglbEm(): Promise<Record<string, unknown>[] | null>
-    stockXgsrThs(): Promise<Record<string, unknown>[] | null>
-    stockZdhtmxEm(): Promise<Record<string, unknown>[] | null>
-    stockQsjyEm(): Promise<Record<string, unknown>[] | null>
-    stockQbzfEm(): Promise<Record<string, unknown>[] | null>
-    stockYzxdrEm(): Promise<Record<string, unknown>[] | null>
-    stockGddhEm(): Promise<Record<string, unknown>[] | null>
-    stockGgcgEm(): Promise<Record<string, unknown>[] | null>
-    stockZygcEm(): Promise<Record<string, unknown>[] | null>
-    stockZyjsThs(): Promise<Record<string, unknown>[] | null>
-    stockEbsLg(): Promise<Record<string, unknown>[] | null>
-    stockPriceJs(): Promise<Record<string, unknown>[] | null>
-    stockHsgtHistEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtFundFlowSummaryEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtFundMinEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtStockStatisticsEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtInstitutionStatisticsEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtBoardRankEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtShHkSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockHsgtHoldStockEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHsgtIndividualEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHsgtIndividualDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkSpot(): Promise<Record<string, unknown>[] | null>
-    stockHkSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockHkHist(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockHkHistMinEm(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockHkDaily(symbol: string): Promise<Record<string, unknown>[] | null>
-    stockHkFamousSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockHkMainBoardSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockHkCompanyProfileEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkSecurityProfileEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkFinancialIndicatorEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkDividendPayoutEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkGgtComponentsEm(): Promise<Record<string, unknown>[] | null>
-    stockHkIndicatorEniu(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkScaleComparisonEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkGrowthComparisonEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkProfitForecastEt(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkFhpxDetailThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockHkValuationBaidu(code: string): Promise<Record<string, unknown>[] | null>
-    stockUsSpot(): Promise<Record<string, unknown>[] | null>
-    stockUsSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockUsHist(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockUsHistMinEm(code: string, period?: string): Promise<Record<string, unknown>[] | null>
-    stockUsDaily(symbol: string): Promise<Record<string, unknown>[] | null>
-    stockUsFamousSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockUsPinkSpotEm(): Promise<Record<string, unknown>[] | null>
-    stockUsValuationBaidu(code: string): Promise<Record<string, unknown>[] | null>
-    stockInfoACodeName(): Promise<Record<string, unknown>[] | null>
-    stockInfoShNameCode(): Promise<Record<string, unknown>[] | null>
-    stockInfoSzNameCode(): Promise<Record<string, unknown>[] | null>
-    stockInfoBjNameCode(): Promise<Record<string, unknown>[] | null>
-    stockInfoShDelist(): Promise<Record<string, unknown>[] | null>
-    stockInfoSzDelist(): Promise<Record<string, unknown>[] | null>
-    stockInfoChangeName(): Promise<Record<string, unknown>[] | null>
-    stockInfoSzChangeName(): Promise<Record<string, unknown>[] | null>
-    stockStaqNetStop(): Promise<Record<string, unknown>[] | null>
-    stockShareChangeCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockShareHoldChangeSse(code: string): Promise<Record<string, unknown>[] | null>
-    stockShareHoldChangeSzse(code: string): Promise<Record<string, unknown>[] | null>
-    stockShareHoldChangeBse(code: string): Promise<Record<string, unknown>[] | null>
-    stockShareholderChangeThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldChangeCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldControlCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldNumCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldManagementDetailCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldManagementDetailEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockHoldManagementPersonEm(code: string): Promise<Record<string, unknown>[] | null>
-    stockIndustryCategoryCninfo(): Promise<Record<string, unknown>[] | null>
-    stockIndustryChangeCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockIndustryPeRatioCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockProfileCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockAddStock(code: string): Promise<Record<string, unknown>[] | null>
-    stockAllotmentCninfo(code: string): Promise<Record<string, unknown>[] | null>
-    stockManagementChangeThs(code: string): Promise<Record<string, unknown>[] | null>
-    stockRankForecastCninfo(): Promise<Record<string, unknown>[] | null>
-    stockEsgHzSina(): Promise<Record<string, unknown>[] | null>
-    stockEsgMsciSina(): Promise<Record<string, unknown>[] | null>
-    stockEsgRateSina(): Promise<Record<string, unknown>[] | null>
-    stockEsgRftSina(): Promise<Record<string, unknown>[] | null>
-    stockEsgZdSina(): Promise<Record<string, unknown>[] | null>
+    fundRatingJa(date: string): Promise<Record<string, unknown>[] | null>
   }
 }
