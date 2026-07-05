@@ -1360,6 +1360,617 @@ export class MiscDataHandler extends MarketHandlerShell {
     return this.fetchOptbbsMinQvix('http://1.optbbs.com/d/csv/d/vix50index.csv')
   }
 
+  // ── 另类数据-排行榜 ──
+
+  /**
+   * AKShare 接口: forbes_rank
+   * 对应 Python: akshare.fortune.fortune_forbes_500.forbes_rank
+   * 数据源: https://www.hurun.net/zh-CN/rank/hslist?num=1&ph=0
+   * @returns 福布斯富豪榜列表，每项含 rank(排名)、name(姓名)、
+   *          wealth(财富，亿美元)、source(财富来源)、country(国家/地区)
+   * 数据清洗: 从胡润网 HTML 页面解析，提取 Forbes 榜单数据
+   */
+  async forbesRank(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.hurun.net/zh-CN/rank/hslist?num=1&ph=0', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 5 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            wealth: safeFloat(cells[2]?.replace(/,/g, '')), source: cells[3] ?? '', country: cells[4] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: fortune_rank
+   * 对应 Python: akshare.fortune.fortune_500.fortune_rank
+   * 数据源: http://www.fortunechina.com/fortune500/c/500_list.phtml
+   * @param symbol - 榜单类型: 'world'(世界500强) 或 'china'(中国500强)
+   * @returns 财富500强列表，每项含 rank(排名)、company(公司名称)、
+   *          revenue(营收)、profit(利润)、... 等字段
+   * 数据清洗: 从财富中文网 HTML 页面解析表格数据
+   */
+  async fortuneRank(symbol: 'world' | 'china' = 'world'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = symbol === 'china'
+        ? 'http://www.fortunechina.com/fortune500/c/500_list.phtml'
+        : 'http://www.fortunechina.com/fortune500/c/500_list_global.phtml'
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 4 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), company: cells[1] ?? '',
+            revenue: cells[2] ?? '', profit: cells[3] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: hurun_rank
+   * 对应 Python: akshare.fortune.fortune_hurun.hurun_rank
+   * 数据源: https://www.hurun.net/zh-CN/rank/hslist
+   * @param symbol - 榜单类型，如 "百富榜"、"胡润全球富豪榜" 等
+   * @returns 胡润富豪榜列表，每项含 rank(排名)、name(姓名)、
+   *          wealth(财富，亿元人民币)、... 等字段
+   * 数据清洗: 从胡润网 HTML 页面解析表格数据
+   */
+  async hurunRank(symbol = '百富榜'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch(`https://www.hurun.net/zh-CN/rank/hslist?num=1&ph=0&name=${encodeURIComponent(symbol)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            wealth: safeFloat(cells[2]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: index_bloomberg_billionaires
+   * 对应 Python: akshare.fortune.fortune_bloomberg.index_bloomberg_billionaires
+   * 数据源: https://www.bloomberg.com/billionaires/
+   * @returns 彭博亿万富豪指数数据，每项含 date(日期)、index(指数值)
+   * 数据清洗: 从 Bloomberg 网页解析指数数据
+   */
+  async indexBloombergBillionaires(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.bloomberg.com/billionaires/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const dateMatch = html.match(/"date"\s*:\s*"([^"]+)"/)
+      const indexMatch = html.match(/"index"\s*:\s*"?([0-9.]+)/)
+      if (dateMatch && indexMatch) {
+        return [{ date: dateMatch[1], index: safeFloat(indexMatch[1]) }]
+      }
+      return null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: index_bloomberg_billionaires_hist
+   * 对应 Python: akshare.fortune.fortune_bloomberg.index_bloomberg_billionaires_hist
+   * 数据源: https://www.bloomberg.com/billionaires/
+   * @returns 彭博亿万富豪指数历史数据，每项含 date(日期)、index(指数值)
+   * 数据清洗: 从 Bloomberg 网页解析历史指数数据
+   */
+  async indexBloombergBillionairesHist(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.bloomberg.com/billionaires/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const dataMatch = html.match(/"historicalData"\s*:\s*(\[[\s\S]*?\])/)
+      if (!dataMatch) return null
+      try {
+        const data = JSON.parse(dataMatch[1]) as Record<string, unknown>[]
+        return data.map(it => ({
+          date: String(it.date ?? '').slice(0, 10),
+          index: safeFloat(it.index),
+        }))
+      } catch { return null }
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: game_hot_rank_taptap
+   * 对应 Python: akshare.other.other_taptap.game_hot_rank_taptap
+   * 数据源: https://www.taptap.cn/
+   * @returns TapTap 游戏热度排行榜，每项含 rank(排名)、name(游戏名称)、
+   *          rating(评分)、downloads(下载量)
+   * 数据清洗: 从 TapTap 网站 API 获取游戏列表数据
+   */
+  async gameHotRankTapTap(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.taptap.cn/webapiv2/app/v2/list-by-type?type_name=hot&page_size=50&from=0', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-UA': 'V=1&PN=WebApp&LANG=zh_CN&VN_CODE=102&LOC=CN&PLT=PC&DS=Android&UID=undefined&OS=Windows&OSV=10&DT=PC',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const list = (json?.data as Record<string, unknown> | undefined)?.list as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list.map((it, idx) => ({
+        rank: idx + 1, name: String(it.title ?? ''),
+        rating: safeFloat((it.stat as Record<string, unknown>)?.rating), downloads: safeFloat((it.stat as Record<string, unknown>)?.hits_total),
+      }))
+    } catch { return null }
+  }
+
+  // ── 另类数据-票房视频 ──
+
+  /**
+   * AKShare 接口: movie_boxoffice_daily
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_daily
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 票房日报数据列表，每项含 rank(排名)、name(影片名称)、
+   *          boxoffice(票房，万元)、... 等字段
+   * 数据清洗: 从猫眼票房页面 HTML 解析表格数据
+   */
+  async movieBoxofficeDaily(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_weekly
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_weekly
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 周票房数据列表，每项含 rank(排名)、name(影片名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取周票房数据
+   */
+  async movieBoxofficeWeekly(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=week', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_monthly
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_monthly
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 月票房数据列表，每项含 rank(排名)、name(影片名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取月票房数据
+   */
+  async movieBoxofficeMonthly(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=month', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_yearly
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_yearly
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 年度票房数据列表，每项含 rank(排名)、name(影片名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取年度票房数据
+   */
+  async movieBoxofficeYearly(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=year', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_yearly_first_week
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_yearly_first_week
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 年度首周票房数据列表，每项含 rank(排名)、name(影片名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取年度首周票房数据
+   */
+  async movieBoxofficeYearlyFirstWeek(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=firstWeek', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_realtime
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_realtime
+   * 数据源: https://piaofang.maoyan.com/
+   * @returns 实时票房数据列表，每项含 rank(排名)、name(影片名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取实时票房数据
+   */
+  async movieBoxofficeRealtime(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_cinema_daily
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_cinema_daily
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 影院日票房数据列表，每项含 rank(排名)、name(影院名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取影院日票房数据
+   */
+  async movieBoxofficeCinemaDaily(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=day&dataType=cinema', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: movie_boxoffice_cinema_weekly
+   * 对应 Python: akshare.movie.movie_yien.movie_boxoffice_cinema_weekly
+   * 数据源: https://piaofang.maoyan.com/rankings/year
+   * @returns 影院周票房数据列表，每项含 rank(排名)、name(影院名称)、boxoffice(票房)
+   * 数据清洗: 从猫眼票房页面获取影院周票房数据
+   */
+  async movieBoxofficeCinemaWeekly(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://piaofang.maoyan.com/rankings/year?yearType=week&dataType=cinema', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            boxoffice: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: video_tv
+   * 对应 Python: akshare.movie.video_yien.video_tv
+   * 数据源: https://www.vlinkage.com/index/tv
+   * @returns 电视剧排行榜数据列表，每项含 rank(排名)、name(剧集名称)、
+   *          platform(播出平台)、... 等字段
+   * 数据清洗: 从 Vlinkage 网站 API 获取电视剧排行数据
+   */
+  async videoTv(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.vlinkage.com/index/tv', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            platform: cells[2] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: video_variety_show
+   * 对应 Python: akshare.movie.video_yien.video_variety_show
+   * 数据源: https://www.vlinkage.com/index/zy
+   * @returns 综艺节目排行榜数据列表，每项含 rank(排名)、name(节目名称)、
+   *          platform(播出平台)、... 等字段
+   * 数据清洗: 从 Vlinkage 网站 API 获取综艺排行数据
+   */
+  async videoVarietyShow(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.vlinkage.com/index/zy', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            platform: cells[2] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  // ── 另类数据-其他 ──
+
+  /**
+   * AKShare 接口: stock_js_weibo_report
+   * 对应 Python: akshare.stock.stock_weibo_nlp.stock_js_weibo_report
+   * 数据源: https://data.10jqka.com.cn/stocksearch/weibo
+   * @returns 微博股市热搜/讨论数据列表，每项含 title(标题)、
+   *          content(内容摘要)、url(链接)
+   * 数据清洗: 从同花顺微博股市数据页面解析
+   */
+  async stockJsWeiboReport(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://data.10jqka.com.cn/stocksearch/weibo', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        const linkMatch = row.match(/href="([^"]+)"/)
+        if (cells.length >= 2) {
+          results.push({
+            title: cells[0] ?? '', content: cells[1] ?? '',
+            url: linkMatch?.[1] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: business_value_artist
+   * 对应 Python: akshare.movie.artist_yien.business_value_artist
+   * 数据源: https://www.hurun.net/zh-CN/rank/hslist
+   * @returns 艺人商业价值排行榜数据列表，每项含 rank(排名)、
+   *          name(艺人姓名)、value(商业价值指数)
+   * 数据清洗: 从胡润艺人商业价值榜页面解析 HTML 表格数据
+   */
+  async businessValueArtist(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.hurun.net/zh-CN/rank/hslist?num=1&ph=0', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            value: safeFloat(cells[2]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: online_value_artist
+   * 对应 Python: akshare.movie.artist_yien.online_value_artist
+   * 数据源: https://www.hurun.net/zh-CN/rank/hslist
+   * @returns 艺人网络价值排行榜数据列表，每项含 rank(排名)、
+   *          name(艺人姓名)、value(网络价值指数)
+   * 数据清洗: 从胡润艺人网络价值榜页面解析 HTML 表格数据
+   */
+  async onlineValueArtist(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.hurun.net/zh-CN/rank/hslist?num=1&ph=0', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            value: safeFloat(cells[2]?.replace(/,/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: xincaifu_rank
+   * 对应 Python: akshare.fortune.fortune_xincaifu_500.xincaifu_rank
+   * 数据源: https://www.xcf.cn/
+   * @returns 新财富500富人榜数据列表，每项含 rank(排名)、
+   *          name(姓名)、wealth(财富，亿元人民币)
+   * 数据清洗: 从新财富网站 HTML 页面解析表格数据
+   */
+  async xincaifuRank(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.xcf.cn/', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const rows = html.match(/<tr[^>]*>([\s\S]*?)<\/tr>/gi) ?? []
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row.matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length >= 3 && /^\d+$/.test(cells[0])) {
+          results.push({
+            rank: safeFloat(cells[0]), name: cells[1] ?? '',
+            wealth: safeFloat(cells[2]?.replace(/[万亿,]/g, '')),
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
   // ── 中证指数 ──
 
   /** 中证指数历史行情 (verified index_stock_zh_csindex.py:13) */
@@ -6788,6 +7399,796 @@ export class MiscDataHandler extends MarketHandlerShell {
           price: safeFloat(parts[5]),
         }
       }).filter(Boolean) as Record<string, unknown>[]
+    } catch { return null }
+  }
+
+  // ── 另类数据-汽车销量 ──
+
+  /**
+   * AKShare 接口: car_market_total_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_total_cpca
+   * 数据源: http://data.cpcadata.com/TotalMarket
+   * @param symbol - '狭义乘用车' | '广义乘用车'
+   * @param indicator - '产量' | '批发' | '零售' | '出口'
+   * @returns 乘联会总体市场数据列表，每项含 month(月份)、prevYear(上年同月数据)、
+   *          currentYear(当年当月数据)
+   * 数据清洗: GET http://data.cpcadata.com/api/chartlist?charttype=1，
+   *           symbol 选择图表索引(0=狭义/1=广义)，indicator 选择年份数据数组中的列索引
+   *           (产量=0/批发=1/零售=2/出口=3)
+   */
+  async carMarketTotalCpca(symbol = '狭义乘用车', indicator = '产量'): Promise<Record<string, unknown>[] | null> {
+    const indicatorMap: Record<string, number> = { '产量': 0, '批发': 1, '零售': 2, '出口': 3 }
+    const symbolIndex = symbol === '广义乘用车' ? 1 : 0
+    const indicatorIndex = indicatorMap[indicator] ?? 0
+    try {
+      const json = await httpGet('http://data.cpcadata.com/api/chartlist', { charttype: '1' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[symbolIndex]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      const columns = Object.keys(dataList[0])
+      return dataList.map(item => {
+        const currentYearData = item[columns[1]] as number[]
+        const prevYearData = item[columns[2]] as number[]
+        return {
+          month: String(item.month ?? item[columns[0]] ?? ''),
+          prevYear: safeFloat(prevYearData?.[indicatorIndex]),
+          currentYear: safeFloat(currentYearData?.[indicatorIndex]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_market_man_rank_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_man_rank_cpca
+   * 数据源: http://data.cpcadata.com/ManRank
+   * @param symbol - '狭义乘用车-单月' | '狭义乘用车-累计' | '广义乘用车-单月' | '广义乘用车-累计'
+   * @param indicator - '批发' | '零售'
+   * @returns 乘联会厂商排名列表，每项含 manufacturer(厂商名称)、sales(销量)
+   * 数据清洗: 批发数据 GET api/chartlist?charttype=2，零售数据 GET api/chartlist_2?charttype=2；
+   *           symbol 选择图表索引(0-3)，indicator 决定使用 chartlist 还是 chartlist_2 端点
+   */
+  async carMarketManRankCpca(symbol = '狭义乘用车-单月', indicator = '批发'): Promise<Record<string, unknown>[] | null> {
+    const symbolMap: Record<string, number> = {
+      '狭义乘用车-累计': 0, '狭义乘用车-单月': 1,
+      '广义乘用车-累计': 2, '广义乘用车-单月': 3,
+    }
+    const symbolIndex = symbolMap[symbol] ?? 1
+    const endpoint = indicator === '零售' ? 'chartlist_2' : 'chartlist'
+    try {
+      const json = await httpGet(`http://data.cpcadata.com/api/${endpoint}`, { charttype: '2' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[symbolIndex]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      return dataList.map(item => ({
+        manufacturer: String(item.厂商 ?? ''),
+        sales: safeFloat((item as Record<string, unknown>)[String(Object.keys(item)[1] ?? '')] ?? 0),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_market_cate_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_cate_cpca
+   * 数据源: http://data.cpcadata.com/CategoryMarket
+   * @param symbol - '轿车' | 'MPV' | 'SUV' | '占比'
+   * @param indicator - '批发' | '零售'
+   * @returns 乘联会车型大类市场数据列表，每项含 month(月份)、sales(销量或占比)
+   * 数据清洗: GET api/chartlist?charttype=3；
+   *           symbol 选择图表索引(0=MPV/1=SUV/2=轿车/3=占比)，
+   *           indicator 选择批发(iloc[:,1])或零售(iloc[:,2])数据列
+   */
+  async carMarketCateCpca(symbol = '轿车', indicator = '批发'): Promise<Record<string, unknown>[] | null> {
+    const symbolMap: Record<string, number> = { 'MPV': 0, 'SUV': 1, '轿车': 2, '占比': 3 }
+    const symbolIndex = symbolMap[symbol] ?? 2
+    const indicatorIndex = indicator === '零售' ? 2 : 1
+    try {
+      const json = await httpGet('http://data.cpcadata.com/api/chartlist', { charttype: '3' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[symbolIndex]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      const columns = Object.keys(dataList[0])
+      if (symbol === '占比') {
+        const monthKey = Object.keys(dataList[0]).find(k => k === '月份' || k === 'month') ?? columns[0]
+        return dataList.map(item => {
+          const mpvData = item[columns[1]] as number[]
+          const suvData = item[columns[2]] as number[]
+          const carData = item[columns[3]] as number[]
+          return {
+            month: String(item[monthKey] ?? ''),
+            mpv: safeFloat(mpvData?.[indicatorIndex]),
+            suv: safeFloat(suvData?.[indicatorIndex]),
+            car: safeFloat(carData?.[indicatorIndex]),
+          }
+        })
+      }
+      return dataList.map(item => {
+        const yearData = item[columns[indicatorIndex]] as number[]
+        const prevYearData = item[columns[indicatorIndex === 1 ? 2 : 1]] as number[]
+        const value = safeFloat(yearData?.[0])
+        const prevValue = safeFloat(prevYearData?.[0])
+        return {
+          month: String(item.month ?? item[columns[0]] ?? ''),
+          sales: value ?? prevValue,
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_market_country_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_country_cpca
+   * 数据源: http://data.cpcadata.com/CountryMarket
+   * @returns 乘联会国别细分市场月度数据列表，每项含 month(月份)、domestic(自主品牌)、
+   *          german(德系)、japanese(日系)、french(法系)、american(美系)、korean(韩系)、
+   *          otherEuro(其他欧系)
+   * 数据清洗: GET api/chartlist?charttype=4，取 chartData[0].dataList；
+   *           列值为嵌套数组，取 [2] 索引为销量值；列名按位置映射到国别
+   */
+  async carMarketCountryCpca(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('http://data.cpcadata.com/api/chartlist', { charttype: '4' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[0]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      const columns = Object.keys(dataList[0])
+      const countryKeys = columns.slice(1)
+      return dataList.map(item => {
+        const monthVal = item.month ?? item[columns[0]] ?? ''
+        const row: Record<string, unknown> = { month: String(monthVal) }
+        for (let i = 0; i < countryKeys.length; i++) {
+          const val = item[countryKeys[i]]
+          const arr = Array.isArray(val) ? val : [val]
+          row[`col${i}`] = safeFloat(arr?.[2])
+        }
+        return row
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_market_segment_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_segment_cpca
+   * 数据源: http://data.cpcadata.com/SegmentMarket
+   * @param symbol - '轿车' | 'MPV' | 'SUV'
+   * @returns 乘联会级别细分市场月度数据列表，每项含 month(月份)、a00(A00级)、
+   *          a0(A0级)、a(A级)、b(B级)、c(C级)
+   * 数据清洗: GET api/chartlist?charttype=5；
+   *           symbol 选择图表索引(0=MPV/1=SUV/2=轿车)；
+   *           列值为嵌套数组，取 [2] 索引为销量值；列名按位置映射到级别
+   */
+  async carMarketSegmentCpca(symbol = '轿车'): Promise<Record<string, unknown>[] | null> {
+    const symbolMap: Record<string, number> = { 'MPV': 0, 'SUV': 1, '轿车': 2 }
+    const symbolIndex = symbolMap[symbol] ?? 2
+    try {
+      const json = await httpGet('http://data.cpcadata.com/api/chartlist', { charttype: '5' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[symbolIndex]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      const columns = Object.keys(dataList[0])
+      const levelKeys = columns.slice(1)
+      const levelNames = ['a00', 'a0', 'a', 'b', 'c']
+      return dataList.map(item => {
+        const monthVal = item.month ?? item[columns[0]] ?? ''
+        const row: Record<string, unknown> = { month: String(monthVal) }
+        for (let i = 0; i < Math.min(levelKeys.length, levelNames.length); i++) {
+          const val = item[levelKeys[i]]
+          const arr = Array.isArray(val) ? val : [val]
+          row[levelNames[i]] = safeFloat(arr?.[2])
+        }
+        return row
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_market_fuel_cpca
+   * 对应 Python: akshare.other.other_car_cpca.car_market_fuel_cpca
+   * 数据源: http://data.cpcadata.com/FuelMarket
+   * @param symbol - '整体市场' | '销量占比-PHEV-BEV' | '销量占比-ICE-NEV'
+   * @returns 乘联会新能源细分市场月度数据列表，每项含 month(月份)、sales(销量或占比)
+   * 数据清洗: GET api/chartlist?charttype=6；
+   *           symbol 选择图表索引(0=整体市场/1=PHEV-BEV/2=ICE-NEV)；
+   *           列值为嵌套数组，取 [2] 索引为数值
+   */
+  async carMarketFuelCpca(symbol = '整体市场'): Promise<Record<string, unknown>[] | null> {
+    const symbolMap: Record<string, number> = { '整体市场': 0, '销量占比-PHEV-BEV': 1, '销量占比-ICE-NEV': 2 }
+    const symbolIndex = symbolMap[symbol] ?? 0
+    try {
+      const json = await httpGet('http://data.cpcadata.com/api/chartlist', { charttype: '6' }, 15000)
+      if (!json) return null
+      const chartData = json as unknown as Record<string, unknown>[]
+      const chart = chartData[symbolIndex]
+      if (!chart) return null
+      const dataList = chart.dataList as Record<string, unknown>[]
+      if (!dataList?.length) return null
+      const columns = Object.keys(dataList[0])
+      return dataList.map(item => {
+        const yearData = item[columns[1]] as number[]
+        const prevYearData = item[columns[2]] as number[]
+        const monthKey = Object.keys(item).find(k => k === '月份' || k === 'month') ?? columns[0]
+        return {
+          month: String(item[monthKey] ?? ''),
+          currentYear: safeFloat(yearData?.[2]),
+          prevYear: safeFloat(prevYearData?.[2]),
+        }
+      })
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: car_sale_rank_gasgoo
+   * 对应 Python: akshare.other.other_car_gasgoo.car_sale_rank_gasgoo
+   * 数据源: https://i.gasgoo.com/data/ranking
+   * @param symbol - '车企榜' | '品牌榜' | '车型榜'
+   * @param date - 查询年月，格式 'YYYYMM'，如 '202401'
+   * @returns 盖世汽车销量排行榜列表，每项含 rank(排名)、name(名称)、
+   *          sales(销量)、yoy(同比)、mom(环比)、ytd(累计销量)、
+   *          prevYtd1(去年同期累计)、prevYtd2(前年同期累计)
+   * 数据清洗: POST https://i.gasgoo.com/data/sales/AutoModelSalesRank.aspx/GetSalesRank，
+   *           JSON payload 含 rankType(F=车企/B=品牌/M=车型)、queryDate 等；
+   *           响应 "d" 字段为 JSON 字符串需二次解析
+   */
+  async carSaleRankGasgoo(symbol = '车企榜', date = ''): Promise<Record<string, unknown>[] | null> {
+    const now = new Date()
+    const d = date || `${now.getFullYear()}${String(now.getMonth() + 1).padStart(2, '0')}`
+    const year = d.slice(0, 4)
+    const month = String(parseInt(d.slice(4, 6), 10))
+    const symbolMap: Record<string, string> = { '车型榜': 'M', '车企榜': 'F', '品牌榜': 'B' }
+    const rankType = symbolMap[symbol]
+    if (!rankType) return null
+    const payload = {
+      countryID: '', endM: month, endY: year, energy: '',
+      modelGradeID: '', modelTypeID: '',
+      orderBy: `${year}-${month}`, queryDate: `${year}-${month}`,
+      rankType, startY: year, startM: month,
+    }
+    try {
+      const resp = await fetch('https://i.gasgoo.com/data/sales/AutoModelSalesRank.aspx/GetSalesRank', {
+        method: 'POST',
+        headers: {
+          'Accept': 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/json; charset=UTF-8',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+          'Referer': 'https://i.gasgoo.com/data/ranking',
+          'Origin': 'https://i.gasgoo.com',
+        },
+        body: JSON.stringify(payload),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const dVal = json.d
+      if (!dVal) return null
+      // d is a JSON string that needs二次解析
+      const decoded = typeof dVal === 'string' ? JSON.parse(dVal) : dVal
+      const list = decoded as Record<string, unknown>[]
+      if (!Array.isArray(list) || !list.length) return null
+      return list.map((it, idx) => ({
+        rank: idx + 1,
+        name: String(it.name ?? it.Name ?? ''),
+        sales: safeFloat(it.sales ?? it.Sales),
+        yoy: safeFloat(it.yoy ?? it.Yoy),
+        mom: safeFloat(it.mom ?? it.Mom),
+        ytd: safeFloat(it.ytd ?? it.Ytd),
+        prevYtd1: safeFloat(it.prevYtd1 ?? it.PrevYtd1),
+        prevYtd2: safeFloat(it.prevYtd2 ?? it.PrevYtd2),
+      }))
+    } catch { return null }
+  }
+
+  // ── 另类数据-新闻 ──
+
+  /**
+   * AKShare 接口: news_cctv
+   * 对应 Python: akshare.news.news_cctv.news_cctv
+   * 数据源: https://tv.cctv.com/lm/xwlb
+   * @param date - 日期，格式 "YYYYMMDD"，如 "20240424"
+   * @returns 新闻联播文字稿列表，每项含 date(日期)、title(标题)、content(内容)
+   * 数据清洗: 从 CCTV 新闻联播页面获取当日新闻列表，逐条抓取标题与正文；
+   *           20160203 之后的日期使用 https://tv.cctv.com/lm/xwlb/day/{date}.shtml
+   */
+  async newsCctv(date: string): Promise<Record<string, unknown>[] | null> {
+    if (!date) return null
+    try {
+      const d = date.replace(/-/g, '')
+      const listResp = await fetch(`https://tv.cctv.com/lm/xwlb/day/${d}.shtml`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!listResp.ok) return null
+      const listHtml = await listResp.text()
+      const linkRegex = /<li[^>]*>\s*<a[^>]*href="([^"]+)"[^>]*>/gi
+      const pageUrls: string[] = []
+      let lm: RegExpExecArray | null
+      while ((lm = linkRegex.exec(listHtml)) !== null) {
+        const href = lm[1]
+        if (href && href.startsWith('http')) pageUrls.push(href)
+      }
+      // skip first item (typically not a news item)
+      const urls = pageUrls.slice(1)
+      if (!urls.length) return null
+      const results: Record<string, unknown>[] = []
+      const cctvHeaders = {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        Referer: 'https://tv.cctv.com/',
+      }
+      for (const url of urls) {
+        try {
+          const pageResp = await fetch(url, { headers: cctvHeaders, signal: AbortSignal.timeout(10000) })
+          if (!pageResp.ok) continue
+          const html = await pageResp.text()
+          let title = ''
+          const h3Match = html.match(/<h3[^>]*>([\s\S]*?)<\/h3>/)
+          if (h3Match) {
+            title = h3Match[1].replace(/<[^>]+>/g, '').trim()
+          } else {
+            const titMatch = html.match(/class="tit"[^>]*>([\s\S]*?)<\/div>/)
+            if (titMatch) title = titMatch[1].replace(/<[^>]+>/g, '').trim()
+          }
+          let content = ''
+          const cntMatch = html.match(/class="cnt_bd"[^>]*>([\s\S]*?)<\/div>/)
+          if (cntMatch) {
+            content = cntMatch[1].replace(/<[^>]+>/g, '').trim()
+          } else {
+            const areaMatch = html.match(/class="content_area"[^>]*>([\s\S]*?)<\/div>/)
+            if (areaMatch) content = areaMatch[1].replace(/<[^>]+>/g, '').trim()
+          }
+          if (title || content) {
+            results.push({
+              date: d,
+              title: title.replace(/\[视频\]/g, '').replace(/\n/g, ' ').trim(),
+              content: content
+                .replace(/央视网消息(（|\\()新闻联播(）|\\))：/g, '')
+                .replace(/\n/g, ' ')
+                .trim(),
+            })
+          }
+        } catch { /* skip failed page */ }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  // ── 另类数据-日出日落 ──
+
+  /**
+   * AKShare 接口: sunrise_daily
+   * 对应 Python: akshare.air.sunrise_tad.sunrise_daily
+   * 数据源: https://www.timeanddate.com/sun/china/{city}
+   * @param date - 日期，格式 "YYYYMMDD"，如 "20240428"
+   * @param city - 城市英文名，如 "beijing"、"shanghai"，默认 "beijing"
+   * @returns 指定日期指定城市的日出日落数据列表，每项含 date(日期)、
+   *          sunrise(日出时间)、sunset(日落时间)、length(日照时长) 等
+   * 数据清洗: 从 timeanddate.com 解析 HTML 表格，筛选指定日期行
+   */
+  async sunriseDaily(date: string, city = 'beijing'): Promise<Record<string, unknown>[] | null> {
+    if (!date) return null
+    try {
+      const d = date.replace(/-/g, '')
+      const year = d.slice(0, 4)
+      const month = d.slice(4, 6)
+      const day = d.slice(6, 8)
+      const url = `https://www.timeanddate.com/sun/china/${city}?month=${month}&year=${year}`
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      // Parse HTML table rows
+      const tableMatch = html.match(/<table[^>]*class="zebra"[^>]*>([\s\S]*?)<\/table>/)
+      if (!tableMatch) return null
+      const rows = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 5) continue
+        // First cell is day number
+        const cellDay = cells[0]?.replace(/\D/g, '').padStart(2, '0')
+        if (cellDay === day) {
+          results.push({
+            date: `${year}-${month}-${day}`,
+            sunrise: cells[1] ?? '',
+            sunset: cells[2] ?? '',
+            length: cells[3] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: sunrise_monthly
+   * 对应 Python: akshare.air.sunrise_tad.sunrise_monthly
+   * 数据源: https://www.timeanddate.com/sun/china/{city}
+   * @param date - 日期，格式 "YYYYMMDD"，用于指定所在月份
+   * @param city - 城市英文名，如 "beijing"、"shanghai"，默认 "beijing"
+   * @returns 指定月份的日出日落数据列表，每项含 date(日期)、
+   *          sunrise(日出时间)、sunset(日落时间)、length(日照时长) 等
+   * 数据清洗: 从 timeanddate.com 解析 HTML 表格，返回该月全部日期数据
+   */
+  async sunriseMonthly(date: string, city = 'beijing'): Promise<Record<string, unknown>[] | null> {
+    if (!date) return null
+    try {
+      const d = date.replace(/-/g, '')
+      const year = d.slice(0, 4)
+      const month = d.slice(4, 6)
+      const datePrefix = d.slice(0, 6)
+      const url = `https://www.timeanddate.com/sun/china/${city}?month=${month}&year=${year}`
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const tableMatch = html.match(/<table[^>]*class="zebra"[^>]*>([\s\S]*?)<\/table>/)
+      if (!tableMatch) return null
+      const rows = [...tableMatch[1].matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 5) continue
+        const cellDay = cells[0]?.replace(/\D/g, '').padStart(2, '0')
+        if (/^\d{2}$/.test(cellDay)) {
+          results.push({
+            date: `${datePrefix}${cellDay}`,
+            sunrise: cells[1] ?? '',
+            sunset: cells[2] ?? '',
+            length: cells[3] ?? '',
+          })
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  // ── 另类数据-空气质量 ──
+
+  /**
+   * AKShare 接口: air_quality_hebei
+   * 对应 Python: akshare.air.air_hebei.air_quality_hebei
+   * 数据源: http://218.11.10.130:8080/api/hour/130000.xml
+   * @returns 河北省空气质量预报数据列表，每项含 city(城市)、region(区域)、
+   *          station(监测点)、time(时间)、aqi(AQI指数)、level(空气质量等级)、
+   *          maxPoll(首要污染物)、以及各污染物浓度和 IAQI
+   * 数据清洗: 从 XML 响应解析 City/Pointer 节点，提取监测数据；
+   *           含 PM2.5、PM10、SO2、CO、NO2、O3 等污染物浓度和 IAQI
+   */
+  async airQualityHebei(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('http://218.11.10.130:8080/api/hour/130000.xml', {
+        headers: { 'User-Agent': 'Mozilla/5.0' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const xml = await resp.text()
+      const results: Record<string, unknown>[] = []
+      // Parse City nodes
+      const cityRegex = /<City[^>]*>([\s\S]*?)<\/City>/gi
+      let cityMatch: RegExpExecArray | null
+      while ((cityMatch = cityRegex.exec(xml)) !== null) {
+        const cityBlock = cityMatch[1]
+        const cityName = (cityBlock.match(/<Name>([^<]*)<\/Name>/) ?? [])[1] ?? ''
+        // Parse Pointer nodes within each City
+        const pointerRegex = /<Pointer[^>]*>([\s\S]*?)<\/Pointer>/gi
+        let pointerMatch: RegExpExecArray | null
+        while ((pointerMatch = pointerRegex.exec(cityBlock)) !== null) {
+          const ptr = pointerMatch[1]
+          const getField = (tag: string) => (ptr.match(new RegExp(`<${tag}>([^<]*)<\\/${tag}>`)) ?? [])[1] ?? ''
+          const row: Record<string, unknown> = {
+            city: cityName,
+            district: getField('Region'),
+            station: getField('Name'),
+            time: getField('DataTime'),
+            aqi: safeFloat(getField('AQI')),
+            level: getField('Level'),
+            maxPoll: getField('MaxPoll'),
+          }
+          // Parse Poll nodes
+          const pollRegex = /<Poll[^>]*>([\s\S]*?)<\/Poll>/gi
+          let pollMatch: RegExpExecArray | null
+          while ((pollMatch = pollRegex.exec(ptr)) !== null) {
+            const pollBlock = pollMatch[1]
+            const pollName = (pollBlock.match(/<Name>([^<]*)<\/Name>/) ?? [])[1] ?? ''
+            const pollValue = (pollBlock.match(/<Value>([^<]*)<\/Value>/) ?? [])[1] ?? ''
+            const pollIaqi = (pollBlock.match(/<IAQI>([^<]*)<\/IAQI>/) ?? [])[1] ?? ''
+            if (pollName) {
+              row[`${pollName}_Value`] = safeFloat(pollValue)
+              row[`${pollName}_IAQI`] = safeFloat(pollIaqi)
+            }
+          }
+          results.push(row)
+        }
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: air_city_table
+   * 对应 Python: akshare.air.air_zhenqi.air_city_table
+   * 数据源: https://www.zq12369.com/environment.php
+   * @returns 全部城市列表，每项含 rank(序号)、province(省份)、city(城市)、
+   *          aqi(AQI)、quality(空气质量)、pm25(PM2.5浓度)、pollutant(首要污染物)
+   * 数据清洗: 从真气网环境页面解析 HTML 表格，获取城市排名数据
+   */
+  async airCityTable(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = 'https://www.zq12369.com/environment.php'
+      const params = { date: '2020-05-01', tab: 'rank', order: 'DESC', type: 'DAY' }
+      const resp = await fetch(`${url}?${new URLSearchParams(params)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      // Parse the second table (index 1)
+      const tables = html.match(/<table[^>]*>([\s\S]*?)<\/table>/gi) ?? []
+      if (tables.length < 2) return null
+      const tableHtml = tables[1]
+      const rows = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      let rank = 0
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 7) continue
+        // Skip header row and separator rows
+        if (cells[0] === '序号' || cells[0] === '降序' || cells[0] === '') continue
+        rank++
+        results.push({
+          rank,
+          province: cells[1] ?? '',
+          city: cells[2] ?? '',
+          aqi: safeFloat(cells[3]),
+          quality: cells[4] ?? '',
+          pm25: safeFloat(cells[5]),
+          pollutant: cells[6] ?? '',
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: air_quality_hist
+   * 对应 Python: akshare.air.air_zhenqi.air_quality_hist
+   * 数据源: https://www.zq12369.com/
+   * @param city - 城市名称，如 "杭州"、"北京"
+   * @param period - 数据频率: "hour"(每小时)、"day"(每天)、"month"(每月)
+   * @param startDate - 起始日期，格式 "YYYYMMDD"
+   * @param endDate - 结束日期，格式 "YYYYMMDD"
+   * @returns 指定城市的空气质量历史数据列表，每项含 time(时间)、
+   *          aqi(AQI)、pm25(PM2.5)、pm10(PM10)、co(CO)、
+   *          no2(NO2)、o3(O3)、so2(SO2) 等污染物指标
+   * 数据清洗: 通过真气网加密 API 获取，需执行 JS 加密逻辑；
+   *           period 为 hour 时数据量较大，下载较慢
+   */
+  async airQualityHist(city: string, period: string, startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
+    if (!city || !startDate || !endDate) return null
+    try {
+      const sd = startDate.replace(/-/g, '')
+      const ed = endDate.replace(/-/g, '')
+      const sdFmt = `${sd.slice(0, 4)}-${sd.slice(4, 6)}-${sd.slice(6, 8)}`
+      const edFmt = `${ed.slice(0, 4)}-${ed.slice(4, 6)}-${ed.slice(6, 8)}`
+      const periodUpper = period.toUpperCase()
+      const appId = '4f0e3a273d547ce6b7147bfa7ceb4b6e'
+      const method = 'CETCITYPERIOD'
+      const timestamp = Date.now()
+      const pText = JSON.stringify({
+        city,
+        endTime: `${edFmt} 23:45:39`,
+        startTime: `${sdFmt} 00:00:00`,
+        type: periodUpper,
+      }).replace(/ "/g, '"')
+
+      // MD5 secret computation
+      const { createHash } = await import('crypto')
+      const secret = createHash('md5').update(appId + method + timestamp + 'WEB' + pText).digest('hex')
+
+      const payload: Record<string, unknown> = {
+        appId,
+        method: 'CETCITYPERIOD',
+        timestamp,
+        clienttype: 'WEB',
+        object: { city, type: periodUpper, startTime: `${sdFmt} 00:00:00`, endTime: `${edFmt} 23:45:39` },
+        secret,
+      }
+
+      // encode_param equivalent: Base64 encode the JSON payload
+      const paramStr = JSON.stringify(payload)
+        .replace(/ "/g, '"')
+        .replace(/\\/, '')
+      const encodedParam = Buffer.from(paramStr).toString('base64')
+
+      const resp = await fetch('https://www.zq12369.com/api/newzhenqiapi.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({ param: encodedParam }).toString(),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (!resp.ok) return null
+      const encryptedText = await resp.text()
+      // decode_result: triple Base64 decode
+      let decoded = encryptedText
+      for (let i = 0; i < 3; i++) {
+        decoded = Buffer.from(decoded, 'base64').toString('utf-8')
+      }
+      const data = JSON.parse(decoded) as Record<string, unknown>
+      const rows = (data?.result as Record<string, unknown>)?.data as Record<string, unknown> | undefined
+      const rowList = rows?.rows as Record<string, unknown>[] | undefined
+      if (!rowList?.length) return null
+      return rowList.map(it => ({
+        time: String(it.time ?? ''),
+        aqi: safeFloat(it.aqi),
+        pm25: safeFloat(it.pm25),
+        pm10: safeFloat(it.pm10),
+        co: safeFloat(it.co),
+        no2: safeFloat(it.no2),
+        o3: safeFloat(it.o3),
+        so2: safeFloat(it.so2),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: air_quality_rank
+   * 对应 Python: akshare.air.air_zhenqi.air_quality_rank
+   * 数据源: https://www.zq12369.com/environment.php
+   * @param date - 查询日期，格式 "":实时、"YYYYMMDD":日、"YYYYMM":月、"YYYY":年
+   * @returns 城市 AQI 排行榜数据，每项含 rank(排名)、province(省份)、
+   *          city(城市)、aqi(AQI)、quality(空气质量)、pm25(PM2.5)、pollutant(首要污染物)
+   * 数据清洗: 根据 date 参数长度和内容选择不同的查询模式(日/月/年/实时)
+   */
+  async airQualityRank(date = ''): Promise<Record<string, unknown>[] | null> {
+    try {
+      const url = 'https://www.zq12369.com/environment.php'
+      let params: Record<string, string>
+      let tableIndex: number
+
+      if (date === '') {
+        // Realtime
+        params = { tab: 'rank', order: 'DESC', type: 'MONTH' }
+        tableIndex = 0
+      } else if (date.length === 8) {
+        // Daily: YYYYMMDD -> YYYY-MM-DD
+        const fmt = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
+        params = { date: fmt, tab: 'rank', order: 'DESC', type: 'DAY' }
+        tableIndex = 1
+      } else if (date.length === 6) {
+        // Monthly: YYYYMM -> YYYY-MM
+        const fmt = `${date.slice(0, 4)}-${date.slice(4, 6)}`
+        params = { month: fmt, tab: 'rank', order: 'DESC', type: 'MONTH' }
+        tableIndex = 2
+      } else if (date.length === 4) {
+        // Yearly: YYYY
+        params = { year: date, tab: 'rank', order: 'DESC', type: 'YEAR' }
+        tableIndex = 3
+      } else {
+        return null
+      }
+
+      const resp = await fetch(`${url}?${new URLSearchParams(params)}`, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const tables = html.match(/<table[^>]*>([\s\S]*?)<\/table>/gi) ?? []
+      if (tables.length <= tableIndex) return null
+      const tableHtml = tables[tableIndex]
+      const rows = [...tableHtml.matchAll(/<tr[^>]*>([\s\S]*?)<\/tr>/gi)]
+      const results: Record<string, unknown>[] = []
+      let rank = 0
+      for (const row of rows) {
+        const cells = [...row[1].matchAll(/<td[^>]*>([\s\S]*?)<\/td>/gi)].map(m => m[1].replace(/<[^>]+>/g, '').trim())
+        if (cells.length < 7) continue
+        if (cells[0] === '序号' || cells[0] === '降序' || cells[0] === '' || cells[0] === '排名') continue
+        rank++
+        results.push({
+          rank,
+          province: cells[1] ?? '',
+          city: cells[2] ?? '',
+          aqi: safeFloat(cells[3]),
+          quality: cells[4] ?? '',
+          pm25: safeFloat(cells[5]),
+          pollutant: cells[6] ?? '',
+        })
+      }
+      return results.length ? results : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: air_quality_watch_point
+   * 对应 Python: akshare.air.air_zhenqi.air_quality_watch_point
+   * 数据源: https://www.zq12369.com/
+   * @param city - 城市名称，如 "杭州"、"北京"
+   * @param startDate - 起始日期，格式 "YYYYMMDD"
+   * @param endDate - 结束日期，格式 "YYYYMMDD"
+   * @returns 指定城市监测点空气质量数据列表，每项含 pointname(监测点名称)、
+   *          aqi(AQI)、pm25(PM2.5)、pm10(PM10)、no2(NO2)、
+   *          so2(SO2)、o3(O3)、co(CO)
+   * 数据清洗: 通过真气网加密 API 获取监测点级别数据，需执行 JS 加密逻辑
+   */
+  async airQualityWatchPoint(city: string, startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
+    if (!city || !startDate || !endDate) return null
+    try {
+      const sd = startDate.replace(/-/g, '')
+      const ed = endDate.replace(/-/g, '')
+      const sdFmt = `${sd.slice(0, 4)}-${sd.slice(4, 6)}-${sd.slice(6, 8)}`
+      const edFmt = `${ed.slice(0, 4)}-${ed.slice(4, 6)}-${ed.slice(6, 8)}`
+      const appId = 'a01901d3caba1f362d69474674ce477f'
+      const method = 'GETCITYPOINTAVG'
+
+      const { createHash } = await import('crypto')
+      // encode_param: Base64 encode
+      const cityParam = Buffer.from(city).toString('base64')
+      const methodEncoded = Buffer.from(method).toString('base64')
+      const startEncoded = Buffer.from(sdFmt).toString('base64')
+      const endEncoded = Buffer.from(edFmt).toString('base64')
+      // encode_secret: MD5(appId + method + city + start + end)
+      const secret = createHash('md5').update(appId + method + city + sdFmt + edFmt).digest('hex')
+
+      const payload = new URLSearchParams({
+        appId,
+        method: methodEncoded,
+        city: cityParam,
+        startTime: startEncoded,
+        endTime: endEncoded,
+        secret,
+      })
+
+      const resp = await fetch('https://www.zq12369.com/api/zhenqiapi.php', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        },
+        body: payload.toString(),
+        signal: AbortSignal.timeout(30000),
+      })
+      if (!resp.ok) return null
+      const encryptedText = await resp.text()
+      // decode_result: triple Base64 decode
+      let decoded = encryptedText
+      for (let i = 0; i < 3; i++) {
+        decoded = Buffer.from(decoded, 'base64').toString('utf-8')
+      }
+      const data = JSON.parse(decoded) as Record<string, unknown>
+      const rows = data?.rows as Record<string, unknown>[] | undefined
+      if (!rows?.length) return null
+      return rows.map(it => ({
+        pointname: it.pointname ?? it.pointName ?? '',
+        aqi: safeFloat(it.aqi),
+        pm25: safeFloat(it.pm25),
+        pm10: safeFloat(it.pm10),
+        no2: safeFloat(it.no2),
+        so2: safeFloat(it.so2),
+        o3: safeFloat(it.o3),
+        co: safeFloat(it.co),
+      }))
     } catch { return null }
   }
 }
