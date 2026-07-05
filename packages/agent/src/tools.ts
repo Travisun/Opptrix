@@ -22,30 +22,81 @@ import { buildAgentSystemRules, instrumentRefsFromList, normalizeInstrumentHubPa
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
 
+/**
+ * JSON Schema 对象类型定义 — 工具参数的结构化描述格式。
+ *
+ * 用途：定义 Agent 工具的输入参数 Schema，供 LLM function calling 和 MCP 协议使用。
+ * 格式：遵循 JSON Schema Draft-07 的 object 类型规范。
+ */
 export interface JsonSchema {
+  /** 固定为 "object"，表示参数是一个 JSON 对象 */
   type: 'object'
-  properties: Record<string, { type: string; description?: string; items?: unknown; default?: unknown }>
+  /** 参数属性定义，key 为参数名，value 含类型和描述 */
+  properties: Record<string, {
+    /** 参数类型（如 "string"、"number"、"boolean"、"array"） */
+    type: string
+    /** 参数描述文本，供 LLM 理解参数含义 */
+    description?: string
+    /** 当 type="array" 时，描述数组元素的类型 */
+    items?: unknown
+    /** 参数默认值 */
+    default?: unknown
+  }>
+  /** 必填参数名列表，缺省时所有参数均为可选 */
   required?: string[]
 }
 
+/**
+ * Agent 工具定义 — 完整的工具注册信息，包含元数据和执行函数。
+ *
+ * 用途：ToolRegistry 内部存储的工具定义，用于生成 MCP/OpenAI tools 列表和实际调用。
+ */
 export interface ToolDef {
+  /** 工具唯一名称（如 "evaluate_stock"、"get_stock_kline"），全局不可重复 */
   name: string
+  /** 工具描述文本，供 LLM 理解工具用途 */
   description: string
+  /** 工具分类（如 "个股分析"、"选股"、"本地数据"、"策略"） */
   category: string
+  /** 输入参数的 JSON Schema 定义 */
   parameters: JsonSchema
+  /** 工具执行函数：接收参数对象，返回 Promise<unknown> */
   handler: (args: Record<string, unknown>) => Promise<unknown>
+  /** 工具元数据（用途说明、调用规范、是否用于挖掘等） */
   meta?: ToolMeta
 }
 
+/**
+ * MCP 协议工具定义 — list_tools 响应格式。
+ *
+ * 用途：MCP Server 返回给 Client 的工具目录信息。
+ */
 export interface McpToolDef {
+  /** 工具唯一名称 */
   name: string
+  /** 工具描述文本 */
   description: string
+  /** 输入参数的 JSON Schema 定义（MCP 称为 inputSchema） */
   inputSchema: JsonSchema
 }
 
+/**
+ * OpenAI function calling 工具格式 — 符合 OpenAI Chat API 的 tools 参数规范。
+ *
+ * 用途：非 MCP 模式下，直接传给 OpenAI API 的 tools 数组。
+ */
 export interface OpenAiTool {
+  /** 固定为 "function"，表示这是一个函数工具 */
   type: 'function'
-  function: { name: string; description: string; parameters: JsonSchema }
+  /** 函数定义 */
+  function: {
+    /** 函数名称（与 ToolDef.name 一致） */
+    name: string
+    /** 函数描述文本 */
+    description: string
+    /** 输入参数的 JSON Schema 定义 */
+    parameters: JsonSchema
+  }
 }
 
 export class ToolRegistry {

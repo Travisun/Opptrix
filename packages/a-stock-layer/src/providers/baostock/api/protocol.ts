@@ -14,6 +14,13 @@ import {
   MESSAGE_SPLIT,
 } from './constants.js'
 
+/**
+ * BaoStock TCP 协议解析 — 处理与 BaoStock 服务器的 TCP 通信协议。
+ *
+ * 用途：封装连接建立、请求构建、响应解析、zlib 解压等底层操作。
+ * 协议：自定义 TCP 协议，消息格式为 [header]\x01[body]\x01[crc32]\r\n
+ */
+
 export class BaostockProtocolError extends Error {
   constructor(message: string, readonly code?: string) {
     super(message)
@@ -21,11 +28,21 @@ export class BaostockProtocolError extends Error {
   }
 }
 
+/**
+ * BaoStock 已解析的消息结构 — TCP 响应解析后的结构化数据。
+ *
+ * 用途：上层 Client 直接读取 bodyParts 数组提取字段，无需重复解析。
+ */
 export interface ParsedBaostockMessage {
+  /** 协议版本号 */
   version: string
+  /** 消息类型（如 "login"、"query_history_k_data_plus"） */
   msgType: string
+  /** 消息体长度（十进制字符串） */
   bodyLength: string
+  /** 消息体按 \x01 分割后的字段数组 */
   bodyParts: string[]
+  /** 原始消息体文本（未分割） */
   rawBody: string
 }
 

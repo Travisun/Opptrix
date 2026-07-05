@@ -61,27 +61,56 @@ import {
 } from './protocol.js'
 import { normalizeBaostockCode } from './symbols.js'
 
+/**
+ * BaoStock 查询结果行 — 单行数据为字段名到值的映射。
+ *
+ * 用途：BaoStock API 返回的数据行，值类型为 string | number | null。
+ */
 export type BaostockRow = Record<string, string | number | null>
 
+/**
+ * BaoStock 查询结果 — 标准分页响应格式。
+ *
+ * 用途：所有 BaoStock 查询方法的返回类型，含错误码、分页信息、字段定义和数据。
+ * 数据源：BaoStock TCP 协议接口 http://baostock.com/baostock_index.php
+ */
 export interface BaostockResult {
+  /** 错误码，"0" 表示成功，其他为具体错误 */
   error_code: string
+  /** 错误描述信息 */
   error_msg: string
+  /** 请求方法名（如 "query_history_k_data_plus"） */
   method?: string
+  /** 当前会话用户 ID */
   user_id?: string
+  /** 当前页码（从 1 开始） */
   cur_page?: string
+  /** 每页条数（默认 1000） */
   per_page?: string
+  /** 字段名列表（如 ["date", "code", "open", "high"]） */
   fields: string[]
+  /** 二维数据数组，每行为一个字段值数组，顺序与 fields 对应 */
   data: unknown[][]
+  /** 元数据（如查询日期范围、频率等） */
   meta?: Record<string, string>
 }
 
-/** @deprecated use BaostockResult */
+/**
+ * @deprecated 使用 BaostockResult
+ */
 export type BaostockQueryResult = BaostockResult
 
+/**
+ * BaoStock 登录结果 — 登录/登出操作的响应。
+ */
 export interface BaostockLoginResult {
+  /** 错误码，"0" 表示成功 */
   error_code: string
+  /** 错误描述（如"用户ID不能为空"） */
   error_msg: string
+  /** 操作方法名（如 "login"、"logout"） */
   method?: string
+  /** 用户 ID */
   user_id?: string
 }
 

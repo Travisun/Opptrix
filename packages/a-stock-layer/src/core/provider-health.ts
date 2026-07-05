@@ -17,18 +17,36 @@ export enum CircuitState {
   HALF_OPEN = 'half_open',
 }
 
+/**
+ * 单个 (Provider × Capability) 组合的健康状态快照。
+ *
+ * 用途：熔断器判断是否跳过该 Provider、诊断界面展示健康状态。
+ */
 export interface InterfaceHealth {
+  /** 连续失败次数，达到 FAILURE_THRESHOLD 时触发熔断 */
   consecutiveFails: number
+  /** 累计失败总次数 */
   totalFails: number
+  /** 累计成功总次数 */
   totalSuccesses: number
+  /** 最近一次失败时间戳（Unix 毫秒），0 表示无失败记录 */
   lastFailAt: number
+  /** 最近一次成功时间戳（Unix 毫秒），0 表示无成功记录 */
   lastSuccessAt: number
+  /** 熔断器当前状态（CLOSED/OPEN/HALF_OPEN） */
   state: CircuitState
+  /** 熔断器冷却期截止时间戳（Unix 毫秒），0 表示未冷却 */
   cooldownUntil: number
-  /** Last error message (for diagnostics) */
+  /** 最近一次错误消息（截断至 200 字符），用于诊断 */
   lastError: string
 }
 
+/**
+ * 健康状态快照 — 所有 (Provider × Capability) 组合的当前健康状态。
+ *
+ * 用途：诊断接口返回、健康监控面板展示。
+ * key 格式："{providerId}::{capability}"（如 "eastmoney::STOCK_REALTIME"）
+ */
 export interface HealthSnapshot {
   [key: string]: InterfaceHealth
 }

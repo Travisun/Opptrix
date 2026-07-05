@@ -1,3 +1,12 @@
+/**
+ * 查询计划引擎 — 根据市场、资产类别和能力，选择最优 Provider 执行策略。
+ *
+ * 核心职责：
+ *   1. 按 QueryPlanId 查找预定义的查询计划（market + assetClass + capability + strategy）
+ *   2. 按优先级依次尝试 Provider（sequential）、合并多 Provider 结果（merge）或竞速取最快（race）
+ *   3. 集成缓存、熔断器、数据校验
+ */
+
 import type { AssetClass, Market, QueryResult } from '@opptrix/shared'
 import { Capability, CACHE_TYPE } from './capabilities.js'
 import type { Cache } from './cache.js'
@@ -13,34 +22,62 @@ import type { StockRealtime } from '@opptrix/shared'
 import { getProviderHealthTracker } from './provider-health.js'
 import { validateResponse } from './data-validator.js'
 
+/**
+ * 查询执行策略 — 决定多个 Provider 之间如何协调。
+ *
+ * - sequential: 按优先级依次尝试，首个成功即返回（适用于单标的查询）
+ * - merge:      多个 Provider 并行/串行合并结果，去重后返回（适用于批量实时行情）
+ * - race:       多个 Provider 竞速，最快返回者胜出（预留，当前未使用）
+ */
 export type QueryPlanStrategy = 'sequential' | 'merge' | 'race'
 
+/**
+ * 预定义查询计划标识 — 每个 ID 对应一组固定的 market + assetClass + capability + strategy。
+ * 新增查询类型时在此扩展。
+ */
 export type QueryPlanId =
-  | 'cn_equity_stock_kline_daily'
-  | 'cn_equity_stock_kline_minute'
-  | 'cn_equity_stock_realtime_batch'
-  | 'cn_index_index_kline'
+  | 'cn_equity_stock_kline_daily'      // A 股日 K 线
+  | 'cn_equity_stock_kline_minute'     // A 股分钟 K 线
+  | 'cn_equity_stock_realtime_batch'   // A 股批量实时行情
+  | 'cn_index_index_kline'             // A 股指数 K 线
 
+/**
+ * 查询计划定义 — 绑定市场、资产类别、数据能力与执行策略。
+ * 由 QUERY_PLANS 常量表驱动，QueryPlanExecutor 根据此执行实际查询。
+ */
 export interface QueryPlan {
+  /** 计划唯一标识 */
   id: QueryPlanId
+  /** 目标市场（CN/US/HK/CRYPTO） */
   market: Market
+  /** 资产类别（EQUITY/ETF/INDEX/CRYPTO_SPOT） */
   assetClass: AssetClass
+  /** 所需数据能力（STOCK_KLINE/STOCK_REALTIME/INDEX_KLINE 等） */
   capability: Capability
+  /** 执行策略 */
   strategy: QueryPlanStrategy
 }
 
+/**
+ * 查询执行上下文 — 单次查询的运行时参数。
+ * 由调用方传入，控制缓存、方法分发、参数传递和合并逻辑。
+ */
 export interface QueryExecutionContext {
+  /** Provider 上要调用的方法名（如 "kline"、"realtime"） */
   method: string
+  /** 缓存类型键（如 "stock_kline"、"stock_realtime"），为空则不缓存 */
   cacheType: string
+  /** 是否启用缓存读写 */
   useCache: boolean
+  /** 传递给 Provider 方法的参数列表 */
   args: unknown[]
-  /** For merge: dedupe key */
+  /** merge 策略下的去重键函数，默认按归一化 code 去重 */
   mergeKey?: (item: unknown) => string
-  /** Optional asset class override (e.g. ETF quote) */
+  /** 可选资产类别覆盖（如 ETF 行情走 ETF 路由而非 EQUITY） */
   assetClass?: AssetClass
 }
 
-/** CN query plans — provider order comes from registry priority + user settings. */
+/** CN 查询计划表 — Provider 顺序由 Registry 优先级 + 用户设置决定。 */
 export const QUERY_PLANS: Record<QueryPlanId, QueryPlan> = {
   cn_equity_stock_kline_daily: {
     id: 'cn_equity_stock_kline_daily',
@@ -84,16 +121,25 @@ function resolveAssetClassFromArgs(args: unknown[], fallback: AssetClass): Asset
   return fallback
 }
 
+/**
+ * 查询计划执行器 — 协调 Registry、Cache、HealthTracker 完成实际数据查询。
+ * 优先从缓存读取，miss 时按策略执行，成功后写入缓存。
+ */
 export class QueryPlanExecutor {
   constructor(
     private readonly registry: DriverRegistry,
     private readonly cache: Cache,
   ) {}
 
+  /** 获取指定 ID 的查询计划定义 */
   getPlan(id: QueryPlanId): QueryPlan {
     return QUERY_PLANS[id]
   }
 
+  /**
+   * 执行查询计划 — 检查缓存 → 按策略调用 Provider → 写入缓存 → 返回结果。
+   * @typeParam T - 返回数据元素类型
+   */
   async execute<T>(plan: QueryPlan, ctx: QueryExecutionContext): Promise<QueryResult<T[]>> {
     if (ctx.useCache && ctx.cacheType) {
       const params = {
@@ -123,13 +169,14 @@ export class QueryPlanExecutor {
     return result
   }
 
-  /** Registry-ordered providers for this plan (priority + enabled + runtime gates). */
+  /** 按 Registry 优先级解析可用 Provider 列表（过滤掉禁用/低优先级/熔断中的） */
   private resolveDrivers(plan: QueryPlan, ctx: QueryExecutionContext): BaseDriver[] {
     const assetClass = ctx.assetClass ?? resolveAssetClassFromArgs(ctx.args, plan.assetClass)
     const bound = this.registry.getProvidersWithFallback(plan.market, assetClass, plan.capability) as BaseDriver[]
     return bound.filter(d => d.supports(plan.capability) && isProviderRunnable(d, this.registry))
   }
 
+  /** sequential 策略：按优先级依次尝试，首个成功即返回 */
   private async executeSequential<T>(
     plan: QueryPlan,
     ctx: QueryExecutionContext,
@@ -180,6 +227,7 @@ export class QueryPlanExecutor {
     return { success: false, error: `所有 provider 均失败: ${lastError}` }
   }
 
+  /** merge 策略：多 Provider 合并去重结果（当前仅支持 cn_equity_stock_realtime_batch） */
   private async executeMerge<T>(
     plan: QueryPlan,
     ctx: QueryExecutionContext,
@@ -249,6 +297,12 @@ export class QueryPlanExecutor {
   }
 }
 
+/**
+ * 根据能力与方法名解析默认缓存类型。
+ * @param cap  数据能力枚举
+ * @param method Provider 方法名
+ * @returns 缓存类型键，未匹配时返回方法名本身
+ */
 export function defaultCacheType(cap: Capability, method: string): string {
   return CACHE_TYPE[cap] ?? method
 }

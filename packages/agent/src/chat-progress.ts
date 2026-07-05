@@ -1,18 +1,58 @@
+/**
+ * 聊天进度事件系统 — 在 Agent 聊天过程中推送实时状态更新。
+ *
+ * 用途：前端实时展示 Agent 的思考过程、工具调用进度、流式回复片段。
+ * 事件流：thinking → tool_start → tool_done → ... → done
+ */
+
+/**
+ * 工具调用步骤状态 — 标识单次工具调用的当前阶段。
+ * - running: 正在执行
+ * - done:    执行成功完成
+ * - error:   执行出错
+ */
 export type ChatToolStepStatus = 'running' | 'done' | 'error'
 
+/**
+ * 工具调用步骤 — 单次工具调用的完整生命周期信息。
+ *
+ * 用途：在聊天界面中展示"正在评估 600519..."、"获取 K 线数据"等进度条。
+ * 生命周期：创建(status=running) → 完成(enrichStepFromResult) → 显示结果摘要
+ */
 export interface ChatToolStep {
+  /** 步骤唯一 ID（如 UUID 或递增序号） */
   id: string
+  /** 工具名称（如 "evaluate_stock"、"get_stock_kline"） */
   tool: string
+  /** 显示给用户的中文标签（如"评估 600519 因子与评分"） */
   label: string
+  /** 当前状态 */
   status: ChatToolStepStatus
+  /** 参数预览文本（JSON 序列化，截断至 240 字符） */
   argsPreview?: string
+  /** Agent 思考过程片段（如有） */
   thinking?: string
+  /** 结果摘要文本（截断至 180 字符） */
   resultPreview?: string
+  /** 结果完整详情（截断至 4000 字符），点击展开时显示 */
   resultDetail?: string
+  /** 开始时间 ISO 8601 */
   startedAt: string
+  /** 完成时间 ISO 8601 */
   finishedAt?: string
 }
 
+/**
+ * 聊天进度事件 — 聊天过程中推送的各类实时状态。
+ *
+ * 事件类型说明：
+ *   - thinking:    Agent 正在推理（round=第几轮，label=当前步骤描述）
+ *   - tool_start:  工具调用开始（step 含工具名、参数、开始时间）
+ *   - tool_done:   工具调用完成（step 含结果摘要、完成时间）
+ *   - reply:       流式回复片段（content=本次增量文本）
+ *   - done:        全部完成（reply=最终回复、tools_used=使用的工具列表、title=会话标题）
+ *   - error:       出错（message=错误信息）
+ */
 export type ChatProgressEvent =
   | { type: 'thinking'; round: number; label: string; snippet?: string }
   | { type: 'tool_start'; step: ChatToolStep }
@@ -20,19 +60,34 @@ export type ChatProgressEvent =
   | { type: 'reply'; content: string }
   | {
     type: 'done'
+    /** Agent 最终回复文本 */
     reply: string
+    /** 本轮使用的工具名称列表 */
     tools_used: string[]
+    /** 会话 ID */
     session_id: string
+    /** 自动生成的会话标题（可选） */
     title?: string
+    /** 全部工具调用步骤（含状态、耗时、结果） */
     tool_steps: ChatToolStep[]
+    /** 是否被用户取消 */
     cancelled?: boolean
   }
   | { type: 'error'; message: string }
 
+/**
+ * 聊天进度回调选项 — 配置进度推送回调和中断信号。
+ *
+ * 用途：聊天发起时传入，用于实时接收 Agent 执行进度。
+ */
 export interface ChatProgressOptions {
+  /** 进度事件回调函数，Agent 每个阶段变化时调用 */
   onProgress?: (event: ChatProgressEvent) => void
+  /** AbortSignal，用于用户取消聊天请求 */
   signal?: AbortSignal
 }
+
+// ── 工具中文标签映射 ──
 
 const TOOL_LABELS: Record<string, string> = {
   evaluate_stock: '评估个股因子与评分',
@@ -143,6 +198,14 @@ function extractStockName(result: unknown): string | null {
   return typeof name === 'string' && name.trim() ? name.trim() : null
 }
 
+/**
+ * 生成工具调用的中文显示标签 — 根据工具名和参数生成可读描述。
+ *
+ * @param tool   工具名称
+ * @param args   工具参数
+ * @param result 工具返回结果（可选，用于提取股票名称）
+ * @returns 中文标签（如"评估 贵州茅台（600519）因子与评分"）
+ */
 export function formatToolLabel(tool: string, args: Record<string, unknown> = {}, result?: unknown): string {
   const base = TOOL_LABELS[tool] ?? tool.replace(/_/g, ' ')
   const ref = stockRef(args, result)
@@ -220,6 +283,9 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
   }
 }
 
+/**
+ * 格式化工具参数预览 — JSON 序列化后截断至 240 字符。
+ */
 export function formatArgsPreview(args: Record<string, unknown>): string {
   try {
     const s = JSON.stringify(args, null, 0)
@@ -229,6 +295,9 @@ export function formatArgsPreview(args: Record<string, unknown>): string {
   }
 }
 
+/**
+ * 格式化工具结果预览与详情 — preview 180 字符、detail 4000 字符。
+ */
 export function formatResultPreview(result: unknown): { preview: string; detail: string } {
   let text = ''
   if (typeof result === 'string') {
@@ -245,6 +314,9 @@ export function formatResultPreview(result: unknown): { preview: string; detail:
   return { preview, detail }
 }
 
+/**
+ * 用工具执行结果补全步骤信息 — 更新标签、状态、预览文本和完成时间。
+ */
 export function enrichStepFromResult(step: ChatToolStep, result: unknown): ChatToolStep {
   let args: Record<string, unknown> = {}
   try {

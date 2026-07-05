@@ -8,27 +8,51 @@
  *   2. invoke_provider_custom_method — call any declared method
  */
 
+/**
+ * Provider 自定义方法参数定义 — 描述单个参数的名称、类型、描述和默认值。
+ *
+ * 用途：MCP 工具层自动生成参数 Schema，供 LLM 理解参数含义。
+ */
 export interface CustomMethodParam {
+  /** 参数名称（如 "code"、"date"、"startDate"） */
   name: string
+  /** 参数类型 */
   type: 'string' | 'number' | 'boolean'
+  /** 参数描述（如"股票代码"、"日期 YYYY-MM-DD"） */
   description: string
+  /** 是否必填，默认 false */
   required?: boolean
+  /** 默认值 */
   default?: unknown
 }
 
+/**
+ * Provider 自定义方法定义 — 描述一个可在 Provider 上调用的非标准方法。
+ *
+ * 用途：
+ *   1. MCP 层自动生成 list_provider_custom_methods 和 invoke_provider_custom_method 工具
+ *   2. Agent 可发现和调用 Provider 暴露的扩展 API
+ */
 export interface CustomMethodDef {
-  /** Method name on the provider driver */
+  /** Provider driver 上的方法名（如 "bsStockConcept"、"zzSentimentMarketTopN"） */
   method: string
-  /** Human-readable description for the agent */
+  /** 人类可读的功能描述（如"查询股票所属概念板块"） */
   description: string
-  /** Parameter schema */
+  /** 方法参数 Schema 列表 */
   params: CustomMethodParam[]
-  /** Example usage (for prompt hints) */
+  /** 示例调用 JSON（如 '{"provider":"baostock","method":"bsStockConcept","args":["600519"]}'） */
   example?: string
 }
 
+/**
+ * Provider 自定义方法集合 — 某个 Provider 暴露的所有自定义方法。
+ *
+ * 用途：MCP 层按 providerId 分组展示可用方法。
+ */
 export interface ProviderCustomMethods {
+  /** Provider 唯一标识（如 "baostock"、"zzshare"、"eastmoney"） */
   providerId: string
+  /** 该 Provider 的自定义方法列表 */
   methods: CustomMethodDef[]
 }
 

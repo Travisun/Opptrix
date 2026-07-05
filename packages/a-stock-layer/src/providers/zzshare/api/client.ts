@@ -24,116 +24,244 @@ export class ZzshareRateLimitError extends Error {
 
 type QueryValue = string | number | boolean | null | undefined
 
+/**
+ * 自在量化日 K 线查询参数 — 查询单只股票的日线历史数据。
+ *
+ * 用途：获取指定日期范围内的日 K 线序列。
+ * 数据源：自在量化 API https://api.zizizaizai.com/v3/market/kline/day
+ */
 export interface DailyQuery {
+  /** 股票代码（如 "600519" 或 "600519.SH"），与 trade_date 二选一 */
   ts_code?: string
+  /** 单日查询：交易日期 YYYYMMDD */
   trade_date?: string
+  /** 起始日期 YYYYMMDD（范围查询） */
   start_date?: string
+  /** 结束日期 YYYYMMDD（范围查询） */
   end_date?: string
+  /** 分页偏移量 */
   offset?: number
+  /** 每页条数限制 */
   limit?: number
+  /** 返回字段过滤（如 "open,high,low,close" 或 "all"） */
   fields?: string
+  /** 复权类型："qfq"=前复权、"hfq"=后复权、空=不复权 */
   adj?: string
+  /** K 线模式：0=不复权、1=前复权、2=后复权（优先于 adj） */
   candle_mode?: number
+  /** 是否返回所有字段（"true"/"1" 启用扩展字段） */
   export_all?: boolean | string
+  /** 允许额外的自定义参数 */
   [key: string]: QueryValue
 }
 
+/**
+ * 自在量化日 K 线数据行 — 单根日 K 线的完整字段。
+ *
+ * 用途：K 线图表渲染、技术指标计算、策略回测。
+ */
 export interface DailyBar {
+  /** 股票代码（如 "600519.SH"），null 表示未解析 */
   ts_code: string | null
+  /** 交易日期 YYYYMMDD */
   trade_date: string
+  /** 开盘价（元） */
   open: number | null
+  /** 最高价（元） */
   high: number | null
+  /** 最低价（元） */
   low: number | null
+  /** 收盘价（元） */
   close: number | null
+  /** 昨收盘价（元） */
   pre_close: number | null
+  /** 涨跌额（元）= close - pre_close */
   change: number | null
+  /** 涨跌幅（%）= change / pre_close × 100 */
   pct_chg: number | null
+  /** 成交量（手） */
   vol: number | null
+  /** 成交额（元） */
   amount: number | null
+  /** 成交量（手）— 备用字段，与 vol 相同 */
   volume?: number | null
+  /** 成交额（元）— 备用字段，与 amount 相同 */
   turnover?: number | null
+  /** 复权因子 */
   factor?: number | null
+  /** 前收盘价（元）— 备用字段 */
   prev_close?: number | null
+  /** 均价（元）= amount / vol */
   avg_price?: number | null
+  /** 涨停价（元） */
   high_limit?: number | null
+  /** 跌停价（元） */
   low_limit?: number | null
+  /** 换手率（%） */
   turnover_rate?: number | null
+  /** 振幅（%）= (high - low) / pre_close × 100 */
   amp_rate?: number | null
+  /** 量比 */
   quote_rate?: number | null
+  /** 是否停牌（true/false 或 "1"/"0"） */
   is_paused?: unknown
+  /** 是否 ST 股（true/false 或 "1"/"0"） */
   is_st?: unknown
 }
 
+/**
+ * 自在量化分钟 K 线查询参数 — 查询单只股票的分时数据。
+ *
+ * 用途：盘中分时走势、日内交易分析。
+ * 数据源：自在量化 API https://api.zizizaizai.com/v3/market/kline/minute
+ */
 export interface StkMinsQuery {
+  /** 股票代码（必填，如 "600519"） */
   ts_code?: string
+  /** 指定时间点查询（HH:MM:SS 格式） */
   trade_time?: string
+  /** 起始时间（HH:MM:SS 格式） */
   start_time?: string
+  /** 结束时间（HH:MM:SS 格式） */
   end_time?: string
+  /** 分钟频率（如 "1min"、"5min"、"15min"），默认 "1min" */
   freq?: string
+  /** 返回条数限制 */
   count?: number
   [key: string]: QueryValue
 }
 
+/**
+ * 自在量化分钟 K 线数据行 — 单根分钟 K 线。
+ */
 export interface StkMinBar {
+  /** 股票代码 */
   ts_code: string | null
+  /** 交易时间（如 "2024-01-15 09:31:00"） */
   trade_time: string
+  /** 开盘价（元） */
   open: number | null
+  /** 最高价（元） */
   high: number | null
+  /** 最低价（元） */
   low: number | null
+  /** 收盘价（元） */
   close: number | null
+  /** 成交量（手） */
   vol: number | null
+  /** 成交额（元） */
   amount: number | null
 }
 
+/**
+ * 自在量化实时行情查询参数 — 查询单只股票的实时快照。
+ *
+ * 用途：获取最新价、买卖盘口、成交量等盘中数据。
+ * 数据源：自在量化 API https://api.zizizaizai.com/v3/market/kline/realtime
+ */
 export interface RtKQuery {
+  /** 股票代码（如 "600519"） */
   ts_code?: string
+  /** 返回字段过滤（如 "ts_code,close,vol" 或 "all"） */
   fields?: string
   [key: string]: QueryValue
 }
 
+/**
+ * 自在量化实时行情数据行 — 单只股票的实时快照。
+ *
+ * 用途：行情展示、盘口分析、实时监控。
+ */
 export interface RtKBar {
+  /** 股票代码（如 "600519.SH"） */
   ts_code: string
+  /** 股票名称 */
   name?: string
+  /** 昨收盘价（元） */
   pre_close?: number | null
+  /** 最高价（元） */
   high?: number | null
+  /** 开盘价（元） */
   open?: number | null
+  /** 最低价（元） */
   low?: number | null
+  /** 最新价（元） */
   close?: number | null
+  /** 成交量（手） */
   vol?: number | null
+  /** 成交额（元） */
   amount?: number | null
+  /** 成交笔数 */
   num?: number | null
+  /** 卖一价（元） */
   ask_price1?: number | null
+  /** 卖一量（手） */
   ask_volume1?: number | null
+  /** 买一价（元） */
   bid_price1?: number | null
+  /** 买一量（手） */
   bid_volume1?: number | null
+  /** 允许额外的扩展字段（如涨停价、PE 等） */
   [key: string]: unknown
 }
 
+/**
+ * 自在量化股票基础信息查询参数 — 查询股票列表和基本信息。
+ *
+ * 用途：获取 A 股全量股票列表、按代码/名称/交易所过滤。
+ * 数据源：自在量化 API https://api.zizizaizai.com/v3/open/stocks/list
+ */
 export interface StockBasicQuery {
+  /** 股票代码过滤（如 "600519" 或 "600519,000858"） */
   ts_code?: string
+  /** 交易所过滤（如 "SSE"、"SZSE"） */
   exchange?: string
+  /** 上市状态：L=上市、D=退市、P=暂停上市，默认 L */
   list_status?: string
+  /** 沪港通标识：H=沪股通、S=深股通 */
   is_hs?: string
+  /** 返回字段过滤 */
   fields?: string
+  /** 股票名称模糊搜索 */
   name?: string
   [key: string]: QueryValue
 }
 
+/**
+ * 自在量化股票基础信息行 — 单只股票的工商和上市信息。
+ *
+ * 用途：股票搜索结果、股票列表展示、代码归一化。
+ */
 export interface StockBasicRow {
+  /** 完整代码（如 "600519.SH"） */
   ts_code: string
+  /** 纯数字代码（如 "600519"） */
   symbol: string
+  /** 股票名称（如"贵州茅台"） */
   name: string
+  /** 所在地域 */
   area: string
+  /** 所属行业 */
   industry: string
+  /** 公司全称 */
   fullname: string
+  /** 英文名称 */
   enname: string
+  /** 拼音缩写（如 "GZMT"） */
   cnspell: string
+  /** 市场标识（如"主板"、"创业板"、"科创板"） */
   market: string
+  /** 交易所（如 "SSE"、"SZSE"） */
   exchange: string
+  /** 交易货币（"CNY"） */
   curr_type: string
+  /** 上市状态（"L"=上市、"D"=退市、"P"=暂停） */
   list_status: string
+  /** 上市日期 YYYYMMDD */
   list_date: string
+  /** 退市日期 YYYYMMDD（空表示未退市） */
   delist_date: string
+  /** 沪港通标识 */
   is_hs: string
 }
 

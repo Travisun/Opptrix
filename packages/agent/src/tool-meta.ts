@@ -2,14 +2,24 @@
 import { discoverMiningToolNamesForProfile, INSTRUMENT_HUB_FEATURE, isDiscoverStrategyProfile } from '@opptrix/shared'
 import { UNIFIED_MINING_INSTRUMENT_TOOLS } from './unified-mcp-tools.js'
 
+/**
+ * 工具元数据 — 每个 Agent 工具的使用指南和调用规范。
+ *
+ * 用途：
+ *   1. 注入 LLM 工具描述（formatToolDescription 拼接 usageGuide + compliance）
+ *   2. 控制工具在挖掘/聊天场景下的可见性
+ *   3. 映射到 ResearchHub.dispatch feature 名称
+ */
 export interface ToolMeta {
+  /** 何时使用此工具的指导说明（如"初选后批量获取候选截面"） */
   usageGuide: string
+  /** 调用规范与约束（如"codes ≤80、禁止重复调用"） */
   compliance: string
-  /** 选股挖掘阶段是否开放给 Agent */
+  /** 选股挖掘阶段是否开放给 Agent，默认 false 隐藏 */
   miningEligible?: boolean
-  /** 对应 ResearchHub.dispatch feature */
+  /** 对应 ResearchHub.dispatch feature 名称，用于 hub 层路由 */
   hubFeature?: string
-  /** 已由跨市场统一工具替代，默认聊天场景隐藏 */
+  /** 已由跨市场统一工具替代时标记为 true，聊天场景默认隐藏 */
   deprecated?: boolean
 }
 

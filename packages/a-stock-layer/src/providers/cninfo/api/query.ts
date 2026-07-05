@@ -1,5 +1,18 @@
+/**
+ * 巨潮资讯公告查询工具 — 构建和发送巨潮资讯公告搜索请求。
+ *
+ * 用途：查询上市公司公告（年报、季报、重大事项等）。
+ * 数据源：巨潮资讯公告查询接口 https://www.cninfo.com.cn/new/hisAnnouncement/query
+ */
+
 import { isBseCode, normalizeCode, resolveMarket } from '../../../utils/helpers.js'
 
+/**
+ * 巨潮资讯公告搜索标签页 — 决定搜索范围。
+ * - fulltext:  全文搜索（默认）
+ * - relation:  关联搜索（按关联公司）
+ * - industry:  行业搜索（按行业分类）
+ */
 export type CninfoAnnouncementTab = 'fulltext' | 'relation' | 'industry'
 
 /** Maps engine newsType tokens → cninfo category filter (disclosure site taxonomy). */
@@ -13,14 +26,27 @@ const NEWS_TYPE_CATEGORY: Record<string, string> = {
   temp: 'category_yjpl_szsh;',
 }
 
+/**
+ * 巨潮资讯公告查询参数 — 定义单次公告搜索的完整条件。
+ *
+ * 用途：传入 buildAnnouncementPayload() 构建 POST 请求体。
+ */
 export interface CninfoAnnouncementQuery {
+  /** 股票代码（6 位纯数字，如 "600519"） */
   code: string
+  /** 巨潮资讯内部组织 ID（orgId），需通过公司资料接口获取 */
   orgId: string
+  /** 页码，默认 1 */
   page?: number
+  /** 每页条数，默认 10，最大 30 */
   pageSize?: number
+  /** 搜索标签页，默认 "fulltext" */
   tab?: CninfoAnnouncementTab
+  /** 公告分类过滤（如 "category_ndbg_szsh;" 年报） */
   category?: string
+  /** 发布日期范围过滤（如 "2024-01-01~2024-12-31"） */
   seDate?: string
+  /** 全文搜索关键词 */
   searchkey?: string
 }
 

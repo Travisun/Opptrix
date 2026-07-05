@@ -1,13 +1,34 @@
+/** 自在量化 API 默认基地址 */
 export const DEFAULT_BASE_URL = 'https://api.zizizaizai.com'
 
+/**
+ * 自在量化 API 鉴权等级。
+ * - open:  免费接口，无需 Token（匿名模式可用）
+ * - token: 付费接口，需配置有效 Token
+ */
 export type ZzshareAuthTier = 'open' | 'token'
 
+/**
+ * 自在量化快捷端点参数定义 — 支持数组和对象两种格式。
+ * - string[]: 按位置索引映射到端点路径参数
+ * - Record:   按参数名映射，支持默认值
+ */
 export type ZzshareParamNames = string[] | Record<string, string | number | boolean>
 
+/**
+ * 自在量化快捷端点定义 — 映射到具体 API 路径和参数。
+ *
+ * 用途：ZzshareClient 自动注册快捷方法，无需手动构造 URL。
+ * 数据源：自在量化开放平台 https://quant.zizizaizai.com
+ */
 export interface ZzshareShortcut {
+  /** API 路径模板（如 "market/trade/days"、"v3/market/kline/day/{code}"） */
   path: string
+  /** 参数定义：数组格式按位置映射，对象格式按名称映射（含默认值） */
   params: ZzshareParamNames
+  /** 端点功能描述 */
   description: string
+  /** 鉴权等级：open=免费、token=需付费 Token */
   auth: ZzshareAuthTier
 }
 
