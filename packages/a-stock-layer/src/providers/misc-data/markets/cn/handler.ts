@@ -6648,4 +6648,112 @@ export class MiscDataHandler extends MarketHandlerShell {
       }
     })
   }
+
+  // ── 银行数据 ──
+
+  /**
+   * AKShare 接口: bank_fjcf_table_detail
+   * 对应 Python: akshare.bank.bank_cbirc_2020.bank_fjcf_table_detail
+   * 数据源: https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemIdAndChild
+   * @param page - 获取前 page 页数据，默认 5
+   * @param item - 处罚类型: "机关" | "本级" | "分局本级"，默认 "分局本级"
+   * @param begin - 开始页码，默认 1
+   * @returns 行政处罚信息公开表数据
+   * 数据清洗: 两步获取 — 先获取 docId 列表，再逐个获取 HTML 表格并解析为结构化数据
+   */
+  async bankFjcfTableDetail(page = 5, item = '分局本级', begin = 1): Promise<Record<string, unknown>[] | null> {
+    const itemIdMap: Record<string, string> = { '机关': '4113', '本级': '4114', '分局本级': '4115' }
+    const itemId = itemIdMap[item]
+    if (!itemId) return null
+
+    const headers = {
+      'Accept': '*/*',
+      'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive',
+      'Host': 'www.nfra.gov.cn',
+      'Pragma': 'no-cache',
+      'Referer': 'http://www.nfra.gov.cn/cn/view/pages/ItemList.html?itemPId=923&itemId=4115',
+      'X-Requested-With': 'XMLHttpRequest',
+      'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+    }
+
+    try {
+      // Step 1: Get doc IDs from list API
+      const docIds: string[] = []
+      for (let i = begin; i < begin + page; i++) {
+        const listUrl = 'https://www.nfra.gov.cn/cbircweb/DocInfo/SelectDocByItemIdAndChild'
+        const listJson = await httpGet(listUrl, { itemId, pageSize: '18', pageIndex: String(i) }, 15000, headers) as Record<string, unknown>
+        const data = listJson?.data as Record<string, unknown> | undefined
+        const rows = data?.rows as Array<Record<string, unknown>> | undefined
+        if (rows?.length) {
+          for (const row of rows) {
+            if (row.docId) docIds.push(String(row.docId))
+          }
+        }
+      }
+
+      if (!docIds.length) return null
+
+      // Step 2: Fetch each doc's HTML table
+      const results: Record<string, unknown>[] = []
+      const expectedCols = [
+        '行政处罚决定书文号', '姓名', '单位', '单位名称', '主要负责人姓名',
+        '主要违法违规事实（案由）', '行政处罚依据', '行政处罚决定',
+        '作出处罚决定的机关名称', '作出处罚决定的日期',
+      ]
+
+      for (const docId of docIds) {
+        try {
+          const docUrl = `https://www.nfra.gov.cn/cn/static/data/DocInfo/SelectByDocId/data_docId=${docId}.json`
+          const docJson = await httpGet(docUrl, undefined, 10000) as Record<string, unknown>
+          const docData = docJson?.data as Record<string, unknown> | undefined
+          const html = String(docData?.docClob ?? '')
+          if (!html) continue
+
+          // Parse HTML table — extract rows from <tr> tags
+          const trRegex = /<tr[^>]*>([\s\S]*?)<\/tr>/gi
+          const tdRegex = /<td[^>]*>([\s\S]*?)<\/td>/gi
+          const rows: string[][] = []
+          let trMatch
+          while ((trMatch = trRegex.exec(html)) !== null) {
+            const cells: string[] = []
+            let tdMatch
+            while ((tdMatch = tdRegex.exec(trMatch[1])) !== null) {
+              cells.push(tdMatch[1].replace(/<[^>]+>/g, '').trim())
+            }
+            if (cells.length) rows.push(cells)
+          }
+
+          if (!rows.length) continue
+
+          // Extract penalty data from table
+          let values: string[]
+          if (rows[0].length === 2) {
+            // 2-column format: label-value pairs
+            values = rows.map(r => r[1] ?? '')
+          } else {
+            // Multi-column format: skip first 3 columns
+            values = rows[0].slice(3).map(v => v ?? '')
+          }
+
+          // Pad to 10 fields if needed
+          while (values.length < 10) values.splice(2, 0, '')
+
+          // Flatten nested lists
+          values = values.map(v => Array.isArray(v) ? v[0] ?? '' : v)
+
+          const record: Record<string, unknown> = {}
+          for (let ci = 0; ci < expectedCols.length && ci < values.length; ci++) {
+            record[expectedCols[ci]] = values[ci]
+          }
+          record['处罚ID'] = docId
+          record['处罚公布日期'] = String(docData?.publishDate ?? '')
+          results.push(record)
+        } catch { /* skip failed doc */ }
+      }
+
+      return results.length ? results : null
+    } catch { return null }
+  }
 }
