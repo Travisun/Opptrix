@@ -6043,4 +6043,481 @@ export class MiscDataHandler extends MarketHandlerShell {
       return results.length ? results : null
     } catch { return null }
   }
+
+  // ── 现货数据 ──
+
+  /**
+   * AKShare 接口: spot_price_qh
+   * 对应 Python: akshare.spot.spot_price_qh.spot_price_qh
+   * 数据源: https://www.99qh.com/data/spotTrend
+   * @param symbol - 品种中文名称，如 "螺纹钢"、"铜"、"铝"；为空则默认 "螺纹钢"
+   * @returns 现货走势数据列表，每项含 date(日期)、futuresClose(期货收盘价)、spotPrice(现货价格)
+   * 数据清洗: 从 99qh.com 页面 __NEXT_DATA__ JSON 提取品种映射表，从
+   *           centerapi.fx168api.com 获取 token，再请求 /app/qh/api/spot/trend；
+   *           fp→futuresClose、sp→spotPrice，通过 safeFloat 转为数值
+   */
+  async spotPriceQh(symbol = '螺纹钢'): Promise<Record<string, unknown>[] | null> {
+    try {
+      // Step 1: Get product list from page __NEXT_DATA__
+      const pageResp = await fetch('https://www.99qh.com/data/spotTrend', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!pageResp.ok) return null
+      const html = await pageResp.text()
+      const ndMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+      if (!ndMatch) return null
+      const ndJson = JSON.parse(ndMatch[1]) as Record<string, unknown>
+      const pageProps = (ndJson?.props as Record<string, unknown>)?.pageProps as Record<string, unknown> | undefined
+      const data = pageProps?.data as Record<string, unknown> | undefined
+      const varietyList = data?.varietyListData as Record<string, unknown>[] | undefined
+      if (!varietyList?.length) return null
+
+      // Build name→productId mapping
+      const nameToId = new Map<string, string>()
+      for (const cat of varietyList) {
+        const products = cat.productList as Record<string, unknown>[] | undefined
+        if (!products) continue
+        for (const p of products) {
+          nameToId.set(String(p.name ?? ''), String(p.productId ?? ''))
+        }
+      }
+      const productId = nameToId.get(symbol)
+      if (!productId) return null
+
+      // Step 2: Get token from fx168api
+      const tokenResp = await fetch('https://centerapi.fx168api.com/app/common/v.js', {
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          Origin: 'https://www.99qh.com',
+          Referer: 'https://www.99qh.com',
+        },
+        signal: AbortSignal.timeout(10000),
+      })
+      const token = tokenResp.headers.get('_pcc') ?? ''
+
+      // Step 3: Fetch spot trend data
+      const resp = await httpGet('https://centerapi.fx168api.com/app/qh/api/spot/trend', {
+        productId,
+        pageNo: '1',
+        pageSize: '50000',
+        startDate: '',
+        endDate: '2050-01-01',
+        appCategory: 'web',
+      }, 15000, {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+        _pcc: token,
+        Origin: 'https://www.99qh.com',
+        Referer: 'https://www.99qh.com',
+      })
+      const list = (resp?.data as Record<string, unknown> | undefined)?.list as Record<string, unknown>[] | undefined
+      if (!list?.length) return null
+      return list
+        .map(it => ({
+          date: String(it.date ?? '').slice(0, 10),
+          futuresClose: safeFloat(it.fp),
+          spotPrice: safeFloat(it.sp),
+        }))
+        .sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_price_table_qh
+   * 对应 Python: akshare.spot.spot_price_qh.spot_price_table_qh
+   * 数据源: https://www.99qh.com/data/spotTrend
+   * @returns 交易所与品种对照表，每项含 exchange(交易所名称)、name(品种名称)、productId(品种ID)
+   * 数据清洗: 从 99qh.com 页面 __NEXT_DATA__ JSON 提取 varietyListData，扁平化
+   *           所有 category 的 productList，取 qhExchangeName/name/productId 三列
+   */
+  async spotPriceTableQh(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.99qh.com/data/spotTrend', {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const html = await resp.text()
+      const ndMatch = html.match(/<script[^>]*id="__NEXT_DATA__"[^>]*>([\s\S]*?)<\/script>/)
+      if (!ndMatch) return null
+      const ndJson = JSON.parse(ndMatch[1]) as Record<string, unknown>
+      const pageProps = (ndJson?.props as Record<string, unknown>)?.pageProps as Record<string, unknown> | undefined
+      const data = pageProps?.data as Record<string, unknown> | undefined
+      const varietyList = data?.varietyListData as Record<string, unknown>[] | undefined
+      if (!varietyList?.length) return null
+      const result: Record<string, unknown>[] = []
+      for (const cat of varietyList) {
+        const products = cat.productList as Record<string, unknown>[] | undefined
+        if (!products) continue
+        for (const p of products) {
+          result.push({
+            exchange: String(p.qhExchangeName ?? ''),
+            name: String(p.name ?? ''),
+            productId: String(p.productId ?? ''),
+          })
+        }
+      }
+      return result.length ? result : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_hist_sge
+   * 对应 Python: akshare.spot.spot_sge.spot_hist_sge
+   * 数据源: https://www.sge.com.cn/sjzx/mrhq
+   * @param symbol - 品种代码，如 "Au99.99"、"Ag99.99"、"Au(T+D)"；默认 "Au99.99"
+   *                 可选值: 'Au99.99', 'Au99.95', 'Au100g', 'Pt99.95', 'Ag(T+D)', 'Au(T+D)',
+   *                 'mAu(T+D)', 'Au(T+N1)', 'Au(T+N2)', 'Ag99.99', 'iAu99.99', 'Au99.5',
+   *                 'iAu100g', 'iAu99.5', 'PGC30g', 'NYAuTN06', 'NYAuTN12'
+   * @returns 上海黄金交易所历史行情列表，每项含 date(日期)、open(开盘)、close(收盘)、
+   *          low(最低)、high(最高)
+   * 数据清洗: POST 请求 sge.com.cn/graph/Dailyhq，解析 data_json["time"] 数组，
+   *           字段通过 safeFloat 转为数值，date 通过 Date 构造函数转换
+   */
+  async spotHistSge(symbol = 'Au99.99'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.sge.com.cn/graph/Dailyhq', {
+        method: 'POST',
+        headers: {
+          Accept: 'text/html, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: 'https://www.sge.com.cn',
+          Referer: 'https://www.sge.com.cn/sjzx/mrhq',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({ instid: symbol }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const timeArr = json.time as unknown[][] | undefined
+      if (!timeArr?.length) return null
+      return timeArr.map(row => ({
+        date: row[0] != null ? new Date(Number(row[0])).toISOString().slice(0, 10) : '',
+        open: safeFloat(row[1]),
+        close: safeFloat(row[2]),
+        low: safeFloat(row[3]),
+        high: safeFloat(row[4]),
+      }))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_quotations_sge
+   * 对应 Python: akshare.spot.spot_sge.spot_quotations_sge
+   * 数据源: https://www.sge.com.cn/graph/quotations
+   * @param symbol - 品种代码，如 "Au99.99"、"Ag(T+D)"；默认 "Au99.99"
+   * @returns 上海黄金交易所实时行情列表，每项含 variety(品种)、time(时间)、
+   *          price(现价)、updateTime(更新时间)
+   * 数据清洗: POST 请求 sge.com.cn/graph/quotations，解析 heyue/times/data/delaystr 数组；
+   *           price 通过 safeFloat 转为数值，过滤掉时间晚于更新时间的行，按时间排序
+   */
+  async spotQuotationsSge(symbol = 'Au99.99'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.sge.com.cn/graph/quotations', {
+        method: 'POST',
+        headers: {
+          Accept: 'application/json, text/javascript, */*; q=0.01',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: 'https://www.sge.com.cn',
+          Referer: 'https://www.sge.com.cn/',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        body: new URLSearchParams({ instid: symbol }),
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const heyue = json.heyue as string[] | undefined
+      const times = json.times as string[] | undefined
+      const data = json.data as (string | number)[] | undefined
+      const delayStr = json.delaystr as string[] | undefined
+      if (!heyue?.length || !times?.length || !data?.length) return null
+      const updateTime = delayStr?.[0]?.split(' ')[1] ?? ''
+      const rows: Record<string, unknown>[] = []
+      for (let i = 0; i < heyue.length; i++) {
+        const t = times[i] ?? ''
+        if (updateTime && t >= updateTime) continue
+        rows.push({
+          variety: heyue[i] ?? '',
+          time: t,
+          price: safeFloat(data[i]),
+          updateTime: delayStr?.[0] ?? '',
+        })
+      }
+      rows.sort((a, b) => String(a.time).localeCompare(String(b.time)))
+      return rows.length ? rows : null
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_golden_benchmark_sge
+   * 对应 Python: akshare.spot.spot_sge.spot_golden_benchmark_sge
+   * 数据源: https://www.sge.com.cn/sjzx/jzj
+   * @returns 上海金基准价历史数据，每项含 date(交易日期)、eveningPrice(晚盘价)、
+   *          morningPrice(早盘价)
+   * 数据清洗: POST 请求 sge.com.cn/graph/DayilyJzj，解析 wp(晚盘)和 zp(早盘)两个数组；
+   *           时间戳从 Unix 毫秒转为日期，价格通过 safeFloat 转为数值
+   */
+  async spotGoldenBenchmarkSge(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.sge.com.cn/graph/DayilyJzj', {
+        method: 'POST',
+        headers: {
+          Accept: '*/*',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: 'https://www.sge.com.cn',
+          Referer: 'https://www.sge.com.cn/sjzx/jzj',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const wpArr = json.wp as unknown[][] | undefined
+      const zpArr = json.zp as unknown[][] | undefined
+      if (!wpArr?.length) return null
+      const resultMap = new Map<string, Record<string, unknown>>()
+      for (const row of wpArr) {
+        const date = row[0] != null ? new Date(Number(row[0])).toISOString().slice(0, 10) : ''
+        resultMap.set(date, { date, eveningPrice: safeFloat(row[1]), morningPrice: null })
+      }
+      if (zpArr?.length) {
+        for (const row of zpArr) {
+          const date = row[0] != null ? new Date(Number(row[0])).toISOString().slice(0, 10) : ''
+          const existing = resultMap.get(date)
+          if (existing) {
+            existing.morningPrice = safeFloat(row[1])
+          } else {
+            resultMap.set(date, { date, eveningPrice: null, morningPrice: safeFloat(row[1]) })
+          }
+        }
+      }
+      return Array.from(resultMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_silver_benchmark_sge
+   * 对应 Python: akshare.spot.spot_sge.spot_silver_benchmark_sge
+   * 数据源: https://www.sge.com.cn/sjzx/mrhq
+   * @returns 上海银基准价历史数据，每项含 date(交易日期)、eveningPrice(晚盘价)、
+   *          morningPrice(早盘价)
+   * 数据清洗: POST 请求 sge.com.cn/graph/DayilyShsilverJzj，结构同 spot_golden_benchmark_sge；
+   *           wp(晚盘)和 zp(早盘)数组，时间戳从 Unix 毫秒转为日期
+   */
+  async spotSilverBenchmarkSge(): Promise<Record<string, unknown>[] | null> {
+    try {
+      const resp = await fetch('https://www.sge.com.cn/graph/DayilyShsilverJzj', {
+        method: 'POST',
+        headers: {
+          Accept: '*/*',
+          'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+          Origin: 'https://www.sge.com.cn',
+          Referer: 'https://www.sge.com.cn/sjzx/mrhq',
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+          'X-Requested-With': 'XMLHttpRequest',
+        },
+        signal: AbortSignal.timeout(15000),
+      })
+      if (!resp.ok) return null
+      const json = await resp.json() as Record<string, unknown>
+      const wpArr = json.wp as unknown[][] | undefined
+      const zpArr = json.zp as unknown[][] | undefined
+      if (!wpArr?.length) return null
+      const resultMap = new Map<string, Record<string, unknown>>()
+      for (const row of wpArr) {
+        const date = row[0] != null ? new Date(Number(row[0])).toISOString().slice(0, 10) : ''
+        resultMap.set(date, { date, eveningPrice: safeFloat(row[1]), morningPrice: null })
+      }
+      if (zpArr?.length) {
+        for (const row of zpArr) {
+          const date = row[0] != null ? new Date(Number(row[0])).toISOString().slice(0, 10) : ''
+          const existing = resultMap.get(date)
+          if (existing) {
+            existing.morningPrice = safeFloat(row[1])
+          } else {
+            resultMap.set(date, { date, eveningPrice: null, morningPrice: safeFloat(row[1]) })
+          }
+        }
+      }
+      return Array.from(resultMap.values()).sort((a, b) => String(a.date).localeCompare(String(b.date)))
+    } catch { return null }
+  }
+
+  // ── 现货-生猪大数据 ──
+
+  private async soozhuPost(act: string, indid = ''): Promise<Record<string, unknown> | null> {
+    try {
+      const session = await fetch('https://www.soozhu.com/price/data/center/', {
+        headers: HEADERS,
+        signal: AbortSignal.timeout(15000),
+      })
+      const html = await session.text()
+      const tokenMatch = html.match(/name="csrfmiddlewaretoken"\s+value="([^"]+)"/)
+      if (!tokenMatch) return null
+      const token = tokenMatch[1]
+      const payload: Record<string, string> = { act, csrfmiddlewaretoken: token }
+      if (indid !== '') payload.indid = indid
+      const cookie = session.headers.getSetCookie()?.join('; ') ?? ''
+      const resp = await fetch('https://www.soozhu.com/price/data/center/', {
+        method: 'POST',
+        headers: { ...HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
+        body: new URLSearchParams(payload).toString(),
+        signal: AbortSignal.timeout(15000),
+      })
+      return await resp.json() as Record<string, unknown>
+    } catch { return null }
+  }
+
+  /**
+   * AKShare 接口: spot_hog_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_hog_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 各省生猪均价实时排行榜，每项含 province(省份)、price(均价，元/公斤)、
+   *          changePercent(涨跌幅，%)
+   * 数据清洗: POST act=mapdata 获取 vlist 数组，每个 item 含 name(省份)、
+   *           value=[价格, 涨跌幅]；通过 safeFloat 转为数值
+   */
+  async spotHogSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('mapdata')
+    if (!json?.vlist) return null
+    const list = json.vlist as Record<string, unknown>[]
+    if (!list.length) return null
+    return list.map(it => ({
+      province: String(it.name ?? ''),
+      price: safeFloat((it.value as unknown[])?.[0]),
+      changePercent: safeFloat((it.value as unknown[])?.[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_hog_year_trend_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_hog_year_trend_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 今年以来全国出栏均价走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=yeartrend 获取 nationlist 数组，含 [日期, 价格]；
+   *           日期截取前10位，价格通过 safeFloat 转为数值
+   */
+  async spotHogYearTrendSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('yeartrend')
+    if (!json?.nationlist) return null
+    const list = json.nationlist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_hog_lean_price_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_hog_lean_price_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国瘦肉型肉猪价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="" 获取 datalist 数组
+   */
+  async spotHogLeanPriceSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_hog_three_way_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_hog_three_way_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国三元仔猪价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="4" 获取 datalist 数组
+   */
+  async spotHogThreeWaySoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '4')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_hog_crossbred_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_hog_crossbred_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国后备二元母猪价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="6" 获取 datalist 数组
+   */
+  async spotHogCrossbredSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '6')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_corn_price_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_corn_price_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国玉米价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="8" 获取 datalist 数组
+   */
+  async spotCornPriceSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '8')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_soybean_price_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_soybean_price_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国豆粕价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="9" 获取 datalist 数组
+   */
+  async spotSoybeanPriceSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '9')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
+
+  /**
+   * AKShare 接口: spot_mixed_feed_soozhu
+   * 对应 Python: akshare.spot.spot_hog_soozhu.spot_mixed_feed_soozhu
+   * 数据源: https://www.soozhu.com/price/data/center/
+   * @returns 全国育肥猪合料半月价格走势，每项含 date(日期)、price(价格，元/公斤)
+   * 数据清洗: POST act=pricetrend, indid="11" 获取 datalist 数组
+   */
+  async spotMixedFeedSoozhu(): Promise<Record<string, unknown>[] | null> {
+    const json = await this.soozhuPost('pricetrend', '11')
+    if (!json?.datalist) return null
+    const list = json.datalist as unknown[][]
+    if (!list.length) return null
+    return list.map(it => ({
+      date: String(it[0] ?? '').slice(0, 10),
+      price: safeFloat(it[1]),
+    }))
+  }
 }

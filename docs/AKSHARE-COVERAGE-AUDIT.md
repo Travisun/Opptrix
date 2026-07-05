@@ -167,6 +167,27 @@
 
 ---
 
+## 现货数据（13 接口）— 100% 已实现
+
+| AKShare 函数 | 数据源 | Provider | 说明 |
+|---|---|---|---|
+| `spot_price_qh` | 99qh.com | misc-data | 99现货走势 |
+| `spot_price_table_qh` | 99qh.com | misc-data | 现货品种表 |
+| `spot_hist_sge` | sge.com.cn | misc-data | 上金所历史行情 |
+| `spot_quotations_sge` | sge.com.cn | misc-data | 上金所实时行情 |
+| `spot_golden_benchmark_sge` | sge.com.cn | misc-data | 上海金基准价 |
+| `spot_silver_benchmark_sge` | sge.com.cn | misc-data | 上海银基准价 |
+| `spot_hog_soozhu` | soozhu.com | misc-data | 搜猪各省均价 |
+| `spot_hog_year_trend_soozhu` | soozhu.com | misc-data | 搜猪年度走势 |
+| `spot_hog_lean_price_soozhu` | soozhu.com | misc-data | 搜猪瘦肉型肉猪 |
+| `spot_hog_three_way_soozhu` | soozhu.com | misc-data | 搜猪三元仔猪 |
+| `spot_hog_crossbred_soozhu` | soozhu.com | misc-data | 搜猪后备二元母猪 |
+| `spot_corn_price_soozhu` | soozhu.com | misc-data | 搜猪玉米价格 |
+| `spot_soybean_price_soozhu` | soozhu.com | misc-data | 搜猪豆粕价格 |
+| `spot_mixed_feed_soozhu` | soozhu.com | misc-data | 搜猪育肥猪合料 |
+
+---
+
 ## 汇总
 
 | 页面 | 总接口 | 已实现 | 未实现 | 覆盖率 |
@@ -175,7 +196,8 @@
 | 期货数据 | 54 | 54 | 0 | 100% |
 | 债券数据 | 42 | 42 | 0 | 100% |
 | 外汇数据 | 11 | 11 | 0 | 100% |
-| **合计** | **121** | **121** | **0** | **100%** |
+| 现货数据 | 13 | 13 | 0 | 100% |
+| **合计** | **134** | **134** | **0** | **100%** |
 
 ## 实现位置
 
