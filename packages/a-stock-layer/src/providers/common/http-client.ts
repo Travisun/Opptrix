@@ -12,7 +12,7 @@
  * 设计目标：ProviderHttpClient 是唯一的对外请求出口。
  */
 
-import { HTTP_DEFAULT_HEADERS, sleep } from '../../utils/http.js'
+import { HTTP_DEFAULT_HEADERS, sleep } from '../../utils/http-shared.js'
 import { hostnameLimiter, extractHostname } from './rate-limiter.js'
 
 /** 需要重试的 HTTP 状态码 */

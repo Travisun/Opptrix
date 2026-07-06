@@ -9,36 +9,14 @@
  */
 
 import { ProviderHttpClient } from '../providers/common/http-client.js'
+import { HTTP_DEFAULT_HEADERS, sleep, sdkKeyHeaders } from './http-shared.js'
+export { HTTP_DEFAULT_HEADERS, sleep, sdkKeyHeaders }
 
 /** 全局默认 HTTP Client — 所有 httpGet/httpPost 等函数委托给它 */
 const defaultClient = new ProviderHttpClient({ providerId: 'builtin' })
 
-export const HTTP_DEFAULT_HEADERS = {
-  'User-Agent': (
-    'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) '
-    + 'AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36'
-  ),
-  Accept: 'application/json, text/plain, */*',
-  'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-}
-
 /** 需要重试的 HTTP 状态码 */
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504])
-
-/** 异步休眠指定毫秒 */
-export function sleep(ms: number) {
-  return new Promise(resolve => setTimeout(resolve, ms))
-}
-
-/**
- * 构造自在量化 API 鉴权请求头。
- * @param token 自在量化 API Token（sdk-key）
- * @returns 包含 `sdk-key` 的请求头对象，token 为空时返回空对象
- */
-export function sdkKeyHeaders(token: string): Record<string, string> {
-  const key = token.trim()
-  return key ? { 'sdk-key': key } : {}
-}
 
 /**
  * HTTP 响应包装 — 统一 fetch Response 接口，便于测试与 mock。
