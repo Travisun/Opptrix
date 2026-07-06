@@ -825,11 +825,6 @@ export class MarketDataEngine {
     this.clearCacheForProvider(providerId)
     return result
   }
-  reorderProviderMarketGroup(marketGroup: string, providerIds: string[]) {
-    const result = this.providerCatalog.reorderMarketGroup(marketGroup, providerIds)
-    for (const id of providerIds) this.clearCacheForProvider(id)
-    return result
-  }
   listProviderBindingOverrides(providerId: string) {
     return this.providerCatalog.listPublicBindingOverrides(providerId)
   }
