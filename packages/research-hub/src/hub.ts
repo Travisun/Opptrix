@@ -1242,7 +1242,7 @@ export class ResearchHub {
   /** 详情页次要字段（财务/新闻/分红等）超时后降级为空，避免 Baostock 慢连阻塞整页 */
   private stockDetailOptional<T>(
     promise: Promise<{ success: boolean; data?: T[] | null }>,
-    timeoutMs = 6000,
+    timeoutMs = 10000,
   ): Promise<{ success: boolean; data?: T[] | null }> {
     return Promise.race([
       promise,

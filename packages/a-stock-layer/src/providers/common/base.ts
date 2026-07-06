@@ -9,6 +9,9 @@ export abstract class BaseDriver {
   abstract get priority(): number
   abstract capabilities(): Capability[]
 
+  /** true = 驱动内部有限流+HTTP超时，引擎不再叠加外层超时 */
+  readonly selfThrottled?: boolean
+
   /** Multi-market bindings; default = CN/EQUITY for all capabilities */
   bindings(): ProviderBinding[] {
     return cnEquityBindings(this.capabilities(), this.priority)

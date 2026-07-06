@@ -3,7 +3,9 @@ import { TDX_SPEC } from './manifest.js'
 import { TdxMarketHandler } from './markets/cn/handler.js'
 import { isTdxEnabled } from './config.js'
 
-export class TdxDriver extends TdxMarketHandler {}
+export class TdxDriver extends TdxMarketHandler {
+  override readonly selfThrottled = true
+}
 
 applyManifestSpec(TdxDriver, TDX_SPEC, { isRuntimeEnabled: isTdxEnabled })
 

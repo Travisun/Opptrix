@@ -3,7 +3,9 @@ import { YFINANCE_SPEC } from './manifest.js'
 import { YfinanceMarketHandler } from './markets/handler.js'
 import { isYfinanceEnabled } from './config.js'
 
-export class YfinanceDriver extends YfinanceMarketHandler {}
+export class YfinanceDriver extends YfinanceMarketHandler {
+  override readonly selfThrottled = true
+}
 
 applyManifestSpec(YfinanceDriver, YFINANCE_SPEC, { isRuntimeEnabled: isYfinanceEnabled })
 

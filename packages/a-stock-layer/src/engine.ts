@@ -7,10 +7,12 @@ import { DriverRegistry } from './core/registry.js'
 import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
 import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
+import { ProviderSpeedRanker } from './core/speed-ranker.js'
 import { validateResponse } from './core/data-validator.js'
 import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
+import { getUserDataStore } from '@opptrix/user-store'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
 import { isCnEtfCode } from './core/instrument.js'
 import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
@@ -49,6 +51,7 @@ export class MarketDataEngine {
   readonly providerCatalog: ProviderCatalogService
   readonly providerLoader: ProviderLoader
   private readonly queryPlans: QueryPlanExecutor
+  private readonly speedRanker: ProviderSpeedRanker
   private providerDirWatcher?: ProviderDirWatcher
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
@@ -78,8 +81,13 @@ export class MarketDataEngine {
         })
     }
     this.registry.refreshPriorities(configStore)
+    this.speedRanker = new ProviderSpeedRanker(getUserDataStore().speedRanking)
+    this.registry.attachSpeedRanker(this.speedRanker)
     this.providerCatalog = createProviderCatalog(this.registry)
-    this.queryPlans = new QueryPlanExecutor(this.registry, this.cache)
+    this.queryPlans = new QueryPlanExecutor(this.registry, this.cache, this.speedRanker)
+    void this.speedRanker.warmUp(this.registry)
+      .then(() => this.registry.rebuildIndicesWithRanking())
+      .catch(err => console.warn('[MarketDataEngine] speed ranker warm-up failed:', err))
   }
 
   private async queryScoped<T>(
@@ -122,26 +130,33 @@ export class MarketDataEngine {
       if (!fn) continue
 
       try {
-        // Provider-level timeout wrapper
-        const data = await this.withProviderTimeout(
-          () => fn.apply(driver, args) as Promise<unknown[] | null>,
-          providerTimeoutMs,
-          driver.name,
-        )
+        // Self-throttled providers (eastmoney/sina/netease/...) have internal
+        // rate-limit queues; wrapping them with the engine timeout counts queue
+        // wait against the budget. Skip the outer timeout for those drivers —
+        // their own httpGet timeout (15s) is the effective deadline.
+        const call = () => fn.apply(driver, args) as Promise<unknown[] | null>
+        const t0 = Date.now()
+        const data = driver.selfThrottled
+          ? await call()
+          : await this.withProviderTimeout(call, providerTimeoutMs, driver.name)
+        const elapsed = Date.now() - t0
 
         // Data quality validation — rejects empty/invalid responses
         if (!data?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         const validation = validateResponse(cap, data)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.speedRanker.recordResult(driver.name, capStr, elapsed, true)
         if (useCache && cacheType) {
           this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) }, driver.name)
         }
@@ -150,6 +165,10 @@ export class MarketDataEngine {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
         health.recordFailure(driver.name, capStr, msg)
+        this.speedRanker.recordResult(driver.name, capStr, 0, false)
+        if (this.speedRanker.shouldRebuildIndices(driver.name, capStr)) {
+          this.registry.rebuildIndicesWithRanking()
+        }
       }
     }
     return { success: false, error: `所有 provider 均失败: ${lastError}` }

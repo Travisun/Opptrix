@@ -8,4 +8,6 @@ export interface RegistryProvider {
   capabilities(): Capability[]
   bindings(): ProviderBinding[]
   isRuntimeEnabled?(): boolean
+  /** true = 驱动内部有限流+HTTP超时，引擎不再叠加外层超时 */
+  readonly selfThrottled?: boolean
 }

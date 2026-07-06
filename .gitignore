@@ -49,3 +49,4 @@ outputs/
 
 # Local trials when using example/ configs
 example/runtime-local/
+.akshare-ref/

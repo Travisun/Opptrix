@@ -15,6 +15,14 @@ export interface ProviderConfigBridge {
   ): number
 }
 
+/** Speed ranking bridge — provided by a-stock-layer when available */
+export interface SpeedRankingBridge {
+  isReady(): boolean
+  getRankedProviders(bindingKey: string): string[]
+  recordResult(providerId: string, capability: string, responseTimeMs: number, success: boolean): void
+  shouldRebuild(providerId: string, capability: string): boolean
+}
+
 /** Driver registry — capability index with (market × assetClass) scope */
 export class DriverRegistry {
   private drivers = new Map<string, RegistryProvider>()
@@ -22,10 +30,15 @@ export class DriverRegistry {
   private bindingIndex = new Map<BindingKey, string[]>()
   private effectivePriorityCache = new Map<string, number>()
   private configStore: ProviderConfigBridge | null = null
+  private speedRanker: SpeedRankingBridge | null = null
 
   bindConfigStore(store: ProviderConfigBridge) {
     this.configStore = store
     this.refreshPriorities(store)
+  }
+
+  attachSpeedRanker(ranker: SpeedRankingBridge) {
+    this.speedRanker = ranker
   }
 
   refreshPriorities(store?: ProviderConfigBridge) {
@@ -41,6 +54,11 @@ export class DriverRegistry {
         this.effectivePriorityCache.set(name, cs.effectivePriority(name, driver.priority))
       }
     }
+    this.rebuildIndices()
+  }
+
+  /** 结合 speed ranking 重建索引；若 speed ranker 未就绪则 fallback 到优先级排序 */
+  rebuildIndicesWithRanking() {
     this.rebuildIndices()
   }
 
@@ -63,16 +81,51 @@ export class DriverRegistry {
         this.capIndex.set(cap, clist)
       }
     }
-    const sortList = (list: string[]) => {
-      list.sort((a, b) => this.getEffectivePriority(b) - this.getEffectivePriority(a))
+    // 排序：若 speed ranker 就绪，按速度排序；否则 fallback 到 manifest 优先级
+    const useSpeed = this.speedRanker?.isReady() === true
+    for (const [key, list] of this.bindingIndex) {
+      this.sortBindingList(key, list, useSpeed)
     }
     for (const [cap, list] of this.capIndex) {
-      sortList(list)
-      this.capIndex.set(cap, list)
+      this.sortCapList(cap, list, useSpeed)
     }
-    for (const [key, list] of this.bindingIndex) {
-      sortList(list)
-      this.bindingIndex.set(key, list)
+  }
+
+  private sortBindingList(bindingKey: string, list: string[], useSpeed: boolean) {
+    if (useSpeed) {
+      const ranked = this.speedRanker!.getRankedProviders(bindingKey)
+      const order = new Map(ranked.map((name, i) => [name, i]))
+      list.sort((a, b) => {
+        const ai = order.get(a) ?? Number.MAX_SAFE_INTEGER
+        const bi = order.get(b) ?? Number.MAX_SAFE_INTEGER
+        return ai - bi
+      })
+    } else {
+      list.sort((a, b) => this.getEffectivePriority(b) - this.getEffectivePriority(a))
+    }
+  }
+
+  private sortCapList(cap: Capability, list: string[], useSpeed: boolean) {
+    if (useSpeed) {
+      // 按所有 binding key 下该 capability 的平均排序位置聚合
+      const scoreMap = new Map<string, { total: number; count: number }>()
+      for (const [key, blist] of this.bindingIndex) {
+        if (!key.endsWith(`::${cap}`)) continue
+        blist.forEach((name, i) => {
+          const s = scoreMap.get(name) ?? { total: 0, count: 0 }
+          s.total += i
+          s.count++
+          scoreMap.set(name, s)
+        })
+      }
+      list.sort((a, b) => {
+        const as = scoreMap.get(a), bs = scoreMap.get(b)
+        const asScore = as && as.count > 0 ? as.total / as.count : Number.MAX_SAFE_INTEGER
+        const bsScore = bs && bs.count > 0 ? bs.total / bs.count : Number.MAX_SAFE_INTEGER
+        return asScore - bsScore
+      })
+    } else {
+      list.sort((a, b) => this.getEffectivePriority(b) - this.getEffectivePriority(a))
     }
   }
 

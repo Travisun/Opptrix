@@ -12,7 +12,7 @@ export {
 } from './core/bindings.js'
 export type { BindingKey } from './core/bindings.js'
 export { DriverRegistry } from './core/registry.js'
-export type { ProviderConfigBridge } from './core/registry.js'
+export type { ProviderConfigBridge, SpeedRankingBridge } from './core/registry.js'
 export type { RegistryProvider } from './core/provider-types.js'
 
 export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'

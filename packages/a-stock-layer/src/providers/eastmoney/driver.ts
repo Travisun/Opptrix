@@ -5,7 +5,9 @@ import { mixEastMoneyResearch } from './markets/cn/research.js'
 import { mixEastMoneyChain } from './markets/cn/chain.js'
 import { isEastmoneyEnabled } from './config.js'
 
-export class EastMoneyDriver extends EastMoneyMarketHandler {}
+export class EastMoneyDriver extends EastMoneyMarketHandler {
+  override readonly selfThrottled = true
+}
 
 applyManifestSpec(EastMoneyDriver, EASTMONEY_SPEC, { isRuntimeEnabled: isEastmoneyEnabled })
 mixEastMoneyResearch(EastMoneyDriver)

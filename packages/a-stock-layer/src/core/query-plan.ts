@@ -129,11 +129,22 @@ export class QueryPlanExecutor {
   constructor(
     private readonly registry: DriverRegistry,
     private readonly cache: Cache,
+    private readonly speedRanker?: import('@opptrix/market-data-core').SpeedRankingBridge,
   ) {}
 
   /** 获取指定 ID 的查询计划定义 */
   getPlan(id: QueryPlanId): QueryPlan {
     return QUERY_PLANS[id]
+  }
+
+  private withTimeout<T>(fn: () => Promise<T>, ms: number, name: string): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const timer = setTimeout(() => reject(new Error(`provider ${name} 超时 (${ms}ms)`)), ms)
+      fn().then(
+        v => { clearTimeout(timer); resolve(v) },
+        e => { clearTimeout(timer); reject(e) },
+      )
+    })
   }
 
   /**
@@ -204,24 +215,36 @@ export class QueryPlanExecutor {
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
       try {
-        const data = await fn.apply(driver, ctx.args)
+        const call = () => fn.apply(driver, ctx.args) as Promise<unknown[] | null>
+        const t0 = Date.now()
+        const data = driver.selfThrottled
+          ? await call()
+          : await this.withTimeout(call, 15_000, driver.name)
+        const elapsed = Date.now() - t0
         if (!data?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         const validation = validateResponse(plan.capability, data)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         return { success: true, data: data as T[], source: driver.name, cached: false }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
         health.recordFailure(driver.name, capStr, msg)
+        this.speedRanker?.recordResult(driver.name, capStr, 0, false)
+        if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {
+          this.registry.rebuildIndicesWithRanking()
+        }
       }
     }
     return { success: false, error: `所有 provider 均失败: ${lastError}` }
@@ -272,23 +295,35 @@ export class QueryPlanExecutor {
       ) => Promise<StockRealtime[] | null> | undefined
       if (typeof fn !== 'function') continue
       try {
-        const result = await fn(batch, markets)
+        const call = () => fn(batch, markets) as Promise<StockRealtime[] | null>
+        const t0 = Date.now()
+        const result = driver.selfThrottled
+          ? await call()
+          : await this.withTimeout(call, 15_000, driver.name)
+        const elapsed = Date.now() - t0
         if (!result?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         const validation = validateResponse(plan.capability, result)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         pushRows(result)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         health.recordFailure(driver.name, capStr, msg)
+        this.speedRanker?.recordResult(driver.name, capStr, 0, false)
+        if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {
+          this.registry.rebuildIndicesWithRanking()
+        }
       }
     }
 

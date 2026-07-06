@@ -294,7 +294,7 @@ export const research = {
 
   stockDetail: async (code: string) => {
     const instrument = cnEquityRef(code)
-    const resp = await postInstrument<StockDetailData>('/instruments/snapshot', { instrument }, undefined, 15000)
+    const resp = await postInstrument<StockDetailData>('/instruments/snapshot', { instrument }, undefined, 30000)
     return toApiResponse<StockDetailData>('stock_detail', resp, {
       code,
       name: code,
