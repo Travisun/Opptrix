@@ -1200,7 +1200,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_fh_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:253) */
+  /**
+   * AKShare 接口: fund_fh_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_fh_rank_em (line 253)
+   * 数据源: https://api.fund.eastmoney.com/FundRank/GetHbRankList
+   * @returns 分红排行基金数组，包含 code, name, fhsp, fhDate；无数据时返回 null
+   * 数据清洗: SortColumn=fhsp&Sort=desc，映射 fcode→code, shortname→name, fhsp→分红次数, fhrq→fhDate
+   */
   p.fundFhRankEm = async function fundFhRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetHbRankList?SortColumn=fhsp&Sort=desc&pageIndex=1&pageSize=100', {
@@ -1218,7 +1224,18 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_hist_em — push2his.eastmoney.com (verified fund_etf_em.py:263) */
+  /**
+   * AKShare 接口: fund_etf_hist_em
+   * 对应 Python: akshare.fund.fund_etf_em.fund_etf_hist_em (line 263)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param code - ETF 代码，如 '510300'
+   * @param period - 周期，'daily'/'weekly'/'monthly'，默认 'daily'
+   * @param startDate - 开始日期，格式 'YYYYMMDD'，默认 '20000101'
+   * @param endDate - 结束日期，格式 'YYYYMMDD'，默认 '20500101'
+   * @param adjust - 复权类型，''/'qfq'/'hfq'，默认 ''
+   * @returns ETF 历史行情数组，包含 date, open, close, high, low, volume, amount, changePct, turnoverRate
+   * 数据清洗: 使用 resolveSecId 转换 secid，period 映射为 klt 参数 (101/102/103)，解析逗号分隔的 kline 字段
+   */
   p.fundEtfHistEm = async function fundEtfHistEm(code: string, period = 'daily', startDate = '20000101', endDate = '20500101', adjust = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const kltMap: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
@@ -1239,7 +1256,18 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_lof_hist_em — push2his (verified fund_lof_em.py:146) */
+  /**
+   * AKShare 接口: fund_lof_hist_em
+   * 对应 Python: akshare.fund.fund_lof_em.fund_lof_hist_em (line 146)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param code - LOF 代码，如 '166009'
+   * @param period - 周期，'daily'/'weekly'/'monthly'，默认 'daily'
+   * @param startDate - 开始日期，格式 'YYYYMMDD'，默认 '20000101'
+   * @param endDate - 结束日期，格式 'YYYYMMDD'，默认 '20500101'
+   * @param adjust - 复权类型，''/'qfq'/'hfq'，默认 ''
+   * @returns LOF 历史行情数组，包含 date, open, close, high, low, volume, amount, changePct, turnoverRate
+   * 数据清洗: 使用 resolveSecId 转换 secid，period 映射为 klt 参数 (101/102/103)，解析逗号分隔的 kline 字段
+   */
   p.fundLofHistEm = async function fundLofHistEm(code: string, period = 'daily', startDate = '20000101', endDate = '20500101', adjust = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const kltMap: Record<string, string> = { daily: '101', weekly: '102', monthly: '103' }
@@ -1260,7 +1288,18 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_hist_min_em — push2his (verified fund_etf_em.py:361) */
+  /**
+   * AKShare 接口: fund_etf_hist_min_em
+   * 对应 Python: akshare.fund.fund_etf_em.fund_etf_hist_min_em (line 361)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/trends2/get
+   * @param code - ETF 代码，如 '510300'
+   * @param period - 分钟周期，'1'/'5'/'15'/'30'/'60'，默认 '5'
+   * @param startDate - 开始日期（当前未使用，固定 ndays=5）
+   * @param endDate - 结束日期（当前未使用）
+   * @param adjust - 复权类型（当前未使用）
+   * @returns ETF 分钟行情数组，包含 date, open, close, high, low, volume, amount
+   * 数据清洗: 使用 resolveSecId 转换 secid，解析逗号分隔的 trends 字段
+   */
   p.fundEtfHistMinEm = async function fundEtfHistMinEm(code: string, period = '5', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const kltMap: Record<string, string> = { '1': '1', '5': '5', '15': '15', '30': '30', '60': '60' }
@@ -1279,7 +1318,18 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_lof_hist_min_em — push2his (verified fund_lof_em.py:220) */
+  /**
+   * AKShare 接口: fund_lof_hist_min_em
+   * 对应 Python: akshare.fund.fund_lof_em.fund_lof_hist_min_em (line 220)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/trends2/get
+   * @param code - LOF 代码，如 '166009'
+   * @param period - 分钟周期，'1'/'5'/'15'/'30'/'60'，默认 '5'
+   * @param startDate - 开始日期（当前未使用，固定 ndays=5）
+   * @param endDate - 结束日期（当前未使用）
+   * @param adjust - 复权类型（当前未使用）
+   * @returns LOF 分钟行情数组，包含 date, open, close, high, low, volume, amount
+   * 数据清洗: 使用 resolveSecId 转换 secid，解析逗号分隔的 trends 字段
+   */
   p.fundLofHistMinEm = async function fundLofHistMinEm(code: string, period = '5', startDate = '', endDate = '', adjust = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const kltMap: Record<string, string> = { '1': '1', '5': '5', '15': '15', '30': '30', '60': '60' }
@@ -1298,7 +1348,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_info_ths — fund.10jqka.com.cn (verified fund_info_ths.py:25) */
+  /**
+   * AKShare 接口: fund_info_ths
+   * 对应 Python: akshare.fund.fund_info_ths.fund_info_ths (line 25)
+   * 数据源: https://fund.10jqka.com.cn/{code}/interduce.html
+   * @param code - 基金代码，如 '000009'
+   * @returns 基金基本信息键值对数组，包含 field/value 字段；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格中的 td 元素，提取字段名和值的键值对
+   */
   p.fundInfoThs = async function fundInfoThs(code: string): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://fund.10jqka.com.cn/${code}/interduce.html`, {
@@ -1315,7 +1372,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** index_stock_cons — vip.stock.finance.sina.com.cn (verified index_cons.py:87) */
+  /**
+   * AKShare 接口: index_stock_cons
+   * 对应 Python: akshare.index.index_cons.index_stock_cons (line 87)
+   * 数据源: https://vip.stock.finance.sina.com.cn/corp/go.php/vII_NewestComponent/indexid/{symbol}.phtml
+   * @param symbol - 指数代码，如 '399639'
+   * @returns 指数成分股数组，包含 indexCode, stockCode, stockName；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格中的 td 元素，提取股票代码和名称
+   */
   p.indexStockCons = async function indexStockCons(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://vip.stock.finance.sina.com.cn/corp/view/vII_NewestComponent.php?page=1&indexid=${symbol}`, {
@@ -1335,7 +1399,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** index_stock_info — vip.stock.finance.sina.com.cn (verified index_cons.py:70) */
+  /**
+   * AKShare 接口: index_stock_info
+   * 对应 Python: akshare.index.index_cons.index_stock_info (line 70)
+   * 数据源: https://vip.stock.finance.sina.com.cn/corp/go.php/vII_NewestComponent/index.phtml
+   * @returns 指数代码列表，包含 indexCode；无数据时返回 null
+   * 数据清洗: 从 HTML 中提取 indexid 匹配的数字作为指数代码
+   */
   p.indexStockInfo = async function indexStockInfo(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://vip.stock.finance.sina.com.cn/corp/go.php/vII_NewestComponent/index.phtml', {
@@ -2029,27 +2099,57 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     return fetchOptbbsQvix([0, 71, 72, 73, 74])
   }
 
-  /** index_option_kcb_qvix (verified index_option_qvix.py:188) */
+  /**
+   * AKShare 接口: index_option_kcb_qvix
+   * 对应 Python: akshare.index.index_option_qvix.index_option_kcb_qvix (line 188)
+   * 数据源: http://1.optbbs.com/d/csv/d/k.csv
+   * @returns 科创板期权波动率指数 QVIX 数组，包含 date, open, high, low, close；无数据时返回 null
+   * 数据清洗: 从 optbbs CSV 读取原始数据，提取第 0,83,84,85,86 列
+   */
   p.indexOptionKcbQvix = async function indexOptionKcbQvix(): Promise<Record<string, unknown>[] | null> {
     return fetchOptbbsQvix([0, 83, 84, 85, 86])
   }
 
-  /** index_option_100etf_qvix (verified index_option_qvix.py:228) */
+  /**
+   * AKShare 接口: index_option_100etf_qvix
+   * 对应 Python: akshare.index.index_option_qvix.index_option_100etf_qvix (line 228)
+   * 数据源: http://1.optbbs.com/d/csv/d/k.csv
+   * @returns 深证100ETF期权波动率指数 QVIX 数组，包含 date, open, high, low, close；无数据时返回 null
+   * 数据清洗: 从 optbbs CSV 读取原始数据，提取第 0,75,76,77,78 列
+   */
   p.indexOption100EtfQvix = async function indexOption100EtfQvix(): Promise<Record<string, unknown>[] | null> {
     return fetchOptbbsQvix([0, 75, 76, 77, 78])
   }
 
-  /** index_option_300index_qvix (verified index_option_qvix.py:268) */
+  /**
+   * AKShare 接口: index_option_300index_qvix
+   * 对应 Python: akshare.index.index_option_qvix.index_option_300index_qvix (line 268)
+   * 数据源: http://1.optbbs.com/d/csv/d/k.csv
+   * @returns 中证300股指期权波动率指数 QVIX 数组，包含 date, open, high, low, close；无数据时返回 null
+   * 数据清洗: 从 optbbs CSV 读取原始数据，提取第 0,17,18,19,20 列
+   */
   p.indexOption300IndexQvix = async function indexOption300IndexQvix(): Promise<Record<string, unknown>[] | null> {
     return fetchOptbbsQvix([0, 17, 18, 19, 20])
   }
 
-  /** index_option_1000index_qvix (verified index_option_qvix.py:308) */
+  /**
+   * AKShare 接口: index_option_1000index_qvix
+   * 对应 Python: akshare.index.index_option_qvix.index_option_1000index_qvix (line 308)
+   * 数据源: http://1.optbbs.com/d/csv/d/k.csv
+   * @returns 中证1000股指期权波动率指数 QVIX 数组，包含 date, open, high, low, close；无数据时返回 null
+   * 数据清洗: 从 optbbs CSV 读取原始数据，提取第 0,25,26,27,28 列
+   */
   p.indexOption1000IndexQvix = async function indexOption1000IndexQvix(): Promise<Record<string, unknown>[] | null> {
     return fetchOptbbsQvix([0, 25, 26, 27, 28])
   }
 
-  /** index_option_50index_qvix (verified index_option_qvix.py:348) */
+  /**
+   * AKShare 接口: index_option_50index_qvix
+   * 对应 Python: akshare.index.index_option_qvix.index_option_50index_qvix (line 348)
+   * 数据源: http://1.optbbs.com/d/csv/d/k.csv
+   * @returns 上证50股指期权波动率指数 QVIX 数组，包含 date, open, high, low, close；无数据时返回 null
+   * 数据清洗: 从 optbbs CSV 读取原始数据，提取第 0,79,80,81,82 列
+   */
   p.indexOption50IndexQvix = async function indexOption50IndexQvix(): Promise<Record<string, unknown>[] | null> {
     return fetchOptbbsQvix([0, 79, 80, 81, 82])
   }
@@ -2058,7 +2158,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
   // FUND APIS — batch 2 (verified against akshare Python sources)
   // ═══════════════════════════════════════════════════════════════
 
-  /** fund_aum_em — fund.eastmoney.com/Company/home/gspmlist (verified fund_aum_em.py:14) */
+  /**
+   * AKShare 接口: fund_aum_em
+   * 对应 Python: akshare.fund.fund_aum_em.fund_aum_em (line 14)
+   * 数据源: https://fund.eastmoney.com/Company/home/gspmlist
+   * @returns 基金公司排名列表，包含 rank, company, establishedDate, totalScale, fundCount；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格，提取公司排名、成立时间、管理规模和基金数量
+   */
   p.fundAumEm = async function fundAumEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/Company/home/gspmlist?fundType=0', {
@@ -2087,7 +2193,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_aum_hist_em — fund.eastmoney.com/Company/home/HistoryScaleTable (verified fund_aum_em.py:64) */
+  /**
+   * AKShare 接口: fund_aum_hist_em
+   * 对应 Python: akshare.fund.fund_aum_em.fund_aum_hist_em (line 64)
+   * 数据源: https://fund.eastmoney.com/Company/home/HistoryScaleTable
+   * @param year - 查询年份，默认当前年份
+   * @returns 基金公司历年管理规模排行列表，包含 rank, company, totalScale, stockType, mixedType, bondType, indexType, qdii, moneyType；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格，提取公司排名和各类基金规模数据
+   */
   p.fundAumHistEm = async function fundAumHistEm(year = String(new Date().getFullYear())): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://fund.eastmoney.com/Company/home/HistoryScaleTable?year=${year}`, {
@@ -2119,7 +2232,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_aum_trend_em — fund.eastmoney.com/Company/home/GetFundTotalScaleForChart (verified fund_aum_em.py:45) */
+  /**
+   * AKShare 接口: fund_aum_trend_em
+   * 对应 Python: akshare.fund.fund_aum_em.fund_aum_trend_em (line 45)
+   * 数据源: https://fund.eastmoney.com/Company/home/GetFundTotalScaleForChart
+   * @returns 基金市场管理规模走势数组，包含 date, value；无数据时返回 null
+   * 数据清洗: 解析 JSON 响应，映射 x→date, y→value
+   */
   p.fundAumTrendEm = async function fundAumTrendEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/Company/home/GetFundTotalScaleForChart?fundType=0', {
@@ -2134,7 +2253,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_stock_position_lg — legulegu.com (verified fund_position_lg.py:15) */
+  /**
+   * AKShare 接口: fund_stock_position_lg
+   * 对应 Python: akshare.fund.fund_position_lg.fund_stock_position_lg (line 15)
+   * 数据源: https://legulegu.com/api/stockdata/fund-position
+   * @returns 股票型基金仓位数组，包含 date, close, position；无数据时返回 null
+   * 数据清洗: type=pos_stock&category=总仓位&marketId=5，解析 JSON 数组
+   */
   p.fundStockPositionLg = async function fundStockPositionLg(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_stock&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
@@ -2151,7 +2276,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_balance_position_lg — legulegu.com (verified fund_position_lg.py:51) */
+  /**
+   * AKShare 接口: fund_balance_position_lg
+   * 对应 Python: akshare.fund.fund_position_lg.fund_balance_position_lg (line 51)
+   * 数据源: https://legulegu.com/api/stockdata/fund-position
+   * @returns 平衡混合型基金仓位数组，包含 date, close, position；无数据时返回 null
+   * 数据清洗: type=pos_pingheng&category=总仓位&marketId=5，解析 JSON 数组
+   */
   p.fundBalancePositionLg = async function fundBalancePositionLg(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_pingheng&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
@@ -2168,7 +2299,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_linghuo_position_lg — legulegu.com (verified fund_position_lg.py:89) */
+  /**
+   * AKShare 接口: fund_linghuo_position_lg
+   * 对应 Python: akshare.fund.fund_position_lg.fund_linghuo_position_lg (line 89)
+   * 数据源: https://legulegu.com/api/stockdata/fund-position
+   * @returns 灵活配置型基金仓位数组，包含 date, close, position；无数据时返回 null
+   * 数据清洗: type=pos_linghuo&category=总仓位&marketId=5，解析 JSON 数组
+   */
   p.fundLinghuoPositionLg = async function fundLinghuoPositionLg(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://legulegu.com/api/stockdata/fund-position?token=&type=pos_linghuo&category=%E6%80%BB%E4%BB%93%E4%BD%8D&marketId=5', {
@@ -2185,7 +2322,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_category_ths — fund.10jqka.com.cn (verified fund_etf_ths.py:15) */
+  /**
+   * AKShare 接口: fund_etf_category_ths
+   * 对应 Python: akshare.fund.fund_etf_ths.fund_etf_category_ths (line 15)
+   * 数据源: https://fund.10jqka.com.cn/data/Net/info/{symbol}_rate_desc_{date}_0_1_9999_0_0_0_jsonp_g.html
+   * @param symbol - 基金类型，默认 'ETF'
+   * @param date - 查询日期，格式 'YYYYMMDD'，为空返回全部
+   * @returns 基金实时行情数组，包含 rank, code, name, nav, accNav, prevNav, prevAccNav, changeAmt, changePct, sellStatus, buyStatus, tradeDate, newNav, newAccNav, fundType；无数据时返回 null
+   * 数据清洗: symbol 映射为内部类型码，解析 JSONP 响应中的 data.data 对象
+   */
   p.fundEtfCategoryThs = async function fundEtfCategoryThs(symbol = 'ETF', date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const symbolMap: Record<string, string> = {
@@ -2223,12 +2368,26 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_spot_ths — fund.10jqka.com.cn (verified fund_etf_ths.py:110) */
+  /**
+   * AKShare 接口: fund_etf_spot_ths
+   * 对应 Python: akshare.fund.fund_etf_ths.fund_etf_spot_ths (line 110)
+   * 数据源: 委托 fundEtfCategoryThs 方法
+   * @param date - 查询日期，格式 'YYYYMMDD'，为空返回全部
+   * @returns ETF 基金实时行情数组，与 fundEtfCategoryThs 返回结构一致；无数据时返回 null
+   * 数据清洗: 委托 fundEtfCategoryThs('ETF', date) 完成数据获取
+   */
   p.fundEtfSpotThs = async function fundEtfSpotThs(date = ''): Promise<Record<string, unknown>[] | null> {
     return p.fundEtfCategoryThs!.call(this, 'ETF', date)
   }
 
-  /** fund_etf_dividend_sina — finance.sina.com.cn (verified fund_etf_sina.py:152) */
+  /**
+   * AKShare 接口: fund_etf_dividend_sina
+   * 对应 Python: akshare.fund.fund_etf_sina.fund_etf_dividend_sina (line 152)
+   * 数据源: https://finance.sina.com.cn/realstock/company/{symbol}/hfq.js
+   * @param symbol - ETF 代码，如 'sh510050'
+   * @returns ETF 分红历史数组，包含 date, dividend；无数据时返回 null
+   * 数据清洗: 解析 JS 变量赋值，提取 data 数组，过滤 1900-01-01 日期
+   */
   p.fundEtfDividendSina = async function fundEtfDividendSina(symbol = 'sh510050'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://finance.sina.com.cn/realstock/company/${symbol}/hfq.js`, {
@@ -2250,7 +2409,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_hist_sina — finance.sina.com.cn (verified fund_etf_sina.py:116) */
+  /**
+   * AKShare 接口: fund_etf_hist_sina
+   * 对应 Python: akshare.fund.fund_etf_sina.fund_etf_hist_sina (line 116)
+   * 数据源: https://finance.sina.com.cn/realstock/company/{symbol}/hisdata_klc2/klc_kl.js
+   * @param symbol - ETF 代码，如 'sh510050'
+   * @returns ETF 历史 K 线数组，包含 date, open, high, low, close, volume；无数据时返回 null
+   * 数据清洗: 解析 JS 变量赋值，提取 JSON 数组
+   */
   p.fundEtfHistSina = async function fundEtfHistSina(symbol = 'sh510050'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://finance.sina.com.cn/realstock/company/${symbol}/hisdata_klc2/klc_kl.js`, {
@@ -2273,7 +2439,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_scale_sse — query.sse.com.cn (verified fund_etf_sse.py:13) */
+  /**
+   * AKShare 接口: fund_etf_scale_sse
+   * 对应 Python: akshare.fund.fund_etf_sse.fund_etf_scale_sse (line 13)
+   * 数据源: https://query.sse.com.cn/commonQuery.do?sqlId=COMMON_SSE_ZQPZ_ETFZL_XXPL_ETFGM_SEARCH_L
+   * @param date - 统计日期，格式 'YYYYMMDD'，为空返回最新数据
+   * @returns 上交所 ETF 基金份额数据，包含 code, name, etfType, statDate, shares；无数据时返回 null
+   * 数据清洗: Referer: https://www.sse.com.cn/，解析 JSON result 数组
+   */
   p.fundEtfScaleSse = async function fundEtfScaleSse(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -2295,7 +2468,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_scale_szse — fund.szse.cn (verified fund_etf_szse.py:15) */
+  /**
+   * AKShare 接口: fund_etf_scale_szse
+   * 对应 Python: akshare.fund.fund_etf_szse.fund_etf_scale_szse (line 15)
+   * 数据源: https://fund.szse.cn/api/report/ShowReport?CATALOGID=1000_lf&TABKEY=tab1
+   * @returns 深交所 ETF 基金份额数据，包含 code, name, category, investType, listingDate, shares, manager, nav；无数据时返回 null
+   * 数据清洗: 解析 JSON data 数组，映射中文字段名为语义化属性
+   */
   p.fundEtfScaleSzse = async function fundEtfScaleSzse(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.szse.cn/api/report/ShowReport?SHOWTYPE=JSON&CATALOGID=1000_lf&TABKEY=tab1', {
@@ -2318,7 +2497,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_exchange_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:151) */
+  /**
+   * AKShare 接口: fund_exchange_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_exchange_rank_em (line 151)
+   * 数据源: https://fund.eastmoney.com/data/rankhandler.aspx
+   * @returns 场内交易基金排行数组，包含 rank, code, name, navDate, nav, accNav, week1, month1, month3, month6, year1, year2, year3, yearToDate, sinceInception；无数据时返回 null
+   * 数据清洗: dt=fb&ft=ct，解析 rankhandler 返回的逗号分隔数据
+   */
   p.fundExchangeRankEm = async function fundExchangeRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/data/rankhandler.aspx?op=ph&dt=fb&ft=ct&rs=&gs=0&sc=1nzf&st=desc&pi=1&pn=30000&v=0.1591891419018292', {
@@ -2343,7 +2528,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_money_fund_daily_em — fund.eastmoney.com/HBJJ_pjsyl.html (verified fund_em.py:588) */
+  /**
+   * AKShare 接口: fund_money_fund_daily_em
+   * 对应 Python: akshare.fund.fund_em.fund_money_fund_daily_em (line 588)
+   * 数据源: https://fund.eastmoney.com/HBJJ_pjsyl.html
+   * @returns 货币基金每日收益数组，包含 code, name, tenKUnitYield, annualized7d, nav, dayChange；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格，提取基金代码、名称、万份收益和七日年化收益率
+   */
   p.fundMoneyFundDailyEm = async function fundMoneyFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/HBJJ_pjsyl.html', {
@@ -2372,7 +2563,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_money_rank_em — api.fund.eastmoney.com/FundRank/GetHbRankList (verified fund_rank_em.py:246) */
+  /**
+   * AKShare 接口: fund_money_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_money_rank_em (line 246)
+   * 数据源: https://api.fund.eastmoney.com/FundRank/GetHbRankList
+   * @returns 货币基金排行数组，包含 rank, code, name, navDate, tenKUnitYield, annualized7d, annualized14d, annualized28d, month1, month3, month6, year1, year2, year3, year5, yearToDate, sinceInception；无数据时返回 null
+   * 数据清洗: strSortCol=SYL_1N&orderType=desc，映射 fcode→code, shortname→name 等字段
+   */
   p.fundMoneyRankEm = async function fundMoneyRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetHbRankList?intCompany=0&MinsgType=&IsSale=1&strSortCol=SYL_1N&orderType=desc&pageIndex=1&pageSize=10000', {
@@ -2399,7 +2596,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_money_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:622) */
+  /**
+   * AKShare 接口: fund_money_fund_info_em
+   * 对应 Python: akshare.fund.fund_em.fund_money_fund_info_em (line 622)
+   * 数据源: https://api.fund.eastmoney.com/f10/lsjz
+   * @param symbol - 基金代码，如 '000009'
+   * @returns 货币基金历史净值数组，包含 date, tenKUnitYield, annualized7d, buyStatus, sellStatus；无数据时返回 null
+   * 数据清洗: fundCode={symbol}，解析 Data.LSJZList 数组
+   */
   p.fundMoneyFundInfoEm = async function fundMoneyFundInfoEm(symbol = '000009'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
@@ -2419,7 +2623,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_fee_em — fundf10.eastmoney.com/jjfl_*.html (verified fund_fee_em.py:17) */
+  /**
+   * AKShare 接口: fund_fee_em
+   * 对应 Python: akshare.fund.fund_fee_em.fund_fee_em (line 17)
+   * 数据源: https://fundf10.eastmoney.com/jjfl_{symbol}.html
+   * @param symbol - 基金代码
+   * @param indicator - 费用类型，如 '运作费用'、'认购费率（前端）'、'赎回费率' 等
+   * @returns 基金费用信息数组；无数据时返回 null
+   * 数据清洗: 解析 HTML 中的 h4 标题和对应的 table 表格，按 indicator 匹配返回
+   */
   p.fundFeeEm = async function fundFeeEm(symbol: string, indicator = '运作费用'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://fundf10.eastmoney.com/jjfl_${symbol}.html`, {
@@ -2455,7 +2667,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_financial_fund_daily_em — api.fund.eastmoney.com/FundNetValue/GetLCJJJZ (verified fund_em.py:681) */
+  /**
+   * AKShare 接口: fund_financial_fund_daily_em
+   * 对应 Python: akshare.fund.fund_em.fund_financial_fund_daily_em (line 681)
+   * 数据源: https://api.fund.eastmoney.com/FundNetValue/GetLCJJJZ
+   * @returns 理财基金每日收益数组，包含 rank, code, name, annRatePrev, tenKUnitYield, annRate7d, buyStatus, cycle；无数据时返回 null
+   * 数据清洗: sort=ljjz,desc&page=1,100，解析 Data.List 数组
+   */
   p.fundFinancialFundDailyEm = async function fundFinancialFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://api.fund.eastmoney.com/FundNetValue/GetLCJJJZ?letter=&jjgsid=0&searchtext=&sort=ljjz,desc&page=1,100&AttentionCodes=&cycle=&OnlySale=1', {
@@ -2477,7 +2695,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_financial_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:754) */
+  /**
+   * AKShare 接口: fund_financial_fund_info_em
+   * 对应 Python: akshare.fund.fund_em.fund_financial_fund_info_em (line 754)
+   * 数据源: https://api.fund.eastmoney.com/f10/lsjz
+   * @param symbol - 基金代码，如 '000134'
+   * @returns 理财基金历史净值数组，包含 date, nav, accNav, changePct, buyStatus, sellStatus, dividend；无数据时返回 null
+   * 数据清洗: fundCode={symbol}，解析 Data.LSJZList 数组
+   */
   p.fundFinancialFundInfoEm = async function fundFinancialFundInfoEm(symbol = '000134'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
@@ -2499,7 +2724,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_graded_fund_daily_em — fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx (verified fund_em.py:809) */
+  /**
+   * AKShare 接口: fund_graded_fund_daily_em
+   * 对应 Python: akshare.fund.fund_em.fund_graded_fund_daily_em (line 809)
+   * 数据源: https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx
+   * @returns 分级基金每日行情数组，包含 rank, code, name, nav, accNav, prevNav, prevAccNav, changeAmt, changePct, marketPrice, premiumRate；无数据时返回 null
+   * 数据清洗: t=1&lx=9，解析 var db= 变量赋值中的 datas 数组
+   */
   p.fundGradedFundDailyEm = async function fundGradedFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/Data/Fund_JJJZ_Data.aspx?t=1&lx=9&letter=&gsid=0&text=&sort=zdf,desc&page=1,10000&dt=1580914040623&atfc=', {
@@ -2521,7 +2752,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_graded_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:879) */
+  /**
+   * AKShare 接口: fund_graded_fund_info_em
+   * 对应 Python: akshare.fund.fund_em.fund_graded_fund_info_em (line 879)
+   * 数据源: https://api.fund.eastmoney.com/f10/lsjz
+   * @param symbol - 分级基金代码，如 '150232'
+   * @returns 分级基金历史净值数组，包含 date, nav, accNav, changePct, buyStatus, sellStatus；无数据时返回 null
+   * 数据清洗: fundCode={symbol}，解析 Data.LSJZList 数组
+   */
   p.fundGradedFundInfoEm = async function fundGradedFundInfoEm(symbol = '150232'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://api.fund.eastmoney.com/f10/lsjz?fundCode=${symbol}&pageIndex=1&pageSize=10000&startDate=&endDate=&_=${Date.now()}`, {
@@ -2542,7 +2780,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_value_estimation_em — api.fund.eastmoney.com/FundGuZhi/GetFundGZList (verified fund_em.py:1042) */
+  /**
+   * AKShare 接口: fund_value_estimation_em
+   * 对应 Python: akshare.fund.fund_em.fund_value_estimation_em (line 1042)
+   * 数据源: https://api.fund.eastmoney.com/FundGuZhi/GetFundGZList
+   * @param symbol - 基金类型，默认 '全部'
+   * @returns 基金估值估算数组，包含 rank, code, name, estNav, estChangePct, actualNav, actualChangePct, estError；无数据时返回 null
+   * 数据清洗: type 映射为数字类型，解析 Data.list 数组
+   */
   p.fundValueEstimationEm = async function fundValueEstimationEm(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
       const symbolMap: Record<string, number> = {
@@ -2569,7 +2814,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_lcx_rank_em — api.fund.eastmoney.com/FundRank/GetLcRankList (verified fund_rank_em.py:346) */
+  /**
+   * AKShare 接口: fund_lcx_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_lcx_rank_em (line 346)
+   * 数据源: https://api.fund.eastmoney.com/FundRank/GetLcRankList
+   * @returns 理财基金排行数组，包含 rank, code, name, navDate, tenKUnitYield, annRate7d, annRate14d, annRate28d, week1, month1, month3, month6, yearToDate, sinceInception；无数据时返回 null
+   * 数据清洗: strSortCol=SYL_Z&orderType=desc，映射 fcode→code, shortname→name 等字段
+   */
   p.fundLcxRankEm = async function fundLcxRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://api.fund.eastmoney.com/FundRank/GetLcRankList?intCompany=0&MinsgType=undefined&IsSale=1&strSortCol=SYL_Z&orderType=desc&pageIndex=1&pageSize=50&FBQ=', {
@@ -2594,7 +2845,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_overview_em — fundf10.eastmoney.com/jbgk_*.html (verified fund_overview_em.py:15) */
+  /**
+   * AKShare 接口: fund_overview_em
+   * 对应 Python: akshare.fund.fund_overview_em.fund_overview_em (line 15)
+   * 数据源: https://fundf10.eastmoney.com/jbgk_{symbol}.html
+   * @param symbol - 基金代码
+   * @returns 基金基本概况键值对对象；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格中的 td 元素，提取字段名和值的键值对
+   */
   p.fundOverviewEm = async function fundOverviewEm(symbol: string): Promise<Record<string, unknown> | null> {
     try {
       const resp = await fetch(`https://fundf10.eastmoney.com/jbgk_${symbol}.html`, {
@@ -2612,7 +2870,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_open_fund_info_em — fund.eastmoney.com/pingzhongdata/*.js (verified fund_em.py:333) */
+  /**
+   * AKShare 接口: fund_open_fund_info_em
+   * 对应 Python: akshare.fund.fund_em.fund_open_fund_info_em (line 333)
+   * 数据源: https://fund.eastmoney.com/pingzhongdata/{symbol}.js
+   * @param symbol - 基金代码
+   * @param indicator - 数据类型，'单位净值走势'/'累计净值走势'/'同类排名走势'
+   * @returns 开放式基金信息数组；无数据时返回 null
+   * 数据清洗: 从 JS 文件中提取 Data_netWorthTrend/Data_ACWorthTrend/Data_rateInSimilarType 变量
+   */
   p.fundOpenFundInfoEm = async function fundOpenFundInfoEm(symbol: string, indicator = '单位净值走势'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://fund.eastmoney.com/pingzhongdata/${symbol}.js`, {
@@ -2650,7 +2916,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_open_fund_rank_em — fund.eastmoney.com/data/rankhandler.aspx (verified fund_rank_em.py:33) */
+  /**
+   * AKShare 接口: fund_open_fund_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_open_fund_rank_em (line 33)
+   * 数据源: https://fund.eastmoney.com/data/rankhandler.aspx
+   * @param symbol - 基金类型，'全部'/'股票型'/'混合型'/'债券型'/'指数型'/'QDII'/'FOF'
+   * @returns 开放基金排行数组，包含 rank, code, name, navDate, nav, accNav, changePct, week1, month1, month3, month6, year1, year2, year3, yearToDate, sinceInception；无数据时返回 null
+   * 数据清洗: dt=kf&ft={type}，解析 rankhandler 返回的逗号分隔数据
+   */
   p.fundOpenFundRankEm = async function fundOpenFundRankEm(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
       const typeMap: Record<string, [string, string]> = {
@@ -2684,7 +2957,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_new_found_em — fund.eastmoney.com/data/FundNewIssue.aspx (verified fund_init_em.py:15) */
+  /**
+   * AKShare 接口: fund_new_found_em
+   * 对应 Python: akshare.fund.fund_init_em.fund_new_found_em (line 15)
+   * 数据源: https://fund.eastmoney.com/data/FundNewIssue.aspx
+   * @returns 新成立基金数组，包含 code, name, company, fundType, salePeriod, raisedShares, establishedDate, sinceInception, manager, buyStatus, fee；无数据时返回 null
+   * 数据清洗: t=xcln&sort=jzrgq,desc，解析 var newfunddata= 变量赋值中的 datas 数组
+   */
   p.fundNewFoundEm = async function fundNewFoundEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/data/FundNewIssue.aspx?t=xcln&sort=jzrgq,desc=&y=&page=1,50000&isbuy=1&v=0.4069919776543214', {
@@ -2710,7 +2989,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_new_found_ths — fund.10jqka.com.cn/datacenter/xfjj/ (verified fund_init_ths.py:15) */
+  /**
+   * AKShare 接口: fund_new_found_ths
+   * 对应 Python: akshare.fund.fund_init_ths.fund_new_found_ths (line 15)
+   * 数据源: https://fund.10jqka.com.cn/datacenter/xfjj/
+   * @param symbol - 基金状态，'全部'/'发行中'/'将发行'
+   * @returns 新发基金数组，包含 rank, code, name, investType, fundType, investStyle, startDate, endDate, orgName, manager, subscribeFee, minSubscribe；无数据时返回 null
+   * 数据清洗: 从页面提取 jsonData 对象，根据 zzfx 字段筛选状态
+   */
   p.fundNewFoundThs = async function fundNewFoundThs(symbol = '全部'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.10jqka.com.cn/datacenter/xfjj/', {
@@ -2746,7 +3032,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_info_ths — fund.10jqka.com.cn (verified fund_info_ths.py:25, improved) */
+  /**
+   * AKShare 接口: fund_info_ths (improved version)
+   * 对应 Python: akshare.fund.fund_info_ths.fund_info_ths (line 25)
+   * 数据源: https://fund.10jqka.com.cn/{code}/interduce.html
+   * @param code - 基金代码
+   * @returns 基金基本信息键值对对象；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格中的 td 元素，提取字段名和值的键值对
+   */
   p.fundInfoThs = async function fundInfoThs(code: string): Promise<Record<string, unknown> | null> {
     try {
       const resp = await fetch(`https://fund.10jqka.com.cn/${code}/interduce.html`, {
@@ -2768,7 +3061,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
   // FUND APIS — batch 3 (verified against akshare Python sources)
   // ═══════════════════════════════════════════════════════════════
 
-  /** fund_rating_sh — fund.eastmoney.com/data/fundrating_3 (verified fund_rating.py:91) */
+  /**
+   * AKShare 接口: fund_rating_sh
+   * 对应 Python: akshare.fund.fund_rating.fund_rating_sh (line 91)
+   * 数据源: https://fund.eastmoney.com/data/fundrating_3_{date}.html
+   * @param date - 评级日期，格式 'YYYYMMDD'，为空返回最新数据
+   * @returns 上海证券基金评级数组，包含 code, name, fundType, fundManager, fundCompany, rating3Year, rating3YearChange, rating5Year, rating5YearChange, nav, navDate, changePct, year1, year3, year5, fee；无数据时返回 null
+   * 数据清洗: 优先解析 var rankData 变量，降级解析 script 标签中的管道分隔数据
+   */
   p.fundRatingSh = async function fundRatingSh(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -2828,7 +3128,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_rating_zs — fund.eastmoney.com/data/fundrating_2 (verified fund_rating.py:189) */
+  /**
+   * AKShare 接口: fund_rating_zs
+   * 对应 Python: akshare.fund.fund_rating.fund_rating_zs (line 189)
+   * 数据源: https://fund.eastmoney.com/data/fundrating_2_{date}.html
+   * @param date - 评级日期，格式 'YYYYMMDD'，为空返回最新数据
+   * @returns 招商证券基金评级数组，包含 code, name, fundManager, fundCompany, rating3Year, rating3YearChange, nav, navDate, changePct, year1, year3, year5, fee；无数据时返回 null
+   * 数据清洗: 优先解析 var rankData 变量，降级解析 script 标签中的管道分隔数据
+   */
   p.fundRatingZs = async function fundRatingZs(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -2884,7 +3191,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_report_asset_allocation_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:161) */
+  /**
+   * AKShare 接口: fund_report_asset_allocation_cninfo
+   * 对应 Python: akshare.fund.fund_report_cninfo.fund_report_asset_allocation_cninfo (line 161)
+   * 数据源: https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1114
+   * @returns 基金资产配置数据数组，包含 reportDate, fundCoverage, equityRatio, bondRatio, cashRatio, netAssetScale；无数据时返回 null
+   * 数据清洗: POST 请求，解析 records 数组，映射 ENDDATE/F001N/F006N/F007N/F008N/F005N 字段
+   */
   p.fundReportAssetAllocationCninfo = async function fundReportAssetAllocationCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1114', {
@@ -2916,7 +3229,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_report_industry_allocation_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:97) */
+  /**
+   * AKShare 接口: fund_report_industry_allocation_cninfo
+   * 对应 Python: akshare.fund.fund_report_cninfo.fund_report_industry_allocation_cninfo (line 97)
+   * 数据源: https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1113
+   * @param date - 报告日期，格式 'YYYYMMDD'，为空返回最新数据
+   * @returns 基金行业配置数据数组，包含 industryCode, industryName, reportDate, fundCoverage, industryScale, netAssetRatio；无数据时返回 null
+   * 数据清洗: POST 请求，解析 records 数组，映射 F001V/F002V/ENDDATE/F003N/F004N/F005N 字段
+   */
   p.fundReportIndustryAllocationCninfo = async function fundReportIndustryAllocationCninfo(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -2950,7 +3270,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_report_stock_cninfo — webapi.cninfo.com.cn (verified fund_report_cninfo.py:30) */
+  /**
+   * AKShare 接口: fund_report_stock_cninfo
+   * 对应 Python: akshare.fund.fund_report_cninfo.fund_report_stock_cninfo (line 30)
+   * 数据源: https://webapi.cninfo.com.cn/api/sysapi/p_sysapi1112
+   * @param date - 报告日期，格式 'YYYYMMDD'，为空返回最新数据
+   * @returns 基金重仓股数据数组，包含 stockCode, stockName, reportDate, fundCoverage, totalShares, totalMarketValue；无数据时返回 null
+   * 数据清洗: POST 请求，解析 records 数组，映射 SECCODE/SECNAME/ENDDATE/F001N/F002N/F003N 字段
+   */
   p.fundReportStockCninfo = async function fundReportStockCninfo(date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -2984,7 +3311,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_scale_close_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:95) */
+  /**
+   * AKShare 接口: fund_scale_close_sina
+   * 对应 Python: akshare.fund.fund_scale_sina.fund_scale_close_sina (line 95)
+   * 数据源: http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/.../NetValueReturn_Service.NetValueReturnClose
+   * @returns 封闭式基金规模数组，包含 rank, code, name, nav, totalScale, totalShares, establishedDate, manager, updateDate；无数据时返回 null
+   * 数据清洗: sort=zmjgm&asc=0，解析 JSONP 回调中的 data 数组
+   */
   p.fundScaleCloseSina = async function fundScaleCloseSina(): Promise<Record<string, unknown>[] | null> {
     try {
       const url = 'http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/IO.XSRV2.CallbackList[_bjN6KvXOkfPy2Bu]/NetValueReturn_Service.NetValueReturnClose'
@@ -3012,7 +3345,16 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_scale_daily_szse — www.szse.cn (verified fund_scale_szse.py:27) */
+  /**
+   * AKShare 接口: fund_scale_daily_szse
+   * 对应 Python: akshare.fund.fund_scale_szse.fund_scale_daily_szse (line 27)
+   * 数据源: https://www.szse.cn/api/report/ShowReport?CATALOGID=scsj_fund_jjgm&TABKEY=tab1
+   * @param startDate - 开始日期，格式 'YYYYMMDD'
+   * @param endDate - 结束日期，格式 'YYYYMMDD'
+   * @param symbol - 基金类型，'ETF'/'LOF'/'REITS'
+   * @returns 深交所基金规模每日数据，包含 date, code, name, shares；无数据时返回 null
+   * 数据清洗: jjlb 参数映射基金类型，解析 JSON data 数组
+   */
   p.fundScaleDailySzse = async function fundScaleDailySzse(startDate = '', endDate = '', symbol = 'ETF'): Promise<Record<string, unknown>[] | null> {
     try {
       const now = new Date()
@@ -3048,7 +3390,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_scale_open_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:15) */
+  /**
+   * AKShare 接口: fund_scale_open_sina
+   * 对应 Python: akshare.fund.fund_scale_sina.fund_scale_open_sina (line 15)
+   * 数据源: http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/.../NetValueReturn_Service.NetValueReturnOpen
+   * @param symbol - 基金类型，'股票型基金'/'混合型基金'/'债券型基金'/'货币型基金'/'QDII基金'
+   * @returns 开放式基金规模数组，包含 rank, code, name, nav, totalScale, totalShares, establishedDate, manager, updateDate；无数据时返回 null
+   * 数据清洗: sort=zmjgm&asc=0&type2={type}，解析 JSONP 回调中的 data 数组
+   */
   p.fundScaleOpenSina = async function fundScaleOpenSina(symbol = '股票型基金'): Promise<Record<string, unknown>[] | null> {
     try {
       const fundMap: Record<string, string> = {
@@ -3081,7 +3430,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_scale_structured_sina — vip.stock.finance.sina.com.cn (verified fund_scale_sina.py:166) */
+  /**
+   * AKShare 接口: fund_scale_structured_sina
+   * 对应 Python: akshare.fund.fund_scale_sina.fund_scale_structured_sina (line 166)
+   * 数据源: http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/.../NetValueReturn_Service.NetValueReturnCX
+   * @returns 创新型基金规模数组，包含 rank, code, name, nav, totalScale, totalShares, establishedDate, manager, updateDate；无数据时返回 null
+   * 数据清洗: sort=zmjgm&asc=0，解析 JSONP 回调中的 data 数组
+   */
   p.fundScaleStructuredSina = async function fundScaleStructuredSina(): Promise<Record<string, unknown>[] | null> {
     try {
       const url = 'http://vip.stock.finance.sina.com.cn/fund_center/data/jsonp.php/IO.XSRV2.CallbackList[cRrwseM7NWX68rDa]/NetValueReturn_Service.NetValueReturnCX'
@@ -3109,7 +3464,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** reits_hist_em — push2his.eastmoney.com (verified reits_basic.py:116) */
+  /**
+   * AKShare 接口: reits_hist_em
+   * 对应 Python: akshare.reits.reits_basic.reits_hist_em (line 116)
+   * 数据源: https://push2his.eastmoney.com/api/qt/stock/kline/get
+   * @param symbol - REITs 代码，如 '508097'
+   * @returns REITs 历史行情数组，包含 date, open, close, high, low, volume, amount, amplitude, turnoverRate；无数据时返回 null
+   * 数据清洗: 先通过 push2 clist 获取 secid，再调用 kline API 获取历史数据
+   */
   p.reitsHistEm = async function reitsHistEm(symbol = '508097'): Promise<Record<string, unknown>[] | null> {
     try {
       const spotParams = {
@@ -3146,7 +3508,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** reits_realtime_em — 95.push2.eastmoney.com (verified reits_basic.py:45) */
+  /**
+   * AKShare 接口: reits_realtime_em
+   * 对应 Python: akshare.reits.reits_basic.reits_realtime_em (line 45)
+   * 数据源: https://95.push2.eastmoney.com/api/qt/clist/get
+   * @returns REITs 实时行情数组，包含 rank, code, name, price, changePct, changeAmt, volume, amount, high, low, open, prevClose；无数据时返回 null
+   * 数据清洗: fs=m:1 t:9 e:97,m:0 t:10 e:97，映射 f-fields 为语义化属性
+   */
   p.reitsRealtimeEm = async function reitsRealtimeEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const params = {
@@ -3169,7 +3537,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_category_sina — sina fund list (verified fund_etf_sina.py:17) */
+  /**
+   * AKShare 接口: fund_etf_category_sina
+   * 对应 Python: akshare.fund.fund_etf_sina.fund_etf_category_sina (line 17)
+   * 数据源: https://vip.stock.finance.sina.com.cn/quotes_service/api/jsonp.php/.../Market_Center.getHQNodeDataSimple
+   * @param symbol - 基金类型，'封闭式基金'/'ETF基金'/'LOF基金'
+   * @returns 基金行情数组，包含 code, name, price, changeAmt, changePct, buy, sell, prevClose, open, high, low, volume, amount；无数据时返回 null
+   * 数据清洗: node 参数映射基金类型，解析 JSONP 回调中的数组
+   */
   p.fundEtfCategorySina = async function fundEtfCategorySina(symbol = 'ETF基金'): Promise<Record<string, unknown>[] | null> {
     try {
       const fundMap: Record<string, string> = { '封闭式基金': 'close_fund', 'ETF基金': 'etf_hq_fund', 'LOF基金': 'lof_hq_fund' }
@@ -3195,7 +3570,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_fund_daily_em — fund.eastmoney.com/cnjy_dwjz.html (verified fund_em.py:940) */
+  /**
+   * AKShare 接口: fund_etf_fund_daily_em
+   * 对应 Python: akshare.fund.fund_em.fund_etf_fund_daily_em (line 940)
+   * 数据源: https://fund.eastmoney.com/cnjy_dwjz.html
+   * @returns 场内交易基金每日行情数组，包含 code, name, type, nav, accNav, prevNav, prevAccNav, changeAmt, changePct, price, premiumRate；无数据时返回 null
+   * 数据清洗: 解析 HTML 表格，提取基金代码、名称、净值和折溢价率
+   */
   p.fundEtfFundDailyEm = async function fundEtfFundDailyEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://fund.eastmoney.com/cnjy_dwjz.html', {
@@ -3225,7 +3606,16 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_etf_fund_info_em — api.fund.eastmoney.com/f10/lsjz (verified fund_em.py:973) */
+  /**
+   * AKShare 接口: fund_etf_fund_info_em
+   * 对应 Python: akshare.fund.fund_em.fund_etf_fund_info_em (line 973)
+   * 数据源: https://api.fund.eastmoney.com/f10/lsjz
+   * @param fund - 基金代码
+   * @param start - 开始日期，格式 'YYYYMMDD'
+   * @param end - 结束日期，格式 'YYYYMMDD'
+   * @returns 场内交易基金历史净值数组，包含 date, nav, accNav, changePct, purchaseStatus, redeemStatus；无数据时返回 null
+   * 数据清洗: fundCode={fund}，解析 Data.LSJZList 数组
+   */
   p.fundEtfFundInfoEm = async function fundEtfFundInfoEm(fund: string, start = '', end = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const fmtDate = (d: string) => d ? `${d.slice(0, 4)}-${d.slice(4, 6)}-${d.slice(6)}` : ''
@@ -3245,7 +3635,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_hk_fund_hist_em — overseas.1234567.com.cn (verified fund_em.py:1132) */
+  /**
+   * AKShare 接口: fund_hk_fund_hist_em
+   * 对应 Python: akshare.fund.fund_em.fund_hk_fund_hist_em (line 1132)
+   * 数据源: https://overseas.1234567.com.cn/overseasapi/OpenApiHander.ashx
+   * @param code - 港股基金代码
+   * @param symbol - 数据类型，'历史净值明细' 或 '分红送配详情'
+   * @returns 港股基金历史数据数组；无数据时返回 null
+   * 数据清洗: action=2(净值)/3(分红)，解析 Data 数组
+   */
   p.fundHkFundHistEm = async function fundHkFundHistEm(code: string, symbol = '历史净值明细'): Promise<Record<string, unknown>[] | null> {
     try {
       const action = symbol === '分红送配详情' ? '3' : '2'
@@ -3276,7 +3674,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_hk_rank_em — overseas.1234567.com.cn (verified fund_rank_em.py:427) */
+  /**
+   * AKShare 接口: fund_hk_rank_em
+   * 对应 Python: akshare.fund.fund_rank_em.fund_hk_rank_em (line 427)
+   * 数据源: https://overseas.1234567.com.cn/overseasapi/OpenApiHander.ashx
+   * @returns 港股基金排行数组，包含 rank, code, hkCode, name, currency, date, nav, changePct, week1, month1, month3, month6, year1, year2, year3, yearToDate, sinceInception, buyable；无数据时返回 null
+   * 数据清洗: action=1，解析 Data 数组，映射 fundcode/hkfcode/fundshortname 等字段
+   */
   p.fundHkRankEm = async function fundHkRankEm(): Promise<Record<string, unknown>[] | null> {
     try {
       const now = new Date().toISOString().slice(0, 10)
@@ -3303,7 +3707,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_achievement_xq — danjuanfunds.com (verified fund_xq.py:78) */
+  /**
+   * AKShare 接口: fund_individual_achievement_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_achievement_xq (line 78)
+   * 数据源: https://danjuanfunds.com/djapi/fundx/base/fund/achievement/{code}
+   * @param code - 基金代码
+   * @returns 基金业绩数据数组，包含 type, period, returnPct, maxDrawdown, rankInSameType；无数据时返回 null
+   * 数据清洗: 解析 annual_performance_list 和 stage_performance_list 数组
+   */
   p.fundIndividualAchievementXq = async function fundIndividualAchievementXq(code: string): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://danjuanfunds.com/djapi/fundx/base/fund/achievement/${code}`, {
@@ -3330,7 +3741,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_analysis_xq — danjuanfunds.com (verified fund_xq.py:132) */
+  /**
+   * AKShare 接口: fund_individual_analysis_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_analysis_xq (line 132)
+   * 数据源: https://danjuanfunds.com/djapi/fund/base/quote/data/index/analysis/{code}
+   * @param code - 基金代码
+   * @returns 基金分析数据数组，包含 period, costPerformance, riskControl, annualizedVolatility, annualizedSharpe, maxDrawdown；无数据时返回 null
+   * 数据清洗: 解析 index_data_list 数组，百分比字段转换为数值
+   */
   p.fundIndividualAnalysisXq = async function fundIndividualAnalysisXq(code: string): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://danjuanfunds.com/djapi/fund/base/quote/data/index/analysis/${code}`, {
@@ -3350,7 +3768,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_basic_info_xq — danjuanfunds.com (verified fund_xq.py:13) */
+  /**
+   * AKShare 接口: fund_individual_basic_info_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_basic_info_xq (line 13)
+   * 数据源: https://danjuanfunds.com/djapi/fund/{code}
+   * @param code - 基金代码
+   * @returns 基金基本信息对象，包含 code, name, fullName, foundedDate, totalShares, company, manager, custodian, fundType, ratingSource, rating, strategy, objective, benchmark；无数据时返回 null
+   * 数据清洗: 解析 data 对象，映射 fd_code/fd_name/fd_full_name 等字段
+   */
   p.fundIndividualBasicInfoXq = async function fundIndividualBasicInfoXq(code: string): Promise<Record<string, unknown> | null> {
     try {
       const resp = await fetch(`https://danjuanfunds.com/djapi/fund/${code}`, {
@@ -3372,7 +3797,15 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_detail_hold_xq — danjuanfunds.com (verified fund_xq.py:270) */
+  /**
+   * AKShare 接口: fund_individual_detail_hold_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_detail_hold_xq (line 270)
+   * 数据源: https://danjuanfunds.com/djapi/fundx/base/fund/record/asset/percent
+   * @param code - 基金代码
+   * @param date - 报告日期，格式 'YYYYMMDD'
+   * @returns 基金持仓明细数组，包含 assetType, weight；无数据时返回 null
+   * 数据清洗: 解析 chart_list 数组，映射 type_desc→assetType, percent→weight
+   */
   p.fundIndividualDetailHoldXq = async function fundIndividualDetailHoldXq(code: string, date = ''): Promise<Record<string, unknown>[] | null> {
     try {
       const d = date || new Date().toISOString().slice(0, 10).replace(/-/g, '')
@@ -3390,7 +3823,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_detail_info_xq — danjuanfunds.com (verified fund_xq.py:224) */
+  /**
+   * AKShare 接口: fund_individual_detail_info_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_detail_info_xq (line 224)
+   * 数据源: https://danjuanfunds.com/djapi/fund/detail/{code}
+   * @param code - 基金代码
+   * @returns 基金费用明细数组，包含 rateType, name, value；无数据时返回 null
+   * 数据清洗: 解析 fund_rates 对象中的 declare_rate_table/withdraw_rate_table/other_rate_table
+   */
   p.fundIndividualDetailInfoXq = async function fundIndividualDetailInfoXq(code: string): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://danjuanfunds.com/djapi/fund/detail/${code}`, {
@@ -3416,7 +3856,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_individual_profit_probability_xq — danjuanfunds.com (verified fund_xq.py:185) */
+  /**
+   * AKShare 接口: fund_individual_profit_probability_xq
+   * 对应 Python: akshare.fund.fund_xq.fund_individual_profit_probability_xq (line 185)
+   * 数据源: https://danjuanfunds.com/djapi/fundx/base/fund/profit/ratio/{code}
+   * @param code - 基金代码
+   * @returns 基金盈利概率数组，包含 holdingPeriod, profitProbability, averageReturn；无数据时返回 null
+   * 数据清洗: 解析 data_list 数组，百分比字段转换为数值
+   */
   p.fundIndividualProfitProbabilityXq = async function fundIndividualProfitProbabilityXq(code: string): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://danjuanfunds.com/djapi/fundx/base/fund/profit/ratio/${code}`, {
@@ -3433,7 +3880,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** fund_rating_ja — fund.eastmoney.com/data/fundrating_4.html (verified fund_rating.py:276) */
+  /**
+   * AKShare 接口: fund_rating_ja
+   * 对应 Python: akshare.fund.fund_rating.fund_rating_ja (line 276)
+   * 数据源: https://fund.eastmoney.com/data/fundrating_4_{date}.html
+   * @param date - 评级日期，格式 'YYYYMMDD'
+   * @returns 中国银河证券基金评级数组，包含 code, name, fundManager, fundCompany, rating3Year, rating3YearChange, nav, date, changePct, year1, year3, year5, fee, fundType；无数据时返回 null
+   * 数据清洗: 从主页面获取可用日期列表，解析 var 变量中的管道分隔数据
+   */
   p.fundRatingJa = async function fundRatingJa(date: string): Promise<Record<string, unknown>[] | null> {
     try {
       const fmtDate = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6)}`
@@ -3475,10 +3929,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
   // INDEX APIS — batch 2 (verified against .akshare-ref/akshare/index/)
   // ═══════════════════════════════════════════════════════════════
 
-  /** index_us_stock_sina — finance.sina.com.cn/staticdata/us/ (verified index_stock_us_sina.py:18)
-   *  Note: Python source uses JS decryption (py_mini_racer). Without a JS runtime,
-   *  the encrypted payload cannot be decoded. Returns null until a JS decryption
-   *  adapter is added or an alternative JSON endpoint is found. */
+  /**
+   * AKShare 接口: index_us_stock_sina
+   * 对应 Python: akshare.index.index_stock_us_sina.index_us_stock_sina (line 18)
+   * 数据源: https://finance.sina.com.cn/staticdata/us/{symbol}
+   * @param symbol - 美股指数代码，默认 '.INX'
+   * @returns 美股指数行情数组，包含 date, open, high, low, close, volume, amount；无数据时返回 null
+   * 数据清洗: ⚠️ Python 源码使用 py_mini_racer 解密 JS，当前实现尝试直接解析，可能无法解密全部数据
+   */
   p.indexUsStockSina = async function indexUsStockSina(symbol = '.INX'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://finance.sina.com.cn/staticdata/us/${symbol}`, {
@@ -3503,9 +3961,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** stock_hk_index_daily_sina — finance.sina.com.cn/stock/hkstock/{symbol}/klc2_kl.js
-   *  (verified index_stock_hk.py:121)
-   *  Note: Python source uses JS decryption. Same limitation as indexUsStockSina. */
+  /**
+   * AKShare 接口: stock_hk_index_daily_sina
+   * 对应 Python: akshare.index.index_stock_hk.stock_hk_index_daily_sina (line 121)
+   * 数据源: https://finance.sina.com.cn/stock/hkstock/{symbol}/klc2_kl.js
+   * @param symbol - 港股指数代码，默认 'CES100'
+   * @returns 港股指数行情数组，包含 date, open, high, low, close, volume；无数据时返回 null
+   * 数据清洗: ⚠️ Python 源码使用 py_mini_racer 解密 JS，当前实现尝试直接解析，可能无法解密全部数据
+   */
   p.stockHkIndexDailySina = async function stockHkIndexDailySina(symbol = 'CES100'): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch(`https://finance.sina.com.cn/stock/hkstock/${symbol}/klc2_kl.js?d=2023_5_01`, {
@@ -3525,9 +3988,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** index_stock_cons_csindex — csindex.com.cn XLS constituent file
-   *  (verified index_cons.py:126)
-   *  Note: Requires XLS parsing library. Returns raw buffer info until XLS parser is available. */
+  /**
+   * AKShare 接口: index_stock_cons_csindex
+   * 对应 Python: akshare.index.index_cons.index_stock_cons_csindex (line 126)
+   * 数据源: https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/cons/{symbol}cons.xls
+   * @param symbol - 指数代码，默认 '000300'
+   * @returns ⚠️ 当前返回 null（需要 XLS 解析库）；正常应返回指数成分股数据
+   * 数据清洗: 下载 XLS 文件，需要 openpyxl/xlrd 解析
+   */
   p.indexStockConsCsindex = async function indexStockConsCsindex(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
     try {
       const url = `https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/cons/${symbol}cons.xls`
@@ -3538,9 +4006,14 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** index_stock_cons_weight_csindex — csindex.com.cn XLS weight file
-   *  (verified index_cons.py:160)
-   *  Note: Requires XLS parsing library. Same limitation as indexStockConsCsindex. */
+  /**
+   * AKShare 接口: index_stock_cons_weight_csindex
+   * 对应 Python: akshare.index.index_cons.index_stock_cons_weight_csindex (line 160)
+   * 数据源: https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/closeweight/{symbol}closeweight.xls
+   * @param symbol - 指数代码，默认 '000300'
+   * @returns ⚠️ 当前返回 null（需要 XLS 解析库）；正常应返回指数成分股权重数据
+   * 数据清洗: 下载 XLS 文件，需要 openpyxl/xlrd 解析
+   */
   p.indexStockConsWeightCsindex = async function indexStockConsWeightCsindex(symbol = '000300'): Promise<Record<string, unknown>[] | null> {
     try {
       const url = `https://oss-ch.csindex.com.cn/static/html/csindex/public/uploads/file/autofile/closeweight/${symbol}closeweight.xls`
@@ -3551,9 +4024,13 @@ export function mixEastMoneyResearch(Driver: { prototype: EastMoneyDriver }) {
     } catch { return null }
   }
 
-  /** index_csindex_all — csindex.com.cn POST to exportExcel
-   *  (verified index_csindex.py:16)
-   *  Note: Returns XLS content. Same XLS parsing limitation. */
+  /**
+   * AKShare 接口: index_csindex_all
+   * 对应 Python: akshare.index.index_csindex.index_csindex_all (line 16)
+   * 数据源: https://www.csindex.com.cn/csindex-home/exportExcel/indexAll/CH
+   * @returns ⚠️ 当前返回 null（需要 XLS 解析库）；正常应返回所有中证指数列表
+   * 数据清洗: POST 请求导出 Excel，需要 openpyxl 解析
+   */
   p.indexCsindexAll = async function indexCsindexAll(): Promise<Record<string, unknown>[] | null> {
     try {
       const resp = await fetch('https://www.csindex.com.cn/csindex-home/exportExcel/indexAll/CH', {

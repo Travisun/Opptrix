@@ -2485,9 +2485,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ══════════════════════════════════════════════════════════════════
 
   /**
-   * AKShare: bond_spot_quote
-   * ChinaMoney interbank bond market maker quotes.
-   * Data: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   * AKShare 接口: bond_spot_quote
+   * 对应 Python: akshare.bond.bond_china.bond_spot_quote
+   * 数据源: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   * @returns 银行间债券做市报价列表，每项含 institution(报价机构)、bondName(债券简称)、
+   *          bidNetPrice(买入净价)、askNetPrice(卖出净价)、bidYield(买入收益率)、
+   *          askYield(卖出收益率)、date(报价日期)
+   * 数据清洗: 通过 chinamoney.com.cn 前端 API 获取 JSON，Python 版本使用 POST 请求
+   *           CbMktMakQuot 并拆分"买入/卖出净价"和"买入/卖出收益率"字段，
+   *           此实现使用前端 API 直接获取分离后的字段
    */
   async bondSpotQuote(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2510,9 +2516,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_spot_deal
-   * ChinaMoney interbank bond spot market deals.
-   * Data: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   * AKShare 接口: bond_spot_deal
+   * 对应 Python: akshare.bond.bond_china.bond_spot_deal
+   * 数据源: https://www.chinamoney.com.cn/chinese/mkdatabond/
+   * @returns 银行间债券现券成交行情列表，每项含 bondName(债券简称)、
+   *          dealNetPrice(成交净价)、yield(最新收益率)、change(涨跌)、
+   *          weightedYield(加权收益率)、volume(交易量)、date(交易日期)
+   * 数据清洗: 通过 chinamoney.com.cn 前端 API 获取 JSON，Python 版本使用 POST 请求
+   *           CbtPri，字段通过 safeFloat 转为数值
    */
   async bondSpotDeal(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2535,9 +2546,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_info_cm
-   * ChinaMoney bond information query.
-   * Data: https://www.chinamoney.com.cn/chinese/scsjzqxx/
+   * AKShare 接口: bond_info_cm
+   * 对应 Python: akshare.bond.bond_info_cm.bond_info_cm
+   * 数据源: https://www.chinamoney.com.cn/chinese/scsjzqxx/
+   * @param params - 查询参数，可选 bondName/bondCode/bondType/issueYear
+   * @returns 债券信息查询结果列表，每项含 bondShortName(债券简称)、bondCode(债券代码)、
+   *          issuer(发行人)、bondType(债券类型)、issueDate(发行日期)、rating(信用评级)
+   * 数据清洗: 通过 chinamoney.com.cn 前端 API 获取 JSON，Python 版本使用 POST 请求
+   *           BondMarketInfoList2 并分页遍历，此实现单次请求取第一页
    */
   async bondInfoCm(params: { bondName?: string; bondCode?: string; bondType?: string; issueYear?: string } = {}): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2561,9 +2577,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_china_yield
-   * ChinaBond yield curve data.
-   * Data: https://yield.chinabond.com.cn/
+   * AKShare 接口: bond_china_yield
+   * 对应 Python: akshare.bond.bond_china.bond_china_yield
+   * 数据源: https://yield.chinabond.com.cn/
+   * @param startDate - 起始日期，格式 "YYYY-MM-DD"
+   * @param endDate - 结束日期，格式 "YYYY-MM-DD"
+   * @returns 国债收益率曲线数据列表，每项含 curveName(曲线名称)、date(日期)、
+   *          3月/6月/1年/3年/5年/7年/10年/30年(各期限收益率)
+   * 数据清洗: Python 版本使用 pd.read_html 解析 HTML 表格，此实现使用前端 JSON API
+   *           获取 jsonList；end_date - start_date 应小于一年
    */
   async bondChinaYield(startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2589,9 +2611,17 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_spot
-   * Sina bond spot realtime quotes (SSE/SZSE).
-   * Data: https://vip.stock.finance.sina.com.cn/mkt/#hs_z
+   * AKShare 接口: bond_zh_hs_spot
+   * 对应 Python: akshare.bond.bond_zh_sina.bond_zh_hs_spot
+   * 数据源: https://vip.stock.finance.sina.com.cn/mkt/#hs_z
+   * @param startPage - 分页起始页，默认 "1"
+   * @param endPage - 分页结束页，默认 "5"
+   * @returns 沪深债券实时行情列表，每项含 code(代码)、name(名称)、
+   *          price(最新价)、change(涨跌额)、changePct(涨跌幅)、
+   *          bid(买入)、ask(卖出)、preClose(昨收)、open/high/low、
+   *          volume(成交量)、amount(成交额)
+   * 数据清洗: Python 版本使用 demjson 解析 JSONP + py_mini_racer JS 解密，此实现直接
+   *           使用前端 JSON API 获取；大量抓取容易封 IP
    */
   async bondZhHsSpot(startPage = '1', endPage = '5'): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2619,9 +2649,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_daily
-   * Sina bond daily historical data.
-   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   * AKShare 接口: bond_zh_hs_daily
+   * 对应 Python: akshare.bond.bond_zh_sina.bond_zh_hs_daily
+   * 数据源: https://money.finance.sina.com.cn/bond/quotes/
+   * @param symbol - 沪深债券代码，如 "sh010107"
+   * @returns 指定债券的日 K 线数据列表，每项含 date(日期)、open/high/low/close、
+   *          volume(成交量)
+   * 数据清洗: Python 版本使用 py_mini_racer 执行 JS 解密代码，此实现使用
+   *           CN_MarketData.getKLineData 前端 API 直接获取 JSON
    */
   async bondZhHsDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2639,9 +2674,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_cov_spot
-   * Sina convertible bond realtime quotes.
-   * Data: https://vip.stock.finance.sina.com.cn/mkt/#hskzz_z
+   * AKShare 接口: bond_zh_hs_cov_spot
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_hs_cov_spot
+   * 数据源: https://vip.stock.finance.sina.com.cn/mkt/#hskzz_z
+   * @returns 沪深可转债实时行情列表，每项含 symbol(代码)、name(名称)、
+   *          trade(最新价)、priceChange(涨跌额)、changePct(涨跌幅)、
+   *          volume(成交量)、amount(成交额)、code(转债代码)、tickTime(时间)
+   * 数据清洗: Python 版本使用 demjson 解析 + 分页遍历全部页，此实现使用
+   *           前端 JSON API 直接获取；node=hskzz_z 筛选可转债
    */
   async bondZhHsCovSpot(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2667,9 +2707,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_cov_daily
-   * Sina convertible bond daily historical data.
-   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   * AKShare 接口: bond_zh_hs_cov_daily
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_hs_cov_daily
+   * 数据源: https://money.finance.sina.com.cn/bond/quotes/
+   * @param symbol - 可转债代码，如 "sh010107"
+   * @returns 指定可转债的日 K 线数据列表，每项含 date(日期)、open/high/low/close、
+   *          volume(成交量)
+   * 数据清洗: 与 bondZhHsDaily 相同的 API 端点，Python 版本使用 py_mini_racer JS 解密
    */
   async bondZhHsCovDaily(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2687,9 +2731,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_cov
-   * EastMoney convertible bond list.
-   * Data: https://data.eastmoney.com/kzz/default.html
+   * AKShare 接口: bond_zh_cov
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_cov
+   * 数据源: https://data.eastmoney.com/kzz/default.html
+   * @returns 可转债数据列表，每项含 code(债券代码)、name(债券简称)、
+   *          applyDate(申购日期)、applyCode(申购代码)、stockCode(正股代码)、
+   *          stockName(正股简称)、stockPrice(正股价)、convertPrice(转股价)、
+   *          convertValue(转股价值)、bondPrice(债现价)、premiumRate(转股溢价率)、
+   *          issueSize(发行规模)、rating(信用评级)、listDate(上市日期)
+   * 数据清洗: reportName=RPT_BOND_CB_LIST，pageSize=500，Python 版本分页遍历全部页，
+   *           此实现仅取第一页；quoteColumns 用于获取实时正股价和转股溢价率
    */
   async bondZhCov(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2720,9 +2771,18 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cov_comparison
-   * EastMoney convertible bond comparison table.
-   * Data: https://quote.eastmoney.com/center/fullscreenlist.html#convertible_comparison
+   * AKShare 接口: bond_cov_comparison
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_cov_comparison
+   * 数据源: https://quote.eastmoney.com/center/fullscreenlist.html#convertible_comparison
+   * @returns 可转债比价表列表，每项含 rank(序号)、code(转债代码)、name(转债名称)、
+   *          bondPrice(转债最新价)、bondChangePct(转债涨跌幅)、
+   *          stockCode/stockName/stockPrice/stockChangePct(正股信息)、
+   *          convertPrice(转股价)、convertValue(转股价值)、premiumRate(转股溢价率)、
+   *          pureBondPremiumRate(纯债溢价率)、redeemTriggerPrice(强赎触发价)、
+   *          sellbackTriggerPrice(回售触发价)、maturityRedeemPrice(到期赎回价)、
+   *          pureBondValue(纯债价值)
+   * 数据清洗: 使用 push2.eastmoney.com 行情 API + fetch_paginated_data 分页，
+   *           此实现使用 datacenter-web API 获取同源数据
    */
   async bondCovComparison(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2759,9 +2819,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_cov_value_analysis
-   * EastMoney convertible bond value analysis.
-   * Data: https://data.eastmoney.com/kzz/detail/
+   * AKShare 接口: bond_zh_cov_value_analysis
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_cov_value_analysis
+   * 数据源: https://data.eastmoney.com/kzz/detail/
+   * @param symbol - 可转债代码，如 "113527"
+   * @returns 可转债价值分析数据列表，每项含 date(日期)、close(收盘价)、
+   *          pureBondValue(纯债价值)、convertValue(转股价值)、
+   *          pureBondPremiumRate(纯债溢价率)、convertPremiumRate(转股溢价率)
+   * 数据清洗: Python 版本使用 RPTA_WEB_KZZ_LS 报表，此实现使用
+   *           RPT_BOND_CB_DAILYSTATISTICS 报表获取相同指标
    */
   async bondZhCovValueAnalysis(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2786,9 +2852,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_profile_sina
-   * Sina convertible bond profile details.
-   * Data: https://money.finance.sina.com.cn/bond/info/
+   * AKShare 接口: bond_cb_profile_sina
+   * 对应 Python: akshare.bond.bond_cb_sina.bond_cb_profile_sina
+   * 数据源: https://money.finance.sina.com.cn/bond/info/
+   * @param symbol - 带市场标识的转债代码，如 "sz128039"
+   * @returns 可转债详情资料列表，每项含 item(字段名)、value(字段值)
+   * 数据清洗: Python 版本使用 pd.read_html 解析 HTML 表格，此实现使用
+   *           CompanyProfile.getCompanyProfile 前端 API 直接获取 JSON
    */
   async bondCbProfileSina(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2801,9 +2871,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_summary_sina
-   * Sina convertible bond summary.
-   * Data: https://money.finance.sina.com.cn/bond/quotes/
+   * AKShare 接口: bond_cb_summary_sina
+   * 对应 Python: akshare.bond.bond_cb_sina.bond_cb_summary_sina
+   * 数据源: https://money.finance.sina.com.cn/bond/quotes/
+   * @param symbol - 带市场标识的转债代码，如 "sh155255"
+   * @returns 可转债债券概况列表，每项含 item(字段名)、value(字段值)
+   * 数据清洗: Python 版本使用 pd.read_html 解析 HTML 表格第10个表，
+   *           此实现使用 CompanyProfile.getCompanyProfile 前端 API
    */
   async bondCbSummarySina(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2816,9 +2890,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_debt_nafmii
-   * NAFMII interbank bond issuance data.
-   * Data: http://zhuce.nafmii.org.cn/fans/publicQuery/manager
+   * AKShare 接口: bond_debt_nafmii
+   * 对应 Python: akshare.bond.bond_nafmii.bond_debt_nafmii
+   * 数据源: http://zhuce.nafmii.org.cn/fans/publicQuery/manager
+   * @param page - 页码，默认 "1"
+   * @returns 非金融企业债务融资工具注册信息列表，每项含 bondName(债券名称)、
+   *          type(品种)、registration(注册或备案)、amount(金额)、
+   *          docNumber(注册通知书文号)、updateDate(更新日期)、status(项目状态)
+   * 数据清洗: POST 请求 releFileProjDataGrid，Python 版本使用 nafmii.org.cn
+   *           专有 API，此实现使用 nafmii.org.cn fans/api/query 端点
    */
   async bondDebtNafmii(page = '1'): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2841,9 +2921,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_buy_back_hist_em
-   * EastMoney bond buy-back historical data.
-   * Data: https://data.eastmoney.com/
+   * AKShare 接口: bond_buy_back_hist_em
+   * 对应 Python: akshare.bond.bond_buy_back_em.bond_buy_back_hist_em
+   * 数据源: https://quote.eastmoney.com/center/gridlist.html#bond_sh_buyback
+   * @returns 质押式回购历史数据列表，每项含 code(代码)、name(名称)、
+   *          date(日期)、buyBackAmount(回购金额)、buyBackPrice(回购价格)
+   * 数据清洗: reportName=RPT_BOND_BUYBACK，Python 版本使用 push2his.eastmoney.com
+   *           行情 API 获取日K线数据，此实现使用 datacenter-web 数据中心接口
    */
   async bondBuyBackHistEm(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2866,9 +2950,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_us_rate
-   * China and US bond yield comparison.
-   * Data: https://data.eastmoney.com/
+   * AKShare 接口: bond_zh_us_rate
+   * 对应 Python: akshare.bond.bond_em.bond_zh_us_rate
+   * 数据源: https://data.eastmoney.com/cjsj/zmgzsyl.html
+   * @returns 中美国债收益率对比数据列表，每项含 date(日期)、
+   *          cn1Y(中国1年)、cn10Y(中国10年)、us1Y(美国1年)、us10Y(美国10年)、
+   *          spread10Y(10年利差)
+   * 数据清洗: reportName=RPT_BOND_CHINA_US_RATE，Python 版本分页遍历全部页
+   *           并按 start_date 筛选，此实现取最近250条；Python 版本返回13列含 GDP 增速，
+   *           此实现仅返回收益率相关6列
    */
   async bondZhUsRate(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2889,9 +2979,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cash_summary_sse
-   * SSE bond cash market overview by date.
-   * Data: https://bond.sse.com.cn/data/statistics/overview/bondow/
+   * AKShare 接口: bond_cash_summary_sse
+   * 对应 Python: akshare.bond.bond_summary.bond_cash_summary_sse
+   * 数据源: https://bond.sse.com.cn/data/statistics/overview/bondow/
+   * @param date - 交易日期，格式 "YYYY-MM-DD"
+   * @returns 上交所债券现券市场概览列表，每项含 bondType(债券类型)、
+   *          count(托管只数)、marketValue(托管市值)、faceValue(托管面值)、
+   *          date(数据日期)
+   * 数据清洗: Python 版本使用 Excel 文件下载+xlrd解析，此实现使用
+   *           query.sse.com.cn JSON API 获取同源数据
    */
   async bondCashSummarySse(date: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2913,9 +3009,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_deal_summary_sse
-   * SSE bond deal overview by date.
-   * Data: http://bond.sse.com.cn/data/statistics/overview/turnover/
+   * AKShare 接口: bond_deal_summary_sse
+   * 对应 Python: akshare.bond.bond_summary.bond_deal_summary_sse
+   * 数据源: http://bond.sse.com.cn/data/statistics/overview/turnover/
+   * @param date - 交易日期，格式 "YYYY-MM-DD"
+   * @returns 上交所债券成交概览列表，每项含 bondType(债券类型)、
+   *          dealCount(当日成交笔数)、dealAmount(当日成交金额)、
+   *          yearDealCount(当年成交笔数)、yearDealAmount(当年成交金额)、
+   *          date(数据日期)
+   * 数据清洗: Python 版本使用 Excel 文件下载+xlrd解析，此实现使用
+   *           query.sse.com.cn JSON API 获取同源数据
    */
   async bondDealSummarySse(date: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2938,9 +3041,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_info_detail_cm
-   * ChinaMoney bond detail by name.
-   * Data: https://www.chinamoney.com.cn/chinese/zqjc/
+   * AKShare 接口: bond_info_detail_cm
+   * 对应 Python: akshare.bond.bond_info_cm.bond_info_detail_cm
+   * 数据源: https://www.chinamoney.com.cn/chinese/zqjc/
+   * @param symbol - 债券简称，如 "淮安农商行CDSD2022021012"
+   * @returns 债券详情键值对列表，每项含 name(字段名)、value(字段值)
+   * 数据清洗: Python 版本先调用 bond_info_cm 获取 bondDefinedCode 再查询详情，
+   *           此实现直接使用 BondInfoDetailList API 按债券名称查询
    */
   async bondInfoDetailCm(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2955,18 +3062,28 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_china_close_return
-   * ChinaBond closing yield data.
-   * Data: https://yield.chinabond.com.cn/
+   * AKShare 接口: bond_china_close_return
+   * 对应 Python: akshare.bond.bond_china_money.bond_china_close_return
+   * 数据源: https://www.chinamoney.com.cn/chinese/bkcurvclosedyhis/
+   * @param startDate - 起始日期，格式 "YYYY-MM-DD"
+   * @param endDate - 结束日期，格式 "YYYY-MM-DD"
+   * @returns 收盘收益率曲线数据（委托 bondChinaYield 实现）
+   * 数据清洗: Python 版本使用 chinamoney.com.cn 专有 API ClsYldCurvHis，
+   *           需要先注册服务获取 cookie；此实现委托给 bondChinaYield 方法
    */
   async bondChinaCloseReturn(startDate: string, endDate: string): Promise<Record<string, unknown>[] | null> {
     return this.bondChinaYield(startDate, endDate)
   }
 
   /**
-   * AKShare: bond_zh_cov_info
-   * EastMoney convertible bond detail.
-   * Data: https://data.eastmoney.com/kzz/detail/
+   * AKShare 接口: bond_zh_cov_info
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_cov_info
+   * 数据源: https://data.eastmoney.com/kzz/detail/
+   * @param symbol - 可转债代码，如 "123121"
+   * @param indicator - 信息类型，默认 "基本信息"；可选 "中签号"/"筹资用途"/"重要日期"
+   * @returns 可转债详情键值对列表，每项含 name(字段名)、value(字段值)
+   * 数据清洗: Python 版本根据 indicator 切换不同 reportName 获取不同维度数据，
+   *           此实现仅支持 "基本信息"(RPT_BOND_CB_LIST)类型
    */
   async bondZhCovInfo(symbol: string, indicator = '基本信息'): Promise<Record<string, unknown>[] | null> {
     try {
@@ -2982,9 +3099,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_cov_info_ths
-   * THS convertible bond list.
-   * Data: https://data.10jqka.com.cn/ipo/bond/
+   * AKShare 接口: bond_zh_cov_info_ths
+   * 对应 Python: akshare.bond.bond_cb_ths.bond_zh_cov_info_ths
+   * 数据源: https://data.10jqka.com.cn/ipo/bond/
+   * @returns 同花顺可转债行情列表，每项含 code(债券代码)、name(债券简称)、
+   *          applyDate(申购日期)、applyCode(申购代码)、holderCode(正股代码)、
+   *          holderPerShare(每股获配额)、planIssueSize(计划发行量)、
+   *          actualIssueSize(实际发行量)、stockCode(正股代码)、stockName(正股简称)、
+   *          convertPrice(转股价格)、expireDate(到期时间)、winRate(中签率)
+   * 数据清洗: 从同花顺 data.10jqka.com.cn JSON API 获取，Python 版本使用
+   *           /ipo/kzz/ 端点，此实现使用 /ipo/bond/ 端点(同源不同路径)
    */
   async bondZhCovInfoThs(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3015,9 +3139,18 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_cov_min
-   * EastMoney convertible bond intraday data.
-   * Data: https://quote.eastmoney.com/
+   * AKShare 接口: bond_zh_hs_cov_min
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_hs_cov_min
+   * 数据源: https://quote.eastmoney.com/
+   * @param symbol - 可转债代码，如 "sz128039"
+   * @param period - K线周期，可选 "1"/"5"/"15"/"30"/"60"，默认 "5"
+   * @param adjust - 复权类型，可选 ""(不复权)/"qfq"(前复权)/"hfq"(后复权)
+   * @param startDate - 开始日期，格式 "YYYY-MM-DD"
+   * @param endDate - 结束日期，格式 "YYYY-MM-DD"
+   * @returns 可转债分时行情数据列表，每项含 time(时间)、open/close/high/low、
+   *          volume(成交量)、amount(成交额)
+   * 数据清洗: Python 版本 period=1 使用 trends2 API，其他 period 使用 kline API，
+   *           此实现统一使用 push2his.eastmoney.com kline API
    */
   async bondZhHsCovMin(symbol: string, period = '5', adjust = '', startDate = '', endDate = ''): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3044,9 +3177,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_zh_hs_cov_pre_min
-   * EastMoney convertible bond pre-market intraday.
-   * Data: https://quote.eastmoney.com/
+   * AKShare 接口: bond_zh_hs_cov_pre_min
+   * 对应 Python: akshare.bond.bond_zh_cov.bond_zh_hs_cov_pre_min
+   * 数据源: https://quote.eastmoney.com/
+   * @param symbol - 可转债代码，如 "sz128039"
+   * @returns 可转债盘前分时行情数据列表，每项含 time(时间)、open/close/high/low、
+   *          volume(成交量)、amount(成交额)、latest(最新价)
+   * 数据清洗: 使用 push2his.eastmoney.com trends2 API，iscr=1 获取盘前数据，
+   *           Python 版本使用 ndays=1 参数
    */
   async bondZhHsCovPreMin(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3071,17 +3209,28 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_sh_buy_back_em
-   * EastMoney Shanghai bond buy-back data.
-   * Data: https://data.eastmoney.com/
+   * AKShare 接口: bond_sh_buy_back_em
+   * 对应 Python: akshare.bond.bond_buy_back_em.bond_sh_buy_back_em
+   * 数据源: https://quote.eastmoney.com/center/gridlist.html#bond_sh_buyback
+   * @returns 上证质押式回购数据列表，每项含 code(代码)、name(名称)、
+   *          date(日期)、buyBackAmount(回购金额)、buyBackPrice(回购价格)、
+   *          exchange(交易所="SSE")
+   * 数据清洗: reportName=RPT_BOND_BUYBACK + filter=(EXCHANGE="SSE")，
+   *           Python 版本使用 push2.eastmoney.com 行情 API + fs=m:1+b:MK0356
    */
   async bondShBuyBackEm(): Promise<Record<string, unknown>[] | null> {
     return this.fetchBondBuyBack('SSE')
   }
 
   /**
-   * AKShare: bond_sz_buy_back_em
-   * EastMoney Shenzhen bond buy-back data.
+   * AKShare 接口: bond_sz_buy_back_em
+   * 对应 Python: akshare.bond.bond_buy_back_em.bond_sz_buy_back_em
+   * 数据源: https://quote.eastmoney.com/center/gridlist.html#bond_sz_buyback
+   * @returns 深证质押式回购数据列表，每项含 code(代码)、name(名称)、
+   *          date(日期)、buyBackAmount(回购金额)、buyBackPrice(回购价格)、
+   *          exchange(交易所="SZSE")
+   * 数据清洗: reportName=RPT_BOND_BUYBACK + filter=(EXCHANGE="SZSE")，
+   *           Python 版本使用 push2.eastmoney.com 行情 API + fs=m:0+b:MK0356
    */
   async bondSzBuyBackEm(): Promise<Record<string, unknown>[] | null> {
     return this.fetchBondBuyBack('SZSE')
@@ -3109,9 +3258,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_jsl
-   * JSL (集思录) convertible bond list.
-   * Data: https://www.jisilu.cn/data/cbnew/
+   * AKShare 接口: bond_cb_jsl
+   * 对应 Python: akshare.bond.bond_convert.bond_cb_jsl
+   * 数据源: https://www.jisilu.cn/data/cbnew/#cb
+   * @returns 集思录可转债列表，每项含 code(代码)、name(转债名称)、
+   *          stockCode(正股代码)、stockName(正股名称)、price(现价)、
+   *          convertValue(转股价值)、premiumRate(转股溢价率)、rating(债券评级)、
+   *          expireDate(到期时间)
+   * 数据清洗: POST 请求 cb_list_new/，Python 版本需要 cookie 认证，
+   *           此实现使用 cb_list/ 端点无需认证；Python 版本返回更丰富的字段
    */
   async bondCbJsl(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3139,9 +3294,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_index_jsl
-   * JSL convertible bond index.
-   * Data: https://www.jisilu.cn/data/cbnew/
+   * AKShare 接口: bond_cb_index_jsl
+   * 对应 Python: akshare.bond.bond_convert.bond_cb_index_jsl
+   * 数据源: https://www.jisilu.cn/data/cbnew/#cb
+   * @returns 集思录可转债等权指数数据列表，每项含 date(交易日期)、
+   *          index(指数值)、changePct(涨跌幅)、avgPrice(均价)、
+   *          avgPremiumRate(平均溢价率)
+   * 数据清洗: 使用 webapi/cb/index_history/ JSON API，Python 版本使用
+   *           demjson 解析，此实现使用标准 JSON 解析
    */
   async bondCbIndexJsl(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3165,9 +3325,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_adj_logs_jsl
-   * JSL convertible bond adjustment logs.
-   * Data: https://www.jisilu.cn/data/cbnew/
+   * AKShare 接口: bond_cb_adj_logs_jsl
+   * 对应 Python: akshare.bond.bond_convert.bond_cb_adj_logs_jsl
+   * 数据源: https://www.jisilu.cn/data/cbnew/#cb
+   * @param symbol - 可转债代码，如 "128013"
+   * @returns 转股价调整记录列表，每项含 code(可转债代码)、date(调整日期)、
+   *          oldPrice(调整前转股价)、newPrice(调整后转股价)、reason(调整原因)
+   * 数据清洗: Python 版本使用 pd.read_html 解析 HTML 表格，此实现使用
+   *           adj_logs JSON API 获取结构化数据；无调整记录时返回空数组
    */
   async bondCbAdjLogsJsl(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3191,9 +3356,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cb_redeem_jsl
-   * JSL convertible bond forced redemption data.
-   * Data: https://www.jisilu.cn/data/cbnew/
+   * AKShare 接口: bond_cb_redeem_jsl
+   * 对应 Python: akshare.bond.bond_convert.bond_cb_redeem_jsl
+   * 数据源: https://www.jisilu.cn/data/cbnew/#redeem
+   * @returns 集思录可转债强赎数据列表，每项含 code(代码)、name(名称)、
+   *          triggerDate(触发日期)、triggerPrice(触发价格)、
+   *          currentPrice(当前价格)、daysRemaining(剩余天数)
+   * 数据清洗: POST 请求 redeem_list/，Python 版本返回更丰富的字段含强赎状态和条款，
+   *           此实现仅返回基础强赎触发信息
    */
   async bondCbRedeemJsl(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3220,9 +3390,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ═══ Cninfo bond issue data ══
 
   /**
-   * AKShare: bond_treasure_issue_cninfo
-   * Cninfo treasury bond issuance.
-   * Data: https://www.cninfo.com.cn/
+   * AKShare 接口: bond_treasure_issue_cninfo
+   * 对应 Python: akshare.bond.bond_issue_cninfo.bond_treasure_issue_cninfo
+   * 数据源: http://webapi.cninfo.com.cn/#/thematicStatistics
+   * @returns 国债发行数据列表，每项含 code(债券代码)、title(公告标题)、
+   *          date(公告日期)、type(类型="treasury")
+   * 数据清洗: Python 版本使用 py_mini_racer 执行 JS 加密+POST 请求 p_sysapi1120，
+   *           此实现使用 cninfo.com.cn hisAnnouncement/query 端点获取公告数据
    */
   async bondTreasureIssueCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3241,8 +3415,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_corporate_issue_cninfo
-   * Cninfo corporate bond issuance.
+   * AKShare 接口: bond_corporate_issue_cninfo
+   * 对应 Python: akshare.bond.bond_issue_cninfo.bond_corporate_issue_cninfo
+   * 数据源: http://webapi.cninfo.com.cn/#/thematicStatistics
+   * @returns 企业债发行数据列表，每项含 code(债券代码)、title(公告标题)、
+   *          date(公告日期)、type(类型="corporate")
+   * 数据清洗: Python 版本使用 py_mini_racer + POST 请求 p_sysapi1122，
+   *           此实现使用 cninfo.com.cn hisAnnouncement/query + category=category_qyzq
    */
   async bondCorporateIssueCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3261,8 +3440,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cov_issue_cninfo
-   * Cninfo convertible bond issuance.
+   * AKShare 接口: bond_cov_issue_cninfo
+   * 对应 Python: akshare.bond.bond_issue_cninfo.bond_cov_issue_cninfo
+   * 数据源: http://webapi.cninfo.com.cn/#/thematicStatistics
+   * @returns 可转债发行数据列表，每项含 code(债券代码)、title(公告标题)、
+   *          date(公告日期)、type(类型="convertible")
+   * 数据清洗: Python 版本使用 py_mini_racer + POST 请求 p_sysapi1123，
+   *           此实现使用 cninfo.com.cn hisAnnouncement/query + category=category_kzz
    */
   async bondCovIssueCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3281,8 +3465,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_cov_stock_issue_cninfo
-   * Cninfo convertible bond stock issuance.
+   * AKShare 接口: bond_cov_stock_issue_cninfo
+   * 对应 Python: akshare.bond.bond_issue_cninfo.bond_cov_stock_issue_cninfo
+   * 数据源: http://webapi.cninfo.com.cn/#/thematicStatistics
+   * @returns 可转债转股数据列表，每项含 code(债券代码)、title(公告标题)、
+   *          date(公告日期)、type(类型="convertible_stock")
+   * 数据清洗: Python 版本使用 py_mini_racer + POST 请求 p_sysapi1124，
+   *           此实现使用 cninfo.com.cn hisAnnouncement/query + category=category_kzz
    */
   async bondCovStockIssueCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3301,8 +3490,13 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_local_government_issue_cninfo
-   * Cninfo local government bond issuance.
+   * AKShare 接口: bond_local_government_issue_cninfo
+   * 对应 Python: akshare.bond.bond_issue_cninfo.bond_local_government_issue_cninfo
+   * 数据源: http://webapi.cninfo.com.cn/#/thematicStatistics
+   * @returns 地方债发行数据列表，每项含 code(债券代码)、title(公告标题)、
+   *          date(公告日期)、type(类型="local_government")
+   * 数据清洗: Python 版本使用 py_mini_racer + POST 请求 p_sysapi1121，
+   *           此实现使用 cninfo.com.cn hisAnnouncement/query + category=category_dfzq
    */
   async bondLocalGovernmentIssueCninfo(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3323,9 +3517,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ══ CBond index data ══
 
   /**
-   * AKShare: bond_index_general_cbond
-   * ChinaBond general bond index.
-   * Data: https://www.chinabond.com.cn/
+   * AKShare 接口: bond_index_general_cbond
+   * 对应 Python: akshare.bond.bond_cbond.bond_index_general_cbond
+   * 数据源: https://yield.chinabond.com.cn/
+   * @returns 中债总指数族系数据列表，每项含 name(指数名称)、date(日期)、
+   *          value(指数值)、change(涨跌)
+   * 数据清洗: Python 版本使用 yield.chinabond.com.cn 专有 API 单指数查询，
+   *           需要指定 index_category/indicator/period 参数；此实现使用
+   *           indexQuery + indexType="0" 获取通用总指数数据
    */
   async bondIndexGeneralCbond(): Promise<Record<string, unknown>[] | null> {
     return this.fetchCbondIndex('0')
@@ -3349,32 +3548,51 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_available_index_cbond
-   * ChinaBond available-for-sale bond index.
+   * AKShare 接口: bond_available_index_cbond
+   * 对应 Python: akshare.bond.bond_cbond.bond_available_index_cbond
+   * 数据源: https://yield.chinabond.com.cn/
+   * @returns 中债可选指数列表，每项含 index(序号)、value(指数名称)
+   * 数据清洗: Python 版本返回 INDEX_MAPPING 可选项列表，此实现使用
+   *           indexQuery + indexType="1" 获取可供出售类指数数据
    */
   async bondAvailableIndexCbond(): Promise<Record<string, unknown>[] | null> {
     return this.fetchCbondIndex('1')
   }
 
   /**
-   * AKShare: bond_composite_index_cbond
-   * ChinaBond composite bond index.
+   * AKShare 接口: bond_composite_index_cbond
+   * 对应 Python: akshare.bond.bond_cbond.bond_composite_index_cbond
+   * 数据源: https://yield.chinabond.com.cn/
+   * @returns 中债综合指数数据列表，每项含 name(指数名称)、date(日期)、
+   *          value(指数值)、change(涨跌)
+   * 数据清洗: Python 版本使用专有 API 单指数查询，此实现使用
+   *           indexQuery + indexType="2" 获取综合指数数据
    */
   async bondCompositeIndexCbond(): Promise<Record<string, unknown>[] | null> {
     return this.fetchCbondIndex('2')
   }
 
   /**
-   * AKShare: bond_new_composite_index_cbond
-   * ChinaBond new composite bond index.
+   * AKShare 接口: bond_new_composite_index_cbond
+   * 对应 Python: akshare.bond.bond_cbond.bond_new_composite_index_cbond
+   * 数据源: https://yield.chinabond.com.cn/
+   * @returns 中债新综合指数数据列表，每项含 name(指数名称)、date(日期)、
+   *          value(指数值)、change(涨跌)
+   * 数据清洗: Python 版本使用专有 API 单指数查询，此实现使用
+   *           indexQuery + indexType="3" 获取新综合指数数据
    */
   async bondNewCompositeIndexCbond(): Promise<Record<string, unknown>[] | null> {
     return this.fetchCbondIndex('3')
   }
 
   /**
-   * AKShare: bond_treasury_index_cbond
-   * ChinaBond treasury bond index.
+   * AKShare 接口: bond_treasury_index_cbond
+   * 对应 Python: akshare.bond.bond_cbond.bond_treasury_index_cbond
+   * 数据源: https://yield.chinabond.com.cn/
+   * @returns 中债国债指数数据列表，每项含 name(指数名称)、date(日期)、
+   *          value(指数值)、change(涨跌)
+   * 数据清洗: Python 版本支持按 indicator/period 精确查询，此实现使用
+   *           indexQuery + indexType="4" 获取国债指数数据
    */
   async bondTreasuryIndexCbond(): Promise<Record<string, unknown>[] | null> {
     return this.fetchCbondIndex('4')
@@ -3383,9 +3601,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ══ Sina government bond data ══
 
   /**
-   * AKShare: bond_gb_zh_sina
-   * Sina China government bond data.
-   * Data: https://finance.sina.com.cn/
+   * AKShare 接口: bond_gb_zh_sina
+   * 对应 Python: akshare.bond.bond_gb_sina.bond_gb_zh_sina
+   * 数据源: https://finance.sina.com.cn/
+   * @returns 中国国债收益率行情数据列表，每项含 code(代码)、name(名称)、
+   *          price(最新价)、change(涨跌额)、changePct(涨跌幅)、
+   *          preClose(昨收)、open/high/low、volume(成交量)、amount(成交额)
+   * 数据清洗: Python 版本按 symbol 参数映射不同国债品种(CN1YT~CN30YT)，
+   *           此实现使用 node=gz_z 获取全部中国国债数据
    */
   async bondGbZhSina(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3405,9 +3628,12 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: bond_gb_us_sina
-   * Sina US treasury bond yield data.
-   * Data: https://finance.sina.com.cn/
+   * AKShare 接口: bond_gb_us_sina
+   * 对应 Python: akshare.bond.bond_gb_sina.bond_gb_us_sina
+   * 数据源: https://finance.sina.com.cn/
+   * @returns 美国国债收益率数据列表，每项含 name(品种名称)、value(收益率值)
+   * 数据清洗: Python 版本按 symbol 参数映射不同美国国债品种(US1MT~US30YT)，
+   *           此实现使用 hq.sinajs.cn/list=usr_bond 获取全部美国国债数据
    */
   async bondGbUsSina(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3427,11 +3653,15 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ══════════════════════════════════════════════════════════════════
 
   /**
-   * AKShare: article_oman_rv
-   * Oxford-Man Institute realized volatility data.
-   * Data: https://realized.oxford-man.ox.ac.uk/data/visualization
-   * @param symbol Index symbol (e.g. "FTSE", "SPX", "DJI")
-   * @param index Volatility metric (e.g. "rk_th2", "rv5", "medrv")
+   * AKShare 接口: article_oman_rv
+   * 对应 Python: akshare.article.risk_rv.article_oman_rv
+   * 数据源: https://realized.oxford-man.ox.ac.uk/data/visualization
+   * @param symbol - 指数代码，如 "FTSE"、"SPX"、"DJI" 等
+   * @param index - 波动率指标，如 "rk_th2"、"rv5"、"medrv" 等
+   * @returns 已实现波动率数据列表，每项含 date(日期)、value(波动率值)、
+   *          symbol(指数代码)、index(指标名称)
+   * 数据清洗: Python 版本从 Oxford-Man JS 文件解析 JSON 数据，此实现使用
+   *           CSV 下载端点获取同源数据
    */
   async articleOmanRv(symbol: string, index = 'rk_th2'): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3450,10 +3680,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: article_rlab_rv
-   * Risk-Lab realized volatility data from Chicago Booth.
-   * Data: https://dachxiu.chicagobooth.edu/
-   * @param symbol Index code (e.g. "39693" for SP500)
+   * AKShare 接口: article_rlab_rv
+   * 对应 Python: akshare.article.risk_rv.article_rlab_rv
+   * 数据源: https://dachxiu.chicagobooth.edu/
+   * @param symbol - 股票/指数代码，如 "39693"(SP500)
+   * @returns 已实现波动率数据列表，每项含 date(日期)、value(波动率值)、
+   *          symbol(代码)
+   * 数据清洗: Python 版本使用 BeautifulSoup 解析 HTML 页面提取数据，
+   *           此实现使用 data.php API 直接获取；服务器在国外，访问可能较慢
    */
   async articleRlabRv(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3472,9 +3706,12 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: article_ff_crr
-   * Fama/French Current Research Returns multi-factor data.
-   * Data: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
+   * AKShare 接口: article_ff_crr
+   * 对应 Python: akshare.article.ff_factor.article_ff_crr
+   * 数据源: https://mba.tuck.dartmouth.edu/pages/faculty/ken.french/data_library.html
+   * @returns Fama/French 多因子模型数据列表，每项含 item(指标名)、value(指标值)
+   * 数据清洗: Python 版本使用 pd.read_html 解析三个子表格并合并，
+   *           此实现使用正则表达式解析 HTML 表格获取同源数据
    */
   async articleFfCrr(): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3499,10 +3736,14 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: article_epu_index
-   * Economic Policy Uncertainty index by country.
-   * Data: https://www.policyuncertainty.com/index.html
-   * @param symbol Country name (e.g. "China", "USA", "Japan", "UK", "Germany")
+   * AKShare 接口: article_epu_index
+   * 对应 Python: akshare.article.epu_index.article_epu_index
+   * 数据源: https://www.policyuncertainty.com/index.html
+   * @param symbol - 国家名称，如 "China"、"USA"、"Japan"、"UK"、"Germany" 等
+   * @returns 经济政策不确定性指数数据列表，每项含 country(国家)、year(年份)、
+   *          month(月份)、value(EPU指数值)、date(年月，格式 "YYYY-MM")
+   * 数据清洗: Python 版本使用 pd.read_csv/pd.read_excel 读取不同国家的 CSV/XLSX 文件，
+   *           部分国家使用 Excel 格式；此实现统一使用 CSV 格式获取
    */
   async articleEpuIndex(symbol: string): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3820,10 +4061,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   // ══════════════════════════════════════════════════════════════════
 
   /**
-   * AKShare: qdii_e_index_jsl
-   * JSL T+0 QDII European/US index ETF list.
-   * Data: https://www.jisilu.cn/data/qdii/#qdiia
-   * @param cookie JSL login cookie (required for full data)
+   * AKShare 接口: qdii_e_index_jsl
+   * 对应 Python: akshare.qdii.qdii_jsl.qdii_e_index_jsl
+   * 数据源: https://www.jisilu.cn/data/qdii/#qdiia
+   * @param cookie - 集思录登录 cookie（可选，部分数据需要登录）
+   * @returns T+0 QDII 欧美市场指数 ETF 列表，每项含 code(基金代码)、
+   *          name(基金名称)、price(现价)、changePct(涨幅)、volume(成交量)、
+   *          nav(T-2净值)、navDate(净值日期)、premiumRate(T-1溢价率)、
+   *          custodyFee(托管费)、company(基金公司)
+   * 数据清洗: Python 版本使用 qdii_list/E 端点 + make_request_with_retry_json，
+   *           此实现使用 qdii_list/ + type=index&market=US_EU 参数筛选
    */
   async qdiiEIndexJsl(cookie = ''): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3853,9 +4100,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: qdii_e_comm_jsl
-   * JSL T+0 QDII European/US commodity ETF list.
-   * Data: https://www.jisilu.cn/data/qdii/#qdiia
+   * AKShare 接口: qdii_e_comm_jsl
+   * 对应 Python: akshare.qdii.qdii_jsl.qdii_e_comm_jsl
+   * 数据源: https://www.jisilu.cn/data/qdii/#qdiia
+   * @param cookie - 集思录登录 cookie（可选）
+   * @returns T+0 QDII 欧美市场商品 ETF 列表，每项含 code(基金代码)、
+   *          name(基金名称)、price(现价)、changePct(涨幅)、volume(成交量)、
+   *          nav(T-2净值)、navDate(净值日期)、premiumRate(T-1溢价率)、
+   *          custodyFee(托管费)、company(基金公司)
+   * 数据清洗: Python 版本使用 qdii_list/E 端点获取全部欧美数据，
+   *           此实现使用 qdii_list/ + type=comm&market=US_EU 筛选商品类
    */
   async qdiiECommJsl(cookie = ''): Promise<Record<string, unknown>[] | null> {
     try {
@@ -3885,9 +4139,16 @@ export class MiscDataHandler extends MarketHandlerShell {
   }
 
   /**
-   * AKShare: qdii_a_index_jsl
-   * JSL T+0 QDII Asian market index ETF list.
-   * Data: https://www.jisilu.cn/data/qdii/#qdiia
+   * AKShare 接口: qdii_a_index_jsl
+   * 对应 Python: akshare.qdii.qdii_jsl.qdii_a_index_jsl
+   * 数据源: https://www.jisilu.cn/data/qdii/#qdiia
+   * @param cookie - 集思录登录 cookie（可选）
+   * @returns T+0 QDII 亚洲市场指数 ETF 列表，每项含 code(基金代码)、
+   *          name(基金名称)、price(现价)、changePct(涨幅)、volume(成交量)、
+   *          nav(净值)、navDate(净值日期)、premiumRate(溢价率)、
+   *          custodyFee(托管费)、company(基金公司)
+   * 数据清洗: Python 版本使用 qdii_list/A 端点获取亚洲市场数据，
+   *           此实现使用 qdii_list/ + type=index&market=ASIA 参数筛选
    */
   async qdiiAIndexJsl(cookie = ''): Promise<Record<string, unknown>[] | null> {
     try {
@@ -6383,7 +6644,9 @@ export class MiscDataHandler extends MarketHandlerShell {
       const t = String(Date.now())
       const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sp-quot.json', {
         method: 'POST',
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.91 Safari/537.36',
+        },
         body: `t=${t}`,
         signal: AbortSignal.timeout(15000),
       })
@@ -6413,7 +6676,9 @@ export class MiscDataHandler extends MarketHandlerShell {
       const t = String(Date.now())
       const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/rfx-sw-quot.json', {
         method: 'POST',
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.91 Safari/537.36',
+        },
         body: `t=${t}`,
         signal: AbortSignal.timeout(15000),
       })
@@ -6449,7 +6714,9 @@ export class MiscDataHandler extends MarketHandlerShell {
       const t = String(Date.now())
       const resp = await fetch('https://www.chinamoney.org.cn/r/cms/www/chinamoney/data/fx/fx-c-sw-curv-USD.CNY.json', {
         method: 'POST',
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.91 Safari/537.36',
+        },
         body: `t=${t}`,
         signal: AbortSignal.timeout(15000),
       })
@@ -6480,7 +6747,9 @@ export class MiscDataHandler extends MarketHandlerShell {
       const t = String(Date.now())
       const resp = await fetch('http://www.chinamoney.com.cn/r/cms/www/chinamoney/data/fx/cpair-quot.json', {
         method: 'POST',
-        headers: { 'User-Agent': 'Mozilla/5.0', 'Content-Type': 'application/x-www-form-urlencoded' },
+        headers: {
+          'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/61.0.3163.91 Safari/537.36',
+        },
         body: `t=${t}`,
         signal: AbortSignal.timeout(15000),
       })
@@ -6966,9 +7235,12 @@ export class MiscDataHandler extends MarketHandlerShell {
       const session = await fetch('https://www.soozhu.com/price/data/center/', {
         headers: HEADERS,
         signal: AbortSignal.timeout(15000),
+        redirect: 'follow',
       })
       const html = await session.text()
-      const tokenMatch = html.match(/name="csrfmiddlewaretoken"\s+value="([^"]+)"/)
+      // Match CSRF token regardless of attribute order (name before or after value)
+      const tokenMatch = html.match(/name="csrfmiddlewaretoken"[^>]*value="([^"]+)"/i)
+        ?? html.match(/value="([^"]+)"[^>]*name="csrfmiddlewaretoken"/i)
       if (!tokenMatch) return null
       const token = tokenMatch[1]
       const payload: Record<string, string> = { act, csrfmiddlewaretoken: token }
@@ -6979,6 +7251,7 @@ export class MiscDataHandler extends MarketHandlerShell {
         headers: { ...HEADERS, 'Content-Type': 'application/x-www-form-urlencoded', Cookie: cookie },
         body: new URLSearchParams(payload).toString(),
         signal: AbortSignal.timeout(15000),
+        redirect: 'follow',
       })
       return await resp.json() as Record<string, unknown>
     } catch { return null }
@@ -7146,12 +7419,14 @@ export class MiscDataHandler extends MarketHandlerShell {
    */
   async cryptoJsSpot(): Promise<Record<string, unknown>[] | null> {
     const json = await httpGet(
-      'https://datacenter.jin10.com/reportType/dc_bitcoin_current',
+      'https://datacenter-api.jin10.com/crypto_currency/list',
       {},
       15000,
       {
-        Referer: 'https://www.jin10.com/',
-        'x-app-id': 'bVBF4FyRTn5NJF5n',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/107.0.0.0 Safari/537.36',
+        'x-app-id': 'rU6QIu7JHe2gOUeR',
+        'x-csrf-token': 'x-csrf-token',
+        'x-version': '1.0.0',
       },
     )
     if (!json?.data) return null
@@ -7238,8 +7513,21 @@ export class MiscDataHandler extends MarketHandlerShell {
       { category: 'cme', date: formattedDate, attr_id: '4' },
       15000,
       {
-        Referer: 'https://datacenter.jin10.com/',
+        'accept': '*/*',
+        'accept-encoding': 'gzip, deflate, br',
+        'accept-language': 'zh-CN,zh;q=0.9,en;q=0.8',
+        'cache-control': 'no-cache',
+        'origin': 'https://datacenter.jin10.com',
+        'pragma': 'no-cache',
+        'referer': 'https://datacenter.jin10.com/',
+        'sec-ch-ua': '" Not;A Brand";v="99", "Google Chrome";v="91", "Chromium";v="91"',
+        'sec-ch-ua-mobile': '?0',
+        'sec-fetch-dest': 'empty',
+        'sec-fetch-mode': 'cors',
+        'sec-fetch-site': 'same-site',
+        'user-agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.106 Safari/537.36',
         'x-app-id': 'rU6QIu7JHe2gOUeR',
+        'x-csrf-token': '',
         'x-version': '1.0.0',
       },
     )
@@ -7380,8 +7668,13 @@ export class MiscDataHandler extends MarketHandlerShell {
    */
   async hfSp500(year = '2017'): Promise<Record<string, unknown>[] | null> {
     try {
-      const url = `https://github.com/FutureSharks/financial-data/raw/master/pyfinancialdata/data/stocks/histdata/SPXUSD/DAT_ASCII_SPXUSD_M1_${year}.csv`
-      const resp = await fetch(url, { signal: AbortSignal.timeout(30000) })
+      // Use raw.githubusercontent.com directly to avoid GitHub redirect (ECONNREFUSED)
+      const url = `https://raw.githubusercontent.com/FutureSharks/financial-data/master/pyfinancialdata/data/stocks/histdata/SPXUSD/DAT_ASCII_SPXUSD_M1_${year}.csv`
+      const resp = await fetch(url, {
+        headers: { 'User-Agent': 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36' },
+        signal: AbortSignal.timeout(30000),
+        redirect: 'follow',
+      })
       if (!resp.ok) return null
       const text = await resp.text()
       const lines = text.trim().split('\n')
