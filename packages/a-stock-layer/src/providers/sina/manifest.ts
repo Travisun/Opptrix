@@ -20,7 +20,7 @@ export const SINA_SPEC: ProviderManifestSpec = {
   subtitle: '新浪财经数据中心 · 代用户浏览（实时/K线/列表 · 限速 2 秒/次）',
   marketGroup: 'CN',
   defaultPriority: 24,
-  maxConcurrent: 3,
+  maxConcurrent: 1,
   capabilities: SINA_CAPS,
   bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     [

@@ -16,8 +16,9 @@ export const STATS_GOV_SPEC: ProviderManifestSpec = {
   subtitle: '宏观指标',
   marketGroup: 'GLOBAL',
   defaultPriority: 15,
+  maxConcurrent: 1,
   capabilities: STATS_GOV_CAPS,
-  bindingsFor: (p) => cnEquityBindings(STATS_GOV_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnEquityBindings(STATS_GOV_CAPS, p, maxConcurrent),
   settings: STATS_GOV_SETTINGS,
 }
 

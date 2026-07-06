@@ -43,15 +43,18 @@ export const TICKFLOW_SPEC: ProviderManifestSpec = {
   subtitle: 'A股/港股/美股行情与 A 股分时，需 API Key（api.tickflow.org）',
   marketGroup: 'GLOBAL',
   defaultPriority: 80,
+  maxConcurrent: 5,
   capabilities: TICKFLOW_CAPS,
-  bindingsFor: (p) => [
-    ...usEquityBindings(TICKFLOW_EQUITY_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => [
+    ...usEquityBindings(TICKFLOW_EQUITY_CAPS, p, maxConcurrent),
     ...cnEquityEtfIndex(
       [...TICKFLOW_EQUITY_CAPS, ...TICKFLOW_CN_EXPERT_CAPS, ...TICKFLOW_CN_INTRADAY_CAPS],
       TICKFLOW_CN_INDEX_CAPS,
       p,
+      undefined,
+      maxConcurrent,
     ),
-    ...regionalEquityBindings('HK', TICKFLOW_EQUITY_CAPS, p),
+    ...regionalEquityBindings('HK', TICKFLOW_EQUITY_CAPS, p, maxConcurrent),
   ],
   settings: TICKFLOW_SETTINGS,
   supportsTest: true,

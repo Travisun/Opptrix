@@ -18,8 +18,9 @@ export const OKX_SPEC: ProviderManifestSpec = {
   subtitle: 'OKX 官方公开行情 API',
   marketGroup: 'CRYPTO',
   defaultPriority: 90,
+  maxConcurrent: 5,
   capabilities: OKX_CAPS,
-  bindingsFor: (p) => cryptoSpotBindings(OKX_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cryptoSpotBindings(OKX_CAPS, p, maxConcurrent),
   settings: OKX_SETTINGS,
 }
 

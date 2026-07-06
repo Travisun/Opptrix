@@ -8,6 +8,7 @@ const SPEC: ProviderManifestSpec = {
   subtitle: '债券、期货、汇率、碳排放、另类数据等 AKShare 接口',
   marketGroup: 'CN',
   defaultPriority: 30,
+  maxConcurrent: 1,
   capabilities: [],
   bindingsFor: () => [],
   settings: {

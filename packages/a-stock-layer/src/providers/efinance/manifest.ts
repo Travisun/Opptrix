@@ -22,8 +22,9 @@ export const EFINANCE_SPEC: ProviderManifestSpec = {
   subtitle: '东方财富网公开行情接口（封装层）',
   marketGroup: 'CN',
   defaultPriority: 80,
+  maxConcurrent: 1,
   capabilities: EFINANCE_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
       EFINANCE_CAPS.filter(c => ![
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
         Capability.GLOBAL_INDEX, Capability.EXCHANGE_RATE, Capability.MACRO_INDICATOR,
@@ -32,6 +33,8 @@ export const EFINANCE_SPEC: ProviderManifestSpec = {
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
       ].includes(c)),
       p,
+      undefined,
+      maxConcurrent,
     ),
   settings: EFINANCE_SETTINGS,
 }

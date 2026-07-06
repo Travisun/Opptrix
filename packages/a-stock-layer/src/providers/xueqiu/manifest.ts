@@ -18,8 +18,9 @@ export const XUEQIU_SPEC: ProviderManifestSpec = {
   subtitle: '行情与资金流',
   marketGroup: 'CN',
   defaultPriority: 10,
+  maxConcurrent: 1,
   capabilities: XUEQIU_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
       XUEQIU_CAPS.filter(c => ![
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
         Capability.GLOBAL_INDEX, Capability.EXCHANGE_RATE, Capability.MACRO_INDICATOR,
@@ -28,6 +29,8 @@ export const XUEQIU_SPEC: ProviderManifestSpec = {
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
       ].includes(c)),
       p,
+      undefined,
+      maxConcurrent,
     ),
   settings: XUEQIU_SETTINGS,
 }

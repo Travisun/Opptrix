@@ -33,11 +33,12 @@ const EQUITY_CAPS = ZZSHARE_CAPS.filter(c => !INDEX_CAPS.includes(c))
 export const ZZSHARE_SPEC: ProviderManifestSpec = {
   id: 'zzshare',
   title: '自在量化',
-  subtitle: '免费 A 股行情·涨停复盘·龙虎榜·资金流·情绪；Token 可选提升频率',
+  subtitle: '自在量化行情数据服务',
   marketGroup: 'CN',
   defaultPriority: 110,
+  maxConcurrent: 5,
   capabilities: ZZSHARE_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, undefined, maxConcurrent),
   settings: ZZSHARE_SETTINGS,
   supportsTest: true,
 }

@@ -19,7 +19,7 @@ export const NETEASE_SPEC: ProviderManifestSpec = {
   subtitle: '网易财经数据中心 · 接口已停服，默认关闭（可改由新浪财经替代）',
   marketGroup: 'CN',
   defaultPriority: 24,
-  maxConcurrent: 3,
+  maxConcurrent: 1,
   capabilities: NETEASE_CAPS,
   bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     [

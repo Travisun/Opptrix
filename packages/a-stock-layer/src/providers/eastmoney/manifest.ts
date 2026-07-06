@@ -69,7 +69,7 @@ export const EASTMONEY_SPEC: ProviderManifestSpec = {
   subtitle: '代用户浏览东方财富网站 · 限速 2 秒/次',
   marketGroup: 'CN',
   defaultPriority: 100,
-  maxConcurrent: 3,
+  maxConcurrent: 1,
   capabilities: EASTMONEY_CAPS,
   bindingsFor: (p, maxConcurrent) => cnFullSplit(EASTMONEY_CAPS, p, maxConcurrent),
   settings: EASTMONEY_SETTINGS,

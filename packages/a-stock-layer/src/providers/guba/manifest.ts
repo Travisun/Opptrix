@@ -17,8 +17,9 @@ export const GUBA_SPEC: ProviderManifestSpec = {
   subtitle: '舆情与讨论',
   marketGroup: 'CN',
   defaultPriority: 15,
+  maxConcurrent: 1,
   capabilities: GUBA_CAPS,
-  bindingsFor: (p) => cnEquityBindings(GUBA_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnEquityBindings(GUBA_CAPS, p, maxConcurrent),
   settings: GUBA_SETTINGS,
 }
 

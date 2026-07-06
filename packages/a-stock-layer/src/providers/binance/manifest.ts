@@ -18,8 +18,9 @@ export const BINANCE_SPEC: ProviderManifestSpec = {
   subtitle: 'Binance 官方公开行情 API',
   marketGroup: 'CRYPTO',
   defaultPriority: 100,
+  maxConcurrent: 5,
   capabilities: BINANCE_CAPS,
-  bindingsFor: (p) => cryptoSpotBindings(BINANCE_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cryptoSpotBindings(BINANCE_CAPS, p, maxConcurrent),
   settings: BINANCE_SETTINGS,
 }
 

@@ -16,7 +16,7 @@ export const CNINFO_SPEC: ProviderManifestSpec = {
   subtitle: '法定披露公告 · 代用户浏览（支持分类/日期/PDF 链接 · 限速 2 秒/次）',
   marketGroup: 'CN',
   defaultPriority: 92,
-  maxConcurrent: 3,
+  maxConcurrent: 1,
   capabilities: CNINFO_CAPS,
   bindingsFor: (p, maxConcurrent) => cnEquityBindings(CNINFO_CAPS, p, maxConcurrent),
   settings: CNINFO_SETTINGS,

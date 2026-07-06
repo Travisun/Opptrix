@@ -21,8 +21,9 @@ export const TENCENT_SPEC: ProviderManifestSpec = {
   subtitle: '实时 / K 线回退',
   marketGroup: 'CN',
   defaultPriority: 50,
+  maxConcurrent: 1,
   capabilities: TENCENT_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
       TENCENT_CAPS.filter(c => ![
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
         Capability.GLOBAL_INDEX, Capability.EXCHANGE_RATE, Capability.MACRO_INDICATOR,
@@ -31,6 +32,8 @@ export const TENCENT_SPEC: ProviderManifestSpec = {
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
       ].includes(c)),
       p,
+      undefined,
+      maxConcurrent,
     ),
   settings: TENCENT_SETTINGS,
 }

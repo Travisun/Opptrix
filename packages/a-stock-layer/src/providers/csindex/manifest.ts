@@ -16,8 +16,9 @@ export const CSINDEX_SPEC: ProviderManifestSpec = {
   subtitle: '指数成分股',
   marketGroup: 'CN',
   defaultPriority: 30,
+  maxConcurrent: 1,
   capabilities: CSINDEX_CAPS,
-  bindingsFor: (p) => cnIndexBindings(CSINDEX_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnIndexBindings(CSINDEX_CAPS, p, maxConcurrent),
   settings: CSINDEX_SETTINGS,
 }
 

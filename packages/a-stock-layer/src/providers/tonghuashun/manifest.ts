@@ -26,8 +26,9 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   subtitle: '同花顺金融数据 API（fuyao.aicubes.cn），需 API Key',
   marketGroup: 'CN',
   defaultPriority: 88,
+  maxConcurrent: 5,
   capabilities: TONGHUASHUN_CAPS,
-  bindingsFor: (p) => cnFullSplit(TONGHUASHUN_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnFullSplit(TONGHUASHUN_CAPS, p, maxConcurrent),
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,
 }
