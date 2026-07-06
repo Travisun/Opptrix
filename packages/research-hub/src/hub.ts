@@ -1748,17 +1748,6 @@ export class ResearchHub {
     try {
       const saved = this.de.saveProviderConfig(id, {
         enabled: params.enabled === undefined ? undefined : params.enabled === true,
-        priorityMode: params.priority_mode === 'custom'
-          ? 'custom'
-          : params.priority_mode === 'manifest'
-            ? 'manifest'
-            : undefined,
-        priority: params.priority !== undefined
-          ? (params.priority === null ? null : Number(params.priority))
-          : undefined,
-        sortOrder: params.sort_order !== undefined
-          ? (params.sort_order === null ? null : Number(params.sort_order))
-          : undefined,
         extra: (params.extra as Record<string, unknown> | undefined)
           ?? (params.token !== undefined ? { token: String(params.token).trim() } : undefined),
       })
