@@ -18,8 +18,8 @@
     "start": "npm run start -w @opptrix/server",
     "serve": "concurrently -k -n api,web -c blue,cyan \"npm run start\" \"npm run preview -w opptrix-client -- --host 0.0.0.0\"",
     "clean": "find packages apps -name dist -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name tsconfig.tsbuildinfo -delete 2>/dev/null; rm -rf client-ui/dist",
-    "test": "npm run build:packages && node --test tests/*.test.mjs",
-    "test:ci": "node --test tests/*.test.mjs"
+    "test": "npm run build:packages && node scripts/run-tests.mjs",
+    "test:ci": "node scripts/run-tests.mjs"
   },
   "engines": {
     "node": ">=20"

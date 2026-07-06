@@ -21,7 +21,9 @@ before(async () => {
 })
 
 after(async () => {
-  if (dataDir) await rm(dataDir, { recursive: true, force: true })
+  const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+  getUserDataStore().close()
+  if (dataDir) await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 
 test('market data package round-trip preserves stock universe', async () => {

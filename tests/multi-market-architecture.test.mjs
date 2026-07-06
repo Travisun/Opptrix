@@ -249,16 +249,21 @@ test('regional list seeds sync writes instruments', async () => {
   process.env.OPPTRIX_MARKET_DB_PATH = dbPath
 
   const store = new MarketDataStore(dbPath)
-  const engine = new MarketDataSyncEngine(store, new MarketDataEngine())
-  await engine.sync({ jobs: ['jp_list'], mode: 'full' })
+  const de = new MarketDataEngine(false)
+  de.providerLoader.registerBuiltins()
+  try {
+    const engine = new MarketDataSyncEngine(store, de)
+    await engine.sync({ jobs: ['jp_list'], mode: 'full' })
 
-  assert.ok(store.countRegionalEquityInstruments('JP') >= getRegionalListSeeds('JP').length)
-  const toyota = store.db.prepare(`
-    SELECT name FROM instruments WHERE market = 'JP' AND code = ?
-  `).get('7203')
-  assert.equal(toyota?.name, '丰田汽车')
-  store.close()
-  rmSync(dir, { recursive: true, force: true })
+    assert.ok(store.countRegionalEquityInstruments('JP') >= getRegionalListSeeds('JP').length)
+    const toyota = store.db.prepare(`
+      SELECT name FROM instruments WHERE market = 'JP' AND code = ?
+    `).get('7203')
+    assert.equal(toyota?.name, '丰田汽车')
+  } finally {
+    store.close()
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
 })
 
 test('US regime stub resolves strategy ids from SPY-like klines', () => {
