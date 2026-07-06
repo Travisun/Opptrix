@@ -1,13 +1,17 @@
 /**
- * HTTP 工具层 — 封装 fetch 请求，提供重试、超时、退避策略。
+ * HTTP 工具层 — 所有 Provider 的底层 HTTP 通信入口。
  *
- * 用途：所有数据 Provider 的底层 HTTP 通信。
- * 特性：
- *   - 自动重试 429/5xx（指数退避 + Retry-After 头解析）
- *   - 请求超时控制（默认 15s）
- *   - 统一 User-Agent / Referer 头
- *   - 支持 GET/POST JSON/Form 多种格式
+ * 所有函数内部委托给全局 ProviderHttpClient 实例，
+ * 自动获得：主机名限流（>=1s）、429/5xx 重试、超时控制。
+ *
+ * 新代码应直接使用 ProviderHttpClient 实例。
+ * 本模块保留是为了向后兼容现有 Provider 调用。
  */
+
+import { ProviderHttpClient } from '../providers/common/http-client.js'
+
+/** 全局默认 HTTP Client — 所有 httpGet/httpPost 等函数委托给它 */
+const defaultClient = new ProviderHttpClient({ providerId: 'builtin' })
 
 export const HTTP_DEFAULT_HEADERS = {
   'User-Agent': (
@@ -139,43 +143,7 @@ export async function httpGet(
   timeoutMs = 15000,
   extraHeaders: Record<string, string> = {},
 ) {
-  const qs = new URLSearchParams(params)
-  const fullUrl = `${url}?${qs}`
-  let lastError = ''
-  const headers = { ...HTTP_DEFAULT_HEADERS, ...extraHeaders }
-
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), timeoutMs)
-    try {
-      const resp = await fetch(fullUrl, { headers, signal: controller.signal })
-      if (!resp.ok) {
-        if (RETRY_STATUS.has(resp.status) && attempt < 2) {
-          await sleep(1000 * (attempt + 1))
-          continue
-        }
-        throw new Error(`HTTP ${resp.status}`)
-      }
-      const ct = resp.headers.get('content-type') ?? ''
-      if (ct.includes('json')) return resp.json() as Promise<Record<string, unknown>>
-      const text = await resp.text()
-      if (text.trimStart().startsWith('<')) throw new Error('HTML response')
-      try {
-        return JSON.parse(text) as Record<string, unknown>
-      } catch {
-        throw new Error('Invalid JSON')
-      }
-    } catch (e) {
-      lastError = String(e)
-      if (attempt < 2) {
-        await sleep(1000 * (attempt + 1))
-        continue
-      }
-    } finally {
-      clearTimeout(timer)
-    }
-  }
-  throw new Error(lastError || 'request failed')
+  return defaultClient.get(url, params, { timeoutMs, extraHeaders })
 }
 
 /**
@@ -192,18 +160,7 @@ export async function httpGetText(
   extraHeaders: Record<string, string> = {},
   timeoutMs = 15000,
 ): Promise<string> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const resp = await fetch(url, {
-      headers: { ...HTTP_DEFAULT_HEADERS, ...extraHeaders },
-      signal: controller.signal,
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    return resp.text()
-  } finally {
-    clearTimeout(timer)
-  }
+  return defaultClient.getText(url, { timeoutMs, extraHeaders })
 }
 
 /**
@@ -222,24 +179,7 @@ export async function httpPost(
   extraHeaders: Record<string, string> = {},
   timeoutMs = 15000,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...HTTP_DEFAULT_HEADERS,
-        'Content-Type': 'application/json',
-        ...extraHeaders,
-      },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    return resp.json() as Promise<Record<string, unknown>>
-  } finally {
-    clearTimeout(timer)
-  }
+  return defaultClient.post(url, body, { timeoutMs, extraHeaders })
 }
 
 /**
@@ -258,22 +198,5 @@ export async function httpPostForm(
   extraHeaders: Record<string, string> = {},
   timeoutMs = 15000,
 ): Promise<Record<string, unknown>> {
-  const controller = new AbortController()
-  const timer = setTimeout(() => controller.abort(), timeoutMs)
-  try {
-    const resp = await fetch(url, {
-      method: 'POST',
-      headers: {
-        ...HTTP_DEFAULT_HEADERS,
-        'Content-Type': 'application/x-www-form-urlencoded',
-        ...extraHeaders,
-      },
-      body: new URLSearchParams(data),
-      signal: controller.signal,
-    })
-    if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-    return resp.json() as Promise<Record<string, unknown>>
-  } finally {
-    clearTimeout(timer)
-  }
+  return defaultClient.postForm(url, data, { timeoutMs, extraHeaders })
 }
