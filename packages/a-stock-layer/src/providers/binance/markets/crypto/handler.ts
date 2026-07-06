@@ -3,7 +3,7 @@ import { Capability } from '../../../../core/capabilities.js'
 import { cryptoSpotBindings } from '../../../../core/bindings.js'
 import { mapBinanceKlines, mapBinanceTicker } from '../../normalize/index.js'
 import { parseCryptoPair } from '../../../../utils/crypto-market.js'
-import { httpGet } from '../../../../utils/http.js'
+import { binanceClient } from '../../api/http-client.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 
 const BASE = 'https://api.binance.com'
@@ -20,8 +20,8 @@ export class BinanceMarketHandler extends MarketHandlerShell {
   async realtime(symbol: string) {
     try {
       const pair = this.pair(symbol)
-      const row = await httpGet(`${BASE}/api/v3/ticker/24hr`, { symbol: pair.binanceSymbol }, 15000, {
-        Accept: 'application/json',
+      const row = await binanceClient.get(`${BASE}/api/v3/ticker/24hr`, { symbol: pair.binanceSymbol }, {
+        extraHeaders: { Accept: 'application/json' },
       })
       return [mapBinanceTicker(pair, row as Record<string, unknown>)] as StockRealtime[]
     } catch {
@@ -43,11 +43,11 @@ export class BinanceMarketHandler extends MarketHandlerShell {
     try {
       const pair = this.pair(symbol)
       const limit = Math.min(Math.max(count ?? 100, 1), 1000)
-      const rows = await httpGet(`${BASE}/api/v3/klines`, {
+      const rows = await binanceClient.get(`${BASE}/api/v3/klines`, {
         symbol: pair.binanceSymbol,
         interval: '1d',
         limit: String(limit),
-      }, 15000, { Accept: 'application/json' })
+      }, { extraHeaders: { Accept: 'application/json' } })
       const kl = mapBinanceKlines(pair, rows as unknown as unknown[])
       return kl.length ? kl : null
     } catch {
@@ -58,7 +58,10 @@ export class BinanceMarketHandler extends MarketHandlerShell {
   /** Popular USDT / USDC / BTC quoted SPOT pairs */
   async stockList(_market = 'CRYPTO', _keyword = '') {
     try {
-      const rows = await httpGet(`${BASE}/api/v3/ticker/24hr`, {}, 20000, { Accept: 'application/json' })
+      const rows = await binanceClient.get(`${BASE}/api/v3/ticker/24hr`, {}, {
+        timeoutMs: 20000,
+        extraHeaders: { Accept: 'application/json' },
+      })
       if (!Array.isArray(rows)) return null
       const all = rows as Record<string, unknown>[]
       const specs: { quote: string; limit: number }[] = [
