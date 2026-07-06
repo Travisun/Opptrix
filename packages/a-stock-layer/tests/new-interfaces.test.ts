@@ -98,7 +98,7 @@ describe('EastMoney research — fund methods', () => {
 
   describe('Error handling', () => {
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('timeout'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const r = await driver.fundNameEm()
       expect(r).toBeNull()
     })
@@ -148,7 +148,7 @@ describe('AkshareHandler — AMAC private fund APIs', () => {
 
   describe('Error handling', () => {
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('network'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const results = await Promise.all([
         handler.amacMemberInfo(),
         handler.amacManagerInfo(),
@@ -198,7 +198,7 @@ describe('Currency APIs (currencyscoop)', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('timeout'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const result = await handler.currencyLatest()
       expect(result).toBeNull()
     })
@@ -216,7 +216,7 @@ describe('Currency APIs (currencyscoop)', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('fail'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const result = await handler.currencyHistory()
       expect(result).toBeNull()
     })
@@ -238,7 +238,7 @@ describe('Currency APIs (currencyscoop)', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('timeout'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const result = await handler.currencyTimeSeries()
       expect(result).toBeNull()
     })
@@ -258,7 +258,7 @@ describe('Currency APIs (currencyscoop)', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('fail'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const result = await handler.currencyCurrencies()
       expect(result).toBeNull()
     })
@@ -280,7 +280,7 @@ describe('Currency APIs (currencyscoop)', () => {
     })
 
     it('returns null on error', async () => {
-      mockFetch.mockRejectedValue(new Error('fail'))
+      mockFetch.mockResolvedValue({ ok: false, status: 400, json: () => Promise.resolve({}), text: () => Promise.resolve(''), headers: new Map() })
       const result = await handler.currencyConvert()
       expect(result).toBeNull()
     })

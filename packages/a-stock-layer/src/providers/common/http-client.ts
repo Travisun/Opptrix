@@ -1,25 +1,28 @@
 /**
- * 统一 Provider HTTP Client 基类
+ * 统一 Provider HTTP Client
  *
- * 所有数据 Provider 的 HTTP 请求都应经过此基类。
+ * 所有数据 Provider 的对外 HTTP 请求都应通过此类发起。
  *
- * 限流策略：
- * - 使用全局 HostnameRateLimiter 单例，所有 Provider 共享
- * - 同一主机名请求间隔 >= 1s（默认），不同主机名完全并行
- * - 限流与重试解耦：限流器只管调度，重试在 httpGet 内部处理
+ * 核心能力：
+ * 1. 全局主机名限流 — 同一主机名请求间隔 >= 1s，不同主机名并行
+ * 2. 429/5xx 自动重试 — 指数退避 + Retry-After 头解析
+ * 3. 请求超时控制 — AbortController + 可配置超时
+ * 4. 统一 Header / 认证 — Provider 级别默认配置
  *
- * 认证与 Header：
- * - Provider 可配置默认 header、认证 token
- * - 每次请求可传入额外 header 覆盖
+ * 设计目标：ProviderHttpClient 是唯一的对外请求出口。
  */
 
-import { HTTP_DEFAULT_HEADERS, httpGet, httpGetText, httpPost, httpPostForm } from '../../utils/http.js'
+import { HTTP_DEFAULT_HEADERS, sleep } from '../../utils/http.js'
 import { hostnameLimiter, extractHostname } from './rate-limiter.js'
+
+/** 需要重试的 HTTP 状态码 */
+const RETRY_STATUS = new Set([429, 500, 502, 503, 504])
 
 export interface ProviderHttpClientConfig {
   providerId: string
   defaultHeaders?: Record<string, string>
   timeoutMs?: number
+  maxRetries?: number
   auth?: {
     type: 'header' | 'query'
     key: string
@@ -30,10 +33,9 @@ export interface ProviderHttpClientConfig {
 /**
  * 统一 Provider HTTP Client
  *
- * 职责：
- * 1. 统一 header / 认证 / 超时
- * 2. 通过全局限流器保护目标服务器
- * 3. 不处理重试 — 重试由底层 httpGet 负责
+ * 请求流程：
+ *   acquire(hostname)  → 重试循环 → release(hostname)
+ *   限流器保证同主机名间隔，重试循环处理 429/5xx 退避
  */
 export class ProviderHttpClient {
   protected config: Required<Omit<ProviderHttpClientConfig, 'auth'>> & { auth: ProviderHttpClientConfig['auth'] }
@@ -43,6 +45,7 @@ export class ProviderHttpClient {
       providerId: config.providerId,
       defaultHeaders: config.defaultHeaders ?? { ...HTTP_DEFAULT_HEADERS },
       timeoutMs: config.timeoutMs ?? 15000,
+      maxRetries: config.maxRetries ?? 3,
       auth: config.auth,
     }
   }
@@ -66,27 +69,98 @@ export class ProviderHttpClient {
   /**
    * 通过全局限流器执行请求
    *
-   * 流程：acquire → fn() → release
-   * 无论 fn 成功失败，release 都会执行。
+   * 限流器负责：acquire → fn() → release
+   * fn() 内部可包含重试逻辑，限流器不感知重试
    */
   private async throttled<T>(url: string, fn: () => Promise<T>): Promise<T> {
     const hostname = extractHostname(url)
     return hostnameLimiter.acquireWith(hostname, fn)
   }
 
+  /**
+   * 带重试的原始 fetch
+   *
+   * 429 → 解析 Retry-After 头 + 指数退避
+   * 5xx → 固定退避重试
+   * 网络错误 → 指数退避重试
+   */
+  private async fetchWithRetry(
+    url: string,
+    init: RequestInit,
+    timeoutMs: number,
+  ): Promise<Response> {
+    const maxRetries = this.config.maxRetries
+    let retries = 0
+    let backoff = 2
+
+    while (true) {
+      const controller = new AbortController()
+      const timer = setTimeout(() => controller.abort(), timeoutMs)
+      try {
+        const resp = await globalThis.fetch(url, { ...init, signal: controller.signal })
+
+        if (resp.status === 429) {
+          retries += 1
+          if (retries > maxRetries) return resp
+          const retryAfter = resp.headers.get('Retry-After')
+          let sleepTime = backoff
+          if (retryAfter) {
+            const parsed = Number.parseFloat(retryAfter)
+            sleepTime = Number.isFinite(parsed) ? parsed + 0.5 : backoff
+            if (!Number.isFinite(parsed)) backoff *= 2
+          } else {
+            backoff *= 2
+          }
+          await sleep(sleepTime * 1000)
+          continue
+        }
+
+        return resp
+      } catch (e) {
+        if (retries >= maxRetries) throw e instanceof Error ? e : new Error(String(e))
+        retries += 1
+        await sleep(backoff * 1000)
+        backoff *= 2
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+  }
+
+  // ──────────────────────────────────────────────────────────
+  // 公开 API — 所有 Provider 统一调用这些方法
+  // ──────────────────────────────────────────────────────────
+
+  /**
+   * GET 请求（返回 JSON）
+   *
+   * 流程：限流 → 构建 URL/Header → 带重试 fetch → 解析 JSON
+   */
   async get<T = Record<string, unknown>>(
     url: string,
     params?: Record<string, string>,
     options?: { timeoutMs?: number; extraHeaders?: Record<string, string> },
   ): Promise<T> {
     return this.throttled(url, async () => {
-      const allParams = this.getParams(params ?? {})
+      const qs = new URLSearchParams(this.getParams(params ?? {}))
+      const fullUrl = qs.toString() ? `${url}?${qs}` : url
       const headers = this.getHeaders(options?.extraHeaders)
       const timeout = options?.timeoutMs ?? this.config.timeoutMs
-      return httpGet(url, allParams, timeout, headers) as Promise<T>
+
+      const resp = await this.fetchWithRetry(fullUrl, { headers }, timeout)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+
+      const ct = resp.headers.get('content-type') ?? ''
+      if (ct.includes('json')) return resp.json() as Promise<T>
+      const text = await resp.text()
+      if (text.trimStart().startsWith('<')) throw new Error('HTML response')
+      return JSON.parse(text) as T
     })
   }
 
+  /**
+   * GET 请求（返回文本）
+   */
   async getText(
     url: string,
     options?: { timeoutMs?: number; extraHeaders?: Record<string, string> },
@@ -94,48 +168,76 @@ export class ProviderHttpClient {
     return this.throttled(url, async () => {
       const headers = this.getHeaders(options?.extraHeaders)
       const timeout = options?.timeoutMs ?? this.config.timeoutMs
-      return httpGetText(url, headers, timeout)
+      const resp = await this.fetchWithRetry(url, { headers }, timeout)
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      return resp.text()
     })
   }
 
+  /**
+   * POST 请求（JSON body，返回 JSON）
+   */
   async post<T = Record<string, unknown>>(
     url: string,
     body: unknown,
     options?: { timeoutMs?: number; extraHeaders?: Record<string, string> },
   ): Promise<T> {
     return this.throttled(url, async () => {
-      const headers = this.getHeaders(options?.extraHeaders)
+      const headers = {
+        ...this.getHeaders(options?.extraHeaders),
+        'Content-Type': 'application/json',
+      }
       const timeout = options?.timeoutMs ?? this.config.timeoutMs
-      return httpPost(url, body, headers, timeout) as Promise<T>
+      const resp = await this.fetchWithRetry(
+        url,
+        { method: 'POST', headers, body: JSON.stringify(body) },
+        timeout,
+      )
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      return resp.json() as Promise<T>
     })
   }
 
+  /**
+   * POST 请求（Form body，返回 JSON）
+   */
   async postForm<T = Record<string, unknown>>(
     url: string,
     data: Record<string, string>,
     options?: { timeoutMs?: number; extraHeaders?: Record<string, string> },
   ): Promise<T> {
     return this.throttled(url, async () => {
-      const headers = this.getHeaders(options?.extraHeaders)
+      const headers = {
+        ...this.getHeaders(options?.extraHeaders),
+        'Content-Type': 'application/x-www-form-urlencoded',
+      }
       const timeout = options?.timeoutMs ?? this.config.timeoutMs
-      return httpPostForm(url, data, headers, timeout) as Promise<T>
+      const resp = await this.fetchWithRetry(
+        url,
+        { method: 'POST', headers, body: new URLSearchParams(data) },
+        timeout,
+      )
+      if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
+      return resp.json() as Promise<T>
     })
   }
 
+  /**
+   * 原始 fetch（用于流式响应、二进制数据等特殊场景）
+   */
   async fetch(
     url: string,
     init?: RequestInit & { timeoutMs?: number },
   ): Promise<Response> {
     return this.throttled(url, async () => {
       const timeout = init?.timeoutMs ?? this.config.timeoutMs
-      const controller = new AbortController()
-      const timer = setTimeout(() => controller.abort(), timeout)
-      try {
-        const headers = this.getHeaders(init?.headers as Record<string, string>)
-        return await globalThis.fetch(url, { ...init, headers, signal: controller.signal })
-      } finally {
-        clearTimeout(timer)
-      }
+      const headers = this.getHeaders(init?.headers as Record<string, string>)
+      return this.fetchWithRetry(url, { ...init, headers }, timeout)
     })
+  }
+
+  /** 获取全局限流状态（调试用） */
+  getThrottleStatus() {
+    return hostnameLimiter.status()
   }
 }
