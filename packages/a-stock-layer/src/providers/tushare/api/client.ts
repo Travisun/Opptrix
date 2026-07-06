@@ -1,4 +1,5 @@
 import { loadTushareConfig } from '../config.js'
+import { tushareClient } from './http-client.js'
 
 export type TushareRow = Record<string, string | number | null>
 
@@ -37,18 +38,12 @@ export class TushareClient {
     params: Record<string, unknown> = {},
     fields?: string,
   ): Promise<TushareRow[]> {
-    const resp = await fetch('http://api.tushare.pro', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        api_name: apiName,
-        token: this.token,
-        params,
-        fields,
-      }),
+    const json = await tushareClient.post<TushareResponse>('http://api.tushare.pro', {
+      api_name: apiName,
+      token: this.token,
+      params,
+      fields,
     })
-    if (!resp.ok) throw new TushareApiError(`HTTP ${resp.status}`)
-    const json = await resp.json() as TushareResponse
     if (json.code !== 0) throw new TushareApiError(json.msg ?? 'Tushare API error', json.code)
     const data = json.data
     if (!data?.fields?.length || !data.items?.length) return []

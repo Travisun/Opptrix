@@ -23,6 +23,8 @@ export interface ProviderHttpClientConfig {
   defaultHeaders?: Record<string, string>
   timeoutMs?: number
   maxRetries?: number
+  /** 跳过主机名限流 — 付费 API（如 tushare/tickflow）无需等待间隔 */
+  bypassRateLimit?: boolean
   auth?: {
     type: 'header' | 'query'
     key: string
@@ -46,6 +48,7 @@ export class ProviderHttpClient {
       defaultHeaders: config.defaultHeaders ?? { ...HTTP_DEFAULT_HEADERS },
       timeoutMs: config.timeoutMs ?? 15000,
       maxRetries: config.maxRetries ?? 3,
+      bypassRateLimit: config.bypassRateLimit ?? false,
       auth: config.auth,
     }
   }
@@ -73,6 +76,7 @@ export class ProviderHttpClient {
    * fn() 内部可包含重试逻辑，限流器不感知重试
    */
   private async throttled<T>(url: string, fn: () => Promise<T>): Promise<T> {
+    if (this.config.bypassRateLimit) return fn()
     const hostname = extractHostname(url)
     return hostnameLimiter.acquireWith(hostname, fn)
   }

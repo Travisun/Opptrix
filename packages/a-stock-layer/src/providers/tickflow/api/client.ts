@@ -1,4 +1,5 @@
 import { loadTickflowConfig, TICKFLOW_DEFAULT_BASE_URL } from '../config.js'
+import { tickflowClient } from './http-client.js'
 
 /**
  * TickFlow 地区标识 — 指定标的所属市场地区。
@@ -447,37 +448,25 @@ export class TickflowClient {
     const qs = new URLSearchParams(this.queryParams(query))
     const suffix = qs.toString()
     const url = suffix ? `${this.url(path)}?${suffix}` : this.url(path)
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 20000)
-    try {
-      const resp = await fetch(url, {
-        method: 'GET',
-        headers: this.headers(),
-        signal: controller.signal,
-      })
-      return this.handleResponse(resp)
-    } finally {
-      clearTimeout(timer)
-    }
+    const resp = await tickflowClient.fetch(url, {
+      method: 'GET',
+      headers: this.headers(),
+      timeoutMs: 20000,
+    })
+    return this.handleResponse(resp)
   }
 
   async post(path: string, body: unknown): Promise<Record<string, unknown>> {
-    const controller = new AbortController()
-    const timer = setTimeout(() => controller.abort(), 20000)
-    try {
-      const resp = await fetch(this.url(path), {
-        method: 'POST',
-        headers: {
-          ...this.headers(),
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(body),
-        signal: controller.signal,
-      })
-      return this.handleResponse(resp)
-    } finally {
-      clearTimeout(timer)
-    }
+    const resp = await tickflowClient.fetch(this.url(path), {
+      method: 'POST',
+      headers: {
+        ...this.headers(),
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(body),
+      timeoutMs: 20000,
+    })
+    return this.handleResponse(resp)
   }
 
   // —— Quotes ——
