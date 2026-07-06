@@ -79,11 +79,10 @@ export default function DataProvidersSettingsSection() {
 
       <div className={tab === 'priority' ? s.tabPanel : s.tabPanelHidden}>
         <Text className={s.tabHint} block>
-          先选择市场板块，再拖拽或使用箭头调整该板块内数据源的优先顺序。
+          先选择市场板块，查看该板块内数据源的响应速度排序。
         </Text>
         <ProviderPriorityPanels
           catalog={catalog}
-          onReordered={next => setCatalog(next)}
         />
       </div>
     </div>

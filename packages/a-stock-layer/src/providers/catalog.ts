@@ -114,14 +114,7 @@ export class ProviderCatalogService {
     for (const marketGroup of MARKET_GROUP_ORDER) {
       const providers = runtimes
         .filter(r => r.marketGroup === marketGroup)
-        .sort((a, b) => {
-          const ao = this.configStore.getRuntime(a.providerId).sortOrder
-          const bo = this.configStore.getRuntime(b.providerId).sortOrder
-          if (ao != null && bo != null && ao !== bo) return ao - bo
-          if (ao != null && bo == null) return -1
-          if (ao == null && bo != null) return 1
-          return b.effectivePriority - a.effectivePriority
-        })
+        .sort((a, b) => a.title.localeCompare(b.title))
       if (!providers.length) continue
       groups.push({
         marketGroup,
@@ -145,9 +138,6 @@ export class ProviderCatalogService {
     providerId: string,
     patch: {
       enabled?: boolean
-      priorityMode?: 'manifest' | 'custom'
-      priority?: number | null
-      sortOrder?: number | null
       extra?: Record<string, unknown>
     },
   ): PublicProviderRuntime {
@@ -168,49 +158,12 @@ export class ProviderCatalogService {
       enabled = true
     }
 
-    this.configStore.save(providerId, {
-      enabled,
-      priorityMode: patch.priorityMode ?? current.priorityMode,
-      priority: patch.priority !== undefined ? patch.priority : current.priority,
-      sortOrder: patch.sortOrder !== undefined ? patch.sortOrder : current.sortOrder,
-      extra,
-    })
+    this.configStore.save(providerId, { enabled, extra })
 
     this.registry.refreshPriorities(this.configStore)
     const pub = this.getPublic(providerId)
     if (!pub) throw new Error(`保存后无法读取: ${providerId}`)
     return pub
-  }
-
-  reorderMarketGroup(marketGroup: string, providerIds: string[]): ProviderCatalogResponse {
-    const catalog = this.listCatalog()
-    const group = catalog.groups.find(g => g.marketGroup === marketGroup)
-    if (!group) throw new Error(`未知市场: ${marketGroup}`)
-
-    const existingIds = new Set(group.providers.map(p => p.providerId))
-    if (providerIds.length !== group.providers.length) {
-      throw new Error('排序列表不完整')
-    }
-    for (const id of providerIds) {
-      if (!existingIds.has(id)) {
-        throw new Error(`数据源 ${id} 不属于 ${marketGroup}`)
-      }
-    }
-
-    const n = providerIds.length
-    for (let i = 0; i < n; i++) {
-      const providerId = providerIds[i]!
-      const current = this.configStore.getRuntime(providerId)
-      this.configStore.save(providerId, {
-        enabled: current.enabled,
-        priorityMode: 'custom',
-        priority: (n - i) * 10,
-        sortOrder: i,
-      })
-    }
-
-    this.registry.refreshPriorities(this.configStore)
-    return this.listCatalog()
   }
 
   async testConnection(providerId: string, overrides?: Record<string, unknown>) {

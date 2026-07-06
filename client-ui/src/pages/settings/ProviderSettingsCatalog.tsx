@@ -12,7 +12,6 @@ import {
   ChevronDownRegular,
   ChevronRightRegular,
   ChevronUpRegular,
-  ReOrderRegular,
 } from '@fluentui/react-icons'
 import type { InstalledProviderSummary, ProviderCatalogGroup, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
 import {
@@ -20,7 +19,6 @@ import {
   listInstalledProviders,
   rescanProviders,
   reloadInstalledProvider,
-  reorderProviderCatalog,
   saveProviderConfig,
   uninstallInstalledProvider,
 } from '../../api/client'
@@ -349,29 +347,6 @@ const usePriorityStyles = makeStyles({
   },
 })
 
-function reorderIds(ids: string[], from: number, to: number): string[] {
-  if (from === to || from < 0 || to < 0 || from >= ids.length || to >= ids.length) return ids
-  const next = [...ids]
-  const [moved] = next.splice(from, 1)
-  if (!moved) return ids
-  next.splice(to, 0, moved)
-  return next
-}
-
-function resolveDropIndex(listEl: HTMLElement, clientY: number): number {
-  const rows = listEl.querySelectorAll<HTMLElement>('[data-sort-row="1"]')
-  if (!rows.length) return 0
-  for (const row of rows) {
-    const index = Number(row.dataset.sortIndex)
-    if (Number.isNaN(index)) continue
-    const rect = row.getBoundingClientRect()
-    if (clientY < rect.top + rect.height / 2) return index
-  }
-  const last = rows[rows.length - 1]!
-  const lastIndex = Number(last.dataset.sortIndex)
-  return Number.isNaN(lastIndex) ? rows.length - 1 : lastIndex
-}
-
 export function useProviderCatalog() {
   const toast = useSettingsToast()
   const [catalog, setCatalog] = useState<ProviderCatalogResponse | null>(null)
@@ -669,163 +644,24 @@ export function ProviderCatalogListPanel({
   )
 }
 
-type SaveState = 'idle' | 'saving' | 'saved'
-
 function MarketPriorityPanel({
   group,
-  onReordered,
 }: {
   group: ProviderCatalogGroup
-  onReordered: (catalog: ProviderCatalogResponse) => void
 }) {
   const listS = useListStyles()
   const priorityS = usePriorityStyles()
-  const toast = useSettingsToast()
-  const listRef = useRef<HTMLDivElement>(null)
-  const [order, setOrder] = useState<string[]>(() => group.providers.map(p => p.providerId))
-  const [saveState, setSaveState] = useState<SaveState>('idle')
   const [hoverIndex, setHoverIndex] = useState<number | null>(null)
-  const [dragging, setDragging] = useState<{
-    providerId: string
-    fromIndex: number
-    offsetX: number
-    offsetY: number
-    x: number
-    y: number
-    width: number
-  } | null>(null)
-  const [dropIndex, setDropIndex] = useState<number | null>(null)
-  const [dropLineTop, setDropLineTop] = useState<number | null>(null)
 
-  const saving = saveState === 'saving'
   const providerMap = useMemo(
     () => new Map(group.providers.map(p => [p.providerId, p])),
     [group.providers],
   )
 
-  useEffect(() => {
-    setOrder(group.providers.map(p => p.providerId))
-  }, [group.providers])
-
-  useEffect(() => {
-    if (saveState !== 'saved') return
-    const timer = window.setTimeout(() => setSaveState('idle'), 1800)
-    return () => window.clearTimeout(timer)
-  }, [saveState])
-
-  const updateDropIndicator = useCallback((clientY: number) => {
-    const listEl = listRef.current
-    if (!listEl) return
-    const rows = listEl.querySelectorAll<HTMLElement>('[data-sort-row="1"]')
-    const listRect = listEl.getBoundingClientRect()
-    if (!rows.length) return
-
-    for (const row of rows) {
-      const index = Number(row.dataset.sortIndex)
-      if (Number.isNaN(index)) continue
-      const rect = row.getBoundingClientRect()
-      const mid = rect.top + rect.height / 2
-      if (clientY < mid) {
-        setDropIndex(index)
-        setDropLineTop(rect.top - listRect.top - 1)
-        return
-      }
-    }
-
-    const last = rows[rows.length - 1]!
-    const lastIndex = Number(last.dataset.sortIndex)
-    const lastRect = last.getBoundingClientRect()
-    setDropIndex(Number.isNaN(lastIndex) ? rows.length - 1 : lastIndex)
-    setDropLineTop(lastRect.bottom - listRect.top)
-  }, [])
-
-  const commitOrder = useCallback(async (nextOrder: string[]) => {
-    setSaveState('saving')
-    try {
-      const catalog = await reorderProviderCatalog(group.marketGroup, nextOrder)
-      onReordered(catalog)
-      setSaveState('saved')
-    } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '保存优先级失败')
-      setOrder(group.providers.map(p => p.providerId))
-      setSaveState('idle')
-    }
-  }, [group.marketGroup, group.providers, onReordered, toast])
-
-  const orderRef = useRef(order)
-  orderRef.current = order
-
-  useEffect(() => {
-    if (!dragging) return
-
-    const fromIndex = dragging.fromIndex
-
-    const handleMove = (e: PointerEvent) => {
-      setDragging(prev => prev ? { ...prev, x: e.clientX, y: e.clientY } : prev)
-      updateDropIndicator(e.clientY)
-    }
-
-    const handleUp = (e: PointerEvent) => {
-      const listEl = listRef.current
-      const nextDrop = listEl ? resolveDropIndex(listEl, e.clientY) : fromIndex
-      setDragging(null)
-      setDropIndex(null)
-      setDropLineTop(null)
-      if (nextDrop !== fromIndex) {
-        const next = reorderIds(orderRef.current, fromIndex, nextDrop)
-        setOrder(next)
-        void commitOrder(next)
-      }
-    }
-
-    window.addEventListener('pointermove', handleMove)
-    window.addEventListener('pointerup', handleUp)
-    window.addEventListener('pointercancel', handleUp)
-    return () => {
-      window.removeEventListener('pointermove', handleMove)
-      window.removeEventListener('pointerup', handleUp)
-      window.removeEventListener('pointercancel', handleUp)
-    }
-  }, [dragging, commitOrder, updateDropIndicator])
-
-  const handleMoveBy = (index: number, direction: -1 | 1) => {
-    const target = index + direction
-    if (target < 0 || target >= order.length || saving || dragging) return
-    const next = reorderIds(order, index, target)
-    setOrder(next)
-    void commitOrder(next)
-  }
-
-  const handleDragStart = (index: number, providerId: string, e: ReactPointerEvent<HTMLSpanElement>) => {
-    if (saving) return
-    const row = (e.currentTarget as HTMLElement).closest('[data-sort-row]') as HTMLElement | null
-    if (!row) return
-    const rect = row.getBoundingClientRect()
-    e.currentTarget.setPointerCapture(e.pointerId)
-    e.preventDefault()
-    setDragging({
-      providerId,
-      fromIndex: index,
-      offsetX: e.clientX - rect.left,
-      offsetY: e.clientY - rect.top,
-      x: e.clientX,
-      y: e.clientY,
-      width: rect.width,
-    })
-    setDropIndex(index)
-    setDropLineTop(null)
-  }
-
   const headerMeta = (() => {
     const enabledCount = group.providers.filter(p => p.enabled).length
-    const base = `${group.providers.length} 个数据源 · ${enabledCount} 个已启用 · 越靠上越优先`
-    if (saveState === 'saving') return `${base} · 保存中…`
-    if (saveState === 'saved') return `${base} · 已保存`
-    return base
+    return `${group.providers.length} 个数据源 · ${enabledCount} 个已启用 · 按响应速度自动排序`
   })()
-
-  const draggedProvider = dragging ? providerMap.get(dragging.providerId) : null
-  const showDropLine = dragging != null && dropIndex != null && dropIndex !== dragging.fromIndex && dropLineTop != null
 
   return (
     <>
@@ -834,127 +670,47 @@ function MarketPriorityPanel({
           <Text className={listS.listHeaderMeta} block>
             {headerMeta}
           </Text>
-          <Text
-            className={mergeClasses(priorityS.saveHint, saveState !== 'idle' && priorityS.saveHintActive)}
-            block
-          >
-            拖动手柄或使用箭头调整顺序
+          <Text className={priorityS.saveHint} block>
+            数据来源按响应速度自动排序 · 速度越快越优先
           </Text>
         </div>
         <div
-          ref={listRef}
           className={mergeClasses(listS.listScroll, priorityS.dragList, 'opptrix-scroll', 'opptrix-scroll-hover')}
         >
-          {showDropLine && (
-            <div className={priorityS.dropLine} style={{ top: dropLineTop }} aria-hidden />
-          )}
-          {order.map((providerId, index) => {
-            const provider = providerMap.get(providerId)
-            if (!provider) return null
-            const isDraggingRow = dragging?.fromIndex === index
-            if (isDraggingRow) {
-              return (
-                <div
-                  key={`${providerId}-placeholder`}
-                  className={priorityS.dragRowPlaceholder}
-                  data-sort-row="0"
-                  data-sort-index={String(index)}
-                  aria-hidden
-                />
-              )
-            }
-            return (
-              <div
-                key={providerId}
-                data-sort-row="1"
-                data-sort-index={String(index)}
-                data-provider-id={providerId}
-                className={mergeClasses(
-                  priorityS.dragRow,
-                  hoverIndex === index && priorityS.dragRowHover,
-                  !provider.enabled && priorityS.dragRowDisabled,
-                )}
-                onMouseEnter={() => setHoverIndex(index)}
-                onMouseLeave={() => setHoverIndex(prev => (prev === index ? null : prev))}
-              >
-                <span
-                  className={mergeClasses(priorityS.dragHandle, 'opptrix-focusable')}
-                  role="button"
-                  tabIndex={0}
-                  aria-label={`拖动 ${provider.title} 调整顺序`}
-                  onPointerDown={e => handleDragStart(index, providerId, e)}
-                >
-                  <ReOrderRegular fontSize={16} />
-                </span>
-                <span className={priorityS.rankBadge}>{index + 1}</span>
-                <div className={priorityS.dragMain}>
-                  <Text className={priorityS.dragTitle} block title={provider.title}>
-                    {provider.title}
-                  </Text>
-                  <Text className={priorityS.dragMeta} block>
-                    {provider.enabled
-                      ? `生效优先级 ${provider.effectivePriority}`
-                      : '已停用 · 不参与回退'}
-                  </Text>
-                </div>
-                <div className={priorityS.moveControls}>
-                  <button
-                    type="button"
-                    className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
-                    aria-label={`上移 ${provider.title}`}
-                    disabled={index === 0 || saving || dragging != null}
-                    onClick={() => handleMoveBy(index, -1)}
-                  >
-                    <ChevronUpRegular fontSize={12} />
-                  </button>
-                  <button
-                    type="button"
-                    className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
-                    aria-label={`下移 ${provider.title}`}
-                    disabled={index >= order.length - 1 || saving || dragging != null}
-                    onClick={() => handleMoveBy(index, 1)}
-                  >
-                    <ChevronDownRegular fontSize={12} />
-                  </button>
-                </div>
+          {group.providers.map((provider, index) => (
+            <div
+              key={provider.providerId}
+              className={mergeClasses(
+                priorityS.dragRow,
+                hoverIndex === index && priorityS.dragRowHover,
+                !provider.enabled && priorityS.dragRowDisabled,
+              )}
+              onMouseEnter={() => setHoverIndex(index)}
+              onMouseLeave={() => setHoverIndex(prev => (prev === index ? null : prev))}
+            >
+              <span className={priorityS.rankBadge}>{index + 1}</span>
+              <div className={priorityS.dragMain}>
+                <Text className={priorityS.dragTitle} block title={provider.title}>
+                  {provider.title}
+                </Text>
+                <Text className={priorityS.dragMeta} block>
+                  {provider.enabled
+                    ? `生效优先级 ${provider.effectivePriority}`
+                    : '已停用 · 不参与回退'}
+                </Text>
               </div>
-            )
-          })}
+            </div>
+          ))}
         </div>
       </div>
-
-      {dragging && draggedProvider && (
-        <div
-          className={priorityS.floatPreview}
-          style={{
-            left: dragging.x - dragging.offsetX,
-            top: dragging.y - dragging.offsetY,
-            width: dragging.width,
-          }}
-          aria-hidden
-        >
-          <span className={priorityS.dragHandle}>
-            <ReOrderRegular fontSize={16} />
-          </span>
-          <span className={priorityS.rankBadge}>{dragging.fromIndex + 1}</span>
-          <div className={priorityS.dragMain}>
-            <Text className={priorityS.dragTitle} block>{draggedProvider.title}</Text>
-            <Text className={priorityS.dragMeta} block>
-              {draggedProvider.enabled ? '拖动至目标位置后松开' : '已停用'}
-            </Text>
-          </div>
-        </div>
-      )}
     </>
   )
 }
 
 export function ProviderPriorityPanels({
   catalog,
-  onReordered,
 }: {
   catalog: ProviderCatalogResponse
-  onReordered: (catalog: ProviderCatalogResponse) => void
 }) {
   const listS = useListStyles()
   const priorityS = usePriorityStyles()
@@ -975,7 +731,7 @@ export function ProviderPriorityPanels({
     return (
       <div className={listS.listPanel}>
         <div className={listS.emptyBlock}>
-          <Text className={listS.emptyTitle} block>暂无可排序的数据源</Text>
+          <Text className={listS.emptyTitle} block>暂无可用的数据源</Text>
           <Text className={listS.emptyDesc} block>请先在「提供商」中启用数据源。</Text>
         </div>
       </div>
@@ -1002,7 +758,6 @@ export function ProviderPriorityPanels({
         <MarketPriorityPanel
           key={activeGroup.marketGroup}
           group={activeGroup}
-          onReordered={onReordered}
         />
       )}
     </div>

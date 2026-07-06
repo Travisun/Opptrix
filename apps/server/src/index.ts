@@ -433,20 +433,6 @@ app.get('/api/data/providers', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.post<{
-  Body: {
-    market_group: string
-    provider_ids: string[]
-  }
-}>('/api/data/providers/reorder', async (req) => {
-  const body = req.body ?? { market_group: '', provider_ids: [] as string[] }
-  const r = await hub.dispatch('provider_reorder', {
-    market_group: body.market_group,
-    provider_ids: body.provider_ids,
-  })
-  return { success: r.success, data: r.data, message: r.message }
-})
-
 app.get('/api/data/providers/installed', async () => {
   const r = await hub.dispatch('provider_installed_list', {})
   return { success: r.success, data: r.data, message: r.message }
