@@ -66,11 +66,12 @@ export const EASTMONEY_CAPS = [
 export const EASTMONEY_SPEC: ProviderManifestSpec = {
   id: 'eastmoney',
   title: '东方财富',
-  subtitle: '代用户浏览东方财富网站 · 限速 2 秒/次，无并发',
+  subtitle: '代用户浏览东方财富网站 · 限速 2 秒/次',
   marketGroup: 'CN',
   defaultPriority: 100,
+  maxConcurrent: 3,
   capabilities: EASTMONEY_CAPS,
-  bindingsFor: (p) => cnFullSplit(EASTMONEY_CAPS, p),
+  bindingsFor: (p, maxConcurrent) => cnFullSplit(EASTMONEY_CAPS, p, maxConcurrent),
   settings: EASTMONEY_SETTINGS,
   supportsTest: true,
 }

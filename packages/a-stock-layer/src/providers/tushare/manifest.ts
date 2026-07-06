@@ -31,8 +31,9 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
   subtitle: '批量行情与基本面，需 Token',
   marketGroup: 'CN',
   defaultPriority: 90,
+  maxConcurrent: 5,
   capabilities: TUSHARE_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
       TUSHARE_CAPS.filter(c => ![
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
         Capability.GLOBAL_INDEX, Capability.EXCHANGE_RATE, Capability.MACRO_INDICATOR,
@@ -41,6 +42,8 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
       ].includes(c)),
       p,
+      undefined,
+      maxConcurrent,
     ),
   settings: TUSHARE_SETTINGS,
   supportsTest: true,

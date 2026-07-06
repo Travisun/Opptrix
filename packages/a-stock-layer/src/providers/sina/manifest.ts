@@ -17,11 +17,12 @@ export const SINA_CAPS = [
 export const SINA_SPEC: ProviderManifestSpec = {
   id: 'sina',
   title: '新浪财经',
-  subtitle: '新浪财经数据中心 · 代用户浏览（实时/K线/列表 · 限速 2 秒/次，无并发）',
+  subtitle: '新浪财经数据中心 · 代用户浏览（实时/K线/列表 · 限速 2 秒/次）',
   marketGroup: 'CN',
   defaultPriority: 24,
+  maxConcurrent: 3,
   capabilities: SINA_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     [
       Capability.STOCK_REALTIME,
       Capability.STOCK_KLINE,
@@ -31,6 +32,8 @@ export const SINA_SPEC: ProviderManifestSpec = {
     ],
     [Capability.INDEX_REALTIME, Capability.INDEX_KLINE],
     p,
+    undefined,
+    maxConcurrent,
   ),
   settings: SINA_SETTINGS,
   supportsTest: true,

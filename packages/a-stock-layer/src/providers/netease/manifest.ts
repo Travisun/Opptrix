@@ -19,8 +19,9 @@ export const NETEASE_SPEC: ProviderManifestSpec = {
   subtitle: '网易财经数据中心 · 接口已停服，默认关闭（可改由新浪财经替代）',
   marketGroup: 'CN',
   defaultPriority: 24,
+  maxConcurrent: 3,
   capabilities: NETEASE_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     [
       Capability.STOCK_REALTIME,
       Capability.STOCK_KLINE,
@@ -29,6 +30,8 @@ export const NETEASE_SPEC: ProviderManifestSpec = {
     ],
     [Capability.INDEX_REALTIME, Capability.INDEX_KLINE],
     p,
+    undefined,
+    maxConcurrent,
   ),
   settings: NETEASE_SETTINGS,
   supportsTest: true,

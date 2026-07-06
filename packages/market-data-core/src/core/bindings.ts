@@ -11,12 +11,14 @@ export function bindingKey(market: Market, assetClass: AssetClass, capability: C
 export function cnEquityBindings(
   capabilities: Capability[],
   defaultPriority: number,
+  maxConcurrent?: number,
 ): ProviderBinding[] {
   return capabilities.map(capability => ({
     market: 'CN',
     assetClass: 'EQUITY',
     capability,
     defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }))
 }
 
@@ -30,16 +32,17 @@ export const CN_ETF_CAPABILITIES: Capability[] = [
   Capability.ETF_PROFILE,
 ]
 
-export function cnEtfBindings(defaultPriority: number): ProviderBinding[] {
+export function cnEtfBindings(defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
   return CN_ETF_CAPABILITIES.map(capability => ({
     market: 'CN',
     assetClass: 'ETF',
     capability,
     defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }))
 }
 
-export function cnIndexBindings(capabilities: Capability[], defaultPriority: number): ProviderBinding[] {
+export function cnIndexBindings(capabilities: Capability[], defaultPriority: number, maxConcurrent?: number): ProviderBinding[] {
   return capabilities
     .filter(c => [
       Capability.INDEX_REALTIME,
@@ -51,30 +54,35 @@ export function cnIndexBindings(capabilities: Capability[], defaultPriority: num
       assetClass: 'INDEX',
       capability,
       defaultPriority,
+      ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
     }))
 }
 
 export function usEquityBindings(
   capabilities: Capability[],
   defaultPriority: number,
+  maxConcurrent?: number,
 ): ProviderBinding[] {
   return capabilities.map(capability => ({
     market: 'US',
     assetClass: 'EQUITY',
     capability,
     defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }))
 }
 
 export function cryptoSpotBindings(
   capabilities: Capability[],
   defaultPriority: number,
+  maxConcurrent?: number,
 ): ProviderBinding[] {
   return capabilities.map(capability => ({
     market: 'CRYPTO',
     assetClass: 'CRYPTO_SPOT',
     capability,
     defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }))
 }
 
@@ -82,11 +90,13 @@ export function regionalEquityBindings(
   market: 'JP' | 'KR' | 'HK',
   capabilities: Capability[],
   defaultPriority: number,
+  maxConcurrent?: number,
 ): ProviderBinding[] {
   return capabilities.map(capability => ({
     market,
     assetClass: 'EQUITY',
     capability,
     defaultPriority,
+    ...(maxConcurrent !== undefined ? { maxConcurrent } : {}),
   }))
 }

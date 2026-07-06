@@ -30,8 +30,9 @@ export const BAOSTOCK_SPEC: ProviderManifestSpec = {
   subtitle: '免费开源 A 股历史数据，无需注册',
   marketGroup: 'CN',
   defaultPriority: 105,
+  maxConcurrent: 2,
   capabilities: BAOSTOCK_CAPS,
-  bindingsFor: (p) => cnEquityEtfIndex(
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     BAOSTOCK_CAPS.filter(c => ![
       Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
     ].includes(c)),
@@ -39,6 +40,8 @@ export const BAOSTOCK_SPEC: ProviderManifestSpec = {
       Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
     ].includes(c)),
     p,
+    undefined,
+    maxConcurrent,
   ),
   settings: BAOSTOCK_SETTINGS,
   supportsTest: true,

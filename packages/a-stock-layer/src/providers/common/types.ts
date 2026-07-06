@@ -9,9 +9,11 @@ export interface ProviderManifestSpec {
   marketGroup: ProviderManifest['marketGroup']
   defaultPriority: number
   capabilities: Capability[]
-  bindingsFor: (priority: number) => ProviderBinding[]
+  bindingsFor: (priority: number, maxConcurrent?: number) => ProviderBinding[]
   settings?: ProviderSettingsDefinition
   supportsTest?: boolean
+  /** 最大并发请求数（负载均衡硬限制） */
+  maxConcurrent?: number
 }
 
 export function buildManifest(spec: ProviderManifestSpec): ProviderManifest {

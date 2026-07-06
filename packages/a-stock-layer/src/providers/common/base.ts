@@ -11,6 +11,8 @@ export abstract class BaseDriver {
 
   /** true = 驱动内部有限流+HTTP超时，引擎不再叠加外层超时 */
   readonly selfThrottled?: boolean
+  /** 最大并发请求数（负载均衡硬限制） */
+  readonly maxConcurrent?: number
 
   /** Multi-market bindings; default = CN/EQUITY for all capabilities */
   bindings(): ProviderBinding[] {

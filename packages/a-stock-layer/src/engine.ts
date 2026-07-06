@@ -8,6 +8,7 @@ import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
 import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
 import { ProviderSpeedRanker } from './core/speed-ranker.js'
+import { LoadBalancer } from './core/load-balancer.js'
 import { validateResponse } from './core/data-validator.js'
 import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
@@ -52,6 +53,7 @@ export class MarketDataEngine {
   readonly providerLoader: ProviderLoader
   private readonly queryPlans: QueryPlanExecutor
   private readonly speedRanker: ProviderSpeedRanker
+  private readonly loadBalancer: LoadBalancer
   private providerDirWatcher?: ProviderDirWatcher
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
@@ -83,6 +85,9 @@ export class MarketDataEngine {
     this.registry.refreshPriorities(configStore)
     this.speedRanker = new ProviderSpeedRanker(getUserDataStore().speedRanking)
     this.registry.attachSpeedRanker(this.speedRanker)
+    this.loadBalancer = new LoadBalancer({ defaultMaxConcurrent: 3 })
+    this.loadBalancer.attachSpeedRanker(this.speedRanker)
+    this.registry.attachLoadBalancer(this.loadBalancer)
     this.providerCatalog = createProviderCatalog(this.registry)
     this.queryPlans = new QueryPlanExecutor(this.registry, this.cache, this.speedRanker)
     void this.speedRanker.warmUp(this.registry)
@@ -106,16 +111,27 @@ export class MarketDataEngine {
       if (cached) return { success: true, data: cached, source: 'cache', cached: true }
     }
 
-    const drivers = this.registry.getProvidersWithFallback(market, assetClass, cap)
-    if (!drivers.length) {
-      return { success: false, error: `没有可用的 provider 支持 [${market}/${assetClass}/${cap}]` }
-    }
-
     const health = getProviderHealthTracker()
     const capStr = String(cap)
     let lastError = ''
 
-    for (const driver of drivers) {
+    // 最多尝试 3 个 provider（负载均衡选择 + fallback）
+    const attempted = new Set<string>()
+    for (let attempt = 0; attempt < 3; attempt++) {
+      // 负载感知选择：从候选中选一个最优的
+      const driver = this.registry.getLoadAwareProvider(market, assetClass, cap)
+      if (!driver) {
+        return { success: false, error: `没有可用的 provider 支持 [${market}/${assetClass}/${cap}]` }
+      }
+      if (attempted.has(driver.name)) {
+        // 已经试过这个 provider，取下一个
+        const allDrivers = this.registry.getProvidersWithFallback(market, assetClass, cap)
+        const next = allDrivers.find(d => !attempted.has(d.name))
+        if (!next) break
+        // 用 next 替代
+      }
+      attempted.add(driver.name)
+
       // Circuit breaker: skip unhealthy provider×capability
       if (health.shouldSkip(driver.name, capStr)) {
         const h = health.getHealth(driver.name, capStr)
@@ -129,11 +145,10 @@ export class MarketDataEngine {
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
 
+      // 通知负载均衡器：请求开始
+      this.registry.notifyAcquire(driver.name)
+
       try {
-        // Self-throttled providers (eastmoney/sina/netease/...) have internal
-        // rate-limit queues; wrapping them with the engine timeout counts queue
-        // wait against the budget. Skip the outer timeout for those drivers —
-        // their own httpGet timeout (15s) is the effective deadline.
         const call = () => fn.apply(driver, args) as Promise<unknown[] | null>
         const t0 = Date.now()
         const data = driver.selfThrottled
@@ -141,21 +156,25 @@ export class MarketDataEngine {
           : await this.withProviderTimeout(call, providerTimeoutMs, driver.name)
         const elapsed = Date.now() - t0
 
-        // Data quality validation — rejects empty/invalid responses
         if (!data?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
+          lastError = `${driver.name}: 空数据`
           continue
         }
 
         const validation = validateResponse(cap, data)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
+          lastError = `${driver.name}: ${validation.reason}`
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker.recordResult(driver.name, capStr, elapsed, true)
         if (useCache && cacheType) {
           this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) }, driver.name)
@@ -165,6 +184,7 @@ export class MarketDataEngine {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
         health.recordFailure(driver.name, capStr, msg)
+        this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker.shouldRebuildIndices(driver.name, capStr)) {
           this.registry.rebuildIndicesWithRanking()

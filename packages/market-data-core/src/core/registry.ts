@@ -23,6 +23,14 @@ export interface SpeedRankingBridge {
   shouldRebuild(providerId: string, capability: string): boolean
 }
 
+/** Load balancer bridge — provided by a-stock-layer when available */
+export interface LoadBalancerBridge {
+  registerProvider(providerId: string, maxConcurrent: number): void
+  route(capability: string, candidates: string[]): string
+  acquire(providerId: string): void
+  release(providerId: string, responseTimeMs: number, success: boolean): void
+}
+
 /** Driver registry — capability index with (market × assetClass) scope */
 export class DriverRegistry {
   private drivers = new Map<string, RegistryProvider>()
@@ -31,6 +39,7 @@ export class DriverRegistry {
   private effectivePriorityCache = new Map<string, number>()
   private configStore: ProviderConfigBridge | null = null
   private speedRanker: SpeedRankingBridge | null = null
+  private loadBalancer: LoadBalancerBridge | null = null
 
   bindConfigStore(store: ProviderConfigBridge) {
     this.configStore = store
@@ -39,6 +48,10 @@ export class DriverRegistry {
 
   attachSpeedRanker(ranker: SpeedRankingBridge) {
     this.speedRanker = ranker
+  }
+
+  attachLoadBalancer(lb: LoadBalancerBridge) {
+    this.loadBalancer = lb
   }
 
   refreshPriorities(store?: ProviderConfigBridge) {
@@ -94,7 +107,7 @@ export class DriverRegistry {
   private sortBindingList(bindingKey: string, list: string[], useSpeed: boolean) {
     if (useSpeed) {
       const ranked = this.speedRanker!.getRankedProviders(bindingKey)
-      const order = new Map(ranked.map((name, i) => [name, i]))
+      const order = new Map(ranked.map((name, i: number) => [name, i]))
       list.sort((a, b) => {
         const ai = order.get(a) ?? Number.MAX_SAFE_INTEGER
         const bi = order.get(b) ?? Number.MAX_SAFE_INTEGER
@@ -139,6 +152,9 @@ export class DriverRegistry {
       ? this.configStore.effectivePriority(driver.name, driver.priority)
       : driver.priority
     this.effectivePriorityCache.set(driver.name, effective)
+    // 注册到负载均衡器
+    const maxConcurrent = driver.maxConcurrent ?? 3
+    this.loadBalancer?.registerProvider(driver.name, maxConcurrent)
     this.rebuildIndices()
   }
 
@@ -196,6 +212,32 @@ export class DriverRegistry {
       return this.getProviders(market, 'EQUITY', cap)
     }
     return primary
+  }
+
+  /**
+   * 负载感知的 provider 选择：从候选列表中选一个最优的。
+   * 由 LoadBalancer 决定，考虑当前在途请求数和预测释放时间。
+   */
+  getLoadAwareProvider(market: Market, assetClass: AssetClass, cap: Capability): RegistryProvider | null {
+    const candidates = this.getProviders(market, assetClass, cap)
+    if (!candidates.length) return null
+    if (candidates.length === 1) return candidates[0]!
+    if (!this.loadBalancer) return candidates[0]!
+
+    const capStr = String(cap)
+    const candidateNames = candidates.map(d => d.name)
+    const selected = this.loadBalancer.route(capStr, candidateNames)
+    return candidates.find(d => d.name === selected) ?? candidates[0]!
+  }
+
+  /** 通知负载均衡器请求开始 */
+  notifyAcquire(providerId: string): void {
+    this.loadBalancer?.acquire(providerId)
+  }
+
+  /** 通知负载均衡器请求结束 */
+  notifyRelease(providerId: string, responseTimeMs: number, success: boolean): void {
+    this.loadBalancer?.release(providerId, responseTimeMs, success)
   }
 
   getDriversForCapability(cap: Capability): RegistryProvider[] {

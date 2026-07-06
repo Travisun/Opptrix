@@ -6,4 +6,6 @@ export interface ProviderBinding {
   assetClass: AssetClass
   capability: string
   defaultPriority: number
+  /** 该 provider 最大并发请求数（负载均衡硬限制） */
+  maxConcurrent?: number
 }

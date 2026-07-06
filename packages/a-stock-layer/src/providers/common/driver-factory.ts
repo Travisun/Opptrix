@@ -18,12 +18,15 @@ export function applyManifestSpec(
   Object.defineProperties(DriverClass.prototype, {
     name: { get() { return spec.id } },
     priority: { get() { return spec.defaultPriority } },
+    ...(spec.maxConcurrent !== undefined
+      ? { maxConcurrent: { get() { return spec.maxConcurrent } } }
+      : {}),
   })
   DriverClass.prototype.capabilities = function capabilities() {
     return spec.capabilities
   }
   DriverClass.prototype.bindings = function bindings() {
-    return spec.bindingsFor(this.priority)
+    return spec.bindingsFor(this.priority, this.maxConcurrent)
   }
   if (opts?.isRuntimeEnabled) {
     ;(DriverClass.prototype as BaseDriver & { isRuntimeEnabled: () => boolean }).isRuntimeEnabled =

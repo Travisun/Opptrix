@@ -14,15 +14,16 @@ export function cnEquityEtfIndex(
   indexCaps: Capability[],
   p: number,
   etfCaps: Capability[] = [Capability.STOCK_REALTIME, Capability.STOCK_KLINE],
+  maxConcurrent?: number,
 ) {
   return [
-    ...cnEquityBindings(equityCaps, p),
-    ...cnEtfBindings(p).filter(b => etfCaps.includes(b.capability as Capability)),
-    ...cnIndexBindings(indexCaps, p),
+    ...cnEquityBindings(equityCaps, p, maxConcurrent),
+    ...cnEtfBindings(p, maxConcurrent).filter(b => etfCaps.includes(b.capability as Capability)),
+    ...cnIndexBindings(indexCaps, p, maxConcurrent),
   ]
 }
 
-export function cnFullSplit(caps: Capability[], p: number) {
+export function cnFullSplit(caps: Capability[], p: number, maxConcurrent?: number) {
   const etfSet = new Set<Capability>(CN_ETF_CAPABILITIES)
   const indexSet = new Set<Capability>([
     Capability.INDEX_REALTIME,
@@ -31,9 +32,9 @@ export function cnFullSplit(caps: Capability[], p: number) {
   ])
   const equityCaps = caps.filter(c => !etfSet.has(c) && !indexSet.has(c))
   return [
-    ...cnEquityBindings(equityCaps, p),
-    ...cnEtfBindings(p),
-    ...cnIndexBindings(caps.filter(c => indexSet.has(c)), p),
+    ...cnEquityBindings(equityCaps, p, maxConcurrent),
+    ...cnEtfBindings(p, maxConcurrent),
+    ...cnIndexBindings(caps.filter(c => indexSet.has(c)), p, maxConcurrent),
   ]
 }
 

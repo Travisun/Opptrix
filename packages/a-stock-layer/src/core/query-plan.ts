@@ -187,22 +187,26 @@ export class QueryPlanExecutor {
     return bound.filter(d => d.supports(plan.capability) && isProviderRunnable(d, this.registry))
   }
 
-  /** sequential 策略：按优先级依次尝试，首个成功即返回 */
+  /** sequential 策略：负载感知选择 + fallback */
   private async executeSequential<T>(
     plan: QueryPlan,
     ctx: QueryExecutionContext,
   ): Promise<QueryResult<T[]>> {
-    const drivers = this.resolveDrivers(plan, ctx)
-    if (!drivers.length) {
-      const key = bindingKey(plan.market, ctx.assetClass ?? plan.assetClass, plan.capability)
-      return { success: false, error: `没有可用的 provider 支持 [${key}]` }
-    }
-
     const health = getProviderHealthTracker()
     const capStr = String(plan.capability)
     let lastError = ''
 
-    for (const driver of drivers) {
+    const attempted = new Set<string>()
+    for (let attempt = 0; attempt < 3; attempt++) {
+      const assetClass = ctx.assetClass ?? resolveAssetClassFromArgs(ctx.args, plan.assetClass)
+      const driver = this.registry.getLoadAwareProvider(plan.market, assetClass, plan.capability)
+      if (!driver) {
+        const key = bindingKey(plan.market, assetClass, plan.capability)
+        return { success: false, error: `没有可用的 provider 支持 [${key}]` }
+      }
+      if (attempted.has(driver.name)) break
+      attempted.add(driver.name)
+
       if (health.shouldSkip(driver.name, capStr)) {
         const h = health.getHealth(driver.name, capStr)
         if (h?.state === 'open') {
@@ -214,6 +218,8 @@ export class QueryPlanExecutor {
       const fn = (driver as unknown as Record<string, unknown>)[ctx.method] as
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
+
+      this.registry.notifyAcquire(driver.name)
       try {
         const call = () => fn.apply(driver, ctx.args) as Promise<unknown[] | null>
         const t0 = Date.now()
@@ -223,24 +229,30 @@ export class QueryPlanExecutor {
         const elapsed = Date.now() - t0
         if (!data?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
+          lastError = `${driver.name}: 空数据`
           continue
         }
 
         const validation = validateResponse(plan.capability, data)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
+          lastError = `${driver.name}: ${validation.reason}`
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         return { success: true, data: data as T[], source: driver.name, cached: false }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
         health.recordFailure(driver.name, capStr, msg)
+        this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker?.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {
           this.registry.rebuildIndicesWithRanking()
@@ -294,6 +306,8 @@ export class QueryPlanExecutor {
         markets?: Record<string, import('../utils/helpers.js').StockMarket | undefined>,
       ) => Promise<StockRealtime[] | null> | undefined
       if (typeof fn !== 'function') continue
+
+      this.registry.notifyAcquire(driver.name)
       try {
         const call = () => fn(batch, markets) as Promise<StockRealtime[] | null>
         const t0 = Date.now()
@@ -303,6 +317,7 @@ export class QueryPlanExecutor {
         const elapsed = Date.now() - t0
         if (!result?.length) {
           health.recordInvalidResponse(driver.name, capStr)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
@@ -310,16 +325,19 @@ export class QueryPlanExecutor {
         const validation = validateResponse(plan.capability, result)
         if (!validation.valid) {
           health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
         health.recordSuccess(driver.name, capStr)
+        this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         pushRows(result)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         health.recordFailure(driver.name, capStr, msg)
+        this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker?.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {
           this.registry.rebuildIndicesWithRanking()
