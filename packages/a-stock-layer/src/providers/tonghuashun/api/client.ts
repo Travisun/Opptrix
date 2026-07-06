@@ -1,4 +1,4 @@
-import { httpGetWithRetry } from '../../../utils/http.js'
+import { tonghuashunClient } from './http-client.js'
 import { FUYAO_BASE_URL, loadTonghuashunConfig } from '../config.js'
 
 export class FuyaoApiError extends Error {
@@ -50,10 +50,10 @@ export class FuyaoClient {
     let lastErr: unknown
     for (let attempt = 0; attempt < 3; attempt++) {
       try {
-        const resp = await httpGetWithRetry(url, cleanParams(params), {
+        const resp = await tonghuashunClient.fetch(url, {
+          method: 'GET',
+          headers: this.headers(),
           timeoutMs: 30000,
-          extraHeaders: this.headers(),
-          maxRetries: 0,
         })
         const payload = await resp.json() as {
           code?: number
