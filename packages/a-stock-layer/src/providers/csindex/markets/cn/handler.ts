@@ -46,6 +46,25 @@ export class CsindexMarketHandler extends MarketHandlerShell {
     }
   }
 
+  async stockZhIndexHistCsindex(symbol = '000928', startDate = '20180526', endDate = '20240604'): Promise<Record<string, unknown>[] | null> {
+    try {
+      const json = await httpGet('https://www.csindex.com.cn/csindex-home/perf/index-perf', {
+        indexCode: symbol, startDate, endDate,
+      }, 15000, HEADERS)
+      if (!json?.data) return null
+      const data = json.data as Record<string, unknown>[]
+      return data.map(it => ({
+        date: String(it['日期'] ?? it.date ?? '').slice(0, 10),
+        code: String(it['指数代码'] ?? it.indexCode ?? ''),
+        open: safeFloat(it['开盘'] ?? it.open), high: safeFloat(it['最高'] ?? it.high),
+        low: safeFloat(it['最低'] ?? it.low), close: safeFloat(it['收盘'] ?? it.close),
+        change: safeFloat(it['涨跌'] ?? it.change), changePct: safeFloat(it['涨跌幅'] ?? it.changePct),
+        volume: safeFloat(it['成交量'] ?? it.volume), amount: safeFloat(it['成交金额'] ?? it.amount),
+        sampleCount: safeFloat(it['样本数量'] ?? it.sampleCount), pe: safeFloat(it['滚动市盈率'] ?? it.pe),
+      }))
+    } catch { return null }
+  }
+
   async indexConstituents(indexCode: string) {
     try {
       const c = normalizeCode(indexCode)

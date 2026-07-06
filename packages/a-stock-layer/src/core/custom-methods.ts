@@ -246,44 +246,7 @@ const EASTMONEY_EXTRA_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
-const MISC_DATA_CUSTOM: CustomMethodDef[] = [
-  {
-    method: 'lhbDetail',
-    description: '龙虎榜详情（营业部买卖明细）',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
-    ],
-    example: '{"provider":"misc-data","method":"lhbDetail","args":["2026-07-04"]}',
-  },
-  {
-    method: 'lhbJgStatistic',
-    description: '龙虎榜机构席位统计',
-    params: [],
-  },
-  {
-    method: 'lhbStockStatistic',
-    description: '个股龙虎榜历史统计',
-    params: [
-      { name: 'code', type: 'string', description: '股票代码', required: true },
-    ],
-  },
-  {
-    method: 'gdfxHoldingCount',
-    description: '股东户数变动 Top100（散户筹码集中度）',
-    params: [],
-  },
-  {
-    method: 'gdfxHoldingDetail',
-    description: '个股股东户数历史详情',
-    params: [
-      { name: 'code', type: 'string', description: '股票代码', required: true },
-    ],
-  },
-  {
-    method: 'marketValuation',
-    description: '全市场估值指标（PE/PB/股息率）',
-    params: [],
-  },
+const AKSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'stockALgPe',
     description: 'A股等权重市盈率历史（乐咕）',
@@ -319,60 +282,92 @@ const MISC_DATA_CUSTOM: CustomMethodDef[] = [
     ],
   },
   {
-    method: 'profitForecast',
-    description: '个股盈利预测（EPS/营收/净利润）',
-    params: [
-      { name: 'code', type: 'string', description: '股票代码', required: true },
-    ],
-  },
-  {
-    method: 'institutionRecommend',
-    description: '机构推荐汇总（买入/增持/中性/减持）',
+    method: 'bondSpotQuote',
+    description: '银行间债券做市报价',
     params: [],
   },
   {
-    method: 'ipoApply',
-    description: '新股申购与中签',
+    method: 'bondSpotDeal',
+    description: '银行间债券现券成交行情',
     params: [],
   },
   {
-    method: 'marginDetailSse',
-    description: '沪市融资融券明细',
+    method: 'bondChinaYield',
+    description: '国债收益率曲线',
     params: [
-      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
+      { name: 'startDate', type: 'string', description: '起始日期 YYYY-MM-DD', required: true },
+      { name: 'endDate', type: 'string', description: '结束日期 YYYY-MM-DD', required: true },
     ],
   },
   {
-    method: 'dividendDetail',
-    description: '个股分红配送历史',
-    params: [
-      { name: 'code', type: 'string', description: '股票代码', required: true },
-    ],
-  },
-  {
-    method: 'lockupExpiry',
-    description: '限售解禁（近期可解禁股票）',
-    params: [
-      { name: 'code', type: 'string', description: '可选股票代码' },
-    ],
-  },
-  {
-    method: 'buyback',
-    description: '股票回购数据',
+    method: 'bondZhCov',
+    description: '可转债列表',
     params: [],
   },
   {
-    method: 'blockTradeDetail',
-    description: '大宗交易每日明细',
+    method: 'bondCbJsl',
+    description: '集思录可转债列表',
+    params: [],
+  },
+  {
+    method: 'amacMemberInfo',
+    description: '私募基金协会会员机构',
+    params: [],
+  },
+  {
+    method: 'amacManagerInfo',
+    description: '私募基金管理人信息',
+    params: [],
+  },
+  {
+    method: 'amacFundInfo',
+    description: '私募基金产品信息',
     params: [
-      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD' },
+      { name: 'startPage', type: 'number', description: '起始页码', required: true },
+      { name: 'endPage', type: 'number', description: '结束页码', required: true },
     ],
   },
   {
-    method: 'shareStructure',
-    description: '个股股本结构',
+    method: 'futuresSettle',
+    description: '期货结算价',
     params: [
-      { name: 'code', type: 'string', description: '股票代码', required: true },
+      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD', required: true },
+      { name: 'market', type: 'string', description: '交易所代码', required: true },
+    ],
+  },
+  {
+    method: 'futuresZhDailySina',
+    description: '期货日K线（新浪）',
+    params: [
+      { name: 'symbol', type: 'string', description: '合约代码', required: true },
+    ],
+  },
+  {
+    method: 'currencyLatest',
+    description: '实时汇率',
+    params: [
+      { name: 'base', type: 'string', description: '基准货币', default: 'USD' },
+    ],
+  },
+  {
+    method: 'currencyConvert',
+    description: '货币兑换',
+    params: [
+      { name: 'from', type: 'string', description: '源货币', default: 'USD' },
+      { name: 'to', type: 'string', description: '目标货币', default: 'CNY' },
+      { name: 'amount', type: 'number', description: '金额', default: 10000 },
+    ],
+  },
+  {
+    method: 'movieBoxofficeRealtime',
+    description: '实时票房',
+    params: [],
+  },
+  {
+    method: 'newsCctv',
+    description: '央视新闻联播文字稿',
+    params: [
+      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD', required: true },
     ],
   },
 ]
@@ -381,7 +376,7 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'eastmoney', methods: EASTMONEY_EXTRA_CUSTOM },
-  { providerId: 'misc-data', methods: MISC_DATA_CUSTOM },
+  { providerId: 'akshare', methods: AKSHARE_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {

@@ -106,16 +106,16 @@ describe('EastMoney research — fund methods', () => {
 })
 
 // ═══════════════════════════════════════════════════════════════
-// MiscDataHandler — AMAC methods
+// AkshareHandler — AMAC methods
 // ═══════════════════════════════════════════════════════════════
 
-describe('MiscDataHandler — AMAC private fund APIs', () => {
-  let handler: Awaited<typeof import('../src/providers/misc-data/markets/cn/handler')>['MiscDataHandler']
+describe('AkshareHandler — AMAC private fund APIs', () => {
+  let handler: Awaited<typeof import('../src/providers/akshare/markets/cn/handler')>['AkshareHandler']
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    const mod = await import('../src/providers/misc-data/markets/cn/handler')
-    handler = new mod.MiscDataHandler()
+    const mod = await import('../src/providers/akshare/markets/cn/handler')
+    handler = new mod.AkshareHandler()
   })
 
   function amacResponse(data: unknown[]) {
@@ -166,12 +166,12 @@ describe('MiscDataHandler — AMAC private fund APIs', () => {
 // ═══════════════════════════════════════════════════════════════
 
 describe('Currency APIs (currencyscoop)', () => {
-  let handler: Awaited<typeof import('../src/providers/misc-data/markets/cn/handler')>['MiscDataHandler']
+  let handler: Awaited<typeof import('../src/providers/akshare/markets/cn/handler')>['AkshareHandler']
 
   beforeEach(async () => {
     vi.clearAllMocks()
-    const mod = await import('../src/providers/misc-data/markets/cn/handler')
-    handler = new mod.MiscDataHandler()
+    const mod = await import('../src/providers/akshare/markets/cn/handler')
+    handler = new mod.AkshareHandler()
   })
 
   describe('currencyLatest', () => {
