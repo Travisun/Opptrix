@@ -20,7 +20,6 @@ export const HTTP_DEFAULT_HEADERS = {
   ),
   Accept: 'application/json, text/plain, */*',
   'Accept-Language': 'zh-CN,zh;q=0.9,en;q=0.8',
-  Referer: 'https://quote.eastmoney.com/',
 }
 
 /** 需要重试的 HTTP 状态码 */
