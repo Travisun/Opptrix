@@ -24,10 +24,6 @@ export class AkshareHttpClient extends ProviderHttpClient {
     super({
       providerId: 'akshare',
       defaultHeaders: AKSHARE_HEADERS,
-      rateLimit: {
-        enabled: true,
-        intervalMs: 1000,
-      },
     })
   }
 
