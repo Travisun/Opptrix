@@ -6,6 +6,7 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
+import { SINAFINANCE_MANIFEST } from './sinafinance/manifest.js'
 import { WEBFEED_MANIFEST } from './webfeed/manifest.js'
 import { TENCENT_MANIFEST } from './tencent/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
@@ -17,6 +18,7 @@ export { OKX_SETTINGS } from './okx/settings.js'
 export { BAOSTOCK_SETTINGS } from './baostock/settings.js'
 export { ZZSHARE_SETTINGS } from './zzshare/settings.js'
 export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
+export { SINAFINANCE_SETTINGS } from './sinafinance/settings.js'
 export { WEBFEED_SETTINGS } from './webfeed/settings.js'
 export { TENCENT_SETTINGS } from './tencent/settings.js'
 
@@ -30,6 +32,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
   TENCENT_MANIFEST,
+  SINAFINANCE_MANIFEST,
   WEBFEED_MANIFEST,
 ]
 

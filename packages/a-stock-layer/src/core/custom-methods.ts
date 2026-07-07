@@ -244,6 +244,212 @@ const TENCENT_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
+const SINA_CUSTOM: CustomMethodDef[] = [
+  {
+    method: 'sinaCorpInfo',
+    description: '公司完整资料（简介、行业、概念，来源 F10 HTML）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaExecutives',
+    description: '公司高管 / 董事会成员列表',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaMajorShareholders',
+    description: '主要股东持股明细',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundHoldings',
+    description: '基金持股明细（含多期截止日）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaConceptPlates',
+    description: '所属概念板块（含行情中心 node）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaRelatedSecurities',
+    description: '相关证券（可转债、同公司品种等）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaIndexMembership',
+    description: '所属指数成分历史',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaCirculateShareholders',
+    description: '流通股东持股明细',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaDividends',
+    description: '分红送配历史（F10 发行分配）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFinancialPivot',
+    description: '财务三表 / 指标 / 杜邦透视（guide|profit|balance|cashflow|dupont）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'sheet', type: 'string', description: 'guide|profit|balance|cashflow|dupont', required: false },
+    ],
+  },
+  {
+    method: 'sinaStockStructure',
+    description: '股本结构变动历史',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaCorpRule',
+    description: '公司章程正文',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaAnnualBulletins',
+    description: '年度报告公告列表',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaShareUnlock',
+    description: '限售解禁计划',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaMarginTrading',
+    description: '融资融券快照（自全市场页筛选）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaDragonTigerStock',
+    description: '个股单日龙虎榜记录',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'date', type: 'string', description: '交易日 YYYY-MM-DD', required: false },
+    ],
+  },
+  {
+    method: 'sinaPriceDistribution',
+    description: '分价统计（当日价位成交分布）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaLargeOrders',
+    description: '大单成交追踪明细',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaPerfForecast',
+    description: '业绩预告（F10 vFD_AchievementNotice）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaBulletins',
+    description: '定期报告公告列表（ndbg 年报 / zqbg 半年报 / yjdbg 一季报 / sjdbg 三季报）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'pageType', type: 'string', description: 'ndbg|zqbg|yjdbg|sjdbg', required: false },
+    ],
+  },
+  {
+    method: 'sinaAllBulletins',
+    description: '公司公告全量列表（分页；返回日期、标题、链接）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'page', type: 'number', description: '页码，从 1 开始', required: false },
+    ],
+  },
+  {
+    method: 'sinaBulletinDetail',
+    description: '公告详情正文（有 PDF 附件则提取 PDF 文本，否则提取网页正文）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'bulletinId', type: 'string', description: '公告 id（列表 link 中的 id 参数）', required: true },
+    ],
+  },
+  {
+    method: 'sinaInsiderTrades',
+    description: '内部交易（董监高持股变动）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'bdate', type: 'string', description: '起始日期 YYYY-MM-DD', required: false },
+      { name: 'edate', type: 'string', description: '结束日期 YYYY-MM-DD', required: false },
+    ],
+  },
+  {
+    method: 'sinaStockComment',
+    description: '千股千评（综合评价与行情快照）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaPriceHistory',
+    description: '持仓分析 / 历史分价分布（默认近 7 日）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+      { name: 'startDate', type: 'string', description: '起始日期 YYYY-MM-DD', required: false },
+      { name: 'endDate', type: 'string', description: '结束日期 YYYY-MM-DD', required: false },
+    ],
+  },
+  {
+    method: 'sinaIpoInfo',
+    description: '新股发行（IPO）资料',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaAddStockHistory',
+    description: '增发情况历史',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+]
+
+/** @deprecated 与 {@link SINA_CUSTOM} 相同，保留 webfeed 兼容 */
+const WEBFEED_CUSTOM = SINA_CUSTOM
+
+const SINAFINANCE_CUSTOM = SINA_CUSTOM
+
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'zzUplimitHot',
@@ -290,6 +496,8 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'tencent', methods: TENCENT_CUSTOM },
+  { providerId: 'sinafinance', methods: SINAFINANCE_CUSTOM },
+  { providerId: 'webfeed', methods: WEBFEED_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {

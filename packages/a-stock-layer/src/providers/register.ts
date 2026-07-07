@@ -7,6 +7,7 @@ import { BaostockDriver } from './baostock/driver.js'
 import { ZzshareDriver } from './zzshare/driver.js'
 import { TonghuashunDriver } from './tonghuashun/driver.js'
 import { WebfeedDriver } from './webfeed/driver.js'
+import { SinafinanceDriver } from './sinafinance/driver.js'
 import { TencentDriver } from './tencent/driver.js'
 
 /** Register built-in data providers. */
@@ -20,6 +21,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new ZzshareDriver(),
     new TonghuashunDriver(),
     new TencentDriver(),
+    new SinafinanceDriver(),
     new WebfeedDriver(),
   ]
   for (const d of drivers) registry.register(d)
@@ -34,6 +36,7 @@ export {
   BaostockDriver,
   ZzshareDriver,
   TonghuashunDriver,
-  WebfeedDriver,
   TencentDriver,
+  SinafinanceDriver,
+  WebfeedDriver,
 }

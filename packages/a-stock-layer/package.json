@@ -22,6 +22,7 @@
   "dependencies": {
     "@opptrix/market-data-core": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*"
+    "@opptrix/user-store": "*",
+    "pdf-parse": "^1.1.1"
   }
 }

@@ -4,14 +4,15 @@ import { fetchJson, fetchText } from './http.js'
 import { toSinaIndexListSymbol, toSinaKlineSymbol, toSinaListSymbol } from './symbols.js'
 import { parseHqLine } from '../normalize/quote.js'
 import { mapSinaKlineRows } from '../normalize/kline.js'
+import { SINA_BOARD_NODE_MAP, SINA_KLINE_SCALE, SINA_REFERER } from './types.js'
+import { buildSinaStockReferer } from './types.js'
 
 const HQ_LIST_URL = 'https://hq.sinajs.cn/list='
 const KLINE_URL = 'https://money.finance.sina.com.cn/quotes_service/api/json_v2.php/CN_MarketData.getKLineData'
 const MARKET_CENTER_URL = 'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeData'
 const MARKET_COUNT_URL = 'https://vip.stock.finance.sina.com.cn/quotes_service/api/json_v2.php/Market_Center.getHQNodeStockCount'
 
-/** 新浪接口要求 Referer，其余不附加绕过头 */
-const SINA_REFERER = 'https://finance.sina.com.cn/'
+export { SINA_REFERER, SINA_KLINE_SCALE, SINA_BOARD_NODE_MAP } from './types.js'
 
 export const SINA_GLOBAL_INDEX: Record<string, string> = {
   dji: 'gb_$dji',
@@ -51,24 +52,37 @@ export async function fetchSinaIndexQuote(code: string) {
   return fetchSinaHqList([toSinaIndexListSymbol(code)])
 }
 
-export async function fetchSinaKlineRows(code: string, datalen = 1023) {
+export async function fetchSinaKlineRows(
+  code: string,
+  datalen = 1023,
+  period = 'daily',
+) {
+  const scale = SINA_KLINE_SCALE[period] ?? SINA_KLINE_SCALE.daily ?? '240'
   const params = new URLSearchParams({
     symbol: toSinaKlineSymbol(code),
-    scale: '240',
+    scale,
     ma: 'no',
     datalen: String(Math.min(Math.max(datalen, 1), 1023)),
   })
-  const rows = await fetchJson<Array<Record<string, string>>>(`${KLINE_URL}?${params}`, SINA_REFERER)
+  const referer = buildSinaStockReferer(toSinaKlineSymbol(code))
+  const rows = await fetchJson<Array<Record<string, string>>>(`${KLINE_URL}?${params}`, referer)
   return Array.isArray(rows) ? rows : []
 }
 
-export async function fetchSinaStockList(): Promise<StockListItem[] | null> {
+function resolveBoardNode(market: string): string {
+  const key = String(market ?? 'all').trim().toLowerCase()
+  return SINA_BOARD_NODE_MAP[key] ?? SINA_BOARD_NODE_MAP.all ?? 'hs_a'
+}
+
+async function fetchSinaBoardRows(node: string, maxItems = 0): Promise<StockListItem[]> {
   const all: StockListItem[] = []
   const totalRaw = await fetchJson<string | number>(
-    `${MARKET_COUNT_URL}?node=${encodeURIComponent('hs_a')}`,
+    `${MARKET_COUNT_URL}?node=${encodeURIComponent(node)}`,
     SINA_REFERER,
   )
-  const total = Number(totalRaw) || Number.POSITIVE_INFINITY
+  const total = Number(totalRaw)
+  if (!total || Number.isNaN(total)) return all
+
   const pageSize = 100
   const maxPages = Math.min(80, Math.ceil(total / pageSize) + 1)
 
@@ -78,7 +92,7 @@ export async function fetchSinaStockList(): Promise<StockListItem[] | null> {
       num: String(pageSize),
       sort: 'symbol',
       asc: '1',
-      node: 'hs_a',
+      node,
       symbol: '',
     })
     const batch = await fetchJson<Array<Record<string, unknown>>>(
@@ -95,10 +109,50 @@ export async function fetchSinaStockList(): Promise<StockListItem[] | null> {
         market: resolveMarket(code),
         industry: '',
       })
+      if (maxItems > 0 && all.length >= maxItems) return all
     }
     if (batch.length < pageSize) break
   }
+  return all
+}
+
+export async function fetchSinaStockList(market = 'all'): Promise<StockListItem[] | null> {
+  const node = resolveBoardNode(market)
+  const all = await fetchSinaBoardRows(node)
   return all.length ? all : null
+}
+
+/** 概念/行业板块成分股（`mkt/#chgn_700014` 等 node） */
+export async function fetchSinaBoardStocks(
+  node: string,
+  page = 1,
+  pageSize = 50,
+): Promise<StockListItem[] | null> {
+  const params = new URLSearchParams({
+    page: String(page),
+    num: String(Math.min(pageSize, 100)),
+    sort: 'changepercent',
+    asc: '0',
+    node,
+    symbol: '',
+  })
+  const batch = await fetchJson<Array<Record<string, unknown>>>(
+    `${MARKET_CENTER_URL}?${params}`,
+    SINA_REFERER,
+  )
+  if (!Array.isArray(batch) || !batch.length) return null
+  const out: StockListItem[] = []
+  for (const row of batch) {
+    const c = normalizeCode(String(row.code ?? ''))
+    if (!/^\d{6}$/.test(c)) continue
+    out.push({
+      code: c,
+      name: String(row.name ?? ''),
+      market: resolveMarket(c),
+      industry: '',
+    })
+  }
+  return out.length ? out : null
 }
 
 export async function fetchSinaMarketBreadth(date = '') {

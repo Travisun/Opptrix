@@ -1,10 +1,50 @@
-import type { IndexRealtime, StockRealtime } from '../../../core/schema.js'
+import type { IndexRealtime, StockProfile, StockRealtime } from '../../../core/schema.js'
 import { normalizeCode, safeFloat } from '../../../utils/helpers.js'
 import { fromSinaListSymbol } from '../api/symbols.js'
 
 export type ParsedHqLine = {
   key: string
   values: string[]
+}
+
+/** 解析 `hq_str_{symbol}_i` 逗号分隔扩展字段 */
+export function parseSinaExtendedParts(line: string): string[] {
+  const text = String(line ?? '').trim()
+  if (!text) return []
+  return text.split(',')
+}
+
+/** 从 jsvar.js 文本提取 `var key = value;` */
+export function parseSinaJsVarNumber(text: string, key: string): number | null {
+  const m = text.match(new RegExp(`var\\s+${key}\\s*=\\s*([\\d.]+)`))
+  return m ? safeFloat(m[1]) : null
+}
+
+export function mapSinaExtendedProfile(
+  code: string,
+  parts: string[],
+  jsvar = '',
+): StockProfile | null {
+  if (!parts.length) return null
+  const bare = normalizeCode(code)
+  const name = parts[22]?.trim() || undefined
+  const industry = parts[34]?.trim() || undefined
+  const conceptsRaw = parts[40]?.trim()
+  const concepts = conceptsRaw
+    ? conceptsRaw.split('|').map(s => s.trim()).filter(Boolean)
+    : undefined
+  const mktcapWan = safeFloat(parts[37])
+  const totalShares = safeFloat(parts[7])
+  const jsTotalCap = parseSinaJsVarNumber(jsvar, 'totalcapital')
+
+  return {
+    code: bare,
+    name,
+    industry,
+    concepts,
+    totalMarketCap: mktcapWan != null ? mktcapWan * 10000 : null,
+    regCapital: jsTotalCap ?? totalShares,
+  }
 }
 
 export function parseHqLine(line: string): ParsedHqLine | null {
