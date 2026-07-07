@@ -40,7 +40,32 @@
 
 ## 自定义方法
 
-`sinaCorpInfo`、…、`sinaPerfForecast`、`sinaBulletins`、`sinaAllBulletins`、`sinaBulletinDetail`、`sinaIpoInfo`、`sinaAddStockHistory`、`sinaInsiderTrades`、`sinaStockComment`、`sinaPriceHistory`
+`sinaCorpInfo`、…、`sinaPriceHistory`、`sinaEtfList`、`sinaFundQuote`、`sinaFundProfile`、`sinaFundNav`、`sinaFundFees`、`sinaFundDistributions`、`sinaFundDividends`、`sinaFundAnnouncements`、`sinaFundDocuments`、`sinaFundShareChange`、`sinaFundAgencies`、`sinaFundTopHolders`、`sinaFundHolderStructure`、`sinaFundHolderStructureHistory`、`sinaFundFinancialIndicators`、`sinaFundIncomeStatement`、`sinaFundBalanceSheet`
+
+## ETF / 基金（2026-07-07）
+
+| 模块 | 新浪来源 |
+|------|----------|
+| ETF 列表（分页） | `Market_Center.getHQNodeData?node=etf_hq_fund` |
+| 基金详情行情 | `hq.sinajs.cn` · `of{code}` / `f_{code}` / `{sh\|sz}{code}` |
+| 基本信息 | `fundInfo/openapi.php/FundPageInfoService.tabjjgk` |
+| 历史净值 | `CaihuiFundInfoService.getNav` |
+| 费率 | `FundPageInfoService.tabfl` + `FdFundService.getDealRule` |
+| 分红/折算 | `FdFundService.getJJFHAll` |
+| 公告 | `CaihuiFundInfoService.getGG` |
+| 法律文件 | `FundPageInfoService.tabflwj` |
+| 申购赎回份额 | `FundPageInfoService.tabsgsh` |
+| 销售机构 | `FundPageInfoService.tabxsjg` |
+| 十大持有人 | `FundPageInfoService.tabsdcyr` |
+| 持有人结构 | `FundPageInfoService.tabcyrjg` |
+| 持有人结构历史 | `FundPageInfoService.tabsdcyrbd` |
+| 财务指标 | `FundPageInfoService.tabcwzb` |
+| 利润表 | `FundPageInfoService.tablrb` |
+| 基金负债表 | `FundPageInfoService.tabfzb` |
+
+页面入口：
+- ETF 列表：`vip.stock.finance.sina.com.cn/fund_center/index.html#jjhqetf`
+- 基金详情：`finance.sina.com.cn/fund/quotes/{code}/bc.shtml`
 
 ## 限制
 

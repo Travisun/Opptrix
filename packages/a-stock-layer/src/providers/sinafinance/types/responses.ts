@@ -199,6 +199,164 @@ export interface SinaPriceHistoryRecord {
   source: SinaSource
 }
 
+/** ETF 场内行情 — `sinaEtfList` */
+export interface SinaEtfListItemRecord extends SinaBaseRow {
+  symbol?: string
+  name?: string
+  price?: string | number
+  change?: string | number
+  changePct?: string | number
+  open?: string | number
+  high?: string | number
+  low?: string | number
+  prevClose?: string | number
+  volume?: string | number
+  amount?: string | number
+  turnoverRatio?: string | number
+  tickTime?: string
+  detailUrl?: string
+}
+
+export interface SinaEtfListPageRecord {
+  node: string
+  total: number
+  page: number
+  pageSize: number
+  hasNext: boolean
+  items: SinaEtfListItemRecord[]
+  source: SinaSource
+}
+
+/** 基金行情快照 — `sinaFundQuote` */
+export interface SinaFundQuoteRecord extends SinaBaseRow {
+  name?: string
+  unitNav?: number | null
+  accNav?: number | null
+  prevNav?: number | null
+  changePct?: number | null
+  navDate?: string
+  exchangePrice?: number | null
+  exchangeChange?: number | null
+  exchangeChangePct?: number | null
+  premiumPct?: number | null
+  detailUrl?: string
+}
+
+/** 基金基本信息 — `sinaFundProfile` */
+export interface SinaFundProfileRecord extends SinaBaseRow {
+  fullName?: string
+  shortName?: string
+  establishDate?: string
+  listDate?: string
+  type1?: string
+  type2?: string
+  type3?: string
+  fundScale?: string
+  fundShares?: string
+  manager?: string
+  company?: string
+  benchmark?: string
+  fields?: Record<string, string>
+  detailUrl?: string
+}
+
+/** 基金历史净值 — `sinaFundNav` */
+export interface SinaFundNavRowRecord extends SinaBaseRow {
+  date: string
+  unitNav?: string
+  accNav?: string
+  dailyReturn?: string
+  weeklyReturn?: string
+}
+
+/** 基金公告 — `sinaFundAnnouncements` */
+export interface SinaFundAnnouncementRecord extends SinaBaseRow {
+  id: string
+  title: string
+  type?: string
+  publishDate?: string
+  publisher?: string
+  link: string
+}
+
+/** 基金现金分红 — `sinaFundDividends`（`FdFundService.getJJFHAll` · `fh`） */
+export interface SinaFundDividendRecord extends SinaBaseRow {
+  qydjr?: string
+  sqhlmsf?: string
+  hlffr_cw?: string
+  hlffr_cn?: string
+  cqcxr_cw?: string
+  cqcxr_cn?: string
+}
+
+export interface SinaFundDividendsPageRecord {
+  code: string
+  dividends: SinaFundDividendRecord[]
+  source: SinaSource
+}
+
+/** 基金十大持有人 — `sinaFundTopHolders`（`FundPageInfoService.tabsdcyr`） */
+export interface SinaFundTopHolderRecord extends SinaBaseRow {
+  name: string
+  shares?: string
+  ratioPct?: string
+}
+
+export interface SinaFundTopHoldersPageRecord {
+  code: string
+  reportDate?: string
+  availableDates: string[]
+  holders: SinaFundTopHolderRecord[]
+  source: SinaSource
+}
+
+/** 基金持有人结构 — `sinaFundHolderStructure`（`FundPageInfoService.tabcyrjg`） */
+export interface SinaFundHolderStructureRecord {
+  code: string
+  reportDate?: string
+  availableDates: string[]
+  structure: {
+    reportDate?: string
+    holderCount?: string
+    totalShares?: string
+    institutionalShares?: string
+    institutionalRatioPct?: string
+    individualShares?: string
+    individualRatioPct?: string
+    employeeShares?: string
+    employeeRatioPct?: string
+    managerShares?: string
+    managerRatioPct?: string
+  }
+  source: SinaSource
+}
+
+/** 基金持有人结构历史 — `sinaFundHolderStructureHistory`（`FundPageInfoService.tabsdcyrbd`） */
+export interface SinaFundHolderStructureHistoryRow extends SinaBaseRow {
+  reportDate: string
+  individualShares?: string
+  institutionalShares?: string
+  institutionalRatioPct?: string
+}
+
+export interface SinaFundHolderStructureHistoryRecord {
+  code: string
+  periods: SinaFundHolderStructureHistoryRow[]
+  source: SinaSource
+}
+
+/** 基金财报单期指标 — `sinaFundFinancialIndicators` / `sinaFundIncomeStatement` / `sinaFundBalanceSheet` */
+export interface SinaFundFinancialPeriodRecord {
+  reportDate: string
+  metrics: Record<string, string | number | null>
+}
+
+export interface SinaFundFinancialStatementRecord {
+  code: string
+  periods: SinaFundFinancialPeriodRecord[]
+  source: SinaSource
+}
+
 /** 公司章程 — `sinaCorpRule` */
 export interface SinaCorpRuleRecord extends SinaBaseRow {
   title?: string

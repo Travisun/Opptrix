@@ -31,6 +31,25 @@ import {
   fetchSinaStockComment,
   fetchSinaStockStructureHistory,
 } from '../../api/ext-service.js'
+import {
+  fetchSinaEtfList,
+  fetchSinaFundAgencies,
+  fetchSinaFundAnnouncements,
+  fetchSinaFundBalanceSheet,
+  fetchSinaFundDistributions,
+  fetchSinaFundDividends,
+  fetchSinaFundDocuments,
+  fetchSinaFundFees,
+  fetchSinaFundFinancialIndicators,
+  fetchSinaFundHolderStructure,
+  fetchSinaFundHolderStructureHistory,
+  fetchSinaFundIncomeStatement,
+  fetchSinaFundNav,
+  fetchSinaFundProfile,
+  fetchSinaFundQuote,
+  fetchSinaFundShareChange,
+  fetchSinaFundTopHolders,
+} from '../../api/fund-service.js'
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
 
@@ -234,5 +253,114 @@ export function mixSinafinanceExt(Driver: { prototype: SinafinanceCnHandler }) {
     if (!bare) return null
     const rows = await fetchSinaPerfForecastList(bare)
     return rows.length ? rows : null
+  }
+
+  p.sinaEtfList = async function sinaEtfList(page = 1, pageSize = 40) {
+    const result = await fetchSinaEtfList({ page, pageSize })
+    return result.items.length ? result : null
+  }
+
+  p.sinaFundQuote = async function sinaFundQuote(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundQuote(bare)
+  }
+
+  p.sinaFundProfile = async function sinaFundProfile(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundProfile(bare)
+  }
+
+  p.sinaFundNav = async function sinaFundNav(code: string, page = 1, pageSize = 20) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const result = await fetchSinaFundNav(bare, page, pageSize)
+    return result.rows.length ? result : null
+  }
+
+  p.sinaFundFees = async function sinaFundFees(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundFees(bare)
+  }
+
+  p.sinaFundDistributions = async function sinaFundDistributions(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundDistributions(bare)
+  }
+
+  p.sinaFundAnnouncements = async function sinaFundAnnouncements(
+    code: string,
+    page = 1,
+    type = '',
+  ) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const result = await fetchSinaFundAnnouncements(bare, page, type)
+    return result.items.length ? result : null
+  }
+
+  p.sinaFundDocuments = async function sinaFundDocuments(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const rows = await fetchSinaFundDocuments(bare)
+    return rows?.length ? rows : null
+  }
+
+  p.sinaFundShareChange = async function sinaFundShareChange(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const rows = await fetchSinaFundShareChange(bare)
+    return rows?.length ? rows : null
+  }
+
+  p.sinaFundAgencies = async function sinaFundAgencies(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundAgencies(bare)
+  }
+
+  p.sinaFundDividends = async function sinaFundDividends(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundDividends(bare)
+  }
+
+  p.sinaFundTopHolders = async function sinaFundTopHolders(code: string, date = '') {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundTopHolders(bare, date)
+  }
+
+  p.sinaFundHolderStructure = async function sinaFundHolderStructure(code: string, date = '') {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundHolderStructure(bare, date)
+  }
+
+  p.sinaFundHolderStructureHistory = async function sinaFundHolderStructureHistory(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundHolderStructureHistory(bare)
+  }
+
+  p.sinaFundFinancialIndicators = async function sinaFundFinancialIndicators(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundFinancialIndicators(bare)
+  }
+
+  p.sinaFundIncomeStatement = async function sinaFundIncomeStatement(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundIncomeStatement(bare)
+  }
+
+  p.sinaFundBalanceSheet = async function sinaFundBalanceSheet(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundBalanceSheet(bare)
   }
 }

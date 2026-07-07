@@ -443,6 +443,132 @@ const SINA_CUSTOM: CustomMethodDef[] = [
       { name: 'code', type: 'string', description: '6 位股票代码', required: true },
     ],
   },
+  {
+    method: 'sinaEtfList',
+    description: 'ETF 基金列表（场内行情，支持翻页；含最新价、涨跌幅等）',
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', required: false },
+      { name: 'pageSize', type: 'number', description: '每页条数，默认 40，最大 100', required: false },
+    ],
+  },
+  {
+    method: 'sinaFundQuote',
+    description: '基金详情页行情（单位/累计净值、场内价格、折溢价）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码，如 159937', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundProfile',
+    description: '基金基本信息（概况 tab）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundNav',
+    description: '历史净值（分页）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+      { name: 'page', type: 'number', description: '页码', required: false },
+      { name: 'pageSize', type: 'number', description: '每页条数，默认 20', required: false },
+    ],
+  },
+  {
+    method: 'sinaFundFees',
+    description: '费率与交易规则（管理费/托管费/申购赎回规则）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundDistributions',
+    description: '分红与份额折算记录',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundAnnouncements',
+    description: '基金公告列表（分页，20 条/页）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+      { name: 'page', type: 'number', description: '页码', required: false },
+      { name: 'type', type: 'string', description: '公告类型筛选（可选）', required: false },
+    ],
+  },
+  {
+    method: 'sinaFundDocuments',
+    description: '法律文件（基金合同、招募说明书等）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundShareChange',
+    description: '申购赎回份额变动（按报告期）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundAgencies',
+    description: '销售机构（直销/代销）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundDividends',
+    description: '历史现金分红（不含份额折算）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundTopHolders',
+    description: '十大持有人（可按报告期筛选）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+      { name: 'date', type: 'string', description: '报告期 YYYY-MM-DD（可选，默认最新）', required: false },
+    ],
+  },
+  {
+    method: 'sinaFundHolderStructure',
+    description: '持有人结构（机构/个人占比等）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+      { name: 'date', type: 'string', description: '报告期 YYYY-MM-DD（可选）', required: false },
+    ],
+  },
+  {
+    method: 'sinaFundHolderStructureHistory',
+    description: '持有人结构历史变动（机构/个人份额与占比）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundFinancialIndicators',
+    description: '财务指标（本期利润、净收益、期末净值等，多期）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundIncomeStatement',
+    description: '利润表（收入/费用/净利润等，多期）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
+  {
+    method: 'sinaFundBalanceSheet',
+    description: '基金负债表（资产/负债/权益，多期）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位基金代码', required: true },
+    ],
+  },
 ]
 
 /** @deprecated 与 {@link SINA_CUSTOM} 相同，保留 webfeed 兼容 */
