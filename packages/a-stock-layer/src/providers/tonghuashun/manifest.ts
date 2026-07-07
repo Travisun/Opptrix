@@ -2,7 +2,7 @@ import { Capability } from '../../core/capabilities.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { TONGHUASHUN_SETTINGS } from './settings.js'
-import { cnEquityEtfIndex, cnFullSplit } from '../common/bindings.js'
+import { cnEquityEtfIndex } from '../common/bindings.js'
 
 export const TONGHUASHUN_CAPS = [
   Capability.STOCK_REALTIME,
@@ -20,6 +20,13 @@ export const TONGHUASHUN_CAPS = [
   Capability.SENTIMENT,
 ]
 
+const INDEX_CAPS = [
+  Capability.INDEX_REALTIME,
+  Capability.INDEX_KLINE,
+]
+
+const EQUITY_CAPS = TONGHUASHUN_CAPS.filter(c => !INDEX_CAPS.includes(c))
+
 export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   id: 'tonghuashun',
   title: '同花顺',
@@ -28,7 +35,7 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   defaultPriority: 88,
   maxConcurrent: 5,
   capabilities: TONGHUASHUN_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnFullSplit(TONGHUASHUN_CAPS, p, maxConcurrent),
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, undefined, maxConcurrent),
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,
 }

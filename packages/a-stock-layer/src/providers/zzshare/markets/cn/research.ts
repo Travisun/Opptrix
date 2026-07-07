@@ -1,4 +1,4 @@
-import type { DragonTiger, LimitUpDown, MarketMoneyFlow, MoneyFlow, SentimentData } from '../../../../core/schema.js'
+import type { DragonTiger, LimitUpDown, SentimentData } from '../../../../core/schema.js'
 import { normalizeCode } from '../../../../utils/helpers.js'
 import type { ZzshareClient } from '../../api/client.js'
 import { invokeZzshare } from '../../api/invoke.js'
@@ -17,9 +17,6 @@ import {
   mapZzshareUplimitHotRows,
   mapZzshareUplimitStocksRows,
   mapZzshareUpdownDistributionRows,
-  mapZzshareMarketMoneyFlowRows,
-  mapZzshareSentimentMarketTopNRows,
-  mapZzshareStockMoneyFlowRows,
 } from '../../normalize/index.js'
 import type { ZzshareCnHandler } from './handler.js'
 
@@ -49,14 +46,22 @@ type ZzHandler = ZzshareCnHandler & {
   zzAiReports?(type?: string, page?: number, pageSize?: number): Promise<Record<string, unknown>[] | null>
   zzMovementAlerts?(date?: string, type?: string, limit?: number): Promise<Record<string, unknown>[] | null>
   zzMacroSentiment?(date1?: string, date2?: string): Promise<Record<string, unknown>[] | null>
-  moneyFlow?(code: string): Promise<MoneyFlow[] | null>
-  marketMoneyFlow?(direction?: string): Promise<MarketMoneyFlow[] | null>
-  zzSentimentMarketTopN?(modalId?: number, date1?: string, date2?: string): Promise<Record<string, unknown>[] | null>
 }
 
+/**
+ * 向 `ZzshareCnHandler` 原型混入研究类能力（龙虎榜、涨跌停、情绪、板块等）。
+ *
+ * @param Driver 驱动类（通常为 `ZzshareDriver`）
+ */
 export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
   const p = Driver.prototype as ZzHandler
 
+  /**
+   * 龙虎榜每日上榜列表 — Capability `DRAGON_TIGER`。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @returns 龙虎榜条目；无数据时 `null`
+   */
   p.dragonTiger = async function dragonTiger(date = ''): Promise<DragonTiger[] | null> {
     const queryDate = resolveQueryDate(date)
     return this.withClient(async client => {
@@ -66,6 +71,14 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 涨跌停复盘 — Capability `LIMIT_UPDOWN`。
+   *
+   * 合并 `uplimit_stocks` 与 `review_uplimit_reason_open` 去重。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @returns 涨跌停记录；无数据时 `null`
+   */
   p.limitUpdown = async function limitUpdown(date = ''): Promise<LimitUpDown[] | null> {
     const queryDate = resolveQueryDate(date)
     return this.withClient(async client => {
@@ -85,6 +98,12 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 市场涨跌家数分布 — Capability `MARKET_BREADTH`。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @returns 涨跌分布统计行；无数据时 `null`
+   */
   p.marketBreadth = async function marketBreadth(date = ''): Promise<Record<string, unknown>[] | null> {
     const queryDate = resolveQueryDate(date)
     return this.withClient(async client => {
@@ -94,6 +113,14 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 市场情绪 — Capability `SENTIMENT`。
+   *
+   * 空代码/`MARKET`/`000001` 时拉全市场综合情绪；否则拉个股同花顺热度。
+   *
+   * @param code 股票代码或留空表示全市场
+   * @returns 情绪摘要；无数据时 `null`
+   */
   p.sentiment = async function sentiment(code = ''): Promise<SentimentData[] | null> {
     const bare = normalizeCode(code)
     const isMarket = !bare || bare === 'MARKET' || bare === '000001'
@@ -134,6 +161,12 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 板块列表 — Capability `SECTOR_LIST`。
+   *
+   * @param plateType 板块类型：17=题材、15=概念、14=行业，默认 14
+   * @returns 板块行；无数据时 `null`
+   */
   p.sectorList = async function sectorList(plateType = '14'): Promise<Record<string, unknown>[] | null> {
     const typeNum = Number(plateType) || 14
     return this.withClient(async client => {
@@ -143,55 +176,13 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
-  p.moneyFlow = async function moneyFlow(code: string): Promise<MoneyFlow[] | null> {
-    const bare = normalizeCode(code)
-    if (!bare) return null
-    const queryDate = ymdToApi(todayYmd())
-    return this.withClient(async client => {
-      const data = await invokeZzshare(client, 'stock_moneyflow', {
-        stock_id: bare,
-        m_type: '',
-      })
-      const rows = mapZzshareStockMoneyFlowRows(bare, data, queryDate)
-      return rows.length ? rows : null
-    })
-  }
-
-  p.marketMoneyFlow = async function marketMoneyFlow(
-    direction = 'market',
-  ): Promise<MarketMoneyFlow[] | null> {
-    const queryDate = ymdToApi(todayYmd())
-    return this.withClient(async client => {
-      const data = await invokeZzshare(client, 'market_mf', {
-        stock: '',
-        date: queryDate,
-        wm: 0,
-        default_v: 0,
-      }).catch(() => null)
-      if (data == null) return null
-      const rows = mapZzshareMarketMoneyFlowRows(data, queryDate, direction)
-      return rows.length ? rows : null
-    })
-  }
-
-  p.zzSentimentMarketTopN = async function zzSentimentMarketTopN(
-    modalId = 1,
-    date1 = '',
-    date2 = '',
-  ): Promise<Record<string, unknown>[] | null> {
-    const end = resolveQueryDate(date2 || date1)
-    const start = date1 ? resolveQueryDate(date1) : ymdDaysAgo(14)
-    return this.withClient(async client => {
-      const data = await invokeZzshare(client, 'sentiment_market_top_n', {
-        modal_id: modalId,
-        date1: ymdToApi(start),
-        date2: ymdToApi(end),
-      })
-      const rows = mapZzshareSentimentMarketTopNRows(data)
-      return rows.length ? rows : null
-    })
-  }
-
+  /**
+   * 涨停热点与连板梯队 — 自定义方法 `zzUplimitHot`。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @param board 可选板块过滤
+   * @returns 热点板块数据；无数据时 `null`
+   */
   p.zzUplimitHot = async function zzUplimitHot(
     date = '',
     board = '',
@@ -206,6 +197,13 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 龙虎榜席位明细 — 自定义方法 `zzLhbDetail`。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @param stockCode 6 位股票代码（必填）
+   * @returns 买卖席位详情；无数据或代码为空时 `null`
+   */
   p.zzLhbDetail = async function zzLhbDetail(
     date = '',
     stockCode = '',
@@ -223,6 +221,14 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 板块热度排名 — 自定义方法 `zzPlatesRank`。
+   *
+   * @param plateType 板块类型，默认 14（行业）
+   * @param date 排名日期 YYYY-MM-DD，默认今天
+   * @param limit 返回条数，默认 20
+   * @returns 排名行；无数据时 `null`
+   */
   p.zzPlatesRank = async function zzPlatesRank(
     plateType = 14,
     date = '',
@@ -236,6 +242,13 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 题材库表格列表 — 自定义方法 `zzTopicTables`。
+   *
+   * @param page 页码，默认 1
+   * @param limit 每页条数，默认 20
+   * @returns 题材表格摘要；无数据时 `null`
+   */
   p.zzTopicTables = async function zzTopicTables(
     page = 1,
     limit = 20,
@@ -247,6 +260,14 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * AI 投研报告列表 — 自定义方法 `zzAiReports`。
+   *
+   * @param type 报告类型（如 `daily`），默认 `daily`
+   * @param page 页码，默认 1
+   * @param pageSize 每页条数，默认 10
+   * @returns 报告列表行；无数据时 `null`
+   */
   p.zzAiReports = async function zzAiReports(
     type = 'daily',
     page = 1,
@@ -259,6 +280,14 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 异动与监管预警 — 自定义方法 `zzMovementAlerts`。
+   *
+   * @param date 查询日期 YYYY-MM-DD，默认今天
+   * @param type 异动类型过滤，空表示全部
+   * @param limit 返回条数，默认 50
+   * @returns 异动记录；无数据时 `null`
+   */
   p.zzMovementAlerts = async function zzMovementAlerts(
     date = '',
     type = '',
@@ -282,6 +311,15 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
     })
   }
 
+  /**
+   * 宏观情绪聚合 — 自定义方法 `zzMacroSentiment`。
+   *
+   * 合并 `sentiment_bull_data` 与 `open_sentiment_data`。
+   *
+   * @param date1 起始日期 YYYY-MM-DD；空则默认近 30 日
+   * @param date2 结束日期 YYYY-MM-DD；空则与 date1 或今天相同
+   * @returns 情绪时序行；无数据时 `null`
+   */
   p.zzMacroSentiment = async function zzMacroSentiment(
     date1 = '',
     date2 = '',

@@ -309,7 +309,7 @@ export class QueryPlanExecutor {
 
       this.registry.notifyAcquire(driver.name)
       try {
-        const call = () => fn(batch, markets) as Promise<StockRealtime[] | null>
+        const call = () => fn.apply(driver, [batch, markets]) as Promise<StockRealtime[] | null>
         const t0 = Date.now()
         const result = driver.selfThrottled
           ? await call()

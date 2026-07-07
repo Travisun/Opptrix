@@ -19,8 +19,6 @@ export const ZZSHARE_CAPS = [
   Capability.MARKET_BREADTH,
   Capability.SENTIMENT,
   Capability.SECTOR_LIST,
-  Capability.STOCK_MONEY_FLOW,
-  Capability.MARKET_MONEY_FLOW,
 ]
 
 const INDEX_CAPS = [
@@ -46,7 +44,7 @@ export const ZZSHARE_SPEC: ProviderManifestSpec = {
 export const ZZSHARE_MANIFEST = providerManifestEntry(
   'zzshare',
   '自在量化',
-  '免费 A 股行情·涨停复盘·龙虎榜·资金流·情绪；Token 可选提升频率',
+  '免费 A 股行情·涨停复盘·龙虎榜·情绪；Token 可选提升频率',
   'CN',
   110,
   ZZSHARE_SETTINGS,

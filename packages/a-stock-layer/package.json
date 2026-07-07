@@ -14,6 +14,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.json",
     "audit:apis": "npm run build && node scripts/audit-apis.mjs",
+    "test:zzshare": "npm run build && node scripts/test-zzshare-apis.mjs",
     "test:oppx": "npm run build && node scripts/test-oppx.mjs"
   },
   "dependencies": {

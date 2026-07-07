@@ -92,9 +92,6 @@ driver.ts + manifest.ts
 | `uplimit_market_value` | — | （未映射） | open | 涨停市值分布 |
 | `movement_alerts` | — | `zzMovementAlerts()` | open | 异动 / 监管预警 |
 | `zdjk_get` | — | （未映射） | open | 已触发监管列表 |
-| `stock_moneyflow` | `STOCK_MONEY_FLOW` | `moneyFlow()` | open | 个股主力流向；字段透传，上层再规范化 |
-| `market_mf` | `MARKET_MONEY_FLOW` | `marketMoneyFlow()` | open | 全市场资金流分钟概览 |
-| `sentiment_market_top_n` | — | `zzSentimentMarketTopN()` | open | 市场 TopN 热点概念 |
 | `ai_report_list` | — | `zzAiReports()` | open | AI 收盘/盘前报告列表 |
 | `ai_report_detail` | — | （未映射） | open | AI 报告详情 |
 | `topic_table_list` | — | `zzTopicTables()` | open | 题材库表格 |
@@ -121,6 +118,8 @@ driver.ts + manifest.ts
 | **周/月线** | 由日 K 在客户端聚合，非服务端原生周期 |
 | **ETF / 北交所** | 覆盖以 Zzshare 服务端为准；未单独保证 Opptrix ETF 路由 |
 | **VIP 接口** | `sentiment_timing` 等需账号权限，非仅 Token 即可 |
+| **上游已下线** | 官方 SDK 已注释 `stock_moneyflow`、`market_mf`、`sentiment_market_top_n`（见 zzshare issue #2）；Opptrix 不注册对应 Capability |
+| **stock_info** | `info_type` 为必填整数；当前上游常返回 `data: null`，`profile()` 回退 `stock_basic` |
 
 ---
 

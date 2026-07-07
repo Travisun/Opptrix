@@ -177,6 +177,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     return this.clientInstance
   }
 
+  /**
+   * 在已启用客户端上执行回调；失败或未配置时返回 `null`。
+   *
+   * @param fn 接收 {@link ZzshareClient} 的异步回调
+   * @returns 回调结果，或 `null`
+   */
   protected async withClient<T>(fn: (client: ZzshareClient) => Promise<T>): Promise<T | null> {
     const client = this.client()
     if (!client) return null
@@ -241,10 +247,23 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     return mapped.length ? mapped : null
   }
 
+  /**
+   * 上市股票列表 — 委托 {@link stockBasic} 拉取全市场 L 状态股票。
+   *
+   * @param _market 保留参数，与引擎接口一致
+   * @returns 股票列表；无数据时 `null`
+   */
   async stockList(_market = 'all'): Promise<StockListItem[] | null> {
     return this.stockBasic('', 'L')
   }
 
+  /**
+   * 股票基础信息列表 — 调用 `stock_basic` 并映射为 {@link StockListItem}。
+   *
+   * @param code 可选单股过滤（6 位代码）
+   * @param listStatus 上市状态：L/D/P，默认 L
+   * @returns 股票列表；无数据时 `null`
+   */
   async stockBasic(code = '', listStatus = 'L'): Promise<StockListItem[] | null> {
     return this.withClient(async client => {
       const query: { list_status: string; ts_code?: string } = { list_status: listStatus || 'L' }
@@ -311,6 +330,14 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     return mapZzshareDailyRowToIndexRealtime(bare, row as unknown as Record<string, unknown>)
   }
 
+  /**
+   * 个股或指数实时快照 — Capability `STOCK_REALTIME`。
+   *
+   * 有 Token 时优先 `rt_k`；否则回退最新日 K 全市场快照或单股日 K。
+   *
+   * @param code 6 位股票或指数代码
+   * @returns 单条实时行情；无数据时 `null`
+   */
   async realtime(code: string): Promise<StockRealtime[] | null> {
     if (!this.beginQuoteGuard('realtime', code)) return null
     try {
@@ -330,6 +357,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     }
   }
 
+  /**
+   * 批量实时快照 — Capability `STOCK_REALTIME`。
+   *
+   * @param codes 股票代码数组
+   * @returns 实时行情列表；无数据时 `null`
+   */
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     return this.withClient(async client => {
       const normalized = codes.map(c => normalizeCode(c))
@@ -363,6 +396,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * 指数实时快照 — Capability `INDEX_REALTIME`。
+   *
+   * @param code 指数代码（如 `000001`、`399006`）
+   * @returns 单条指数快照；无数据时 `null`
+   */
   async indexRealtime(code: string): Promise<IndexRealtime[] | null> {
     if (!this.beginQuoteGuard('indexRealtime', code)) return null
     try {
@@ -375,6 +414,18 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     }
   }
 
+  /**
+   * 股票 K 线 — Capability `STOCK_KLINE`。
+   *
+   * 支持日/周/月（日 K 客户端聚合）及分钟周期（`stk_mins`）。
+   *
+   * @param code 6 位股票代码
+   * @param period Opptrix 周期（`daily`/`weekly`/`monthly`/`1m`…）
+   * @param start 起始日期 YYYY-MM-DD
+   * @param end 结束日期 YYYY-MM-DD
+   * @param count 最大返回根数
+   * @returns K 线列表；不支持周期或无数据时 `null`
+   */
   async kline(
     code: string,
     period = 'daily',
@@ -403,6 +454,18 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * 指数/板块/题材 K 线 — Capability `INDEX_KLINE`。
+   *
+   * 指数走日 K；板块码 `88xxxx` 走 `plate_kline`；`topic:{id}` 走 `topic_kline`。
+   *
+   * @param code 指数、板块或题材标识
+   * @param period Opptrix 周期
+   * @param start 起始日期 YYYY-MM-DD
+   * @param end 结束日期 YYYY-MM-DD
+   * @param count 最大返回根数
+   * @returns 指数 K 线列表；无数据时 `null`
+   */
   async indexKline(
     code: string,
     period = 'daily',
@@ -451,11 +514,19 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * 个股资料 — Capability `STOCK_PROFILE`。
+   *
+   * 合并 `stock_info`（`info_type=0`）与 `stock_basic`；扩展字段为空时回退基础列表。
+   *
+   * @param code 6 位股票代码
+   * @returns 单条资料；无数据时 `null`
+   */
   async profile(code: string): Promise<StockProfile[] | null> {
     return this.withClient(async client => {
       const bare = normalizeCode(code)
       const [infoData, basicRows] = await Promise.all([
-        invokeZzshare(client, 'stock_info', { stock_id: bare, info_type: 'all' }).catch(() => null),
+        invokeZzshare(client, 'stock_info', { stock_id: bare, info_type: 0 }).catch(() => null),
         client.stock_basic({ ts_code: bare, list_status: 'L' }),
       ])
 
@@ -476,6 +547,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * A 股交易日历 — Capability `TRADE_CALENDAR`。
+   *
+   * @param year 公历年份；0 表示当前年
+   * @returns 交易日记录；无数据时 `null`
+   */
   async tradeCalendar(year = 0): Promise<Record<string, unknown>[] | null> {
     return this.withClient(async client => {
       const y = year || new Date().getFullYear()
@@ -489,6 +566,13 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * 多日分时会话 — Capability `INTRADAY_TICK`。
+   *
+   * @param code 6 位股票代码（不含指数/板块/题材）
+   * @param ndays 回溯交易日数，1–5，默认 5
+   * @returns 按交易日分组的分时数据；不支持标的或无数据时 `null`
+   */
   async fetchIntradaySessions(
     code: string,
     ndays = 5,
@@ -516,6 +600,14 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
+  /**
+   * 分钟趋势 K 线 — 用于分时图连续展示。
+   *
+   * @param code 6 位股票代码
+   * @param ndays 回溯交易日数，1–5，默认 1
+   * @param count 最多返回根数；0 表示不裁剪
+   * @returns 分钟 K 线列表；无数据时 `null`
+   */
   async minuteTrendKline(
     code: string,
     ndays = 1,
@@ -542,7 +634,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
-  /** Fallback: latest daily bar as index snapshot when rt_k unavailable. */
+  /**
+   * 回退：用最新日 K 构造指数快照（`rt_k` 不可用时）。
+   *
+   * @param code 指数代码
+   * @returns 指数实时结构；无数据时 `null`
+   */
   protected async latestIndexFromDaily(code: string): Promise<IndexRealtime | null> {
     return this.withClient(async client => {
       const daily = await client.daily({ ts_code: toTsCode(code), limit: 1 })
@@ -554,7 +651,12 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     })
   }
 
-  /** Fallback: latest daily bar as stock snapshot when rt_k unavailable. */
+  /**
+   * 回退：用最新日 K 构造个股快照（`rt_k` 不可用时）。
+   *
+   * @param code 股票代码
+   * @returns 个股实时结构；无数据时 `null`
+   */
   protected async latestStockFromDaily(code: string): Promise<StockRealtime | null> {
     return this.withClient(async client => {
       const daily = await client.daily({ ts_code: toTsCode(code), limit: 1 })

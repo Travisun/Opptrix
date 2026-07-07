@@ -8,13 +8,23 @@ const SUFFIX_MAP: Record<string, string> = {
   BSE: 'BJ',
 }
 
-/** Normalize to bare 6-digit code (strip exchange suffix). */
+/**
+ * 归一化为 6 位纯数字代码（去掉交易所后缀）。
+ *
+ * @param symbol 股票代码，如 `600519` 或 `600519.SH`
+ * @returns 纯数字代码
+ */
 export function normalizeSymbol(symbol: string): string {
   const trimmed = symbol.trim()
   return trimmed.includes('.') ? trimmed.split('.')[0]! : trimmed
 }
 
-/** Convert to Tushare-style ts_code, e.g. `600000.SH`. */
+/**
+ * 转换为 Tushare 风格 `ts_code`。
+ *
+ * @param symbol 股票代码，支持带后缀或裸代码
+ * @returns 如 `600519.SH`、`000001.SZ`
+ */
 export function toTsCode(symbol: string): string {
   const normalized = symbol.trim().toUpperCase()
   if (normalized.includes('.')) {
@@ -29,7 +39,12 @@ export function toTsCode(symbol: string): string {
   return normalized
 }
 
-/** Parse ts_code into `{ code, exchange }` where exchange is SSE/SZSE/BSE. */
+/**
+ * 从 `ts_code` 解析代码与交易所枚举。
+ *
+ * @param tsCode Tushare 风格代码
+ * @returns `code` 为 6 位数字，`exchange` 为 SSE/SZSE/BSE 之一
+ */
 export function fromTsCode(tsCode: string): { code: string; exchange: string } {
   const code = normalizeSymbol(tsCode)
   let exchange = ''
@@ -39,7 +54,12 @@ export function fromTsCode(tsCode: string): { code: string; exchange: string } {
   return { code, exchange }
 }
 
-/** Map Tushare-style exchange to zzshare backend exchange code. */
+/**
+ * 将 Tushare/通用交易所标识映射为自在量化后端交易所代码。
+ *
+ * @param exchange 如 SSE、SZSE、GEM、KSH
+ * @returns 后端代码（SS/SZ/GEM 等），无法识别时 `null`
+ */
 export function toBackendExchange(exchange?: string | null): string | null {
   if (!exchange) return null
   const mapping: Record<string, string> = {

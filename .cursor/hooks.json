@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "hooks": {
+    "sessionStart": [
+      {
+        "command": ".cursor/hooks/ensure-codegraph.sh",
+        "timeout": 60
+      }
+    ]
+  }
+}

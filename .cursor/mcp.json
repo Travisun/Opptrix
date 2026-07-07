@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "codegraph": {
+      "type": "stdio",
+      "command": "/Users/mac/.local/bin/codegraph",
+      "args": [
+        "serve",
+        "--mcp",
+        "--path",
+        "${workspaceFolder}"
+      ],
+      "env": {
+        "CODEGRAPH_TELEMETRY": "0",
+        "PATH": "/Users/mac/.local/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+      }
+    }
+  }
+}

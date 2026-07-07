@@ -8,6 +8,11 @@ import {
 } from './constants.js'
 import { fromTsCode, normalizeSymbol, toBackendExchange, toTsCode } from './symbols.js'
 
+/**
+ * 自在量化 API 鉴权失败错误。
+ *
+ * 触发条件：HTTP 401 或 Token 无效。
+ */
 export class ZzshareAuthError extends Error {
   constructor(message = '自在量化 API 鉴权失败，请检查 Token 配置') {
     super(message)
@@ -15,6 +20,11 @@ export class ZzshareAuthError extends Error {
   }
 }
 
+/**
+ * 自在量化 API 频率限制错误。
+ *
+ * 触发条件：HTTP 429，客户端已耗尽自动重试次数。
+ */
 export class ZzshareRateLimitError extends Error {
   constructor(message = '自在量化 API 请求过于频繁，请稍后再试') {
     super(message)
@@ -331,11 +341,27 @@ function sortByKey<T extends object>(rows: T[], key: string, ascending = false):
   })
 }
 
+/**
+ * 自在量化 REST API 客户端 — 对齐官方 Python `DataApi`（`client.py`）。
+ *
+ * 用途：封装鉴权、429 重试、`SHORTCUTS` 动态快捷方法，以及 `daily`/`rt_k` 等自定义查询。
+ * 数据源：https://api.zizizaizai.com
+ */
 export class ZzshareClient {
+  /** API Token；未配置时为 `anonymous` */
   readonly token: string
+  /** 单次请求超时（毫秒） */
   readonly timeoutMs: number
+  /** API 基地址（不含尾部 `/`） */
   readonly baseUrl: string
 
+  /**
+   * 创建自在量化客户端，并注册 `SHORTCUTS` 快捷方法。
+   *
+   * @param token API Token；空字符串时读取环境变量或回退 `anonymous`
+   * @param timeoutMs 请求超时（毫秒），默认 10000
+   * @param baseUrl API 基地址，默认 {@link DEFAULT_BASE_URL}
+   */
   constructor(
     token = '',
     timeoutMs = 10_000,
@@ -347,6 +373,12 @@ export class ZzshareClient {
     this.registerShortcuts()
   }
 
+  /**
+   * 从 Provider 运行时配置构造客户端。
+   *
+   * @param cfg 运行时配置；默认调用 {@link loadZzshareConfig}
+   * @returns 已注册快捷方法的客户端实例
+   */
   static fromConfig(cfg = loadZzshareConfig()): ZzshareClient {
     return new ZzshareClient(cfg.token, cfg.timeoutMs, cfg.baseUrl)
   }
@@ -365,6 +397,18 @@ export class ZzshareClient {
     })
   }
 
+  /**
+   * 通用 REST 查询 — 对齐官方 Python `_query`。
+   *
+   * 用途：调用未注册为快捷方法的端点，或需要直接指定路径的场景。
+   * 数据源：自在量化开放平台 REST API
+   *
+   * @param path API 路径（不含域名与前导 `/`，如 `market/trade/days`）
+   * @param params Query 参数字典；`null`/`undefined`/空字符串会被忽略
+   * @returns `code` 为 200 或 20000 时的 `data`；业务失败或无数据时 `null`
+   * @throws {ZzshareAuthError} HTTP 401
+   * @throws {ZzshareRateLimitError} HTTP 429（重试耗尽）
+   */
   async query(path: string, params: Record<string, QueryValue> = {}): Promise<unknown> {
     const cleanPath = path.replace(/^\//, '')
     const url = `${this.baseUrl}/${cleanPath}`
@@ -373,9 +417,8 @@ export class ZzshareClient {
     if (res.status === 200) {
       const body = await res.json()
       const code = body.code
-      if (code === 200 || code === 20000) return body.data
-      if ('data' in body) return body.data
-      return body
+      if (code === 200 || code === 20000) return body.data ?? null
+      return null
     }
     if (res.status === 401) {
       throw new ZzshareAuthError(
@@ -445,6 +488,15 @@ export class ZzshareClient {
     return this.query(path, kwargs)
   }
 
+  /**
+   * 日 K 线查询 — 对齐官方 Python `daily()`。
+   *
+   * 用途：按股票代码或全市场交易日拉取日线；支持复权、分页与字段裁剪。
+   * 数据源：`/v3/market/kline/day` 与 `/v3/market/kline/day/{ts_code}`
+   *
+   * @param query 查询参数，见 {@link DailyQuery}
+   * @returns 规范化 {@link DailyBar} 列表；无数据时空数组
+   */
   async daily(query: DailyQuery = {}): Promise<DailyBar[]> {
     const {
       ts_code,
@@ -569,6 +621,16 @@ export class ZzshareClient {
     return result
   }
 
+  /**
+   * 分钟 K 线查询 — 对齐官方 Python `stk_mins()`。
+   *
+   * 用途：盘中分时、日内多周期 K 线。
+   * 数据源：`/v3/market/kline/minute/{ts_code}`
+   *
+   * @param query 查询参数，见 {@link StkMinsQuery}；`ts_code` 必填
+   * @returns 规范化 {@link StkMinBar} 列表；无数据时空数组
+   * @throws 当 `ts_code` 为空时抛出
+   */
   async stk_mins(query: StkMinsQuery = {}): Promise<StkMinBar[]> {
     const {
       ts_code,
@@ -631,6 +693,15 @@ export class ZzshareClient {
     return pickColumns(rows, ['ts_code', 'trade_time', 'open', 'high', 'low', 'close', 'vol', 'amount'])
   }
 
+  /**
+   * 实时行情快照 — 对齐官方 Python `rt_k()`。
+   *
+   * 用途：盘中最新价、盘口与扩展量化字段；需有效 Token。
+   * 数据源：`/v3/market/kline/realtime`
+   *
+   * @param query 查询参数，见 {@link RtKQuery}
+   * @returns 实时快照行；`fields === 'all'` 时返回扩展列，否则返回基础列
+   */
   async rt_k(query: RtKQuery = {}): Promise<RtKBar[]> {
     const { ts_code, fields, ...rest } = query
     const params: Record<string, QueryValue> = { ...rest }
@@ -675,6 +746,16 @@ export class ZzshareClient {
     return pickColumns(rows, RT_K_BASE_COLS)
   }
 
+  /**
+   * 股票基础列表 — 对齐官方 Python `stock_basic()`。
+   *
+   * 用途：按交易所聚合上市/退市股票，支持代码与名称过滤。
+   * 数据源：`/v3/open/stocks/list`
+   *
+   * @param query 查询参数，见 {@link StockBasicQuery}
+   * @returns 规范化 {@link StockBasicRow} 列表
+   * @throws 当 `list_status` 或 `exchange` 非法时抛出
+   */
   async stock_basic(query: StockBasicQuery = {}): Promise<StockBasicRow[]> {
     const {
       ts_code,
@@ -778,10 +859,28 @@ export class ZzshareClient {
     return pickColumns(result, STOCK_BASIC_COLS)
   }
 
+  /**
+   * 板块热度排名 — 对齐官方 Python `plates_rank()`。
+   *
+   * @param plate_type 板块类型：17=题材、15=概念、14=行业
+   * @param date1 排名日期 YYYYMMDD
+   * @param limit 返回条数，默认 10
+   * @returns 原始 API `data` 载荷
+   */
   plates_rank(plate_type: number, date1: string, limit = 10): Promise<unknown> {
     return this.query(`v3/market/plates/${plate_type}/rank`, { date1, limit })
   }
 
+  /**
+   * 板块区间涨跌幅排名 — 对齐官方 Python `plates_rank_days()`。
+   *
+   * @param plate_type 板块类型：17=题材、15=概念、14=行业
+   * @param date2 截止交易日 YYYYMMDD
+   * @param n_days 回溯交易日数，默认 5
+   * @param n_type 排名维度，默认 3
+   * @param limit 返回条数，默认 10
+   * @returns 原始 API `data` 载荷
+   */
   plates_rank_days(
     plate_type: number,
     date2: string,
@@ -797,6 +896,17 @@ export class ZzshareClient {
     })
   }
 
+  /**
+   * 板块区间排名（含新进标记）— 对齐官方 Python `plates_rank_days_new()`。
+   *
+   * @param plate_type 板块类型：17=题材、15=概念、14=行业
+   * @param date2 截止交易日 YYYYMMDD
+   * @param n_days 回溯交易日数，默认 5
+   * @param n_type 排名维度，默认 3
+   * @param limit 返回条数，默认 20
+   * @param prev_days 新进对比天数，默认 3
+   * @returns 原始 API `data` 载荷
+   */
   plates_rank_days_new(
     plate_type: number,
     date2: string,
@@ -867,6 +977,14 @@ function emptyStockBasicRows(fields?: string): StockBasicRow[] {
   return []
 }
 
+/**
+ * 自在量化连接自检 — 用于设置页「测试连接」。
+ *
+ * 步骤：1) `trade_days` 验证网络；2) 非匿名 Token 时额外调用 `rt_k`。
+ *
+ * @param token 可选覆盖 Token；默认读取运行时配置
+ * @returns `{ ok, message }` 人类可读结果
+ */
 export async function testZzshareConnection(
   token?: string,
 ): Promise<{ ok: boolean; message: string }> {

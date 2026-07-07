@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Mcp(codegraph, *)",
+      "Shell(codegraph *)"
+    ],
+    "deny": []
+  }
+}

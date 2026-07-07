@@ -46,7 +46,10 @@ export class FuyaoClient {
     path: string,
     params: Record<string, QueryValue> = {},
   ): Promise<T> {
-    const url = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+    const qs = new URLSearchParams(cleanParams(params))
+    const suffix = qs.toString()
+    const base = `${this.baseUrl}${path.startsWith('/') ? path : `/${path}`}`
+    const url = suffix ? `${base}?${suffix}` : base
     let lastErr: unknown
     for (let attempt = 0; attempt < 3; attempt++) {
       try {

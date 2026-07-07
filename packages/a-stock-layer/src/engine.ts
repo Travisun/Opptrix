@@ -385,7 +385,7 @@ export class MarketDataEngine {
     return this.q(Capability.STOCK_MONEY_FLOW, 'moneyFlow', true, code)
   }
   indexRealtime(code: string): Promise<QueryResult<IndexRealtime[]>> {
-    return this.q(Capability.INDEX_REALTIME, 'indexRealtime', false, code)
+    return this.qScoped('CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code)
   }
 
   indexKline(code: string, periodOrCount: number): Promise<QueryResult<IndexKline[]>>
@@ -398,7 +398,7 @@ export class MarketDataEngine {
       return this.fetchIndexKline(code, count ?? 800, periodOrCount)
     }
     const args = count ? [code, periodOrCount, start, end, count] : [code, periodOrCount, start, end]
-    return this.query<IndexKline>(Capability.INDEX_KLINE, 'indexKline', 'index_kline', true, args)
+    return this.qScoped('CN', 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, ...args)
   }
 
   private fetchIndexKline(

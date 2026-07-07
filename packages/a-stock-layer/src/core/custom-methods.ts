@@ -157,13 +157,6 @@ const BAOSTOCK_CUSTOM: CustomMethodDef[] = [
 
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   {
-    method: 'zzSentimentMarketTopN',
-    description: '自在量化市场情绪 Top N 概览',
-    params: [
-      { name: 'n', type: 'number', description: '返回条数，默认 10' },
-    ],
-  },
-  {
     method: 'zzUplimitHot',
     description: '涨停热度追踪（连板、首板统计）',
     params: [

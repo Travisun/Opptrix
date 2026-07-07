@@ -31,6 +31,13 @@ const DEFAULTS: ZzshareRuntimeConfig = {
   timeoutMs: 10_000,
 }
 
+/**
+ * 读取自在量化 Provider 运行时配置。
+ *
+ * 优先级：`provider_settings` 中 `extra.apiKey` → 环境变量 → `anonymous`。
+ *
+ * @returns 合并后的运行时配置
+ */
 export function loadZzshareConfig(): ZzshareRuntimeConfig {
   try {
     const row = getProviderConfigStore().getRuntime('zzshare')
@@ -47,12 +54,22 @@ export function loadZzshareConfig(): ZzshareRuntimeConfig {
   }
 }
 
-/** Enabled flag only — token defaults to `anonymous` when unset. */
+/**
+ * 判断自在量化 Provider 是否已启用。
+ *
+ * @param cfg 运行时配置；默认 {@link loadZzshareConfig}
+ * @returns `enabled` 标志
+ */
 export function isZzshareEnabled(cfg = loadZzshareConfig()): boolean {
   return cfg.enabled
 }
 
-/** True when a non-anonymous token is configured (enables rt_k realtime). */
+/**
+ * 判断是否配置了非匿名 Token（可调用 `rt_k` 等付费接口）。
+ *
+ * @param cfg 运行时配置；默认 {@link loadZzshareConfig}
+ * @returns Token 非空且不为 `anonymous` 时为 true
+ */
 export function hasZzshareToken(cfg = loadZzshareConfig()): boolean {
   const token = cfg.token.trim()
   return token.length > 0 && token !== 'anonymous'

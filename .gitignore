@@ -47,6 +47,10 @@ logs/
 data/cache/
 outputs/
 
+# CodeGraph local index (keep .codegraph/.gitignore if committed)
+.codegraph/*
+!.codegraph/.gitignore
+
 # Local trials when using example/ configs
 example/runtime-local/
 .akshare-ref/

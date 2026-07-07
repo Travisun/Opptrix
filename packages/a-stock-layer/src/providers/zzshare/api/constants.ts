@@ -256,24 +256,6 @@ export const SHORTCUTS: Record<string, ZzshareShortcut> = {
     description: '多空情绪对比及牛市指标参考',
     auth: 'open',
   },
-  stock_moneyflow: {
-    path: 'open/stock/{stock_id}/moneyflow',
-    params: ['stock_id', 'm_type'],
-    description: '个股实时主力主力资金流向（超大单/大单等）',
-    auth: 'open',
-  },
-  market_mf: {
-    path: 'open/market/mf',
-    params: ['stock', 'date', 'wm', 'default_v'],
-    description: '全量市场资金流分布概览（分钟级）',
-    auth: 'open',
-  },
-  sentiment_market_top_n: {
-    path: 'v2/api/sentiment/market/top/n',
-    params: ['modal_id', 'date1', 'date2'],
-    description: '市场最热的前 N 名热点概念动态跟踪',
-    auth: 'open',
-  },
   uplimit_market_value: {
     path: 'v2/api/uplimit/market/value',
     params: ['date1', 'date2'],
