@@ -13,24 +13,12 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
-import { CNINFO_MANIFEST } from './cninfo/manifest.js'
-import { EASTMONEY_MANIFEST } from './eastmoney/manifest.js'
-import { TDX_MANIFEST } from './tdx/manifest.js'
-import { NETEASE_MANIFEST } from './netease/manifest.js'
-import { SINA_MANIFEST } from './sina/manifest.js'
-import { YFINANCE_MANIFEST } from './yfinance/manifest.js'
 import { AKSHARE_MANIFEST } from './akshare/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
 import { testBaostockConnection } from './baostock/api/client.js'
 import { testZzshareConnection } from './zzshare/api/client.js'
 import { testTonghuashunConnection } from './tonghuashun/api/client.js'
-import { testCninfoConnection } from './cninfo/api/client.js'
-import { testEastmoneyConnection } from './eastmoney/api/client.js'
-import { testTdxConnection } from './tdx/api/client.js'
-import { testNeteaseConnection } from './netease/api/client.js'
-import { testSinaConnection } from './sina/api/client.js'
-import { testYfinanceConnection } from './yfinance/api/client.js'
 import { testAkshareConnection } from './akshare/driver.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
@@ -50,12 +38,6 @@ const BUILTIN_MANIFESTS = [
   BAOSTOCK_MANIFEST,
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
-  CNINFO_MANIFEST,
-  EASTMONEY_MANIFEST,
-  TDX_MANIFEST,
-  NETEASE_MANIFEST,
-  SINA_MANIFEST,
-  YFINANCE_MANIFEST,
   AKSHARE_MANIFEST,
 ]
 
@@ -121,12 +103,6 @@ export class ProviderLoader {
       ).trim()
       return testTonghuashunConnection(apiKey)
     })
-    this.testHooks.set('cninfo', async () => testCninfoConnection())
-    this.testHooks.set('eastmoney', async () => testEastmoneyConnection())
-    this.testHooks.set('tdx', async () => testTdxConnection())
-    this.testHooks.set('netease', async () => testNeteaseConnection())
-    this.testHooks.set('sina', async () => testSinaConnection())
-    this.testHooks.set('yfinance', async () => testYfinanceConnection())
     this.testHooks.set('akshare', async () => testAkshareConnection())
   }
 

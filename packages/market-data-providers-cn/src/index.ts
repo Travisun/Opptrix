@@ -12,9 +12,6 @@ export {
   TushareClient,
   toTsCode,
   fromTsCode,
-  TdxClient,
-  tdxClient,
-  toTdxSymbol,
   normalizeCode,
   toInstrumentRef,
 } from '@opptrix/a-stock-layer'

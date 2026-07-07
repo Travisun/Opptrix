@@ -56,7 +56,7 @@ export interface ProviderSettingsField {
  * 用途：Provider 渲染配置表单、验证用户输入。
  */
 export interface ProviderSettingsDefinition {
-  /** Provider 唯一标识（如 "eastmoney"、"baostock"） */
+  /** Provider 唯一标识（如 "baostock"、"zzshare"） */
   providerId: string
   /** Provider 显示标题（如"东方财富"、"BaoStock"） */
   title: string

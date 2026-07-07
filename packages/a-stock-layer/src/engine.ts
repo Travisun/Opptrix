@@ -1040,4 +1040,3 @@ export type {
   QueryExecutionContext,
 } from './core/query-plan.js'
 export { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
-export { fetchTdxKlinePaginated } from './providers/tdx/kline-paginate.js'

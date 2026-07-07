@@ -50,7 +50,7 @@ export interface CustomMethodDef {
  * 用途：MCP 层按 providerId 分组展示可用方法。
  */
 export interface ProviderCustomMethods {
-  /** Provider 唯一标识（如 "baostock"、"zzshare"、"eastmoney"） */
+  /** Provider 唯一标识（如 "baostock"、"zzshare"、"akshare"） */
   providerId: string
   /** 该 Provider 的自定义方法列表 */
   methods: CustomMethodDef[]
@@ -203,49 +203,6 @@ const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
-const EASTMONEY_EXTRA_CUSTOM: CustomMethodDef[] = [
-  {
-    method: 'boardConceptList',
-    description: '概念板块列表（含涨跌幅、领涨股）',
-    params: [],
-    example: '{"provider":"eastmoney","method":"boardConceptList","args":[]}',
-  },
-  {
-    method: 'boardIndustryList',
-    description: '行业板块列表（含涨跌幅、领涨股）',
-    params: [],
-  },
-  {
-    method: 'boardRegionList',
-    description: '地域板块列表',
-    params: [],
-  },
-  {
-    method: 'boardConceptCons',
-    description: '概念板块成分股',
-    params: [
-      { name: 'boardCode', type: 'string', description: '板块代码，如 BK0818', required: true },
-    ],
-  },
-  {
-    method: 'ztPool',
-    description: '涨停股池（当日涨停股票列表）',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYYMMDD，默认今日' },
-    ],
-  },
-  {
-    method: 'hsgtNorthFlow',
-    description: '沪深港通北向资金净流入（近30日）',
-    params: [],
-  },
-  {
-    method: 'hotRank',
-    description: '东财个股热搜排名 Top100',
-    params: [],
-  },
-]
-
 const AKSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'stockALgPe',
@@ -375,7 +332,6 @@ const AKSHARE_CUSTOM: CustomMethodDef[] = [
 const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
-  { providerId: 'eastmoney', methods: EASTMONEY_EXTRA_CUSTOM },
   { providerId: 'akshare', methods: AKSHARE_CUSTOM },
 ]
 
@@ -393,3 +349,4 @@ export function findCustomMethod(
   const provider = ALL_CUSTOM_METHODS.find(p => p.providerId === providerId)
   return provider?.methods.find(m => m.method === methodName)
 }
+

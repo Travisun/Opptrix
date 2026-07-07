@@ -6,12 +6,7 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
-import { CNINFO_MANIFEST } from './cninfo/manifest.js'
-import { EASTMONEY_MANIFEST } from './eastmoney/manifest.js'
-import { TDX_MANIFEST } from './tdx/manifest.js'
-import { NETEASE_MANIFEST } from './netease/manifest.js'
-import { SINA_MANIFEST } from './sina/manifest.js'
-import { YFINANCE_MANIFEST } from './yfinance/manifest.js'
+import { AKSHARE_MANIFEST } from './akshare/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -21,12 +16,6 @@ export { OKX_SETTINGS } from './okx/settings.js'
 export { BAOSTOCK_SETTINGS } from './baostock/settings.js'
 export { ZZSHARE_SETTINGS } from './zzshare/settings.js'
 export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
-export { CNINFO_SETTINGS } from './cninfo/settings.js'
-export { EASTMONEY_SETTINGS } from './eastmoney/settings.js'
-export { TDX_SETTINGS } from './tdx/settings.js'
-export { NETEASE_SETTINGS } from './netease/settings.js'
-export { SINA_SETTINGS } from './sina/settings.js'
-export { YFINANCE_SETTINGS } from './yfinance/settings.js'
 
 /** Static built-in manifests — registered into ManifestRegistry by ProviderLoader.registerBuiltins() */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -37,12 +26,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   BAOSTOCK_MANIFEST,
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
-  CNINFO_MANIFEST,
-  EASTMONEY_MANIFEST,
-  TDX_MANIFEST,
-  NETEASE_MANIFEST,
-  SINA_MANIFEST,
-  YFINANCE_MANIFEST,
+  AKSHARE_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */

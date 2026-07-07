@@ -11,9 +11,9 @@ import {
  * Integration test: multi-provider fallback with circuit breaker.
  *
  * Scenario:
- *   Provider A (eastmoney) — primary, flaky
- *   Provider B (sina)      — secondary, stable
- *   Provider C (netease)   — tertiary, always fails
+ *   Provider A (zzshare) — primary, flaky
+ *   Provider B (tushare)      — secondary, stable
+ *   Provider C (baostock)   — tertiary, always fails
  *
  * Simulates the engine's queryScoped loop with health tracking.
  */
@@ -67,153 +67,153 @@ async function simulateQueryScoped(
 
 describe('Multi-provider fallback integration', () => {
   let health: ProviderHealthTracker
-  let eastmoney: MockProvider
-  let sina: MockProvider
-  let netease: MockProvider
+  let zzshare: MockProvider
+  let tushare: MockProvider
+  let baostock: MockProvider
 
   beforeEach(() => {
     health = new ProviderHealthTracker()
-    eastmoney = createMockProvider('eastmoney', false)
-    sina = createMockProvider('sina', false)
-    netease = createMockProvider('netease', true, 'connection refused')
+    zzshare = createMockProvider('zzshare', false)
+    tushare = createMockProvider('tushare', false)
+    baostock = createMockProvider('baostock', true, 'connection refused')
   })
 
   it('primary succeeds on first try — no fallback', async () => {
     const result = await simulateQueryScoped(
-      [eastmoney, sina, netease],
+      [zzshare, tushare, baostock],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('eastmoney')
-    expect(result.attempts).toEqual(['TRY:eastmoney'])
-    expect(eastmoney.callCount).toBe(1)
-    expect(sina.callCount).toBe(0)
+    expect(result.source).toBe('zzshare')
+    expect(result.attempts).toEqual(['TRY:zzshare'])
+    expect(zzshare.callCount).toBe(1)
+    expect(tushare.callCount).toBe(0)
   })
 
   it('primary fails → falls to secondary', async () => {
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     const result = await simulateQueryScoped(
-      [eastmoney, sina, netease],
+      [zzshare, tushare, baostock],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('sina')
-    expect(result.attempts).toEqual(['TRY:eastmoney', 'TRY:sina'])
+    expect(result.source).toBe('tushare')
+    expect(result.attempts).toEqual(['TRY:zzshare', 'TRY:tushare'])
   })
 
   it('all providers fail → returns error', async () => {
-    eastmoney.shouldFail = true
-    sina.shouldFail = true
+    zzshare.shouldFail = true
+    tushare.shouldFail = true
 
     const result = await simulateQueryScoped(
-      [eastmoney, sina, netease],
+      [zzshare, tushare, baostock],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(false)
-    expect(result.attempts).toEqual(['TRY:eastmoney', 'TRY:sina', 'TRY:netease'])
+    expect(result.attempts).toEqual(['TRY:zzshare', 'TRY:tushare', 'TRY:baostock'])
   })
 
   it('primary trips circuit after 3 failures → skips to secondary', async () => {
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     // Run 3 times to trip the circuit
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina, netease], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare, baostock], health, 'realtime')
     }
 
-    // 4th query: eastmoney should be skipped
-    sina.shouldFail = false
+    // 4th query: zzshare should be skipped
+    tushare.shouldFail = false
     const result = await simulateQueryScoped(
-      [eastmoney, sina, netease],
+      [zzshare, tushare, baostock],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('sina')
-    // eastmoney was skipped (not tried)
-    expect(result.attempts[0]).toMatch(/^SKIP:eastmoney/)
-    expect(eastmoney.callCount).toBe(FAILURE_THRESHOLD) // only 3 calls total
+    expect(result.source).toBe('tushare')
+    // zzshare was skipped (not tried)
+    expect(result.attempts[0]).toMatch(/^SKIP:zzshare/)
+    expect(zzshare.callCount).toBe(FAILURE_THRESHOLD) // only 3 calls total
   })
 
   it('per-capability isolation: realtime circuit open, kline works', async () => {
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     // Trip circuit for realtime
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare], health, 'realtime')
     }
 
     // kline on same provider should still work
-    eastmoney.shouldFail = false
+    zzshare.shouldFail = false
     const result = await simulateQueryScoped(
-      [eastmoney, sina],
+      [zzshare, tushare],
       health,
       'kline',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('eastmoney')
+    expect(result.source).toBe('zzshare')
   })
 
   it('recovery after cooldown — HALF_OPEN probe succeeds', async () => {
     vi.useFakeTimers()
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     // Trip circuit
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare], health, 'realtime')
     }
 
     // Confirm circuit is open
-    expect(health.shouldSkip('eastmoney', 'realtime')).toBe(true)
+    expect(health.shouldSkip('zzshare', 'realtime')).toBe(true)
 
     // Advance past cooldown
     vi.advanceTimersByTime(BASE_COOLDOWN_MS + 1000)
 
-    // Now eastmoney is back online — probe should succeed
-    eastmoney.shouldFail = false
+    // Now zzshare is back online — probe should succeed
+    zzshare.shouldFail = false
     const result = await simulateQueryScoped(
-      [eastmoney, sina],
+      [zzshare, tushare],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('eastmoney')
-    expect(health.getHealth('eastmoney', 'realtime')?.state).toBe(CircuitState.CLOSED)
+    expect(result.source).toBe('zzshare')
+    expect(health.getHealth('zzshare', 'realtime')?.state).toBe(CircuitState.CLOSED)
     vi.useRealTimers()
   })
 
   it('recovery fails → reopens circuit with longer cooldown', async () => {
     vi.useFakeTimers()
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     // Trip circuit
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare], health, 'realtime')
     }
 
     vi.advanceTimersByTime(BASE_COOLDOWN_MS + 1000)
 
     // Probe fails again
     const result = await simulateQueryScoped(
-      [eastmoney, sina],
+      [zzshare, tushare],
       health,
       'realtime',
     )
 
-    expect(result.success).toBe(true) // sina saved us
-    expect(result.source).toBe('sina')
+    expect(result.success).toBe(true) // tushare saved us
+    expect(result.source).toBe('tushare')
 
-    const h = health.getHealth('eastmoney', 'realtime')!
+    const h = health.getHealth('zzshare', 'realtime')!
     expect(h.state).toBe(CircuitState.OPEN)
     // Cooldown should be longer (4 failures now)
     expect(h.cooldownUntil - Date.now()).toBeGreaterThan(BASE_COOLDOWN_MS)
@@ -221,20 +221,20 @@ describe('Multi-provider fallback integration', () => {
   })
 
   it('empty responses count as failures for circuit breaker', async () => {
-    // eastmoney returns empty data; sina is healthy
-    const emptyEastmoney = { ...eastmoney, shouldFail: false }
+    // zzshare returns empty data; tushare is healthy
+    const emptyEastmoney = { ...zzshare, shouldFail: false }
     const calls: string[] = []
     const emptyCap = 'realtime_empty'
 
     async function simulateEmptyFirst() {
-      for (const p of [emptyEastmoney, sina]) {
+      for (const p of [emptyEastmoney, tushare]) {
         if (health.shouldSkip(p.name, emptyCap)) {
           calls.push(`SKIP:${p.name}`)
           continue
         }
         calls.push(`TRY:${p.name}`)
-        // eastmoney always returns empty
-        if (p.name === 'eastmoney') {
+        // zzshare always returns empty
+        if (p.name === 'zzshare') {
           health.recordInvalidResponse(p.name, emptyCap)
           continue
         }
@@ -247,33 +247,33 @@ describe('Multi-provider fallback integration', () => {
     const result = await simulateEmptyFirst()
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('sina')
-    // eastmoney's invalid response was recorded
-    const h = health.getHealth('eastmoney', emptyCap)!
+    expect(result.source).toBe('tushare')
+    // zzshare's invalid response was recorded
+    const h = health.getHealth('zzshare', emptyCap)!
     expect(h.consecutiveFails).toBe(1)
     expect(h.lastError).toBe('invalid_response')
   })
 
   it('forceClose allows immediate retry', async () => {
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
 
     // Trip circuit
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare], health, 'realtime')
     }
 
     // Manual recovery
-    health.forceClose('eastmoney', 'realtime')
-    eastmoney.shouldFail = false
+    health.forceClose('zzshare', 'realtime')
+    zzshare.shouldFail = false
 
     const result = await simulateQueryScoped(
-      [eastmoney, sina],
+      [zzshare, tushare],
       health,
       'realtime',
     )
 
     expect(result.success).toBe(true)
-    expect(result.source).toBe('eastmoney')
+    expect(result.source).toBe('zzshare')
   })
 
   it('exponential cooldown increases with consecutive failures', () => {
@@ -310,33 +310,33 @@ describe('Multi-provider fallback integration', () => {
   })
 
   it('stats tracking across mixed success/failure', async () => {
-    eastmoney.shouldFail = true
-    await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+    zzshare.shouldFail = true
+    await simulateQueryScoped([zzshare, tushare], health, 'realtime')
 
-    eastmoney.shouldFail = false
-    await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+    zzshare.shouldFail = false
+    await simulateQueryScoped([zzshare, tushare], health, 'realtime')
 
-    const h = health.getHealth('eastmoney', 'realtime')!
+    const h = health.getHealth('zzshare', 'realtime')!
     expect(h.totalFails).toBe(1)
     expect(h.totalSuccesses).toBe(1)
     expect(h.consecutiveFails).toBe(0) // success reset it
   })
 
   it('reset clears all state for a provider', async () => {
-    eastmoney.shouldFail = true
+    zzshare.shouldFail = true
     for (let i = 0; i < FAILURE_THRESHOLD; i++) {
-      await simulateQueryScoped([eastmoney, sina], health, 'realtime')
+      await simulateQueryScoped([zzshare, tushare], health, 'realtime')
     }
 
-    health.reset('eastmoney')
-    expect(health.getHealth('eastmoney', 'realtime')).toBeUndefined()
+    health.reset('zzshare')
+    expect(health.getHealth('zzshare', 'realtime')).toBeUndefined()
 
     // Should work again
     const result = await simulateQueryScoped(
-      [eastmoney, sina],
+      [zzshare, tushare],
       health,
       'realtime',
     )
-    expect(result.attempts[0]).toBe('TRY:eastmoney')
+    expect(result.attempts[0]).toBe('TRY:zzshare')
   })
 })

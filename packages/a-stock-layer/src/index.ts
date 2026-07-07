@@ -89,8 +89,6 @@ export {
   ZZSHARE_SETTINGS,
 } from './providers/zzshare/index.js'
 
-export { TdxClient, tdxClient, TdxDailyBarReader, readTdxDayFile, toTdxSymbol, isIndexCode, toTdxMarketId, patchNodetdxBjMarket, tdxMinuteIndexToTime, transformTdxMinutePoints } from './providers/tdx/index.js'
-
 export { PortfolioManager } from './portfolio/manager.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
 export { WatchlistManager } from './watchlist/manager.js'

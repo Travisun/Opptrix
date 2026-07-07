@@ -19,7 +19,6 @@
   "dependencies": {
     "@opptrix/market-data-core": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*",
-    "nodetdx": "^4.2.6"
+    "@opptrix/user-store": "*"
   }
 }
