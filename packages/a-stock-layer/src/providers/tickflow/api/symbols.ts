@@ -1,5 +1,5 @@
 import type { Market } from '@opptrix/shared'
-import { inferMarketFromSymbol } from '../../../core/instrument.js'
+import { inferMarketFromSymbol, isCnEtfCode } from '../../../core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from '../../../utils/helpers.js'
 import { normalizeUsSymbol } from '../../../utils/us-market.js'
 
@@ -25,6 +25,17 @@ const CN_EXCHANGE_SUFFIX: Record<string, string> = {
   BJ: 'BJ',
 }
 
+function cnExchangeSuffix(code: string): string {
+  const c = normalizeCode(code)
+  if (isCnEtfCode(c)) {
+    const head2 = c.slice(0, 2)
+    const head3 = c.slice(0, 3)
+    if (head2 === '51' || head2 === '52' || head2 === '56' || head2 === '58') return 'SH'
+    if (head3 === '159' || head2 === '16') return 'SZ'
+  }
+  return CN_EXCHANGE_SUFFIX[resolveStockMarketCode(c)] ?? 'SZ'
+}
+
 function toTickflowSymbolFromMarket(market: Market, code: string): string {
   const raw = code.trim()
   if (/\.(SH|SZ|BJ|US|HK)$/i.test(raw)) return raw.toUpperCase()
@@ -36,7 +47,7 @@ function toTickflowSymbolFromMarket(market: Market, code: string): string {
   }
   if (market === 'CN') {
     const c = normalizeCode(raw)
-    const ex = CN_EXCHANGE_SUFFIX[resolveStockMarketCode(c)] ?? 'SZ'
+    const ex = cnExchangeSuffix(c)
     return `${c}.${ex}`
   }
   throw new Error(`TickFlow 暂不支持市场：${market}`)

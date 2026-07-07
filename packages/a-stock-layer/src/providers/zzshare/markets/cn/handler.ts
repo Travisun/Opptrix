@@ -3,6 +3,7 @@ import type {
 } from '../../../../core/schema.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
+import { isCnEtfCode } from '../../../../core/instrument.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { ZzshareClient } from '../../api/client.js'
 import { invokeZzshare } from '../../api/invoke.js'
@@ -28,6 +29,11 @@ import {
   mapZzshareTradeCalendarRows,
   opptrixPeriodToZzshareFreq,
 } from '../../normalize/index.js'
+import {
+  filterCnEtfListItems,
+  mapKlinesToEtfNavRows,
+  mapProfilesToEtfProfileRows,
+} from '../../../common/etf.js'
 
 function todayYmd(): string {
   const d = new Date()
@@ -666,5 +672,34 @@ export class ZzshareCnHandler extends MarketHandlerShell {
       const bar = klines[0]
       return bar ? mapLatestKlineToStockRealtime(bar, this.nameCache.get(normalizeCode(code)) ?? '') : null
     })
+  }
+
+  async etfList(_market = 'CN', etfCode = ''): Promise<StockListItem[] | null> {
+    const bare = etfCode.trim()
+    if (bare) {
+      if (!isCnEtfCode(bare)) return null
+      const one = await this.stockBasic(bare)
+      return one
+    }
+    const all = await this.stockList('all')
+    if (!all) return null
+    const etfs = filterCnEtfListItems(all)
+    return etfs.length ? etfs : null
+  }
+
+  async etfProfile(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const profiles = await this.profile(etfCode)
+    if (!profiles) return null
+    const mapped = mapProfilesToEtfProfileRows(profiles)
+    return mapped.length ? mapped : null
+  }
+
+  async etfNav(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const rows = await this.kline(etfCode, 'daily', '', '', 30)
+    if (!rows?.length) return null
+    const mapped = mapKlinesToEtfNavRows(etfCode, rows)
+    return mapped.length ? mapped : null
   }
 }

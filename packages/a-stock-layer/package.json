@@ -15,6 +15,8 @@
     "build": "tsc -p tsconfig.json",
     "audit:apis": "npm run build && node scripts/audit-apis.mjs",
     "test:zzshare": "npm run build && node scripts/test-zzshare-apis.mjs",
+    "test:tickflow": "npm run build && node scripts/test-tickflow-apis.mjs",
+    "test:free-gaps": "npm run build && node scripts/test-free-provider-gaps.mjs",
     "test:oppx": "npm run build && node scripts/test-oppx.mjs"
   },
   "dependencies": {

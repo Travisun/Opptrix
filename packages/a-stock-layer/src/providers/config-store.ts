@@ -3,6 +3,7 @@ import type { ProviderSettingsPatch, ProviderSettingsRow, ProviderBindingOverrid
 import { computeEffectivePriority, getUserDataStore } from '@opptrix/user-store'
 import path from 'node:path'
 import { getProviderManifest } from './manifests.js'
+import { notifyProviderConfigChanged } from './common/permission-denial.js'
 
 function fieldKeyToEnvSuffix(key: string): string {
   return key.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase()
@@ -59,7 +60,10 @@ export class ProviderConfigStore {
   }
 
   save(providerId: string, patch: ProviderSettingsPatch): ProviderSettingsRow {
-    return getUserDataStore().providerSettings.save(providerId, patch)
+    const prev = this.getRuntime(providerId)
+    const saved = getUserDataStore().providerSettings.save(providerId, patch)
+    notifyProviderConfigChanged(providerId, prev, saved)
+    return saved
   }
 
   secretsOk(providerId: string, runtime: ProviderSettingsRow): boolean {

@@ -5,6 +5,11 @@ import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends
 import {
   isBse920Code, isShIndexCode, normalizeCode, type StockMarket,
 } from '../../../../utils/helpers.js'
+import { isCnEtfCode } from '../../../../core/instrument.js'
+import {
+  mapIndexConstToEtfHoldings,
+  resolveEtfIndexProxy,
+} from '../../../common/free-proxies.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { BaostockClient, zipBaostockRows, type BaostockResult } from '../../api/client.js'
 import { toBaostockCode } from '../../api/symbols.js'
@@ -34,6 +39,11 @@ import {
   ymdDaysAgo,
   isIntradayBaostockPeriod,
 } from '../../normalize/index.js'
+import {
+  filterCnEtfListItems,
+  mapKlinesToEtfNavRows,
+  mapProfilesToEtfProfileRows,
+} from '../../../common/etf.js'
 
 const INDEX_CODES = new Set(['000001', '000016', '000300', '000688', '000905', '000906', '000852', '399001', '399006', '399005', '399330'])
 
@@ -479,5 +489,53 @@ export class BaostockCnHandler extends MarketHandlerShell {
 
       return results.length ? results : null
     })
+  }
+
+  async etfList(_market = 'CN', etfCode = ''): Promise<StockListItem[] | null> {
+    const bare = etfCode.trim()
+    if (bare) {
+      if (!isCnEtfCode(bare)) return null
+      return this.stockBasic(bare)
+    }
+    const all = await this.stockList('all')
+    if (!all) return null
+    const etfs = filterCnEtfListItems(all)
+    return etfs.length ? etfs : null
+  }
+
+  async etfProfile(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const profiles = await this.profile(etfCode)
+    if (!profiles) return null
+    const mapped = mapProfilesToEtfProfileRows(profiles)
+    return mapped.length ? mapped : null
+  }
+
+  async etfNav(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const rows = await this.kline(etfCode, 'daily', '', '', 30)
+    if (!rows?.length) return null
+    const mapped = mapKlinesToEtfNavRows(etfCode, rows)
+    return mapped.length ? mapped : null
+  }
+
+  /** ETF 持仓 — 宽基 ETF 用指数成分股代理（source: index_constituent_proxy）。 */
+  async etfHoldings(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const indexCode = resolveEtfIndexProxy(etfCode)
+    if (!indexCode) return null
+    const constituents = await this.indexConstituents(indexCode)
+    if (!constituents?.length) return null
+    const mapped = mapIndexConstToEtfHoldings(etfCode, indexCode, constituents)
+    return mapped.length ? mapped : null
+  }
+
+  /** 主营业务 — 来自证券宝行业/类型字段。 */
+  async mainBusiness(code: string): Promise<Record<string, unknown>[] | null> {
+    const profiles = await this.profile(code)
+    const p0 = profiles?.[0]
+    const item = p0?.industry || p0?.industryCsrc || p0?.orgProfile
+    if (!item) return null
+    return [{ code: normalizeCode(code), item, source: 'baostock_profile' }]
   }
 }

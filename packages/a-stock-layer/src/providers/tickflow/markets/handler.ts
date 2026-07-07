@@ -3,6 +3,8 @@ import type { IndexKline } from '../../../core/schema.js'
 import type { CompactKlineData } from '../api/client.js'
 import { TickflowClient, type TickflowAdjustType, type TickflowPeriod } from '../api/client.js'
 import { tickflowRegion } from '../api/symbols.js'
+import { isCnEtfCode } from '../../../core/instrument.js'
+import { mapKlinesToEtfNavRows } from '../../common/etf.js'
 import { isTickflowEnabled } from '../config.js'
 import {
   expandCompactKlines,
@@ -141,5 +143,14 @@ export class TickflowMarketHandler extends TickflowCommonHandler {
       amount: r.amount,
       changePct: r.changePct,
     }))
+  }
+
+  /** ETF 净值 — 免费日 K 收盘价近似（无 IOPV 字段时的回退） */
+  async etfNav(etfCode: string): Promise<Record<string, unknown>[] | null> {
+    if (!isCnEtfCode(etfCode)) return null
+    const rows = await this.kline(etfCode, 'daily', '', '', 30)
+    if (!rows?.length) return null
+    const mapped = mapKlinesToEtfNavRows(etfCode, rows)
+    return mapped.length ? mapped : null
   }
 }

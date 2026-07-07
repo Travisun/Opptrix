@@ -155,6 +155,49 @@ const BAOSTOCK_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
+const TICKFLOW_CUSTOM: CustomMethodDef[] = [
+  {
+    method: 'fetchDepth',
+    description: 'TickFlow 五档盘口深度',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'tfDepthBatch',
+    description: 'TickFlow 批量五档盘口',
+    params: [
+      { name: 'codes', type: 'string', description: '股票代码数组（invoke 时传 JSON 数组）', required: true },
+    ],
+  },
+  {
+    method: 'tfListUniverses',
+    description: 'TickFlow 标的池列表',
+    params: [],
+  },
+  {
+    method: 'tfUniverseBatch',
+    description: 'TickFlow 批量标的池详情',
+    params: [
+      { name: 'ids', type: 'string', description: '标的池 ID 数组', required: true },
+    ],
+  },
+  {
+    method: 'tfExFactors',
+    description: 'TickFlow 除权因子',
+    params: [
+      { name: 'code', type: 'string', description: '股票代码', required: true },
+    ],
+  },
+  {
+    method: 'tfIntradayBatch',
+    description: 'TickFlow 批量当日分钟 K',
+    params: [
+      { name: 'codes', type: 'string', description: '股票代码数组', required: true },
+    ],
+  },
+]
+
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'zzUplimitHot',
@@ -324,6 +367,7 @@ const AKSHARE_CUSTOM: CustomMethodDef[] = [
 
 const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
+  { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'akshare', methods: AKSHARE_CUSTOM },
 ]

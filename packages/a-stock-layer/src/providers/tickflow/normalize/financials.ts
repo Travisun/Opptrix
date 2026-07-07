@@ -55,6 +55,14 @@ export interface TickflowCashFlowRecord {
   capex?: number | null
 }
 
+/** 股本结构单期记录 — TickFlow `/v1/financials/shares` */
+export interface TickflowSharesRecord {
+  period_end: string
+  announce_date?: string | null
+  float_shares?: number | null
+  total_shares?: number | null
+}
+
 function num(v: unknown): number | null {
   if (v == null || v === '') return null
   const n = Number(v)
@@ -212,4 +220,34 @@ export function rowsForSymbol<T>(
   if (upper?.length) return upper
   const key = Object.keys(data).find(k => k.toUpperCase() === tickflowSymbol.toUpperCase())
   return key ? (data[key] ?? []) : []
+}
+
+/**
+ * 股本结构 → 股东/股本 Capability 行。
+ *
+ * @param tickflowSymbol TickFlow 完整代码
+ * @param rows `/v1/financials/shares` 单标的记录
+ * @param reportDate 可选报告期过滤 YYYY-MM-DD
+ */
+export function mapShareholderRecords(
+  tickflowSymbol: string,
+  rows: TickflowSharesRecord[],
+  reportDate = '',
+): Record<string, unknown>[] {
+  const { code } = parseTickflowSymbol(tickflowSymbol)
+  let filtered = rows
+  if (reportDate) {
+    const hint = reportDate.slice(0, 10)
+    filtered = rows.filter(r => String(r.period_end).slice(0, 10) === hint)
+  }
+  return filtered
+    .sort((a, b) => String(b.period_end).localeCompare(String(a.period_end)))
+    .map(r => ({
+      code,
+      reportDate: String(r.period_end).slice(0, 10),
+      announceDate: r.announce_date ?? null,
+      totalShares: num(r.total_shares),
+      floatShares: num(r.float_shares),
+      source: 'tickflow',
+    }))
 }

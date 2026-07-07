@@ -21,6 +21,7 @@ export {
   mapBalanceSheetRecords,
   mapIncomeStatementRecords,
   mapCashFlowRecords,
+  mapShareholderRecords,
   rowsForSymbol,
 } from './financials.js'
 export { mapTickflowDepth, type TickflowMarketDepth } from './depth.js'

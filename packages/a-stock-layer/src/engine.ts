@@ -7,6 +7,14 @@ import { DriverRegistry } from './core/registry.js'
 import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
 import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
+import {
+  isPermissionDeniedError,
+  isProviderCapabilityDenied,
+  recordProviderPermissionDenial,
+  getProviderPermissionDenialSnapshot,
+  clearProviderPermissionDenials,
+  clearAllProviderPermissionDenials,
+} from './providers/common/permission-denial.js'
 import { ProviderSpeedRanker } from './core/speed-ranker.js'
 import { LoadBalancer } from './core/load-balancer.js'
 import { validateResponse } from './core/data-validator.js'
@@ -141,6 +149,12 @@ export class MarketDataEngine {
         continue
       }
 
+      // 权限拒绝登记：永久跳过该 provider×capability（换 Key / 重启用后清除）
+      if (isProviderCapabilityDenied(driver.name, capStr)) {
+        lastError = `${driver.name}: 接口无权限（已登记屏蔽）`
+        continue
+      }
+
       const fn = (driver as unknown as Record<string, unknown>)[method] as
         ((...a: unknown[]) => Promise<unknown[] | null> | unknown[] | null) | undefined
       if (!fn) continue
@@ -183,7 +197,12 @@ export class MarketDataEngine {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
-        health.recordFailure(driver.name, capStr, msg)
+        if (isPermissionDeniedError(e)) {
+          recordProviderPermissionDenial(driver.name, capStr, msg)
+          this.registry.rebuildIndicesWithRanking()
+        } else {
+          health.recordFailure(driver.name, capStr, msg)
+        }
         this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker.shouldRebuildIndices(driver.name, capStr)) {
@@ -901,6 +920,18 @@ export class MarketDataEngine {
     return getProviderHealthTracker().prune()
   }
 
+  /** 已登记「权限不足」的 provider×接口（换 Key / 重启用后清除）。 */
+  providerPermissionDenials() {
+    return getProviderPermissionDenialSnapshot()
+  }
+
+  /** 清除权限拒绝登记并重建路由索引。 */
+  resetProviderPermissionDenials(providerId?: string) {
+    if (providerId) clearProviderPermissionDenials(providerId)
+    else clearAllProviderPermissionDenials()
+    this.registry.rebuildIndicesWithRanking()
+  }
+
   // ── Provider custom methods ──
 
   /** List all available custom methods across providers (or for a specific provider). */
@@ -937,6 +968,10 @@ export class MarketDataEngine {
         return { success: false, error: `${providerId} 当前熔断中，请稍后重试` }
       }
 
+      if (isProviderCapabilityDenied(providerId, capStr)) {
+        return { success: false, error: `${providerId}.${methodName} 无权限（已登记屏蔽）` }
+      }
+
       const result = await this.withProviderTimeout(
         () => fn.apply(driver, args),
         15_000,
@@ -948,7 +983,13 @@ export class MarketDataEngine {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const health = getProviderHealthTracker()
-      health.recordFailure(providerId, `custom:${methodName}`, msg)
+      const capStr = `custom:${methodName}`
+      if (isPermissionDeniedError(e)) {
+        recordProviderPermissionDenial(providerId, capStr, msg)
+        this.registry.rebuildIndicesWithRanking()
+      } else {
+        health.recordFailure(providerId, capStr, msg)
+      }
       return { success: false, error: msg }
     }
   }

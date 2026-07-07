@@ -1,8 +1,9 @@
 import { Capability } from '../../core/capabilities.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
-import { BAOSTOCK_SETTINGS } from './settings.js'
 import { cnEquityEtfIndex } from '../common/bindings.js'
+import { FREE_CN_ETF_CAPABILITIES, FREE_CN_ETF_HOLDINGS_CAPABILITIES } from '../common/etf-capabilities.js'
+import { BAOSTOCK_SETTINGS } from './settings.js'
 
 export const BAOSTOCK_CAPS = [
   Capability.STOCK_KLINE,
@@ -22,6 +23,9 @@ export const BAOSTOCK_CAPS = [
   Capability.INTRADAY_TICK,
   Capability.MACRO_INDICATOR,
   Capability.PERF_FORECAST,
+  Capability.MAIN_BUSINESS,
+  ...FREE_CN_ETF_CAPABILITIES,
+  ...FREE_CN_ETF_HOLDINGS_CAPABILITIES,
 ]
 
 export const BAOSTOCK_SPEC: ProviderManifestSpec = {
@@ -35,12 +39,14 @@ export const BAOSTOCK_SPEC: ProviderManifestSpec = {
   bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
     BAOSTOCK_CAPS.filter(c => ![
       Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
+      ...FREE_CN_ETF_CAPABILITIES,
+      ...FREE_CN_ETF_HOLDINGS_CAPABILITIES,
     ].includes(c)),
     BAOSTOCK_CAPS.filter(c => [
       Capability.INDEX_REALTIME, Capability.INDEX_KLINE, Capability.INDEX_CONST,
     ].includes(c)),
     p,
-    undefined,
+    [...FREE_CN_ETF_CAPABILITIES, ...FREE_CN_ETF_HOLDINGS_CAPABILITIES, Capability.STOCK_REALTIME, Capability.STOCK_KLINE],
     maxConcurrent,
   ),
   settings: BAOSTOCK_SETTINGS,

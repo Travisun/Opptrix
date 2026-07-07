@@ -64,6 +64,8 @@ export {
   mapZzshareUplimitStocksRows,
 } from './limit-up.js'
 
+export { mapRecordsToNewsItems, mapZzshareStockNewsRows } from './news.js'
+
 export {
   mapZzshareMarketPlateStocksRows,
   mapZzsharePlatesListRows,

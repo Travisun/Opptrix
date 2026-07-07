@@ -19,6 +19,13 @@ export const ZZSHARE_CAPS = [
   Capability.MARKET_BREADTH,
   Capability.SENTIMENT,
   Capability.SECTOR_LIST,
+  Capability.NEWS,
+  Capability.MAIN_BUSINESS,
+  Capability.INST_HOLDING,
+  Capability.SHAREHOLDER,
+  Capability.STOCK_MONEY_FLOW,
+  Capability.SECTOR_MONEY_FLOW,
+  Capability.MARKET_MONEY_FLOW,
 ]
 
 const INDEX_CAPS = [

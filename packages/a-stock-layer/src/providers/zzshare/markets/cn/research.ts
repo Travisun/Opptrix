@@ -1,22 +1,30 @@
-import type { DragonTiger, LimitUpDown, SentimentData } from '../../../../core/schema.js'
+import type { DragonTiger, LimitUpDown, MoneyFlow, NewsItem, SentimentData } from '../../../../core/schema.js'
 import { normalizeCode } from '../../../../utils/helpers.js'
 import type { ZzshareClient } from '../../api/client.js'
 import { invokeZzshare } from '../../api/invoke.js'
 import { toTsCode } from '../../api/symbols.js'
 import {
+  mapLhbDetailToInstHolding,
+  mapLhbDetailToMoneyFlow,
+  mapLhbHistoryToShareholders,
+} from '../../../common/free-proxies.js'
+import {
   genericRecords,
   mapZzshareGenericRecords,
   mapZzshareLhbDetailRows,
   mapZzshareLhbListRows,
+  mapZzshareLhbStockHistoryRows,
   mapZzshareMarketSentimentRows,
   mapZzsharePlatesListRows,
   mapZzsharePlatesRankRows,
   mapZzshareReviewUplimitReasonRows,
   mapZzshareSentimentBullDataRows,
+  mapZzshareStockUplimitReasonRows,
   mapZzshareTopicTableListRows,
   mapZzshareUplimitHotRows,
   mapZzshareUplimitStocksRows,
   mapZzshareUpdownDistributionRows,
+  mapZzshareStockNewsRows,
 } from '../../normalize/index.js'
 import type { ZzshareCnHandler } from './handler.js'
 
@@ -342,6 +350,165 @@ export function mixZzshareResearch(Driver: { prototype: ZzshareCnHandler }) {
         ...mapZzshareGenericRecords(open).map(row => ({ ...row, source: 'open_sentiment_data' })),
       ]
       return rows.length ? rows : null
+    })
+  }
+
+  /**
+   * 个股资讯/公告 — Capability `NEWS`。
+   * 合并涨停原因、历史涨停、异动预警与 AI 报告摘要（免费 open API）。
+   */
+  p.news = async function news(
+    code: string,
+    page = 1,
+    pageSize = 20,
+    _newsType = '',
+  ): Promise<NewsItem[] | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const limit = Math.max(1, Math.min(pageSize, 50))
+    const offset = Math.max(0, (Math.max(1, page) - 1) * limit)
+    return this.withClient(async client => {
+      const ts = toTsCode(bare)
+      const [reason, history, alerts, reports] = await Promise.all([
+        invokeZzshare(client, 'stock_uplimit_reason', { stock_code: bare }).catch(() => null),
+        invokeZzshare(client, 'stock_uplimit_reason_history', { stock_code: bare }).catch(() => null),
+        invokeZzshare(client, 'movement_alerts', { stock_code: bare, limit: 30, is_real: 1 }).catch(() => null),
+        invokeZzshare(client, 'ai_report_list', { type: 'daily', page: 1, page_size: 10 }).catch(() => null),
+      ])
+      const reasonRows = mapZzshareStockUplimitReasonRows(reason, bare)
+      const historyRows = mapZzshareStockUplimitReasonRows(history, bare).map(r => ({ ...r, source: 'stock_uplimit_reason_history' }))
+      const alertRows = genericRecords(alerts)
+        .filter(row => !row.code || normalizeCode(String(row.code)) === bare)
+        .map(row => ({ ...row, code: bare, source: 'movement_alerts' }))
+      const reportRows = genericRecords(reports)
+        .filter(row => {
+          const text = JSON.stringify(row)
+          return text.includes(bare) || text.includes(ts)
+        })
+        .map(row => ({ ...row, code: bare, source: 'ai_report_list', reason: row.title ?? row.summary }))
+      const limitRows: Record<string, unknown>[] = []
+      for (let i = 0; i < 5; i++) {
+        const d = ymdDaysAgo(i)
+        const lu = await invokeZzshare(client, 'review_uplimit_reason_open', { date1: ymdToApi(d) }).catch(() => null)
+        const mapped = mapZzshareReviewUplimitReasonRows(lu, d)
+          .filter(row => row.code === bare)
+          .map(row => ({
+            code: bare,
+            date: row.date,
+            reason: row.reason ?? row.name,
+            source: 'review_uplimit_reason',
+          }))
+        limitRows.push(...mapped)
+        if (limitRows.length >= limit) break
+      }
+      const items = mapZzshareStockNewsRows(bare, reasonRows, historyRows, alertRows, reportRows, limitRows)
+      const sliced = items.slice(offset, offset + limit)
+      return sliced.length ? sliced : null
+    })
+  }
+
+  /** 主营业务 — Capability `MAIN_BUSINESS`（来自个股 profile / stock_info）。 */
+  p.mainBusiness = async function mainBusiness(code: string): Promise<Record<string, unknown>[] | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const profiles = await this.profile(bare)
+    const p0 = profiles?.[0]
+    const item = p0?.mainBusiness || p0?.businessScope || p0?.industry || p0?.orgProfile
+    if (!item) return null
+    return [{ code: bare, item, source: 'profile' }]
+  }
+
+  /** 机构持仓 — Capability `INST_HOLDING`（龙虎榜机构席位代理）。 */
+  p.instHolding = async function instHolding(code: string): Promise<Record<string, unknown>[] | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return this.withClient(async client => {
+      const data = await invokeZzshare(client, 'lhb_stock_history', {
+        stock_code: bare,
+      }).catch(() => null)
+      const history = mapZzshareLhbStockHistoryRows(data, bare)
+      const seats: Record<string, unknown>[] = []
+      for (let i = 0; i < 10; i++) {
+        const queryDate = ymdDaysAgo(i)
+        const detail = await invokeZzshare(client, 'lhb_detail', {
+          date1: ymdToApi(queryDate),
+          stock_code: bare,
+        }).catch(() => null)
+        seats.push(...mapZzshareLhbDetailRows(detail, queryDate))
+        if (seats.length) break
+      }
+      const rows = mapLhbDetailToInstHolding(bare, [...history, ...seats])
+      return rows.length ? rows : null
+    })
+  }
+
+  /** 股东信息 — Capability `SHAREHOLDER`（龙虎榜历史席位弱代理，非十大股东）。 */
+  p.shareholders = async function shareholders(code: string, _reportDate = ''): Promise<Record<string, unknown>[] | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return this.withClient(async client => {
+      const data = await invokeZzshare(client, 'lhb_stock_history', {
+        stock_code: bare,
+      }).catch(() => null)
+      const rows = mapLhbHistoryToShareholders(bare, mapZzshareLhbStockHistoryRows(data, bare))
+      return rows.length ? rows : null
+    })
+  }
+
+  /** 个股资金流 — Capability `STOCK_MONEY_FLOW`（龙虎榜净买额代理）。 */
+  p.moneyFlow = async function moneyFlow(code: string): Promise<MoneyFlow[] | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return this.withClient(async client => {
+      const data = await invokeZzshare(client, 'lhb_stock_history', {
+        stock_code: bare,
+      }).catch(() => null)
+      const history = mapZzshareLhbStockHistoryRows(data, bare)
+      const rows = mapLhbDetailToMoneyFlow(bare, history)
+      return rows.length ? rows : null
+    })
+  }
+
+  /** 板块资金流 — Capability `SECTOR_MONEY_FLOW`（板块热度排名代理）。 */
+  p.sectorMoneyFlow = async function sectorMoneyFlow(sectorType = '14'): Promise<Record<string, unknown>[] | null> {
+    const plateType = Number(sectorType) || 14
+    return this.withClient(async client => {
+      for (let i = 0; i < 10; i++) {
+        const queryDate = ymdDaysAgo(i)
+        const data = await client.plates_rank(plateType, ymdToApi(queryDate), 30).catch(() => null)
+        const rows = mapZzsharePlatesRankRows(data, plateType, queryDate)
+        const mapped = rows.map(row => ({
+          sectorCode: String(row.plateCode ?? row.plate_code ?? ''),
+          sectorName: String(row.plate_name ?? row.plateName ?? row.name ?? ''),
+          date: queryDate,
+          netAmount: row.money_leader ?? row.money_leader_buy ?? null,
+          changePct: row.rate ?? row.changePct ?? row.change_pct ?? null,
+          source: 'plates_rank_proxy',
+        })).filter(r => r.sectorName)
+        if (mapped.length) return mapped
+      }
+      return null
+    })
+  }
+
+  /** 大盘资金流 — Capability `MARKET_MONEY_FLOW`（涨跌家数分布代理）。 */
+  p.marketMoneyFlow = async function marketMoneyFlow(direction = 'market'): Promise<Record<string, unknown>[] | null> {
+    const queryDate = todayYmd()
+    return this.withClient(async client => {
+      const data = await invokeZzshare(client, 'updown_distribution', { date1: ymdToApi(queryDate) })
+      const rows = mapZzshareUpdownDistributionRows(data, queryDate)
+      if (!rows.length) return null
+      const latest = rows[rows.length - 1]!
+      const up = Number(latest.up ?? latest.up_count ?? 0) || 0
+      const down = Number(latest.down ?? latest.down_count ?? 0) || 0
+      return [{
+        direction,
+        date: queryDate,
+        netAmount: up - down,
+        shNet: latest.sh_up ?? null,
+        szNet: latest.sz_up ?? null,
+        source: 'updown_distribution_proxy',
+      }]
     })
   }
 }
