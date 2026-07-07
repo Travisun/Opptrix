@@ -54,4 +54,4 @@ if (errors.length) {
   console.error('Provider audit failed:\n' + errors.map(e => `  - ${e}`).join('\n'))
   process.exit(1)
 }
-console.log('Provider audit OK: 19 registered providers, no shim directories.')
+console.log('Provider audit OK: 7 registered providers, no shim directories.')

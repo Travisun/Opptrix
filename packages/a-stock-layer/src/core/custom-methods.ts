@@ -50,7 +50,7 @@ export interface CustomMethodDef {
  * 用途：MCP 层按 providerId 分组展示可用方法。
  */
 export interface ProviderCustomMethods {
-  /** Provider 唯一标识（如 "baostock"、"zzshare"、"akshare"） */
+  /** Provider 唯一标识（如 "baostock"、"zzshare"） */
   providerId: string
   /** 该 Provider 的自定义方法列表 */
   methods: CustomMethodDef[]
@@ -239,137 +239,10 @@ const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
-const AKSHARE_CUSTOM: CustomMethodDef[] = [
-  {
-    method: 'stockALgPe',
-    description: 'A股等权重市盈率历史（乐咕）',
-    params: [],
-  },
-  {
-    method: 'stockALgPb',
-    description: 'A股等权重市净率历史（乐咕）',
-    params: [],
-  },
-  {
-    method: 'stockBuffettIndex',
-    description: '巴菲特指标（A股总市值/GDP）',
-    params: [],
-  },
-  {
-    method: 'sseSummary',
-    description: '上交所市场总貌（市值、市盈率、上市公司数）',
-    params: [],
-  },
-  {
-    method: 'szseSummary',
-    description: '深交所市场总貌',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYYMMDD' },
-    ],
-  },
-  {
-    method: 'sseDealDaily',
-    description: '上交所每日概况（挂牌数、市值、成交额）',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYYMMDD' },
-    ],
-  },
-  {
-    method: 'bondSpotQuote',
-    description: '银行间债券做市报价',
-    params: [],
-  },
-  {
-    method: 'bondSpotDeal',
-    description: '银行间债券现券成交行情',
-    params: [],
-  },
-  {
-    method: 'bondChinaYield',
-    description: '国债收益率曲线',
-    params: [
-      { name: 'startDate', type: 'string', description: '起始日期 YYYY-MM-DD', required: true },
-      { name: 'endDate', type: 'string', description: '结束日期 YYYY-MM-DD', required: true },
-    ],
-  },
-  {
-    method: 'bondZhCov',
-    description: '可转债列表',
-    params: [],
-  },
-  {
-    method: 'bondCbJsl',
-    description: '集思录可转债列表',
-    params: [],
-  },
-  {
-    method: 'amacMemberInfo',
-    description: '私募基金协会会员机构',
-    params: [],
-  },
-  {
-    method: 'amacManagerInfo',
-    description: '私募基金管理人信息',
-    params: [],
-  },
-  {
-    method: 'amacFundInfo',
-    description: '私募基金产品信息',
-    params: [
-      { name: 'startPage', type: 'number', description: '起始页码', required: true },
-      { name: 'endPage', type: 'number', description: '结束页码', required: true },
-    ],
-  },
-  {
-    method: 'futuresSettle',
-    description: '期货结算价',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD', required: true },
-      { name: 'market', type: 'string', description: '交易所代码', required: true },
-    ],
-  },
-  {
-    method: 'futuresZhDailySina',
-    description: '期货日K线（新浪）',
-    params: [
-      { name: 'symbol', type: 'string', description: '合约代码', required: true },
-    ],
-  },
-  {
-    method: 'currencyLatest',
-    description: '实时汇率',
-    params: [
-      { name: 'base', type: 'string', description: '基准货币', default: 'USD' },
-    ],
-  },
-  {
-    method: 'currencyConvert',
-    description: '货币兑换',
-    params: [
-      { name: 'from', type: 'string', description: '源货币', default: 'USD' },
-      { name: 'to', type: 'string', description: '目标货币', default: 'CNY' },
-      { name: 'amount', type: 'number', description: '金额', default: 10000 },
-    ],
-  },
-  {
-    method: 'movieBoxofficeRealtime',
-    description: '实时票房',
-    params: [],
-  },
-  {
-    method: 'newsCctv',
-    description: '央视新闻联播文字稿',
-    params: [
-      { name: 'date', type: 'string', description: '日期 YYYY-MM-DD', required: true },
-    ],
-  },
-]
-
 const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
-  { providerId: 'akshare', methods: AKSHARE_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {

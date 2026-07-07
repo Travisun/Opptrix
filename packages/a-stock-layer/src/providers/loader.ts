@@ -13,13 +13,11 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
-import { AKSHARE_MANIFEST } from './akshare/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
 import { testBaostockConnection } from './baostock/api/client.js'
 import { testZzshareConnection } from './zzshare/api/client.js'
 import { testTonghuashunConnection } from './tonghuashun/api/client.js'
-import { testAkshareConnection } from './akshare/driver.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
 import {
@@ -38,7 +36,6 @@ const BUILTIN_MANIFESTS = [
   BAOSTOCK_MANIFEST,
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
-  AKSHARE_MANIFEST,
 ]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {
@@ -103,7 +100,6 @@ export class ProviderLoader {
       ).trim()
       return testTonghuashunConnection(apiKey)
     })
-    this.testHooks.set('akshare', async () => testAkshareConnection())
   }
 
   getTestConnectionHook(providerId: string): ProviderTestConnectionHook | undefined {

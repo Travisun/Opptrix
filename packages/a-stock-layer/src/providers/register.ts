@@ -6,7 +6,6 @@ import { OkxDriver } from './okx/driver.js'
 import { BaostockDriver } from './baostock/driver.js'
 import { ZzshareDriver } from './zzshare/driver.js'
 import { TonghuashunDriver } from './tonghuashun/driver.js'
-import { AkshareDriver } from './akshare/driver.js'
 
 /** Register built-in data providers. */
 export function registerAllDrivers(registry: DriverRegistry) {
@@ -18,7 +17,6 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new BaostockDriver(),
     new ZzshareDriver(),
     new TonghuashunDriver(),
-    new AkshareDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -32,5 +30,4 @@ export {
   BaostockDriver,
   ZzshareDriver,
   TonghuashunDriver,
-  AkshareDriver,
 }

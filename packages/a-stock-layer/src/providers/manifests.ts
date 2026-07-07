@@ -6,7 +6,6 @@ import { OKX_MANIFEST } from './okx/manifest.js'
 import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
-import { AKSHARE_MANIFEST } from './akshare/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -26,7 +25,6 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   BAOSTOCK_MANIFEST,
   ZZSHARE_MANIFEST,
   TONGHUASHUN_MANIFEST,
-  AKSHARE_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */
