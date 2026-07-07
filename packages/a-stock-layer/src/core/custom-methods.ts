@@ -198,6 +198,52 @@ const TICKFLOW_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
+const TENCENT_CUSTOM: CustomMethodDef[] = [
+  {
+    method: 'tencentStockPlates',
+    description: '查询个股行业/概念/地域标签（腾讯 plateNew）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+    example: '{"provider":"tencent","method":"tencentStockPlates","args":["300308"]}',
+  },
+  {
+    method: 'tencentRelatedPlates',
+    description: '查询个股关联板块列表',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'tencentIndustryRank',
+    description: '查询个股行业内估值排名（PE/市值/每股收益）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'tencentInstitutionRating',
+    description: '查询机构评级汇总与近期研报标题',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+  {
+    method: 'tencentStockSearch',
+    description: '股票搜索（腾讯 smartbox）',
+    params: [
+      { name: 'query', type: 'string', description: '代码或名称关键词', required: true },
+    ],
+  },
+  {
+    method: 'tencentTradeDetails',
+    description: '逐笔成交明细（盘中有效，收盘后常为空）',
+    params: [
+      { name: 'code', type: 'string', description: '6 位股票代码', required: true },
+    ],
+  },
+]
+
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
   {
     method: 'zzUplimitHot',
@@ -243,6 +289,7 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'baostock', methods: BAOSTOCK_CUSTOM },
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
+  { providerId: 'tencent', methods: TENCENT_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {
