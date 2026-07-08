@@ -1,9 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
-import DiscoverTab from './DiscoverTab'
-import IndustryTab from './IndustryTab'
 import PortfolioTab from './PortfolioTab'
-import { useDiscoverSession } from './useDiscoverSession'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
 import EtfDetailTab from './EtfDetailTab'
@@ -14,7 +11,7 @@ import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars } from '../theme/tokens'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -38,7 +35,7 @@ import {
 } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 
-type MarketTab = 'watchlist' | 'discover' | 'industry' | 'portfolio' | 'detail'
+type MarketTab = 'watchlist' | 'portfolio' | 'detail'
 
 const useStyles = makeStyles({
   root: {
@@ -73,7 +70,7 @@ const useStyles = makeStyles({
     paddingRight: '12px',
   },
   tabsWrap: {
-    flex: '0 1 auto',
+    flex: '0 0 auto',
     minWidth: 0,
     maxWidth: '100%',
     paddingLeft: '15px',
@@ -88,6 +85,11 @@ const useStyles = makeStyles({
     minHeight: 'unset',
     flexWrap: 'nowrap',
     width: 'max-content',
+  },
+  titleBarDragLead: {
+    flex: '0 0 auto',
+    alignSelf: 'stretch',
+    minWidth: '8px',
   },
   dragFill: {
     flex: '1 1 auto',
@@ -155,7 +157,6 @@ export default function RightMarketPanel({
     deleteTrade,
     refreshHoldings,
   } = useFollowPortfolio()
-  const discover = useDiscoverSession()
   const [tab, setTab] = useState<MarketTab>('watchlist')
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
@@ -194,11 +195,6 @@ export default function RightMarketPanel({
     updateItem(code, { note: note || undefined })
   }, [updateItem])
 
-  const watchlistCodeSet = useMemo(
-    () => new Set(items.map(item => watchlistItemKey(normalizeWatchlistItem(item)))),
-    [items],
-  )
-
   const detailStock = useMemo(() => {
     if (!selected) return null
     const key = watchlistItemKey(normalizeWatchlistItem(selected))
@@ -234,15 +230,6 @@ export default function RightMarketPanel({
     return () => { cancelled = true }
   }, [detailStock, detailKind])
 
-  const handleDiscoverSelect = useCallback((item: WatchlistItem) => {
-    setSelected(item)
-    setTab('detail')
-  }, [])
-
-  const handleDiscoverAdd = useCallback((item: WatchlistItem) => {
-    addItem(item)
-  }, [addItem])
-
   const handlePortfolioSelect = useCallback((code: string) => {
     const fromList = items.find(item => item.code === code || normalizeCode(item.code) === normalizeCode(code))
     const holding = holdingsByCode[normalizeCode(code)] ?? holdingsByCode[code]
@@ -265,10 +252,13 @@ export default function RightMarketPanel({
     : null
 
   const showDetailTab = tab === 'detail'
-  /** Overlay sidebar + full-width panel: indent tabs past global toolbar (no fixed title bar). */
-  const tabsPadLeft = electronChrome && panelFullWidth && !chatColumnVisible && chromeToolbarReserve > 0
-    ? Math.max(15, chromeToolbarReserve)
-    : undefined
+  /** Full-width panel: reserve global toolbar band as a dedicated drag zone (not tab padding). */
+  const titleBarDragLeadWidth = electronChrome
+    && panelFullWidth
+    && !chatColumnVisible
+    && chromeToolbarReserve > 0
+    ? chromeToolbarReserve
+    : 0
 
   useEffect(() => {
     if (tab === 'detail' && !selected) {
@@ -292,10 +282,14 @@ export default function RightMarketPanel({
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}
       >
-        <div
-          className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}
-          style={tabsPadLeft != null ? { paddingLeft: `${tabsPadLeft}px` } : undefined}
-        >
+        {titleBarDragLeadWidth > 0 && (
+          <div
+            className={mergeClasses(s.titleBarDragLead, 'opptrix-right-panel-title-drag')}
+            style={{ width: `${titleBarDragLeadWidth}px` }}
+            aria-hidden
+          />
+        )}
+        <div className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}>
           <TabList
             className={s.tabs}
             size="small"
@@ -304,8 +298,6 @@ export default function RightMarketPanel({
           >
             <Tab value="watchlist">关注</Tab>
             <Tab value="portfolio">组合</Tab>
-            <Tab value="industry">行业</Tab>
-            <Tab value="discover">选股</Tab>
             {showDetailTab ? <Tab value="detail">详情</Tab> : null}
           </TabList>
         </div>
@@ -362,17 +354,6 @@ export default function RightMarketPanel({
               }
             }}
           />
-        </div>
-        <div className={mergeClasses(s.tabPane, tab !== 'discover' && s.tabPaneHidden)}>
-          <DiscoverTab
-            session={discover}
-            watchlistCodes={watchlistCodeSet}
-            onSelect={handleDiscoverSelect}
-            onAdd={handleDiscoverAdd}
-          />
-        </div>
-        <div className={mergeClasses(s.tabPane, tab !== 'industry' && s.tabPaneHidden)}>
-          <IndustryTab onSelectStock={handleDiscoverSelect} />
         </div>
         <div className={mergeClasses(s.tabPane, tab !== 'portfolio' && s.tabPaneHidden)}>
           <PortfolioTab

@@ -246,6 +246,8 @@ html.opptrix-electron .opptrix-right-panel-title-bar {
 html.opptrix-electron .opptrix-right-panel-title-drag {
   pointer-events: auto;
   -webkit-app-region: drag;
+  align-self: stretch;
+  min-width: 8px;
 }
 
 html.opptrix-electron .opptrix-panel-title-no-drag {
