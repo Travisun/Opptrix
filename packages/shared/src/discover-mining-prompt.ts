@@ -2,7 +2,7 @@ import type { DiscoverStrategyProfile } from './discover-profile-types.js'
 import { getDiscoverProfileDefinition } from './discover-profile-registry.js'
 import { discoverMiningToolNamesForProfile } from './discover-mining-tools.js'
 import { discoverPrescreenMode } from './discover-profiles.js'
-import { buildInstrumentAnalysisPlaybook, buildNewsRetrievalPlaybook } from './agent-prompt-guide.js'
+import { buildInstrumentAnalysisPlaybook, buildNewsRetrievalPlaybook, buildProviderCustomMethodPlaybook } from './agent-prompt-guide.js'
 
 /** 策略解析 / 执行提示中的资产类型描述 */
 export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): string {
@@ -34,7 +34,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
   const def = getDiscoverProfileDefinition(profile)
   const mode = discoverPrescreenMode(profile)
   const tools = discoverMiningToolNamesForProfile(profile)
-  const toolLine = tools.length ? `可调用：${tools.join('、')}` : '暂无可用数据工具'
+  const toolLine = tools.length ? `可调用：${tools.join('、')}` : '该资产类型暂无可用数据工具（日股/韩股暂未接入）'
 
   const footer = [
     '禁止编造数字；只能从候选列表中选股。',
@@ -42,6 +42,15 @@ export function buildDiscoverMiningSystemPrompt(input: {
     outputSchema,
     `最终 items 不超过 ${finalTopN}，按 match_score 降序。不要推荐买卖，仅研究与数据解读。`,
   ].join('\n')
+
+  if (def?.prescreenMode === 'blocked') {
+    return [
+      `你是 Opptrix ${def.label}挖掘 Agent。${def.label}标准行情与挖掘能力暂未接入。`,
+      '请勿调用 get_instrument_* 行情/快照/K 线工具；可向用户说明暂不支持，或仅结合资讯做背景解读。',
+      buildNewsRetrievalPlaybook(),
+      footer,
+    ].join('\n')
+  }
 
   if (mode === 'etf_screen') {
     return [
@@ -64,7 +73,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
       ? `7×24 市场波动大，仅做研究解读。 shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
       : group === 'us_equity'
         ? `禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 深入；${analyticsHint}。`
-        : group === 'jp_equity' || group === 'kr_equity' || group === 'hk_equity'
+        : group === 'hk_equity'
           ? `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
           : `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。`
     return [
@@ -79,12 +88,14 @@ export function buildDiscoverMiningSystemPrompt(input: {
     return [
       '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成因子初选。',
       '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-      '1) get_market_db_status → list_local_industries（行业名）→ screen_local_industry_stocks / screen_local_universe → batch_instrument_snapshots',
+      '1) search_instruments / screen_stocks → batch_instrument_snapshots（在线初选优先）',
       '2) 不足时对 shortlisted 单股：get_instrument_snapshot / evaluate_instrument / get_instrument_strategy_signal / institution_rating',
-      '3) 本地库未就绪：get_market_db_sync_state，必要时 trigger_market_db_sync（每任务最多一次）',
+      '3) 本地因子库（可选）：get_market_db_status → screen_local_universe；未就绪时勿强依赖 trigger_market_db_sync',
       '4) 策略涉及用户持仓/关注：get_watchlist、get_portfolio_holdings、portfolio_trades',
       '5) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
+      '6) 板块/宏观/情绪等非标准数据：list_provider_custom_methods → invoke_provider_custom_method',
       buildInstrumentAnalysisPlaybook(),
+      buildProviderCustomMethodPlaybook(),
       buildNewsRetrievalPlaybook(),
       toolLine,
       '禁止编造数字；禁止对全部候选逐只 get_instrument_snapshot。',

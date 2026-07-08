@@ -27,8 +27,9 @@ const INSTRUMENT_REF_USAGE = [
   'InstrumentRef 示例：',
   'CN {market:"CN", symbol:"600519"}',
   'US {market:"US", symbol:"AAPL"}',
-  'JP {market:"JP", symbol:"7203"}',
+  'HK {market:"HK", symbol:"00700"}',
   'Crypto {market:"CRYPTO", symbol:"BTC", quote:"USDT"}',
+  'JP/KR 暂未接入行情与快照。',
   '也可平传 market + symbol；不熟悉市场时先 get_instrument_capabilities。',
 ].join(' ')
 
@@ -310,26 +311,26 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_local_jp_screen_schema: {
     hubFeature: 'local_jp_screen_schema',
     miningEligible: false,
-    usageGuide: 'screen_local_jp_stocks 前先读本地日股筛选维度说明。',
-    compliance: '只读 schema；需 jp_list 已同步。',
+    usageGuide: '日股暂未接入，勿调用。',
+    compliance: 'prescreenMode=blocked；仅保留兼容。',
   },
   screen_local_jp_stocks: {
     hubFeature: 'local_jp_screen',
-    miningEligible: true,
-    usageGuide: '按代码/公司名、行业关键词筛选本地日股列表。',
-    compliance: 'top_n ≤200；本地 jp_count=0 时勿调用。',
+    miningEligible: false,
+    usageGuide: '日股暂未接入，勿调用。',
+    compliance: 'prescreenMode=blocked。',
   },
   get_local_kr_screen_schema: {
     hubFeature: 'local_kr_screen_schema',
     miningEligible: false,
-    usageGuide: 'screen_local_kr_stocks 前先读本地韩股筛选维度说明。',
-    compliance: '只读 schema；需 kr_list 已同步。',
+    usageGuide: '韩股暂未接入，勿调用。',
+    compliance: 'prescreenMode=blocked；仅保留兼容。',
   },
   screen_local_kr_stocks: {
     hubFeature: 'local_kr_screen',
-    miningEligible: true,
-    usageGuide: '按代码/公司名、行业关键词筛选本地韩股列表。',
-    compliance: 'top_n ≤200；本地 kr_count=0 时勿调用。',
+    miningEligible: false,
+    usageGuide: '韩股暂未接入，勿调用。',
+    compliance: 'prescreenMode=blocked。',
   },
   get_local_hk_screen_schema: {
     hubFeature: 'local_hk_screen_schema',
@@ -346,8 +347,15 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_local_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
-    usageGuide: '跨市场本地标的搜索；JP/KR/HK/US/Crypto 挖掘时用于补充候选或校验代码。',
-    compliance: 'keyword 必填；可用 markets 限定市场；勿替代 screen_local_* 初选。',
+    deprecated: true,
+    usageGuide: '已合并至 search_instruments；跨市场在线搜索 keyword，可用 markets 过滤。',
+    compliance: 'keyword 必填；优先 search_instruments；勿替代 screen_local_* 初选。',
+  },
+  search_instruments: {
+    hubFeature: 'instrument_search',
+    miningEligible: true,
+    usageGuide: '跨市场在线搜索标的（CN/US/HK/Crypto 等）；不熟悉代码或需多市场检索时的首选入口。',
+    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤；结果 InstrumentRef 用于后续 get_instrument_*。',
   },
   get_instrument_capabilities: {
     hubFeature: 'instrument_capabilities',
@@ -595,6 +603,24 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: false,
     usageGuide: '需要确认 Tushare 等外部集成是否已配置时调用。',
     compliance: '只读；不返回 Token/Secret。',
+  },
+  list_enabled_providers: {
+    hubFeature: 'provider_list',
+    miningEligible: false,
+    usageGuide: '调用自定义方法前确认数据源已启用；返回 provider_id、优先级与支持能力摘要。',
+    compliance: '只读；无参数；自定义方法调用前建议先调用一次。',
+  },
+  list_provider_custom_methods: {
+    hubFeature: 'provider_custom_methods',
+    miningEligible: false,
+    usageGuide: '查找非标准 API（板块、宏观、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
+    compliance: '只读；provider_id 如 baostock、zzshare、stockindex、akshare；keyword 匹配方法名/描述；limit 默认 40。',
+  },
+  invoke_provider_custom_method: {
+    hubFeature: 'provider_invoke_custom',
+    miningEligible: false,
+    usageGuide: '执行 list_provider_custom_methods 查到的自定义方法；标准 get_instrument_* 能覆盖的需求勿调用。',
+    compliance: 'provider_id + method 必填；args 为 JSON 数组；code/symbol 可传 InstrumentRef 或 CN:600519 / 600519.SH / sh600519，引擎自动转为 Provider 格式；同一 method 每任务最多 1 次。',
   },
 }
 

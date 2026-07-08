@@ -2,21 +2,60 @@ import type { InstrumentRef } from './market-data.js'
 import { resolveInstrumentAnalyticsProfile } from './instrument-analytics.js'
 import { crossMarketNewsHints } from './news-source-hints.js'
 
+/** 标准 Instrument API 能力清单 — 与 data-layer InstrumentDataCapability 对齐 */
+export const STANDARD_INSTRUMENT_API_CAPABILITIES = [
+  'realtime', 'kline', 'snapshot', 'profile', 'financials',
+  'stock_list', 'instrument_search', 'sector_list',
+  'etf_list', 'etf_nav', 'etf_holdings', 'etf_snapshot',
+] as const
+
+/** Agent 工具与标准能力的映射提示 */
+export function buildStandardInstrumentApiPlaybook(): string {
+  return [
+    '【标准 Instrument API — 优先使用，对应 get_instrument_* / search_instruments】',
+    `- 能力：${STANDARD_INSTRUMENT_API_CAPABILITIES.join('、')}`,
+    '- 搜索：search_instruments（跨市场 keyword，可 markets 过滤）',
+    '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
+    '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart',
+    '- A 股批量截面：batch_instrument_snapshots；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
+    '- ETF：search_etfs / get_etf_snapshot / get_etf_nav / get_etf_holdings（或 instrument ETF ref）',
+    '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
+  ].join('\n')
+}
+
+/** 数据源自定义方法调用路径 */
+export function buildProviderCustomMethodPlaybook(): string {
+  return [
+    '【数据源扩展 — 仅当标准 API 无覆盖时使用】',
+    '0) 板块概念、宏观序列、情绪榜单、龙虎榜等「非标准能力」→ 自定义方法',
+    '1) list_enabled_providers：确认 baostock / zzshare / stockindex / akshare 等是否可用',
+    '2) list_provider_custom_methods：必须带 provider_id 或 keyword；akshare 方法多，禁止无过滤全量拉取',
+    '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
+    '4) args 中的 code/symbol 可传 InstrumentRef、CN:600519、600519.SH、sh600519 等；引擎会自动转为 Provider 格式（如 A 股 6 位、腾讯 sh600519）',
+    '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav，勿调 sinaEtfNav）',
+    '6) 同一任务对同一 method 最多调用 1 次；失败时换 provider 或说明数据不可用，勿编造',
+  ].join('\n')
+}
+
 /** 聊天 Agent — 按标的类型的分析工具路径（由浅入深） */
 export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具】',
     '0) 不确定时：get_instrument_capabilities → 仅调用返回支持的能力',
-    '1) CN 股票（EQUITY）：batch_instrument_snapshots（批量）→ get_instrument_snapshot → evaluate_instrument（因子评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq；因子初选 screen_local_universe / screen_local_industry_stocks',
-    '2) CN ETF：evaluate_instrument（决策雷达）→ get_instrument_strategy_signal → get_etf_scorecard；勿用 A 股股票因子筛选',
-    '3) 美股/港股/日股/韩股：get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面，非基本面因子）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
-    '4) Crypto：get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
-    '5) 禁止对非 CN 股票调用 institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股因子筛选工具',
+    '1) CN 股票（EQUITY）：search_instruments / screen_stocks 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → evaluate_instrument（因子评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq',
+    '2) CN ETF：search_etfs → get_etf_snapshot → evaluate_instrument（决策雷达）→ get_instrument_strategy_signal；勿用 A 股股票因子筛选',
+    '3) 美股/港股：get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
+    '4) 日股/韩股（JP/KR）：暂未接入行情与快照；可读相关资讯，勿调用 get_instrument_* 行情类工具',
+    '5) Crypto：get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
+    '6) 禁止对非 CN 股票调用 institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股因子筛选工具',
   ].join('\n')
 }
 
 /** 单只标的分析路径摘要 — 用于用户已点名代码时 */
 export function instrumentAnalysisStepsForRef(ref: InstrumentRef): string {
+  if (ref.market === 'JP' || ref.market === 'KR') {
+    return '日股/韩股暂未接入标准 API；可读相关资讯，勿调用行情/快照/K 线/评估工具'
+  }
   const profile = resolveInstrumentAnalyticsProfile(ref)
   if (profile.mode === 'cn_factor_scorecard') {
     return '建议顺序：get_instrument_snapshot → evaluate_instrument → get_instrument_strategy_signal → institution_rating（可选）→ get_instrument_cyq（可选）'
@@ -63,12 +102,11 @@ export function buildAgentSystemRules(): string {
   return [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
-    '- 任务开始先 get_market_db_status；本地库不足时用在线工具或 trigger_market_db_sync（谨慎）',
-    '- 跨市场标的统一用 InstrumentRef（market + symbol）；不确定能力时先 get_instrument_capabilities',
-    '- 行情/快照/K 线：get_instrument_quotes / get_instrument_snapshot / get_instrument_chart；A 股初选后批量截面用 batch_instrument_snapshots',
-    '- 本地搜索：search_local_instruments（可用 markets 过滤市场）',
+    '- 跨市场标的统一用 InstrumentRef（market + symbol）；不熟悉代码时 search_instruments',
+    buildStandardInstrumentApiPlaybook(),
     buildInstrumentAnalysisPlaybook(),
-    '- A 股因子初选：get_local_universe_screen_schema + screen_local_universe；按行业 list_local_industries + screen_local_industry_stocks',
+    buildProviderCustomMethodPlaybook(),
+    '- A 股在线初选：screen_stocks；本地因子库可选 get_market_db_status + screen_local_universe（库未就绪时勿强依赖）',
     buildNewsRetrievalPlaybook(),
     '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
     '- 不推荐具体买卖，仅提供研究与数据解读',

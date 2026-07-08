@@ -333,7 +333,17 @@ export class ResearchHub {
         case 'strategy_report': return this.strategyReport(String(params.code), t0)
         case 'provider_custom_methods': {
           const providerId = params.provider_id ? String(params.provider_id) : undefined
-          return ok(this.de.listCustomMethods(providerId), '自定义方法列表', t0)
+          const keyword = params.keyword != null ? String(params.keyword).trim() : undefined
+          const limit = params.limit != null ? Number(params.limit) : undefined
+          return ok(
+            this.de.listCustomMethodsForAgent({
+              providerId,
+              keyword: keyword || undefined,
+              limit: Number.isFinite(limit) ? limit : undefined,
+            }),
+            '自定义方法列表',
+            t0,
+          )
         }
         case 'provider_invoke_custom': {
           const pid = String(params.provider_id ?? '')
@@ -341,7 +351,13 @@ export class ResearchHub {
           const args = Array.isArray(params.args) ? params.args : []
           return this.de.invokeCustomMethod(pid, method, args)
             .then(r => r.success
-              ? ok(r.data, `${pid}.${method}`, t0)
+              ? ok(
+                r.argTransforms?.length
+                  ? { result: r.data, arg_transforms: r.argTransforms }
+                  : r.data,
+                `${pid}.${method}`,
+                t0,
+              )
               : fail(r.error ?? '调用失败', t0))
         }
         default: return fail(`Unknown feature: ${feature}`, t0)

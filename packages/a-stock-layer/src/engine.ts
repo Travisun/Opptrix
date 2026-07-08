@@ -20,6 +20,8 @@ import { ProviderSpeedRanker } from './core/speed-ranker.js'
 import { LoadBalancer } from './core/load-balancer.js'
 import { validateResponse } from './core/data-validator.js'
 import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
+import { listCustomMethodsForAgent } from './core/custom-methods-agent.js'
+import { normalizeCustomMethodArgs } from './core/custom-method-args.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
 import { resolveProviderAlias } from './providers/common/provider-aliases.js'
@@ -981,12 +983,21 @@ export class MarketDataEngine {
     return listProviderCustomMethods(providerId)
   }
 
+  /** Agent 友好目录 — 压缩体积，支持 keyword / limit */
+  listCustomMethodsForAgent(options?: {
+    providerId?: string
+    keyword?: string
+    limit?: number
+  }) {
+    return listCustomMethodsForAgent(options)
+  }
+
   /** Invoke a custom method on a specific provider. Returns the raw result or error. */
   async invokeCustomMethod(
     providerId: string,
     methodName: string,
     args: unknown[] = [],
-  ): Promise<{ success: boolean; data?: unknown; error?: string }> {
+  ): Promise<{ success: boolean; data?: unknown; error?: string; argTransforms?: string[] }> {
     const resolvedId = resolveProviderAlias(providerId)
     const def = findCustomMethod(resolvedId, methodName)
     if (!def) {
@@ -1015,14 +1026,20 @@ export class MarketDataEngine {
         return { success: false, error: `${resolvedId}.${methodName} 无权限（已登记屏蔽）` }
       }
 
+      const { args: normalizedArgs, transforms } = normalizeCustomMethodArgs(resolvedId, def, args)
+
       const result = await this.withProviderTimeout(
-        () => fn.apply(driver, args),
+        () => fn.apply(driver, normalizedArgs),
         15_000,
         resolvedId,
       )
 
       health.recordSuccess(resolvedId, capStr)
-      return { success: true, data: result }
+      return {
+        success: true,
+        data: result,
+        ...(transforms.length ? { argTransforms: transforms } : {}),
+      }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const health = getProviderHealthTracker()
@@ -1058,6 +1075,13 @@ export {
   listProviderCustomMethods,
   findCustomMethod,
 } from './core/custom-methods.js'
+export { listCustomMethodsForAgent } from './core/custom-methods-agent.js'
+export { normalizeCustomMethodArgs } from './core/custom-method-args.js'
+export type { NormalizedCustomMethodArgs } from './core/custom-method-args.js'
+export type {
+  AgentCustomMethodListResult,
+  AgentCustomMethodProviderBlock,
+} from './core/custom-methods-agent.js'
 export type { CustomMethodDef, CustomMethodParam, ProviderCustomMethods } from './core/custom-methods.js'
 export {
   TushareDriver,

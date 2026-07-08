@@ -40,11 +40,6 @@ const REGIONAL_MINING_TOOLS = [
   ...UNIFIED_INSTRUMENT_MINING_TOOLS,
 ] as const
 
-const BLOCKED_REGIONAL_MINING_TOOLS = [
-  'search_instruments',
-  ...UNIFIED_INSTRUMENT_MINING_TOOLS,
-] as const
-
 /** Agent 挖掘工具组 — 与 packages/agent tool-meta 对齐 */
 export const DISCOVER_MINING_TOOL_GROUPS = {
   cn_equity_full: [...CN_EQUITY_ONLINE_TOOLS],
@@ -59,15 +54,15 @@ export const DISCOVER_MINING_TOOL_GROUPS = {
     'get_instrument_strategy_signal',
   ],
   us_equity: [
-    'search_us_stocks',
+    'search_instruments',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
   crypto_spot: [
-    'search_crypto_pairs',
+    'search_instruments',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
-  jp_equity: [...BLOCKED_REGIONAL_MINING_TOOLS],
-  kr_equity: [...BLOCKED_REGIONAL_MINING_TOOLS],
+  jp_equity: [] as const,
+  kr_equity: [] as const,
   hk_equity: [...REGIONAL_MINING_TOOLS],
   none: [] as const,
 } as const satisfies Record<string, readonly string[]>

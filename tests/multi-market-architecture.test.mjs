@@ -56,8 +56,7 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
   assert.equal(getDiscoverProfileDefinition('hk_equity')?.localScreenFeature, 'local_hk_screen')
 
   const jpTools = discoverMiningToolNamesForProfile('jp_equity')
-  assert.ok(jpTools.includes('search_instruments'))
-  assert.ok(jpTools.includes('get_instrument_quotes'))
+  assert.equal(jpTools.length, 0)
   assert.ok(!jpTools.includes('screen_local_jp_stocks'))
 
   const hkTools = discoverMiningToolNamesForProfile('hk_equity')
@@ -149,13 +148,15 @@ test('us_equity mining uses unified instrument tools not legacy US quote', () =>
   }
 })
 
-test('UNIFIED_INSTRUMENT_MINING_TOOLS shared across non-CN discover groups', () => {
-  for (const profile of ['us_equity', 'crypto_spot', 'jp_equity', 'hk_equity']) {
+test('UNIFIED_INSTRUMENT_MINING_TOOLS shared across active non-CN discover groups', () => {
+  for (const profile of ['us_equity', 'crypto_spot', 'hk_equity']) {
     const tools = discoverMiningToolNamesForProfile(profile)
     for (const tool of UNIFIED_INSTRUMENT_MINING_TOOLS) {
       assert.ok(tools.includes(tool), `${profile} should include ${tool}`)
     }
   }
+  assert.equal(discoverMiningToolNamesForProfile('jp_equity').length, 0)
+  assert.equal(discoverMiningToolNamesForProfile('kr_equity').length, 0)
 })
 
 test('cn_equity_full mining uses unified instrument batch and evaluation tools', () => {
@@ -327,11 +328,16 @@ test('agent system rules include analysis and news playbooks', async () => {
   const rules = buildAgentSystemRules()
   assert.ok(rules.includes('【标的分析路径'))
   assert.ok(rules.includes('【资讯调阅'))
+  assert.ok(rules.includes('【标准 Instrument API'))
+  assert.ok(rules.includes('【数据源扩展'))
   assert.ok(rules.includes('market_hints'))
+  assert.ok(rules.includes('JP/KR'))
   const cnSteps = instrumentAnalysisStepsForRef({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' })
   assert.ok(cnSteps.includes('evaluate_instrument'))
   const usSteps = instrumentAnalysisStepsForRef({ market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' })
   assert.ok(usSteps.includes('get_instrument_indicators'))
+  const jpSteps = instrumentAnalysisStepsForRef({ market: 'JP', assetClass: 'EQUITY', symbol: '7203' })
+  assert.ok(jpSteps.includes('暂未接入'))
 })
 
 test('discover factor_screen prompt includes news retrieval playbook', () => {

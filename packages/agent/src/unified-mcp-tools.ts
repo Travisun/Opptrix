@@ -26,11 +26,11 @@ export interface UnifiedInstrumentToolDef {
 const INSTRUMENT_OBJECT_PROPERTIES: Record<string, { type: string; description?: string }> = {
   market: {
     type: 'string',
-    description: '市场：CN | US | HK | JP | KR | CRYPTO',
+    description: '市场：CN | US | HK | CRYPTO（JP/KR 暂未接入行情）',
   },
   symbol: {
     type: 'string',
-    description: '标的代码，如 600519、AAPL、7203、BTC',
+    description: '标的代码，如 600519、AAPL、00700、BTC',
   },
   assetClass: {
     type: 'string',
@@ -56,7 +56,7 @@ export const INSTRUMENT_REF_SCHEMA: JsonSchema['properties'] = {
   },
   market: {
     type: 'string',
-    description: '平铺写法：市场 CN | US | HK | JP | KR | CRYPTO（与 instrument 二选一）',
+    description: '平铺写法：市场 CN | US | HK | CRYPTO（JP/KR 暂未接入；与 instrument 二选一）',
   },
   symbol: {
     type: 'string',
@@ -336,30 +336,42 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'list_enabled_providers',
       category: '数据源扩展',
-      description: '查询当前已启用的数据源列表（provider_id、名称、优先级、支持的能力）。调用自定义方法前先确认目标 provider 是否可用',
+      description: '查询已启用的数据源（provider_id、名称、优先级、能力摘要）',
       parameters: S({}),
       handler: () => d('provider_list', {}),
     },
     {
       name: 'list_provider_custom_methods',
       category: '数据源扩展',
-      description: '查询所有数据源的可用自定义方法（如板块概念、宏观数据、情绪指标等）。返回方法名、说明、参数和示例。可按 provider_id 过滤',
+      description: '查询数据源自定义方法目录（板块、宏观、情绪等）；标准 get_instrument_* 无覆盖时使用',
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '可选，按数据源过滤（如 baostock、zzshare）。不填返回全部',
+          description: '数据源 ID，如 baostock、zzshare、stockindex、akshare；大数据源建议必填',
+        },
+        keyword: {
+          type: 'string',
+          description: '可选，按方法名或描述过滤（如 bond、amac、sse、concept）',
+        },
+        limit: {
+          type: 'number',
+          description: '返回条数上限，默认 40，最大 80',
         },
       }),
-      handler: (a) => d('provider_custom_methods', { provider_id: a.provider_id }),
+      handler: (a) => d('provider_custom_methods', {
+        provider_id: a.provider_id,
+        keyword: a.keyword,
+        limit: a.limit,
+      }),
     },
     {
       name: 'invoke_provider_custom_method',
       category: '数据源扩展',
-      description: '调用数据源的自定义方法。先用 list_provider_custom_methods 查看可用方法和参数，再用此工具调用',
+      description: '调用数据源自定义方法；须先用 list_provider_custom_methods 确认 method 与 params',
       parameters: S({
         provider_id: {
           type: 'string',
-          description: '数据源 ID（如 baostock、zzshare）',
+          description: '数据源 ID（如 baostock、zzshare、akshare）',
         },
         method: {
           type: 'string',
@@ -367,8 +379,8 @@ export function buildUnifiedInstrumentTools(
         },
         args: {
           type: 'array',
-          description: '参数数组，按方法定义的参数顺序传入',
-          items: { type: 'string' },
+          description: '参数 JSON 数组，顺序与 params 定义一致；元素可为 string/number/boolean/对象',
+          items: {},
         },
       }, ['provider_id', 'method']),
       handler: (a) => d('provider_invoke_custom', {

@@ -223,3 +223,40 @@ test('instrumentRefKey includes crypto quote for dedupe', () => {
   })
   assert.equal(instrumentRefKey(btc), 'CRYPTO:CRYPTO_SPOT:BTC:USDT:binance')
 })
+
+test('listCustomMethodsForAgent truncates large providers and supports keyword', async () => {
+  const { listCustomMethodsForAgent } = await import('../packages/a-stock-layer/dist/core/custom-methods-agent.js')
+  const all = listCustomMethodsForAgent()
+  const ak = all.providers.find(p => p.providerId === 'akshare')
+  assert.ok(ak)
+  assert.ok(ak.methodCount > 50)
+  assert.equal(ak.truncated, true)
+  assert.ok(ak.categoryHints?.length)
+  const bond = listCustomMethodsForAgent({ providerId: 'akshare', keyword: 'bond', limit: 10 })
+  assert.ok(bond.providers[0].methods.length <= 10)
+  assert.ok(bond.providers[0].methods.some(m => m.method.toLowerCase().includes('bond')))
+  const baostock = listCustomMethodsForAgent({ providerId: 'baostock' })
+  assert.ok(baostock.providers[0].methods.length > 0)
+  assert.ok(!baostock.providers[0].truncated)
+})
+
+test('normalizeCustomMethodArgs converts instrument formats per provider', async () => {
+  const { normalizeCustomMethodArgs } = await import('../packages/a-stock-layer/dist/core/custom-method-args.js')
+  const { findCustomMethod } = await import('../packages/a-stock-layer/dist/core/custom-methods.js')
+
+  const bsDef = findCustomMethod('baostock', 'bsStockConcept')
+  assert.ok(bsDef)
+  const bs = normalizeCustomMethodArgs('baostock', bsDef, ['600519.SH'])
+  assert.equal(bs.args[0], '600519')
+
+  const tfDef = findCustomMethod('tickflow', 'fetchDepth')
+  assert.ok(tfDef)
+  const tf = normalizeCustomMethodArgs('tickflow', tfDef, [{ market: 'CN', symbol: '600519' }])
+  assert.equal(tf.args[0], '600519')
+
+  const tcDef = findCustomMethod('tencent', 'tencentCnIndexSnapshot')
+  assert.ok(tcDef)
+  const tc = normalizeCustomMethodArgs('tencent', tcDef, ['major', false, 'sh600519,sz399001'])
+  assert.match(String(tc.args[2]), /sh600519/)
+  assert.match(String(tc.args[2]), /sz399001/)
+})
