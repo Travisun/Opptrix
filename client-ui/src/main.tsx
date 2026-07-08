@@ -2,6 +2,7 @@ import React from 'react'
 import ReactDOM from 'react-dom/client'
 import { FluentProvider } from '@fluentui/react-components'
 import App from './App'
+import { OpptrixDialogAlertProvider } from './components/opptrix/OpptrixDialogAlert'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
@@ -23,7 +24,9 @@ function ThemedApp() {
   const { resolvedScheme } = useTheme()
   return (
     <FluentProvider theme={getOpptrixFluentTheme(resolvedScheme)}>
-      <App />
+      <OpptrixDialogAlertProvider>
+        <App />
+      </OpptrixDialogAlertProvider>
     </FluentProvider>
   )
 }

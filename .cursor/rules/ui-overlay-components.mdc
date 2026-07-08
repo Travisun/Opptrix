@@ -1,0 +1,65 @@
+---
+description: client-ui 浮层/Dialog/面板/警告/通知 — 统一样式组件（必读 UI 文档后使用）
+globs: client-ui/**/*
+alwaysApply: false
+---
+
+# UI 浮层与反馈组件
+
+> 动手改 `client-ui` 可见界面前，**必须先读** `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；Electron 壳层另读 `docs/DESKTOP.md`。细则与 `.cursor/rules/engineering-guidelines.mdc` 并列。
+
+## 禁止
+
+- **`window.confirm` / `window.alert` / `window.prompt`** — 一律用下方封装或内联控件
+- 裸 `DialogSurface` 无项目类名
+- 自写 shadow / blur / 圆角，未对照 tokens 与 `global.css`
+- 新建与下表职责重叠的「确认弹窗 / Toast / 毛玻璃面板」组件
+
+## 组件选型（按场景）
+
+| 场景 | 用法 | 样式 |
+|------|------|------|
+| **二次确认**（删除、清空、不可逆） | `OpptrixDialogAlert` 或 `useOpptrixDialogAlert().confirm()` | `opptrix-glass-dialog-surface` |
+| **复杂表单 Dialog**（向导、多字段编辑） | Fluent `Dialog` + `OpptrixField` / `OpptrixInput` | `opptrix-dialog-surface` 或毛玻璃（见设计文档 §5.1） |
+| **搜索 / 命令面板** | 专用组件（如 `WorkspaceSearchDialog`） | `opptrix-dialog-surface` + 文档约定 body 类 |
+| **下拉 / 锚定浮层** | `OpptrixDropdownPanel`、`mergeOpptrixDropdownListboxProps` | `opptrix-glass-panel` |
+| **Popover 选项列表** | Fluent Dropdown/Combobox listbox | `OPPTRIX_GLASS_DROPDOWN_LISTBOX_CLASS` |
+| **Transient 通知**（成功/失败/提示） | `useSettingsToast()`（需在 `SettingsToastProvider` 内） | mixin `glassPanel` |
+| **侧栏/列表内联确认** | 同行 `inlineEditRow` + ✓/✕（如归档文件夹） | 与列表行同高，**不用**额外 Dialog |
+| **分段切换**（Tab 胶囊） | `OpptrixSegmentedControl`（`variant="embedded"` 用于侧栏） | `opptrix-segmented-control` |
+| **分组设置块** | `OpptrixSurface`、`SettingsGroup` | 实底卡片，非毛玻璃 |
+
+## 二次确认 API
+
+```tsx
+// 全局 Provider：client-ui/src/main.tsx → OpptrixDialogAlertProvider
+
+const { confirm } = useOpptrixDialogAlert()
+const ok = await confirm({
+  title: '确定删除？',
+  message: '删除后无法恢复。',
+  confirmLabel: '删除',
+  confirmTone: 'danger', // 'default' | 'danger'
+})
+if (!ok) return
+```
+
+声明式：`<OpptrixDialogAlert open title message onConfirm onCancel confirmTone="danger" />`
+
+## 样式来源（单一事实）
+
+| 类型 | CSS 类 / mixin | 定义 |
+|------|----------------|------|
+| 毛玻璃 Dialog | `.opptrix-glass-dialog-surface` | `global.css` |
+| 实底大 Dialog | `.opptrix-dialog-surface` | `global.css` |
+| 毛玻璃面板 | `.opptrix-glass-panel` | `global.css` + `OPPTRIX_GLASS_PANEL_CLASS` |
+| Tokens | `opptrixCssVars.*` | `theme/tokens.ts` + `global.css` `--opptrix-*` |
+| 交互 mixin | `glassDropdown`、`glassPanel` | `theme/mixins.ts` |
+
+## 基础封装（表单与按钮）
+
+- 按钮：`OpptrixButton`（`primary` / `secondary` / `ghost`）
+- 输入：`OpptrixInput`、`OpptrixTextarea`、`OpptrixField`
+- 选择：`OpptrixSelect`
+
+新 UI **优先组合**上述组件；仅当设计文档未覆盖且用户明确要求时，才新增 `Opptrix*` 封装并 **同步更新** `docs/UI-DESIGN-SYSTEM.md` §7 与本规则。

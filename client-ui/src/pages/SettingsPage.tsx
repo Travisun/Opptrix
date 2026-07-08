@@ -5,6 +5,7 @@ import {
 } from '@fluentui/react-components'
 import { ChevronRightRegular, DeleteRegular, EditRegular, SystemRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
@@ -302,6 +303,7 @@ function SettingsPageView({
   initialSection,
 }: SettingsPageProps) {
   const toast = useSettingsToast()
+  const { confirm } = useOpptrixDialogAlert()
   const { preference: themePreference, setPreference: setThemePreference } = useTheme()
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
@@ -400,7 +402,13 @@ function SettingsPageView({
   }, [])
 
   const handleDeleteProvider = async (p: PublicProvider) => {
-    if (!confirm(`确定删除提供商「${p.name}」？`)) return
+    const ok = await confirm({
+      title: `确定删除提供商「${p.name}」？`,
+      message: '删除后将无法使用该提供商下的模型。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     try {
       await deleteProvider(p.id)
       await refresh()

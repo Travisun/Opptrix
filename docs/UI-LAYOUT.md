@@ -1,5 +1,7 @@
 # Opptrix UI Layout
 
+> 实现 UI 前请先读 [`UI-DESIGN-SYSTEM.md`](./UI-DESIGN-SYSTEM.md)（色彩、组件、毛玻璃）与本文件（布局）。浮层 / Dialog / Toast 选型见 [`.cursor/rules/ui-overlay-components.mdc`](../.cursor/rules/ui-overlay-components.mdc)。
+
 ## 1. 整体结构（EchoBird 三栏）
 
 ```
@@ -21,7 +23,7 @@
 - **Sidebar**：全高固定，不随主区滚动
 - **Main Canvas**：暖色 canvas 背景，内部卡片为 surface 白
 - **Agent Panel**：右侧滑入，与 EchoBird「会话记录」栏同位；关闭时主区占满
-- **浮层面板**：Dialog、下拉、抽屉统一毛玻璃（见 `UI-DESIGN-SYSTEM.md` §5.1）
+- **浮层面板**：Dialog、下拉、抽屉统一毛玻璃（见 `UI-DESIGN-SYSTEM.md` §5.1、§7.8）；二次确认用 `OpptrixDialogAlert`
 
 ### 1.1 Chat 主界面（当前默认入口）
 

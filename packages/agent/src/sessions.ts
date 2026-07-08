@@ -171,6 +171,54 @@ export class SessionStore {
     })).filter(g => g.sessions.length > 0)
   }
 
+  /** 归档侧栏：展示全部文件夹（含空文件夹） */
+  listArchivedByFolderAll(): Array<{ folder: import('./archive-folders.js').SessionArchiveFolder; sessions: SessionMeta[] }> {
+    const folders = this.folderStore.ensureDefaults()
+    const archived = this.listAll().filter(s => s.archivedAt)
+    return folders.map(folder => ({
+      folder,
+      sessions: archived
+        .filter(s => (s.archiveFolderId || 'other') === folder.id)
+        .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt)),
+    }))
+  }
+
+  createArchiveFolder(title: string) {
+    return this.folderStore.create(title)
+  }
+
+  renameArchiveFolder(id: string, title: string) {
+    return this.folderStore.rename(id, title)
+  }
+
+  deleteArchiveFolder(id: string): { ok: boolean; movedCount: number } {
+    const folder = this.folderStore.get(id)
+    if (!folder || folder.isDefault) return { ok: false, movedCount: 0 }
+    let movedCount = 0
+    for (const meta of this.listAll()) {
+      if (!meta.archivedAt || (meta.archiveFolderId || 'other') !== id) continue
+      const record = this.get(meta.id)
+      if (!record) continue
+      record.archiveFolderId = 'other'
+      writeRecord(record)
+      movedCount += 1
+    }
+    const ok = this.folderStore.delete(id)
+    return { ok, movedCount }
+  }
+
+  clearArchiveFolder(id: string): { ok: boolean; deletedCount: number } {
+    const folder = this.folderStore.get(id)
+    if (!folder) return { ok: false, deletedCount: 0 }
+    let deletedCount = 0
+    for (const meta of this.listAll()) {
+      if (!meta.archivedAt || (meta.archiveFolderId || 'other') !== id) continue
+      this.delete(meta.id)
+      deletedCount += 1
+    }
+    return { ok: true, deletedCount }
+  }
+
   get(id: string): SessionRecord | null {
     const raw = getUserDataStore().getDocument<SessionRecord>(NAMESPACE, id)
     if (!raw) return null
@@ -203,11 +251,14 @@ export class SessionStore {
 
   archive(id: string, folderId: string): SessionRecord | null {
     const record = this.get(id)
-    if (!record || isArchived(record)) return null
+    if (!record) return null
     const folder = this.folderStore.get(folderId) ?? this.folderStore.get('other')
     if (!folder) return null
-    record.archivedAt = new Date().toISOString()
+    if (!isArchived(record)) {
+      record.archivedAt = new Date().toISOString()
+    }
     record.archiveFolderId = folder.id
+    record.updatedAt = new Date().toISOString()
     writeRecord(record)
     return record
   }

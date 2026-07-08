@@ -83,6 +83,11 @@ export const DESKTOP_Z_PANEL_TITLE = 1200
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
 /** Global fixed toolbar / window controls — always above panel title bands */
 export const DESKTOP_Z_CHROME_TOOLS = 1300
+/** Clickable session title — above drag layer, below window controls hit targets */
+export const DESKTOP_Z_TITLE_INTERACTIVE = 1310
+
+/** Reserve for chat title-bar panel toggle buttons (2 × tool + gap) */
+export const DESKTOP_TITLE_BAR_ACTIONS_WIDTH = 60
 
 /** Clip global title-bar drag so news status + action buttons stay clickable */
 export const DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN = 240

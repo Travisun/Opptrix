@@ -1269,6 +1269,40 @@ export async function listSessionArchiveFolders() {
   return jsonFetch<{ folders: import('../types/chat').SessionArchiveFolder[] }>('/sessions/archive-folders')
 }
 
+export async function createSessionArchiveFolder(title: string) {
+  return jsonFetch<{ folder: import('../types/chat').SessionArchiveFolder }>('/sessions/archive-folders', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function renameSessionArchiveFolder(id: string, title: string) {
+  return jsonFetch<{ folder: import('../types/chat').SessionArchiveFolder }>(`/sessions/archive-folders/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function deleteSessionArchiveFolder(id: string) {
+  return jsonFetch<{ ok: boolean; movedCount?: number }>(`/sessions/archive-folders/${id}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function clearSessionArchiveFolder(id: string) {
+  return jsonFetch<{ ok: boolean; deletedCount: number }>(`/sessions/archive-folders/${id}/clear`, {
+    method: 'POST',
+  })
+}
+
+export async function listArchivedSessions() {
+  return jsonFetch<{ groups: Array<{ folder: import('../types/chat').SessionArchiveFolder; sessions: SessionMeta[] }> }>(
+    '/sessions/archived',
+  )
+}
+
 export async function archiveSession(id: string, folderId: string) {
   return jsonFetch<{ session: SessionMeta }>(`/sessions/${id}/archive`, {
     method: 'POST',

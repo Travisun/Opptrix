@@ -482,6 +482,26 @@ function registerWindowIpc() {
     return filePath
   })
 
+  ipcMain.handle('pick-save-file', async (event, payload) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const defaultPath = String(payload?.defaultPath ?? '对话.md').trim() || '对话.md'
+    const result = await dialog.showSaveDialog(win ?? undefined, {
+      title: String(payload?.title ?? '保存文件'),
+      defaultPath,
+      filters: [{ name: 'Markdown', extensions: ['md'] }],
+    })
+    if (result.canceled || !result.filePath) return null
+    return result.filePath
+  })
+
+  ipcMain.handle('write-text-file', async (_event, payload) => {
+    const filePath = String(payload?.filePath ?? '').trim()
+    const text = String(payload?.text ?? '')
+    if (!filePath) throw new Error('保存路径无效')
+    await fs.writeFile(filePath, text, 'utf8')
+    return filePath
+  })
+
   ipcMain.handle('client-version', async () => VERSION)
 
   ipcMain.handle('open-external-url', async (_event, url) => {

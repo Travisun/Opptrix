@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import SessionSidebar from './SessionSidebar'
+import SessionSidebar, { type SidebarListTab } from './SessionSidebar'
+import type { ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
@@ -13,6 +14,8 @@ import {
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
   archiveSession,
+  listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
+  clearSessionArchiveFolder, renameSession,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -30,11 +33,15 @@ import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
+import ChatSessionTitleTools from './ChatSessionTitleTools'
+import { sessionToMarkdown } from './sessionExportMarkdown'
+import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -126,6 +133,7 @@ const useStyles = makeStyles({
 
 export default function ChatApp() {
   const s = useStyles()
+  const { confirm } = useOpptrixDialogAlert()
   const breakpoint = useBreakpoint()
   const isMobile = breakpoint === 'mobile'
   const {
@@ -214,7 +222,10 @@ export default function ChatApp() {
   }, [view, toggleVisible])
 
   const [sessions, setSessions] = useState<SessionMeta[]>([])
+  const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
+  const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [input, setInput] = useState('')
@@ -266,9 +277,16 @@ export default function ChatApp() {
     return list
   }, [])
 
+  const refreshArchived = useCallback(async () => {
+    const { groups } = await listArchivedSessions()
+    setArchivedGroups(groups)
+    return groups
+  }, [])
+
   const loadSession = useCallback(async (id: string) => {
     const data = await getSession(id)
     setActiveId(id)
+    setActiveSessionMeta(data.session)
     setMessages(data.messages)
     setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
@@ -355,6 +373,7 @@ export default function ChatApp() {
       const list = await refreshSessions()
       setSessions(list)
       setActiveId(session.id)
+      setActiveSessionMeta(session)
       setMessages([])
       setContextRef(null)
       setSessionModelState(undefined)
@@ -380,7 +399,13 @@ export default function ChatApp() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定删除此对话？')) return
+    const ok = await confirm({
+      title: '确定删除此对话？',
+      message: '删除后无法恢复。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     try {
       await deleteSession(id)
       const list = await refreshSessions()
@@ -389,6 +414,7 @@ export default function ChatApp() {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
         }
@@ -403,11 +429,13 @@ export default function ChatApp() {
       await archiveSession(id, folderId)
       const list = await refreshSessions()
       setSessions(list)
+      void refreshArchived()
       if (activeId === id) {
         if (list.length > 0) {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
@@ -417,6 +445,119 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '归档失败')
     }
   }
+
+  const handleCreateArchiveFolder = useCallback(async (title: string) => {
+    try {
+      await createSessionArchiveFolder(title)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '创建文件夹失败')
+    }
+  }, [refreshArchived])
+
+  const handleRenameArchiveFolder = useCallback(async (id: string, title: string) => {
+    try {
+      await renameSessionArchiveFolder(id, title)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重命名失败')
+    }
+  }, [refreshArchived])
+
+  const handleDeleteArchiveFolder = useCallback(async (id: string) => {
+    try {
+      await deleteSessionArchiveFolder(id)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除文件夹失败')
+    }
+  }, [refreshArchived])
+
+  const handleClearArchiveFolder = useCallback(async (id: string) => {
+    try {
+      const clearedIds = new Set(
+        archivedGroups.find(g => g.folder.id === id)?.sessions.map(s => s.id) ?? [],
+      )
+      await clearSessionArchiveFolder(id)
+      await refreshArchived()
+      if (activeId && clearedIds.has(activeId)) {
+        const list = await refreshSessions()
+        if (list.length > 0) {
+          await loadSession(list[0].id)
+        } else {
+          setActiveId(null)
+          setActiveSessionMeta(null)
+          setMessages([])
+          setContextRef(null)
+          setSessionModelState(undefined)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '清空文件夹失败')
+    }
+  }, [activeId, archivedGroups, loadSession, refreshArchived, refreshSessions])
+
+  const handleDeleteArchivedSession = useCallback(async (id: string) => {
+    try {
+      await deleteSession(id)
+      await refreshArchived()
+      if (activeId === id) {
+        const list = await refreshSessions()
+        if (list.length > 0) {
+          await loadSession(list[0].id)
+        } else {
+          setActiveId(null)
+          setActiveSessionMeta(null)
+          setMessages([])
+          setContextRef(null)
+          setSessionModelState(undefined)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败')
+    }
+  }, [activeId, loadSession, refreshArchived, refreshSessions])
+
+  const handleRenameSession = useCallback(async (title: string) => {
+    if (!activeId) return
+    try {
+      const { session } = await renameSession(activeId, title)
+      setActiveSessionMeta(prev => prev && prev.id === activeId
+        ? { ...prev, title: session.title, updatedAt: session.updatedAt }
+        : prev)
+      setSessions(prev => prev.map(sess =>
+        sess.id === activeId ? { ...sess, title: session.title, updatedAt: session.updatedAt } : sess,
+      ))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重命名失败')
+    }
+  }, [activeId])
+
+  const handleArchiveActiveSession = useCallback(async (folderId: string) => {
+    if (!activeId) return
+    await handleArchive(activeId, folderId)
+  }, [activeId, handleArchive])
+
+  const handleDeleteActiveSession = useCallback(async () => {
+    if (!activeId) return
+    await handleDelete(activeId)
+  }, [activeId, handleDelete])
+
+  const handleExportSession = useCallback(async () => {
+    if (!activeId || !activeSessionMeta) return
+    try {
+      const md = sessionToMarkdown(activeSessionMeta, messages)
+      const result = await saveTextFileWithDialog(md, activeSessionMeta.title)
+      if (!result) return
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导出失败')
+    }
+  }, [activeId, activeSessionMeta, messages])
+
+  const handleSidebarListTabChange = useCallback((tab: SidebarListTab) => {
+    setSidebarListTab(tab)
+    if (tab === 'archive') void refreshArchived()
+  }, [refreshArchived])
 
   const handleOpenSearch = useCallback(() => {
     closeDrawer()
@@ -550,6 +691,7 @@ export default function ChatApp() {
         setActiveId(sid)
       }
       const fresh = await getSession(sid)
+      setActiveSessionMeta(fresh.session)
       setMessages(fresh.messages)
       setContextRef(fresh.contextRef ?? null)
       setSessionModelState(fresh.session.model)
@@ -563,6 +705,7 @@ export default function ChatApp() {
       if (aborted) {
         try {
           const fresh = await getSession(sessionId)
+          setActiveSessionMeta(fresh.session)
           setMessages(fresh.messages)
           setContextRef(fresh.contextRef ?? null)
           setSessionModelState(fresh.session.model)
@@ -577,6 +720,7 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '发送失败')
       try {
         const fresh = await getSession(sessionId)
+        setActiveSessionMeta(fresh.session)
         setMessages(fresh.messages)
         setContextRef(fresh.contextRef ?? null)
       } catch {
@@ -681,6 +825,7 @@ export default function ChatApp() {
       const list = await refreshSessions()
       setSessions(list)
       setActiveId(session.id)
+      setActiveSessionMeta(session)
       setMessages([])
       const data = await setSessionContext(session.id, nextRef)
       setContextRef(data.contextRef ?? nextRef)
@@ -724,12 +869,37 @@ export default function ChatApp() {
     }
   }
 
-  const activeSession = sessions.find(x => x.id === activeId)
+  const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
   const isNews = view === 'news'
   const chromeTitle = isNews ? '新闻中心' : (activeSession?.title ?? '新对话')
   const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
+
+  const sessionTitleTools = view === 'chat' && !isNews ? (
+    <ChatSessionTitleTools
+      title={activeSession?.title ?? '新对话'}
+      sessionId={activeId}
+      variant="chrome"
+      textClassName="opptrix-desktop-title-text"
+      onRename={handleRenameSession}
+      onArchive={handleArchiveActiveSession}
+      onDelete={() => { void handleDeleteActiveSession() }}
+      onExport={handleExportSession}
+    />
+  ) : null
+
+  const chatTitleSlot = view === 'chat' && !isNews ? (
+    <ChatSessionTitleTools
+      title={activeSession?.title ?? '新对话'}
+      sessionId={activeId}
+      variant="header"
+      onRename={handleRenameSession}
+      onArchive={handleArchiveActiveSession}
+      onDelete={() => { void handleDeleteActiveSession() }}
+      onExport={handleExportSession}
+    />
+  ) : null
 
   const handleEdgeRevealSidebar = useCallback(() => {
     if (isSettings) {
@@ -750,6 +920,14 @@ export default function ChatApp() {
     onOpenSearch: handleOpenSearch,
     onOpenSettings: () => { openSettings() },
     onOpenNewsCenter: openNewsCenter,
+    listTab: sidebarListTab,
+    onListTabChange: handleSidebarListTabChange,
+    archivedGroups,
+    onCreateArchiveFolder: handleCreateArchiveFolder,
+    onRenameArchiveFolder: handleRenameArchiveFolder,
+    onDeleteArchiveFolder: handleDeleteArchiveFolder,
+    onClearArchiveFolder: handleClearArchiveFolder,
+    onDeleteArchivedSession: handleDeleteArchivedSession,
   }
 
   return (
@@ -768,6 +946,7 @@ export default function ChatApp() {
       {electronChrome && (
         <DesktopWindowChrome
           title={chromeTitle}
+          titleSlot={sessionTitleTools}
           viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
@@ -784,6 +963,8 @@ export default function ChatApp() {
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
+          chatColumnWidth={view === 'chat' && !isMobile && chatVisible && showSplitter ? chatWidth : undefined}
+          chatAreaLeft={sidebarInlineVisible ? SIDEBAR_INLINE_WIDTH : 0}
           chatColumnVisible={view === 'chat' && !isMobile ? chatVisible : undefined}
           onToggleRightPanel={view === 'chat' && !isMobile ? handleToggleRightPanel : undefined}
           onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
@@ -887,6 +1068,7 @@ export default function ChatApp() {
                 <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
                   <ChatView
                     title={activeSession?.title ?? '新对话'}
+                    titleSlot={electronChrome ? undefined : chatTitleSlot}
                     sessionId={activeId}
                     welcomeEpoch={welcomeEpoch}
                     chatScrollEpoch={chatScrollEpoch}

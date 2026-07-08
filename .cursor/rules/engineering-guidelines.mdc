@@ -7,8 +7,14 @@ alwaysApply: true
 
 ## UI / UX 风格
 
+- **设计前必读（强制）**：动手编写或修改 **任何** `client-ui` 可见界面前，必须先查阅：
+  1. `docs/UI-DESIGN-SYSTEM.md` — 色彩、排版、毛玻璃、组件清单
+  2. `docs/UI-LAYOUT.md` — 三栏布局、侧栏、内容区
+  3. Electron 桌面壳：`docs/DESKTOP.md`
+  4. 浮层 / Dialog / 警告 / 通知：`.cursor/rules/ui-overlay-components.mdc`
+  不得跳过文档自行发明圆角、阴影、弹窗样式或原生 `window.confirm` / `alert` / `prompt`。
 - **严格沿用现有框架与设计语言**：React + Fluent UI v9（`@fluentui/react-components`）、项目 tokens（`client-ui/src/theme/tokens.ts`）、mixins（`mixins.ts`）、全局类（`global.css`）。
-- 新交互优先使用 Fluent 已有组件（Menu、Dialog、Button 等），样式与 `OpptrixButton`、`OpptrixField` 等封装保持一致。
+- 新交互优先使用 Fluent 已有组件（Menu、Dialog、Button 等），样式与 `OpptrixButton`、`OpptrixField`、`OpptrixDialogAlert` 等封装保持一致。
 - 布局与视觉规范以 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` 为准；桌面壳层见 `docs/DESKTOP.md`。
 - **不要**在未获用户明确指示时自行引入移动版布局、额外 header、drawer 变体或与设计体系冲突的 shadow / 圆角 / 间距。
 
