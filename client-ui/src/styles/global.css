@@ -1682,7 +1682,24 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     pointer-events: auto;
   }
 
-  .opptrix-archive-folder-head:hover .opptrix-archive-folder-actions {
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-count {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-rename,
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-delete,
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-clear {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-count {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-rename,
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-delete,
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-clear {
     opacity: 1;
     pointer-events: auto;
   }
@@ -1718,6 +1735,19 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
   }
 
   .opptrix-follow-item:hover .opptrix-follow-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+}
+
+@media (hover: none) {
+  .opptrix-archive-folder-head .opptrix-archive-folder-count {
+    display: none;
+  }
+
+  .opptrix-archive-folder-head .opptrix-archive-folder-rename,
+  .opptrix-archive-folder-head .opptrix-archive-folder-delete,
+  .opptrix-archive-folder-head .opptrix-archive-folder-clear {
     opacity: 1;
     pointer-events: auto;
   }

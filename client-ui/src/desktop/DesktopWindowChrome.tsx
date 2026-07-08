@@ -1,5 +1,5 @@
 import { createPortal } from 'react-dom'
-import { cloneElement, isValidElement, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
+import { cloneElement, isValidElement, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   ArrowLeftRegular,
   ArrowRightRegular,
@@ -35,7 +35,6 @@ import { opptrixCssVars } from '../theme/tokens'
 import {
   desktopTitleLeft,
   desktopTitleMaxWidth,
-  desktopTitleZoneRight,
   desktopToolbarLeft,
   type DesktopViewMode,
 } from './layout'
@@ -89,8 +88,6 @@ const useStyles = makeStyles({
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
   titleInteractive: {
-    pointerEvents: 'auto',
-    WebkitAppRegion: 'no-drag',
     zIndex: 5,
   },
   titleSlotWrap: {
@@ -204,17 +201,17 @@ export default function DesktopWindowChrome({
 }: DesktopWindowChromeProps) {
   const s = useStyles()
   const macFullscreen = useElectronFullscreen()
+  const titleMeasureRef = useRef<HTMLDivElement>(null)
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1280,
   )
+  const [titleBlockWidth, setTitleBlockWidth] = useState(0)
 
   useEffect(() => {
     const onResize = () => setViewportWidth(window.innerWidth)
     window.addEventListener('resize', onResize)
     return () => window.removeEventListener('resize', onResize)
   }, [])
-
-  if (!isElectron()) return null
 
   const isSettings = viewMode === 'settings'
   const isNews = viewMode === 'news'
@@ -234,13 +231,36 @@ export default function DesktopWindowChrome({
     chatColumnWidth,
     chatAreaLeft,
   })
-  const titleZoneRight = desktopTitleZoneRight(titleLeft, titleMaxWidth)
   const showPageTitle = !isNews && !isSettings && chatColumnVisible
   const interactiveTitle = showPageTitle && Boolean(titleSlot)
 
   const titleSlotWithLayout = titleSlot && isValidElement(titleSlot)
     ? cloneElement(titleSlot, { maxWidth: titleMaxWidth } as { maxWidth: number })
     : titleSlot
+
+  useLayoutEffect(() => {
+    if (!isElectron() || !interactiveTitle) {
+      setTitleBlockWidth(0)
+      return
+    }
+    const el = titleMeasureRef.current
+    if (!el) return
+
+    const update = () => {
+      setTitleBlockWidth(Math.ceil(el.getBoundingClientRect().width))
+    }
+    update()
+    const observer = new ResizeObserver(update)
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [interactiveTitle, title, titleMaxWidth, titleSlotWithLayout])
+
+  if (!isElectron()) return null
+
+  /** 仅让出可点击标题的实际宽度，其余标题栏带仍可拖拽 */
+  const dragResumeLeft = interactiveTitle
+    ? titleLeft + (titleBlockWidth > 0 ? titleBlockWidth : 0)
+    : titleLeft
 
   const dragRightClip = resolveDragRightClip(
     isNews,
@@ -280,7 +300,7 @@ export default function DesktopWindowChrome({
             />
             <div
               className={s.drag}
-              style={{ left: `${titleZoneRight}px`, right: 0, ...dragRightClip }}
+              style={{ left: `${dragResumeLeft}px`, right: 0, ...dragRightClip }}
               aria-hidden
             />
           </>
@@ -297,7 +317,7 @@ export default function DesktopWindowChrome({
             }}
           >
             {titleSlotWithLayout ? (
-              <div className={s.titleSlotWrap}>
+              <div ref={titleMeasureRef} className={s.titleSlotWrap}>
                 {titleSlotWithLayout}
               </div>
             ) : (

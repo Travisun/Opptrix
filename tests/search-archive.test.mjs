@@ -46,6 +46,44 @@ test('listActive hides archived sessions', async () => {
   getUserDataStore().close()
 })
 
+test('archived session can move to another folder', async () => {
+  const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+  const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+
+  const sessions = new SessionStore()
+  const s = sessions.create('已归档')
+  sessions.archive(s.id, 'research')
+
+  const moved = sessions.archive(s.id, 'trades')
+  assert.ok(moved)
+  assert.equal(moved.archiveFolderId, 'trades')
+  assert.ok(moved.archivedAt)
+
+  const grouped = sessions.listArchivedByFolderAll()
+  const trades = grouped.find(g => g.folder.id === 'trades')
+  assert.ok(trades?.sessions.some(x => x.id === s.id))
+
+  getUserDataStore().close()
+})
+
+test('default folders can be cleared', async () => {
+  const { SessionStore } = await import('../packages/agent/dist/sessions.js')
+  const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+
+  const sessions = new SessionStore()
+  const a = sessions.create('A')
+  const b = sessions.create('B')
+  sessions.archive(a.id, 'review')
+  sessions.archive(b.id, 'review')
+
+  const result = sessions.clearArchiveFolder('review')
+  assert.equal(result.ok, true)
+  assert.equal(result.deletedCount, 2)
+  assert.equal(sessions.listArchivedByFolderAll().find(g => g.folder.id === 'review')?.sessions.length, 0)
+
+  getUserDataStore().close()
+})
+
 test('FTS indexes and searches session content', async () => {
   const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
 

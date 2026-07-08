@@ -251,11 +251,14 @@ export class SessionStore {
 
   archive(id: string, folderId: string): SessionRecord | null {
     const record = this.get(id)
-    if (!record || isArchived(record)) return null
+    if (!record) return null
     const folder = this.folderStore.get(folderId) ?? this.folderStore.get('other')
     if (!folder) return null
-    record.archivedAt = new Date().toISOString()
+    if (!isArchived(record)) {
+      record.archivedAt = new Date().toISOString()
+    }
     record.archiveFolderId = folder.id
+    record.updatedAt = new Date().toISOString()
     writeRecord(record)
     return record
   }

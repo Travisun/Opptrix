@@ -13,11 +13,22 @@ import {
 } from '@fluentui/react-icons'
 import type { SessionArchiveFolder, SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { ghostInteractive, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
+import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 
 const OTHER_ARCHIVE_FOLDER_ID = 'other'
+
+const SYSTEM_ARCHIVE_FOLDER_IDS = new Set([
+  'research',
+  'trades',
+  'review',
+  OTHER_ARCHIVE_FOLDER_ID,
+])
+
+function isSystemArchiveFolder(folder: Pick<SessionArchiveFolder, 'id'>) {
+  return SYSTEM_ARCHIVE_FOLDER_IDS.has(folder.id)
+}
 
 const useStyles = makeStyles({
   root: {
@@ -118,10 +129,10 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
-    padding: '0 8px 8px',
+    padding: '4px 8px 8px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   folderBlock: {
     display: 'flex',
@@ -131,8 +142,8 @@ const useStyles = makeStyles({
   folderHead: {
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
-    padding: '4px 6px',
+    gap: '8px',
+    padding: '5px 10px',
     borderRadius: opptrixTokens.radiusMd,
     minHeight: '30px',
     ...ghostInteractive,
@@ -149,12 +160,11 @@ const useStyles = makeStyles({
     },
   },
   folderToggle: {
-    ...nativeIconInteractive,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '22px',
-    height: '22px',
+    width: '14px',
+    height: '14px',
     flexShrink: 0,
     color: opptrixCssVars.textTertiary,
     lineHeight: 0,
@@ -162,28 +172,49 @@ const useStyles = makeStyles({
   folderIcon: {
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
+    lineHeight: 0,
   },
   folderTitle: {
     flex: 1,
     minWidth: 0,
-    fontSize: '12px',
-    fontWeight: 650,
+    fontSize: '13px',
+    fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  folderHeadTrailing: {
+    position: 'relative',
+    flexShrink: 0,
+    width: '52px',
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+  },
   folderCount: {
-    fontSize: '10px',
+    fontSize: '11px',
     fontWeight: 500,
     color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+    '@media (hover: none)': {
+      display: 'none',
+    },
   },
-  folderActions: {
+  folderActionRename: {
+    ...nativeIconInteractive,
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '0',
-    flexShrink: 0,
+    justifyContent: 'center',
+    lineHeight: 0,
+    position: 'absolute',
+    right: '18px',
+    top: '50%',
+    transform: 'translateY(-50%)',
     opacity: 0,
     pointerEvents: 'none',
     '@media (hover: none)': {
@@ -191,17 +222,38 @@ const useStyles = makeStyles({
       pointerEvents: 'auto',
     },
   },
-  iconAction: {
+  folderActionDelete: {
     ...nativeIconInteractive,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '24px',
-    height: '24px',
     lineHeight: 0,
-    color: opptrixCssVars.textTertiary,
-    ':hover': {
-      color: opptrixCssVars.textPrimary,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    opacity: 0,
+    pointerEvents: 'none',
+    '@media (hover: none)': {
+      opacity: 1,
+      pointerEvents: 'auto',
+    },
+  },
+  folderActionClear: {
+    ...nativeIconInteractive,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    lineHeight: 0,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    opacity: 0,
+    pointerEvents: 'none',
+    '@media (hover: none)': {
+      opacity: 1,
+      pointerEvents: 'auto',
     },
   },
   sessionList: {
@@ -319,12 +371,16 @@ export default function SessionSidebarArchivePanel({
   const [deletingFolderId, setDeletingFolderId] = useState<string | null>(null)
   const [deletingSessionId, setDeletingSessionId] = useState<string | null>(null)
   const [clearDialogOpen, setClearDialogOpen] = useState(false)
+  const [clearFolderId, setClearFolderId] = useState<string | null>(null)
 
   const createInputRef = useFocusOnMount(creatingFolder)
   const renameInputRef = useFocusOnMount(renamingFolderId != null)
 
-  const toggleFolder = useCallback((folderId: string) => {
-    setCollapsed(prev => ({ ...prev, [folderId]: !prev[folderId] }))
+  const toggleFolder = useCallback((folderId: string, isDefault: boolean) => {
+    setCollapsed(prev => {
+      const current = prev[folderId] ?? isDefault
+      return { ...prev, [folderId]: !current }
+    })
   }, [])
 
   const cancelCreate = useCallback(() => {
@@ -411,12 +467,17 @@ export default function SessionSidebarArchivePanel({
   }, [submitRename, cancelRename])
 
   const hasAnySession = groups.some(g => g.sessions.length > 0)
-  const otherFolderSessions = groups.find(g => g.folder.id === OTHER_ARCHIVE_FOLDER_ID)?.sessions.length ?? 0
+  const clearFolderGroup = clearFolderId
+    ? groups.find(g => g.folder.id === clearFolderId)
+    : undefined
+  const clearFolderTitle = clearFolderGroup?.folder.title ?? ''
+  const clearFolderSessions = clearFolderGroup?.sessions.length ?? 0
 
-  const confirmClearOtherFolder = useCallback(() => {
-    if (onClearFolder) void onClearFolder(OTHER_ARCHIVE_FOLDER_ID)
+  const confirmClearFolder = useCallback(() => {
+    if (onClearFolder && clearFolderId) void onClearFolder(clearFolderId)
     setClearDialogOpen(false)
-  }, [onClearFolder])
+    setClearFolderId(null)
+  }, [onClearFolder, clearFolderId])
 
   return (
     <div className={s.root}>
@@ -476,9 +537,13 @@ export default function SessionSidebarArchivePanel({
           <div className={s.emptyAll}>暂无归档对话<br />在对话列表中可将对话归档到此</div>
         )}
         {groups.map(({ folder, sessions }) => {
-          const isCollapsed = collapsed[folder.id] ?? false
+          const isCollapsed = collapsed[folder.id] ?? isSystemArchiveFolder(folder)
           const isRenaming = renamingFolderId === folder.id
           const isDeleting = deletingFolderId === folder.id
+          // 用户自建：重命名/删除；系统默认文件夹：清空
+          const hasUserFolderActions = !folder.isDefault
+          const hasFolderClear = folder.isDefault
+          const showFolderCountSwap = hasUserFolderActions || hasFolderClear
 
           return (
             <div key={folder.id} className={s.folderBlock}>
@@ -489,20 +554,27 @@ export default function SessionSidebarArchivePanel({
                   'opptrix-archive-folder-head',
                   !isRenaming && !isDeleting && 'opptrix-focusable',
                 )}
+                role={!isRenaming && !isDeleting ? 'button' : undefined}
+                tabIndex={!isRenaming && !isDeleting ? 0 : undefined}
+                aria-expanded={!isRenaming && !isDeleting ? !isCollapsed : undefined}
+                onClick={() => {
+                  if (!isRenaming && !isDeleting) toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' && !isRenaming && !isDeleting) {
+                    e.preventDefault()
+                    toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                  }
+                }}
               >
                 {!isRenaming && (
-                  <button
-                    type="button"
-                    className={s.folderToggle}
-                    aria-label={isCollapsed ? '展开' : '收起'}
-                    onClick={() => toggleFolder(folder.id)}
-                  >
+                  <span className={s.folderToggle} aria-hidden>
                     {isCollapsed
                       ? <ChevronRightRegular fontSize={14} />
                       : <ChevronDownRegular fontSize={14} />}
-                  </button>
+                  </span>
                 )}
-                {!isRenaming && <FolderRegular className={s.folderIcon} fontSize={15} />}
+                {!isRenaming && <FolderRegular className={s.folderIcon} fontSize={14} />}
                 {isRenaming ? (
                   <>
                     <Input
@@ -560,42 +632,64 @@ export default function SessionSidebarArchivePanel({
                 ) : (
                   <>
                     <span className={s.folderTitle}>{folder.title}</span>
-                    <span className={s.folderCount}>{sessions.length}</span>
-                    {!folder.isDefault && (
-                      <span className={mergeClasses(s.folderActions, 'opptrix-archive-folder-actions')}>
-                        <button
-                          type="button"
-                          className={mergeClasses(s.iconAction, 'opptrix-focusable')}
-                          aria-label="重命名文件夹"
-                          onClick={e => { e.stopPropagation(); startRename(folder) }}
-                        >
-                          <EditRegular fontSize={14} />
-                        </button>
-                        <button
-                          type="button"
-                          className={mergeClasses(s.iconAction, 'opptrix-focusable')}
-                          aria-label="删除文件夹"
-                          onClick={e => { e.stopPropagation(); startDeleteFolder(folder) }}
-                        >
-                          <DeleteRegular fontSize={14} />
-                        </button>
+                    <span className={s.folderHeadTrailing}>
+                      <span
+                        className={mergeClasses(
+                          s.folderCount,
+                          showFolderCountSwap && 'opptrix-archive-folder-count',
+                        )}
+                      >
+                        {sessions.length}
                       </span>
-                    )}
-                    {folder.id === OTHER_ARCHIVE_FOLDER_ID && onClearFolder && (
-                      <span className={mergeClasses(s.folderActions, 'opptrix-archive-folder-actions')}>
+                      {hasUserFolderActions && (
+                        <>
+                          <button
+                            type="button"
+                            className={mergeClasses(
+                              s.folderActionRename,
+                              'opptrix-archive-folder-rename',
+                              'opptrix-focusable',
+                            )}
+                            aria-label="重命名文件夹"
+                            onClick={e => { e.stopPropagation(); startRename(folder) }}
+                          >
+                            <EditRegular fontSize={14} />
+                          </button>
+                          <button
+                            type="button"
+                            className={mergeClasses(
+                              s.folderActionDelete,
+                              'opptrix-archive-folder-delete',
+                              'opptrix-focusable',
+                            )}
+                            aria-label="删除文件夹"
+                            onClick={e => { e.stopPropagation(); startDeleteFolder(folder) }}
+                          >
+                            <DeleteRegular fontSize={14} />
+                          </button>
+                        </>
+                      )}
+                      {hasFolderClear && (
                         <button
                           type="button"
-                          className={mergeClasses(s.iconAction, 'opptrix-focusable')}
+                          className={mergeClasses(
+                            s.folderActionClear,
+                            'opptrix-archive-folder-clear',
+                            'opptrix-focusable',
+                          )}
                           aria-label="清空文件夹"
                           onClick={e => {
                             e.stopPropagation()
-                            setClearDialogOpen(true)
+                            if (onClearFolder) {
+                              setClearFolderId(folder.id)
+                              setClearDialogOpen(true)
+                            }
                           }}
                         >
                           <BroomRegular fontSize={14} />
                         </button>
-                      </span>
-                    )}
+                      )}
+                    </span>
                   </>
                 )}
               </div>
@@ -672,17 +766,20 @@ export default function SessionSidebarArchivePanel({
 
       <OpptrixDialogAlert
         open={clearDialogOpen}
-        title="清空「其他」文件夹"
+        title={`清空「${clearFolderTitle}」`}
         message={
-          otherFolderSessions > 0
-            ? `将永久删除「其他」中的 ${otherFolderSessions} 条归档对话，此操作不可撤销。`
-            : '「其他」文件夹中暂无对话。'
+          clearFolderSessions > 0
+            ? `将永久删除「${clearFolderTitle}」中的 ${clearFolderSessions} 条归档对话，此操作不可撤销。`
+            : `「${clearFolderTitle}」中暂无对话。`
         }
         confirmLabel="清空"
         confirmTone="danger"
-        confirmDisabled={otherFolderSessions === 0}
-        onConfirm={confirmClearOtherFolder}
-        onCancel={() => setClearDialogOpen(false)}
+        confirmDisabled={clearFolderSessions === 0}
+        onConfirm={confirmClearFolder}
+        onCancel={() => {
+          setClearDialogOpen(false)
+          setClearFolderId(null)
+        }}
       />
     </div>
   )
