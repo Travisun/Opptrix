@@ -34,6 +34,17 @@ import {
   fetchTencentUsStockList,
 } from '../../api/us-stock-service.js'
 import {
+  fetchTencentUsFinancialSummary,
+  fetchTencentUsRelatedStocks,
+  fetchTencentUsSeniorTrades,
+  fetchTencentUsShareholderStats,
+  fetchTencentUsStockKline,
+  fetchTencentUsStockNews,
+  fetchTencentUsStockNotices,
+  fetchTencentUsStockProfile,
+  fetchTencentUsStockQuote,
+} from '../../api/us-detail-service.js'
+import {
   fetchTencentIndustryBoardList,
   fetchTencentIndustryConstituents,
   fetchTencentIndustryRank,
@@ -717,5 +728,148 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length && !result.recent.length) return null
     return [{ ...result, source: 'tencent_hk_dividends' }]
+  }
+
+  /**
+   * 美股基本资料（gu.qq.com 简况页）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/us/introduce/brief?symbol=usEQIX.OQ
+   * @pageUrl https://gu.qq.com/usEQIX.OQ/gg/jbzl
+   */
+  p.tencentUsStockProfile = async function tencentUsStockProfile(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const profile = await fetchTencentUsStockProfile(bare)
+    return [{ ...profile, source: 'tencent_us_brief' }]
+  }
+
+  /**
+   * 美股实时行情（价格与市场数据）。
+   *
+   * @sourceUrl https://qt.gtimg.cn/q=usEQIX
+   * @pageUrl https://gu.qq.com/usEQIX.OQ/gg
+   */
+  p.tencentUsStockQuote = async function tencentUsStockQuote(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const quote = await fetchTencentUsStockQuote(bare)
+    return [{ ...quote, source: 'tencent_us_qt' }]
+  }
+
+  /**
+   * 美股个股新闻（侧边栏「新闻」）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/news/info/search?symbol=usEQIX.OQ&type=2
+   */
+  p.tencentUsStockNews = async function tencentUsStockNews(
+    code: string,
+    page = 1,
+    pageSize = 20,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsStockNews({ code: bare, page, pageSize })
+    if (!result.items.length && !result.total) return null
+    return [{ code: bare, ...result, source: 'tencent_us_news' }]
+  }
+
+  /**
+   * 美股公司公告（侧边栏「公司公告」；部分标的无数据）。
+   */
+  p.tencentUsStockNotices = async function tencentUsStockNotices(
+    code: string,
+    page = 1,
+    pageSize = 20,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsStockNotices({ code: bare, page, pageSize })
+    if (!result.items.length && !result.total) return null
+    return [{ code: bare, ...result, source: 'tencent_us_notice' }]
+  }
+
+  /**
+   * 美股财务摘要（损益/资产负债/现金流按年）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/us/UsCw/cwData
+   * @pageUrl https://gu.qq.com/usEQIX.OQ/gg/cwsj
+   */
+  p.tencentUsFinancialSummary = async function tencentUsFinancialSummary(
+    code: string,
+    page = 1,
+    pageSize = 10,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsFinancialSummary({ code: bare, page, pageSize })
+    if (!result.items.length) return null
+    return [{ code: bare, ...result, source: 'tencent_us_finance' }]
+  }
+
+  /**
+   * 美股股东统计（标普股东持仓）。
+   */
+  p.tencentUsShareholderStats = async function tencentUsShareholderStats(
+    code: string,
+    page = 1,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsShareholderStats({ code: bare, page })
+    if (!result.items.length) return null
+    return [{ code: bare, ...result, source: 'tencent_us_shareholder' }]
+  }
+
+  /**
+   * 美股高管交易记录（支持分页）。
+   */
+  p.tencentUsSeniorTrades = async function tencentUsSeniorTrades(
+    code: string,
+    page = 1,
+    pageSize = 10,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsSeniorTrades({ code: bare, page, pageSize })
+    if (!result.items.length) return null
+    return [{ code: bare, ...result, source: 'tencent_us_senior_trade' }]
+  }
+
+  /**
+   * 美股关联股票（附简要行情）。
+   */
+  p.tencentUsRelatedStocks = async function tencentUsRelatedStocks(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const items = await fetchTencentUsRelatedStocks(bare)
+    return items.length ? [{ code: bare, items, source: 'tencent_us_relate' }] : null
+  }
+
+  /**
+   * 美股 K 线（分时 / 五日 / 日周月 / 1-3-5 年）。
+   *
+   * @sourceUrl web.ifzq.gtimg.cn minute/query | kline/kline | usfqkline/get
+   * @pageUrl https://gu.qq.com/usEQIX.OQ/gg
+   */
+  p.tencentUsStockKline = async function tencentUsStockKline(
+    code: string,
+    period = 'day',
+    limit = 0,
+    adjust = 'none',
+    startDate = '',
+    endDate = '',
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentUsStockKline({
+      code: bare,
+      period,
+      limit: limit > 0 ? limit : undefined,
+      adjust: adjust === 'qfq' ? 'qfq' : 'none',
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    })
+    if (!result.items.length) return null
+    return [{ ...result, source: 'tencent_us_kline' }]
   }
 }

@@ -496,6 +496,139 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     notes: 'recent 来自 jiankuang.fhpx，含 2024-2026 等最新派息；items 来自 getDividends 历史档案（腾讯控股约至 2018）。参数 c=5 位代码。',
     example: '{"provider":"tencent","method":"tencentHkDividends","args":["00700",1,10,true]}',
   },
+
+  tencentUsStockProfile: {
+    method: 'tencentUsStockProfile',
+    description: '美股基本资料（公司名称、上市日期、行业、营收构成）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/us/introduce/brief?symbol=usEQIX.OQ&app=official_website`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg/jbzl',
+    params: [{ name: 'code', type: 'string', description: '美股代码，如 EQIX、usEQIX.OQ', required: true }],
+    returns: '[{ code, symbol, companyName, listingDate, exchange, website, industry, description, totalShares, revenueBreakdown, raw, source }]',
+    usage: INVOKE('tencentUsStockProfile', '["usEQIX.OQ"]'),
+    notes: 'symbol 自动规范为 us{TICKER}.{OQ|N|AM}；未带后缀时默认 .OQ。',
+    example: '{"provider":"tencent","method":"tencentUsStockProfile","args":["EQIX"]}',
+  },
+
+  tencentUsStockQuote: {
+    method: 'tencentUsStockQuote',
+    description: '美股实时行情（价格、涨跌、成交、估值、52周高低）',
+    sourceUrl: 'https://qt.gtimg.cn/q=usEQIX',
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg',
+    params: [{ name: 'code', type: 'string', description: '美股代码', required: true }],
+    returns: '[{ code, symbol, qtCode, name, price, preClose, open, high, low, changeAmt, changePct, volume, amount, pe, pb, marketCap, currency, quoteTime, week52High, week52Low, source }]',
+    usage: INVOKE('tencentUsStockQuote', '["NVDA"]'),
+    notes: 'qt 查询码为 us{TICKER}（无 .OQ 后缀）；附 mobile/qt/data 增强 52 周高低与估值。',
+    example: '{"provider":"tencent","method":"tencentUsStockQuote","args":["usNVDA.OQ"]}',
+  },
+
+  tencentUsStockNews: {
+    method: 'tencentUsStockNews',
+    description: '美股个股新闻列表（详情页侧边栏）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/news/info/search?symbol=usEQIX.OQ&type=2`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg/news',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 51', default: 20 },
+    ],
+    returns: '[{ code, total, totalPages, page, pageSize, items: [{ id, title, time, url, type }], source }]',
+    usage: INVOKE('tencentUsStockNews', '["EQIX",1,10]'),
+    notes: '上游 total_page 约 2000；type=2 为个股新闻。',
+    example: '{"provider":"tencent","method":"tencentUsStockNews","args":["usEQIX.OQ",1,5]}',
+  },
+
+  tencentUsStockNotices: {
+    method: 'tencentUsStockNotices',
+    description: '美股公司公告列表',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/news/noticeList/search?symbol=usEQIX.OQ`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg/gsgg',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50', default: 20 },
+    ],
+    returns: '[{ code, total, page, pageSize, items: [{ id, title, time, url, type }], source }]',
+    usage: INVOKE('tencentUsStockNotices', '["EQIX",1,10]'),
+    notes: '部分美股标的公告源为空（如 EQIX 返回 0 条）。',
+    example: '{"provider":"tencent","method":"tencentUsStockNotices","args":["usEQIX.OQ",1,10]}',
+  },
+
+  tencentUsFinancialSummary: {
+    method: 'tencentUsFinancialSummary',
+    description: '美股财务摘要（按年：营收/净利润、总资产/负债、现金流）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/us/UsCw/cwData?symbol=usEQIX.OQ&page=1&num=10`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg/cwsj',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'page', type: 'number', description: '页码（每页约 10 个财年）', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 20', default: 10 },
+    ],
+    returns: '[{ code, page, pageSize, items: [{ year, income, balance, cash }], source }]',
+    usage: INVOKE('tencentUsFinancialSummary', '["NVDA",1,10]'),
+    notes: '侧栏摘要与 cwsj 页均走 UsCw/cwData；finDetail/search 对美股已不可用。',
+    example: '{"provider":"tencent","method":"tencentUsFinancialSummary","args":["usEQIX.OQ",1,4]}',
+  },
+
+  tencentUsShareholderStats: {
+    method: 'tencentUsShareholderStats',
+    description: '美股股东统计（标普机构持仓）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/app/StandardPoorsGudong/holdingOwnerList?code=usEQIX.OQ`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'page', type: 'number', description: '页码（上游目前固定返回约 50 条）', default: 1 },
+    ],
+    returns: '[{ code, asOfDate, page, items: [{ name, shares, shareRatio, sharesChange, ratioChange, period, holderType }], source }]',
+    usage: INVOKE('tencentUsShareholderStats', '["EQIX"]'),
+    notes: '参数名为 code（非 symbol）；page 暂不影响结果集。',
+    example: '{"provider":"tencent","method":"tencentUsShareholderStats","args":["usEQIX.OQ"]}',
+  },
+
+  tencentUsSeniorTrades: {
+    method: 'tencentUsSeniorTrades',
+    description: '美股高管交易记录（内幕交易披露）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/us/Manager/getTrade?symbol=usEQIX.OQ&page=1&num=10`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50', default: 10 },
+    ],
+    returns: '[{ code, page, pageSize, items: [{ ric, code, name, date, shares, value, detail }], source }]',
+    usage: INVOKE('tencentUsSeniorTrades', '["EQIX",1,10]'),
+    example: '{"provider":"tencent","method":"tencentUsSeniorTrades","args":["usEQIX.OQ",1,10]}',
+  },
+
+  tencentUsRelatedStocks: {
+    method: 'tencentUsRelatedStocks',
+    description: '美股关联股票列表（附简要行情）',
+    sourceUrl: `${PROXY}/ifzqgtimg/stock/relate/data/usRelateStocks?code=usEQIX.OQ`,
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg',
+    params: [{ name: 'code', type: 'string', description: '美股代码', required: true }],
+    returns: '[{ code, items: [{ code, symbol, name, price, changePct }], source }]',
+    usage: INVOKE('tencentUsRelatedStocks', '["EQIX"]'),
+    notes: '参数名为 code；行情通过 qt.gtimg.cn 批量补充。',
+    example: '{"provider":"tencent","method":"tencentUsRelatedStocks","args":["usEQIX.OQ"]}',
+  },
+
+  tencentUsStockKline: {
+    method: 'tencentUsStockKline',
+    description: '美股 K 线（分时 / 五日 / 日周月 / 1-3-5 年，支持历史区间）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/appstock/app/minute/query | kline/kline | usfqkline/get',
+    pageUrl: 'https://gu.qq.com/usEQIX.OQ/gg',
+    params: [
+      { name: 'code', type: 'string', description: '美股代码', required: true },
+      { name: 'period', type: 'string', description: 'minute|fdays|day|week|month|year1|year3|year5', default: 'day' },
+      { name: 'limit', type: 'number', description: 'K 线条数，0 表示默认；上游单次最大 2000', default: 0 },
+      { name: 'adjust', type: 'string', description: 'none 不复权 / qfq 前复权（日周月年）', default: 'none' },
+      { name: 'startDate', type: 'string', description: '历史起始 YYYY-MM-DD', default: '' },
+      { name: 'endDate', type: 'string', description: '历史截止 YYYY-MM-DD', default: '' },
+    ],
+    returns: '[{ code, symbol, period, adjust, startDate, endDate, items, quote?, source }]',
+    usage: INVOKE('tencentUsStockKline', '["NVDA","day",0,"none","2020-01-01","2026-07-08"]'),
+    notes: 'symbol 为 us{TICKER}.OQ；前复权走 usfqkline/get。五日 fdays 为 m5 日 K 摘要（非港股式分时五日）。日 K 跨多年自动按年分批。',
+    example: '{"provider":"tencent","method":"tencentUsStockKline","args":["usNVDA.OQ","week"]}',
+  },
 }
 
 export const TENCENT_CUSTOM = Object.values(TENCENT_METHOD_DOCS).map(toCustomMethodDef)

@@ -422,6 +422,85 @@ describe('tencent HK detail API', () => {
   })
 })
 
+describe('tencent US detail API', () => {
+  it('normalizes US symbol and resolves kline period', async () => {
+    const {
+      normalizeUsTencentSymbol,
+      normalizeUsTicker,
+      normalizeUsQtCode,
+      resolveTencentUsKlinePeriod,
+    } = await import('../src/providers/tencent/api/us-detail-service.js')
+    expect(normalizeUsTencentSymbol('EQIX')).toBe('usEQIX.OQ')
+    expect(normalizeUsTencentSymbol('usNVDA.OQ')).toBe('usNVDA.OQ')
+    expect(normalizeUsTicker('usEQIX.OQ')).toBe('EQIX')
+    expect(normalizeUsQtCode('NVDA')).toBe('usNVDA')
+    expect(resolveTencentUsKlinePeriod('5day')).toBe('fdays')
+    expect(resolveTencentUsKlinePeriod('year3')).toBe('year3')
+  })
+
+  it('fetches US profile, quote, news and financial summary', async () => {
+    const {
+      fetchTencentUsStockProfile,
+      fetchTencentUsStockQuote,
+      fetchTencentUsStockNews,
+      fetchTencentUsFinancialSummary,
+      fetchTencentUsShareholderStats,
+      fetchTencentUsRelatedStocks,
+    } = await import('../src/providers/tencent/api/us-detail-service.js')
+
+    const profile = await fetchTencentUsStockProfile('usEQIX.OQ')
+    expect(profile.companyName).toMatch(/Equinix/i)
+    expect(profile.industry?.name).toBeTruthy()
+
+    const quote = await fetchTencentUsStockQuote('EQIX')
+    expect(quote.code).toBe('EQIX')
+    expect(quote.price).toBeGreaterThan(0)
+    expect(quote.currency).toBe('USD')
+
+    const news = await fetchTencentUsStockNews({ code: 'usEQIX.OQ', page: 1, pageSize: 5 })
+    expect(news.items.length).toBeGreaterThan(0)
+    expect(news.total).toBeGreaterThan(0)
+
+    const financeP1 = await fetchTencentUsFinancialSummary({ code: 'usEQIX.OQ', page: 1, pageSize: 4 })
+    expect(financeP1.items.length).toBe(4)
+    expect(financeP1.items[0]?.income.revenue).toBeGreaterThan(0)
+
+    const financeP2 = await fetchTencentUsFinancialSummary({ code: 'usEQIX.OQ', page: 2, pageSize: 10 })
+    expect(Number(financeP2.items[0]?.year)).toBeLessThan(Number(financeP1.items.at(-1)?.year))
+
+    const holders = await fetchTencentUsShareholderStats({ code: 'usEQIX.OQ' })
+    expect(holders.items.length).toBeGreaterThan(0)
+    expect(holders.items[0]?.name).toBeTruthy()
+
+    const related = await fetchTencentUsRelatedStocks('usEQIX.OQ')
+    expect(related.length).toBeGreaterThan(0)
+    expect(related[0]?.symbol).toMatch(/^us[A-Z]+\.(OQ|N|AM|A)$/)
+  })
+
+  it('fetches US day kline and senior trades with pagination', async () => {
+    const {
+      fetchTencentUsStockKline,
+      fetchTencentUsSeniorTrades,
+    } = await import('../src/providers/tencent/api/us-detail-service.js')
+
+    const kline = await fetchTencentUsStockKline({
+      code: 'NVDA',
+      period: 'day',
+      startDate: '2024-01-01',
+      endDate: '2026-07-08',
+    })
+    expect(kline.items.length).toBeGreaterThan(200)
+    expect(kline.symbol).toBe('usNVDA.OQ')
+
+    const tradesP1 = await fetchTencentUsSeniorTrades({ code: 'usEQIX.OQ', page: 1, pageSize: 5 })
+    expect(tradesP1.items.length).toBe(5)
+    expect(tradesP1.items[0]?.detail).toBeTruthy()
+
+    const tradesP2 = await fetchTencentUsSeniorTrades({ code: 'usEQIX.OQ', page: 2, pageSize: 5 })
+    expect(tradesP2.items[0]?.date).not.toBe(tradesP1.items[0]?.date)
+  })
+})
+
 describe('tencent exchange rate API', () => {
   const sampleRows = [
     {
