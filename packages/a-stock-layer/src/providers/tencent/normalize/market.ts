@@ -1,6 +1,7 @@
 import type { MoneyFlow, StockKline, StockListItem, StockRealtime } from '../../../core/schema.js'
 import { normalizeCode, safeFloat } from '../../../utils/helpers.js'
 import { fromTencentSymbol } from '../api/proxy.js'
+import { tencentMarketCapYuan } from './quote.js'
 import type {
   TencentBigOrderData,
   TencentBoardRankRow,
@@ -38,13 +39,17 @@ export function mapTencentSqtRealtime(code: string, fields: TencentSqtQuoteArray
     price,
     preClose: safeFloat(fields[4]),
     open: safeFloat(fields[5]),
+    high: safeFloat(fields[33]),
+    low: safeFloat(fields[34]),
     volume: safeFloat(fields[6]),
     amount: safeFloat(fields[37]),
     changePct: safeFloat(fields[32]),
     pe: safeFloat(fields[39]),
     pb: safeFloat(fields[46]),
     turnoverRate: safeFloat(fields[38]),
-    marketCap: safeFloat(fields[44]),
+    volumeRatio: safeFloat(fields[49]),
+    marketCap: tencentMarketCapYuan(fields[44]),
+    circulatingMarketCap: tencentMarketCapYuan(fields[45]),
   }
 }
 

@@ -13,6 +13,7 @@ export {
   ManifestRegistry, getManifestRegistry,
   StockIndexDriver,
   QueryPlanExecutor, QUERY_PLANS, defaultCacheType, executeIntradaySessionsPlan,
+  computeChipDistribution, computeLatestChipProfile,
 } from './engine.js'
 
 export {
@@ -164,3 +165,10 @@ export type {
   StockProfile, NewsItem, SentimentData, Dividend, DragonTiger, LimitUpDown,
   GlobalIndex, TechnicalIndicator, ChipDistribution,
 } from './core/schema.js'
+
+export type { AnnouncementContent } from './announcement/index.js'
+export {
+  fetchAnnouncementContentByUrl,
+  compressPlainTextForAgent,
+  resolveAnnouncementUrl,
+} from './announcement/index.js'

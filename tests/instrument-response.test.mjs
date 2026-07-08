@@ -18,6 +18,30 @@ test('quoteFromProviderRow normalizes camelCase provider row', () => {
   assert.equal(q.market, 'US')
 })
 
+test('quoteFromProviderRow preserves extended CN quote fields', () => {
+  const q = quoteFromProviderRow(
+    { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
+    {
+      name: '贵州茅台',
+      price: 1700,
+      changePct: 0.5,
+      open: 1690,
+      high: 1710,
+      low: 1688,
+      preClose: 1691,
+      turnoverRate: 0.32,
+      pe: 28.5,
+      pb: 8.2,
+      volume: 12000,
+      amount: 2e9,
+    },
+  )
+  assert.equal(q.open, 1690)
+  assert.equal(q.pre_close, 1691)
+  assert.equal(q.turnover_rate, 0.32)
+  assert.equal(q.pe, 28.5)
+})
+
 test('klinesToChartBars maps StockKline shape', () => {
   const bars = klinesToChartBars([
     { code: '600519', date: '2024-01-02', open: 1, high: 2, low: 0.5, close: 1.5, volume: 100, amount: 200, changePct: 1, turnoverRate: 0.5 },

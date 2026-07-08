@@ -16,6 +16,12 @@ export function tencentChangePct(parts: string[]): number | null {
   return null
 }
 
+/** 腾讯行情总市值/流通市值字段单位为「亿元」→ 元 */
+export function tencentMarketCapYuan(raw: string | undefined): number | null {
+  const yi = safeFloat(raw)
+  return yi != null ? yi * 1e8 : null
+}
+
 export function mapTencentRealtime(code: string, parts: string[]): StockRealtime {
   const f = (v: string | undefined) => safeFloat(v)
   return {
@@ -24,13 +30,17 @@ export function mapTencentRealtime(code: string, parts: string[]): StockRealtime
     price: f(parts[3]),
     preClose: f(parts[4]),
     open: f(parts[5]),
+    high: f(parts[33]),
+    low: f(parts[34]),
     volume: f(parts[6]),
     amount: f(parts[37]),
     changePct: f(parts[32]),
     pe: f(parts[39]),
     pb: f(parts[46]),
     turnoverRate: f(parts[38]),
-    marketCap: f(parts[44]),
+    volumeRatio: f(parts[49]),
+    marketCap: tencentMarketCapYuan(parts[44]),
+    circulatingMarketCap: tencentMarketCapYuan(parts[45]),
   }
 }
 

@@ -6,6 +6,9 @@ import type {
   StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
 import { normalizeCode } from '../../../../utils/helpers.js'
+import type { StockMarket } from '../../../../utils/helpers.js'
+import { cnTodayString } from '../../../../utils/market-session.js'
+import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { isSinafinanceHttpError, type SinafinanceHttpError } from '../../api/errors.js'
 import { trySinafinanceSources } from '../../api/fallback.js'
@@ -373,6 +376,33 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
     return mapped.length ? mapped : null
   }
 
+  async fetchIntradaySessions(
+    code: string,
+    _ndays = 1,
+    _market?: StockMarket,
+  ): Promise<IntradayTrendFetchResult | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const env = await fetchSinaMinline(bare)
+    const ticks = mapSinaMinlineTicks(bare, env.result?.data ?? [])
+    if (!ticks.length) return null
+    const sessionDate = cnTodayString()
+    const bars = ticks.map(t => {
+      const clock = String(t.time ?? '').trim().slice(0, 5)
+      return {
+        time: `${sessionDate} ${clock}:00`,
+        price: t.price as number,
+        volume: (t.volume as number) ?? 0,
+        amount: 0,
+        avgPrice: (t.avgPrice as number) ?? (t.price as number),
+      }
+    })
+    return {
+      sessions: [{ sessionDate, preClose: null, bars }],
+      apiPreClose: null,
+    }
+  }
+
   async minuteTrendKline(
     code: string,
     _ndays = 1,
@@ -383,19 +413,23 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
     const env = await fetchSinaMinline(bare)
     const ticks = mapSinaMinlineTicks(bare, env.result?.data ?? [])
     if (!ticks.length) return null
-    const today = new Date().toISOString().slice(0, 10)
-    let rows: StockKline[] = ticks.map(t => ({
-      code: bare,
-      date: `${today} ${String(t.time ?? '')}`,
-      open: t.price as number,
-      close: t.price as number,
-      high: t.price as number,
-      low: t.price as number,
-      volume: (t.volume as number) ?? 0,
-      amount: 0,
-      changePct: null,
-      turnoverRate: null,
-    }))
+    const sessionDate = cnTodayString()
+    let rows: StockKline[] = ticks.map(t => {
+      const timeText = String(t.time ?? '').trim()
+      const clock = timeText.length >= 5 ? timeText.slice(0, 5) : timeText
+      return {
+        code: bare,
+        date: `${sessionDate} ${clock}:00`,
+        open: t.price as number,
+        close: t.price as number,
+        high: t.price as number,
+        low: t.price as number,
+        volume: (t.volume as number) ?? 0,
+        amount: 0,
+        changePct: null,
+        turnoverRate: null,
+      }
+    })
     if (count > 0 && rows.length > count) rows = rows.slice(-count)
     return rows
   }

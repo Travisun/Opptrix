@@ -86,6 +86,7 @@ import {
   unifiedChartToStockChart,
   unifiedSnapshotToCrossMarket,
   unifiedSnapshotToStockDetail,
+  unifiedQuoteToMarketQuote,
   type UnifiedInstrumentChartDto,
   type UnifiedInstrumentSnapshotDto,
 } from '../market/instrument-adapters'
@@ -120,18 +121,8 @@ function toApiResponse<T>(
   }
 }
 
-function unifiedQuoteToMarketQuote(q: UnifiedInstrumentQuote): MarketQuote {
-  return {
-    code: q.code,
-    name: q.name,
-    price: q.price,
-    changePct: q.change_pct,
-    pe: null,
-    pb: null,
-    turnoverRate: null,
-    volume: q.volume,
-    amount: q.amount,
-  }
+function unifiedQuoteToMarketQuoteFromApi(q: UnifiedInstrumentQuote): MarketQuote {
+  return unifiedQuoteToMarketQuote(q)
 }
 
 async function postInstrument<T>(
@@ -336,7 +327,7 @@ export const research = {
     return toApiResponse<StockQuotesData>(
       'stock_quotes',
       resp.success && resp.data?.quotes
-        ? { ...resp, data: { quotes: resp.data.quotes.map(unifiedQuoteToMarketQuote) } }
+        ? { ...resp, data: { quotes: resp.data.quotes.map(unifiedQuoteToMarketQuoteFromApi) } }
         : resp,
       { quotes: [] },
     )

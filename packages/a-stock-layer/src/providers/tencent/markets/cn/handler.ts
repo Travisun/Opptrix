@@ -3,6 +3,9 @@ import type {
   StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
 import { normalizeCode, safeFloat } from '../../../../utils/helpers.js'
+import { cnTodayString } from '../../../../utils/market-session.js'
+import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
+import { minuteKlinesToIntradaySessions } from '../../../../utils/intraday-trends.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { isTencentHttpError, type TencentHttpError } from '../../api/errors.js'
 import {
@@ -226,8 +229,31 @@ export class TencentCnHandler extends MarketHandlerShell {
     const bare = normalizeCode(code)
     if (!bare) return null
     const raw = await fetchTencentMinuteRaw(bare)
-    const rows = mapTencentMinuteTicks(bare, raw)
+    const rows = mapTencentMinuteTicks(bare, raw, cnTodayString())
     return rows.length ? rows : null
+  }
+
+  async fetchIntradaySessions(
+    code: string,
+    _ndays = 1,
+  ): Promise<IntradayTrendFetchResult | null> {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    const raw = await fetchTencentMinuteRaw(bare)
+    const ticks = mapTencentMinuteTicks(bare, raw, cnTodayString())
+    if (!ticks.length) return null
+    const sessionDate = cnTodayString()
+    const bars = ticks.map(t => ({
+      time: `${sessionDate} ${String(t.time ?? '09:30')}:00`,
+      price: t.price as number,
+      volume: (t.volume as number) ?? 0,
+      amount: (t.amount as number) ?? 0,
+      avgPrice: t.price as number,
+    }))
+    return {
+      sessions: [{ sessionDate, preClose: null, bars }],
+      apiPreClose: null,
+    }
   }
 
   async minuteTrendKline(
@@ -237,7 +263,7 @@ export class TencentCnHandler extends MarketHandlerShell {
   ): Promise<StockKline[] | null> {
     const bare = normalizeCode(code)
     if (!bare) return null
-    let rows = mapTencentMinuteKlines(bare, await fetchTencentMinuteRaw(bare))
+    let rows = mapTencentMinuteKlines(bare, await fetchTencentMinuteRaw(bare), cnTodayString())
     if (count > 0 && rows.length > count) rows = rows.slice(-count)
     return rows.length ? rows : null
   }

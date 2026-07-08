@@ -134,6 +134,7 @@ const TOOL_LABELS: Record<string, string> = {
   list_news_sources: '读取资讯订阅来源',
   list_news_articles: '浏览资讯列表',
   get_news_article: '读取资讯正文',
+  get_notice_content: '读取公告正文',
   get_current_time: '获取当前时间',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',

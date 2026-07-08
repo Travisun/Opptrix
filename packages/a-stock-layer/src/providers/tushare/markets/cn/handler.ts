@@ -275,6 +275,28 @@ export class TushareMarketHandler extends MarketHandlerShell {
     }
   }
 
+  async shareholderNumbers(code: string): Promise<Record<string, unknown>[] | null> {
+    const client = this.client()
+    if (!client) return null
+    try {
+      const rows = await client.queryAll(
+        'stk_holdernumber',
+        { ts_code: toTsCode(code) },
+        'ts_code,end_date,ann_date,holder_num',
+      )
+      if (!rows.length) return null
+      return rows.map(r => ({
+        code: normalizeCode(code),
+        end_date: r.end_date,
+        ann_date: r.ann_date,
+        holder_num: r.holder_num,
+        source: 'stk_holdernumber',
+      }))
+    } catch {
+      return null
+    }
+  }
+
   async perfForecast(code: string): Promise<Record<string, unknown>[] | null> {
     const client = this.client()
     if (!client) return null

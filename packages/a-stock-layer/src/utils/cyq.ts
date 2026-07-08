@@ -145,13 +145,13 @@ export function cyqCalculator(index: number, klinedata: CyqKlineInput[]): CyqCal
   }
 }
 
-export function klinesToCyqInput(klines: StockKline[]): CyqKlineInput[] {
+export function klinesToCyqInput(klines: StockKline[], defaultHsl = 1): CyqKlineInput[] {
   return klines.map(row => ({
     open: row.open,
     close: row.close,
     high: row.high,
     low: row.low,
-    hsl: row.turnoverRate ?? 0,
+    hsl: row.turnoverRate != null && row.turnoverRate > 0 ? row.turnoverRate : defaultHsl,
   }))
 }
 

@@ -579,6 +579,12 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '仅对 list 筛出的最相关 1–3 篇拉正文做深度解读；用户点名某条资讯时使用。',
     compliance: 'article_id 必填且须来自 list_news_articles；只读；正文已压缩空白；无正文时可能仅返回标题。',
   },
+  get_notice_content: {
+    hubFeature: 'notice_content',
+    miningEligible: false,
+    usageGuide: '用户要读某条上市公司公告/年报全文时使用；url 来自 get_instrument_snapshot 公告列表或用户提供的链接。',
+    compliance: 'url 必填；支持新浪/巨潮/SSE 等 HTML 与 PDF；正文已压缩；truncated=true 时可增大 max_chars；只读。',
+  },
   get_current_time: {
     miningEligible: true,
     usageGuide: '需要时间戳、时区、报告日期或交易日上下文时调用。',

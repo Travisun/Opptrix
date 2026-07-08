@@ -115,6 +115,18 @@ export function quoteFromProviderRow(
     market: instrument.market,
     asset_class: instrument.assetClass,
     source,
+    open: num(row.open),
+    high: num(row.high),
+    low: num(row.low),
+    pre_close: num(row.preClose ?? row.pre_close),
+    change: num(row.change),
+    pe: num(row.pe),
+    pb: num(row.pb),
+    turnover_rate: num(row.turnoverRate ?? row.turnover_rate),
+    amplitude: num(row.amplitude),
+    volume_ratio: num(row.volumeRatio ?? row.volume_ratio),
+    market_cap: num(row.marketCap ?? row.market_cap),
+    circulating_market_cap: num(row.circulatingMarketCap ?? row.circulating_market_cap),
   }
 }
 

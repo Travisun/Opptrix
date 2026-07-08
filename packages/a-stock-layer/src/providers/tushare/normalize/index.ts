@@ -140,6 +140,8 @@ export function mapProfileRow(code: string, row: TushareRow, company?: TushareRo
     province: str(base.province),
     city: str(base.city),
     employees: num(base.employees),
+    chairman: str(base.chairman),
+    regCapital: num(base.reg_capital),
   }
 }
 

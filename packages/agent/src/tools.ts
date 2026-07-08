@@ -411,6 +411,18 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('news_article_detail', { article_id: a.article_id }),
       },
       {
+        name: 'get_notice_content', category: '公告研报',
+        description: '按公告 URL 获取正文（自动解析 HTML 页面或 PDF 附件，剥离标签并压缩空白，供阅读年报/公告）',
+        parameters: S({
+          url: { type: 'string', description: '公告详情页或 PDF 链接（来自标的详情公告列表等）' },
+          max_chars: { type: 'number', description: '返回正文最大字符数，默认 16000，最大 40000' },
+        }, ['url']),
+        handler: (a: Record<string, unknown>) => d('notice_content', {
+          url: a.url,
+          max_chars: a.max_chars ?? a.maxChars,
+        }),
+      },
+      {
         name: 'get_latest_evaluation', category: '通用',
         description: '读取最近一次评估缓存（会话内 evaluate 结果）',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),

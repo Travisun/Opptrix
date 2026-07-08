@@ -66,4 +66,15 @@ export interface UnifiedInstrumentQuote {
   market: Market
   asset_class: AssetClass
   source: 'local' | 'live' | 'mixed'
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  pre_close?: number | null
+  change?: number | null
+  pe?: number | null
+  pb?: number | null
+  turnover_rate?: number | null
+  amplitude?: number | null
+  volume_ratio?: number | null
+  market_cap?: number | null
 }

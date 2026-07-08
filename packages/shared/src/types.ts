@@ -36,6 +36,8 @@ export interface StockRealtime {
   pb: number | null
   turnoverRate: number | null
   marketCap?: number | null
+  /** 流通市值（元） */
+  circulatingMarketCap?: number | null
   open?: number | null
   high?: number | null
   low?: number | null

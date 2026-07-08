@@ -91,6 +91,30 @@ export interface UnifiedInstrumentQuote {
   asset_class: import('./market-data.js').AssetClass
   /** 数据来源：local=本地库、live=在线、mixed=混合 */
   source: 'local' | 'live' | 'mixed'
+  /** 今开 */
+  open?: number | null
+  /** 最高 */
+  high?: number | null
+  /** 最低 */
+  low?: number | null
+  /** 昨收 */
+  pre_close?: number | null
+  /** 涨跌额 */
+  change?: number | null
+  /** 市盈率 */
+  pe?: number | null
+  /** 市净率 */
+  pb?: number | null
+  /** 换手率（%） */
+  turnover_rate?: number | null
+  /** 振幅（%） */
+  amplitude?: number | null
+  /** 量比 */
+  volume_ratio?: number | null
+  /** 总市值（元） */
+  market_cap?: number | null
+  /** 流通市值（元） */
+  circulating_market_cap?: number | null
 }
 
 /**

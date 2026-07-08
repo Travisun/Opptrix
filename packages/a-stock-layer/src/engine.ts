@@ -506,6 +506,22 @@ export class MarketDataEngine {
   news(code: string, page = 1, pageSize = 20, newsType = 'all'): Promise<QueryResult<NewsItem[]>> {
     return this.q(Capability.NEWS, 'news', page <= 2, code, page, pageSize, newsType)
   }
+  /** 按公告 URL 提取正文（HTML 去标签 / PDF 文字），压缩后供 Agent 阅读 */
+  async announcementContent(
+    url: string,
+    maxChars = 16_000,
+  ): Promise<QueryResult<import('./announcement/index.js').AnnouncementContent>> {
+    const { fetchAnnouncementContentByUrl } = await import('./announcement/index.js')
+    try {
+      const data = await fetchAnnouncementContentByUrl(url, { maxChars })
+      if (!data?.text) {
+        return { success: false, error: '未能提取公告正文' }
+      }
+      return { success: true, data, source: data.source }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) }
+    }
+  }
   sentiment(code: string): Promise<QueryResult<SentimentData[]>> {
     return this.q(Capability.SENTIMENT, 'sentiment', false, code)
   }

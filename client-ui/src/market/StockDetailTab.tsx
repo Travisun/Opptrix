@@ -475,8 +475,8 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
   }
   return (
     <div className={s.flatList}>
-      {items.map(item => (
-        <div key={`${item.date}-${item.title}`} className={s.annRow}>
+      {items.map((item, index) => (
+        <div key={`${item.date}-${item.title}-${item.url ?? index}`} className={s.annRow}>
           <span className={s.listDate}>{item.date || '—'}</span>
           {item.url ? (
             <Link

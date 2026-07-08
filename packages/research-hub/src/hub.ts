@@ -1,12 +1,13 @@
-import { MarketDataEngine, computeIndicators, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
+import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
+  type NewsItem, type MoneyFlow, type Dividend,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
-import type { StockListItem } from '@opptrix/shared'
+import type { StockListItem, FinancialSummary } from '@opptrix/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@opptrix/skills'
 import {
@@ -57,6 +58,7 @@ import {
   newsGroupsList,
   newsSourcesList,
 } from './news-hub.js'
+import { noticeContent } from './notice-content-hub.js'
 import {
   routeInstrumentCapabilities,
   routeInstrumentChart,
@@ -79,6 +81,15 @@ import {
   routeInstrumentBatchSnapshots,
   type InstrumentBatchRouteHandlers,
 } from './instrument-batch-router.js'
+import {
+  dedupeStockNewsItems,
+  enrichDetailProfileFromQuote,
+  enrichShareholderView,
+  holderHistoryFromRows,
+  mergeDetailQuoteRows,
+  mergeStockProfileRows,
+  normalizeShareholderPayload,
+} from './stock-detail-normalize.js'
 import { searchInstrumentsUnified } from './instrument-search-unified.js'
 import type { LocalInstrumentInsights } from '@opptrix/shared'
 
@@ -235,6 +246,9 @@ export class ResearchHub {
         case 'news_sources_list': return newsSourcesList(t0)
         case 'news_articles_list': return newsArticlesList(params, t0)
         case 'news_article_detail': return await newsArticleDetail(params, t0)
+        case 'notice_content':
+        case 'instrument_notice_content':
+          return await noticeContent(params, t0)
         case 'tushare_config': return ok(this.de.providerCatalog.tusharePublicLegacy(), 'Tushare 配置', t0)
         case 'tushare_config_save': return this.tushareConfigSave(params, t0)
         case 'tushare_test': return this.tushareTest(params, t0)
@@ -1036,16 +1050,19 @@ export class ResearchHub {
 
   private async stockCyq(code: string, t0: number) {
     const normalized = code.padStart(6, '0')
-    const result = await this.de.chipDistribution(normalized)
-    if (!result.success || !result.data?.length) {
-      return fail(result.error ?? '筹码分布获取失败', t0)
+    const klineR = await this.de.queryInstrumentData(this.cnEquityRef(normalized), 'kline', { count: 320 })
+    const klines = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR) ?? []
+    if (!klines.length) {
+      return fail('K线不足，无法计算筹码分布', t0)
     }
-    const latest = result.data[result.data.length - 1]
+    const rows = computeChipDistribution(normalized, klines, 90)
+    if (!rows.length) return fail('筹码分布计算失败', t0)
+    const latest = rows[rows.length - 1]!
     return ok({
       code: normalized,
-      rows: result.data,
+      rows,
       latest,
-    }, `${normalized} 筹码 ${result.data.length} 日`, t0)
+    }, `${normalized} 筹码 ${rows.length} 日`, t0)
   }
 
   private mapCyqRow(row: {
@@ -1072,10 +1089,10 @@ export class ResearchHub {
     }
   }
 
-  /** 详情页次要字段（财务/新闻/分红等）超时后降级为空，避免 Baostock 慢连阻塞整页 */
+  /** 详情页次要字段（财务/新闻/分红等）超时后降级为空，避免慢源阻塞整页 */
   private stockDetailOptional<T>(
     promise: Promise<{ success: boolean; data?: T[] | null }>,
-    timeoutMs = 10000,
+    timeoutMs = 20000,
   ): Promise<{ success: boolean; data?: T[] | null }> {
     return Promise.race([
       promise,
@@ -1085,25 +1102,176 @@ export class ResearchHub {
     ])
   }
 
-  private async stockDetail(code: string, t0: number) {
-    void this.marketData.hydrateStocks([normalizeCode(code)], 'detail').catch(() => {})
+  /** 绕过 queryScoped 测速，按优先级直连指定 provider（详情页避免 zzshare 代理抢先） */
+  private async callDetailProviderMethod<T>(
+    providerIds: string[],
+    method: string,
+    args: unknown[],
+  ): Promise<T[] | null> {
+    for (const pid of providerIds) {
+      const driver = this.de.registry.get(pid) as Record<string, unknown> | undefined
+      if (!driver) continue
+      const fn = driver[method] as ((...a: unknown[]) => Promise<T[] | null>) | undefined
+      if (typeof fn !== 'function') continue
+      try {
+        const data = await fn.apply(driver, args)
+        if (data?.length) return data
+      } catch {
+        continue
+      }
+    }
+    return null
+  }
 
-    const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
-      this.stockRealtime(code),
-      this.de.queryInstrumentData(this.cnEquityRef(code), 'profile'),
-      this.stockDetailOptional(this.de.queryInstrumentData(this.cnEquityRef(code), 'financials', {
-        reportDate: '',
-        reportType: 'all',
-      }) as Promise<{ success: boolean; data?: Array<{ reportType?: string }> | null }>),
-      this.stockDetailOptional(this.de.news(code, 1, 20)),
-      this.stockDetailOptional(this.de.dividend(code)),
-      this.stockDetailOptional(this.de.moneyFlow(code)),
-      this.stockDetailOptional(this.de.shareholders(code)),
+  private async stockDetailNotices(code: string): Promise<NewsItem[]> {
+    const limit = 30
+    const merged: NewsItem[] = []
+    for (const pid of ['tencent', 'sinafinance']) {
+      const rows = await this.callDetailProviderMethod<NewsItem>(
+        [pid],
+        'news',
+        [code, 1, limit, 'notice'],
+      )
+      if (rows) merged.push(...rows)
+    }
+    if (merged.length) return dedupeStockNewsItems(merged).slice(0, limit)
+    const fallback = await this.de.news(code, 1, limit, 'notice')
+    return fallback.data ?? []
+  }
+
+  private async stockDetailShareholders(code: string) {
+    const raw = await this.callDetailProviderMethod<Record<string, unknown>>(
+      ['sinafinance', 'tushare'],
+      'shareholders',
+      [code],
+    )
+    const rows = raw ?? (await this.de.shareholders(code)).data ?? null
+    const normalized = normalizeShareholderPayload(code, rows)
+    return normalized ? [normalized] : null
+  }
+
+  private async stockDetailHolderHistory(code: string) {
+    const rows = await this.callDetailProviderMethod<Record<string, unknown>>(
+      ['tushare'],
+      'shareholderNumbers',
+      [code],
+    )
+    return holderHistoryFromRows(rows)
+  }
+
+  /** 详情页行情：腾讯补全 PE/PB/量比/市值，fallback 保留准确 OHLCV/成交量 */
+  private async stockDetailQuote(code: string) {
+    const [preferred, fallbackR] = await Promise.all([
+      this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'realtime', [code]),
+      this.de.queryInstrumentData(this.cnEquityRef(code), 'realtime'),
+    ])
+    const merged = mergeDetailQuoteRows(
+      code,
+      preferred?.[0] ?? null,
+      (instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(fallbackR)?.[0] ?? null) as Record<string, unknown> | null,
+    )
+    if (!merged) return null
+    return normalizePreOpenRealtimeQuote(merged as unknown as import('@opptrix/shared').StockRealtime)
+  }
+
+  /** 详情页公司资料：绕过 queryScoped 测速，合并 sinafinance / tushare / 腾讯 */
+  private async stockDetailProfile(code: string): Promise<Record<string, unknown> | null> {
+    const rows: Record<string, unknown>[] = []
+    for (const pid of ['sinafinance', 'tushare', 'tencent']) {
+      const batch = await this.callDetailProviderMethod<Record<string, unknown>>(
+        [pid],
+        'profile',
+        [code],
+      )
+      if (batch?.[0]) rows.push(batch[0])
+    }
+    if (!rows.length) {
+      const fallback = await this.de.queryInstrumentData(this.cnEquityRef(code), 'profile')
+      const row = instrumentQueryData<Array<Record<string, unknown>>>(fallback)?.[0]
+      if (row) rows.push(row)
+    }
+    return mergeStockProfileRows(code, rows)
+  }
+
+  private async stockDetail(code: string, t0: number) {
+    const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR, holderHistoryR] = await Promise.all([
+      this.stockDetailQuote(code),
+      this.stockDetailOptional(
+        this.stockDetailProfile(code).then(profile => ({
+          success: !!profile,
+          data: profile ? [profile] : null,
+        })),
+        25000,
+      ),
+      this.stockDetailOptional(
+        (async () => {
+          const fast = await this.callDetailProviderMethod<FinancialSummary>(
+            ['sinafinance', 'tushare'],
+            'financials',
+            [code, '', 'all'],
+          )
+          if (fast?.length) return { success: true, data: fast }
+          return this.de.queryInstrumentData(this.cnEquityRef(code), 'financials', {
+            reportDate: '',
+            reportType: 'all',
+          }) as Promise<{ success: boolean; data?: Array<{ reportType?: string }> | null }>
+        })(),
+        25000,
+      ),
+      this.stockDetailOptional(
+        this.stockDetailNotices(code).then(data => ({ success: data.length > 0, data })),
+      ),
+      this.stockDetailOptional(
+        (async () => {
+          const preferred = await this.callDetailProviderMethod<Dividend>(
+            ['sinafinance', 'tushare'],
+            'dividend',
+            [code],
+          )
+          if (preferred?.length) return { success: true, data: preferred }
+          return this.de.dividend(code)
+        })(),
+      ),
+      this.stockDetailOptional(
+        (async () => {
+          const preferred = await this.callDetailProviderMethod<MoneyFlow>(
+            ['tencent', 'sinafinance'],
+            'moneyFlow',
+            [code],
+          )
+          if (preferred?.length) return { success: true, data: preferred }
+          return this.de.moneyFlow(code)
+        })(),
+      ),
+      this.stockDetailOptional(
+        this.stockDetailShareholders(code).then(data => ({
+          success: !!data?.length,
+          data,
+        })),
+      ),
+      this.stockDetailOptional(
+        this.stockDetailHolderHistory(code).then(history => ({
+          success: history.length > 0,
+          data: history,
+        })),
+        25000,
+      ),
     ])
 
-    const quoteRaw = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
-    const quote = this.mergeQuoteWithLocal(code, quoteRaw)
-    const profileRow = instrumentQueryData<Array<Record<string, unknown>>>(profileR)?.[0] ?? null
+    const quoteRaw = quoteR
+    const quote = quoteRaw ? this.enrichQuote(quoteRaw) : null
+    const profileRow = enrichDetailProfileFromQuote(
+      instrumentQueryData<Array<Record<string, unknown>>>(profileR)?.[0] ?? null,
+      quote as Record<string, unknown> | null,
+    )
+    const shareholderBase = shareholdersR.data?.[0] as import('./stock-detail-normalize.js').StockDetailShareholderView | null ?? null
+    const shareholders = enrichShareholderView(shareholderBase, {
+      price: quote?.price ?? null,
+      circulatingMarketCap: (quote as Record<string, unknown> | null)?.circulatingMarketCap as number | null
+        ?? (profileRow?.circulatingMarketCap as number | null | undefined)
+        ?? null,
+      holderHistory: holderHistoryR.data ?? [],
+    })
     const financialHistory = financialAllR.data ?? []
     const financial = financialHistory.find(row => row.reportType === 'annual')
       ?? financialHistory[0]
@@ -1125,7 +1293,7 @@ export class ResearchHub {
       news: newsR.data ?? [],
       dividends: dividendR.data ?? [],
       moneyFlow: moneyFlowR.data ?? [],
-      shareholders: shareholdersR.data?.[0] ?? null,
+      shareholders,
     }, `${name}(${code}) 详情`, t0)
   }
 
@@ -1492,14 +1660,13 @@ export class ResearchHub {
     let cyqLatest: ReturnType<ResearchHub['mapCyqRow']> | null = null
     let cyqProfile: { date: string; currentPrice: number; levels: { price: number; weight: number }[] } | null = null
     if (period === 'daily' || period === 'weekly' || period === 'monthly') {
-      const profileR = await this.de.chipProfile(normalized)
-      const raw = profileR.data?.[0]
-      if (profileR.success && raw) {
-        cyqLatest = this.mapCyqRow(raw)
+      const profileRaw = computeLatestChipProfile(normalized, fetched.klines)
+      if (profileRaw) {
+        cyqLatest = this.mapCyqRow(profileRaw)
         cyqProfile = {
-          date: raw.date,
-          currentPrice: raw.currentPrice,
-          levels: raw.levels.map(level => ({ price: level.price, weight: level.weight })),
+          date: profileRaw.date,
+          currentPrice: profileRaw.currentPrice,
+          levels: profileRaw.levels.map(level => ({ price: level.price, weight: level.weight })),
         }
       }
     }

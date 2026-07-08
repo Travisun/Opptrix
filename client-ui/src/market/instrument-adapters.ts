@@ -9,6 +9,7 @@ import type {
   CrossMarketKlineBar,
   CrossMarketQuote,
   CryptoSnapshotData,
+  IntradayChartBar,
   MarketQuote,
   OhlcChartBar,
   StockChartData,
@@ -27,6 +28,17 @@ export interface UnifiedInstrumentQuoteDto {
   market: InstrumentRef['market']
   asset_class: InstrumentRef['assetClass']
   source: 'local' | 'live' | 'mixed'
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  pre_close?: number | null
+  change?: number | null
+  pe?: number | null
+  pb?: number | null
+  turnover_rate?: number | null
+  amplitude?: number | null
+  volume_ratio?: number | null
+  market_cap?: number | null
 }
 
 export interface UnifiedChartBarDto {
@@ -95,18 +107,30 @@ export function isUnifiedChart(data: unknown): data is UnifiedInstrumentChartDto
   return !!data && typeof data === 'object' && 'instrument' in data && Array.isArray((data as UnifiedInstrumentChartDto).bars)
 }
 
-function quoteDtoToMarketQuote(q: UnifiedInstrumentQuoteDto): MarketQuote {
+export function unifiedQuoteToMarketQuote(q: UnifiedInstrumentQuoteDto): MarketQuote {
   return {
     code: q.code,
     name: q.name,
     price: q.price,
     changePct: q.change_pct,
-    pe: null,
-    pb: null,
-    turnoverRate: null,
+    pe: q.pe ?? null,
+    pb: q.pb ?? null,
+    turnoverRate: q.turnover_rate ?? null,
+    marketCap: q.market_cap ?? null,
+    open: q.open ?? null,
+    high: q.high ?? null,
+    low: q.low ?? null,
+    preClose: q.pre_close ?? null,
     volume: q.volume,
     amount: q.amount,
+    change: q.change ?? null,
+    amplitude: q.amplitude ?? null,
+    volumeRatio: q.volume_ratio ?? null,
   }
+}
+
+function quoteDtoToMarketQuote(q: UnifiedInstrumentQuoteDto): MarketQuote {
+  return unifiedQuoteToMarketQuote(q)
 }
 
 function quoteDtoToCrossMarket(q: UnifiedInstrumentQuoteDto): CrossMarketQuote {
@@ -171,6 +195,30 @@ export function unifiedChartToStockChart(
   data: UnifiedInstrumentChartDto,
   fallbackCode: string,
 ): StockChartData {
+  const period = data.period as ChartPeriod
+  if (period === 'intraday') {
+    const bars: IntradayChartBar[] = data.bars.map(b => ({
+      time: b.time,
+      price: b.price ?? b.close ?? 0,
+      volume: b.volume ?? 0,
+      amount: b.amount ?? 0,
+      avgPrice: b.avg_price ?? b.price ?? b.close ?? 0,
+    }))
+    return {
+      code: data.code || fallbackCode,
+      name: data.name || fallbackCode,
+      period,
+      preClose: data.pre_close,
+      sessionDate: data.session_date ?? null,
+      isTradingDay: data.is_trading_day ?? false,
+      hasMore: data.has_more,
+      bars,
+      indicators: (data.indicators ?? []) as StockChartData['indicators'],
+      cyqLatest: data.extras?.cyqLatest as StockChartData['cyqLatest'],
+      cyqProfile: data.extras?.cyqProfile as StockChartData['cyqProfile'],
+    }
+  }
+
   const bars: OhlcChartBar[] = data.bars.map(b => ({
     time: b.time,
     open: b.open ?? b.close ?? b.price ?? 0,
