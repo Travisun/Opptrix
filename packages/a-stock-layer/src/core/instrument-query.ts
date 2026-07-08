@@ -6,12 +6,10 @@
  */
 
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
-import { instrumentDisplayCode } from '@opptrix/shared'
+import { instrumentDisplayCode, normalizeInstrumentRef } from '@opptrix/shared'
 import { Capability } from './capabilities.js'
 import { isCnEtfCode } from './instrument.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regional-symbol.js'
-import { normalizeUsSymbol } from '../utils/us-market.js'
-import { normalizeCode } from '../utils/helpers.js'
 
 /**
  * 标的数据能力 — 定义可查询的数据类型。
@@ -97,15 +95,19 @@ function cnAssetClass(ref: InstrumentRef): AssetClass {
 }
 
 function cnSymbol(ref: InstrumentRef): string {
-  return normalizeCode(ref.symbol)
+  return normalizeInstrumentRef(ref).symbol
 }
 
 function usSymbol(ref: InstrumentRef): string {
-  return normalizeUsSymbol(ref.symbol)
+  return normalizeInstrumentRef(ref).symbol
+}
+
+function regionalSymbol(ref: InstrumentRef): string {
+  return normalizeInstrumentRef(ref).symbol
 }
 
 function cryptoPair(ref: InstrumentRef): string {
-  return instrumentDisplayCode(ref)
+  return instrumentDisplayCode(normalizeInstrumentRef(ref))
 }
 
 function registryPlan(
@@ -186,7 +188,7 @@ export function resolveInstrumentQueryPlan(
   // ── 区域市场（HK/JP/KR 等） ──
   if (isRegionalEquityMarket(ref.market)) {
     const market = ref.market as RegionalEquityMarket
-    const sym = ref.symbol.trim()
+    const sym = regionalSymbol(ref)
     switch (dataCap) {
       case 'realtime':
         return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym])

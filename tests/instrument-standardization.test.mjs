@@ -6,6 +6,12 @@ import {
   normalizeInstrumentHubParams,
 } from '../packages/shared/dist/instrument-param.js'
 import {
+  normalizeInstrumentRef,
+  canonicalHkSymbol,
+  instrumentRefLabel,
+} from '../packages/shared/dist/instrument-symbol.js'
+import { instrumentRefKey } from '../packages/shared/dist/instrument-ref.js'
+import {
   INSTRUMENT_HUB_FEATURE,
   LEGACY_HUB_FEATURE_SHIM,
   resolveInstrumentHubFeature,
@@ -30,7 +36,7 @@ test('resolveInstrumentFromParams — legacy code and explicit market', () => {
 
   const prefixed = resolveInstrumentFromParams({ code: 'HK:0700' })
   assert.equal(prefixed?.market, 'HK')
-  assert.equal(prefixed?.symbol, '0700')
+  assert.equal(prefixed?.symbol, '00700')
 })
 
 test('instrumentRefsFromList batch resolves mixed legacy codes', () => {
@@ -125,14 +131,14 @@ test('Engine resolveInstrumentQueryPlan CRYPTO realtime', () => {
 
 test('Engine resolveInstrumentQueryPlan HK kline', () => {
   const plan = resolveInstrumentQueryPlan(
-    { market: 'HK', assetClass: 'EQUITY', symbol: '0700' },
+    { market: 'HK', assetClass: 'EQUITY', symbol: '00700' },
     'kline',
   )
   assert.equal(plan?.kind, 'registry')
   if (plan?.kind === 'registry') {
     assert.equal(plan.market, 'HK')
     assert.equal(plan.method, 'kline')
-    assert.deepEqual(plan.args, ['0700', 'daily', '', '', 120])
+    assert.deepEqual(plan.args, ['00700', 'daily', '', '', 120])
   }
 })
 
@@ -146,4 +152,25 @@ test('Engine resolveInstrumentQueryPlan JP snapshot', () => {
     assert.equal(plan.market, 'JP')
     assert.equal(plan.symbol, '7203')
   }
+})
+
+test('canonical symbol normalization across markets', () => {
+  assert.equal(canonicalHkSymbol('700'), '00700')
+  assert.equal(canonicalHkSymbol('0700'), '00700')
+  const hk = normalizeInstrumentRef({ market: 'HK', assetClass: 'EQUITY', symbol: '700' })
+  assert.equal(hk.symbol, '00700')
+  assert.equal(instrumentRefLabel(hk), 'HK:00700')
+  const cn = normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: '519' })
+  assert.equal(cn.symbol, '000519')
+})
+
+test('instrumentRefKey includes crypto quote for dedupe', () => {
+  const btc = normalizeInstrumentRef({
+    market: 'CRYPTO',
+    assetClass: 'CRYPTO_SPOT',
+    symbol: 'btc',
+    quote: 'usdt',
+    exchange: 'binance',
+  })
+  assert.equal(instrumentRefKey(btc), 'CRYPTO:CRYPTO_SPOT:BTC:USDT:binance')
 })

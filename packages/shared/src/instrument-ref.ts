@@ -1,4 +1,5 @@
 import type { AssetClass, InstrumentRef, Market } from './market-data.js'
+import { normalizeInstrumentRef } from './instrument-symbol.js'
 
 const MARKETS: Market[] = ['CN', 'US', 'HK', 'CRYPTO', 'JP', 'KR']
 const ASSET_CLASSES: AssetClass[] = ['EQUITY', 'ETF', 'INDEX', 'FUND', 'CRYPTO_SPOT', 'CRYPTO_PERP']
@@ -22,7 +23,7 @@ export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   const assetClass = isAssetClass(assetRaw) ? assetRaw : 'EQUITY'
   const exchange = row.exchange != null ? String(row.exchange) : undefined
   const quote = row.quote != null ? String(row.quote) : undefined
-  return { market: marketRaw, assetClass, symbol, exchange, quote }
+  return normalizeInstrumentRef({ market: marketRaw, assetClass, symbol, exchange, quote })
 }
 
 /** Build InstrumentRef from flat API fields (POST body) */
@@ -39,15 +40,15 @@ export function instrumentRefKey(ref: InstrumentRef): string {
   return `${ref.market}:${ref.assetClass}:${ref.symbol}${quote}${exchange}`
 }
 
-/** Display / map key for non-crypto cross-market symbols (no A-share zero pad) */
+/** Display / map key for non-crypto cross-market symbols (CN 6 位，HK 5 位等 canonical 格式) */
 export function instrumentDisplayCode(ref: InstrumentRef): string {
-  if (ref.market === 'CRYPTO' || ref.assetClass === 'CRYPTO_SPOT' || ref.assetClass === 'CRYPTO_PERP') {
-    if (ref.symbol.includes('/')) return ref.symbol
-    const quote = ref.quote ?? 'USDT'
-    return `${ref.symbol}/${quote}`
+  const n = normalizeInstrumentRef(ref)
+  if (n.market === 'CRYPTO' || n.assetClass === 'CRYPTO_SPOT' || n.assetClass === 'CRYPTO_PERP') {
+    if (n.symbol.includes('/')) return n.symbol
+    const quote = n.quote ?? 'USDT'
+    return `${n.symbol}/${quote}`
   }
-  if (ref.market === 'CN') return ref.symbol.padStart(6, '0')
-  return ref.symbol
+  return n.symbol
 }
 
 /** Legacy alias — prefer instrumentDisplayCode */

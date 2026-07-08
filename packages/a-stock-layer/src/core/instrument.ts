@@ -1,6 +1,11 @@
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
+import {
+  instrumentRefKey,
+  normalizeInstrumentRef,
+  parseCanonicalInstrumentInput,
+} from '@opptrix/shared'
 import { isShIndexCode, normalizeCode, resolveStockMarketCode, type StockMarket } from '../utils/helpers.js'
-import { isValidUsSymbol, normalizeUsSymbol } from '../utils/us-market.js'
+import { isValidUsSymbol } from '../utils/us-market.js'
 import { isCryptoPairNotation, parseCryptoPair } from '../utils/crypto-market.js'
 
 /** A 股 ETF 代码段（宽基/行业/跨境等） */
@@ -30,34 +35,65 @@ export function toInstrumentRef(
   opts?: { market?: Market; assetClass?: AssetClass },
 ): InstrumentRef {
   if (typeof input === 'object' && input != null && 'symbol' in input) {
-    return input
+    return normalizeInstrumentRef(input)
   }
-  const market = opts?.market ?? inferMarketFromSymbol(String(input))
-  let symbol: string
-  let quote: string | undefined
-  let exchange: string | undefined
-  if (market === 'CRYPTO') {
-    const pair = parseCryptoPair(String(input))
-    symbol = pair?.base ?? normalizeCryptoBase(String(input))
-    quote = pair?.quote
-    exchange = 'binance'
-  } else if (market === 'US') {
-    symbol = normalizeUsSymbol(String(input))
-  } else {
-    symbol = normalizeCode(String(input))
-    exchange = cnMarketFromCode(symbol)
+  const raw = String(input).trim()
+  if (!raw) {
+    return normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: '000000' })
   }
-  const assetClass = opts?.assetClass ?? (
-    market === 'CN' ? inferCnAssetClass(symbol)
-      : market === 'CRYPTO' ? 'CRYPTO_SPOT' as const
-        : 'EQUITY' as const
-  )
-  if (market === 'CN' && !exchange) exchange = cnMarketFromCode(symbol)
-  return { market, assetClass, symbol, exchange, quote }
-}
 
-function normalizeCryptoBase(s: string): string {
-  return s.trim().toUpperCase().replace(/[^A-Z0-9]/g, '')
+  if (opts?.market) {
+    const market = opts.market
+    if (market === 'CRYPTO') {
+      const pair = parseCryptoPair(raw)
+      return normalizeInstrumentRef({
+        market: 'CRYPTO',
+        assetClass: opts.assetClass ?? 'CRYPTO_SPOT',
+        symbol: pair?.base ?? raw,
+        quote: pair?.quote ?? 'USDT',
+        exchange: 'binance',
+      })
+    }
+    if (market === 'CN') {
+      const symbol = normalizeCode(raw)
+      return normalizeInstrumentRef({
+        market: 'CN',
+        assetClass: opts.assetClass ?? inferCnAssetClass(symbol),
+        symbol,
+        exchange: cnMarketFromCode(symbol),
+      })
+    }
+    return normalizeInstrumentRef({
+      market,
+      assetClass: opts.assetClass ?? 'EQUITY',
+      symbol: raw,
+    })
+  }
+
+  const parsed = parseCanonicalInstrumentInput(raw)
+  if (parsed) return parsed
+
+  const market = inferMarketFromSymbol(raw)
+  if (market === 'CRYPTO') {
+    const pair = parseCryptoPair(raw)
+    return normalizeInstrumentRef({
+      market: 'CRYPTO',
+      assetClass: 'CRYPTO_SPOT',
+      symbol: pair?.base ?? raw,
+      quote: pair?.quote ?? 'USDT',
+      exchange: 'binance',
+    })
+  }
+  if (market === 'CN') {
+    const symbol = normalizeCode(raw)
+    return normalizeInstrumentRef({
+      market: 'CN',
+      assetClass: inferCnAssetClass(symbol),
+      symbol,
+      exchange: cnMarketFromCode(symbol),
+    })
+  }
+  return normalizeInstrumentRef({ market: 'US', assetClass: 'EQUITY', symbol: raw })
 }
 
 /** Heuristic: crypto pair → US ticker → CN 6-digit */
@@ -72,6 +108,5 @@ export function inferMarketFromSymbol(raw: string): Market {
 }
 
 export function instrumentId(ref: InstrumentRef): string {
-  const ex = ref.exchange ?? ''
-  return `${ref.market}:${ref.assetClass}:${ref.symbol}${ex ? `:${ex}` : ''}`
+  return instrumentRefKey(normalizeInstrumentRef(ref))
 }

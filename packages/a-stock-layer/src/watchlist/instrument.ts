@@ -1,4 +1,5 @@
 import type { InstrumentRef } from '@opptrix/shared'
+import { instrumentDisplayCode } from '@opptrix/shared'
 import { inferCnAssetClass, instrumentId, toInstrumentRef } from '../core/instrument.js'
 import { normalizeCode, resolveStockMarketCode } from '../utils/helpers.js'
 import type { WatchlistItem } from './models.js'
@@ -10,13 +11,7 @@ export function watchlistItemKey(item: Pick<WatchlistItem, 'code' | 'instrument'
 }
 
 export function displayCodeFromInstrument(ref: InstrumentRef): string {
-  if (ref.market === 'CRYPTO' && ref.quote) {
-    return `${ref.symbol}/${ref.quote}`
-  }
-  if (ref.market === 'US' || ref.market === 'HK') {
-    return ref.symbol
-  }
-  return normalizeCode(ref.symbol)
+  return instrumentDisplayCode(ref)
 }
 
 export function legacyToInstrument(code: string): InstrumentRef {

@@ -1,6 +1,7 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
 import { isBseCode, isTushareEnabled, isRegionalTradingDay, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, QueryResult, StockListItem, StockRealtime } from '@opptrix/shared'
+import { normalizeInstrumentRef } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
@@ -30,15 +31,27 @@ function equityInstrumentRef(
   code: string,
 ): InstrumentRef {
   const symbol = market === 'US' ? code : normalizeRegionalSymbol(market, code)
-  return { market, assetClass: 'EQUITY', symbol }
+  return normalizeInstrumentRef({ market, assetClass: 'EQUITY', symbol })
 }
 
 function cryptoInstrumentRef(code: string): InstrumentRef {
   const pair = parseCryptoPair(code)
   if (pair) {
-    return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: pair.base, quote: pair.quote }
+    return normalizeInstrumentRef({
+      market: 'CRYPTO',
+      assetClass: 'CRYPTO_SPOT',
+      symbol: pair.base,
+      quote: pair.quote,
+      exchange: 'binance',
+    })
   }
-  return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: code, quote: 'USDT' }
+  return normalizeInstrumentRef({
+    market: 'CRYPTO',
+    assetClass: 'CRYPTO_SPOT',
+    symbol: code,
+    quote: 'USDT',
+    exchange: 'binance',
+  })
 }
 
 function deStockListQuery(

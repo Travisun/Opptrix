@@ -1,4 +1,9 @@
 import type { Market } from '@opptrix/shared'
+import {
+  canonicalHkSymbol,
+  canonicalJpSymbol,
+  canonicalKrSymbol,
+} from '@opptrix/shared'
 import { normalizeUsSymbol } from './us-market.js'
 
 export type RegionalEquityMarket = 'JP' | 'KR' | 'HK'
@@ -7,30 +12,29 @@ export function isRegionalEquityMarket(market: Market): market is RegionalEquity
   return market === 'JP' || market === 'KR' || market === 'HK'
 }
 
-/** 本地 symbol → Yahoo Finance ticker */
+/** 本地 canonical symbol → Yahoo Finance ticker（Provider 专用） */
 export function toYahooFinanceSymbol(market: Market, symbol: string): string {
   const raw = symbol.trim().toUpperCase().replace(/^(JP|KR|HK):/i, '')
   if (market === 'US') return normalizeUsSymbol(raw)
   if (market === 'JP') {
-    const digits = raw.replace(/\D/g, '')
+    const digits = canonicalJpSymbol(raw)
     return `${digits || raw}.T`
   }
   if (market === 'KR') {
-    const digits = raw.replace(/\D/g, '').padStart(6, '0')
+    const digits = canonicalKrSymbol(raw)
     return `${digits}.KS`
   }
   if (market === 'HK') {
-    const digits = raw.replace(/\D/g, '')
-    const hk = digits.length > 4 ? digits.slice(-4) : digits.padStart(4, '0')
-    return `${hk}.HK`
+    const hk = canonicalHkSymbol(raw)
+    const yahoo = hk.length > 4 ? hk.slice(-4) : hk
+    return `${yahoo}.HK`
   }
   return raw
 }
 
+/** @deprecated 使用 @opptrix/shared canonicalHkSymbol / canonicalJpSymbol / canonicalKrSymbol */
 export function normalizeRegionalSymbol(market: RegionalEquityMarket, symbol: string): string {
-  const raw = symbol.trim().toUpperCase().replace(/^(JP|KR|HK):/i, '')
-  if (market === 'JP') return raw.replace(/\D/g, '') || raw
-  if (market === 'KR') return raw.replace(/\D/g, '').padStart(6, '0')
-  const digits = raw.replace(/\D/g, '')
-  return digits.length > 4 ? digits : digits.padStart(5, '0')
+  if (market === 'JP') return canonicalJpSymbol(symbol)
+  if (market === 'KR') return canonicalKrSymbol(symbol)
+  return canonicalHkSymbol(symbol)
 }

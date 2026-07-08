@@ -97,6 +97,7 @@ export type { WatchlistItem } from './watchlist/models.js'
 export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
 
 export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, secXueqiuSymbol } from './utils/helpers.js'
+export { instrumentRefKey } from '@opptrix/shared'
 export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
 export {
   normalizeUsSymbol,
@@ -145,6 +146,17 @@ export {
   type InstrumentQueryPlan,
 } from './core/instrument-query.js'
 export { resolveInstrumentFromParams, instrumentRefsFromList, normalizeInstrumentHubParams, instrumentProviderSymbol } from '@opptrix/shared'
+export {
+  normalizeInstrumentRef,
+  canonicalSymbolForMarket,
+  canonicalCnSymbol,
+  canonicalUsSymbol,
+  canonicalHkSymbol,
+  canonicalJpSymbol,
+  canonicalKrSymbol,
+  instrumentRefLabel,
+  parseCanonicalInstrumentInput,
+} from '@opptrix/shared'
 export type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 
 export type {

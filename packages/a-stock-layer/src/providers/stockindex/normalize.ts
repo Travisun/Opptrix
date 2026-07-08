@@ -1,7 +1,9 @@
-import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/shared'
-import { isCnEtfCode } from '../../core/instrument.js'
-import { normalizeRegionalSymbol } from '../../utils/regional-symbol.js'
-import { normalizeUsSymbol } from '../../utils/us-market.js'
+import type { InstrumentRef, Market, StockListItem } from '@opptrix/shared'
+import {
+  inferCnAssetClassFromSymbol,
+  instrumentRefLabel,
+  normalizeInstrumentRef,
+} from '@opptrix/shared'
 import type { StockIndexItem } from './api/client.js'
 
 function cnExchangeFromInstrumentId(instrumentId: string): 'SH' | 'SZ' | 'BJ' | undefined {
@@ -15,45 +17,30 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
   if (!code) return null
 
   if (market === 'CN') {
-    const sym = code.replace(/\D/g, '').slice(-6).padStart(6, '0')
     const exchange = item.exchange?.toUpperCase()
       ?? cnExchangeFromInstrumentId(item.instrumentId)
-    const assetClass: AssetClass = item.assetType === 'etf' || isCnEtfCode(sym)
-      ? 'ETF'
-      : 'EQUITY'
-    return {
+    return normalizeInstrumentRef({
       market: 'CN',
-      assetClass,
-      symbol: sym,
+      assetClass: item.assetType === 'etf' ? 'ETF' : inferCnAssetClassFromSymbol(code),
+      symbol: code,
       exchange: exchange as InstrumentRef['exchange'],
-    }
+    })
   }
 
-  if (market === 'US') {
-    return {
-      market: 'US',
+  if (market === 'US' || market === 'HK') {
+    return normalizeInstrumentRef({
+      market,
       assetClass: 'EQUITY',
-      symbol: normalizeUsSymbol(code),
-      exchange: item.exchange ?? undefined,
-    }
-  }
-
-  if (market === 'HK') {
-    return {
-      market: 'HK',
-      assetClass: 'EQUITY',
-      symbol: normalizeRegionalSymbol('HK', code),
-      exchange: item.exchange ?? 'HK',
-    }
+      symbol: code,
+      exchange: item.exchange ?? (market === 'HK' ? 'HK' : undefined),
+    })
   }
 
   return null
 }
 
 export function refLabelFromInstrument(ref: InstrumentRef): string {
-  if (ref.market === 'CN') return ref.symbol
-  if (ref.market === 'CRYPTO' && ref.quote) return `CRYPTO:${ref.symbol}/${ref.quote}`
-  return `${ref.market}:${ref.symbol}`
+  return instrumentRefLabel(ref)
 }
 
 export function stockIndexItemToListRow(item: StockIndexItem): StockListItem | null {

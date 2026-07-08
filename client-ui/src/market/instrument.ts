@@ -31,16 +31,21 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
     return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: body, quote: 'USDT' }
   }
   if (HK_PREFIX.test(input)) {
-    const sym = input.replace(HK_PREFIX, '').toUpperCase()
-    return { market: 'HK', assetClass: 'EQUITY', symbol: sym }
+    const sym = input.replace(HK_PREFIX, '').trim()
+    const digits = sym.replace(/\D/g, '')
+    const symbol = digits.length > 5 ? digits.slice(-5) : digits.padStart(5, '0')
+    return { market: 'HK', assetClass: 'EQUITY', symbol, exchange: 'HK' }
   }
   if (JP_PREFIX.test(input)) {
-    const sym = input.replace(JP_PREFIX, '').toUpperCase()
-    return { market: 'JP', assetClass: 'EQUITY', symbol: sym }
+    const sym = input.replace(JP_PREFIX, '').trim()
+    const symbol = sym.replace(/\D/g, '') || sym.toUpperCase()
+    return { market: 'JP', assetClass: 'EQUITY', symbol }
   }
   if (KR_PREFIX.test(input)) {
-    const sym = input.replace(KR_PREFIX, '').toUpperCase()
-    return { market: 'KR', assetClass: 'EQUITY', symbol: sym }
+    const sym = input.replace(KR_PREFIX, '').trim()
+    const digits = sym.replace(/\D/g, '')
+    const symbol = digits ? digits.padStart(6, '0') : sym.toUpperCase()
+    return { market: 'KR', assetClass: 'EQUITY', symbol }
   }
   if (/^\d+$/.test(input) && input.length <= 6) {
     const sym = normalizeCode(input)
@@ -74,6 +79,13 @@ export function displayCodeFromInstrument(ref: InstrumentRef): string {
   return ref.symbol
 }
 
+/** @ 引用标签 — 与 @opptrix/shared instrumentRefLabel 保持一致 */
+export function formatInstrumentLabel(ref: InstrumentRef): string {
+  if (ref.market === 'CN') return normalizeCode(ref.symbol)
+  if (ref.market === 'CRYPTO' && ref.quote) return `CRYPTO:${ref.symbol}/${ref.quote}`
+  return `${ref.market}:${ref.symbol}`
+}
+
 export function isLikelyCnEquityInput(raw: string): boolean {
   const s = String(raw).trim()
   if (/^(US|HK|JP|KR|CRYPTO|NYSE|NASDAQ|AMEX|BINANCE|OKX):/i.test(s)) return false
@@ -82,15 +94,24 @@ export function isLikelyCnEquityInput(raw: string): boolean {
   return /^\d{1,6}$/.test(s)
 }
 
-export function formatInstrumentLabel(ref: InstrumentRef): string {
+/** 与 @opptrix/shared instrumentRefKey 保持一致：symbol → quote → exchange */
+export function instrumentKey(ref: InstrumentRef): string {
+  const quote = ref.quote ? `:${ref.quote}` : ''
+  const exchange = ref.exchange ? `:${ref.exchange}` : ''
+  return `${ref.market}:${ref.assetClass}:${ref.symbol}${quote}${exchange}`
+}
+
+function refToParseInput(ref: InstrumentRef): string {
   if (ref.market === 'CN') return ref.symbol
-  if (ref.market === 'CRYPTO' && ref.quote) return `CRYPTO:${ref.symbol}/${ref.quote}`
+  if (ref.market === 'CRYPTO') {
+    return ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
+  }
   return `${ref.market}:${ref.symbol}`
 }
 
-export function instrumentKey(ref: InstrumentRef): string {
-  const ex = ref.exchange ?? ''
-  return `${ref.market}:${ref.assetClass}:${ref.symbol}${ex ? `:${ex}` : ''}${ref.quote ? `:${ref.quote}` : ''}`
+/** 将 InstrumentRef 规范化为应用内 canonical 格式（与 shared normalizeInstrumentRef 对齐） */
+export function normalizeInstrumentRefLocal(ref: InstrumentRef): InstrumentRef {
+  return parseInstrumentInput(refToParseInput(ref))
 }
 
 export function resolveWatchlistInstrument(item: WatchlistItem): InstrumentRef {
@@ -99,7 +120,7 @@ export function resolveWatchlistInstrument(item: WatchlistItem): InstrumentRef {
 }
 
 export function normalizeWatchlistItem(item: WatchlistItem): WatchlistItem {
-  const instrument = item.instrument ?? parseInstrumentInput(item.code)
+  const instrument = normalizeInstrumentRefLocal(item.instrument ?? parseInstrumentInput(item.code))
   const code = displayCodeFromInstrument(instrument)
   return {
     ...item,

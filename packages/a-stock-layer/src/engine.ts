@@ -32,6 +32,7 @@ import { normalizeUsSymbol } from './utils/us-market.js'
 import { isRegionalEquityMarket, normalizeRegionalSymbol, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
 import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
+import { instrumentProviderSymbol, normalizeInstrumentRef } from '@opptrix/shared'
 import {
   resolveInstrumentQueryPlan,
   unsupportedInstrumentCapabilityMessage,
@@ -110,9 +111,15 @@ export class MarketDataEngine {
   private isWatchlistTarget(market: Market, assetClass: AssetClass, args: unknown[]): boolean {
     const symbol = this.extractSymbolFromArgs(market, assetClass, args)
     if (!symbol) return false
-    const ref: InstrumentRef = market === 'CRYPTO'
-      ? { market, assetClass, symbol: symbol.split('/')[0]!, quote: symbol.split('/')[1] ?? 'USDT' }
-      : { market, assetClass, symbol }
+    const ref = market === 'CRYPTO'
+      ? normalizeInstrumentRef({
+        market,
+        assetClass,
+        symbol: symbol.split('/')[0]!,
+        quote: symbol.split('/')[1] ?? 'USDT',
+        exchange: 'binance',
+      })
+      : normalizeInstrumentRef({ market, assetClass, symbol })
     const key = instrumentId(ref)
     return this.watchlist.list().some(item => watchlistItemKey(item) === key)
   }
@@ -120,11 +127,16 @@ export class MarketDataEngine {
   private extractSymbolFromArgs(market: Market, assetClass: AssetClass, args: unknown[]): string {
     const first = String(args[0] ?? '').trim()
     if (!first) return ''
-    if (market === 'CN') return normalizeCode(first)
-    if (market === 'US') return normalizeUsSymbol(first)
-    if (isRegionalEquityMarket(market)) return normalizeRegionalSymbol(market, first)
-    if (market === 'CRYPTO') return first
-    return first
+    if (market === 'CRYPTO') {
+      const [base, quote] = first.includes('/') ? first.split('/') : [first, 'USDT']
+      return instrumentProviderSymbol(normalizeInstrumentRef({
+        market: 'CRYPTO',
+        assetClass,
+        symbol: base!,
+        quote: quote ?? 'USDT',
+      }))
+    }
+    return instrumentProviderSymbol(normalizeInstrumentRef({ market, assetClass, symbol: first }))
   }
 
   private async queryScoped<T>(

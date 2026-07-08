@@ -2,15 +2,20 @@
  * 跨市场标的搜索 — StockIndex Provider 主路径，腾讯搜索 CN 备用。
  */
 
-import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/shared'
+import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
+import {
+  canonicalCnSymbol,
+  inferCnAssetClassFromSymbol,
+  instrumentDisplayCode,
+  instrumentRefLabel,
+  normalizeInstrumentRef,
+} from '@opptrix/shared'
 import type { MarketDataEngine } from '../engine.js'
 import type { StockIndexItem } from '../providers/stockindex/api/client.js'
 import { stockIndexSearch } from '../providers/stockindex/api/client.js'
 import {
-  refLabelFromInstrument,
   stockIndexItemToInstrumentRef,
 } from '../providers/stockindex/normalize.js'
-import { normalizeCode } from '../utils/helpers.js'
 import { parseYahooSearchQuotes } from '../utils/yahoo-search.js'
 
 export interface InstrumentSearchHit {
@@ -31,49 +36,17 @@ function cacheKey(keyword: string, limit: number, markets?: Market[]): string {
   return `${keyword.toLowerCase()}|${limit}|${(markets ?? []).join(',')}`
 }
 
-function instrumentRefFromListRow(row: StockListItem): InstrumentRef | null {
-  const market = String(row.market ?? 'CN').toUpperCase() as Market
-  const code = String(row.code ?? '').trim()
-  if (!code) return null
-  if (market === 'CN') {
-    const sym = normalizeCode(code)
-    return { market: 'CN', assetClass: 'EQUITY', symbol: sym }
-  }
-  if (market === 'US') {
-    return { market: 'US', assetClass: 'EQUITY', symbol: code.toUpperCase() }
-  }
-  if (market === 'HK') {
-    return { market: 'HK', assetClass: 'EQUITY', symbol: code, exchange: 'HK' }
-  }
-  return null
-}
-
-function hitFromStockListRow(row: StockListItem, source: InstrumentSearchHit['source']): InstrumentSearchHit | null {
-  const instrument = instrumentRefFromListRow(row)
-  if (!instrument) return null
-  return {
-    code: instrument.symbol,
-    name: row.name ?? instrument.symbol,
-    market: instrument.market,
-    assetClass: instrument.assetClass,
-    exchange: null,
-    instrument,
-    refLabel: refLabelFromInstrument(instrument),
-    source,
-  }
-}
-
 function hitFromStockIndexItem(item: StockIndexItem): InstrumentSearchHit | null {
   const instrument = stockIndexItemToInstrumentRef(item)
   if (!instrument) return null
   return {
-    code: instrument.symbol,
+    code: instrumentDisplayCode(instrument),
     name: item.nameCn ?? item.code,
     market: instrument.market,
     assetClass: instrument.assetClass,
     exchange: instrument.exchange ?? item.exchange ?? null,
     instrument,
-    refLabel: refLabelFromInstrument(instrument),
+    refLabel: instrumentRefLabel(instrument),
     source: 'stock_index',
   }
 }
@@ -120,22 +93,21 @@ async function tencentCnSearchFallback(
   const rows = resp.data as Record<string, unknown>[]
   const out: InstrumentSearchHit[] = []
   for (const r of rows) {
-    const code = normalizeCode(String(r.code ?? r.symbol ?? r.stockCode ?? '').replace(/\D/g, '').slice(-6))
-    if (!code) continue
-    const instrument: InstrumentRef = {
+    const code = canonicalCnSymbol(String(r.code ?? r.symbol ?? r.stockCode ?? ''))
+    if (!code || code === '000000') continue
+    const instrument = normalizeInstrumentRef({
       market: 'CN',
-      assetClass: 'EQUITY',
+      assetClass: inferCnAssetClassFromSymbol(code),
       symbol: code,
-      exchange: undefined,
-    }
+    })
     out.push({
-      code,
+      code: instrument.symbol,
       name: String(r.name ?? r.stockName ?? r.shortname ?? code),
       market: 'CN',
       assetClass: instrument.assetClass,
       exchange: null,
       instrument,
-      refLabel: code,
+      refLabel: instrumentRefLabel(instrument),
       source: 'tencent',
     })
     if (out.length >= limit) break

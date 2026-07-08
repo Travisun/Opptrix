@@ -1,4 +1,9 @@
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
+import {
+  instrumentDisplayCode,
+  instrumentRefLabel,
+  normalizeInstrumentRef,
+} from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 
 export interface LocalInstrumentHit {
@@ -12,14 +17,6 @@ export interface LocalInstrumentHit {
   refLabel: string
 }
 
-function toRefLabel(ref: InstrumentRef): string {
-  if (ref.market === 'CN') return ref.symbol
-  if (ref.market === 'CRYPTO' && ref.quote) {
-    return `CRYPTO:${ref.symbol}/${ref.quote}`
-  }
-  return `${ref.market}:${ref.symbol}`
-}
-
 function rowToHit(row: {
   code: string
   name: string | null
@@ -29,27 +26,20 @@ function rowToHit(row: {
 }): LocalInstrumentHit {
   const market = row.market as Market
   const assetClass = row.asset_class as AssetClass
-  const symbol = market === 'CRYPTO' && row.code.includes('/')
-    ? row.code.split('/')[0]!
-    : row.code
-  const quote = market === 'CRYPTO' && row.code.includes('/')
-    ? row.code.split('/')[1]
-    : undefined
-  const instrument: InstrumentRef = {
+  const instrument = normalizeInstrumentRef({
     market,
     assetClass,
-    symbol,
+    symbol: row.code,
     exchange: row.exchange ?? undefined,
-    quote,
-  }
+  })
   return {
-    code: row.code,
+    code: instrumentDisplayCode(instrument),
     name: row.name,
-    market,
-    assetClass,
+    market: instrument.market,
+    assetClass: instrument.assetClass,
     exchange: row.exchange,
     instrument,
-    refLabel: toRefLabel(instrument),
+    refLabel: instrumentRefLabel(instrument),
   }
 }
 
