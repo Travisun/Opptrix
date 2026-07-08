@@ -422,6 +422,42 @@ describe('tencent HK detail API', () => {
   })
 })
 
+describe('tencent CN stock list API', () => {
+  it('resolves CN board and sort field', async () => {
+    const {
+      resolveTencentCnBoard,
+      resolveTencentCnSortField,
+    } = await import('../src/providers/tencent/api/cn-rank-service.js')
+    expect(resolveTencentCnBoard('hs_hsj')).toBe('aStock')
+    expect(resolveTencentCnBoard('hs_cyb')).toBe('cyb')
+    expect(resolveTencentCnBoard('hs_kcb')).toBe('ksh')
+    expect(resolveTencentCnSortField(32)).toBe('priceRatio')
+    expect(resolveTencentCnSortField('price')).toBe('price')
+  })
+
+  it('fetches HSJ/CYB/KCB lists with pagination and quote fields', async () => {
+    const { fetchTencentCnStockList } = await import('../src/providers/tencent/api/cn-rank-service.js')
+
+    const hsj = await fetchTencentCnStockList({ board: 'hsj', page: 1, pageSize: 5, sortType: 32 })
+    expect(hsj.board).toBe('aStock')
+    expect(hsj.mstatsListId).toBe('hs_hsj')
+    expect(hsj.total).toBeGreaterThan(5000)
+    expect(hsj.items.length).toBe(5)
+    expect(hsj.items[0]?.price).not.toBeNull()
+
+    const cyb = await fetchTencentCnStockList({ board: 'cyb', page: 1, pageSize: 3 })
+    expect(cyb.board).toBe('cyb')
+    expect(cyb.mstatsListId).toBe('hs_cyb')
+    expect(cyb.total).toBeGreaterThan(1000)
+
+    const kcb = await fetchTencentCnStockList({ board: 'kcb', page: 2, pageSize: 3 })
+    expect(kcb.board).toBe('ksh')
+    expect(kcb.mstatsListId).toBe('hs_kcb')
+    expect(kcb.page).toBe(2)
+    expect(kcb.items.length).toBe(3)
+  })
+})
+
 describe('tencent US detail API', () => {
   it('normalizes US symbol and resolves kline period', async () => {
     const {

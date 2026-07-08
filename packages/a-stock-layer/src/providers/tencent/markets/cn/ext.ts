@@ -13,6 +13,9 @@ import {
   fetchTencentCnIndexSnapshot,
 } from '../../api/cn-index-service.js'
 import {
+  fetchTencentCnStockList,
+} from '../../api/cn-rank-service.js'
+import {
   fetchTencentHkStockList,
 } from '../../api/hk-rank-service.js'
 import {
@@ -170,6 +173,90 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length) return null
     return [{ ...result, source: 'tencent_qt_index' }]
+  }
+
+  /**
+   * 沪深京 A 股排行列表（mstats hs_hsj）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=aStock
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hs_hsj&module=hs&type=hsj
+   * @param page 页码，从 1 开始
+   * @param pageSize 每页条数，最大 100
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等
+   * @returns `[{ board, boardKey, boardLabel, mstatsListId, page, pageSize, total, items, source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentHsjStockList",[1,20,32,"desc"])`
+   */
+  p.tencentHsjStockList = async function tencentHsjStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentCnStockList({
+      board: 'hsj', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_cn_rank' }]
+  }
+
+  /**
+   * 创业板股票列表（mstats hs_cyb）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=cyb
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hs_cyb&module=hs&type=cyb
+   * @usage `engine.invokeCustomMethod("tencent","tencentCybStockList",[1,20,32,"desc"])`
+   */
+  p.tencentCybStockList = async function tencentCybStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentCnStockList({
+      board: 'cyb', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_cn_rank' }]
+  }
+
+  /**
+   * 科创板股票列表（mstats hs_kcb）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=ksh
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hs_kcb&module=hs&type=kcb
+   * @usage `engine.invokeCustomMethod("tencent","tencentKcbStockList",[1,20,32,"desc"])`
+   */
+  p.tencentKcbStockList = async function tencentKcbStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentCnStockList({
+      board: 'kcb', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_cn_rank' }]
+  }
+
+  /**
+   * 沪深 A 股板块排行（通用入口，board=hsj|cyb|kcb）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList
+   * @usage `engine.invokeCustomMethod("tencent","tencentCnStockList",["hsj",1,20,32,"desc"])`
+   */
+  p.tencentCnStockList = async function tencentCnStockList(
+    board = 'hsj',
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentCnStockList({
+      board, page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_cn_rank' }]
   }
 
   /**

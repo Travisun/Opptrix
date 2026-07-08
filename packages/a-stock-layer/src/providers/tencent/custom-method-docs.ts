@@ -61,6 +61,74 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     example: '{"provider":"tencent","method":"tencentCnIndexSnapshot","args":["mstats_home",false]}',
   },
 
+  tencentHsjStockList: {
+    method: 'tencentHsjStockList',
+    description: '沪深京 A 股排行列表（mstats hs_hsj，含行情摘要，服务端分页）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=aStock&sort_type=priceRatio&direct=down&offset=0&count=20`,
+    pageUrl: `${MSTATS}/#mod=list&id=hs_hsj&module=hs&type=hsj`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "aStock", boardKey, boardLabel, mstatsListId: "hs_hsj", page, pageSize, total, items: [{ code, name, price, changePct, volume, peTtm, marketCap, ... }], source }]',
+    usage: INVOKE('tencentHsjStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentCnStockList("hsj", ...)；上游 board_code=aStock，全市场约 5500+ 只。优于标准 stockList("hsj") 仅返回前 100 条且无行情字段。',
+    example: '{"provider":"tencent","method":"tencentHsjStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentCybStockList: {
+    method: 'tencentCybStockList',
+    description: '创业板股票列表（mstats hs_cyb，含行情摘要，服务端分页）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=cyb`,
+    pageUrl: `${MSTATS}/#mod=list&id=hs_cyb&module=hs&type=cyb`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "cyb", mstatsListId: "hs_cyb", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentCybStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentCnStockList("cyb", ...)；上游 board_code=cyb。',
+    example: '{"provider":"tencent","method":"tencentCybStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentKcbStockList: {
+    method: 'tencentKcbStockList',
+    description: '科创板股票列表（mstats hs_kcb，含行情摘要，服务端分页）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/hs/getBoardRankList?board_code=ksh`,
+    pageUrl: `${MSTATS}/#mod=list&id=hs_kcb&module=hs&type=kcb`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "ksh", mstatsListId: "hs_kcb", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentKcbStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentCnStockList("kcb", ...)；上游 board_code=ksh（mstats type=kcb）。',
+    example: '{"provider":"tencent","method":"tencentKcbStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentCnStockList: {
+    method: 'tencentCnStockList',
+    description: '沪深 A 股板块排行（通用：hsj / cyb / kcb）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/hs/getBoardRankList`,
+    pageUrl: `${MSTATS}/#mod=list&id=hs_hsj&module=hs&type=hsj`,
+    params: [
+      { name: 'board', type: 'string', description: 'hsj（沪深京）/ cyb（创业板）/ kcb（科创板）', default: 'hsj' },
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号或 sort_type 字段名', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board, boardKey, boardLabel, mstatsListId, page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentCnStockList', '["hsj",1,20,32,"desc"]'),
+    example: '{"provider":"tencent","method":"tencentCnStockList","args":["cyb",1,20,3,"desc"]}',
+  },
+
   tencentHkStockList: {
     method: 'tencentHkStockList',
     description: '港股排行列表（mstats HK：主板/创业板/恒指成分等）',
