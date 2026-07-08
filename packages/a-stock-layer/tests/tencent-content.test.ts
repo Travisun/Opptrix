@@ -83,6 +83,9 @@ describe('mapTencentJiankuangProfile', () => {
     expect(profile?.industry).toBe('通信设备')
     expect(profile?.concepts).toEqual(['5G概念', '芯片概念'])
     expect(profile?.listingDate).toBe('2012-04-10')
+    expect(profile?.businessScope).toBeUndefined()
+    expect(profile?.profileMetrics?.length).toBeGreaterThan(0)
+    expect(profile?.metricsReportDate).toBe('2026一季报')
   })
 })
 

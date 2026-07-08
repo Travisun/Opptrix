@@ -177,13 +177,26 @@ const PROFILE_FIELD_ALIASES: Record<string, string> = {
   reg_capital: 'regCapital',
   board_secretary: 'secretary',
   web_site: 'website',
+  org_name_en: 'orgNameEn',
+  office_address: 'officeAddress',
+  org_email: 'orgEmail',
+  org_fax: 'orgFax',
+  lead_underwriter: 'leadUnderwriter',
+  industry_secondary: 'industrySecondary',
 }
 
 const PROFILE_SCALAR_KEYS = [
-  'name', 'orgName', 'industry', 'industryCsrc', 'listingDate', 'foundDate',
-  'mainBusiness', 'orgProfile', 'businessScope', 'totalMarketCap', 'circulatingMarketCap',
-  'employees', 'province', 'city', 'address', 'website', 'regCapital', 'chairman',
-  'legalPerson', 'secretary', 'orgTel', 'securityType', 'formerName', 'issuePrice',
+  'name', 'orgName', 'orgNameEn', 'industry', 'industrySecondary', 'industryCsrc',
+  'listingDate', 'foundDate', 'mainBusiness', 'orgProfile', 'businessScope',
+  'totalMarketCap', 'circulatingMarketCap', 'employees', 'province', 'city',
+  'address', 'officeAddress', 'website', 'orgEmail', 'orgFax', 'leadUnderwriter',
+  'regCapital', 'chairman', 'legalPerson', 'secretary', 'orgTel', 'securityType',
+  'formerName', 'issuePrice', 'metricsReportDate',
+] as const
+
+const PROFILE_STRUCTURED_KEYS = [
+  'profileMetrics', 'industryPlates', 'conceptPlates', 'areaPlates',
+  'indexMembership', 'executives', 'industryRank', 'institutionRating',
 ] as const
 
 function isBlankProfileValue(v: unknown): boolean {
@@ -229,6 +242,10 @@ export function normalizeStockProfileRow(
       } else {
         out[target] = typeof value === 'number' ? value : str(value)
       }
+      continue
+    }
+    if (PROFILE_STRUCTURED_KEYS.includes(target as typeof PROFILE_STRUCTURED_KEYS[number])) {
+      out[target] = value
     }
   }
 
@@ -237,7 +254,8 @@ export function normalizeStockProfileRow(
   }
 
   const filledScalars = PROFILE_SCALAR_KEYS.filter(k => !isBlankProfileValue(out[k])).length
-  if (filledScalars === 0 && !out.concepts) return null
+  const hasStructured = PROFILE_STRUCTURED_KEYS.some(k => !isBlankProfileValue(out[k]))
+  if (filledScalars === 0 && !out.concepts && !hasStructured) return null
   return out
 }
 
@@ -259,6 +277,10 @@ export function mergeStockProfileRows(
       if (!isBlankProfileValue(merged[key]) || isBlankProfileValue(row[key])) continue
       merged[key] = row[key]
     }
+    for (const key of PROFILE_STRUCTURED_KEYS) {
+      if (!isBlankProfileValue(merged[key]) || isBlankProfileValue(row[key])) continue
+      merged[key] = row[key]
+    }
     for (const tag of normalizeConceptList(row.concepts)) {
       conceptSet.add(tag)
     }
@@ -269,8 +291,185 @@ export function mergeStockProfileRows(
   }
 
   const filledScalars = PROFILE_SCALAR_KEYS.filter(k => !isBlankProfileValue(merged[k])).length
-  if (filledScalars === 0 && !merged.concepts) return null
+  const hasStructured = PROFILE_STRUCTURED_KEYS.some(k => !isBlankProfileValue(merged[k]))
+  if (filledScalars === 0 && !merged.concepts && !hasStructured) return null
   return merged
+}
+
+function fillProfileScalar(
+  profile: Record<string, unknown>,
+  key: string,
+  value: unknown,
+): void {
+  if (isBlankProfileValue(value) || !isBlankProfileValue(profile[key])) return
+  profile[key] = value
+}
+
+function governanceFromExecutives(
+  rows: Array<Record<string, unknown>>,
+): {
+  chairman?: string
+  legalPerson?: string
+  executives: Array<Record<string, unknown>>
+} {
+  const executives = rows.slice(0, 12).map(row => ({
+    name: str(row.name),
+    title: str(row.title) || undefined,
+    startDate: str(row.startDate) || undefined,
+    endDate: str(row.endDate) || undefined,
+  })).filter(row => row.name)
+
+  let chairman: string | undefined
+  let legalPerson: string | undefined
+  for (const row of executives) {
+    const title = row.title ?? ''
+    if (!chairman && /董事长/.test(title) && !/副/.test(title)) chairman = row.name
+    if (!legalPerson && /(法定代表人|法人代表)/.test(title)) legalPerson = row.name
+  }
+  if (!chairman) {
+    const acting = executives.find(row => /(?:代.*?)?总经理/.test(row.title ?? ''))
+    if (acting) chairman = `${acting.name}（${acting.title}）`
+  }
+  if (!legalPerson) {
+    const deputy = executives.find(row => /副董事长|董事/.test(row.title ?? ''))
+    if (deputy && !chairman?.startsWith(deputy.name)) legalPerson = deputy.name
+  }
+  return { chairman, legalPerson, executives }
+}
+
+function normalizeCnPlates(rows: Record<string, unknown>[]) {
+  const industryPlates: Array<Record<string, unknown>> = []
+  const conceptPlates: Array<Record<string, unknown>> = []
+  const areaPlates: Array<Record<string, unknown>> = []
+  const conceptNames = new Set<string>()
+
+  for (const row of rows) {
+    const name = str(row.plateName)
+    if (!name) continue
+    const plate = {
+      name,
+      code: str(row.plateCode) || undefined,
+      changePct: num(row.changePct),
+      tag: str(row.tag) || undefined,
+    }
+    const type = str(row.plateType)
+    if (type === 'industry') industryPlates.push(plate)
+    else if (type === 'area') areaPlates.push(plate)
+    else conceptPlates.push(plate)
+    conceptNames.add(name)
+  }
+
+  return { industryPlates, conceptPlates, areaPlates, conceptNames: [...conceptNames] }
+}
+
+function normalizeCnIndustryRank(row: Record<string, unknown> | null | undefined) {
+  if (!row) return null
+  const industryName = str(row.industryName)
+  if (!industryName) return null
+  return {
+    industryName,
+    industryCode: str(row.industryCode) || undefined,
+    pe: num(row.pe),
+    marketCap: num(row.marketCap),
+    eps: num(row.eps),
+    peRank: row.peRank ?? null,
+    marketCapRank: row.marketCapRank ?? null,
+    epsRank: row.epsRank ?? null,
+    industryAvgPe: num(row.industryAvgPe),
+  }
+}
+
+function normalizeCnInstitutionRating(row: Record<string, unknown> | null | undefined) {
+  if (!row) return null
+  const ratings = (row.ratings ?? {}) as Record<string, { name?: string; num?: number }>
+  const recentReports = Array.isArray(row.recentReports)
+    ? (row.recentReports as Record<string, unknown>[])
+    : []
+  const targetPrice = (row.targetPrice ?? {}) as Record<string, unknown>
+  const hasCounts = Object.values(ratings).some(v => num(v?.num) != null && num(v?.num)! > 0)
+  const hasReports = recentReports.some(item => str(item.title))
+  if (!hasCounts && !hasReports) return null
+
+  return {
+    period: str(typeof ratings.desc === 'string' ? ratings.desc : row.period) || undefined,
+    buy: num(ratings.mr?.num),
+    outperform: num(ratings.zc?.num),
+    neutral: num(ratings.zx?.num),
+    underperform: num(ratings.jc?.num),
+    sell: num(ratings.mc?.num),
+    targetPriceAvg: str(targetPrice.avg) && str(targetPrice.avg) !== '--' ? str(targetPrice.avg) : undefined,
+    targetPriceHigh: str(targetPrice.high) && str(targetPrice.high) !== '--' ? str(targetPrice.high) : undefined,
+    targetPriceLow: str(targetPrice.low) && str(targetPrice.low) !== '--' ? str(targetPrice.low) : undefined,
+    recentReports: recentReports.slice(0, 5).map(item => ({
+      title: str(item.title),
+      date: str(item.time).slice(0, 10),
+      rating: str(item.tzpj) || undefined,
+    })).filter(item => item.title),
+  }
+}
+
+function normalizeCnIndexMembership(rows: Record<string, unknown>[] | null | undefined) {
+  if (!rows?.length) return []
+  return rows.slice(0, 12).map(row => ({
+    indexName: str(row.indexName),
+    indexCode: str(row.indexCode) || undefined,
+    enterDate: str(row.enterDate) || undefined,
+  })).filter(row => row.indexName)
+}
+
+/** 合并 A 股详情 profile 基础字段与腾讯/新浪扩展 enrichments */
+export function enrichCnStockProfile(
+  code: string,
+  base: Record<string, unknown> | null,
+  enrich: {
+    industryRank?: Record<string, unknown> | null
+    plates?: Record<string, unknown>[] | null
+    institutionRating?: Record<string, unknown> | null
+    executives?: Record<string, unknown>[] | null
+    indexMembership?: Record<string, unknown>[] | null
+  },
+): Record<string, unknown> | null {
+  if (!base && !enrich.industryRank && !enrich.plates?.length
+    && !enrich.institutionRating && !enrich.executives?.length && !enrich.indexMembership?.length) {
+    return base
+  }
+
+  const out: Record<string, unknown> = { ...(base ?? { code }) }
+  if (!out.code) out.code = code
+
+  const industryRank = normalizeCnIndustryRank(enrich.industryRank)
+  if (industryRank) out.industryRank = industryRank
+
+  if (enrich.plates?.length) {
+    const plates = normalizeCnPlates(enrich.plates)
+    if (plates.industryPlates.length) out.industryPlates = plates.industryPlates
+    if (plates.conceptPlates.length) out.conceptPlates = plates.conceptPlates
+    if (plates.areaPlates.length) out.areaPlates = plates.areaPlates
+    const conceptSet = new Set(normalizeConceptList(out.concepts))
+    for (const name of plates.conceptNames) conceptSet.add(name)
+    if (conceptSet.size) out.concepts = [...conceptSet]
+    if (isBlankProfileValue(out.industry) && plates.industryPlates[0]?.name) {
+      out.industry = plates.industryPlates[0].name
+    }
+    if (isBlankProfileValue(out.industrySecondary) && plates.industryPlates[1]?.name) {
+      out.industrySecondary = plates.industryPlates[1].name
+    }
+  }
+
+  const institutionRating = normalizeCnInstitutionRating(enrich.institutionRating)
+  if (institutionRating) out.institutionRating = institutionRating
+
+  const indexMembership = normalizeCnIndexMembership(enrich.indexMembership)
+  if (indexMembership.length) out.indexMembership = indexMembership
+
+  if (enrich.executives?.length) {
+    const gov = governanceFromExecutives(enrich.executives)
+    if (gov.executives.length) out.executives = gov.executives
+    fillProfileScalar(out, 'chairman', gov.chairman)
+    fillProfileScalar(out, 'legalPerson', gov.legalPerson)
+  }
+
+  return out
 }
 
 /** 用行情中的市值字段补全 profile */

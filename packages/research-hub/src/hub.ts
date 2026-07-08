@@ -83,6 +83,7 @@ import {
 } from './instrument-batch-router.js'
 import {
   dedupeStockNewsItems,
+  enrichCnStockProfile,
   enrichDetailProfileFromQuote,
   enrichShareholderView,
   holderHistoryFromRows,
@@ -1189,8 +1190,22 @@ export class ResearchHub {
     return normalizePreOpenRealtimeQuote(merged as unknown as import('@opptrix/shared').StockRealtime)
   }
 
-  /** 详情页公司资料：绕过 queryScoped 测速，合并 sinafinance / tushare / 腾讯 */
+  /** 详情页公司资料：绕过 queryScoped 测速，合并 sinafinance / tushare / 腾讯 + 扩展 enrichments */
   private async stockDetailProfile(code: string): Promise<Record<string, unknown> | null> {
+    const [
+      industryRankR,
+      platesR,
+      institutionRatingR,
+      executivesR,
+      indexMembershipR,
+    ] = await Promise.all([
+      this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentIndustryRank', [code]),
+      this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentStockPlates', [code]),
+      this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentInstitutionRating', [code]),
+      this.callDetailProviderMethod<Record<string, unknown>>(['sinafinance'], 'sinaExecutives', [code]),
+      this.callDetailProviderMethod<Record<string, unknown>>(['sinafinance'], 'sinaIndexMembership', [code]),
+    ])
+
     const rows: Record<string, unknown>[] = []
     for (const pid of ['sinafinance', 'tushare', 'tencent']) {
       const batch = await this.callDetailProviderMethod<Record<string, unknown>>(
@@ -1205,7 +1220,15 @@ export class ResearchHub {
       const row = instrumentQueryData<Array<Record<string, unknown>>>(fallback)?.[0]
       if (row) rows.push(row)
     }
-    return mergeStockProfileRows(code, rows)
+
+    const base = mergeStockProfileRows(code, rows)
+    return enrichCnStockProfile(code, base, {
+      industryRank: industryRankR?.[0] ?? null,
+      plates: platesR ?? null,
+      institutionRating: institutionRatingR?.[0] ?? null,
+      executives: executivesR ?? null,
+      indexMembership: indexMembershipR ?? null,
+    })
   }
 
   private async stockDetail(code: string, t0: number) {

@@ -3,6 +3,7 @@ import { test } from 'node:test'
 
 import {
   dedupeStockNewsItems,
+  enrichCnStockProfile,
   enrichShareholderView,
   mergeDetailQuoteRows,
   mergeStockProfileRows,
@@ -157,4 +158,64 @@ test('enrichShareholderView derives avg holdings and concentration', () => {
   assert.ok(out.avgFreeShares != null)
   assert.ok(out.avgHoldingValue != null)
   assert.equal(out.holdFocus, '较为集中')
+})
+
+test('enrichCnStockProfile merges industry rank, plates, executives and ratings', () => {
+  const base = mergeStockProfileRows('600519', [{
+    code: '600519',
+    name: '贵州茅台',
+    orgName: '贵州茅台酒股份有限公司',
+    industry: '白酒',
+  }])
+  const out = enrichCnStockProfile('600519', base, {
+    industryRank: {
+      industryName: '白酒',
+      peRank: 3,
+      marketCapRank: 1,
+      epsRank: 2,
+      industryAvgPe: 28.5,
+      pe: 18.1,
+      eps: 68.5,
+    },
+    plates: [
+      { plateType: 'industry', plateName: '白酒', plateCode: 'BK0477' },
+      { plateType: 'industry', plateName: '酿酒行业', plateCode: 'BK0896' },
+      { plateType: 'concept', plateName: '沪股通', tag: '热门' },
+      { plateType: 'area', plateName: '贵州板块' },
+    ],
+    institutionRating: {
+      ratings: {
+        desc: '近半年内',
+        mr: { name: '买入', num: 12 },
+        zc: { name: '增持', num: 8 },
+      },
+      targetPrice: { avg: '2100', high: '2300', low: '1900' },
+      recentReports: [{ title: '维持买入评级', time: '2025-12-01', tzpj: '买入' }],
+    },
+    executives: [
+      { name: '张德芹', title: '董事长', startDate: '2024-05-29' },
+      { name: '王莉', title: '代总经理', startDate: '2024-05-29' },
+    ],
+    indexMembership: [
+      { indexName: '上证50', indexCode: '000016', enterDate: '2004-01-02' },
+    ],
+  })
+  assert.ok(out)
+  assert.equal(out.industryRank.peRank, 3)
+  assert.equal(out.industrySecondary, '酿酒行业')
+  assert.deepEqual(out.concepts, ['白酒', '酿酒行业', '沪股通', '贵州板块'])
+  assert.equal(out.conceptPlates[0].tag, '热门')
+  assert.equal(out.chairman, '张德芹')
+  assert.equal(out.institutionRating.buy, 12)
+  assert.equal(out.institutionRating.period, '近半年内')
+  assert.equal(out.indexMembership[0].indexName, '上证50')
+  assert.equal(out.executives.length, 2)
+})
+
+test('enrichCnStockProfile fills industry from plates when missing', () => {
+  const out = enrichCnStockProfile('600519', { code: '600519' }, {
+    plates: [{ plateType: 'industry', plateName: '白酒' }],
+  })
+  assert.ok(out)
+  assert.equal(out.industry, '白酒')
 })

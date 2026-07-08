@@ -24,22 +24,28 @@ export function mapSinaCorpInfoToProfile(
   raw: SinaCorpInfoRaw,
 ): StockProfile {
   const bare = normalizeCode(code)
+  const orgName = raw['公司名称：']
   return {
     code: bare,
-    name: raw['公司名称：']?.replace(/\(.*\)/, '').trim() || undefined,
-    orgName: raw['公司名称：'],
+    name: orgName?.replace(/\(.*\)/, '').trim() || undefined,
+    orgName,
+    orgNameEn: raw['公司英文名称：'],
     industry: undefined,
     listingDate: raw['上市日期：'],
     foundDate: raw['成立日期：'],
     mainBusiness: raw['主营业务：'],
     orgProfile: raw.orgProfile,
     address: raw['注册地址：'],
+    officeAddress: raw['办公地址：'],
     website: raw['公司网址：'],
     orgTel: raw['公司电话：'],
+    orgFax: raw['公司传真：'],
+    orgEmail: raw['公司电子邮箱：'],
     secretary: raw['董事会秘书：'],
     regCapital: parseRegCapitalWan(raw['注册资本：']),
     issuePrice: safeFloat(raw['发行价格：']),
-    securityType: raw['上市市场：'],
+    securityType: raw['上市市场：'] || raw['组织形式：'],
+    leadUnderwriter: raw['主承销商：'],
   }
 }
 

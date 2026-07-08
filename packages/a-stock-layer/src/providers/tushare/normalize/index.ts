@@ -141,7 +141,9 @@ export function mapProfileRow(code: string, row: TushareRow, company?: TushareRo
     city: str(base.city),
     employees: num(base.employees),
     chairman: str(base.chairman),
+    legalPerson: str(base.manager ?? base.chairman),
     regCapital: num(base.reg_capital),
+    securityType: str(row.market) || undefined,
   }
 }
 

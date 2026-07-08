@@ -4,10 +4,13 @@ import { EditRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
 import type {
   FinancialSummaryData,
+  ProfileInstitutionRating,
+  ProfilePlateItem,
   StockDetailData,
   StockDividendItem,
   StockMoneyFlowItem,
   StockNewsItem,
+  StockProfileData,
   StockShareholderData,
   WatchlistItem,
 } from '../types/market'
@@ -331,6 +334,11 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.accentSoft,
     color: opptrixCssVars.textSecondary,
   },
+  tagHot: {
+    backgroundColor: 'rgba(255, 59, 48, 0.10)',
+    color: '#C9342B',
+    fontWeight: 600,
+  },
   list: {
     display: 'flex',
     flexDirection: 'column',
@@ -596,6 +604,82 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
   )
 }
 
+function formatIndustryLine(profile: StockProfileData | null | undefined, fallback?: string): string {
+  const primary = profile?.industry ?? fallback
+  const secondary = profile?.industrySecondary
+  if (primary && secondary) return `${primary} · ${secondary}`
+  return primary ?? '—'
+}
+
+function formatRankValue(rank: unknown): string {
+  if (rank == null || rank === '') return '—'
+  return String(rank)
+}
+
+function PlateTags({ title, plates }: { title: string; plates: ProfilePlateItem[] }) {
+  const s = useStyles()
+  if (!plates.length) return null
+  return (
+    <MetricSection title={title}>
+      <div className={s.tagRow}>
+        {plates.slice(0, 20).map(plate => (
+          <span
+            key={`${title}-${plate.code ?? plate.name}`}
+            className={mergeClasses(s.tag, plate.tag && s.tagHot)}
+            title={plate.tag ? `${plate.name} · ${plate.tag}` : plate.name}
+          >
+            {plate.name}
+          </span>
+        ))}
+      </div>
+    </MetricSection>
+  )
+}
+
+function InstitutionRatingPanel({ rating }: { rating: ProfileInstitutionRating }) {
+  const s = useStyles()
+  const hasCounts = [rating.buy, rating.outperform, rating.neutral, rating.underperform, rating.sell]
+    .some(v => v != null && v > 0)
+  const hasTarget = rating.targetPriceAvg || rating.targetPriceHigh || rating.targetPriceLow
+  const reports = rating.recentReports ?? []
+  if (!hasCounts && !hasTarget && !reports.length) {
+    return <Text className={s.emptyHint}>暂无机构评级数据</Text>
+  }
+  return (
+    <>
+      {hasCounts && (
+        <div className={s.metricGrid3}>
+          <Metric label="买入" value={rating.buy != null ? String(rating.buy) : '—'} />
+          <Metric label="增持" value={rating.outperform != null ? String(rating.outperform) : '—'} />
+          <Metric label="中性" value={rating.neutral != null ? String(rating.neutral) : '—'} />
+          <Metric label="减持" value={rating.underperform != null ? String(rating.underperform) : '—'} />
+          <Metric label="卖出" value={rating.sell != null ? String(rating.sell) : '—'} />
+          {rating.period && <Metric label="统计区间" value={rating.period} />}
+        </div>
+      )}
+      {hasTarget && (
+        <div className={s.metricGrid3}>
+          <Metric label="目标均价" value={rating.targetPriceAvg ?? '—'} />
+          <Metric label="目标最高" value={rating.targetPriceHigh ?? '—'} />
+          <Metric label="目标最低" value={rating.targetPriceLow ?? '—'} />
+        </div>
+      )}
+      {reports.length > 0 && (
+        <div className={s.flatList}>
+          {reports.map(item => (
+            <div key={`${item.date}-${item.title}`} className={s.annRow}>
+              <span className={s.listDate}>{item.date || '—'}</span>
+              <span className={s.listTitle}>
+                {item.rating ? `[${item.rating}] ` : ''}{item.title}
+              </span>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
   const s = useStyles()
   if (!rows.length) {
@@ -834,12 +918,35 @@ export default function StockDetailTab({
               <div className={s.metricGrid3}>
                 <Metric label="总市值" value={formatCompactNumber(profile?.totalMarketCap ?? quote?.marketCap ?? null)} />
                 <Metric label="流通市值" value={formatCompactNumber(profile?.circulatingMarketCap ?? null)} />
-                <Metric label="所属行业" value={profile?.industry ?? stock.industry ?? '—'} />
+                <Metric label="所属行业" value={formatIndustryLine(profile, stock.industry)} />
                 <Metric label="EPS" value={financial?.eps != null ? financial.eps.toFixed(2) : '—'} />
                 <Metric label="每股净资产" value={financial?.bps != null ? financial.bps.toFixed(2) : '—'} />
                 <Metric label="报告类型" value={financial?.reportType ?? '—'} />
               </div>
             </MetricSection>
+
+            {profile?.industryRank && (
+              <MetricSection title={`行业内排名 · ${profile.industryRank.industryName}`}>
+                <div className={s.metricGrid3}>
+                  <Metric label="市盈率排名" value={formatRankValue(profile.industryRank.peRank)} />
+                  <Metric label="市值排名" value={formatRankValue(profile.industryRank.marketCapRank)} />
+                  <Metric label="EPS 排名" value={formatRankValue(profile.industryRank.epsRank)} />
+                  <Metric label="行业平均 PE" value={profile.industryRank.industryAvgPe != null ? profile.industryRank.industryAvgPe.toFixed(2) : '—'} />
+                  <Metric label="本股市盈率" value={profile.industryRank.pe != null ? profile.industryRank.pe.toFixed(2) : '—'} />
+                  <Metric label="行业 EPS" value={profile.industryRank.eps != null ? profile.industryRank.eps.toFixed(2) : '—'} />
+                </div>
+              </MetricSection>
+            )}
+
+            {profile?.profileMetrics?.length ? (
+              <MetricSection title={`最新指标${profile.metricsReportDate ? ` · ${profile.metricsReportDate}` : ''}`}>
+                <div className={s.metricGrid3}>
+                  {profile.profileMetrics.slice(0, 9).map(item => (
+                    <Metric key={item.label} label={item.label} value={item.value} />
+                  ))}
+                </div>
+              </MetricSection>
+            ) : null}
 
             {financial && (
               <MetricSection title="盈利能力">
@@ -865,6 +972,7 @@ export default function StockDetailTab({
             <MetricSection title="公司概况">
               <div className={s.metricGrid3}>
                 <Metric label="公司全称" value={profile?.orgName || detail.name || '—'} />
+                <Metric label="英文名称" value={profile?.orgNameEn ?? '—'} />
                 <Metric label="证券类型" value={profile?.securityType ?? '—'} />
                 <Metric label="曾用名" value={profile?.formerName ?? '—'} />
                 <Metric label="成立日期" value={profile?.foundDate ?? '—'} />
@@ -872,10 +980,14 @@ export default function StockDetailTab({
                 <Metric label="发行价" value={profile?.issuePrice != null ? formatPrice(profile.issuePrice) : '—'} />
                 <Metric label="注册资本" value={profile?.regCapital != null ? formatCompactNumber(profile.regCapital) : '—'} />
                 <Metric label="员工人数" value={profile?.employees != null ? String(profile.employees) : '—'} />
-                <Metric label="所属行业" value={profile?.industry ?? stock.industry ?? '—'} />
+                <Metric label="所属行业" value={formatIndustryLine(profile, stock.industry)} />
                 <Metric label="证监会行业" value={profile?.industryCsrc ?? '—'} />
                 <Metric label="注册地址" value={profile?.address || profile?.province || '—'} />
+                <Metric label="办公地址" value={profile?.officeAddress ?? '—'} />
                 <Metric label="联系电话" value={profile?.orgTel ?? '—'} />
+                <Metric label="电子邮箱" value={profile?.orgEmail ?? '—'} />
+                <Metric label="传真" value={profile?.orgFax ?? '—'} />
+                <Metric label="主承销商" value={profile?.leadUnderwriter ?? '—'} />
               </div>
             </MetricSection>
 
@@ -886,6 +998,45 @@ export default function StockDetailTab({
                 <Metric label="董秘" value={profile?.secretary ?? '—'} />
               </div>
             </MetricSection>
+
+            {profile?.executives?.length ? (
+              <MetricSection title="高管团队">
+                <div className={s.flatList}>
+                  <div className={s.tableHeadWide}>
+                    <span className={s.tableHeadCell}>姓名</span>
+                    <span className={s.tableHeadCell}>职务</span>
+                    <span className={s.tableHeadCell}>任职日期</span>
+                    <span className={s.tableHeadCell}>离任日期</span>
+                    <span className={s.tableHeadCell} />
+                  </div>
+                  {profile.executives.slice(0, 10).map(exec => (
+                    <div key={`${exec.name}-${exec.title ?? ''}`} className={s.tableRowWide}>
+                      <span className={s.tableCellName}>{exec.name}</span>
+                      <span className={s.tableCell}>{exec.title || '—'}</span>
+                      <span className={s.tableCell}>{exec.startDate || '—'}</span>
+                      <span className={s.tableCell}>{exec.endDate || '—'}</span>
+                      <span className={s.tableCell} />
+                    </div>
+                  ))}
+                </div>
+              </MetricSection>
+            ) : null}
+
+            {profile?.indexMembership?.length ? (
+              <MetricSection title="指数成分">
+                <div className={s.tagRow}>
+                  {profile.indexMembership.map(item => (
+                    <span
+                      key={`${item.indexCode ?? item.indexName}`}
+                      className={s.tag}
+                      title={item.enterDate ? `纳入 ${item.enterDate}` : item.indexName}
+                    >
+                      {item.indexName}
+                    </span>
+                  ))}
+                </div>
+              </MetricSection>
+            ) : null}
 
             {profile?.website && (
               <MetricSection title="官网">
@@ -903,7 +1054,11 @@ export default function StockDetailTab({
               </MetricSection>
             )}
 
-            {profile?.concepts?.length ? (
+            <PlateTags title="行业板块" plates={profile?.industryPlates ?? []} />
+            <PlateTags title="概念题材" plates={profile?.conceptPlates ?? []} />
+            <PlateTags title="地域板块" plates={profile?.areaPlates ?? []} />
+
+            {!profile?.conceptPlates?.length && profile?.concepts?.length ? (
               <MetricSection title="板块 · 题材">
                 <div className={s.tagRow}>
                   {profile.concepts.slice(0, 16).map(tag => (
@@ -912,6 +1067,12 @@ export default function StockDetailTab({
                 </div>
               </MetricSection>
             ) : null}
+
+            {profile?.institutionRating && (
+              <MetricSection title="机构评级">
+                <InstitutionRatingPanel rating={profile.institutionRating} />
+              </MetricSection>
+            )}
 
             <MetricSection title="公司简介">
               <Text className={s.prose} block>

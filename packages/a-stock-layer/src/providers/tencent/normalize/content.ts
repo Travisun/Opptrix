@@ -135,12 +135,19 @@ export function mapTencentJiankuangProfile(
     .filter(Boolean)
 
   const metrics = data.zyzb?.detail ?? {}
+  const profileMetrics = Object.entries(metrics)
+    .filter(([key, val]) => key !== 'date' && val != null && String(val).trim() && String(val) !== '--')
+    .map(([key, val]) => ({
+      label: metricLabel(key),
+      value: String(val).trim(),
+    }))
 
   return {
     code: bare,
     name: gsjj.gsmz ? String(gsjj.gsmz).replace(/股份有限公司$/, '') : undefined,
     orgName: gsjj.gsmz,
     industry: plateNames[0],
+    industrySecondary: plateNames[1],
     concepts: conceptNames.length ? conceptNames : undefined,
     listingDate: ymdFromDatetime(gsjj.riqi) || undefined,
     mainBusiness: gsjj.yw,
@@ -149,15 +156,25 @@ export function mapTencentJiankuangProfile(
     issuePrice: safeFloat(String(gsjj.jg ?? '').replace(/元$/, '')),
     totalMarketCap: null,
     circulatingMarketCap: null,
-    businessScope: [
-      metrics.date ? `报告期 ${metrics.date}` : '',
-      metrics.mgsy ? `每股收益 ${metrics.mgsy}` : '',
-      metrics.jlr ? `净利润 ${metrics.jlr}` : '',
-      metrics.jlrzzl ? `净利润同比 ${metrics.jlrzzl}` : '',
-      metrics.jzcsyl ? `ROE ${metrics.jzcsyl}` : '',
-      metrics.zcfzl ? `资产负债率 ${metrics.zcfzl}` : '',
-    ].filter(Boolean).join('；') || undefined,
+    profileMetrics: profileMetrics.length ? profileMetrics : undefined,
+    metricsReportDate: metrics.date ? String(metrics.date) : undefined,
   }
+}
+
+function metricLabel(key: string): string {
+  const map: Record<string, string> = {
+    mgsy: '每股收益',
+    jlr: '净利润',
+    jlrzzl: '净利润同比',
+    yyzsr: '营业收入',
+    zsrzzl: '营收同比',
+    mgjzc: '每股净资产',
+    jzcsyl: 'ROE',
+    zcfzl: '资产负债率',
+    syl: '市盈率',
+    sjl: '市净率',
+  }
+  return map[key] ?? key
 }
 
 /**

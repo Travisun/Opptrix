@@ -32,11 +32,63 @@ export interface MarketQuote {
   volumeRatio?: number | null
 }
 
+export interface ProfileMetricItem {
+  label: string
+  value: string
+}
+
+export interface ProfilePlateItem {
+  name: string
+  code?: string
+  changePct?: number | null
+  tag?: string
+}
+
+export interface ProfileExecutive {
+  name: string
+  title?: string
+  startDate?: string
+  endDate?: string
+}
+
+export interface ProfileIndustryRank {
+  industryName: string
+  industryCode?: string
+  pe?: number | null
+  marketCap?: number | null
+  eps?: number | null
+  peRank?: number | string | null
+  marketCapRank?: number | string | null
+  epsRank?: number | string | null
+  industryAvgPe?: number | null
+}
+
+export interface ProfileInstitutionRating {
+  period?: string
+  buy?: number | null
+  outperform?: number | null
+  neutral?: number | null
+  underperform?: number | null
+  sell?: number | null
+  targetPriceAvg?: string
+  targetPriceHigh?: string
+  targetPriceLow?: string
+  recentReports?: Array<{ title: string; date?: string; rating?: string }>
+}
+
+export interface ProfileIndexMembership {
+  indexName: string
+  indexCode?: string
+  enterDate?: string
+}
+
 export interface StockProfileData {
   code: string
   name?: string
   orgName?: string
+  orgNameEn?: string
   industry?: string
+  industrySecondary?: string
   industryCsrc?: string
   concepts?: string[]
   listingDate?: string
@@ -50,7 +102,11 @@ export interface StockProfileData {
   province?: string
   city?: string
   address?: string
+  officeAddress?: string
   website?: string
+  orgEmail?: string
+  orgFax?: string
+  leadUnderwriter?: string
   regCapital?: number | null
   chairman?: string
   legalPerson?: string
@@ -61,6 +117,15 @@ export interface StockProfileData {
   issuePrice?: number | null
   totalShares?: number | null
   weekDividendYield?: number | null
+  metricsReportDate?: string
+  profileMetrics?: ProfileMetricItem[]
+  industryPlates?: ProfilePlateItem[]
+  conceptPlates?: ProfilePlateItem[]
+  areaPlates?: ProfilePlateItem[]
+  indexMembership?: ProfileIndexMembership[]
+  executives?: ProfileExecutive[]
+  industryRank?: ProfileIndustryRank
+  institutionRating?: ProfileInstitutionRating
   revenueBreakdown?: RevenueBreakdownBlock[]
 }
 

@@ -157,8 +157,12 @@ export interface StockProfile {
   name?: string
   /** 公司全称（如"贵州茅台酒股份有限公司"） */
   orgName?: string
+  /** 公司英文名称 */
+  orgNameEn?: string
   /** 所属行业（如"白酒"、"银行"、"半导体"） */
   industry?: string
+  /** 二级行业分类（如"酿酒行业"） */
+  industrySecondary?: string
   /** 证监会行业分类代码与名称 */
   industryCsrc?: string
   /** 所属概念板块列表（如 ["锂电池", "人工智能", "新能源"]） */
@@ -185,8 +189,16 @@ export interface StockProfile {
   city?: string
   /** 注册地址 */
   address?: string
+  /** 办公地址 */
+  officeAddress?: string
   /** 公司官网 URL */
   website?: string
+  /** 公司电子邮箱 */
+  orgEmail?: string
+  /** 公司传真 */
+  orgFax?: string
+  /** IPO 主承销商 */
+  leadUnderwriter?: string
   /** 注册资本（万元） */
   regCapital?: number | null
   /** 董事长姓名 */
@@ -203,6 +215,10 @@ export interface StockProfile {
   formerName?: string
   /** 首次发行价（元） */
   issuePrice?: number | null
+  /** 简况页最新指标报告期标签（如"2026一季报"） */
+  metricsReportDate?: string
+  /** 简况页最新财务/估值指标快照 */
+  profileMetrics?: Array<{ label: string; value: string }>
 }
 
 /**
