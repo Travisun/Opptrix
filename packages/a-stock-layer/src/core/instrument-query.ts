@@ -338,7 +338,7 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('CRYPTO', 'CRYPTO_SPOT', Capability.STOCK_REALTIME, 'realtime', true, [pair])
       case 'kline':
         return registryPlan('CRYPTO', 'CRYPTO_SPOT', Capability.STOCK_KLINE, 'kline', true, [
-          pair, 'daily', '', '', count,
+          pair, opts.period ?? 'daily', '', '', count,
         ])
       case 'snapshot':
         return { kind: 'composite_snapshot', market: 'CRYPTO', symbol: pair }

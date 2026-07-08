@@ -9,7 +9,7 @@ const AKSHARE_SETTINGS: ProviderSettingsDefinition = {
       key: 'enabled',
       type: 'boolean',
       label: '启用 AKShare 数据',
-      default: false,
+      default: true,
     },
   ],
 }

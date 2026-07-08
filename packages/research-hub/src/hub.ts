@@ -1982,7 +1982,7 @@ export class ResearchHub {
         this.stockChart(code, period, count, before, tail, market, t0),
       usKline: (symbol, count) => this.usKline(symbol, { count }, t0),
       regionalKline: (market, symbol, count) => this.regionalKline(market, symbol, { count }, t0),
-      cryptoKline: (pair, count) => this.cryptoKline(pair, { count }, t0),
+      cryptoKline: (pair, period, count) => this.cryptoKline(pair, { count, period }, t0),
       stockCyq: code => this.stockCyq(code, t0),
       institutionRating: (code, groups) => this.institutionRating(code, groups, t0),
       institutionReport: (code, groups) => this.institutionReport(code, groups, t0),
@@ -2262,7 +2262,8 @@ export class ResearchHub {
 
   private async cryptoKline(pair: string, params: Record<string, unknown>, t0: number) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.queryInstrumentData(cryptoRefFromPair(pair), 'kline', { count })
+    const period = String(params.period ?? 'daily')
+    const r = await this.de.queryInstrumentData(cryptoRefFromPair(pair), 'kline', { count, period })
     if (!r.success) return fail(instrumentQueryError(r, 'Crypto K 线获取失败'), t0)
     const items = instrumentQueryData<unknown[]>(r) ?? []
     return ok({ pair, items, count: items.length }, `K 线 ${items.length} 根`, t0)

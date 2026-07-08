@@ -1,5 +1,6 @@
 import type { StockKline, StockRealtime } from '@opptrix/shared'
 import type { CryptoPairRef } from '../utils/crypto-market.js'
+import { formatCryptoKlineDate } from '../utils/crypto-kline.js'
 
 function n(v: unknown): number | null {
   if (v == null || v === '') return null
@@ -27,7 +28,11 @@ export function mapBinanceTicker(pair: CryptoPairRef, row: Record<string, unknow
   }
 }
 
-export function mapBinanceKlines(pair: CryptoPairRef, rows: unknown[]): StockKline[] {
+export function mapBinanceKlines(
+  pair: CryptoPairRef,
+  rows: unknown[],
+  intraday = false,
+): StockKline[] {
   const out: StockKline[] = []
   for (const row of rows) {
     if (!Array.isArray(row) || row.length < 6) continue
@@ -49,7 +54,7 @@ export function mapBinanceKlines(pair: CryptoPairRef, rows: unknown[]): StockKli
   }
   return out.map(k => ({
     ...k,
-    date: k.date.length > 10 ? new Date(Number(k.date)).toISOString().slice(0, 10) : k.date,
+    date: formatCryptoKlineDate(k.date, intraday),
   }))
 }
 
@@ -77,7 +82,11 @@ export function mapOkxTicker(pair: CryptoPairRef, row: Record<string, unknown>):
   }
 }
 
-export function mapOkxCandles(pair: CryptoPairRef, rows: unknown[]): StockKline[] {
+export function mapOkxCandles(
+  pair: CryptoPairRef,
+  rows: unknown[],
+  intraday = false,
+): StockKline[] {
   const out: StockKline[] = []
   for (const row of rows) {
     if (!Array.isArray(row) || row.length < 6) continue
@@ -87,7 +96,7 @@ export function mapOkxCandles(pair: CryptoPairRef, rows: unknown[]): StockKline[
     const prev = out.length ? out[out.length - 1]!.close : open
     out.push({
       code: pair.pair,
-      date: ts != null ? new Date(ts).toISOString().slice(0, 10) : String(row[0]),
+      date: ts != null ? String(ts) : String(row[0]),
       open,
       high: n(row[2]) ?? close,
       low: n(row[3]) ?? close,
@@ -98,5 +107,8 @@ export function mapOkxCandles(pair: CryptoPairRef, rows: unknown[]): StockKline[
       turnoverRate: null,
     })
   }
-  return out.reverse()
+  return out.reverse().map(k => ({
+    ...k,
+    date: formatCryptoKlineDate(k.date, intraday),
+  }))
 }

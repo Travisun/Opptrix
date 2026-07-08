@@ -10,6 +10,14 @@ function fieldKeyToEnvSuffix(key: string): string {
   return key.replace(/([a-z])([A-Z])/g, '$1_$2').toUpperCase()
 }
 
+/** 无需必填密钥的数据源默认启用；需 API Key 的默认关闭。 */
+export function defaultProviderEnabled(providerId: string): boolean {
+  const manifest = getProviderManifest(resolveProviderAlias(providerId))
+  if (!manifest?.settings) return false
+  const fields = manifest.settings.fields
+  return !fields.some(f => f.type === 'secret' && f.required !== false)
+}
+
 function resolveSecretFieldValue(
   providerId: string,
   field: ProviderSettingsField,
@@ -44,9 +52,7 @@ export class ProviderConfigStore {
     if (existing) {
       return providerId !== resolvedId ? { ...existing, providerId: resolvedId } : existing
     }
-    const manifest = getProviderManifest(resolvedId)
-    const enabledField = manifest?.settings?.fields.find(f => f.key === 'enabled')
-    const enabledDefault = enabledField?.default === true
+    const enabledDefault = defaultProviderEnabled(resolvedId)
     return {
       providerId: resolvedId,
       enabled: enabledDefault,
