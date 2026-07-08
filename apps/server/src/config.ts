@@ -86,8 +86,16 @@ function readStoredConfig(): Partial<AppConfig> & { llm?: LegacyLlmConfig } {
 export function loadConfig(): AppConfig {
   const file = readStoredConfig()
   const providers = migrateLegacy(file)
-  const defaultModel = file.default_model
-    ?? (providers[0] ? `${providers[0].id}:${providers[0].models[0]}` : undefined)
+  const availableModelRefs = new Set(
+    providers.flatMap(p => p.models.map(model => `${p.id}:${model}`)),
+  )
+  const fallbackModel = providers[0]?.models[0]
+    ? `${providers[0].id}:${providers[0].models[0]}`
+    : undefined
+  // 本地配置可能留下已删除 provider 的 default_model；启动时自动回落到第一个可用模型。
+  const defaultModel = file.default_model && availableModelRefs.has(file.default_model)
+    ? file.default_model
+    : fallbackModel
 
   return {
     providers,

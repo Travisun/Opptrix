@@ -110,6 +110,10 @@ export function useSidebarPreference(isMobile: boolean) {
     if (isDesktopApp()) {
       return shouldAutoExpandSidebar()
     }
+    // Web 桌面没有 Electron 标题栏里的侧栏展开按钮；宽屏下默认展开，避免用户被隐藏偏好卡住。
+    if (!window.matchMedia(MOBILE_QUERY).matches) {
+      return shouldAutoExpandSidebar()
+    }
     return localStorage.getItem(SIDEBAR_KEY) === 'true' || localStorage.getItem('inno-sidebar-visible') === 'true'
   })
   const [drawerOpen, setDrawerOpen] = useState(false)

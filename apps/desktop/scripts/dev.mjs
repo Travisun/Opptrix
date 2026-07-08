@@ -6,11 +6,12 @@ import { spawn, spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveElectronExecutable } from './ensure-electron.mjs'
+import { NODE_CMD } from './lib/commands.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
 
-spawnSync('node', ['scripts/prepare-icons.mjs'], {
+spawnSync(NODE_CMD, ['scripts/prepare-icons.mjs'], {
   cwd: DESKTOP_ROOT,
   stdio: 'inherit',
 })
@@ -29,10 +30,15 @@ async function waitForUrl(url, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${url}`)
 }
 
-const stack = spawn('node', ['scripts/dev-stack.mjs'], {
+const stack = spawn(NODE_CMD, ['scripts/dev-stack.mjs'], {
   cwd: DESKTOP_ROOT,
   stdio: 'inherit',
   shell: false,
+})
+
+stack.on('error', (err) => {
+  console.error('[desktop] failed to start dev stack:', err)
+  process.exit(1)
 })
 
 const cleanup = () => {
