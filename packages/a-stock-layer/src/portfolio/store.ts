@@ -16,6 +16,20 @@ function defaultState(): DbState {
   return { config: { ...DEFAULT_FEE_CONFIG }, stockConfig: {}, trades: [], nextId: 1 }
 }
 
+function tradeCodeAliases(code: string): Set<string> {
+  const trimmed = code.trim()
+  const aliases = new Set<string>([trimmed, trimmed.toUpperCase()])
+  if (/^\d+$/.test(trimmed)) aliases.add(trimmed.padStart(6, '0'))
+  return aliases
+}
+
+function tradeCodesOverlap(code: string, aliases: Set<string>): boolean {
+  for (const alias of tradeCodeAliases(code)) {
+    if (aliases.has(alias)) return true
+  }
+  return false
+}
+
 export class PortfolioStore {
   private static inst: PortfolioStore | null = null
   private state: DbState
@@ -61,6 +75,18 @@ export class PortfolioStore {
     this.state.trades = this.state.trades.filter(t => t.id !== id)
     this.save()
     return this.state.trades.length < before
+  }
+
+  /** Remove all trades and per-stock fee overrides for one instrument code. */
+  deleteTradesForCode(code: string): number {
+    const aliases = tradeCodeAliases(code)
+    const before = this.state.trades.length
+    this.state.trades = this.state.trades.filter(t => !tradeCodesOverlap(t.code, aliases))
+    for (const key of aliases) {
+      if (/^\d{6}$/.test(key)) delete this.state.stockConfig[key]
+    }
+    this.save()
+    return before - this.state.trades.length
   }
 
   getTrades(code = ''): TradeRecord[] {

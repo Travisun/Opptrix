@@ -155,6 +155,7 @@ export default function RightMarketPanel({
     loadTrades,
     submitTrade,
     deleteTrade,
+    clearPortfolioForCode,
     refreshHoldings,
   } = useFollowPortfolio()
   const [tab, setTab] = useState<MarketTab>('watchlist')
@@ -347,10 +348,18 @@ export default function RightMarketPanel({
             onAdd={handleAdd}
             onPatchItem={updateItem}
             onRemove={code => {
+              void clearPortfolioForCode(code)
               removeItem(code)
-              if (selected?.code === code) {
+              const selectedKey = selected
+                ? watchlistItemKey(normalizeWatchlistItem(selected))
+                : null
+              if (selected?.code === code || selectedKey === code) {
                 setSelected(null)
                 setTab('watchlist')
+              }
+              if (manageStock?.code === code) {
+                setManageStock(null)
+                setDialogPrice(null)
               }
             }}
           />

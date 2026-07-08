@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { portfolioDeleteTrade, portfolioTrade, research } from '../api/client'
+import { portfolioClearInstrument, portfolioDeleteTrade, portfolioTrade, research } from '../api/client'
 import type { PortfolioSummaryData, PortfolioTradeItem } from '../types/schemas'
 import { normalizeCode } from './format'
 
@@ -64,6 +64,24 @@ export function useFollowPortfolio() {
     return loadTrades(code)
   }, [loadTrades, refreshHoldings])
 
+  const clearPortfolioForCode = useCallback(async (code: string) => {
+    const normalized = normalizeCode(code)
+    try {
+      await portfolioClearInstrument(code)
+    } catch {
+      /* best-effort cleanup when removing watchlist row */
+    }
+    delete tradesCache.current[normalized]
+    delete tradesCache.current[code.trim()]
+    setHoldingsByCode(prev => {
+      const next = { ...prev }
+      delete next[normalized]
+      delete next[code.trim()]
+      return next
+    })
+    await refreshHoldings()
+  }, [refreshHoldings])
+
   const isHolding = useCallback((code: string) => {
     const row = holdingsByCode[normalizeCode(code)]
     return Boolean(row && row.shares > 0)
@@ -76,6 +94,7 @@ export function useFollowPortfolio() {
     loadTrades,
     submitTrade,
     deleteTrade,
+    clearPortfolioForCode,
     isHolding,
   }
 }

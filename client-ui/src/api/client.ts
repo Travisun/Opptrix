@@ -1126,6 +1126,13 @@ export async function portfolioDeleteTrade(id: number) {
   return resp.json() as Promise<{ success: boolean }>
 }
 
+export async function portfolioClearInstrument(code: string) {
+  const qs = new URLSearchParams({ code: code.trim() })
+  const resp = await fetchWithTimeout(`${API_BASE}/portfolio/instrument?${qs}`, { method: 'DELETE' })
+  if (!resp.ok) throw new Error('clear portfolio instrument failed')
+  return resp.json() as Promise<{ success: boolean; removed: number }>
+}
+
 export async function getHealth() {
   const resp = await fetchWithTimeout(`${API_BASE}/health`)
   if (!resp.ok) throw new Error(`Health check failed: ${resp.status}`)

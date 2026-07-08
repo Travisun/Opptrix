@@ -157,5 +157,12 @@ export class PortfolioManager {
   }
 
   removeTrade(id: number) { return this.store.deleteTrade(id) }
+
+  /** Drop ledger rows and per-stock fee overrides when a watchlist symbol is removed. */
+  clearInstrument(code: string) {
+    const removed = this.store.deleteTradesForCode(code)
+    return { removed }
+  }
+
   clear() { return this.store.clearAll() }
 }

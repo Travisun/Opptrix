@@ -1082,6 +1082,13 @@ app.delete<{ Params: { id: string } }>('/api/portfolio/trade/:id', async (req, r
   return { success: true }
 })
 
+app.delete<{ Querystring: { code?: string } }>('/api/portfolio/instrument', async (req, reply) => {
+  const code = String(req.query?.code ?? '').trim()
+  if (!code) return reply.code(400).send({ error: 'code required' })
+  const { removed } = hub.de.portfolio.clearInstrument(code)
+  return { success: true, removed }
+})
+
 let serveUi = false
 
 async function bootstrap() {
