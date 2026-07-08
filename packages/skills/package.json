@@ -6,7 +6,7 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": { ".": { "types": "./dist/index.d.ts", "import": "./dist/index.js" } },
-  "scripts": { "build": "tsc -p tsconfig.json && cp src/chain-knowledge.json dist/" },
+  "scripts": { "build": "tsc -p tsconfig.json && node -e \"require('fs').copyFileSync('src/chain-knowledge.json','dist/chain-knowledge.json')\"" },
   "dependencies": {
     "@opptrix/shared": "*",
     "@opptrix/a-stock-layer": "*"

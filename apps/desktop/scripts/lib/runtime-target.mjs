@@ -3,6 +3,7 @@
  * CI sets OPPTRIX_RUNTIME_ARCH on macOS cross-builds (arm64 runner → x64 package).
  */
 import { spawnSync } from 'node:child_process'
+import { NPM_CMD, NPM_SHELL } from './commands.mjs'
 
 export function normalizeArch(arch) {
   if (!arch) return arch
@@ -51,11 +52,11 @@ export function hostMatchesTarget(target) {
   return target.platform === process.platform && target.arch === hostArch
 }
 
-function spawn(cmd, args, { cwd, env }) {
+function spawn(cmd, args, { cwd, env, shell = false }) {
   return spawnSync(cmd, args, {
     cwd,
     stdio: 'inherit',
-    shell: false,
+    shell,
     env,
   })
 }
@@ -66,7 +67,7 @@ export function runNpm(args, { cwd, target, extraEnv = {} }) {
   if (target.useRosettaX64) {
     return spawn('arch', ['-x86_64', 'npm', ...args], { cwd, env })
   }
-  return spawn('npm', args, { cwd, env })
+  return spawn(NPM_CMD, args, { cwd, env, shell: NPM_SHELL })
 }
 
 /** @param {string} scriptPath */

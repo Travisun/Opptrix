@@ -223,7 +223,9 @@ test('gateInstrumentAnalytics — CN evaluation still cn_factor_scorecard', () =
 test('stock-index search maps CN/US instruments', { timeout: 30_000 }, async () => {
   const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
-  const de = new MarketDataEngine()
+  const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
+  const de = new MarketDataEngine(false)
+  registerAllDrivers(de.registry)
   const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
   assert.ok(cn.some(h => h.instrument.symbol === '600519'))
   const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
@@ -243,12 +245,15 @@ test('cross-market list sync jobs are no-op', async () => {
   process.env.OPPTRIX_MARKET_DB_PATH = dbPath
 
   const store = new MarketDataStore(dbPath)
-  const engine = new MarketDataSyncEngine(store, new MarketDataEngine())
-  const result = await engine.sync({ jobs: ['jp_list'], mode: 'full' })
-  assert.equal(result.jobs.jp_list, 'skipped')
-  assert.equal(store.countRegionalEquityInstruments('JP'), 0)
-  store.close()
-  rmSync(dir, { recursive: true, force: true })
+  try {
+    const engine = new MarketDataSyncEngine(store, new MarketDataEngine(false))
+    const result = await engine.sync({ jobs: ['jp_list'], mode: 'full' })
+    assert.equal(result.jobs.jp_list, 'skipped')
+    assert.equal(store.countRegionalEquityInstruments('JP'), 0)
+  } finally {
+    store.close()
+    rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
+  }
 })
 
 test('US regime stub resolves strategy ids from SPY-like klines', () => {

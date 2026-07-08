@@ -932,7 +932,10 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
     }
 
     const ac = registerSessionChat(req.params.id)
-    req.raw.on('close', () => {
+    req.raw.on('aborted', () => {
+      if (!reply.raw.writableEnded) ac.abort()
+    })
+    reply.raw.on('close', () => {
       if (!reply.raw.writableEnded) ac.abort()
     })
 
