@@ -1,8 +1,8 @@
 /**
- * 跨市场标的搜索 — StockIndex Provider 主路径，腾讯搜索 CN 备用。
+ * 跨市场标的搜索 — 标准 instrument_search 主路径，腾讯 CN 搜索为自定义备用。
  */
 
-import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
+import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/shared'
 import {
   canonicalCnSymbol,
   inferCnAssetClassFromSymbol,
@@ -32,6 +32,11 @@ export interface InstrumentSearchHit {
 const SEARCH_CACHE_MS = 5 * 60 * 1000
 const searchCache = new Map<string, { expires: number; items: InstrumentSearchHit[] }>()
 
+function equityListRef(market: Market): InstrumentRef {
+  const symbol = market === 'CN' ? '000001' : market === 'HK' ? '00700' : 'AAPL'
+  return normalizeInstrumentRef({ market, assetClass: 'EQUITY', symbol })
+}
+
 function cacheKey(keyword: string, limit: number, markets?: Market[]): string {
   return `${keyword.toLowerCase()}|${limit}|${(markets ?? []).join(',')}`
 }
@@ -51,6 +56,28 @@ function hitFromStockIndexItem(item: StockIndexItem): InstrumentSearchHit | null
   }
 }
 
+function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSearchHit | null {
+  const rawCode = String(row.code ?? '').trim()
+  if (!rawCode) return null
+  const code = market === 'CN' ? canonicalCnSymbol(rawCode) : rawCode
+  const instrument = normalizeInstrumentRef({
+    market,
+    assetClass: market === 'CN' ? inferCnAssetClassFromSymbol(code) : 'EQUITY',
+    symbol: code,
+    exchange: market === 'HK' ? 'HK' : row.market === 'SH' || row.market === 'SZ' ? row.market : undefined,
+  })
+  return {
+    code: instrumentDisplayCode(instrument),
+    name: row.name ?? code,
+    market,
+    assetClass: instrument.assetClass,
+    exchange: row.market ?? instrument.exchange ?? null,
+    instrument,
+    refLabel: instrumentRefLabel(instrument),
+    source: 'stock_index',
+  }
+}
+
 async function searchMarketDirect(
   market: Market,
   keyword: string,
@@ -62,27 +89,26 @@ async function searchMarketDirect(
     .filter((h): h is InstrumentSearchHit => h != null)
 }
 
-async function searchMarketViaProvider(
+async function searchMarketViaStandardApi(
   de: MarketDataEngine,
   market: Market,
   keyword: string,
   limit: number,
 ): Promise<InstrumentSearchHit[]> {
-  const resp = await de.invokeCustomMethod('stockindex', 'stockIndexSearch', [
+  const r = await de.queryInstrumentData(equityListRef(market), 'instrument_search', {
     keyword,
-    market,
-    Math.min(limit, 50),
-  ])
-  if (resp.success && Array.isArray(resp.data) && resp.data[0]) {
-    const payload = resp.data[0] as { items?: StockIndexItem[] }
-    const hits = (payload.items ?? [])
-      .map(hitFromStockIndexItem)
+    pageSize: Math.min(limit, 50),
+  })
+  if (r.success && 'data' in r && Array.isArray(r.data) && r.data.length) {
+    const hits = (r.data as StockListItem[])
+      .map(row => hitFromStockListItem(row, market))
       .filter((h): h is InstrumentSearchHit => h != null)
-    if (hits.length) return hits
+    if (hits.length) return hits.slice(0, limit)
   }
   return searchMarketDirect(market, keyword, limit)
 }
 
+/** 腾讯 stock 搜索 — 自定义方法，仅作 CN 空结果备用 */
 async function tencentCnSearchFallback(
   de: MarketDataEngine,
   keyword: string,
@@ -115,7 +141,7 @@ async function tencentCnSearchFallback(
   return out
 }
 
-/** 关键词搜索 — StockIndex Provider 优先，CN 空结果时腾讯备用 */
+/** 关键词搜索 — 标准 instrument_search，CN 空结果时腾讯自定义方法备用 */
 export async function searchInstrumentsOnline(
   de: MarketDataEngine,
   keyword: string,
@@ -138,7 +164,7 @@ export async function searchInstrumentsOnline(
 
   for (const market of targetMarkets) {
     try {
-      for (const hit of await searchMarketViaProvider(de, market, kw, limit)) {
+      for (const hit of await searchMarketViaStandardApi(de, market, kw, limit)) {
         const key = `${hit.market}:${hit.instrument.symbol}:${hit.instrument.assetClass}`
         if (seen.has(key)) continue
         seen.add(key)
@@ -167,7 +193,7 @@ export async function searchInstrumentsOnline(
   return result
 }
 
-/** Discover 初选 — 经 StockIndex Provider 分页列表 */
+/** Discover 初选 — 标准 stock_list（含板块过滤） */
 export async function listInstrumentsOnline(
   de: MarketDataEngine,
   market: 'CN' | 'US' | 'HK',
@@ -180,46 +206,22 @@ export async function listInstrumentsOnline(
   } = {},
 ): Promise<{ total_universe: number; passed: number; items: InstrumentSearchHit[] }> {
   const pageSize = Math.min(Math.max(opts.pageSize ?? opts.topN ?? 50, 1), 100)
-
-  if (opts.board) {
-    const resp = await de.invokeCustomMethod('stockindex', 'stockIndexListBoardStocks', [
-      opts.board,
-      market,
-      opts.page ?? 1,
-      pageSize,
-      opts.keyword?.trim(),
-    ])
-    if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) {
-      throw new Error(resp.error ?? 'StockIndex 板块成分获取失败')
-    }
-    const payload = resp.data[0] as { total?: number; items?: StockIndexItem[] }
-    const items = (payload.items ?? [])
-      .map(hitFromStockIndexItem)
-      .filter((h): h is InstrumentSearchHit => h != null)
-    return {
-      total_universe: payload.total ?? items.length,
-      passed: items.length,
-      items,
-    }
-  }
-
-  const resp = await de.invokeCustomMethod('stockindex', 'stockIndexListStocks', [
-    market,
-    opts.page ?? 1,
+  const r = await de.queryInstrumentData(equityListRef(market), 'stock_list', {
+    keyword: opts.keyword?.trim(),
+    page: opts.page ?? 1,
     pageSize,
-    opts.board,
-    undefined,
-    opts.keyword?.trim(),
-  ])
-  if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) {
-    throw new Error(resp.error ?? 'StockIndex 列表获取失败')
+    boardKey: opts.board,
+  })
+  if (!r.success) {
+    const err = 'error' in r && r.error ? String(r.error) : '标的列表获取失败'
+    throw new Error(err)
   }
-  const payload = resp.data[0] as { total?: number; items?: StockIndexItem[] }
-  const items = (payload.items ?? [])
-    .map(hitFromStockIndexItem)
+  const rows = ('data' in r && Array.isArray(r.data) ? r.data : []) as StockListItem[]
+  const items = rows
+    .map(row => hitFromStockListItem(row, market))
     .filter((h): h is InstrumentSearchHit => h != null)
   return {
-    total_universe: payload.total ?? items.length,
+    total_universe: items.length,
     passed: items.length,
     items,
   }

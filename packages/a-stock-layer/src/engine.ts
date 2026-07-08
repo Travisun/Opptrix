@@ -760,6 +760,8 @@ export class MarketDataEngine {
           plan.useCache,
           ...plan.args,
         )
+      case 'cn_etf_snapshot':
+        return this.etfSnapshot(plan.symbol)
       default:
         return Promise.resolve({
           success: false,

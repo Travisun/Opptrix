@@ -12,7 +12,11 @@ function crossMarketBindings(
   const markets = ['CN', 'US', 'HK'] as const
   const rows: ProviderBinding[] = []
   for (const market of markets) {
-    for (const capability of [Capability.STOCK_LIST, Capability.SECTOR_LIST]) {
+    for (const capability of [
+      Capability.STOCK_LIST,
+      Capability.INSTRUMENT_SEARCH,
+      Capability.SECTOR_LIST,
+    ]) {
       rows.push({
         market,
         assetClass: 'EQUITY',

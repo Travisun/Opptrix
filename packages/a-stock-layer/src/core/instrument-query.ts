@@ -12,13 +12,23 @@ import { isCnEtfCode } from './instrument.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regional-symbol.js'
 
 /**
- * 标的数据能力 — 定义可查询的数据类型。
- * - realtime:   实时/最新行情
- * - kline:      K 线历史数据
- * - snapshot:   聚合快照（概况 + 行情 + 近期 K 线）
- * - profile:    公司基本面资料
- * - financials: 财务报表数据
- * - stock_list: 股票列表（支持关键词搜索）
+ * 标的数据能力 — 定义可查询的数据类型（标准 Instrument API）。
+ *
+ * 未列入本类型的 Provider 方法须登记为自定义方法，经
+ * `list_provider_custom_methods` / `invoke_provider_custom_method` 调用。
+ *
+ * - realtime:       实时/最新行情
+ * - kline:          K 线历史数据
+ * - snapshot:       聚合快照（概况 + 行情 + 近期 K 线）
+ * - profile:        公司/基金基本面资料
+ * - financials:     财务报表数据
+ * - stock_list:         股票列表（分页、板块过滤）
+ * - instrument_search:  跨市场关键词搜索（相关性排序）
+ * - sector_list:        板块/行业列表
+ * - etf_list:       ETF 列表（支持关键词）
+ * - etf_nav:        ETF 净值序列
+ * - etf_holdings:   ETF 持仓成分
+ * - etf_snapshot:   ETF 聚合快照（概况 + 净值 + 行情）
  */
 export type InstrumentDataCapability =
   | 'realtime'
@@ -27,8 +37,12 @@ export type InstrumentDataCapability =
   | 'profile'
   | 'financials'
   | 'stock_list'
+  | 'instrument_search'
   | 'sector_list'
   | 'etf_list'
+  | 'etf_nav'
+  | 'etf_holdings'
+  | 'etf_snapshot'
 
 /**
  * 标的查询可选参数 — 控制返回数量、关键词、报告日期/类型、周期等。
@@ -36,7 +50,7 @@ export type InstrumentDataCapability =
 export interface InstrumentQueryOpts {
   /** 返回数据条数（如 K 线根数），默认 120 */
   count?: number
-  /** 搜索关键词（用于 stock_list 能力） */
+  /** 搜索关键词（用于 stock_list / instrument_search） */
   keyword?: string
   /** 财务报告截止日期 YYYY-MM-DD（用于 financials 能力） */
   reportDate?: string
@@ -96,6 +110,11 @@ export type InstrumentQueryPlan =
     count: number
     period?: string
   }
+  | {
+    /** A 股 ETF 聚合快照 */
+    kind: 'cn_etf_snapshot'
+    symbol: string
+  }
 
 // ── 内部辅助函数 ──
 
@@ -130,6 +149,19 @@ function registryPlan(
   args: unknown[],
 ): InstrumentQueryPlan {
   return { kind: 'registry', market, assetClass, capability, method, useCache, args }
+}
+
+function instrumentSearchPlan(
+  market: Market,
+  opts: InstrumentQueryOpts,
+): InstrumentQueryPlan | null {
+  const keyword = (opts.keyword ?? '').trim()
+  if (!keyword) return null
+  const limit = Math.min(opts.pageSize ?? 30, 100)
+  const args: unknown[] = [keyword, market, limit]
+  if (opts.boardKey) args.push(opts.boardKey)
+  if (opts.industryCode) args.push(opts.industryCode)
+  return registryPlan(market, 'EQUITY', Capability.INSTRUMENT_SEARCH, 'instrumentSearch', true, args)
 }
 
 /**
@@ -171,6 +203,8 @@ export function resolveInstrumentQueryPlan(
         if (opts.industryCode) args.push(opts.industryCode)
         return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
+      case 'instrument_search':
+        return instrumentSearchPlan('CN', opts)
       case 'sector_list':
         return registryPlan(
           'CN',
@@ -185,6 +219,21 @@ export function resolveInstrumentQueryPlan(
           return registryPlan('CN', 'ETF', Capability.ETF_LIST, 'etfList', true, [
             'CN', opts.keyword ?? '',
           ])
+        }
+        return null
+      case 'etf_nav':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return registryPlan('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, [symbol])
+        }
+        return null
+      case 'etf_holdings':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return registryPlan('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, [symbol])
+        }
+        return null
+      case 'etf_snapshot':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return { kind: 'cn_etf_snapshot', symbol }
         }
         return null
       default:
@@ -216,6 +265,8 @@ export function resolveInstrumentQueryPlan(
         if (opts.boardKey) args.push(opts.boardKey)
         return registryPlan('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
+      case 'instrument_search':
+        return instrumentSearchPlan('US', opts)
       case 'sector_list':
         return registryPlan(
           'US',
@@ -249,6 +300,8 @@ export function resolveInstrumentQueryPlan(
         if (opts.boardKey) args.push(opts.boardKey)
         return registryPlan(market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
+      case 'instrument_search':
+        return market === 'HK' ? instrumentSearchPlan('HK', opts) : null
       case 'sector_list':
         return registryPlan(
           market,

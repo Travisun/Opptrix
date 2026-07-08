@@ -1619,29 +1619,41 @@ export class ResearchHub {
     )
   }
 
+  private cnEtfRef(code: string): InstrumentRef {
+    const sym = code.trim() || '510300'
+    return { market: 'CN', assetClass: 'ETF', symbol: sym }
+  }
+
   private async etfList(params: Record<string, unknown>, t0: number) {
     const code = params.code != null ? String(params.code) : ''
-    const r = await this.de.etfList(code)
-    if (!r.success) return fail(r.error ?? 'ETF 列表获取失败', t0)
-    return ok(r.data, `ETF 列表 ${r.data?.length ?? 0} 条`, t0)
+    const r = await this.de.queryInstrumentData(
+      this.cnEtfRef(code || '510300'),
+      'etf_list',
+      code ? { keyword: code } : {},
+    )
+    if (!r.success) return fail(instrumentQueryError(r, 'ETF 列表获取失败'), t0)
+    const data = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(data, `ETF 列表 ${data.length} 条`, t0)
   }
 
   private async etfSnapshot(code: string, t0: number) {
-    const r = await this.de.etfSnapshot(code)
-    if (!r.success) return fail('ETF 快照获取失败', t0)
-    return ok(r.data, 'ETF 快照', t0)
+    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_snapshot')
+    if (!r.success) return fail(instrumentQueryError(r, 'ETF 快照获取失败'), t0)
+    return ok(instrumentQueryData(r), 'ETF 快照', t0)
   }
 
   private async etfNav(code: string, t0: number) {
-    const r = await this.de.etfNav(code)
-    if (!r.success) return fail(r.error ?? 'ETF 净值获取失败', t0)
-    return ok(r.data, `ETF 净值 ${r.data?.length ?? 0} 条`, t0)
+    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_nav')
+    if (!r.success) return fail(instrumentQueryError(r, 'ETF 净值获取失败'), t0)
+    const data = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(data, `ETF 净值 ${data.length} 条`, t0)
   }
 
   private async etfHoldings(code: string, t0: number) {
-    const r = await this.de.etfHoldings(code)
-    if (!r.success) return fail(r.error ?? 'ETF 持仓获取失败', t0)
-    return ok(r.data, `ETF 持仓 ${r.data?.length ?? 0} 条`, t0)
+    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_holdings')
+    if (!r.success) return fail(instrumentQueryError(r, 'ETF 持仓获取失败'), t0)
+    const data = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(data, `ETF 持仓 ${data.length} 条`, t0)
   }
 
   private async localEtfList(params: Record<string, unknown>, t0: number) {
@@ -1874,9 +1886,14 @@ export class ResearchHub {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
-    const r = await this.de.etfList(keyword)
-    if (!r.success) return fail(r.error ?? 'ETF 搜索失败', t0)
-    const items = (r.data ?? []).map(row => {
+    const r = await this.de.queryInstrumentData(
+      this.cnEtfRef('510300'),
+      'etf_list',
+      { keyword },
+    )
+    if (!r.success) return fail(instrumentQueryError(r, 'ETF 搜索失败'), t0)
+    const rows = instrumentQueryData<unknown[]>(r) ?? []
+    const items = rows.map(row => {
       const it = row as Record<string, unknown>
       return { code: String(it.code ?? ''), name: String(it.name ?? '') }
     })

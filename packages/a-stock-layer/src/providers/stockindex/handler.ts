@@ -89,6 +89,30 @@ export class StockIndexHandler extends MarketHandlerShell {
     }
   }
 
+  /** 标准 instrument_search — 跨市场关键词搜索 */
+  async instrumentSearch(
+    query: string,
+    market = 'CN',
+    limit = 20,
+    board?: string,
+    industry?: string,
+    assetType?: string,
+  ): Promise<StockListItem[] | null> {
+    try {
+      const resp = await stockIndexSearch(query, {
+        market: parseStockIndexMarket(market) ?? 'CN',
+        limit: Math.min(Math.max(limit, 1), 100),
+        board,
+        industry,
+        assetType,
+      })
+      const rows = stockIndexItemsToListRows(resp.items ?? [])
+      return rows.length ? rows : null
+    } catch {
+      return null
+    }
+  }
+
   /** boards:CN | industries:CN:1 | board:hsj:CN */
   async sectorList(plateType = 'boards:CN'): Promise<Record<string, unknown>[] | null> {
     try {
@@ -292,6 +316,7 @@ export function mixStockIndexExt(DriverClass: typeof import('../common/base.js')
 
 export const STOCKINDEX_HANDLER_CAPS = [
   Capability.STOCK_LIST,
+  Capability.INSTRUMENT_SEARCH,
   Capability.SECTOR_LIST,
   Capability.ETF_LIST,
 ]

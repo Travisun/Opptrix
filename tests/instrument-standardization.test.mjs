@@ -154,6 +154,50 @@ test('Engine resolveInstrumentQueryPlan JP snapshot', () => {
   }
 })
 
+test('Engine resolveInstrumentQueryPlan CN ETF nav uses registry', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'CN', assetClass: 'ETF', symbol: '510300' },
+    'etf_nav',
+  )
+  assert.equal(plan?.kind, 'registry')
+  if (plan?.kind === 'registry') {
+    assert.equal(plan.method, 'etfNav')
+    assert.deepEqual(plan.args, ['510300'])
+  }
+})
+
+test('Engine resolveInstrumentQueryPlan CN ETF snapshot uses composite', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'CN', assetClass: 'ETF', symbol: '510300' },
+    'etf_snapshot',
+  )
+  assert.equal(plan?.kind, 'cn_etf_snapshot')
+  if (plan?.kind === 'cn_etf_snapshot') {
+    assert.equal(plan.symbol, '510300')
+  }
+})
+
+test('AkShare custom methods are registered', async () => {
+  const { listProviderCustomMethods } = await import('../packages/a-stock-layer/dist/core/custom-methods.js')
+  const ak = listProviderCustomMethods('akshare')
+  assert.equal(ak.length, 1)
+  assert.ok(ak[0] && ak[0].methods.length >= 200)
+  assert.ok(ak[0].methods.some(m => m.method === 'bondZhHsDaily'))
+})
+
+test('Engine resolveInstrumentQueryPlan CN instrument_search uses registry', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'CN', assetClass: 'EQUITY', symbol: '000001' },
+    'instrument_search',
+    { keyword: '600519', pageSize: 20 },
+  )
+  assert.equal(plan?.kind, 'registry')
+  if (plan?.kind === 'registry') {
+    assert.equal(plan.method, 'instrumentSearch')
+    assert.deepEqual(plan.args, ['600519', 'CN', 20])
+  }
+})
+
 test('canonical symbol normalization across markets', () => {
   assert.equal(canonicalHkSymbol('700'), '00700')
   assert.equal(canonicalHkSymbol('0700'), '00700')

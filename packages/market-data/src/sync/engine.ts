@@ -32,6 +32,7 @@ import {
   type InitialSyncCallbacks,
 } from './initial-sync.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
+import { cnEtfListRef, cnEtfRef } from './instrument-gateway.js'
 import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
@@ -640,7 +641,10 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const resp = await this.callApi(() => this.de.etfList(), 'default')
+    const resp = await this.callApi(
+      () => this.de.queryInstrumentData(cnEtfListRef(), 'etf_list') as Promise<QueryResult<StockListItem[]>>,
+      'default',
+    )
     if (!resp.success || !resp.data?.length) {
       throw new Error(resp.error ?? 'etfList failed')
     }
@@ -650,18 +654,17 @@ export class MarketDataSyncEngine {
     let success = 0
     for (const [i, item] of resp.data.entries()) {
       if (options.maxStocks && i >= options.maxStocks) break
-      const raw = item as Record<string, unknown>
-      const code = normalizeStockCode(String(raw.code ?? ''))
+      const code = normalizeStockCode(String(item.code ?? ''))
       if (!code) continue
       this.store.upsertInstrument({
         code,
         market: 'CN',
         assetClass: 'ETF',
-        name: String(raw.name ?? ''),
+        name: String(item.name ?? ''),
         exchange: resolveMarket(code),
         status: 'active',
       })
-      this.store.upsertEtfProfile(code, raw)
+      this.store.upsertEtfProfile(code, item as unknown as Record<string, unknown>)
       this.markDone('etf_list', code, '')
       success++
       if (i % 50 === 0) {
@@ -686,7 +689,10 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'etf_nav', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.etfNav(code), 'default')
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(cnEtfRef(code), 'etf_nav') as Promise<QueryResult<unknown[]>>,
+          'default',
+        )
         if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'etfNav failed')
         const rows = resp.data.map(row => {
           const r = row as Record<string, unknown>
@@ -728,7 +734,10 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'etf_holdings', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.etfHoldings(code), 'default')
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(cnEtfRef(code), 'etf_holdings') as Promise<QueryResult<unknown[]>>,
+          'default',
+        )
         if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'etfHoldings failed')
         const rows = resp.data.map(row => {
           const r = row as Record<string, unknown>

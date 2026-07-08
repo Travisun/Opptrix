@@ -7,24 +7,6 @@ const INVOKE = (method: string, args = '["茅台"]') =>
   `engine.invokeCustomMethod("stockindex", "${method}", ${args})`
 
 export const STOCKINDEX_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
-  stockIndexSearch: {
-    method: 'stockIndexSearch',
-    description: '跨市场关键词搜索（CN/HK/US）',
-    sourceUrl: `${BASE}/api/v1/search`,
-    pageUrl: `${BASE}/openapi/`,
-    params: [
-      { name: 'query', type: 'string', description: '搜索词', required: true },
-      { name: 'market', type: 'string', description: 'CN / HK / US，可选' },
-      { name: 'limit', type: 'number', description: '条数，最大 100', default: 20 },
-      { name: 'board', type: 'string', description: '板块 key 过滤' },
-      { name: 'industry', type: 'string', description: '行业代码过滤' },
-      { name: 'assetType', type: 'string', description: 'equity / etf' },
-    ],
-    returns: '[{ query, total, items: StockIndexItem[], source }]',
-    usage: INVOKE('stockIndexSearch', '["600519","CN",20]'),
-    notes: '公开接口无需鉴权；A 股空结果时可由上层回退腾讯搜索。',
-    example: '{"provider":"stockindex","method":"stockIndexSearch","args":["茅台","CN",20]}',
-  },
   stockIndexListStocks: {
     method: 'stockIndexListStocks',
     description: '分页个股列表（多条件筛选）',
