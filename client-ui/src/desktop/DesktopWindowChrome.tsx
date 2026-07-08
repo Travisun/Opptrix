@@ -1,10 +1,10 @@
 import { createPortal } from 'react-dom'
-import type { CSSProperties } from 'react'
+import { cloneElement, isValidElement, useEffect, useState, type CSSProperties, type ReactNode } from 'react'
 import {
   ArrowLeftRegular,
   ArrowRightRegular,
 } from '@fluentui/react-icons'
-import { makeStyles, Text } from '@fluentui/react-components'
+import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
 import { isElectron } from '../platform/detect'
 import {
   DESKTOP_CHROME_BAND_HEIGHT,
@@ -17,10 +17,10 @@ import {
   DESKTOP_TOOL_GAP,
   DESKTOP_TOOL_ICON_SIZE,
   DESKTOP_Z_CHROME_TOOLS,
-  DESKTOP_Z_TITLE,
   DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN,
   DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN,
   SIDEBAR_INLINE_WIDTH,
+  DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
 } from './constants'
 import {
   PanelLeftContractRegular,
@@ -31,8 +31,14 @@ import {
   ArrowMinimizeRegular,
 } from '../chat/chatIcons'
 import { electronPlatform } from '../platform/detect'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { desktopTitleLeft, desktopToolbarLeft, type DesktopViewMode } from './layout'
+import { opptrixCssVars } from '../theme/tokens'
+import {
+  desktopTitleLeft,
+  desktopTitleMaxWidth,
+  desktopTitleZoneRight,
+  desktopToolbarLeft,
+  type DesktopViewMode,
+} from './layout'
 import ChromeToolButton from './ChromeToolButton'
 import WindowControls from './WindowControls'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
@@ -49,7 +55,8 @@ const useStyles = makeStyles({
   },
   drag: {
     position: 'absolute',
-    inset: 0,
+    top: 0,
+    bottom: 0,
     WebkitAppRegion: 'drag',
     pointerEvents: 'auto',
   },
@@ -62,24 +69,37 @@ const useStyles = makeStyles({
     gap: `${DESKTOP_TOOL_GAP}px`,
     pointerEvents: 'auto',
     WebkitAppRegion: 'no-drag',
-    zIndex: 1,
+    zIndex: 4,
     transitionProperty: 'left',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
   title: {
-    position: 'fixed',
+    position: 'absolute',
     top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
     height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
     display: 'flex',
     alignItems: 'center',
-    maxWidth: 'min(480px, 46vw)',
+    minWidth: 0,
     pointerEvents: 'none',
     WebkitAppRegion: 'drag',
-    zIndex: DESKTOP_Z_TITLE,
-    transitionProperty: 'left',
+    zIndex: 2,
+    transitionProperty: 'left, max-width',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+  },
+  titleInteractive: {
+    pointerEvents: 'auto',
+    WebkitAppRegion: 'no-drag',
+    zIndex: 5,
+  },
+  titleSlotWrap: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    minWidth: 0,
+    maxWidth: '100%',
+    pointerEvents: 'auto',
+    WebkitAppRegion: 'no-drag',
   },
   titleText: {
     fontSize: '13px',
@@ -106,11 +126,12 @@ const useStyles = makeStyles({
 
 interface DesktopWindowChromeProps {
   title: string
+  /** 可点击标题与工具菜单；未提供时使用纯文本标题 */
+  titleSlot?: ReactNode
   viewMode?: DesktopViewMode
   sidebarOpen?: boolean
   sidebarInline?: boolean
   showSidebarToggle?: boolean
-  /** Overlay mode: hover toolbar button to reveal sidebar */
   sidebarHoverReveal?: boolean
   canGoBack?: boolean
   canGoForward?: boolean
@@ -120,15 +141,47 @@ interface DesktopWindowChromeProps {
   onGoBack?: () => void
   onGoForward?: () => void
   rightPanelOpen?: boolean
-  /** Width of the open right panel — used to clip global drag off panel title bar. */
   rightPanelWidth?: number
+  chatColumnWidth?: number
+  chatAreaLeft?: number
   onToggleRightPanel?: () => void
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
 }
 
+function resolveDragRightClip(
+  isNews: boolean,
+  isSettings: boolean,
+  rightPanelOpen: boolean,
+  chatColumnVisible: boolean,
+  sidebarInline: boolean,
+  rightPanelWidth: number,
+): Pick<CSSProperties, 'right' | 'width' | 'pointerEvents' | 'WebkitAppRegion'> {
+  if (isNews) {
+    const right = electronPlatform() === 'darwin'
+      ? DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN
+      : DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN
+    return { right: `${right}px` }
+  }
+  if (isSettings || !rightPanelOpen) return {}
+  if (!chatColumnVisible) {
+    if (sidebarInline) {
+      return { right: `calc(100% - ${SIDEBAR_INLINE_WIDTH}px)` }
+    }
+    return {
+      width: 0,
+      overflow: 'hidden',
+      pointerEvents: 'none',
+      WebkitAppRegion: 'no-drag',
+    }
+  }
+  if (rightPanelWidth > 0) return { right: `${rightPanelWidth}px` }
+  return {}
+}
+
 export default function DesktopWindowChrome({
   title,
+  titleSlot,
   viewMode = 'chat',
   sidebarOpen = false,
   sidebarInline = false,
@@ -143,12 +196,23 @@ export default function DesktopWindowChrome({
   onGoForward,
   rightPanelOpen = false,
   rightPanelWidth = 0,
+  chatColumnWidth,
+  chatAreaLeft = 0,
   onToggleRightPanel,
   chatColumnVisible = true,
   onToggleChatColumn,
 }: DesktopWindowChromeProps) {
   const s = useStyles()
   const macFullscreen = useElectronFullscreen()
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280,
+  )
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   if (!isElectron()) return null
 
@@ -157,33 +221,35 @@ export default function DesktopWindowChrome({
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
-
-  /** Clip global drag off interactive title bands (news actions, right panel, etc.). */
-  const dragLayerStyle: CSSProperties = (() => {
-    if (isNews) {
-      const right = electronPlatform() === 'darwin'
-        ? DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN
-        : DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN
-      return { right: `${right}px` }
-    }
-    if (isSettings || !rightPanelOpen) return {}
-    if (!chatColumnVisible) {
-      if (sidebarInline) {
-        return { right: `calc(100% - ${SIDEBAR_INLINE_WIDTH}px)` }
-      }
-      return {
-        width: 0,
-        overflow: 'hidden',
-        pointerEvents: 'none',
-        WebkitAppRegion: 'no-drag',
-      }
-    }
-    if (rightPanelWidth > 0) return { right: `${rightPanelWidth}px` }
-    return {}
-  })()
-
-  /** Page title in the chrome band (news uses its own in-page title bar). */
+  const showTitleBarActions = !isSettings && !rightPanelOpen && Boolean(onToggleRightPanel || onToggleChatColumn)
+  const titleMaxWidth = desktopTitleMaxWidth({
+    titleLeft,
+    viewportWidth,
+    rightPanelOpen,
+    rightPanelWidth,
+    chatColumnVisible,
+    reserveTitleBarActions: showTitleBarActions,
+    titleBarActionsRight,
+    titleBarActionsWidth: DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
+    chatColumnWidth,
+    chatAreaLeft,
+  })
+  const titleZoneRight = desktopTitleZoneRight(titleLeft, titleMaxWidth)
   const showPageTitle = !isNews && !isSettings && chatColumnVisible
+  const interactiveTitle = showPageTitle && Boolean(titleSlot)
+
+  const titleSlotWithLayout = titleSlot && isValidElement(titleSlot)
+    ? cloneElement(titleSlot, { maxWidth: titleMaxWidth } as { maxWidth: number })
+    : titleSlot
+
+  const dragRightClip = resolveDragRightClip(
+    isNews,
+    isSettings,
+    rightPanelOpen,
+    chatColumnVisible,
+    sidebarInline,
+    rightPanelWidth,
+  )
 
   const handleSidebarPointer = () => {
     if (sidebarHoverReveal) {
@@ -204,14 +270,41 @@ export default function DesktopWindowChrome({
 
   return createPortal(
     <>
-      {showPageTitle && (
-        <div className={s.title} style={{ left: `${titleLeft}px` }}>
-          <Text className={s.titleText}>{title || (isNews ? '新闻中心' : '新对话')}</Text>
-        </div>
-      )}
-
       <header className={s.chromeBar} aria-label="窗口标题栏">
-        <div className={s.drag} style={dragLayerStyle} aria-hidden />
+        {interactiveTitle ? (
+          <>
+            <div
+              className={s.drag}
+              style={{ left: 0, width: `${titleLeft}px` }}
+              aria-hidden
+            />
+            <div
+              className={s.drag}
+              style={{ left: `${titleZoneRight}px`, right: 0, ...dragRightClip }}
+              aria-hidden
+            />
+          </>
+        ) : (
+          <div className={s.drag} style={{ left: 0, right: 0, ...dragRightClip }} aria-hidden />
+        )}
+
+        {showPageTitle && (
+          <div
+            className={mergeClasses(s.title, titleSlot && s.titleInteractive)}
+            style={{
+              left: `${titleLeft}px`,
+              maxWidth: `${titleMaxWidth}px`,
+            }}
+          >
+            {titleSlotWithLayout ? (
+              <div className={s.titleSlotWrap}>
+                {titleSlotWithLayout}
+              </div>
+            ) : (
+              <Text className={s.titleText}>{title || '新对话'}</Text>
+            )}
+          </div>
+        )}
 
         <div className={s.toolbar} style={{ left: `${toolbarLeft}px` }}>
           {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (

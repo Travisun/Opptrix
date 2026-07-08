@@ -15,7 +15,7 @@ import {
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
-  clearSessionArchiveFolder,
+  clearSessionArchiveFolder, renameSession,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -34,11 +34,14 @@ import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
+import ChatSessionTitleTools from './ChatSessionTitleTools'
+import { sessionToMarkdown } from './sessionExportMarkdown'
+import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -222,6 +225,7 @@ export default function ChatApp() {
   const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
   const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
+  const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [input, setInput] = useState('')
@@ -282,6 +286,7 @@ export default function ChatApp() {
   const loadSession = useCallback(async (id: string) => {
     const data = await getSession(id)
     setActiveId(id)
+    setActiveSessionMeta(data.session)
     setMessages(data.messages)
     setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
@@ -368,6 +373,7 @@ export default function ChatApp() {
       const list = await refreshSessions()
       setSessions(list)
       setActiveId(session.id)
+      setActiveSessionMeta(session)
       setMessages([])
       setContextRef(null)
       setSessionModelState(undefined)
@@ -408,6 +414,7 @@ export default function ChatApp() {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
         }
@@ -428,6 +435,7 @@ export default function ChatApp() {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
@@ -478,6 +486,7 @@ export default function ChatApp() {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
@@ -498,6 +507,7 @@ export default function ChatApp() {
           await loadSession(list[0].id)
         } else {
           setActiveId(null)
+          setActiveSessionMeta(null)
           setMessages([])
           setContextRef(null)
           setSessionModelState(undefined)
@@ -507,6 +517,42 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '删除失败')
     }
   }, [activeId, loadSession, refreshArchived, refreshSessions])
+
+  const handleRenameSession = useCallback(async (title: string) => {
+    if (!activeId) return
+    try {
+      const { session } = await renameSession(activeId, title)
+      setActiveSessionMeta(prev => prev && prev.id === activeId
+        ? { ...prev, title: session.title, updatedAt: session.updatedAt }
+        : prev)
+      setSessions(prev => prev.map(sess =>
+        sess.id === activeId ? { ...sess, title: session.title, updatedAt: session.updatedAt } : sess,
+      ))
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重命名失败')
+    }
+  }, [activeId])
+
+  const handleArchiveActiveSession = useCallback(async (folderId: string) => {
+    if (!activeId) return
+    await handleArchive(activeId, folderId)
+  }, [activeId, handleArchive])
+
+  const handleDeleteActiveSession = useCallback(async () => {
+    if (!activeId) return
+    await handleDelete(activeId)
+  }, [activeId, handleDelete])
+
+  const handleExportSession = useCallback(async () => {
+    if (!activeId || !activeSessionMeta) return
+    try {
+      const md = sessionToMarkdown(activeSessionMeta, messages)
+      const result = await saveTextFileWithDialog(md, activeSessionMeta.title)
+      if (!result) return
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '导出失败')
+    }
+  }, [activeId, activeSessionMeta, messages])
 
   const handleSidebarListTabChange = useCallback((tab: SidebarListTab) => {
     setSidebarListTab(tab)
@@ -645,6 +691,7 @@ export default function ChatApp() {
         setActiveId(sid)
       }
       const fresh = await getSession(sid)
+      setActiveSessionMeta(fresh.session)
       setMessages(fresh.messages)
       setContextRef(fresh.contextRef ?? null)
       setSessionModelState(fresh.session.model)
@@ -658,6 +705,7 @@ export default function ChatApp() {
       if (aborted) {
         try {
           const fresh = await getSession(sessionId)
+          setActiveSessionMeta(fresh.session)
           setMessages(fresh.messages)
           setContextRef(fresh.contextRef ?? null)
           setSessionModelState(fresh.session.model)
@@ -672,6 +720,7 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '发送失败')
       try {
         const fresh = await getSession(sessionId)
+        setActiveSessionMeta(fresh.session)
         setMessages(fresh.messages)
         setContextRef(fresh.contextRef ?? null)
       } catch {
@@ -776,6 +825,7 @@ export default function ChatApp() {
       const list = await refreshSessions()
       setSessions(list)
       setActiveId(session.id)
+      setActiveSessionMeta(session)
       setMessages([])
       const data = await setSessionContext(session.id, nextRef)
       setContextRef(data.contextRef ?? nextRef)
@@ -819,12 +869,37 @@ export default function ChatApp() {
     }
   }
 
-  const activeSession = sessions.find(x => x.id === activeId)
+  const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
   const isNews = view === 'news'
   const chromeTitle = isNews ? '新闻中心' : (activeSession?.title ?? '新对话')
   const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
+
+  const sessionTitleTools = view === 'chat' && !isNews ? (
+    <ChatSessionTitleTools
+      title={activeSession?.title ?? '新对话'}
+      sessionId={activeId}
+      variant="chrome"
+      textClassName="opptrix-desktop-title-text"
+      onRename={handleRenameSession}
+      onArchive={handleArchiveActiveSession}
+      onDelete={() => { void handleDeleteActiveSession() }}
+      onExport={handleExportSession}
+    />
+  ) : null
+
+  const chatTitleSlot = view === 'chat' && !isNews ? (
+    <ChatSessionTitleTools
+      title={activeSession?.title ?? '新对话'}
+      sessionId={activeId}
+      variant="header"
+      onRename={handleRenameSession}
+      onArchive={handleArchiveActiveSession}
+      onDelete={() => { void handleDeleteActiveSession() }}
+      onExport={handleExportSession}
+    />
+  ) : null
 
   const handleEdgeRevealSidebar = useCallback(() => {
     if (isSettings) {
@@ -871,6 +946,7 @@ export default function ChatApp() {
       {electronChrome && (
         <DesktopWindowChrome
           title={chromeTitle}
+          titleSlot={sessionTitleTools}
           viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
@@ -887,6 +963,8 @@ export default function ChatApp() {
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
+          chatColumnWidth={view === 'chat' && !isMobile && chatVisible && showSplitter ? chatWidth : undefined}
+          chatAreaLeft={sidebarInlineVisible ? SIDEBAR_INLINE_WIDTH : 0}
           chatColumnVisible={view === 'chat' && !isMobile ? chatVisible : undefined}
           onToggleRightPanel={view === 'chat' && !isMobile ? handleToggleRightPanel : undefined}
           onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
@@ -990,6 +1068,7 @@ export default function ChatApp() {
                 <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
                   <ChatView
                     title={activeSession?.title ?? '新对话'}
+                    titleSlot={electronChrome ? undefined : chatTitleSlot}
                     sessionId={activeId}
                     welcomeEpoch={welcomeEpoch}
                     chatScrollEpoch={chatScrollEpoch}

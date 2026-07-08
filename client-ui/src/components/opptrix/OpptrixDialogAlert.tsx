@@ -12,6 +12,7 @@ import {
   DialogBody,
   DialogTitle,
   DialogContent,
+  DialogActions,
   Text,
   makeStyles,
   mergeClasses,
@@ -54,25 +55,6 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
     whiteSpace: 'pre-wrap',
   },
-  actions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    alignItems: 'center',
-    flexWrap: 'wrap',
-    gap: '8px',
-    paddingTop: '2px',
-  },
-  confirmDanger: {
-    backgroundColor: opptrixCssVars.error,
-    color: '#FFFFFF',
-    ':hover': {
-      backgroundColor: opptrixCssVars.error,
-      opacity: 0.92,
-    },
-    ':active': {
-      opacity: 0.85,
-    },
-  },
 })
 
 export function OpptrixDialogAlert({
@@ -91,33 +73,36 @@ export function OpptrixDialogAlert({
   return (
     <Dialog
       open={open}
+      modalType="alert"
       onOpenChange={(_, data) => {
         if (!data.open) onCancel()
       }}
     >
       <DialogSurface className="opptrix-glass-dialog-surface opptrix-dialog-alert-surface">
-        <DialogBody>
-          <DialogTitle>{title}</DialogTitle>
+        <DialogBody className="opptrix-dialog-alert-body">
+          <DialogTitle className="opptrix-dialog-alert-title">{title}</DialogTitle>
           {message != null && message !== '' && (
-            <DialogContent>
+            <DialogContent className="opptrix-dialog-alert-content">
               {typeof message === 'string'
                 ? <Text className={s.message} block>{message}</Text>
                 : message}
             </DialogContent>
           )}
-          <div className={mergeClasses(s.actions, 'opptrix-dialog-alert-actions')}>
+          <DialogActions className="opptrix-dialog-alert-actions">
             <OpptrixButton variant="ghost" onClick={onCancel}>
               {cancelLabel}
             </OpptrixButton>
             <OpptrixButton
               variant="primary"
               disabled={confirmDisabled}
-              className={confirmTone === 'danger' ? s.confirmDanger : undefined}
+              className={mergeClasses(
+                confirmTone === 'danger' && 'opptrix-btn-danger',
+              )}
               onClick={onConfirm}
             >
               {confirmLabel}
             </OpptrixButton>
-          </div>
+          </DialogActions>
         </DialogBody>
       </DialogSurface>
     </Dialog>

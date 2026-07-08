@@ -9,6 +9,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   getIsFullscreen: () => ipcRenderer.invoke('window-is-fullscreen'),
   pickExportDirectory: () => ipcRenderer.invoke('pick-export-directory'),
   writeBinaryFile: (payload) => ipcRenderer.invoke('write-binary-file', payload),
+  pickSaveFile: (payload) => ipcRenderer.invoke('pick-save-file', payload),
+  writeTextFile: (payload) => ipcRenderer.invoke('write-text-file', payload),
   openExternalUrl: (url) => ipcRenderer.invoke('open-external-url', url),
   clientVersion: () => ipcRenderer.invoke('client-version'),
   appUpdateGetStatus: () => ipcRenderer.invoke('app-update-get-status'),

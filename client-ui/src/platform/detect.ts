@@ -13,6 +13,14 @@ declare global {
         filename: string
         data: ArrayBuffer
       }) => Promise<string>
+      pickSaveFile?: (payload: {
+        defaultPath?: string
+        title?: string
+      }) => Promise<string | null>
+      writeTextFile?: (payload: {
+        filePath: string
+        text: string
+      }) => Promise<string>
       openExternalUrl?: (url: string) => Promise<boolean>
       clientVersion?: () => Promise<string>
       appUpdateGetStatus?: () => Promise<AppUpdateStatus>
@@ -37,6 +45,10 @@ declare global {
       signalShellReady?: () => void
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
+    showSaveFilePicker?: (options?: {
+      suggestedName?: string
+      types?: Array<{ description?: string; accept: Record<string, string[]> }>
+    }) => Promise<FileSystemFileHandle>
   }
 }
 

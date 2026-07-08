@@ -135,6 +135,13 @@ const useStyles = makeStyles({
     gap: '4px',
     flexShrink: 0,
   },
+  headerTitleSlot: {
+    flex: '1 1 auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    display: 'flex',
+    alignItems: 'center',
+  },
   title: {
     fontSize: '14px',
     fontWeight: 500,
@@ -218,6 +225,8 @@ const WELCOME_LETTER_BASE_DELAY_S = 0.55
 
 interface ChatViewProps {
   title?: string
+  /** 顶栏标题区（可点击工具菜单）；未提供时使用纯文本 */
+  titleSlot?: React.ReactNode
   sessionId?: string | null
   welcomeEpoch?: number
   chatScrollEpoch?: number
@@ -256,7 +265,7 @@ interface ChatViewProps {
 }
 
 export default function ChatView({
-  title = '新对话', sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
+  title = '新对话', titleSlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -486,7 +495,9 @@ export default function ChatView({
       {!isMobile && !electronChrome && (
         <div className={s.header}>
           <div className={s.headerInner}>
-            <Text className={s.title}>{title || '新对话'}</Text>
+            <div className={s.headerTitleSlot}>
+              {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
+            </div>
             {!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
               <div className={s.headerActions}>
                 {onToggleChatColumn && (
