@@ -223,6 +223,82 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
   }
 
   /**
+   * 主板国企股列表（mstats hk_mb_hscei）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=main_China&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_mb_hscei&module=HK&type=MBHSCEI
+   */
+  p.tencentHkMbHsceiStockList = async function tencentHkMbHsceiStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'MBHSCEI', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
+   * 主板红筹股列表（mstats hk_mb_hscci）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=main_red&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_mb_hscci&module=HK&type=MBHSCCI
+   */
+  p.tencentHkMbHscciStockList = async function tencentHkMbHscciStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'MBHSCCI', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
+   * 牛证列表（mstats hk_cbbc_pull）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=niuxiong_niu&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_cbbc_pull&module=HK&type=BULL
+   */
+  p.tencentHkBullWarrantList = async function tencentHkBullWarrantList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'BULL', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
+   * 熊证列表（mstats hk_cbbc_bear）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=niuxiong_xiong&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_cbbc_bear&module=HK&type=BEAR
+   */
+  p.tencentHkBearWarrantList = async function tencentHkBearWarrantList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'BEAR', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
    * 首页行业热度排行（板块平均涨跌幅 + 领涨股）。
    *
    * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank?l=10&p=1&t=averatio&o=0

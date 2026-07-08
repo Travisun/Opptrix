@@ -113,6 +113,74 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     example: '{"provider":"tencent","method":"tencentHkAhStockList","args":[1,20,32,"desc"]}',
   },
 
+  tencentHkMbHsceiStockList: {
+    method: 'tencentHkMbHsceiStockList',
+    description: '港股主板国企股列表（含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=main_China&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_mb_hscei&module=HK&type=MBHSCEI`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅（默认），或 price/change_rate', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "main_China", boardKey: "MBHSCEI", boardLabel: "主板国企股", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentHkMbHsceiStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentHkStockList("MBHSCEI", ...)；上游 board=main_China。',
+    example: '{"provider":"tencent","method":"tencentHkMbHsceiStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentHkMbHscciStockList: {
+    method: 'tencentHkMbHscciStockList',
+    description: '港股主板红筹股列表（含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=main_red&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_mb_hscci&module=HK&type=MBHSCCI`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅（默认），或 price/change_rate', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "main_red", boardKey: "MBHSCCI", boardLabel: "主板红筹", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentHkMbHscciStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentHkStockList("MBHSCCI", ...)；上游 board=main_red。',
+    example: '{"provider":"tencent","method":"tencentHkMbHscciStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentHkBullWarrantList: {
+    method: 'tencentHkBullWarrantList',
+    description: '港股牛证列表（含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=niuxiong_niu&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_cbbc_pull&module=HK&type=BULL`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅（默认），或 price/change_rate', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "niuxiong_niu", boardKey: "BULL", boardLabel: "牛证", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentHkBullWarrantList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentHkStockList("BULL", ...)；上游 board=niuxiong_niu。牛熊证代码常为 5 位数字。',
+    example: '{"provider":"tencent","method":"tencentHkBullWarrantList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentHkBearWarrantList: {
+    method: 'tencentHkBearWarrantList',
+    description: '港股熊证列表（含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=niuxiong_xiong&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_cbbc_bear&module=HK&type=BEAR`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅（默认），或 price/change_rate', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "niuxiong_xiong", boardKey: "BEAR", boardLabel: "熊证", page, pageSize, total, items, source }]',
+    usage: INVOKE('tencentHkBearWarrantList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentHkStockList("BEAR", ...)；上游 board=niuxiong_xiong。',
+    example: '{"provider":"tencent","method":"tencentHkBearWarrantList","args":[1,20,32,"desc"]}',
+  },
+
   tencentUsTechStockList: {
     method: 'tencentUsTechStockList',
     description: '美股科技股排行列表（含最新价、涨跌幅、市值、市盈率等行情摘要）',

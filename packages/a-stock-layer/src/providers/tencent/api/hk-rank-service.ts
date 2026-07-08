@@ -15,7 +15,11 @@ export const TENCENT_HK_BOARD_MAP = {
   hk_mb: 'main_all',
   主板: 'main_all',
   MBHSCEI: 'main_China',
+  hk_mb_hscei: 'main_China',
+  国企股: 'main_China',
   MBHSCCI: 'main_red',
+  hk_mb_hscci: 'main_red',
+  红筹股: 'main_red',
   GEM: 'gem_all',
   GEMHSCEI: 'gem_China',
   GEMHSCCI: 'gem_red',
@@ -32,14 +36,18 @@ export const TENCENT_HK_BOARD_MAP = {
   PUT: 'warrant_put',
   CBBC: 'niuxiong_all',
   BULL: 'niuxiong_niu',
+  hk_cbbc_pull: 'niuxiong_niu',
+  牛证: 'niuxiong_niu',
   BEAR: 'niuxiong_xiong',
+  hk_cbbc_bear: 'niuxiong_xiong',
+  熊证: 'niuxiong_xiong',
 } as const
 
 export type TencentHkBoardKey = keyof typeof TENCENT_HK_BOARD_MAP
 
 const BOARD_LABEL: Record<string, string> = {
   main_all: '港股主板',
-  main_China: '主板国企指数',
+  main_China: '主板国企股',
   main_red: '主板红筹',
   gem_all: '港股创业板',
   gem_China: '创业板国企',
@@ -153,6 +161,10 @@ export function resolveTencentHkBoard(board: string): string {
   if (lower === 'main' || lower === '主板' || lower === 'hk_mb') return TENCENT_HK_BOARD_MAP.MB
   if (lower === 'gem' || lower === '创业板') return TENCENT_HK_BOARD_MAP.GEM
   if (lower === 'ah' || lower === 'ah股' || lower === 'hk_ah' || lower === 'a+h') return TENCENT_HK_BOARD_MAP.AH
+  if (lower === 'hk_mb_hscei' || lower === 'mbhscei' || lower.includes('国企')) return TENCENT_HK_BOARD_MAP.MBHSCEI
+  if (lower === 'hk_mb_hscci' || lower === 'mbhscci' || lower === '红筹' || lower === '红筹股') return TENCENT_HK_BOARD_MAP.MBHSCCI
+  if (lower === 'hk_cbbc_pull' || lower === 'bull' || lower === '牛证') return TENCENT_HK_BOARD_MAP.BULL
+  if (lower === 'hk_cbbc_bear' || lower === 'bear' || lower === '熊证') return TENCENT_HK_BOARD_MAP.BEAR
   return TENCENT_HK_BOARD_MAP.MB
 }
 
@@ -166,6 +178,10 @@ export function resolveTencentHkBoardKey(board: string): string {
   if (resolved === TENCENT_HK_BOARD_MAP.MB) return 'MB'
   if (resolved === TENCENT_HK_BOARD_MAP.GEM) return 'GEM'
   if (resolved === TENCENT_HK_BOARD_MAP.AH) return 'AH'
+  if (resolved === TENCENT_HK_BOARD_MAP.MBHSCEI) return 'MBHSCEI'
+  if (resolved === TENCENT_HK_BOARD_MAP.MBHSCCI) return 'MBHSCCI'
+  if (resolved === TENCENT_HK_BOARD_MAP.BULL) return 'BULL'
+  if (resolved === TENCENT_HK_BOARD_MAP.BEAR) return 'BEAR'
   return input || 'MB'
 }
 
