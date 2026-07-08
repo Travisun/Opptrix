@@ -24,87 +24,57 @@ export const UNIFIED_CN_ANALYTICS_TOOLS = [
   'get_instrument_cyq',
 ] as const
 
-const CN_EQUITY_SCREEN_TOOLS = [
-  'get_market_db_status',
-  'get_market_db_sync_state',
-  'trigger_market_db_sync',
-  'get_local_universe_screen_schema',
-  'screen_local_universe',
-  'list_local_industries',
-  'screen_local_industry_stocks',
-  'screen_local_etfs',
-  'get_etf_scorecard',
+const CN_EQUITY_ONLINE_TOOLS = [
+  'screen_stocks',
+  'search_instruments',
+  'batch_instrument_snapshots',
+  'institution_rating',
+  ...UNIFIED_INSTRUMENT_MINING_TOOLS,
+  'verify_instrument_strategy',
+  'get_instrument_cyq',
+  'get_instrument_latest_evaluation',
 ] as const
 
 const REGIONAL_MINING_TOOLS = [
-  'get_market_db_status',
-  'search_local_instruments',
+  'search_instruments',
+  ...UNIFIED_INSTRUMENT_MINING_TOOLS,
 ] as const
 
-function regionalMiningTools(schema: string, screen: string): readonly string[] {
-  return [...REGIONAL_MINING_TOOLS, schema, screen, ...UNIFIED_INSTRUMENT_MINING_TOOLS]
-}
-
 const BLOCKED_REGIONAL_MINING_TOOLS = [
-  'get_market_db_status',
-  'search_local_instruments',
+  'search_instruments',
   ...UNIFIED_INSTRUMENT_MINING_TOOLS,
 ] as const
 
 /** Agent 挖掘工具组 — 与 packages/agent tool-meta 对齐 */
 export const DISCOVER_MINING_TOOL_GROUPS = {
-  cn_equity_full: [
-    ...CN_EQUITY_SCREEN_TOOLS,
-    'search_local_instruments',
-    'batch_instrument_snapshots',
-    'institution_rating',
-    ...UNIFIED_INSTRUMENT_MINING_TOOLS,
-    'verify_instrument_strategy',
-    'get_instrument_cyq',
-    'get_instrument_latest_evaluation',
-  ],
+  cn_equity_full: [...CN_EQUITY_ONLINE_TOOLS],
   cn_etf: [
-    'get_market_db_status',
-    'get_local_etf_screen_schema',
-    'screen_local_etfs',
-    'get_etf_scorecard',
+    'search_etfs',
     'get_etf_snapshot',
     'get_etf_nav',
     'get_etf_holdings',
-    'search_local_instruments',
+    'search_instruments',
     'get_instrument_snapshot',
     'evaluate_instrument',
     'get_instrument_strategy_signal',
   ],
   us_equity: [
-    'get_market_db_status',
-    'get_local_us_screen_schema',
-    'screen_local_us_stocks',
-    'search_local_instruments',
+    'search_us_stocks',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
   crypto_spot: [
-    'get_market_db_status',
-    'get_local_crypto_screen_schema',
-    'screen_local_crypto_pairs',
-    'search_local_instruments',
+    'search_crypto_pairs',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
-  jp_equity: BLOCKED_REGIONAL_MINING_TOOLS,
-  kr_equity: BLOCKED_REGIONAL_MINING_TOOLS,
-  hk_equity: regionalMiningTools(
-    'get_local_hk_screen_schema',
-    'screen_local_hk_stocks',
-  ),
+  jp_equity: [...BLOCKED_REGIONAL_MINING_TOOLS],
+  kr_equity: [...BLOCKED_REGIONAL_MINING_TOOLS],
+  hk_equity: [...REGIONAL_MINING_TOOLS],
+  none: [] as const,
 } as const satisfies Record<string, readonly string[]>
 
-export type DiscoverMiningToolGroupName = keyof typeof DISCOVER_MINING_TOOL_GROUPS
-
-export function discoverMiningToolNamesForProfile(profile: DiscoverStrategyProfile): readonly string[] {
-  const def = getDiscoverProfileDefinition(profile)
-  if (!def || def.miningToolGroup === 'none') {
-    return []
-  }
-  const group = def.miningToolGroup as DiscoverMiningToolGroupName
-  return DISCOVER_MINING_TOOL_GROUPS[group] ?? []
+export function discoverMiningToolNamesForProfile(
+  profile: DiscoverStrategyProfile,
+): readonly string[] {
+  const group = getDiscoverProfileDefinition(profile)?.miningToolGroup ?? 'none'
+  return DISCOVER_MINING_TOOL_GROUPS[group] ?? DISCOVER_MINING_TOOL_GROUPS.none
 }

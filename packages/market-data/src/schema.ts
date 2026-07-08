@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 6
+export const SCHEMA_VERSION = 7
 
 export const MIGRATION_SQL = `
 PRAGMA journal_mode = WAL;
@@ -461,4 +461,71 @@ SELECT
   u.updated_at
 FROM v_instruments_unified u
 WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
+`
+
+/** v7 — cross-market bars + taxonomy (initial data layer) */
+export const MIGRATION_V7_SQL = `
+CREATE TABLE IF NOT EXISTS instrument_bars_daily (
+  market TEXT NOT NULL,
+  code TEXT NOT NULL,
+  trade_date TEXT NOT NULL,
+  open REAL,
+  high REAL,
+  low REAL,
+  close REAL,
+  volume REAL,
+  amount REAL,
+  change_pct REAL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (market, code, trade_date)
+);
+
+CREATE INDEX IF NOT EXISTS idx_instrument_bars_market_code
+  ON instrument_bars_daily(market, code, trade_date DESC);
+CREATE INDEX IF NOT EXISTS idx_instrument_bars_date
+  ON instrument_bars_daily(trade_date);
+
+CREATE TABLE IF NOT EXISTS taxonomy_nodes (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  market TEXT NOT NULL,
+  kind TEXT NOT NULL,
+  code TEXT NOT NULL,
+  name TEXT NOT NULL,
+  parent_code TEXT,
+  level INTEGER,
+  stock_count INTEGER,
+  extra TEXT,
+  synced_at TEXT NOT NULL,
+  UNIQUE(market, kind, code)
+);
+
+CREATE INDEX IF NOT EXISTS idx_taxonomy_market_kind ON taxonomy_nodes(market, kind);
+
+CREATE TABLE IF NOT EXISTS instrument_taxonomy (
+  market TEXT NOT NULL,
+  code TEXT NOT NULL,
+  taxonomy_id INTEGER NOT NULL,
+  synced_at TEXT NOT NULL,
+  PRIMARY KEY (market, code, taxonomy_id),
+  FOREIGN KEY (taxonomy_id) REFERENCES taxonomy_nodes(id) ON DELETE CASCADE
+);
+
+CREATE INDEX IF NOT EXISTS idx_instrument_taxonomy_tax ON instrument_taxonomy(taxonomy_id);
+
+INSERT OR IGNORE INTO instrument_bars_daily (
+  market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
+)
+SELECT
+  'CN',
+  code,
+  trade_date,
+  open,
+  high,
+  low,
+  close,
+  volume,
+  amount,
+  change_pct,
+  synced_at
+FROM stock_klines_daily;
 `

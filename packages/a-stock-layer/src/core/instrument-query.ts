@@ -27,6 +27,8 @@ export type InstrumentDataCapability =
   | 'profile'
   | 'financials'
   | 'stock_list'
+  | 'sector_list'
+  | 'etf_list'
 
 /**
  * 标的查询可选参数 — 控制返回数量、关键词、报告日期/类型、周期等。
@@ -42,6 +44,15 @@ export interface InstrumentQueryOpts {
   reportType?: string
   /** K 线周期："daily"、"weekly"、"monthly"、"1m" 等，默认 daily */
   period?: string
+  /** stock_list 分页 */
+  page?: number
+  pageSize?: number
+  /** stock_list 板块过滤（如 hsj、cyb） */
+  boardKey?: string
+  /** stock_list 行业代码过滤（A 股） */
+  industryCode?: string
+  /** sector_list 入参，如 industries:CN、boards:HK */
+  plateType?: string
 }
 
 /**
@@ -153,8 +164,29 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('CN', assetClass, Capability.FINANCIAL_SUMMARY, 'financials', true, [
           symbol, opts.reportDate ?? '', opts.reportType ?? 'annual',
         ])
-      case 'stock_list':
-        return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [opts.keyword ?? ''])
+      case 'stock_list': {
+        const args: unknown[] = [opts.keyword ?? '']
+        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
+        if (opts.boardKey) args.push(opts.boardKey)
+        if (opts.industryCode) args.push(opts.industryCode)
+        return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
+      }
+      case 'sector_list':
+        return registryPlan(
+          'CN',
+          'EQUITY',
+          Capability.SECTOR_LIST,
+          'sectorList',
+          true,
+          [opts.plateType ?? 'industries:CN'],
+        )
+      case 'etf_list':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return registryPlan('CN', 'ETF', Capability.ETF_LIST, 'etfList', true, [
+            'CN', opts.keyword ?? '',
+          ])
+        }
+        return null
       default:
         return null
     }
@@ -178,8 +210,21 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, [
           sym, opts.reportDate ?? '', opts.reportType ?? 'annual',
         ])
-      case 'stock_list':
-        return registryPlan('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, ['US', opts.keyword ?? ''])
+      case 'stock_list': {
+        const args: unknown[] = ['US', opts.keyword ?? '']
+        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
+        if (opts.boardKey) args.push(opts.boardKey)
+        return registryPlan('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
+      }
+      case 'sector_list':
+        return registryPlan(
+          'US',
+          'EQUITY',
+          Capability.SECTOR_LIST,
+          'sectorList',
+          true,
+          [opts.plateType ?? 'boards:US'],
+        )
       default:
         return null
     }
@@ -198,8 +243,21 @@ export function resolveInstrumentQueryPlan(
         ])
       case 'snapshot':
         return { kind: 'composite_snapshot', market, symbol: sym }
-      case 'stock_list':
-        return registryPlan(market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [market, opts.keyword ?? ''])
+      case 'stock_list': {
+        const args: unknown[] = [market, opts.keyword ?? '']
+        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
+        if (opts.boardKey) args.push(opts.boardKey)
+        return registryPlan(market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
+      }
+      case 'sector_list':
+        return registryPlan(
+          market,
+          'EQUITY',
+          Capability.SECTOR_LIST,
+          'sectorList',
+          true,
+          [opts.plateType ?? `boards:${market}`],
+        )
       default:
         return null
     }

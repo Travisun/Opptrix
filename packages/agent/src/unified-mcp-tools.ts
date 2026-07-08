@@ -82,6 +82,7 @@ function legacyCodeFrom(args: Record<string, unknown>): string | undefined {
 }
 
 export const UNIFIED_INSTRUMENT_TOOL_NAMES = [
+  'search_instruments',
   'get_instrument_capabilities',
   'get_instrument_snapshot',
   'get_instrument_quotes',
@@ -148,6 +149,17 @@ export function buildUnifiedInstrumentTools(
   S: SchemaFn,
 ): UnifiedInstrumentToolDef[] {
   return [
+    {
+      name: 'search_instruments',
+      category: '跨市场标的',
+      description: '按代码或名称在线搜索标的（CN/US/HK/Crypto 等）',
+      parameters: S({
+        keyword: { type: 'string', description: '搜索关键词' },
+        markets: { type: 'array', description: '可选市场过滤，如 CN、US、CRYPTO' },
+        limit: { type: 'number', description: '返回条数，默认 30，最大 50' },
+      }, ['keyword']),
+      handler: (a) => d('instrument_search', a),
+    },
     {
       name: 'get_instrument_capabilities',
       category: '跨市场标的',

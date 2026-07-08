@@ -1,7 +1,6 @@
 export type SettingsSection =
   | 'general'
   | 'models'
-  | 'market_data'
   | 'data_providers'
   | 'discover_strategies'
   | 'news_feed'

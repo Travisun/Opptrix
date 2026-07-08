@@ -190,7 +190,7 @@ export class ToolRegistry {
       },
       {
         name: 'screen_stocks', category: '选股',
-        description: '按因子条件筛选股票（优先本地 L0 初选库，未就绪时在线扫描）',
+        description: '按因子条件在线筛选股票',
         parameters: S({
           conditions: { type: 'array', description: '条件数组 [{factor, op, value}]，op 为 > >= < <= =' },
           scorecard: { type: 'string', description: '评分卡' },
@@ -199,214 +199,10 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('screening', { conditions: a.conditions, scorecard: a.scorecard, top_n: a.top_n ?? 20 }),
       },
       {
-        name: 'get_market_db_status', category: '本地数据',
-        description: '查询本地初选数据库就绪状态、股票数量、因子日期与 bootstrap 覆盖率',
-        parameters: S({}),
-        handler: () => d('market_db_status', {}),
-      },
-      {
-        name: 'list_local_screen_factors', category: '本地数据',
-        description: '列出本地初选库可用于筛选的因子字段（PE/ROE/动量/量比等）',
-        parameters: S({}),
-        handler: () => d('list_screen_factors', {}),
-      },
-      {
-        name: 'get_local_universe_screen_schema', category: '本地数据',
-        description: '获取本地初选多维度筛选说明：因子单位/区间、行业/板块/评分/市值过滤格式与示例',
-        parameters: S({}),
-        handler: () => d('local_universe_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_universe', category: '本地数据',
-        description: '本地初选库多维度组合筛选（因子条件 + 行业/板块/评分/估值/市值 + 排序）',
-        parameters: S({
-          factor_conditions: {
-            type: 'array',
-            description: '因子条件 [{factor, op, value}]，op 为 > >= < <= =，AND 组合，最多 8 条',
-          },
-          industry_contains: { type: 'string', description: '行业关键词模糊匹配' },
-          industries: { type: 'array', description: '行业名称精确匹配列表' },
-          markets: { type: 'array', description: '交易所板块：SH / SZ / BJ' },
-          min_total_score: { type: 'number', description: '综合评分下限 0-100' },
-          max_total_score: { type: 'number', description: '综合评分上限 0-100' },
-          min_market_cap_yi: { type: 'number', description: '总市值下限（亿元）' },
-          max_market_cap_yi: { type: 'number', description: '总市值上限（亿元）' },
-          min_pe: { type: 'number', description: 'PE 下限（倍）' },
-          max_pe: { type: 'number', description: 'PE 上限（倍）' },
-          min_pb: { type: 'number', description: 'PB 下限（倍）' },
-          max_pb: { type: 'number', description: 'PB 上限（倍）' },
-          exclude_st: { type: 'boolean', description: '是否排除 ST，默认 true' },
-          scorecard: { type: 'string', description: '评分卡，默认综合评估' },
-          sort_by: { type: 'string', description: '排序字段：total_score / pe / pb / market_cap / 因子名' },
-          sort_order: { type: 'string', description: 'asc 或 desc，默认 desc' },
-          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD，默认最新' },
-          top_n: { type: 'number', description: '返回条数 1-200，默认 40' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_universe_screen', a),
-      },
-      {
-        name: 'list_local_industries', category: '本地数据',
-        description: '列出本地初选库中的行业名称（含股票数、均分/估值），支持关键词过滤',
-        parameters: S({
-          keyword: { type: 'string', description: '行业名称关键词，如「半导体」「银行」' },
-          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD，默认最新' },
-          limit: { type: 'number', description: '返回行业数上限 1-500，默认 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_industry_list', a),
-      },
-      {
-        name: 'screen_local_industry_stocks', category: '本地数据',
-        description: '在指定行业内筛选本地股票（因子条件 + 评分/估值 + 排序），行业名须与 list_local_industries 一致',
-        parameters: S({
-          industry: { type: 'string', description: '行业精确名称（推荐，来自 list_local_industries）' },
-          industries: { type: 'array', description: '多个行业精确匹配（与 industry 可叠加）' },
-          industry_contains: { type: 'string', description: '行业关键词模糊匹配（不知精确名时用）' },
-          factor_conditions: {
-            type: 'array',
-            description: '因子条件 [{factor, op, value}]，AND 组合，最多 8 条',
-          },
-          min_total_score: { type: 'number', description: '综合评分下限 0-100' },
-          max_total_score: { type: 'number', description: '综合评分上限 0-100' },
-          min_pe: { type: 'number', description: 'PE 下限（倍）' },
-          max_pe: { type: 'number', description: 'PE 上限（倍）' },
-          min_pb: { type: 'number', description: 'PB 下限（倍）' },
-          max_pb: { type: 'number', description: 'PB 上限（倍）' },
-          exclude_st: { type: 'boolean', description: '是否排除 ST，默认 true' },
-          scorecard: { type: 'string', description: '评分卡，默认综合评估' },
-          sort_by: { type: 'string', description: '排序：total_score / pe / pb / market_cap / 因子名' },
-          sort_order: { type: 'string', description: 'asc 或 desc，默认 desc' },
-          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD' },
-          top_n: { type: 'number', description: '返回条数 1-200，默认 40' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_industry_screen', a),
-      },
-      {
-        name: 'local_screen_stocks', category: '本地数据',
-        description: '使用本地 L0 因子库快速初选，不拉取全市场在线数据',
-        parameters: S({
-          conditions: { type: 'array', description: '条件数组 [{factor, op, value}]' },
-          top_n: { type: 'number', description: '返回条数，默认60' },
-        }, ['conditions']),
-        handler: (a: Record<string, unknown>) => d('screening', { conditions: a.conditions, scorecard: '综合评估', top_n: a.top_n ?? 60 }),
-      },
-      {
-        name: 'get_local_industry_stocks', category: '本地数据',
-        description: '按行业名称获取本地成分股列表（价量、评分），不做因子筛选',
-        parameters: S({
-          industry: { type: 'string', description: '行业精确名称，来自 list_local_industries' },
-          trade_date: { type: 'string', description: '交易日 YYYY-MM-DD' },
-          limit: { type: 'number', description: '返回条数 1-200，默认 120' },
-        }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('market_industry_stocks', a),
-      },
-      {
-        name: 'get_industry_stats', category: '本地数据',
-        description: '本地行业截面统计：股票数、均分、均 PE/PB',
-        parameters: S({
-          trade_date: { type: 'string', description: '可选交易日 YYYY-MM-DD' },
-        }),
-        handler: (a: Record<string, unknown>) => d('market_industry_stats', { trade_date: a.trade_date }),
-      },
-      {
-        name: 'batch_stock_snapshots', category: '本地数据',
-        description: '批量获取候选股的本地截面快照（行业、评分、估值、初选因子）',
-        parameters: S({
-          codes: { type: 'array', description: '股票代码列表，建议不超过80' },
-        }, ['codes']),
-        handler: (a: Record<string, unknown>) => d('instrument_batch_snapshots', {
-          instruments: instrumentRefsFromList(a.codes, 'CN'),
-        }),
-      },
-      {
-        name: 'get_market_db_sync_state', category: '本地数据',
-        description: '查询本地数据同步任务进度与最近更新时间',
-        parameters: S({}),
-        handler: () => d('market_db_sync_state', {}),
-      },
-      {
-        name: 'trigger_market_db_sync', category: '本地数据',
-        description: '后台触发本地市场数据同步（resume/bootstrap），用于本地因子库未就绪时',
-        parameters: S({
-          mode: { type: 'string', description: 'resume 或 bootstrap，默认 resume' },
-          background: { type: 'boolean', description: '是否后台执行，默认 true' },
-        }),
-        handler: (a: Record<string, unknown>) => d('market_db_sync', {
-          mode: a.mode ?? 'resume',
-          background: a.background ?? true,
-        }),
-      },
-      {
-        name: 'get_stock_quotes', category: '本地数据',
-        description: '批量获取股票实时行情（价量、涨跌幅）',
-        parameters: S({
-          codes: { type: 'array', description: '股票代码列表' },
-        }, ['codes']),
-        handler: (a: Record<string, unknown>) => d('instrument_quotes', {
-          instruments: instrumentRefsFromList(a.codes, 'CN'),
-        }),
-      },
-      {
         name: 'get_watchlist', category: '组合管理',
         description: '读取用户关注列表（代码、名称、行业、备注、加入价）',
         parameters: S({}),
         handler: () => d('watchlist_list', {}),
-      },
-      {
-        name: 'get_watchlist_radar', category: '本地数据',
-        description: '关注列表雷达：行情 + 策略信号摘要（codes 为空则使用用户关注列表）',
-        parameters: S({
-          codes: { type: 'array', description: '股票代码列表，省略则读取用户关注列表' },
-        }),
-        handler: (a: Record<string, unknown>) => d('watchlist_radar', { codes: a.codes }),
-      },
-      {
-        name: 'get_stock_kline', category: '本地数据',
-        description: '获取单股日 K 线序列（本地/在线）',
-        parameters: S({
-          code: { type: 'string', description: '6位股票代码' },
-          count: { type: 'number', description: 'K线根数，默认90，最大240' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_chart', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          period: 'daily',
-          count: a.count ?? 90,
-        }),
-      },
-      {
-        name: 'get_stock_cyq', category: '本地数据',
-        description: '获取单股筹码分布（CYQ）',
-        parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_cyq', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
-      },
-      {
-        name: 'get_stock_chart', category: '本地数据',
-        description: '获取单股多周期图表数据（日/周/月/分钟）',
-        parameters: S({
-          code: { type: 'string', description: '6位股票代码' },
-          period: { type: 'string', description: '周期：daily/weekly/monthly/1m/5m 等' },
-          count: { type: 'number', description: '返回条数，0 为默认' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_chart', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          period: a.period ?? 'daily',
-          count: a.count ?? 0,
-        }),
-      },
-      {
-        name: 'get_stock_detail', category: '本地数据',
-        description: '获取单股详情：行情、基本面、财务、新闻、资金流等聚合',
-        parameters: S({ code: { type: 'string', description: '6位股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
-      },
-      {
-        name: 'get_etf_list', category: '本地数据',
-        description: '获取 A 股 ETF 列表（本地优先，含代码、名称、净值摘要）',
-        parameters: S({
-          code: { type: 'string', description: '可选，6 位 ETF 代码过滤单只' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_etf_list', {
-          ...(a.code ? { code: a.code } : {}),
-        }),
       },
       {
         name: 'search_etfs', category: '通用',
@@ -417,202 +213,22 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('search_etfs', { keyword: a.keyword }),
       },
       {
-        name: 'get_etf_snapshot', category: '本地数据',
+        name: 'get_etf_snapshot', category: '通用',
         description: '单只 ETF 快照：概况、净值、实时行情',
         parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
         handler: (a: Record<string, unknown>) => d('etf_snapshot', { code: a.code }),
       },
       {
-        name: 'get_etf_nav', category: '本地数据',
+        name: 'get_etf_nav', category: '通用',
         description: 'ETF 历史净值与溢价率',
         parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('local_etf_nav', { code: a.code }),
+        handler: (a: Record<string, unknown>) => d('etf_nav', { code: a.code }),
       },
       {
-        name: 'get_etf_holdings', category: '本地数据',
+        name: 'get_etf_holdings', category: '通用',
         description: 'ETF 最新披露持仓与权重',
         parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('local_etf_holdings', { code: a.code }),
-      },
-      {
-        name: 'get_local_etf_screen_schema', category: '本地数据',
-        description: '本地 ETF 筛选维度说明（溢价率、规模、跟踪指数等）',
-        parameters: S({}),
-        handler: () => d('local_etf_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_etfs', category: '本地数据',
-        description: '本地 ETF 筛选：按折溢价率、规模（亿元）、跟踪指数等条件过滤',
-        parameters: S({
-          min_premium_rate: { type: 'number', description: '折溢价率下限（%）' },
-          max_premium_rate: { type: 'number', description: '折溢价率上限（%）' },
-          min_scale_yi: { type: 'number', description: '规模下限（亿元）' },
-          max_scale_yi: { type: 'number', description: '规模上限（亿元）' },
-          keyword: { type: 'string', description: '代码或名称关键词' },
-          tracking_index_contains: { type: 'string', description: '跟踪指数关键词' },
-          sort_by: { type: 'string', description: 'premium_rate | scale_yi | nav | code | name' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_etf_screen', a),
-      },
-      {
-        name: 'get_etf_scorecard', category: '本地数据',
-        description: '单只 A 股 ETF 决策雷达：折溢价、规模流动性、费率、净值稳健与同类对比（0–100 分）',
-        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('etf_scorecard', { code: a.code }),
-      },
-      {
-        name: 'get_etf_scorecard_schema', category: '本地数据',
-        description: 'ETF 决策雷达评分维度与权重说明',
-        parameters: S({}),
-        handler: () => d('etf_scorecard_schema', {}),
-      },
-      {
-        name: 'get_local_us_screen_schema', category: '本地数据',
-        description: '本地美股列表筛选维度说明（keyword、行业等）',
-        parameters: S({}),
-        handler: () => d('local_us_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_us_stocks', category: '本地数据',
-        description: '本地美股列表筛选：按 ticker/公司名、行业关键词过滤',
-        parameters: S({
-          keyword: { type: 'string', description: 'ticker 或公司名关键词' },
-          industry_contains: { type: 'string', description: '行业关键词' },
-          sort_by: { type: 'string', description: 'code | name' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_us_screen', a),
-      },
-      {
-        name: 'get_local_crypto_screen_schema', category: '本地数据',
-        description: '本地 Crypto 交易对筛选维度说明（quote、base 等）',
-        parameters: S({}),
-        handler: () => d('local_crypto_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_crypto_pairs', category: '本地数据',
-        description: '本地 Crypto 交易对筛选：按 keyword、quote、base_contains 过滤',
-        parameters: S({
-          keyword: { type: 'string', description: '交易对或名称关键词' },
-          quote: { type: 'string', description: '计价币，如 USDT、BTC' },
-          base_contains: { type: 'string', description: '基础币前缀，如 BTC、ETH' },
-          sort_by: { type: 'string', description: 'code | name | quote' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_crypto_screen', a),
-      },
-      {
-        name: 'get_local_jp_screen_schema', category: '本地数据',
-        description: '本地日股列表筛选维度说明（keyword、行业等）',
-        parameters: S({}),
-        handler: () => d('local_jp_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_jp_stocks', category: '本地数据',
-        description: '本地日股列表筛选：按代码/公司名、行业关键词过滤',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或公司名关键词' },
-          industry_contains: { type: 'string', description: '行业关键词' },
-          sort_by: { type: 'string', description: 'code | name' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_jp_screen', a),
-      },
-      {
-        name: 'get_local_kr_screen_schema', category: '本地数据',
-        description: '本地韩股列表筛选维度说明（keyword、行业等）',
-        parameters: S({}),
-        handler: () => d('local_kr_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_kr_stocks', category: '本地数据',
-        description: '本地韩股列表筛选：按代码/公司名、行业关键词过滤',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或公司名关键词' },
-          industry_contains: { type: 'string', description: '行业关键词' },
-          sort_by: { type: 'string', description: 'code | name' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_kr_screen', a),
-      },
-      {
-        name: 'get_local_hk_screen_schema', category: '本地数据',
-        description: '本地港股列表筛选维度说明（keyword、行业等）',
-        parameters: S({}),
-        handler: () => d('local_hk_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_hk_stocks', category: '本地数据',
-        description: '本地港股列表筛选：按代码/公司名、行业关键词过滤',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或公司名关键词' },
-          industry_contains: { type: 'string', description: '行业关键词' },
-          sort_by: { type: 'string', description: 'code | name' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_hk_screen', a),
-      },
-      {
-        name: 'search_local_instruments', category: '本地数据',
-        description: '跨市场本地标的搜索（CN/US/HK/JP/KR/Crypto instruments 表）',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或名称关键词' },
-          limit: { type: 'number', description: '返回条数，默认 30' },
-          markets: { type: 'array', description: '可选市场过滤，如 US、JP' },
-        }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('instrument_search', a),
-      },
-      {
-        name: 'get_us_stock_quote', category: '本地数据',
-        description: '获取单只美股实时行情',
-        parameters: S({
-          symbol: { type: 'string', description: '美股 ticker，如 AAPL' },
-        }, ['symbol']),
-        handler: (a: Record<string, unknown>) => {
-          const ref = resolveInstrumentFromParams({ market: 'US', symbol: a.symbol ?? a.code })
-          return d('instrument_quotes', { instruments: ref ? [ref] : [] })
-        },
-      },
-      {
-        name: 'get_us_stock_kline', category: '本地数据',
-        description: '获取美股日 K 线',
-        parameters: S({
-          symbol: { type: 'string', description: '美股 ticker' },
-          count: { type: 'number', description: 'K 线根数，默认 180' },
-        }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('instrument_chart', {
-          ...normalizeInstrumentHubParams({ market: 'US', symbol: a.symbol ?? a.code }),
-          period: 'daily',
-          count: a.count ?? 180,
-        }),
-      },
-      {
-        name: 'get_us_stock_profile', category: '本地数据',
-        description: '获取美股公司概况',
-        parameters: S({ symbol: { type: 'string', description: '美股 ticker' } }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('us_profile', { symbol: a.symbol ?? a.code }),
-      },
-      {
-        name: 'get_us_stock_financials', category: '本地数据',
-        description: '美股财报摘要（营收、净利、EPS、ROE 等；需 TickFlow 已配置）',
-        parameters: S({
-          symbol: { type: 'string', description: '美股 ticker' },
-          report_type: { type: 'string', description: 'annual 或 quarter，默认 annual' },
-        }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('us_financials', {
-          symbol: a.symbol ?? a.code,
-          report_type: a.report_type,
-        }),
-      },
-      {
-        name: 'get_us_stock_snapshot', category: '本地数据',
-        description: '单只美股快照：概况、行情、近期 K 线',
-        parameters: S({ symbol: { type: 'string', description: '美股 ticker' } }, ['symbol']),
-        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({
-          market: 'US',
-          symbol: a.symbol ?? a.code,
-        })),
+        handler: (a: Record<string, unknown>) => d('etf_holdings', { code: a.code }),
       },
       {
         name: 'search_us_stocks', category: '通用',
@@ -622,34 +238,6 @@ export class ToolRegistry {
           keyword: a.keyword,
           markets: ['US'],
         }),
-      },
-      {
-        name: 'get_crypto_quote', category: '本地数据',
-        description: 'Crypto 交易对实时行情（如 BTC/USDT）',
-        parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
-        handler: (a: Record<string, unknown>) => {
-          const ref = resolveInstrumentFromParams({ code: a.pair ?? a.symbol })
-          return d('instrument_quotes', { instruments: ref ? [ref] : [] })
-        },
-      },
-      {
-        name: 'get_crypto_kline', category: '本地数据',
-        description: 'Crypto 交易对日 K 线',
-        parameters: S({
-          pair: { type: 'string', description: '交易对，如 BTC/USDT' },
-          count: { type: 'number', description: 'K 线根数，默认 180' },
-        }, ['pair']),
-        handler: (a: Record<string, unknown>) => d('instrument_chart', {
-          ...normalizeInstrumentHubParams({ code: a.pair ?? a.symbol }),
-          period: 'daily',
-          count: a.count ?? 180,
-        }),
-      },
-      {
-        name: 'get_crypto_snapshot', category: '本地数据',
-        description: 'Crypto 交易对快照：行情 + 近期 K 线',
-        parameters: S({ pair: { type: 'string', description: '交易对，如 BTC/USDT' } }, ['pair']),
-        handler: (a: Record<string, unknown>) => d('instrument_snapshot', normalizeInstrumentHubParams({ code: a.pair ?? a.symbol })),
       },
       {
         name: 'search_crypto_pairs', category: '通用',
@@ -671,9 +259,12 @@ export class ToolRegistry {
       },
       {
         name: 'search_stocks', category: '通用',
-        description: '按代码或名称关键词搜索本地股票池（market.db universe）',
+        description: '按代码或名称关键词在线搜索 A 股标的',
         parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('search_stocks', { keyword: a.keyword }),
+        handler: (a: Record<string, unknown>) => d('instrument_search', {
+          keyword: a.keyword,
+          markets: ['CN'],
+        }),
       },
       {
         name: 'get_strategy_signal', category: '策略',
@@ -821,7 +412,7 @@ export class ToolRegistry {
       },
       {
         name: 'get_latest_evaluation', category: '通用',
-        description: '读取本地最近一次的因子评估快照',
+        description: '读取最近一次评估缓存（会话内 evaluate 结果）',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
         handler: (a: Record<string, unknown>) => d('latest_evaluation', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
@@ -845,11 +436,7 @@ export class ToolRegistry {
       },
     ]
     const unifiedTools = buildUnifiedInstrumentTools(d, S)
-    const searchIdx = tools.findIndex(t => t.name === 'search_local_instruments')
-    const merged = searchIdx >= 0
-      ? [...tools.slice(0, searchIdx + 1), ...unifiedTools, ...tools.slice(searchIdx + 1)]
-      : [...tools, ...unifiedTools]
-    return merged.map(t => ({ ...t, meta: TOOL_META[t.name] }))
+    return [...tools, ...unifiedTools].map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }
 
   private buildBasicTools(): ToolDef[] {

@@ -12,7 +12,6 @@ import SettingsSidebar, {
 import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
-import MarketDataSettingsSection from './settings/MarketDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
@@ -569,8 +568,6 @@ function SettingsPageView({
           </div>
         )
 
-      case 'market_data':
-        return <MarketDataSettingsSection />
 
       case 'data_providers':
         return <DataProvidersSettingsSection />
@@ -660,7 +657,6 @@ function SettingsPageView({
 
             <div className={mergeClasses(
               s.contentBody,
-              section === 'market_data' && s.contentBodyCompact,
               section === 'data_providers' && s.contentBodyCompact,
               section === 'discover_strategies' && s.contentBodyFill,
             )}>

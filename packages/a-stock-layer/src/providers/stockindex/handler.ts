@@ -12,6 +12,7 @@ import {
   stockIndexListIndustryStocks,
   stockIndexListStocks,
   stockIndexSearch,
+  type StockIndexItem,
 } from './api/client.js'
 import { parseStockIndexMarket, stockIndexItemsToListRows } from './normalize.js'
 
@@ -37,26 +38,50 @@ function resolveMarketAndKeyword(marketOrKeyword: string, keyword?: string) {
 export class StockIndexHandler extends MarketHandlerShell {
   readonly selfThrottled = true
 
-  async stockList(marketOrKeyword = '', keyword = ''): Promise<StockListItem[] | null> {
+  async stockList(marketOrKeyword = '', keyword = '', page = 1, pageSize = 100, board?: string, industry?: string): Promise<StockListItem[] | null> {
     try {
       const parsed = resolveMarketAndKeyword(marketOrKeyword, keyword || undefined)
       const market = parsed.market
       const q = parsed.keyword
-      const board = 'board' in parsed ? parsed.board : undefined
+      const boardKey = board ?? ('board' in parsed ? parsed.board : undefined)
 
       if (q) {
-        const resp = await stockIndexSearch(q, { market, limit: 50, board })
+        const resp = await stockIndexSearch(q, { market, limit: 50, board: boardKey })
         const rows = stockIndexItemsToListRows(resp.items ?? [])
         return rows.length ? rows : null
       }
 
-      if (board) {
-        const resp = await stockIndexListBoardStocks(board, { market, pageSize: 100 })
+      if (boardKey) {
+        const resp = await stockIndexListBoardStocks(boardKey, { market, page, pageSize })
         const rows = stockIndexItemsToListRows(resp.items ?? [])
         return rows.length ? rows : null
       }
 
-      const resp = await stockIndexListStocks({ market, pageSize: 100 })
+      if (industry) {
+        const resp = await stockIndexListIndustryStocks(industry, { page, pageSize })
+        const rows = stockIndexItemsToListRows(resp.items ?? [])
+        return rows.length ? rows : null
+      }
+
+      if (!page || page === 1) {
+        const allItems: StockIndexItem[] = []
+        let p = 1
+        const size = Math.min(Math.max(pageSize, 1), 100)
+        while (p <= 400) {
+          const resp = await stockIndexListStocks({ market, page: p, pageSize: size })
+          const batch = resp.items ?? []
+          allItems.push(...batch)
+          const total = resp.total ?? 0
+          if (!batch.length) break
+          if (total > 0 && allItems.length >= total) break
+          if (batch.length < size) break
+          p++
+        }
+        const rows = stockIndexItemsToListRows(allItems)
+        return rows.length ? rows : null
+      }
+
+      const resp = await stockIndexListStocks({ market, page, pageSize })
       const rows = stockIndexItemsToListRows(resp.items ?? [])
       return rows.length ? rows : null
     } catch {
@@ -102,11 +127,26 @@ export class StockIndexHandler extends MarketHandlerShell {
 
   async etfList(_market = 'CN', keyword = ''): Promise<StockListItem[] | null> {
     try {
-      const resp = await stockIndexListEtfs({
-        pageSize: 100,
-        q: keyword.trim() || undefined,
-      })
-      const rows = stockIndexItemsToListRows(resp.items ?? [])
+      const q = keyword.trim()
+      if (q) {
+        const resp = await stockIndexListEtfs({ pageSize: 100, q })
+        const rows = stockIndexItemsToListRows(resp.items ?? [])
+        return rows.length ? rows : null
+      }
+      const allItems: StockIndexItem[] = []
+      let page = 1
+      const pageSize = 100
+      while (page <= 50) {
+        const resp = await stockIndexListEtfs({ page, pageSize })
+        const batch = resp.items ?? []
+        allItems.push(...batch)
+        const total = resp.total ?? 0
+        if (!batch.length) break
+        if (total > 0 && allItems.length >= total) break
+        if (batch.length < pageSize) break
+        page++
+      }
+      const rows = stockIndexItemsToListRows(allItems)
       return rows.length ? rows : null
     } catch {
       return null

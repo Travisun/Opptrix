@@ -1,5 +1,5 @@
 import type Database from 'better-sqlite3'
-import { MIGRATION_SQL, MIGRATION_V2_SQL, MIGRATION_V3_SQL, MIGRATION_V4_SQL, MIGRATION_V5_SQL, MIGRATION_V6_SQL, SCHEMA_VERSION } from './schema.js'
+import { MIGRATION_SQL, MIGRATION_V2_SQL, MIGRATION_V3_SQL, MIGRATION_V4_SQL, MIGRATION_V5_SQL, MIGRATION_V6_SQL, MIGRATION_V7_SQL, SCHEMA_VERSION } from './schema.js'
 
 function currentVersion(db: Database.Database): number {
   const row = db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number | null } | undefined
@@ -43,8 +43,15 @@ export function migrate(db: Database.Database): void {
       new Date().toISOString(),
     )
   }
-  if (currentVersion(db) < SCHEMA_VERSION) {
+  if (currentVersion(db) < 6) {
     db.exec(MIGRATION_V6_SQL)
+    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(
+      6,
+      new Date().toISOString(),
+    )
+  }
+  if (currentVersion(db) < SCHEMA_VERSION) {
+    db.exec(MIGRATION_V7_SQL)
     db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(
       SCHEMA_VERSION,
       new Date().toISOString(),

@@ -11,6 +11,7 @@ import {
 import { allJobsForEnabledPacks } from './sync/market-packs.js'
 import type { MarketDataPackConfig, MarketDataPackId, SupplementPackId } from '@opptrix/shared'
 import { hydrateStocks, type HydrateManifest } from './sync/hydrate.js'
+import { LOCAL_OFFLINE_SCREENING_ENABLED } from './sync/instrument-gateway.js'
 import {
   exportMarketDataPackage,
   importMarketDataPackageToDisk,
@@ -81,6 +82,10 @@ export class MarketDataService {
     return this.store.getStatus()
   }
 
+  isOfflineScreeningEnabled() {
+    return LOCAL_OFFLINE_SCREENING_ENABLED
+  }
+
   syncState(): SyncStateSnapshot {
     return this.coordinator.getSnapshot()
   }
@@ -135,8 +140,7 @@ export class MarketDataService {
   }
 
   autoSyncOnBoot() {
-    this.coordinator.autoSyncOnBoot()
-    this.coordinator.startRefreshScheduler()
+    // 本地离线市场库已停用
   }
 
   /** @deprecated Use autoSyncOnBoot */

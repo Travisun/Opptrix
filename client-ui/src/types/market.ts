@@ -378,6 +378,11 @@ export interface MarketDbStatusData {
   is_ready: boolean
   bootstrap?: {
     ready: boolean
+    initial_cn?: boolean
+    initial_hk?: boolean
+    initial_us?: boolean
+    initial_cn_etf?: boolean
+    initial_taxonomy?: boolean
     universe: boolean
     quotes: boolean
     klines: boolean

@@ -133,7 +133,7 @@ export class ResearchHub {
   private readonly stockNameCache = new Map<string, string>()
 
   initMarketDataAutoSync(): void {
-    this.marketData.autoSyncOnBoot()
+    // 本地离线市场库已停用，不再自动同步
   }
 
   /** @deprecated Use initMarketDataAutoSync */
@@ -394,31 +394,6 @@ export class ResearchHub {
     const conditions = (params.conditions ?? []) as { factor: string; op: string; value: number }[]
     const scorecard = String(params.scorecard ?? '综合评估')
     const topN = Number(params.top_n ?? 20)
-    const localStatus = this.marketData.status()
-
-    if (localStatus.is_ready && conditions.length) {
-      const data = this.marketData.screen(
-        conditions as never[],
-        topN,
-      )
-      const topCodes = data.items.map(i => i.code).slice(0, Math.min(topN, 30))
-      if (topCodes.length) {
-        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
-      }
-      return ok({
-        total_scanned: localStatus.stock_count,
-        passed: data.passed,
-        scorecard,
-        source: 'local',
-        trade_date: data.trade_date,
-        items: data.items.map(i => ({
-          code: i.code,
-          name: i.name,
-          total_score: i.total_score ?? 0,
-          key_factors: i.key_factors as Record<string, number>,
-        })),
-      }, `本地扫描 ${localStatus.stock_count} 只，通过 ${data.passed}`, t0)
-    }
 
     const data = await this.screener.run(conditions as never[], scorecard, topN)
     return ok({
@@ -428,29 +403,20 @@ export class ResearchHub {
     }, `在线扫描 ${data.totalScanned} 通过 ${data.passed}`, t0)
   }
 
+  private failLocalOffline(t0: number, hint?: string) {
+    return fail(hint ?? '本地离线数据已停用，请使用 instrument_search、instrument_evaluation、instrument_chart 等在线能力', t0)
+  }
+
   private marketDbStatus(t0: number) {
-    return ok(this.marketData.status(), '本地指标库状态', t0)
+    return this.failLocalOffline(t0)
   }
 
   private marketDbSyncState(t0: number) {
-    return ok(this.marketData.syncState(), '同步状态', t0)
+    return this.failLocalOffline(t0)
   }
 
   private marketDataPacks(t0: number) {
-    const config = this.marketData.marketPackConfig()
-    const status = this.marketData.status()
-    return ok({
-      config,
-      counts: {
-        cn_stocks: status.stock_count,
-        cn_etfs: status.etf_count,
-        us: status.us_count,
-        crypto: status.crypto_count,
-        jp: status.jp_count ?? 0,
-        kr: status.kr_count ?? 0,
-        hk: status.hk_count ?? 0,
-      },
-    }, '市场数据包', t0)
+    return this.failLocalOffline(t0)
   }
 
   private discoverReadinessContext(): DiscoverProfileReadinessContext {
@@ -495,202 +461,67 @@ export class ResearchHub {
   }
 
   private marketDataPacksSave(params: Record<string, unknown>, t0: number) {
-    const patch = params.patch as Record<string, { enabled?: boolean }> | undefined
-    if (!patch || typeof patch !== 'object') return fail('缺少 patch', t0)
-    const config = this.marketData.updateMarketPackConfig(patch)
-    return ok({ config }, '已保存', t0)
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private async marketDataPackPrepare(params: Record<string, unknown>, t0: number) {
-    const pack = String(params.pack ?? '').trim().toLowerCase()
-    const allowed = new Set(['cn', 'us', 'crypto', 'hk', 'jp', 'kr'])
-    if (!allowed.has(pack)) {
-      return fail('pack 须为 cn、us、crypto、hk、jp 或 kr', t0)
-    }
-    const force = params.force === true
-    const result = await this.marketData.prepareMarketPack(pack as import('@opptrix/shared').MarketDataPackId, force)
-    const msg = result.started ? '数据包准备已在后台启动' : '同步任务进行中'
-    return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private async marketDbSync(params: Record<string, unknown>, t0: number) {
-    const force = params.force === true
-    const modeRaw = params.mode != null ? String(params.mode) : 'auto'
-    const maxStocks = params.max_stocks != null ? Number(params.max_stocks) : undefined
-    const jobs = Array.isArray(params.jobs) ? (params.jobs as string[]) : undefined
-    const profile = params.profile != null ? String(params.profile) : undefined
-
-    let result: Awaited<ReturnType<typeof this.marketData.syncAdaptive>>
-    let planLabel: string
-
-    if (force || modeRaw === 'full') {
-      const enabledJobs = this.marketData.planSync(true).jobs
-      const r = await this.marketData.sync({
-        mode: 'full',
-        maxStocks,
-        jobs: jobs ?? [...enabledJobs],
-        force: true,
-        profile,
-        background: true,
-      })
-      result = { ...r, plan: { mode: 'full' as const, jobs: jobs ?? [], label: '全量重拉' } }
-      planLabel = '全量重拉'
-    } else if (modeRaw === 'resume' || modeRaw === 'incremental') {
-      const r = await this.marketData.sync({
-        mode: modeRaw,
-        maxStocks,
-        jobs,
-        force,
-        profile,
-        background: true,
-      })
-      planLabel = modeRaw === 'resume' ? '接续同步' : '增量同步'
-      result = { ...r, plan: { mode: modeRaw, jobs: jobs ?? [], label: planLabel } }
-    } else {
-      result = await this.marketData.syncAdaptive(force)
-      planLabel = result.plan.label
-    }
-
-    const msg = result.started
-      ? `${planLabel}已在后台启动`
-      : '同步任务进行中'
-    return ok({ ...result, state: this.marketData.syncState() }, msg, t0)
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private marketIndustryStats(params: Record<string, unknown>, t0: number) {
-    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
-    const data = this.marketData.industryStats(tradeDate)
-    return ok(
-      { items: data.items, trade_date: data.trade_date, quote_date: data.quote_date },
-      '行业统计',
-      t0,
-    )
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private marketIndustryStocks(params: Record<string, unknown>, t0: number) {
-    const industry = String(params.industry ?? '').trim()
-    if (!industry) return fail('请指定行业', t0)
-    const limit = params.limit != null ? Number(params.limit) : 120
-    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
-    const data = this.marketData.industryStocks(industry, tradeDate, limit)
-    const topCodes = data.items.map(i => i.code).slice(0, 30)
-    if (topCodes.length) {
-      void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
-    }
-    return ok(data, `${industry} ${data.items.length} 只`, t0)
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private localIndustryList(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if (!status.is_ready) {
-      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
-    }
-    const keyword = params.keyword != null ? String(params.keyword) : undefined
-    const tradeDate = params.trade_date ? String(params.trade_date) : undefined
-    const limit = params.limit != null ? Number(params.limit) : undefined
-    const data = this.marketData.industryList(keyword, tradeDate, limit)
-    return ok(data, `本地行业 ${data.total} 个${keyword ? `（含「${keyword}」）` : ''}`, t0)
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private localIndustryScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if (!status.is_ready) {
-      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
-    }
-    try {
-      const data = this.marketData.industryScreen({
-        industry: params.industry as string | undefined,
-        industries: params.industries as string[] | undefined,
-        industry_contains: params.industry_contains as string | undefined,
-        factor_conditions: params.factor_conditions as never,
-        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
-        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
-        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
-        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
-        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
-        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
-        exclude_st: params.exclude_st as boolean | undefined,
-        scorecard: params.scorecard as string | undefined,
-        sort_by: params.sort_by as string | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        trade_date: params.trade_date as string | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      const topCodes = data.items.map(i => i.code).slice(0, Math.min(data.items.length, 30))
-      if (topCodes.length) {
-        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
-      }
-      return ok({
-        source: 'local',
-        trade_date: data.trade_date,
-        scorecard: data.scorecard,
-        total_universe: data.total_universe,
-        passed: data.passed,
-        items: data.items,
-      }, `行业筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e), t0)
-    }
+    void params
+    return this.failLocalOffline(t0)
   }
 
   private listScreenFactors(t0: number) {
-    return ok({ factors: this.marketData.listScreenFactors() }, '本地初选因子列表', t0)
+    return this.failLocalOffline(t0)
   }
 
   private localUniverseScreenSchema(t0: number) {
-    return ok(this.marketData.universeScreenSchema(), '本地初选筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private localUniverseScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if (!status.is_ready) {
-      return fail('本地初选库未就绪，请先完成基础数据构建或调用 trigger_market_db_sync', t0)
-    }
-    try {
-      const data = this.marketData.universeScreen({
-        factor_conditions: params.factor_conditions as never,
-        industry_contains: params.industry_contains as string | undefined,
-        industries: params.industries as string[] | undefined,
-        markets: params.markets as Array<'SH' | 'SZ' | 'BJ'> | undefined,
-        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
-        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
-        min_market_cap_yi: params.min_market_cap_yi != null ? Number(params.min_market_cap_yi) : undefined,
-        max_market_cap_yi: params.max_market_cap_yi != null ? Number(params.max_market_cap_yi) : undefined,
-        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
-        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
-        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
-        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
-        exclude_st: params.exclude_st as boolean | undefined,
-        scorecard: params.scorecard as string | undefined,
-        sort_by: params.sort_by as string | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        trade_date: params.trade_date as string | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      const topCodes = data.items.map(i => i.code).slice(0, Math.min(data.items.length, 30))
-      if (topCodes.length) {
-        void this.marketData.hydrateStocks(topCodes, 'watchlist').catch(() => {})
-      }
-      return ok({
-        source: 'local',
-        trade_date: data.trade_date,
-        scorecard: data.scorecard,
-        total_universe: data.total_universe,
-        passed: data.passed,
-        items: data.items,
-      }, `本地筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e), t0)
-    }
+    void params
+    return this.failLocalOffline(t0)
   }
 
-  private batchStockSnapshots(params: Record<string, unknown>, t0: number) {
+  private async batchStockSnapshots(params: Record<string, unknown>, t0: number) {
     const codes = Array.isArray(params.codes) ? (params.codes as string[]).map(String) : []
-    const limit = Math.min(codes.length, 80)
-    const slice = codes.slice(0, limit)
-    const tradeDate = this.marketData.status().latest_factor_date ?? undefined
-    const items = this.marketData.discoverCandidates(slice, undefined, tradeDate ?? undefined)
-    return ok({ trade_date: tradeDate ?? null, items }, `批量快照 ${items.length} 只`, t0)
+    const slice = codes.slice(0, 80)
+    const items: Record<string, unknown>[] = []
+    for (const code of slice) {
+      const snap = await this.instrumentSnapshot(
+        normalizeInstrumentHubParams({ code, market: 'CN' }),
+        t0,
+      )
+      if (snap.success && snap.data && typeof snap.data === 'object') {
+        items.push(snap.data as Record<string, unknown>)
+      }
+    }
+    return ok({ trade_date: null, items }, `批量快照 ${items.length} 只`, t0)
   }
 
   private instrumentBatchHandlers(t0: number): InstrumentBatchRouteHandlers {
@@ -1074,14 +905,8 @@ export class ResearchHub {
     return normalized
   }
 
-  private async fillMissingStockNames(codes: string[]): Promise<void> {
-    const missing = [...new Set(codes.map(c => normalizeCode(c)).filter(c => this.resolveStockName(c) === c))]
-    if (!missing.length) return
-
-    const metaBatch = this.marketData.store.stockMetaBatch(missing)
-    for (const [code, meta] of metaBatch) {
-      if (meta.name && meta.name !== code) this.stockNameCache.set(code, meta.name)
-    }
+  private async fillMissingStockNames(_codes: string[]): Promise<void> {
+    // 名称由在线行情回填，不再读本地 universe
   }
 
   private async stockQuotes(codes: string[] | undefined, t0: number) {
@@ -1111,21 +936,6 @@ export class ResearchHub {
     if (!normalized.length) return ok({ items: [] as WatchlistRadarItem[] }, '暂无 A 股关注', t0)
 
     await this.fillMissingStockNames(normalized)
-    void this.marketData.hydrateStocks(normalized, 'watchlist').catch(() => {})
-
-    const localRows = this.marketData.status().is_ready
-      ? this.marketData.radarBatch(normalized) as {
-          code: string
-          name: string
-          total_score: number | null
-          scorecard: string | null
-          pe: number | null
-          pb: number | null
-          pe_percentile: number | null
-          pb_percentile: number | null
-        }[]
-      : []
-    const localByCode = new Map(localRows.map(row => [row.code, row]))
 
     const quoteByCode = new Map<string, { name?: string; pe?: number | null; pb?: number | null }>()
     try {
@@ -1138,7 +948,7 @@ export class ResearchHub {
     }
 
     const items = await Promise.all(
-      normalized.map(code => this.buildWatchlistRadarItem(code, localByCode.get(code), quoteByCode.get(code))),
+      normalized.map(code => this.buildWatchlistRadarItem(code, undefined, quoteByCode.get(code))),
     )
     return ok({ items }, `雷达 ${items.length} 只`, t0)
   }
@@ -1298,48 +1108,17 @@ export class ResearchHub {
     code: string,
     quoteRaw: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0] | null,
   ) {
-    const normalizedCode = normalizeCode(code)
     const normalized = quoteRaw ? normalizePreOpenRealtimeQuote(quoteRaw) : null
-    const local = this.marketData.localLatestQuote(normalizedCode)
-    const needsLocal = isMissingLivePrice(normalized?.price) && local?.close != null && local.close > 0
-
-    if (!normalized && !needsLocal) return null
-    if (!needsLocal) return normalized ? this.enrichQuote(normalized) : null
-
-    const merged = {
-      code: normalizedCode,
-      name: normalized?.name ?? local?.name ?? code,
-      price: local!.close!,
-      changePct: normalized?.changePct ?? local?.change_pct ?? 0,
-      pe: normalized?.pe ?? local?.pe ?? null,
-      pb: normalized?.pb ?? local?.pb ?? null,
-      turnoverRate: normalized?.turnoverRate ?? null,
-      preClose: normalized?.preClose ?? local?.close ?? null,
-      open: normalized?.open ?? null,
-      high: normalized?.high ?? null,
-      low: normalized?.low ?? null,
-      volume: normalized?.volume ?? null,
-      amount: normalized?.amount ?? null,
-      marketCap: normalized?.marketCap ?? local?.market_cap ?? null,
-      change: normalized?.change ?? 0,
-      amplitude: normalized?.amplitude ?? null,
-    }
-    return this.enrichQuote(merged)
+    if (!normalized) return null
+    return this.enrichQuote(normalized)
   }
 
   private fetchLocalChartKlines(
-    code: string,
-    safeCount: number,
-    before: string,
+    _code: string,
+    _safeCount: number,
+    _before: string,
   ): { klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null {
-    if (!isBseCode(code)) return null
-    const limit = before ? 200 : safeCount
-    const klines = this.marketData.localDailyKlines(code, limit, before || undefined)
-    if (!klines.length) return null
-    return {
-      klines,
-      hasMore: klines.length >= limit && klines.length < 800,
-    }
+    return null
   }
 
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
@@ -1564,21 +1343,6 @@ export class ResearchHub {
     const quoteR = await this.stockRealtime(code, explicitMarket)
     let quote = quoteR.data?.[0] ?? null
     if (quote) quote = normalizePreOpenRealtimeQuote(quote)
-    if (isMissingLivePrice(quote?.price)) {
-      const local = this.marketData.localLatestQuote(normalized)
-      if (local?.close != null && local.close > 0) {
-        quote = {
-          code: normalized,
-          name: quote?.name ?? local.name ?? normalized,
-          price: local.close,
-          changePct: quote?.changePct ?? local.change_pct ?? 0,
-          pe: quote?.pe ?? local.pe ?? null,
-          pb: quote?.pb ?? local.pb ?? null,
-          turnoverRate: quote?.turnoverRate ?? null,
-          preClose: quote?.preClose ?? local.close ?? null,
-        }
-      }
-    }
     const preClose = quote?.preClose ?? null
     const name = this.resolveStockName(code, quote?.name)
 
@@ -1881,105 +1645,43 @@ export class ResearchHub {
   }
 
   private async localEtfList(params: Record<string, unknown>, t0: number) {
-    const limit = params.limit != null ? Number(params.limit) : 5000
-    const items = this.marketData.listLocalEtfs(limit)
-    if (items.length) {
-      return ok({ items, count: items.length, source: 'local' }, `本地 ETF ${items.length} 只`, t0)
-    }
     return this.etfList(params, t0)
   }
 
   private async localEtfNav(code: string, params: Record<string, unknown>, t0: number) {
-    const limit = params.limit != null ? Number(params.limit) : 120
-    const local = this.marketData.localEtfNav(code, limit)
-    if (local.length) {
-      return ok({ code, items: local, source: 'local' }, `本地 ETF 净值 ${local.length} 条`, t0)
-    }
+    void params
     return this.etfNav(code, t0)
   }
 
   private async localEtfHoldings(code: string, params: Record<string, unknown>, t0: number) {
-    const limit = params.limit != null ? Number(params.limit) : 100
-    const local = this.marketData.localEtfHoldings(code, limit)
-    if (local.length) {
-      return ok({ code, items: local, source: 'local' }, `本地 ETF 持仓 ${local.length} 条`, t0)
-    }
+    void params
     return this.etfHoldings(code, t0)
   }
 
   private localEtfScreenSchema(t0: number) {
-    return ok(this.marketData.etfScreenSchema(), '本地 ETF 筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private localEtfScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if (status.etf_count < 1) {
-      return fail('本地 ETF 库为空，请先完成 etf_list / etf_nav 同步', t0)
-    }
-    try {
-      const data = this.marketData.etfScreen({
-        min_premium_rate: params.min_premium_rate != null ? Number(params.min_premium_rate) : undefined,
-        max_premium_rate: params.max_premium_rate != null ? Number(params.max_premium_rate) : undefined,
-        min_scale_yi: params.min_scale_yi != null ? Number(params.min_scale_yi) : undefined,
-        max_scale_yi: params.max_scale_yi != null ? Number(params.max_scale_yi) : undefined,
-        keyword: params.keyword as string | undefined,
-        tracking_index_contains: params.tracking_index_contains as string | undefined,
-        fund_type_contains: params.fund_type_contains as string | undefined,
-        sort_by: params.sort_by as 'premium_rate' | 'scale_yi' | 'nav' | 'code' | 'name' | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      return ok({
-        source: 'local',
-        total_universe: data.total_universe,
-        passed: data.passed,
-        items: data.items,
-      }, `ETF 筛选 ${data.total_universe} 只，命中 ${data.passed} 只，返回 ${data.items.length} 只`, t0)
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e), t0)
-    }
+    void params
+    return this.failLocalOffline(t0)
   }
 
-  private etfScorecard(code: string, t0: number) {
+  private async etfScorecard(code: string, t0: number) {
     const trimmed = code.trim()
     if (!trimmed) return fail('code 必填', t0)
-    const status = this.marketData.status()
-    if (status.etf_count < 1) {
-      return fail('本地 ETF 库为空，请先完成 etf_list / etf_nav 同步', t0)
-    }
-    const data = this.marketData.etfScorecard(trimmed)
-    if (!data) return fail(`未找到 ETF ${trimmed}，请确认代码或先同步 etf_list`, t0)
-    const scoreLabel = data.total_score != null ? `${data.total_score} 分` : '待评估'
-    return ok(data, `${data.name} ETF 决策雷达 ${scoreLabel}`, t0)
+    return this.instrumentEvaluation(
+      normalizeInstrumentHubParams({ code: trimmed, market: 'CN', assetClass: 'ETF' }),
+      t0,
+    )
   }
 
   private etfScorecardSchema(t0: number) {
-    return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
-  private localInsightsForRef(ref: InstrumentRef): LocalInstrumentInsights | null {
-    if (ref.market !== 'CN') return null
-    if (ref.assetClass !== 'EQUITY' && ref.assetClass !== 'ETF') return null
-    if (!this.marketData.status().is_ready) return null
-    const rows = this.marketData.radarBatch([ref.symbol]) as Array<{
-      total_score?: number | null
-      scorecard?: string | null
-      pe?: number | null
-      pb?: number | null
-      pe_percentile?: number | null
-      pb_percentile?: number | null
-    }>
-    const row = rows[0]
-    if (!row) return null
-    return {
-      trade_date: this.marketData.status().latest_factor_date ?? null,
-      total_score: row.total_score ?? null,
-      scorecard: row.scorecard ?? null,
-      pe: row.pe ?? null,
-      pb: row.pb ?? null,
-      pe_percentile: row.pe_percentile ?? null,
-      pb_percentile: row.pb_percentile ?? null,
-    }
+  private localInsightsForRef(_ref: InstrumentRef): LocalInstrumentInsights | null {
+    return null
   }
 
   private async searchInstrumentsUnifiedHandler(
@@ -1994,7 +1696,7 @@ export class ResearchHub {
       keyword,
       limit,
       markets: m,
-      includeLocal,
+      includeLocal: false,
     })
     const sourceLabel = sources.length ? sources.join('+') : 'online'
     const items = rawItems.map(h => ({
@@ -2016,20 +1718,7 @@ export class ResearchHub {
   }
 
   private localInstrumentsSummary(t0: number) {
-    const summary = this.marketData.localInstrumentsSummary()
-    const status = this.marketData.status()
-    return ok({
-      summary,
-      counts: {
-        cn_stocks: status.stock_count,
-        cn_etfs: status.etf_count,
-        us: status.us_count,
-        crypto: status.crypto_count ?? 0,
-        jp: status.jp_count ?? 0,
-        kr: status.kr_count ?? 0,
-        hk: status.hk_count ?? 0,
-      },
-    }, '本地 instruments 汇总', t0)
+    return this.failLocalOffline(t0)
   }
 
   private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {
@@ -2078,7 +1767,7 @@ export class ResearchHub {
   }
 
   private localUsScreenSchema(t0: number) {
-    return ok(this.marketData.usScreenSchema(), '本地美股筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private async localUsScreen(params: Record<string, unknown>, t0: number) {
@@ -2086,33 +1775,36 @@ export class ResearchHub {
   }
 
   private localCryptoScreenSchema(t0: number) {
-    return ok(this.marketData.cryptoScreenSchema(), 'Crypto 本地筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
-  private localCryptoScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if ((status.crypto_count ?? 0) < 1) {
-      return fail('本地 Crypto 库为空，请先完成 crypto_list 同步', t0)
-    }
-    try {
-      const data = this.marketData.cryptoScreen({
-        keyword: params.keyword as string | undefined,
-        quote: params.quote as string | undefined,
-        base_contains: params.base_contains as string | undefined,
-        sort_by: params.sort_by as 'code' | 'name' | 'quote' | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      return ok({
-        source: 'local',
-        total_universe: data.total_universe,
-        passed: data.passed,
-        available_quotes: data.available_quotes,
-        items: data.items,
-      }, `Crypto 筛选 ${data.total_universe} 对，命中 ${data.passed} 对`, t0)
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e), t0)
-    }
+  private async localCryptoScreen(params: Record<string, unknown>, t0: number) {
+    const listResp = await this.cryptoList(params, t0)
+    if (!listResp.success || !listResp.data) return listResp
+    const rawItems = (listResp.data as { items?: Array<Record<string, unknown>> }).items ?? []
+    const keyword = params.keyword != null ? String(params.keyword).trim().toLowerCase() : ''
+    const quote = params.quote != null ? String(params.quote).trim().toUpperCase() : ''
+    const baseContains = params.base_contains != null ? String(params.base_contains).trim().toLowerCase() : ''
+    const topN = params.top_n != null ? Number(params.top_n) : 50
+
+    const items = rawItems.filter(row => {
+      const code = String(row.code ?? '').toLowerCase()
+      const name = String(row.name ?? '').toLowerCase()
+      const base = String(row.base ?? code.split('/')[0] ?? '').toLowerCase()
+      const rowQuote = String(row.quote ?? code.split('/')[1] ?? '').toUpperCase()
+      if (keyword && !code.includes(keyword) && !name.includes(keyword)) return false
+      if (quote && rowQuote !== quote) return false
+      if (baseContains && !base.includes(baseContains)) return false
+      return true
+    }).slice(0, Math.min(Math.max(topN, 1), 200))
+
+    return ok({
+      source: 'online',
+      total_universe: rawItems.length,
+      passed: items.length,
+      available_quotes: [...new Set(items.map(i => String(i.quote ?? 'USDT')))],
+      items,
+    }, `Crypto 筛选 ${rawItems.length} 对，命中 ${items.length} 对`, t0)
   }
 
   private async onlineListScreen(
@@ -2151,11 +1843,11 @@ export class ResearchHub {
     if (market === 'HK') {
       return this.onlineListScreen('HK', params, t0)
     }
-    return fail(`${label}暂不支持在线名录筛选，请直接指定代码或使用 search_local_instruments`, t0)
+    return fail(`${label}暂不支持在线名录筛选，请直接指定代码或使用 instrument_search`, t0)
   }
 
   private localJpScreenSchema(t0: number) {
-    return ok(this.marketData.jpScreenSchema(), '本地日股筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private async localJpScreen(params: Record<string, unknown>, t0: number) {
@@ -2163,7 +1855,7 @@ export class ResearchHub {
   }
 
   private localKrScreenSchema(t0: number) {
-    return ok(this.marketData.krScreenSchema(), '本地韩股筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private async localKrScreen(params: Record<string, unknown>, t0: number) {
@@ -2171,7 +1863,7 @@ export class ResearchHub {
   }
 
   private localHkScreenSchema(t0: number) {
-    return ok(this.marketData.hkScreenSchema(), '本地港股筛选维度说明', t0)
+    return this.failLocalOffline(t0)
   }
 
   private async localHkScreen(params: Record<string, unknown>, t0: number) {
@@ -2182,10 +1874,6 @@ export class ResearchHub {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
-    const local = this.marketData.searchLocalEtfs(keyword, limit)
-    if (local.length) {
-      return ok({ items: local, count: local.length, source: 'local' }, `ETF 搜索 ${local.length} 条`, t0)
-    }
     const r = await this.de.etfList(keyword)
     if (!r.success) return fail(r.error ?? 'ETF 搜索失败', t0)
     const items = (r.data ?? []).map(row => {
@@ -2348,22 +2036,12 @@ export class ResearchHub {
   }
 
   private async localCryptoList(params: Record<string, unknown>, t0: number) {
-    const limit = params.limit != null ? Number(params.limit) : 5000
-    const items = this.marketData.listLocalCryptoPairs(limit)
-    if (items.length) {
-      return ok({ items, count: items.length, source: 'local' }, `本地 Crypto ${items.length} 对`, t0)
-    }
     return this.cryptoList(params, t0)
   }
 
   private async searchCryptoPairs(params: Record<string, unknown>, t0: number) {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
-    const limit = params.limit != null ? Number(params.limit) : 30
-    const local = this.marketData.searchLocalCryptoPairs(keyword, limit)
-    if (local.length) {
-      return ok({ items: local, count: local.length, source: 'local' }, `Crypto 搜索 ${local.length} 条`, t0)
-    }
     const r = await this.de.queryInstrumentData(
       { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: 'BTC', quote: 'USDT' },
       'stock_list',

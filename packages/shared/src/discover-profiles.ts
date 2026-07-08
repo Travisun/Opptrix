@@ -150,39 +150,21 @@ export function assessDiscoverProfileReadiness(
   }
 
   if (profile === 'cn_equity') {
-    if (ctx.cn_is_ready) {
-      return {
-        profile,
-        ready: true,
-        mode: 'local',
-        message: '本地因子库已就绪，将使用本地初选',
-        action: null,
-      }
-    }
     return {
       profile,
       ready: true,
       mode: 'online',
-      message: '本地因子库未完全就绪，初选将在线扫描（耗时更长）',
-      action: '建议前往 设置 → 市场数据 完成 A 股同步，以加速挖掘',
+      message: '将使用在线因子扫描初选',
+      action: null,
     }
   }
 
   if (profile === 'cn_etf') {
-    if (ctx.etf_count < 1) {
-      return {
-        profile,
-        ready: false,
-        mode: 'blocked',
-        message: '本地尚无 ETF 数据，无法初选',
-        action: '请前往 设置 → 市场数据，完成 ETF 列表与净值同步（etf_list / etf_nav）',
-      }
-    }
     return {
       profile,
       ready: true,
-      mode: 'local',
-      message: `本地 ETF ${ctx.etf_count} 只，将按决策雷达评分初选`,
+      mode: 'online',
+      message: '将使用在线 ETF 列表与评估初选',
       action: null,
     }
   }
@@ -200,32 +182,12 @@ export function assessDiscoverProfileReadiness(
   }
 
   if (prescreen === 'list_filter') {
-    const countKey = def?.readinessCountKey
     const label = DISCOVER_PROFILE_LABELS[profile]
-    if (!countKey) {
-      return {
-        profile,
-        ready: true,
-        mode: 'online',
-        message: `${label}将使用 StockIndex 在线列表初选`,
-        action: null,
-      }
-    }
-    const count = readinessCount(ctx, profile)
-    if (count < 1) {
-      return {
-        profile,
-        ready: false,
-        mode: 'blocked',
-        message: `本地尚无${label}列表`,
-        action: packId ? packDisabledAction(packId) : null,
-      }
-    }
     return {
       profile,
       ready: true,
-      mode: 'local',
-      message: `本地${label} ${count} 只，将按列表筛选初选`,
+      mode: 'online',
+      message: `${label}将使用在线列表初选`,
       action: null,
     }
   }

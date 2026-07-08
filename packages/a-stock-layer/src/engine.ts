@@ -37,6 +37,7 @@ import {
   resolveInstrumentQueryPlan,
   unsupportedInstrumentCapabilityMessage,
   type InstrumentDataCapability,
+  type InstrumentQueryOpts,
 } from './core/instrument-query.js'
 import type {
   Dividend, DragonTiger, GlobalIndex, IndexKline, IndexRealtime,
@@ -725,13 +726,7 @@ export class MarketDataEngine {
   queryInstrumentData(
     ref: InstrumentRef,
     capability: InstrumentDataCapability,
-    opts?: {
-      count?: number
-      keyword?: string
-      reportDate?: string
-      reportType?: string
-      period?: string
-    },
+    opts?: InstrumentQueryOpts,
   ) {
     const plan = resolveInstrumentQueryPlan(ref, capability, opts)
     if (!plan) {

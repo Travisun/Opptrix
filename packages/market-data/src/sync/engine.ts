@@ -23,8 +23,16 @@ import {
 import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
-import { fetchBulkDailyBars, listBootstrapTradeDates, tushareBulkEnabled } from './tushare-bulk.js'
 import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
+import { StandardInstrumentGateway } from './instrument-gateway.js'
+import {
+  syncAllInitialTaxonomy,
+  syncInitialCnEtf,
+  syncInitialUniverse,
+  type InitialSyncCallbacks,
+} from './initial-sync.js'
+import type { InitialEquityMarket } from './instrument-gateway.js'
+import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -181,13 +189,29 @@ export class MarketDataSyncEngine {
       try {
         switch (job) {
           case 'universe':
-            await this.syncUniverse(runId, options, mode)
+          case 'initial_cn_universe':
+            await this.syncInitialUniverseJob(runId, 'CN', job, options, mode)
+            break
+          case 'initial_hk_universe':
+            await this.syncInitialUniverseJob(runId, 'HK', job, options, mode)
+            break
+          case 'initial_us_universe':
+            await this.syncInitialUniverseJob(runId, 'US', job, options, mode)
+            break
+          case 'initial_cn_etf':
+            await this.syncInitialCnEtfJob(runId, options, mode)
+            break
+          case 'initial_taxonomy':
+            await this.syncInitialTaxonomyJob(runId, options, mode)
             break
           case 'quotes':
             await this.syncQuotes(runId, mode, options)
             break
           case 'kline_bootstrap':
             await this.syncKlineBootstrap(runId, mode, options)
+            break
+          case 'kline_daily':
+            await this.syncKlineDaily(runId, mode, options)
             break
           case 'screen_factors':
             await this.syncScreenFactors(runId, mode, options)
@@ -414,43 +438,13 @@ export class MarketDataSyncEngine {
     return daysSince(last) >= cfg.ttlDays
   }
 
-  /** After market inputs update, ensure K-line-derived factors + industry stats are fresh. */
+  /** 本地 K 线/因子层已停用 — 不再在同步后派生计算 */
   private async finalizeDerivedData(
-    options: SyncOptions,
-    mode: SyncMode,
-    results: Record<string, string>,
+    _options: SyncOptions,
+    _mode: SyncMode,
+    _results: Record<string, string>,
   ): Promise<void> {
-    const tradeDate = todayTradeDate()
-    const needsFactors = this.store.screenFactorsStale(tradeDate)
-    const needsIndustry = this.store.industryStatsStale(tradeDate)
-    if (!needsFactors && !needsIndustry) return
-
-    if (needsFactors) {
-      options.onLog?.('行情/K线/财务已更新，重算初选因子（动量/量比等）')
-      const runId = this.store.beginRun('screen_factors', mode)
-      try {
-        await this.syncScreenFactors(runId, mode, options, true)
-        results.screen_factors = 'ok'
-        this.store.setCursor('screen_factors', { trade_date: tradeDate, source: 'finalize' })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
-        results.screen_factors = `failed: ${msg}`
-      }
-    }
-
-    if (needsIndustry || needsFactors) {
-      const runId = this.store.beginRun('industry_stats', mode)
-      try {
-        this.syncIndustryStats(runId, mode, options, true)
-        results.industry_stats = 'ok'
-        this.store.setCursor('industry_stats', { trade_date: tradeDate, source: 'finalize' })
-      } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e)
-        this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
-        results.industry_stats = `failed: ${msg}`
-      }
-    }
+    return
   }
 
   private finishJobEmpty(
@@ -527,38 +521,107 @@ export class MarketDataSyncEngine {
     this.store.markJobProgress(job, code, scopeKey, 'error')
   }
 
-  private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    const cfg = this.cfg('universe', options)
+  private createGateway(options: SyncOptions): StandardInstrumentGateway {
+    return new StandardInstrumentGateway(this.de, {
+      onRetry: (attempt, error) => {
+        options.onLog?.(`标准接口重试 ${attempt}：${error}`)
+      },
+    })
+  }
+
+  private initialCallbacks(job: string, options: SyncOptions): InitialSyncCallbacks {
+    return {
+      onLog: options.onLog,
+      onProgress: (current, total, label) => {
+        options.onProgress?.({ job, current, total, message: label })
+      },
+    }
+  }
+
+  private async syncInitialCnEtfJob(
+    runId: number,
+    options: SyncOptions,
+    mode: SyncMode,
+  ): Promise<void> {
+    const job = 'initial_cn_etf'
+    const cfg = this.cfg(job, options)
     if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('universe')
+      const last = this.store.getCursorLastSuccess(job)
       if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'universe', options, '股票池在 TTL 内，跳过')
+        this.finishJobEmpty(runId, job, options, 'ETF 名录在 TTL 内，跳过')
         return
       }
     }
 
-    const resp = await this.callApi(() => this.de.stockList(), this.laneTushareIfEnabled())
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'stockList failed')
+    const gateway = this.createGateway(options)
+    const result = await syncInitialCnEtf(gateway, this.store, cfg, this.initialCallbacks(job, options))
+    for (const code of this.store.listEtfCodes(true).slice(0, result.success)) {
+      this.markDone(job, code, '')
     }
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const code = normalizeStockCode(item.code)
-      this.store.upsertStock({
-        code,
-        name: item.name,
-        market: item.market ?? resolveMarket(code),
-        industry: item.industry,
-        is_st: detectSt(item.name),
-        status: detectSt(item.name) ? 'st' : 'active',
-      })
-      this.markDone('universe', code, '')
-      success++
+    this.store.finishRun(runId, 'success', {
+      total: result.total,
+      success: result.success,
+      error: Math.max(0, result.total - result.success),
+    })
+  }
+
+  private async syncInitialUniverseJob(
+    runId: number,
+    market: InitialEquityMarket,
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+  ): Promise<void> {
+    const cfg = this.cfg(job, options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess(job)
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, job, options, `${market} 名录在 TTL 内，跳过`)
+        return
+      }
     }
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+
+    const gateway = this.createGateway(options)
+    const result = await syncInitialUniverse(
+      gateway,
+      this.store,
+      market,
+      cfg,
+      this.initialCallbacks(job, options),
+    )
+    const codes = listEquityCodesForMarket(this.store, market, true)
+    for (const code of codes.slice(0, result.success)) {
+      this.markDone(job, code, '')
+    }
+    this.store.finishRun(runId, 'success', {
+      total: result.total,
+      success: result.success,
+      error: Math.max(0, result.total - result.success),
+    })
+  }
+
+  private async syncInitialTaxonomyJob(
+    runId: number,
+    options: SyncOptions,
+    mode: SyncMode,
+  ): Promise<void> {
+    const job = 'initial_taxonomy'
+    const cfg = this.cfg(job, options)
+    if (mode === 'incremental' && cfg.ttlDays) {
+      const last = this.store.getCursorLastSuccess(job)
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, job, options, '行业/板块在 TTL 内，跳过')
+        return
+      }
+    }
+
+    const gateway = this.createGateway(options)
+    await syncAllInitialTaxonomy(gateway, this.store, cfg, this.initialCallbacks(job, options))
+    this.store.finishRun(runId, 'success', { total: 1, success: 1, error: 0 })
+  }
+
+  private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
+    await this.syncInitialUniverseJob(runId, 'CN', 'universe', options, mode)
   }
 
   private etfCodes(options: SyncOptions): string[] {
@@ -1396,102 +1459,97 @@ export class MarketDataSyncEngine {
     })
   }
 
+  private klinePendingFilter(
+    job: string,
+    options: SyncOptions,
+    mode: SyncMode,
+    scopeKey: string,
+    ttlDays?: number,
+  ): (market: InitialEquityMarket, code: string) => boolean {
+    return (market, code) => {
+      const scoped = `${market}:${code}`
+      if (market === 'CN') {
+        return this.pendingCodes(job, options, mode, scopeKey, ttlDays).includes(code)
+      }
+      const errored = this.store.isJobError(job, scoped, scopeKey)
+      if (mode === 'resume') {
+        if (this.store.isJobDone(job, scoped, scopeKey)) return false
+        if (errored) return false
+        return true
+      }
+      if (mode === 'full') return true
+      if (this.store.isJobDone(job, scoped, scopeKey)) {
+        const syncedAt = this.store.jobProgressSyncedAt(job, scoped, scopeKey)
+        return shouldRefresh(syncedAt, ttlDays, mode)
+      }
+      return true
+    }
+  }
+
   private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
     const cfg = this.cfg('kline_bootstrap', options)
-    let dates = await listBootstrapTradeDates()
-    if (!dates.length) {
-      this.finishJobEmpty(runId, 'kline_bootstrap', options, '无可用交易日')
-      return
-    }
+    const gateway = this.createGateway(options)
+    const pending = this.klinePendingFilter('kline_bootstrap', options, mode, '', cfg.ttlDays)
 
-    if (mode === 'incremental') {
-      const missing = dates.filter(d => !this.store.hasTradeDateKlines(d))
-      const recent = dates.slice(-3)
-      dates = [...new Set([...missing, ...recent])].sort()
-    }
+    const result = await syncKlineBootstrapLayer(gateway, this.store, cfg, {
+      maxInstruments: options.maxStocks,
+      pendingFilter: mode === 'full' ? undefined : pending,
+      callbacks: {
+        onLog: options.onLog,
+        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
+      },
+    })
 
-    if (tushareBulkEnabled()) {
-      let barCount = 0
-      for (let i = 0; i < dates.length; i++) {
-        const tradeDate = dates[i]!
-        options.onProgress?.({ job: 'kline_bootstrap', current: i + 1, total: dates.length })
-        try {
-          const bars = await this.callApi(() => fetchBulkDailyBars(tradeDate), 'tushare')
-          if (bars.length) {
-            barCount += this.store.bulkUpsertKlines(bars.map(b => ({
-              tradeDate: b.tradeDate,
-              code: b.code,
-              open: b.open,
-              high: b.high,
-              low: b.low,
-              close: b.close,
-              volume: b.volume,
-              amount: b.amount,
-              changePct: b.changePct,
-            })))
-          }
-        } catch (e) {
-          this.store.logError(runId, 'kline_bootstrap', null, e instanceof Error ? e.message : String(e))
-        }
-        if (cfg.delayMs > 0) await sleep(cfg.delayMs)
-      }
-      const cutoff = dates[0] ?? todayTradeDate()
-      this.store.pruneKlinesOlderThan(cutoff)
-      await this.syncBseKlineSupplement(runId, options, cfg)
-      const klineCodes = this.store.listCodesWithMinKlines(60)
-      if (klineCodes.length) {
-        this.store.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
-        options.onLog?.(`K 线覆盖 ${klineCodes.length} 只（≥60 个交易日）`)
-      }
-      this.store.setCursor('kline_bootstrap', { trade_dates: dates.length, bars: barCount })
-      this.store.finishRun(runId, 'success', { total: dates.length, success: dates.length, error: 0 })
-      return
-    }
-
-    const codes = this.pendingCodes('kline_bootstrap', options, mode, '', cfg.ttlDays)
-    if (codes.length === 0) {
+    if (result.total === 0) {
       this.finishJobEmpty(runId, 'kline_bootstrap', options, 'K 线均在 TTL 内，跳过')
       return
     }
-    let success = 0
-    let error = 0
 
-    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
-      options.onProgress?.({ job: 'kline_bootstrap', current: index + 1, total: codes.length })
-      try {
-        const resp = await this.callApi(
-          () => this.de.kline(code, 'daily', '', '', KLINE_BOOTSTRAP_DAYS),
-          'default',
-        )
-        if (!resp.success || !resp.data?.length) throw new Error(resp.error ?? 'kline failed')
-        this.store.bulkUpsertKlines(resp.data.map(bar => ({
-          tradeDate: bar.date.slice(0, 10),
-          code,
-          open: bar.open,
-          high: bar.high,
-          low: bar.low,
-          close: bar.close,
-          volume: bar.volume ?? null,
-          amount: bar.amount ?? null,
-          changePct: bar.changePct ?? null,
-        })))
-        this.markDone('kline_bootstrap', code, '')
-        success++
-      } catch (e) {
-        error++
-        this.markError('kline_bootstrap', code, '')
-        this.store.logError(runId, 'kline_bootstrap', code, e instanceof Error ? e.message : String(e))
+    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
+      const scoped = `${market}:${code}`
+      if (this.store.listCodesWithMinInstrumentBars(market, market === 'CN' ? 60 : 30).includes(code)) {
+        this.markDone('kline_bootstrap', market === 'CN' ? code : scoped, '')
       }
-    })
+    }
 
-    this.store.finishRun(runId, error ? 'partial' : 'success', {
-      total: codes.length,
-      success,
-      error,
+    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
+      total: result.total,
+      success: result.success,
+      error: result.error,
     })
   }
 
-  /** BJ kline supplement skipped — Tushare does not cover BJ 920 codes; no compliant fallback. */
+  private async syncKlineDaily(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('kline_daily', options)
+    const gateway = this.createGateway(options)
+    const pending = this.klinePendingFilter('kline_daily', options, mode, todayTradeDate(), cfg.ttlDays)
+
+    const result = await syncKlineDailyLayer(gateway, this.store, cfg, {
+      pendingFilter: mode === 'full' ? undefined : pending,
+      callbacks: {
+        onLog: options.onLog,
+        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
+      },
+    })
+
+    if (result.total === 0) {
+      this.finishJobEmpty(runId, 'kline_daily', options, '今日 K 线已齐，跳过')
+      return
+    }
+
+    const scope = todayTradeDate()
+    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
+      const scoped = `${market}:${code}`
+      this.markDone('kline_daily', market === 'CN' ? code : scoped, scope)
+    }
+
+    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
+      total: result.total,
+      success: result.success,
+      error: result.error,
+    })
+  }
+
   private async syncBseKlineSupplement(
     _runId: number,
     options: SyncOptions,

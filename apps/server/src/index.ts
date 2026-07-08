@@ -10,7 +10,7 @@ import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
   PROVIDER_PRESETS, type StoredProvider,
 } from './config.js'
-import { getMarketDataService, suggestPackageFilename, suggestPackFilename } from '@opptrix/market-data-store'
+import { getMarketDataService } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
 import { cancelDiscoverJob, deleteDiscoverJob, getDiscoverJob, listDiscoverJobs, startDiscoverCustomJob, startDiscoverJob } from './discover-jobs.js'
 import { cancelSessionChat, clearSessionChat, registerSessionChat } from './session-chat-runs.js'
@@ -23,7 +23,7 @@ import {
 import { getUserPreference, setUserPreference } from './user-preferences.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
-import { isDiscoverStrategyProfile, listDiscoverProfileMeta, isMarketDataPackId, isSupplementPackId, type DiscoverStrategyProfile } from '@opptrix/shared'
+import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
@@ -39,7 +39,6 @@ const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
 const APP_VERSION = process.env.OPPTRIX_APP_VERSION ?? '0.6.0'
 
 const hub = new ResearchHub()
-hub.initMarketDataAutoSync()
 let cfg = loadConfig()
 
 function syncAgentProviders() {
@@ -86,24 +85,6 @@ setEnrichmentPersistHook(doc => {
 
 const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 })
 
-const MARKET_PACKAGE_BODY_LIMIT = 512 * 1024 * 1024
-
-app.addContentTypeParser(
-  'application/octet-stream',
-  { parseAs: 'buffer', bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
-  (_req, body, done) => {
-    done(null, body)
-  },
-)
-
-app.addContentTypeParser(
-  'application/vnd.opptrix.market-data+opmd',
-  { parseAs: 'buffer', bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
-  (_req, body, done) => {
-    done(null, body)
-  },
-)
-
 app.post<{ Params: { code: string }; Body: { force?: boolean } }>('/api/stock/:code/prep', async (req) => {
   const prep = startStockPrep(hub, req.params.code, { force: Boolean(req.body?.force) })
   return { prep }
@@ -145,48 +126,6 @@ app.post<{ Body: { feature: string; params?: Record<string, unknown> } }>(
     if (!feature) return reply.code(400).send({ error: 'feature required' })
     const result = await hub.dispatch(feature, params)
     return { success: result.success, feature, data: result.data, message: result.message, elapsed: result.elapsed }
-  },
-)
-
-app.get('/api/market-data/status', async () => {
-  const result = await hub.dispatch('market_db_status', {})
-  return { success: result.success, data: result.data, message: result.message }
-})
-
-app.get('/api/market-data/sync-state', async () => {
-  const result = await hub.dispatch('market_db_sync_state', {})
-  return { success: result.success, data: result.data, message: result.message }
-})
-
-app.get('/api/market-data/packs', async () => {
-  const result = await hub.dispatch('market_data_packs', {})
-  return { success: result.success, data: result.data, message: result.message }
-})
-
-app.patch<{ Body: { patch?: Record<string, { enabled?: boolean }> } }>(
-  '/api/market-data/packs',
-  async (req, reply) => {
-    const patch = req.body?.patch
-    if (!patch || typeof patch !== 'object') {
-      return reply.code(400).send({ error: 'patch required' })
-    }
-    const result = await hub.dispatch('market_data_packs_save', { patch })
-    return { success: result.success, data: result.data, message: result.message }
-  },
-)
-
-app.post<{ Params: { id: string }; Body: { force?: boolean } }>(
-  '/api/market-data/packs/:id/prepare',
-  async (req, reply) => {
-    const pack = req.params.id?.trim().toLowerCase()
-    if (!isMarketDataPackId(pack)) {
-      return reply.code(400).send({ error: 'pack must be cn, us, crypto, hk, jp, or kr' })
-    }
-    const result = await hub.dispatch('market_data_pack_prepare', {
-      pack,
-      force: req.body?.force === true,
-    })
-    return { success: result.success, data: result.data, message: result.message }
   },
 )
 
@@ -336,78 +275,6 @@ app.delete<{ Params: { id: string } }>('/api/discover/jobs/:id', async (req, rep
   if (!deleted) return reply.code(404).send({ error: 'job not found' })
   return { deleted: true }
 })
-
-app.post<{ Body: { mode?: string; max_stocks?: number; jobs?: string[]; background?: boolean; force?: boolean; profile?: string } }>(
-  '/api/market-data/sync',
-  async (req) => {
-    const body = req.body ?? {}
-    const result = await hub.dispatch('market_db_sync', {
-      mode: body.mode,
-      max_stocks: body.max_stocks,
-      jobs: body.jobs,
-      background: body.background,
-      force: body.force,
-      profile: body.profile,
-    })
-    return { success: result.success, data: result.data, message: result.message, elapsed: result.elapsed }
-  },
-)
-
-app.get<{ Querystring: { pack?: string } }>('/api/market-data/export', async (req, reply) => {
-  try {
-    const packRaw = req.query.pack?.trim().toLowerCase()
-    const pack = packRaw && isSupplementPackId(packRaw) ? packRaw : undefined
-    const svc = getMarketDataService()
-    const buffer = await svc.exportPackage(pack)
-    const inspect = svc.inspectPackage(buffer)
-    const filename = pack
-      ? suggestPackFilename(pack, inspect.metadata)
-      : suggestPackageFilename(inspect.metadata)
-    return reply
-      .header('Content-Type', 'application/vnd.opptrix.market-data+opmd')
-      .header('Content-Disposition', `attachment; filename="${filename}"`)
-      .header('X-Opptrix-Package-Format', '1')
-      .send(buffer)
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e)
-    return reply.code(409).send({ error: msg })
-  }
-})
-
-app.post<{ Body: Buffer }>(
-  '/api/market-data/package/inspect',
-  { bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
-  async (req, reply) => {
-    const body = req.body
-    if (!body?.length) return reply.code(400).send({ error: 'empty body' })
-    const result = getMarketDataService().inspectPackage(body)
-    if (!result.valid) {
-      return reply.code(400).send({ success: false, error: result.error ?? 'invalid package' })
-    }
-    return { success: true, data: result }
-  },
-)
-
-app.post<{ Body: Buffer }>(
-  '/api/market-data/import',
-  { bodyLimit: MARKET_PACKAGE_BODY_LIMIT },
-  async (req, reply) => {
-    const body = req.body
-    if (!body?.length) return reply.code(400).send({ error: 'empty body' })
-    try {
-      const metadata = getMarketDataService().importPackage(body)
-      const status = hub.marketData.status()
-      return {
-        success: true,
-        message: '基础数据已导入',
-        data: { metadata, status },
-      }
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return reply.code(400).send({ success: false, error: msg })
-    }
-  },
-)
 
 app.get('/api/tushare/config', async () => {
   const r = await hub.dispatch('tushare_config', {})

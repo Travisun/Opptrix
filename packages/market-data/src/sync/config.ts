@@ -37,18 +37,25 @@ export const SCREEN_PACK_FACTORS = [
   'volume_ratio',
 ] as const
 
-/** L0 bootstrap — enough for local screening / discover. */
-export const BOOTSTRAP_SYNC_JOBS = [
-  'universe',
-  'quotes',
-  'kline_bootstrap',
-  'financials',
-  'screen_factors',
-  'industry_stats',
+/** Initial 数据层 — 名录 + 行业/板块 + ETF */
+export const INITIAL_SYNC_JOBS = [
+  'initial_cn_universe',
+  'initial_hk_universe',
+  'initial_us_universe',
+  'initial_cn_etf',
+  'initial_taxonomy',
 ] as const
 
-/** Daily refresh after bootstrap ready. */
-export const DAILY_SYNC_JOBS = [...BOOTSTRAP_SYNC_JOBS] as const
+/** L0 bootstrap = 仅 Initial 名录层（无本地 K 线 / 因子筛选） */
+export const BOOTSTRAP_SYNC_JOBS = [...INITIAL_SYNC_JOBS] as const
+
+/** 就绪后仅刷新名录（7–14 天 TTL） */
+export const DAILY_SYNC_JOBS = [
+  'initial_cn_universe',
+  'initial_hk_universe',
+  'initial_us_universe',
+  'initial_cn_etf',
+] as const
 
 /** L2 deep sync — only on full rebuild or explicit force. */
 export const DEEP_SYNC_JOBS = [
@@ -227,12 +234,18 @@ export function isTushareBackedSyncJob(job: string): boolean {
 }
 
 export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
-  /** 股票池 — 增量 7 天刷新一次 */
-  universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_cn_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 14 },
+  /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   /** 日频截面 — 每个交易日刷新 */
   quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },
-  /** 6 月日 K — 截面按交易日批量拉取 */
-  kline_bootstrap: { concurrency: 1, delayMs: 80, ttlDays: 1 },
+  /** 6 月日 K — 按标的经标准 kline 接口拉取 */
+  kline_bootstrap: { concurrency: 2, delayMs: 200, ttlDays: 7 },
+  /** 多市场静默窗口内的日 K 增量 */
+  kline_daily: { concurrency: 2, delayMs: 180, ttlDays: 1 },
   /** 本地初选因子 — 从 SQLite 计算 */
   screen_factors: { concurrency: 1, delayMs: 0, ttlDays: 1 },
   profiles: { concurrency: 2, delayMs: 320, ttlDays: 30 },

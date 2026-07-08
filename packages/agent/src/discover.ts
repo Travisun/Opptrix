@@ -467,7 +467,7 @@ export class DiscoverRunner {
       plan,
       candidates,
       toolsUsed,
-      pct => onProgress({ phase: 'mining', message: 'Agent 调用本地数据技能分析…', percent: pct }),
+      pct => onProgress({ phase: 'mining', message: 'Agent 调用在线数据技能分析…', percent: pct }),
       signal,
     )
     throwIfAborted()
@@ -512,7 +512,7 @@ export class DiscoverRunner {
       top_n: plan.prescreen_top_n,
     })
     if (!screenResp.success || !screenResp.data) {
-      throw new Error(screenResp.message || '本地初选失败')
+      throw new Error(screenResp.message || '在线初选失败')
     }
     const screenData = screenResp.data as {
       total_scanned: number
@@ -536,31 +536,52 @@ export class DiscoverRunner {
   }
 
   private async prescreenEtf(plan: DiscoverParsedPlan, onMsg?: (message: string) => void) {
-    const screenResp = await this.hub.dispatch(
-      'local_etf_screen',
-      etfConditionsToQuery(plan.conditions, plan.prescreen_top_n),
-    )
-    if (!screenResp.success || !screenResp.data) {
-      throw new Error(screenResp.message || 'ETF 初选失败')
+    const listResp = await this.hub.dispatch('etf_list', {})
+    if (!listResp.success || !listResp.data) {
+      throw new Error(listResp.message || 'ETF 列表获取失败')
     }
-    const data = screenResp.data as {
-      total_universe: number
-      passed: number
-      items: Array<{
-        code: string
-        name: string
-        premium_rate: number | null
-        scale_yi: number | null
-      }>
-    }
-    const screened = (data.items ?? []).map(item => ({
-      code: item.code,
-      name: item.name,
-      premium_rate: item.premium_rate,
-      scale_yi: item.scale_yi,
-    }))
+    const all = (listResp.data as Array<{ code: string; name: string }>) ?? []
+    const query = etfConditionsToQuery(plan.conditions, plan.prescreen_top_n * 3)
+    const maxPremium = query.max_premium_rate as number | undefined
+    const minPremium = query.min_premium_rate as number | undefined
+    const minScale = query.min_scale_yi as number | undefined
+    const maxScale = query.max_scale_yi as number | undefined
 
-    onMsg?.(`ETF 条件命中 ${screened.length} 只，决策雷达评分中…`)
+    onMsg?.(`在线 ETF 名录 ${all.length} 只，按条件初筛…`)
+
+    const screened: Array<{
+      code: string
+      name: string
+      premium_rate: number | null
+      scale_yi: number | null
+    }> = []
+
+    for (const item of all.slice(0, 120)) {
+      let premiumRate: number | null = null
+      let scaleYi: number | null = null
+      try {
+        const snapResp = await this.hub.dispatch('etf_snapshot', { code: item.code })
+        if (snapResp.success && snapResp.data && typeof snapResp.data === 'object') {
+          const snap = snapResp.data as { premium_rate?: number | null; scale_yi?: number | null }
+          premiumRate = snap.premium_rate ?? null
+          scaleYi = snap.scale_yi ?? null
+        }
+      } catch { /* optional */ }
+
+      if (maxPremium != null && premiumRate != null && premiumRate > maxPremium) continue
+      if (minPremium != null && premiumRate != null && premiumRate < minPremium) continue
+      if (minScale != null && scaleYi != null && scaleYi < minScale) continue
+      if (maxScale != null && scaleYi != null && scaleYi > maxScale) continue
+      screened.push({
+        code: item.code,
+        name: item.name,
+        premium_rate: premiumRate,
+        scale_yi: scaleYi,
+      })
+      if (screened.length >= plan.prescreen_top_n * 2) break
+    }
+
+    onMsg?.(`ETF 条件命中 ${screened.length} 只，在线评分中…`)
 
     const scored: PrescreenCandidate[] = []
     for (const item of screened) {
@@ -570,7 +591,10 @@ export class DiscoverRunner {
       if (item.scale_yi != null) key_factors.scale_yi = item.scale_yi
 
       try {
-        const scResp = await this.hub.dispatch('etf_scorecard', { code: item.code })
+        const scResp = await this.hub.dispatch('instrument_evaluation', {
+          instrument: { market: 'CN', assetClass: 'ETF', symbol: item.code },
+          scorecard: 'ETF决策雷达',
+        })
         if (scResp.success && scResp.data) {
           const card = scResp.data as {
             total_score: number | null
@@ -606,10 +630,10 @@ export class DiscoverRunner {
     scored.sort((a, b) => (b.total_score ?? 0) - (a.total_score ?? 0))
     const candidates = scored.slice(0, plan.prescreen_top_n)
     const screenData = {
-      total_scanned: data.total_universe,
-      passed: data.passed,
+      total_scanned: all.length,
+      passed: screened.length,
       trade_date: null as string | null,
-      source: 'local' as const,
+      source: 'live' as const,
     }
     return { screenData, candidates }
   }
@@ -639,7 +663,7 @@ export class DiscoverRunner {
         total_scanned: data.total_universe,
         passed: data.passed,
         trade_date: null as string | null,
-        source: 'local' as const,
+        source: 'live' as const,
       },
       candidates,
     }
@@ -670,7 +694,7 @@ export class DiscoverRunner {
         total_scanned: data.total_universe,
         passed: data.passed,
         trade_date: null as string | null,
-        source: 'local' as const,
+        source: 'live' as const,
       },
       candidates,
     }

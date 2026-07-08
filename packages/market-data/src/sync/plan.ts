@@ -62,14 +62,14 @@ export function resolveSyncPlan(
 
   if (status.is_ready) {
     const daily = filterJobsByMarketPacks(DAILY_SYNC_JOBS, packs)
-    const optional: string[] = []
-    if (packs.us.enabled) optional.push(...US_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
+    const jobs: string[] = daily.filter(j => jobNeedsRefresh(j, status.last_sync))
+    if (packs.us.enabled) jobs.push(...US_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
     if (packs.crypto.enabled) {
-      optional.push(...CRYPTO_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
+      jobs.push(...CRYPTO_PACK_JOBS.filter(j => jobNeedsRefresh(j, status.last_sync)))
     }
     return {
       mode: 'incremental',
-      jobs: [...new Set([...daily, ...optional])],
+      jobs: [...new Set(jobs)],
       label: '增量更新',
     }
   }

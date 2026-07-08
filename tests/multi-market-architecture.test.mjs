@@ -56,21 +56,21 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
   assert.equal(getDiscoverProfileDefinition('hk_equity')?.localScreenFeature, 'local_hk_screen')
 
   const jpTools = discoverMiningToolNamesForProfile('jp_equity')
-  assert.ok(jpTools.includes('search_local_instruments'))
+  assert.ok(jpTools.includes('search_instruments'))
   assert.ok(jpTools.includes('get_instrument_quotes'))
   assert.ok(!jpTools.includes('screen_local_jp_stocks'))
 
   const hkTools = discoverMiningToolNamesForProfile('hk_equity')
-  assert.ok(hkTools.includes('screen_local_hk_stocks'))
-  assert.ok(hkTools.includes('get_local_hk_screen_schema'))
+  assert.ok(hkTools.includes('search_instruments'))
+  assert.ok(!hkTools.includes('get_local_hk_screen_schema'))
 
   assert.deepEqual(discoverFactorsForProfile('hk_equity'), ['keyword', 'industry_contains'])
 })
 
-test('discover mining tools empty for unknown profile — no CN fallback', () => {
+test('discover mining tools for cn_equity start with online screening', () => {
   assert.deepEqual(discoverMiningToolNamesForProfile('cn_equity').slice(0, 2), [
-    'get_market_db_status',
-    'get_market_db_sync_state',
+    'screen_stocks',
+    'search_instruments',
   ])
 })
 
@@ -134,8 +134,8 @@ test('discover mining system prompt is registry-driven', () => {
     outputSchema: '{}',
   })
   assert.ok(prompt.includes('港股'))
-  assert.ok(prompt.includes('screen_local_hk_stocks'))
-  assert.ok(prompt.includes('search_local_instruments'))
+  assert.ok(prompt.includes('search_instruments'))
+  assert.ok(prompt.includes('get_instrument_snapshot'))
   assert.equal(discoverProfileAssetLabel('hk_equity'), '港股（StockIndex 在线列表 keyword / industry_contains）')
 })
 
@@ -176,13 +176,13 @@ test('CHAT_MCP_TOOL_NAMES excludes legacy per-market tools', async () => {
       { name: 'batch_instrument_snapshots' },
       { name: 'get_instrument_snapshot' },
       { name: 'get_instrument_indicators' },
-      { name: 'get_market_db_status' },
+      { name: 'search_instruments' },
     ],
   }
   const chatTools = CHAT_MCP_TOOL_NAMES(registry)
   assert.ok(chatTools.includes('get_instrument_snapshot'))
   assert.ok(chatTools.includes('get_instrument_indicators'))
-  assert.ok(chatTools.includes('get_market_db_status'))
+  assert.ok(chatTools.includes('search_instruments'))
   assert.ok(!chatTools.includes('get_us_stock_quote'))
   assert.ok(!chatTools.includes('get_crypto_quote'))
   assert.ok(!chatTools.includes('strategy_verify'))

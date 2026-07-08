@@ -22,7 +22,16 @@ export function bootstrapJobRatio(
 
   switch (job) {
     case 'universe':
-      return b?.universe ? 1 : stockRatio(progress?.done ?? 0, stockCount)
+    case 'initial_cn_universe':
+      return b?.initial_cn ?? b?.universe ? 1 : stockRatio(progress?.done ?? 0, stockCount)
+    case 'initial_hk_universe':
+      return b?.initial_hk ? 1 : stockRatio(progress?.done ?? 0, dbStatus.hk_count || 1)
+    case 'initial_us_universe':
+      return b?.initial_us ? 1 : stockRatio(progress?.done ?? 0, dbStatus.us_count || 1)
+    case 'initial_cn_etf':
+      return b?.initial_cn_etf ? 1 : stockRatio(progress?.done ?? 0, dbStatus.etf_count || 1)
+    case 'initial_taxonomy':
+      return b?.initial_taxonomy ? 1 : (progress?.done ? 1 : 0)
     case 'quotes':
       return b?.quotes ? 1 : (ratioPct('quote_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'kline_bootstrap':

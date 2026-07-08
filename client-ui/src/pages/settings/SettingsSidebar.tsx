@@ -3,7 +3,6 @@ import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BotRegular,
   ChartMultipleRegular,
-  DatabaseRegular,
   ImageRegular,
   InfoRegular,
   NewsRegular,
@@ -32,7 +31,6 @@ export type SettingsSidebarMode = 'panel' | 'overlay'
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'models', label: '模型', icon: BotRegular },
-  { id: 'market_data', label: '基础数据', icon: DatabaseRegular },
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
@@ -363,8 +361,6 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理默认评分卡与后端连接状态'
     case 'models':
       return '配置 LLM 提供商与可用模型'
-    case 'market_data':
-      return '本地行情库、同步与导入导出'
     case 'data_providers':
       return '管理各市场行情与资讯数据提供商'
     case 'discover_strategies':

@@ -6,7 +6,6 @@ import { ToolRegistry } from '../tools.js'
 import { runMcpStdio } from './server.js'
 
 const hub = new ResearchHub()
-hub.initMarketDataAutoSync()
 const registry = new ToolRegistry(hub, createDefaultAppContext())
 
 const miningOnly = process.argv.includes('--mining')

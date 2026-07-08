@@ -1,7 +1,16 @@
 import type Database from 'better-sqlite3'
 import type { MarketDataStore } from '../store.js'
 import { SCREEN_PACK_FACTORS } from '../sync/config.js'
+import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
 import { todayTradeDate } from '../utils.js'
+
+const OFFLINE_SCREEN_MSG = '本地因子筛选已停用。请使用 instrument_evaluation、instrument_search 等在线接口按需分析。'
+
+function assertOfflineScreeningEnabled(): void {
+  if (!LOCAL_OFFLINE_SCREENING_ENABLED) {
+    throw new Error(OFFLINE_SCREEN_MSG)
+  }
+}
 
 const SCREEN_FACTOR_SET = new Set<string>(SCREEN_PACK_FACTORS)
 const ALLOWED_OPS = new Set<ScreenCondition['op']>(['>', '<', '>=', '<=', '='])
@@ -161,6 +170,7 @@ export function localScreen(
   topN = 20,
   excludeSt = true,
 ): { trade_date: string; passed: number; items: LocalScreenItem[] } {
+  assertOfflineScreeningEnabled()
   const db = store.db
   const date = tradeDate ?? latestFactorDate(db) ?? todayTradeDate()
 
@@ -287,6 +297,7 @@ export function localUniverseScreen(
   store: MarketDataStore,
   query: LocalUniverseScreenQuery,
 ): LocalUniverseScreenResult {
+  assertOfflineScreeningEnabled()
   const db = store.db
   const date = query.trade_date ?? latestFactorDate(db) ?? todayTradeDate()
   const conditions = normalizeConditions(query.factor_conditions)
@@ -546,6 +557,7 @@ export function localIndustryScreen(
   store: MarketDataStore,
   query: LocalIndustryScreenQuery,
 ): LocalUniverseScreenResult {
+  assertOfflineScreeningEnabled()
   const exact = String(query.industry ?? '').trim()
   const list = (query.industries ?? []).map(i => i.trim()).filter(Boolean)
   const contains = query.industry_contains?.trim()
@@ -678,6 +690,7 @@ export function queryDiscoverCandidates(
   factorNames: readonly string[],
   tradeDate?: string,
 ): DiscoverCandidateRow[] {
+  assertOfflineScreeningEnabled()
   if (!codes.length) return []
   const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
   const placeholders = codes.map(() => '?').join(',')

@@ -39,7 +39,15 @@ export interface MarketDbStatus {
 
 export interface BootstrapReadiness {
   ready: boolean
+  /** A 股股票名录 */
+  initial_cn: boolean
+  initial_hk: boolean
+  initial_us: boolean
+  initial_cn_etf: boolean
+  initial_taxonomy: boolean
+  /** @deprecated 等同 initial_cn */
   universe: boolean
+  /** @deprecated 本地 K 线层已停用 */
   quotes: boolean
   klines: boolean
   fundamentals: boolean
@@ -48,6 +56,7 @@ export interface BootstrapReadiness {
   kline_stock_ratio: number
   fin_stock_ratio: number
   factor_stock_ratio: number
+  kline_cross_market: boolean
 }
 
 export class MarketDataStore {
@@ -150,7 +159,7 @@ export class MarketDataStore {
       GROUP BY job_name
     `).all() as { job_name: string; done: number; error: number }[]
     for (const row of progressRows) {
-      const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap'])
+      const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap', 'initial_cn_etf'])
       const usJobs = new Set(['us_list'])
       const cryptoJobs = new Set(['crypto_list'])
       const jpJobs = new Set(['jp_list', 'jp_quotes'])
@@ -212,85 +221,45 @@ export class MarketDataStore {
 
   assessBootstrapReadiness(
     stockCount?: number,
-    latestQuoteDate?: string | null,
-    latestFactorDate?: string | null,
+    _latestQuoteDate?: string | null,
+    _latestFactorDate?: string | null,
   ): BootstrapReadiness {
-    const total = stockCount ?? (this.db.prepare(
-      'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
-    ).get() as { c: number }).c
-    const minKlines = 60
-    const klineRow = this.db.prepare(`
-      SELECT COUNT(DISTINCT code) AS c FROM (
-        SELECT code FROM stock_klines_daily GROUP BY code HAVING COUNT(*) >= ?
-      )
-    `).get(minKlines) as { c: number }
-    const klineStockRatio = total > 0 ? klineRow.c / total : 0
+    const cnEquity = stockCount ?? this.countEquityInstruments('CN')
+    const hkEquity = this.countEquityInstruments('HK')
+    const usEquity = this.countEquityInstruments('US')
+    const etfCount = this.listEtfCodes(true).length
 
-    const factorDate = latestFactorDate
-      ?? (this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }).d
-    const factorRow = factorDate
-      ? this.db.prepare(`
-          SELECT COUNT(DISTINCT code) AS c FROM stock_factors WHERE trade_date = ?
-        `).get(factorDate) as { c: number }
-      : { c: 0 }
-    const factorStockRatio = total > 0 ? factorRow.c / total : 0
+    const initial_cn = cnEquity > 1000
+    const initial_hk = hkEquity > 100
+    const initial_us = usEquity > 500
+    const initial_cn_etf = etfCount > 50
+    const initial_taxonomy = this.countTaxonomyNodes('CN', 'industry') >= 5
 
-    const finRow = this.db.prepare('SELECT COUNT(DISTINCT code) AS c FROM stock_financials').get() as { c: number }
-    const finRatio = total > 0 ? finRow.c / total : 0
-
-    const quoteDate = latestQuoteDate
-      ?? (this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }).d
-    const quoteRow = quoteDate
-      ? this.db.prepare('SELECT COUNT(*) AS c FROM stock_quotes_daily WHERE trade_date = ?').get(quoteDate) as { c: number }
-      : { c: 0 }
-    const quoteRatio = total > 0 ? quoteRow.c / total : 0
-
-    const universe = total > 1000
-    const quotes = quoteRatio >= 0.85
-    const klines = klineStockRatio >= 0.8
-    const fundamentals = finRatio >= 0.75
-    const screen_factors = factorStockRatio >= 0.75
-    const ready = universe && quotes && klines && fundamentals && screen_factors
+    const ready = initial_cn && initial_hk && initial_us && initial_cn_etf && initial_taxonomy
 
     return {
       ready,
-      universe,
-      quotes,
-      klines,
-      fundamentals,
-      screen_factors,
-      quote_stock_ratio: Math.round(quoteRatio * 1000) / 10,
-      kline_stock_ratio: Math.round(klineStockRatio * 1000) / 10,
-      fin_stock_ratio: Math.round(finRatio * 1000) / 10,
-      factor_stock_ratio: Math.round(factorStockRatio * 1000) / 10,
+      initial_cn,
+      initial_hk,
+      initial_us,
+      initial_cn_etf,
+      initial_taxonomy,
+      universe: initial_cn,
+      quotes: false,
+      klines: false,
+      fundamentals: false,
+      screen_factors: false,
+      quote_stock_ratio: 0,
+      kline_stock_ratio: 0,
+      fin_stock_ratio: 0,
+      factor_stock_ratio: 0,
+      kline_cross_market: false,
     }
   }
 
-  /** True when quotes/K线/财务比上次因子计算更新 — 需要重算 screen_factors。 */
-  screenFactorsStale(tradeDate = todayTradeDate()): boolean {
-    const factorCursor = this.getCursorLastSuccess('screen_factors')
-    if (!factorCursor) return true
-
-    const factorAt = new Date(factorCursor).getTime()
-    for (const job of ['quotes', 'kline_bootstrap', 'financials'] as const) {
-      const at = this.getCursorLastSuccess(job)
-      if (at && new Date(at).getTime() > factorAt) return true
-    }
-
-    const latestFactorDate = (this.db.prepare(
-      'SELECT MAX(trade_date) AS d FROM stock_factors',
-    ).get() as { d: string | null }).d
-    if (latestFactorDate !== tradeDate) return true
-
-    const active = (this.db.prepare(
-      'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
-    ).get() as { c: number }).c
-    if (active <= 0) return false
-
-    const withFactors = (this.db.prepare(
-      'SELECT COUNT(DISTINCT code) AS c FROM stock_factors WHERE trade_date = ?',
-    ).get(tradeDate) as { c: number }).c
-    return withFactors / active < 0.75
+  /** @deprecated 本地因子层已停用 */
+  screenFactorsStale(_tradeDate = todayTradeDate()): boolean {
+    return false
   }
 
   industryStatsStale(tradeDate = todayTradeDate()): boolean {
@@ -362,7 +331,152 @@ export class MarketDataStore {
       }
     })
     for (let i = 0; i < rows.length; i += 800) tx(rows.slice(i, i + 800))
+    const cnRows = rows.map(r => ({ ...r, market: 'CN' as const }))
+    if (cnRows.length) this.bulkUpsertInstrumentBars(cnRows)
     return rows.length
+  }
+
+  bulkUpsertInstrumentBars(
+    rows: Array<{
+      market: string
+      code: string
+      tradeDate: string
+      open?: number | null
+      high?: number | null
+      low?: number | null
+      close?: number | null
+      volume?: number | null
+      amount?: number | null
+      changePct?: number | null
+    }>,
+  ): number {
+    if (!rows.length) return 0
+    const ts = nowIso()
+    const stmt = this.db.prepare(`
+      INSERT INTO instrument_bars_daily (
+        market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(market, code, trade_date) DO UPDATE SET
+        open = excluded.open,
+        high = excluded.high,
+        low = excluded.low,
+        close = excluded.close,
+        volume = excluded.volume,
+        amount = excluded.amount,
+        change_pct = excluded.change_pct,
+        synced_at = excluded.synced_at
+    `)
+    const tx = this.db.transaction((batch: typeof rows) => {
+      for (const r of batch) {
+        if (!r.tradeDate) continue
+        stmt.run(
+          r.market,
+          r.code,
+          r.tradeDate,
+          r.open ?? null,
+          r.high ?? null,
+          r.low ?? null,
+          r.close ?? null,
+          r.volume ?? null,
+          r.amount ?? null,
+          r.changePct ?? null,
+          ts,
+        )
+      }
+    })
+    for (let i = 0; i < rows.length; i += 800) tx(rows.slice(i, i + 800))
+    return rows.length
+  }
+
+  countEquityInstruments(market: 'CN' | 'US' | 'HK'): number {
+    if (market === 'CN') {
+      return (this.db.prepare(
+        `SELECT COUNT(*) AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
+      ).get() as { c: number }).c
+    }
+    if (market === 'US') return this.countUsInstruments()
+    return this.countRegionalEquityInstruments('HK')
+  }
+
+  countTaxonomyNodes(market: string, kind: string): number {
+    return (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM taxonomy_nodes WHERE market = ? AND kind = ?',
+    ).get(market, kind) as { c: number }).c
+  }
+
+  upsertTaxonomyNode(row: {
+    market: string
+    kind: string
+    code: string
+    name: string
+    parentCode?: string | null
+    level?: number | null
+    stockCount?: number | null
+    extra?: string | null
+  }): number {
+    const ts = nowIso()
+    const result = this.db.prepare(`
+      INSERT INTO taxonomy_nodes (market, kind, code, name, parent_code, level, stock_count, extra, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ON CONFLICT(market, kind, code) DO UPDATE SET
+        name = excluded.name,
+        parent_code = excluded.parent_code,
+        level = excluded.level,
+        stock_count = excluded.stock_count,
+        extra = excluded.extra,
+        synced_at = excluded.synced_at
+    `).run(
+      row.market,
+      row.kind,
+      row.code,
+      row.name,
+      row.parentCode ?? null,
+      row.level ?? null,
+      row.stockCount ?? null,
+      row.extra ?? null,
+      ts,
+    )
+    const id = Number(result.lastInsertRowid)
+    if (id > 0) return id
+    const existing = this.db.prepare(
+      'SELECT id FROM taxonomy_nodes WHERE market = ? AND kind = ? AND code = ?',
+    ).get(row.market, row.kind, row.code) as { id: number } | undefined
+    return existing?.id ?? 0
+  }
+
+  replaceInstrumentTaxonomy(market: string, taxonomyId: number, codes: string[]): number {
+    if (!taxonomyId || !codes.length) return 0
+    const ts = nowIso()
+    const del = this.db.prepare(
+      'DELETE FROM instrument_taxonomy WHERE taxonomy_id = ? AND market = ?',
+    ).run(taxonomyId, market)
+    const stmt = this.db.prepare(`
+      INSERT OR IGNORE INTO instrument_taxonomy (market, code, taxonomy_id, synced_at)
+      VALUES (?, ?, ?, ?)
+    `)
+    let n = 0
+    for (const code of codes) {
+      stmt.run(market, code, taxonomyId, ts)
+      n++
+    }
+    return n
+  }
+
+  listCodesWithMinInstrumentBars(market: string, minBars: number): string[] {
+    const rows = this.db.prepare(`
+      SELECT code FROM instrument_bars_daily
+      WHERE market = ?
+      GROUP BY code
+      HAVING COUNT(*) >= ?
+    `).all(market, minBars) as { code: string }[]
+    return rows.map(r => r.code)
+  }
+
+  latestInstrumentBarDate(market: string, code: string): string | null {
+    const row = this.db.prepare(`
+      SELECT MAX(trade_date) AS d FROM instrument_bars_daily WHERE market = ? AND code = ?
+    `).get(market, code) as { d: string | null } | undefined
+    return row?.d ?? null
   }
 
   hasTradeDateKlines(tradeDate: string): boolean {
