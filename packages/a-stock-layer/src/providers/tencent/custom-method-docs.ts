@@ -96,6 +96,23 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     example: '{"provider":"tencent","method":"tencentHkMainBoardStockList","args":[1,20,3,"desc"]}',
   },
 
+  tencentHkAhStockList: {
+    method: 'tencentHkAhStockList',
+    description: 'A+H 股列表（港股侧 AH 溢价排行，含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=A_H&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_ah&module=HK&type=AH`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅（默认）/ 36 成交量，或 price/change_rate', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "A_H", boardKey: "AH", boardLabel: "AH股", page, pageSize, total, items: [{ code, name, price, changePct, changeAmt, preClose, open, high, low, buy, sell, volume, amount, market }], source }]',
+    usage: INVOKE('tencentHkAhStockList', '[1,20,32,"desc"]'),
+    notes: '等价于 tencentHkStockList("AH", ...)；上游 board=A_H。列表含 AH 溢价率等字段（page_data 末位）。',
+    example: '{"provider":"tencent","method":"tencentHkAhStockList","args":[1,20,32,"desc"]}',
+  },
+
   tencentUsTechStockList: {
     method: 'tencentUsTechStockList',
     description: '美股科技股排行列表（含最新价、涨跌幅、市值、市盈率等行情摘要）',

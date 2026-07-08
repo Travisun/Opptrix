@@ -199,6 +199,30 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
   }
 
   /**
+   * A+H 股列表（mstats hk_ah）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=A_H&metric=change_rate&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_ah&module=HK&type=AH
+   * @param page 页码，从 1 开始
+   * @param pageSize 每页条数，最大 100
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或 price/change_rate
+   * @returns `[{ board, boardKey, boardLabel, page, pageSize, total, items[{ code, name, price, changePct, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentHkAhStockList",[1,20,32,"desc"])`
+   */
+  p.tencentHkAhStockList = async function tencentHkAhStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'AH', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
    * 首页行业热度排行（板块平均涨跌幅 + 领涨股）。
    *
    * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank?l=10&p=1&t=averatio&o=0

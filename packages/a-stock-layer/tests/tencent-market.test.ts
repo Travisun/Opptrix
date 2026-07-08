@@ -309,6 +309,7 @@ describe('tencent HK stock list API', () => {
     } = await import('../src/providers/tencent/api/hk-rank-service.js')
     expect(resolveTencentHkBoard('MB')).toBe('main_all')
     expect(resolveTencentHkBoard('hk_mb')).toBe('main_all')
+    expect(resolveTencentHkBoard('hk_ah')).toBe('A_H')
     expect(resolveTencentHkBoard('GEM')).toBe('gem_all')
     expect(resolveTencentHkSortMetric(32)).toBe('change_rate')
     expect(resolveTencentHkSortMetric('price')).toBe('price')

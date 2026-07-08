@@ -25,6 +25,8 @@ export const TENCENT_HK_BOARD_MAP = {
   HSCEIB: 'China_board',
   HSCCI: 'red_composite',
   AH: 'A_H',
+  hk_ah: 'A_H',
+  AH股: 'A_H',
   WRNT: 'warrant_all',
   CALL: 'warrant_call',
   PUT: 'warrant_put',
@@ -116,6 +118,7 @@ export type TencentHkStockRow = {
   changePct: number | null
   volume: number | null
   amount: number | null
+  ahPremium: number | null
   market: 'HK'
 }
 
@@ -149,6 +152,7 @@ export function resolveTencentHkBoard(board: string): string {
   if (values.includes(key as typeof values[number])) return key
   if (lower === 'main' || lower === '主板' || lower === 'hk_mb') return TENCENT_HK_BOARD_MAP.MB
   if (lower === 'gem' || lower === '创业板') return TENCENT_HK_BOARD_MAP.GEM
+  if (lower === 'ah' || lower === 'ah股' || lower === 'hk_ah' || lower === 'a+h') return TENCENT_HK_BOARD_MAP.AH
   return TENCENT_HK_BOARD_MAP.MB
 }
 
@@ -161,6 +165,7 @@ export function resolveTencentHkBoardKey(board: string): string {
   if (input in TENCENT_HK_BOARD_MAP) return input
   if (resolved === TENCENT_HK_BOARD_MAP.MB) return 'MB'
   if (resolved === TENCENT_HK_BOARD_MAP.GEM) return 'GEM'
+  if (resolved === TENCENT_HK_BOARD_MAP.AH) return 'AH'
   return input || 'MB'
 }
 
@@ -200,6 +205,7 @@ function mapHkPageDataParts(parts: string[]): TencentHkStockRow | null {
     preClose: safeFloat(parts[10]),
     high: safeFloat(parts[11]),
     low: safeFloat(parts[12]),
+    ahPremium: safeFloat(parts[13]),
     market: 'HK' as const,
   }
 }
@@ -221,6 +227,7 @@ function mapHkQtParts(parts: string[]): TencentHkStockRow | null {
     amount: safeFloat(parts[37]),
     high: safeFloat(parts[33]),
     low: safeFloat(parts[34]),
+    ahPremium: null,
     market: 'HK' as const,
   }
 }
@@ -250,6 +257,7 @@ function mapProxyHkRows(rankList: TencentBoardRankRow[]): TencentHkStockRow[] {
     changePct: safeFloat(row.zdf),
     volume: safeFloat(row.volume),
     amount: safeFloat(row.turnover),
+    ahPremium: null,
     market: 'HK' as const,
   })).filter(row => row.code)
 }
@@ -269,6 +277,7 @@ export function mapTencentHkStockRows(rows: TencentHkStockRow[]): Record<string,
     changePct: row.changePct,
     volume: row.volume,
     amount: row.amount,
+    ahPremium: row.ahPremium,
     market: row.market,
     source: 'tencent_hk_rank',
   }))
