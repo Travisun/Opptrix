@@ -1035,8 +1035,10 @@ app.post<{ Body: { industry: string } }>('/api/industry/mermaid', async (req, re
 
 // Portfolio trade ledger (buy/sell records)
 app.get('/api/portfolio/trades', async (req) => {
-  const code = (req.query as { code?: string }).code ?? ''
-  const r = await hub.dispatch('portfolio_trades', { code })
+  const q = req.query as { code?: string; market?: string }
+  const code = q.code ?? ''
+  const market = q.market?.trim() || undefined
+  const r = await hub.dispatch('portfolio_trades', { code, market })
   return { success: r.success, data: r.data, message: r.message }
 })
 
@@ -1061,15 +1063,16 @@ app.put<{ Body: { items: Array<{ code: string; name: string; industry?: string; 
   },
 )
 
-app.post<{ Body: { code: string; shares: number; price: number; side?: string; date?: string } }>(
+app.post<{ Body: { code: string; shares: number; price: number; side?: string; date?: string; market?: string } }>(
   '/api/portfolio/trade',
   async (req, reply) => {
-    const { code, shares, price, side = 'buy', date } = req.body ?? {}
+    const { code, shares, price, side = 'buy', date, market } = req.body ?? {}
     if (!code || !shares || !price) return reply.code(400).send({ error: 'code, shares, price required' })
     const pm = hub.de.portfolio
+    const m = market?.trim() || undefined
     const result = side === 'sell'
-      ? await pm.sell(code, shares, price, date)
-      : await pm.buy(code, shares, price, date)
+      ? await pm.sell(code, shares, price, date, '', m as import('@opptrix/shared').Market | undefined)
+      : await pm.buy(code, shares, price, date, '', m as import('@opptrix/shared').Market | undefined)
     return { success: true, trade: result }
   },
 )
@@ -1082,10 +1085,11 @@ app.delete<{ Params: { id: string } }>('/api/portfolio/trade/:id', async (req, r
   return { success: true }
 })
 
-app.delete<{ Querystring: { code?: string } }>('/api/portfolio/instrument', async (req, reply) => {
+app.delete<{ Querystring: { code?: string; market?: string } }>('/api/portfolio/instrument', async (req, reply) => {
   const code = String(req.query?.code ?? '').trim()
   if (!code) return reply.code(400).send({ error: 'code required' })
-  const { removed } = hub.de.portfolio.clearInstrument(code)
+  const market = req.query?.market?.trim() || undefined
+  const { removed } = hub.de.portfolio.clearInstrument(code, market as import('@opptrix/shared').Market | undefined)
   return { success: true, removed }
 })
 

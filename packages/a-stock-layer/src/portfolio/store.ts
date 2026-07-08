@@ -1,6 +1,13 @@
+import type { Market } from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { FeeConfig, TradeRecord } from './models.js'
 import { DEFAULT_FEE_CONFIG } from './models.js'
+import {
+  portfolioCodeAliases,
+  portfolioCodesMatch,
+  portfolioDisplayCode,
+  portfolioInstrumentRef,
+} from './instrument.js'
 
 const NAMESPACE = 'portfolio'
 const DOC_ID = 'default'
@@ -16,18 +23,8 @@ function defaultState(): DbState {
   return { config: { ...DEFAULT_FEE_CONFIG }, stockConfig: {}, trades: [], nextId: 1 }
 }
 
-function tradeCodeAliases(code: string): Set<string> {
-  const trimmed = code.trim()
-  const aliases = new Set<string>([trimmed, trimmed.toUpperCase()])
-  if (/^\d+$/.test(trimmed)) aliases.add(trimmed.padStart(6, '0'))
-  return aliases
-}
-
-function tradeCodesOverlap(code: string, aliases: Set<string>): boolean {
-  for (const alias of tradeCodeAliases(code)) {
-    if (aliases.has(alias)) return true
-  }
-  return false
+function legacyTradeMarket(trade: TradeRecord): Market {
+  return trade.market ?? 'CN'
 }
 
 export class PortfolioStore {
@@ -59,8 +56,9 @@ export class PortfolioStore {
     return { ...this.state.config }
   }
 
-  getStockConfig(code: string): Partial<FeeConfig> {
-    return { ...(this.state.stockConfig[code.padStart(6, '0')] ?? {}) }
+  getStockConfig(code: string, market?: Market): Partial<FeeConfig> {
+    const key = portfolioDisplayCode(code, market)
+    return { ...(this.state.stockConfig[key] ?? {}) }
   }
 
   addTrade(rec: Omit<TradeRecord, 'id'>): number {
@@ -77,26 +75,27 @@ export class PortfolioStore {
     return this.state.trades.length < before
   }
 
-  /** Remove all trades and per-stock fee overrides for one instrument code. */
-  deleteTradesForCode(code: string): number {
-    const aliases = tradeCodeAliases(code)
+  /** Remove all trades and per-stock fee overrides when a watchlist symbol is removed. */
+  deleteTradesForCode(code: string, market?: Market) {
     const before = this.state.trades.length
-    this.state.trades = this.state.trades.filter(t => !tradeCodesOverlap(t.code, aliases))
-    for (const key of aliases) {
-      if (/^\d{6}$/.test(key)) delete this.state.stockConfig[key]
+    this.state.trades = this.state.trades.filter(
+      t => !portfolioCodesMatch(t.code, legacyTradeMarket(t), code, market),
+    )
+    for (const alias of portfolioCodeAliases(code, market)) {
+      delete this.state.stockConfig[alias]
     }
     this.save()
     return before - this.state.trades.length
   }
 
-  getTrades(code = ''): TradeRecord[] {
-    if (code) {
-      const c = code.padStart(6, '0')
-      return this.state.trades
-        .filter(t => t.code === c)
-        .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
-    }
-    return [...this.state.trades].sort((a, b) => b.tradeDate.localeCompare(a.tradeDate) || b.id - a.id).slice(0, 500)
+  getTrades(code = '', market?: Market): TradeRecord[] {
+    const sorted = [...this.state.trades].sort(
+      (a, b) => b.tradeDate.localeCompare(a.tradeDate) || b.id - a.id,
+    )
+    if (!code.trim()) return sorted.slice(0, 500)
+    return sorted
+      .filter(t => portfolioCodesMatch(t.code, legacyTradeMarket(t), code, market))
+      .sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
   }
 
   clearAll() {
@@ -106,3 +105,5 @@ export class PortfolioStore {
     return n
   }
 }
+
+export { portfolioInstrumentRef } from './instrument.js'

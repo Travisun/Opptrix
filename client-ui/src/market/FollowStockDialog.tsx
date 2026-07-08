@@ -341,19 +341,20 @@ interface Props {
   stock: WatchlistItem | null
   currentPrice: number | null
   holding?: HoldingSnapshot | null
-  /** A 股持仓录入与盈亏；非 A 股仅备注与现价 */
+  /** 持仓录入与盈亏；需标的支持 portfolio_pnl */
   portfolioEnabled?: boolean
   onClose: () => void
   onSaveNote: (code: string, note: string) => void
-  loadTrades: (code: string) => Promise<PortfolioTradeItem[]>
+  loadTrades: (code: string, market?: string) => Promise<PortfolioTradeItem[]>
   submitTrade: (payload: {
     code: string
+    market?: string
     shares: number
     price: number
     side: 'buy' | 'sell'
     date?: string
   }) => Promise<PortfolioTradeItem[]>
-  deleteTrade: (id: number, code: string) => Promise<PortfolioTradeItem[]>
+  deleteTrade: (id: number, code: string, market?: string) => Promise<PortfolioTradeItem[]>
 }
 
 export default function FollowStockDialog({
@@ -452,7 +453,7 @@ export default function FollowStockDialog({
     }
     let cancelled = false
     setLoadingTrades(true)
-    void loadTrades(tradeCode).then(rows => {
+    void loadTrades(tradeCode, stockRef?.market).then(rows => {
       if (!cancelled) {
         setTrades(rows)
         setDialogTab(rows.length > 0 ? 'records' : 'trade')
@@ -461,7 +462,7 @@ export default function FollowStockDialog({
       if (!cancelled) setLoadingTrades(false)
     })
     return () => { cancelled = true }
-  }, [open, stock, tradeCode, currentPrice, loadTrades, portfolioEnabled])
+  }, [open, stock, tradeCode, stockRef?.market, currentPrice, loadTrades, portfolioEnabled])
 
   useEffect(() => {
     if (!open || !stock) return undefined
@@ -503,7 +504,8 @@ export default function FollowStockDialog({
     setSubmitting(true)
     try {
       const rows = await submitTrade({
-        code: stock.code,
+        code: tradeCode,
+        market: stockRef?.market,
         shares,
         price,
         side: tradeForm.side,
@@ -517,15 +519,15 @@ export default function FollowStockDialog({
     } finally {
       setSubmitting(false)
     }
-  }, [stock, tradeForm, submitTrade])
+  }, [stock, stockRef, tradeCode, tradeForm, submitTrade])
 
   const handleDeleteTrade = useCallback(async (id: number) => {
     if (!stock) return
     try {
-      const rows = await deleteTrade(id, stock.code)
+      const rows = await deleteTrade(id, tradeCode, stockRef?.market)
       setTrades(rows)
     } catch { /* ignore */ }
-  }, [stock, deleteTrade])
+  }, [stock, tradeCode, stockRef, deleteTrade])
 
   if (!stock) return null
 
@@ -622,7 +624,7 @@ export default function FollowStockDialog({
 
             {!portfolioEnabled && (
               <Text className={s.sub}>
-                持仓录入与盈亏统计暂仅支持 A 股；此处可记录关注备注，并在上方查看现价与关注收益。
+                此标的暂不支持持仓录入与盈亏统计；可记录关注备注，并在上方查看现价与关注收益。
               </Text>
             )}
 

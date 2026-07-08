@@ -331,6 +331,7 @@ export interface IndustryMiningData {
 
 export interface PortfolioTradeItem {
   id: number; code: string; name: string
+  market?: string
   tradeSide: 'buy' | 'sell'; shares: number; price: number
   amount: number; totalFee: number; tradeDate: string
 }
@@ -346,7 +347,7 @@ export interface PortfolioSummaryData {
   totalPnl: number; totalPnlPct: number
   holdingsCount: number; tradesCount: number
   holdings: {
-    code: string; name: string; shares: number
+    code: string; name: string; market?: string; shares: number
     costBasis: number; totalCost?: number; currentPrice: number
     marketValue: number; unrealizedPnl: number; unrealizedPnlPct: number
     realizedPnl?: number; totalPnl?: number; totalPnlPct?: number

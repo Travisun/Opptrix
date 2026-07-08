@@ -260,7 +260,7 @@ export class ResearchHub {
           const code = ref?.symbol ?? String(params.code ?? '')
           return this.latestEvaluation(code, ref ? { ...params, instrument: ref } : params, t0)
         }
-        case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), t0)
+        case 'portfolio_trades': return this.portfolioTrades(String(params.code ?? ''), params.market != null ? String(params.market) : undefined, t0)
         case 'portfolio_holdings': return this.portfolioHoldings(t0)
         case 'portfolio_summary': return this.portfolioSummary(t0)
         case 'news_center_status': return newsCenterStatus(t0)
@@ -2775,8 +2775,8 @@ export class ResearchHub {
     return ok({ code, report_type: 'strategy_report', text }, 'T策略分析报告', t0)
   }
 
-  private async portfolioTrades(code: string, t0: number) {
-    const trades = this.de.portfolio.trades(code)
+  private async portfolioTrades(code: string, market: string | undefined, t0: number) {
+    const trades = this.de.portfolio.trades(code, market as import('@opptrix/shared').Market | undefined)
     return ok({ trades, count: trades.length }, `交易记录 ${trades.length} 条`, t0)
   }
 

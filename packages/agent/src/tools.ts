@@ -436,9 +436,24 @@ export class ToolRegistry {
       },
       {
         name: 'portfolio_trades', category: '组合管理',
-        description: '查询交易账本记录（买卖流水）',
-        parameters: S({ code: { type: 'string', description: '可选，按代码过滤' } }),
-        handler: (a: Record<string, unknown>) => d('portfolio_trades', { code: a.code ?? '' }),
+        description: '查询交易账本记录（买卖流水）；可按标的过滤',
+        parameters: S({
+          code: { type: 'string', description: '可选，按代码过滤（A 股六位、港股五位、美股 ticker）' },
+          market: { type: 'string', description: '可选，CN | US | HK；过滤港/美流水时必填' },
+          symbol: { type: 'string', description: '可选，与 market 平铺写法（与 code 二选一）' },
+        }),
+        handler: (a: Record<string, unknown>) => {
+          const hasFilter = a.code != null || a.symbol != null || a.market != null || a.instrument != null
+          if (!hasFilter) return d('portfolio_trades', {})
+          const ref = resolveInstrumentFromParams(a)
+          if (ref) {
+            return d('portfolio_trades', { code: ref.symbol, market: ref.market })
+          }
+          return d('portfolio_trades', {
+            code: String(a.code ?? a.symbol ?? ''),
+            market: a.market != null ? String(a.market) : undefined,
+          })
+        },
       },
       {
         name: 'portfolio_summary', category: '组合管理',

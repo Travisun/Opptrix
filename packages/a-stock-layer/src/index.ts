@@ -105,6 +105,12 @@ export {
 } from './providers/zzshare/index.js'
 
 export { PortfolioManager } from './portfolio/manager.js'
+export {
+  portfolioCodeAliases,
+  portfolioDisplayCode,
+  portfolioInstrumentRef,
+  portfolioLedgerKey,
+} from './portfolio/instrument.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
 export { WatchlistManager } from './watchlist/manager.js'
 export type { WatchlistItem } from './watchlist/models.js'

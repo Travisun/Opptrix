@@ -633,8 +633,8 @@ export const research = {
   strategyReport: (code: string) =>
     apiCall<ReportTextData>('strategy_report', { code }),
 
-  portfolioTrades: (code = '') =>
-    apiCall<import('../types/schemas').PortfolioLedgerData>('portfolio_trades', { code }),
+  portfolioTrades: (code = '', market?: string) =>
+    apiCall<import('../types/schemas').PortfolioLedgerData>('portfolio_trades', { code, market }),
 
   portfolioSummary: () =>
     apiCall<import('../types/schemas').PortfolioSummaryData>('portfolio_summary', {}),
@@ -1100,7 +1100,7 @@ export async function reloadInstalledProvider(providerId: string) {
 }
 
 export async function portfolioTrade(payload: {
-  code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string
+  code: string; shares: number; price: number; side?: 'buy' | 'sell'; date?: string; market?: string
 }) {
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/trade`, {
     method: 'POST',
@@ -1117,8 +1117,9 @@ export async function portfolioDeleteTrade(id: number) {
   return resp.json() as Promise<{ success: boolean }>
 }
 
-export async function portfolioClearInstrument(code: string) {
+export async function portfolioClearInstrument(code: string, market?: string) {
   const qs = new URLSearchParams({ code: code.trim() })
+  if (market) qs.set('market', market)
   const resp = await fetchWithTimeout(`${API_BASE}/portfolio/instrument?${qs}`, { method: 'DELETE' })
   if (!resp.ok) throw new Error('clear portfolio instrument failed')
   return resp.json() as Promise<{ success: boolean; removed: number }>

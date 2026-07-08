@@ -1,5 +1,11 @@
+import type { InstrumentRef, Market } from '@opptrix/shared'
 import type { AshareEngine } from '../engine.js'
 import type { FeeConfig, HoldingPosition, PnLSummary, TradeRecord, TradeSide } from './models.js'
+import {
+  portfolioDisplayCode,
+  portfolioInstrumentRef,
+  portfolioLedgerKey,
+} from './instrument.js'
 import { PortfolioStore } from './store.js'
 
 function calcFees(amount: number, side: TradeSide, cfg: FeeConfig) {
@@ -36,10 +42,12 @@ function calcPnlForStock(trades: TradeRecord[], currentPrice: number): HoldingPo
   const marketValue = shares * currentPrice
   const unrealizedPnl = marketValue - totalCost
   const totalPnl = unrealizedPnl + realizedPnl
+  const first = trades[0]
 
   return {
-    code: trades[0]?.code ?? '',
-    name: trades[0]?.name ?? '',
+    code: first?.code ?? '',
+    name: first?.name ?? '',
+    market: first?.market,
     shares: Math.round(shares * 100) / 100,
     costBasis: Math.round(costBasis * 1000) / 1000,
     totalCost: Math.round(totalCost * 100) / 100,
@@ -60,9 +68,9 @@ export class PortfolioManager {
 
   constructor(private engine?: AshareEngine) {}
 
-  private feeConfig(code: string): FeeConfig {
+  private feeConfig(code: string, market?: Market): FeeConfig {
     const global = this.store.getConfig()
-    const stock = this.store.getStockConfig(code)
+    const stock = this.store.getStockConfig(code, market)
     return {
       commissionRate: stock.commissionRate ?? global.commissionRate,
       commissionMin: stock.commissionMin ?? global.commissionMin,
@@ -71,64 +79,140 @@ export class PortfolioManager {
     }
   }
 
-  private async resolveName(code: string, name = '') {
+  private equityRef(code: string, market?: Market): InstrumentRef {
+    return portfolioInstrumentRef(code, market)
+  }
+
+  private async resolveName(ref: InstrumentRef, name = '') {
     if (name || !this.engine) return name
     try {
-      const r = await this.engine.realtime(code)
-      return r.data?.[0]?.name ?? name
+      const r = await this.engine.queryInstrumentData(ref, 'realtime')
+      const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
+      const row = rows[0] as { name?: unknown } | undefined
+      return row?.name != null ? String(row.name) : name
     } catch {
       return name
     }
   }
 
-  async buy(code: string, shares: number, price: number, date = '', name = '') {
-    const tradeDate = date || new Date().toISOString().slice(0, 10)
-    const c = code.padStart(6, '0')
-    const amount = Math.round(shares * price * 100) / 100
-    const fees = calcFees(amount, 'buy', this.feeConfig(c))
-    const stockName = await this.resolveName(c, name)
-    const totalFee = fees.commission + fees.stampDuty + fees.transferFee
-    const id = this.store.addTrade({
-      code: c, name: stockName, tradeSide: 'buy', shares, price, amount,
-      commission: fees.commission, stampDuty: fees.stampDuty, transferFee: fees.transferFee,
-      totalFee: Math.round(totalFee * 100) / 100, tradeDate,
-    })
-    return { id, code: c, name: stockName, tradeSide: 'buy' as const, shares, price, amount, tradeDate }
+  private async fetchRealtimePrice(ref: InstrumentRef): Promise<number | null> {
+    if (!this.engine) return null
+    try {
+      const r = await this.engine.queryInstrumentData(ref, 'realtime')
+      const rows = 'data' in r && Array.isArray(r.data) ? r.data : []
+      const row = rows[0] as { price?: unknown } | undefined
+      const price = row?.price
+      return price != null && Number.isFinite(Number(price)) ? Number(price) : null
+    } catch {
+      return null
+    }
   }
 
-  async sell(code: string, shares: number, price: number, date = '', name = '') {
+  async buy(
+    code: string,
+    shares: number,
+    price: number,
+    date = '',
+    name = '',
+    market?: Market,
+  ) {
+    const ref = this.equityRef(code, market)
+    const displayCode = portfolioDisplayCode(code, ref.market)
     const tradeDate = date || new Date().toISOString().slice(0, 10)
-    const c = code.padStart(6, '0')
     const amount = Math.round(shares * price * 100) / 100
-    const fees = calcFees(amount, 'sell', this.feeConfig(c))
-    const stockName = await this.resolveName(c, name)
+    const fees = calcFees(amount, 'buy', this.feeConfig(displayCode, ref.market))
+    const stockName = await this.resolveName(ref, name)
     const totalFee = fees.commission + fees.stampDuty + fees.transferFee
     const id = this.store.addTrade({
-      code: c, name: stockName, tradeSide: 'sell', shares, price, amount,
-      commission: fees.commission, stampDuty: fees.stampDuty, transferFee: fees.transferFee,
-      totalFee: Math.round(totalFee * 100) / 100, tradeDate,
+      code: displayCode,
+      market: ref.market,
+      name: stockName,
+      tradeSide: 'buy',
+      shares,
+      price,
+      amount,
+      commission: fees.commission,
+      stampDuty: fees.stampDuty,
+      transferFee: fees.transferFee,
+      totalFee: Math.round(totalFee * 100) / 100,
+      tradeDate,
     })
-    return { id, code: c, name: stockName, tradeSide: 'sell' as const, shares, price, amount, tradeDate }
+    return {
+      id,
+      code: displayCode,
+      market: ref.market,
+      name: stockName,
+      tradeSide: 'buy' as const,
+      shares,
+      price,
+      amount,
+      tradeDate,
+    }
   }
 
-  trades(code = '') { return this.store.getTrades(code) }
+  async sell(
+    code: string,
+    shares: number,
+    price: number,
+    date = '',
+    name = '',
+    market?: Market,
+  ) {
+    const ref = this.equityRef(code, market)
+    const displayCode = portfolioDisplayCode(code, ref.market)
+    const tradeDate = date || new Date().toISOString().slice(0, 10)
+    const amount = Math.round(shares * price * 100) / 100
+    const fees = calcFees(amount, 'sell', this.feeConfig(displayCode, ref.market))
+    const stockName = await this.resolveName(ref, name)
+    const totalFee = fees.commission + fees.stampDuty + fees.transferFee
+    const id = this.store.addTrade({
+      code: displayCode,
+      market: ref.market,
+      name: stockName,
+      tradeSide: 'sell',
+      shares,
+      price,
+      amount,
+      commission: fees.commission,
+      stampDuty: fees.stampDuty,
+      transferFee: fees.transferFee,
+      totalFee: Math.round(totalFee * 100) / 100,
+      tradeDate,
+    })
+    return {
+      id,
+      code: displayCode,
+      market: ref.market,
+      name: stockName,
+      tradeSide: 'sell' as const,
+      shares,
+      price,
+      amount,
+      tradeDate,
+    }
+  }
+
+  trades(code = '', market?: Market) {
+    return this.store.getTrades(code, market)
+  }
 
   async holdings(refreshPrices = true): Promise<HoldingPosition[]> {
     const all = this.store.getTrades()
-    const byCode = new Map<string, TradeRecord[]>()
+    const byKey = new Map<string, TradeRecord[]>()
     for (const t of all) {
-      if (!byCode.has(t.code)) byCode.set(t.code, [])
-      byCode.get(t.code)!.push(t)
+      const key = portfolioLedgerKey(t.code, t.market)
+      if (!byKey.has(key)) byKey.set(key, [])
+      byKey.get(key)!.push(t)
     }
 
     const results: HoldingPosition[] = []
-    for (const [, ts] of byCode) {
-      let price = ts[ts.length - 1].price
+    for (const [, ts] of byKey) {
+      ts.sort((a, b) => a.tradeDate.localeCompare(b.tradeDate) || a.id - b.id)
+      let price = ts[ts.length - 1]!.price
       if (refreshPrices && this.engine) {
-        try {
-          const r = await this.engine.realtime(ts[0].code)
-          if (r.success && r.data?.[0]?.price != null) price = r.data[0].price!
-        } catch { /* keep last trade price */ }
+        const ref = portfolioInstrumentRef(ts[0]!.code, ts[0]!.market)
+        const live = await this.fetchRealtimePrice(ref)
+        if (live != null) price = live
       }
       const pos = calcPnlForStock(ts, price)
       if (pos.shares > 0) results.push(pos)
@@ -159,8 +243,8 @@ export class PortfolioManager {
   removeTrade(id: number) { return this.store.deleteTrade(id) }
 
   /** Drop ledger rows and per-stock fee overrides when a watchlist symbol is removed. */
-  clearInstrument(code: string) {
-    const removed = this.store.deleteTradesForCode(code)
+  clearInstrument(code: string, market?: Market) {
+    const removed = this.store.deleteTradesForCode(code, market)
     return { removed }
   }
 

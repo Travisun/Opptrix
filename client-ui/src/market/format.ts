@@ -60,6 +60,14 @@ export function normalizeCode(code: string): string {
   return code.trim().padStart(6, '0')
 }
 
+/** 持仓 map 键 — A 股六位，港/美用展示代码 */
+export function portfolioHoldingsKey(code: string, market?: string): string {
+  const trimmed = code.trim()
+  if (market && market !== 'CN') return trimmed
+  if (/^\d+$/.test(trimmed) && trimmed.length <= 6) return normalizeCode(trimmed)
+  return trimmed
+}
+
 /** A 股 ETF 代码段（宽基/行业/跨境等） */
 export function isCnEtfCode(code: string): boolean {
   const c = normalizeCode(code)

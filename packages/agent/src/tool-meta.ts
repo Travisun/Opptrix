@@ -534,19 +534,19 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_portfolio_holdings: {
     hubFeature: 'portfolio_holdings',
     miningEligible: true,
-    usageGuide: '读取用户实盘持仓（股数、成本、市值、浮盈）；分析持仓、对比策略候选或排除已持仓时使用。',
-    compliance: '只读；无参数；数据来自本地交易账本。',
+    usageGuide: '读取用户实盘持仓（股数、成本、市值、浮盈）；含 A 股/港股/美股；分析持仓、对比策略候选或排除已持仓时使用。',
+    compliance: '只读；无参数；返回每条含 market 字段；数据来自本地交易账本。',
   },
   portfolio_trades: {
     hubFeature: 'portfolio_trades',
     miningEligible: true,
-    usageGuide: '查询买卖流水；核实成本、交易历史或复盘时使用。',
-    compliance: '只读；可选 code 过滤；勿编造交易记录。',
+    usageGuide: '查询买卖流水；核实成本、交易历史或复盘时使用。过滤单只时港/美须带 market（如 market=HK, code=00700）。',
+    compliance: '只读；可选 code/market 过滤；勿编造交易记录。',
   },
   portfolio_summary: {
     hubFeature: 'portfolio_summary',
     miningEligible: true,
-    usageGuide: '持仓盈亏汇总 + 明细；需要组合层面 PnL 时使用。',
+    usageGuide: '持仓盈亏汇总 + 明细（含 market）；需要组合层面 PnL 时使用。',
     compliance: '只读；比 get_portfolio_holdings 更重；二选一即可，勿重复调用。',
   },
   get_news_center_status: {

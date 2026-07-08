@@ -26,10 +26,11 @@ import {
 } from '../chat/chatIcons'
 import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
-import { normalizeCode } from './format'
+import { normalizeCode, portfolioHoldingsKey } from './format'
 import {
   detailPanelKind,
   normalizeWatchlistItem,
+  parseInstrumentInput,
   resolveWatchlistInstrument,
   watchlistItemKey,
 } from './instrument'
@@ -231,9 +232,21 @@ export default function RightMarketPanel({
     return () => { cancelled = true }
   }, [detailStock, detailKind])
 
-  const handlePortfolioSelect = useCallback((code: string) => {
-    const fromList = items.find(item => item.code === code || normalizeCode(item.code) === normalizeCode(code))
-    const holding = holdingsByCode[normalizeCode(code)] ?? holdingsByCode[code]
+  const handlePortfolioSelect = useCallback((code: string, market?: string) => {
+    const fromList = items.find(item => {
+      const ref = resolveWatchlistInstrument(item)
+      const itemKey = portfolioHoldingsKey(item.code, ref.market)
+      const targetKey = portfolioHoldingsKey(code, market ?? ref.market)
+      return itemKey === targetKey
+        || item.code === code
+        || normalizeCode(item.code) === normalizeCode(code)
+    })
+    const ref = fromList
+      ? resolveWatchlistInstrument(fromList)
+      : market
+        ? parseInstrumentInput(`${market}:${code}`)
+        : parseInstrumentInput(code)
+    const holding = holdingsByCode[portfolioHoldingsKey(code, ref.market)] ?? holdingsByCode[code]
     const item: WatchlistItem = fromList ?? normalizeWatchlistItem({
       code,
       name: holding?.name ?? code,
@@ -241,6 +254,16 @@ export default function RightMarketPanel({
     setSelected(item)
     setTab('detail')
   }, [items, holdingsByCode])
+
+  const manageRef = manageStock ? resolveWatchlistInstrument(manageStock) : null
+  const manageHolding = manageStock && manageRef
+    ? holdingsByCode[portfolioHoldingsKey(manageStock.code, manageRef.market)] ?? null
+    : null
+
+  const detailRef = detailStock ? resolveWatchlistInstrument(detailStock) : null
+  const detailHoldingKey = detailStock && detailRef
+    ? portfolioHoldingsKey(detailStock.code, detailRef.market)
+    : ''
 
   const handleSelectPeer = useCallback((item: WatchlistItem) => {
     handleSelect(normalizeWatchlistItem(item))
@@ -251,10 +274,6 @@ export default function RightMarketPanel({
     handlePortfolioSelect(focusStockCode)
     onFocusStockConsumed?.()
   }, [focusStockCode, handlePortfolioSelect, onFocusStockConsumed])
-
-  const manageHolding = manageStock
-    ? holdingsByCode[normalizeCode(manageStock.code)] ?? null
-    : null
 
   const showDetailTab = tab === 'detail'
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone (not tab padding). */
@@ -351,17 +370,19 @@ export default function RightMarketPanel({
             onManage={item => { void handleManage(item) }}
             onAdd={handleAdd}
             onPatchItem={updateItem}
-            onRemove={code => {
-              void clearPortfolioForCode(code)
-              removeItem(code)
+            onRemove={item => {
+              const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
+              void clearPortfolioForCode(item.code, ref.market)
+              removeItem(item.code)
               const selectedKey = selected
                 ? watchlistItemKey(normalizeWatchlistItem(selected))
                 : null
-              if (selected?.code === code || selectedKey === code) {
+              const removedKey = watchlistItemKey(normalizeWatchlistItem(item))
+              if (selected?.code === item.code || selectedKey === removedKey) {
                 setSelected(null)
                 setTab('watchlist')
               }
-              if (manageStock?.code === code) {
+              if (manageStock?.code === item.code) {
                 setManageStock(null)
                 setDialogPrice(null)
               }
@@ -395,8 +416,8 @@ export default function RightMarketPanel({
         ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
           <StockDetailTab
             stock={detailStock}
-            isHolding={detailStock ? (holdingsByCode[detailStock.code]?.shares ?? 0) > 0 : false}
-            holding={detailStock ? holdingsByCode[detailStock.code] ?? null : null}
+            isHolding={detailHoldingKey ? (holdingsByCode[detailHoldingKey]?.shares ?? 0) > 0 : false}
+            holding={detailHoldingKey ? holdingsByCode[detailHoldingKey] ?? null : null}
             onManage={detailStock ? () => { void handleManage(detailStock) } : undefined}
             onDiscussInChat={onDiscussInChat}
           />
@@ -421,8 +442,8 @@ export default function RightMarketPanel({
             await refreshHoldings()
             return rows
           }}
-          deleteTrade={async (id, code) => {
-            const rows = await deleteTrade(id, code)
+          deleteTrade={async (id, code, market) => {
+            const rows = await deleteTrade(id, code, market)
             await refreshHoldings()
             return rows
           }}

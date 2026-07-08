@@ -1,9 +1,12 @@
+import type { Market } from '@opptrix/shared'
+
 export type TradeSide = 'buy' | 'sell'
 
 export interface TradeRecord {
   id: number
   code: string
   name: string
+  market?: Market
   tradeSide: TradeSide
   shares: number
   price: number
@@ -19,6 +22,7 @@ export interface TradeRecord {
 export interface HoldingPosition {
   code: string
   name: string
+  market?: Market
   shares: number
   costBasis: number
   totalCost: number

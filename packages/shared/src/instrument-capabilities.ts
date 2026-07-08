@@ -41,7 +41,7 @@ const CN_ETF: ApplicationCapability[] = [
 
 const US_EQUITY: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'strategy_signal',
-  'technical_indicators', 'discover_mine',
+  'technical_indicators', 'discover_mine', 'portfolio_pnl',
 ]
 
 const CRYPTO_SPOT: ApplicationCapability[] = [
@@ -51,7 +51,7 @@ const CRYPTO_SPOT: ApplicationCapability[] = [
 
 const HK_EQUITY: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'strategy_signal',
-  'technical_indicators', 'discover_mine',
+  'technical_indicators', 'discover_mine', 'portfolio_pnl',
 ]
 
 function capabilityRow(

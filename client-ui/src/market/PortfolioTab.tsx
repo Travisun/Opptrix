@@ -5,7 +5,8 @@ import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { formatPct, formatPrice, formatPriceForMarket, normalizeCode, pctTone, portfolioHoldingsKey } from './format'
+import { marketDisplayName } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
@@ -155,7 +156,7 @@ const useStyles = makeStyles({
 interface PortfolioTabProps {
   active?: boolean
   selectedCode: string | null
-  onSelect: (code: string) => void
+  onSelect: (code: string, market?: string) => void
 }
 
 function pnlColor(pct: number): string {
@@ -236,7 +237,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
     <div className={s.root}>
       <div style={{ flexShrink: 0, padding: `6px ${CONTENT_PAD} 0` }}>
         <Text className={s.metricLabel} style={{ lineHeight: 1.45 }}>
-          组合盈亏与交易记录基于 A 股持仓；其他市场请在关注列表中查看详情。
+          汇总 A 股、港股、美股的持仓市值与盈亏；在关注列表或详情页录入买卖后自动更新。
         </Text>
       </div>
       {!empty && data ? (
@@ -272,25 +273,33 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
           <SidebarListEmpty
             icon={<BriefcaseRegular />}
             title="还没有持仓记录"
-            hint="在 A 股个股详情里录入买卖后，会在这里汇总市值与盈亏"
+            hint="在个股详情里录入买卖后，会在这里汇总市值与盈亏"
           />
         ) : (
           holdings.map((h) => {
-            const code = normalizeCode(h.code)
-            const selected = selectedCode === code
+            const displayCode = portfolioHoldingsKey(h.code, h.market)
+            const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market) : null
+            const selected = selectedCode != null && (
+              h.code === selectedCode
+              || normalizeCode(h.code) === normalizeCode(selectedCode)
+              || portfolioHoldingsKey(selectedCode, h.market) === displayCode
+            )
             const sharesLabel = formatShares(h.shares)
-            const note = sharesLabel ? `${code} · ${sharesLabel}` : code
+            const note = [
+              marketLabel ? `${marketLabel} · ${h.code}` : displayCode,
+              sharesLabel,
+            ].filter(Boolean).join(' · ')
             return (
               <div
-                key={code}
+                key={`${h.market ?? 'CN'}:${displayCode}`}
                 className={mergeClasses(s.row, 'opptrix-focusable', selected && s.rowActive)}
                 role="button"
                 tabIndex={0}
-                onClick={() => onSelect(code)}
+                onClick={() => onSelect(h.code, h.market)}
                 onKeyDown={(e) => {
                   if (e.key === 'Enter' || e.key === ' ') {
                     e.preventDefault()
-                    onSelect(code)
+                    onSelect(h.code, h.market)
                   }
                 }}
               >
@@ -302,7 +311,11 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
                   <span className={s.quotePrimary} style={{ color: pnlColor(h.unrealizedPnlPct) }}>
                     {formatPct(h.unrealizedPnlPct)}
                   </span>
-                  <span className={s.quoteSecondary}>{formatPrice(h.marketValue)}</span>
+                  <span className={s.quoteSecondary}>
+                    {h.market && h.market !== 'CN'
+                      ? formatPriceForMarket(h.market, h.marketValue)
+                      : formatPrice(h.marketValue)}
+                  </span>
                 </div>
               </div>
             )

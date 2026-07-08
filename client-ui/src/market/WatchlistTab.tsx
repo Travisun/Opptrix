@@ -13,7 +13,7 @@ import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import { followReturnPct } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
-import { formatPct, formatPriceForMarket, normalizeCode, pctTone, resolveDisplayStockName, hasCjkText } from './format'
+import { formatPct, formatPriceForMarket, normalizeCode, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
 import type { WatchlistRadarItem } from '../types/schemas'
 import { displayCodeFromInstrument, hitToWatchlistItem, resolveWatchlistInstrument, normalizeWatchlistItem, watchlistItemKey } from './instrument'
@@ -294,7 +294,7 @@ interface Props {
   onSelect: (item: WatchlistItem) => void
   onManage: (item: WatchlistItem) => void
   onAdd: (item: WatchlistItem, opts?: { addedPrice?: number | null }) => void
-  onRemove: (code: string) => void
+  onRemove: (item: WatchlistItem) => void
   onPatchItem: (code: string, patch: Partial<WatchlistItem>) => void
 }
 
@@ -467,7 +467,10 @@ export default function WatchlistTab({
   }, [keyword])
 
   const holdingCount = useMemo(
-    () => items.filter(item => (holdingsByCode[item.code]?.shares ?? 0) > 0).length,
+    () => items.filter(item => {
+      const ref = resolveWatchlistInstrument(item)
+      return (holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]?.shares ?? 0) > 0
+    }).length,
     [items, holdingsByCode],
   )
 
@@ -546,7 +549,7 @@ export default function WatchlistTab({
         {items.map(item => {
           const ref = resolveWatchlistInstrument(item)
           const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)]
-          const holding = holdingsByCode[item.code]
+          const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
           const isHolding = (holding?.shares ?? 0) > 0
           const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct
           const followPct = followReturnPct(quote?.price, item.addedPrice)
@@ -637,7 +640,7 @@ export default function WatchlistTab({
                     type="button"
                     className={mergeClasses(s.rowActionBtn, 'opptrix-focusable')}
                     aria-label={`删除 ${item.name}`}
-                    onClick={() => onRemove(item.code)}
+                    onClick={() => onRemove(item)}
                   >
                     <DeleteRegular fontSize={14} />
                   </button>

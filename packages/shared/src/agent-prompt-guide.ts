@@ -111,7 +111,7 @@ export function buildAgentSystemRules(): string {
     '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
     '- 不推荐具体买卖，仅提供研究与数据解读',
     '- 可组合多个工具由浅入深补全数据',
-    '- 用户关注列表用 get_watchlist；实盘持仓用 get_portfolio_holdings / portfolio_summary；交易流水用 portfolio_trades',
+    '- 用户关注列表用 get_watchlist；实盘持仓用 get_portfolio_holdings / portfolio_summary（含 A/HK/US，返回带 market）；交易流水用 portfolio_trades（过滤港/美须带 market）',
     '- 报告日期与时区用 get_current_time；环境/版本用 get_system_info；默认评分卡与模型用 get_app_settings',
     '- 外部集成（Tushare）状态用 get_integration_status',
     '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
