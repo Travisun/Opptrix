@@ -47,23 +47,16 @@ export { pickIntradaySession } from './utils/intraday-trends.js'
 export {
   crossMarketChartTimeZone,
   crossMarketSessionDate,
+  hkFdaysToIntradayItems,
   intradaySessionDateFromKlines,
   isCrossMarketTradingDay,
+  isHkFdaysPayload,
   marketLocalDatetimeToIso,
   minuteKlinesToIntradayItems,
   timezoneOffsetIso,
   type CrossMarketChartMarket,
+  type HkFdaysDay,
 } from './utils/cross-market-intraday.js'
-export {
-  dailyBarsNeededForCrossMarketPeriod,
-  deriveCrossMarketKlinesFromDaily,
-  filterKlinesByCalendarYears,
-  isCrossMarketDerivedKlinePeriod,
-  resampleKlinesByTradingDays,
-  resampleKlinesMonthly,
-  resampleKlinesWeekly,
-  type CrossMarketDerivedKlinePeriod,
-} from './utils/kline-resample.js'
 export {
   parseStockMarket,
   resolveStockMarketCode,

@@ -336,7 +336,9 @@ export function normalizeInstrumentChart(
   const sessionDate = items.length
     ? str((items[0] as Record<string, unknown>).date ?? (items[0] as Record<string, unknown>).time).slice(0, 10)
     : null
-  const intradayBars = period === 'intraday' && items.length && (items[0] as Record<string, unknown>).time
+  const firstItem = items[0] as Record<string, unknown> | undefined
+  const hasIntradayPoints = !!(firstItem?.time && firstItem.price != null && firstItem.open == null && firstItem.close == null)
+  const intradayBars = (period === 'intraday' || period === '5day') && items.length && hasIntradayPoints
     ? (items as Record<string, unknown>[]).map(row => ({
       time: str(row.time),
       price: num(row.price),

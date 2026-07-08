@@ -34,8 +34,21 @@ export type InstrumentRouteHandlers = {
     tail: number,
     market?: string,
   ) => Promise<ResearchResult>
-  usKline: (symbol: string, period: string, count: number) => Promise<ResearchResult>
-  regionalKline: (market: 'HK', symbol: string, period: string, count: number) => Promise<ResearchResult>
+  usKline: (
+    symbol: string,
+    period: string,
+    count: number,
+    before: string,
+    tail: number,
+  ) => Promise<ResearchResult>
+  regionalKline: (
+    market: 'HK',
+    symbol: string,
+    period: string,
+    count: number,
+    before: string,
+    tail: number,
+  ) => Promise<ResearchResult>
   cryptoKline: (pair: string, period: string, count: number) => Promise<ResearchResult>
   stockCyq: (code: string) => Promise<ResearchResult>
   institutionRating: (code: string, groups?: string[]) => Promise<ResearchResult>
@@ -196,10 +209,10 @@ export async function routeInstrumentChart(
     )
   }
   if (ref.market === 'US') {
-    return wrapChart(ref, period, await handlers.usKline(ref.symbol, period, count))
+    return wrapChart(ref, period, await handlers.usKline(ref.symbol, period, count, before, tail))
   }
   if (ref.market === 'HK') {
-    return wrapChart(ref, period, await handlers.regionalKline('HK', ref.symbol, period, count))
+    return wrapChart(ref, period, await handlers.regionalKline('HK', ref.symbol, period, count, before, tail))
   }
   if (ref.market === 'JP' || ref.market === 'KR') {
     return fail(ref.market === 'JP' ? '日股暂未接入' : '韩股暂未接入')

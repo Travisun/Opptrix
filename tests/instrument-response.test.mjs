@@ -65,6 +65,21 @@ test('normalizeInstrumentChart wraps cross-market kline items', () => {
   assert.equal(chart.bars[0]?.close, 1.5)
 })
 
+test('normalizeInstrumentChart passes cross-market has_more', () => {
+  const chart = normalizeInstrumentChart(
+    { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },
+    'daily',
+    {
+      symbol: 'AAPL',
+      items: [{ code: 'AAPL', date: '2024-01-02', open: 1, high: 1, low: 1, close: 1, volume: 1, amount: 1, changePct: 0, turnoverRate: null }],
+      indicators: [],
+      count: 1,
+      hasMore: true,
+    },
+  )
+  assert.equal(chart.has_more, true)
+})
+
 test('normalizeInstrumentChart passes cross-market indicators', () => {
   const chart = normalizeInstrumentChart(
     { market: 'HK', assetClass: 'EQUITY', symbol: '00700' },

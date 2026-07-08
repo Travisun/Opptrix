@@ -76,3 +76,51 @@ export function intradaySessionDateFromKlines(klines: StockKline[]): string | nu
   const sorted = [...klines].sort((a, b) => a.date.localeCompare(b.date))
   return sorted[sorted.length - 1]!.date.slice(0, 10) || null
 }
+
+export type HkFdaysDay = {
+  date: string
+  preClose?: number | null
+  points?: Array<Record<string, unknown>>
+}
+
+/** 腾讯港股 day/query 五日结构（含 points 数组，非 OHLC） */
+export function isHkFdaysPayload(items: Record<string, unknown>[]): boolean {
+  if (!items.length) return false
+  const first = items[0]!
+  return Array.isArray(first.points) && typeof first.date === 'string'
+}
+
+/** 港股五日分时 → 图表点（按日累计均价） */
+export function hkFdaysToIntradayItems(
+  market: CrossMarketChartMarket,
+  days: HkFdaysDay[],
+): Array<Record<string, unknown>> {
+  const sortedDays = [...days].sort((a, b) => String(a.date).localeCompare(String(b.date)))
+  const out: Array<Record<string, unknown>> = []
+
+  for (const day of sortedDays) {
+    const date = String(day.date ?? '').slice(0, 10)
+    if (!date) continue
+    let cumVolume = 0
+    let cumAmount = 0
+    for (const pt of day.points ?? []) {
+      const price = Number(pt.price)
+      if (!Number.isFinite(price) || price <= 0) continue
+      const rawTime = String(pt.time ?? '')
+      const clock = /^\d{2}:\d{2}$/.test(rawTime) ? `${rawTime}:00` : rawTime
+      const volume = Number(pt.volume ?? 0)
+      const amount = Number(pt.amount ?? 0) || price * volume
+      cumVolume += volume
+      cumAmount += amount
+      const avgPrice = cumVolume > 0 ? cumAmount / cumVolume : price
+      out.push({
+        time: marketLocalDatetimeToIso(market, `${date} ${clock}`),
+        price,
+        volume,
+        amount,
+        avg_price: avgPrice,
+      })
+    }
+  }
+  return out
+}

@@ -40,6 +40,7 @@ export function timeSortKey(time: Time): number | string {
 
 export function chartTimeForPeriod(raw: string, period: string, timeZone?: string): Time {
   if (isIntradayPeriod(period)) return toChartTime(raw, true, timeZone)
+  if (period === '5day' && (raw.includes(' ') || raw.includes('T'))) return toChartTime(raw, true, timeZone)
   return toChartTime(raw, isMinuteOhlcPeriod(period), timeZone)
 }
 

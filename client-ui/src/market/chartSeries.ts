@@ -112,9 +112,15 @@ function maPoints(
   )
 }
 
+function isLineChartPeriod(period: string, bars: StockChartData['bars']): boolean {
+  if (isIntradayPeriod(period)) return true
+  if (period === '5day' && bars.length > 0 && 'avgPrice' in bars[0]!) return true
+  return false
+}
+
 /** Normalize API payload → chart-ready series (sorted, deduped, validated). */
 export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'light'): ChartSeriesBundle {
-  const intraday = isIntradayPeriod(data.period)
+  const intraday = isLineChartPeriod(data.period, data.bars)
   const minuteOhlc = isMinuteOhlcPeriod(data.period)
   const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
   const ma = getMaColors(scheme)

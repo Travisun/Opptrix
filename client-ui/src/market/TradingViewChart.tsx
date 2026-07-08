@@ -384,6 +384,8 @@ export default function TradingViewChart({ code, expanded = false, active = true
           nextPeriod,
           count,
           signal,
+          opts?.before,
+          opts?.tail,
         )
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (!resp.success || !resp.data) {
