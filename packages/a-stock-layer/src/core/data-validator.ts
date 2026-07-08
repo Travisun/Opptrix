@@ -35,10 +35,13 @@ function hasString(v: unknown): v is string {
   return typeof v === 'string' && v.length > 0
 }
 
-/** 校验代码字段是否为合法格式：CN 6位数字 / US 1-5字母 / CRYPTO 含斜杠 */
+/** 校验代码字段是否为合法格式：CN 6位 / HK 5位 / US ticker / CRYPTO 含斜杠 */
 function isValidCode(v: unknown): boolean {
   if (!hasString(v)) return false
-  return /^\d{6}$/.test(v) || /^[A-Z]{1,5}$/.test(v) || /^[A-Z]+\/[A-Z]+$/.test(v)
+  return /^\d{6}$/.test(v)
+    || /^\d{5}$/.test(v)
+    || /^[A-Z][A-Z0-9.-]{0,11}$/.test(v)
+    || /^[A-Z]+\/[A-Z]+$/.test(v)
 }
 
 /** 校验日期字符串是否在 N 天有效期内（防止返回过期数据） */

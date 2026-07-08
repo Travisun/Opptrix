@@ -1,4 +1,5 @@
 import { safeFloat } from '../../../utils/helpers.js'
+import { parseTencentLine } from '../normalize/quote.js'
 import { fetchJson, fetchText } from './http.js'
 import { fetchTencentJsonp, parseTencentJsonp } from './jsonp.js'
 import { mapTencentKlineRows } from '../normalize/kline.js'
@@ -8,6 +9,7 @@ import { TENCENT_PROXY_BASE } from './types.js'
 
 const IFZQ_WEB = 'https://web.ifzq.gtimg.cn'
 const IFZQ_PROXY = TENCENT_PROXY_BASE
+const QT_URL = 'https://qt.gtimg.cn/q='
 
 const HK_JIANKUANG_PATH = '/ifzqgtimg/appstock/app/hkStockinfo/jiankuang'
 const HK_NEWS_PATH = '/ifzqgtimg/appstock/news/info/search'
@@ -334,6 +336,27 @@ function mapTradingLevels(
       volumeRatio: maxVol > 0 ? Math.round((volume / maxVol) * 10000) / 10000 : null,
     })),
     largeOrderPct: safeFloat(percent),
+  }
+}
+
+/**
+ * 港股实时行情 — `qt.gtimg.cn`（代码为 hk{5位}，如 hk00700）。
+ */
+export async function fetchTencentHkStockQuote(code: string): Promise<{
+  code: string
+  symbol: string
+  parts: string[]
+}> {
+  const symbol = normalizeHkSymbol(code)
+  const text = await fetchText(`${QT_URL}${symbol}`, 'gbk')
+  const parts = parseTencentLine(text.trim())
+  if (!parts) {
+    throw new Error(`未找到港股行情：${symbol}`)
+  }
+  return {
+    code: normalizeHkNumericCode(code),
+    symbol,
+    parts,
   }
 }
 

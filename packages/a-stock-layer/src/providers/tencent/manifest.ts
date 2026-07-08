@@ -1,7 +1,7 @@
 import { Capability } from '../../core/capabilities.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
-import { cnEquityEtfIndex, usEquityBindings } from '../common/bindings.js'
+import { cnEquityEtfIndex, usEquityBindings, regionalEquityBindings } from '../common/bindings.js'
 import { TENCENT_CN_ETF_CAPABILITIES } from '../common/etf-capabilities.js'
 import { TENCENT_SETTINGS } from './settings.js'
 
@@ -36,6 +36,13 @@ const TENCENT_US_EQUITY_CAPS = [
   Capability.STOCK_LIST,
 ]
 
+const TENCENT_HK_EQUITY_CAPS = [
+  Capability.STOCK_REALTIME,
+  Capability.STOCK_KLINE,
+  Capability.STOCK_PROFILE,
+  Capability.STOCK_LIST,
+]
+
 const EQUITY_CAPS = TENCENT_CAPS.filter(c => !INDEX_CAPS.includes(c))
 
 export const TENCENT_SPEC: ProviderManifestSpec = {
@@ -62,6 +69,7 @@ export const TENCENT_SPEC: ProviderManifestSpec = {
       maxConcurrent,
     ),
     ...usEquityBindings(TENCENT_US_EQUITY_CAPS, p, maxConcurrent),
+    ...regionalEquityBindings('HK', TENCENT_HK_EQUITY_CAPS, p, maxConcurrent),
   ],
   settings: TENCENT_SETTINGS,
   supportsTest: true,
