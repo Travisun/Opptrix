@@ -66,7 +66,16 @@ export class Cache {
 
   get<T>(cacheType: string, method: string, params: Record<string, unknown>): T | null {
     const ttl = DEFAULT_TTL[cacheType] ?? 3600
-    if (ttl <= 0) return null
+    return this.getWithTtl<T>(cacheType, method, params, ttl)
+  }
+
+  getWithTtl<T>(
+    cacheType: string,
+    method: string,
+    params: Record<string, unknown>,
+    ttlSeconds: number,
+  ): T | null {
+    if (ttlSeconds <= 0) return null
     const e = this.store.get(this.key(cacheType, method, params))
     if (!e || Date.now() > e.expires) return null
     return e.data as T
@@ -80,9 +89,20 @@ export class Cache {
     source?: string,
   ) {
     const ttl = DEFAULT_TTL[cacheType] ?? 3600
-    if (ttl <= 0) return
+    this.setWithTtl(cacheType, data, method, params, ttl, source)
+  }
+
+  setWithTtl(
+    cacheType: string,
+    data: unknown,
+    method: string,
+    params: Record<string, unknown>,
+    ttlSeconds: number,
+    source?: string,
+  ) {
+    if (ttlSeconds <= 0) return
     this.store.set(this.key(cacheType, method, params), {
-      data, expires: Date.now() + ttl * 1000, source,
+      data, expires: Date.now() + ttlSeconds * 1000, source,
     })
     this.persist()
   }

@@ -45,6 +45,12 @@ function regionalMiningTools(schema: string, screen: string): readonly string[] 
   return [...REGIONAL_MINING_TOOLS, schema, screen, ...UNIFIED_INSTRUMENT_MINING_TOOLS]
 }
 
+const BLOCKED_REGIONAL_MINING_TOOLS = [
+  'get_market_db_status',
+  'search_local_instruments',
+  ...UNIFIED_INSTRUMENT_MINING_TOOLS,
+] as const
+
 /** Agent 挖掘工具组 — 与 packages/agent tool-meta 对齐 */
 export const DISCOVER_MINING_TOOL_GROUPS = {
   cn_equity_full: [
@@ -84,14 +90,8 @@ export const DISCOVER_MINING_TOOL_GROUPS = {
     'search_local_instruments',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
-  jp_equity: regionalMiningTools(
-    'get_local_jp_screen_schema',
-    'screen_local_jp_stocks',
-  ),
-  kr_equity: regionalMiningTools(
-    'get_local_kr_screen_schema',
-    'screen_local_kr_stocks',
-  ),
+  jp_equity: BLOCKED_REGIONAL_MINING_TOOLS,
+  kr_equity: BLOCKED_REGIONAL_MINING_TOOLS,
   hk_equity: regionalMiningTools(
     'get_local_hk_screen_schema',
     'screen_local_hk_stocks',

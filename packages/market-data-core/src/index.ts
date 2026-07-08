@@ -1,5 +1,6 @@
 export { Capability, CACHE_TYPE } from './core/capabilities.js'
 export { Cache, DEFAULT_TTL } from './core/cache.js'
+export { WATCHLIST_INSTRUMENT_TTL, watchlistCacheTtl } from './core/watchlist-cache.js'
 export {
   cnEquityBindings,
   cnEtfBindings,

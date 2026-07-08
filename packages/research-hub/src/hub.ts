@@ -1955,15 +1955,17 @@ export class ResearchHub {
     return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达维度说明', t0)
   }
 
-  private searchLocalInstruments(params: Record<string, unknown>, t0: number) {
+  private async searchLocalInstruments(params: Record<string, unknown>, t0: number) {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
     const markets = Array.isArray(params.markets)
       ? params.markets.map(String) as import('@opptrix/shared').Market[]
       : undefined
-    const items = this.marketData.searchLocalInstruments(keyword, limit, markets)
-    return ok({ items, count: items.length, source: 'local' }, `本地标的搜索 ${items.length} 条`, t0)
+    const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+    const items = await searchInstrumentsOnline(this.de, keyword, limit, markets)
+    const source = items[0]?.source === 'tencent' ? 'tencent' : 'stock_index'
+    return ok({ items, count: items.length, source }, `标的搜索 ${items.length} 条`, t0)
   }
 
   private localInstrumentsSummary(t0: number) {
@@ -2033,28 +2035,8 @@ export class ResearchHub {
     return ok(this.marketData.usScreenSchema(), '本地美股筛选维度说明', t0)
   }
 
-  private localUsScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    if ((status.us_count ?? 0) < 1) {
-      return fail('本地美股库为空，请先完成 us_list 同步', t0)
-    }
-    try {
-      const data = this.marketData.usScreen({
-        keyword: params.keyword as string | undefined,
-        industry_contains: params.industry_contains as string | undefined,
-        sort_by: params.sort_by as 'code' | 'name' | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      return ok({
-        source: 'local',
-        total_universe: data.total_universe,
-        passed: data.passed,
-        items: data.items,
-      }, `美股筛选 ${data.total_universe} 只，命中 ${data.passed} 只`, t0)
-    } catch (e) {
-      return fail(e instanceof Error ? e.message : String(e), t0)
-    }
+  private async localUsScreen(params: Record<string, unknown>, t0: number) {
+    return this.onlineListScreen('US', params, t0)
   }
 
   private localCryptoScreenSchema(t0: number) {
@@ -2087,65 +2069,67 @@ export class ResearchHub {
     }
   }
 
-  private localRegionalScreen(
-    market: 'JP' | 'KR' | 'HK',
-    label: string,
-    count: number,
+  private async onlineListScreen(
+    market: 'US' | 'HK' | 'CN',
     params: Record<string, unknown>,
     t0: number,
   ) {
-    if (count < 1) {
-      return fail(`本地${label}库为空，请先完成 ${market.toLowerCase()}_list 同步`, t0)
-    }
     try {
-      const query = {
+      const { listInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+      const data = await listInstrumentsOnline(this.de, market, {
         keyword: params.keyword as string | undefined,
-        industry_contains: params.industry_contains as string | undefined,
-        sort_by: params.sort_by as 'code' | 'name' | undefined,
-        sort_order: params.sort_order as 'asc' | 'desc' | undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      }
-      const data = market === 'JP'
-        ? this.marketData.jpScreen(query)
-        : market === 'KR'
-          ? this.marketData.krScreen(query)
-          : this.marketData.hkScreen(query)
+        topN: params.top_n != null ? Number(params.top_n) : undefined,
+      })
       return ok({
-        source: 'local',
+        source: 'stock_index',
         total_universe: data.total_universe,
         passed: data.passed,
-        items: data.items,
-      }, `${label}筛选 ${data.total_universe} 只，命中 ${data.passed} 只`, t0)
+        items: data.items.map(item => ({
+          code: item.code,
+          name: item.name,
+          market: item.market,
+          exchange: item.exchange,
+        })),
+      }, `${market} 列表筛选 ${data.total_universe} 只，命中 ${data.passed} 只`, t0)
     } catch (e) {
       return fail(e instanceof Error ? e.message : String(e), t0)
     }
+  }
+
+  private localRegionalScreen(
+    market: 'JP' | 'KR' | 'HK',
+    label: string,
+    params: Record<string, unknown>,
+    t0: number,
+  ) {
+    if (market === 'HK') {
+      return this.onlineListScreen('HK', params, t0)
+    }
+    return fail(`${label}暂不支持在线名录筛选，请直接指定代码或使用 search_local_instruments`, t0)
   }
 
   private localJpScreenSchema(t0: number) {
     return ok(this.marketData.jpScreenSchema(), '本地日股筛选维度说明', t0)
   }
 
-  private localJpScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    return this.localRegionalScreen('JP', '日股', status.jp_count ?? 0, params, t0)
+  private async localJpScreen(params: Record<string, unknown>, t0: number) {
+    return this.localRegionalScreen('JP', '日股', params, t0)
   }
 
   private localKrScreenSchema(t0: number) {
     return ok(this.marketData.krScreenSchema(), '本地韩股筛选维度说明', t0)
   }
 
-  private localKrScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    return this.localRegionalScreen('KR', '韩股', status.kr_count ?? 0, params, t0)
+  private async localKrScreen(params: Record<string, unknown>, t0: number) {
+    return this.localRegionalScreen('KR', '韩股', params, t0)
   }
 
   private localHkScreenSchema(t0: number) {
     return ok(this.marketData.hkScreenSchema(), '本地港股筛选维度说明', t0)
   }
 
-  private localHkScreen(params: Record<string, unknown>, t0: number) {
-    const status = this.marketData.status()
-    return this.localRegionalScreen('HK', '港股', status.hk_count ?? 0, params, t0)
+  private async localHkScreen(params: Record<string, unknown>, t0: number) {
+    return this.localRegionalScreen('HK', '港股', params, t0)
   }
 
   private async searchEtfs(params: Record<string, unknown>, t0: number) {
@@ -2252,23 +2236,21 @@ export class ResearchHub {
   }
 
   private async usStockList(params: Record<string, unknown>, t0: number) {
-    const keyword = params.keyword != null ? String(params.keyword) : ''
-    const r = await this.de.queryInstrumentData(
-      { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
-      'stock_list',
-      { keyword },
-    )
-    if (!r.success) return fail(instrumentQueryError(r, '美股列表获取失败'), t0)
-    const items = instrumentQueryData<unknown[]>(r) ?? []
-    return ok({ items, count: items.length }, `美股列表 ${items.length} 条`, t0)
+    const { listInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+    const limit = params.limit != null ? Number(params.limit) : 5000
+    const data = await listInstrumentsOnline(this.de, 'US', {
+      keyword: params.keyword != null ? String(params.keyword) : undefined,
+      topN: Math.min(limit, 200),
+    })
+    const items = data.items.map(hit => ({
+      code: hit.code,
+      name: hit.name ?? hit.code,
+      market: hit.market,
+    }))
+    return ok({ items, count: items.length, source: 'stock_index' }, `美股列表 ${items.length} 条`, t0)
   }
 
   private async localUsList(params: Record<string, unknown>, t0: number) {
-    const limit = params.limit != null ? Number(params.limit) : 5000
-    const items = this.marketData.listLocalUsEquities(limit)
-    if (items.length) {
-      return ok({ items, count: items.length, source: 'local' }, `本地美股 ${items.length} 只`, t0)
-    }
     return this.usStockList(params, t0)
   }
 
@@ -2276,25 +2258,15 @@ export class ResearchHub {
     const keyword = String(params.keyword ?? params.q ?? '').trim()
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
-    const local = this.marketData.searchLocalUsEquities(keyword, limit)
-    if (local.length) {
-      return ok({ items: local, count: local.length, source: 'local' }, `美股搜索 ${local.length} 条`, t0)
-    }
-    const r = await this.de.queryInstrumentData(
-      { market: 'US', assetClass: 'EQUITY', symbol: 'SPY' },
-      'stock_list',
-      { keyword },
-    )
-    if (!r.success) return fail(instrumentQueryError(r, '美股搜索失败'), t0)
-    const items = (instrumentQueryData<unknown[]>(r) ?? []).map(raw => {
-      const row = raw as { code?: string; name?: string; market?: string }
-      return {
-        code: String(row.code ?? ''),
-        name: String(row.name ?? row.code ?? ''),
-        market: row.market ?? 'US',
-      }
-    })
-    return ok({ items, count: items.length, source: 'online' }, `美股搜索 ${items.length} 条`, t0)
+    const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
+    const hits = await searchInstrumentsOnline(this.de, keyword, limit, ['US'])
+    const items = hits.map(hit => ({
+      code: hit.code,
+      name: hit.name ?? hit.code,
+      market: hit.market,
+    }))
+    const source = hits[0]?.source === 'tencent' ? 'tencent' : 'stock_index'
+    return ok({ items, count: items.length, source }, `美股搜索 ${items.length} 条`, t0)
   }
 
   private async cryptoRealtime(pair: string, t0: number) {

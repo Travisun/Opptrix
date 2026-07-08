@@ -51,18 +51,14 @@ test('pack registry includes six markets with backward-compatible normalize', ()
 
 test('discover profile registry drives prescreen mode and mining tools', () => {
   assert.equal(discoverPrescreenMode('cn_equity'), 'factor_screen')
-  assert.equal(discoverPrescreenMode('jp_equity'), 'list_filter')
+  assert.equal(discoverPrescreenMode('jp_equity'), 'blocked')
   assert.equal(discoverPrescreenMode('hk_equity'), 'list_filter')
-  assert.equal(getDiscoverProfileDefinition('kr_equity')?.localScreenFeature, 'local_kr_screen')
   assert.equal(getDiscoverProfileDefinition('hk_equity')?.localScreenFeature, 'local_hk_screen')
 
   const jpTools = discoverMiningToolNamesForProfile('jp_equity')
-  assert.ok(jpTools.includes('screen_local_jp_stocks'))
-  assert.ok(jpTools.includes('get_instrument_quotes'))
-  assert.ok(jpTools.includes('get_instrument_strategy_signal'))
-  assert.ok(jpTools.includes('get_local_jp_screen_schema'))
   assert.ok(jpTools.includes('search_local_instruments'))
-  assert.ok(!jpTools.includes('batch_stock_snapshots'))
+  assert.ok(jpTools.includes('get_instrument_quotes'))
+  assert.ok(!jpTools.includes('screen_local_jp_stocks'))
 
   const hkTools = discoverMiningToolNamesForProfile('hk_equity')
   assert.ok(hkTools.includes('screen_local_hk_stocks'))
@@ -88,31 +84,32 @@ test('isLikelyCnEquityInput gates CN-only hub APIs', () => {
   assert.equal(isLikelyCnEquityInput('BTC/USDT'), false)
 })
 
-test('discover readiness uses regional counts from context', () => {
+test('discover readiness uses online mode for StockIndex profiles', () => {
   const packs = buildDefaultMarketPackConfig()
-  packs.jp.enabled = true
+  packs.us.enabled = true
   packs.hk.enabled = true
   const ctx = {
     packs,
     stock_count: 5000,
     etf_count: 800,
-    us_count: 3000,
+    us_count: 0,
     crypto_count: 200,
-    jp_count: 120,
+    jp_count: 0,
     kr_count: 0,
-    hk_count: 45,
+    hk_count: 0,
     cn_is_ready: true,
   }
-  const jp = assessDiscoverProfileReadiness('jp_equity', ctx)
-  assert.equal(jp.ready, true)
-  assert.equal(jp.mode, 'local')
+  const us = assessDiscoverProfileReadiness('us_equity', ctx)
+  assert.equal(us.ready, true)
+  assert.equal(us.mode, 'online')
 
-  const kr = assessDiscoverProfileReadiness('kr_equity', ctx)
-  assert.equal(kr.ready, false)
+  const jp = assessDiscoverProfileReadiness('jp_equity', ctx)
+  assert.equal(jp.ready, false)
+  assert.equal(jp.mode, 'blocked')
 
   const hk = assessDiscoverProfileReadiness('hk_equity', ctx)
   assert.equal(hk.ready, true)
-  assert.equal(hk.mode, 'local')
+  assert.equal(hk.mode, 'online')
 })
 
 test('listDiscoverProfileMeta exposes jp/kr/hk profiles', () => {
@@ -132,20 +129,14 @@ test('supplement pack ids include hk jp kr', async () => {
 
 test('discover mining system prompt is registry-driven', () => {
   const prompt = buildDiscoverMiningSystemPrompt({
-    profile: 'jp_equity',
+    profile: 'hk_equity',
     finalTopN: 10,
     outputSchema: '{}',
   })
-  assert.ok(prompt.includes('日本股市'))
-  assert.ok(prompt.includes('screen_local_jp_stocks'))
+  assert.ok(prompt.includes('港股'))
+  assert.ok(prompt.includes('screen_local_hk_stocks'))
   assert.ok(prompt.includes('search_local_instruments'))
-  assert.ok(prompt.includes('get_instrument_snapshot'))
-  assert.ok(prompt.includes('get_instrument_quotes'))
-  const callableLine = prompt.split('\n').find(line => line.startsWith('可调用：'))
-  assert.ok(callableLine?.includes('get_instrument_snapshot'))
-  assert.ok(!callableLine?.includes('get_us_stock'))
-  assert.match(prompt, /get_instrument_(snapshot|quotes|chart)/)
-  assert.equal(discoverProfileAssetLabel('hk_equity'), '港股（本地列表 keyword / industry_contains）')
+  assert.equal(discoverProfileAssetLabel('hk_equity'), '港股（StockIndex 在线列表 keyword / industry_contains）')
 })
 
 test('us_equity mining uses unified instrument tools not legacy US quote', () => {
@@ -228,21 +219,23 @@ test('gateInstrumentAnalytics — CN evaluation still cn_factor_scorecard', () =
   assert.equal(resolveInstrumentAnalyticsProfile(ref).mode, 'cn_factor_scorecard')
 })
 
-test('regional list seeds provide at least 50 per market', async () => {
-  const { getRegionalListSeedCount } = await import('../packages/market-data/dist/sync/regional-list-seeds.js')
-  assert.ok(getRegionalListSeedCount('JP') >= 50)
-  assert.ok(getRegionalListSeedCount('KR') >= 50)
-  assert.ok(getRegionalListSeedCount('HK') >= 50)
+test('stock-index search maps CN/US instruments', { timeout: 30_000 }, async () => {
+  const { searchInstrumentsOnline } = await import('../packages/a-stock-layer/dist/search/instrument-search.js')
+  const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
+  const de = new MarketDataEngine()
+  const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
+  assert.ok(cn.some(h => h.instrument.symbol === '600519'))
+  const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
+  assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
 })
 
-test('regional list seeds sync writes instruments', async () => {
+test('cross-market list sync jobs are no-op', async () => {
   const { mkdtempSync, rmSync } = await import('node:fs')
   const { tmpdir } = await import('node:os')
   const { join } = await import('node:path')
   const { MarketDataEngine } = await import('../packages/a-stock-layer/dist/engine.js')
   const { MarketDataStore } = await import('../packages/market-data/dist/store.js')
   const { MarketDataSyncEngine } = await import('../packages/market-data/dist/sync/engine.js')
-  const { getRegionalListSeeds } = await import('../packages/market-data/dist/sync/regional-list-seeds.js')
 
   const dir = mkdtempSync(join(tmpdir(), 'opptrix-regional-'))
   const dbPath = join(dir, 'market.db')
@@ -250,13 +243,9 @@ test('regional list seeds sync writes instruments', async () => {
 
   const store = new MarketDataStore(dbPath)
   const engine = new MarketDataSyncEngine(store, new MarketDataEngine())
-  await engine.sync({ jobs: ['jp_list'], mode: 'full' })
-
-  assert.ok(store.countRegionalEquityInstruments('JP') >= getRegionalListSeeds('JP').length)
-  const toyota = store.db.prepare(`
-    SELECT name FROM instruments WHERE market = 'JP' AND code = ?
-  `).get('7203')
-  assert.equal(toyota?.name, '丰田汽车')
+  const result = await engine.sync({ jobs: ['jp_list'], mode: 'full' })
+  assert.equal(result.jobs.jp_list, 'skipped')
+  assert.equal(store.countRegionalEquityInstruments('JP'), 0)
   store.close()
   rmSync(dir, { recursive: true, force: true })
 })
@@ -297,23 +286,17 @@ test('normalizeRegionalSymbol and regionalTodayString', async () => {
   assert.equal(isRegionalTradingDay('JP', new Date('2026-01-01T03:00:00Z')), false)
 })
 
-test('yfinance provider declares regional STOCK_LIST capability', async () => {
-  const { YFINANCE_CAPS } = await import('../packages/a-stock-layer/dist/providers/yfinance/manifest.js')
-  const { Capability } = await import('../packages/a-stock-layer/dist/core/capabilities.js')
-  assert.ok(YFINANCE_CAPS.includes(Capability.STOCK_LIST))
-})
-
-test('yahooQuoteToRegionalStockRow maps exchange suffix', async () => {
-  const { yahooQuoteToRegionalStockRow } = await import('../packages/a-stock-layer/dist/utils/regional-stock-list.js')
-  const item = yahooQuoteToRegionalStockRow('JP', {
-    symbol: '7203.T',
-    longname: 'Toyota Motor',
-    quoteType: 'EQUITY',
+test('stock-index client maps instrument ids', async () => {
+  const { stockIndexItemToInstrumentRef } = await import('../packages/a-stock-layer/dist/providers/stockindex/normalize.js')
+  const ref = stockIndexItemToInstrumentRef({
+    id: 'CN:SH.600519',
+    code: '600519',
+    nameCn: '贵州茅台',
+    market: 'CN',
+    exchange: 'SH',
   })
-  assert.equal(item?.code, '7203')
-  assert.equal(item?.name, 'Toyota Motor')
-  assert.equal(item?.market, 'JP')
-  assert.equal(yahooQuoteToRegionalStockRow('JP', { symbol: 'AAPL', quoteType: 'EQUITY' }), null)
+  assert.equal(ref?.market, 'CN')
+  assert.equal(ref?.symbol, '600519')
 })
 
 test('parseYahooSearchQuotes extracts symbols', async () => {

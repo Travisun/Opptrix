@@ -102,6 +102,8 @@ export class MarketDataSyncEngine {
   private tushareThrottler: ApiThrottler | null = null
   private profileSettings = getSyncProfileSettings()
   private tushareBoost = isTushareEnabled() ? getTushareSyncBoost() : null
+  /** finishJobEmpty 标记当前 job 为 intentional skip（非 ok） */
+  private jobFinishedEmpty = false
   private quotesBatchDelayMs = getSyncProfileSettings().quotesBatchDelayMs
 
   constructor(
@@ -161,6 +163,7 @@ export class MarketDataSyncEngine {
         }
       }
       options.onLog?.(`开始任务 ${job}`)
+      this.jobFinishedEmpty = false
       const runId = this.store.beginRun(job, mode)
       try {
         switch (job) {
@@ -257,8 +260,8 @@ export class MarketDataSyncEngine {
             options.onJobFinish?.(job, 'skipped', jobIndex)
             continue
         }
-        results[job] = 'ok'
-        this.store.setCursor(job)
+        results[job] = this.jobFinishedEmpty ? 'skipped' : 'ok'
+        if (!this.jobFinishedEmpty) this.store.setCursor(job)
         options.onJobFinish?.(job, results[job], jobIndex)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
@@ -443,6 +446,7 @@ export class MarketDataSyncEngine {
     options: SyncOptions,
     reason: string,
   ): void {
+    this.jobFinishedEmpty = true
     options.onLog?.(`${job}: ${reason}`)
     this.store.finishRun(runId, 'success', { total: 0, success: 0, error: 0 })
   }
@@ -721,46 +725,8 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private async syncUsList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    const cfg = this.cfg('us_list', options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('us_list')
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'us_list', options, '美股列表在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const resp = await this.callApi(() => deStockListQuery(this.de, 'US'), 'default')
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
-    }
-
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const raw = item as { code?: string; name?: string; market?: string; industry?: string }
-      const code = String(raw.code ?? '').trim().toUpperCase()
-      if (!code) continue
-      this.store.upsertInstrument({
-        code,
-        market: 'US',
-        assetClass: 'EQUITY',
-        name: String(raw.name ?? code),
-        exchange: null,
-        status: 'active',
-        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
-      })
-      this.markDone('us_list', code, '')
-      success++
-      if (i % 100 === 0) {
-        options.onProgress?.({ job: 'us_list', current: i + 1, total })
-      }
-    }
-    options.onProgress?.({ job: 'us_list', current: success, total })
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  private async syncUsList(runId: number, options: SyncOptions, _mode: SyncMode): Promise<void> {
+    this.finishJobEmpty(runId, 'us_list', options, '跨市场名录已改 StockIndex 在线检索，跳过 us_list')
   }
 
   private async syncUsQuotes(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -805,100 +771,18 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private async syncCryptoList(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
-    const cfg = this.cfg('crypto_list', options)
-    if (mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('crypto_list')
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, 'crypto_list', options, 'Crypto 列表在 TTL 内，跳过')
-        return
-      }
-    }
-
-    const resp = await this.callApi(() => deStockListQuery(this.de, 'CRYPTO'), 'default')
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? 'queryInstrumentData stock_list failed')
-    }
-
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const raw = item as { code?: string; name?: string; market?: string; industry?: string }
-      const code = String(raw.code ?? '').trim().toUpperCase()
-      if (!code) continue
-      this.store.upsertInstrument({
-        code,
-        market: 'CRYPTO',
-        assetClass: 'CRYPTO_SPOT',
-        name: String(raw.name ?? code),
-        exchange: 'binance',
-        status: 'active',
-        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
-      })
-      this.markDone('crypto_list', code, '')
-      success++
-      if (i % 100 === 0) {
-        options.onProgress?.({ job: 'crypto_list', current: i + 1, total })
-      }
-    }
-    options.onProgress?.({ job: 'crypto_list', current: success, total })
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+  private async syncCryptoList(runId: number, options: SyncOptions, _mode: SyncMode): Promise<void> {
+    this.finishJobEmpty(runId, 'crypto_list', options, '跨市场名录已改在线检索，跳过 crypto_list')
   }
 
-  /** HK/JP/KR list sync — Provider STOCK_LIST → instruments */
+  /** HK/JP/KR list sync — 已停用，改用 StockIndex / 在线 Provider */
   private async syncRegionalList(
     runId: number,
     job: string,
     options: SyncOptions,
-    mode: SyncMode,
+    _mode: SyncMode,
   ): Promise<void> {
-    if (!isRegionalListJob(job)) {
-      throw new Error(`未知区域列表任务: ${job}`)
-    }
-    const market = regionalListJobMarket(job)!
-    const cfg = this.cfg(job, options)
-    const existing = this.store.countRegionalEquityInstruments(market)
-
-    if (mode === 'incremental' && cfg.ttlDays && existing > 0) {
-      const last = this.store.getCursorLastSuccess(job)
-      if (last && daysSince(last) < cfg.ttlDays) {
-        this.finishJobEmpty(runId, job, options, `${job} 在 TTL 内，跳过`)
-        return
-      }
-    }
-
-    const resp = await this.callApi(() => deStockListQuery(this.de, market), 'default')
-    if (!resp.success || !resp.data?.length) {
-      throw new Error(resp.error ?? `${market} STOCK_LIST provider failed`)
-    }
-
-    let total = resp.data.length
-    if (options.maxStocks) total = Math.min(total, options.maxStocks)
-    let success = 0
-    for (const [i, item] of resp.data.entries()) {
-      if (options.maxStocks && i >= options.maxStocks) break
-      const code = normalizeRegionalSymbol(market, String(item.code ?? '').trim())
-      if (!code) continue
-      const raw = item as StockListItem
-      this.store.upsertInstrument({
-        code,
-        market,
-        assetClass: 'EQUITY',
-        name: String(raw.name ?? code),
-        exchange: null,
-        status: 'active',
-        extra: raw.industry ? JSON.stringify({ industry: raw.industry }) : null,
-      })
-      this.markDone(job, code, '')
-      success++
-      if (i % 20 === 0) {
-        options.onProgress?.({ job, current: i + 1, total })
-      }
-    }
-    options.onProgress?.({ job, current: success, total })
-    this.store.finishRun(runId, 'success', { total, success, error: total - success })
+    this.finishJobEmpty(runId, job, options, `${job} 名录同步已停用，请使用在线搜索`)
   }
 
   /** HK/JP/KR quotes — requires a registered regional provider (no free scraper registered). */

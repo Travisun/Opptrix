@@ -363,7 +363,7 @@ export default function CrossMarketSnapshotDetail({
         ) : null}
         {localIndexed === false ? (
           <Text className={s.muted}>
-            本地库暂未收录该标的。可在「设置 → 基础数据 → 市场数据包」中准备对应列表，便于 @ 引用与离线筛选。
+            在线名录暂未匹配到该代码，请确认代码是否正确；A 股可直接输入 6 位代码，美股/港股可用 US:AAPL、HK:00700 格式引用。
           </Text>
         ) : null}
         <Text className={s.foot}>{footnote}</Text>

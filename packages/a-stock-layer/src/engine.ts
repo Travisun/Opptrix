@@ -3,6 +3,7 @@ import type {
 } from '@opptrix/shared'
 import { CACHE_TYPE, Capability } from './core/capabilities.js'
 import { Cache } from './core/cache.js'
+import { watchlistCacheTtl } from '@opptrix/market-data-core'
 import { DriverRegistry } from './core/registry.js'
 import { CAP_METHOD } from './providers/common/base.js'
 import { createProviderLoader, type ProviderLoader } from './providers/loader.js'
@@ -28,7 +29,7 @@ import { isCnEtfCode } from './core/instrument.js'
 import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
 import { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
 import { normalizeUsSymbol } from './utils/us-market.js'
-import { isRegionalEquityMarket, type RegionalEquityMarket } from './utils/regional-symbol.js'
+import { isRegionalEquityMarket, normalizeRegionalSymbol, type RegionalEquityMarket } from './utils/regional-symbol.js'
 import { parseCryptoPair } from './utils/crypto-market.js'
 import type { AssetClass, Market, InstrumentRef } from '@opptrix/shared'
 import {
@@ -44,6 +45,8 @@ import type {
 import { computeIndicators } from './utils/indicators.js'
 import { PortfolioManager } from './portfolio/manager.js'
 import { WatchlistManager } from './watchlist/manager.js'
+import { watchlistItemKey } from './watchlist/instrument.js'
+import { instrumentId } from './core/instrument.js'
 import { normalizeCode } from './utils/helpers.js'
 import {
   normalizePreOpenRealtimeQuote,
@@ -104,6 +107,26 @@ export class MarketDataEngine {
       .catch(err => console.warn('[MarketDataEngine] speed ranker warm-up failed:', err))
   }
 
+  private isWatchlistTarget(market: Market, assetClass: AssetClass, args: unknown[]): boolean {
+    const symbol = this.extractSymbolFromArgs(market, assetClass, args)
+    if (!symbol) return false
+    const ref: InstrumentRef = market === 'CRYPTO'
+      ? { market, assetClass, symbol: symbol.split('/')[0]!, quote: symbol.split('/')[1] ?? 'USDT' }
+      : { market, assetClass, symbol }
+    const key = instrumentId(ref)
+    return this.watchlist.list().some(item => watchlistItemKey(item) === key)
+  }
+
+  private extractSymbolFromArgs(market: Market, assetClass: AssetClass, args: unknown[]): string {
+    const first = String(args[0] ?? '').trim()
+    if (!first) return ''
+    if (market === 'CN') return normalizeCode(first)
+    if (market === 'US') return normalizeUsSymbol(first)
+    if (isRegionalEquityMarket(market)) return normalizeRegionalSymbol(market, first)
+    if (market === 'CRYPTO') return first
+    return first
+  }
+
   private async queryScoped<T>(
     market: Market,
     assetClass: AssetClass,
@@ -114,9 +137,11 @@ export class MarketDataEngine {
     args: unknown[],
     providerTimeoutMs = 15_000,
   ): Promise<QueryResult<T[]>> {
-    if (useCache && cacheType) {
-      const params = { method, market, assetClass, args: JSON.stringify(args) }
-      const cached = this.cache.get<T[]>(cacheType, method, params)
+    const cacheParams = { method, market, assetClass, args: JSON.stringify(args) }
+    const watchlistCache = useCache && cacheType && this.isWatchlistTarget(market, assetClass, args)
+    if (watchlistCache) {
+      const ttl = watchlistCacheTtl(cacheType)
+      const cached = this.cache.getWithTtl<T[]>(cacheType, method, cacheParams, ttl)
       if (cached) return { success: true, data: cached, source: 'cache', cached: true }
     }
 
@@ -191,8 +216,9 @@ export class MarketDataEngine {
         health.recordSuccess(driver.name, capStr)
         this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker.recordResult(driver.name, capStr, elapsed, true)
-        if (useCache && cacheType) {
-          this.cache.set(cacheType, data, method, { method, market, assetClass, args: JSON.stringify(args) }, driver.name)
+        if (watchlistCache) {
+          const ttl = watchlistCacheTtl(cacheType)
+          this.cache.setWithTtl(cacheType, data, method, cacheParams, ttl, driver.name)
         }
         return { success: true, data: data as T[], source: driver.name }
       } catch (e) {
@@ -1025,6 +1051,10 @@ export {
   OkxDriver,
   BaostockDriver,
   ZzshareDriver,
+  TonghuashunDriver,
+  TencentDriver,
+  SinafinanceDriver,
+  StockIndexDriver,
   registerAllDrivers,
 } from './providers/register.js'
 export { loadTushareConfig, isTushareEnabled, saveTushareConfig, publicTushareConfig } from './providers/tushare/config.js'

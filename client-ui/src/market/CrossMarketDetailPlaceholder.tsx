@@ -98,15 +98,15 @@ export default function CrossMarketDetailPlaceholder({
       </div>
       <div className={s.body}>
         {loading ? (
-          <Spinner size="small" label="正在检查本地库…" />
+          <Spinner size="small" label="正在查询标的…" />
         ) : (
           <div className={s.card}>
             <Text className={s.muted}>
               {localIndexed === true
-                ? '该标的已收录于本地 instruments 库。实时行情、K 线与深度分析将在对应数据源接入后在此展示。'
+                ? '已匹配在线名录。实时行情、K 线与深度分析将在对应数据源接入后在此展示。'
                 : localIndexed === false
-                  ? '本地库暂未收录该标的。可先完成对应市场的列表同步（如 us_list / crypto_list），或在 Agent 对话中直接引用在线查询。'
-                  : '跨市场详情页已就绪。本地列表同步完成后可在此展示概况；实时行情接入后将自动启用图表与分析模块。'}
+                  ? '在线名录暂未匹配该代码，请核对代码或在对话中直接 @ 引用。'
+                  : '跨市场详情页已就绪；接入行情源后将在此展示概况、K 线与分析模块。'}
             </Text>
           </div>
         )}

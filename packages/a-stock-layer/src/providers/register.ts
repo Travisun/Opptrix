@@ -8,6 +8,7 @@ import { ZzshareDriver } from './zzshare/driver.js'
 import { TonghuashunDriver } from './tonghuashun/driver.js'
 import { SinafinanceDriver } from './sinafinance/driver.js'
 import { TencentDriver } from './tencent/driver.js'
+import { StockIndexDriver } from './stockindex/driver.js'
 
 /** Register built-in data providers. */
 export function registerAllDrivers(registry: DriverRegistry) {
@@ -21,6 +22,7 @@ export function registerAllDrivers(registry: DriverRegistry) {
     new TonghuashunDriver(),
     new TencentDriver(),
     new SinafinanceDriver(),
+    new StockIndexDriver(),
   ]
   for (const d of drivers) registry.register(d)
   return drivers.length
@@ -36,4 +38,5 @@ export {
   TonghuashunDriver,
   TencentDriver,
   SinafinanceDriver,
+  StockIndexDriver,
 }

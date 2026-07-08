@@ -1,20 +1,3 @@
-import {
-  getRegionalEquitySeedCount,
-  getRegionalEquitySeeds,
-  type RegionalEquitySeed,
-} from '@opptrix/a-stock-layer'
-
-export type RegionalListSeed = RegionalEquitySeed
-
-/** @deprecated use getRegionalEquitySeeds from @opptrix/a-stock-layer */
-export function getRegionalListSeeds(market: 'JP' | 'KR' | 'HK'): readonly RegionalListSeed[] {
-  return getRegionalEquitySeeds(market)
-}
-
-export function getRegionalListSeedCount(market: 'JP' | 'KR' | 'HK'): number {
-  return getRegionalEquitySeedCount(market)
-}
-
 export function regionalListJobMarket(job: string): 'JP' | 'KR' | 'HK' | null {
   if (job === 'jp_list') return 'JP'
   if (job === 'kr_list') return 'KR'

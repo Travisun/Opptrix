@@ -188,9 +188,30 @@ export function assessDiscoverProfileReadiness(
   }
 
   const prescreen = def?.prescreenMode
-  if (prescreen === 'list_filter') {
-    const count = readinessCount(ctx, profile)
+  if (prescreen === 'blocked') {
     const label = DISCOVER_PROFILE_LABELS[profile]
+    return {
+      profile,
+      ready: false,
+      mode: 'blocked',
+      message: def?.description ?? `${label}暂不支持自动初选`,
+      action: '请直接指定标的代码进行挖掘',
+    }
+  }
+
+  if (prescreen === 'list_filter') {
+    const countKey = def?.readinessCountKey
+    const label = DISCOVER_PROFILE_LABELS[profile]
+    if (!countKey) {
+      return {
+        profile,
+        ready: true,
+        mode: 'online',
+        message: `${label}将使用 StockIndex 在线列表初选`,
+        action: null,
+      }
+    }
+    const count = readinessCount(ctx, profile)
     if (count < 1) {
       return {
         profile,

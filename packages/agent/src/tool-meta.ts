@@ -432,7 +432,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: true,
     deprecated: true,
     usageGuide: '根据名称/代码/行业关键词在本地 universe 中定位标的；需先完成 universe 同步。',
-    compliance: 'keyword ≥ 2 字符；结果来自本地 market.db；请改用 search_local_instruments（markets: CN）。',
+    compliance: 'keyword 必填；优先 StockIndex 在线检索，A 股空结果时腾讯备用；可用 markets 限定市场。',
   },
   evaluate_stock: {
     hubFeature: INSTRUMENT_HUB_FEATURE.evaluation,

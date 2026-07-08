@@ -10,6 +10,7 @@
 
 import { resolveProviderAlias } from '../providers/common/provider-aliases.js'
 import { TENCENT_CUSTOM } from '../providers/tencent/custom-method-docs.js'
+import { STOCKINDEX_CUSTOM } from '../providers/stockindex/custom-method-docs.js'
 import { SINA_CUSTOM } from '../providers/sinafinance/custom-method-docs.js'
 
 /**
@@ -264,6 +265,7 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'tickflow', methods: TICKFLOW_CUSTOM },
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'tencent', methods: TENCENT_CUSTOM },
+  { providerId: 'stockindex', methods: STOCKINDEX_CUSTOM },
   { providerId: 'sinafinance', methods: SINAFINANCE_CUSTOM },
 ]
 

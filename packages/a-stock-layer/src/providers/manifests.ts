@@ -8,6 +8,7 @@ import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
 import { SINAFINANCE_MANIFEST } from './sinafinance/manifest.js'
 import { TENCENT_MANIFEST } from './tencent/manifest.js'
+import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -19,6 +20,7 @@ export { ZZSHARE_SETTINGS } from './zzshare/settings.js'
 export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
 export { SINAFINANCE_SETTINGS } from './sinafinance/settings.js'
 export { TENCENT_SETTINGS } from './tencent/settings.js'
+export { STOCKINDEX_SETTINGS } from './stockindex/settings.js'
 
 /** Static built-in manifests — registered into ManifestRegistry by ProviderLoader.registerBuiltins() */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -31,6 +33,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   TONGHUASHUN_MANIFEST,
   TENCENT_MANIFEST,
   SINAFINANCE_MANIFEST,
+  STOCKINDEX_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */

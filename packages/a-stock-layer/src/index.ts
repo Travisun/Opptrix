@@ -11,6 +11,7 @@ export {
   PROVIDER_MANIFESTS, listProviderManifests, getProviderManifest,
   ProviderLoader, createProviderLoader, getProviderLoader,
   ManifestRegistry, getManifestRegistry,
+  StockIndexDriver,
   QueryPlanExecutor, QUERY_PLANS, defaultCacheType, executeIntradaySessionsPlan,
 } from './engine.js'
 
@@ -119,16 +120,22 @@ export {
 } from './utils/regional-symbol.js'
 export type { RegionalEquityMarket } from './utils/regional-symbol.js'
 export { regionalTodayString, isRegionalTradingWeekday, isRegionalTradingDay, isRegionalHoliday, regionalHolidaysForYear } from './utils/regional-calendar.js'
-export { parseYahooSearchQuotes, type YahooSearchQuote } from './utils/yahoo-search.js'
 export {
-  getRegionalEquitySeeds,
-  getRegionalEquitySeedCount,
-  type RegionalEquitySeed,
-} from './data/regional-equity-seeds.js'
+  STOCKINDEX_MANIFEST,
+  STOCKINDEX_SETTINGS,
+  STOCKINDEX_DEFAULT_BASE_URL,
+  STOCKINDEX_DEFAULT_BASE_URL as STOCK_INDEX_BASE_URL,
+  stockIndexSearch,
+  stockIndexListStocks,
+  stockIndexItemToInstrumentRef,
+  refLabelFromInstrument,
+  type StockIndexItem as StockIndexSearchItem,
+} from './providers/stockindex/index.js'
 export {
-  regionalSeedStockList,
-  yahooQuoteToRegionalStockRow,
-} from './utils/regional-stock-list.js'
+  searchInstrumentsOnline,
+  listInstrumentsOnline,
+  type InstrumentSearchHit,
+} from './search/instrument-search.js'
 export { parseCryptoPair, isCryptoPairNotation, normalizeCryptoBase } from './utils/crypto-market.js'
 export type { CryptoPairRef } from './utils/crypto-market.js'
 export {
