@@ -14,6 +14,7 @@ alwaysApply: true
 
 ## 改动原则
 
+- **Data Provider 文档**：在 `a-stock-layer` 新增/修改 Provider 方法时，须按 `.cursor/rules/data-provider-docs.mdc` 完善 JSDoc 与 `custom-method-docs.ts`（含 sourceUrl、入参/出参、usage、维护备注）；不得只实现逻辑不写文档。
 - **基于上一版实现与用户最新指示**做增量修改；不要臆测需求或“顺便优化”未提及的行为。
 - 用户已确认的尺寸、对齐、导航模式、动画，除非用户要求调整，否则保持不动。
 - 缩小窗口、侧栏浮层等行为以用户描述为准（例如：全高侧栏、仅右侧圆角、hover 收起），不得擅自改为卡片式内缩、替换顶栏等。

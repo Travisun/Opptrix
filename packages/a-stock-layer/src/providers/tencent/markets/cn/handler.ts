@@ -22,10 +22,10 @@ import {
   resolveTencentBoardCode,
 } from '../../api/proxy.js'
 import { fetchTencentGlobalIndexList } from '../../api/global-index-service.js'
+import { fetchTencentExchangeRateList } from '../../api/exchange-rate-service.js'
 import {
   fetchTencentKline,
   fetchTencentQuotes,
-  TENCENT_FX,
   TENCENT_GLOBAL_INDEX,
 } from '../../api/quotes.js'
 import {
@@ -340,23 +340,14 @@ export class TencentCnHandler extends MarketHandlerShell {
   }
 
   async exchangeRate(pair = ''): Promise<Record<string, unknown>[] | null> {
-    const map = TENCENT_FX
-    const keys = pair ? [pair.toUpperCase()] : Object.keys(map)
-    const results: Record<string, unknown>[] = []
-    for (const k of keys) {
-      const sym = map[k]
-      if (!sym) continue
-      const rows = await fetchTencentQuotes([sym], { rawSymbols: true })
-      const parts = rows[0]?.parts
-      if (!parts) continue
-      results.push({
-        code: k,
-        name: parts[1] || k,
-        price: safeFloat(parts[3]),
-        changePct: tencentChangePct(parts),
-        source: 'tencent',
-      })
-    }
-    return results.length ? results : null
+    const result = await fetchTencentExchangeRateList({
+      category: 'ALL',
+      pair: pair || undefined,
+      page: 1,
+      pageSize: pair ? 5 : 200,
+      sortType: 3,
+      order: 'desc',
+    })
+    return result.items.length ? result.items : null
   }
 }

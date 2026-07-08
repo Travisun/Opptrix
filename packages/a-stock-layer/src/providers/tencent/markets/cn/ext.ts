@@ -7,6 +7,9 @@ import {
   fetchTencentGlobalIndexList,
 } from '../../api/global-index-service.js'
 import {
+  fetchTencentExchangeRateList,
+} from '../../api/exchange-rate-service.js'
+import {
   fetchTencentIndustryBoardList,
   fetchTencentIndustryConstituents,
   fetchTencentIndustryRank,
@@ -42,14 +45,6 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
    *
    * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/rank/worldCommodities
    * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=qh_global&module=GQH&type=ALL
-   * @param category 品类 ALL / energy / preciousMetal 等，支持中文「能源」
-   * @param page 页码（客户端分页）
-   * @param pageSize 每页条数，最大 200
-   * @param sortType 0 名称 / 1 最新价 / 2 涨跌额 / 3 涨跌幅
-   * @param order desc|down 降序，asc|up 升序
-   * @returns `[{ category, page, pageSize, total, items[], source }]`；无数据 `null`
-   * @usage `engine.invokeCustomMethod("tencent","tencentGlobalFuturesList",["ALL",1,40,3,"desc"])`
-   * @remarks 上游一次返回全品类；延迟约 15 分钟
    */
   p.tencentGlobalFuturesList = async function tencentGlobalFuturesList(
     category = 'ALL',
@@ -86,6 +81,34 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length && !result.total) return null
     return [{ ...result, source: 'tencent_global_index_rank' }]
+  }
+
+  /**
+   * 全球外汇/汇率实时列表（mstats ER 模块）。
+   *
+   * @sourceUrl https://qt.gtimg.cn/?q=whUSDCNY,whEURUSD,...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=exchange&module=ER&type=ALL
+   * @param category ALL / BASE（基本汇率）/ CROSS（交叉汇率）
+   * @param page 页码（客户端分页）
+   * @param pageSize 每页条数，最大 200
+   * @param sortType 0 名称 / 1 货币对 / 2 最新价 / 3 涨跌幅 / 4 涨跌额
+   * @param order desc|down 降序，asc|up 升序
+   * @returns `[{ category, page, pageSize, total, items[{ code, qtCode, name, price, changePct, bid, ask, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentExchangeRateList",["ALL",1,40,3,"desc"])`
+   * @remarks 与全球期货 worldCommodities 的 exchangeRate 桶不同，此为 mstats 专用 wh* 直盘/交叉盘列表
+   */
+  p.tencentExchangeRateList = async function tencentExchangeRateList(
+    category = 'ALL',
+    page = 1,
+    pageSize = 40,
+    sortType: string | number = 3,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentExchangeRateList({
+      category, page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_wh_forex' }]
   }
 
   /**

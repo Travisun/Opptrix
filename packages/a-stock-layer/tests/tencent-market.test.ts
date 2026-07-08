@@ -236,3 +236,64 @@ describe('tencent global futures API', () => {
     expect(resolveTencentGlobalFuturesCategory('preciousMetal')).toBe('preciousMetal')
   })
 })
+
+describe('tencent exchange rate API', () => {
+  const sampleRows = [
+    {
+      symbol: 'whUSDCNY',
+      pair: 'USDCNY',
+      name: '美元人民币',
+      price: 6.7942,
+      preClose: 6.7924,
+      open: 6.791,
+      high: 6.7996,
+      low: 6.7867,
+      bid: 6.7942,
+      ask: 6.7975,
+      changeAmt: 0.0018,
+      changePct: 0.03,
+      quoteTime: '02:59',
+      category: 'BASE' as const,
+    },
+    {
+      symbol: 'whEURJPY',
+      pair: 'EURJPY',
+      name: '欧元/日元',
+      price: 185.14,
+      preClose: 184.84,
+      open: 184.84,
+      high: 185.21,
+      low: 184.83,
+      bid: 185.14,
+      ask: 185.24,
+      changeAmt: 0.3,
+      changePct: 0.16,
+      quoteTime: '09:09',
+      category: 'CROSS' as const,
+    },
+  ]
+
+  it('resolves category and forex symbol', async () => {
+    const { resolveTencentExchangeRateCategory, resolveTencentForexSymbol } =
+      await import('../src/providers/tencent/api/exchange-rate-service.js')
+    expect(resolveTencentExchangeRateCategory('基本汇率')).toBe('BASE')
+    expect(resolveTencentExchangeRateCategory('cross')).toBe('CROSS')
+    expect(resolveTencentForexSymbol('USDCNY')).toBe('whUSDCNY')
+    expect(resolveTencentForexSymbol('eurjpy')).toBe('whEURJPY')
+  })
+
+  it('sorts by changePct desc and maps forex fields', async () => {
+    const { sortTencentExchangeRateRows, mapTencentExchangeRateRows } =
+      await import('../src/providers/tencent/api/exchange-rate-service.js')
+    const sorted = sortTencentExchangeRateRows(sampleRows, 3, 'desc')
+    expect(sorted[0]?.pair).toBe('EURJPY')
+    const mapped = mapTencentExchangeRateRows(sorted.slice(0, 1), 'ALL')
+    expect(mapped[0]).toMatchObject({
+      code: 'EURJPY',
+      qtCode: 'whEURJPY',
+      market: 'forex',
+      categoryLabel: '交叉汇率',
+      source: 'tencent_wh_forex',
+    })
+  })
+})

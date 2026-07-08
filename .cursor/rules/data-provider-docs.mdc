@@ -1,0 +1,59 @@
+---
+description: Data Provider 方法与 fetch 层 JSDoc 文档标准（a-stock-layer 必遵）
+globs: packages/a-stock-layer/src/providers/**/*
+alwaysApply: false
+---
+
+# Data Provider API 文档标准
+
+在 `packages/a-stock-layer` 新增或修改 **Provider 自定义方法**、**底层 fetch**、**Capability 专用接口** 时，必须同步完善文档，便于 MCP 发现与后续维护对照上游。
+
+参考实现：`providers/tencent/custom-method-docs.ts`、`providers/sinafinance/custom-method-docs.ts`。
+
+## 三层文档（缺一不可）
+
+| 层级 | 文件 | 要求 |
+|------|------|------|
+| 注册表 | `{provider}/custom-method-docs.ts` | 每个方法一条 `CustomMethodApiDoc`，导出 `*_CUSTOM` |
+| 挂载层 | `{provider}/markets/*/ext.ts` | 每个 `p.method = …` 前有完整 JSDoc（与注册表一致） |
+| Fetch 层 | `{provider}/api/*.ts`（proxy、service） | 每个对外 `fetch*` 含 `@sourceUrl`、入参、返回结构、`@remarks` |
+
+工具类型与生成器：`providers/common/custom-method-doc-types.ts`（`formatCustomMethodJSDoc` / `wrapCustomMethodJSDoc` / `toCustomMethodDef`）。
+
+## 每个方法必填字段
+
+- **description**：一句话功能摘要
+- **sourceUrl**：上游真实接口 URL（含 host + path；query 占位符如 `{code}`、`{symbol}`）
+- **pageUrl**：产品页入口（mstats / F10 / 基金详情等），无则省略
+- **params**：名称、类型、`required`、默认值、中文说明
+- **returns**：`invokeCustomMethod` 成功时 `data` 的形态（含 `null` 条件）
+- **usage**：`engine.invokeCustomMethod("{providerId}", "{method}", [args])`
+- **notes**：Referer、分页方式、延迟行情、仅盘中有效、与相似接口的区别
+- **example**：`{"provider":"…","method":"…","args":[…]}`
+
+## MCP 注册
+
+- 在 `core/custom-methods.ts` 通过 `toCustomMethodDef` 导入 `{provider}/custom-method-docs.ts` 的 `*_CUSTOM`
+- 扩展 `CustomMethodDef` 字段（`sourceUrl`、`pageUrl`、`returns`、`usage`、`notes`）须一并填写，勿只写 `description` + `params`
+
+## JSDoc 标签约定（ext.ts / fetch）
+
+```typescript
+/**
+ * 功能摘要
+ * @sourceUrl https://proxy.example.com/path?code={symbol}
+ * @pageUrl https://product.example.com/page
+ * @param code 6 位 A 股代码（必填）
+ * @returns FooRow[]；无数据时 null
+ * @usage engine.invokeCustomMethod("tencent", "tencentFoo", ["600519"])
+ * @remarks Referer 要求、分页、延迟等维护要点
+ * @example {"provider":"tencent","method":"tencentFoo","args":["600519"]}
+ */
+```
+
+## 完成前自检
+
+- [ ] 注册表、ext.ts、fetch 三层内容一致（改一处同步另两处）
+- [ ] `sourceUrl` 可在浏览器/抓包中对照验证
+- [ ] 新增方法已加入 `*_CUSTOM` 且 `npm run build` 通过
+- [ ] 有 normalize/分页逻辑的，service 文件顶部注明上游一次返回 vs 客户端分页

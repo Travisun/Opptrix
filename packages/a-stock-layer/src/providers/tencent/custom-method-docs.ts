@@ -44,6 +44,24 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     example: '{"provider":"tencent","method":"tencentGlobalIndexList","args":["EU",1,20,2,"desc"]}',
   },
 
+  tencentExchangeRateList: {
+    method: 'tencentExchangeRateList',
+    description: '全球外汇汇率列表（mstats ER：基本汇率 + 交叉汇率）',
+    sourceUrl: 'https://qt.gtimg.cn/?q=whUSDCNY,whEURUSD,...',
+    pageUrl: `${MSTATS}/#mod=list&id=exchange&module=ER&type=ALL`,
+    params: [
+      { name: 'category', type: 'string', description: 'ALL、BASE（基本汇率）、CROSS（交叉汇率）；支持中文「基本汇率」', default: 'ALL' },
+      { name: 'page', type: 'number', description: '页码，从 1 开始（客户端分页）', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 200', default: 40 },
+      { name: 'sortType', type: 'string', description: '0 名称 / 1 货币对 / 2 最新价 / 3 涨跌幅 / 4 涨跌额', default: 3 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ category, page, pageSize, total, items: [{ code, qtCode, name, price, changeAmt, changePct, preClose, open, high, low, bid, ask, quoteTime, categoryLabel, market }], source }]',
+    usage: INVOKE('tencentExchangeRateList', '["ALL",1,40,3,"desc"]'),
+    notes: '数据源为 qt.gtimg.cn wh* 代码（与 mstats listTPL.ER 一致）；非 worldCommodities 的 exchangeRate 期货桶。Capability exchangeRate(pair) 亦走此接口。',
+    example: '{"provider":"tencent","method":"tencentExchangeRateList","args":["BASE",1,20,3,"desc"]}',
+  },
+
   tencentShenwanIndustryList: {
     method: 'tencentShenwanIndustryList',
     description: '申万行业板块列表（一级/二级，含阶段涨跌幅与领涨股）',

@@ -5,7 +5,7 @@
  * 基址：`https://proxy.finance.qq.com`（{@link TENCENT_PROXY_BASE}）。
  *
  * 自定义方法文档见 `providers/tencent/custom-method-docs.ts`；
- * 全球股指/期货分页见 `global-index-service.ts`、`global-futures-service.ts`。
+ * 全球股指/期货/外汇分页见 `global-index-service.ts`、`global-futures-service.ts`、`exchange-rate-service.ts`。
  */
 import { normalizeCode, secFullCode } from '../../../utils/helpers.js'
 import { fetchJson } from './http.js'
