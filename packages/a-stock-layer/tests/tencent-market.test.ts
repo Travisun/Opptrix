@@ -237,6 +237,104 @@ describe('tencent global futures API', () => {
   })
 })
 
+describe('tencent cn index snapshot API', () => {
+  it('maps qt index parts and resolves preset', async () => {
+    const { pickTencentCnIndexSymbols, resolveTencentCnIndexPreset, mapTencentCnIndexSnapshotRows } =
+      await import('../src/providers/tencent/api/cn-index-service.js')
+    expect(resolveTencentCnIndexPreset('mstats_home')).toBe('mstats_home')
+    expect(pickTencentCnIndexSymbols({ preset: 'major' })).toContain('sh000001')
+    expect(pickTencentCnIndexSymbols({ preset: 'mstats_home' })).toContain('r_hkHSI')
+    const mapped = mapTencentCnIndexSnapshotRows([{
+      qtCode: 'sh000001',
+      code: '000001',
+      name: '上证指数',
+      price: 3996.81,
+      preClose: 3990.24,
+      open: 3996.81,
+      high: 3996.81,
+      low: 3990.24,
+      changeAmt: 6.57,
+      changePct: 0.16,
+      volume: 3462322,
+      amount: 8048267553,
+      quoteTime: '09:27',
+      market: 'CN',
+    }])
+    expect(mapped[0]).toMatchObject({
+      code: '000001',
+      qtCode: 'sh000001',
+      market: 'CN',
+      source: 'tencent_qt_index',
+    })
+  })
+})
+
+describe('tencent industry heat API', () => {
+  it('maps heat rows and resolves type/order', async () => {
+    const {
+      mapTencentIndustryHeatRows,
+      mapTencentIndustryHeatOutputRows,
+      resolveTencentIndustryHeatType,
+      resolveTencentIndustryHeatOrder,
+    } = await import('../src/providers/tencent/api/industry-heat-service.js')
+    expect(resolveTencentIndustryHeatType('01/averatio')).toBe('01/averatio')
+    expect(resolveTencentIndustryHeatOrder('asc')).toBe('1')
+    expect(resolveTencentIndustryHeatOrder('desc')).toBe('0')
+    const rows = mapTencentIndustryHeatRows([{
+      bd_name: '旅游及景区',
+      bd_code: 'pt01801993',
+      bd_zxj: '1853.63',
+      bd_zdf: '3.33',
+      nzg_code: 'sz000524',
+      nzg_name: '岭南控股',
+      nzg_zdf: '10.06',
+    }])
+    expect(rows[0]?.boardName).toBe('旅游及景区')
+    expect(rows[0]?.leadingCode).toBe('000524')
+    const out = mapTencentIndustryHeatOutputRows(rows, 'averatio', '0')
+    expect(out[0]).toMatchObject({
+      industryCode: 'pt01801993',
+      leadingStock: { code: '000524', name: '岭南控股', changePct: 10.06 },
+      source: 'tencent_industry_heat',
+    })
+  })
+})
+
+describe('tencent HK stock list API', () => {
+  it('resolves board and maps hk rank page_data rows', async () => {
+    const {
+      resolveTencentHkBoard,
+      resolveTencentHkSortMetric,
+      mapTencentHkStockRows,
+    } = await import('../src/providers/tencent/api/hk-rank-service.js')
+    expect(resolveTencentHkBoard('MB')).toBe('main_all')
+    expect(resolveTencentHkBoard('GEM')).toBe('gem_all')
+    expect(resolveTencentHkSortMetric(32)).toBe('change_rate')
+    expect(resolveTencentHkSortMetric('price')).toBe('price')
+    const mapped = mapTencentHkStockRows([{
+      code: '00700',
+      name: '腾讯控股',
+      price: 520.5,
+      preClose: 515,
+      open: 516,
+      high: 522,
+      low: 514,
+      buy: 520,
+      sell: 520.5,
+      changeAmt: 5.5,
+      changePct: 1.07,
+      volume: 12000000,
+      amount: 6200000000,
+      market: 'HK',
+    }])
+    expect(mapped[0]).toMatchObject({
+      code: '00700',
+      market: 'HK',
+      source: 'tencent_hk_rank',
+    })
+  })
+})
+
 describe('tencent exchange rate API', () => {
   const sampleRows = [
     {

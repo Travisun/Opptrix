@@ -44,6 +44,58 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     example: '{"provider":"tencent","method":"tencentGlobalIndexList","args":["EU",1,20,2,"desc"]}',
   },
 
+  tencentCnIndexSnapshot: {
+    method: 'tencentCnIndexSnapshot',
+    description: 'A 股主要指数 / mstats 首页滚动指数快照（qt.gtimg.cn 批量行情）',
+    sourceUrl: 'https://qt.gtimg.cn/q=sh000001,sz399001,sz399006,...',
+    pageUrl: `${MSTATS}/#`,
+    params: [
+      { name: 'preset', type: 'string', description: 'major（默认 7 只 A 股主要指数）/ mstats_home（首页滚动条 12 只）/ custom（配合 codes）', default: 'major' },
+      { name: 'includeBoardRanks', type: 'boolean', description: '是否附带上证/深证指数成分涨跌榜（bkqtRank_A_sh/sz）', default: false },
+      { name: 'codes', type: 'string', description: '可选，逗号分隔 qt 代码覆盖 preset，如 sh000001,sz399300', default: '' },
+      { name: 'boardRankPageSize', type: 'number', description: '指数成分榜条数，最大 50', default: 10 },
+    ],
+    returns: '[{ preset, symbols, items: [{ code, qtCode, name, price, changePct, changeAmt, open, high, low, volume, amount, quoteTime, market }], boardRanks?: { shanghai, shenzhen }, source }]',
+    usage: INVOKE('tencentCnIndexSnapshot', '["major",false]'),
+    notes: '与 tencentGlobalIndexList（indexRankDetail2 全球股指）不同；本接口为实时 qt 文本行情，含 A 股/港股/美股/期货首页条。成分榜仅交易时段有数据。',
+    example: '{"provider":"tencent","method":"tencentCnIndexSnapshot","args":["mstats_home",false]}',
+  },
+
+  tencentHkStockList: {
+    method: 'tencentHkStockList',
+    description: '港股排行列表（mstats HK：主板/创业板/恒指成分等）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=change_rate&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_mb&module=hk&type=MB`,
+    params: [
+      { name: 'board', type: 'string', description: 'mstats type：MB（主板）、GEM（创业板）、HSI、HSCEI、AH 等；或直接传 main_all/gem_all', default: 'MB' },
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅，或 price/change_rate/volume 等', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board, boardKey, page, pageSize, total, items: [{ code, name, price, changePct, changeAmt, buy, sell, volume, amount, market }], source }]',
+    usage: INVOKE('tencentHkStockList', '["MB",1,20,32,"desc"]'),
+    notes: '优先 hk_rank.php JSONP；盘前或非交易时段可能返回空，自动回退 proxy rank/hk/getList（board_type）。港股代码 5 位如 00700。',
+    example: '{"provider":"tencent","method":"tencentHkStockList","args":["GEM",1,20,32,"desc"]}',
+  },
+
+  tencentIndustryHeatRank: {
+    method: 'tencentIndustryHeatRank',
+    description: 'mstats 首页行业热度排行（板块平均涨跌幅 + 领涨股）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/app/mktHs/rank?l=10&p=1&t=averatio&o=0`,
+    pageUrl: `${MSTATS}/#`,
+    params: [
+      { name: 'type', type: 'string', description: 'averatio（行业平均涨跌幅）或 01/averatio（沪深 A 股行业平均，首页市场一览）', default: 'averatio' },
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50', default: 10 },
+      { name: 'order', type: 'string', description: 'desc/down → 涨幅榜（o=0）；asc/up → 跌幅榜（o=1）', default: 'desc' },
+    ],
+    returns: '[{ type, page, pageSize, order, total, items: [{ industryCode, industryName, changePct, changePct5d, changePct20d, leadingStock: { code, name, changePct }, ... }], source }]',
+    usage: INVOKE('tencentIndustryHeatRank', '["averatio",1,10,"desc"]'),
+    notes: 't=01 单独使用会 TYPE_ERROR；请用 averatio 或 01/averatio。',
+    example: '{"provider":"tencent","method":"tencentIndustryHeatRank","args":["01/averatio",1,10,"desc"]}',
+  },
+
   tencentExchangeRateList: {
     method: 'tencentExchangeRateList',
     description: '全球外汇汇率列表（mstats ER：基本汇率 + 交叉汇率）',

@@ -10,6 +10,15 @@ import {
   fetchTencentExchangeRateList,
 } from '../../api/exchange-rate-service.js'
 import {
+  fetchTencentCnIndexSnapshot,
+} from '../../api/cn-index-service.js'
+import {
+  fetchTencentHkStockList,
+} from '../../api/hk-rank-service.js'
+import {
+  fetchTencentIndustryHeatRank,
+} from '../../api/industry-heat-service.js'
+import {
   fetchTencentIndustryBoardList,
   fetchTencentIndustryConstituents,
   fetchTencentIndustryRank,
@@ -109,6 +118,80 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length && !result.total) return null
     return [{ ...result, source: 'tencent_wh_forex' }]
+  }
+
+  /**
+   * A 股 / 首页主要指数快照（qt.gtimg.cn 批量行情）。
+   *
+   * @sourceUrl https://qt.gtimg.cn/q=sh000001,sz399001,...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#
+   * @param preset major（默认）/ mstats_home（首页滚动条）/ custom（配合 codes）
+   * @param includeBoardRanks 是否附带上证/深证指数成分涨跌榜
+   * @returns `[{ preset, symbols, items[{ code, qtCode, name, price, changePct, ... }], boardRanks?, source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentCnIndexSnapshot",["major",false])`
+   */
+  p.tencentCnIndexSnapshot = async function tencentCnIndexSnapshot(
+    preset = 'major',
+    includeBoardRanks = false,
+    codes = '',
+    boardRankPageSize = 10,
+  ) {
+    const result = await fetchTencentCnIndexSnapshot({
+      preset,
+      codes: codes || undefined,
+      includeBoardRanks: Boolean(includeBoardRanks),
+      boardRankPageSize,
+    })
+    if (!result.items.length) return null
+    return [{ ...result, source: 'tencent_qt_index' }]
+  }
+
+  /**
+   * 港股排行列表（mstats HK 模块）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=change_rate&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_mb&module=hk&type=MB
+   * @param board MB / GEM / HSI 等 mstats type，或 main_all 等上游 board 名
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或字段名 price/change_rate
+   * @returns `[{ board, boardKey, page, pageSize, total, items[{ code, name, price, changePct, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentHkStockList",["MB",1,20,32,"desc"])`
+   * @remarks 盘前/非交易时段 hk_rank 可能为空，自动回退 rank/hk/getList
+   */
+  p.tencentHkStockList = async function tencentHkStockList(
+    board = 'MB',
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board, page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
+   * 首页行业热度排行（板块平均涨跌幅 + 领涨股）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank?l=10&p=1&t=averatio&o=0
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#
+   * @param type averatio 或 01/averatio（沪深 A 股行业平均）
+   * @param order desc/down 涨幅榜（o=0），asc/up 跌幅榜（o=1）
+   * @returns `[{ type, page, pageSize, order, total, items[{ industryCode, industryName, changePct, leadingStock, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentIndustryHeatRank",["averatio",1,10,"desc"])`
+   */
+  p.tencentIndustryHeatRank = async function tencentIndustryHeatRank(
+    type = 'averatio',
+    page = 1,
+    pageSize = 10,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentIndustryHeatRank({
+      type, page, pageSize, order,
+    })
+    if (!result.items.length) return null
+    return [{ ...result, source: 'tencent_industry_heat' }]
   }
 
   /**
