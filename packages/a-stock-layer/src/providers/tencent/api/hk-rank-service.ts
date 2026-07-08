@@ -12,6 +12,8 @@ const HK_PROXY_LIST_URL = `${TENCENT_PROXY_BASE}/cgi/cgi-bin/rank/hk/getList`
  */
 export const TENCENT_HK_BOARD_MAP = {
   MB: 'main_all',
+  hk_mb: 'main_all',
+  主板: 'main_all',
   MBHSCEI: 'main_China',
   MBHSCCI: 'main_red',
   GEM: 'gem_all',
@@ -32,6 +34,27 @@ export const TENCENT_HK_BOARD_MAP = {
 } as const
 
 export type TencentHkBoardKey = keyof typeof TENCENT_HK_BOARD_MAP
+
+const BOARD_LABEL: Record<string, string> = {
+  main_all: '港股主板',
+  main_China: '主板国企指数',
+  main_red: '主板红筹',
+  gem_all: '港股创业板',
+  gem_China: '创业板国企',
+  gem_red: '创业板红筹',
+  index: '港股指数',
+  HSI_composite: '恒生指数成分',
+  China_composite: '国企指数成分',
+  China_board: '国企板块',
+  red_composite: '红筹指数成分',
+  A_H: 'AH股',
+  warrant_all: '认股证',
+  warrant_call: '认购证',
+  warrant_put: '认沽证',
+  niuxiong_all: '牛熊证',
+  niuxiong_niu: '牛证',
+  niuxiong_xiong: '熊证',
+}
 
 /** mstats 列序号 → hk_rank metric 字段名 */
 const SORT_TO_METRIC: Record<number, string> = {
@@ -118,14 +141,27 @@ type HkProxyListPayload = {
 
 export function resolveTencentHkBoard(board: string): string {
   const key = board.trim()
-  const upper = key.toUpperCase() as TencentHkBoardKey
-  if (upper in TENCENT_HK_BOARD_MAP) return TENCENT_HK_BOARD_MAP[upper]
   const lower = key.toLowerCase()
+  for (const [k, v] of Object.entries(TENCENT_HK_BOARD_MAP)) {
+    if (k.toLowerCase() === lower) return v
+  }
   const values = Object.values(TENCENT_HK_BOARD_MAP)
   if (values.includes(key as typeof values[number])) return key
-  if (lower === 'main' || lower === '主板') return TENCENT_HK_BOARD_MAP.MB
+  if (lower === 'main' || lower === '主板' || lower === 'hk_mb') return TENCENT_HK_BOARD_MAP.MB
   if (lower === 'gem' || lower === '创业板') return TENCENT_HK_BOARD_MAP.GEM
   return TENCENT_HK_BOARD_MAP.MB
+}
+
+export function resolveTencentHkBoardKey(board: string): string {
+  const resolved = resolveTencentHkBoard(board)
+  for (const [k, v] of Object.entries(TENCENT_HK_BOARD_MAP)) {
+    if (v === resolved) return k.toUpperCase() === k ? k : k
+  }
+  const input = board.trim().toUpperCase()
+  if (input in TENCENT_HK_BOARD_MAP) return input
+  if (resolved === TENCENT_HK_BOARD_MAP.MB) return 'MB'
+  if (resolved === TENCENT_HK_BOARD_MAP.GEM) return 'GEM'
+  return input || 'MB'
 }
 
 export function resolveTencentHkSortMetric(sort: string | number): string {
@@ -320,14 +356,16 @@ export async function fetchTencentHkStockList(opts: {
 }): Promise<{
   board: string
   boardKey: string
+  boardLabel: string
   page: number
   pageSize: number
   total: number
   items: Record<string, unknown>[]
   source: 'tencent_hk_rank' | 'tencent_hk_rank_proxy'
 }> {
-  const boardKey = opts.board?.trim().toUpperCase() || 'MB'
+  const boardKey = resolveTencentHkBoardKey(opts.board ?? 'MB')
   const board = resolveTencentHkBoard(boardKey)
+  const boardLabel = BOARD_LABEL[board] ?? boardKey
   const page = Math.max(1, opts.page ?? 1)
   const pageSize = Math.max(1, Math.min(opts.pageSize ?? 20, 100))
   const metric = resolveTencentHkSortMetric(opts.sortType ?? 32)
@@ -339,6 +377,7 @@ export async function fetchTencentHkStockList(opts: {
     return {
       board,
       boardKey,
+      boardLabel,
       page,
       pageSize,
       total: jsonp.total,
@@ -357,6 +396,7 @@ export async function fetchTencentHkStockList(opts: {
   return {
     board,
     boardKey,
+    boardLabel,
     page,
     pageSize,
     total: proxy.total,

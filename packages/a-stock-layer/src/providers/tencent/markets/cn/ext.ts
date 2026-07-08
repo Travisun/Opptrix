@@ -19,6 +19,9 @@ import {
   fetchTencentIndustryHeatRank,
 } from '../../api/industry-heat-service.js'
 import {
+  fetchTencentUsStockList,
+} from '../../api/us-stock-service.js'
+import {
   fetchTencentIndustryBoardList,
   fetchTencentIndustryConstituents,
   fetchTencentIndustryRank,
@@ -172,6 +175,30 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
   }
 
   /**
+   * 港股主板股票列表（mstats hk_mb，默认按最新价排序）。
+   *
+   * @sourceUrl https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&...
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hk_mb&module=HK&type=MB&sort=3&page=1&max=20
+   * @param page 页码，从 1 开始
+   * @param pageSize 每页条数，最大 100（对应 mstats max）
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或 price/change_rate
+   * @returns `[{ board, boardKey, boardLabel, page, pageSize, total, items[{ code, name, price, changePct, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentHkMainBoardStockList",[1,20,3,"desc"])`
+   */
+  p.tencentHkMainBoardStockList = async function tencentHkMainBoardStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 3,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentHkStockList({
+      board: 'MB', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [result]
+  }
+
+  /**
    * 首页行业热度排行（板块平均涨跌幅 + 领涨股）。
    *
    * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/mktHs/rank?l=10&p=1&t=averatio&o=0
@@ -192,6 +219,52 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length) return null
     return [{ ...result, source: 'tencent_industry_heat' }]
+  }
+
+  /**
+   * 美股科技股排行（含行情摘要字段，服务端分页）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/us/getList?board_type=tec
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=us_kjg&module=US&type=tec
+   * @param page 页码，从 1 开始
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等
+   * @returns `[{ board, boardLabel, page, pageSize, total, items[{ code, symbol, name, price, changePct, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentUsTechStockList",[1,20,32,"desc"])`
+   */
+  p.tencentUsTechStockList = async function tencentUsTechStockList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentUsStockList({
+      board: 'tec', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_us_rank' }]
+  }
+
+  /**
+   * 中概股排行（含行情摘要字段，服务端分页）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/us/getList?board_type=cdr
+   * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=us_zgg&module=US&type=cdr
+   * @param page 页码，从 1 开始
+   * @param sortType 列序号 3 最新价 / 32 涨跌幅，或 price/priceRatio/volume 等
+   * @returns `[{ board, boardLabel, page, pageSize, total, items[{ code, symbol, name, price, changePct, ... }], source }]`
+   * @usage `engine.invokeCustomMethod("tencent","tencentUsChinaAdrList",[1,20,32,"desc"])`
+   */
+  p.tencentUsChinaAdrList = async function tencentUsChinaAdrList(
+    page = 1,
+    pageSize = 20,
+    sortType: string | number = 32,
+    order: 'asc' | 'desc' | 'up' | 'down' = 'desc',
+  ) {
+    const result = await fetchTencentUsStockList({
+      board: 'cdr', page, pageSize, sortType, order,
+    })
+    if (!result.items.length && !result.total) return null
+    return [{ ...result, source: 'tencent_us_rank' }]
   }
 
   /**

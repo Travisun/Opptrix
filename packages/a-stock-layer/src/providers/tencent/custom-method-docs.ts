@@ -73,10 +73,61 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
       { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅，或 price/change_rate/volume 等', default: 32 },
       { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
     ],
-    returns: '[{ board, boardKey, page, pageSize, total, items: [{ code, name, price, changePct, changeAmt, buy, sell, volume, amount, market }], source }]',
+    returns: '[{ board, boardKey, boardLabel, page, pageSize, total, items: [{ code, name, price, changePct, changeAmt, buy, sell, volume, amount, market }], source }]',
     usage: INVOKE('tencentHkStockList', '["MB",1,20,32,"desc"]'),
     notes: '优先 hk_rank.php JSONP；盘前或非交易时段可能返回空，自动回退 proxy rank/hk/getList（board_type）。港股代码 5 位如 00700。',
     example: '{"provider":"tencent","method":"tencentHkStockList","args":["GEM",1,20,32,"desc"]}',
+  },
+
+  tencentHkMainBoardStockList: {
+    method: 'tencentHkMainBoardStockList',
+    description: '港股主板股票列表（mstats hk_mb，含行情摘要，服务端分页）',
+    sourceUrl: 'https://stock.gtimg.cn/data/hk_rank.php?board=main_all&metric=price&pageSize=20&reqPage=1&order=0&var_name=list_data',
+    pageUrl: `${MSTATS}/#mod=list&id=hk_mb&module=HK&type=MB&sort=3&page=1&max=20`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始（对应 mstats page）', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100（对应 mstats max）', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价（mstats 默认）/ 32 涨跌幅，或 price/change_rate', default: 3 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "main_all", boardKey: "MB", boardLabel: "港股主板", page, pageSize, total, items: [{ code, name, price, changePct, changeAmt, preClose, open, high, low, buy, sell, volume, amount, market }], source }]',
+    usage: INVOKE('tencentHkMainBoardStockList', '[1,20,3,"desc"]'),
+    notes: '等价于 tencentHkStockList("MB", ...)；默认 sort=3 与 mstats 主板页一致。共约 1000+ 只，按 stock_count 分页。',
+    example: '{"provider":"tencent","method":"tencentHkMainBoardStockList","args":[1,20,3,"desc"]}',
+  },
+
+  tencentUsTechStockList: {
+    method: 'tencentUsTechStockList',
+    description: '美股科技股排行列表（含最新价、涨跌幅、市值、市盈率等行情摘要）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/us/getList?board_type=tec&sort_type=priceRatio&direct=down&offset=0&count=20`,
+    pageUrl: `${MSTATS}/#mod=list&id=us_kjg&module=US&type=tec`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始（服务端分页）', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅 / 36 成交量 / 4 总市值，或 price/priceRatio/volume/marketValue', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "tec", boardLabel, page, pageSize, total, items: [{ code, symbol, name, price, changePct, changeAmt, turnoverRate, amplitude, volume, turnover, peTtm, pb, marketCap, floatMarketCap, market }], source }]',
+    usage: INVOKE('tencentUsTechStockList', '[1,20,32,"desc"]'),
+    notes: '上游 board_type=tec；symbol 为 usTICKER.EX 格式，code 为纯 ticker。延迟约 15 分钟。',
+    example: '{"provider":"tencent","method":"tencentUsTechStockList","args":[1,20,32,"desc"]}',
+  },
+
+  tencentUsChinaAdrList: {
+    method: 'tencentUsChinaAdrList',
+    description: '中概股排行列表（含最新价、涨跌幅、市值、市盈率等行情摘要）',
+    sourceUrl: `${PROXY}/cgi/cgi-bin/rank/us/getList?board_type=cdr&sort_type=priceRatio&direct=down&offset=0&count=20`,
+    pageUrl: `${MSTATS}/#mod=list&id=us_zgg&module=US&type=cdr`,
+    params: [
+      { name: 'page', type: 'number', description: '页码，从 1 开始（服务端分页）', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 20 },
+      { name: 'sortType', type: 'string', description: '列序号 3 最新价 / 32 涨跌幅 / 36 成交量 / 4 总市值，或 price/priceRatio/volume/marketValue', default: 32 },
+      { name: 'order', type: 'string', description: 'desc|down 降序，asc|up 升序', default: 'desc' },
+    ],
+    returns: '[{ board: "cdr", boardLabel: "中概股", page, pageSize, total, items: [{ code, symbol, name, price, changePct, changeAmt, turnoverRate, amplitude, volume, turnover, peTtm, pb, marketCap, floatMarketCap, market }], source }]',
+    usage: INVOKE('tencentUsChinaAdrList', '[1,20,32,"desc"]'),
+    notes: '上游 board_type=cdr（mstats type=cdr / id=us_zgg）。与科技股共用 rank/us/getList。',
+    example: '{"provider":"tencent","method":"tencentUsChinaAdrList","args":[2,20,32,"desc"]}',
   },
 
   tencentIndustryHeatRank: {

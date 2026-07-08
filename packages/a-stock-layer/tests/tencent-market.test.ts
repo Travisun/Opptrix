@@ -308,6 +308,7 @@ describe('tencent HK stock list API', () => {
       mapTencentHkStockRows,
     } = await import('../src/providers/tencent/api/hk-rank-service.js')
     expect(resolveTencentHkBoard('MB')).toBe('main_all')
+    expect(resolveTencentHkBoard('hk_mb')).toBe('main_all')
     expect(resolveTencentHkBoard('GEM')).toBe('gem_all')
     expect(resolveTencentHkSortMetric(32)).toBe('change_rate')
     expect(resolveTencentHkSortMetric('price')).toBe('price')
@@ -331,6 +332,47 @@ describe('tencent HK stock list API', () => {
       code: '00700',
       market: 'HK',
       source: 'tencent_hk_rank',
+    })
+  })
+})
+
+describe('tencent US stock list API', () => {
+  it('resolves board/sort and maps US rank rows', async () => {
+    const {
+      resolveTencentUsBoard,
+      resolveTencentUsSortField,
+      bareUsTicker,
+      mapTencentUsStockRows,
+    } = await import('../src/providers/tencent/api/us-stock-service.js')
+    expect(resolveTencentUsBoard('US_tec')).toBe('tec')
+    expect(resolveTencentUsBoard('us_zgg')).toBe('cdr')
+    expect(resolveTencentUsSortField(32)).toBe('priceRatio')
+    expect(resolveTencentUsSortField('volume')).toBe('volume')
+    expect(bareUsTicker('usNVDA.OQ')).toBe('NVDA')
+    const mapped = mapTencentUsStockRows([{
+      code: 'usCTSH.OQ',
+      name: '高知特',
+      zxj: '43.94',
+      zdf: '6.21',
+      zd: '2.57',
+      hsl: '2.26',
+      zf: '3.92',
+      volume: '10677246.00',
+      turnover: '466811490.00',
+      pe_ttm: '9.53',
+      pn: '1.38',
+      zsz: '207.84',
+      ltsz: '207.60',
+    }], 'tec')
+    expect(mapped[0]).toMatchObject({
+      code: 'CTSH',
+      symbol: 'usCTSH.OQ',
+      name: '高知特',
+      price: 43.94,
+      changePct: 6.21,
+      boardLabel: '美股科技股',
+      market: 'US',
+      source: 'tencent_us_rank',
     })
   })
 })
