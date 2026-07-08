@@ -382,6 +382,46 @@ describe('tencent US stock list API', () => {
   })
 })
 
+describe('tencent HK detail API', () => {
+  it('normalizes HK symbol and resolves kline period', async () => {
+    const {
+      normalizeHkNumericCode,
+      normalizeHkSymbol,
+      resolveTencentHkKlinePeriod,
+      resolveTencentHkFinancialType,
+    } = await import('../src/providers/tencent/api/hk-detail-service.js')
+    expect(normalizeHkNumericCode('hk00700')).toBe('00700')
+    expect(normalizeHkSymbol('700')).toBe('hk00700')
+    expect(resolveTencentHkKlinePeriod('5day')).toBe('fdays')
+    expect(resolveTencentHkKlinePeriod('year3')).toBe('year3')
+    expect(resolveTencentHkFinancialType('现金流')).toBe('cashflow')
+    expect(resolveTencentHkFinancialType('balance')).toBe('balance')
+  })
+
+  it('fetches full historical day kline via date range batching', async () => {
+    const { fetchTencentHkStockKline } = await import('../src/providers/tencent/api/hk-detail-service.js')
+    const result = await fetchTencentHkStockKline({
+      code: '00700',
+      period: 'day',
+      startDate: '2004-01-01',
+      endDate: '2026-07-08',
+    })
+    expect(result.items.length).toBeGreaterThan(3000)
+    expect(result.startDate).toBe('2004-01-01')
+    expect(result.items[0]?.date).toMatch(/^2004-/)
+  })
+
+  it('maps HK dividends with recent fhpx and paginated history', async () => {
+    const { fetchTencentHkDividends } = await import('../src/providers/tencent/api/hk-detail-service.js')
+    const result = await fetchTencentHkDividends({ code: '00700', page: 1, pageSize: 5 })
+    expect(result.recent.length).toBeGreaterThan(0)
+    expect(result.recent[0]?.content).toMatch(/港元|分派/)
+    expect(result.items.length).toBe(5)
+    expect(result.items[0]?.fiscalYear).toBeTruthy()
+    expect(result.hasMore).toBe(true)
+  })
+})
+
 describe('tencent exchange rate API', () => {
   const sampleRows = [
     {

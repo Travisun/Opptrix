@@ -6,12 +6,14 @@ import { fetchText } from './http.js'
 export function parseTencentJsonp<T>(text: string, callbackName: string): T {
   const trimmed = text.trim()
   const prefix = `${callbackName}=`
-  const jsonPart = trimmed.startsWith(prefix)
+  let jsonPart = trimmed.startsWith(prefix)
     ? trimmed.slice(prefix.length)
     : trimmed
-  const end = jsonPart.lastIndexOf(';')
-  const payload = end > 0 ? jsonPart.slice(0, end) : jsonPart
-  return JSON.parse(payload) as T
+  // 仅去掉 JSONP 末尾分号；勿用 lastIndexOf(';')，K 线除权等字段字符串内可能含 ';'
+  if (jsonPart.endsWith(';')) {
+    jsonPart = jsonPart.slice(0, -1).trimEnd()
+  }
+  return JSON.parse(jsonPart) as T
 }
 
 export async function fetchTencentJsonp<T>(

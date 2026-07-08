@@ -16,6 +16,18 @@ import {
   fetchTencentHkStockList,
 } from '../../api/hk-rank-service.js'
 import {
+  fetchTencentHkFinancialReport,
+  fetchTencentHkInvestRating,
+  fetchTencentHkDividends,
+  fetchTencentHkRelatedStocks,
+  fetchTencentHkReviewProspect,
+  fetchTencentHkStockKline,
+  fetchTencentHkStockNews,
+  fetchTencentHkStockNotices,
+  fetchTencentHkStockProfile,
+  fetchTencentHkTechnicalAnalysis,
+} from '../../api/hk-detail-service.js'
+import {
   fetchTencentIndustryHeatRank,
 } from '../../api/industry-heat-service.js'
 import {
@@ -538,5 +550,172 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     const data = await fetchTencentTradeDetails(bare)
     const rows = mapTencentTradeDetailRows(bare, data)
     return rows.length ? rows : null
+  }
+
+  /**
+   * 港股基本资料（gu.qq.com 简况页）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/hkStockinfo/jiankuang?code=hk00700
+   * @pageUrl https://gu.qq.com/hk00700/gp
+   */
+  p.tencentHkStockProfile = async function tencentHkStockProfile(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const profile = await fetchTencentHkStockProfile(bare)
+    return [{ ...profile, source: 'tencent_hk_jiankuang' }]
+  }
+
+  /**
+   * 港股个股新闻（侧边栏「新闻」）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/news/info/search?symbol=hk00700&type=2
+   */
+  p.tencentHkStockNews = async function tencentHkStockNews(
+    code: string,
+    page = 1,
+    pageSize = 20,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkStockNews({ code: bare, page, pageSize })
+    if (!result.items.length && !result.total) return null
+    return [{ code: bare, ...result, source: 'tencent_hk_news' }]
+  }
+
+  /**
+   * 港股个股公告（侧边栏「公告」）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/news/noticeList/search?symbol=hk00700
+   */
+  p.tencentHkStockNotices = async function tencentHkStockNotices(
+    code: string,
+    page = 1,
+    pageSize = 20,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkStockNotices({ code: bare, page, pageSize })
+    if (!result.items.length && !result.total) return null
+    return [{ code: bare, ...result, source: 'tencent_hk_notice' }]
+  }
+
+  /**
+   * 港股财务三表（损益 / 现金流 / 负债）。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/stock/corp/hkcwbb/detail?type=zhsy|xjll|zcfz
+   * @pageUrl https://gu.qq.com/hk00700/gp/income
+   */
+  p.tencentHkStockFinancialReport = async function tencentHkStockFinancialReport(
+    code: string,
+    reportType = 'income',
+    reportPeriod = 'all',
+    periods = 4,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkFinancialReport({
+      code: bare,
+      reportType,
+      reportPeriod: reportPeriod as 'all' | 'annual' | 'interim',
+      periods,
+    })
+    return [{ code: bare, ...result, source: 'tencent_hk_finance' }]
+  }
+
+  /**
+   * 港股 K 线（分时 / 五日 / 日周月 / 1-3-5年）。
+   *
+   * @sourceUrl web.ifzq.gtimg.cn minute/query | day/query | kline/kline
+   * @pageUrl https://gu.qq.com/hk00700/gp
+   */
+  p.tencentHkStockKline = async function tencentHkStockKline(
+    code: string,
+    period = 'day',
+    limit = 0,
+    adjust = 'none',
+    startDate = '',
+    endDate = '',
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkStockKline({
+      code: bare,
+      period,
+      limit: limit > 0 ? limit : undefined,
+      adjust: adjust === 'qfq' ? 'qfq' : 'none',
+      startDate: startDate || undefined,
+      endDate: endDate || undefined,
+    })
+    if (!result.items.length) return null
+    return [{ ...result, source: 'tencent_hk_kline' }]
+  }
+
+  /**
+   * 港股技术面（成交分布 + 均价波幅）。
+   *
+   * @sourceUrl hk_trading_vol_analyse.php + Hkinchot/averageVolatility
+   */
+  p.tencentHkTechnicalAnalysis = async function tencentHkTechnicalAnalysis(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkTechnicalAnalysis(bare)
+    return [{ ...result, source: 'tencent_hk_technical' }]
+  }
+
+  /**
+   * 港股关联股票。
+   *
+   * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/hk/aastocks/relate/relate?code=hk00700
+   */
+  p.tencentHkRelatedStocks = async function tencentHkRelatedStocks(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const items = await fetchTencentHkRelatedStocks(bare)
+    return items.length ? [{ code: bare, items, source: 'tencent_hk_relate' }] : null
+  }
+
+  /**
+   * 港股业绩回顾与展望。
+   */
+  p.tencentHkReviewProspect = async function tencentHkReviewProspect(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkReviewProspect(bare)
+    if (!result.review && !result.prospect) return null
+    return [{ code: bare, ...result, source: 'tencent_hk_review' }]
+  }
+
+  /**
+   * 港股投行评级。
+   */
+  p.tencentHkInvestRating = async function tencentHkInvestRating(code: string) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const items = await fetchTencentHkInvestRating(bare)
+    return items.length ? [{ code: bare, items, source: 'tencent_hk_invest_rating' }] : null
+  }
+
+  /**
+   * 港股分红派息（底部摘要 + 完整分页列表）。
+   *
+   * @sourceUrl getDividends?c=00700&p=1&max=10 + jiankuang.fhpx
+   * @pageUrl https://gu.qq.com/hk00700/gp/dividends
+   */
+  p.tencentHkDividends = async function tencentHkDividends(
+    code: string,
+    page = 1,
+    pageSize = 10,
+    includeRecent = true,
+  ) {
+    const bare = String(code ?? '').trim()
+    if (!bare) return null
+    const result = await fetchTencentHkDividends({
+      code: bare,
+      page,
+      pageSize,
+      includeRecent: Boolean(includeRecent),
+    })
+    if (!result.items.length && !result.recent.length) return null
+    return [{ ...result, source: 'tencent_hk_dividends' }]
   }
 }

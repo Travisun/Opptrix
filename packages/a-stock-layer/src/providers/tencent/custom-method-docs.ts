@@ -354,6 +354,148 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     notes: '收盘后常返回空；仅交易时段有逐笔数据。',
     example: '{"provider":"tencent","method":"tencentTradeDetails","args":["300308"]}',
   },
+
+  tencentHkStockProfile: {
+    method: 'tencentHkStockProfile',
+    description: '港股基本资料（公司名称、官网、主营业务）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/app/hkStockinfo/jiankuang?code=hk00700`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [{ name: 'code', type: 'string', description: '港股代码，如 00700 或 hk00700', required: true }],
+    returns: '[{ code, symbol, chiName, website, business, raw, source }]',
+    usage: INVOKE('tencentHkStockProfile', '["00700"]'),
+    notes: '与 A 股 stockinfo/jiankuang 不同，须走 hkStockinfo 路径。',
+    example: '{"provider":"tencent","method":"tencentHkStockProfile","args":["00700"]}',
+  },
+
+  tencentHkStockNews: {
+    method: 'tencentHkStockNews',
+    description: '港股个股新闻列表（详情页侧边栏）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/news/info/search?symbol=hk00700&type=2`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [
+      { name: 'code', type: 'string', description: '港股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50', default: 20 },
+    ],
+    returns: '[{ code, total, items: [{ id, title, time, url, type }], source }]',
+    usage: INVOKE('tencentHkStockNews', '["00700",1,10]'),
+    notes: 'type=2 为个股新闻；type=1 常为空。与 A 股 HyNews/getBySymbol 不通用。',
+    example: '{"provider":"tencent","method":"tencentHkStockNews","args":["00700",1,10]}',
+  },
+
+  tencentHkStockNotices: {
+    method: 'tencentHkStockNotices',
+    description: '港股个股公告列表',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/news/noticeList/search?symbol=hk00700`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [
+      { name: 'code', type: 'string', description: '港股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50', default: 20 },
+    ],
+    returns: '[{ code, total, items: [{ id, title, time, url, type }], source }]',
+    usage: INVOKE('tencentHkStockNotices', '["00700",1,10]'),
+    example: '{"provider":"tencent","method":"tencentHkStockNotices","args":["00700",1,10]}',
+  },
+
+  tencentHkStockFinancialReport: {
+    method: 'tencentHkStockFinancialReport',
+    description: '港股财务三表（损益表 / 现金流量表 / 资产负债表）',
+    sourceUrl: `${PROXY}/ifzqgtimg/stock/corp/hkcwbb/detail?type=zhsy|xjll|zcfz&symbol=hk00700`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp/income',
+    params: [
+      { name: 'code', type: 'string', description: '港股代码', required: true },
+      { name: 'reportType', type: 'string', description: 'income 损益 / cashflow 现金流 / balance 负债', default: 'income' },
+      { name: 'reportPeriod', type: 'string', description: 'all 全部 / annual 年报 / interim 中报', default: 'all' },
+      { name: 'periods', type: 'number', description: '返回期数，最大 12', default: 4 },
+    ],
+    returns: '[{ code, reportType, reportPeriod, tables, source }]',
+    usage: INVOKE('tencentHkStockFinancialReport', '["00700","income","all",4]'),
+    notes: '上游 getFinReport 已 offline；须用 hkcwbb/detail。type 映射：zhsy/xjll/zcfz。',
+    example: '{"provider":"tencent","method":"tencentHkStockFinancialReport","args":["00700","balance"]}',
+  },
+
+  tencentHkStockKline: {
+    method: 'tencentHkStockKline',
+    description: '港股 K 线（分时 / 五日 / 日周月 / 1-3-5 年，支持历史区间）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/appstock/app/minute/query | day/query | kline/kline',
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [
+      { name: 'code', type: 'string', description: '港股代码', required: true },
+      { name: 'period', type: 'string', description: 'minute|fdays|day|week|month|year1|year3|year5', default: 'day' },
+      { name: 'limit', type: 'number', description: 'K 线条数，0 表示默认；上游单次最大 2000', default: 0 },
+      { name: 'adjust', type: 'string', description: 'none 不复权 / qfq 前复权（仅日周月年）', default: 'none' },
+      { name: 'startDate', type: 'string', description: '历史起始 YYYY-MM-DD；与 endDate 配合可拉全量历史', default: '' },
+      { name: 'endDate', type: 'string', description: '历史截止 YYYY-MM-DD；省略时默认今天', default: '' },
+    ],
+    returns: '[{ code, symbol, period, adjust, startDate, endDate, items, quote?, source }]',
+    usage: INVOKE('tencentHkStockKline', '["00700","day",0,"none","2004-01-01","2026-07-08"]'),
+    notes: '日 K 历史超过约 4 年或 limit≥2000 时自动按年分批请求并合并（与 gu.qq.com 图表一致）。周/月单次即可覆盖全历史。分时仅当日，五日固定近 5 个交易日。',
+    example: '{"provider":"tencent","method":"tencentHkStockKline","args":["00700","day",0,"none","2004-01-01"]}',
+  },
+
+  tencentHkTechnicalAnalysis: {
+    method: 'tencentHkTechnicalAnalysis',
+    description: '港股技术面（最活跃成交价位分布 + 均价波幅）',
+    sourceUrl: `${PROXY}/message/hk/hk_trading_vol_analyse.php?code=00700 + Hkinchot/averageVolatility`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [{ name: 'code', type: 'string', description: '港股代码', required: true }],
+    returns: '[{ code, symbol, trading: { priceLevels, largeOrderPct }, average: { ma10..ma250, volatility }, source }]',
+    usage: INVOKE('tencentHkTechnicalAnalysis', '["00700"]'),
+    notes: '成交分布用 5 位代码（无 hk 前缀）；均价波幅盘前可能为 NA。',
+    example: '{"provider":"tencent","method":"tencentHkTechnicalAnalysis","args":["00700"]}',
+  },
+
+  tencentHkRelatedStocks: {
+    method: 'tencentHkRelatedStocks',
+    description: '港股关联股票列表',
+    sourceUrl: `${PROXY}/ifzqgtimg/hk/aastocks/relate/relate?code=hk00700`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [{ name: 'code', type: 'string', description: '港股代码', required: true }],
+    returns: '[{ code, items: [{ code, name }], source }]',
+    usage: INVOKE('tencentHkRelatedStocks', '["00700"]'),
+    example: '{"provider":"tencent","method":"tencentHkRelatedStocks","args":["00700"]}',
+  },
+
+  tencentHkReviewProspect: {
+    method: 'tencentHkReviewProspect',
+    description: '港股业绩回顾与业务展望（HTML 正文）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/hk/HkInfo/getReview?c=00700 + getProspect`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [{ name: 'code', type: 'string', description: '港股代码', required: true }],
+    returns: '[{ code, review, prospect, source }]',
+    usage: INVOKE('tencentHkReviewProspect', '["00700"]'),
+    notes: '参数为 c=5位代码，非 hk 前缀。',
+    example: '{"provider":"tencent","method":"tencentHkReviewProspect","args":["00700"]}',
+  },
+
+  tencentHkInvestRating: {
+    method: 'tencentHkInvestRating',
+    description: '港股投行评级与目标价',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/hk/HkInfo/getInvestBankRating?c=00700`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp',
+    params: [{ name: 'code', type: 'string', description: '港股代码', required: true }],
+    returns: '[{ code, items: [{ DEPARTMENT_NAME, AIM_PRICE, EVA_RANK, ... }], source }]',
+    usage: INVOKE('tencentHkInvestRating', '["00700"]'),
+    example: '{"provider":"tencent","method":"tencentHkInvestRating","args":["00700"]}',
+  },
+
+  tencentHkDividends: {
+    method: 'tencentHkDividends',
+    description: '港股分红派息（详情页底部摘要 + 完整分页列表）',
+    sourceUrl: `${PROXY}/ifzqgtimg/appstock/hk/HkInfo/getDividends?c=00700&p=1&max=10 + jiankuang.fhpx`,
+    pageUrl: 'https://gu.qq.com/hk00700/gp/dividends',
+    params: [
+      { name: 'code', type: 'string', description: '港股代码', required: true },
+      { name: 'page', type: 'number', description: '页码，从 1 开始', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 50（对应上游 max）', default: 10 },
+      { name: 'includeRecent', type: 'boolean', description: '是否附带 jiankuang.fhpx 近年摘要（详情页底部）', default: true },
+    ],
+    returns: '[{ code, symbol, page, pageSize, hasMore, recent: [{ content, exDate, payDate }], items: [{ fiscalYear, eventType, method, exDate, payDate, content, ... }], source }]',
+    usage: INVOKE('tencentHkDividends', '["00700",1,5]'),
+    notes: 'recent 来自 jiankuang.fhpx，含 2024-2026 等最新派息；items 来自 getDividends 历史档案（腾讯控股约至 2018）。参数 c=5 位代码。',
+    example: '{"provider":"tencent","method":"tencentHkDividends","args":["00700",1,10,true]}',
+  },
 }
 
 export const TENCENT_CUSTOM = Object.values(TENCENT_METHOD_DOCS).map(toCustomMethodDef)
