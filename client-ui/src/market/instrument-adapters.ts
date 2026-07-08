@@ -70,6 +70,7 @@ export interface UnifiedInstrumentChartDto {
   has_more?: boolean
   bars: UnifiedChartBarDto[]
   indicators?: Record<string, unknown>[]
+  chart_time_zone?: string
   extras?: Record<string, unknown>
   source?: string
 }
@@ -256,6 +257,7 @@ export function unifiedChartToStockChart(
       hasMore: data.has_more,
       bars,
       indicators: (data.indicators ?? []) as StockChartData['indicators'],
+      chartTimeZone: data.chart_time_zone,
       cyqLatest: data.extras?.cyqLatest as StockChartData['cyqLatest'],
       cyqProfile: data.extras?.cyqProfile as StockChartData['cyqProfile'],
     }

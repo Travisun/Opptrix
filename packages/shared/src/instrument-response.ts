@@ -43,6 +43,7 @@ export interface UnifiedInstrumentChart {
   /** CN 专属：筹码等扩展块，跨市场为空 */
   extras?: Record<string, unknown>
   source: 'local' | 'live' | 'mixed'
+  chart_time_zone?: string
 }
 
 export interface UnifiedInstrumentBatchResult {
@@ -335,6 +336,15 @@ export function normalizeInstrumentChart(
   const sessionDate = items.length
     ? str((items[0] as Record<string, unknown>).date ?? (items[0] as Record<string, unknown>).time).slice(0, 10)
     : null
+  const intradayBars = period === 'intraday' && items.length && (items[0] as Record<string, unknown>).time
+    ? (items as Record<string, unknown>[]).map(row => ({
+      time: str(row.time),
+      price: num(row.price),
+      volume: num(row.volume),
+      amount: num(row.amount),
+      avg_price: num(row.avg_price ?? row.avgPrice),
+    }))
+    : klinesToChartBars(items, period)
   return {
     instrument,
     code: str(raw.symbol ?? raw.pair ?? raw.code, code),
@@ -344,7 +354,9 @@ export function normalizeInstrumentChart(
     session_date: raw.sessionDate != null ? str(raw.sessionDate) : raw.session_date != null ? str(raw.session_date) : sessionDate || undefined,
     is_trading_day: raw.isTradingDay as boolean | undefined ?? raw.is_trading_day as boolean | undefined,
     has_more: raw.hasMore as boolean | undefined ?? raw.has_more as boolean | undefined,
-    bars: klinesToChartBars(items, period),
+    bars: intradayBars,
+    indicators: raw.indicators as Record<string, unknown>[] | undefined,
+    chart_time_zone: str(raw.chartTimeZone ?? raw.chart_time_zone) || undefined,
     source,
   }
 }

@@ -4,6 +4,7 @@ import { fetchJson, fetchText } from './http.js'
 import { fetchTencentJsonp, parseTencentJsonp } from './jsonp.js'
 import { mapTencentKlineRows } from '../normalize/kline.js'
 import { mapTencentMinuteKlines, mapTencentMinuteTicks } from '../normalize/market.js'
+import { crossMarketSessionDate } from '../../../utils/cross-market-intraday.js'
 import type { StockKline } from '../../../core/schema.js'
 import { TENCENT_PROXY_BASE } from './types.js'
 
@@ -317,7 +318,7 @@ function mapHkNoticeRows(symbol: string, rows: Array<Record<string, unknown>>): 
 
 function mapHkMinuteKlines(code: string, rows: string[]): StockKline[] {
   const numeric = normalizeHkNumericCode(code)
-  const date = new Date().toISOString().slice(0, 10)
+  const date = crossMarketSessionDate('HK')
   return mapTencentMinuteKlines(numeric, rows, date).map(row => ({ ...row, code: numeric }))
 }
 

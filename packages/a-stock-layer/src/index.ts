@@ -45,6 +45,26 @@ export {
 } from './utils/market-session.js'
 export { pickIntradaySession } from './utils/intraday-trends.js'
 export {
+  crossMarketChartTimeZone,
+  crossMarketSessionDate,
+  intradaySessionDateFromKlines,
+  isCrossMarketTradingDay,
+  marketLocalDatetimeToIso,
+  minuteKlinesToIntradayItems,
+  timezoneOffsetIso,
+  type CrossMarketChartMarket,
+} from './utils/cross-market-intraday.js'
+export {
+  dailyBarsNeededForCrossMarketPeriod,
+  deriveCrossMarketKlinesFromDaily,
+  filterKlinesByCalendarYears,
+  isCrossMarketDerivedKlinePeriod,
+  resampleKlinesByTradingDays,
+  resampleKlinesMonthly,
+  resampleKlinesWeekly,
+  type CrossMarketDerivedKlinePeriod,
+} from './utils/kline-resample.js'
+export {
   parseStockMarket,
   resolveStockMarketCode,
   isShIndexCode,

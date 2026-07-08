@@ -3,6 +3,7 @@ import { fetchJson, fetchText } from './http.js'
 import { fetchTencentJsonp, parseTencentJsonp } from './jsonp.js'
 import { mapTencentKlineRows } from '../normalize/kline.js'
 import { mapTencentMinuteKlines } from '../normalize/market.js'
+import { crossMarketSessionDate } from '../../../utils/cross-market-intraday.js'
 import { parseTencentLine } from '../normalize/quote.js'
 import type { StockKline } from '../../../core/schema.js'
 import { TENCENT_PROXY_BASE } from './types.js'
@@ -371,7 +372,7 @@ function mapUsKlineRows(code: string, rows: string[][]): StockKline[] {
 
 function mapUsMinuteKlines(code: string, rows: string[]): StockKline[] {
   const ticker = normalizeUsTicker(code)
-  const date = new Date().toISOString().slice(0, 10)
+  const date = crossMarketSessionDate('US')
   return mapTencentMinuteKlines(ticker, rows, date).map(row => ({ ...row, code: ticker }))
 }
 

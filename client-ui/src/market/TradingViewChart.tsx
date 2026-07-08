@@ -28,7 +28,15 @@ const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
   { id: 'monthly', label: '月K' },
 ]
 
-const CROSS_MARKET_PERIODS = new Set<ChartPeriod>(['intraday', 'daily', 'weekly', 'monthly'])
+const CROSS_MARKET_PERIOD_OPTIONS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
+  { id: 'daily', label: '日K' },
+  { id: '5day', label: '5日' },
+  { id: 'weekly', label: '周K' },
+  { id: 'monthly', label: '月K' },
+  { id: 'year1', label: '1年' },
+  { id: 'year3', label: '3年' },
+  { id: 'year5', label: '5年' },
+]
 
 const useStyles = makeStyles({
   root: {
@@ -283,9 +291,16 @@ export default function TradingViewChart({ code, expanded = false, active = true
     && hasApplicationCapability(instrumentRef, 'chart_intraday')
   const periodOptions = useMemo(() => {
     if (cnEquityChart) return PERIODS
-    if (crossMarketChart) return PERIODS.filter(item => CROSS_MARKET_PERIODS.has(item.id))
+    if (crossMarketChart) {
+      const options: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = []
+      if (hasApplicationCapability(instrumentRef, 'chart_intraday')) {
+        options.push({ id: 'intraday', label: '分时', tradingOnly: true })
+      }
+      options.push(...CROSS_MARKET_PERIOD_OPTIONS)
+      return options
+    }
     return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
-  }, [cnEquityChart, crossMarketChart])
+  }, [cnEquityChart, crossMarketChart, instrumentRef])
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
@@ -600,7 +615,6 @@ export default function TradingViewChart({ code, expanded = false, active = true
         <div className={s.periodGroup}>
           {periodOptions.map(item => {
             const disabled = (!cnEquityChart && !crossMarketChart && (isIntradayPeriod(item.id) || isMinuteOhlcPeriod(item.id)))
-              || (crossMarketChart && !cnEquityChart && !CROSS_MARKET_PERIODS.has(item.id))
               || (item.tradingOnly && !intradayAvailable && item.id === 'intraday')
             const activeTab = period === item.id
             return (

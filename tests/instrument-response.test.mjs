@@ -65,6 +65,22 @@ test('normalizeInstrumentChart wraps cross-market kline items', () => {
   assert.equal(chart.bars[0]?.close, 1.5)
 })
 
+test('normalizeInstrumentChart passes cross-market indicators', () => {
+  const chart = normalizeInstrumentChart(
+    { market: 'HK', assetClass: 'EQUITY', symbol: '00700' },
+    'daily',
+    {
+      symbol: '00700',
+      items: [{ code: '00700', date: '2024-01-02', open: 300, high: 310, low: 295, close: 305, volume: 1000, amount: 305000, changePct: 1.2, turnoverRate: null }],
+      indicators: [{ time: '2024-01-02', ma5: 302, ma10: 298, ma20: 290, ma60: 280, macd: 1.2, macdSignal: 0.8, macdHist: 0.4 }],
+      count: 1,
+    },
+  )
+  assert.equal(chart.indicators?.length, 1)
+  assert.equal(chart.indicators?.[0]?.ma5, 302)
+  assert.equal(chart.indicators?.[0]?.macdHist, 0.4)
+})
+
 test('normalizeInstrumentSnapshot attaches local_insights in extras', () => {
   const snap = normalizeInstrumentSnapshot(
     { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },

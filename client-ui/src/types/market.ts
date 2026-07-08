@@ -173,7 +173,11 @@ export interface StockKlineBar {
   turnoverRate: number | null
 }
 
-export type ChartPeriod = 'intraday' | '1m' | '5m' | '15m' | '30m' | '60m' | 'daily' | 'weekly' | 'monthly'
+export type ChartPeriod =
+  | 'intraday'
+  | '1m' | '5m' | '15m' | '30m' | '60m'
+  | 'daily' | '5day' | 'weekly' | 'monthly'
+  | 'year1' | 'year3' | 'year5'
 
 export interface IntradayChartBar {
   time: string
@@ -245,6 +249,8 @@ export interface StockChartData {
   hasMore?: boolean
   bars: IntradayChartBar[] | OhlcChartBar[]
   indicators: ChartIndicatorPoint[]
+  /** IANA timezone for cross-market intraday parsing */
+  chartTimeZone?: string
   cyqLatest?: ChipDistributionPoint | null
   cyqProfile?: ChipDistributionProfileData | null
 }

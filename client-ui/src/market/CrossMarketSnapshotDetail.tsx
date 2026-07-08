@@ -13,17 +13,17 @@ import { research } from '../api/client'
 import { openExternalUrl } from '../platform/openUrl'
 import type {
   CryptoSnapshotData,
+  CrossMarketRelatedStock,
   FinancialSummaryData,
+  RevenueBreakdownBlock,
+  SeniorTradeItem,
   StockDividendItem,
   StockNewsItem,
   StockProfileData,
   StockShareholderData,
+  TradingDistributionData,
   UsSnapshotData,
   WatchlistItem,
-  type CrossMarketRelatedStock,
-  type RevenueBreakdownBlock,
-  type SeniorTradeItem,
-  type TradingDistributionData,
 } from '../types/market'
 import type { InstrumentRef } from '../types/instrument'
 import {

@@ -76,8 +76,8 @@ function assertUniqueTimes(times: Time[], label: string, period: string): void {
   }
 }
 
-function chartTime(raw: string, period: string): Time {
-  return chartTimeForPeriod(raw, period)
+function chartTime(raw: string, period: string, timeZone?: string): Time {
+  return chartTimeForPeriod(raw, period, timeZone)
 }
 
 function normalizeOhlc(bar: OhlcChartBar, period: string): CandlePoint {
@@ -118,22 +118,23 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
   const minuteOhlc = isMinuteOhlcPeriod(data.period)
   const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
   const ma = getMaColors(scheme)
+  const tz = data.chartTimeZone
 
   if (intraday) {
     const bars = data.bars as IntradayChartBar[]
     const priceLine = dedupeByTime(bars.map(bar => ({
-      time: chartTime(bar.time, data.period),
+      time: chartTime(bar.time, data.period, tz),
       value: bar.price,
     })))
     const avgLine = dedupeByTime(bars.map(bar => ({
-      time: chartTime(bar.time, data.period),
+      time: chartTime(bar.time, data.period, tz),
       value: bar.avgPrice,
     })))
     const volume = dedupeByTime(bars.map((bar, i) => {
       const ref = i > 0 ? bars[i - 1].price : data.preClose
       const delta = ref == null ? null : bar.price - ref
       return {
-        time: chartTime(bar.time, data.period),
+        time: chartTime(bar.time, data.period, tz),
         value: bar.volume,
         color: volumeColor(delta, scheme),
       }
@@ -220,6 +221,10 @@ const PERIOD_LABELS: Record<ChartPeriod, string> = {
   '30m': '30分',
   '60m': '60分',
   daily: '日K',
+  '5day': '5日K',
   weekly: '周K',
   monthly: '月K',
+  year1: '1年',
+  year3: '3年',
+  year5: '5年',
 }

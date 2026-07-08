@@ -4,10 +4,17 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
   type NewsItem, type MoneyFlow, type Dividend,
+  dailyBarsNeededForCrossMarketPeriod,
+  deriveCrossMarketKlinesFromDaily,
+  isCrossMarketDerivedKlinePeriod,
+  crossMarketChartTimeZone,
+  intradaySessionDateFromKlines,
+  isCrossMarketTradingDay,
+  minuteKlinesToIntradayItems,
 } from '@opptrix/a-stock-layer'
 import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
-import type { StockListItem, FinancialSummary } from '@opptrix/shared'
+import type { StockListItem, FinancialSummary, StockKline } from '@opptrix/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@opptrix/skills'
 import {
@@ -2190,6 +2197,62 @@ export class ResearchHub {
     return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} ${market} 行情`, t0)
   }
 
+  private mapCrossMarketKlineItems(
+    items: Record<string, unknown>[],
+    symbol: string,
+  ): StockKline[] {
+    return items.map(row => ({
+      code: String(row.code ?? symbol),
+      date: String(row.date ?? row.time ?? ''),
+      open: Number(row.open ?? row.close ?? row.price ?? 0),
+      close: Number(row.close ?? row.price ?? row.open ?? 0),
+      high: Number(row.high ?? row.close ?? row.price ?? 0),
+      low: Number(row.low ?? row.close ?? row.price ?? 0),
+      volume: Number(row.volume ?? 0),
+      amount: Number(row.amount ?? 0),
+      changePct: row.changePct != null
+        ? Number(row.changePct)
+        : row.change_pct != null
+          ? Number(row.change_pct)
+          : null,
+      turnoverRate: row.turnoverRate != null
+        ? Number(row.turnoverRate)
+        : row.turnover_rate != null
+          ? Number(row.turnover_rate)
+          : null,
+    })).filter(row => row.date)
+  }
+
+  private crossMarketKlineToItems(klines: StockKline[]): Record<string, unknown>[] {
+    return klines.map(row => ({
+      code: row.code,
+      date: row.date,
+      open: row.open,
+      high: row.high,
+      low: row.low,
+      close: row.close,
+      volume: row.volume,
+      amount: row.amount,
+      changePct: row.changePct,
+      turnoverRate: row.turnoverRate,
+    }))
+  }
+
+  private mapCrossMarketChartIndicators(code: string, klines: StockKline[]) {
+    return this.sortChartBars(computeIndicators(code, klines).map(row => ({
+      time: row.date,
+      ma5: row.ma5,
+      ma10: row.ma10,
+      ma20: row.ma20,
+      ma60: row.ma60,
+      rsi6: row.rsi6,
+      rsi12: row.rsi12,
+      macd: row.macd,
+      macdSignal: row.macdSignal,
+      macdHist: row.macdHist,
+    })))
+  }
+
   private async crossMarketKlineChart(
     market: 'US' | 'HK',
     symbol: string,
@@ -2198,22 +2261,68 @@ export class ResearchHub {
     t0: number,
   ) {
     const ref = { market, assetClass: 'EQUITY' as const, symbol }
-    const r = await this.de.queryInstrumentData(ref, 'kline', { count, period })
+    const derived = isCrossMarketDerivedKlinePeriod(period)
+    const fetchPeriod = derived ? 'daily' : period
+    const fetchCount = derived ? dailyBarsNeededForCrossMarketPeriod(period, count) : count
+    const r = await this.de.queryInstrumentData(ref, 'kline', { count: fetchCount, period: fetchPeriod })
     if (!r.success) {
       return fail(instrumentQueryError(r, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
     }
-    const items = instrumentQueryData<Record<string, unknown>[]>(r) ?? []
+    let items = instrumentQueryData<Record<string, unknown>[]>(r) ?? []
     let preClose: number | null = null
-    if (period === 'intraday' && items.length) {
+    let sessionDate: string | null = null
+    let isTradingDay = false
+    const chartTimeZone = crossMarketChartTimeZone(market)
+
+    if (period === 'intraday') {
       const qR = await this.de.queryInstrumentData(ref, 'realtime')
       const quote = instrumentQueryData<Record<string, unknown>[]>(qR)?.[0]
       preClose = quote?.preClose != null ? Number(quote.preClose) : null
       if (preClose == null || !Number.isFinite(preClose)) {
         preClose = quote?.pre_close != null ? Number(quote.pre_close) : null
       }
+      const minuteKlines = this.mapCrossMarketKlineItems(items, symbol)
+      sessionDate = intradaySessionDateFromKlines(minuteKlines)
+      isTradingDay = sessionDate ? isCrossMarketTradingDay(market, sessionDate) : false
+      items = minuteKlines.length ? minuteKlinesToIntradayItems(market, minuteKlines) : []
+      return ok(
+        {
+          symbol,
+          period,
+          items,
+          indicators: [],
+          count: items.length,
+          preClose,
+          pre_close: preClose,
+          session_date: sessionDate,
+          is_trading_day: isTradingDay,
+          chart_time_zone: chartTimeZone,
+        },
+        `分时 ${items.length} 点`,
+        t0,
+      )
     }
+
+    let klines = items.length
+      ? this.mapCrossMarketKlineItems(items, symbol)
+      : []
+    if (derived && klines.length) {
+      klines = deriveCrossMarketKlinesFromDaily(klines, period)
+      items = this.crossMarketKlineToItems(klines)
+    }
+
+    const indicators = klines.length ? this.mapCrossMarketChartIndicators(symbol, klines) : []
     return ok(
-      { symbol, period, items, count: items.length, preClose, pre_close: preClose },
+      {
+        symbol,
+        period,
+        items,
+        indicators,
+        count: items.length,
+        preClose,
+        pre_close: preClose,
+        chart_time_zone: chartTimeZone,
+      },
       `K 线 ${items.length} 根`,
       t0,
     )
