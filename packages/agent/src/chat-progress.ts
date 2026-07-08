@@ -240,6 +240,17 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const n = instrumentsCount(args) ?? codesCount(args)
       return n != null ? `批量获取 ${n} 只候选标的快照` : '批量获取候选标的快照'
     }
+    case 'get_instrument_snapshot':
+    case 'get_instrument_chart':
+    case 'get_instrument_quotes':
+    case 'evaluate_instrument':
+    case 'get_instrument_strategy_signal':
+    case 'get_instrument_indicators':
+    case 'verify_instrument_strategy':
+    case 'get_instrument_cyq': {
+      const iref = instrumentRefFromArgs(args) ?? ref
+      return iref ? `${base} · ${iref}` : base
+    }
     case 'get_stock_quotes': {
       const n = codesCount(args)
       return n != null ? `获取 ${n} 只股票实时行情` : '获取实时行情'
@@ -295,10 +306,217 @@ export function formatArgsPreview(args: Record<string, unknown>): string {
   }
 }
 
+function instrumentRefFromArgs(args: Record<string, unknown>): string | null {
+  const inst = args.instrument
+  if (inst && typeof inst === 'object') {
+    const i = inst as Record<string, unknown>
+    const market = typeof i.market === 'string' ? i.market : ''
+    const symbol = i.symbol ?? i.pair
+    if (typeof symbol === 'string' && symbol.trim()) {
+      return market ? `${market}:${symbol.trim()}` : symbol.trim()
+    }
+  }
+  if (typeof args.symbol === 'string' && args.symbol.trim()) {
+    const market = typeof args.market === 'string' ? args.market : 'US'
+    return `${market}:${args.symbol.trim()}`
+  }
+  if (typeof args.pair === 'string' && args.pair.trim()) {
+    return `CRYPTO:${args.pair.trim()}`
+  }
+  return null
+}
+
+function asResearchEnvelope(result: unknown): {
+  success?: boolean
+  message?: string
+  data?: unknown
+} | null {
+  if (!result || typeof result !== 'object') return null
+  const r = result as Record<string, unknown>
+  if ('success' in r || ('data' in r && 'message' in r)) {
+    return {
+      success: typeof r.success === 'boolean' ? r.success : undefined,
+      message: typeof r.message === 'string' ? r.message : undefined,
+      data: r.data,
+    }
+  }
+  return null
+}
+
+function fmtPct(v: unknown): string | null {
+  if (typeof v !== 'number' || Number.isNaN(v)) return null
+  const sign = v > 0 ? '+' : ''
+  return `${sign}${v.toFixed(2)}%`
+}
+
+function summarizeBatchSnapshot(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const rows = Array.isArray(d.discover_items)
+    ? d.discover_items as Record<string, unknown>[]
+    : Array.isArray(d.items)
+      ? d.items as Record<string, unknown>[]
+      : []
+  const quotes = Array.isArray(d.quotes) ? d.quotes as Record<string, unknown>[] : []
+  const count = typeof d.count === 'number' ? d.count : rows.length + quotes.length
+  if (!count) return message ?? '无批量截面数据'
+
+  const tradeDate = d.trade_date != null ? String(d.trade_date) : null
+  let head = `批量截面 ${count} 只`
+  if (tradeDate) head += `（${tradeDate}）`
+
+  if (rows.length) {
+    const sample = rows.slice(0, 3).map(row => {
+      const code = row.code ?? row.symbol ?? '?'
+      const name = typeof row.name === 'string' ? row.name : ''
+      const score = row.total_score ?? row.score
+      const keyFactors = row.key_factors && typeof row.key_factors === 'object'
+        ? row.key_factors as Record<string, unknown>
+        : null
+      const pe = row.pe ?? keyFactors?.pe
+      const label = name ? `${name}（${code}）` : String(code)
+      if (typeof score === 'number') return `${label} ${score} 分`
+      if (typeof pe === 'number') return `${label} PE ${pe}`
+      return label
+    })
+    const tail = rows.length > 3 ? `等 ${rows.length} 只` : ''
+    return [head, sample.join(' · '), tail].filter(Boolean).join('：')
+  }
+
+  if (quotes.length) {
+    const sample = quotes.slice(0, 3).map(q => {
+      const code = q.code ?? '?'
+      const pct = fmtPct(q.change_pct ?? q.changePct)
+      return pct ? `${code} ${pct}` : String(code)
+    })
+    return `${head}：${sample.join(' · ')}`
+  }
+
+  return message ?? head
+}
+
+function summarizeInstrumentSnapshot(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const code = d.code ?? d.symbol ?? d.pair
+  const name = typeof d.name === 'string' ? d.name : null
+  const quote = d.quote && typeof d.quote === 'object' ? d.quote as Record<string, unknown> : null
+  const price = quote?.price ?? d.price
+  const pct = fmtPct(quote?.change_pct ?? quote?.changePct ?? d.change_pct ?? d.changePct)
+  const label = name && code ? `${name}（${code}）` : (name ?? code ?? '标的')
+  const priceText = typeof price === 'number' ? price.toFixed(2) : null
+  const bits = [label, priceText, pct].filter(Boolean)
+  return bits.length ? bits.join(' · ') : (message ?? null)
+}
+
+function summarizeInstrumentQuotes(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const quotes = Array.isArray(d.quotes) ? d.quotes as Record<string, unknown>[] : []
+  if (!quotes.length) return message ?? '无行情数据'
+  const sample = quotes.slice(0, 4).map(q => {
+    const code = q.code ?? '?'
+    const pct = fmtPct(q.change_pct ?? q.changePct)
+    return pct ? `${code} ${pct}` : String(code)
+  })
+  const head = `${quotes.length} 只行情`
+  return `${head}：${sample.join(' · ')}`
+}
+
+function summarizeInstrumentChart(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const bars = Array.isArray(d.bars) ? d.bars : Array.isArray(d.recent_bars) ? d.recent_bars : []
+  const code = d.code ?? d.symbol
+  const name = typeof d.name === 'string' ? d.name : null
+  const period = typeof d.period === 'string' ? d.period : 'K线'
+  const label = name && code ? `${name}（${code}）` : (name ?? code ?? '标的')
+  return `${label} · ${period} · ${bars.length} 根`
+}
+
+function summarizeInstrumentSearch(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const items = Array.isArray(d.items) ? d.items as Record<string, unknown>[] : []
+  if (!items.length) return message ?? '未找到匹配标的'
+  const sample = items.slice(0, 3).map(item => {
+    const code = item.code ?? item.ref_label ?? item.symbol ?? '?'
+    const name = typeof item.name === 'string' ? item.name : ''
+    return name ? `${name}（${code}）` : String(code)
+  })
+  const head = `找到 ${typeof d.count === 'number' ? d.count : items.length} 只`
+  return `${head}：${sample.join(' · ')}`
+}
+
+function summarizeInstrumentEvaluation(data: unknown, message?: string): string | null {
+  if (!data || typeof data !== 'object') return message ?? null
+  const d = data as Record<string, unknown>
+  const codeRaw = d.code ?? d.symbol
+  const code = typeof codeRaw === 'string' ? codeRaw : null
+  const name = typeof d.name === 'string' ? d.name : null
+  const score = d.total_score ?? d.score
+  const scorecard = typeof d.scorecard === 'string' ? d.scorecard : null
+  const label = name && code ? `${name}（${code}）` : (name ?? code ?? '标的')
+  if (typeof score === 'number') {
+    return scorecard ? `${label} · ${scorecard} ${score} 分` : `${label} · ${score} 分`
+  }
+  return message ?? label
+}
+
+function summarizeToolResult(tool: string, result: unknown): string | null {
+  if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
+    const err = (result as { error?: unknown }).error
+    return typeof err === 'string' ? err : '执行失败'
+  }
+
+  const envelope = asResearchEnvelope(result)
+  if (envelope?.success === false) {
+    return envelope.message || '执行失败'
+  }
+
+  const data = envelope?.data ?? result
+  const message = envelope?.message
+
+  switch (tool) {
+    case 'batch_instrument_snapshots':
+    case 'batch_stock_snapshots':
+      return summarizeBatchSnapshot(data, message)
+    case 'get_instrument_snapshot':
+    case 'get_stock_detail':
+    case 'get_us_snapshot':
+    case 'get_crypto_snapshot':
+      return summarizeInstrumentSnapshot(data, message)
+    case 'get_instrument_quotes':
+    case 'get_stock_quotes':
+      return summarizeInstrumentQuotes(data, message)
+    case 'get_instrument_chart':
+    case 'get_stock_chart':
+    case 'get_stock_kline':
+      return summarizeInstrumentChart(data, message)
+    case 'search_stocks':
+    case 'search_instruments':
+    case 'search_us_stocks':
+    case 'search_crypto_pairs':
+      return summarizeInstrumentSearch(data, message)
+    case 'evaluate_instrument':
+    case 'evaluate_stock':
+    case 'get_instrument_latest_evaluation':
+    case 'get_latest_evaluation':
+      return summarizeInstrumentEvaluation(data, message)
+    default:
+      return null
+  }
+}
+
 /**
  * 格式化工具结果预览与详情 — preview 180 字符、detail 4000 字符。
+ * 对 instrument_* / batch_* 等工具生成面向投资者的可读摘要。
  */
-export function formatResultPreview(result: unknown): { preview: string; detail: string } {
+export function formatResultPreview(
+  result: unknown,
+  tool?: string,
+): { preview: string; detail: string } {
+  const summarized = tool ? summarizeToolResult(tool, result) : null
   let text = ''
   if (typeof result === 'string') {
     text = result
@@ -310,6 +528,10 @@ export function formatResultPreview(result: unknown): { preview: string; detail:
     }
   }
   const detail = text.length <= 4000 ? text : `${text.slice(0, 4000)}…`
+  if (summarized) {
+    const preview = summarized.length <= 180 ? summarized : `${summarized.slice(0, 180)}…`
+    return { preview, detail }
+  }
   const preview = text.length <= 180 ? text : `${text.slice(0, 180)}…`
   return { preview, detail }
 }
@@ -323,8 +545,11 @@ export function enrichStepFromResult(step: ChatToolStep, result: unknown): ChatT
     args = step.argsPreview ? JSON.parse(step.argsPreview) as Record<string, unknown> : {}
   } catch { /* empty */ }
   const label = formatToolLabel(step.tool, args, result)
-  const { preview, detail } = formatResultPreview(result)
-  const isError = Boolean(result && typeof result === 'object' && 'error' in result)
+  const { preview, detail } = formatResultPreview(result, step.tool)
+  const isError = Boolean(
+    (result && typeof result === 'object' && 'error' in result)
+    || (result && typeof result === 'object' && 'success' in result && (result as { success?: boolean }).success === false),
+  )
   return {
     ...step,
     label,

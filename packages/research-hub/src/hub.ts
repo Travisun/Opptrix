@@ -79,6 +79,8 @@ import {
   routeInstrumentBatchSnapshots,
   type InstrumentBatchRouteHandlers,
 } from './instrument-batch-router.js'
+import { searchInstrumentsUnified } from './instrument-search-unified.js'
+import type { LocalInstrumentInsights } from '@opptrix/shared'
 
 function cryptoRefFromPair(pair: string): import('@opptrix/shared').InstrumentRef {
   const p = parseCryptoPair(pair)
@@ -180,13 +182,12 @@ export class ResearchHub {
           return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes': {
           const refs = instrumentRefsFromList(params.codes)
-          if (refs.some(r => r.market !== 'CN')) {
-            return this.instrumentQuotes({ instruments: refs.length ? refs : params.codes, ...params }, t0)
-          }
-          const cnCodes = refs.length
-            ? refs.map(r => r.symbol)
-            : (params.codes as string[] | undefined)
-          return this.stockQuotes(cnCodes, t0)
+          const list = refs.length
+            ? refs
+            : (params.codes as string[] | undefined)?.map(code =>
+              resolveInstrumentFromParams({ code, market: 'CN' }),
+            ).filter((r): r is InstrumentRef => r != null) ?? []
+          return this.instrumentQuotes({ instruments: list.length ? list : params.codes, ...params }, t0)
         }
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
@@ -264,7 +265,8 @@ export class ResearchHub {
         case 'local_etf_screen': return this.localEtfScreen(params, t0)
         case 'etf_scorecard': return this.etfScorecard(String(params.code ?? ''), t0)
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
-        case 'search_local_instruments': return this.searchLocalInstruments(params, t0)
+        case 'search_local_instruments':
+          return this.instrumentSearch(params, t0)
         case 'local_instruments_summary': return this.localInstrumentsSummary(t0)
         case 'instrument_snapshot': return this.instrumentSnapshot(params, t0)
         case 'instrument_quotes': return this.instrumentQuotes(params, t0)
@@ -1955,17 +1957,62 @@ export class ResearchHub {
     return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达维度说明', t0)
   }
 
+  private localInsightsForRef(ref: InstrumentRef): LocalInstrumentInsights | null {
+    if (ref.market !== 'CN') return null
+    if (ref.assetClass !== 'EQUITY' && ref.assetClass !== 'ETF') return null
+    if (!this.marketData.status().is_ready) return null
+    const rows = this.marketData.radarBatch([ref.symbol]) as Array<{
+      total_score?: number | null
+      scorecard?: string | null
+      pe?: number | null
+      pb?: number | null
+      pe_percentile?: number | null
+      pb_percentile?: number | null
+    }>
+    const row = rows[0]
+    if (!row) return null
+    return {
+      trade_date: this.marketData.status().latest_factor_date ?? null,
+      total_score: row.total_score ?? null,
+      scorecard: row.scorecard ?? null,
+      pe: row.pe ?? null,
+      pb: row.pb ?? null,
+      pe_percentile: row.pe_percentile ?? null,
+      pb_percentile: row.pb_percentile ?? null,
+    }
+  }
+
+  private async searchInstrumentsUnifiedHandler(
+    keyword: string,
+    limit: number,
+    markets?: string[],
+    includeLocal = true,
+    t0 = Date.now(),
+  ) {
+    const m = markets as import('@opptrix/shared').Market[] | undefined
+    const { items: rawItems, sources } = await searchInstrumentsUnified(this.de, this.marketData, {
+      keyword,
+      limit,
+      markets: m,
+      includeLocal,
+    })
+    const sourceLabel = sources.length ? sources.join('+') : 'online'
+    const items = rawItems.map(h => ({
+      code: h.code,
+      name: h.name,
+      market: h.market,
+      assetClass: h.asset_class,
+      exchange: h.exchange,
+      instrument: h.instrument,
+      refLabel: h.ref_label,
+      source: h.source,
+    }))
+    return ok({ items, count: items.length, source: sourceLabel }, `标的搜索 ${items.length} 条`, t0)
+  }
+
+  /** @deprecated 使用 instrument_search */
   private async searchLocalInstruments(params: Record<string, unknown>, t0: number) {
-    const keyword = String(params.keyword ?? params.q ?? '').trim()
-    if (keyword.length < 1) return fail('keyword 必填', t0)
-    const limit = params.limit != null ? Number(params.limit) : 30
-    const markets = Array.isArray(params.markets)
-      ? params.markets.map(String) as import('@opptrix/shared').Market[]
-      : undefined
-    const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
-    const items = await searchInstrumentsOnline(this.de, keyword, limit, markets)
-    const source = items[0]?.source === 'tencent' ? 'tencent' : 'stock_index'
-    return ok({ items, count: items.length, source }, `标的搜索 ${items.length} 条`, t0)
+    return this.instrumentSearch(params, t0)
   }
 
   private localInstrumentsSummary(t0: number) {
@@ -2004,10 +2051,9 @@ export class ResearchHub {
       stockCyq: code => this.stockCyq(code, t0),
       institutionRating: (code, groups) => this.institutionRating(code, groups, t0),
       institutionReport: (code, groups) => this.institutionReport(code, groups, t0),
-      searchLocalInstruments: (keyword, limit, markets) => {
-        const m = markets as import('@opptrix/shared').Market[] | undefined
-        return Promise.resolve(this.searchLocalInstruments({ keyword, limit, markets: m }, t0))
-      },
+      searchInstruments: (keyword, limit, markets, includeLocal) =>
+        this.searchInstrumentsUnifiedHandler(keyword, limit, markets, includeLocal !== false, t0),
+      localInsights: ref => this.localInsightsForRef(ref),
     }
   }
 

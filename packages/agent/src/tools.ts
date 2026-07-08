@@ -618,7 +618,10 @@ export class ToolRegistry {
         name: 'search_us_stocks', category: '通用',
         description: '搜索美股（ticker 或公司名）',
         parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('search_us_stocks', { keyword: a.keyword }),
+        handler: (a: Record<string, unknown>) => d('instrument_search', {
+          keyword: a.keyword,
+          markets: ['US'],
+        }),
       },
       {
         name: 'get_crypto_quote', category: '本地数据',
@@ -652,7 +655,10 @@ export class ToolRegistry {
         name: 'search_crypto_pairs', category: '通用',
         description: '搜索 Crypto 交易对（base 或 pair 名）',
         parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('search_crypto_pairs', { keyword: a.keyword }),
+        handler: (a: Record<string, unknown>) => d('instrument_search', {
+          keyword: a.keyword,
+          markets: ['CRYPTO'],
+        }),
       },
       {
         name: 'analyze_portfolio', category: '组合管理',

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { EditRegular } from '@fluentui/react-icons'
-import { fetchCryptoSnapshot, fetchUsSnapshot, research } from '../api/client'
+import { research } from '../api/client'
 import type { CryptoSnapshotData, UsSnapshotData, WatchlistItem } from '../types/market'
 import type { InstrumentRef } from '../types/instrument'
 import {
@@ -220,15 +220,14 @@ function MiniKline({ bars, className }: { bars: { close: number; changePct: numb
 }
 
 async function loadSnapshot(ref: InstrumentRef): Promise<UsSnapshotData | CryptoSnapshotData> {
-  if (hasApplicationCapability(ref, 'snapshot')) {
-    const resp = await research.instrumentSnapshot(ref)
-    if (resp.success && resp.data && typeof resp.data === 'object') {
-      return resp.data as UsSnapshotData | CryptoSnapshotData
-    }
+  if (!hasApplicationCapability(ref, 'snapshot')) {
+    throw new Error('该标的暂不支持快照')
   }
-  const symbol = displayCodeFromInstrument(ref)
-  if (ref.market === 'CRYPTO') return fetchCryptoSnapshot(symbol)
-  return fetchUsSnapshot(symbol)
+  const resp = await research.instrumentSnapshot(ref)
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') {
+    throw new Error(resp.message || '获取行情失败')
+  }
+  return resp.data as UsSnapshotData | CryptoSnapshotData
 }
 
 export default function CrossMarketSnapshotDetail({

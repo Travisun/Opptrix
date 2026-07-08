@@ -80,6 +80,15 @@ import type {
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
 import { cnEquityRef } from '../market/instrument'
+import {
+  isUnifiedChart,
+  isUnifiedSnapshot,
+  unifiedChartToStockChart,
+  unifiedSnapshotToCrossMarket,
+  unifiedSnapshotToStockDetail,
+  type UnifiedInstrumentChartDto,
+  type UnifiedInstrumentSnapshotDto,
+} from '../market/instrument-adapters'
 import type { InstrumentRef, UnifiedInstrumentQuote } from '../types/instrument'
 import type {
   ChartPeriod,
@@ -97,11 +106,16 @@ const INSTRUMENT_JSON_HEADERS = { 'Content-Type': 'application/json' } as const
 
 type InstrumentEnvelope<T> = { success: boolean; data?: T; message?: string }
 
-function toApiResponse<T>(feature: string, resp: InstrumentEnvelope<T>, fallback: T): ApiResponse<T> {
+function toApiResponse<T>(
+  feature: string,
+  resp: InstrumentEnvelope<T>,
+  fallback: T,
+  mapped?: T,
+): ApiResponse<T> {
   return {
     success: resp.success,
     feature,
-    data: (resp.success && resp.data != null ? resp.data : fallback) as T,
+    data: (resp.success && (mapped ?? resp.data) != null ? (mapped ?? resp.data) : fallback) as T,
     message: resp.message,
   }
 }
@@ -138,6 +152,18 @@ async function postInstrument<T>(
   )
 }
 
+async function callInstrumentApi<T>(
+  feature: string,
+  path: string,
+  body: Record<string, unknown>,
+  fallback: T,
+  signal?: AbortSignal,
+  timeoutMs = REQUEST_TIMEOUT,
+): Promise<ApiResponse<T>> {
+  const resp = await postInstrument<T>(path, body, signal, timeoutMs)
+  return toApiResponse(feature, resp, fallback)
+}
+
 function ohlcBarsToKlines(code: string, bars: StockChartData['bars']): StockKlineBar[] {
   return (bars as OhlcChartBar[]).map(bar => ({
     code,
@@ -155,10 +181,42 @@ function ohlcBarsToKlines(code: string, bars: StockChartData['bars']): StockKlin
 
 export const research = {
   diagnose: (code: string, scorecard?: string) =>
-    apiCall<StockDiagnosisData>('stock_diagnosis', { code, ...(scorecard ? { scorecard } : {}) }),
+    callInstrumentApi<StockDiagnosisData>(
+      'stock_diagnosis',
+      '/instruments/evaluation',
+      { instrument: cnEquityRef(code), ...(scorecard ? { scorecard } : {}) },
+      {
+        code,
+        name: code,
+        total_score: 0,
+        scorecard_name: scorecard ?? '综合评估',
+        scorecard_dimensions: [],
+        factors: [],
+        valid_factor_count: 0,
+        total_factor_count: 0,
+        factor_categories: {},
+      },
+      undefined,
+      60000,
+    ),
 
   institutionRating: (code: string, groups?: string[], signal?: AbortSignal) =>
-    apiCall<InstitutionRatingData>('institution_rating', { code, groups }, { signal }, 20000),
+    callInstrumentApi<InstitutionRatingData>(
+      'institution_rating',
+      '/instruments/institution-rating',
+      { instrument: cnEquityRef(code), ...(groups?.length ? { groups } : {}) },
+      {
+        code,
+        name: code,
+        avg_confidence: 0,
+        avg_raw_confidence: 0,
+        consensus_rating: '',
+        consensus_rating_cn: '',
+        items: [],
+      },
+      signal,
+      20000,
+    ),
 
   screen: (conditions: any[], scorecard = '综合评估', topN = 20, signal?: AbortSignal) =>
     apiCall<ScreeningData>('screening', { conditions, scorecard, top_n: topN }, { signal }, 120000),
@@ -175,7 +233,22 @@ export const research = {
     ),
 
   strategySignals: (code: string, signal?: AbortSignal) =>
-    apiCall<StrategySignalData>('strategy_signal', { code }, { signal }, 30000),
+    callInstrumentApi<StrategySignalData>(
+      'strategy_signal',
+      '/instruments/strategy-signal',
+      { instrument: cnEquityRef(code) },
+      {
+        code,
+        name: code,
+        summary: '',
+        bullish_count: 0,
+        bearish_count: 0,
+        neutral_count: 0,
+        signals: [],
+      },
+      signal,
+      30000,
+    ),
 
   trendBrief: (code: string, holdingCost?: number | null, signal?: AbortSignal) =>
     apiCall<TrendBriefData>(
@@ -189,7 +262,23 @@ export const research = {
     ),
 
   strategyVerify: (code: string, checkpoints = 30, forwardDays = 5) =>
-    apiCall<StrategyVerifyData>('strategy_verify', { code, checkpoints, forward_days: forwardDays }),
+    callInstrumentApi<StrategyVerifyData>(
+      'strategy_verify',
+      '/instruments/strategy-verify',
+      { instrument: cnEquityRef(code), checkpoints, forward_days: forwardDays },
+      {
+        code,
+        name: code,
+        checkpoints,
+        forward_days: forwardDays,
+        date_range: [],
+        avg_win_rate: 0,
+        best_strategy: null,
+        performances: [],
+      },
+      undefined,
+      120000,
+    ),
 
   portfolioAnalysis: (holdings: [string, number][]) =>
     apiCall<PortfolioAnalysisData>('portfolio_analysis', { holdings }),
@@ -215,8 +304,28 @@ export const research = {
   marketReport: (type: 'morning' | 'closing') =>
     apiCall<MarketReportData>('market_report', { type }),
 
-  searchStocks: (keyword: string) =>
-    apiCall<SearchStocksData>('search_stocks', { keyword }),
+  searchStocks: async (keyword: string) => {
+    const resp = await jsonFetch<{
+      success: boolean
+      data?: { items: Array<{ code: string; name: string | null; market?: string }> }
+      message?: string
+    }>(`/instruments/search?keyword=${encodeURIComponent(keyword)}&markets=CN&limit=30`)
+    const items = resp.data?.items ?? []
+    return {
+      success: resp.success,
+      feature: 'search_stocks',
+      data: {
+        keyword,
+        results: items.map(item => ({
+          code: item.code,
+          name: item.name ?? item.code,
+          industry: '',
+          market: item.market ?? 'CN',
+        })),
+      },
+      message: resp.message,
+    } satisfies ApiResponse<SearchStocksData>
+  },
 
   stockQuotes: async (codes: string[]) => {
     const instruments = codes.map(c => cnEquityRef(c))
@@ -238,17 +347,20 @@ export const research = {
 
   stockKline: async (code: string, count = 90) => {
     const instrument = cnEquityRef(code)
-    const resp = await postInstrument<StockChartData>(
+    const resp = await postInstrument<StockChartData | UnifiedInstrumentChartDto>(
       '/instruments/chart',
       { instrument, period: 'daily', count },
     )
     if (!resp.success || !resp.data) {
       return toApiResponse<StockKlineData>('stock_kline', resp, { code, klines: [] })
     }
+    const chart = isUnifiedChart(resp.data)
+      ? unifiedChartToStockChart(resp.data, code)
+      : resp.data
     return {
       success: true,
       feature: 'stock_kline',
-      data: { code, klines: ohlcBarsToKlines(code, resp.data.bars) },
+      data: { code, klines: ohlcBarsToKlines(code, chart.bars) },
       message: resp.message,
     }
   },
@@ -266,8 +378,8 @@ export const research = {
     if (count != null) body.count = count
     if (before) body.before = before
     if (tail != null) body.tail = tail
-    const resp = await postInstrument<StockChartData>('/instruments/chart', body, signal)
-    return toApiResponse<StockChartData>('stock_chart', resp, {
+    const resp = await postInstrument<StockChartData | UnifiedInstrumentChartDto>('/instruments/chart', body, signal)
+    const fallback: StockChartData = {
       code,
       name: code,
       period,
@@ -275,7 +387,11 @@ export const research = {
       isTradingDay: false,
       bars: [],
       indicators: [],
-    })
+    }
+    if (resp.success && resp.data && isUnifiedChart(resp.data)) {
+      return toApiResponse<StockChartData>('stock_chart', resp, fallback, unifiedChartToStockChart(resp.data, code))
+    }
+    return toApiResponse<StockChartData>('stock_chart', resp, fallback)
   },
 
   stockCyq: async (code: string, signal?: AbortSignal) => {
@@ -294,14 +410,28 @@ export const research = {
 
   stockDetail: async (code: string) => {
     const instrument = cnEquityRef(code)
-    const resp = await postInstrument<StockDetailData>('/instruments/snapshot', { instrument }, undefined, 30000)
-    return toApiResponse<StockDetailData>('stock_detail', resp, {
+    const resp = await postInstrument<StockDetailData | UnifiedInstrumentSnapshotDto>(
+      '/instruments/snapshot',
+      { instrument },
+      undefined,
+      30000,
+    )
+    const fallback: StockDetailData = {
       code,
       name: code,
       quote: null,
       profile: null,
       financial: null,
-    })
+    }
+    if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
+      return toApiResponse<StockDetailData>(
+        'stock_detail',
+        resp,
+        fallback,
+        unifiedSnapshotToStockDetail(resp.data),
+      )
+    }
+    return toApiResponse<StockDetailData>('stock_detail', resp, fallback)
   },
 
   etfList: (code = '') =>
@@ -356,8 +486,16 @@ export const research = {
       counts: { cn_stocks: number; cn_etfs: number; us: number; crypto: number }
     } }>('/instruments/summary'),
 
-  instrumentSnapshot: (instrument: InstrumentRef, signal?: AbortSignal) =>
-    postInstrument<unknown>('/instruments/snapshot', { instrument }, signal),
+  instrumentSnapshot: async (instrument: InstrumentRef, signal?: AbortSignal) => {
+    const resp = await postInstrument<UnifiedInstrumentSnapshotDto>('/instruments/snapshot', { instrument }, signal)
+    if (resp.success && resp.data && isUnifiedSnapshot(resp.data)) {
+      return {
+        ...resp,
+        data: unifiedSnapshotToCrossMarket(resp.data, instrument),
+      }
+    }
+    return resp
+  },
 
   instrumentQuotes: (instruments: InstrumentRef[], signal?: AbortSignal) =>
     postInstrument<{ quotes: UnifiedInstrumentQuote[] }>(
@@ -366,7 +504,7 @@ export const research = {
       signal,
     ),
 
-  instrumentChart: (
+  instrumentChart: async (
     instrument: InstrumentRef,
     period: ChartPeriod | 'daily' | 'weekly' | 'monthly' | 'intraday' = 'daily',
     count = 120,
@@ -377,8 +515,79 @@ export const research = {
     const body: Record<string, unknown> = { instrument, period, count }
     if (before) body.before = before
     if (tail != null) body.tail = tail
-    return postInstrument<unknown>('/instruments/chart', body, signal)
+    const resp = await postInstrument<UnifiedInstrumentChartDto>('/instruments/chart', body, signal)
+    if (resp.success && resp.data && isUnifiedChart(resp.data)) {
+      return {
+        ...resp,
+        data: unifiedChartToStockChart(resp.data, instrument.symbol),
+      }
+    }
+    return resp
   },
+
+  instrumentBatchSnapshots: (
+    instruments: InstrumentRef[],
+    signal?: AbortSignal,
+  ) => postInstrument<{
+    trade_date?: string | null
+    count: number
+    quotes: UnifiedInstrumentQuote[]
+    discover_items?: Array<Record<string, unknown>>
+  }>('/instruments/batch-snapshots', { instruments }, signal, 30000),
+
+  instrumentEvaluation: (
+    instrument: InstrumentRef,
+    scorecard?: string,
+    signal?: AbortSignal,
+  ) => postInstrument<unknown>(
+    '/instruments/evaluation',
+    { instrument, scorecard },
+    signal,
+    60000,
+  ),
+
+  instrumentStrategySignal: (instrument: InstrumentRef, signal?: AbortSignal) =>
+    postInstrument<unknown>('/instruments/strategy-signal', { instrument }, signal, 60000),
+
+  instrumentIndicators: (instrument: InstrumentRef, signal?: AbortSignal) =>
+    postInstrument<unknown>('/instruments/indicators', { instrument }, signal, 60000),
+
+  instrumentStrategyVerify: (
+    instrument: InstrumentRef,
+    checkpoints?: unknown[],
+    forwardDays?: number,
+    signal?: AbortSignal,
+  ) => postInstrument<unknown>(
+    '/instruments/strategy-verify',
+    { instrument, checkpoints, forward_days: forwardDays },
+    signal,
+    120000,
+  ),
+
+  instrumentLatestEvaluation: (
+    instrument: InstrumentRef,
+    scorecard?: string,
+    force = false,
+    signal?: AbortSignal,
+  ) => callInstrumentApi<LatestEvalData>(
+    'latest_evaluation',
+    '/instruments/latest-evaluation',
+    {
+      instrument,
+      ...(scorecard ? { scorecard } : {}),
+      ...(force ? { force: true } : {}),
+    },
+    {
+      code: instrument.symbol,
+      name: instrument.symbol,
+      timestamp: '',
+      scorecard: scorecard ?? 'G=B+M',
+      total_score: 0,
+      factors: {},
+    },
+    signal,
+    90000,
+  ),
 
   instrumentCapabilities: (instrument: InstrumentRef, signal?: AbortSignal) =>
     postInstrument<import('../types/instrument').InstrumentCapabilitySet>(
@@ -410,10 +619,23 @@ export const research = {
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
   latestEval: (code: string, signal?: AbortSignal, scorecard?: string, force = false) =>
-    apiCall<LatestEvalData>(
+    callInstrumentApi<LatestEvalData>(
       'latest_evaluation',
-      { code, ...(scorecard ? { scorecard } : {}), ...(force ? { force: true } : {}) },
-      { signal },
+      '/instruments/latest-evaluation',
+      {
+        instrument: cnEquityRef(code),
+        ...(scorecard ? { scorecard } : {}),
+        ...(force ? { force: true } : {}),
+      },
+      {
+        code,
+        name: code,
+        timestamp: '',
+        scorecard: scorecard ?? 'G=B+M',
+        total_score: 0,
+        factors: {},
+      },
+      signal,
       90000,
     ),
 
@@ -521,25 +743,6 @@ export async function prepareMarketDataPack(pack: 'us' | 'crypto' | 'cn' | 'hk' 
   })
 }
 
-export async function fetchUsSnapshot(symbol: string, signal?: AbortSignal) {
-  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').UsSnapshotData }>(
-    `/us/${encodeURIComponent(symbol)}/snapshot`,
-    { signal },
-    20000,
-  )
-  if (!resp.data) throw new Error('无法获取美股快照')
-  return resp.data
-}
-
-export async function fetchCryptoSnapshot(pair: string, signal?: AbortSignal) {
-  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').CryptoSnapshotData }>(
-    `/crypto/${encodeURIComponent(pair)}/snapshot`,
-    { signal },
-    20000,
-  )
-  if (!resp.data) throw new Error('无法获取 Crypto 快照')
-  return resp.data
-}
 
 export type SupplementPackId = 'us' | 'crypto' | 'hk' | 'jp' | 'kr'
 

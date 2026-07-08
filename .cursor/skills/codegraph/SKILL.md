@@ -57,4 +57,6 @@ codegraph status
 
 ## 与其他工具的关系
 
+**优先级：CodeGraph > Read > Grep/Glob/Shell 扫目录。** 见 `.cursor/rules/codegraph.mdc`。
+
 CodeGraph 负责**探索与定位**；确定修改点后仍用 Read 精确定位、用编辑工具改代码。若返回 ⚠️ 待同步横幅，对该文件用 Read 取最新内容。

@@ -1,27 +1,41 @@
 ---
-description: CodeGraph 本地知识图谱 — 探索代码库时优先精准上下文，避免全库 grep/Read
+description: 探索/查询本仓库 — 最高优先级 CodeGraph；禁止先全库 Grep/Read/扫目录
 alwaysApply: true
 ---
 
-本项目已启用 CodeGraph 本地索引（`.codegraph/`），**100% 本地运行**，代码不会通过 CodeGraph 发往云端。
+# CodeGraph 优先（代码探索最高优先级）
 
-**MCP 连接（每次会话必用）：**
-- 项目已配置 `.cursor/mcp.json` → 本地 `codegraph serve --mcp`
-- 会话启动时 `.cursor/hooks/ensure-codegraph.sh` 自动 `sync` 索引
-- 若 MCP 工具列表中无 `codegraph_explore`：重启 Cursor，并在 Settings → MCP 确认 `codegraph` 为绿色已连接
+本仓库已建本地索引 `.codegraph/`（**100% 本地**，代码不上云）。
 
-**强制：在用 Read、Grep、Glob 或 Shell 探索代码库之前，必须先查 CodeGraph：**
-- MCP 工具 `codegraph_explore`（首选）— 一次调用返回相关源码、调用链、影响范围
-- CLI 回退：`codegraph explore "<问题>"`（MCP 不可用时）
+**凡「了解代码库 / 查实现 / 找符号 / 跟调用链 / 评估改动影响」——必须先 CodeGraph，再考虑 Read、Grep、Glob、Shell 扫目录。**
 
-仅在以下情况直接用 Read/Grep/Glob：
-1. CodeGraph 已定位目标，只需修改或调试具体行
-2. `.codegraph/` 索引尚不存在（先运行 `codegraph init`）
-3. CodeGraph 返回某文件「待同步」提示，且你刚编辑过该文件 — 对该文件用 Read 读最新内容
+## 工具优先级（从高到低）
 
-**索引维护：**
-- MCP 服务启动后自动监听文件变更并增量同步，**无需手动 `codegraph sync`**
-- 检查索引状态：`codegraph status`
-- 新克隆仓库后：`codegraph init`（一次性建图，之后自动同步）
+1. **`codegraph_explore`**（MCP，首选）— 自然语言或符号/文件名；一次返回相关源码（带行号）、调用链、影响范围
+2. **CLI 回退**：`codegraph explore "<问题>"`（仅 MCP 未连接时）
+3. **Read** — CodeGraph 已定位目标后，打开要改的具体文件/行
+4. **Grep / Glob / Shell** — 极窄验证，或 CodeGraph 明确无法覆盖的场景（见下）
+5. **Task 子 agent** — 不得用来替代 CodeGraph 扫库；若派发探索类子 agent，prompt 须写明：**先 `codegraph_explore`，禁止先 Grep/Read 全库**
 
-对你派发的每个涉及代码探索的子 agent，在其 prompt 中显式包含本规则。不要跳过 CodeGraph 直接全库搜索 — 它会给出跨文件依赖与动态派发边，grep 难以覆盖。
+## 禁止（反模式）
+
+- ❌ 会话开始就用 `Glob **/*`、逐目录 `Read`、`Grep` 摸清结构
+- ❌ CodeGraph 能答的「怎么工作 / 在哪 / 谁调用」，却用 Read/Grep 循环拼上下文
+- ❌ 把「读很多文件找答案」交给 subagent，而未先查 CodeGraph
+
+## 允许跳过 CodeGraph 的情况
+
+1. CodeGraph 已给出目标 — 仅需 Read 编辑具体行
+2. 无 `.codegraph/` 索引 — 提示 `codegraph init`，或只处理 configs/docs 等非索引内容
+3. 返回 ⚠️「待同步」且刚编辑过该文件 — 仅对该文件 Read 最新内容
+4. 非图谱内容：环境变量、锁文件、二进制、用户粘贴的日志/报错
+
+## MCP 与索引
+
+- 配置：`.cursor/mcp.json` → `codegraph serve --mcp`；hook 自动 sync
+- 无 `codegraph_explore`：重启 Cursor，Settings → MCP 确认 `codegraph` 已连接
+- 状态：`codegraph status`；新克隆：`codegraph init`；日常无需手跑 `codegraph sync`
+
+## 改代码时
+
+CodeGraph 负责**探索与定位**；确定修改点后用编辑工具改代码。返回的源码视为已 Read，勿对同一符号重复打开文件。

@@ -106,13 +106,19 @@ export function startStockPrep(hub: ResearchHub, code: string, opts?: { force?: 
 
         switch (def.id) {
           case 'quote': {
-            const resp = await hub.dispatch('stock_detail', { code: normalized })
+            const resp = await hub.dispatch('instrument_snapshot', {
+              instrument: { market: 'CN', assetClass: 'EQUITY', symbol: normalized },
+            })
             if (!resp.success) throw new Error(resp.message || '行情加载失败')
             patchStep(normalized, def.id, { status: 'done', message: '已同步' })
             break
           }
           case 'klines': {
-            const resp = await hub.dispatch('stock_kline', { code: normalized, count: 120 })
+            const resp = await hub.dispatch('instrument_chart', {
+              instrument: { market: 'CN', assetClass: 'EQUITY', symbol: normalized },
+              period: 'daily',
+              count: 120,
+            })
             if (!resp.success) throw new Error(resp.message || 'K 线加载失败')
             patchStep(normalized, def.id, { status: 'done', message: '已同步' })
             break

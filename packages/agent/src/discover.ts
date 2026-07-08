@@ -803,9 +803,16 @@ export class DiscoverRunner {
           instruments: codes.map(code => ({ market: 'CN', assetClass: 'EQUITY', symbol: code })),
         })
         const payload = snapResp.success && snapResp.data && typeof snapResp.data === 'object'
-          ? snapResp.data as { items?: Array<{ code: string; industry: string | null; pe: number | null }> }
+          ? snapResp.data as {
+            items?: Array<{ code: string; industry: string | null; pe: number | null }>
+            discover_items?: Array<{ code: string; industry: string | null; pe: number | null }>
+          }
           : null
-        const rows = Array.isArray(payload?.items) ? payload.items : []
+        const rows = Array.isArray(payload?.discover_items)
+          ? payload.discover_items
+          : Array.isArray(payload?.items)
+            ? payload.items
+            : []
         if (rows.length) {
           const byCode = new Map(rows.map(r => [r.code, r]))
           enriched = candidates.map(c => {

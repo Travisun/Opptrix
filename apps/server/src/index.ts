@@ -583,7 +583,7 @@ app.get<{ Querystring: { q?: string; keyword?: string; limit?: string; markets?:
     const markets = req.query.markets
       ? req.query.markets.split(',').map(s => s.trim()).filter(Boolean)
       : undefined
-    const r = await hub.dispatch('search_local_instruments', {
+    const r = await hub.dispatch('instrument_search', {
       keyword: req.query.keyword ?? req.query.q,
       limit: req.query.limit != null ? Number(req.query.limit) : undefined,
       markets,
@@ -632,6 +632,41 @@ app.post<{ Body: Record<string, unknown> }>('/api/instruments/institution-report
   return { success: r.success, data: r.data, message: r.message }
 })
 
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/batch-snapshots', async (req) => {
+  const r = await hub.dispatch('instrument_batch_snapshots', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/evaluation', async (req) => {
+  const r = await hub.dispatch('instrument_evaluation', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/strategy-signal', async (req) => {
+  const r = await hub.dispatch('instrument_strategy_signal', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/indicators', async (req) => {
+  const r = await hub.dispatch('instrument_indicators', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/strategy-verify', async (req) => {
+  const r = await hub.dispatch('instrument_strategy_verify', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.post<{ Body: Record<string, unknown> }>('/api/instruments/latest-evaluation', async (req) => {
+  const r = await hub.dispatch('latest_evaluation', req.body ?? {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+function markDeprecatedInstrumentRoute(reply: { header: (name: string, value: string) => void }, successorPath: string) {
+  reply.header('Deprecation', 'true')
+  reply.header('Link', `<${successorPath}>; rel="successor-version"`)
+}
+
 app.get('/api/us/screen/schema', async () => {
   const r = await hub.dispatch('local_us_screen_schema', {})
   return { success: r.success, data: r.data, message: r.message }
@@ -650,20 +685,31 @@ app.get<{ Querystring: { keyword?: string; limit?: string } }>('/api/us/list', a
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.get<{ Params: { symbol: string } }>('/api/us/:symbol/snapshot', async (req) => {
-  const r = await hub.dispatch('us_snapshot', { symbol: req.params.symbol })
+app.get<{ Params: { symbol: string } }>('/api/us/:symbol/snapshot', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/snapshot')
+  const r = await hub.dispatch('instrument_snapshot', {
+    instrument: { market: 'US', assetClass: 'EQUITY', symbol: req.params.symbol },
+  })
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.get<{ Params: { symbol: string } }>('/api/us/:symbol/quote', async (req) => {
-  const r = await hub.dispatch('us_realtime', { symbol: req.params.symbol })
-  return { success: r.success, data: r.data, message: r.message }
+app.get<{ Params: { symbol: string } }>('/api/us/:symbol/quote', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/quotes')
+  const r = await hub.dispatch('instrument_quotes', {
+    instruments: [{ market: 'US', assetClass: 'EQUITY', symbol: req.params.symbol }],
+  })
+  const quotes = r.data && typeof r.data === 'object'
+    ? (r.data as { quotes?: unknown[] }).quotes
+    : undefined
+  return { success: r.success, data: quotes?.[0] ?? null, message: r.message }
 })
 
-app.get<{ Params: { symbol: string }; Querystring: { count?: string } }>('/api/us/:symbol/kline', async (req) => {
-  const r = await hub.dispatch('us_kline', {
-    symbol: req.params.symbol,
-    count: req.query.count != null ? Number(req.query.count) : undefined,
+app.get<{ Params: { symbol: string }; Querystring: { count?: string } }>('/api/us/:symbol/kline', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/chart')
+  const r = await hub.dispatch('instrument_chart', {
+    instrument: { market: 'US', assetClass: 'EQUITY', symbol: req.params.symbol },
+    period: 'daily',
+    count: req.query.count != null ? Number(req.query.count) : 120,
   })
   return { success: r.success, data: r.data, message: r.message }
 })
@@ -685,10 +731,12 @@ app.get<{ Params: { symbol: string }; Querystring: { report_type?: string; repor
   },
 )
 
-app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/us/search', async (req) => {
-  const r = await hub.dispatch('search_us_stocks', {
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/us/search', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/search')
+  const r = await hub.dispatch('instrument_search', {
     keyword: req.query.keyword ?? req.query.q,
     limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+    markets: ['US'],
   })
   return { success: r.success, data: r.data, message: r.message }
 })
@@ -711,28 +759,43 @@ app.get<{ Querystring: { keyword?: string; limit?: string } }>('/api/crypto/list
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.get<{ Params: { pair: string } }>('/api/crypto/:pair/snapshot', async (req) => {
-  const r = await hub.dispatch('crypto_snapshot', { pair: decodeURIComponent(req.params.pair) })
+app.get<{ Params: { pair: string } }>('/api/crypto/:pair/snapshot', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/snapshot')
+  const pair = decodeURIComponent(req.params.pair)
+  const r = await hub.dispatch('instrument_snapshot', { market: 'CRYPTO', pair })
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.get<{ Params: { pair: string } }>('/api/crypto/:pair/quote', async (req) => {
-  const r = await hub.dispatch('crypto_realtime', { pair: decodeURIComponent(req.params.pair) })
-  return { success: r.success, data: r.data, message: r.message }
+app.get<{ Params: { pair: string } }>('/api/crypto/:pair/quote', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/quotes')
+  const pair = decodeURIComponent(req.params.pair)
+  const r = await hub.dispatch('instrument_quotes', {
+    instruments: [{ market: 'CRYPTO', pair }],
+  })
+  const quotes = r.data && typeof r.data === 'object'
+    ? (r.data as { quotes?: unknown[] }).quotes
+    : undefined
+  return { success: r.success, data: quotes?.[0] ?? null, message: r.message }
 })
 
-app.get<{ Params: { pair: string }; Querystring: { count?: string } }>('/api/crypto/:pair/kline', async (req) => {
-  const r = await hub.dispatch('crypto_kline', {
-    pair: decodeURIComponent(req.params.pair),
-    count: req.query.count != null ? Number(req.query.count) : undefined,
+app.get<{ Params: { pair: string }; Querystring: { count?: string } }>('/api/crypto/:pair/kline', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/chart')
+  const pair = decodeURIComponent(req.params.pair)
+  const r = await hub.dispatch('instrument_chart', {
+    market: 'CRYPTO',
+    pair,
+    period: 'daily',
+    count: req.query.count != null ? Number(req.query.count) : 120,
   })
   return { success: r.success, data: r.data, message: r.message }
 })
 
-app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/crypto/search', async (req) => {
-  const r = await hub.dispatch('search_crypto_pairs', {
+app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api/crypto/search', async (req, reply) => {
+  markDeprecatedInstrumentRoute(reply, '/api/instruments/search')
+  const r = await hub.dispatch('instrument_search', {
     keyword: req.query.keyword ?? req.query.q,
     limit: req.query.limit != null ? Number(req.query.limit) : undefined,
+    markets: ['CRYPTO'],
   })
   return { success: r.success, data: r.data, message: r.message }
 })

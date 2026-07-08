@@ -24,6 +24,22 @@ export const APPLICATION_HUB_FEATURES = {
   /** InstrumentRef 统一入口：批量获取标的快照 */
   instrumentBatchSnapshots: 'instrument_batch_snapshots',
 
+  /** InstrumentRef 统一入口：因子评估 / 决策雷达 */
+  instrumentEvaluation: 'instrument_evaluation',
+  /** InstrumentRef 统一入口：策略信号 */
+  instrumentStrategySignal: 'instrument_strategy_signal',
+  /** InstrumentRef 统一入口：技术指标 */
+  instrumentIndicators: 'instrument_indicators',
+  /** InstrumentRef 统一入口：策略验证 */
+  instrumentStrategyVerify: 'instrument_strategy_verify',
+  /** InstrumentRef 统一入口：读取缓存评估（latest_evaluation） */
+  instrumentLatestEvaluation: 'latest_evaluation',
+
+  /** 本地 L0 初选因子筛选 — 与 instrument_search 互补，保留专用入口 */
+  localInstrumentScreen: 'local_universe_screen',
+  localInstrumentScreenSchema: 'local_universe_screen_schema',
+  listScreenFactors: 'list_screen_factors',
+
   /** 发现策略列表 */
   discoverProfiles: 'discover_profiles',
   /** 发现策略就绪状态 */

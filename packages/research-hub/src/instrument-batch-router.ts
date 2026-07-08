@@ -4,6 +4,8 @@ import {
   hasApplicationCapability,
   parseInstrumentRef,
   type InstrumentRef,
+  type UnifiedInstrumentBatchResult,
+  type UnifiedInstrumentQuote,
 } from '@opptrix/shared'
 
 export type InstrumentBatchRouteHandlers = {
@@ -22,31 +24,68 @@ function parseInstrumentList(params: Record<string, unknown>): InstrumentRef[] {
   return refs
 }
 
+function quotesFromResult(data: Record<string, unknown> | undefined): UnifiedInstrumentQuote[] {
+  if (!data?.quotes || !Array.isArray(data.quotes)) return []
+  return data.quotes as UnifiedInstrumentQuote[]
+}
+
 function mergeBatchResults(results: ResearchResult[]): ResearchResult {
   const failed = results.find(r => !r.success)
   if (failed) return failed
 
-  const items: unknown[] = []
-  const quotes: unknown[] = []
-  let tradeDate: string | null = null
-  for (const r of results) {
-    const data = r.data as Record<string, unknown> | undefined
-    if (data?.items && Array.isArray(data.items)) items.push(...data.items)
-    if (data?.quotes && Array.isArray(data.quotes)) quotes.push(...data.quotes)
-    if (data?.trade_date != null) tradeDate = String(data.trade_date)
+  const payload: UnifiedInstrumentBatchResult = {
+    trade_date: null,
+    count: 0,
+    quotes: [],
+    discover_items: [],
+    items: [],
   }
 
-  const count = items.length || quotes.length
+  for (const r of results) {
+    const data = r.data as Record<string, unknown> | undefined
+    if (!data) continue
+    if (data.trade_date != null) payload.trade_date = String(data.trade_date)
+    const batchItems = batchRowsFromData(data)
+    if (batchItems.length) {
+      payload.discover_items!.push(...batchItems)
+      payload.items = [...(payload.items ?? []), ...batchItems]
+    }
+    payload.quotes.push(...quotesFromResult(data))
+  }
+
+  payload.count = payload.quotes.length + (payload.discover_items?.length ?? 0)
+  if (!payload.discover_items?.length) {
+    delete payload.discover_items
+    delete payload.items
+  }
+
   return {
     success: true,
-    message: `批量快照 ${count} 只`,
-    data: {
-      trade_date: tradeDate,
-      ...(items.length ? { items } : {}),
-      ...(quotes.length ? { quotes } : {}),
-    },
+    message: `批量快照 ${payload.count} 只`,
+    data: payload,
     elapsed: Math.max(...results.map(r => r.elapsed ?? 0)),
   }
+}
+
+function batchRowsFromData(data: Record<string, unknown>): Record<string, unknown>[] {
+  if (Array.isArray(data.discover_items)) return data.discover_items as Record<string, unknown>[]
+  if (Array.isArray(data.items)) return data.items as Record<string, unknown>[]
+  return []
+}
+
+/** Legacy CN-only batch — 仍返回 discover_items，外层统一 envelope */
+export function wrapCnBatchResult(resp: ResearchResult): ResearchResult {
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') return resp
+  const data = resp.data as Record<string, unknown>
+  const items = Array.isArray(data.items) ? data.items as Record<string, unknown>[] : []
+  const payload: UnifiedInstrumentBatchResult = {
+    trade_date: data.trade_date != null ? String(data.trade_date) : null,
+    count: items.length,
+    quotes: [],
+    discover_items: items,
+    items,
+  }
+  return { ...resp, data: payload }
 }
 
 export async function routeInstrumentBatchSnapshots(
@@ -61,7 +100,7 @@ export async function routeInstrumentBatchSnapshots(
   if (legacyCodesOnly) {
     const symbols = (params.codes as string[]).map(String).filter(Boolean)
     if (!symbols.length) return fail('codes 必填')
-    return handlers.cnBatchSnapshots(symbols)
+    return wrapCnBatchResult(await handlers.cnBatchSnapshots(symbols))
   }
 
   const refs = parseInstrumentList(params)
@@ -83,7 +122,7 @@ export async function routeInstrumentBatchSnapshots(
   const results: ResearchResult[] = []
 
   if (cnEquitySymbols.length) {
-    results.push(await handlers.cnBatchSnapshots(cnEquitySymbols))
+    results.push(wrapCnBatchResult(await handlers.cnBatchSnapshots(cnEquitySymbols)))
   }
 
   if (otherSnapshotRefs.length) {

@@ -4,11 +4,16 @@ import {
   hasApplicationCapability,
   instrumentDisplayCode,
   instrumentRefsFromList,
+  normalizeInstrumentChart,
+  normalizeInstrumentSnapshot,
   parseInstrumentRef,
+  quoteFromProviderRow,
   resolveInstrumentCapabilities,
   resolveInstrumentFromParams,
   type InstrumentRef,
+  type LocalInstrumentInsights,
   type UnifiedInstrumentQuote,
+  type UnifiedInstrumentSearchHit,
 } from '@opptrix/shared'
 
 export type InstrumentRouteHandlers = {
@@ -35,26 +40,35 @@ export type InstrumentRouteHandlers = {
   stockCyq: (code: string) => Promise<ResearchResult>
   institutionRating: (code: string, groups?: string[]) => Promise<ResearchResult>
   institutionReport: (code: string, groups?: string[]) => Promise<ResearchResult>
-  searchLocalInstruments: (
+  searchInstruments: (
     keyword: string,
     limit: number,
     markets?: string[],
+    includeLocal?: boolean,
   ) => Promise<ResearchResult>
+  /** CN 本地离线因子摘要 — 可选，不阻塞 snapshot */
+  localInsights?: (ref: InstrumentRef) => LocalInstrumentInsights | null
 }
 
-function quoteFromCnRow(ref: InstrumentRef, row: Record<string, unknown>): UnifiedInstrumentQuote {
-  return {
-    instrument: ref,
-    code: instrumentDisplayCode(ref),
-    name: String(row.name ?? ref.symbol),
-    price: row.price != null ? Number(row.price) : null,
-    change_pct: row.changePct != null ? Number(row.changePct) : row.change_pct != null ? Number(row.change_pct) : null,
-    volume: row.volume != null ? Number(row.volume) : null,
-    amount: row.amount != null ? Number(row.amount) : null,
-    market: ref.market,
-    asset_class: ref.assetClass,
-    source: 'live',
-  }
+function wrapSnapshot(
+  ref: InstrumentRef,
+  resp: ResearchResult,
+  handlers: InstrumentRouteHandlers,
+): ResearchResult {
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') return resp
+  const insights = handlers.localInsights?.(ref) ?? null
+  const snapshot = normalizeInstrumentSnapshot(
+    ref,
+    resp.data as Record<string, unknown>,
+    { localInsights: insights, source: insights ? 'mixed' : 'live' },
+  )
+  return { ...resp, data: snapshot }
+}
+
+function wrapChart(ref: InstrumentRef, period: string, resp: ResearchResult): ResearchResult {
+  if (!resp.success || !resp.data || typeof resp.data !== 'object') return resp
+  const chart = normalizeInstrumentChart(ref, period, resp.data as Record<string, unknown>)
+  return { ...resp, data: chart }
 }
 
 export async function routeInstrumentSnapshot(
@@ -69,20 +83,22 @@ export async function routeInstrumentSnapshot(
   }
 
   if (ref.market === 'CN' && ref.assetClass === 'ETF') {
-    return handlers.etfSnapshot(ref.symbol)
+    return wrapSnapshot(ref, await handlers.etfSnapshot(ref.symbol), handlers)
   }
   if (ref.market === 'CN') {
-    return handlers.stockDetail(ref.symbol)
+    return wrapSnapshot(ref, await handlers.stockDetail(ref.symbol), handlers)
   }
-  if (ref.market === 'US' || ref.market === 'HK') {
-    if (ref.market === 'US') return handlers.usSnapshot(ref.symbol)
-    return handlers.regionalSnapshot('HK', ref.symbol)
+  if (ref.market === 'US') {
+    return wrapSnapshot(ref, await handlers.usSnapshot(ref.symbol), handlers)
+  }
+  if (ref.market === 'HK') {
+    return wrapSnapshot(ref, await handlers.regionalSnapshot('HK', ref.symbol), handlers)
   }
   if (ref.market === 'JP' || ref.market === 'KR') {
-    return handlers.regionalSnapshot(ref.market, ref.symbol)
+    return wrapSnapshot(ref, await handlers.regionalSnapshot(ref.market, ref.symbol), handlers)
   }
   if (ref.market === 'CRYPTO') {
-    return handlers.cryptoSnapshot(instrumentDisplayCode(ref))
+    return wrapSnapshot(ref, await handlers.cryptoSnapshot(instrumentDisplayCode(ref)), handlers)
   }
   return fail('不支持的市场')
 }
@@ -113,7 +129,9 @@ export async function routeInstrumentQuotes(
       for (const row of rows) {
         const code = String(row.code ?? '')
         const ref = refs.find(r => r.market === 'CN' && r.symbol === code)
-        if (ref) quotes.push(quoteFromCnRow(ref, row))
+        if (ref) {
+          quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
+        }
       }
     }
   }
@@ -122,20 +140,28 @@ export async function routeInstrumentQuotes(
     if (ref.market === 'US') {
       const resp = await handlers.usRealtime(ref.symbol)
       if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromCnRow(ref, resp.data as Record<string, unknown>))
+        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
       }
     }
     if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
       const resp = await handlers.regionalRealtime(ref.market, ref.symbol)
       if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromCnRow(ref, resp.data as Record<string, unknown>))
+        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
       }
     }
     if (ref.market === 'CRYPTO') {
       const pair = instrumentDisplayCode(ref)
       const resp = await handlers.cryptoRealtime(pair)
       if (resp.success && resp.data && typeof resp.data === 'object') {
-        quotes.push(quoteFromCnRow(ref, resp.data as Record<string, unknown>))
+        quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
+      }
+    }
+    if (ref.market === 'CN' && ref.assetClass === 'ETF') {
+      const resp = await handlers.stockQuotes([ref.symbol])
+      if (resp.success && resp.data && typeof resp.data === 'object') {
+        const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
+        const row = rows.find(r => String(r.code) === ref.symbol)
+        if (row) quotes.push(quoteFromProviderRow(ref, row, 'mixed'))
       }
     }
   }
@@ -160,16 +186,20 @@ export async function routeInstrumentChart(
   }
 
   if (ref.market === 'CN') {
-    return handlers.stockChart(ref.symbol, period, count, before, tail, ref.exchange)
+    return wrapChart(
+      ref,
+      period,
+      await handlers.stockChart(ref.symbol, period, count, before, tail, ref.exchange),
+    )
   }
   if (ref.market === 'US') {
-    return handlers.usKline(ref.symbol, count)
+    return wrapChart(ref, period, await handlers.usKline(ref.symbol, count))
   }
   if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
-    return handlers.regionalKline(ref.market, ref.symbol, count)
+    return wrapChart(ref, period, await handlers.regionalKline(ref.market, ref.symbol, count))
   }
   if (ref.market === 'CRYPTO') {
-    return handlers.cryptoKline(instrumentDisplayCode(ref), count)
+    return wrapChart(ref, period, await handlers.cryptoKline(instrumentDisplayCode(ref), count))
   }
   return fail('不支持的市场')
 }
@@ -182,7 +212,8 @@ export async function routeInstrumentSearch(
   if (keyword.length < 1) return fail('keyword 必填')
   const limit = params.limit != null ? Number(params.limit) : 30
   const markets = Array.isArray(params.markets) ? params.markets.map(String) : undefined
-  return handlers.searchLocalInstruments(keyword, limit, markets)
+  const includeLocal = params.include_local !== false
+  return handlers.searchInstruments(keyword, limit, markets, includeLocal)
 }
 
 export function routeInstrumentCapabilities(params: Record<string, unknown>): ResearchResult {
@@ -232,3 +263,5 @@ export async function routeInstrumentInstitutionReport(
   const groups = Array.isArray(params.groups) ? params.groups.map(String) : undefined
   return handlers.institutionReport(ref.symbol, groups)
 }
+
+export type { UnifiedInstrumentSearchHit }

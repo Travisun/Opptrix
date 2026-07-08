@@ -356,10 +356,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
           nextPeriod === 'weekly' ? 'weekly' : nextPeriod === 'monthly' ? 'monthly' : 'daily',
           count,
           signal,
-        ).then(r => ({
-          ...r,
-          data: r.data as StockChartData | undefined,
-        }))
+        )
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (!resp.success || !resp.data) {
         setError(resp.message || '图表加载失败')
