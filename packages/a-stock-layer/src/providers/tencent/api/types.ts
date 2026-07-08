@@ -83,6 +83,142 @@ export interface TencentBoardRankData {
   total?: number
 }
 
+/**
+ * 申万行业板块 `board_type` — 对应 mstats `#module=hy&type=first|second`。
+ *
+ * @see https://stockapp.finance.qq.com/mstats/#mod=list&id=hy_first&module=hy&type=first
+ */
+export type TencentIndustryBoardType = 'hy' | 'hy2'
+
+/** `rank/pt/getRank` 行业列表支持的 `sort_type` */
+export type TencentIndustrySortField =
+  | 'code'
+  | 'name'
+  | 'price'
+  | 'priceRatio'
+  | 'priceRatioD5'
+  | 'priceRatioD20'
+  | 'priceRatioD60'
+  | 'priceRatioW52'
+  | 'priceRatioY'
+
+/** `rank/pt/getRank` 领涨股 */
+export interface TencentIndustryLeadingStock {
+  code?: string
+  name?: string
+  zd?: string
+  zdf?: string
+  zxj?: string
+}
+
+/** `rank/pt/getRank` 单条申万行业 */
+export interface TencentIndustryBoardRow {
+  /** 行业板块代码，如 pt01801780 */
+  code: string
+  name: string
+  zxj?: string
+  zdf?: string
+  zd?: string
+  zdf_d5?: string
+  zdf_d20?: string
+  zdf_d60?: string
+  zdf_w52?: string
+  zdf_y?: string
+  hsl?: string
+  lb?: string
+  turnover?: string
+  volume?: string
+  zljlr?: string
+  zgb?: string
+  stock_type?: string
+  lzg?: TencentIndustryLeadingStock
+  [key: string]: unknown
+}
+
+/** `rank/pt/getRank` 响应 data 块 */
+export interface TencentIndustryBoardData {
+  rank_list: TencentIndustryBoardRow[]
+  total?: number
+  offset?: number
+}
+
+/**
+ * 全球股指分区 — 对应 mstats `#module=GIDX&type=ALL|EU|AM|AS|OA|AF`。
+ *
+ * @see https://stockapp.finance.qq.com/mstats/#mod=list&id=indices&module=GIDX&type=ALL
+ */
+export type TencentGlobalIndexRegionKey =
+  | 'ALL'
+  | 'EU'
+  | 'AM'
+  | 'AS'
+  | 'OA'
+  | 'AF'
+
+/** `indexRankDetail2` 单条全球指数 */
+export interface TencentGlobalIndexRankRow {
+  code?: string
+  qtcode?: string
+  name?: string
+  location?: string
+  zxj?: string | number
+  zdf?: string | number
+  state?: string
+  img?: string
+  [key: string]: unknown
+}
+
+/** `indexRankDetail2` 响应 data — 按地区分组 */
+export interface TencentGlobalIndexRankData {
+  common?: TencentGlobalIndexRankRow[]
+  america?: TencentGlobalIndexRankRow[]
+  europe?: TencentGlobalIndexRankRow[]
+  asia?: TencentGlobalIndexRankRow[]
+  other?: TencentGlobalIndexRankRow[]
+}
+
+/**
+ * 全球期货品类 — 对应 mstats `#module=GQH&type=ALL` 合并顺序。
+ *
+ * @see https://stockapp.finance.qq.com/mstats/#mod=list&id=qh_global&module=GQH&type=ALL
+ */
+export type TencentGlobalFuturesCategoryKey =
+  | 'ALL'
+  | 'agriculture'
+  | 'basicMetal'
+  | 'energy'
+  | 'exchangeRate'
+  | 'interestRate'
+  | 'preciousMetal'
+  | 'stockIndex'
+
+/** `worldCommodities` 单条全球期货 */
+export interface TencentGlobalFuturesRow {
+  code?: string
+  qtcode?: string
+  name?: string
+  location?: string
+  zxj?: string | number
+  zdf?: string | number
+  zde?: string | number
+  state?: string
+  status?: string
+  img?: string
+  stocktype?: string
+  [key: string]: unknown
+}
+
+/** `worldCommodities` 响应 data — 按品类分组 */
+export interface TencentWorldCommoditiesData {
+  agriculture?: TencentGlobalFuturesRow[]
+  basicMetal?: TencentGlobalFuturesRow[]
+  energy?: TencentGlobalFuturesRow[]
+  exchangeRate?: TencentGlobalFuturesRow[]
+  interestRate?: TencentGlobalFuturesRow[]
+  preciousMetal?: TencentGlobalFuturesRow[]
+  stockIndex?: TencentGlobalFuturesRow[]
+}
+
 /** `investRate/getReport` 单条研报 */
 export interface TencentResearchReportRow {
   id: string

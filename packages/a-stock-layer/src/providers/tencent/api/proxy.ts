@@ -1,3 +1,12 @@
+/**
+ * 腾讯证券 `proxy.finance.qq.com` HTTP 客户端。
+ *
+ * 所有请求经 {@link tencentProxyGet} 解析 `{ code, msg, data }` 信封；`code !== 0` 时抛错。
+ * 基址：`https://proxy.finance.qq.com`（{@link TENCENT_PROXY_BASE}）。
+ *
+ * 自定义方法文档见 `providers/tencent/custom-method-docs.ts`；
+ * 全球股指/期货分页见 `global-index-service.ts`、`global-futures-service.ts`。
+ */
 import { normalizeCode, secFullCode } from '../../../utils/helpers.js'
 import { fetchJson } from './http.js'
 import { fetchTencentJsonp } from './jsonp.js'
@@ -9,7 +18,14 @@ import {
   type TencentBigOrderData,
   type TencentBoardRankData,
   type TencentBoardSortField,
+  type TencentIndustryBoardData,
+  type TencentIndustryBoardType,
+  type TencentIndustrySortField,
   type TencentFundFlowData,
+  type TencentGlobalIndexRankData,
+  type TencentGlobalIndexRegionKey,
+  type TencentGlobalFuturesCategoryKey,
+  type TencentWorldCommoditiesData,
   type TencentHyNewsData,
   type TencentInvestRateData,
   type TencentJggdData,
@@ -25,6 +41,9 @@ import {
 } from './types.js'
 
 const BOARD_RANK_PATH = '/cgi/cgi-bin/rank/hs/getBoardRankList'
+const INDUSTRY_BOARD_PATH = '/cgi/cgi-bin/rank/pt/getRank'
+const GLOBAL_INDEX_RANK_PATH = '/ifzqgtimg/appstock/app/rank/indexRankDetail2'
+const WORLD_COMMODITIES_PATH = '/ifzqgtimg/appstock/app/rank/worldCommodities'
 const RESEARCH_REPORT_PATH = '/ifzqgtimg/appstock/app/investRate/getReport'
 const NOTICE_LIST_PATH = '/ifzqgtimg/appstock/news/noticeList/search'
 const HY_NEWS_PATH = '/ifzqgtimg/appstock/news/HyNews/getBySymbol'
@@ -92,6 +111,210 @@ async function tencentProxyGet<T>(
     throw new Error(body.msg?.trim() || `Tencent proxy 请求失败 (${body.code})`)
   }
   return body.data
+}
+
+/**
+ * 全球期货品类 → `worldCommodities` data 键名。
+ */
+export function resolveTencentGlobalFuturesCategory(category: string): TencentGlobalFuturesCategoryKey {
+  const key = category.trim()
+  const lower = key.toLowerCase()
+  const alias: Record<string, TencentGlobalFuturesCategoryKey> = {
+    all: 'ALL',
+    agriculture: 'agriculture',
+    agri: 'agriculture',
+    农产品: 'agriculture',
+    basicmetal: 'basicMetal',
+    metal: 'basicMetal',
+    基本金属: 'basicMetal',
+    energy: 'energy',
+    能源: 'energy',
+    exchangerate: 'exchangeRate',
+    fx: 'exchangeRate',
+    汇率: 'exchangeRate',
+    interestrate: 'interestRate',
+    rate: 'interestRate',
+    利率: 'interestRate',
+    preciousmetal: 'preciousMetal',
+    gold: 'preciousMetal',
+    贵金属: 'preciousMetal',
+    stockindex: 'stockIndex',
+    index: 'stockIndex',
+    股指: 'stockIndex',
+  }
+  if (alias[lower]) return alias[lower]!
+  if (alias[key]) return alias[key]!
+  const camel = key as TencentGlobalFuturesCategoryKey
+  const buckets: TencentGlobalFuturesCategoryKey[] = [
+    'agriculture', 'basicMetal', 'energy', 'exchangeRate', 'interestRate', 'preciousMetal', 'stockIndex',
+  ]
+  if (buckets.includes(camel)) return camel
+  return 'ALL'
+}
+
+/**
+ * 全球期货实时列表 — `worldCommodities`（一次返回各品类，客户端筛选/排序/分页）。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/rank/worldCommodities
+ * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=qh_global&module=GQH&type=ALL
+ * @returns `TencentWorldCommoditiesData` — 键为 agriculture/basicMetal/energy 等品类数组
+ * @remarks 无 query 参数；报价延迟约 15 分钟
+ */
+export async function fetchTencentWorldCommodities(): Promise<TencentWorldCommoditiesData> {
+  return tencentProxyGet<TencentWorldCommoditiesData>(WORLD_COMMODITIES_PATH, {})
+}
+
+/**
+ * mstats 全球股指分区 → `indexRankDetail2` data 键名。
+ */
+export function resolveTencentGlobalIndexRegion(region: string): TencentGlobalIndexRegionKey {
+  const key = region.trim().toUpperCase()
+  if (key === 'EU' || key === 'EUROPE') return 'EU'
+  if (key === 'AM' || key === 'AMERICA' || key === 'US') return 'AM'
+  if (key === 'AS' || key === 'ASIA') return 'AS'
+  if (key === 'OA' || key === 'AF' || key === 'OTHER') return key === 'AF' ? 'AF' : 'OA'
+  return 'ALL'
+}
+
+/**
+ * 全球股指列表 — `indexRankDetail2`（一次返回各分区，客户端筛选/排序/分页）。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/rank/indexRankDetail2
+ * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=indices&module=GIDX&type=ALL
+ * @returns `TencentGlobalIndexRankData` — common/america/europe/asia/other 分区数组
+ * @remarks 无 query 参数；ALL 合并与分页在 global-index-service 完成
+ */
+export async function fetchTencentGlobalIndexRankDetail(): Promise<TencentGlobalIndexRankData> {
+  return tencentProxyGet<TencentGlobalIndexRankData>(GLOBAL_INDEX_RANK_PATH, {})
+}
+
+/**
+ * 申万行业层级 → `rank/pt/getRank` 的 `board_type`。
+ *
+ * mstats 页面：`type=first` → `hy`（一级）；`type=second` → `hy2`（二级）。
+ */
+export function resolveTencentIndustryBoardType(level: string): TencentIndustryBoardType {
+  const key = level.trim().toLowerCase()
+  if (key === 'second' || key === '2' || key === 'hy2') return 'hy2'
+  return 'hy'
+}
+
+/**
+ * mstats 列表页 `sort` 列序号 → `rank/pt/getRank` 的 `sort_type`。
+ *
+ * 与页面 `listTPL.HY` 列定义一致：0 代码、1 名称、2 涨跌幅、5/6/7/8/9 为阶段涨跌幅。
+ */
+export function resolveTencentIndustrySortField(sort: string | number): TencentIndustrySortField {
+  const fields: TencentIndustrySortField[] = [
+    'code',
+    'name',
+    'price',
+    'priceRatio',
+    'priceRatio',
+    'priceRatioD5',
+    'priceRatioD20',
+    'priceRatioD60',
+    'priceRatioW52',
+    'priceRatioY',
+  ]
+  const idx = Number(sort)
+  if (Number.isFinite(idx) && idx >= 0 && idx < fields.length) {
+    return fields[idx]!
+  }
+  const key = String(sort).trim() as TencentIndustrySortField
+  if (fields.includes(key)) return key
+  return 'priceRatio'
+}
+
+/**
+ * 申万行业板块列表 — `rank/pt/getRank`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/pt/getRank
+ * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=hy_first&module=hy&type=first
+ * @param opts.level first → board_type=hy；second → hy2
+ * @param opts.sortType sort_type 字段或 mstats 列序号
+ * @param opts.direct up|down 排序方向
+ * @param opts.page / opts.pageSize 换算为 offset + count
+ * @returns `{ rank_list, total }` 原始排行
+ */
+export async function fetchTencentIndustryBoardList(opts: {
+  level?: string
+  boardType?: TencentIndustryBoardType
+  sortType?: TencentIndustrySortField | string | number
+  direct?: 'up' | 'down'
+  page?: number
+  pageSize?: number
+  offset?: number
+}): Promise<TencentIndustryBoardData> {
+  const pageSize = Math.max(1, Math.min(opts.pageSize ?? 20, 100))
+  const page = Math.max(1, opts.page ?? 1)
+  const offset = opts.offset ?? (page - 1) * pageSize
+  const boardType = opts.boardType ?? resolveTencentIndustryBoardType(opts.level ?? 'first')
+  const sortType = resolveTencentIndustrySortField(opts.sortType ?? 'priceRatio')
+
+  return tencentProxyGet<TencentIndustryBoardData>(INDUSTRY_BOARD_PATH, {
+    board_type: boardType,
+    sort_type: sortType,
+    direct: opts.direct ?? 'down',
+    offset: String(Math.max(0, offset)),
+    count: String(pageSize),
+  })
+}
+
+/**
+ * 申万行业成分股 — `getBoardRankList`，`board_code` 为行业板块代码（如 pt01801780）。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/rank/hs/getBoardRankList
+ * @pageUrl https://stockapp.finance.qq.com/mstats/#mod=list&id=pt01801780&typename=银行&sign=web
+ * @param opts.industryCode 行业 pt 代码（来自 getRank 的 code）
+ * @returns `{ rank_list, total }` 成分股排行
+ */
+export async function fetchTencentIndustryConstituents(opts: {
+  industryCode: string
+  sortType?: TencentBoardSortField | string | number
+  direct?: 'up' | 'down'
+  page?: number
+  pageSize?: number
+  offset?: number
+}): Promise<TencentBoardRankData> {
+  const industryCode = opts.industryCode.trim()
+  if (!industryCode) {
+    throw new Error('行业板块代码不能为空')
+  }
+  const pageSize = Math.max(1, Math.min(opts.pageSize ?? 20, 100))
+  const page = Math.max(1, opts.page ?? 1)
+  const offset = opts.offset ?? (page - 1) * pageSize
+  const sortFields: TencentBoardSortField[] = [
+    'code',
+    'name',
+    'price',
+    'priceRatio',
+    'priceChange',
+    'exchange',
+    'netMainIn',
+    'volumeRatio',
+    'amplitude',
+    'volume',
+    'turnover',
+  ]
+  let sortType: TencentBoardSortField = 'priceRatio'
+  const rawSort = opts.sortType
+  if (rawSort != null && rawSort !== '') {
+    const idx = Number(rawSort)
+    if (Number.isFinite(idx) && idx >= 0 && idx < sortFields.length) {
+      sortType = sortFields[idx]!
+    } else if (sortFields.includes(String(rawSort) as TencentBoardSortField)) {
+      sortType = String(rawSort) as TencentBoardSortField
+    }
+  }
+
+  return fetchTencentBoardRankList({
+    boardCode: industryCode,
+    sortType,
+    direct: opts.direct ?? 'down',
+    offset,
+    count: pageSize,
+  })
 }
 
 /**
@@ -177,6 +400,9 @@ export async function fetchTencentJiankuang(code: string): Promise<TencentJianku
 
 /**
  * 板块 / 概念 / 地域标签 — `stockinfo/plateNew`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/stockinfo/plateNew?code={symbol}&app=wzq&zdf=1
+ * @param code 6 位 A 股代码，自动转 sh/sz 前缀
  */
 export async function fetchTencentPlateTags(code: string): Promise<TencentPlateNewData> {
   return tencentProxyGet<TencentPlateNewData>(PLATE_NEW_PATH, {
@@ -188,6 +414,8 @@ export async function fetchTencentPlateTags(code: string): Promise<TencentPlateN
 
 /**
  * 关联板块列表 — `stock/relate/data/plate`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/stock/relate/data/plate?code={symbol}
  */
 export async function fetchTencentRelatedPlates(code: string): Promise<TencentRelatedPlateRow[]> {
   return tencentProxyGet<TencentRelatedPlateRow[]>(RELATED_PLATE_PATH, {
@@ -196,7 +424,9 @@ export async function fetchTencentRelatedPlates(code: string): Promise<TencentRe
 }
 
 /**
- * 行业内排名与估值对比 — `hs/hypm/get`。
+ * 行业内排名与估值对比 — `hs/hypm/get`（单股行业内 PE/市值排名）。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/hs/hypm/get?code={symbol}
  */
 export async function fetchTencentIndustryRank(code: string): Promise<Record<string, unknown>> {
   return tencentProxyGet<Record<string, unknown>>(INDUSTRY_RANK_PATH, {
@@ -206,6 +436,8 @@ export async function fetchTencentIndustryRank(code: string): Promise<Record<str
 
 /**
  * 机构评级统计 — `investRate/getInvestRate`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/investRate/getInvestRate?symbol={symbol}
  */
 export async function fetchTencentInvestRate(code: string): Promise<TencentInvestRateData> {
   return tencentProxyGet<TencentInvestRateData>(INVEST_RATE_PATH, {
@@ -215,6 +447,8 @@ export async function fetchTencentInvestRate(code: string): Promise<TencentInves
 
 /**
  * 机构观点（月度评级分布）— `hs/jggd/get`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/hs/jggd/get?code={symbol}
  */
 export async function fetchTencentJggd(code: string): Promise<TencentJggdData> {
   return tencentProxyGet<TencentJggdData>(JGGD_PATH, {
@@ -291,6 +525,9 @@ export async function fetchTencentBigOrders(code: string): Promise<TencentBigOrd
 
 /**
  * 逐笔成交明细 — `dealinfo/getMingxiV2`（盘中才有数据）。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/ifzqgtimg/appstock/app/dealinfo/getMingxiV2?code={symbol}
+ * @remarks 收盘后常返回空
  */
 export async function fetchTencentTradeDetails(code: string): Promise<TencentTradeDetailData> {
   return tencentProxyGet<TencentTradeDetailData>(MINGXI_PATH, {
@@ -300,6 +537,10 @@ export async function fetchTencentTradeDetails(code: string): Promise<TencentTra
 
 /**
  * 股票搜索 — `smartbox/search`。
+ *
+ * @sourceUrl https://proxy.finance.qq.com/cgi/cgi-bin/smartbox/search?stockFlag=1&fundFlag=1&query={q}
+ * @param query 代码或名称关键词
+ * @returns `TencentSmartboxStock[]`
  */
 export async function fetchTencentSmartboxSearch(query: string): Promise<TencentSmartboxStock[]> {
   const qs = new URLSearchParams({

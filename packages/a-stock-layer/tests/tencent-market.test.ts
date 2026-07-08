@@ -2,6 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   mapTencentBigOrderRows,
   mapTencentFundFlowSeries,
+  mapTencentIndustryBoardRows,
+  mapTencentIndustryConstituentRows,
   mapTencentKlineAppNodes,
   mapTencentMinuteKlines,
   mapTencentMinuteTicks,
@@ -10,6 +12,21 @@ import {
   mapTencentSqtRealtime,
   parseTencentScopedMarket,
 } from '../src/providers/tencent/normalize/market.js'
+import {
+  mapTencentGlobalFuturesRows,
+  pickTencentGlobalFuturesRows,
+  sortTencentGlobalFuturesRows,
+} from '../src/providers/tencent/api/global-futures-service.js'
+import {
+  resolveTencentIndustryBoardType,
+  resolveTencentIndustrySortField,
+  resolveTencentGlobalFuturesCategory,
+} from '../src/providers/tencent/api/proxy.js'
+import {
+  mapTencentGlobalIndexRankRows,
+  pickTencentGlobalIndexRows,
+  sortTencentGlobalIndexRows,
+} from '../src/providers/tencent/api/global-index-service.js'
 
 describe('mapTencentSqtRealtime', () => {
   it('maps utf8 json array to realtime', () => {
@@ -102,5 +119,120 @@ describe('mapTencentMinuteKlines', () => {
     const rows = mapTencentMinuteKlines('300308', ['0931 1098.56 9770 1072314709.32'], '2026-07-07')
     expect(rows[0]?.date).toBe('2026-07-07 09:31:00')
     expect(rows[0]?.close).toBe(1098.56)
+  })
+})
+
+describe('tencent shenwan industry APIs', () => {
+  it('maps industry board row with leading stock', () => {
+    const rows = mapTencentIndustryBoardRows([{
+      code: 'pt01801780',
+      name: '银行',
+      zxj: '3808.55',
+      zdf: '0.20',
+      stock_type: 'BK-HY-1',
+      lzg: { code: 'sh601939', name: '建设银行', zdf: '2.59', zxj: '9.92' },
+    }])
+    expect(rows[0]?.industryCode).toBe('pt01801780')
+    expect(rows[0]?.level).toBe(1)
+    expect(rows[0]?.leadingStock).toMatchObject({ code: '601939', name: '建设银行', changePct: 2.59 })
+  })
+
+  it('maps industry constituent quote fields', () => {
+    const rows = mapTencentIndustryConstituentRows([{
+      code: 'sh601939',
+      name: '建设银行',
+      zxj: '9.92',
+      zdf: '2.59',
+      pe_ttm: '7.59',
+    }])
+    expect(rows[0]?.code).toBe('601939')
+    expect(rows[0]?.price).toBe(9.92)
+    expect(rows[0]?.peTtm).toBe(7.59)
+  })
+
+  it('resolves mstats level and sort params', () => {
+    expect(resolveTencentIndustryBoardType('first')).toBe('hy')
+    expect(resolveTencentIndustryBoardType('second')).toBe('hy2')
+    expect(resolveTencentIndustrySortField(2)).toBe('price')
+    expect(resolveTencentIndustrySortField(3)).toBe('priceRatio')
+    expect(resolveTencentIndustrySortField('priceRatioD5')).toBe('priceRatioD5')
+  })
+})
+
+describe('tencent global index rank API', () => {
+  const sampleData = {
+    common: [{ qtcode: 's_usDJI', code: 'DJI', name: '道琼斯', zxj: '100', zdf: '-1' }],
+    america: [{ qtcode: 's_usDJI', code: 'DJI', name: '道琼斯', zxj: '100', zdf: '-1' }],
+    europe: [{ qtcode: 's_ukFTSE', code: 'FTSE', name: '富时100', zxj: '200', zdf: '0.5' }],
+    asia: [{ qtcode: 's_sh000001', code: '000001', name: '上证指数', zxj: '3000', zdf: '0.2' }],
+    other: [{ qtcode: 's_auXJO', code: 'XJO', name: '澳大利亚标普200', zxj: '7000', zdf: '0.1' }],
+  }
+
+  it('dedupes ALL region by qtcode', () => {
+    const rows = pickTencentGlobalIndexRows(sampleData, 'ALL')
+    expect(rows).toHaveLength(4)
+    expect(rows.some(r => r.code === 'DJI')).toBe(true)
+  })
+
+  it('filters single region bucket', () => {
+    const rows = pickTencentGlobalIndexRows(sampleData, 'EU')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('富时100')
+  })
+
+  it('sorts by changePct desc and maps trade state', () => {
+    const sorted = sortTencentGlobalIndexRows(
+      pickTencentGlobalIndexRows(sampleData, 'ALL'),
+      2,
+      'desc',
+    )
+    expect(Number(sorted[0]?.zdf)).toBeGreaterThan(Number(sorted.at(-1)?.zdf))
+    const mapped = mapTencentGlobalIndexRankRows(sorted.slice(0, 1), 'ALL')
+    expect(mapped[0]).toMatchObject({
+      code: 'FTSE',
+      tradeStateLabel: '--',
+      market: 'global',
+    })
+  })
+})
+
+describe('tencent global futures API', () => {
+  const sampleData = {
+    agriculture: [{ qtcode: 'fuZC', code: 'ZC', name: 'CBOT玉米', zxj: '461.25', zde: '-3', zdf: '-0.65', state: 'open' }],
+    energy: [{ qtcode: 'fuCL', code: 'CL', name: 'WTI原油', zxj: '72.13', zde: '1.69', zdf: '2.40', state: 'open' }],
+    preciousMetal: [{ qtcode: 'fuGC', code: 'GC', name: 'COMEX黄金', zxj: '4132.9', zde: '-24.5', zdf: '-0.59', state: 'open' }],
+  }
+
+  it('merges ALL categories in mstats order', () => {
+    const rows = pickTencentGlobalFuturesRows(sampleData, 'ALL')
+    expect(rows).toHaveLength(3)
+    expect(rows[0]?.code).toBe('ZC')
+  })
+
+  it('filters single category bucket', () => {
+    const rows = pickTencentGlobalFuturesRows(sampleData, 'energy')
+    expect(rows).toHaveLength(1)
+    expect(rows[0]?.name).toBe('WTI原油')
+  })
+
+  it('sorts by changePct and maps fields', () => {
+    const sorted = sortTencentGlobalFuturesRows(
+      pickTencentGlobalFuturesRows(sampleData, 'ALL'),
+      3,
+      'desc',
+    )
+    expect(Number(sorted[0]?.zdf)).toBeGreaterThan(Number(sorted.at(-1)?.zdf))
+    const mapped = mapTencentGlobalFuturesRows(sorted.slice(0, 1), 'energy')
+    expect(mapped[0]).toMatchObject({
+      code: 'CL',
+      market: 'global_futures',
+      tradeStateLabel: '开市',
+      categoryLabel: '能源',
+    })
+  })
+
+  it('resolves category aliases', () => {
+    expect(resolveTencentGlobalFuturesCategory('能源')).toBe('energy')
+    expect(resolveTencentGlobalFuturesCategory('preciousMetal')).toBe('preciousMetal')
   })
 })

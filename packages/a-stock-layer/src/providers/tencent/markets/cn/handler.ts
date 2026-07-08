@@ -21,6 +21,7 @@ import {
   fetchTencentSqtQuotes,
   resolveTencentBoardCode,
 } from '../../api/proxy.js'
+import { fetchTencentGlobalIndexList } from '../../api/global-index-service.js'
 import {
   fetchTencentKline,
   fetchTencentQuotes,
@@ -297,24 +298,45 @@ export class TencentCnHandler extends MarketHandlerShell {
   }
 
   async globalIndex(code = ''): Promise<Record<string, unknown>[] | null> {
-    const keys = code ? [code.trim().toLowerCase()] : Object.keys(TENCENT_GLOBAL_INDEX)
-    const results: Record<string, unknown>[] = []
-    for (const key of keys) {
-      const sym = TENCENT_GLOBAL_INDEX[key]
-      if (!sym) continue
-      const rows = await runTencentPartial(() => fetchTencentQuotes([sym], { rawSymbols: true }))
-      const parts = rows?.[0]?.parts
-      if (!parts) continue
-      results.push({
-        code: key,
-        name: parts[1] || parts[0] || key,
-        price: safeFloat(parts[3]),
-        changePct: tencentChangePct(parts),
-        market: 'global',
-        source: 'tencent',
-      })
+    const query = code.trim()
+    if (!query) {
+      const result = await runTencentPartial(() => fetchTencentGlobalIndexList({
+        region: 'ALL',
+        page: 1,
+        pageSize: 200,
+        sortType: 1,
+        order: 'desc',
+      }))
+      return result?.items.length ? result.items : null
     }
-    return results.length ? results : null
+
+    const key = query.toLowerCase()
+    const sym = TENCENT_GLOBAL_INDEX[key]
+    if (!sym) {
+      const all = await runTencentPartial(() => fetchTencentGlobalIndexList({
+        region: 'ALL',
+        page: 1,
+        pageSize: 200,
+      }))
+      const hit = all?.items.find(item => {
+        const c = String(item.code ?? '').toLowerCase()
+        const q = String(item.qtCode ?? '').toLowerCase()
+        return c === key || q.includes(key) || q.endsWith(key)
+      })
+      return hit ? [hit] : null
+    }
+
+    const rows = await runTencentPartial(() => fetchTencentQuotes([sym], { rawSymbols: true }))
+    const parts = rows?.[0]?.parts
+    if (!parts) return null
+    return [{
+      code: key,
+      name: parts[1] || parts[0] || key,
+      price: safeFloat(parts[3]),
+      changePct: tencentChangePct(parts),
+      market: 'global',
+      source: 'tencent',
+    }]
   }
 
   async exchangeRate(pair = ''): Promise<Record<string, unknown>[] | null> {

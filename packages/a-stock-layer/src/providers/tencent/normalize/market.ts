@@ -3,7 +3,9 @@ import { normalizeCode, safeFloat } from '../../../utils/helpers.js'
 import { fromTencentSymbol } from '../api/proxy.js'
 import type {
   TencentBigOrderData,
+  TencentBoardRankRow,
   TencentFundFlowData,
+  TencentIndustryBoardRow,
   TencentKlineNode,
   TencentPlateNewData,
   TencentRelatedPlateRow,
@@ -250,6 +252,76 @@ export function mapTencentIndustryRankRow(
     industryAvgPe: safeFloat((data.plate_avg as Record<string, unknown> | undefined)?.avg_syl),
     source: 'tencent_hypm',
   }]
+}
+
+/**
+ * `rank/pt/getRank` → 申万行业板块列表行。
+ */
+export function mapTencentIndustryBoardRows(rows: TencentIndustryBoardRow[]): Record<string, unknown>[] {
+  return rows.map(row => {
+    const industryCode = String(row.code ?? '').trim()
+    const stockType = String(row.stock_type ?? '')
+    const level = stockType.includes('BK-HY-2') ? 2 : stockType.includes('BK-HY-1') ? 1 : null
+    const leading = row.lzg
+    const leadingCode = leading?.code ? fromTencentSymbol(String(leading.code)) : ''
+    return {
+      industryCode,
+      name: String(row.name ?? industryCode),
+      price: safeFloat(row.zxj),
+      changePct: safeFloat(row.zdf),
+      changeAmt: safeFloat(row.zd),
+      changePct5d: safeFloat(row.zdf_d5),
+      changePct20d: safeFloat(row.zdf_d20),
+      changePct60d: safeFloat(row.zdf_d60),
+      changePct52w: safeFloat(row.zdf_w52),
+      changePctYtd: safeFloat(row.zdf_y),
+      turnoverRate: safeFloat(row.hsl),
+      volumeRatio: safeFloat(row.lb),
+      turnover: safeFloat(row.turnover),
+      volume: safeFloat(row.volume),
+      netMainInflow: safeFloat(row.zljlr),
+      upDownCount: row.zgb ?? null,
+      level,
+      stockType: stockType || null,
+      leadingStock: leading
+        ? {
+          code: leadingCode,
+          name: leading.name ?? '',
+          price: safeFloat(leading.zxj),
+          changePct: safeFloat(leading.zdf),
+          changeAmt: safeFloat(leading.zd),
+        }
+        : null,
+      source: 'tencent_industry_board',
+    }
+  }).filter(row => row.industryCode)
+}
+
+/**
+ * 行业成分股 `getBoardRankList` → 带行情字段的记录。
+ */
+export function mapTencentIndustryConstituentRows(rows: TencentBoardRankRow[]): Record<string, unknown>[] {
+  return rows.map(row => {
+    const code = fromTencentSymbol(String(row.code ?? ''))
+    return {
+      code,
+      name: String(row.name ?? code),
+      price: safeFloat(row.zxj),
+      changePct: safeFloat(row.zdf),
+      changeAmt: safeFloat(row.zd),
+      turnoverRate: safeFloat(row.hsl),
+      peTtm: safeFloat(row.pe_ttm),
+      pb: safeFloat(row.pn),
+      netMainInflow: safeFloat(row.zljlr),
+      amplitude: safeFloat(row.zf),
+      volume: safeFloat(row.volume),
+      turnover: safeFloat(row.turnover),
+      marketCap: safeFloat(row.zsz),
+      floatMarketCap: safeFloat(row.ltsz),
+      stockType: row.stock_type ?? null,
+      source: 'tencent_industry_constituent',
+    }
+  }).filter(row => row.code)
 }
 
 /**
