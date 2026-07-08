@@ -20,11 +20,11 @@ export type InstrumentRouteHandlers = {
   stockDetail: (code: string) => Promise<ResearchResult>
   etfSnapshot: (code: string) => Promise<ResearchResult>
   usSnapshot: (symbol: string) => Promise<ResearchResult>
-  regionalSnapshot: (market: 'JP' | 'KR' | 'HK', symbol: string) => Promise<ResearchResult>
+  regionalSnapshot: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
   stockQuotes: (codes: string[]) => Promise<ResearchResult>
   usRealtime: (symbol: string) => Promise<ResearchResult>
-  regionalRealtime: (market: 'JP' | 'KR' | 'HK', symbol: string) => Promise<ResearchResult>
+  regionalRealtime: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoRealtime: (pair: string) => Promise<ResearchResult>
   stockChart: (
     code: string,
@@ -35,7 +35,7 @@ export type InstrumentRouteHandlers = {
     market?: string,
   ) => Promise<ResearchResult>
   usKline: (symbol: string, count: number) => Promise<ResearchResult>
-  regionalKline: (market: 'JP' | 'KR' | 'HK', symbol: string, count: number) => Promise<ResearchResult>
+  regionalKline: (market: 'HK', symbol: string, count: number) => Promise<ResearchResult>
   cryptoKline: (pair: string, count: number) => Promise<ResearchResult>
   stockCyq: (code: string) => Promise<ResearchResult>
   institutionRating: (code: string, groups?: string[]) => Promise<ResearchResult>
@@ -95,7 +95,7 @@ export async function routeInstrumentSnapshot(
     return wrapSnapshot(ref, await handlers.regionalSnapshot('HK', ref.symbol), handlers)
   }
   if (ref.market === 'JP' || ref.market === 'KR') {
-    return wrapSnapshot(ref, await handlers.regionalSnapshot(ref.market, ref.symbol), handlers)
+    return fail(ref.market === 'JP' ? '日股暂未接入' : '韩股暂未接入')
   }
   if (ref.market === 'CRYPTO') {
     return wrapSnapshot(ref, await handlers.cryptoSnapshot(instrumentDisplayCode(ref)), handlers)
@@ -143,11 +143,14 @@ export async function routeInstrumentQuotes(
         quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
       }
     }
-    if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
-      const resp = await handlers.regionalRealtime(ref.market, ref.symbol)
+    if (ref.market === 'HK') {
+      const resp = await handlers.regionalRealtime('HK', ref.symbol)
       if (resp.success && resp.data && typeof resp.data === 'object') {
         quotes.push(quoteFromProviderRow(ref, resp.data as Record<string, unknown>))
       }
+    }
+    if (ref.market === 'JP' || ref.market === 'KR') {
+      // 日股/韩股暂未接入 — 跳过
     }
     if (ref.market === 'CRYPTO') {
       const pair = instrumentDisplayCode(ref)
@@ -195,8 +198,11 @@ export async function routeInstrumentChart(
   if (ref.market === 'US') {
     return wrapChart(ref, period, await handlers.usKline(ref.symbol, count))
   }
-  if (ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
-    return wrapChart(ref, period, await handlers.regionalKline(ref.market, ref.symbol, count))
+  if (ref.market === 'HK') {
+    return wrapChart(ref, period, await handlers.regionalKline('HK', ref.symbol, count))
+  }
+  if (ref.market === 'JP' || ref.market === 'KR') {
+    return fail(ref.market === 'JP' ? '日股暂未接入' : '韩股暂未接入')
   }
   if (ref.market === 'CRYPTO') {
     return wrapChart(ref, period, await handlers.cryptoKline(instrumentDisplayCode(ref), count))

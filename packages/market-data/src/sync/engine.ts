@@ -32,7 +32,7 @@ import {
   type InitialSyncCallbacks,
 } from './initial-sync.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
-import { cnEtfListRef, cnEtfRef } from './instrument-gateway.js'
+import { cnEtfListRef, cnEtfRef, cnEquityRef } from './instrument-gateway.js'
 import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
@@ -1032,7 +1032,10 @@ export class MarketDataSyncEngine {
         if (missing.length) {
           await mapPool(missing, cfg.concurrency, cfg.delayMs, async code => {
             try {
-              const single = await this.callApi(() => this.de.realtime(code), 'default')
+              const single = await this.callApi(
+                () => this.de.queryInstrumentData(cnEquityRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
+                'default',
+              )
               if (!single.success || !single.data?.[0]) throw new Error(single.error ?? 'realtime failed')
               this.store.upsertQuoteDaily(tradeDate, code, single.data[0] as unknown as Record<string, unknown>)
               this.markDone('quotes', code, tradeDate)
@@ -1047,7 +1050,10 @@ export class MarketDataSyncEngine {
       } catch {
         await mapPool(chunk, cfg.concurrency, cfg.delayMs, async code => {
           try {
-            const resp = await this.callApi(() => this.de.realtime(code), 'default')
+            const resp = await this.callApi(
+              () => this.de.queryInstrumentData(cnEquityRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
+              'default',
+            )
             if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'realtime failed')
             this.store.upsertQuoteDaily(tradeDate, code, resp.data[0] as unknown as Record<string, unknown>)
             this.markDone('quotes', code, tradeDate)

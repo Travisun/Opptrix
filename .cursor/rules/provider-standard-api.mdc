@@ -1,0 +1,52 @@
+---
+description: Provider 标准 Instrument API 与自定义方法边界；新增/修改 a-stock-layer Provider 时必遵
+globs: packages/a-stock-layer/src/providers/**/*
+alwaysApply: false
+---
+
+# Provider 标准 API 开发规范
+
+完整说明见 `docs/PROVIDER-STANDARD-API.md`。以下为强制要点。
+
+## 调用边界
+
+- **Hub / Agent / 同步**：只经 `queryInstrumentData(ref, InstrumentDataCapability, opts)`（或 `StandardInstrumentGateway`）
+- **禁止**在 Hub 主路径新增 `de.realtime()` / `de.etfNav()` 等 Engine 直连
+- **非标准能力**：`invokeCustomMethod` + `custom-method-docs.ts` + `ALL_CUSTOM_METHODS` 登记
+
+## 标准能力（不得用自定义方法替代）
+
+`realtime` `kline` `snapshot` `profile` `financials` `stock_list` `instrument_search` `sector_list` `etf_list` `etf_nav` `etf_holdings` `etf_snapshot`
+
+新增产品能力：先改 `instrument-query.ts` 的 `InstrumentDataCapability` 与 `resolveInstrumentQueryPlan`，再实现 Provider 标准方法。
+
+## manifest 必做
+
+```typescript
+bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(equityCaps, indexCaps, p, etfCaps, maxConcurrent)
+// 或 usEquityBindings / regionalEquityBindings / cryptoSpotBindings / crossMarketBindings
+```
+
+- 每个 `(market, assetClass, capability)` 一行 binding，与 `capabilities` 一致
+- **ETF** 用 `assetClass: 'ETF'` + `ETF_*` capability，勿与 EQUITY 混绑
+- **多市场**：同一 Driver 为 CN/US/HK 分别声明 binding；方法内用 `market` 参数或 symbol 规范化调不同上游 API
+- 纯自定义 Provider（AkShare）：`capabilities: []`、`bindingsFor: () => []`，但仍须在 `register.ts` 注册 Driver
+
+## 标准方法约定
+
+- 方法名与 Engine `queryScoped(..., method, ...)` 一致：`realtime`、`kline`、`stockList`、`instrumentSearch`、`etfNav`…
+- 返回 `T[] | null`；失败或空数据返回 `null` 以触发 Registry failover
+- 跨市场 `stockList` / `instrumentSearch`：首参或 opts 中带 `market`，在 handler 内分支
+
+## 自定义方法
+
+- 仅用于无标准 capability 的接口（债券、期货、F10 深度、板块目录原始结构等）
+- **禁止**登记与标准 capability 同义的 custom（例：`stockIndexSearch` 已废弃，用标准 `instrumentSearch`）
+- 文档：`custom-method-docs.ts` + `ext.ts` JSDoc + `api/*` `@sourceUrl`（见 `data-provider-docs.mdc`）
+
+## 提交前自检
+
+- [ ] `bindingsFor` 覆盖所有声明 capability × 目标市场 × 正确 assetClass
+- [ ] 新 Provider 已加入 `providers/register.ts`；设置页可见则加入 `loader.ts` `BUILTIN_MANIFESTS`
+- [ ] 未在 Hub/Agent 主路径绕过 `queryInstrumentData`
+- [ ] `npm run build` 通过

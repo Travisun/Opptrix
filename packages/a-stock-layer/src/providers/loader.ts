@@ -15,6 +15,8 @@ import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
 import { SINAFINANCE_MANIFEST } from './sinafinance/manifest.js'
 import { TENCENT_MANIFEST } from './tencent/manifest.js'
+import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
+import { AKSHARE_MANIFEST } from './akshare/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
 import { testBaostockConnection } from './baostock/api/client.js'
@@ -42,6 +44,8 @@ const BUILTIN_MANIFESTS = [
   TONGHUASHUN_MANIFEST,
   TENCENT_MANIFEST,
   SINAFINANCE_MANIFEST,
+  STOCKINDEX_MANIFEST,
+  AKSHARE_MANIFEST,
 ]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {

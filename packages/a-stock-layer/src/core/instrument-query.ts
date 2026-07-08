@@ -2,7 +2,7 @@
  * 标的查询计划路由 — 根据 InstrumentRef + 数据能力，解析为具体的 Engine 执行计划。
  *
  * 用途：Agent/Hub 层调用时，将"我要查 AAPL 的 K 线"转化为具体的 Provider 调用路径。
- * 支持市场：CN（A股）、US（美股）、HK（港股）、JP（日股）、KR（韩股）、CRYPTO（加密货币）
+ * 支持市场：CN（A股）、US（美股）、HK（港股）、CRYPTO（加密货币）；JP/KR 暂不接入标准 API。
  */
 
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
@@ -67,6 +67,10 @@ export interface InstrumentQueryOpts {
   industryCode?: string
   /** sector_list 入参，如 industries:CN、boards:HK */
   plateType?: string
+  /** K 线起始日期 YYYY-MM-DD（CN cn_kline） */
+  startDate?: string
+  /** K 线结束日期 YYYY-MM-DD（CN cn_kline） */
+  endDate?: string
 }
 
 /**
@@ -109,6 +113,8 @@ export type InstrumentQueryPlan =
     symbol: string
     count: number
     period?: string
+    start?: string
+    end?: string
   }
   | {
     /** A 股 ETF 聚合快照 */
@@ -187,7 +193,14 @@ export function resolveInstrumentQueryPlan(
       case 'realtime':
         return { kind: 'cn_realtime', symbol }
       case 'kline':
-        return { kind: 'cn_kline', symbol, count, period: opts.period ?? 'daily' }
+        return {
+          kind: 'cn_kline',
+          symbol,
+          count,
+          period: opts.period ?? 'daily',
+          start: opts.startDate,
+          end: opts.endDate,
+        }
       case 'snapshot':
         return { kind: 'cn_realtime', symbol }
       case 'profile':
@@ -281,9 +294,10 @@ export function resolveInstrumentQueryPlan(
     }
   }
 
-  // ── 区域市场（HK/JP/KR 等） ──
+  // ── 区域市场（HK；JP/KR 暂不接入） ──
   if (isRegionalEquityMarket(ref.market)) {
     const market = ref.market as RegionalEquityMarket
+    if (market === 'JP' || market === 'KR') return null
     const sym = regionalSymbol(ref)
     switch (dataCap) {
       case 'realtime':

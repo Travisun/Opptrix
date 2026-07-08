@@ -26,6 +26,16 @@ export function cnEtfListRef(): InstrumentRef {
   return cnEtfRef('510300')
 }
 
+export function cnEquityRef(code: string): InstrumentRef {
+  const bare = code.trim().replace(/\D/g, '')
+  const symbol = bare.length <= 6 ? bare.padStart(6, '0') : bare.slice(-6)
+  return normalizeInstrumentRef({
+    market: 'CN',
+    assetClass: 'EQUITY',
+    symbol: symbol || '000001',
+  })
+}
+
 export function equityListRef(market: InitialEquityMarket): InstrumentRef {
   return normalizeInstrumentRef({
     market,

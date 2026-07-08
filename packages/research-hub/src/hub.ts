@@ -680,8 +680,13 @@ export class ResearchHub {
     const normalized = normalizeCode(code)
     let klines = this.marketData.localDailyKlines(normalized, 280)
     if (klines.length < 30) {
-      const kl = await this.de.kline(normalized, 280)
-      if (kl.success && kl.data?.length) klines = kl.data
+      const kl = await this.de.queryInstrumentData(
+        this.cnEquityRef(normalized),
+        'kline',
+        { count: 280 },
+      )
+      const klData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(kl)
+      if (kl.success && klData?.length) klines = klData
     }
     if (klines.length < 20) {
       return fail('K 线数据不足，请先同步本地行情后再查看趋势研判', t0)
@@ -689,7 +694,7 @@ export class ResearchHub {
 
     const indexKlines = this.marketData.localDailyKlines('000300', 280)
     const quoteR = await this.stockRealtime(normalized)
-    const quote = quoteR.data?.[0] ?? null
+    const quote = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
     const name = this.resolveStockName(normalized, quote?.name)
 
     const holdingCost = Number(params.holding_cost)
@@ -970,10 +975,10 @@ export class ResearchHub {
     const factors = stored?.factorValues ?? {}
     try {
       const quoteR = cachedQuote
-        ? { data: [cachedQuote] }
+        ? { success: true, data: [cachedQuote] }
         : await this.stockRealtime(code)
       const flowR = await this.de.moneyFlow(code)
-      const quote = quoteR.data?.[0]
+      const quote = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0]
       const flow = flowR.data?.[0]
       return {
         code,
@@ -1007,9 +1012,10 @@ export class ResearchHub {
 
   private async stockKline(code: string, count: number, t0: number) {
     const safeCount = Math.max(20, Math.min(count, 240))
-    const result = await this.de.kline(code, safeCount)
-    if (!result.success) return fail(result.error ?? 'K线获取失败', t0)
-    return ok({ code, klines: result.data ?? [] }, `${code} K线 ${result.data?.length ?? 0} 根`, t0)
+    const result = await this.de.queryInstrumentData(this.cnEquityRef(code), 'kline', { count: safeCount })
+    if (!result.success) return fail(instrumentQueryError(result, 'K线获取失败'), t0)
+    const klines = instrumentQueryData<import('@opptrix/shared').StockKline[]>(result) ?? []
+    return ok({ code, klines }, `${code} K线 ${klines.length} 根`, t0)
   }
 
   private async stockCyq(code: string, t0: number) {
@@ -1068,17 +1074,20 @@ export class ResearchHub {
 
     const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR] = await Promise.all([
       this.stockRealtime(code),
-      this.de.profile(code),
-      this.stockDetailOptional(this.de.financials(code, '', 'all')),
+      this.de.queryInstrumentData(this.cnEquityRef(code), 'profile'),
+      this.stockDetailOptional(this.de.queryInstrumentData(this.cnEquityRef(code), 'financials', {
+        reportDate: '',
+        reportType: 'all',
+      }) as Promise<{ success: boolean; data?: Array<{ reportType?: string }> | null }>),
       this.stockDetailOptional(this.de.news(code, 1, 20)),
       this.stockDetailOptional(this.de.dividend(code)),
       this.stockDetailOptional(this.de.moneyFlow(code)),
       this.stockDetailOptional(this.de.shareholders(code)),
     ])
 
-    const quoteRaw = quoteR.data?.[0] ?? null
+    const quoteRaw = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
     const quote = this.mergeQuoteWithLocal(code, quoteRaw)
-    const profile = profileR.data?.[0] ?? null
+    const profileRow = instrumentQueryData<Array<Record<string, unknown>>>(profileR)?.[0] ?? null
     const financialHistory = financialAllR.data ?? []
     const financial = financialHistory.find(row => row.reportType === 'annual')
       ?? financialHistory[0]
@@ -1086,15 +1095,15 @@ export class ResearchHub {
     const name = this.resolveStockName(
       code,
       quote?.name,
-      profile?.name,
-      profile?.orgName,
+      profileRow?.name as string | undefined,
+      profileRow?.orgName as string | undefined,
     )
 
     return ok({
       code,
       name,
       quote,
-      profile,
+      profile: profileRow,
       financial,
       financialHistory,
       news: newsR.data ?? [],
@@ -1158,8 +1167,8 @@ export class ResearchHub {
   }
 
   private async stockRealtime(code: string, explicitMarket?: string | null) {
-    const market = this.resolveStockMarket(code, explicitMarket)
-    return this.de.realtime(code, market)
+    void explicitMarket
+    return this.de.queryInstrumentData(this.cnEquityRef(code), 'realtime')
   }
 
   private async stockBatchRealtime(codes: string[]) {
@@ -1167,8 +1176,9 @@ export class ResearchHub {
     const normalized = [...new Set(codes.map(c => normalizeCode(String(c))).filter(Boolean))]
     const rows = await Promise.all(
       normalized.map(async code => {
-        const result = await this.de.realtime(code, markets.get(code))
-        return result.data?.[0] ?? null
+        const result = await this.stockRealtime(code, markets.get(code))
+        const data = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(result)
+        return data?.[0] ?? null
       }),
     )
     const quotes = rows.filter((row): row is NonNullable<typeof row> => row != null)
@@ -1184,8 +1194,12 @@ export class ResearchHub {
     if (session.preClose != null && session.preClose > 0) return session.preClose
     if (isLatestSession && apiPreClose != null && apiPreClose > 0) return apiPreClose
 
-    const r = await this.de.kline(code, 'daily', '', session.sessionDate, 12)
-    const rows = (r.data ?? [])
+    const r = await this.queryCnKline(code, {
+      period: 'daily',
+      count: 12,
+      endDate: session.sessionDate,
+    })
+    const rows = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(r) ?? [])
       .filter(row => row.date.slice(0, 10) <= session.sessionDate)
       .sort((a, b) => a.date.localeCompare(b.date))
     const idx = rows.findIndex(row => row.date.slice(0, 10) === session.sessionDate)
@@ -1299,16 +1313,28 @@ export class ResearchHub {
     if (before) {
       const step = 200
       const endDay = this.dayBefore(before.slice(0, 10))
-      let olderR = await this.de.kline(code, klinePeriod, '', endDay, step, stockMarket)
-      let older = (olderR.data ?? []).filter(b => b.date < before)
+      let olderR = await this.queryCnKline(code, {
+        period: klinePeriod,
+        count: step,
+        endDate: endDay,
+      })
+      let older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? []).filter(b => b.date < before)
       if (!older.length) {
-        olderR = await this.de.kline(code, klinePeriod, '', before.slice(0, 10), step, stockMarket)
-        older = (olderR.data ?? []).filter(b => b.date < before)
+        olderR = await this.queryCnKline(code, {
+          period: klinePeriod,
+          count: step,
+          endDate: before.slice(0, 10),
+        })
+        older = (instrumentQueryData<import('@opptrix/shared').StockKline[]>(olderR) ?? []).filter(b => b.date < before)
       }
       const recentCount = Math.max(tail, safeCount, 240)
-      const recentR = await this.de.kline(code, klinePeriod, '', '', recentCount, stockMarket)
-      if (recentR.success && recentR.data?.length) {
-        const merged = this.mergeKlineByTime(older, recentR.data, before)
+      const recentR = await this.queryCnKline(code, {
+        period: klinePeriod,
+        count: recentCount,
+      })
+      const recentData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(recentR)
+      if (recentR.success && recentData?.length) {
+        const merged = this.mergeKlineByTime(older, recentData, before)
         return {
           klines: merged.slice(-800),
           hasMore: older.length >= step,
@@ -1317,11 +1343,15 @@ export class ResearchHub {
       return this.fetchLocalChartKlines(code, safeCount, before)
     }
 
-    const klineR = await this.de.kline(code, klinePeriod, '', '', safeCount, stockMarket)
-    if (klineR.success && klineR.data?.length) {
+    const klineR = await this.queryCnKline(code, {
+      period: klinePeriod,
+      count: safeCount,
+    })
+    const klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    if (klineR.success && klineData?.length) {
       return {
-        klines: klineR.data,
-        hasMore: klineR.data.length >= safeCount && safeCount < 800,
+        klines: klineData,
+        hasMore: klineData.length >= safeCount && safeCount < 800,
       }
     }
     return this.fetchLocalChartKlines(code, safeCount, before)
@@ -1341,7 +1371,7 @@ export class ResearchHub {
     const safeCount = Math.max(20, Math.min(count || this.defaultChartCount(period), cap))
     const stockMarket = this.resolveStockMarket(normalized, explicitMarket)
     const quoteR = await this.stockRealtime(code, explicitMarket)
-    let quote = quoteR.data?.[0] ?? null
+    let quote = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
     if (quote) quote = normalizePreOpenRealtimeQuote(quote)
     const preClose = quote?.preClose ?? null
     const name = this.resolveStockName(code, quote?.name)
@@ -1622,6 +1652,27 @@ export class ResearchHub {
   private cnEtfRef(code: string): InstrumentRef {
     const sym = code.trim() || '510300'
     return { market: 'CN', assetClass: 'ETF', symbol: sym }
+  }
+
+  private cnEquityRef(code: string): InstrumentRef {
+    const sym = normalizeCode(code)
+    return {
+      market: 'CN',
+      assetClass: isCnEtfCode(sym) ? 'ETF' : 'EQUITY',
+      symbol: sym,
+    }
+  }
+
+  private async queryCnKline(
+    code: string,
+    opts: { period?: string; count?: number; startDate?: string; endDate?: string },
+  ) {
+    return this.de.queryInstrumentData(this.cnEquityRef(code), 'kline', {
+      count: opts.count ?? 120,
+      period: opts.period ?? 'daily',
+      startDate: opts.startDate,
+      endDate: opts.endDate,
+    })
   }
 
   private async etfList(params: Record<string, unknown>, t0: number) {
@@ -1909,7 +1960,7 @@ export class ResearchHub {
     return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} 美股行情`, t0)
   }
 
-  private async regionalRealtime(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
+  private async regionalRealtime(market: 'HK', symbol: string, t0: number) {
     const r = await this.de.queryInstrumentData(
       { market, assetClass: 'EQUITY', symbol },
       'realtime',
@@ -1919,7 +1970,7 @@ export class ResearchHub {
   }
 
   private async regionalKline(
-    market: 'JP' | 'KR' | 'HK',
+    market: 'HK',
     symbol: string,
     params: Record<string, unknown>,
     t0: number,
@@ -1935,7 +1986,7 @@ export class ResearchHub {
     return ok({ symbol, items, count: items.length }, `K 线 ${items.length} 根`, t0)
   }
 
-  private async regionalSnapshot(market: 'JP' | 'KR' | 'HK', symbol: string, t0: number) {
+  private async regionalSnapshot(market: 'HK', symbol: string, t0: number) {
     const r = await this.de.queryInstrumentData(
       { market, assetClass: 'EQUITY', symbol },
       'snapshot',

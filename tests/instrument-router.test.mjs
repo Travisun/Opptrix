@@ -5,13 +5,13 @@ import {
   routeInstrumentSearch,
 } from '../packages/research-hub/dist/instrument-router.js'
 
-test('instrument capabilities resolves JP equity batch quote', () => {
+test('instrument capabilities marks JP equity as unsupported', () => {
   const resp = routeInstrumentCapabilities({
     instrument: { market: 'JP', assetClass: 'EQUITY', symbol: '7203' },
   })
   assert.equal(resp.success, true)
-  assert.ok(resp.data.capabilities.includes('batch_quote'))
-  assert.equal(resp.data.detailPanelKind, 'cross-market')
+  assert.equal(resp.data.detailPanelKind, 'unsupported')
+  assert.equal(resp.data.capabilities.length, 0)
 })
 
 test('instrument search delegates to local instruments handler', async () => {
@@ -27,7 +27,7 @@ test('instrument search delegates to local instruments handler', async () => {
     stockChart: async () => ({ success: false, message: 'skip', elapsed: 0 }),
     usKline: async () => ({ success: false, message: 'skip', elapsed: 0 }),
     cryptoKline: async () => ({ success: false, message: 'skip', elapsed: 0 }),
-    searchLocalInstruments: async (keyword, limit, markets) => {
+    searchInstruments: async (keyword, limit, markets) => {
       calls.push({ keyword, limit, markets })
       return {
         success: true,

@@ -4,7 +4,16 @@ globs: packages/a-stock-layer/src/providers/**/*
 alwaysApply: false
 ---
 
-# Data Provider API 文档标准
+# Data Provider 开发规范
+
+**标准 API 与 binding 规则**见 `docs/PROVIDER-STANDARD-API.md` 与 `.cursor/rules/provider-standard-api.mdc`。
+
+- 产品级查询 → `queryInstrumentData` + `InstrumentDataCapability`
+- 无标准 capability 的接口 → `invokeCustomMethod` + 下文自定义方法文档
+
+---
+
+# Data Provider API 文档标准（自定义方法）
 
 在 `packages/a-stock-layer` 新增或修改 **Provider 自定义方法**、**底层 fetch**、**Capability 专用接口** 时，必须同步完善文档，便于 MCP 发现与后续维护对照上游。
 

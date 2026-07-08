@@ -142,16 +142,21 @@ test('Engine resolveInstrumentQueryPlan HK kline', () => {
   }
 })
 
-test('Engine resolveInstrumentQueryPlan JP snapshot', () => {
+test('Engine resolveInstrumentQueryPlan JP snapshot returns null (not connected)', () => {
   const plan = resolveInstrumentQueryPlan(
     { market: 'JP', assetClass: 'EQUITY', symbol: '7203' },
     'snapshot',
   )
-  assert.equal(plan?.kind, 'composite_snapshot')
-  if (plan?.kind === 'composite_snapshot') {
-    assert.equal(plan.market, 'JP')
-    assert.equal(plan.symbol, '7203')
-  }
+  assert.equal(plan, null)
+})
+
+test('Engine resolveInstrumentQueryPlan KR instrument_search returns null (not connected)', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'KR', assetClass: 'EQUITY', symbol: '005930' },
+    'instrument_search',
+    { keyword: '三星' },
+  )
+  assert.equal(plan, null)
 })
 
 test('Engine resolveInstrumentQueryPlan CN ETF nav uses registry', () => {

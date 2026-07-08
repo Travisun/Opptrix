@@ -54,11 +54,6 @@ const HK_EQUITY: ApplicationCapability[] = [
   'technical_indicators', 'discover_mine',
 ]
 
-const REGIONAL_EQUITY: ApplicationCapability[] = [
-  'quote', 'batch_quote', 'snapshot', 'chart_daily', 'strategy_signal',
-  'technical_indicators', 'discover_mine',
-]
-
 function capabilityRow(
   market: Market,
   assetClass: AssetClass,
@@ -74,8 +69,6 @@ export const INSTRUMENT_CAPABILITY_MATRIX: InstrumentCapabilitySet[] = [
   capabilityRow('CN', 'ETF', CN_ETF, 'cn-etf'),
   capabilityRow('US', 'EQUITY', US_EQUITY, 'cross-market'),
   capabilityRow('HK', 'EQUITY', HK_EQUITY, 'cross-market'),
-  capabilityRow('JP', 'EQUITY', REGIONAL_EQUITY, 'cross-market'),
-  capabilityRow('KR', 'EQUITY', REGIONAL_EQUITY, 'cross-market'),
   capabilityRow('CRYPTO', 'CRYPTO_SPOT', CRYPTO_SPOT, 'cross-market'),
 ]
 
@@ -87,8 +80,11 @@ export function resolveInstrumentCapabilities(ref: InstrumentRef): InstrumentCap
   if (ref.market === 'CN') {
     return capabilityRow('CN', 'EQUITY', CN_EQUITY, 'cn-equity')
   }
-  if (ref.market === 'US' || ref.market === 'HK' || ref.market === 'JP' || ref.market === 'KR') {
-    const caps = ref.market === 'HK' ? HK_EQUITY : (ref.market === 'US' ? US_EQUITY : REGIONAL_EQUITY)
+  if (ref.market === 'JP' || ref.market === 'KR') {
+    return capabilityRow(ref.market, 'EQUITY', [], 'unsupported')
+  }
+  if (ref.market === 'US' || ref.market === 'HK') {
+    const caps = ref.market === 'HK' ? HK_EQUITY : US_EQUITY
     return capabilityRow(ref.market, 'EQUITY', caps, 'cross-market')
   }
   if (ref.market === 'CRYPTO') {

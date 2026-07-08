@@ -740,8 +740,14 @@ export class MarketDataEngine {
       case 'cn_realtime':
         return this.realtime(plan.symbol)
       case 'cn_kline':
-        if (plan.period && plan.period !== 'daily') {
-          return this.kline(plan.symbol, plan.period, '', '', plan.count)
+        if ((plan.period && plan.period !== 'daily') || plan.start || plan.end) {
+          return this.kline(
+            plan.symbol,
+            plan.period ?? 'daily',
+            plan.start ?? '',
+            plan.end ?? '',
+            plan.count,
+          )
         }
         return this.kline(plan.symbol, plan.count)
       case 'composite_snapshot':
