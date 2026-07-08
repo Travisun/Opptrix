@@ -59,6 +59,21 @@ export interface StockProfileData {
   securityType?: string
   formerName?: string
   issuePrice?: number | null
+  totalShares?: number | null
+  weekDividendYield?: number | null
+  revenueBreakdown?: RevenueBreakdownBlock[]
+}
+
+export interface RevenueSegment {
+  label: string
+  sales?: string
+  ratio?: string
+}
+
+export interface RevenueBreakdownBlock {
+  date: string
+  currency?: string
+  segments: RevenueSegment[]
 }
 
 export interface FinancialSummaryData {
@@ -214,6 +229,35 @@ export interface TopShareholderItem {
   shareType?: string
 }
 
+export interface CrossMarketRelatedStock {
+  code: string
+  name: string
+  market: 'US' | 'HK'
+  price?: number | null
+  changePct?: number | null
+}
+
+export interface SeniorTradeItem {
+  code: string
+  personName: string
+  tradeDate: string
+  shares?: number | null
+  value?: number | null
+  detail?: string
+}
+
+export interface TradingDistributionLevel {
+  price: number | null
+  volume: number | null
+  volumeRatio: number | null
+}
+
+export interface TradingDistributionData {
+  code: string
+  priceLevels: TradingDistributionLevel[]
+  largeOrderPct: number | null
+}
+
 export interface StockShareholderData {
   code?: string
   reportDate?: string
@@ -311,8 +355,19 @@ export interface CrossMarketQuote {
   open?: number | null
   high?: number | null
   low?: number | null
+  preClose?: number | null
   volume?: number | null
+  amount?: number | null
+  pe?: number | null
+  pb?: number | null
+  turnoverRate?: number | null
+  amplitude?: number | null
+  volumeRatio?: number | null
   marketCap?: number | null
+  circulatingMarketCap?: number | null
+  week52High?: number | null
+  week52Low?: number | null
+  currency?: string | null
   quoteSession?: 'pre' | 'regular' | 'post' | 'closed'
   sessionLabel?: string
   preMarketPrice?: number | null
@@ -332,9 +387,22 @@ export interface CrossMarketKlineBar {
 
 export interface UsSnapshotData {
   code: string
+  name?: string
   profile: Record<string, unknown> | null
   quote: CrossMarketQuote | null
   recentKlines: CrossMarketKlineBar[]
+  financial?: FinancialSummaryData | null
+  financialHistory?: FinancialSummaryData[]
+  /** @deprecated 使用 notices */
+  news?: StockNewsItem[]
+  notices?: StockNewsItem[]
+  articles?: StockNewsItem[]
+  dividends?: StockDividendItem[]
+  shareholders?: StockShareholderData | null
+  reviewProspect?: { review: string | null; prospect: string | null } | null
+  relatedStocks?: CrossMarketRelatedStock[]
+  seniorTrades?: SeniorTradeItem[]
+  tradingDistribution?: TradingDistributionData | null
 }
 
 export interface CryptoSnapshotData {

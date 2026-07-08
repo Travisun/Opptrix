@@ -28,6 +28,8 @@ const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
   { id: 'monthly', label: '月K' },
 ]
 
+const CROSS_MARKET_PERIODS = new Set<ChartPeriod>(['intraday', 'daily', 'weekly', 'monthly'])
+
 const useStyles = makeStyles({
   root: {
     display: 'flex',
@@ -270,9 +272,20 @@ interface Props {
 export default function TradingViewChart({ code, expanded = false, active = true }: Props) {
   const s = useStyles()
   const instrumentRef = useMemo(() => parseInstrumentInput(code), [code])
-  const cnEquityChart = hasApplicationCapability(instrumentRef, 'chart_intraday')
-    || (instrumentRef.market === 'CN' && instrumentRef.assetClass === 'EQUITY')
-  const canChart = hasApplicationCapability(instrumentRef, 'chart_daily')
+  const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
+    && hasApplicationCapability(instrumentRef, 'chart_daily')
+  const cnEquityChart = instrumentRef.market === 'CN'
+    && instrumentRef.assetClass === 'EQUITY'
+    && (hasApplicationCapability(instrumentRef, 'chart_intraday')
+      || hasApplicationCapability(instrumentRef, 'chart_daily'))
+  const canChart = cnEquityChart || crossMarketChart
+  const crossMarketIntraday = crossMarketChart
+    && hasApplicationCapability(instrumentRef, 'chart_intraday')
+  const periodOptions = useMemo(() => {
+    if (cnEquityChart) return PERIODS
+    if (crossMarketChart) return PERIODS.filter(item => CROSS_MARKET_PERIODS.has(item.id))
+    return PERIODS.filter(item => item.id === 'daily' || item.id === 'weekly' || item.id === 'monthly')
+  }, [cnEquityChart, crossMarketChart])
   const { resolvedScheme } = useTheme()
   const maColors = useMemo(() => getMaColors(resolvedScheme), [resolvedScheme])
   const [period, setPeriod] = useState<ChartPeriod>('daily')
@@ -353,7 +366,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
         )
         : await research.instrumentChart(
           instrumentRef,
-          nextPeriod === 'weekly' ? 'weekly' : nextPeriod === 'monthly' ? 'monthly' : 'daily',
+          nextPeriod,
           count,
           signal,
         )
@@ -399,7 +412,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
         setRefreshing(false)
       }
     }
-  }, [code, instrumentRef, cnEquityChart, canChart])
+  }, [code, instrumentRef, cnEquityChart, crossMarketChart, canChart])
 
   const handleNeedHistory = useCallback(() => {
     const now = Date.now()
@@ -463,20 +476,23 @@ export default function TradingViewChart({ code, expanded = false, active = true
   }, [period, active, data?.isTradingDay, loadChart])
 
   useEffect(() => {
-    if (!cnEquityChart) {
+    if (!cnEquityChart && !crossMarketIntraday) {
       setIntradayAvailable(false)
       if (isIntradayPeriod(period) || isMinuteOhlcPeriod(period)) setPeriod('daily')
       return undefined
     }
     const controller = new AbortController()
-    research.stockChart(code, 'intraday', undefined, controller.signal)
+    const probe = cnEquityChart
+      ? research.stockChart(code, 'intraday', undefined, controller.signal)
+      : research.instrumentChart(instrumentRef, 'intraday', 1, controller.signal)
+    probe
       .then(resp => {
         if (controller.signal.aborted || !resp.success || !resp.data) return
         setIntradayAvailable(resp.data.bars.length > 0)
       })
       .catch(() => {})
     return () => { controller.abort() }
-  }, [code, cnEquityChart, period])
+  }, [code, instrumentRef, cnEquityChart, crossMarketIntraday, period])
 
   useEffect(() => {
     if (!data || !mainRef.current || !volumeRef.current || !macdRef.current) return undefined
@@ -582,8 +598,9 @@ export default function TradingViewChart({ code, expanded = false, active = true
     <div className={mergeClasses(s.root, expanded && s.rootExpanded)}>
       <div className={s.toolbar}>
         <div className={s.periodGroup}>
-          {PERIODS.map(item => {
-            const disabled = (!cnEquityChart && (isIntradayPeriod(item.id) || isMinuteOhlcPeriod(item.id)))
+          {periodOptions.map(item => {
+            const disabled = (!cnEquityChart && !crossMarketChart && (isIntradayPeriod(item.id) || isMinuteOhlcPeriod(item.id)))
+              || (crossMarketChart && !cnEquityChart && !CROSS_MARKET_PERIODS.has(item.id))
               || (item.tradingOnly && !intradayAvailable && item.id === 'intraday')
             const activeTab = period === item.id
             return (

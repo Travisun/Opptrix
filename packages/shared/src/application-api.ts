@@ -115,6 +115,12 @@ export interface UnifiedInstrumentQuote {
   market_cap?: number | null
   /** 流通市值（元） */
   circulating_market_cap?: number | null
+  /** 52 周最高 */
+  week52_high?: number | null
+  /** 52 周最低 */
+  week52_low?: number | null
+  /** 报价币种（如 USD、HKD） */
+  currency?: string | null
 }
 
 /**

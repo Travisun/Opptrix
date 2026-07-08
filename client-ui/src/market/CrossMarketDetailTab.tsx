@@ -7,6 +7,7 @@ interface Props {
   localIndexed?: boolean | null
   loading?: boolean
   onManage?: () => void
+  onSelectPeer?: (item: WatchlistItem) => void
 }
 
 /** US / HK / JP / KR 详情 — 统一 instrument 快照 */

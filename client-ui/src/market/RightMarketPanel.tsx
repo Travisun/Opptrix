@@ -242,6 +242,10 @@ export default function RightMarketPanel({
     setTab('detail')
   }, [items, holdingsByCode])
 
+  const handleSelectPeer = useCallback((item: WatchlistItem) => {
+    handleSelect(normalizeWatchlistItem(item))
+  }, [handleSelect])
+
   useEffect(() => {
     if (!focusStockCode) return
     handlePortfolioSelect(focusStockCode)
@@ -386,6 +390,7 @@ export default function RightMarketPanel({
             localIndexed={localIndexed}
             loading={localIndexLoading}
             onManage={() => { void handleManage(detailStock) }}
+            onSelectPeer={handleSelectPeer}
           />
         ) : tab === 'detail' && detailStock && detailKind === 'cn-equity' ? (
           <StockDetailTab

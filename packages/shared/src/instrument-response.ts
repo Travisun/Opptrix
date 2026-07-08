@@ -77,11 +77,17 @@ export interface UnifiedInstrumentSnapshot {
     financial?: unknown
     financial_history?: unknown[]
     news?: unknown[]
+    notices?: unknown[]
+    articles?: unknown[]
     dividends?: unknown[]
     money_flow?: unknown[]
     shareholders?: unknown
     nav?: unknown
     holdings?: unknown
+    review_prospect?: { review?: string | null; prospect?: string | null } | null
+    related_stocks?: unknown[]
+    senior_trades?: unknown[]
+    trading_distribution?: unknown
     /** 本地离线因子/评分摘要 — 与 local_universe_screen 互补，非替代 */
     local_insights?: LocalInstrumentInsights | null
   }
@@ -119,7 +125,11 @@ export function quoteFromProviderRow(
     high: num(row.high),
     low: num(row.low),
     pre_close: num(row.preClose ?? row.pre_close),
-    change: num(row.change),
+    change: num(row.change) ?? (
+      num(row.price) != null && num(row.preClose ?? row.pre_close) != null
+        ? num(row.price)! - num(row.preClose ?? row.pre_close)!
+        : null
+    ),
     pe: num(row.pe),
     pb: num(row.pb),
     turnover_rate: num(row.turnoverRate ?? row.turnover_rate),
@@ -127,21 +137,34 @@ export function quoteFromProviderRow(
     volume_ratio: num(row.volumeRatio ?? row.volume_ratio),
     market_cap: num(row.marketCap ?? row.market_cap),
     circulating_market_cap: num(row.circulatingMarketCap ?? row.circulating_market_cap),
+    week52_high: num(row.week52High ?? row.week52_high),
+    week52_low: num(row.week52Low ?? row.week52_low),
+    currency: str(row.currency) || null,
   }
 }
 
-export function klinesToChartBars(rows: StockKline[] | Record<string, unknown>[]): UnifiedChartBar[] {
+export function klinesToChartBars(
+  rows: StockKline[] | Record<string, unknown>[],
+  period?: string,
+): UnifiedChartBar[] {
+  const intraday = period === 'intraday'
   return rows.map(row => {
     const r = row as Record<string, unknown>
     const date = str(r.date ?? r.time ?? r.sessionDate)
-    const isIntraday = r.price != null && r.open == null
-    if (isIntraday) {
+    const volume = num(r.volume)
+    const amount = num(r.amount)
+    const close = num(r.close)
+    const price = num(r.price) ?? close
+    const avgFromAmount = volume != null && volume > 0 && amount != null
+      ? amount / volume
+      : null
+    if (intraday || (price != null && r.open == null)) {
       return {
         time: date,
-        price: num(r.price),
-        volume: num(r.volume),
-        amount: num(r.amount),
-        avg_price: num(r.avgPrice ?? r.avg_price),
+        price,
+        volume,
+        amount,
+        avg_price: num(r.avgPrice ?? r.avg_price) ?? avgFromAmount ?? price,
       }
     }
     return {
@@ -149,9 +172,9 @@ export function klinesToChartBars(rows: StockKline[] | Record<string, unknown>[]
       open: num(r.open),
       high: num(r.high),
       low: num(r.low),
-      close: num(r.close),
-      volume: num(r.volume),
-      amount: num(r.amount),
+      close,
+      volume,
+      amount,
       change_pct: num(r.changePct ?? r.change_pct),
       turnover_rate: num(r.turnoverRate ?? r.turnover_rate),
     }
@@ -212,8 +235,13 @@ export function normalizeInstrumentSnapshot(
   const instrument = normalizeInstrumentRef(ref)
   const code = instrumentDisplayCode(instrument)
 
-  // CN 详情页
-  if (raw.quote != null && (raw.profile != null || raw.financial != null || raw.news != null)) {
+  // 详情页（A 股 / 美股 / 港股）
+  const klines = (raw.recentKlines ?? raw.items ?? []) as StockKline[] | Record<string, unknown>[]
+  if (raw.quote != null && (
+    raw.profile != null || raw.financial != null || raw.news != null
+    || raw.notices != null || raw.articles != null
+    || raw.relatedStocks != null || raw.dividends != null || klines.length > 0
+  )) {
     const quoteRow = raw.quote as Record<string, unknown>
     return {
       instrument,
@@ -221,23 +249,28 @@ export function normalizeInstrumentSnapshot(
       name: str(raw.name, instrument.symbol),
       quote: quoteFromProviderRow(instrument, quoteRow, opts?.source ?? 'mixed'),
       profile: (raw.profile as Record<string, unknown> | null) ?? null,
-      recent_bars: [],
+      recent_bars: klinesToChartBars(klines),
       extras: {
         financial: raw.financial,
         financial_history: raw.financialHistory as unknown[] | undefined,
         news: raw.news as unknown[] | undefined,
+        notices: (raw.notices ?? raw.news) as unknown[] | undefined,
+        articles: raw.articles as unknown[] | undefined,
         dividends: raw.dividends as unknown[] | undefined,
         money_flow: raw.moneyFlow as unknown[] | undefined,
         shareholders: raw.shareholders,
+        review_prospect: raw.reviewProspect as { review?: string | null; prospect?: string | null } | null | undefined,
+        related_stocks: raw.relatedStocks as unknown[] | undefined,
+        senior_trades: raw.seniorTrades as unknown[] | undefined,
+        trading_distribution: raw.tradingDistribution,
         local_insights: opts?.localInsights ?? null,
       },
       source: opts?.source ?? 'mixed',
     }
   }
 
-  // ETF / 跨市场 composite
+  // ETF / 跨市场 composite（Crypto 等）
   const quoteRow = (raw.quote ?? null) as Record<string, unknown> | null
-  const klines = (raw.recentKlines ?? raw.items ?? []) as StockKline[] | Record<string, unknown>[]
   const pairCode = str(raw.pair, code)
 
   return {
@@ -299,13 +332,19 @@ export function normalizeInstrumentChart(
   }
 
   const items = (raw.items ?? []) as StockKline[] | Record<string, unknown>[]
+  const sessionDate = items.length
+    ? str((items[0] as Record<string, unknown>).date ?? (items[0] as Record<string, unknown>).time).slice(0, 10)
+    : null
   return {
     instrument,
     code: str(raw.symbol ?? raw.pair ?? raw.code, code),
     name: str(raw.name, instrument.symbol),
     period,
-    pre_close: null,
-    bars: klinesToChartBars(items),
+    pre_close: num(raw.preClose ?? raw.pre_close),
+    session_date: raw.sessionDate != null ? str(raw.sessionDate) : raw.session_date != null ? str(raw.session_date) : sessionDate || undefined,
+    is_trading_day: raw.isTradingDay as boolean | undefined ?? raw.is_trading_day as boolean | undefined,
+    has_more: raw.hasMore as boolean | undefined ?? raw.has_more as boolean | undefined,
+    bars: klinesToChartBars(items, period),
     source,
   }
 }

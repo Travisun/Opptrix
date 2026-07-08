@@ -90,6 +90,21 @@ import {
   mergeStockProfileRows,
   normalizeShareholderPayload,
 } from './stock-detail-normalize.js'
+import {
+  buildCrossMarketDetailPayload,
+  mergeCrossMarketQuote,
+  normalizeCrossMarketArticles,
+  normalizeCrossMarketNotices,
+  normalizeCrossMarketRelatedStocks,
+  normalizeHkDividends,
+  normalizeHkFinancialHistory,
+  normalizeHkTencentProfile,
+  normalizeHkTradingDistribution,
+  normalizeUsFinancialHistory,
+  normalizeUsSeniorTrades,
+  normalizeUsShareholders,
+  normalizeUsTencentProfile,
+} from './cross-market-detail.js'
 import { searchInstrumentsUnified } from './instrument-search-unified.js'
 import type { LocalInstrumentInsights } from '@opptrix/shared'
 
@@ -1980,8 +1995,8 @@ export class ResearchHub {
       cryptoRealtime: pair => this.cryptoRealtime(pair, t0),
       stockChart: (code, period, count, before, tail, market) =>
         this.stockChart(code, period, count, before, tail, market, t0),
-      usKline: (symbol, count) => this.usKline(symbol, { count }, t0),
-      regionalKline: (market, symbol, count) => this.regionalKline(market, symbol, { count }, t0),
+      usKline: (symbol, period, count) => this.usKline(symbol, { count, period }, t0),
+      regionalKline: (market, symbol, period, count) => this.regionalKline(market, symbol, { count, period }, t0),
       cryptoKline: (pair, period, count) => this.cryptoKline(pair, { count, period }, t0),
       stockCyq: code => this.stockCyq(code, t0),
       institutionRating: (code, groups) => this.institutionRating(code, groups, t0),
@@ -2152,6 +2167,35 @@ export class ResearchHub {
     return ok(instrumentQueryData<unknown[]>(r)?.[0] ?? null, `${symbol} ${market} 行情`, t0)
   }
 
+  private async crossMarketKlineChart(
+    market: 'US' | 'HK',
+    symbol: string,
+    period: string,
+    count: number,
+    t0: number,
+  ) {
+    const ref = { market, assetClass: 'EQUITY' as const, symbol }
+    const r = await this.de.queryInstrumentData(ref, 'kline', { count, period })
+    if (!r.success) {
+      return fail(instrumentQueryError(r, `${market === 'US' ? '美股' : '港股'} K 线获取失败`), t0)
+    }
+    const items = instrumentQueryData<Record<string, unknown>[]>(r) ?? []
+    let preClose: number | null = null
+    if (period === 'intraday' && items.length) {
+      const qR = await this.de.queryInstrumentData(ref, 'realtime')
+      const quote = instrumentQueryData<Record<string, unknown>[]>(qR)?.[0]
+      preClose = quote?.preClose != null ? Number(quote.preClose) : null
+      if (preClose == null || !Number.isFinite(preClose)) {
+        preClose = quote?.pre_close != null ? Number(quote.pre_close) : null
+      }
+    }
+    return ok(
+      { symbol, period, items, count: items.length, preClose, pre_close: preClose },
+      `K 线 ${items.length} 根`,
+      t0,
+    )
+  }
+
   private async regionalKline(
     market: 'HK',
     symbol: string,
@@ -2159,35 +2203,18 @@ export class ResearchHub {
     t0: number,
   ) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.queryInstrumentData(
-      { market, assetClass: 'EQUITY', symbol },
-      'kline',
-      { count },
-    )
-    if (!r.success) return fail(instrumentQueryError(r, `${market} K 线获取失败`), t0)
-    const items = instrumentQueryData<unknown[]>(r) ?? []
-    return ok({ symbol, items, count: items.length }, `K 线 ${items.length} 根`, t0)
+    const period = String(params.period ?? 'daily')
+    return this.crossMarketKlineChart('HK', symbol, period, count, t0)
   }
 
   private async regionalSnapshot(market: 'HK', symbol: string, t0: number) {
-    const r = await this.de.queryInstrumentData(
-      { market, assetClass: 'EQUITY', symbol },
-      'snapshot',
-    )
-    if (!r.success) return fail(`${market} 快照获取失败`, t0)
-    return ok(instrumentQueryData(r), `${market} 快照`, t0)
+    return this.crossMarketStockDetail(market, symbol, t0)
   }
 
   private async usKline(symbol: string, params: Record<string, unknown>, t0: number) {
     const count = params.count != null ? Number(params.count) : 180
-    const r = await this.de.queryInstrumentData(
-      { market: 'US', assetClass: 'EQUITY', symbol },
-      'kline',
-      { count },
-    )
-    if (!r.success) return fail(instrumentQueryError(r, '美股 K 线获取失败'), t0)
-    const items = instrumentQueryData<unknown[]>(r) ?? []
-    return ok({ symbol, items, count: items.length }, `K 线 ${items.length} 根`, t0)
+    const period = String(params.period ?? 'daily')
+    return this.crossMarketKlineChart('US', symbol, period, count, t0)
   }
 
   private async usProfile(symbol: string, t0: number) {
@@ -2211,13 +2238,166 @@ export class ResearchHub {
     return ok({ symbol, items, count: items.length }, `财报 ${items.length} 期`, t0)
   }
 
-  private async usSnapshot(symbol: string, t0: number) {
-    const r = await this.de.queryInstrumentData(
-      { market: 'US', assetClass: 'EQUITY', symbol },
-      'snapshot',
+  private async crossMarketStockDetail(market: 'US' | 'HK', symbol: string, t0: number) {
+    const ref: InstrumentRef = { market, assetClass: 'EQUITY', symbol }
+    const snapshotR = await this.de.queryInstrumentData(ref, 'snapshot')
+    const snap = instrumentQueryData<Record<string, unknown>>(snapshotR)
+
+    const profileMethod = market === 'US' ? 'tencentUsStockProfile' : 'tencentHkStockProfile'
+    const noticeMethod = market === 'US' ? 'tencentUsStockNotices' : 'tencentHkStockNotices'
+    const newsMethod = market === 'US' ? 'tencentUsStockNews' : 'tencentHkStockNews'
+    const financialMethod = market === 'US' ? 'tencentUsFinancialSummary' : 'tencentHkStockFinancialReport'
+
+    const relatedMethod = market === 'US' ? 'tencentUsRelatedStocks' : 'tencentHkRelatedStocks'
+
+    const [
+      profileR,
+      noticeR,
+      articleR,
+      financialR,
+      balanceR,
+      dividendR,
+      shareholderR,
+      reviewR,
+      quoteEnrichR,
+      relatedR,
+      seniorTradesR,
+      technicalR,
+    ] = await Promise.all([
+      this.stockDetailOptional(
+        this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], profileMethod, [symbol])
+          .then(rows => ({ success: !!rows?.length, data: rows })),
+      ),
+      this.stockDetailOptional(
+        this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], noticeMethod, [symbol, 1, 30])
+          .then(rows => ({ success: !!rows?.length, data: rows })),
+      ),
+      this.stockDetailOptional(
+        this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], newsMethod, [symbol, 1, 30])
+          .then(rows => ({ success: !!rows?.length, data: rows })),
+      ),
+      this.stockDetailOptional(
+        this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], financialMethod, [
+          symbol,
+          ...(market === 'US' ? [1, 8] : ['income', 'all', 4]),
+        ]).then(rows => ({ success: !!rows?.length, data: rows })),
+      ),
+      market === 'HK'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentHkStockFinancialReport', [
+            symbol, 'balance', 'all', 4,
+          ]).then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      market === 'HK'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentHkDividends', [symbol, 1, 10, true])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      market === 'US'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentUsShareholderStats', [symbol, 1])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      market === 'HK'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentHkReviewProspect', [symbol])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      market === 'US'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentUsStockQuote', [symbol])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      this.stockDetailOptional(
+        this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], relatedMethod, [symbol])
+          .then(rows => ({ success: !!rows?.length, data: rows })),
+      ),
+      market === 'US'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentUsSeniorTrades', [symbol, 1, 15])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+      market === 'HK'
+        ? this.stockDetailOptional(
+          this.callDetailProviderMethod<Record<string, unknown>>(['tencent'], 'tencentHkTechnicalAnalysis', [symbol])
+            .then(rows => ({ success: !!rows?.length, data: rows })),
+        )
+        : Promise.resolve({ success: false as const, data: null as Record<string, unknown>[] | null }),
+    ])
+
+    const profileRaw = profileR.data?.[0] ?? null
+    const profile = profileRaw
+      ? (market === 'US'
+        ? normalizeUsTencentProfile(symbol, profileRaw)
+        : normalizeHkTencentProfile(symbol, profileRaw))
+      : (snap?.profile as Record<string, unknown> | null) ?? null
+
+    const notices = normalizeCrossMarketNotices(symbol, noticeR.data?.[0] ?? null)
+    const articles = normalizeCrossMarketArticles(symbol, articleR.data?.[0] ?? null)
+    const quote = mergeCrossMarketQuote(
+      (snap?.quote ?? null) as Record<string, unknown> | null,
+      quoteEnrichR.data?.[0] ?? null,
     )
-    if (!r.success) return fail('美股快照获取失败', t0)
-    return ok(instrumentQueryData(r), '美股快照', t0)
+
+    const financialHistory = market === 'US'
+      ? normalizeUsFinancialHistory(symbol, financialR.data?.[0] ?? null)
+      : normalizeHkFinancialHistory(
+        symbol,
+        financialR.data?.[0] ?? null,
+        balanceR.data?.[0] ?? null,
+      )
+
+    const dividends = market === 'HK'
+      ? normalizeHkDividends(symbol, dividendR.data?.[0] ?? null)
+      : []
+
+    const shareholders = market === 'US'
+      ? normalizeUsShareholders(symbol, shareholderR.data?.[0] ?? null)
+      : null
+
+    const reviewRow = reviewR.data?.[0] as { review?: string | null; prospect?: string | null } | undefined
+    const reviewProspect = reviewRow
+      ? { review: reviewRow.review ?? null, prospect: reviewRow.prospect ?? null }
+      : null
+
+    const relatedStocks = normalizeCrossMarketRelatedStocks(market, relatedR.data?.[0] ?? null)
+    const seniorTrades = market === 'US'
+      ? normalizeUsSeniorTrades(symbol, seniorTradesR.data?.[0] ?? null)
+      : []
+    const tradingDistribution = market === 'HK'
+      ? normalizeHkTradingDistribution(symbol, technicalR.data?.[0] ?? null)
+      : null
+
+    const payload = buildCrossMarketDetailPayload(market, symbol, snap ?? null, {
+      profile,
+      quote,
+      notices,
+      articles,
+      financialHistory,
+      dividends,
+      shareholders,
+      reviewProspect,
+      relatedStocks,
+      seniorTrades,
+      tradingDistribution,
+    })
+
+    if (!payload.quote && !payload.profile && !(payload.recentKlines as unknown[])?.length
+      && !notices.length && !articles.length) {
+      return fail(`${market === 'US' ? '美股' : '港股'}详情获取失败`, t0)
+    }
+
+    return ok(payload, `${market === 'US' ? '美股' : '港股'}详情`, t0)
+  }
+
+  private async usSnapshot(symbol: string, t0: number) {
+    return this.crossMarketStockDetail('US', symbol, t0)
   }
 
   private async usStockList(params: Record<string, unknown>, t0: number) {

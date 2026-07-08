@@ -262,7 +262,7 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym])
       case 'kline':
         return registryPlan('US', 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
-          sym, 'daily', '', '', count,
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
         ])
       case 'snapshot':
         return { kind: 'composite_snapshot', market: 'US', symbol: sym }
@@ -304,7 +304,7 @@ export function resolveInstrumentQueryPlan(
         return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym])
       case 'kline':
         return registryPlan(market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
-          sym, 'daily', '', '', count,
+          sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
         ])
       case 'snapshot':
         return { kind: 'composite_snapshot', market, symbol: sym }

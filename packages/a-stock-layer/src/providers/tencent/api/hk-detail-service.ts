@@ -159,6 +159,7 @@ export function resolveTencentHkKlinePeriod(period: string): TencentHkKlinePerio
   const alias: Record<string, TencentHkKlinePeriod> = {
     minute: 'minute',
     m1: 'minute',
+    '1m': 'minute',
     intraday: 'minute',
     fdays: 'fdays',
     '5day': 'fdays',
@@ -285,24 +286,33 @@ function mapHkDividendRecentRows(rows: Array<Record<string, unknown>>): TencentH
   })).filter(row => row.content)
 }
 
+/** 港股公告详情 — 与腾讯个股页「公告」Tab 同源（上游 list 接口不返回 url） */
+function buildTencentHkNoticeDetailUrl(_symbol: string, id: string): string {
+  return `https://gu.qq.com/resources/shy/news/detail-v2/index.html#/index?id=${encodeURIComponent(id)}&s=b`
+}
+
 function mapHkNewsRows(rows: Array<Record<string, unknown>>): TencentHkNewsItem[] {
   return rows.map(row => ({
     id: String(row.id ?? ''),
     title: String(row.title ?? ''),
     time: String(row.time ?? ''),
-    url: String(row.url ?? ''),
+    url: String(row.url ?? '').trim(),
     type: row.type as string | number,
   })).filter(row => row.id || row.title)
 }
 
-function mapHkNoticeRows(rows: Array<Record<string, unknown>>): TencentHkNoticeItem[] {
-  return rows.map(row => ({
-    id: String(row.id ?? ''),
-    title: String(row.title ?? ''),
-    time: String(row.time ?? ''),
-    url: String(row.url ?? ''),
-    type: String(row.type ?? ''),
-  })).filter(row => row.id || row.title)
+function mapHkNoticeRows(symbol: string, rows: Array<Record<string, unknown>>): TencentHkNoticeItem[] {
+  return rows.map(row => {
+    const id = String(row.id ?? '').trim()
+    const external = String(row.url ?? '').trim()
+    return {
+      id,
+      title: String(row.title ?? ''),
+      time: String(row.time ?? ''),
+      url: external || (id ? buildTencentHkNoticeDetailUrl(symbol, id) : ''),
+      type: String(row.type ?? ''),
+    }
+  }).filter(row => row.id || row.title)
 }
 
 function mapHkMinuteKlines(code: string, rows: string[]): StockKline[] {
@@ -424,7 +434,7 @@ export async function fetchTencentHkStockNotices(opts: {
     page: String(Math.max(1, opts.page ?? 1)),
     n: String(Math.max(1, Math.min(opts.pageSize ?? 20, 50))),
   })
-  const items = mapHkNoticeRows(data.data ?? [])
+  const items = mapHkNoticeRows(symbol, data.data ?? [])
   return {
     total: data.total_num ?? items.length,
     items,

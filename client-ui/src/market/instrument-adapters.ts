@@ -39,6 +39,10 @@ export interface UnifiedInstrumentQuoteDto {
   amplitude?: number | null
   volume_ratio?: number | null
   market_cap?: number | null
+  circulating_market_cap?: number | null
+  week52_high?: number | null
+  week52_low?: number | null
+  currency?: string | null
 }
 
 export interface UnifiedChartBarDto {
@@ -81,11 +85,17 @@ export interface UnifiedInstrumentSnapshotDto {
     financial?: unknown
     financial_history?: unknown[]
     news?: unknown[]
+    notices?: unknown[]
+    articles?: unknown[]
     dividends?: unknown[]
     money_flow?: unknown[]
     shareholders?: unknown
     nav?: unknown
     holdings?: unknown
+    review_prospect?: { review?: string | null; prospect?: string | null } | null
+    related_stocks?: unknown[]
+    senior_trades?: unknown[]
+    trading_distribution?: unknown
     local_insights?: {
       trade_date: string | null
       total_score: number | null
@@ -139,7 +149,23 @@ function quoteDtoToCrossMarket(q: UnifiedInstrumentQuoteDto): CrossMarketQuote {
     name: q.name,
     price: q.price,
     changePct: q.change_pct,
+    change: q.change ?? null,
+    open: q.open ?? null,
+    high: q.high ?? null,
+    low: q.low ?? null,
+    preClose: q.pre_close ?? null,
     volume: q.volume,
+    amount: q.amount ?? null,
+    pe: q.pe ?? null,
+    pb: q.pb ?? null,
+    turnoverRate: q.turnover_rate ?? null,
+    amplitude: q.amplitude ?? null,
+    volumeRatio: q.volume_ratio ?? null,
+    marketCap: q.market_cap ?? null,
+    circulatingMarketCap: q.circulating_market_cap ?? null,
+    week52High: q.week52_high ?? null,
+    week52Low: q.week52_low ?? null,
+    currency: q.currency ?? null,
   }
 }
 
@@ -184,9 +210,25 @@ export function unifiedSnapshotToCrossMarket(
   }
   return {
     code: data.code,
+    name: data.name,
     profile: data.profile,
     quote,
     recentKlines: klines,
+    financial: (data.extras?.financial as UsSnapshotData['financial']) ?? null,
+    financialHistory: data.extras?.financial_history as UsSnapshotData['financialHistory'],
+    notices: (data.extras?.notices ?? data.extras?.news) as UsSnapshotData['notices'],
+    articles: data.extras?.articles as UsSnapshotData['articles'],
+    dividends: data.extras?.dividends as UsSnapshotData['dividends'],
+    shareholders: data.extras?.shareholders as UsSnapshotData['shareholders'],
+    reviewProspect: data.extras?.review_prospect
+      ? {
+        review: data.extras.review_prospect.review ?? null,
+        prospect: data.extras.review_prospect.prospect ?? null,
+      }
+      : null,
+    relatedStocks: data.extras?.related_stocks as UsSnapshotData['relatedStocks'],
+    seniorTrades: data.extras?.senior_trades as UsSnapshotData['seniorTrades'],
+    tradingDistribution: data.extras?.trading_distribution as UsSnapshotData['tradingDistribution'],
   }
 }
 

@@ -177,11 +177,11 @@ export function resolveTencentUsKlinePeriod(period: string): TencentUsKlinePerio
   const alias: Record<string, TencentUsKlinePeriod> = {
     minute: 'minute',
     m1: 'minute',
+    '1m': 'minute',
     intraday: 'minute',
     fdays: 'fdays',
     '5day': 'fdays',
     five: 'fdays',
-    m5: 'fdays',
     day: 'day',
     daily: 'day',
     week: 'week',
@@ -267,14 +267,22 @@ function mapUsNewsRows(rows: Array<Record<string, unknown>>): TencentUsNewsItem[
   })).filter(row => row.id || row.title)
 }
 
+function buildTencentUsNoticeDetailUrl(id: string): string {
+  return `https://gu.qq.com/resources/shy/news/detail-v2/index.html#/index?id=${encodeURIComponent(id)}&s=b`
+}
+
 function mapUsNoticeRows(rows: Array<Record<string, unknown>>): TencentUsNoticeItem[] {
-  return rows.map(row => ({
-    id: String(row.id ?? ''),
-    title: String(row.title ?? ''),
-    time: String(row.time ?? ''),
-    url: String(row.url ?? ''),
-    type: String(row.type ?? ''),
-  })).filter(row => row.id || row.title)
+  return rows.map(row => {
+    const id = String(row.id ?? '').trim()
+    const external = String(row.url ?? '').trim()
+    return {
+      id,
+      title: String(row.title ?? ''),
+      time: String(row.time ?? ''),
+      url: external || (id ? buildTencentUsNoticeDetailUrl(id) : ''),
+      type: String(row.type ?? ''),
+    }
+  }).filter(row => row.id || row.title)
 }
 
 function mapUsFinancialRows(rows: Array<Record<string, unknown>>): TencentUsFinancialYear[] {
@@ -640,8 +648,9 @@ type UsKlinePayload = {
 }
 
 async function fetchUsMinute(symbol: string): Promise<string[]> {
-  const varName = `minute_data_${symbol}`
-  const url = `${IFZQ_WEB}/appstock/app/minute/query?_var=${varName}&code=${symbol}`
+  const minuteCode = normalizeUsQtCode(symbol) || symbol.replace(/\.(OQ|N|AM|A)$/i, '')
+  const varName = `minute_data_${minuteCode.replace(/\./g, '_')}`
+  const url = `${IFZQ_WEB}/appstock/app/minute/query?_var=${varName}&code=${minuteCode}`
   const body = await fetchTencentJsonp<{
     code: number
     data?: Record<string, { data?: { data?: string[] } }>
@@ -649,7 +658,7 @@ async function fetchUsMinute(symbol: string): Promise<string[]> {
   if (body.code !== 0) {
     throw new Error(`minute/query 失败 (${body.code})`)
   }
-  return body.data?.[symbol]?.data?.data ?? []
+  return body.data?.[minuteCode]?.data?.data ?? []
 }
 
 async function fetchUsFdays(symbol: string): Promise<StockKline[]> {

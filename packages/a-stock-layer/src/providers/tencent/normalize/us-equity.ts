@@ -8,12 +8,17 @@ import {
 
 export function mapTencentUsQuoteRow(q: TencentUsQuote): StockRealtime {
   const session = resolveUsQuoteSession()
+  const amplitude = q.preClose != null && q.preClose > 0 && q.high != null && q.low != null
+    ? ((q.high - q.low) / q.preClose) * 100
+    : null
   return {
     code: normalizeUsTicker(q.symbol || q.code),
     name: q.name || normalizeUsTicker(q.symbol || q.code),
     price: q.price,
     changePct: q.changePct,
-    change: q.changeAmt,
+    change: q.changeAmt ?? (
+      q.price != null && q.preClose != null ? q.price - q.preClose : null
+    ),
     pe: q.pe,
     pb: q.pb,
     turnoverRate: q.turnoverRate,
@@ -24,6 +29,7 @@ export function mapTencentUsQuoteRow(q: TencentUsQuote): StockRealtime {
     preClose: q.preClose,
     volume: q.volume,
     amount: q.amount,
+    amplitude,
     quoteSession: session,
     sessionLabel: usQuoteSessionLabel(session),
   }
