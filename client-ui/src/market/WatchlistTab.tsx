@@ -319,10 +319,8 @@ export default function WatchlistTab({
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
 
-  const codes = useMemo(() => items.map(item => item.code), [items])
-
   const refreshQuotes = useCallback(async () => {
-    if (!codes.length) {
+    if (!items.length) {
       setQuotes({})
       return
     }
@@ -333,18 +331,25 @@ export default function WatchlistTab({
       if (resp.success && resp.data?.quotes) {
         const map: Record<string, MarketQuote> = {}
         for (const q of resp.data.quotes) {
-          const code = displayCodeFromInstrument(q.instrument)
-          map[code] = {
+          const itemRef = q.instrument ?? resolveWatchlistInstrument({
+            code: q.code,
+            name: q.name,
+          })
+          const code = displayCodeFromInstrument(itemRef)
+          const rowKey = watchlistItemKey({ code, name: q.name, instrument: itemRef })
+          const quote: MarketQuote = {
             code,
             name: q.name ?? code,
             price: q.price ?? null,
             changePct: q.change_pct ?? null,
-            pe: null,
-            pb: null,
-            turnoverRate: null,
+            pe: q.pe ?? null,
+            pb: q.pb ?? null,
+            turnoverRate: q.turnover_rate ?? null,
             volume: q.volume ?? null,
             amount: q.amount ?? null,
           }
+          map[code] = quote
+          map[rowKey] = quote
         }
         setQuotes(map)
         setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
@@ -354,7 +359,7 @@ export default function WatchlistTab({
     } finally {
       setLoadingQuotes(false)
     }
-  }, [codes])
+  }, [items])
 
   const refreshRadar = useCallback(async () => {
     const cnItems = items.filter(item => {
@@ -411,7 +416,7 @@ export default function WatchlistTab({
   useEffect(() => {
     for (const item of items) {
       if (item.addedPrice != null || patchedRef.current.has(item.code)) continue
-      const price = quotes[item.code]?.price
+      const price = quotes[item.code]?.price ?? quotes[watchlistItemKey(item)]?.price
       if (price == null) continue
       patchedRef.current.add(item.code)
       onPatchItem(item.code, {
@@ -423,7 +428,7 @@ export default function WatchlistTab({
 
   useEffect(() => {
     for (const item of items) {
-      const qName = quotes[item.code]?.name
+      const qName = quotes[item.code]?.name ?? quotes[watchlistItemKey(item)]?.name
       const rName = radar[item.code]?.name
       const resolved = resolveDisplayStockName(item.code, qName, rName, item.name)
       if (resolved === item.name) continue
@@ -540,7 +545,7 @@ export default function WatchlistTab({
         )}
         {items.map(item => {
           const ref = resolveWatchlistInstrument(item)
-          const quote = quotes[item.code]
+          const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)]
           const holding = holdingsByCode[item.code]
           const isHolding = (holding?.shares ?? 0) > 0
           const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct
