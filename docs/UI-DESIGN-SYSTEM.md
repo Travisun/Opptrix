@@ -1,5 +1,7 @@
 # Opptrix UI Design System
 
+> 实现或修改 **任何** client-ui 可见界面前须先读本文与 [`UI-LAYOUT.md`](./UI-LAYOUT.md)。Agent 浮层/Dialog/Toast 规则： [`.cursor/rules/ui-overlay-components.mdc`](../.cursor/rules/ui-overlay-components.mdc)。
+
 > 参考 EchoBird 风格：**暖色浅色画布、陶土橙强调、圆角卡片、紧凑信息密度**。基于 Fluent UI v9 组件，自定义 Design Tokens。
 
 ## 1. 设计原则
@@ -113,11 +115,13 @@
 **实现**：
 
 - 全局类：`.opptrix-glass-panel`（`global.css`）
-- Dialog：`.opptrix-glass-dialog-surface`（Fluent `DialogSurface`）
+- 二次确认 Dialog：`.opptrix-glass-dialog-surface` + `OpptrixDialogAlert`（`components/opptrix/OpptrixDialogAlert.tsx`）
+- 复杂表单 Dialog：`.opptrix-dialog-surface`（Fluent `DialogSurface`）
 - Mixins：`glassDropdown`、`glassPanel`（`theme/mixins.ts`）
 - Tokens：`glass`、`glassBlur`、`surfaceGlass`（`theme/tokens.ts`）
 
-**原则**：面板与 Dialog **默认毛玻璃**；实体卡片（SurfaceCard、列表行）仍用 `surface` 实底 + 轻描边，不用毛玻璃。
+**原则**：浮层与二次确认 Dialog **默认毛玻璃**；实体卡片（SurfaceCard、列表行）仍用 `surface` 实底 + 轻描边，不用毛玻璃。  
+**Agent 规则**：`.cursor/rules/ui-overlay-components.mdc`（组件选型表与禁止项）。
 
 ## 6. Layout Constants
 
@@ -173,8 +177,22 @@
 - 发现页策略下拉、设置抽屉、Follow 对话框、SkillSheet 等浮层使用 **§5.1 毛玻璃**
 - 类名 `.opptrix-glass-panel` 或 mixin `glassDropdown`
 - 列表内选项 Hover：半透明白底 `rgba(255,255,255,0.45)`，不用实体灰块
+- 自定义锚定面板：`OpptrixDropdownPanel`；Fluent 下拉 listbox：`mergeOpptrixDropdownListboxProps`
 
-### 7.8 TabList
+### 7.8 浮层与反馈（统一组件）
+
+| 场景 | 组件 | 样式类 / Provider |
+|------|------|-------------------|
+| 二次确认（删除、清空等） | `OpptrixDialogAlert`、`useOpptrixDialogAlert()` | `.opptrix-glass-dialog-surface`；根节点 `OpptrixDialogAlertProvider`（`main.tsx`） |
+| 复杂表单 Dialog | Fluent `Dialog` + `OpptrixField` 等 | `.opptrix-dialog-surface` |
+| 操作结果 Toast | `useSettingsToast()` | `SettingsToastProvider`（设置页等）；mixin `glassPanel` |
+| 侧栏内联确认 | 列表行内 `inlineEditRow` + 按钮 | 与行同高，不用 Dialog |
+| 分段 Tab（胶囊） | `OpptrixSegmentedControl` | `.opptrix-segmented-control`；侧栏用 `variant="embedded"` |
+
+**禁止**：`window.confirm` / `alert` / `prompt`；无类名的裸 `DialogSurface`。  
+细则：`.cursor/rules/ui-overlay-components.mdc`。
+
+### 7.9 TabList
 
 - Fluent Tab `appearance="subtle"` 或自定义 pill
 - 选中：白底 + shadow-card + accent 下划线

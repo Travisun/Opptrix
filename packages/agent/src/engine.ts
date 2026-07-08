@@ -111,8 +111,28 @@ export class AgentEngine {
     return this.sessions.listArchivedGrouped()
   }
 
+  listAllArchivedByFolder() {
+    return this.sessions.listArchivedByFolderAll()
+  }
+
   listSessionArchiveFolders() {
     return this.sessions.listArchiveFolders()
+  }
+
+  createSessionArchiveFolder(title: string) {
+    return this.sessions.createArchiveFolder(title)
+  }
+
+  renameSessionArchiveFolder(id: string, title: string) {
+    return this.sessions.renameArchiveFolder(id, title)
+  }
+
+  deleteSessionArchiveFolder(id: string) {
+    return this.sessions.deleteArchiveFolder(id)
+  }
+
+  clearSessionArchiveFolder(id: string) {
+    return this.sessions.clearArchiveFolder(id)
   }
 
   archiveSession(id: string, folderId: string) {

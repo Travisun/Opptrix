@@ -51,4 +51,26 @@ export class SessionArchiveFolderStore {
     this.save([...folders, folder])
     return folder
   }
+
+  rename(id: string, title: string): SessionArchiveFolder | null {
+    const folders = this.ensureDefaults()
+    const idx = folders.findIndex(f => f.id === id)
+    if (idx < 0) return null
+    if (folders[idx]!.isDefault) return null
+    const trimmed = title.trim()
+    if (!trimmed) return folders[idx]!
+    const next = folders.slice()
+    next[idx] = { ...next[idx]!, title: trimmed }
+    this.save(next)
+    return next[idx]!
+  }
+
+  /** 仅允许删除用户创建的文件夹 */
+  delete(id: string): boolean {
+    const folders = this.ensureDefaults()
+    const folder = folders.find(f => f.id === id)
+    if (!folder || folder.isDefault) return false
+    this.save(folders.filter(f => f.id !== id))
+    return true
+  }
 }

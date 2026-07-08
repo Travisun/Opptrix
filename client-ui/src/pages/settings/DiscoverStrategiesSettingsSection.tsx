@@ -25,6 +25,7 @@ import {
   type StrategyDraft,
 } from './DiscoverStrategyDialogs'
 import { useSettingsToast } from './SettingsToast'
+import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const CATEGORY_LABEL: Record<DiscoverStrategyPublic['category'], string> = {
@@ -185,6 +186,7 @@ function customFromBuiltin(detail: DiscoverStrategyDetail): CustomDiscoverStrate
 export default function DiscoverStrategiesSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
+  const { confirm } = useOpptrixDialogAlert()
   const [profile, setProfile] = useState<DiscoverStrategyProfile>(defaultDiscoverProfile())
   const [builtinList, setBuiltinList] = useState<DiscoverStrategyPublic[]>([])
   const [viewTarget, setViewTarget] = useState<ViewTarget>(null)
@@ -302,8 +304,16 @@ export default function DiscoverStrategiesSettingsSection() {
     toast.showSuccess(creating ? '自编策略已创建' : '策略已保存')
   }
 
-  const handleDeleteCustom = () => {
+  const handleDeleteCustom = async () => {
     if (editTarget?.mode !== 'edit') return
+    const name = draft.name.trim() || '该策略'
+    const ok = await confirm({
+      title: `确定删除「${name}」？`,
+      message: '删除后无法恢复。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     const id = editTarget.id
     removeStrategy(id)
     setEditTarget(null)

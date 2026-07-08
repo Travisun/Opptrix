@@ -33,6 +33,7 @@ import {
   SettingsRow,
 } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
+import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
@@ -275,6 +276,7 @@ type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 export default function NewsFeedSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
+  const { confirm } = useOpptrixDialogAlert()
   const [loading, setLoading] = useState(true)
   const [settings, setSettings] = useState<NewsSettings>({
     refresh_interval_min: 15,
@@ -405,7 +407,13 @@ export default function NewsFeedSettingsSection() {
   }
 
   const handleDeleteGroup = async (id: string) => {
-    if (!confirm('删除分组后，其中订阅将移至未分组。确定删除？')) return
+    const ok = await confirm({
+      title: '确定删除此分组？',
+      message: '删除后，其中订阅将移至未分组。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     try {
       const resp = await news.deleteGroup(id)
       setGroups(resp.groups)
@@ -496,9 +504,13 @@ export default function NewsFeedSettingsSection() {
   const handleDelete = async (id: string) => {
     const sub = subs.find(s => s.id === id)
     const label = sub?.title?.trim() || '该订阅源'
-    if (!confirm(
-      `确定删除「${label}」？\n\n删除后，该来源关联的历史文章将同步清除，无法恢复。`,
-    )) return
+    const ok = await confirm({
+      title: `确定删除「${label}」？`,
+      message: '删除后，该来源关联的历史文章将同步清除，无法恢复。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     try {
       const resp = await news.deleteSubscription(id)
       setSubs(resp.subscriptions)

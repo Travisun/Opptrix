@@ -79,6 +79,9 @@ body {
   --opptrix-settings-panel-border-color: #E5E5EA;
   --opptrix-glass-surface-bg: rgba(255, 255, 255, 0.72);
   --opptrix-glass-surface-border: rgba(60, 60, 67, 0.12);
+  --opptrix-segmented-track: rgba(118, 118, 128, 0.12);
+  --opptrix-segmented-thumb-bg: rgba(255, 255, 255, 0.92);
+  --opptrix-segmented-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.06), 0 2px 8px rgba(0, 0, 0, 0.08);
   --opptrix-overlay-sidebar-hover: #F2F2F7;
   --opptrix-overlay-sidebar-selected: #F2F2F7;
   --opptrix-motion-fast: 140ms;
@@ -143,6 +146,9 @@ body {
   --opptrix-settings-panel-border-color: #3A3A3C;
   --opptrix-glass-surface-bg: rgba(44, 44, 46, 0.72);
   --opptrix-glass-surface-border: rgba(255, 255, 255, 0.12);
+  --opptrix-segmented-track: rgba(118, 118, 128, 0.24);
+  --opptrix-segmented-thumb-bg: rgba(72, 72, 74, 0.96);
+  --opptrix-segmented-thumb-shadow: 0 1px 2px rgba(0, 0, 0, 0.32), 0 2px 8px rgba(0, 0, 0, 0.24);
   --opptrix-overlay-sidebar-hover: #3A3A3C;
   --opptrix-overlay-sidebar-selected: #48484A;
 }
@@ -655,6 +661,15 @@ select:focus-visible {
   overflow: visible !important;
 }
 
+.opptrix-dialog-alert-actions {
+  width: 100%;
+}
+
+[data-theme="dark"] .opptrix-glass-dialog-surface .fui-DialogTitle__action .fui-Button:hover,
+[data-theme="dark"] .opptrix-glass-dialog-surface .fui-DialogTitle__action button:hover {
+  background-color: rgba(255, 255, 255, 0.08) !important;
+}
+
 /* ── Frosted glass panel / dropdown — 对齐 OpptrixDropdownPanel / 选股策略 ── */
 .opptrix-glass-panel {
   background: var(--opptrix-glass-surface-bg);
@@ -662,6 +677,61 @@ select:focus-visible {
   -webkit-backdrop-filter: blur(16px) saturate(160%);
   border: 1px solid var(--opptrix-glass-panel-border);
   box-shadow: var(--opptrix-glass-panel-shadow);
+}
+
+/* iOS-style segmented control — frosted capsule + sliding thumb */
+.opptrix-segmented-control {
+  background: var(--opptrix-segmented-track);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid var(--opptrix-glass-panel-border-color);
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+
+.opptrix-segmented-thumb {
+  background: var(--opptrix-segmented-thumb-bg);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  box-shadow: var(--opptrix-segmented-thumb-shadow);
+}
+
+/* Sidebar-embedded: recessed groove, flat thumb — aligns with list row hover height */
+.opptrix-segmented-control-embedded {
+  background: rgba(118, 118, 128, 0.1);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow:
+    inset 0 0 0 1px rgba(60, 60, 67, 0.07),
+    inset 0 1px 2px rgba(0, 0, 0, 0.04);
+}
+
+.opptrix-segmented-thumb-embedded {
+  background: var(--opptrix-glass-nav-selected);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border: none;
+  box-shadow: none;
+}
+
+[data-theme="dark"] .opptrix-segmented-control {
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+
+[data-theme="dark"] .opptrix-segmented-thumb {
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+[data-theme="dark"] .opptrix-segmented-control-embedded {
+  background: rgba(118, 118, 128, 0.2);
+  box-shadow:
+    inset 0 0 0 1px rgba(255, 255, 255, 0.06),
+    inset 0 1px 2px rgba(0, 0, 0, 0.22);
+}
+
+[data-theme="dark"] .opptrix-segmented-thumb-embedded {
+  background: var(--opptrix-glass-nav-selected);
 }
 
 .fui-PopoverSurface.opptrix-glass-panel,
@@ -1211,6 +1281,31 @@ select:focus-visible {
   }
 
   .opptrix-session-item:hover .opptrix-session-archive {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-actions {
+    opacity: 1;
+    pointer-events: auto;
+  }
+
+  .opptrix-archive-inline-input.fui-Input,
+  .opptrix-archive-inline-input.fui-Input:hover {
+    background-color: var(--opptrix-surface-muted) !important;
+    border: none !important;
+    box-shadow: none !important;
+  }
+
+  .opptrix-archive-inline-input.fui-Input:focus-within {
+    background-color: var(--opptrix-surface-hover) !important;
+  }
+
+  .opptrix-archive-inline-input.fui-Input::after {
+    display: none !important;
+  }
+
+  .opptrix-archive-session-item:hover .opptrix-archive-session-delete {
     opacity: 1;
     pointer-events: auto;
   }

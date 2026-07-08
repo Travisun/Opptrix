@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import SessionSidebar from './SessionSidebar'
+import SessionSidebar, { type SidebarListTab } from './SessionSidebar'
+import type { ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
@@ -13,6 +14,8 @@ import {
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
   archiveSession,
+  listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
+  clearSessionArchiveFolder,
 } from '../api/client'
 import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
@@ -30,6 +33,7 @@ import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
@@ -126,6 +130,7 @@ const useStyles = makeStyles({
 
 export default function ChatApp() {
   const s = useStyles()
+  const { confirm } = useOpptrixDialogAlert()
   const breakpoint = useBreakpoint()
   const isMobile = breakpoint === 'mobile'
   const {
@@ -214,6 +219,8 @@ export default function ChatApp() {
   }, [view, toggleVisible])
 
   const [sessions, setSessions] = useState<SessionMeta[]>([])
+  const [archivedGroups, setArchivedGroups] = useState<ArchiveFolderGroup[]>([])
+  const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
@@ -264,6 +271,12 @@ export default function ChatApp() {
     const { sessions: list } = await listSessions()
     setSessions(list)
     return list
+  }, [])
+
+  const refreshArchived = useCallback(async () => {
+    const { groups } = await listArchivedSessions()
+    setArchivedGroups(groups)
+    return groups
   }, [])
 
   const loadSession = useCallback(async (id: string) => {
@@ -380,7 +393,13 @@ export default function ChatApp() {
   }
 
   const handleDelete = async (id: string) => {
-    if (!confirm('确定删除此对话？')) return
+    const ok = await confirm({
+      title: '确定删除此对话？',
+      message: '删除后无法恢复。',
+      confirmLabel: '删除',
+      confirmTone: 'danger',
+    })
+    if (!ok) return
     try {
       await deleteSession(id)
       const list = await refreshSessions()
@@ -403,6 +422,7 @@ export default function ChatApp() {
       await archiveSession(id, folderId)
       const list = await refreshSessions()
       setSessions(list)
+      void refreshArchived()
       if (activeId === id) {
         if (list.length > 0) {
           await loadSession(list[0].id)
@@ -417,6 +437,81 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '归档失败')
     }
   }
+
+  const handleCreateArchiveFolder = useCallback(async (title: string) => {
+    try {
+      await createSessionArchiveFolder(title)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '创建文件夹失败')
+    }
+  }, [refreshArchived])
+
+  const handleRenameArchiveFolder = useCallback(async (id: string, title: string) => {
+    try {
+      await renameSessionArchiveFolder(id, title)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '重命名失败')
+    }
+  }, [refreshArchived])
+
+  const handleDeleteArchiveFolder = useCallback(async (id: string) => {
+    try {
+      await deleteSessionArchiveFolder(id)
+      await refreshArchived()
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除文件夹失败')
+    }
+  }, [refreshArchived])
+
+  const handleClearArchiveFolder = useCallback(async (id: string) => {
+    try {
+      const clearedIds = new Set(
+        archivedGroups.find(g => g.folder.id === id)?.sessions.map(s => s.id) ?? [],
+      )
+      await clearSessionArchiveFolder(id)
+      await refreshArchived()
+      if (activeId && clearedIds.has(activeId)) {
+        const list = await refreshSessions()
+        if (list.length > 0) {
+          await loadSession(list[0].id)
+        } else {
+          setActiveId(null)
+          setMessages([])
+          setContextRef(null)
+          setSessionModelState(undefined)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '清空文件夹失败')
+    }
+  }, [activeId, archivedGroups, loadSession, refreshArchived, refreshSessions])
+
+  const handleDeleteArchivedSession = useCallback(async (id: string) => {
+    try {
+      await deleteSession(id)
+      await refreshArchived()
+      if (activeId === id) {
+        const list = await refreshSessions()
+        if (list.length > 0) {
+          await loadSession(list[0].id)
+        } else {
+          setActiveId(null)
+          setMessages([])
+          setContextRef(null)
+          setSessionModelState(undefined)
+        }
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '删除失败')
+    }
+  }, [activeId, loadSession, refreshArchived, refreshSessions])
+
+  const handleSidebarListTabChange = useCallback((tab: SidebarListTab) => {
+    setSidebarListTab(tab)
+    if (tab === 'archive') void refreshArchived()
+  }, [refreshArchived])
 
   const handleOpenSearch = useCallback(() => {
     closeDrawer()
@@ -750,6 +845,14 @@ export default function ChatApp() {
     onOpenSearch: handleOpenSearch,
     onOpenSettings: () => { openSettings() },
     onOpenNewsCenter: openNewsCenter,
+    listTab: sidebarListTab,
+    onListTabChange: handleSidebarListTabChange,
+    archivedGroups,
+    onCreateArchiveFolder: handleCreateArchiveFolder,
+    onRenameArchiveFolder: handleRenameArchiveFolder,
+    onDeleteArchiveFolder: handleDeleteArchiveFolder,
+    onClearArchiveFolder: handleClearArchiveFolder,
+    onDeleteArchivedSession: handleDeleteArchivedSession,
   }
 
   return (

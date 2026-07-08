@@ -1,6 +1,6 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import {
-  Text, makeStyles, mergeClasses,
+  makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
@@ -8,14 +8,17 @@ import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import { isElectron } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 import AppUpdateNotice from '../desktop/AppUpdateNotice'
 import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
+import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
+export type SidebarListTab = 'chat' | 'archive'
 
 const useStyles = makeStyles({
   sidebar: {
@@ -93,6 +96,10 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     padding: '8px 8px 0',
   },
+  menuSection: {
+    marginTop: '15px',
+    flexShrink: 0,
+  },
   menuRow: {
     ...sidebarTopMenuRow,
     marginBottom: '6px',
@@ -108,6 +115,17 @@ const useStyles = makeStyles({
     textTransform: 'uppercase',
     letterSpacing: '0.04em',
     padding: '6px 14px 2px',
+  },
+  listTabWrap: {
+    margin: '19px 8px 6px',
+    flexShrink: 0,
+  },
+  chatListWrap: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
   },
   list: {
     flex: 1,
@@ -255,6 +273,14 @@ interface SessionSidebarProps {
   onOpenSettings: () => void
   onOpenNewsCenter: () => void
   onClose?: () => void
+  listTab?: SidebarListTab
+  onListTabChange?: (tab: SidebarListTab) => void
+  archivedGroups?: ArchiveFolderGroup[]
+  onCreateArchiveFolder?: (title: string) => void | Promise<void>
+  onRenameArchiveFolder?: (id: string, title: string) => void | Promise<void>
+  onDeleteArchiveFolder?: (id: string) => void | Promise<void>
+  onClearArchiveFolder?: (id: string) => void | Promise<void>
+  onDeleteArchivedSession?: (id: string) => void | Promise<void>
 }
 
 function formatDate(iso: string) {
@@ -265,6 +291,14 @@ export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat',
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onClose,
+  listTab: listTabProp,
+  onListTabChange,
+  archivedGroups = [],
+  onCreateArchiveFolder,
+  onRenameArchiveFolder,
+  onDeleteArchiveFolder,
+  onClearArchiveFolder,
+  onDeleteArchivedSession,
 }: SessionSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
@@ -272,6 +306,12 @@ export default function SessionSidebar({
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
   const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
+  const [listTabState, setListTabState] = useState<SidebarListTab>('chat')
+  const listTab = listTabProp ?? listTabState
+  const setListTab = useCallback((tab: SidebarListTab) => {
+    if (listTabProp == null) setListTabState(tab)
+    onListTabChange?.(tab)
+  }, [listTabProp, onListTabChange])
   const [archiveMenu, setArchiveMenu] = useState<{ sessionId: string; anchor: HTMLElement } | null>(null)
   const archiveAnchorRef = useRef<HTMLElement | null>(null)
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
@@ -289,6 +329,7 @@ export default function SessionSidebar({
         </div>
       )}
 
+      <div className={s.menuSection}>
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
@@ -311,9 +352,23 @@ export default function SessionSidebar({
         <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新闻中心</span>
       </button>
+      </div>
 
-      <Text className={s.sectionLabel}>对话</Text>
+      <div className={s.listTabWrap}>
+        <OpptrixSegmentedControl
+          aria-label="对话列表"
+          variant="embedded"
+          value={listTab}
+          options={[
+            { value: 'chat', label: '对话' },
+            { value: 'archive', label: '归档' },
+          ]}
+          onChange={setListTab}
+        />
+      </div>
 
+      {listTab === 'chat' ? (
+      <div className={s.chatListWrap}>
       <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {sessions.length === 0 && (
           <div className={s.empty}>暂无历史对话</div>
@@ -362,6 +417,23 @@ export default function SessionSidebar({
           )
         })}
       </div>
+      </div>
+      ) : (
+        onCreateArchiveFolder && onRenameArchiveFolder && onDeleteArchiveFolder && onDeleteArchivedSession ? (
+          <SessionSidebarArchivePanel
+            groups={archivedGroups}
+            activeId={activeId}
+            onSelect={handleSelect}
+            onDeleteSession={onDeleteArchivedSession}
+            onCreateFolder={onCreateArchiveFolder}
+            onRenameFolder={onRenameArchiveFolder}
+            onDeleteFolder={onDeleteArchiveFolder}
+            onClearFolder={onClearArchiveFolder}
+          />
+        ) : (
+          <div className={s.empty}>归档功能加载中…</div>
+        )
+      )}
 
       <div className={s.footer}>
         <AppUpdateNotice />

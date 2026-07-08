@@ -29,6 +29,42 @@ export function registerSearchRoutes(
     folders: agent.listSessionArchiveFolders(),
   }))
 
+  app.post<{ Body: { title?: string } }>('/api/sessions/archive-folders', async (req, reply) => {
+    const title = String(req.body?.title ?? '').trim()
+    if (!title) return reply.code(400).send({ error: 'title required' })
+    const folder = agent.createSessionArchiveFolder(title)
+    return { folder }
+  })
+
+  app.patch<{ Params: { id: string }; Body: { title?: string } }>(
+    '/api/sessions/archive-folders/:id',
+    async (req, reply) => {
+      const title = String(req.body?.title ?? '').trim()
+      if (!title) return reply.code(400).send({ error: 'title required' })
+      const folder = agent.renameSessionArchiveFolder(req.params.id, title)
+      if (!folder) return reply.code(400).send({ error: 'cannot rename folder' })
+      return { folder }
+    },
+  )
+
+  app.delete<{ Params: { id: string } }>(
+    '/api/sessions/archive-folders/:id',
+    async (req, reply) => {
+      const result = agent.deleteSessionArchiveFolder(req.params.id)
+      if (!result.ok) return reply.code(400).send({ error: 'cannot delete folder' })
+      return result
+    },
+  )
+
+  app.post<{ Params: { id: string } }>(
+    '/api/sessions/archive-folders/:id/clear',
+    async (req, reply) => {
+      const result = agent.clearSessionArchiveFolder(req.params.id)
+      if (!result.ok) return reply.code(404).send({ error: 'folder not found' })
+      return result
+    },
+  )
+
   app.post<{ Params: { id: string }; Body: { folderId?: string } }>(
     '/api/sessions/:id/archive',
     async (req, reply) => {
@@ -68,7 +104,7 @@ export function registerSearchRoutes(
   )
 
   app.get('/api/sessions/archived', async () => ({
-    groups: agent.listArchivedSessionsGrouped().map(g => ({
+    groups: agent.listAllArchivedByFolder().map(g => ({
       folder: g.folder,
       sessions: g.sessions,
     })),
