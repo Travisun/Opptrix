@@ -1,6 +1,6 @@
 # 新浪财经（sinafinance）API 覆盖
 
-独立 Provider：`sinafinance`（优先级 56）。`webfeed` 为兼容别名（优先级 50）。
+独立 Provider：`sinafinance`（优先级 56）。
 
 完整接口说明：`~/.cursor/api-captures/sina-finance/2026-07-07/api-spec-full.md`
 
@@ -35,8 +35,7 @@
 | `LOCKUP_EXPIRY` | `kind/xsjj` |
 | `MARGIN_TRADE` | `kind/rzrq` 全市场筛选 |
 | `PERF_FORECAST` | `vFD_AchievementNotice` |
-| `STOCK_MONEY_FLOW` | `MoneyFlow.ssi_ssfx_flzjtj` |
-| `INTRADAY_TICK` | `CN_TransListV2` / 分时 |
+| `ETF_LIST` / `ETF_PROFILE` / `ETF_NAV` / `ETF_HOLDINGS` | 基金中心 + `FundPageInfoService` + 宽基指数成分代理 |
 
 ## 自定义方法
 

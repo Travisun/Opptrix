@@ -48,6 +48,10 @@ export class UserDataStore {
       key => this.markMigration(key),
       (ns, id) => this.getDocument(ns, id),
     )
+    this.providerSettings.migrateWebfeedToSinafinance(
+      key => this.hasMigration(key),
+      key => this.markMigration(key),
+    )
   }
 
   static getInstance(): UserDataStore {

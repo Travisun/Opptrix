@@ -14,7 +14,6 @@ import { BAOSTOCK_MANIFEST } from './baostock/manifest.js'
 import { ZZSHARE_MANIFEST } from './zzshare/manifest.js'
 import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
 import { SINAFINANCE_MANIFEST } from './sinafinance/manifest.js'
-import { WEBFEED_MANIFEST } from './webfeed/manifest.js'
 import { TENCENT_MANIFEST } from './tencent/manifest.js'
 import { testTushareConnection } from './tushare/api/client.js'
 import { testTickflowConnection } from './tickflow/api/client.js'
@@ -22,7 +21,6 @@ import { testBaostockConnection } from './baostock/api/client.js'
 import { testZzshareConnection } from './zzshare/api/client.js'
 import { testTonghuashunConnection } from './tonghuashun/api/client.js'
 import { testSinafinanceConnection } from './sinafinance/api/probe.js'
-import { testWebfeedConnection } from './webfeed/probe.js'
 import { testTencentConnection } from './tencent/api/probe.js'
 import type { ProviderConfigStore } from './config-store.js'
 import { getManifestRegistry, type ManifestRegistry } from './manifest-registry.js'
@@ -44,7 +42,6 @@ const BUILTIN_MANIFESTS = [
   TONGHUASHUN_MANIFEST,
   TENCENT_MANIFEST,
   SINAFINANCE_MANIFEST,
-  WEBFEED_MANIFEST,
 ]
 
 function resolveDriverExport(mod: OpptrixProviderModule): RegistryProvider {
@@ -110,7 +107,6 @@ export class ProviderLoader {
       return testTonghuashunConnection(apiKey)
     })
     this.testHooks.set('sinafinance', async () => testSinafinanceConnection())
-    this.testHooks.set('webfeed', async () => testWebfeedConnection())
     this.testHooks.set('tencent', async () => testTencentConnection())
   }
 

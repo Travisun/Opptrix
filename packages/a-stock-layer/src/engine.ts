@@ -21,6 +21,7 @@ import { validateResponse } from './core/data-validator.js'
 import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
+import { resolveProviderAlias } from './providers/common/provider-aliases.js'
 import { getUserDataStore } from '@opptrix/user-store'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
 import { isCnEtfCode } from './core/instrument.js'
@@ -945,14 +946,15 @@ export class MarketDataEngine {
     methodName: string,
     args: unknown[] = [],
   ): Promise<{ success: boolean; data?: unknown; error?: string }> {
-    const def = findCustomMethod(providerId, methodName)
+    const resolvedId = resolveProviderAlias(providerId)
+    const def = findCustomMethod(resolvedId, methodName)
     if (!def) {
       return { success: false, error: `未知的自定义方法: ${providerId}.${methodName}` }
     }
 
-    const driver = this.registry.get(providerId) as Record<string, unknown> | undefined
+    const driver = this.registry.get(resolvedId) as Record<string, unknown> | undefined
     if (!driver) {
-      return { success: false, error: `Provider ${providerId} 未注册` }
+      return { success: false, error: `Provider ${resolvedId} 未注册` }
     }
 
     const fn = driver[methodName] as ((...a: unknown[]) => Promise<unknown>) | undefined
@@ -964,31 +966,31 @@ export class MarketDataEngine {
       const health = getProviderHealthTracker()
       const capStr = `custom:${methodName}`
 
-      if (health.shouldSkip(providerId, capStr)) {
-        return { success: false, error: `${providerId} 当前熔断中，请稍后重试` }
+      if (health.shouldSkip(resolvedId, capStr)) {
+        return { success: false, error: `${resolvedId} 当前熔断中，请稍后重试` }
       }
 
-      if (isProviderCapabilityDenied(providerId, capStr)) {
-        return { success: false, error: `${providerId}.${methodName} 无权限（已登记屏蔽）` }
+      if (isProviderCapabilityDenied(resolvedId, capStr)) {
+        return { success: false, error: `${resolvedId}.${methodName} 无权限（已登记屏蔽）` }
       }
 
       const result = await this.withProviderTimeout(
         () => fn.apply(driver, args),
         15_000,
-        providerId,
+        resolvedId,
       )
 
-      health.recordSuccess(providerId, capStr)
+      health.recordSuccess(resolvedId, capStr)
       return { success: true, data: result }
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       const health = getProviderHealthTracker()
       const capStr = `custom:${methodName}`
       if (isPermissionDeniedError(e)) {
-        recordProviderPermissionDenial(providerId, capStr, msg)
+        recordProviderPermissionDenial(resolvedId, capStr, msg)
         this.registry.rebuildIndicesWithRanking()
       } else {
-        health.recordFailure(providerId, capStr, msg)
+        health.recordFailure(resolvedId, capStr, msg)
       }
       return { success: false, error: msg }
     }

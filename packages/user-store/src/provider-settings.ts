@@ -8,6 +8,7 @@ import type {
 } from '@opptrix/shared'
 
 const MIGRATION_KEY = 'provider_settings_v1'
+const WEBFEED_REMOVED_KEY = 'webfeed_removed_v1'
 
 export function initProviderSettingsSchema(db: Database.Database) {
   db.exec(`
@@ -78,6 +79,57 @@ export class ProviderSettingsRepository {
       })
     }
     markMigration(MIGRATION_KEY)
+  }
+
+  migrateWebfeedToSinafinance(
+    hasMigration: (key: string) => boolean,
+    markMigration: (key: string) => void,
+  ) {
+    if (hasMigration(WEBFEED_REMOVED_KEY)) return
+
+    const webfeed = this.get('webfeed')
+    if (webfeed) {
+      const sinaExisting = this.get('sinafinance')
+      const patch: ProviderSettingsPatch = {}
+
+      if (webfeed.enabled && (!sinaExisting || !sinaExisting.enabled)) {
+        patch.enabled = true
+      }
+      if (
+        webfeed.priorityMode === 'custom'
+        && webfeed.priority != null
+        && (!sinaExisting || sinaExisting.priorityMode !== 'custom')
+      ) {
+        patch.priorityMode = 'custom'
+        patch.priority = webfeed.priority
+      }
+      if (Object.keys(patch).length > 0) {
+        this.save('sinafinance', patch)
+      }
+
+      for (const ov of this.listBindingOverrides('webfeed')) {
+        const existing = this.getBindingOverride(
+          'sinafinance',
+          ov.market,
+          ov.assetClass,
+          ov.capability,
+        )
+        if (!existing) {
+          this.saveBindingOverride(
+            'sinafinance',
+            ov.market,
+            ov.assetClass,
+            ov.capability,
+            { enabled: ov.enabled, priority: ov.priority },
+          )
+        }
+      }
+
+      this.db.prepare('DELETE FROM provider_binding_overrides WHERE provider_id = ?').run('webfeed')
+      this.db.prepare('DELETE FROM provider_settings WHERE provider_id = ?').run('webfeed')
+    }
+
+    markMigration(WEBFEED_REMOVED_KEY)
   }
 
   get(providerId: string): ProviderSettingsRow | null {

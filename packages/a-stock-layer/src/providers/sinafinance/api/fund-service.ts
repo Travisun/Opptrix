@@ -30,6 +30,27 @@ function withSource<T extends Record<string, unknown>>(code: string, row: T) {
   return { code: normalizeCode(code), ...row, source: SINA_SOURCE }
 }
 
+/** ETF 基金列表全量（自动分页） */
+export async function fetchSinaEtfListAll(opts: {
+  pageSize?: number
+  node?: SinaFundMarketNode
+} = {}): Promise<Array<{ code: string; name?: string; symbol?: string }>> {
+  const pageSize = Math.min(Math.max(opts.pageSize ?? 80, 20), 200)
+  const all: Array<{ code: string; name?: string; symbol?: string }> = []
+  let page = 1
+  for (;;) {
+    const result = await fetchSinaEtfList({ ...opts, page, pageSize })
+    for (const item of result.items) {
+      const code = normalizeCode(String(item.code ?? ''))
+      if (!code) continue
+      all.push({ code, name: item.name, symbol: item.symbol })
+    }
+    if (!result.hasNext || result.items.length < pageSize) break
+    page += 1
+  }
+  return all
+}
+
 /** ETF 基金列表（场内行情，默认 node=etf_hq_fund） */
 export async function fetchSinaEtfList(opts: {
   page?: number

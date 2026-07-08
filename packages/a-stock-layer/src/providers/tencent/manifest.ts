@@ -2,6 +2,7 @@ import { Capability } from '../../core/capabilities.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { cnEquityEtfIndex } from '../common/bindings.js'
+import { TENCENT_CN_ETF_CAPABILITIES } from '../common/etf-capabilities.js'
 import { TENCENT_SETTINGS } from './settings.js'
 
 /** 腾讯行情中心公开接口能力 */
@@ -20,6 +21,7 @@ export const TENCENT_CAPS = [
   Capability.BLOCK_TRADE,
   Capability.SECTOR_LIST,
   Capability.PEER_COMPANY,
+  ...TENCENT_CN_ETF_CAPABILITIES,
 ]
 
 const INDEX_CAPS = [
@@ -43,7 +45,12 @@ export const TENCENT_SPEC: ProviderManifestSpec = {
     ].includes(c)),
     INDEX_CAPS,
     p,
-    [Capability.STOCK_REALTIME, Capability.STOCK_KLINE, Capability.NEWS],
+    [
+      Capability.STOCK_REALTIME,
+      Capability.STOCK_KLINE,
+      Capability.NEWS,
+      ...TENCENT_CN_ETF_CAPABILITIES,
+    ],
     maxConcurrent,
   ),
   settings: TENCENT_SETTINGS,

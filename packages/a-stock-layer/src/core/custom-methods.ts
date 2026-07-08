@@ -8,6 +8,8 @@
  *   2. invoke_provider_custom_method — call any declared method
  */
 
+import { resolveProviderAlias } from '../providers/common/provider-aliases.js'
+
 /**
  * Provider 自定义方法参数定义 — 描述单个参数的名称、类型、描述和默认值。
  *
@@ -571,9 +573,6 @@ const SINA_CUSTOM: CustomMethodDef[] = [
   },
 ]
 
-/** @deprecated 与 {@link SINA_CUSTOM} 相同，保留 webfeed 兼容 */
-const WEBFEED_CUSTOM = SINA_CUSTOM
-
 const SINAFINANCE_CUSTOM = SINA_CUSTOM
 
 const ZZSHARE_CUSTOM: CustomMethodDef[] = [
@@ -623,12 +622,12 @@ const ALL_CUSTOM_METHODS: ProviderCustomMethods[] = [
   { providerId: 'zzshare', methods: ZZSHARE_CUSTOM },
   { providerId: 'tencent', methods: TENCENT_CUSTOM },
   { providerId: 'sinafinance', methods: SINAFINANCE_CUSTOM },
-  { providerId: 'webfeed', methods: WEBFEED_CUSTOM },
 ]
 
 export function listProviderCustomMethods(providerId?: string): ProviderCustomMethods[] {
   if (providerId) {
-    return ALL_CUSTOM_METHODS.filter(p => p.providerId === providerId)
+    const resolved = resolveProviderAlias(providerId)
+    return ALL_CUSTOM_METHODS.filter(p => p.providerId === resolved)
   }
   return ALL_CUSTOM_METHODS
 }
@@ -637,7 +636,8 @@ export function findCustomMethod(
   providerId: string,
   methodName: string,
 ): CustomMethodDef | undefined {
-  const provider = ALL_CUSTOM_METHODS.find(p => p.providerId === providerId)
+  const resolved = resolveProviderAlias(providerId)
+  const provider = ALL_CUSTOM_METHODS.find(p => p.providerId === resolved)
   return provider?.methods.find(m => m.method === methodName)
 }
 
