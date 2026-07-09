@@ -379,9 +379,19 @@ export interface MarketDynamicsSection {
   items: MarketIndexQuote[]
 }
 
+export interface MarketStockMover {
+  code: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  change_amt?: number | null
+}
+
 export interface MarketDynamicsData {
   refreshed_at: string
   sections: MarketDynamicsSection[]
+  cn_gainers?: MarketStockMover[]
+  cn_losers?: MarketStockMover[]
 }
 
 export interface StockSearchItem {

@@ -803,12 +803,14 @@ export class ResearchHub {
   }
 
   private async marketDynamics(t0: number) {
-    const [homeR, majorR, asiaR, europeR, americaR] = await Promise.all([
+    const [homeR, majorR, asiaR, europeR, americaR, gainersR, losersR] = await Promise.all([
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
       this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
       this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
       this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['EU', 1, 40, 2, 'desc']),
       this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AM', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'asc']),
     ])
 
     const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
@@ -839,6 +841,18 @@ export class ResearchHub {
         location: String(row.location ?? '').trim() || undefined,
         trade_state_label: String(row.tradeStateLabel ?? '').trim() || undefined,
       })).filter(item => item.code || item.name)
+    }
+
+    const mapMoverItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
+      })).filter(item => item.code)
     }
 
     const sections = [
@@ -874,6 +888,8 @@ export class ResearchHub {
     return ok({
       refreshed_at: new Date().toISOString(),
       sections,
+      cn_gainers: mapMoverItems(gainersR),
+      cn_losers: mapMoverItems(losersR),
     }, '市场动态', t0)
   }
 
