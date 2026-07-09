@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.12",
+  "version": "0.6.0-dev.13",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
@@ -17,8 +17,8 @@
   "scripts": {
     "dev": "node scripts/dev.mjs",
     "build": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false",
-    "build:dir": "OPPTRIX_MAC_UNSIGNED=1 node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false -c.mac.hardenedRuntime=false -c.mac.identity=-",
-    "build:local": "OPPTRIX_MAC_UNSIGNED=1 CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false -c.mac.hardenedRuntime=false -c.mac.identity=-",
+    "build:dir": "OPPTRIX_MAC_UNSIGNED=1 node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false -c.mac.hardenedRuntime=false",
+    "build:local": "OPPTRIX_MAC_UNSIGNED=1 CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false -c.mac.hardenedRuntime=false",
     "build:package": "node scripts/prebuild.mjs && node scripts/build-package.mjs",
     "build:package:mac-arm64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --arm64",
     "build:package:mac-x64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --x64",
@@ -32,6 +32,7 @@
     "productName": "Opptrix",
     "copyright": "Copyright © 2026 催书书",
     "electronVersion": "35.7.5",
+    "afterPack": "./scripts/after-pack-adhoc.cjs",
     "npmRebuild": false,
     "nodeGypRebuild": false,
     "protocols": [

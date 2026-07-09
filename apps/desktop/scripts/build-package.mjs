@@ -14,8 +14,8 @@ const isMacBuild = platformArgs.includes('--mac')
 const macUnsigned = process.env.OPPTRIX_MAC_UNSIGNED === '1'
 
 if (isMacBuild && macUnsigned) {
-  console.log('macOS unsigned build: ad-hoc sign, hardenedRuntime disabled')
-  ebArgs.push('-c.mac.hardenedRuntime=false', '-c.mac.identity=-')
+  console.log('macOS unsigned build: hardenedRuntime disabled, afterPack ad-hoc sign')
+  ebArgs.push('-c.mac.hardenedRuntime=false')
 }
 
 const result = spawnSync(NPM_CMD, ['exec', '--', 'electron-builder', ...ebArgs], {

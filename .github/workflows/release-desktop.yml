@@ -140,7 +140,7 @@ jobs:
               TMP=$(mktemp -d)
               KC="$TMP/signing.keychain-db"
               CERT="$TMP/cert.p12"
-              echo "$CSC_LINK" | base64 --decode > "$CERT"
+              echo "$CSC_LINK" | base64 --decode > "$CERT" 2>/dev/null || echo "$CSC_LINK" | base64 -D > "$CERT"
               security create-keychain -p ci "$KC"
               security unlock-keychain -p ci "$KC"
               security set-keychain-settings "$KC"
