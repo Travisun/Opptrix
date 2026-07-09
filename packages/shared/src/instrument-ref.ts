@@ -61,5 +61,7 @@ export function isLikelyCnEquityInput(raw: string): boolean {
   if (/^(US|HK|JP|KR|CRYPTO|NYSE|NASDAQ|AMEX|BINANCE|OKX):/i.test(s)) return false
   if (s.includes('/')) return false
   if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(s) && !/^\d+$/.test(s)) return false
+  // 保守兜底：1-6 位数字都可能是 A 股（含省略前导 0 的短写），但 1-5 位存在跨市场歧义，
+  // 调用方应用 isAmbiguousNumericCode 进一步判断并走 instrument_search 消歧。
   return /^\d{1,6}$/.test(s)
 }

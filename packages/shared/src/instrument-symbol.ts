@@ -17,6 +17,21 @@ export function canonicalCnSymbol(symbol: string): string {
   return digits.padStart(6, '0')
 }
 
+/**
+ * 裸数字代码存在跨市场歧义：A 股固定 6 位，港股为 5 位（含前导 0），
+ * 日韩也使用 4-6 位数字。只有输入为精确 6 位纯数字时才能无歧义判为 A 股；
+ * 1-5 位数字需要上层经 instrument_search 跨市场搜索消歧，不能本地直接归 CN。
+ */
+export function isUnambiguousCnDigits(raw: string): boolean {
+  return /^\d{6}$/.test(raw.trim())
+}
+
+/** 1-5 位纯数字 — 可能是港股（00700）、日韩股票、或省略前导 0 的 A 股简写，需要搜索消歧 */
+export function isAmbiguousNumericCode(raw: string): boolean {
+  const s = raw.trim()
+  return /^\d{1,5}$/.test(s)
+}
+
 /** 美股 ticker — 大写、去交易所前缀 */
 export function canonicalUsSymbol(symbol: string): string {
   let s = symbol.trim().toUpperCase().replace(/^(US|NYSE|NASDAQ|AMEX):/i, '')
@@ -173,13 +188,28 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
     })
   }
 
-  if (/^\d{1,6}$/.test(text)) {
+  // 6 位纯数字 → A 股（A 股代码段固定 6 位，CN 内部可继续区分 SH/SZ/BJ/ETF/INDEX），
+  // 本地解析无歧义。1-5 位数字属于跨市场歧义码（港股 5 位码如 00700、日韩代码、省略前导 0 的
+  // A 股短写）：不直接当错，兜底按 A 股原样 symbol 构造（不 padStart 到 6 位），
+  // 但调用方应优先经 instrument_search 跨市场搜索拿到带正确 market 的 ref。
+  // 可用 isAmbiguousNumericCode(text) 判断并走搜索路径。
+  if (isUnambiguousCnDigits(text)) {
     const symbol = canonicalCnSymbol(text)
     return normalizeInstrumentRef({
       market: 'CN',
       assetClass: inferCnAssetClassFromSymbol(symbol),
       symbol,
     })
+  }
+  if (isAmbiguousNumericCode(text)) {
+    // 跨市场歧义的短数字码（1-5 位）：不经过 canonicalCnSymbol 规范化（避免 padStart 到 6 位
+    // 把 "700" 错当 "000700"），返回一个 symbol 为原码的 CN EQUITY ref 作为兜底。
+    // 调用方应优先用 isAmbiguousNumericCode(text) 判断并经 instrument_search 消歧。
+    return {
+      market: 'CN',
+      assetClass: 'EQUITY',
+      symbol: text.trim(),
+    }
   }
 
   if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(text) && !/^\d+$/.test(text)) {

@@ -96,13 +96,17 @@ export function toInstrumentRef(
   return normalizeInstrumentRef({ market: 'US', assetClass: 'EQUITY', symbol: raw })
 }
 
-/** Heuristic: crypto pair → US ticker → CN 6-digit */
+/** Heuristic: crypto pair → US ticker → CN 6-digit.
+ *  1-5 位纯数字有跨市场歧义（港股 5 位码/日韩/省略前导 0 的 A 股短写），
+ *  不在这里武断归 CN；返回 'CN' 仅作为兜底，上层应优先经 parseCanonicalInstrumentInput
+ *  与 instrument_search 消歧后再构造 InstrumentRef。 */
 export function inferMarketFromSymbol(raw: string): Market {
   if (/^(US|NYSE|NASDAQ|AMEX):/i.test(raw.trim())) return 'US'
   if (/^(CRYPTO|BINANCE|OKX):/i.test(raw.trim())) return 'CRYPTO'
   if (isCryptoPairNotation(raw)) return 'CRYPTO'
   const s = raw.trim()
-  if (/^\d+$/.test(s) && s.length <= 6) return 'CN'
+  // 仅 6 位纯数字可无歧义判为 A 股；短数字码交由上层搜索消歧。
+  if (/^\d{6}$/.test(s)) return 'CN'
   if (isValidUsSymbol(s)) return 'US'
   return 'CN'
 }
