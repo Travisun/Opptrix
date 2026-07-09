@@ -99,37 +99,27 @@ export interface ChatProgressOptions {
 // ── 工具中文标签映射 ──
 
 const TOOL_LABELS: Record<string, string> = {
-  evaluate_stock: '评估个股因子与评分',
+  get_market_regime: '分析宏观市场状态',
+  get_market_dynamics: '获取市场动态全景',
+  get_trend_brief: '生成趋势研判',
   screen_stocks: '按条件筛选股票',
-  local_screen_stocks: '本地因子初选',
-  screen_local_universe: '本地多维度筛选',
-  list_local_industries: '读取本地行业列表',
-  screen_local_industry_stocks: '行业内策略筛选',
-  get_local_industry_stocks: '读取行业成分股',
-  get_market_db_status: '查询本地数据库状态',
-  get_market_db_sync_state: '查看数据同步进度',
-  trigger_market_db_sync: '触发本地数据同步',
-  list_local_screen_factors: '读取可用筛选因子',
-  get_local_universe_screen_schema: '读取筛选维度说明',
-  batch_stock_snapshots: '批量获取候选股快照',
+  screen_us_universe: '筛选美股候选',
+  screen_hk_universe: '筛选港股候选',
+  screen_crypto_universe: '筛选 Crypto 交易对',
+  get_local_data_status: '查询本地数据状态',
+  get_etf_list: '读取 ETF 列表',
+  get_etf_scorecard: '评估 ETF 决策雷达',
   batch_instrument_snapshots: '批量获取候选标的快照',
-  get_stock_quotes: '获取实时行情',
+  list_local_industries: '读取本地行业列表',
+  get_local_industry_stocks: '读取行业成分股',
   get_watchlist: '读取关注列表',
   get_watchlist_radar: '生成关注股雷达摘要',
-  get_stock_kline: '获取 K 线数据',
-  get_stock_cyq: '分析筹码分布',
-  get_stock_chart: '获取图表数据',
-  get_stock_detail: '获取个股详情',
-  search_stocks: '搜索股票',
-  get_strategy_signal: '分析策略信号',
   institution_rating: '汇总机构评级',
   institution_report: '生成机构评级报告',
   analyze_portfolio: '分析组合因子暴露',
   get_closing_report: '生成收盘市场报告',
   get_morning_brief: '生成开盘早报',
   run_backtest: '运行因子回测',
-  strategy_verify: '验证策略历史表现',
-  strategy_verify_report: '生成策略验证报告',
   strategy_report: '生成策略分析报告',
   industry_mining: '梳理产业链与代表公司',
   industry_mermaid: '生成产业链图谱',
@@ -137,7 +127,6 @@ const TOOL_LABELS: Record<string, string> = {
   get_portfolio_holdings: '读取实盘持仓',
   portfolio_trades: '查询交易流水',
   portfolio_summary: '汇总持仓盈亏',
-  get_latest_evaluation: '读取缓存评估结果',
   get_news_center_status: '查询资讯中心状态',
   list_news_groups: '读取资讯分组',
   list_news_sources: '读取资讯订阅来源',
@@ -222,35 +211,22 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
   const ref = stockRef(args, result)
 
   switch (tool) {
-    case 'get_stock_kline':
-      return ref ? `获取 ${ref} K 线数据` : '获取 K 线数据'
-    case 'get_stock_chart':
-      return ref ? `获取 ${ref} 图表数据` : '获取图表数据'
-    case 'get_stock_cyq':
-      return ref ? `分析 ${ref} 筹码分布` : '分析筹码分布'
-    case 'get_stock_detail':
-      return ref ? `获取 ${ref} 详情` : '获取个股详情'
-    case 'evaluate_stock':
-      return ref ? `评估 ${ref} 因子与评分` : '评估个股因子与评分'
-    case 'get_strategy_signal':
-      return ref ? `分析 ${ref} 策略信号` : '分析策略信号'
+    case 'get_trend_brief':
+      return ref ? `${ref} · ${base}` : base
+    case 'get_market_regime':
+    case 'get_market_dynamics':
+      return base
+    case 'batch_instrument_snapshots': {
+      const n = instrumentsCount(args) ?? codesCount(args)
+      return n != null ? `批量获取 ${n} 只候选标的快照` : '批量获取候选标的快照'
+    }
     case 'institution_rating':
     case 'institution_report':
     case 'get_instrument_institution_rating':
     case 'get_instrument_institution_report':
       return ref ? `汇总 ${ref} 机构观点` : base
-    case 'strategy_verify':
-    case 'strategy_verify_report':
     case 'strategy_report':
       return ref ? `${ref} · ${base}` : base
-    case 'batch_stock_snapshots': {
-      const n = codesCount(args)
-      return n != null ? `批量获取 ${n} 只候选股快照` : '批量获取候选股快照'
-    }
-    case 'batch_instrument_snapshots': {
-      const n = instrumentsCount(args) ?? codesCount(args)
-      return n != null ? `批量获取 ${n} 只候选标的快照` : '批量获取候选标的快照'
-    }
     case 'get_instrument_snapshot':
     case 'get_instrument_chart':
     case 'get_instrument_quotes':
@@ -262,10 +238,6 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const iref = instrumentRefFromArgs(args) ?? ref
       return iref ? `${base} · ${iref}` : base
     }
-    case 'get_stock_quotes': {
-      const n = codesCount(args)
-      return n != null ? `获取 ${n} 只股票实时行情` : '获取实时行情'
-    }
     case 'get_watchlist_radar': {
       const n = codesCount(args)
       return n != null ? `生成 ${n} 只股票雷达摘要` : '生成关注股雷达摘要'
@@ -274,32 +246,34 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const n = codesCount(args)
       return n != null ? `对 ${n} 只股票运行回测` : '运行因子回测'
     }
-    case 'search_stocks': {
+    case 'screen_stocks':
+    case 'screen_us_universe':
+    case 'screen_hk_universe':
+    case 'screen_crypto_universe': {
+      const conds = Array.isArray(args.conditions)
+        ? args.conditions.length
+        : Array.isArray(args.factor_conditions)
+          ? args.factor_conditions.length
+          : null
       const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
-      return kw ? `搜索「${kw}」` : '搜索股票'
+      if (kw) return `${base} · ${kw}`
+      return conds != null ? `${base}（${conds} 条条件）` : base
     }
     case 'industry_mining':
     case 'industry_mermaid': {
       const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
       return industry ? `${industry} · ${base}` : base
     }
-    case 'screen_stocks':
-    case 'local_screen_stocks':
-    case 'screen_local_universe':
-    case 'screen_local_industry_stocks': {
-      const conds = Array.isArray(args.conditions)
-        ? args.conditions.length
-        : Array.isArray(args.factor_conditions)
-          ? args.factor_conditions.length
-          : null
-      const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
-      if (industry) return `${industry} · ${base}`
-      return conds != null ? `${base}（${conds} 条条件）` : base
-    }
     case 'list_local_industries': {
       const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
       return kw ? `${base} · ${kw}` : base
     }
+    case 'get_local_industry_stocks': {
+      const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
+      return industry ? `${base} · ${industry}` : base
+    }
+    case 'get_industry_stats':
+      return base
     case 'ask_user': {
       const q = typeof args.prompt === 'string'
         ? args.prompt.trim()
@@ -535,6 +509,36 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
         : []
       if (labels.length) return `已选择：${labels.join('、')}`
       return '已收到你的确认'
+    }
+    case 'list_local_industries': {
+      const payload = envelope?.data ?? result
+      if (!payload || typeof payload !== 'object') return null
+      const p = payload as Record<string, unknown>
+      const n = Array.isArray(p.industries) ? p.industries.length : null
+      return n != null ? `共 ${n} 个行业` : null
+    }
+    case 'get_industry_stats': {
+      const payload = envelope?.data ?? result
+      if (!payload || typeof payload !== 'object') return null
+      const p = payload as Record<string, unknown>
+      const n = Array.isArray(p.items) ? p.items.length : null
+      return n != null ? `${n} 个行业统计` : null
+    }
+    case 'get_local_industry_stocks': {
+      const payload = envelope?.data ?? result
+      if (!payload || typeof payload !== 'object') return null
+      const p = payload as Record<string, unknown>
+      const industry = typeof p.industry === 'string' ? p.industry : ''
+      const n = Array.isArray(p.items) ? p.items.length : null
+      if (industry && n != null) return `${industry} · ${n} 只成分股`
+      return n != null ? `${n} 只成分股` : null
+    }
+    case 'industry_mining': {
+      const payload = envelope?.data ?? result
+      if (!payload || typeof payload !== 'object') return null
+      const p = payload as Record<string, unknown>
+      const name = typeof p.industry === 'string' ? p.industry : ''
+      return name ? `${name} 产业链分析完成` : '产业链分析完成'
     }
     default:
       return null

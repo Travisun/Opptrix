@@ -178,20 +178,31 @@ export class ToolRegistry {
 
     const tools: Omit<ToolDef, 'meta'>[] = [
       {
-        name: 'evaluate_stock', category: '个股分析',
-        description: '对单只股票做全面因子评估与评分卡打分',
+        name: 'get_market_regime', category: '市场',
+        description: '获取宏观市场状态（牛熊/风险偏好、建议策略方向）；A 股默认沪深300，美股用 SPY',
         parameters: S({
-          code: { type: 'string', description: '6位股票代码，如 600519' },
-          scorecard: { type: 'string', description: '评分卡名称，默认综合评估' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_evaluation', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          scorecard: a.scorecard ?? '综合评估',
+          profile_scope: { type: 'string', description: 'cn（默认 A 股）| us（美股）' },
         }),
+        handler: (a: Record<string, unknown>) => d('market_regime', a),
+      },
+      {
+        name: 'get_market_dynamics', category: '市场',
+        description: '获取市场动态全景：A 股/全球指数、涨跌榜、龙虎榜摘要',
+        parameters: S({}),
+        handler: () => d('market_dynamics', {}),
+      },
+      {
+        name: 'get_trend_brief', category: '个股分析',
+        description: 'A 股单股趋势研判：均线结构、相对强弱、可选持仓成本盈亏',
+        parameters: S({
+          code: { type: 'string', description: '6 位 A 股代码' },
+          holding_cost: { type: 'number', description: '可选，持仓成本价（元）' },
+        }, ['code']),
+        handler: (a: Record<string, unknown>) => d('trend_brief', a),
       },
       {
         name: 'screen_stocks', category: '选股',
-        description: '按因子条件在线筛选股票',
+        description: '按因子条件在线筛选 A 股',
         parameters: S({
           conditions: { type: 'array', description: '条件数组 [{factor, op, value}]，op 为 > >= < <= =' },
           scorecard: { type: 'string', description: '评分卡' },
@@ -200,10 +211,53 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('screening', { conditions: a.conditions, scorecard: a.scorecard, top_n: a.top_n ?? 20 }),
       },
       {
+        name: 'screen_us_universe', category: '选股',
+        description: '按关键词在线筛选美股名录（StockIndex）',
+        parameters: S({
+          keyword: { type: 'string', description: 'ticker 或公司名关键词' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_us_screen', a),
+      },
+      {
+        name: 'screen_hk_universe', category: '选股',
+        description: '按关键词在线筛选港股名录（StockIndex）',
+        parameters: S({
+          keyword: { type: 'string', description: '代码或公司名关键词' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_hk_screen', a),
+      },
+      {
+        name: 'screen_crypto_universe', category: '选股',
+        description: '按关键词/计价币筛选 Crypto 交易对名录',
+        parameters: S({
+          keyword: { type: 'string', description: '可选，匹配 pair 或 base' },
+          quote: { type: 'string', description: '可选，计价币如 USDT' },
+          base_contains: { type: 'string', description: '可选，base 币种包含' },
+          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_crypto_screen', a),
+      },
+      {
         name: 'get_watchlist', category: '组合管理',
         description: '读取用户关注列表（代码、名称、行业、备注、加入价）',
         parameters: S({}),
         handler: () => d('watchlist_list', {}),
+      },
+      {
+        name: 'get_watchlist_radar', category: '组合管理',
+        description: '关注股或多股雷达摘要（估值分位、主力净流入、评分）；省略 codes 则用用户关注列表',
+        parameters: S({
+          codes: { type: 'array', description: '可选，A 股 6 位代码数组；省略则读取关注列表' },
+        }),
+        handler: (a: Record<string, unknown>) => d('watchlist_radar', { codes: a.codes }),
+      },
+      {
+        name: 'get_local_data_status', category: '基础',
+        description: '查询本地 SQLite 数据规模与就绪状态（行业名录、截面等；不含因子筛选）',
+        parameters: S({}),
+        handler: () => d('market_db_status', {}),
       },
       {
         name: 'search_etfs', category: '通用',
@@ -212,6 +266,20 @@ export class ToolRegistry {
           keyword: { type: 'string', description: '搜索关键词' },
         }, ['keyword']),
         handler: (a: Record<string, unknown>) => d('search_etfs', { keyword: a.keyword }),
+      },
+      {
+        name: 'get_etf_list', category: '通用',
+        description: '获取 A 股 ETF 全量列表，或按 code 过滤单只',
+        parameters: S({
+          code: { type: 'string', description: '可选，6 位 ETF 代码过滤' },
+        }),
+        handler: (a: Record<string, unknown>) => d('etf_list', a),
+      },
+      {
+        name: 'get_etf_scorecard', category: '通用',
+        description: '单只 A 股 ETF 决策雷达（折溢价、规模流动性、费率、波动与同类对比）',
+        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
+        handler: (a: Record<string, unknown>) => d('etf_scorecard', { code: a.code }),
       },
       {
         name: 'get_etf_snapshot', category: '通用',
@@ -232,24 +300,6 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('etf_holdings', { code: a.code }),
       },
       {
-        name: 'search_us_stocks', category: '通用',
-        description: '搜索美股（ticker 或公司名）',
-        parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('instrument_search', {
-          keyword: a.keyword,
-          markets: ['US'],
-        }),
-      },
-      {
-        name: 'search_crypto_pairs', category: '通用',
-        description: '搜索 Crypto 交易对（base 或 pair 名）',
-        parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('instrument_search', {
-          keyword: a.keyword,
-          markets: ['CRYPTO'],
-        }),
-      },
-      {
         name: 'analyze_portfolio', category: '组合管理',
         description: '分析持仓组合的因子暴露与综合评分',
         parameters: S({
@@ -257,21 +307,6 @@ export class ToolRegistry {
           scorecard: { type: 'string', description: '评分卡' },
         }, ['holdings']),
         handler: (a: Record<string, unknown>) => d('portfolio_analysis', { holdings: a.holdings, scorecard: a.scorecard }),
-      },
-      {
-        name: 'search_stocks', category: '通用',
-        description: '按代码或名称关键词在线搜索 A 股标的',
-        parameters: S({ keyword: { type: 'string', description: '搜索关键词' } }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('instrument_search', {
-          keyword: a.keyword,
-          markets: ['CN'],
-        }),
-      },
-      {
-        name: 'get_strategy_signal', category: '策略',
-        description: '获取单股 9 策略融合信号（看多/看空/中性）',
-        parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_strategy_signal', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'institution_rating', category: '个股分析',
@@ -308,29 +343,6 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('backtest', { codes: a.codes, scorecard: a.scorecard, periods: a.periods ?? 5 }),
       },
       {
-        name: 'strategy_verify', category: '策略',
-        description: '验证策略历史信号胜率与 forward 收益',
-        parameters: S({
-          code: { type: 'string', description: '股票代码' },
-          checkpoints: { type: 'number', description: '验证点数' },
-          forward_days: { type: 'number', description: '持有天数' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_strategy_verify', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          checkpoints: a.checkpoints ?? 30,
-          forward_days: a.forward_days ?? 5,
-        }),
-      },
-      {
-        name: 'strategy_verify_report', category: '策略',
-        description: '策略验证的格式化文本报告',
-        parameters: S({
-          code: { type: 'string', description: '股票代码' },
-          checkpoints: { type: 'number', description: '验证点数' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('strategy_verify_report', { code: a.code, checkpoints: a.checkpoints ?? 30 }),
-      },
-      {
         name: 'strategy_report', category: '策略',
         description: '单股 T 策略综合分析文本报告',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
@@ -359,6 +371,34 @@ export class ToolRegistry {
         description: '产业链 Mermaid mindmap 源码',
         parameters: S({ industry: { type: 'string', description: '行业名称' } }, ['industry']),
         handler: (a: Record<string, unknown>) => d('industry_mermaid', { industry: a.industry }),
+      },
+      {
+        name: 'list_local_industries', category: '行业',
+        description: '列出 A 股可用行业名称（可 keyword 模糊过滤），供查成分股或产业链分析',
+        parameters: S({
+          keyword: { type: 'string', description: '可选，模糊匹配行业名，如 半导体、银行' },
+          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
+          limit: { type: 'number', description: '返回条数，默认 200，最大 500' },
+        }),
+        handler: (a: Record<string, unknown>) => d('local_industry_list', a),
+      },
+      {
+        name: 'get_industry_stats', category: '行业',
+        description: 'A 股行业维度统计：成分数量、均评分、PE/PB、涨跌家数对比',
+        parameters: S({
+          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
+        }),
+        handler: (a: Record<string, unknown>) => d('market_industry_stats', a),
+      },
+      {
+        name: 'get_local_industry_stocks', category: '行业',
+        description: '列出指定行业的 A 股成分股（最新价、涨跌幅、综合评分）',
+        parameters: S({
+          industry: { type: 'string', description: '行业名称，须与 list_local_industries 返回一致' },
+          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
+          limit: { type: 'number', description: '返回条数，默认 120，最大 200' },
+        }, ['industry']),
+        handler: (a: Record<string, unknown>) => d('market_industry_stocks', a),
       },
       {
         name: 'get_news_center_status', category: '资讯中心',
@@ -422,12 +462,6 @@ export class ToolRegistry {
           url: a.url,
           max_chars: a.max_chars ?? a.maxChars,
         }),
-      },
-      {
-        name: 'get_latest_evaluation', category: '通用',
-        description: '读取最近一次评估缓存（会话内 evaluate 结果）',
-        parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('latest_evaluation', normalizeInstrumentHubParams({ code: a.code, market: 'CN' })),
       },
       {
         name: 'get_portfolio_holdings', category: '组合管理',

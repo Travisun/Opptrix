@@ -25,6 +25,7 @@ export const UNIFIED_CN_ANALYTICS_TOOLS = [
 ] as const
 
 const CN_EQUITY_ONLINE_TOOLS = [
+  'get_market_regime',
   'screen_stocks',
   'search_instruments',
   'batch_instrument_snapshots',
@@ -33,6 +34,9 @@ const CN_EQUITY_ONLINE_TOOLS = [
   'verify_instrument_strategy',
   'get_instrument_cyq',
   'get_instrument_latest_evaluation',
+  'list_local_industries',
+  'get_industry_stats',
+  'get_local_industry_stocks',
 ] as const
 
 const REGIONAL_MINING_TOOLS = [
@@ -45,25 +49,32 @@ export const DISCOVER_MINING_TOOL_GROUPS = {
   cn_equity_full: [...CN_EQUITY_ONLINE_TOOLS],
   cn_etf: [
     'search_etfs',
+    'get_etf_list',
     'get_etf_snapshot',
     'get_etf_nav',
     'get_etf_holdings',
+    'get_etf_scorecard',
     'search_instruments',
     'get_instrument_snapshot',
     'evaluate_instrument',
     'get_instrument_strategy_signal',
   ],
   us_equity: [
+    'screen_us_universe',
     'search_instruments',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
   crypto_spot: [
+    'screen_crypto_universe',
     'search_instruments',
     ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   ],
   jp_equity: [] as const,
   kr_equity: [] as const,
-  hk_equity: [...REGIONAL_MINING_TOOLS],
+  hk_equity: [
+    'screen_hk_universe',
+    ...REGIONAL_MINING_TOOLS,
+  ],
   none: [] as const,
 } as const satisfies Record<string, readonly string[]>
 

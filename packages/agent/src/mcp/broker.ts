@@ -11,16 +11,14 @@ export const MCP_SLOW_TOOL_CALL_TIMEOUT_MS = 900_000
 
 const SLOW_TOOLS = new Set([
   'screen_stocks',
-  'local_screen_stocks',
-  'screen_local_universe',
-  'screen_local_industry_stocks',
-  'trigger_market_db_sync',
-  'evaluate_stock',
-  'get_stock_detail',
+  'screen_us_universe',
+  'screen_hk_universe',
+  'screen_crypto_universe',
   'get_watchlist_radar',
+  'get_market_dynamics',
   'run_backtest',
-  'strategy_verify',
   'industry_mining',
+  'verify_instrument_strategy',
 ])
 
 export interface McpToolCallOptions {
@@ -34,7 +32,7 @@ function toolCallTimeoutMs(name: string, override?: number): number {
 }
 
 function formatToolTimeoutError(name: string): string {
-  return `工具 ${name} 执行超时（数据拉取或计算耗时较长）。请确认本地初选库已就绪，或缩小筛选范围后重试。`
+  return `工具 ${name} 执行超时（数据拉取或计算耗时较长）。请缩小筛选范围或稍后重试。`
 }
 
 /**

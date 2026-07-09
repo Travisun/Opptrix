@@ -18,7 +18,7 @@ export function buildStandardInstrumentApiPlaybook(): string {
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart',
     '- A 股批量截面：batch_instrument_snapshots；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
-    '- ETF：search_etfs / get_etf_snapshot / get_etf_nav / get_etf_holdings（或 instrument ETF ref）',
+    '- ETF：search_etfs / get_etf_list / get_etf_snapshot / get_etf_nav / get_etf_holdings / get_etf_scorecard（或 instrument ETF ref + evaluate_instrument）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
   ].join('\n')
 }
@@ -109,6 +109,31 @@ export function buildUserInteractionPlaybook(): string {
   ].join('\n')
 }
 
+/** 聊天 Agent — 市场宏观与关注池 */
+export function buildMarketContextPlaybook(): string {
+  return [
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist_radar / get_trend_brief】',
+    '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
+    '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
+    '3) 关注池速览：get_watchlist → get_watchlist_radar（可省略 codes 用关注列表）→ 对重点标的 get_instrument_snapshot',
+    '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
+    '5) 跨市场名录初选：screen_us_universe / screen_hk_universe / screen_crypto_universe 或 search_instruments（markets 过滤）',
+  ].join('\n')
+}
+
+/** 聊天 Agent — 行业分析路径（列表 → 统计 → 成分股 → 产业链） */
+export function buildIndustryAnalysisPlaybook(): string {
+  return [
+    '【A 股行业分析 — list_local_industries / get_industry_stats / get_local_industry_stocks / industry_mining】',
+    '1) 不确定行业名：list_local_industries（keyword 模糊，如「半导体」）→ 用返回的精确 industry 名继续',
+    '2) 行业强弱/估值对比：get_industry_stats → 读涨跌家数、均 PE/PB、均评分',
+    '3) 行业成分与龙头：get_local_industry_stocks（industry 须与列表一致）→ 对重点标的 get_instrument_snapshot / evaluate_instrument',
+    '4) 产业链与代表公司：industry_mining；需 mindmap 展示时用 industry_mermaid',
+    '5) 条件选股：screen_stocks（在线因子筛选）；本地因子筛选已停用',
+    '6) 本地行业库无数据时：get_local_data_status 确认后改 search_instruments + screen_stocks，并告知用户',
+  ].join('\n')
+}
+
 /** 聊天 Agent 完整 system 规则正文（不含角色行） */
 export function buildAgentSystemRules(): string {
   return [
@@ -117,14 +142,16 @@ export function buildAgentSystemRules(): string {
     '- 跨市场标的统一用 InstrumentRef（market + symbol）；不熟悉代码时 search_instruments',
     buildStandardInstrumentApiPlaybook(),
     buildInstrumentAnalysisPlaybook(),
+    buildIndustryAnalysisPlaybook(),
+    buildMarketContextPlaybook(),
     buildProviderCustomMethodPlaybook(),
     buildUserInteractionPlaybook(),
-    '- A 股在线初选：screen_stocks；本地因子库可选 get_market_db_status + screen_local_universe（库未就绪时勿强依赖）',
+    '- A 股在线初选：screen_stocks；跨市场初选：search_instruments 或 screen_us_universe / screen_hk_universe / screen_crypto_universe',
     buildNewsRetrievalPlaybook(),
     '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
     '- 不推荐具体买卖，仅提供研究与数据解读',
     '- 可组合多个工具由浅入深补全数据',
-    '- 用户关注列表用 get_watchlist；实盘持仓用 get_portfolio_holdings / portfolio_summary（含 A/HK/US，返回带 market）；交易流水用 portfolio_trades（过滤港/美须带 market）',
+    '- 用户关注列表用 get_watchlist；关注池雷达用 get_watchlist_radar；实盘持仓用 get_portfolio_holdings / portfolio_summary（含 A/HK/US，返回带 market）；交易流水用 portfolio_trades（过滤港/美须带 market）',
     '- 报告日期与时区用 get_current_time；环境/版本用 get_system_info；默认评分卡与模型用 get_app_settings',
     '- 外部集成（Tushare）状态用 get_integration_status',
     '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',

@@ -461,7 +461,12 @@ export class ResearchHub {
   }
 
   private marketDbStatus(t0: number) {
-    return this.failLocalOffline(t0)
+    const status = this.marketData.status()
+    return ok({
+      ...status,
+      local_offline_screening_enabled: false,
+      guidance: '本地因子筛选已停用；行业名录/截面仍可读本地 SQLite；选股请用 screen_stocks 或 search_instruments',
+    }, '本地数据状态', t0)
   }
 
   private marketDbSyncState(t0: number) {
@@ -528,24 +533,46 @@ export class ResearchHub {
     return this.failLocalOffline(t0)
   }
 
+  private industrySnapshotUnavailable(t0: number) {
+    const { stock_count: stockCount } = this.marketData.status()
+    if (stockCount > 0) return null
+    return fail('本地行业库暂无数据，请使用 search_instruments、screen_stocks 等在线能力', t0)
+  }
+
   private marketIndustryStats(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
+    const unavailable = this.industrySnapshotUnavailable(t0)
+    if (unavailable) return unavailable
+    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
+    const data = this.marketData.industryStats(tradeDate || undefined)
+    return ok(data, `A 股 ${data.items.length} 个行业统计`, t0)
   }
 
   private marketIndustryStocks(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
+    const industry = String(params.industry ?? '').trim()
+    if (!industry) return fail('industry 必填', t0)
+    const unavailable = this.industrySnapshotUnavailable(t0)
+    if (unavailable) return unavailable
+    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
+    const limitRaw = params.limit != null ? Number(params.limit) : 120
+    const limit = Number.isFinite(limitRaw) ? limitRaw : 120
+    const data = this.marketData.industryStocks(industry, tradeDate || undefined, limit)
+    return ok(data, `${industry} 成分股 ${data.items.length} 只`, t0)
   }
 
   private localIndustryList(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
+    const unavailable = this.industrySnapshotUnavailable(t0)
+    if (unavailable) return unavailable
+    const keyword = params.keyword != null ? String(params.keyword).trim() : undefined
+    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
+    const limitRaw = params.limit != null ? Number(params.limit) : undefined
+    const limit = limitRaw != null && Number.isFinite(limitRaw) ? limitRaw : undefined
+    const data = this.marketData.industryList(keyword || undefined, tradeDate || undefined, limit)
+    return ok(data, `行业列表 ${data.industries.length} 项`, t0)
   }
 
   private localIndustryScreen(params: Record<string, unknown>, t0: number) {
     void params
-    return this.failLocalOffline(t0)
+    return fail('本地因子行业内筛选已停用，请用 get_local_industry_stocks 列出成分股后结合 screen_stocks / evaluate_instrument 在线分析', t0)
   }
 
   private listScreenFactors(t0: number) {

@@ -118,6 +118,10 @@ Opptrix/
 - 工具元数据（何时使用、调用规范）：`packages/agent/src/tool-meta.ts`
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（末项可自由输入），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
+- **行业分析**：`list_local_industries` → `get_industry_stats` / `get_local_industry_stocks` → `industry_mining`
+- **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_watchlist_radar` / `get_trend_brief`
+- **跨市场初选**：`screen_us_universe` / `screen_hk_universe` / `screen_crypto_universe` 或 `search_instruments`
+- 本地因子筛选（`screen_local_universe` 等）与 legacy 单市场工具（`evaluate_stock` 等）已从 Agent 移除，统一用 `get_instrument_*` / `evaluate_instrument`
 
 ### 4.3 数据层
 
@@ -132,9 +136,9 @@ Opptrix/
 
 **本地挖掘层** `@opptrix/market-data`：
 
-- SQLite 存储 A 股因子、K 线、行业映射等（ETF / 多市场 schema 见 DATA-LAYER §8）
-- `MarketDataSyncEngine` 从在线层同步；支持设置页触发与 Agent 工具 `trigger_market_db_sync`
-- 本地筛选、行业列表、决策雷达等 **优先走本地库**，降低延迟与源站压力
+- SQLite 存储 A 股行业映射、截面快照等（ETF / 多市场 schema 见 DATA-LAYER §8）
+- 本地因子筛选与全量同步已停用；`market_db_status` 返回名录/截面规模（`get_local_data_status` 工具）
+- 行业列表、决策雷达等只读能力仍可走本地库；选股用 `screen_stocks` 在线筛选
 
 ### 4.4 前端主界面
 

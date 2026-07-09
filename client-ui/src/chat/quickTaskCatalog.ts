@@ -10,7 +10,7 @@ export interface QuickTaskSection {
 
 /**
  * 推荐任务目录（始终展示，无需用户手动添加）
- * 文案面向非技术投资者；Agent 可映射到 evaluate_stock / screen_local_universe 等工具
+ * 文案面向非技术投资者；Agent 可映射到 evaluate_instrument / screen_stocks 等工具
  */
 export const QUICK_TASK_CATALOG: readonly QuickTaskSection[] = [
   {
