@@ -240,6 +240,22 @@ html.opptrix-electron .opptrix-news-title-drag {
   min-width: 8px;
 }
 
+html.opptrix-electron .opptrix-market-dynamics-title-bar {
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  position: relative;
+  z-index: 1200;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+html.opptrix-electron .opptrix-market-dynamics-title-drag {
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  align-self: stretch;
+  min-width: 8px;
+}
+
 html.opptrix-electron .opptrix-right-panel-title-bar {
   background: var(--opptrix-canvas) !important;
   border-bottom: 1px solid var(--opptrix-separator-strong) !important;

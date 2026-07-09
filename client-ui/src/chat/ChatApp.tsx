@@ -5,6 +5,7 @@ import type { ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ChatView from './ChatView'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
+import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
 import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import RightPanel from './RightPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
@@ -243,6 +244,7 @@ export default function ChatApp() {
   const [searchOpen, setSearchOpen] = useState(false)
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
+  const [marketDynamicsMounted, setMarketDynamicsMounted] = useState(() => view === 'market')
 
   const refreshModels = useCallback(async () => {
     try {
@@ -316,6 +318,7 @@ export default function ChatApp() {
 
   useEffect(() => {
     if (view === 'news') setNewsCenterMounted(true)
+    if (view === 'market') setMarketDynamicsMounted(true)
   }, [view])
 
   const openSettings = useCallback((section?: SettingsSection) => {
@@ -327,6 +330,11 @@ export default function ChatApp() {
   const openNewsCenter = useCallback(() => {
     closeDrawer()
     navigate('news')
+  }, [closeDrawer, navigate])
+
+  const openMarketDynamics = useCallback(() => {
+    closeDrawer()
+    navigate('market')
   }, [closeDrawer, navigate])
 
   const openNewsSettings = useCallback(() => {
@@ -872,11 +880,12 @@ export default function ChatApp() {
   const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
   const isNews = view === 'news'
-  const chromeTitle = isNews ? '新闻中心' : (activeSession?.title ?? '新对话')
-  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : 'chat'
+  const isMarket = view === 'market'
+  const chromeTitle = isNews ? '新闻中心' : isMarket ? '市场动态' : (activeSession?.title ?? '新对话')
+  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : isMarket ? 'market' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
-  const sessionTitleTools = view === 'chat' && !isNews ? (
+  const sessionTitleTools = view === 'chat' && !isNews && !isMarket ? (
     <ChatSessionTitleTools
       title={activeSession?.title ?? '新对话'}
       sessionId={activeId}
@@ -889,7 +898,7 @@ export default function ChatApp() {
     />
   ) : null
 
-  const chatTitleSlot = view === 'chat' && !isNews ? (
+  const chatTitleSlot = view === 'chat' && !isNews && !isMarket ? (
     <ChatSessionTitleTools
       title={activeSession?.title ?? '新对话'}
       sessionId={activeId}
@@ -912,7 +921,7 @@ export default function ChatApp() {
   const sidebarProps = {
     sessions,
     activeId,
-    activeRoute: isNews ? 'news' as const : 'chat' as const,
+    activeRoute: isNews ? 'news' as const : isMarket ? 'market' as const : 'chat' as const,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
@@ -920,6 +929,7 @@ export default function ChatApp() {
     onOpenSearch: handleOpenSearch,
     onOpenSettings: () => { openSettings() },
     onOpenNewsCenter: openNewsCenter,
+    onOpenMarketDynamics: openMarketDynamics,
     listTab: sidebarListTab,
     onListTabChange: handleSidebarListTabChange,
     archivedGroups,
@@ -1030,7 +1040,37 @@ export default function ChatApp() {
               </div>
             )}
 
-            {!isNews && (
+            {marketDynamicsMounted && (
+              <div
+                className={mergeClasses(
+                  s.contentWorkspace,
+                  isMobile && s.contentWorkspaceMobile,
+                  electronChrome && s.contentWorkspaceElectron,
+                  electronChrome && 'opptrix-app-main',
+                  !isMarket && s.viewHidden,
+                )}
+                aria-hidden={!isMarket}
+              >
+                {isMobile && isMarket && (
+                  <SessionSidebar
+                    mode="drawer"
+                    drawerOpen={drawerOpen}
+                    onClose={closeDrawer}
+                    {...sidebarProps}
+                  />
+                )}
+                <div
+                  className={mergeClasses(
+                    s.chatColumn,
+                    electronChrome && s.chatColumnElectron,
+                  )}
+                >
+                  <MarketDynamicsPage electronChrome={electronChrome} />
+                </div>
+              </div>
+            )}
+
+            {!isNews && !isMarket && (
           <div
             ref={workspaceRef}
             className={mergeClasses(

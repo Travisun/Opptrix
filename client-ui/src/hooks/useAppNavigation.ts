@@ -1,6 +1,6 @@
 import { useCallback, useReducer } from 'react'
 
-export type AppRoute = 'chat' | 'settings' | 'news'
+export type AppRoute = 'chat' | 'settings' | 'news' | 'market'
 
 type NavState = { stack: AppRoute[]; index: number }
 

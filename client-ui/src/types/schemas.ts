@@ -359,6 +359,31 @@ export interface MarketReportData {
   summary: string; sections: { title: string; content: string }[]
 }
 
+export interface MarketIndexQuote {
+  code: string
+  qt_code?: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  change_amt?: number | null
+  market?: string
+  location?: string
+  trade_state_label?: string
+  quote_time?: string
+}
+
+export interface MarketDynamicsSection {
+  id: string
+  title: string
+  hint?: string
+  items: MarketIndexQuote[]
+}
+
+export interface MarketDynamicsData {
+  refreshed_at: string
+  sections: MarketDynamicsSection[]
+}
+
 export interface StockSearchItem {
   code: string; name: string; industry?: string
 }

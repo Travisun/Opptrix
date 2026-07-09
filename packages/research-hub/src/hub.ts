@@ -211,6 +211,7 @@ export class ResearchHub {
         case 'industry_mining': return this.industryMining(String(params.industry), t0)
         case 'industry_mermaid': return this.industryMermaid(String(params.industry), t0)
         case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
+        case 'market_dynamics': return this.marketDynamics(t0)
         case 'search_stocks':
           return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes': {
@@ -799,6 +800,81 @@ export class ResearchHub {
     }
     const data = await this.closingReport.generate()
     return ok(data, data.title, t0)
+  }
+
+  private async marketDynamics(t0: number) {
+    const [homeR, majorR, asiaR, europeR, americaR] = await Promise.all([
+      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
+      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['EU', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AM', 1, 40, 2, 'desc']),
+    ])
+
+    const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        qt_code: String(row.qtCode ?? '').trim() || undefined,
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
+        market: String(row.market ?? '').trim() || undefined,
+        quote_time: String(row.quoteTime ?? '').trim() || undefined,
+      })).filter(item => item.code || item.name)
+    }
+
+    const mapGlobalItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        qt_code: String(row.qtCode ?? '').trim() || undefined,
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        market: String(row.market ?? 'global').trim() || undefined,
+        location: String(row.location ?? '').trim() || undefined,
+        trade_state_label: String(row.tradeStateLabel ?? '').trim() || undefined,
+      })).filter(item => item.code || item.name)
+    }
+
+    const sections = [
+      {
+        id: 'spotlight',
+        title: '全球要闻',
+        hint: '主要市场指数一览，数据约每 30 秒刷新',
+        items: mapCnItems(homeR),
+      },
+      {
+        id: 'cn_major',
+        title: 'A 股主要指数',
+        hint: '沪深市场核心宽基指数',
+        items: mapCnItems(majorR),
+      },
+      {
+        id: 'asia',
+        title: '亚太市场',
+        items: mapGlobalItems(asiaR),
+      },
+      {
+        id: 'europe',
+        title: '欧洲市场',
+        items: mapGlobalItems(europeR),
+      },
+      {
+        id: 'america',
+        title: '美洲市场',
+        items: mapGlobalItems(americaR),
+      },
+    ].filter(section => section.items.length > 0)
+
+    return ok({
+      refreshed_at: new Date().toISOString(),
+      sections,
+    }, '市场动态', t0)
   }
 
   private async marketRegime(params: Record<string, unknown>, t0: number) {

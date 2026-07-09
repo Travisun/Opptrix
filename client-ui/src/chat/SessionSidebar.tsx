@@ -2,7 +2,7 @@ import { useState, useRef, useCallback } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular, GlobeRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -264,7 +264,7 @@ interface SessionSidebarProps {
   drawerOpen?: boolean
   sessions: SessionMeta[]
   activeId: string | null
-  activeRoute?: 'chat' | 'news'
+  activeRoute?: 'chat' | 'news' | 'market'
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -272,6 +272,7 @@ interface SessionSidebarProps {
   onOpenSearch: () => void
   onOpenSettings: () => void
   onOpenNewsCenter: () => void
+  onOpenMarketDynamics: () => void
   onClose?: () => void
   listTab?: SidebarListTab
   onListTabChange?: (tab: SidebarListTab) => void
@@ -290,7 +291,7 @@ function formatDate(iso: string) {
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat',
-  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onClose,
+  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
   listTab: listTabProp,
   onListTabChange,
   archivedGroups = [],
@@ -351,6 +352,19 @@ export default function SessionSidebar({
       >
         <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新闻中心</span>
+      </button>
+
+      <button
+        type="button"
+        className={mergeClasses(
+          s.menuRow,
+          'opptrix-focusable',
+          activeRoute === 'market' && s.menuRowActive,
+        )}
+        onClick={onOpenMarketDynamics}
+      >
+        <GlobeRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>市场动态</span>
       </button>
       </div>
 
