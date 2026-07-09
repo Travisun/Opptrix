@@ -85,6 +85,32 @@ function stageLinuxIcons() {
   }
 }
 
+async function createWindowsIco() {
+  const { default: toIco } = await import('to-ico')
+  const sizes = [
+    { size: 16, source: 'logo@16.png' },
+    { size: 32, source: 'logo@32.png' },
+    { size: 48, source: 'logo@64.png' },
+    { size: 256, source: 'logo@256.png' },
+  ]
+  const images = sizes.map(({ size, source }) => {
+    const src = path.join(SOURCE_DIR, source)
+    if (!fs.existsSync(src)) {
+      throw new Error(`Missing Windows icon source: ${src}`)
+    }
+    if (size === 48 && process.platform === 'darwin') {
+      const tmp = path.join(OUT_DIR, '.tmp-48.png')
+      resizePng(src, tmp, 48)
+      const buf = fs.readFileSync(tmp)
+      fs.rmSync(tmp, { force: true })
+      return buf
+    }
+    return fs.readFileSync(src)
+  })
+  const ico = await toIco(images)
+  fs.writeFileSync(path.join(OUT_DIR, 'icon.ico'), ico)
+}
+
 function createMacIcns() {
   if (process.platform !== 'darwin') {
     console.log('Skipping .icns generation (iconutil requires macOS); electron-builder will convert PNG on Mac CI.')
@@ -125,5 +151,6 @@ createMacIcns()
 copyFile(path.join(OUT_DIR, 'logo-app.png'), path.join(DESKTOP_ROOT, 'electron', 'about-logo.png'))
 copyFile(path.join(SOURCE_DIR, 'logo@128.png'), path.join(DESKTOP_ROOT, 'electron', 'splash-logo.png'))
 stageLinuxIcons()
+await createWindowsIco()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
 

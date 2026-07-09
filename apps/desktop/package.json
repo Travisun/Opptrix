@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.9",
+  "version": "0.6.0-dev.10",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
@@ -127,20 +127,22 @@
       ]
     },
     "win": {
-      "icon": "build/icons/logo-app.png",
+      "icon": "build/icons/icon.ico",
       "legalTrademarks": "Opptrix",
-      "publisherName": "催书书",
       "target": [
         "nsis"
-      ]
+      ],
+      "signtoolOptions": {
+        "publisherName": "Opptrix"
+      }
     },
     "nsis": {
       "shortcutName": "Opptrix",
       "oneClick": false,
       "allowToChangeInstallationDirectory": true,
-      "installerIcon": "build/icons/logo-app.png",
-      "uninstallerIcon": "build/icons/logo-app.png",
-      "installerHeaderIcon": "build/icons/logo-app.png",
+      "installerIcon": "build/icons/icon.ico",
+      "uninstallerIcon": "build/icons/icon.ico",
+      "installerHeaderIcon": "build/icons/icon.ico",
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true
     },
@@ -170,7 +172,8 @@
   },
   "devDependencies": {
     "electron": "^35.0.0",
-    "electron-builder": "^25.1.8"
+    "electron-builder": "^25.1.8",
+    "to-ico": "^1.1.5"
   },
   "dependencies": {
     "electron-updater": "^6.6.2",
