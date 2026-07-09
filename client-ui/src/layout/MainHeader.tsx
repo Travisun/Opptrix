@@ -4,7 +4,7 @@ import {
 } from '@fluentui/react-components'
 import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
-import { hitToWatchlistItem, parseInstrumentInput, toStockContext, marketDisplayName } from '../market/instrument'
+import { hitToWatchlistItem, isAmbiguousNumericCode, isUnambiguousCnDigits, parseInstrumentInput, tryParseInstrumentInput, toStockContext, marketDisplayName } from '../market/instrument'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -51,14 +51,27 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
     try {
       const resp = await research.searchInstruments(q, 10)
       if (resp.success && resp.data?.items?.length) {
-        setGlobalStock(toStockContext(hitToWatchlistItem(resp.data.items[0])))
+        // 对纯数字短码，选择"symbol 精确匹配"的命中优先（避免 700 → 含 "700" 的名称匹配）；
+        // 若有多个市场精确同码（A/H 同时存在），默认取第一条（搜索已按 CN→HK 排序，
+        // 用户可从结果列表里再选港股，下方股票 chip 会显示市场后缀）。
+        const items = resp.data.items
+        const digits = q.replace(/\D/g, '')
+        let pick = items[0]!
+        if (digits && digits.length <= 5) {
+          const exact = items.find(it => it.instrument.symbol.replace(/^0+/, '') === digits
+            || it.instrument.symbol === digits.padStart(5, '0'))
+          if (exact) pick = exact
+        }
+        setGlobalStock(toStockContext(hitToWatchlistItem(pick)))
       } else {
-        const ref = parseInstrumentInput(q)
+        // 无搜索结果：明确 6 位 A 股/带前缀代码可本地解析；短数字码歧义保守兜底为 CN，
+        // 但保留原始长度（不 padStart 到 6 位），避免把 "700" 误当 "000700"。
+        const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
         setGlobalStock({ code: q, name: '', instrument: ref })
       }
       onNavigate('stock_research')
     } catch {
-      const ref = parseInstrumentInput(q)
+      const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
       setGlobalStock({ code: q, name: '', instrument: ref })
       onNavigate('stock_research')
     }

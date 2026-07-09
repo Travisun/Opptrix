@@ -9,6 +9,21 @@ const HK_PREFIX = /^HK:/i
 const JP_PREFIX = /^JP:/i
 const KR_PREFIX = /^KR:/i
 
+/**
+ * 裸数字代码跨市场歧义检测（与 @opptrix/shared 对齐）：
+ * - 6 位纯数字 → A 股（无歧义）
+ * - 1-5 位纯数字 → 可能是港股 5 位码、日韩代码、或省略前导 0 的 A 股短写，
+ *   需要经 instrument_search 跨市场搜索消歧，不能直接判为 A 股。
+ */
+export function isUnambiguousCnDigits(raw: string): boolean {
+  return /^\d{6}$/.test(raw.trim())
+}
+
+export function isAmbiguousNumericCode(raw: string): boolean {
+  const s = raw.trim()
+  return /^\d{1,5}$/.test(s)
+}
+
 export function parseInstrumentInput(raw: string): InstrumentRef {
   const input = raw.trim()
   if (!input) {
@@ -47,7 +62,10 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
     const symbol = digits ? digits.padStart(6, '0') : sym.toUpperCase()
     return { market: 'KR', assetClass: 'EQUITY', symbol }
   }
-  if (/^\d+$/.test(input) && input.length <= 6) {
+  // 6 位纯数字 → A 股（无歧义）。1-5 位数字仍兜底为 A 股以保持调用方非空约定，
+  // 但入口（主搜索/聊天 @ 提及等）应先用 isAmbiguousNumericCode 判断，
+  // 短码必须先走跨市场 instrument_search 获取带正确 market 的 ref。
+  if (/^\d{6}$/.test(input)) {
     const sym = normalizeCode(input)
     const assetClass = isCnEtfCode(sym) ? 'ETF' : isCnIndexCode(sym) ? 'INDEX' : 'EQUITY'
     return { market: 'CN', assetClass, symbol: sym }
@@ -62,7 +80,36 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
       return { market: 'CRYPTO', assetClass: 'CRYPTO_SPOT', symbol: base, quote }
     }
   }
+  // 短数字码兜底：不 padStart 到 6 位，保留原始长度作为 CN symbol，
+  // 避免把 "700" 错当 "000700"（不存在的 A 股），让上层至少能看出异常。
+  if (/^\d+$/.test(input)) {
+    return { market: 'CN', assetClass: 'EQUITY', symbol: input }
+  }
   return { market: 'CN', assetClass: 'EQUITY', symbol: normalizeCode(input) }
+}
+
+/**
+ * 严格解析：可明确判定 market 的输入才返回 InstrumentRef；
+ * 跨市场歧义（1-5 位纯数字等）返回 null，调用方应走 instrument_search 消歧。
+ */
+export function tryParseInstrumentInput(raw: string): InstrumentRef | null {
+  const input = raw.trim()
+  if (!input) return null
+  // 带前缀 / 6 位纯数字 / 字母 ticker / crypto 对 → 复用 parseInstrumentInput 判定
+  if (US_PREFIX.test(input) || CRYPTO_PREFIX.test(input) || HK_PREFIX.test(input)
+    || JP_PREFIX.test(input) || KR_PREFIX.test(input)) {
+    return parseInstrumentInput(input)
+  }
+  if (isUnambiguousCnDigits(input)) return parseInstrumentInput(input)
+  if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(input) && !/^\d+$/.test(input)) {
+    return parseInstrumentInput(input)
+  }
+  if ((input.includes('/') || input.includes('-'))
+    && /^[A-Z0-9]+[\/\-][A-Z0-9]+$/i.test(input)) {
+    return parseInstrumentInput(input)
+  }
+  // 1-5 位纯数字等歧义场景 → null，交给搜索层
+  return null
 }
 
 /** CN A-share / ETF instrument ref from a bare code or alias string. */
@@ -88,7 +135,8 @@ export function isLikelyCnEquityInput(raw: string): boolean {
   if (/^(US|HK|JP|KR|CRYPTO|NYSE|NASDAQ|AMEX|BINANCE|OKX):/i.test(s)) return false
   if (s.includes('/')) return false
   if (/^[A-Z][A-Z0-9.-]{0,11}$/i.test(s) && !/^\d+$/.test(s)) return false
-  return /^\d{1,6}$/.test(s)
+  // 仅 6 位纯数字无歧义判为 A 股；1-5 位交由跨市场搜索消歧
+  return isUnambiguousCnDigits(s)
 }
 
 /** 与 @opptrix/shared instrumentRefKey 保持一致：symbol → quote → exchange */
