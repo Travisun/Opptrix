@@ -9,6 +9,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
+import ThinkingDots from '../components/ThinkingDots'
 import { isElectron } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
@@ -430,14 +431,7 @@ export default function SessionSidebar({
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
               <span className={s.itemTitle}>
-                {busy && (
-                  <span className="opptrix-thinking-dots" aria-hidden>
-                    <span className="opptrix-thinking-dots__dot" />
-                    <span className="opptrix-thinking-dots__dot" />
-                    <span className="opptrix-thinking-dots__dot" />
-                    <span className="opptrix-thinking-dots__dot" />
-                  </span>
-                )}
+                {busy && <ThinkingDots />}
                 {sess.title}
               </span>
               <span className={s.itemTrailing}>

@@ -16,6 +16,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
+import ThinkingDots from '../components/ThinkingDots'
 
 const useStyles = makeStyles({
   root: {
@@ -747,14 +748,7 @@ export default function SessionSidebarArchivePanel({
                             onKeyDown={e => e.key === 'Enter' && onSelect(sess.id)}
                           >
                             <span className={s.sessionTitle}>
-                              {busy && (
-                                <span className="opptrix-thinking-dots" aria-hidden>
-                                  <span className="opptrix-thinking-dots__dot" />
-                                  <span className="opptrix-thinking-dots__dot" />
-                                  <span className="opptrix-thinking-dots__dot" />
-                                  <span className="opptrix-thinking-dots__dot" />
-                                </span>
-                              )}
+                              {busy && <ThinkingDots />}
                               {sess.title}
                             </span>
                             <span className={s.folderCount}>{formatDate(sess.updatedAt)}</span>

@@ -1803,7 +1803,7 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
   }
 }
 
-/* ── Sidebar "thinking" indicator (2×2 clockwise chase) ──
+/* ── Thinking indicator: 2×2 clockwise chase (compact, text-sized) ──
    Dot positions (clockwise order):
      dot1 (top-left)    dot2 (top-right)
      dot4 (bottom-left) dot3 (bottom-right)
@@ -1812,8 +1812,8 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
      t=25%  leader=TR(1)   trail1=TL(0.5) trail2=BL(0.25) off=BR
      t=50%  leader=BR(1)   trail1=TR(0.5) trail2=TL(0.25) off=BL
      t=75%  leader=BL(1)   trail1=BR(0.5) trail2=TR(0.25) off=TL
-   The "off" slot moves clockwise one position each step, giving a clean
-   chase where exactly three dots are always visible at opacities 1/0.5/0.25. */
+   The "off" slot moves clockwise one position each step; exactly three
+   dots are always visible at opacities 1 / 0.5 / 0.25. */
 @keyframes opptrix-think-dot-1 {
   0%   { opacity: 1;    transform: scale(1); }
   25%  { opacity: 0.5;  transform: scale(0.95); }
@@ -1846,16 +1846,17 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 .opptrix-thinking-dots {
   position: relative;
   display: inline-block;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   flex-shrink: 0;
   margin-right: 4px;
+  vertical-align: -2px;
 }
 
 .opptrix-thinking-dots__dot {
   position: absolute;
-  width: 4px;
-  height: 4px;
+  width: 3px;
+  height: 3px;
   border-radius: 50%;
   background-color: var(--opptrix-accent);
   animation-duration: 1.2s;
