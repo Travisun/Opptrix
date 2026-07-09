@@ -610,6 +610,11 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '需要确认 Tushare 等外部集成是否已配置时调用。',
     compliance: '只读；不返回 Token/Secret。',
   },
+  ask_user: {
+    miningEligible: false,
+    usageGuide: '分析前需用户确认方向、范围或偏好，且上下文无法推断时调用；会在聊天输入框上方展示选择题，用户点选或自行输入后继续。',
+    compliance: 'prompt 必填、面向投资者；options 2–5 项且 id 唯一；allow_multiple 默认 false；同一轮对话最多 1 次；禁止索要密钥；调用后须等待工具返回再续分析。',
+  },
   list_enabled_providers: {
     hubFeature: 'provider_list',
     miningEligible: false,

@@ -6,10 +6,12 @@ import ComposerContextRefTag from './ComposerContextRefTag'
 import ComposerStockRefTag from './ComposerStockRefTag'
 import ComposerQuickTasks from './ComposerQuickTasks'
 import ComposerStockMentionList from './ComposerStockMentionList'
+import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
 import type { AvailableModel, SessionContextRef } from '../types/chat'
+import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { WatchlistItem } from '../types/market'
 import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -248,6 +250,9 @@ interface ChatComposerProps {
   onStop?: () => void
   onModelChange?: (ref: string) => void
   onClearContextRef?: () => void
+  userPrompt?: ChatUserPromptPayload | null
+  userPromptSubmitting?: boolean
+  onUserPromptSubmit?: (answer: UserPromptAnswerPayload) => void
 }
 
 export default function ChatComposer({
@@ -266,6 +271,9 @@ export default function ChatComposer({
   onStop,
   onModelChange,
   onClearContextRef,
+  userPrompt = null,
+  userPromptSubmitting = false,
+  onUserPromptSubmit,
 }: ChatComposerProps) {
   const s = useStyles()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
@@ -344,7 +352,8 @@ export default function ChatComposer({
     setStockRefs([])
   }, [input, loading, onSubmit, stockRefs])
 
-  const canSend = Boolean(input.trim() || stockRefs.length) && !loading
+  const canSend = Boolean(input.trim() || stockRefs.length) && !loading && !userPrompt
+  const composerLocked = loading || Boolean(userPrompt)
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (mentionState.open && mentionMatches.length) {
@@ -419,6 +428,13 @@ export default function ChatComposer({
 
       <div className={s.panelWrap}>
         <div className={s.panelGround} aria-hidden />
+        {userPrompt && onUserPromptSubmit && (
+          <ComposerAgentUserPromptPanel
+            prompt={userPrompt}
+            submitting={userPromptSubmitting}
+            onSubmit={onUserPromptSubmit}
+          />
+        )}
         <div className={mergeClasses(s.panel, 'opptrix-composer-shell')}>
           <div className={s.inputRow}>
             <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
@@ -450,14 +466,14 @@ export default function ChatComposer({
               onKeyUp={handleTextareaSelect}
               placeholder={isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…'}
               rows={ROWS}
-              disabled={loading}
+              disabled={composerLocked}
               enterKeyHint="send"
             />
           </div>
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
               <ComposerQuickTasks
-                disabled={loading}
+                disabled={composerLocked}
                 onApply={handleApplyQuickTask}
               />
             </div>
@@ -466,7 +482,7 @@ export default function ChatComposer({
                 <ModelSelector
                   models={availableModels}
                   value={sessionModel}
-                  disabled={loading}
+                  disabled={composerLocked}
                   isMobile={isMobile}
                   compact
                   onChange={onModelChange}

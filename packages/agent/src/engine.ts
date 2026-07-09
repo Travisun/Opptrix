@@ -14,6 +14,13 @@ import {
   formatArgsPreview,
   formatToolLabel,
 } from './chat-progress.js'
+import {
+  UserPromptBridge,
+  createUserPromptId,
+  parseAskUserArgs,
+  type UserPromptAnswer,
+  UserPromptCancelledError,
+} from './user-prompt.js'
 import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
 
 export interface AgentSettings {
@@ -54,6 +61,7 @@ export class AgentEngine {
   private registry = new ProviderRegistry()
   private settings: AgentSettings
   private mcpBrokerPromise: Promise<McpToolBroker> | null = null
+  readonly userPromptBridge = new UserPromptBridge()
 
   constructor(
     private hub: ResearchHub,
@@ -148,6 +156,7 @@ export class AgentEngine {
   }
 
   deleteSession(id: string) {
+    this.userPromptBridge.cancelSession(id)
     this.sessions.delete(id)
   }
 
@@ -232,6 +241,10 @@ export class AgentEngine {
     return { reply: turn.message.content?.trim() || '（无回复内容）' }
   }
 
+  resolveUserPrompt(sessionId: string, promptId: string, answer: UserPromptAnswer) {
+    return this.userPromptBridge.submit(sessionId, promptId, answer)
+  }
+
   async chat(
     sessionId: string,
     message: string,
@@ -270,6 +283,7 @@ export class AgentEngine {
     const signal = progress?.signal
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
+      this.userPromptBridge.cancelSession(sessionId)
       record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
       if (record!.turns) {
         record!.turns = record!.turns.slice(0, turnsBeforeAssistant + 1)
@@ -395,10 +409,27 @@ export class AgentEngine {
 
           let result: unknown
           try {
-            result = await broker.call(fn, args, { signal })
+            if (fn === 'ask_user') {
+              const parsed = parseAskUserArgs(args)
+              if (parsed.error || !parsed.payload) {
+                result = { error: parsed.error ?? 'ask_user 参数无效' }
+              } else {
+                const promptId = createUserPromptId()
+                const answerPromise = this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
+                emit({
+                  type: 'user_prompt',
+                  prompt: { id: promptId, ...parsed.payload },
+                })
+                const answer = await answerPromise
+                result = { ok: true, ...answer }
+              }
+            } else {
+              result = await broker.call(fn, args, { signal })
+            }
           } catch (e) {
             if (
               e instanceof ChatCancelledError
+              || e instanceof UserPromptCancelledError
               || signal?.aborted
               || (e instanceof DOMException && e.name === 'AbortError')
             ) {

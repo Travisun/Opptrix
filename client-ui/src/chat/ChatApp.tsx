@@ -14,6 +14,7 @@ import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
+  submitUserPromptResponse,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession,
@@ -22,7 +23,7 @@ import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
   SessionMeta, AvailableModel,
 } from '../types/chat'
-import type { ChatLiveTrace } from '../types/chatProgress'
+import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { feedArticleToContextRef } from '../pages/news/newsUtils'
@@ -232,6 +233,8 @@ export default function ChatApp() {
   const [input, setInput] = useState('')
   const [loading, setLoading] = useState(false)
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
+  const [pendingUserPrompt, setPendingUserPrompt] = useState<ChatUserPromptPayload | null>(null)
+  const [userPromptSubmitting, setUserPromptSubmitting] = useState(false)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
@@ -644,6 +647,8 @@ export default function ChatApp() {
     setInput('')
     setLoading(true)
     setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
+    setPendingUserPrompt(null)
+    setUserPromptSubmitting(false)
     setError('')
 
     const optimistic: ChatDisplayMessage = {
@@ -668,6 +673,15 @@ export default function ChatApp() {
           }))
           return
         }
+        if (event.type === 'user_prompt') {
+          setPendingUserPrompt(event.prompt)
+          setLiveTrace(prev => ({
+            steps: prev?.steps ?? [],
+            thinkingLabel: '等待你的确认…',
+            thinkingSnippet: prev?.thinkingSnippet,
+          }))
+          return
+        }
         if (event.type === 'tool_start') {
           setLiveTrace(prev => ({
             thinkingLabel: prev?.thinkingLabel,
@@ -677,6 +691,9 @@ export default function ChatApp() {
           return
         }
         if (event.type === 'tool_done') {
+          if (event.step.tool === 'ask_user') {
+            setPendingUserPrompt(null)
+          }
           setLiveTrace(prev => ({
             thinkingLabel: prev?.thinkingLabel ?? '模型正在整理结果…',
             thinkingSnippet: prev?.thinkingSnippet,
@@ -743,9 +760,27 @@ export default function ChatApp() {
       chatAbortRef.current = null
       stoppingRef.current = false
       setLiveTrace(null)
+      setPendingUserPrompt(null)
+      setUserPromptSubmitting(false)
       setLoading(false)
     }
   }
+
+  const handleUserPromptSubmit = useCallback(async (answer: UserPromptAnswerPayload) => {
+    const sid = activeId
+    const prompt = pendingUserPrompt
+    if (!sid || !prompt || userPromptSubmitting) return
+    setUserPromptSubmitting(true)
+    setError('')
+    try {
+      await submitUserPromptResponse(sid, prompt.id, answer)
+      setPendingUserPrompt(null)
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '提交失败，请重试')
+    } finally {
+      setUserPromptSubmitting(false)
+    }
+  }, [activeId, pendingUserPrompt, userPromptSubmitting])
 
   const handleForkFromMessage = async (messageIndex: number) => {
     if (!activeId) return
@@ -1144,6 +1179,9 @@ export default function ChatApp() {
                     chatColumnVisible={chatVisible}
                     onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
                     onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
+                    userPrompt={pendingUserPrompt}
+                    userPromptSubmitting={userPromptSubmitting}
+                    onUserPromptSubmit={pendingUserPrompt ? handleUserPromptSubmit : undefined}
                   />
                 </div>
               </div>
