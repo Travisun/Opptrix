@@ -397,7 +397,12 @@ export default function ChatApp() {
 
   const handleSelect = async (id: string) => {
     restoreChatColumn()
-    if (id === activeId) return
+    // If we're already on this session but currently viewing news/market,
+    // just navigate back to chat without reloading.
+    if (id === activeId) {
+      if (view !== 'chat') navigate('chat')
+      return
+    }
     try {
       await loadSession(id)
       if (view !== 'chat') navigate('chat')

@@ -406,7 +406,11 @@ export default function SessionSidebar({
           <div className={s.empty}>暂无历史对话</div>
         )}
         {sessions.map(sess => {
-          const active = sess.id === activeId
+          // Only show the active highlight when we're in the chat view; if the
+          // user navigated away to news / market, clear the highlight so any
+          // session row can be clicked (including the current one) to jump
+          // back into the chat area.
+          const active = activeRoute === 'chat' && sess.id === activeId
           return (
             <div
               key={sess.id}
