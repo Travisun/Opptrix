@@ -1,7 +1,7 @@
 import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeChipDistribution, isMissingLivePrice, normalizeCode, normalizePreOpenRealtimeQuote,
   parseCryptoPair,
   pickIntradaySession, parseStockMarket, resolveMarket, resolveStockMarketCode,
-  loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode,
+  loadTushareConfig, saveTushareConfig, isBseCode, isCnEtfCode, inferCnAssetClass,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
   type NewsItem, type MoneyFlow, type Dividend,
   crossMarketChartTimeZone,
@@ -211,6 +211,7 @@ export class ResearchHub {
         case 'industry_mining': return this.industryMining(String(params.industry), t0)
         case 'industry_mermaid': return this.industryMermaid(String(params.industry), t0)
         case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
+        case 'market_dynamics': return this.marketDynamics(t0)
         case 'search_stocks':
           return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
         case 'stock_quotes': {
@@ -801,6 +802,119 @@ export class ResearchHub {
     return ok(data, data.title, t0)
   }
 
+  private async marketDynamics(t0: number) {
+    const [homeR, majorR, asiaR, europeR, americaR, gainersR, losersR, dragonR] = await Promise.all([
+      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['mstats_home', false]),
+      this.de.invokeCustomMethod('tencent', 'tencentCnIndexSnapshot', ['major', false]),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AS', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['EU', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentGlobalIndexList', ['AM', 1, 40, 2, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'desc']),
+      this.de.invokeCustomMethod('tencent', 'tencentHsjStockList', [1, 30, 32, 'asc']),
+      this.de.dragonTiger(),
+    ])
+
+    const mapCnItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        qt_code: String(row.qtCode ?? '').trim() || undefined,
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
+        market: String(row.market ?? '').trim() || undefined,
+        quote_time: String(row.quoteTime ?? '').trim() || undefined,
+      })).filter(item => item.code || item.name)
+    }
+
+    const mapGlobalItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        qt_code: String(row.qtCode ?? '').trim() || undefined,
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        market: String(row.market ?? 'global').trim() || undefined,
+        location: String(row.location ?? '').trim() || undefined,
+        trade_state_label: String(row.tradeStateLabel ?? '').trim() || undefined,
+      })).filter(item => item.code || item.name)
+    }
+
+    const mapMoverItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data) || !resp.data[0]) return []
+      const block = resp.data[0] as { items?: Record<string, unknown>[] }
+      return (block.items ?? []).map(row => ({
+        code: String(row.code ?? '').trim(),
+        name: String(row.name ?? row.code ?? '').trim(),
+        price: typeof row.price === 'number' ? row.price : null,
+        change_pct: typeof row.changePct === 'number' ? row.changePct : null,
+        change_amt: typeof row.changeAmt === 'number' ? row.changeAmt : null,
+      })).filter(item => item.code)
+    }
+
+    const mapDragonTigerItems = (resp: { success: boolean; data?: unknown }) => {
+      if (!resp.success || !Array.isArray(resp.data)) return []
+      return resp.data.map(row => {
+        const item = row as Record<string, unknown>
+        return {
+          code: String(item.code ?? '').trim(),
+          name: String(item.name ?? item.code ?? '').trim(),
+          date: String(item.date ?? '').slice(0, 10),
+          reason: item.reason ? String(item.reason).trim() : undefined,
+          buy_amount: typeof item.buyAmount === 'number' ? item.buyAmount : null,
+          sell_amount: typeof item.sellAmount === 'number' ? item.sellAmount : null,
+          net_amount: typeof item.netAmount === 'number' ? item.netAmount : null,
+          change_pct: typeof item.changePct === 'number' ? item.changePct : null,
+        }
+      }).filter(item => item.code)
+    }
+
+    const cnDragonTiger = mapDragonTigerItems(dragonR)
+
+    const sections = [
+      {
+        id: 'spotlight',
+        title: '全球要闻',
+        hint: '主要市场指数一览，数据约每 30 秒刷新',
+        items: mapCnItems(homeR),
+      },
+      {
+        id: 'cn_major',
+        title: 'A 股主要指数',
+        hint: '沪深市场核心宽基指数',
+        items: mapCnItems(majorR),
+      },
+      {
+        id: 'asia',
+        title: '亚太市场',
+        items: mapGlobalItems(asiaR),
+      },
+      {
+        id: 'europe',
+        title: '欧洲市场',
+        items: mapGlobalItems(europeR),
+      },
+      {
+        id: 'america',
+        title: '美洲市场',
+        items: mapGlobalItems(americaR),
+      },
+    ].filter(section => section.items.length > 0)
+
+    return ok({
+      refreshed_at: new Date().toISOString(),
+      sections,
+      cn_gainers: mapMoverItems(gainersR),
+      cn_losers: mapMoverItems(losersR),
+      cn_dragon_tiger: cnDragonTiger,
+      cn_dragon_tiger_date: cnDragonTiger[0]?.date ?? null,
+    }, '市场动态', t0)
+  }
+
   private async marketRegime(params: Record<string, unknown>, t0: number) {
     const scope = String(params.profile_scope ?? 'cn').toLowerCase() as MarketRegimeScope
     if (scope === 'us') {
@@ -1381,6 +1495,9 @@ export class ResearchHub {
     const normalized = normalizeCode(code)
     const parsed = parseStockMarket(explicitMarket)
     if (parsed) return parsed
+    if (inferCnAssetClass(normalized) === 'INDEX') {
+      return normalized.startsWith('399') ? 'SZ' : 'SH'
+    }
     return this.marketData.store.stockMarket(normalized) ?? resolveStockMarketCode(normalized)
   }
 
@@ -1396,7 +1513,7 @@ export class ResearchHub {
 
   private async stockRealtime(code: string, explicitMarket?: string | null) {
     void explicitMarket
-    return this.de.queryInstrumentData(this.cnEquityRef(code), 'realtime')
+    return this.de.queryInstrumentData(this.cnInstrumentRef(code), 'realtime')
   }
 
   private async stockBatchRealtime(codes: string[]) {
@@ -1624,6 +1741,10 @@ export class ResearchHub {
     }
 
     const klinePeriod = period === 'daily' ? 'daily' : period
+    const isIndex = inferCnAssetClass(normalizeCode(code)) === 'INDEX'
+    const requestCount = isIndex && klinePeriod !== 'daily'
+      ? Math.max(safeCount, 80)
+      : safeCount
     if (before) {
       const step = 200
       const endDay = this.dayBefore(before.slice(0, 10))
@@ -1644,7 +1765,7 @@ export class ResearchHub {
       const recentCount = Math.max(tail, safeCount, 240)
       const recentR = await this.queryCnKline(code, {
         period: klinePeriod,
-        count: recentCount,
+        count: Math.max(recentCount, isIndex && klinePeriod !== 'daily' ? 80 : 0),
       })
       const recentData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(recentR)
       if (recentR.success && recentData?.length) {
@@ -1654,20 +1775,29 @@ export class ResearchHub {
           hasMore: older.length >= step,
         }
       }
+      if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') return null
       return this.fetchLocalChartKlines(code, safeCount, before)
     }
 
-    const klineR = await this.queryCnKline(code, {
+    let klineR = await this.queryCnKline(code, {
       period: klinePeriod,
-      count: safeCount,
+      count: requestCount,
     })
-    const klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    let klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    if ((!klineR.success || !klineData?.length) && klinePeriod !== 'daily') {
+      klineR = await this.queryCnKline(code, {
+        period: klinePeriod,
+        count: Math.max(requestCount, 80),
+      })
+      klineData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR)
+    }
     if (klineR.success && klineData?.length) {
       return {
         klines: klineData,
         hasMore: klineData.length >= safeCount && safeCount < 800,
       }
     }
+    if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') return null
     return this.fetchLocalChartKlines(code, safeCount, before)
   }
 
@@ -1740,6 +1870,7 @@ export class ResearchHub {
         sessionDate: session.sessionDate,
         isTradingDay: isLiveSession,
         hasMore: false,
+        chart_time_zone: 'Asia/Shanghai',
         bars: this.sortChartBars(bars),
         indicators: [],
       }, `${name} 分时 ${session.sessionDate} ${bars.length} 点`, t0)
@@ -1808,6 +1939,7 @@ export class ResearchHub {
       preClose,
       isTradingDay: this.isCnTradingDayCandidate(),
       hasMore: fetched.hasMore,
+      chart_time_zone: 'Asia/Shanghai',
       bars,
       indicators,
       cyqLatest,
@@ -1967,20 +2099,25 @@ export class ResearchHub {
     return { market: 'CN', assetClass: 'ETF', symbol: sym }
   }
 
-  private cnEquityRef(code: string): InstrumentRef {
+  private cnInstrumentRef(code: string): InstrumentRef {
     const sym = normalizeCode(code)
     return {
       market: 'CN',
-      assetClass: isCnEtfCode(sym) ? 'ETF' : 'EQUITY',
+      assetClass: inferCnAssetClass(sym),
       symbol: sym,
     }
+  }
+
+  /** @deprecated Use cnInstrumentRef */
+  private cnEquityRef(code: string): InstrumentRef {
+    return this.cnInstrumentRef(code)
   }
 
   private async queryCnKline(
     code: string,
     opts: { period?: string; count?: number; startDate?: string; endDate?: string },
   ) {
-    return this.de.queryInstrumentData(this.cnEquityRef(code), 'kline', {
+    return this.de.queryInstrumentData(this.cnInstrumentRef(code), 'kline', {
       count: opts.count ?? 120,
       period: opts.period ?? 'daily',
       startDate: opts.startDate,

@@ -359,6 +359,54 @@ export interface MarketReportData {
   summary: string; sections: { title: string; content: string }[]
 }
 
+export interface MarketIndexQuote {
+  code: string
+  qt_code?: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  change_amt?: number | null
+  market?: string
+  location?: string
+  trade_state_label?: string
+  quote_time?: string
+}
+
+export interface MarketDynamicsSection {
+  id: string
+  title: string
+  hint?: string
+  items: MarketIndexQuote[]
+}
+
+export interface MarketStockMover {
+  code: string
+  name: string
+  price: number | null
+  change_pct: number | null
+  change_amt?: number | null
+}
+
+export interface MarketDragonTigerItem {
+  code: string
+  name: string
+  date: string
+  reason?: string
+  buy_amount?: number | null
+  sell_amount?: number | null
+  net_amount?: number | null
+  change_pct?: number | null
+}
+
+export interface MarketDynamicsData {
+  refreshed_at: string
+  sections: MarketDynamicsSection[]
+  cn_gainers?: MarketStockMover[]
+  cn_losers?: MarketStockMover[]
+  cn_dragon_tiger?: MarketDragonTigerItem[]
+  cn_dragon_tiger_date?: string | null
+}
+
 export interface StockSearchItem {
   code: string; name: string; industry?: string
 }

@@ -68,6 +68,14 @@ export function portfolioHoldingsKey(code: string, market?: string): string {
   return trimmed
 }
 
+/** A 股指数代码（上证 000xxx、深证 399xxx） */
+export function isCnIndexCode(code: string): boolean {
+  const c = normalizeCode(code)
+  if (c.startsWith('399')) return true
+  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) return true
+  return false
+}
+
 /** A 股 ETF 代码段（宽基/行业/跨境等） */
 export function isCnEtfCode(code: string): boolean {
   const c = normalizeCode(code)

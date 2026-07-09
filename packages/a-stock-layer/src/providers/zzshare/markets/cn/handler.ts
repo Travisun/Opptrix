@@ -3,7 +3,7 @@ import type {
 } from '../../../../core/schema.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { isShIndexCode, normalizeCode } from '../../../../utils/helpers.js'
-import { isCnEtfCode } from '../../../../core/instrument.js'
+import { isCnEtfCode, inferCnAssetClass } from '../../../../core/instrument.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
 import { ZzshareClient } from '../../api/client.js'
 import { invokeZzshare } from '../../api/invoke.js'
@@ -444,6 +444,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
 
     return this.withClient(async client => {
       if (spec.kind === 'minute') {
+        if (inferCnAssetClass(code) === 'INDEX') return null
         const rows = await client.stk_mins({
           ts_code: toTsCode(code),
           freq: spec.freq,
@@ -507,10 +508,7 @@ export class ZzshareCnHandler extends MarketHandlerShell {
 
     const spec = opptrixPeriodToZzshareFreq(period)
     if (!spec || spec.kind === 'minute') {
-      // 指数分钟线走 kline/stk_mins，禁止调用 realtime（旧版曾在此递归）
-      const stock = await this.kline(code, period, start, end, count)
-      if (!stock) return null
-      return mapZzshareIndexKlineRows(code, stock, period)
+      return null
     }
 
     return this.withClient(async client => {
@@ -583,7 +581,8 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     code: string,
     ndays = 5,
   ): Promise<IntradayTrendFetchResult | null> {
-    if (isCnIndexCode(code) || isPlateCode(code) || parseTopicId(code)) return null
+    if (isPlateCode(code) || parseTopicId(code)) return null
+    if (inferCnAssetClass(code) === 'INDEX') return null
 
     return this.withClient(async client => {
       const safeDays = Math.max(1, Math.min(Math.floor(ndays), 5))
@@ -619,7 +618,8 @@ export class ZzshareCnHandler extends MarketHandlerShell {
     ndays = 1,
     count = 0,
   ): Promise<StockKline[] | null> {
-    if (isCnIndexCode(code) || isPlateCode(code) || parseTopicId(code)) return null
+    if (isPlateCode(code) || parseTopicId(code)) return null
+    if (inferCnAssetClass(code) === 'INDEX') return null
 
     return this.withClient(async client => {
       const safeDays = Math.max(1, Math.min(Math.floor(ndays), 5))

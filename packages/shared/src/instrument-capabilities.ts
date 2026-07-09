@@ -35,6 +35,10 @@ const CN_EQUITY: ApplicationCapability[] = [
   'cyq', 'money_flow', 'industry_context', 'discover_mine', 'portfolio_pnl', 'prep_hydrate',
 ]
 
+const CN_INDEX: ApplicationCapability[] = [
+  'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'discover_mine',
+]
+
 const CN_ETF: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_daily', 'scorecard', 'discover_mine',
 ]
@@ -66,6 +70,7 @@ function capabilityRow(
 /** 静态能力矩阵 — 新市场在此登记一行即可驱动 UI gate */
 export const INSTRUMENT_CAPABILITY_MATRIX: InstrumentCapabilitySet[] = [
   capabilityRow('CN', 'EQUITY', CN_EQUITY, 'cn-equity'),
+  capabilityRow('CN', 'INDEX', CN_INDEX, 'cn-equity'),
   capabilityRow('CN', 'ETF', CN_ETF, 'cn-etf'),
   capabilityRow('US', 'EQUITY', US_EQUITY, 'cross-market'),
   capabilityRow('HK', 'EQUITY', HK_EQUITY, 'cross-market'),

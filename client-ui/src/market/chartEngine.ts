@@ -16,6 +16,8 @@ import {
   indicatorColors,
   stockPriceFormat,
 } from './chartTheme'
+import { createChartAxisFormatters } from './chartAxisTime'
+import { CN_TIMEZONE } from '../utils/cnTime'
 import { defaultVisibleBars, HISTORY_EDGE_THRESHOLD } from './chartViewConfig'
 import { isMinuteOhlcPeriod, isIntradayPeriod } from './chartTime'
 
@@ -35,6 +37,7 @@ export interface ChartPaneRefs {
 export interface ChartMountOptions {
   period: ChartPeriod
   colorScheme?: ColorScheme
+  chartTimeZone?: string
   preserveRange?: LogicalRange | null
   addedBars?: number
   onNeedHistory?: () => void
@@ -64,11 +67,18 @@ export class ChartWorkspace {
     const intradayChart = isIntradayPeriod(options.period)
     const scheme = options.colorScheme ?? 'light'
     const theme = getChartTheme(scheme)
+    const chartTimeZone = options.chartTimeZone ?? CN_TIMEZONE
+    const axisFormat = createChartAxisFormatters(chartTimeZone)
 
     try {
       this.mainChart = createChart(refs.main, {
         layout: theme.layout,
         grid: theme.grid,
+        localization: {
+          locale: 'zh-CN',
+          dateFormat: 'yyyy-MM-dd',
+          timeFormatter: axisFormat.timeFormatter,
+        },
         rightPriceScale: {
           borderVisible: false,
           ...(minuteChart ? { minimumWidth: 52 } : {}),
@@ -79,6 +89,7 @@ export class ChartWorkspace {
           fixRightEdge: true,
           timeVisible: true,
           secondsVisible: (minuteChart && options.period === '1m') || intradayChart,
+          tickMarkFormatter: axisFormat.tickMarkFormatter,
           ...((minuteChart || intradayChart) ? { barSpacing: 7, minBarSpacing: 2 } : {}),
         },
         crosshair: theme.crosshair,

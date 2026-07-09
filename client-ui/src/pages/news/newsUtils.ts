@@ -250,5 +250,11 @@ export function formatRelativeTime(iso: string): string {
   if (hours < 24) return `${hours} 小时前`
   const days = Math.floor(hours / 24)
   if (days < 7) return `${days} 天前`
-  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+  return d.toLocaleString('zh-CN', {
+    timeZone: 'Asia/Shanghai',
+    month: 'short',
+    day: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }

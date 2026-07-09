@@ -1,10 +1,12 @@
 ---
 description: Provider 标准 Instrument API 与自定义方法边界；新增/修改 a-stock-layer Provider 时必遵
-globs: packages/a-stock-layer/src/providers/**/*
+globs: packages/a-stock-layer/**/*
 alwaysApply: false
 ---
 
 # Provider 标准 API 开发规范
+
+> 全局流程（Hub / 前端 / 新功能前先查标准层）：`.cursor/rules/data-layer-standard-api.mdc`
 
 完整说明见 `docs/PROVIDER-STANDARD-API.md`。以下为强制要点。
 

@@ -295,6 +295,9 @@ export const research = {
   marketReport: (type: 'morning' | 'closing') =>
     apiCall<MarketReportData>('market_report', { type }),
 
+  marketDynamics: () =>
+    apiCall<import('../types/schemas').MarketDynamicsData>('market_dynamics', {}, undefined, 20000),
+
   searchStocks: async (keyword: string) => {
     const resp = await jsonFetch<{
       success: boolean

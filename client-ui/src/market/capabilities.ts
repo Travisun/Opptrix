@@ -9,6 +9,10 @@ const CN_EQUITY: ApplicationCapability[] = [
   'cyq', 'money_flow', 'industry_context', 'discover_mine', 'portfolio_pnl', 'prep_hydrate',
 ]
 
+const CN_INDEX: ApplicationCapability[] = [
+  'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily', 'discover_mine',
+]
+
 const CN_ETF: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_daily', 'scorecard', 'discover_mine',
 ]
@@ -30,6 +34,7 @@ const KR_EQUITY: ApplicationCapability[] = ['quote', 'snapshot', 'chart_daily', 
 
 const MATRIX: InstrumentCapabilitySet[] = [
   { market: 'CN', assetClass: 'EQUITY', capabilities: CN_EQUITY, detailPanelKind: 'cn-equity' },
+  { market: 'CN', assetClass: 'INDEX', capabilities: CN_INDEX, detailPanelKind: 'cn-equity' },
   { market: 'CN', assetClass: 'ETF', capabilities: CN_ETF, detailPanelKind: 'cn-etf' },
   { market: 'US', assetClass: 'EQUITY', capabilities: US_EQUITY, detailPanelKind: 'cross-market' },
   { market: 'HK', assetClass: 'EQUITY', capabilities: HK_EQUITY, detailPanelKind: 'cross-market' },

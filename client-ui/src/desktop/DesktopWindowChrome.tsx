@@ -147,14 +147,14 @@ interface DesktopWindowChromeProps {
 }
 
 function resolveDragRightClip(
-  isNews: boolean,
+  isStandalonePanel: boolean,
   isSettings: boolean,
   rightPanelOpen: boolean,
   chatColumnVisible: boolean,
   sidebarInline: boolean,
   rightPanelWidth: number,
 ): Pick<CSSProperties, 'right' | 'width' | 'pointerEvents' | 'WebkitAppRegion'> {
-  if (isNews) {
+  if (isStandalonePanel) {
     const right = electronPlatform() === 'darwin'
       ? DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN
       : DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN
@@ -215,6 +215,8 @@ export default function DesktopWindowChrome({
 
   const isSettings = viewMode === 'settings'
   const isNews = viewMode === 'news'
+  const isMarket = viewMode === 'market'
+  const isStandalonePanel = isNews || isMarket
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
@@ -231,7 +233,7 @@ export default function DesktopWindowChrome({
     chatColumnWidth,
     chatAreaLeft,
   })
-  const showPageTitle = !isNews && !isSettings && chatColumnVisible
+  const showPageTitle = !isStandalonePanel && !isSettings && chatColumnVisible
   const interactiveTitle = showPageTitle && Boolean(titleSlot)
 
   const titleSlotWithLayout = titleSlot && isValidElement(titleSlot)
@@ -263,7 +265,7 @@ export default function DesktopWindowChrome({
     : titleLeft
 
   const dragRightClip = resolveDragRightClip(
-    isNews,
+    isStandalonePanel,
     isSettings,
     rightPanelOpen,
     chatColumnVisible,

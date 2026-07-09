@@ -39,3 +39,5 @@ alwaysApply: true
 ## 改代码时
 
 CodeGraph 负责**探索与定位**；确定修改点后用编辑工具改代码。返回的源码视为已 Read，勿对同一符号重复打开文件。
+
+涉及**行情 / 数据拉取 / Hub 接口**时，探索目标须包含 `queryInstrumentData`、`InstrumentDataCapability`、现有 capability 调用链；不得跳过标准层直接找 Provider。见 `.cursor/rules/data-layer-standard-api.mdc`。
