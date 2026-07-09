@@ -435,6 +435,7 @@ export default function SessionSidebar({
                     <span className="opptrix-thinking-dots__dot" />
                     <span className="opptrix-thinking-dots__dot" />
                     <span className="opptrix-thinking-dots__dot" />
+                    <span className="opptrix-thinking-dots__dot" />
                   </span>
                 )}
                 {sess.title}

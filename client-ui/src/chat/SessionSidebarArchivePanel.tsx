@@ -752,6 +752,7 @@ export default function SessionSidebarArchivePanel({
                                   <span className="opptrix-thinking-dots__dot" />
                                   <span className="opptrix-thinking-dots__dot" />
                                   <span className="opptrix-thinking-dots__dot" />
+                                  <span className="opptrix-thinking-dots__dot" />
                                 </span>
                               )}
                               {sess.title}
