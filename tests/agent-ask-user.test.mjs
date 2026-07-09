@@ -5,7 +5,7 @@ import {
   parseAskUserArgs,
   normalizeUserPromptOptions,
   UserPromptCancelledError,
-} from '../packages/agent/src/user-prompt.ts'
+} from '../packages/agent/dist/user-prompt.js'
 
 test('normalizeUserPromptOptions accepts 2–5 unique options', () => {
   const ok = normalizeUserPromptOptions([
