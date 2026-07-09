@@ -36,9 +36,29 @@ jobs:
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#desktop-v}"
           PRERELEASE_FLAG=""
+          NOTES_FILE="$(mktemp)"
           if [[ "$TAG" == *-dev* ]]; then
             PRERELEASE_FLAG="--prerelease"
           fi
+
+          cat > "$NOTES_FILE" <<EOF
+          ## Opptrix Desktop ${VERSION}
+
+          ### macOS 安装说明
+          - **Apple Silicon** 下载 \`Opptrix-${VERSION}-arm64.dmg\`
+          - **Intel Mac** 下载 \`Opptrix-${VERSION}-x64.dmg\`
+          - 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
+            \`\`\`bash
+            xattr -cr /Applications/Opptrix.app
+            \`\`\`
+          - 或在 Finder 中 **右键 → 打开** 一次
+
+          ### Windows
+          运行 \`Opptrix Setup ${VERSION}.exe\`；未签名包可能触发 SmartScreen，选「仍要运行」
+
+          ### Linux
+          \`chmod +x Opptrix-${VERSION}.AppImage && ./Opptrix-${VERSION}.AppImage\`
+          EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists"
@@ -47,7 +67,7 @@ jobs:
 
           gh release create "$TAG" \
             --title "Opptrix Desktop ${VERSION}" \
-            --notes "Automated desktop build for \`${VERSION}\`. Download the installer for your platform below." \
+            --notes-file "$NOTES_FILE" \
             $PRERELEASE_FLAG
 
   release:
@@ -100,19 +120,10 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
         run: |
-          skip=0
-          if [[ "${{ github.ref_name }}" == *-dev* ]]; then
-            skip=1
-            echo "Dev pre-release tag — skipping code signing"
-          fi
           if [[ "${{ inputs.skip_signing }}" == "true" ]]; then
-            skip=1
-            echo "skip_signing input — skipping code signing"
-          fi
-
-          if [[ "$skip" == "1" ]]; then
             echo "mode=unsigned" >> "$GITHUB_OUTPUT"
             echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "skip_signing input — unsigned build"
             exit 0
           fi
 
@@ -120,11 +131,11 @@ jobs:
             macOS)
               if [ -n "${CSC_LINK:-}" ]; then
                 echo "mode=mac" >> "$GITHUB_OUTPUT"
-                echo "macOS code signing enabled"
+                echo "macOS Developer ID signing enabled"
               else
                 echo "mode=unsigned" >> "$GITHUB_OUTPUT"
                 echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-                echo "::warning::CSC_LINK not configured — unsigned macOS build"
+                echo "::warning::CSC_LINK not configured — ad-hoc macOS build (see release notes for xattr)"
               fi
               ;;
             Windows)
@@ -171,6 +182,9 @@ jobs:
               export CSC_IDENTITY_AUTO_DISCOVERY=false
               unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
               unset APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID
+              if [[ "${{ runner.os }}" == "macOS" ]]; then
+                export OPPTRIX_MAC_UNSIGNED=1
+              fi
               ;;
           esac
 

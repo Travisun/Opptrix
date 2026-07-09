@@ -247,6 +247,21 @@ npm run build:desktop -- --publish always
 
 未签名时：用户可能需 **右键 → 打开**，Mac 自动更新体验也会变差。
 
+#### 提示「已损坏，无法打开」
+
+这通常**不是文件损坏**，而是 macOS Gatekeeper 拦截从未公证/未签名的应用（从 GitHub 下载还会带隔离属性）。
+
+**未签名 / dev 包**（当前 CI 在未配置或跳过证书时）：
+
+```bash
+xattr -cr /Applications/Opptrix.app
+open /Applications/Opptrix.app
+```
+
+或在 Finder 中对该 App **右键 → 打开** 一次。
+
+**正式签名包**仍出现此提示：检查是否下错架构（Intel 需 x64，M 系列需 arm64），或 Release 是否含公证通过的构建。
+
 ### Windows
 
 - 使用 NSIS 安装器（`oneClick: false`，允许用户选择安装目录）。
