@@ -11,12 +11,43 @@ on:
         type: boolean
         default: false
 
+concurrency:
+  group: release-desktop-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
+  prepare-release:
+    name: Prepare GitHub Release
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ensure GitHub Release exists
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          VERSION="${TAG#desktop-v}"
+          PRERELEASE_FLAG=""
+          if [[ "$TAG" == *-dev* ]]; then
+            PRERELEASE_FLAG="--prerelease"
+          fi
+
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release $TAG already exists"
+            exit 0
+          fi
+
+          gh release create "$TAG" \
+            --title "Opptrix Desktop ${VERSION}" \
+            --notes "Automated desktop build for \`${VERSION}\`. Download the installer for your platform below." \
+            $PRERELEASE_FLAG
+
   release:
     name: ${{ matrix.label }}
+    needs: prepare-release
     strategy:
       fail-fast: false
       matrix:
@@ -25,7 +56,6 @@ jobs:
             label: Windows x64
           - os: ubuntu-latest
             label: Linux x64
-          # macOS 分架构各打一包（sidecar 含 better-sqlite3 等原生模块，不能靠 Universal 外壳兼容 Intel）
           - os: macos-latest
             label: macOS arm64
             electron_arch: arm64
@@ -99,7 +129,7 @@ jobs:
               else
                 echo "mode=unsigned" >> "$GITHUB_OUTPUT"
                 echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-                echo "::warning::WIN_CSC_LINK not configured — unsigned Windows build (do not use Apple CSC_LINK on Windows)"
+                echo "::warning::WIN_CSC_LINK not configured — unsigned Windows build"
               fi
               ;;
             *)
@@ -145,16 +175,25 @@ jobs:
             *)     npm run build:package -w @opptrix/desktop ;;
           esac
 
-      - name: Upload to GitHub Release
+      - name: Upload artifacts to GitHub Release
         shell: bash
-        run: |
-          shopt -s nullglob
-          files=(apps/desktop/release/*)
-          if [ ${#files[@]} -eq 0 ]; then
-            echo "No release artifacts under apps/desktop/release/"
-            exit 1
-          fi
-          echo "Uploading ${#files[@]} file(s) to release ${{ github.ref_name }}…"
-          gh release upload "${{ github.ref_name }}" "${files[@]}" --clobber
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          RELEASE_DIR="apps/desktop/release"
+
+          mapfile -t files < <(find "$RELEASE_DIR" -maxdepth 1 -type f \( \
+            -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o \
+            -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \
+          \))
+
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No distributable artifacts under $RELEASE_DIR"
+            ls -la "$RELEASE_DIR" || true
+            exit 1
+          fi
+
+          echo "Uploading ${#files[@]} file(s) to release $TAG:"
+          printf '  - %s\n' "${files[@]}"
+          gh release upload "$TAG" "${files[@]}" --clobber

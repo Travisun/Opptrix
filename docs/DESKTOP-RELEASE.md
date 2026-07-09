@@ -104,17 +104,13 @@ git tag desktop-v0.6.1
 git push origin desktop-v0.6.1
 ```
 
-推送 `desktop-v*` 标签后，GitHub Actions 会在 **4 个并行 job** 上构建（macOS x64、macOS arm64、Windows、Linux）：
+推送 `desktop-v*` 标签后，GitHub Actions 会：
 
-```bash
-npm ci
-npm run build:desktop -- --publish always   # Windows / Linux
-# macOS 额外指定架构：
-npm run build -w @opptrix/desktop -- --mac --arm64 --publish always
-npm run build -w @opptrix/desktop -- --mac --x64 --publish always
-```
+1. **prepare-release**：创建 GitHub Release（`desktop-v{version}`）
+2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux）
+3. 各 job 用 `gh release upload` 上传安装包（`electron-builder --publish never`，避免 CI 内自动 publish/签名冲突）
 
-Sidecar 原生依赖（`better-sqlite3`、`ffmpeg-static`）由 `apps/desktop/scripts/stage-runtime.mjs` 按目标平台/架构 staging；`npm rebuild` 失败时会从 prebuild 镜像补装 SQLite 模块（见 `OPPTRIX_PREBUILD_MIRROR`）。
+Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名。
 
 `electron-builder` 会：
 
