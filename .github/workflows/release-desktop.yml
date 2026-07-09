@@ -188,7 +188,10 @@ jobs:
           TAG="${{ github.ref_name }}"
           RELEASE_DIR="apps/desktop/release"
 
-          mapfile -t files < <(find "$RELEASE_DIR" -maxdepth 1 -type f \( \
+          files=()
+          while IFS= read -r file; do
+            [ -n "$file" ] && files+=("$file")
+          done < <(find "$RELEASE_DIR" -maxdepth 1 -type f \( \
             -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o \
             -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \
           \))
