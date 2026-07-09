@@ -114,9 +114,10 @@ Opptrix/
     ResearchHub / MarketDataService / AshareEngine
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（约 **43** 个 MCP 工具，含本地数据层）
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认）
 - 工具元数据（何时使用、调用规范）：`packages/agent/src/tool-meta.ts`
-- 系统提示与引擎：`packages/agent/src/engine.ts`
+- 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
+- **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（末项可自由输入），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
 
 ### 4.3 数据层
 

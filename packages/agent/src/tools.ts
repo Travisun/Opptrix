@@ -161,6 +161,7 @@ export class ToolRegistry {
   systemPrompt() {
     return [
       '你是 Opptrix 专业多市场投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
+      '需要用户确认分析方向或偏好时，使用 ask_user 工具在界面展示选择题（含自行输入项），勿让用户在聊天里自行罗列选项。',
       buildAgentSystemRules(),
     ].join('\n')
   }
@@ -515,6 +516,21 @@ export class ToolRegistry {
           const tushare = await d('tushare_config', {})
           return { tushare: tushare.data ?? tushare }
         },
+      },
+      {
+        name: 'ask_user',
+        category: '交互',
+        description: '向用户发起选择题确认；会在输入框上方展示题目与选项，最后一项可自由输入后回车提交，作答后继续分析',
+        parameters: S({
+          title: { type: 'string', description: '可选面板标题，如「分析范围确认」' },
+          prompt: { type: 'string', description: '要向用户提出的具体问题（面向投资者，避免技术术语）' },
+          options: {
+            type: 'array',
+            description: '2–5 个预置选项，每项为 { id, label }；id 为稳定标识，label 为展示文案',
+          },
+          allow_multiple: { type: 'boolean', description: '是否允许多选，默认 false' },
+        }, ['prompt', 'options']),
+        handler: async () => ({ error: 'ask_user 由 Agent 引擎直接处理' }),
       },
     ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }

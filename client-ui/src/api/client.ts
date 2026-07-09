@@ -1423,6 +1423,26 @@ export async function cancelSessionChat(sessionId: string) {
   })
 }
 
+export async function submitUserPromptResponse(
+  sessionId: string,
+  promptId: string,
+  answer: {
+    kind: 'option' | 'custom'
+    selected_ids?: string[]
+    selected_labels?: string[]
+    custom_text?: string
+  },
+) {
+  return jsonFetch<{ ok: boolean }>(`/sessions/${sessionId}/chat/user-prompt`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      prompt_id: promptId,
+      ...answer,
+    }),
+  }, CHAT_REQUEST_TIMEOUT)
+}
+
 export async function streamSessionChat(
   sessionId: string,
   message: string,

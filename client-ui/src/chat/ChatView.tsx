@@ -6,7 +6,7 @@ import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
   AvailableModel,
 } from '../types/chat'
-import type { ChatLiveTrace } from '../types/chatProgress'
+import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
@@ -262,6 +262,9 @@ interface ChatViewProps {
   onToggleRightPanel?: () => void
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
+  userPrompt?: ChatUserPromptPayload | null
+  userPromptSubmitting?: boolean
+  onUserPromptSubmit?: (answer: UserPromptAnswerPayload) => void
 }
 
 export default function ChatView({
@@ -277,6 +280,9 @@ export default function ChatView({
   onToggleRightPanel,
   chatColumnVisible = true,
   onToggleChatColumn,
+  userPrompt = null,
+  userPromptSubmitting = false,
+  onUserPromptSubmit,
 }: ChatViewProps) {
   const s = useStyles()
   const chatBoxRef = useRef<HTMLDivElement>(null)
@@ -635,6 +641,9 @@ export default function ChatView({
               onStop={onStop}
               onModelChange={onModelChange}
               onClearContextRef={onClearContextRef}
+              userPrompt={userPrompt}
+              userPromptSubmitting={userPromptSubmitting}
+              onUserPromptSubmit={onUserPromptSubmit}
             />
           </div>
         </div>

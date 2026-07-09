@@ -911,8 +911,56 @@ app.post<{ Params: { id: string }; Body: { message: string; selected_text: strin
 app.post<{ Params: { id: string } }>('/api/sessions/:id/chat/cancel', async (req, reply) => {
   const cancelled = cancelSessionChat(req.params.id)
   if (!cancelled) return reply.code(404).send({ error: 'no active chat' })
+  agent.userPromptBridge.cancelSession(req.params.id)
   return { cancelled: true }
 })
+
+app.post<{
+  Params: { id: string }
+  Body: {
+    prompt_id: string
+    kind: 'option' | 'custom'
+    selected_ids?: string[]
+    selected_labels?: string[]
+    custom_text?: string
+  }
+}>(
+  '/api/sessions/:id/chat/user-prompt',
+  async (req, reply) => {
+    const promptId = req.body?.prompt_id?.trim()
+    if (!promptId) return reply.code(400).send({ error: 'prompt_id required' })
+
+    const kind = req.body?.kind
+    if (kind !== 'option' && kind !== 'custom') {
+      return reply.code(400).send({ error: 'kind must be option or custom' })
+    }
+
+    const selectedIds = Array.isArray(req.body.selected_ids)
+      ? req.body.selected_ids.map(id => String(id).trim()).filter(Boolean)
+      : []
+    const selectedLabels = Array.isArray(req.body.selected_labels)
+      ? req.body.selected_labels.map(label => String(label).trim()).filter(Boolean)
+      : []
+    const customText = typeof req.body.custom_text === 'string'
+      ? req.body.custom_text.trim()
+      : ''
+
+    if (kind === 'custom') {
+      if (!customText) return reply.code(400).send({ error: 'custom_text required for kind=custom' })
+    } else if (!selectedIds.length || !selectedLabels.length) {
+      return reply.code(400).send({ error: 'selected_ids and selected_labels required for kind=option' })
+    }
+
+    const ok = agent.resolveUserPrompt(req.params.id, promptId, {
+      kind,
+      selected_ids: selectedIds,
+      selected_labels: selectedLabels,
+      custom_text: kind === 'custom' ? customText : undefined,
+    })
+    if (!ok) return reply.code(404).send({ error: 'no pending user prompt' })
+    return { ok: true }
+  },
+)
 
 app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
   '/api/sessions/:id/chat/stream',

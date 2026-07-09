@@ -4,8 +4,19 @@ export {
   type ChatProgressOptions,
   type ChatToolStep,
   type ChatToolStepStatus,
+  type ChatUserPromptPayload,
   formatToolLabel,
 } from './chat-progress.js'
+export {
+  type UserPromptAnswer,
+  type UserPromptOption,
+  type UserPromptPayload,
+  UserPromptBridge,
+  UserPromptCancelledError,
+  createUserPromptId,
+  normalizeUserPromptOptions,
+  parseAskUserArgs,
+} from './user-prompt.js'
 export {
   type AgentAppContext,
   type PublicAppSettings,

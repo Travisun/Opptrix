@@ -53,10 +53,19 @@ export interface ChatToolStep {
  *   - done:        全部完成（reply=最终回复、tools_used=使用的工具列表、title=会话标题）
  *   - error:       出错（message=错误信息）
  */
+export interface ChatUserPromptPayload {
+  id: string
+  title?: string
+  prompt: string
+  options: Array<{ id: string; label: string }>
+  allowMultiple?: boolean
+}
+
 export type ChatProgressEvent =
   | { type: 'thinking'; round: number; label: string; snippet?: string }
   | { type: 'tool_start'; step: ChatToolStep }
   | { type: 'tool_done'; step: ChatToolStep }
+  | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
   | { type: 'reply'; content: string }
   | {
     type: 'done'
@@ -140,6 +149,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_app_settings: '读取应用设置',
   get_project_info: '读取项目路径信息',
   get_integration_status: '检查外部集成状态',
+  ask_user: '向你确认问题',
   get_instrument_capabilities: '查询标的能力',
   get_instrument_snapshot: '获取标的快照',
   get_instrument_quotes: '获取标的行情',
@@ -289,6 +299,16 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'list_local_industries': {
       const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
       return kw ? `${base} · ${kw}` : base
+    }
+    case 'ask_user': {
+      const q = typeof args.prompt === 'string'
+        ? args.prompt.trim()
+        : typeof args.question === 'string'
+          ? args.question.trim()
+          : ''
+      if (!q) return base
+      const short = q.length > 36 ? `${q.slice(0, 36)}…` : q
+      return `等待你的确认：${short}`
     }
     default:
       return ref ? `${base} · ${ref}` : base
@@ -504,6 +524,18 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
     case 'get_instrument_latest_evaluation':
     case 'get_latest_evaluation':
       return summarizeInstrumentEvaluation(data, message)
+    case 'ask_user': {
+      if (!result || typeof result !== 'object') return null
+      const r = result as Record<string, unknown>
+      if (r.kind === 'custom' && typeof r.custom_text === 'string' && r.custom_text.trim()) {
+        return `已选择：${r.custom_text.trim()}`
+      }
+      const labels = Array.isArray(r.selected_labels)
+        ? r.selected_labels.filter((l): l is string => typeof l === 'string' && l.trim().length > 0)
+        : []
+      if (labels.length) return `已选择：${labels.join('、')}`
+      return '已收到你的确认'
+    }
     default:
       return null
   }
