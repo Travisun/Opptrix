@@ -927,6 +927,7 @@ export default function ChatApp() {
     sessions,
     activeId,
     activeRoute: isNews ? 'news' as const : isMarket ? 'market' as const : 'chat' as const,
+    busySessionId: loading ? activeId : null,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,

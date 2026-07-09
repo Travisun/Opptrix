@@ -265,6 +265,8 @@ interface SessionSidebarProps {
   sessions: SessionMeta[]
   activeId: string | null
   activeRoute?: 'chat' | 'news' | 'market'
+  /** id of the session currently streaming a response (shows thinking dot) */
+  busySessionId?: string | null
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -290,7 +292,7 @@ function formatDate(iso: string) {
 
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
-  sessions, activeId, activeRoute = 'chat',
+  sessions, activeId, activeRoute = 'chat', busySessionId = null,
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
   listTab: listTabProp,
   onListTabChange,
@@ -411,6 +413,7 @@ export default function SessionSidebar({
           // session row can be clicked (including the current one) to jump
           // back into the chat area.
           const active = activeRoute === 'chat' && sess.id === activeId
+          const busy = sess.id === busySessionId
           return (
             <div
               key={sess.id}
@@ -426,7 +429,16 @@ export default function SessionSidebar({
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
-              <span className={s.itemTitle}>{sess.title}</span>
+              <span className={s.itemTitle}>
+                {busy && (
+                  <span className="opptrix-thinking-dots" aria-hidden>
+                    <span className="opptrix-thinking-dots__dot" />
+                    <span className="opptrix-thinking-dots__dot" />
+                    <span className="opptrix-thinking-dots__dot" />
+                  </span>
+                )}
+                {sess.title}
+              </span>
               <span className={s.itemTrailing}>
                 <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
                 <button
@@ -459,6 +471,8 @@ export default function SessionSidebar({
           <SessionSidebarArchivePanel
             groups={archivedGroups}
             activeId={activeId}
+            activeRoute={activeRoute}
+            busySessionId={busySessionId}
             onSelect={handleSelect}
             onDeleteSession={onDeleteArchivedSession}
             onCreateFolder={onCreateArchiveFolder}

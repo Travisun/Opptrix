@@ -329,6 +329,8 @@ export interface ArchiveFolderGroup {
 interface Props {
   groups: ArchiveFolderGroup[]
   activeId: string | null
+  activeRoute?: 'chat' | 'news' | 'market'
+  busySessionId?: string | null
   onSelect: (id: string) => void
   onDeleteSession: (id: string) => void | Promise<void>
   onCreateFolder: (title: string) => void | Promise<void>
@@ -357,6 +359,8 @@ function useFocusOnMount(active: boolean) {
 export default function SessionSidebarArchivePanel({
   groups,
   activeId,
+  activeRoute = 'chat',
+  busySessionId = null,
   onSelect,
   onDeleteSession,
   onCreateFolder,
@@ -700,7 +704,8 @@ export default function SessionSidebarArchivePanel({
                   : (
                     <div className={s.sessionList}>
                       {sessions.map(sess => {
-                        const active = sess.id === activeId
+                        const active = activeRoute === 'chat' && sess.id === activeId
+                        const busy = sess.id === busySessionId
                         const isDeletingSession = deletingSessionId === sess.id
                         return isDeletingSession ? (
                           <div
@@ -741,7 +746,16 @@ export default function SessionSidebarArchivePanel({
                             onClick={() => onSelect(sess.id)}
                             onKeyDown={e => e.key === 'Enter' && onSelect(sess.id)}
                           >
-                            <span className={s.sessionTitle}>{sess.title}</span>
+                            <span className={s.sessionTitle}>
+                              {busy && (
+                                <span className="opptrix-thinking-dots" aria-hidden>
+                                  <span className="opptrix-thinking-dots__dot" />
+                                  <span className="opptrix-thinking-dots__dot" />
+                                  <span className="opptrix-thinking-dots__dot" />
+                                </span>
+                              )}
+                              {sess.title}
+                            </span>
                             <span className={s.folderCount}>{formatDate(sess.updatedAt)}</span>
                             <button
                               type="button"
