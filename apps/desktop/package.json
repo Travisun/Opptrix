@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.1",
+  "version": "0.6.0-dev.2",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
@@ -19,6 +19,9 @@
     "build": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false",
     "build:dir": "node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false",
     "build:local": "CSC_IDENTITY_AUTO_DISCOVERY=false node scripts/prebuild.mjs && electron-builder --dir --config.npmRebuild=false",
+    "build:publish": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --publish always",
+    "build:publish:mac-arm64": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --mac --arm64 --publish always",
+    "build:publish:mac-x64": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --mac --x64 --publish always",
     "verify:runtime": "node scripts/verify-runtime.mjs"
   },
   "build": {

@@ -69,11 +69,11 @@ jobs:
       - name: Build and publish desktop
         shell: bash
         run: |
-          if [ -n "${{ matrix.electron_arch }}" ]; then
-            npm run build -w @opptrix/desktop -- --mac --${{ matrix.electron_arch }} --publish always
-          else
-            npm run build:desktop -- --publish always
-          fi
+          case "${{ matrix.electron_arch }}" in
+            arm64) npm run build:publish:mac-arm64 -w @opptrix/desktop ;;
+            x64)   npm run build:publish:mac-x64 -w @opptrix/desktop ;;
+            *)     npm run build:publish -w @opptrix/desktop ;;
+          esac
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
