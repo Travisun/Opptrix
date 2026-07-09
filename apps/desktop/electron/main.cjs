@@ -276,16 +276,39 @@ setProtocolDeliverHandler(deliverProtocolPayload)
 installProtocolHandlers(app, { focusMainWindow })
 
 function buildMainWindowOptions() {
+  // Default window size: comfortable on common laptop screens without
+  // overwhelming the display. Capped below screen work area on first launch.
+  const DEFAULT_WIDTH = 1100
+  const DEFAULT_HEIGHT = 740
+  const MIN_WIDTH = 510 // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
+  const MIN_HEIGHT = 640
+
+  let width = DEFAULT_WIDTH
+  let height = DEFAULT_HEIGHT
+  let center = true
+  try {
+    const { screen } = require('electron')
+    const display = screen.getPrimaryDisplay()
+    const { width: sw, height: sh } = display.workAreaSize
+    // Use up to 75% width / 80% height of the work area, but no larger than defaults
+    const targetW = Math.min(DEFAULT_WIDTH, Math.round(sw * 0.78))
+    const targetH = Math.min(DEFAULT_HEIGHT, Math.round(sh * 0.82))
+    width = Math.max(MIN_WIDTH, targetW)
+    height = Math.max(MIN_HEIGHT, targetH)
+  } catch {
+    // screen unavailable (headless tests); fall back to defaults
+  }
+
   /** @type {import('electron').BrowserWindowConstructorOptions} */
   const options = {
-    width: 1280,
-    height: 840,
-    // Keep in sync with DESKTOP_CHAT_MIN_WIDTH in client-ui/src/desktop/constants.ts
-    minWidth: 510,
-    minHeight: 640,
+    width,
+    height,
+    minWidth: MIN_WIDTH,
+    minHeight: MIN_HEIGHT,
     title: 'Opptrix 你的A股投研助手',
     backgroundColor: '#F5F5F7',
     show: false,
+    center,
     webPreferences: mainWindowWebPreferences({
       isDev,
       preloadPath: path.join(__dirname, 'preload.cjs'),

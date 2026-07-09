@@ -9,6 +9,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
+import ThinkingDots from '../components/ThinkingDots'
 import { isElectron } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
@@ -265,6 +266,8 @@ interface SessionSidebarProps {
   sessions: SessionMeta[]
   activeId: string | null
   activeRoute?: 'chat' | 'news' | 'market'
+  /** id of the session currently streaming a response (shows thinking dot) */
+  busySessionId?: string | null
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -290,7 +293,7 @@ function formatDate(iso: string) {
 
 export default function SessionSidebar({
   mode, visible = true, drawerOpen = false,
-  sessions, activeId, activeRoute = 'chat',
+  sessions, activeId, activeRoute = 'chat', busySessionId = null,
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
   listTab: listTabProp,
   onListTabChange,
@@ -317,10 +320,28 @@ export default function SessionSidebar({
   const archiveAnchorRef = useRef<HTMLElement | null>(null)
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
+  const releaseSidebarFocus = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+  }, [])
+
   const handleSelect = (id: string) => {
+    // When picking a session (especially from archive panel), switch back
+    // to the chat tab and clear any :focus / :hover-visible lingering in the
+    // sidebar list so the user lands cleanly in the chat area.
+    if (listTab !== 'chat') setListTab('chat')
+    releaseSidebarFocus()
     onSelect(id)
     if (isDrawer || isOverlay) onClose?.()
   }
+
+  const handleTopMenuClick = useCallback((action: () => void) => {
+    return () => {
+      releaseSidebarFocus()
+      action()
+    }
+  }, [releaseSidebarFocus])
 
   const sidebarBody = (
     <>
@@ -331,12 +352,12 @@ export default function SessionSidebar({
       )}
 
       <div className={s.menuSection}>
-      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
       </button>
 
-      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onOpenSearch}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onOpenSearch)}>
         <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>搜索</span>
       </button>
@@ -348,7 +369,7 @@ export default function SessionSidebar({
           'opptrix-focusable',
           activeRoute === 'news' && s.menuRowActive,
         )}
-        onClick={onOpenNewsCenter}
+        onClick={handleTopMenuClick(onOpenNewsCenter)}
       >
         <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新闻中心</span>
@@ -361,7 +382,7 @@ export default function SessionSidebar({
           'opptrix-focusable',
           activeRoute === 'market' && s.menuRowActive,
         )}
-        onClick={onOpenMarketDynamics}
+        onClick={handleTopMenuClick(onOpenMarketDynamics)}
       >
         <GlobeRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>市场动态</span>
@@ -388,7 +409,12 @@ export default function SessionSidebar({
           <div className={s.empty}>暂无历史对话</div>
         )}
         {sessions.map(sess => {
-          const active = sess.id === activeId
+          // Only show the active highlight when we're in the chat view; if the
+          // user navigated away to news / market, clear the highlight so any
+          // session row can be clicked (including the current one) to jump
+          // back into the chat area.
+          const active = activeRoute === 'chat' && sess.id === activeId
+          const busy = sess.id === busySessionId
           return (
             <div
               key={sess.id}
@@ -404,7 +430,10 @@ export default function SessionSidebar({
               tabIndex={0}
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
-              <span className={s.itemTitle}>{sess.title}</span>
+              <span className={s.itemTitle}>
+                {busy && <ThinkingDots />}
+                {sess.title}
+              </span>
               <span className={s.itemTrailing}>
                 <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
                 <button
@@ -437,6 +466,8 @@ export default function SessionSidebar({
           <SessionSidebarArchivePanel
             groups={archivedGroups}
             activeId={activeId}
+            activeRoute={activeRoute}
+            busySessionId={busySessionId}
             onSelect={handleSelect}
             onDeleteSession={onDeleteArchivedSession}
             onCreateFolder={onCreateArchiveFolder}

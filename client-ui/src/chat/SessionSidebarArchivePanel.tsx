@@ -16,19 +16,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
-
-const OTHER_ARCHIVE_FOLDER_ID = 'other'
-
-const SYSTEM_ARCHIVE_FOLDER_IDS = new Set([
-  'research',
-  'trades',
-  'review',
-  OTHER_ARCHIVE_FOLDER_ID,
-])
-
-function isSystemArchiveFolder(folder: Pick<SessionArchiveFolder, 'id'>) {
-  return SYSTEM_ARCHIVE_FOLDER_IDS.has(folder.id)
-}
+import ThinkingDots from '../components/ThinkingDots'
 
 const useStyles = makeStyles({
   root: {
@@ -168,11 +156,26 @@ const useStyles = makeStyles({
     flexShrink: 0,
     color: opptrixCssVars.textTertiary,
     lineHeight: 0,
+    opacity: 0,
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
   },
   folderIcon: {
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     lineHeight: 0,
+    position: 'absolute',
+    left: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+  },
+  folderIconSlot: {
+    position: 'relative',
+    width: '14px',
+    height: '14px',
+    flexShrink: 0,
   },
   folderTitle: {
     flex: 1,
@@ -327,6 +330,8 @@ export interface ArchiveFolderGroup {
 interface Props {
   groups: ArchiveFolderGroup[]
   activeId: string | null
+  activeRoute?: 'chat' | 'news' | 'market'
+  busySessionId?: string | null
   onSelect: (id: string) => void
   onDeleteSession: (id: string) => void | Promise<void>
   onCreateFolder: (title: string) => void | Promise<void>
@@ -355,6 +360,8 @@ function useFocusOnMount(active: boolean) {
 export default function SessionSidebarArchivePanel({
   groups,
   activeId,
+  activeRoute = 'chat',
+  busySessionId = null,
   onSelect,
   onDeleteSession,
   onCreateFolder,
@@ -376,9 +383,9 @@ export default function SessionSidebarArchivePanel({
   const createInputRef = useFocusOnMount(creatingFolder)
   const renameInputRef = useFocusOnMount(renamingFolderId != null)
 
-  const toggleFolder = useCallback((folderId: string, isDefault: boolean) => {
+  const toggleFolder = useCallback((folderId: string) => {
     setCollapsed(prev => {
-      const current = prev[folderId] ?? isDefault
+      const current = prev[folderId] ?? true
       return { ...prev, [folderId]: !current }
     })
   }, [])
@@ -533,11 +540,8 @@ export default function SessionSidebarArchivePanel({
         {!groups.length && !creatingFolder && (
           <div className={s.emptyAll}>还没有归档文件夹</div>
         )}
-        {groups.length > 0 && !hasAnySession && (
-          <div className={s.emptyAll}>暂无归档对话<br />在对话列表中可将对话归档到此</div>
-        )}
-        {hasAnySession && groups.map(({ folder, sessions }) => {
-          const isCollapsed = collapsed[folder.id] ?? isSystemArchiveFolder(folder)
+        {groups.map(({ folder, sessions }) => {
+          const isCollapsed = collapsed[folder.id] ?? true
           const isRenaming = renamingFolderId === folder.id
           const isDeleting = deletingFolderId === folder.id
           // 用户自建：重命名/删除；系统默认文件夹：清空
@@ -558,23 +562,25 @@ export default function SessionSidebarArchivePanel({
                 tabIndex={!isRenaming && !isDeleting ? 0 : undefined}
                 aria-expanded={!isRenaming && !isDeleting ? !isCollapsed : undefined}
                 onClick={() => {
-                  if (!isRenaming && !isDeleting) toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                  if (!isRenaming && !isDeleting) toggleFolder(folder.id)
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !isRenaming && !isDeleting) {
                     e.preventDefault()
-                    toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                    toggleFolder(folder.id)
                   }
                 }}
               >
                 {!isRenaming && (
-                  <span className={s.folderToggle} aria-hidden>
-                    {isCollapsed
-                      ? <ChevronRightRegular fontSize={14} />
-                      : <ChevronDownRegular fontSize={14} />}
+                  <span className={s.folderIconSlot}>
+                    <FolderRegular className={mergeClasses(s.folderIcon, 'opptrix-archive-folder-icon')} fontSize={14} />
+                    <span className={mergeClasses(s.folderToggle, 'opptrix-archive-folder-toggle')} aria-hidden>
+                      {isCollapsed
+                        ? <ChevronRightRegular fontSize={14} />
+                        : <ChevronDownRegular fontSize={14} />}
+                    </span>
                   </span>
                 )}
-                {!isRenaming && <FolderRegular className={s.folderIcon} fontSize={14} />}
                 {isRenaming ? (
                   <>
                     <Input
@@ -699,7 +705,8 @@ export default function SessionSidebarArchivePanel({
                   : (
                     <div className={s.sessionList}>
                       {sessions.map(sess => {
-                        const active = sess.id === activeId
+                        const active = activeRoute === 'chat' && sess.id === activeId
+                        const busy = sess.id === busySessionId
                         const isDeletingSession = deletingSessionId === sess.id
                         return isDeletingSession ? (
                           <div
@@ -740,7 +747,10 @@ export default function SessionSidebarArchivePanel({
                             onClick={() => onSelect(sess.id)}
                             onKeyDown={e => e.key === 'Enter' && onSelect(sess.id)}
                           >
-                            <span className={s.sessionTitle}>{sess.title}</span>
+                            <span className={s.sessionTitle}>
+                              {busy && <ThinkingDots />}
+                              {sess.title}
+                            </span>
                             <span className={s.folderCount}>{formatDate(sess.updatedAt)}</span>
                             <button
                               type="button"

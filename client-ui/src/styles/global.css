@@ -53,6 +53,7 @@ body {
   --opptrix-border: rgba(60, 60, 67, 0.08);
   --opptrix-border-strong: rgba(60, 60, 67, 0.14);
   --opptrix-text: #1D1D1F;
+  --opptrix-text-primary: #1D1D1F;
   --opptrix-text-secondary: #6E6E73;
   --opptrix-text-tertiary: #AEAEB2;
   --opptrix-success: #34C759;
@@ -120,6 +121,7 @@ body {
   --opptrix-border: rgba(255, 255, 255, 0.08);
   --opptrix-border-strong: rgba(255, 255, 255, 0.14);
   --opptrix-text: #F5F5F7;
+  --opptrix-text-primary: #F5F5F7;
   --opptrix-text-secondary: #AEAEB2;
   --opptrix-text-tertiary: #6E6E73;
   --opptrix-success: #30D158;
@@ -1702,6 +1704,15 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     opacity: 0;
   }
 
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-icon {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-toggle,
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-toggle {
+    opacity: 1;
+  }
+
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-rename,
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-delete,
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-clear {
@@ -1761,6 +1772,14 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     display: none;
   }
 
+  .opptrix-archive-folder-head .opptrix-archive-folder-icon {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head .opptrix-archive-folder-toggle {
+    opacity: 1;
+  }
+
   .opptrix-archive-folder-head .opptrix-archive-folder-rename,
   .opptrix-archive-folder-head .opptrix-archive-folder-delete,
   .opptrix-archive-folder-head .opptrix-archive-folder-clear {
@@ -1782,4 +1801,82 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     grid-template-columns: 1fr !important;
     gap: 6px !important;
   }
+}
+
+/* ── Thinking indicator: 2×2 clockwise chase (compact, text-sized) ──
+   Dot positions (clockwise order):
+     dot1 (top-left)    dot2 (top-right)
+     dot4 (bottom-left) dot3 (bottom-right)
+   Quarter-cycle breakdown (cycle = 1.2s, steps(1) jumps at each 25%):
+     t=0%   leader=TL(1)   trail1=BL(0.5) trail2=BR(0.25) off=TR
+     t=25%  leader=TR(1)   trail1=TL(0.5) trail2=BL(0.25) off=BR
+     t=50%  leader=BR(1)   trail1=TR(0.5) trail2=TL(0.25) off=BL
+     t=75%  leader=BL(1)   trail1=BR(0.5) trail2=TR(0.25) off=TL
+   The "off" slot moves clockwise one position each step; exactly three
+   dots are always visible at opacities 1 / 0.5 / 0.25. */
+@keyframes opptrix-think-dot-1 {
+  0%   { opacity: 1;    transform: scale(1); }
+  25%  { opacity: 0.5;  transform: scale(0.95); }
+  50%  { opacity: 0.25; transform: scale(0.85); }
+  75%  { opacity: 0;    transform: scale(0.75); }
+  100% { opacity: 1;    transform: scale(1); }
+}
+@keyframes opptrix-think-dot-2 {
+  0%   { opacity: 0;    transform: scale(0.75); }
+  25%  { opacity: 1;    transform: scale(1); }
+  50%  { opacity: 0.5;  transform: scale(0.95); }
+  75%  { opacity: 0.25; transform: scale(0.85); }
+  100% { opacity: 0;    transform: scale(0.75); }
+}
+@keyframes opptrix-think-dot-3 {
+  0%   { opacity: 0.25; transform: scale(0.85); }
+  25%  { opacity: 0;    transform: scale(0.75); }
+  50%  { opacity: 1;    transform: scale(1); }
+  75%  { opacity: 0.5;  transform: scale(0.95); }
+  100% { opacity: 0.25; transform: scale(0.85); }
+}
+@keyframes opptrix-think-dot-4 {
+  0%   { opacity: 0.5;  transform: scale(0.95); }
+  25%  { opacity: 0.25; transform: scale(0.85); }
+  50%  { opacity: 0;    transform: scale(0.75); }
+  75%  { opacity: 1;    transform: scale(1); }
+  100% { opacity: 0.5;  transform: scale(0.95); }
+}
+
+.opptrix-thinking-dots {
+  position: relative;
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  flex-shrink: 0;
+  margin-right: 4px;
+  vertical-align: -2px;
+}
+
+.opptrix-thinking-dots__dot {
+  position: absolute;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background-color: var(--opptrix-accent);
+  animation-duration: 1.2s;
+  animation-timing-function: steps(1, end);
+  animation-iteration-count: infinite;
+}
+
+.opptrix-thinking-dots__dot:nth-child(1) {
+  top: 1px; left: 1px;
+  animation-name: opptrix-think-dot-1;
+}
+.opptrix-thinking-dots__dot:nth-child(2) {
+  top: 1px; right: 1px;
+  animation-name: opptrix-think-dot-2;
+}
+.opptrix-thinking-dots__dot:nth-child(3) {
+  bottom: 1px; right: 1px;
+  animation-name: opptrix-think-dot-3;
+}
+.opptrix-thinking-dots__dot:nth-child(4) {
+  bottom: 1px; left: 1px;
+  animation-name: opptrix-think-dot-4;
 }
