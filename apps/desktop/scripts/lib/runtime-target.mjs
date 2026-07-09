@@ -80,9 +80,7 @@ export function runNpm(args, { cwd, target, extraEnv = {} }) {
 
 /** @param {string} scriptPath */
 export function runNodeScript(scriptPath, { cwd, target, extraEnv = {} }) {
+  // install.js 等脚本只需 npm_config_platform/arch，用宿主 Node 即可交叉下载，勿 arch -x86_64 node
   const env = npmEnv(target, extraEnv)
-  if (target.useRosettaX64) {
-    return spawn('arch', ['-x86_64', process.execPath, scriptPath], { cwd, env })
-  }
   return spawn(process.execPath, [scriptPath], { cwd, env })
 }

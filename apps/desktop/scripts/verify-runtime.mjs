@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { hostMatchesTarget, resolveRuntimeTarget } from './lib/runtime-target.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
@@ -18,6 +19,8 @@ function fail(msg) {
   console.error(`verify-runtime: ${msg}`)
   process.exit(1)
 }
+
+const target = resolveRuntimeTarget()
 
 const entry = path.join(STAGE, 'apps/server/dist/index.js')
 if (!fs.existsSync(entry)) {
@@ -52,6 +55,14 @@ const electronBin = resolveElectronBinary()
 const sqliteNode = path.join(STAGE, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node')
 if (!fs.existsSync(sqliteNode)) {
   fail(`missing ${sqliteNode} — run stage-runtime.mjs`)
+}
+
+if (!hostMatchesTarget(target)) {
+  console.log(
+    `verify-runtime: skip live sidecar (host ${process.platform}-${process.arch}`
+    + ` != staged ${target.platform}-${target.arch}) — artifacts OK`,
+  )
+  process.exit(0)
 }
 
 async function waitForHealth(timeoutMs = 45_000) {
