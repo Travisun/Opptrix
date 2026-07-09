@@ -536,7 +536,7 @@ export default function SessionSidebarArchivePanel({
         {groups.length > 0 && !hasAnySession && (
           <div className={s.emptyAll}>暂无归档对话<br />在对话列表中可将对话归档到此</div>
         )}
-        {groups.map(({ folder, sessions }) => {
+        {hasAnySession && groups.map(({ folder, sessions }) => {
           const isCollapsed = collapsed[folder.id] ?? isSystemArchiveFolder(folder)
           const isRenaming = renamingFolderId === folder.id
           const isDeleting = deletingFolderId === folder.id
