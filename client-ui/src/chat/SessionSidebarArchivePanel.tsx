@@ -168,11 +168,26 @@ const useStyles = makeStyles({
     flexShrink: 0,
     color: opptrixCssVars.textTertiary,
     lineHeight: 0,
+    opacity: 0,
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
   },
   folderIcon: {
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     lineHeight: 0,
+    position: 'absolute',
+    left: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
+    transitionProperty: 'opacity',
+    transitionDuration: motion.fast,
+  },
+  folderIconSlot: {
+    position: 'relative',
+    width: '14px',
+    height: '14px',
+    flexShrink: 0,
   },
   folderTitle: {
     flex: 1,
@@ -533,10 +548,7 @@ export default function SessionSidebarArchivePanel({
         {!groups.length && !creatingFolder && (
           <div className={s.emptyAll}>还没有归档文件夹</div>
         )}
-        {groups.length > 0 && !hasAnySession && (
-          <div className={s.emptyAll}>暂无归档对话<br />在对话列表中可将对话归档到此</div>
-        )}
-        {hasAnySession && groups.map(({ folder, sessions }) => {
+        {groups.map(({ folder, sessions }) => {
           const isCollapsed = collapsed[folder.id] ?? isSystemArchiveFolder(folder)
           const isRenaming = renamingFolderId === folder.id
           const isDeleting = deletingFolderId === folder.id
@@ -568,13 +580,15 @@ export default function SessionSidebarArchivePanel({
                 }}
               >
                 {!isRenaming && (
-                  <span className={s.folderToggle} aria-hidden>
-                    {isCollapsed
-                      ? <ChevronRightRegular fontSize={14} />
-                      : <ChevronDownRegular fontSize={14} />}
+                  <span className={s.folderIconSlot}>
+                    <FolderRegular className={mergeClasses(s.folderIcon, 'opptrix-archive-folder-icon')} fontSize={14} />
+                    <span className={mergeClasses(s.folderToggle, 'opptrix-archive-folder-toggle')} aria-hidden>
+                      {isCollapsed
+                        ? <ChevronRightRegular fontSize={14} />
+                        : <ChevronDownRegular fontSize={14} />}
+                    </span>
                   </span>
                 )}
-                {!isRenaming && <FolderRegular className={s.folderIcon} fontSize={14} />}
                 {isRenaming ? (
                   <>
                     <Input

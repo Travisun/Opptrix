@@ -53,6 +53,7 @@ body {
   --opptrix-border: rgba(60, 60, 67, 0.08);
   --opptrix-border-strong: rgba(60, 60, 67, 0.14);
   --opptrix-text: #1D1D1F;
+  --opptrix-text-primary: #1D1D1F;
   --opptrix-text-secondary: #6E6E73;
   --opptrix-text-tertiary: #AEAEB2;
   --opptrix-success: #34C759;
@@ -120,6 +121,7 @@ body {
   --opptrix-border: rgba(255, 255, 255, 0.08);
   --opptrix-border-strong: rgba(255, 255, 255, 0.14);
   --opptrix-text: #F5F5F7;
+  --opptrix-text-primary: #F5F5F7;
   --opptrix-text-secondary: #AEAEB2;
   --opptrix-text-tertiary: #6E6E73;
   --opptrix-success: #30D158;
@@ -1702,6 +1704,15 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     opacity: 0;
   }
 
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-icon {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-toggle,
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-toggle {
+    opacity: 1;
+  }
+
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-rename,
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-delete,
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-clear {
@@ -1759,6 +1770,14 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 @media (hover: none) {
   .opptrix-archive-folder-head .opptrix-archive-folder-count {
     display: none;
+  }
+
+  .opptrix-archive-folder-head .opptrix-archive-folder-icon {
+    opacity: 0;
+  }
+
+  .opptrix-archive-folder-head .opptrix-archive-folder-toggle {
+    opacity: 1;
   }
 
   .opptrix-archive-folder-head .opptrix-archive-folder-rename,
