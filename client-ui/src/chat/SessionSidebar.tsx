@@ -317,10 +317,28 @@ export default function SessionSidebar({
   const archiveAnchorRef = useRef<HTMLElement | null>(null)
   archiveAnchorRef.current = archiveMenu?.anchor ?? null
 
+  const releaseSidebarFocus = useCallback(() => {
+    if (document.activeElement instanceof HTMLElement) {
+      document.activeElement.blur()
+    }
+  }, [])
+
   const handleSelect = (id: string) => {
+    // When picking a session (especially from archive panel), switch back
+    // to the chat tab and clear any :focus / :hover-visible lingering in the
+    // sidebar list so the user lands cleanly in the chat area.
+    if (listTab !== 'chat') setListTab('chat')
+    releaseSidebarFocus()
     onSelect(id)
     if (isDrawer || isOverlay) onClose?.()
   }
+
+  const handleTopMenuClick = useCallback((action: () => void) => {
+    return () => {
+      releaseSidebarFocus()
+      action()
+    }
+  }, [releaseSidebarFocus])
 
   const sidebarBody = (
     <>
@@ -331,12 +349,12 @@ export default function SessionSidebar({
       )}
 
       <div className={s.menuSection}>
-      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onNew}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
       </button>
 
-      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={onOpenSearch}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onOpenSearch)}>
         <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>搜索</span>
       </button>
@@ -348,7 +366,7 @@ export default function SessionSidebar({
           'opptrix-focusable',
           activeRoute === 'news' && s.menuRowActive,
         )}
-        onClick={onOpenNewsCenter}
+        onClick={handleTopMenuClick(onOpenNewsCenter)}
       >
         <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新闻中心</span>
@@ -361,7 +379,7 @@ export default function SessionSidebar({
           'opptrix-focusable',
           activeRoute === 'market' && s.menuRowActive,
         )}
-        onClick={onOpenMarketDynamics}
+        onClick={handleTopMenuClick(onOpenMarketDynamics)}
       >
         <GlobeRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>市场动态</span>
