@@ -1,19 +1,15 @@
 import { mergeClasses } from '@fluentui/react-components'
 
 /**
- * Compact 2×2 chase "thinking" indicator.
+ * Compact 3×3 "thinking" indicator.
  *
- * Layout (clockwise order):
- *   dot1 top-left    dot2 top-right
- *   dot4 bottom-left dot3 bottom-right
+ * 9 dots arranged in a square grid. Each dot pulses independently with a
+ * unique phase, producing a "twinkling" effect. At any moment roughly
+ * 3–5 dots are visible at varying opacities, creating organic motion
+ * rather than a rigid chase.
  *
- * At any instant three dots are visible (opacities 1.0 / 0.5 / 0.25) and
- * one dot is off; the leader moves clockwise in discrete steps so the
- * brightness tiers read crisply. Sized to match ~13px body x-height so
- * it sits comfortably inline with regular text.
- *
- * All animation / size styles live in global.css under the
- * `.opptrix-thinking-dots` / `.opptrix-thinking-dots__dot` classes.
+ * All animation / size styles live in global.css under
+ * `.opptrix-thinking-dots` / `.opptrix-thinking-dots__dot`.
  */
 
 export interface ThinkingDotsProps {
@@ -30,6 +26,11 @@ export default function ThinkingDots({ className, label = '正在思考' }: Thin
       aria-label={label || undefined}
       aria-hidden={label ? undefined : true}
     >
+      <span className="opptrix-thinking-dots__dot" />
+      <span className="opptrix-thinking-dots__dot" />
+      <span className="opptrix-thinking-dots__dot" />
+      <span className="opptrix-thinking-dots__dot" />
+      <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />
       <span className="opptrix-thinking-dots__dot" />

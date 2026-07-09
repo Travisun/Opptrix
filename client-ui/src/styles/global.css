@@ -1803,44 +1803,34 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
   }
 }
 
-/* ── Thinking indicator: 2×2 clockwise chase (compact, text-sized) ──
-   Dot positions (clockwise order):
-     dot1 (top-left)    dot2 (top-right)
-     dot4 (bottom-left) dot3 (bottom-right)
-   Quarter-cycle breakdown (cycle = 1.2s, steps(1) jumps at each 25%):
-     t=0%   leader=TL(1)   trail1=BL(0.5) trail2=BR(0.25) off=TR
-     t=25%  leader=TR(1)   trail1=TL(0.5) trail2=BL(0.25) off=BR
-     t=50%  leader=BR(1)   trail1=TR(0.5) trail2=TL(0.25) off=BL
-     t=75%  leader=BL(1)   trail1=BR(0.5) trail2=TR(0.25) off=TL
-   The "off" slot moves clockwise one position each step; exactly three
-   dots are always visible at opacities 1 / 0.5 / 0.25. */
-@keyframes opptrix-think-dot-1 {
-  0%   { opacity: 1;    transform: scale(1); }
-  25%  { opacity: 0.5;  transform: scale(0.95); }
-  50%  { opacity: 0.25; transform: scale(0.85); }
-  75%  { opacity: 0;    transform: scale(0.75); }
-  100% { opacity: 1;    transform: scale(1); }
-}
-@keyframes opptrix-think-dot-2 {
-  0%   { opacity: 0;    transform: scale(0.75); }
-  25%  { opacity: 1;    transform: scale(1); }
-  50%  { opacity: 0.5;  transform: scale(0.95); }
-  75%  { opacity: 0.25; transform: scale(0.85); }
-  100% { opacity: 0;    transform: scale(0.75); }
-}
-@keyframes opptrix-think-dot-3 {
-  0%   { opacity: 0.25; transform: scale(0.85); }
-  25%  { opacity: 0;    transform: scale(0.75); }
-  50%  { opacity: 1;    transform: scale(1); }
-  75%  { opacity: 0.5;  transform: scale(0.95); }
-  100% { opacity: 0.25; transform: scale(0.85); }
-}
-@keyframes opptrix-think-dot-4 {
-  0%   { opacity: 0.5;  transform: scale(0.95); }
-  25%  { opacity: 0.25; transform: scale(0.85); }
-  50%  { opacity: 0;    transform: scale(0.75); }
-  75%  { opacity: 1;    transform: scale(1); }
-  100% { opacity: 0.5;  transform: scale(0.95); }
+/* ── Thinking indicator: 3×3 twinkle (compact, text-sized) ──
+   9 dots in a square grid. Each dot pulses on its own phase, producing
+   an organic "twinkling" effect. At any moment roughly 3–5 dots are
+   visible at varying opacities, never a rigid chase.
+
+   Grid positions (row, col), 1-indexed:
+     dot1 (1,1)  dot2 (1,2)  dot3 (1,3)
+     dot4 (2,1)  dot5 (2,2)  dot6 (2,3)
+     dot7 (3,1)  dot8 (3,2)  dot9 (3,3)
+
+   Pulse cycle (1.6s, ease-in-out):
+     0–28%  fully dark
+     40%    peak opacity (1)
+     55%    bright (0.85)
+     72%    back to dark
+     100%   dark (hold)
+     → lit window = ~44% of cycle → avg ~4 dots visible (3–5 range)
+
+   Delays are pseudo-randomized across the cycle to avoid mechanical
+   regularity while keeping a balanced brightness. */
+
+@keyframes opptrix-think-pulse {
+  0%   { opacity: 0;    transform: scale(0.4); }
+  28%  { opacity: 0;    transform: scale(0.4); }
+  40%  { opacity: 1;    transform: scale(1); }
+  55%  { opacity: 0.85; transform: scale(0.95); }
+  72%  { opacity: 0;    transform: scale(0.4); }
+  100% { opacity: 0;    transform: scale(0.4); }
 }
 
 .opptrix-thinking-dots {
@@ -1855,28 +1845,25 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 
 .opptrix-thinking-dots__dot {
   position: absolute;
-  width: 3px;
-  height: 3px;
+  width: 2px;
+  height: 2px;
   border-radius: 50%;
   background-color: var(--opptrix-accent);
-  animation-duration: 1.2s;
-  animation-timing-function: steps(1, end);
+  animation-name: opptrix-think-pulse;
+  animation-duration: 1.6s;
+  animation-timing-function: ease-in-out;
   animation-iteration-count: infinite;
 }
 
-.opptrix-thinking-dots__dot:nth-child(1) {
-  top: 1px; left: 1px;
-  animation-name: opptrix-think-dot-1;
-}
-.opptrix-thinking-dots__dot:nth-child(2) {
-  top: 1px; right: 1px;
-  animation-name: opptrix-think-dot-2;
-}
-.opptrix-thinking-dots__dot:nth-child(3) {
-  bottom: 1px; right: 1px;
-  animation-name: opptrix-think-dot-3;
-}
-.opptrix-thinking-dots__dot:nth-child(4) {
-  bottom: 1px; left: 1px;
-  animation-name: opptrix-think-dot-4;
-}
+/* Row 1 */
+.opptrix-thinking-dots__dot:nth-child(1) { top: 1px; left: 1px;  animation-delay: 0s; }
+.opptrix-thinking-dots__dot:nth-child(2) { top: 1px; left: 5px;  animation-delay: 0.42s; }
+.opptrix-thinking-dots__dot:nth-child(3) { top: 1px; left: 9px;  animation-delay: 0.88s; }
+/* Row 2 */
+.opptrix-thinking-dots__dot:nth-child(4) { top: 5px; left: 1px;  animation-delay: 0.18s; }
+.opptrix-thinking-dots__dot:nth-child(5) { top: 5px; left: 5px;  animation-delay: 0.67s; }
+.opptrix-thinking-dots__dot:nth-child(6) { top: 5px; left: 9px;  animation-delay: 1.34s; }
+/* Row 3 */
+.opptrix-thinking-dots__dot:nth-child(7) { top: 9px; left: 1px;  animation-delay: 0.31s; }
+.opptrix-thinking-dots__dot:nth-child(8) { top: 9px; left: 5px;  animation-delay: 1.09s; }
+.opptrix-thinking-dots__dot:nth-child(9) { top: 9px; left: 9px;  animation-delay: 1.52s; }
