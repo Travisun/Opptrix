@@ -5,6 +5,11 @@ on:
     tags:
       - 'desktop-v*'
   workflow_dispatch:
+    inputs:
+      skip_signing:
+        description: Skip code signing (dev / unsigned build)
+        type: boolean
+        default: false
 
 permissions:
   contents: write
@@ -53,18 +58,54 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Resolve macOS code signing
-        if: runner.os == 'macOS'
+      - name: Configure code signing
+        id: signcfg
         shell: bash
-        run: |
-          if [ -n "${CSC_LINK:-}" ]; then
-            echo "macOS code signing enabled"
-          else
-            echo "::warning::CSC_LINK not configured — building unsigned macOS packages"
-            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-          fi
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+        run: |
+          skip=0
+          if [[ "${{ github.ref_name }}" == *-dev* ]]; then
+            skip=1
+            echo "Dev pre-release tag — skipping code signing"
+          fi
+          if [[ "${{ inputs.skip_signing }}" == "true" ]]; then
+            skip=1
+            echo "skip_signing input — skipping code signing"
+          fi
+
+          if [[ "$skip" == "1" ]]; then
+            echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            exit 0
+          fi
+
+          case "${{ runner.os }}" in
+            macOS)
+              if [ -n "${CSC_LINK:-}" ]; then
+                echo "mode=mac" >> "$GITHUB_OUTPUT"
+                echo "macOS code signing enabled"
+              else
+                echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+                echo "::warning::CSC_LINK not configured — unsigned macOS build"
+              fi
+              ;;
+            Windows)
+              if [ -n "${WIN_CSC_LINK:-}" ]; then
+                echo "mode=win" >> "$GITHUB_OUTPUT"
+                echo "Windows code signing enabled"
+              else
+                echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+                echo "::warning::WIN_CSC_LINK not configured — unsigned Windows build (do not use Apple CSC_LINK on Windows)"
+              fi
+              ;;
+            *)
+              echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+              ;;
+          esac
 
       - name: Build and publish desktop
         shell: bash
@@ -77,8 +118,10 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
-          CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          CSC_LINK: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.CSC_LINK || '' }}
+          CSC_KEY_PASSWORD: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.CSC_KEY_PASSWORD || '' }}
+          WIN_CSC_LINK: ${{ steps.signcfg.outputs.mode == 'win' && secrets.WIN_CSC_LINK || '' }}
+          WIN_CSC_KEY_PASSWORD: ${{ steps.signcfg.outputs.mode == 'win' && secrets.WIN_CSC_KEY_PASSWORD || '' }}
+          APPLE_ID: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_TEAM_ID || '' }}
