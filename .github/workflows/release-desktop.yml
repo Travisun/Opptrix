@@ -107,16 +107,15 @@ jobs:
               ;;
           esac
 
-      - name: Build and publish desktop
+      - name: Build desktop package
         shell: bash
         run: |
           case "${{ matrix.electron_arch }}" in
-            arm64) npm run build:publish:mac-arm64 -w @opptrix/desktop ;;
-            x64)   npm run build:publish:mac-x64 -w @opptrix/desktop ;;
-            *)     npm run build:publish -w @opptrix/desktop ;;
+            arm64) npm run build:package:mac-arm64 -w @opptrix/desktop ;;
+            x64)   npm run build:package:mac-x64 -w @opptrix/desktop ;;
+            *)     npm run build:package -w @opptrix/desktop ;;
           esac
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
           CSC_LINK: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.CSC_LINK || '' }}
           CSC_KEY_PASSWORD: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.CSC_KEY_PASSWORD || '' }}
@@ -125,3 +124,17 @@ jobs:
           APPLE_ID: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_ID || '' }}
           APPLE_APP_SPECIFIC_PASSWORD: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
           APPLE_TEAM_ID: ${{ steps.signcfg.outputs.mode == 'mac' && secrets.APPLE_TEAM_ID || '' }}
+
+      - name: Upload to GitHub Release
+        shell: bash
+        run: |
+          shopt -s nullglob
+          files=(apps/desktop/release/*)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No release artifacts under apps/desktop/release/"
+            exit 1
+          fi
+          echo "Uploading ${#files[@]} file(s) to release ${{ github.ref_name }}…"
+          gh release upload "${{ github.ref_name }}" "${files[@]}" --clobber
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
