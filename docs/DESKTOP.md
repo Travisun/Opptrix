@@ -80,6 +80,10 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 | `UI_DIST_PATH` | Override UI dist directory |
 | `STOCK_RESEARCH_PORT` | API port (default `8711`) |
 | `ELECTRON_OPEN_DEVTOOLS` | Set to `1` to open DevTools in dev |
+| `OPPTRIX_RUNTIME_ARCH` | Sidecar native target arch (`arm64` / `x64`); CI macOS Intel 交叉构建时使用 |
+| `OPPTRIX_RUNTIME_PLATFORM` | Sidecar native target platform (`darwin` / `win32` / `linux`); 默认取当前 OS |
+| `OPPTRIX_PREBUILD_MIRROR` | `better-sqlite3` prebuild 镜像根 URL（默认 npmmirror CDN） |
+| `ELECTRON_MIRROR` / `npm_config_disturl` | Electron headers 下载镜像（本地网络受限时） |
 
 ## Platform UI
 

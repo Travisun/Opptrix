@@ -39,12 +39,20 @@ export function npmEnv(target, extra = {}) {
 }
 
 export function electronRebuildEnv(electronVersion, target) {
-  return npmEnv(target, {
+  const disturl = (
+    process.env.npm_config_disturl
+    || process.env.ELECTRON_MIRROR
+    || 'https://electronjs.org/headers'
+  ).replace(/\/$/, '')
+  const env = {
     npm_config_runtime: 'electron',
     npm_config_target: electronVersion,
-    npm_config_disturl: 'https://electronjs.org/headers',
-    npm_config_build_from_source: 'true',
-  })
+    npm_config_disturl: disturl,
+  }
+  if (process.env.OPPTRIX_FORCE_NATIVE_REBUILD === '1') {
+    env.npm_config_build_from_source = 'true'
+  }
+  return npmEnv(target, env)
 }
 
 export function hostMatchesTarget(target) {

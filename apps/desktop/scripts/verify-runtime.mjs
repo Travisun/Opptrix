@@ -32,8 +32,17 @@ function resolveElectronBinary() {
     return require('electron')
   } catch { /* fall through */ }
 
-  const packaged = path.join(DESKTOP_ROOT, 'release/mac/Opptrix.app/Contents/MacOS/Opptrix')
-  if (fs.existsSync(packaged)) return packaged
+  const packagedCandidates = [
+    path.join(DESKTOP_ROOT, 'release/mac-arm64/Opptrix.app/Contents/MacOS/Opptrix'),
+    path.join(DESKTOP_ROOT, 'release/mac/Opptrix.app/Contents/MacOS/Opptrix'),
+    path.join(DESKTOP_ROOT, 'release/mac-x64/Opptrix.app/Contents/MacOS/Opptrix'),
+    path.join(DESKTOP_ROOT, 'release/win-unpacked/Opptrix.exe'),
+    path.join(DESKTOP_ROOT, 'release/linux-unpacked/opptrix'),
+    path.join(DESKTOP_ROOT, 'release/linux-unpacked/Opptrix'),
+  ]
+  for (const candidate of packagedCandidates) {
+    if (fs.existsSync(candidate)) return candidate
+  }
 
   fail('electron not available — run npm install -w @opptrix/desktop, or set OPPTRIX_ELECTRON_BINARY')
 }

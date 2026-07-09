@@ -104,12 +104,17 @@ git tag desktop-v0.6.1
 git push origin desktop-v0.6.1
 ```
 
-推送 `desktop-v*` 标签后，GitHub Actions 会在 **macOS / Windows / Ubuntu** 三个 runner 上并行执行：
+推送 `desktop-v*` 标签后，GitHub Actions 会在 **4 个并行 job** 上构建（macOS x64、macOS arm64、Windows、Linux）：
 
 ```bash
 npm ci
-npm run build:desktop -- --publish always
+npm run build:desktop -- --publish always   # Windows / Linux
+# macOS 额外指定架构：
+npm run build -w @opptrix/desktop -- --mac --arm64 --publish always
+npm run build -w @opptrix/desktop -- --mac --x64 --publish always
 ```
+
+Sidecar 原生依赖（`better-sqlite3`、`ffmpeg-static`）由 `apps/desktop/scripts/stage-runtime.mjs` 按目标平台/架构 staging；`npm rebuild` 失败时会从 prebuild 镜像补装 SQLite 模块（见 `OPPTRIX_PREBUILD_MIRROR`）。
 
 `electron-builder` 会：
 
@@ -223,7 +228,7 @@ npm run build:desktop -- --publish always
 
 - **分架构发布**（`x64` + `arm64`），Intel 与 Apple Silicon 各一份；**不用 Universal 单包**（见 §3 说明）。
 - 同时产出 `dmg`（分发）与 `zip`（更新）。
-- CI 默认 **未签名**（`CSC_IDENTITY_AUTO_DISCOVERY=false`），内测可用；正式发布建议配置签名与公证。
+- **未配置签名 secrets 时 CI 仍可构建**（产出未签名包，`CSC_IDENTITY_AUTO_DISCOVERY=false`）；正式发布建议配置签名与公证。
 
 #### 在 CI 中配置 Apple 签名（推荐）
 
@@ -238,7 +243,7 @@ npm run build:desktop -- --publish always
    | `APPLE_APP_SPECIFIC_PASSWORD` | [App 专用密码](https://appleid.apple.com) |
    | `APPLE_TEAM_ID` | 开发者团队 10 位 ID |
 
-3. 在 [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) 中 **删除** `Disable macOS code signing` 这一步（否则不会签名）。
+3. 配置 secrets 后 **无需改 workflow**；未配置 `CSC_LINK` 时 workflow 自动跳过签名并继续构建。
 4. 项目已内置公证用 entitlements（`apps/desktop/resources/entitlements.mac.plist` 及 `.inherit.plist`），覆盖 Electron 主进程与 sidecar 子进程的原生模块加载；**不要**在签名时移除。
 5. 重新打 `desktop-v*` 标签发布。
 

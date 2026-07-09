@@ -11,18 +11,24 @@ permissions:
 
 jobs:
   release:
+    name: ${{ matrix.label }}
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: windows-latest
+            label: Windows x64
           - os: ubuntu-latest
+            label: Linux x64
           # macOS 分架构各打一包（sidecar 含 better-sqlite3 等原生模块，不能靠 Universal 外壳兼容 Intel）
           - os: macos-latest
+            label: macOS arm64
             electron_arch: arm64
           - os: macos-latest
+            label: macOS x64
             electron_arch: x64
     runs-on: ${{ matrix.os }}
+    timeout-minutes: 90
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -35,6 +41,7 @@ jobs:
 
       - name: Verify desktop version matches tag
         if: startsWith(github.ref, 'refs/tags/desktop-v')
+        shell: bash
         run: |
           TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
           PKG_VERSION="$(node -p "require('./apps/desktop/package.json').version")"
@@ -46,25 +53,21 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Verify macOS signing secrets
+      - name: Resolve macOS code signing
         if: runner.os == 'macOS'
+        shell: bash
         run: |
-          missing=0
-          for key in CSC_LINK CSC_KEY_PASSWORD APPLE_ID APPLE_APP_SPECIFIC_PASSWORD APPLE_TEAM_ID; do
-            if [ -z "${!key:-}" ]; then
-              echo "::error::Missing secret: $key (required for signed + notarized macOS builds)"
-              missing=1
-            fi
-          done
-          exit "$missing"
+          if [ -n "${CSC_LINK:-}" ]; then
+            echo "macOS code signing enabled"
+          else
+            echo "::warning::CSC_LINK not configured — building unsigned macOS packages"
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+          fi
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
-          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
-          APPLE_ID: ${{ secrets.APPLE_ID }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
-          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
 
       - name: Build and publish desktop
+        shell: bash
         run: |
           if [ -n "${{ matrix.electron_arch }}" ]; then
             npm run build -w @opptrix/desktop -- --mac --${{ matrix.electron_arch }} --publish always
