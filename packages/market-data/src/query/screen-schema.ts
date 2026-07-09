@@ -162,7 +162,7 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
   return {
     version: '1.0',
     data_source: '本地 L0 初选库（SQLite stock_factors / stock_scores / stock_quotes_daily）',
-    prerequisite: '先调用 get_market_db_status 确认 is_ready=true；未就绪时勿调用本筛选，改用 screen_stocks 或 trigger_market_db_sync。',
+    prerequisite: '本地因子筛选已停用；请使用 screen_stocks 或 search_instruments 在线初选。',
     trade_date: {
       format: 'YYYY-MM-DD',
       default: latestTradeDate ?? '最新因子交易日',

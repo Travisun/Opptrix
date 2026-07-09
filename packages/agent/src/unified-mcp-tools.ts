@@ -108,37 +108,8 @@ export const UNIFIED_MINING_INSTRUMENT_TOOLS = [
   'get_instrument_indicators',
 ] as const
 
-export const LEGACY_MARKET_DATA_TOOL_NAMES = [
-  'get_us_stock_quote',
-  'get_us_stock_kline',
-  'get_us_stock_snapshot',
-  'get_us_stock_profile',
-  'get_us_stock_financials',
-  'get_crypto_quote',
-  'get_crypto_kline',
-  'get_crypto_snapshot',
-  'get_stock_quotes',
-  'get_stock_kline',
-  'get_stock_chart',
-  'get_stock_detail',
-  'search_us_stocks',
-  'search_crypto_pairs',
-  'evaluate_stock',
-  'get_strategy_signal',
-  'strategy_verify',
-  'strategy_verify_report',
-  'get_latest_evaluation',
-  'batch_stock_snapshots',
-  'get_stock_cyq',
-  'search_stocks',
-] as const
-
-const LEGACY_MARKET_DATA_TOOL_SET = new Set<string>(LEGACY_MARKET_DATA_TOOL_NAMES)
-
 export function CHAT_MCP_TOOL_NAMES(registry: { list: () => Array<{ name: string }> }): readonly string[] {
-  return registry.list()
-    .map(t => t.name)
-    .filter(name => !LEGACY_MARKET_DATA_TOOL_SET.has(name))
+  return registry.list().map(t => t.name)
 }
 
 type DispatchFn = (feature: string, params: Record<string, unknown>) => Promise<unknown>

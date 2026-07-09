@@ -61,13 +61,15 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
 
   const hkTools = discoverMiningToolNamesForProfile('hk_equity')
   assert.ok(hkTools.includes('search_instruments'))
+  assert.ok(hkTools.includes('screen_hk_universe'))
   assert.ok(!hkTools.includes('get_local_hk_screen_schema'))
 
   assert.deepEqual(discoverFactorsForProfile('hk_equity'), ['keyword', 'industry_contains'])
 })
 
-test('discover mining tools for cn_equity start with online screening', () => {
-  assert.deepEqual(discoverMiningToolNamesForProfile('cn_equity').slice(0, 2), [
+test('discover mining tools for cn_equity start with market regime and online screening', () => {
+  assert.deepEqual(discoverMiningToolNamesForProfile('cn_equity').slice(0, 3), [
+    'get_market_regime',
     'screen_stocks',
     'search_instruments',
   ])
@@ -167,28 +169,17 @@ test('cn_equity_full mining uses unified instrument batch and evaluation tools',
   assert.ok(!cnTools.includes('evaluate_stock'))
 })
 
-test('CHAT_MCP_TOOL_NAMES excludes legacy per-market tools', async () => {
-  const { CHAT_MCP_TOOL_NAMES, LEGACY_MARKET_DATA_TOOL_NAMES } = await import(
-    '../packages/agent/dist/unified-mcp-tools.js'
-  )
-  const registry = {
-    list: () => [
-      ...LEGACY_MARKET_DATA_TOOL_NAMES.map(name => ({ name })),
-      { name: 'batch_instrument_snapshots' },
-      { name: 'get_instrument_snapshot' },
-      { name: 'get_instrument_indicators' },
-      { name: 'search_instruments' },
-    ],
-  }
-  const chatTools = CHAT_MCP_TOOL_NAMES(registry)
-  assert.ok(chatTools.includes('get_instrument_snapshot'))
-  assert.ok(chatTools.includes('get_instrument_indicators'))
-  assert.ok(chatTools.includes('search_instruments'))
-  assert.ok(!chatTools.includes('get_us_stock_quote'))
-  assert.ok(!chatTools.includes('get_crypto_quote'))
-  assert.ok(!chatTools.includes('strategy_verify'))
-  assert.ok(!chatTools.includes('batch_stock_snapshots'))
-  assert.ok(chatTools.includes('batch_instrument_snapshots'))
+test('CHAT_MCP_TOOL_NAMES exposes all registered tools', async () => {
+  const { CHAT_MCP_TOOL_NAMES } = await import('../packages/agent/dist/unified-mcp-tools.js')
+  const { ToolRegistry } = await import('../packages/agent/dist/tools.js')
+  const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
+  const registry = new ToolRegistry(new ResearchHub())
+  const chatTools = new Set(CHAT_MCP_TOOL_NAMES(registry))
+  assert.ok(chatTools.has('get_instrument_snapshot'))
+  assert.ok(chatTools.has('get_market_regime'))
+  assert.ok(chatTools.has('get_watchlist_radar'))
+  assert.ok(!chatTools.has('evaluate_stock'))
+  assert.ok(!chatTools.has('search_stocks'))
 })
 
 test('discoverMiningToolNames in agent aligns with shared registry', async () => {
