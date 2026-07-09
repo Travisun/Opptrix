@@ -118,6 +118,7 @@ jobs:
         shell: bash
         env:
           CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
         run: |
           if [[ "${{ inputs.skip_signing }}" == "true" ]]; then
@@ -129,14 +130,31 @@ jobs:
 
           case "${{ runner.os }}" in
             macOS)
-              if [ -n "${CSC_LINK:-}" ]; then
+              if [ -z "${CSC_LINK:-}" ] || [ -z "${CSC_KEY_PASSWORD:-}" ]; then
+                echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+                echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+                echo "::warning::CSC_LINK or CSC_KEY_PASSWORD missing — ad-hoc macOS build"
+                exit 0
+              fi
+
+              TMP=$(mktemp -d)
+              KC="$TMP/signing.keychain-db"
+              CERT="$TMP/cert.p12"
+              echo "$CSC_LINK" | base64 --decode > "$CERT"
+              security create-keychain -p ci "$KC"
+              security unlock-keychain -p ci "$KC"
+              security set-keychain-settings "$KC"
+              if security import "$CERT" -k "$KC" -P "$CSC_KEY_PASSWORD" \
+                  -T /usr/bin/codesign -T /usr/bin/productbuild 2>/dev/null; then
                 echo "mode=mac" >> "$GITHUB_OUTPUT"
                 echo "macOS Developer ID signing enabled"
               else
                 echo "mode=unsigned" >> "$GITHUB_OUTPUT"
                 echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-                echo "::warning::CSC_LINK not configured — ad-hoc macOS build (see release notes for xattr)"
+                echo "::warning::CSC_KEY_PASSWORD does not match CSC_LINK (.p12) — ad-hoc macOS build. Fix GitHub Secrets and rebuild for signed/notarized packages."
               fi
+              security delete-keychain "$KC" 2>/dev/null || true
+              rm -rf "$TMP"
               ;;
             Windows)
               if [ -n "${WIN_CSC_LINK:-}" ]; then

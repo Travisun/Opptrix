@@ -234,7 +234,7 @@ npm run build:desktop -- --publish always
    | Secret | 说明 |
    |--------|------|
    | `CSC_LINK` | `.p12` 文件的 Base64（`base64 -i cert.p12 \| pbcopy`） |
-   | `CSC_KEY_PASSWORD` | 导出 p12 时的密码 |
+   | `CSC_KEY_PASSWORD` | 导出 `.p12` 时的密码（**必须与证书匹配**；CI 会先校验，错误则回退 ad-hoc 未签名包） |
    | `APPLE_ID` | 苹果 ID 邮箱（公证） |
    | `APPLE_APP_SPECIFIC_PASSWORD` | [App 专用密码](https://appleid.apple.com) |
    | `APPLE_TEAM_ID` | 开发者团队 10 位 ID |
