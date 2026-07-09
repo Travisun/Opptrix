@@ -17,19 +17,6 @@ import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } 
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 
-const OTHER_ARCHIVE_FOLDER_ID = 'other'
-
-const SYSTEM_ARCHIVE_FOLDER_IDS = new Set([
-  'research',
-  'trades',
-  'review',
-  OTHER_ARCHIVE_FOLDER_ID,
-])
-
-function isSystemArchiveFolder(folder: Pick<SessionArchiveFolder, 'id'>) {
-  return SYSTEM_ARCHIVE_FOLDER_IDS.has(folder.id)
-}
-
 const useStyles = makeStyles({
   root: {
     flex: 1,
@@ -391,9 +378,9 @@ export default function SessionSidebarArchivePanel({
   const createInputRef = useFocusOnMount(creatingFolder)
   const renameInputRef = useFocusOnMount(renamingFolderId != null)
 
-  const toggleFolder = useCallback((folderId: string, isDefault: boolean) => {
+  const toggleFolder = useCallback((folderId: string) => {
     setCollapsed(prev => {
-      const current = prev[folderId] ?? isDefault
+      const current = prev[folderId] ?? true
       return { ...prev, [folderId]: !current }
     })
   }, [])
@@ -549,7 +536,7 @@ export default function SessionSidebarArchivePanel({
           <div className={s.emptyAll}>还没有归档文件夹</div>
         )}
         {groups.map(({ folder, sessions }) => {
-          const isCollapsed = collapsed[folder.id] ?? isSystemArchiveFolder(folder)
+          const isCollapsed = collapsed[folder.id] ?? true
           const isRenaming = renamingFolderId === folder.id
           const isDeleting = deletingFolderId === folder.id
           // 用户自建：重命名/删除；系统默认文件夹：清空
@@ -570,12 +557,12 @@ export default function SessionSidebarArchivePanel({
                 tabIndex={!isRenaming && !isDeleting ? 0 : undefined}
                 aria-expanded={!isRenaming && !isDeleting ? !isCollapsed : undefined}
                 onClick={() => {
-                  if (!isRenaming && !isDeleting) toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                  if (!isRenaming && !isDeleting) toggleFolder(folder.id)
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !isRenaming && !isDeleting) {
                     e.preventDefault()
-                    toggleFolder(folder.id, isSystemArchiveFolder(folder))
+                    toggleFolder(folder.id)
                   }
                 }}
               >
