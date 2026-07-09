@@ -1,3 +1,5 @@
+import { isShIndexCode, normalizeCode } from '../../../utils/helpers.js'
+
 const SUFFIX_MAP: Record<string, string> = {
   SS: 'SH',
   SH: 'SH',
@@ -31,12 +33,15 @@ export function toTsCode(symbol: string): string {
     const [code, suffix] = normalized.split('.', 2)
     return `${code}.${SUFFIX_MAP[suffix] ?? suffix}`
   }
-  if (normalized.startsWith('6') || normalized.startsWith('5')) return `${normalized}.SH`
-  if (normalized.startsWith('0') || normalized.startsWith('3')) return `${normalized}.SZ`
-  if (normalized.startsWith('8') || normalized.startsWith('4') || normalized.startsWith('2') || normalized.startsWith('9')) {
-    return `${normalized}.BJ`
+  const bare = normalizeCode(normalized)
+  if (isShIndexCode(bare)) return `${bare}.SH`
+  if (bare.startsWith('399')) return `${bare}.SZ`
+  if (bare.startsWith('6') || bare.startsWith('5')) return `${bare}.SH`
+  if (bare.startsWith('0') || bare.startsWith('3')) return `${bare}.SZ`
+  if (bare.startsWith('8') || bare.startsWith('4') || bare.startsWith('2') || bare.startsWith('9')) {
+    return `${bare}.BJ`
   }
-  return normalized
+  return bare
 }
 
 /**

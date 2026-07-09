@@ -3,6 +3,7 @@ import { compareChartTime, isIntradayPeriod, isMinuteOhlcPeriod, chartTimeForPer
 import { MARKET_DOWN, MARKET_UP, getMaColors } from './chartTheme'
 import type { ColorScheme } from '../theme/tokens'
 import { getOpptrixTokens } from '../theme/tokens'
+import { CN_TIMEZONE } from '../utils/cnTime'
 import type { Time } from 'lightweight-charts'
 
 export type ChartMode = 'ohlc' | 'intraday'
@@ -80,7 +81,7 @@ function chartTime(raw: string, period: string, timeZone?: string): Time {
   return chartTimeForPeriod(raw, period, timeZone)
 }
 
-function normalizeOhlc(bar: OhlcChartBar, period: string): CandlePoint {
+function normalizeOhlc(bar: OhlcChartBar, period: string, timeZone?: string): CandlePoint {
   let open = Number(bar.open)
   let high = Number(bar.high)
   let low = Number(bar.low)
@@ -92,7 +93,7 @@ function normalizeOhlc(bar: OhlcChartBar, period: string): CandlePoint {
   high = Math.max(open, high, low, close)
   low = Math.min(open, high, low, close)
   return {
-    time: chartTime(bar.time, period),
+    time: chartTime(bar.time, period, timeZone),
     open,
     high,
     low,
@@ -104,11 +105,12 @@ function maPoints(
   indicators: StockChartData['indicators'],
   key: 'ma5' | 'ma10' | 'ma20' | 'ma60',
   period: string,
+  timeZone?: string,
 ): LinePoint[] {
   return dedupeByTime(
     indicators
       .filter(row => row[key] != null)
-      .map(row => ({ time: chartTime(row.time, period), value: row[key]! })),
+      .map(row => ({ time: chartTime(row.time, period, timeZone), value: row[key]! })),
   )
 }
 
@@ -124,7 +126,7 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
   const minuteOhlc = isMinuteOhlcPeriod(data.period)
   const showMacd = !intraday && !minuteOhlc && data.indicators.some(row => row.macd != null)
   const ma = getMaColors(scheme)
-  const tz = data.chartTimeZone
+  const tz = data.chartTimeZone ?? CN_TIMEZONE
 
   if (intraday) {
     const bars = data.bars as IntradayChartBar[]
@@ -163,9 +165,9 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
   }
 
   const bars = data.bars as OhlcChartBar[]
-  const candles = dedupeByTime(bars.map(bar => normalizeOhlc(bar, data.period)))
+  const candles = dedupeByTime(bars.map(bar => normalizeOhlc(bar, data.period, tz)))
   const volume = dedupeByTime(bars.map(bar => ({
-    time: chartTime(bar.time, data.period),
+    time: chartTime(bar.time, data.period, tz),
     value: bar.volume,
     color: volumeColor(bar.changePct, scheme),
   })))
@@ -173,7 +175,7 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
     data.indicators
       .filter(row => row.macdHist != null && row.macd != null && row.macdSignal != null)
       .map(row => ({
-        time: chartTime(row.time, data.period),
+        time: chartTime(row.time, data.period, tz),
         hist: row.macdHist!,
         histColor: row.macdHist! >= 0 ? MARKET_UP : MARKET_DOWN,
         dif: row.macd!,
@@ -200,14 +202,14 @@ export function buildChartSeries(data: StockChartData, scheme: ColorScheme = 'li
     avgLine: [],
     maLines: minuteOhlc
       ? [
-          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period) },
-          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period) },
+          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period, tz) },
+          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period, tz) },
         ].filter(row => row.points.length > 0)
       : [
-          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period) },
-          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period) },
-          { key: 'ma20', color: ma.ma20, points: maPoints(data.indicators, 'ma20', data.period) },
-          { key: 'ma60', color: ma.ma60, points: maPoints(data.indicators, 'ma60', data.period) },
+          { key: 'ma5', color: ma.ma5, points: maPoints(data.indicators, 'ma5', data.period, tz) },
+          { key: 'ma10', color: ma.ma10, points: maPoints(data.indicators, 'ma10', data.period, tz) },
+          { key: 'ma20', color: ma.ma20, points: maPoints(data.indicators, 'ma20', data.period, tz) },
+          { key: 'ma60', color: ma.ma60, points: maPoints(data.indicators, 'ma60', data.period, tz) },
         ].filter(row => row.points.length > 0),
     volume,
     macd,

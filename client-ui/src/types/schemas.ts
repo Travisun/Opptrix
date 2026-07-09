@@ -387,11 +387,24 @@ export interface MarketStockMover {
   change_amt?: number | null
 }
 
+export interface MarketDragonTigerItem {
+  code: string
+  name: string
+  date: string
+  reason?: string
+  buy_amount?: number | null
+  sell_amount?: number | null
+  net_amount?: number | null
+  change_pct?: number | null
+}
+
 export interface MarketDynamicsData {
   refreshed_at: string
   sections: MarketDynamicsSection[]
   cn_gainers?: MarketStockMover[]
   cn_losers?: MarketStockMover[]
+  cn_dragon_tiger?: MarketDragonTigerItem[]
+  cn_dragon_tiger_date?: string | null
 }
 
 export interface StockSearchItem {

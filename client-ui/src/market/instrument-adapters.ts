@@ -284,6 +284,7 @@ export function unifiedChartToStockChart(
     hasMore: data.has_more,
     bars,
     indicators: (data.indicators ?? []) as StockChartData['indicators'],
+    chartTimeZone: data.chart_time_zone,
     cyqLatest: data.extras?.cyqLatest as StockChartData['cyqLatest'],
     cyqProfile: data.extras?.cyqProfile as StockChartData['cyqProfile'],
   }

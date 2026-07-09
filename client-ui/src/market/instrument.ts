@@ -1,7 +1,7 @@
 import type { WatchlistItem } from '../types/market'
 import type { DetailPanelKind, InstrumentRef, LocalInstrumentHit, Market } from '../types/instrument'
 import type { StockContext } from '../context/AppContext'
-import { isCnEtfCode, normalizeCode } from './format'
+import { isCnEtfCode, isCnIndexCode, normalizeCode } from './format'
 
 const US_PREFIX = /^(US|NYSE|NASDAQ|AMEX):/i
 const CRYPTO_PREFIX = /^(CRYPTO|BINANCE|OKX):/i
@@ -49,11 +49,8 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
   }
   if (/^\d+$/.test(input) && input.length <= 6) {
     const sym = normalizeCode(input)
-    return {
-      market: 'CN',
-      assetClass: isCnEtfCode(sym) ? 'ETF' : 'EQUITY',
-      symbol: sym,
-    }
+    const assetClass = isCnEtfCode(sym) ? 'ETF' : isCnIndexCode(sym) ? 'INDEX' : 'EQUITY'
+    return { market: 'CN', assetClass, symbol: sym }
   }
   if (/^[A-Z][A-Z0-9.-]{0,11}$/.test(input.toUpperCase())) {
     return { market: 'US', assetClass: 'EQUITY', symbol: input.toUpperCase() }

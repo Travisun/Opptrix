@@ -5,7 +5,11 @@ import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
 import { formatPct, formatPrice, pctTone } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
-import { MarketUsTechWatchList } from './MarketUsTechWatch'
+import {
+  MarketUsTechWatchList,
+  MarketUsTechWatchManageButton,
+  MarketUsTechWatchProvider,
+} from './MarketUsTechWatch'
 import MarketWatchlistQuotes from './MarketWatchlistQuotes'
 
 const CONTENT_PAD = '8px'
@@ -38,13 +42,21 @@ const useStyles = makeStyles({
   },
   colHead: {
     flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '4px',
+    padding: `5px ${CONTENT_PAD} 4px`,
+    minHeight: '24px',
+  },
+  colHeadTitle: {
     fontSize: '10px',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
-    padding: `5px ${CONTENT_PAD} 4px`,
     whiteSpace: 'nowrap',
     overflow: 'hidden',
     textOverflow: 'ellipsis',
+    minWidth: 0,
   },
   colScroll: {
     flex: 1,
@@ -164,13 +176,17 @@ type PanelColProps = {
   title: string
   s: ReturnType<typeof useStyles>
   stacked?: boolean
+  headAction?: ReactNode
   children: ReactNode
 }
 
-function PanelCol({ title, s, stacked, children }: PanelColProps) {
+function PanelCol({ title, s, stacked, headAction, children }: PanelColProps) {
   return (
     <div className={mergeClasses(s.col, stacked && s.colStacked)}>
-      <div className={s.colHead}>{title}</div>
+      <div className={s.colHead}>
+        <span className={s.colHeadTitle}>{title}</span>
+        {headAction}
+      </div>
       <div className={mergeClasses(s.colScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {children}
       </div>
@@ -198,9 +214,16 @@ export default function MarketBoardFocus({ gainers, losers, stacked = false }: P
         <MoverRows items={losers} s={s} compact={compactRows} />
       </PanelCol>
 
-      <PanelCol title="美股龙头" s={s} stacked={stacked}>
-        <MarketUsTechWatchList compact scrollable quad />
-      </PanelCol>
+      <MarketUsTechWatchProvider>
+        <PanelCol
+          title="美股龙头"
+          s={s}
+          stacked={stacked}
+          headAction={<MarketUsTechWatchManageButton />}
+        >
+          <MarketUsTechWatchList compact scrollable quad />
+        </PanelCol>
+      </MarketUsTechWatchProvider>
 
       <PanelCol title="我的关注" s={s} stacked={stacked}>
         <MarketWatchlistQuotes compact={compactRows} />

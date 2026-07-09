@@ -13,7 +13,7 @@ import type { Cache } from './cache.js'
 import type { DriverRegistry } from './registry.js'
 import type { BaseDriver } from '../providers/common/base.js'
 import { bindingKey } from './bindings.js'
-import { isCnEtfCode } from './instrument.js'
+import { isCnEtfCode, inferCnAssetClass } from './instrument.js'
 import { normalizeCode } from '../utils/helpers.js'
 import {
   normalizePreOpenRealtimeQuote,
@@ -117,7 +117,7 @@ function isProviderRunnable(driver: BaseDriver, registry: DriverRegistry): boole
 
 function resolveAssetClassFromArgs(args: unknown[], fallback: AssetClass): AssetClass {
   const code = String(args[0] ?? '')
-  if (code && isCnEtfCode(code)) return 'ETF'
+  if (code) return inferCnAssetClass(code)
   return fallback
 }
 

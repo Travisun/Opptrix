@@ -8,7 +8,7 @@
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
 import { instrumentDisplayCode, normalizeInstrumentRef } from '@opptrix/shared'
 import { Capability } from './capabilities.js'
-import { isCnEtfCode } from './instrument.js'
+import { inferCnAssetClass, isCnEtfCode } from './instrument.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regional-symbol.js'
 
 /**
@@ -126,7 +126,7 @@ export type InstrumentQueryPlan =
 
 function cnAssetClass(ref: InstrumentRef): AssetClass {
   if (ref.assetClass === 'ETF' || isCnEtfCode(ref.symbol)) return 'ETF'
-  if (ref.assetClass === 'INDEX') return 'INDEX'
+  if (ref.assetClass === 'INDEX' || inferCnAssetClass(ref.symbol) === 'INDEX') return 'INDEX'
   return 'EQUITY'
 }
 
@@ -191,8 +191,16 @@ export function resolveInstrumentQueryPlan(
     const assetClass = cnAssetClass(ref)
     switch (dataCap) {
       case 'realtime':
+        if (assetClass === 'INDEX') {
+          return registryPlan('CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [symbol])
+        }
         return { kind: 'cn_realtime', symbol }
       case 'kline':
+        if (assetClass === 'INDEX') {
+          return registryPlan('CN', 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
+            symbol, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
+          ])
+        }
         return {
           kind: 'cn_kline',
           symbol,

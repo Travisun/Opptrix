@@ -27,7 +27,7 @@ import { getProviderConfigStore } from './providers/config-store.js'
 import { resolveProviderAlias } from './providers/common/provider-aliases.js'
 import { getUserDataStore } from '@opptrix/user-store'
 import { createProviderCatalog, ProviderCatalogService } from './providers/catalog.js'
-import { isCnEtfCode } from './core/instrument.js'
+import { isCnEtfCode, inferCnAssetClass } from './core/instrument.js'
 import { QueryPlanExecutor, defaultCacheType } from './core/query-plan.js'
 import { executeIntradaySessionsPlan } from './core/query-plan-intraday.js'
 import { normalizeUsSymbol } from './utils/us-market.js'
@@ -52,6 +52,7 @@ import { WatchlistManager } from './watchlist/manager.js'
 import { watchlistItemKey } from './watchlist/instrument.js'
 import { instrumentId } from './core/instrument.js'
 import { normalizeCode } from './utils/helpers.js'
+import { resampleStockKlinesToPeriod } from './utils/kline-resample.js'
 import {
   normalizePreOpenRealtimeQuote,
   normalizePreOpenRealtimeQuotes,
@@ -312,7 +313,27 @@ export class MarketDataEngine {
 
   // ── Core market data ──
   realtime(code: string, market?: import('./utils/helpers.js').StockMarket): Promise<QueryResult<StockRealtime[]>> {
-    const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
+    const assetClass = inferCnAssetClass(code)
+    if (assetClass === 'INDEX') {
+      return this.qScoped<import('./core/schema.js').IndexRealtime>(
+        'CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code,
+      ).then(result => {
+        if (!result.success || !result.data?.length) return { ...result, data: undefined }
+        const data = result.data.map(row => ({
+          code: row.code,
+          name: row.name,
+          price: row.price,
+          open: row.open,
+          high: row.high,
+          low: row.low,
+          preClose: row.preClose,
+          volume: row.volume,
+          amount: row.amount,
+          changePct: row.changePct,
+        })) as StockRealtime[]
+        return { ...result, data: normalizePreOpenRealtimeQuotes(data) }
+      })
+    }
     return this.qScoped<StockRealtime>('CN', assetClass, Capability.STOCK_REALTIME, 'realtime', false, code, market).then(result => {
       if (!result.success || !result.data?.length) return result
       return { ...result, data: normalizePreOpenRealtimeQuotes(result.data) }
@@ -342,6 +363,15 @@ export class MarketDataEngine {
     count?: number,
     market?: import('./utils/helpers.js').StockMarket,
   ) {
+    if (inferCnAssetClass(code) === 'INDEX') {
+      if (typeof periodOrCount === 'number') {
+        return this.indexKline(code, periodOrCount) as Promise<QueryResult<StockKline[]>>
+      }
+      if (count != null) {
+        return this.indexKline(code, periodOrCount, start, end, count) as Promise<QueryResult<StockKline[]>>
+      }
+      return this.indexKline(code, periodOrCount, start, end) as Promise<QueryResult<StockKline[]>>
+    }
     if (typeof periodOrCount === 'number') {
       return this.fetchDailyKline(code, periodOrCount, 0, 'daily', market)
     }
@@ -382,6 +412,9 @@ export class MarketDataEngine {
     period = 'daily',
     market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
+    if (inferCnAssetClass(code) === 'INDEX') {
+      return this.fetchIndexKline(code, count, period) as Promise<QueryResult<StockKline[]>>
+    }
     const want = Math.max(1, count)
     const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
     return this.queryPlans.execute<StockKline>(
@@ -416,6 +449,12 @@ export class MarketDataEngine {
     startOffset: number,
     market?: import('./utils/helpers.js').StockMarket,
   ): Promise<QueryResult<StockKline[]>> {
+    if (inferCnAssetClass(code) === 'INDEX') {
+      const primary = await this.indexKline(code, period, '', '', count) as QueryResult<StockKline[]>
+      if (primary.success && primary.data?.length) return primary
+      if (startOffset > 0) return primary
+      return this.fetchCnIndexMinuteFromTencent(code, period, count)
+    }
     const assetClass = isCnEtfCode(code) ? 'ETF' : 'EQUITY'
     const viaPlan = await this.queryPlans.execute<StockKline>(
       this.queryPlans.getPlan('cn_equity_stock_kline_minute'),
@@ -478,6 +517,29 @@ export class MarketDataEngine {
         assetClass: 'INDEX',
       },
     )
+  }
+
+  /** 指数分钟 K — zzshare stk_mins 会误返个股，回退腾讯 minute/query */
+  private async fetchCnIndexMinuteFromTencent(
+    code: string,
+    period: string,
+    count: number,
+  ): Promise<QueryResult<StockKline[]>> {
+    const driver = this.registry.get('tencent') as {
+      minuteTrendKline?: (c: string, ndays?: number, n?: number) => Promise<StockKline[] | null>
+    } | undefined
+    if (!driver?.minuteTrendKline) {
+      return { success: false, error: '指数分钟 K 暂无数据' }
+    }
+    try {
+      const rows = await driver.minuteTrendKline.call(driver, code, 1, 0)
+      if (!rows?.length) return { success: false, error: '指数分钟 K 暂无数据' }
+      let klines = period === '1m' ? rows : resampleStockKlinesToPeriod(rows, period)
+      if (count > 0 && klines.length > count) klines = klines.slice(-count)
+      return { success: true, data: klines, source: 'tencent' }
+    } catch (e) {
+      return { success: false, error: e instanceof Error ? e.message : String(e) }
+    }
   }
 
   marketMoneyFlow(direction = 'north'): Promise<QueryResult<MarketMoneyFlow[]>> {

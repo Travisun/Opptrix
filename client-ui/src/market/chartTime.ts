@@ -1,4 +1,5 @@
 import type { Time, UTCTimestamp } from 'lightweight-charts'
+import { CN_TIMEZONE } from '../utils/cnTime'
 
 const MINUTE_PERIODS = new Set(['1m', '5m', '15m', '30m', '60m'])
 
@@ -26,7 +27,7 @@ export function toChartTime(value: string, forceTimestamp = false, timeZone?: st
     const hasOffset = /[+-]\d{2}:\d{2}$/.test(withSec) || withSec.endsWith('Z')
     const withTz = hasOffset
       ? withSec
-      : `${withSec}${timeZone ? timezoneOffsetSuffix(timeZone, withSec) : '+08:00'}`
+      : `${withSec}${timeZone ? timezoneOffsetSuffix(timeZone, withSec) : timezoneOffsetSuffix(CN_TIMEZONE, withSec)}`
     const ms = Date.parse(withTz)
     if (Number.isFinite(ms)) return Math.floor(ms / 1000) as UTCTimestamp
   }

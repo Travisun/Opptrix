@@ -1,7 +1,7 @@
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { MarketIndexQuote } from '../../types/schemas'
 import { opptrixCssVars } from '../../theme/tokens'
-import { ghostInteractive } from '../../theme/mixins'
+import { focusVisibleRing, interactiveTransition } from '../../theme/mixins'
 import { formatPct, pctTone } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import { indexKey, isCnChartableIndex } from './marketBoardUtils'
@@ -46,28 +46,42 @@ const useStyles = makeStyles({
     gap: '1px',
     padding: '6px 10px',
     minWidth: '86px',
-    borderTop: 'none',
-    borderBottom: 'none',
-    borderLeft: 'none',
+    margin: 0,
+    border: 'none',
     borderRight: `1px solid ${opptrixCssVars.separator}`,
+    borderRadius: 0,
     background: 'transparent',
     textAlign: 'left',
     cursor: 'default',
-    ...ghostInteractive,
+    fontFamily: 'inherit',
+    fontSize: 'unset',
+    fontWeight: 'normal',
+    lineHeight: 'normal',
+    letterSpacing: 'normal',
+    appearance: 'none',
+    WebkitAppearance: 'none',
+    boxSizing: 'border-box',
+    color: 'inherit',
   },
   indexCellClickable: {
     cursor: 'pointer',
+    borderRadius: '6px',
+    ...interactiveTransition,
+    ...focusVisibleRing,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   indexName: {
+    display: 'block',
     fontSize: '10px',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
+    lineHeight: 1.35,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   indexPct: {
+    display: 'block',
     fontSize: '15px',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
@@ -144,34 +158,27 @@ export default function MarketBoardStrip({
 
       {indices.map(item => {
         const key = indexKey(item)
-        const chartable = isCnChartableIndex(item, cnIndices)
+        const clickable = Boolean(onIndexSelect && isCnChartableIndex(item, cnIndices))
 
-        const inner = (
-          <>
+        return (
+          <div
+            key={key}
+            className={mergeClasses(s.indexCell, clickable && s.indexCellClickable)}
+            role={clickable ? 'button' : undefined}
+            tabIndex={clickable ? 0 : undefined}
+            onClick={clickable ? () => onIndexSelect!(item) : undefined}
+            onKeyDown={clickable ? (e) => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onIndexSelect!(item)
+              }
+            } : undefined}
+          >
             <span className={s.indexName}>{item.name}</span>
             <span className={mergeClasses(s.indexPct, pctClass(s, item.change_pct))}>
               {formatPct(item.change_pct, 2)}
             </span>
-          </>
-        )
-
-        if (!chartable || !onIndexSelect) {
-          return (
-            <div key={key} className={s.indexCell}>
-              {inner}
-            </div>
-          )
-        }
-
-        return (
-          <button
-            key={key}
-            type="button"
-            className={mergeClasses(s.indexCell, s.indexCellClickable)}
-            onClick={() => onIndexSelect(item)}
-          >
-            {inner}
-          </button>
+          </div>
         )
       })}
 

@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useState } from 'react'
+import {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useState,
+  type ReactNode,
+} from 'react'
 import {
   Dialog,
   DialogActions,
@@ -8,13 +15,11 @@ import {
   DialogTitle,
   Input,
   Spinner,
-  Tab,
-  TabList,
   Text,
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { DismissRegular, EditRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
+import { DismissRegular, EditRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { research } from '../../api/client'
 import { formatPct, formatPriceForMarket, pctTone } from '../../market/format'
@@ -30,7 +35,7 @@ import {
   type UsTechSymbol,
 } from './usTechWatchStorage'
 
-const CONTENT_PAD = '10px'
+const CONTENT_PAD = '8px'
 
 type UsQuote = {
   symbol: string
@@ -39,35 +44,27 @@ type UsQuote = {
   changePct: number | null
 }
 
+type UsTechWatchContextValue = {
+  symbols: UsTechSymbol[]
+  quotes: Record<string, UsQuote>
+  loading: boolean
+  openEdit: () => void
+}
+
+const UsTechWatchContext = createContext<UsTechWatchContextValue | null>(null)
+
+function useUsTechWatchContext() {
+  const ctx = useContext(UsTechWatchContext)
+  if (!ctx) throw new Error('MarketUsTechWatch components must be used within MarketUsTechWatchProvider')
+  return ctx
+}
+
 const useStyles = makeStyles({
   list: {
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
-    padding: `2px ${CONTENT_PAD} 12px`,
-  },
-  listScrollable: {
-    paddingBottom: '6px',
-  },
-  rowQuad: {
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
-    gap: '4px',
-    padding: '4px 6px',
-    minHeight: '24px',
-  },
-  rowTitleQuad: {
-    fontSize: '11px',
-  },
-  rowPctQuad: {
-    fontSize: '10px',
-    minWidth: '40px',
-  },
-  manageRowQuad: {
-    padding: `2px ${CONTENT_PAD} 0`,
-  },
-  manageBtnQuad: {
-    fontSize: '10px',
-    padding: '2px 4px',
+    padding: `0 ${CONTENT_PAD} 6px`,
   },
   row: {
     display: 'grid',
@@ -79,6 +76,12 @@ const useStyles = makeStyles({
     borderRadius: '6px',
     ...ghostInteractive,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+  },
+  rowQuad: {
+    gridTemplateColumns: 'minmax(0, 1fr) auto',
+    gap: '4px',
+    padding: '4px 6px',
+    minHeight: '24px',
   },
   rowBody: {
     minWidth: 0,
@@ -93,6 +96,9 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+  },
+  rowTitleQuad: {
+    fontSize: '11px',
   },
   rowMeta: {
     fontSize: '10px',
@@ -116,17 +122,13 @@ const useStyles = makeStyles({
     minWidth: '52px',
     whiteSpace: 'nowrap',
   },
+  rowPctQuad: {
+    fontSize: '10px',
+    minWidth: '40px',
+  },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   pctFlat: { color: opptrixCssVars.textSecondary },
-  manageRow: {
-    display: 'flex',
-    justifyContent: 'flex-end',
-    padding: `4px ${CONTENT_PAD} 2px`,
-  },
-  manageRowCompact: {
-    padding: `0 ${CONTENT_PAD} 2px`,
-  },
   manageBtn: {
     border: 'none',
     background: 'transparent',
@@ -134,19 +136,21 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '4px',
+    gap: '3px',
     fontSize: '10px',
     fontWeight: 600,
-    padding: '4px 6px',
+    padding: '2px 4px',
     borderRadius: '6px',
+    flexShrink: 0,
     ...ghostInteractive,
+    ':hover': { color: opptrixCssVars.textPrimary },
   },
   iconBox: {
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '20px',
-    height: '20px',
+    width: '16px',
+    height: '16px',
     flexShrink: 0,
     lineHeight: 0,
   },
@@ -186,8 +190,8 @@ const useStyles = makeStyles({
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   empty: {
-    padding: '16px 12px',
-    fontSize: '12px',
+    padding: '8px 10px 12px',
+    fontSize: '11px',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
   },
@@ -200,15 +204,7 @@ function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefi
   return s.pctFlat
 }
 
-export function MarketUsTechWatchList({
-  compact = false,
-  scrollable = false,
-  quad = false,
-}: {
-  compact?: boolean
-  scrollable?: boolean
-  quad?: boolean
-}) {
+export function MarketUsTechWatchProvider({ children }: { children: ReactNode }) {
   const s = useStyles()
   const [symbols, setSymbols] = useState<UsTechSymbol[]>(() => readUsTechWatch())
   const [quotes, setQuotes] = useState<Record<string, UsQuote>>({})
@@ -289,6 +285,13 @@ export function MarketUsTechWatchList({
     }
   }, [keyword, editOpen])
 
+  const openEdit = () => {
+    setDraft([...symbols])
+    setKeyword('')
+    setHits([])
+    setEditOpen(true)
+  }
+
   const saveEdit = () => {
     const next = draft.length ? draft : DEFAULT_US_TECH_SYMBOLS
     setSymbols(next)
@@ -297,45 +300,8 @@ export function MarketUsTechWatchList({
   }
 
   return (
-    <>
-      <div className={mergeClasses(s.manageRow, compact && s.manageRowCompact, quad && s.manageRowQuad)}>
-        <button
-          type="button"
-          className={mergeClasses(s.manageBtn, quad && s.manageBtnQuad)}
-          onClick={() => {
-            setDraft([...symbols])
-            setKeyword('')
-            setHits([])
-            setEditOpen(true)
-          }}
-        >
-          <span className={s.iconBox}><EditRegular fontSize={quad ? 14 : 16} /></span>
-          {quad ? '管理' : '管理列表'}
-        </button>
-      </div>
-      <div className={mergeClasses(s.list, scrollable && s.listScrollable)}>
-        {loading && !Object.keys(quotes).length && (
-          <div className={s.empty}><Spinner size="tiny" label="加载报价…" /></div>
-        )}
-        {symbols.map(row => {
-          const q = quotes[row.symbol]
-          return (
-            <div key={row.symbol} className={mergeClasses(s.row, quad && s.rowQuad)}>
-              <div className={s.rowBody}>
-                <span className={mergeClasses(s.rowTitle, quad && s.rowTitleQuad)}>{row.symbol}</span>
-                <span className={s.rowMeta}>{q?.name ?? row.name}</span>
-              </div>
-              {!quad && (
-                <span className={s.rowNum}>{formatPriceForMarket('US', q?.price ?? null)}</span>
-              )}
-              <span className={mergeClasses(s.rowPct, quad && s.rowPctQuad, pctClass(s, q?.changePct))}>
-                {formatPct(q?.changePct ?? null, 2)}
-              </span>
-            </div>
-          )
-        })}
-      </div>
-
+    <UsTechWatchContext.Provider value={{ symbols, quotes, loading, openEdit }}>
+      {children}
       <Dialog open={editOpen} onOpenChange={(_, data) => setEditOpen(data.open)}>
         <DialogSurface className="opptrix-dialog-surface">
           <DialogBody>
@@ -396,6 +362,55 @@ export function MarketUsTechWatchList({
           </DialogBody>
         </DialogSurface>
       </Dialog>
-    </>
+    </UsTechWatchContext.Provider>
+  )
+}
+
+export function MarketUsTechWatchManageButton() {
+  const s = useStyles()
+  const { openEdit } = useUsTechWatchContext()
+
+  return (
+    <button type="button" className={s.manageBtn} onClick={openEdit}>
+      <span className={s.iconBox}><EditRegular fontSize={14} /></span>
+      管理
+    </button>
+  )
+}
+
+export function MarketUsTechWatchList({
+  compact = false,
+  quad = false,
+}: {
+  compact?: boolean
+  scrollable?: boolean
+  quad?: boolean
+}) {
+  const s = useStyles()
+  const { symbols, quotes, loading } = useUsTechWatchContext()
+
+  return (
+    <div className={s.list}>
+      {loading && !Object.keys(quotes).length && (
+        <div className={s.empty}><Spinner size="tiny" label="加载报价…" /></div>
+      )}
+      {symbols.map(row => {
+        const q = quotes[row.symbol]
+        return (
+          <div key={row.symbol} className={mergeClasses(s.row, quad && s.rowQuad)}>
+            <div className={s.rowBody}>
+              <span className={mergeClasses(s.rowTitle, quad && s.rowTitleQuad)}>{row.symbol}</span>
+              <span className={s.rowMeta}>{q?.name ?? row.name}</span>
+            </div>
+            {!quad && !compact && (
+              <span className={s.rowNum}>{formatPriceForMarket('US', q?.price ?? null)}</span>
+            )}
+            <span className={mergeClasses(s.rowPct, quad && s.rowPctQuad, pctClass(s, q?.changePct))}>
+              {formatPct(q?.changePct ?? null, 2)}
+            </span>
+          </div>
+        )
+      })}
+    </div>
   )
 }

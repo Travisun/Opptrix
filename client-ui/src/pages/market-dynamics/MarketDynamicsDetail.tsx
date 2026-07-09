@@ -1,13 +1,23 @@
+import { useState } from 'react'
 import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular, NewsRegular, OpenRegular } from '@fluentui/react-icons'
 import TradingViewChart from '../../market/TradingViewChart'
 import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
-import type { FeedArticle, MarketIndexQuote, MarketReportData, MarketStockMover } from '../../types/schemas'
+import type {
+  FeedArticle,
+  MarketDragonTigerItem,
+  MarketIndexQuote,
+  MarketReportData,
+  MarketStockMover,
+} from '../../types/schemas'
 import { openExternalUrl } from '../../platform/openUrl'
 import { formatRelativeTime } from '../news/newsUtils'
 import { indexChartCodeFromQuote, writeCnIndexChartCode } from './cnIndexChartStorage'
 import MarketBoardFocus from './MarketBoardFocus'
+import MarketDragonTigerList from './MarketDragonTigerList'
+
+type BriefTab = 'report' | 'dragon_tiger'
 
 const CONTENT_PAD = '10px'
 
@@ -133,23 +143,63 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '6px',
+    padding: '0 8px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    height: '32px',
+    minHeight: '32px',
+    boxSizing: 'border-box',
+  },
+  sectionHeadTitle: {
     fontSize: '10px',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
-    padding: '6px 10px 5px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    lineHeight: 1,
+    whiteSpace: 'nowrap',
+  },
+  sectionTabList: {
+    flex: 1,
+    minWidth: 0,
+    alignSelf: 'stretch',
+    display: 'flex',
+    alignItems: 'center',
+    minHeight: 'unset',
+    gap: '2px',
+    '& .fui-TabList': {
+      minHeight: 'unset',
+      height: '24px',
+      gap: '2px',
+    },
+    '& .fui-Tab': {
+      fontSize: '10px',
+      fontWeight: 600,
+      color: opptrixCssVars.textTertiary,
+      letterSpacing: '0.03em',
+      minHeight: '24px',
+      height: '24px',
+      paddingTop: 0,
+      paddingBottom: 0,
+      backgroundColor: 'transparent',
+      ':enabled:hover': { backgroundColor: 'transparent' },
+      ':enabled:active': { backgroundColor: 'transparent' },
+      ':focus': { backgroundColor: 'transparent' },
+      ':focus-visible': { backgroundColor: 'transparent' },
+    },
   },
   sectionHeadHint: {
     fontSize: '10px',
     fontWeight: 400,
     color: opptrixCssVars.textTertiary,
     letterSpacing: 'normal',
+    lineHeight: 1,
+    flexShrink: 0,
   },
   briefScroll: {
     flex: 1,
     minHeight: 0,
     overflowY: 'auto',
+  },
+  briefScrollReport: {
     padding: `6px ${CONTENT_PAD} 8px`,
   },
   briefTitle: {
@@ -239,6 +289,9 @@ type Props = {
   onChartCodeChange: (code: string | null) => void
   gainers: MarketStockMover[]
   losers: MarketStockMover[]
+  dragonTiger: MarketDragonTigerItem[]
+  dragonTigerDate?: string | null
+  marketLoading: boolean
   report: MarketReportData | null
   articles: FeedArticle[]
   insightsLoading: boolean
@@ -251,12 +304,16 @@ export default function MarketDynamicsDetail({
   onChartCodeChange,
   gainers,
   losers,
+  dragonTiger,
+  dragonTigerDate,
+  marketLoading,
   report,
   articles,
   insightsLoading,
   stacked = false,
 }: Props) {
   const s = useStyles()
+  const [briefTab, setBriefTab] = useState<BriefTab>('report')
   const showChart = Boolean(chartCode)
   const activeName = cnIndices.find(item => indexChartCodeFromQuote(item) === chartCode)?.name ?? chartCode
   const chartMinHeight = stacked ? '180px' : '220px'
@@ -329,30 +386,50 @@ export default function MarketDynamicsDetail({
         <div className={mergeClasses(s.insightsRow, stacked && s.insightsRowStacked)}>
           <div className={mergeClasses(s.insightsCol, s.briefSection, stacked && s.insightsColStacked)}>
             <div className={s.sectionHead}>
-              <span>市场简报</span>
+              <TabList
+                className={s.sectionTabList}
+                size="small"
+                appearance="subtle"
+                selectedValue={briefTab}
+                onTabSelect={(_, d) => setBriefTab(String(d.value) as BriefTab)}
+              >
+                <Tab value="report">市场简报</Tab>
+                <Tab value="dragon_tiger">龙虎榜</Tab>
+              </TabList>
+              {briefTab === 'dragon_tiger' && dragonTigerDate && (
+                <span className={s.sectionHeadHint}>{dragonTigerDate}</span>
+              )}
             </div>
             <div className={mergeClasses(s.briefScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-              {insightsLoading && !report ? (
-                <div className={s.loading}><Spinner size="tiny" label="整理市场要点…" /></div>
-              ) : report?.summary ? (
-                <>
-                  <Text className={s.briefTitle} block>{report.title}</Text>
-                  <Text className={s.briefText} block>{report.summary}</Text>
-                  {report.sections.slice(0, 2).map(sec => (
-                    <Text key={sec.title} className={s.briefSectionLine} block>
-                      {sec.title}：{sec.content}
-                    </Text>
-                  ))}
-                </>
+              {briefTab === 'report' ? (
+                <div className={s.briefScrollReport}>
+                  {insightsLoading && !report ? (
+                    <div className={s.loading}><Spinner size="tiny" label="整理市场要点…" /></div>
+                  ) : report?.summary ? (
+                    <>
+                      <Text className={s.briefTitle} block>{report.title}</Text>
+                      <Text className={s.briefText} block>{report.summary}</Text>
+                      {report.sections.slice(0, 2).map(sec => (
+                        <Text key={sec.title} className={s.briefSectionLine} block>
+                          {sec.title}：{sec.content}
+                        </Text>
+                      ))}
+                    </>
+                  ) : (
+                    <div className={s.empty}>暂无市场简报</div>
+                  )}
+                </div>
+              ) : marketLoading && !dragonTiger.length ? (
+                <div className={s.loading}><Spinner size="tiny" label="加载龙虎榜…" /></div>
               ) : (
-                <div className={s.empty}>暂无市场简报</div>
+                <MarketDragonTigerList items={dragonTiger} />
               )}
             </div>
           </div>
 
           <div className={mergeClasses(s.insightsCol, s.newsSection, stacked && s.insightsColStacked)}>
             <div className={s.sectionHead}>
-              <span>最新资讯</span>
+              <span className={s.sectionHeadTitle}>最新资讯</span>
               <span className={s.sectionHeadHint}>{articles.length} 篇</span>
             </div>
             {insightsLoading && !articles.length ? (

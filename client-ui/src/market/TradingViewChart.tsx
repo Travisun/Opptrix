@@ -283,7 +283,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
   const cnEquityChart = instrumentRef.market === 'CN'
-    && instrumentRef.assetClass === 'EQUITY'
+    && (instrumentRef.assetClass === 'EQUITY' || instrumentRef.assetClass === 'INDEX')
     && (hasApplicationCapability(instrumentRef, 'chart_intraday')
       || hasApplicationCapability(instrumentRef, 'chart_daily'))
   const canChart = cnEquityChart || crossMarketChart
@@ -532,6 +532,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
         {
           period: data.period,
           colorScheme: resolvedScheme,
+          chartTimeZone: data.chartTimeZone,
           preserveRange,
           addedBars,
           onNeedHistory: handleNeedHistory,
