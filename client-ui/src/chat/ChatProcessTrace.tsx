@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ChevronDownRegular,
   ChevronRightRegular,
@@ -9,6 +9,7 @@ import {
 import type { ChatToolStep } from '../types/chatProgress'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
+import ThinkingDots from '../components/ThinkingDots'
 
 const useStyles = makeStyles({
   root: {
@@ -72,8 +73,13 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
     fontSize: '14px',
-    width: '14px',
-    height: '14px',
+    width: '16px',
+    height: '16px',
+  },
+  runningDots: {
+    width: '12px',
+    height: '12px',
+    marginRight: 0,
   },
   stepLabel: {
     flex: 1,
@@ -138,7 +144,7 @@ function StepLead({ running, expandable, expanded }: {
   if (running) {
     return (
       <span className={s.stepIcon} aria-hidden>
-        <Spinner size="tiny" />
+        <ThinkingDots className={s.runningDots} label="" />
       </span>
     )
   }
@@ -240,7 +246,7 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
       >
         <span className={s.stepIcon} aria-hidden>
           {active
-            ? <Spinner size="tiny" />
+            ? <ThinkingDots className={s.runningDots} label="" />
             : (expanded ? <ChevronDownRegular /> : <ChevronRightRegular />)}
         </span>
         <LightbulbFilamentRegular className={s.leadIcon} aria-hidden />
@@ -296,7 +302,7 @@ export default function ChatProcessTrace({
           <div className={s.thinkingHead}>
             {modelThinking ? (
               <span className={s.stepIcon} aria-hidden>
-                <Spinner size="tiny" />
+                <ThinkingDots className={s.runningDots} label="" />
               </span>
             ) : (
               <SparkleRegular className={s.leadIcon} aria-hidden />
