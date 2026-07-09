@@ -86,15 +86,48 @@ function isCnEtfSymbol(symbol: string): boolean {
   return false
 }
 
+/**
+ * A 股指数代码段识别（纯代码段推断，主要用于无 exchange 的场景）。
+ * - 深证 399xxx 系列 → 总是深证指数
+ * - 上证 000xxx（000001-000999）→ 默认指数，但若明确来自 SZ 交易所（如 000001 平安银行）则为 EQUITY
+ */
 function isCnIndexSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
-  return c.startsWith('399')
-    || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)
+  if (c.startsWith('399')) return true
+  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) return true
+  return false
 }
 
-export function inferCnAssetClassFromSymbol(symbol: string): AssetClass {
+/**
+ * 判断 A 股代码是否为指数，支持 exchange 消歧。
+ * 000001-000999 段在 SH 市场默认指数，在 SZ 市场（如平安银行 000001）为 EQUITY。
+ */
+export function isCnIndexSymbolByExchange(symbol: string, exchange?: string | null): boolean {
   const c = canonicalCnSymbol(symbol)
-  if (isCnIndexSymbol(c)) return 'INDEX'
+  if (c.startsWith('399')) return true
+  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) {
+    // 399xxx 之外：SZ 市场的 000xxx 是个股（平安银行等），SH 市场的 000xxx 是指数
+    if (exchange && exchange.toUpperCase() === 'SZ') return false
+    return true
+  }
+  return false
+}
+
+/**
+ * 推断 A 股 assetClass，支持 exchange 消歧。
+ * 当 exchange 为明确值时，优先按 exchange 区分 SH 指数 vs SZ 个股；
+ * 无 exchange 时回退到纯代码段推断（旧行为，用于无 exchange 的场景如用户文本输入）。
+ */
+export function inferCnAssetClassFromSymbol(symbol: string, exchange?: string | null): AssetClass {
+  const c = canonicalCnSymbol(symbol)
+  if (exchange && exchange.toUpperCase() === 'SZ') {
+    // SZ 指数仅 399xxx；000xxx 在 SZ 是个股
+    if (c.startsWith('399')) return 'INDEX'
+  } else if (exchange && exchange.toUpperCase() === 'SH') {
+    if (isCnIndexSymbolByExchange(c, 'SH')) return 'INDEX'
+  } else {
+    if (isCnIndexSymbol(c)) return 'INDEX'
+  }
   if (isCnEtfSymbol(c)) return 'ETF'
   return 'EQUITY'
 }
@@ -139,9 +172,10 @@ export function normalizeInstrumentRef(ref: InstrumentRef): InstrumentRef {
   const symbol = canonicalSymbolForMarket(market, ref.symbol)
   let assetClass = ref.assetClass
   if (market === 'CN') {
+    // 有 exchange 信息时传入，用于 000001 这类 SH(指数)/SZ(个股) 同代码消歧
     assetClass = ref.assetClass === 'ETF' || ref.assetClass === 'INDEX'
       ? ref.assetClass
-      : inferCnAssetClassFromSymbol(symbol)
+      : inferCnAssetClassFromSymbol(symbol, ref.exchange)
   } else if (assetClass !== 'ETF' && assetClass !== 'INDEX') {
     assetClass = 'EQUITY'
   }

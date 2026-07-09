@@ -21,7 +21,7 @@ export function stockIndexItemToInstrumentRef(item: StockIndexItem): InstrumentR
       ?? cnExchangeFromInstrumentId(item.instrumentId)
     return normalizeInstrumentRef({
       market: 'CN',
-      assetClass: item.assetType === 'etf' ? 'ETF' : inferCnAssetClassFromSymbol(code),
+      assetClass: item.assetType === 'etf' ? 'ETF' : inferCnAssetClassFromSymbol(code, exchange ?? null),
       symbol: code,
       exchange: exchange as InstrumentRef['exchange'],
     })
