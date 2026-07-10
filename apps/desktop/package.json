@@ -50,7 +50,7 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.opptrix.example/desktop/",
+        "url": "https://update.opptrix.org/desktop/",
         "channel": "latest"
       }
     ],

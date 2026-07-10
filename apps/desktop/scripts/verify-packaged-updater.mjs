@@ -1,11 +1,14 @@
 #!/usr/bin/env node
 /**
- * Fail CI if electron-builder output omits the staged updater vendor.
+ * Fail CI if electron-builder output omits the staged updater vendor
+ * or embeds a placeholder / invalid update feed URL in app-update.yml.
  * Run after `electron-builder` against apps/desktop/release/.
  */
 import { spawnSync } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
+import { readYamlFile } from './lib/load-yaml.mjs'
+import { INVALID_UPDATE_FEED_HOSTS } from './lib/update-feed-url.mjs'
 import { UPDATER_ENTRY_MARKER } from './lib/updater-vendor-paths.mjs'
 
 const ASAR_MARKER = `/${UPDATER_ENTRY_MARKER.replace(/\\/g, '/')}`
@@ -58,7 +61,7 @@ function checkUnpacked(asarPath) {
   return fs.existsSync(markerOnDisk)
 }
 
-function verifyAsar(asarPath) {
+function verifyAsarVendor(asarPath) {
   if (checkUnpacked(asarPath)) {
     console.log(`verify-packaged-updater: OK unpacked ${UPDATER_ENTRY_MARKER} (${asarPath})`)
     return true
@@ -71,6 +74,38 @@ function verifyAsar(asarPath) {
     return true
   }
   return false
+}
+
+function verifyAppUpdateYml(asarPath) {
+  const ymlPath = path.join(path.dirname(asarPath), 'app-update.yml')
+  if (!fs.existsSync(ymlPath)) {
+    fail(`missing app-update.yml beside ${asarPath}`)
+  }
+
+  const info = readYamlFile(ymlPath)
+  const url = String(info?.url ?? '').trim()
+  if (!url.startsWith('https://')) {
+    fail(`app-update.yml url must be https://… (got "${url}" in ${ymlPath})`)
+  }
+
+  let host
+  try {
+    host = new URL(url).hostname
+  } catch {
+    fail(`app-update.yml url is not a valid URL: "${url}" (${ymlPath})`)
+  }
+
+  for (const invalid of INVALID_UPDATE_FEED_HOSTS) {
+    if (host === invalid || url.includes(invalid)) {
+      fail(
+        `app-update.yml still points at placeholder host "${invalid}" (${ymlPath}). `
+          + 'Set OPPTRIX_UPDATE_BASE_URL before electron-builder or use DEFAULT_UPDATE_FEED_URL.',
+      )
+    }
+  }
+
+  console.log(`verify-packaged-updater: OK app-update.yml url=${url}`)
+  return true
 }
 
 function main() {
@@ -86,7 +121,9 @@ function main() {
 
   let ok = 0
   for (const asarPath of asarFiles) {
-    if (verifyAsar(asarPath)) ok++
+    const vendorOk = verifyAsarVendor(asarPath)
+    const feedOk = verifyAppUpdateYml(asarPath)
+    if (vendorOk && feedOk) ok++
   }
 
   if (ok === 0) {
@@ -98,7 +135,7 @@ function main() {
     )
   }
 
-  console.log(`verify-packaged-updater: ${ok}/${asarFiles.length} bundle(s) contain updater vendor`)
+  console.log(`verify-packaged-updater: ${ok}/${asarFiles.length} bundle(s) OK (vendor + feed URL)`)
 }
 
 main()

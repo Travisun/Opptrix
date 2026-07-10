@@ -1,5 +1,8 @@
 /** Public base URL for electron-updater generic provider (must end with `/`). */
-export const DEFAULT_UPDATE_FEED_URL = 'https://updates.opptrix.example/desktop/'
+export const DEFAULT_UPDATE_FEED_URL = 'https://update.opptrix.org/desktop/'
+
+/** Placeholder host that must never ship in packaged app-update.yml. */
+export const INVALID_UPDATE_FEED_HOSTS = Object.freeze(['updates.opptrix.example'])
 
 export function resolveUpdateFeedUrl() {
   const raw = (process.env.OPPTRIX_UPDATE_BASE_URL ?? DEFAULT_UPDATE_FEED_URL).trim()
