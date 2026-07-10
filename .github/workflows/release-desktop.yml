@@ -382,3 +382,11 @@ jobs:
             curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
           done
           echo "Public update metadata reachable on R2"
+
+      - name: Purge Cloudflare CDN cache (latest-*.yml)
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/purge-update-cdn-cache.mjs

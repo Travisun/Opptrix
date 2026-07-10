@@ -152,52 +152,138 @@ latest-linux.yml
 
 编辑 Release 说明，补充 **面向用户** 的更新内容。
 
-### 4.4 Cloudflare R2 更新加速（CI 自动）
+### 4.4 Cloudflare R2 + CDN（`update.opptrix.org`）
 
-桌面客户端的 **检查更新 / 下载更新** 走 Cloudflare R2（免费 10 GB 存储），GitHub Release 仍用于手动下载与 Release Notes。
+桌面客户端的 **检查更新 / 下载更新** 走 R2 + 自定义域名 CDN；GitHub Release 仍用于手动下载与 Release Notes。
 
 CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 
 1. 从 GitHub Release 下载当前标签的全部安装包与 `latest-*.yml`；
-2. **删除** R2 bucket 内 `desktop/` 前缀下的旧对象（仅保留最新一版，避免超出 10 GB 配额）；
+2. **删除** R2 bucket 内 `desktop/` 前缀下的旧对象（仅保留最新一版）；
 3. 上传当前版本全部产物到 R2；
-4. 校验公网 URL 可访问 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`。
+4. 校验 `update.opptrix.org` 上 yml 可访问；
+5. **Purge** Cloudflare 边缘缓存中的三个 `latest-*.yml`（安装包文件名带版本号，无需 purge）。
 
-#### 一次性配置（Cloudflare Dashboard）
+---
 
-1. **R2 → Create bucket**（例如 `opptrix-desktop-releases`）。
-2. **R2 → Manage R2 API Tokens → Create API token**：Object Read & Write，限定上述 bucket。
-3. **启用公网访问**（二选一）：
-   - **R2.dev 子域**：bucket → Settings → Public access → Allow Access，获得 `https://pub-xxxx.r2.dev`；
-   - **自定义域名**：R2 → bucket → Custom Domains，绑定如 `updates.example.com`（推荐，可开 Cloudflare CDN）。
-4. 公网 base URL 须包含路径前缀，例如：`https://pub-xxxx.r2.dev/desktop/`（**末尾斜杠必填**）。
+#### 第一步：Cloudflare R2（存储 + 自定义域名）
 
-#### GitHub Actions Secrets
+1. **R2 → Create bucket**  
+   名称示例：`opptrix-desktop-releases`
 
-在 **Settings → Secrets and variables → Actions** 添加：
+2. **Settings → Custom Domains → Connect Domain**  
+   - 域名：`update.opptrix.org`（`opptrix.org` 须在同一 Cloudflare 账号）  
+   - 等待状态 **Active**
 
-| Secret | 说明 |
-|--------|------|
-| `R2_ACCOUNT_ID` | Cloudflare 账户 ID（Dashboard 右侧） |
-| `R2_ACCESS_KEY_ID` | R2 API Token Access Key ID |
-| `R2_SECRET_ACCESS_KEY` | R2 API Token Secret Access Key |
-| `R2_BUCKET` | Bucket 名称，如 `opptrix-desktop-releases` |
-| `OPPTRIX_UPDATE_BASE_URL` | 公网更新根 URL，如 `https://pub-xxxx.r2.dev/desktop/` |
+3. **Settings → Public Development URL → Disable**  
+   输入 `disallow`，避免攻击者绕过 CDN 直打 `r2.dev`
 
-未配置 R2 secrets 时：`sync-r2` 会跳过上传（构建仍成功）；`OPPTRIX_UPDATE_BASE_URL` 未设置时，安装包内 `app-update.yml` 使用占位 URL，**自动更新不可用**。
+4. **Manage R2 API Tokens → Create API token**（给 GitHub 上传用）  
+   | 项 | 值 |
+   |----|-----|
+   | Token name | `github-opptrix-release` |
+   | Permissions | **Object Read & Write** |
+   | Specify bucket | 仅 `opptrix-desktop-releases` |
+   | TTL | 可选「无过期」或 1 年 |
+
+   创建后**立即复制**（Secret 只显示一次）：
+   - **Access Key ID** → GitHub `R2_ACCESS_KEY_ID`
+   - **Secret Access Key** → GitHub `R2_SECRET_ACCESS_KEY`
+
+5. **Account ID**（Dashboard 右侧 Overview）→ GitHub `R2_ACCOUNT_ID`
+
+---
+
+#### 第二步：Cloudflare API Token（给 GitHub 刷新 CDN 缓存）
+
+与 R2 Token **分开**创建（权限不同）：
+
+1. **My Profile → API Tokens → Create Token**
+2. 可用模板 **「Edit zone DNS」** 改权限，或 **Create Custom Token**：
+   | 项 | 值 |
+   |----|-----|
+   | Token name | `github-opptrix-cdn-purge` |
+   | Permissions | **Zone → Cache Purge → Purge** |
+   | Zone Resources | **Include → Specific zone → opptrix.org** |
+
+3. 创建后复制 Token → GitHub `CLOUDFLARE_API_TOKEN`
+
+4. **Zone ID**（`opptrix.org` → Overview 右侧）→ GitHub `CLOUDFLARE_ZONE_ID`  
+   > 注意：Zone 是 **`opptrix.org`**，不是 `update.opptrix.org` 子域。
+
+---
+
+#### 第三步：GitHub Repository Secrets
+
+打开：**https://github.com/Travisun/Opptrix/settings/secrets/actions → New repository secret**
+
+| Secret 名称 | 填什么 | 示例 |
+|-------------|--------|------|
+| `R2_ACCOUNT_ID` | Cloudflare Account ID | `a1b2c3d4e5f6...` |
+| `R2_ACCESS_KEY_ID` | R2 API Token Access Key ID | `abc123...` |
+| `R2_SECRET_ACCESS_KEY` | R2 API Token Secret Access Key | `xyz789...`（仅创建时可见） |
+| `R2_BUCKET` | Bucket 名称 | `opptrix-desktop-releases` |
+| `OPPTRIX_UPDATE_BASE_URL` | 公网更新根 URL，**末尾带 `/`** | `https://update.opptrix.org/desktop/` |
+| `CLOUDFLARE_API_TOKEN` | Zone Cache Purge Token | `Bearer` 后面的整串 |
+| `CLOUDFLARE_ZONE_ID` | `opptrix.org` 的 Zone ID | `32 位 hex` |
+
+**已有、无需新增**（CI 自带）：`GITHUB_TOKEN`（上传 Release、下载资产）。
+
+**构建阶段也会读** `OPPTRIX_UPDATE_BASE_URL`（写入安装包内 `app-update.yml`），因此 **打 `desktop-v*` 标签前** 必须已配置该 Secret。
+
+---
+
+#### 第四步：验证配置
+
+Secrets 配好后，可本地抽查（勿把 Secret 提交到仓库）：
+
+```bash
+# R2 公网 yml（应 200）
+curl -I "https://update.opptrix.org/desktop/latest-mac.yml"
+
+# Cloudflare Purge API（替换 ZONE_ID 与 TOKEN）
+curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/purge_cache" \
+  -H "Authorization: Bearer $CLOUDFLARE_API_TOKEN" \
+  -H "Content-Type: application/json" \
+  --data '{"files":["https://update.opptrix.org/desktop/latest-mac.yml"]}'
+# 期望 JSON 中 "success": true
+```
+
+正式验证：合并含 `sync-r2` 的 workflow 后，打 `desktop-v*` 标签，在 Actions 查看 **Sync release to Cloudflare R2** job 三步均绿：
+- Sync to Cloudflare R2  
+- Verify public update metadata  
+- Purge Cloudflare CDN cache  
+
+---
+
+#### 跳过行为（便于排查）
+
+| 未配置的 Secret | CI 行为 |
+|-----------------|---------|
+| `R2_ACCESS_KEY_ID` 等 R2 四项 | 跳过 R2 上传 |
+| `OPPTRIX_UPDATE_BASE_URL` | 安装包用占位 URL；跳过公网 verify |
+| `CLOUDFLARE_API_TOKEN` | 跳过 CDN purge（R2 上传仍成功） |
 
 #### 客户端如何指向 R2
 
 - CI 构建时通过 `OPPTRIX_UPDATE_BASE_URL` 注入 `electron-builder` 的 `generic` publish URL；
-- 打包产物内嵌 `app-update.yml`，`electron-updater` 从 R2 拉取 `latest-*.yml` 与安装包；
-- **已发布且仍使用 GitHub 更新源的旧客户端**，需先手动安装一版切换至 R2 源的新包后，后续才能走 R2 加速更新。
+- 打包产物内嵌 `app-update.yml`，`electron-updater` 从 `update.opptrix.org` 拉取 yml 与安装包；
+- **仍走 GitHub 更新源的旧客户端**，需先手动安装一版新包后，后续才走 R2/CDN。
 
-本地调试 R2 同步（需已下载 Release 资源目录）：
+本地调试 R2 同步：
 
 ```bash
 export R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=…
-export OPPTRIX_UPDATE_BASE_URL=https://pub-xxxx.r2.dev/desktop/
+export OPPTRIX_UPDATE_BASE_URL=https://update.opptrix.org/desktop/
 node apps/desktop/scripts/sync-release-to-r2.mjs /path/to/release-assets
+```
+
+本地调试 CDN purge：
+
+```bash
+export CLOUDFLARE_API_TOKEN=… CLOUDFLARE_ZONE_ID=…
+export OPPTRIX_UPDATE_BASE_URL=https://update.opptrix.org/desktop/
+node apps/desktop/scripts/purge-update-cdn-cache.mjs
 ```
 
 ---
