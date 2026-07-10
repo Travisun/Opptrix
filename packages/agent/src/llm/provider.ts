@@ -1,4 +1,5 @@
 import type { OpenAiTool } from '../tools.js'
+import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
 
 export interface LlmConfig {
   provider: string
@@ -80,7 +81,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         ? AbortSignal.any([signal, timeoutSignal])
         : timeoutSignal
 
-      const resp = await fetch(url, {
+      const resp = await outboundFetch(url, {
         method: 'POST',
         headers: {
           Authorization: `Bearer ${this.cfg.apiKey}`,
@@ -135,7 +136,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         const msg = '已取消'
         return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: 'cancelled' }
       }
-      const msg = `⚠️ 请求失败: ${e}`
+      const msg = `⚠️ ${formatOutboundFetchError(e)}`
       return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: msg }
     }
   }
@@ -149,7 +150,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 export async function fetchOpenAiModelList(baseUrl: string, apiKey: string): Promise<string[]> {
   const root = baseUrl.trim().replace(/\/$/, '').replace(/\/v1$/, '')
   const url = `${root}/v1/models`
-  const resp = await fetch(url, {
+  const resp = await outboundFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(30_000),
   })

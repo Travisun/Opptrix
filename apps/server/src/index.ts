@@ -3,7 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
-import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, initOutboundNetwork, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -1147,6 +1147,15 @@ app.delete<{ Querystring: { code?: string; market?: string } }>('/api/portfolio/
 let serveUi = false
 
 async function bootstrap() {
+  const outbound = await initOutboundNetwork()
+  if (outbound.ipv6Available) {
+    console.log('  Outbound network → IPv6')
+  } else if (outbound.ipv4Available) {
+    console.log('  Outbound network → IPv4 (IPv6 unavailable)')
+  } else {
+    console.log('  Outbound network → IPv6 preferred (connectivity probe inconclusive)')
+  }
+
   await registerNewsRoutes(app)
   await registerEnrichmentRoutes(app)
   registerSearchRoutes(app, hub, agent)

@@ -55,3 +55,4 @@ export { SessionStore, setSessionPersistHooks, type SessionMeta, type SessionRec
 export { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS, type SessionArchiveFolder } from './archive-folders.js'
 export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'
+export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
