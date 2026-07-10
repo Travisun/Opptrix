@@ -184,6 +184,7 @@ jobs:
       - name: Build desktop package
         shell: bash
         env:
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
           SIGN_MODE: ${{ steps.signcfg.outputs.mode }}
           CSC_LINK_SECRET: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
@@ -324,3 +325,60 @@ jobs:
 
           gh release upload "$TAG" "$WORK/latest-mac.yml" --clobber
           echo "Published merged latest-mac.yml to $TAG"
+
+  sync-r2:
+    name: Sync release to Cloudflare R2
+    needs: finalize-release
+    runs-on: ubuntu-latest
+    if: ${{ needs.finalize-release.result == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Download release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          WORK="$RUNNER_TEMP/r2-sync"
+          mkdir -p "$WORK"
+          gh release download "$TAG" -D "$WORK"
+          echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
+          ls -la "$WORK"
+
+      - name: Sync to Cloudflare R2 (purge old + upload current)
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/sync-release-to-r2.mjs "$ASSET_DIR"
+
+      - name: Verify public update metadata
+        shell: bash
+        env:
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: |
+          if [[ -z "${OPPTRIX_UPDATE_BASE_URL:-}" ]]; then
+            echo "OPPTRIX_UPDATE_BASE_URL not set — skip public verify"
+            exit 0
+          fi
+          BASE="${OPPTRIX_UPDATE_BASE_URL%/}/"
+          for yml in latest-mac.yml latest.yml latest-linux.yml; do
+            url="${BASE}${yml}"
+            echo "Checking $url"
+            curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
+          done
+          echo "Public update metadata reachable on R2"

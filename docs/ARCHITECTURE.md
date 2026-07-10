@@ -113,7 +113,7 @@ Electron main
 ```
 
 - 生产 bundle：`runtime-stage` 含 server、packages、原生 `.node`（按架构编译）。
-- **electron-updater**：启动后检查 GitHub Release；用户确认后 `quitAndInstall`。
+- **electron-updater**：启动后检查 **Cloudflare R2** 上的 `latest-*.yml`；用户确认后 `quitAndInstall`（GitHub Release 仍供手动下载）。
 - 详见 [DESKTOP.md](./DESKTOP.md)、[DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)。
 
 ## 本地持久化

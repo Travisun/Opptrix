@@ -11,7 +11,8 @@
 | 项目 | 说明 |
 |------|------|
 | 更新方式 | `electron-updater` 全量更新（按平台下载完整安装包，用户确认后重启安装） |
-| 更新源 | GitHub Releases（`apps/desktop/package.json` → `build.publish`） |
+| 更新源 | **Cloudflare R2**（`generic` provider；CI 构建时写入 `app-update.yml`） |
+| 手动下载 | GitHub Releases（安装包与 Release Notes 仍发布在 GitHub） |
 | 版本真源 | `apps/desktop/package.json` 的 `version` 字段 |
 | Git 标签 | `desktop-v{version}`，例如 `desktop-v0.6.1` |
 | CI 工作流 | [.github/workflows/release-desktop.yml](../.github/workflows/release-desktop.yml) |
@@ -109,6 +110,8 @@ git push origin desktop-v0.6.1
 1. **prepare-release**：创建 GitHub Release（`desktop-v{version}`）
 2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux）
 3. 各 job 用 `gh release upload` 上传安装包（`electron-builder --publish never`，避免 CI 内自动 publish/签名冲突）
+4. **finalize-release** 合并 macOS 双架构 `latest-mac.yml` 并校验 yml 与 Release 附件一致
+5. **sync-r2** 将当前 Release 产物同步至 Cloudflare R2（purge 旧版 + 上传），供客户端加速更新
 
 Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名。
 
@@ -148,6 +151,54 @@ latest-linux.yml
 （另可有 `.blockmap` 等辅助文件。）
 
 编辑 Release 说明，补充 **面向用户** 的更新内容。
+
+### 4.4 Cloudflare R2 更新加速（CI 自动）
+
+桌面客户端的 **检查更新 / 下载更新** 走 Cloudflare R2（免费 10 GB 存储），GitHub Release 仍用于手动下载与 Release Notes。
+
+CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
+
+1. 从 GitHub Release 下载当前标签的全部安装包与 `latest-*.yml`；
+2. **删除** R2 bucket 内 `desktop/` 前缀下的旧对象（仅保留最新一版，避免超出 10 GB 配额）；
+3. 上传当前版本全部产物到 R2；
+4. 校验公网 URL 可访问 `latest-mac.yml` / `latest.yml` / `latest-linux.yml`。
+
+#### 一次性配置（Cloudflare Dashboard）
+
+1. **R2 → Create bucket**（例如 `opptrix-desktop-releases`）。
+2. **R2 → Manage R2 API Tokens → Create API token**：Object Read & Write，限定上述 bucket。
+3. **启用公网访问**（二选一）：
+   - **R2.dev 子域**：bucket → Settings → Public access → Allow Access，获得 `https://pub-xxxx.r2.dev`；
+   - **自定义域名**：R2 → bucket → Custom Domains，绑定如 `updates.example.com`（推荐，可开 Cloudflare CDN）。
+4. 公网 base URL 须包含路径前缀，例如：`https://pub-xxxx.r2.dev/desktop/`（**末尾斜杠必填**）。
+
+#### GitHub Actions Secrets
+
+在 **Settings → Secrets and variables → Actions** 添加：
+
+| Secret | 说明 |
+|--------|------|
+| `R2_ACCOUNT_ID` | Cloudflare 账户 ID（Dashboard 右侧） |
+| `R2_ACCESS_KEY_ID` | R2 API Token Access Key ID |
+| `R2_SECRET_ACCESS_KEY` | R2 API Token Secret Access Key |
+| `R2_BUCKET` | Bucket 名称，如 `opptrix-desktop-releases` |
+| `OPPTRIX_UPDATE_BASE_URL` | 公网更新根 URL，如 `https://pub-xxxx.r2.dev/desktop/` |
+
+未配置 R2 secrets 时：`sync-r2` 会跳过上传（构建仍成功）；`OPPTRIX_UPDATE_BASE_URL` 未设置时，安装包内 `app-update.yml` 使用占位 URL，**自动更新不可用**。
+
+#### 客户端如何指向 R2
+
+- CI 构建时通过 `OPPTRIX_UPDATE_BASE_URL` 注入 `electron-builder` 的 `generic` publish URL；
+- 打包产物内嵌 `app-update.yml`，`electron-updater` 从 R2 拉取 `latest-*.yml` 与安装包；
+- **已发布且仍使用 GitHub 更新源的旧客户端**，需先手动安装一版切换至 R2 源的新包后，后续才能走 R2 加速更新。
+
+本地调试 R2 同步（需已下载 Release 资源目录）：
+
+```bash
+export R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=…
+export OPPTRIX_UPDATE_BASE_URL=https://pub-xxxx.r2.dev/desktop/
+node apps/desktop/scripts/sync-release-to-r2.mjs /path/to/release-assets
+```
 
 ---
 
@@ -190,8 +241,8 @@ npm run build:desktop -- --publish always
 
 已安装的打包版客户端（非 `npm run dev`）会：
 
-1. 启动约 10 秒后后台检查 GitHub Release；
-2. 读取嵌入在安装包内的 `app-update.yml`（构建时由 `publish.github` 生成）；
+1. 启动约 10 秒后后台检查 **R2 上的 `latest-*.yml`**；
+2. 读取嵌入在安装包内的 `app-update.yml`（构建时由 `generic` publish + `OPPTRIX_UPDATE_BASE_URL` 生成）；
 3. 对比 `latest-*.yml` 中的 `version` 与本地 `apps/desktop/package.json` 版本；
 4. 若有新版本：`autoDownload` 后台下载 **当前平台** 整包；
 5. 侧栏「设置」上方提示 → 用户点 **重启更新** → `quitAndInstall` 完成替换。

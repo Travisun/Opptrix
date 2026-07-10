@@ -45,10 +45,8 @@
     ],
     "publish": [
       {
-        "provider": "github",
-        "owner": "Travisun",
-        "repo": "Opptrix",
-        "vPrefixedTagName": false
+        "provider": "generic",
+        "url": "https://updates.opptrix.example/desktop/"
       }
     ],
     "directories": {
@@ -173,6 +171,7 @@
     }
   },
   "devDependencies": {
+    "@aws-sdk/client-s3": "^3.888.0",
     "electron": "^35.0.0",
     "electron-builder": "^25.1.8",
     "to-ico": "^1.1.5"
