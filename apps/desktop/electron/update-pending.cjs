@@ -96,10 +96,23 @@ function isVersionNewer(candidate, current) {
   return compareVersions(candidate, current) > 0
 }
 
+function clearPendingDownloadCache() {
+  const pendingDir = path.join(getUpdaterCacheRoot(), 'pending')
+  if (!fs.existsSync(pendingDir)) return false
+  try {
+    fs.rmSync(pendingDir, { recursive: true, force: true })
+    return true
+  } catch (err) {
+    console.warn('[updater] failed to clear pending cache:', err)
+    return false
+  }
+}
+
 module.exports = {
   getUpdaterCacheRoot,
   readPendingDownloadFromDisk,
   parseVersionFromArtifactName,
   compareVersions,
   isVersionNewer,
+  clearPendingDownloadCache,
 }

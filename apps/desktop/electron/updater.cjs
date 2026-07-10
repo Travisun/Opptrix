@@ -5,12 +5,17 @@ const { showLocalNotification } = require('./notifications.cjs')
 const {
   readPendingDownloadFromDisk,
   isVersionNewer,
+  compareVersions,
+  clearPendingDownloadCache,
 } = require('./update-pending.cjs')
 const {
   reconcileInstallGuard,
   isInstallBlocked,
   recordInstallAttempt,
   getInstallBlockReason,
+  clearGuardState,
+  readLastRunVersion,
+  writeLastRunVersion,
 } = require('./update-guard.cjs')
 
 const UPDATER_VENDOR_DIR = path.join(__dirname, '../build/updater-deps/packages')
@@ -76,6 +81,38 @@ function setStatus(patch) {
 
 function shouldSkipStartupResume() {
   return process.argv.includes('--opptrix-skip-update-resume')
+}
+
+/** 清理已成功应用、或降级后残留的 pending 包与 guard，避免误触发 resume */
+function reconcileLocalUpdateState(currentVersion) {
+  reconcileInstallGuard(currentVersion)
+
+  const lastRunVersion = readLastRunVersion()
+  const pending = readPendingDownloadFromDisk()
+  let cleared = false
+
+  if (pending?.version) {
+    if (!isVersionNewer(pending.version, currentVersion)) {
+      console.info('[updater] clearing applied pending cache for', pending.version)
+      cleared = clearPendingDownloadCache()
+    } else if (
+      lastRunVersion
+      && compareVersions(currentVersion, lastRunVersion) < 0
+    ) {
+      console.info(
+        '[updater] clearing stale pending after downgrade',
+        `${currentVersion} <- was ${lastRunVersion}, pending ${pending.version}`,
+      )
+      cleared = clearPendingDownloadCache()
+    }
+  }
+
+  if (cleared) {
+    clearGuardState()
+    updatePackageHydrated = false
+  }
+
+  writeLastRunVersion(currentVersion)
 }
 
 function hydrateReadyStatusFromDisk(currentVersion) {
@@ -282,7 +319,7 @@ async function resumePendingUpdateOnStartup({ version }) {
     return false
   }
 
-  reconcileInstallGuard(version)
+  reconcileLocalUpdateState(version)
 
   const pending = readPendingDownloadFromDisk()
   if (!pending?.version || !isVersionNewer(pending.version, version)) {
@@ -315,7 +352,7 @@ async function resumePendingUpdateOnStartup({ version }) {
 
 function initUpdater({ version }) {
   status.currentVersion = version
-  reconcileInstallGuard(version)
+  reconcileLocalUpdateState(version)
 
   if (!autoUpdater) {
     setStatus({
