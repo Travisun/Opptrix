@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
-import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { useCallback, useEffect, useState } from 'react'
+import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
+  ArrowSyncRegular,
   BugRegular,
   ChevronRightRegular,
   ShieldRegular,
@@ -11,6 +12,10 @@ import { useAppUpdate } from '../../hooks/useAppUpdate'
 import { isElectron } from '../../platform/detect'
 import { openExternalUrl } from '../../platform/openUrl'
 import { opptrixCssVars } from '../../theme/tokens'
+import {
+  buildAppUpdatePanel,
+  isAppUpdateCheckBusy,
+} from '../../utils/appUpdateUi'
 import {
   OPPTRIX_GITHUB_HOME,
   OPPTRIX_GITHUB_ISSUES,
@@ -76,6 +81,28 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
     paddingLeft: '2px',
   },
+  updatePanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+  },
+  updateDesc: {
+    fontSize: '13px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.55,
+  },
+  progressMeta: {
+    fontSize: '12px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.4,
+  },
+  updateActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    paddingTop: '2px',
+  },
 })
 
 type AboutSettingsSectionProps = {
@@ -86,6 +113,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   const s = useStyles()
   const { status: updateStatus, checkNow, installUpdate } = useAppUpdate()
   const [versionLabel, setVersionLabel] = useState<string | null>(null)
+  const [checkedOnce, setCheckedOnce] = useState(false)
 
   useEffect(() => {
     if (isElectron()) {
@@ -99,10 +127,16 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       .catch(() => setVersionLabel(null))
   }, [])
 
+  const handleCheckUpdate = useCallback(() => {
+    setCheckedOnce(true)
+    void checkNow()
+  }, [checkNow])
+
   const versionDesc = versionLabel ?? '读取版本中…'
   const showUpdateBlock = isElectron()
-  const hasUpdateFollowUp = updateStatus.state === 'ready'
-    || (updateStatus.state === 'error' && Boolean(updateStatus.message))
+  const checkBusy = isAppUpdateCheckBusy(updateStatus)
+  const updatePanel = buildAppUpdatePanel(updateStatus, { checkedOnce })
+  const showUpdateStatusRow = Boolean(updatePanel?.visible)
 
   return (
     <div className={mergeClasses(s.root, contentFlush && s.rootFlush)}>
@@ -126,28 +160,58 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
             title="当前版本"
             desc={versionDesc}
             control={showUpdateBlock ? (
-              <OpptrixButton variant="secondary" onClick={() => { void checkNow() }}>
-                检查更新
+              <OpptrixButton
+                variant="secondary"
+                disabled={checkBusy}
+                icon={checkBusy ? <Spinner size="tiny" /> : undefined}
+                onClick={handleCheckUpdate}
+              >
+                {checkBusy ? '检查中…' : '检查更新'}
               </OpptrixButton>
             ) : undefined}
-            last={!showUpdateBlock || !hasUpdateFollowUp}
+            last={!showUpdateStatusRow}
           />
-          {showUpdateBlock && updateStatus.state === 'ready' && (
+          {showUpdateStatusRow && updatePanel && (
             <SettingsRow
-              title={`新版本 v${updateStatus.version ?? ''} 已就绪`}
-              desc="重启应用即可完成更新"
-              control={(
-                <OpptrixButton variant="primary" onClick={() => { void installUpdate() }}>
-                  重启更新
-                </OpptrixButton>
+              stack
+              title={updatePanel.title}
+              desc={(
+                <div className={s.updatePanel}>
+                  <Text className={s.updateDesc} block>{updatePanel.desc}</Text>
+                  {updatePanel.showProgress && (
+                    <>
+                      <ProgressBar
+                        value={
+                          updatePanel.percent != null && updatePanel.percent > 0
+                            ? updatePanel.percent / 100
+                            : undefined
+                        }
+                        max={1}
+                        thickness="medium"
+                        shape="rounded"
+                      />
+                      <Text className={s.progressMeta} block>
+                        {updateStatus.state === 'available'
+                          ? '正在连接下载…'
+                          : updatePanel.percent != null && updatePanel.percent > 0
+                            ? `已完成 ${updatePanel.percent}%`
+                            : '正在准备下载…'}
+                      </Text>
+                    </>
+                  )}
+                  {updatePanel.showInstall && (
+                    <div className={s.updateActions}>
+                      <OpptrixButton
+                        variant="primary"
+                        icon={<ArrowSyncRegular />}
+                        onClick={() => { void installUpdate() }}
+                      >
+                        重启更新
+                      </OpptrixButton>
+                    </div>
+                  )}
+                </div>
               )}
-              last={!(updateStatus.state === 'error' && updateStatus.message)}
-            />
-          )}
-          {showUpdateBlock && updateStatus.state === 'error' && updateStatus.message && (
-            <SettingsRow
-              title="暂时无法检查更新"
-              desc={updateStatus.message}
               last
             />
           )}

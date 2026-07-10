@@ -20,6 +20,7 @@ alwaysApply: true
 
 ## 改动原则
 
+- **向后兼容与迁移（硬性）**：数据库结构变动、数据架构更换、本地存储/配置格式升级、自动更新源变更等，**必须** 设计旧版客户端/旧数据的兼容与迁移机制，**禁止断代**。细则见 `.cursor/rules/backward-compatibility.mdc`。
 - **数据层标准 API（强制）**：任何新功能、数据调用或 Hub/前后端改动前，必须先查阅已有标准方法与架构（`docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md`、`instrument-query.ts`）；优先 `queryInstrumentData(ref, capability)` 复用，标准能力不足时再扩展标准层（计划路由 → Provider 标准方法 → 自定义方法），**禁止**直连 Provider / 重复造轮子。细则见 `.cursor/rules/data-layer-standard-api.mdc`。
 - **Data Provider 文档**：在 `a-stock-layer` 新增/修改 Provider 方法时，须按 `.cursor/rules/data-provider-docs.mdc` 完善 JSDoc 与 `custom-method-docs.ts`（含 sourceUrl、入参/出参、usage、维护备注）；不得只实现逻辑不写文档。
 - **基于上一版实现与用户最新指示**做增量修改；不要臆测需求或“顺便优化”未提及的行为。

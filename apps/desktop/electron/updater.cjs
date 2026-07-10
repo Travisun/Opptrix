@@ -91,7 +91,7 @@ function initUpdater({ version }) {
       currentVersion: version,
       version: null,
       percent: 0,
-      message: null,
+      message: '当前已是最新版本',
     })
   })
 
@@ -156,7 +156,23 @@ function registerUpdaterIpc(ipcMain) {
   ipcMain.handle('app-update-get-status', async () => status)
 
   ipcMain.handle('app-update-check', async () => {
-    if (!app.isPackaged || !autoUpdater) return status
+    if (!autoUpdater) {
+      setStatus({
+        state: 'error',
+        message: '更新组件不可用，请重新安装应用或从 GitHub Releases 下载最新版。',
+      })
+      return status
+    }
+    if (!app.isPackaged) {
+      setStatus({
+        state: 'not-available',
+        currentVersion: status.currentVersion,
+        version: null,
+        percent: 0,
+        message: '开发模式不支持自动更新，请从 GitHub Releases 下载正式安装包。',
+      })
+      return status
+    }
     setStatus({ state: 'checking', message: '正在检查更新…' })
     try {
       await autoUpdater.checkForUpdates()
