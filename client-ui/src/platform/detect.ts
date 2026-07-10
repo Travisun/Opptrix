@@ -153,6 +153,7 @@ export type AppUpdateState =
   | 'available'
   | 'downloading'
   | 'ready'
+  | 'installing'
   | 'not-available'
   | 'error'
 

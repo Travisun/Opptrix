@@ -6,7 +6,7 @@ const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
-const { initUpdater, registerUpdaterIpc } = require('./updater.cjs')
+const { initUpdater, registerUpdaterIpc, resumePendingUpdateOnStartup, isUpdateReady, installPendingUpdate } = require('./updater.cjs')
 const {
   deliverProtocolUrl,
   findProtocolUrl,
@@ -265,7 +265,21 @@ function deliverProtocolPayload(payload) {
   }
 }
 
+function prepareForUpdateInstall() {
+  app.isQuitting = true
+  stopSidecar()
+  destroyTray()
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (!win.isDestroyed()) win.close()
+  }
+}
+
 function quitApp() {
+  if (isUpdateReady()) {
+    prepareForUpdateInstall()
+    void installPendingUpdate()
+    return
+  }
   app.isQuitting = true
   stopSidecar()
   destroyTray()
@@ -575,7 +589,7 @@ function registerWindowIpc() {
     })
   })
 
-  registerUpdaterIpc(ipcMain)
+  registerUpdaterIpc(ipcMain, { prepareForUpdateInstall })
   registerProtocolIpc(ipcMain)
   registerNotificationIpc(ipcMain, {
     onNotificationClick: () => focusMainWindow(),
@@ -598,6 +612,12 @@ app.whenReady().then(async () => {
   applyAppIcon(app)
   setupDesktopChrome()
   registerWindowIpc()
+
+  if (app.isPackaged) {
+    const quittingForUpdate = await resumePendingUpdateOnStartup({ version: VERSION })
+    if (quittingForUpdate) return
+  }
+
   createTray({
     onShowMainWindow: () => {
       void openMainWindowFromMenu()

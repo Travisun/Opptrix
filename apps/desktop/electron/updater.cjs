@@ -2,6 +2,16 @@ const path = require('path')
 const Module = require('module')
 const { app, BrowserWindow } = require('electron')
 const { showLocalNotification } = require('./notifications.cjs')
+const {
+  readPendingDownloadFromDisk,
+  isVersionNewer,
+} = require('./update-pending.cjs')
+const {
+  reconcileInstallGuard,
+  isInstallBlocked,
+  recordInstallAttempt,
+  getInstallBlockReason,
+} = require('./update-guard.cjs')
 
 const UPDATER_VENDOR_DIR = path.join(__dirname, '../build/updater-deps/packages')
 
@@ -39,6 +49,18 @@ let status = {
   message: null,
 }
 
+/** @type {(() => void) | null} */
+let prepareForUpdateInstall = null
+
+/** electron-updater 已加载待安装包（含 Squirrel 代理就绪） */
+let updatePackageHydrated = false
+
+/** 启动时 resume 钩子是否已执行过 checkForUpdates */
+let startupResumeHandled = false
+
+/** 避免重复注册 autoUpdater 事件 */
+let autoUpdaterEventsBound = false
+
 function broadcast(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
     if (!win.isDestroyed()) {
@@ -52,44 +74,68 @@ function setStatus(patch) {
   broadcast('app-update-status', status)
 }
 
-function initUpdater({ version }) {
-  status.currentVersion = version
+function shouldSkipStartupResume() {
+  return process.argv.includes('--opptrix-skip-update-resume')
+}
 
-  if (!autoUpdater) {
-    setStatus({
-      state: 'not-available',
-      currentVersion: version,
-      message: null,
-    })
-    return
+function hydrateReadyStatusFromDisk(currentVersion) {
+  const pending = readPendingDownloadFromDisk()
+  if (!pending?.version || !isVersionNewer(pending.version, currentVersion)) {
+    return null
   }
 
-  if (!app.isPackaged) {
-    setStatus({
-      state: 'not-available',
-      currentVersion: version,
-      message: null,
-    })
-    return
-  }
+  const blockReason = isInstallBlocked(pending.cacheKey)
+    ? getInstallBlockReason(pending.cacheKey)
+    : null
 
+  setStatus({
+    state: 'ready',
+    currentVersion,
+    version: pending.version,
+    percent: 100,
+    message: blockReason
+      ?? `新版本 ${pending.version} 已就绪，重启后即可完成更新`,
+  })
+  return pending
+}
+
+function configureAutoUpdaterDefaults() {
+  if (!autoUpdater) return
   autoUpdater.autoDownload = true
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowDowngrade = false
   autoUpdater.logger = null
+}
+
+function attachNativeBeforeQuitHook() {
+  try {
+    const { autoUpdater: nativeAutoUpdater } = require('electron')
+    nativeAutoUpdater.on('before-quit-for-update', () => {
+      prepareForUpdateInstall?.()
+    })
+  } catch {
+    // non-mac or older runtime
+  }
+}
+
+function bindAutoUpdaterEvents(currentVersion) {
+  if (!autoUpdater || autoUpdaterEventsBound) return
+  autoUpdaterEventsBound = true
 
   autoUpdater.on('checking-for-update', () => {
+    if (status.state === 'installing') return
     setStatus({
       state: 'checking',
-      currentVersion: version,
+      currentVersion,
       message: '正在检查更新…',
     })
   })
 
   autoUpdater.on('update-available', (info) => {
+    if (status.state === 'installing') return
     setStatus({
       state: 'available',
-      currentVersion: version,
+      currentVersion,
       version: info.version,
       percent: 0,
       message: `发现新版本 ${info.version}`,
@@ -97,9 +143,15 @@ function initUpdater({ version }) {
   })
 
   autoUpdater.on('update-not-available', () => {
+    if (status.state === 'installing') return
+    const pending = readPendingDownloadFromDisk()
+    if (pending?.version && isVersionNewer(pending.version, currentVersion)) {
+      hydrateReadyStatusFromDisk(currentVersion)
+      return
+    }
     setStatus({
       state: 'not-available',
-      currentVersion: version,
+      currentVersion,
       version: null,
       percent: 0,
       message: '当前已是最新版本',
@@ -107,6 +159,7 @@ function initUpdater({ version }) {
   })
 
   autoUpdater.on('download-progress', (progress) => {
+    if (status.state === 'installing') return
     setStatus({
       state: 'downloading',
       percent: Math.round(progress.percent ?? 0),
@@ -115,9 +168,10 @@ function initUpdater({ version }) {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
+    updatePackageHydrated = true
     setStatus({
       state: 'ready',
-      currentVersion: version,
+      currentVersion,
       version: info.version,
       percent: 100,
       message: `新版本 ${info.version} 已就绪，重启后即可完成更新`,
@@ -143,14 +197,157 @@ function initUpdater({ version }) {
   })
 
   autoUpdater.on('error', (err) => {
+    if (status.state === 'installing') return
+    const pending = readPendingDownloadFromDisk()
+    if (pending?.version && isVersionNewer(pending.version, currentVersion)) {
+      hydrateReadyStatusFromDisk(currentVersion)
+      return
+    }
     setStatus({
       state: 'error',
       message: err instanceof Error ? err.message : '更新检查失败',
     })
   })
+}
+
+function triggerInstall({ targetVersion, cacheKey, source }) {
+  if (cacheKey && isInstallBlocked(cacheKey)) {
+    const reason = getInstallBlockReason(cacheKey)
+    setStatus({
+      state: 'ready',
+      currentVersion: status.currentVersion,
+      version: targetVersion ?? status.version,
+      percent: 100,
+      message: reason ?? '自动安装已暂停，请手动点击「重启更新」。',
+    })
+    return false
+  }
+
+  if (cacheKey && targetVersion) {
+    recordInstallAttempt({ cacheKey, targetVersion })
+  }
+
+  prepareForUpdateInstall?.()
+  setStatus({
+    state: 'installing',
+    currentVersion: status.currentVersion,
+    version: targetVersion ?? status.version,
+    message: source === 'startup'
+      ? '检测到待安装更新，正在退出并安装…'
+      : '正在安装更新并重启应用…',
+  })
+
+  // macOS: zip 已下载后，quitAndInstall 会交给 Squirrel.Mac 替换 /Applications 内的 .app 并重启。
+  autoUpdater.quitAndInstall(false, true)
+  return true
+}
+
+function waitForHydratedUpdate(currentVersion, timeoutMs = 20_000) {
+  if (updatePackageHydrated && status.state === 'ready') {
+    return Promise.resolve(status.version ?? null)
+  }
+
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = (version) => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve(version)
+    }
+
+    const timer = setTimeout(() => finish(null), timeoutMs)
+
+    autoUpdater.once('update-downloaded', (info) => finish(info.version ?? null))
+    autoUpdater.once('update-not-available', () => {
+      const pending = readPendingDownloadFromDisk()
+      if (pending?.version && isVersionNewer(pending.version, currentVersion)) {
+        finish(pending.version)
+        return
+      }
+      finish(null)
+    })
+    autoUpdater.once('error', () => finish(null))
+
+    void autoUpdater.checkForUpdates().catch(() => finish(null))
+  })
+}
+
+/**
+ * 启动第一时间：若本地已有比当前版本新的待安装包，则跳过 UI/bootstrap，直接退出并安装。
+ * 防循环：同一 pending 包在窗口期内失败次数有上限，超出后仅提示手动安装。
+ */
+async function resumePendingUpdateOnStartup({ version }) {
+  if (!app.isPackaged || !autoUpdater || shouldSkipStartupResume()) {
+    return false
+  }
+
+  reconcileInstallGuard(version)
+
+  const pending = readPendingDownloadFromDisk()
+  if (!pending?.version || !isVersionNewer(pending.version, version)) {
+    return false
+  }
+
+  startupResumeHandled = true
+
+  if (isInstallBlocked(pending.cacheKey)) {
+    console.warn('[updater] startup resume blocked by guard for', pending.version)
+    hydrateReadyStatusFromDisk(version)
+    return false
+  }
+
+  configureAutoUpdaterDefaults()
+  attachNativeBeforeQuitHook()
+  bindAutoUpdaterEvents(version)
+
+  const hydratedVersion = await waitForHydratedUpdate(version)
+  if (!hydratedVersion || !isVersionNewer(hydratedVersion, version)) {
+    return false
+  }
+
+  return triggerInstall({
+    targetVersion: hydratedVersion,
+    cacheKey: pending.cacheKey,
+    source: 'startup',
+  })
+}
+
+function initUpdater({ version }) {
+  status.currentVersion = version
+  reconcileInstallGuard(version)
+
+  if (!autoUpdater) {
+    setStatus({
+      state: 'not-available',
+      currentVersion: version,
+      message: null,
+    })
+    return
+  }
+
+  if (!app.isPackaged) {
+    setStatus({
+      state: 'not-available',
+      currentVersion: version,
+      message: null,
+    })
+    return
+  }
+
+  configureAutoUpdaterDefaults()
+  attachNativeBeforeQuitHook()
+  bindAutoUpdaterEvents(version)
+
+  const pending = hydrateReadyStatusFromDisk(version)
 
   const runCheck = () => {
+    if (status.state === 'installing') return
     void autoUpdater.checkForUpdates().catch(() => {
+      if (pending?.version && isVersionNewer(pending.version, version)) {
+        hydrateReadyStatusFromDisk(version)
+        return
+      }
       setStatus({
         state: 'error',
         message: '无法连接更新服务器',
@@ -158,12 +355,39 @@ function initUpdater({ version }) {
     })
   }
 
-  // Wait for shell to settle before the first background check.
-  setTimeout(runCheck, 10_000)
+  if (startupResumeHandled) {
+    // resume 钩子已做过一次 checkForUpdates；此处仅补常规轮询。
+    setInterval(runCheck, 6 * 60 * 60 * 1000)
+    return
+  }
+
+  const startupDelayMs = pending ? 0 : 10_000
+  setTimeout(runCheck, startupDelayMs)
   setInterval(runCheck, 6 * 60 * 60 * 1000)
 }
 
-function registerUpdaterIpc(ipcMain) {
+function isUpdateReady() {
+  return status.state === 'ready'
+}
+
+async function installPendingUpdate() {
+  if (!app.isPackaged || !autoUpdater || !isUpdateReady()) return false
+
+  const pending = readPendingDownloadFromDisk()
+  const targetVersion = status.version ?? pending?.version ?? null
+  const cacheKey = pending?.cacheKey ?? null
+
+  if (!updatePackageHydrated) {
+    const hydratedVersion = await waitForHydratedUpdate(status.currentVersion ?? app.getVersion())
+    if (!hydratedVersion) return false
+  }
+
+  return triggerInstall({ targetVersion, cacheKey, source: 'manual' })
+}
+
+function registerUpdaterIpc(ipcMain, deps = {}) {
+  prepareForUpdateInstall = deps.prepareForUpdateInstall ?? null
+
   ipcMain.handle('app-update-get-status', async () => status)
 
   ipcMain.handle('app-update-check', async () => {
@@ -197,13 +421,15 @@ function registerUpdaterIpc(ipcMain) {
   })
 
   ipcMain.handle('app-update-install', async () => {
-    if (!app.isPackaged || !autoUpdater || status.state !== 'ready') return false
-    autoUpdater.quitAndInstall(false, true)
-    return true
+    if (!isUpdateReady()) return false
+    return installPendingUpdate()
   })
 }
 
 module.exports = {
   initUpdater,
   registerUpdaterIpc,
+  resumePendingUpdateOnStartup,
+  isUpdateReady,
+  installPendingUpdate,
 }

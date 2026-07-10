@@ -47,10 +47,18 @@ export function buildAppUpdatePanel(
       return {
         visible: true,
         title: status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪',
-        desc: status.message ?? '重启应用即可完成更新，对话与本地数据不会丢失。',
+        desc: status.message ?? '点击下方按钮重启并完成安装，对话与本地数据不会丢失。',
         showProgress: false,
         percent: 100,
         showInstall: true,
+      }
+    case 'installing':
+      return {
+        visible: true,
+        title: status.version ? `正在安装 v${status.version}` : '正在安装更新',
+        desc: status.message ?? '应用即将退出并自动重启，请勿强制结束进程。',
+        showProgress: true,
+        showInstall: false,
       }
     case 'error':
       return {

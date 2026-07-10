@@ -63,27 +63,33 @@ export default function AppUpdateNotice() {
     )
   }
 
-  if (status.state === 'ready') {
+  if (status.state === 'ready' || status.state === 'installing') {
     return (
       <div className={s.wrap}>
         <div className={s.card}>
           <Text className={s.title} block>
-            {status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪'}
+            {status.state === 'installing'
+              ? (status.version ? `正在安装 v${status.version}` : '正在安装更新')
+              : (status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪')}
           </Text>
           <Text className={s.meta} block>
-            重启应用即可完成更新，当前对话与数据不会丢失。
+            {status.message ?? (status.state === 'installing'
+              ? '应用即将退出并自动重启，请勿强制结束进程。'
+              : '重启应用即可完成更新，当前对话与数据不会丢失。')}
           </Text>
-          <div className={s.actions}>
-            <OpptrixButton
-              className={mergeClasses('opptrix-focusable')}
-              variant="primary"
-              size="small"
-              icon={<ArrowSyncRegular />}
-              onClick={() => { void installUpdate() }}
-            >
-              重启更新
-            </OpptrixButton>
-          </div>
+          {status.state === 'ready' && (
+            <div className={s.actions}>
+              <OpptrixButton
+                className={mergeClasses('opptrix-focusable')}
+                variant="primary"
+                size="small"
+                icon={<ArrowSyncRegular />}
+                onClick={() => { void installUpdate() }}
+              >
+                重启更新
+              </OpptrixButton>
+            </div>
+          )}
         </div>
       </div>
     )

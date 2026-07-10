@@ -28,6 +28,7 @@ import {
 } from './aboutLinks'
 import {
   SettingsActionRow,
+  SettingsDivider,
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
@@ -79,6 +80,21 @@ const useStyles = makeStyles({
     lineHeight: 1.55,
     paddingLeft: '2px',
   },
+  updateStatusBlock: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    width: '100%',
+    padding: '12px 18px',
+    boxSizing: 'border-box',
+  },
+  updateTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
   updatePanel: {
     display: 'flex',
     flexDirection: 'column',
@@ -97,9 +113,10 @@ const useStyles = makeStyles({
   },
   updateActions: {
     display: 'flex',
-    justifyContent: 'flex-end',
+    justifyContent: 'flex-start',
     gap: '8px',
     paddingTop: '2px',
+    width: '100%',
   },
 })
 
@@ -173,10 +190,10 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
             last={!showUpdateStatusRow}
           />
           {showUpdateStatusRow && updatePanel && (
-            <SettingsRow
-              stack
-              title={updatePanel.title}
-              desc={(
+            <>
+              <SettingsDivider />
+              <div className={s.updateStatusBlock}>
+                <Text className={s.updateTitle} block>{updatePanel.title}</Text>
                 <div className={s.updatePanel}>
                   <Text className={s.updateDesc} block>{updatePanel.desc}</Text>
                   {updatePanel.showProgress && (
@@ -194,6 +211,8 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                       <Text className={s.progressMeta} block>
                         {updateStatus.state === 'available'
                           ? '正在连接下载…'
+                          : updateStatus.state === 'installing'
+                            ? '正在替换应用文件并准备重启…'
                           : updatePanel.percent != null && updatePanel.percent > 0
                             ? `已完成 ${updatePanel.percent}%`
                             : '正在准备下载…'}
@@ -212,9 +231,8 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                     </div>
                   )}
                 </div>
-              )}
-              last
-            />
+              </div>
+            </>
           )}
         </SettingsGroup>
       </div>
