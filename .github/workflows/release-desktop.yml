@@ -45,8 +45,8 @@ jobs:
           ## Opptrix Desktop ${VERSION}
 
           ### macOS 安装说明
-          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-(M CPU).dmg\`
-          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-(Intel CPU).dmg\`
+          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-arm64-(M CPU).dmg\`
+          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-x64-(Intel CPU).dmg\`
           - 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
             \`\`\`bash
             xattr -cr /Applications/Opptrix.app
@@ -236,6 +236,10 @@ jobs:
           security delete-keychain "$CSC_KEYCHAIN" 2>/dev/null || true
           echo "Cleaned up signing keychain: $CSC_KEYCHAIN"
 
+      - name: Verify update metadata matches built files
+        shell: bash
+        run: node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release
+
       - name: Upload artifacts to GitHub Release
         shell: bash
         env:
@@ -244,13 +248,20 @@ jobs:
           TAG="${{ github.ref_name }}"
           RELEASE_DIR="apps/desktop/release"
 
+          if [[ "${{ runner.os }}" == "macOS" && -n "${{ matrix.electron_arch }}" ]]; then
+            if [[ -f "$RELEASE_DIR/latest-mac.yml" ]]; then
+              mv "$RELEASE_DIR/latest-mac.yml" "$RELEASE_DIR/latest-mac-${{ matrix.electron_arch }}.yml"
+              echo "Renamed latest-mac.yml → latest-mac-${{ matrix.electron_arch }}.yml (merged later in finalize job)"
+            fi
+          fi
+
           files=()
           while IFS= read -r file; do
             [ -n "$file" ] && files+=("$file")
           done < <(find "$RELEASE_DIR" -maxdepth 1 -type f \( \
             -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o \
             -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \
-          \))
+          \) ! -name 'latest-mac.yml')
 
           if [ ${#files[@]} -eq 0 ]; then
             echo "No distributable artifacts under $RELEASE_DIR"
@@ -261,3 +272,55 @@ jobs:
           echo "Uploading ${#files[@]} file(s) to release $TAG:"
           printf '  - %s\n' "${files[@]}"
           gh release upload "$TAG" "${files[@]}" --clobber
+
+  finalize-release:
+    name: Finalize macOS update metadata
+    needs: release
+    runs-on: ubuntu-latest
+    if: ${{ needs.release.result == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Merge latest-mac.yml for both CPU architectures
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ github.ref_name }}"
+          WORK="$RUNNER_TEMP/mac-yml"
+          mkdir -p "$WORK"
+
+          gh release download "$TAG" -p 'latest-mac-arm64.yml' -D "$WORK"
+          gh release download "$TAG" -p 'latest-mac-x64.yml' -D "$WORK"
+
+          node apps/desktop/scripts/merge-mac-update-yml.mjs \
+            "$WORK/latest-mac-arm64.yml" \
+            "$WORK/latest-mac-x64.yml" \
+            "$WORK/latest-mac.yml"
+
+          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > "$WORK/release-assets.txt"
+
+          node apps/desktop/scripts/verify-release-yml-on-github.mjs \
+            "$WORK/latest-mac.yml" \
+            "$WORK/release-assets.txt"
+
+          for yml in latest.yml latest-linux.yml; do
+            if gh release download "$TAG" -p "$yml" -D "$WORK" --clobber 2>/dev/null; then
+              node apps/desktop/scripts/verify-release-yml-on-github.mjs \
+                "$WORK/$yml" \
+                "$WORK/release-assets.txt"
+            fi
+          done
+
+          gh release upload "$TAG" "$WORK/latest-mac.yml" --clobber
+          echo "Published merged latest-mac.yml to $TAG"

@@ -1,7 +1,8 @@
-/** User-facing platform labels in release artifact file names. */
+/** User-facing platform labels in release artifact file names.
+ *  macOS names must include arm64/x64 — electron-updater MacUpdater filters by URL substring. */
 export const MAC_ARTIFACT_LABEL = {
-  arm64: 'MacOS-(M CPU)',
-  x64: 'MacOS-(Intel CPU)',
+  arm64: 'MacOS-arm64-(M CPU)',
+  x64: 'MacOS-x64-(Intel CPU)',
 }
 
 export const WIN_ARTIFACT_LABEL = 'Windows'

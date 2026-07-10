@@ -49,8 +49,8 @@
 
 | 用途 | 格式 | 典型文件名 | 适用机器 |
 |------|------|------------|----------|
-| 首次安装 | `.dmg` | `Opptrix-0.6.1-MacOS-(Intel CPU).dmg` / `Opptrix-0.6.1-MacOS-(M CPU).dmg` | Intel / Apple Silicon |
-| **自动更新** | `.zip` | `Opptrix-0.6.1-MacOS-(Intel CPU).zip` / `Opptrix-0.6.1-MacOS-(M CPU).zip` | 同上 |
+| 首次安装 | `.dmg` | `Opptrix-0.6.1-MacOS-x64-(Intel CPU).dmg` / `Opptrix-0.6.1-MacOS-arm64-(M CPU).dmg` | Intel / Apple Silicon |
+| **自动更新** | `.zip` | `Opptrix-0.6.1-MacOS-x64-(Intel CPU).zip` / `Opptrix-0.6.1-MacOS-arm64-(M CPU).zip` | 同上 |
 | 更新元数据 | `.yml` | `latest-mac.yml`（含多架构条目） | **是** |
 
 > macOS 自动更新依赖 **zip + latest-mac.yml**。在 Apple Silicon CI runner 上打 x64 包时，sidecar 通过 Rosetta 执行 `arch -x86_64 npm install` 安装 x64 原生依赖。
@@ -128,11 +128,11 @@ Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev
 确认附件至少包含：
 
 ```text
-# macOS（CI 自动，分架构）
-Opptrix-{version}-MacOS-(Intel CPU).dmg
-Opptrix-{version}-MacOS-(Intel CPU).zip
-Opptrix-{version}-MacOS-(M CPU).dmg
-Opptrix-{version}-MacOS-(M CPU).zip
+# macOS（CI 自动，分架构 → finalize 合并 latest-mac.yml）
+Opptrix-{version}-MacOS-x64-(Intel CPU).dmg
+Opptrix-{version}-MacOS-x64-(Intel CPU).zip
+Opptrix-{version}-MacOS-arm64-(M CPU).dmg
+Opptrix-{version}-MacOS-arm64-(M CPU).zip
 latest-mac.yml
 
 # Windows（CI 自动）
@@ -198,7 +198,7 @@ npm run build:desktop -- --publish always
 
 | 平台 | 实际下载的文件 |
 |------|----------------|
-| macOS | `Opptrix-*-MacOS-(M CPU).zip` / `Opptrix-*-MacOS-(Intel CPU).zip` |
+| macOS | `Opptrix-*-MacOS-arm64-(M CPU).zip` / `Opptrix-*-MacOS-x64-(Intel CPU).zip` |
 | Windows | `Opptrix-*-Windows.exe` |
 | Linux | 主要为 `Opptrix-*-Linux.AppImage` |
 
@@ -285,7 +285,8 @@ open /Applications/Opptrix.app
 
 ### Q：有新版但 Mac 不更新
 
-- Release 是否包含 `*-mac.zip` 与 `latest-mac.yml`（仅有 dmg 不够）；
+- Release 是否包含 **合并后的** `latest-mac.yml`（含 arm64 + x64 两套 zip/dmg 条目；CI `finalize-release` job 负责合并）；
+- zip 文件名须含 `arm64` / `x64` 子串（`electron-updater` 按 URL 过滤架构）；
 - yml 内 `version` 是否大于客户端当前版本。
 
 ### Q：Intel Mac 和 M 系列 Mac 要发两个包吗？
