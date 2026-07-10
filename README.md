@@ -37,7 +37,7 @@
 使用问题、功能建议、贡献讨论，欢迎扫码加入 **Opptrix 技术交流群**（微信）：
 
 <p align="center">
-  <img src="wx_group.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="280" />
+  <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="280" />
 </p>
 
 <p align="center"><sub>群聊：Opptrix 技术交流群 · 扫码加入后可在群内交流使用与开发问题</sub></p>
