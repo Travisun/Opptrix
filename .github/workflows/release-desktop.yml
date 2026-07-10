@@ -301,8 +301,18 @@ jobs:
           WORK="$RUNNER_TEMP/mac-yml"
           mkdir -p "$WORK"
 
-          gh release download "$TAG" -p 'latest-mac-arm64.yml' -D "$WORK"
-          gh release download "$TAG" -p 'latest-mac-x64.yml' -D "$WORK"
+          gh release view "$TAG" --json assets --jq '.assets[].name' | sort > "$WORK/release-assets.txt"
+          echo "Release assets:"
+          cat "$WORK/release-assets.txt"
+
+          if ! gh release download "$TAG" -p 'latest-mac-arm64.yml' -D "$WORK"; then
+            echo "::error::Missing latest-mac-arm64.yml on release $TAG"
+            exit 1
+          fi
+          if ! gh release download "$TAG" -p 'latest-mac-x64.yml' -D "$WORK"; then
+            echo "::error::Missing latest-mac-x64.yml on release $TAG"
+            exit 1
+          fi
 
           node apps/desktop/scripts/merge-mac-update-yml.mjs \
             "$WORK/latest-mac-arm64.yml" \

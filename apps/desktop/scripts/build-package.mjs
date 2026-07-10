@@ -17,7 +17,8 @@ const updateFeedUrl = resolveUpdateFeedUrl()
 function withUpdateFeedPublishConfig(run) {
   const originalPkgBytes = fs.readFileSync(PKG_PATH)
   const pkg = JSON.parse(originalPkgBytes.toString())
-  pkg.build.publish = [{ provider: 'generic', url: updateFeedUrl }]
+  pkg.build.detectUpdateChannel = false
+  pkg.build.publish = [{ provider: 'generic', url: updateFeedUrl, channel: 'latest' }]
   fs.writeFileSync(PKG_PATH, `${JSON.stringify(pkg, null, 2)}\n`)
   try {
     return run()

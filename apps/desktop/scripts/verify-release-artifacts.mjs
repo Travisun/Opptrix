@@ -57,10 +57,19 @@ function main() {
   const stat = fs.statSync(target)
   if (stat.isDirectory()) {
     const releaseDir = target
+    let verified = 0
     for (const name of fs.readdirSync(releaseDir)) {
       if (!name.startsWith('latest') || !name.endsWith('.yml')) continue
       if (name === 'latest-mac-arm64.yml' || name === 'latest-mac-x64.yml') continue
       verifyUpdateYml(path.join(releaseDir, name), releaseDir)
+      verified++
+    }
+    if (verified === 0) {
+      const ymls = fs.readdirSync(releaseDir).filter((name) => name.endsWith('.yml'))
+      throw new Error(
+        `No latest-*.yml update metadata in ${releaseDir}. Found: ${ymls.join(', ') || 'none'}. `
+          + 'Ensure publish.channel is "latest" (dev pre-release versions otherwise emit dev-*.yml).',
+      )
     }
     return
   }

@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.16",
+  "version": "0.6.0-dev.17",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
@@ -35,6 +35,7 @@
     "afterPack": "./scripts/after-pack-adhoc.cjs",
     "npmRebuild": false,
     "nodeGypRebuild": false,
+    "detectUpdateChannel": false,
     "protocols": [
       {
         "name": "Opptrix Link",
@@ -46,7 +47,8 @@
     "publish": [
       {
         "provider": "generic",
-        "url": "https://updates.opptrix.example/desktop/"
+        "url": "https://updates.opptrix.example/desktop/",
+        "channel": "latest"
       }
     ],
     "directories": {
