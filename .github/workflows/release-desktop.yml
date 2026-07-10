@@ -360,6 +360,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify release metadata policy
+        run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
+
       - name: Download release assets
         shell: bash
         env:
@@ -374,6 +377,15 @@ jobs:
 
       - name: Verify release coherence (tag, yml, assets)
         run: node apps/desktop/scripts/verify-release-coherence.mjs "${{ github.ref_name }}" "$ASSET_DIR"
+
+      - name: Verify R2 credentials
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/verify-r2-credentials.mjs
 
       - name: Sync to Cloudflare R2 (purge old + upload current)
         shell: bash

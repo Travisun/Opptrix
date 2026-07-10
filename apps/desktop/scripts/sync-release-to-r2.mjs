@@ -17,6 +17,8 @@ import {
   listObjectKeys,
   putObjectFile,
   requireR2Env,
+  verifyR2Credentials,
+  explainR2Error,
 } from './lib/r2-client.mjs'
 
 const RELEASE_FILE = /\.(dmg|zip|exe|AppImage|deb|yml|blockmap)$/i
@@ -77,6 +79,9 @@ async function main() {
   console.log(`[r2] bucket: ${r2Env.bucket}  prefix: ${prefix}/`)
   console.log(`[r2] uploading ${files.length} file(s), ${formatBytes(totalBytes)} total`)
 
+  await verifyR2Credentials(client, r2Env.bucket)
+  console.log('[r2] credentials OK')
+
   const existingKeys = await listObjectKeys(client, r2Env.bucket, prefix)
   if (existingKeys.length > 0) {
     console.log(`[r2] purging ${existingKeys.length} existing object(s) under ${prefix}/`)
@@ -102,6 +107,6 @@ async function main() {
 }
 
 main().catch((err) => {
-  console.error('[r2] sync failed:', err instanceof Error ? err.message : err)
+  console.error('[r2] sync failed:', explainR2Error(err))
   process.exit(1)
 })

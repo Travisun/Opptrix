@@ -292,6 +292,21 @@ curl -X POST "https://api.cloudflare.com/client/v4/zones/$CLOUDFLARE_ZONE_ID/pur
 | `OPPTRIX_UPDATE_BASE_URL` | 安装包用占位 URL；跳过公网 verify |
 | `CLOUDFLARE_API_TOKEN` | 跳过 CDN purge（R2 上传仍成功） |
 
+**常见 R2 报错**
+
+| 报错 | 原因 | 处理 |
+|------|------|------|
+| `signature we calculated does not match` | Access Key / Secret **不成对**、Secret 粘贴多了空格/引号、或误用了 `cfut_*` API Token | 在 R2 **重新创建** S3 API Token，**成对**更新 `R2_ACCESS_KEY_ID` + `R2_SECRET_ACCESS_KEY` |
+| `R2_ACCOUNT_ID must be the 32-char…` | 填成了 Zone ID 或 bucket 名 | Dashboard → Overview → **Account ID** |
+| `Authentication error`（purge 步骤） | `CLOUDFLARE_API_TOKEN` 无 Cache Purge 权限 | 单独创建 Zone Cache Purge Token（见上文第二步） |
+
+本地预检 R2 凭证：
+
+```bash
+export R2_ACCOUNT_ID=… R2_ACCESS_KEY_ID=… R2_SECRET_ACCESS_KEY=… R2_BUCKET=…
+npm run verify:r2-credentials -w @opptrix/desktop
+```
+
 #### 客户端如何指向 R2
 
 - CI 构建时通过 `OPPTRIX_UPDATE_BASE_URL` 注入 `electron-builder` 的 `generic` publish URL；
