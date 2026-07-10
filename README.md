@@ -340,4 +340,5 @@ Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron ·
 
 - GitHub：[Travisun/Opptrix](https://github.com/Travisun/Opptrix)  
 - Releases：[桌面安装包下载](https://github.com/Travisun/Opptrix/releases)  
-- Issues：[报告问题或提议功能](https://github.com/Travisun/Opptrix/issues)
+- Issues：[报告问题或提议功能](https://github.com/Travisun/Opptrix/issues)  
+- LinuxDO：[linux.do](https://linux.do) — 中文开发者社区，欢迎交流。
