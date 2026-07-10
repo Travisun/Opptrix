@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readYamlFile } from './lib/load-yaml.mjs'
+import { assertSafeArtifactBasename } from './lib/release-metadata-policy.mjs'
 
 function fileEntries(info) {
   if (Array.isArray(info.files) && info.files.length > 0) return info.files
@@ -30,6 +31,7 @@ function verifyUpdateYml(ymlPath, assetDir) {
 
   for (const entry of entries) {
     const name = path.basename(entry.url)
+    assertSafeArtifactBasename(name)
     const assetPath = path.join(assetDir, name)
     if (!fs.existsSync(assetPath)) {
       throw new Error(`${base} references missing asset: ${name}`)
@@ -40,8 +42,11 @@ function verifyUpdateYml(ymlPath, assetDir) {
   }
 
   const primary = info.path ? path.basename(info.path) : null
-  if (primary && !fs.existsSync(path.join(assetDir, primary))) {
-    throw new Error(`${base} primary path missing asset: ${primary}`)
+  if (primary) {
+    assertSafeArtifactBasename(primary)
+    if (!fs.existsSync(path.join(assetDir, primary))) {
+      throw new Error(`${base} primary path missing asset: ${primary}`)
+    }
   }
 
   console.log(`verify-release-artifacts: OK ${base} (${entries.length} entries, v${info.version})`)

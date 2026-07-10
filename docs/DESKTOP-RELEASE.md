@@ -164,6 +164,34 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 4. 校验 `update.opptrix.org` 上 yml 可访问；
 5. **Purge** Cloudflare 边缘缓存中的三个 `latest-*.yml`（安装包文件名带版本号，无需 purge）。
 
+#### 自动更新链路不变量（dev / beta / 正式版通用）
+
+| 环节 | 约定 | 说明 |
+|------|------|------|
+| **版本号** | `apps/desktop/package.json` `version` **必须**与 tag `desktop-v{version}` 一致 | CI 首步校验 |
+| **更新通道** | 固定 `publish.channel: "latest"` + `detectUpdateChannel: false` | 避免 `0.6.0-dev.*` 生成 `dev-*.yml`、避免 `1.0.0-beta.1` 生成 `beta-*.yml` |
+| **公开 yml** | `latest-mac.yml` / `latest.yml` / `latest-linux.yml` | 客户端与 R2 CDN 只认这三份 |
+| **macOS 分架构** | 矩阵 job 上传 `latest-mac-arm64.yml` + `latest-mac-x64.yml` → finalize 合并 | 合并后 yml 内须同时含 `arm64` 与 `x64` 的 `.zip` |
+| **安装包命名** | 仅字母、数字、连字符（如 `MacOS-arm64-M-CPU`） | 禁止空格/括号；须与 yml 中 `url` **逐字一致** |
+| **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
+| **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
+
+**版本升级语义（electron-updater）**
+
+- `0.6.0-dev.17` → `0.6.0-dev.18`：正常增量更新  
+- `0.6.0-dev.*` → `1.0.0`：正式版号更大，dev 用户可收到正式版（`allowDowngrade: false`）  
+- 旧 GitHub Releases 源安装的客户端：需先手动装一版带 R2 feed 的包，之后走 CDN 自动更新  
+
+**本地/CI 自检**
+
+```bash
+npm run verify:release-metadata-policy -w @opptrix/desktop   # 策略常量（改命名/通道后必跑）
+node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release  # 构建后 yml ↔ 本地文件
+node apps/desktop/scripts/verify-release-coherence.mjs desktop-vX.Y.Z /path/to/release-assets  # 与 tag 一致
+```
+
+策略源码：`apps/desktop/scripts/lib/release-metadata-policy.mjs`（单一事实来源）。
+
 ---
 
 #### 第一步：Cloudflare R2（存储 + 自定义域名）

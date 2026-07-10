@@ -3,6 +3,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { readYamlFile, writeYamlFile } from './lib/load-yaml.mjs'
+import { assertMacMergedUpdateInfo } from './lib/release-metadata-policy.mjs'
 
 function usage() {
   console.error('Usage: merge-mac-update-yml.mjs <arm64.yml> <x64.yml> <out.yml>')
@@ -48,14 +49,17 @@ function mergeMacUpdateYml(arm64Path, x64Path, outPath) {
 
   const releaseDate = [arm64.releaseDate, x64.releaseDate].filter(Boolean).sort().at(-1)
 
-  writeYamlFile(outPath, {
+  const merged = {
     version: arm64.version,
     files,
     path: arm64Zip.url,
     sha512: arm64Zip.sha512,
     size: arm64Zip.size,
     releaseDate,
-  })
+  }
+  assertMacMergedUpdateInfo(merged)
+
+  writeYamlFile(outPath, merged)
 
   console.log(`Merged latest-mac.yml (${files.length} file entries) → ${outPath}`)
 }

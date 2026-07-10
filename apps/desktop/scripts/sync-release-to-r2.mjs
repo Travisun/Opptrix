@@ -9,6 +9,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { r2KeyPrefixFromFeedUrl, resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
+import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
 import {
   contentTypeForFileName,
   createR2Client,
@@ -36,7 +37,7 @@ function collectUploadFiles(dir) {
   if (names.length === 0) {
     throw new Error(`No release artifacts to upload under ${dir}`)
   }
-  const required = ['latest-mac.yml', 'latest.yml', 'latest-linux.yml']
+  const required = [...UPDATE_YML_PUBLIC]
   for (const yml of required) {
     if (!names.includes(yml)) {
       throw new Error(`Missing ${yml} in ${dir} — finalize-release must complete first`)

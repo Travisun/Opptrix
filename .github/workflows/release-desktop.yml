@@ -113,6 +113,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify release metadata policy
+        run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
+
       - name: Configure code signing
         id: signcfg
         shell: bash
@@ -292,6 +295,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Verify release metadata policy
+        run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
+
       - name: Merge latest-mac.yml for both CPU architectures
         shell: bash
         env:
@@ -365,6 +371,9 @@ jobs:
           gh release download "$TAG" -D "$WORK"
           echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
           ls -la "$WORK"
+
+      - name: Verify release coherence (tag, yml, assets)
+        run: node apps/desktop/scripts/verify-release-coherence.mjs "${{ github.ref_name }}" "$ASSET_DIR"
 
       - name: Sync to Cloudflare R2 (purge old + upload current)
         shell: bash

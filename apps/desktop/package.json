@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.18",
+  "version": "0.6.0-dev.19",
   "private": true,
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
@@ -25,6 +25,7 @@
     "build:publish": "node scripts/prebuild.mjs && node scripts/build-package.mjs --publish always",
     "build:publish:mac-arm64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --arm64 --publish always",
     "build:publish:mac-x64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --x64 --publish always",
+    "verify:release-metadata-policy": "node scripts/verify-release-metadata-policy.mjs",
     "verify:runtime": "node scripts/verify-runtime.mjs"
   },
   "build": {
@@ -79,7 +80,6 @@
     "mac": {
       "category": "public.app-category.finance",
       "icon": "build/icons/icon.icns",
-      "artifactName": "${productName}-${version}-${arch}.${ext}",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "resources/entitlements.mac.plist",

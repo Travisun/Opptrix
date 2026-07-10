@@ -6,6 +6,7 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appendDesktopArtifactNameArgs } from './lib/desktop-artifact-names.mjs'
 import { NPM_CMD, NPM_SHELL } from './lib/commands.mjs'
+import { buildPublishPatch } from './lib/release-metadata-policy.mjs'
 import { resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
@@ -17,8 +18,7 @@ const updateFeedUrl = resolveUpdateFeedUrl()
 function withUpdateFeedPublishConfig(run) {
   const originalPkgBytes = fs.readFileSync(PKG_PATH)
   const pkg = JSON.parse(originalPkgBytes.toString())
-  pkg.build.detectUpdateChannel = false
-  pkg.build.publish = [{ provider: 'generic', url: updateFeedUrl, channel: 'latest' }]
+  Object.assign(pkg.build, buildPublishPatch(updateFeedUrl))
   fs.writeFileSync(PKG_PATH, `${JSON.stringify(pkg, null, 2)}\n`)
   try {
     return run()

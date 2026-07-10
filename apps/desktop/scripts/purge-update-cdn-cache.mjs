@@ -5,8 +5,9 @@
  * Env: CLOUDFLARE_API_TOKEN, CLOUDFLARE_ZONE_ID, OPPTRIX_UPDATE_BASE_URL
  */
 import { resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
+import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
 
-const YML_FILES = ['latest-mac.yml', 'latest.yml', 'latest-linux.yml']
+const YML_FILES = [...UPDATE_YML_PUBLIC]
 
 function requireEnv(name) {
   const value = process.env[name]?.trim()

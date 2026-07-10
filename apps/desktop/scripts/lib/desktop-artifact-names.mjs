@@ -1,5 +1,8 @@
 /** User-facing platform labels in release artifact file names.
- *  macOS names must include arm64/x64 — electron-updater MacUpdater filters by URL substring. */
+ *  macOS names must include arm64/x64 — electron-updater MacUpdater filters by URL substring.
+ *  Labels must pass release-metadata-policy SAFE_ARTIFACT_LABEL (no spaces/parens). */
+import { assertSafeArtifactLabel, validateMacArtifactLabelMap } from './release-metadata-policy.mjs'
+
 export const MAC_ARTIFACT_LABEL = {
   arm64: 'MacOS-arm64-M-CPU',
   x64: 'MacOS-x64-Intel-CPU',
@@ -49,3 +52,10 @@ export function appendDesktopArtifactNameArgs(ebArgs, platformArgs) {
     ebArgs.push(`-c.linux.artifactName=${artifactNameTemplate(LINUX_ARTIFACT_LABEL)}`)
   }
 }
+
+for (const label of Object.values(MAC_ARTIFACT_LABEL)) {
+  assertSafeArtifactLabel(label, 'MAC_ARTIFACT_LABEL')
+}
+validateMacArtifactLabelMap(MAC_ARTIFACT_LABEL)
+assertSafeArtifactLabel(WIN_ARTIFACT_LABEL, 'WIN_ARTIFACT_LABEL')
+assertSafeArtifactLabel(LINUX_ARTIFACT_LABEL, 'LINUX_ARTIFACT_LABEL')
