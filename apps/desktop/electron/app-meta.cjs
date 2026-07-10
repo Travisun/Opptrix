@@ -1,7 +1,8 @@
 const pkg = require('../package.json')
 
 const APP_NAME = 'Opptrix'
-const APP_TITLE = 'Opptrix · 你的A股投研助手'
+const APP_TITLE = 'Opptrix'
+const APP_TAGLINE = '全球多市场投研数据助手'
 const AUTHOR_NAME = '催书书'
 const AUTHOR_EMAIL = 'imsorich@foxmail.com'
 const GITHUB_HOME = 'https://github.com/Travisun/Opptrix'
@@ -12,6 +13,7 @@ const VERSION = pkg.version
 module.exports = {
   APP_NAME,
   APP_TITLE,
+  APP_TAGLINE,
   AUTHOR_NAME,
   AUTHOR_EMAIL,
   GITHUB_HOME,

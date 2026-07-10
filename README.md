@@ -2,7 +2,7 @@
   <img src="icons/opptrix-logo.png" alt="Opptrix" height="76" />
 </p>
 
-# Opptrix — 你的 A 股投研助手
+# Opptrix — 全球多市场投研助手
 
 [![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
@@ -28,7 +28,7 @@
 
 ---
 
-**Opptrix** 是一款开源投研助手：用自然语言提问，由大模型调用 **40+ 投研工具** 查询行情、因子、新闻与多市场数据，并整理为可读的中文分析。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
+**Opptrix** 是一款开源的 **全球多市场投研数据助手**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场的行情查询、筛选与 Agent 分析。用自然语言提问，由大模型调用 **40+ 投研工具** 拉取结构化数据并整理为中文可读报告。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
 
 ---
 
@@ -58,10 +58,11 @@
 
 | 维度 | 说明 |
 |------|------|
-| **是什么** | 本地/自托管的 **数据查询与投研整理** 工具：聊天问答、新闻订阅、行情动态、关注列表、本地因子库、多市场标的检索 |
+| **是什么** | 本地/自托管的 **全球多市场数据查询与投研整理** 工具：跨市场标的搜索、聊天问答、新闻订阅、行情动态、关注列表与本地因子库（A 股深度最强） |
 | **不是什么** | 持牌投顾、券商交易软件、理财销售或荐股/喊单系统 |
-| **适合谁** | 希望 **自行查询与整理** A 股及相关市场信息的投资者、研究者；需自备 LLM API Key 使用对话能力 |
-| **适合学习** | TypeScript monorepo、LLM Function Calling、多 Provider 数据层、Fluent UI 产品设计 |
+| **支持市场** | **CN** A 股/ETF/指数 · **US** 美股 · **HK** 港股 · **JP** 日股 · **KR** 韩股 · **CRYPTO** 现货等（能力因市场而异，见 [MULTI-MARKET-ARCHITECTURE.md](docs/MULTI-MARKET-ARCHITECTURE.md)） |
+| **适合谁** | 希望 **自行查询与整理** 全球或多市场信息的投资者、研究者；需自备 LLM API Key 使用对话能力 |
+| **适合学习** | TypeScript monorepo、LLM Function Calling、多 Provider 多市场数据层、Fluent UI 产品设计 |
 
 ---
 
@@ -71,14 +72,14 @@
 |------|------|
 | **Chat Agent** | 流式对话，自动调用投研工具，展示执行过程 |
 | **多会话** | 历史对话持久化（SQLite），侧栏新建/切换/归档 |
-| **MCP 投研工具** | 个股诊断、多市场筛选、本地因子库、机构评级、策略/回测、市况与动态、ETF、组合账本等（见 `packages/agent/src/tools.ts`） |
-| **右侧投研面板** | 关注列表、发现策略、行业（A 股）、个股决策卡、组合（A 股） |
+| **全球多市场** | A 股 / 美股 / 港股 / 日股 / 韩股 / 加密货币：标的搜索、行情、K 线、截面筛选与 Agent 跨市场分析 |
+| **MCP 投研工具** | 个股/ETF 诊断、分市场 universe 筛选、机构评级（A 股）、策略/回测、市况与动态等（见 `packages/agent/src/tools.ts`） |
+| **右侧投研面板** | 跨市场关注列表、发现策略、A 股行业与决策卡、A 股组合账本 |
 | **新闻中心** | RSS 订阅、文章阅读；可选本地/远程翻译 |
-| **行情动态** | 大盘/板块/龙虎榜等动态视图（A 股为主） |
-| **多市场** | CN / US / HK / JP / KR / Crypto 等标的检索与行情（深度评分卡、组合仍以 A 股为主） |
-| **本地因子库** | `market-data`：SQLite 同步、全市场筛选、决策雷达 |
+| **行情动态** | 全球与 A 股大盘/板块/龙虎榜等动态视图 |
+| **本地因子库** | A 股 SQLite 同步、全市场筛选、决策雷达（其他市场以在线数据为主） |
 | **桌面端** | Electron 打包、系统托盘、自动更新、`opptrix://` 深链 |
-| **设置** | LLM 提供商、数据源 Provider、市场数据同步、新闻订阅、翻译/多模态等 |
+| **设置** | LLM 提供商、分市场数据源 Provider、市场数据同步、新闻订阅、翻译/多模态等 |
 
 ---
 
@@ -197,15 +198,15 @@ Opptrix/
 
 ## 数据源说明
 
-数据经 **MarketDataEngine**（`@opptrix/a-stock-layer`）按 **InstrumentRef + Capability** 在多个 Provider 间 **优先级回退**（东财、Tushare、TDX、腾讯、Yahoo 等，见各 Provider `manifest`）。
+数据经 **MarketDataEngine**（`@opptrix/a-stock-layer`）按 **InstrumentRef（市场 + 标的类型 + 代码）+ Capability** 在多个 Provider 间 **按市场优先级回退**（A 股：东财、Tushare、TDX 等；美股/港股/日股/韩股：Yahoo 等；加密货币：专用 Provider，见各 `manifest`）。
 
 | 类型 | 来源 | 备注 |
 |------|------|------|
-| 实时/历史行情 | 多 Provider | 免费接口可能延迟或限流 |
-| 基本面 / 档案 | 东财、Tushare 等 | 字段因源而异 |
-| 机构观点 | institutions + 在线数据 | 规则化评分，非研报全文 |
-| 本地因子库 | `market-data-store` 同步入库 | 适合全市场筛选，需先同步 |
-| 新闻 | RSS + 可选抓取 | 内容由第三方发布者提供 |
+| 实时/历史行情 | 分市场多 Provider | 免费接口可能延迟或限流；各市场覆盖度不同 |
+| 基本面 / 档案 | 东财、Tushare、Yahoo 等 | 字段与深度因市场、数据源而异 |
+| 机构观点 | institutions + 在线数据 | 以 **A 股** 为主；规则化评分，非研报全文 |
+| 本地因子库 | `market-data-store` 同步入库 | **A 股** 全市场筛选与雷达；其他市场以在线查询为主 |
+| 新闻 | RSS + 可选抓取 | 可按 CN / US / MACRO 等分组订阅 |
 
 **请勿** 将本软件作为生产交易决策的 **唯一** 依据。
 

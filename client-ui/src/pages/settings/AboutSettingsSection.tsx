@@ -107,9 +107,9 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   return (
     <div className={mergeClasses(s.root, contentFlush && s.rootFlush)}>
       <div className={mergeClasses(s.prose, contentFlush && s.proseFlush)}>
-        <Text className={s.title} block>Opptrix · 你的A股投研助手</Text>
+        <Text className={s.title} block>Opptrix</Text>
         <Text className={s.lead} block>
-          开源 A 股投研助手：用自然语言提问，自动调用 40+ 投研工具获取行情、因子、机构观点与策略信号，并整理成可读的中文分析。支持多会话聊天、右侧关注与个股面板，Web 与桌面端共用同一套界面。
+          开源的全球多市场投研数据助手，覆盖 A 股、美股、港股、日股、韩股与加密货币等市场。用自然语言提问，自动调用 40+ 投研工具获取行情、因子、新闻与结构化数据，并整理成可读的中文分析。支持多会话聊天、关注列表与右侧个股面板；Web 与桌面端共用同一套界面。
         </Text>
         <Text className={s.note} block>
           适合自助研究与学习使用。本软件不是券商交易终端，不提供投资建议，也不支持自动下单；行情与研报结论仅供参考，投资决策请自行判断并遵守当地法规。

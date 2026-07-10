@@ -127,7 +127,7 @@ export default function Settings() {
       <SectionCard>
         <Text size={200}>Opptrix v0.6.0</Text>
         <Text size={100} style={{ color: '#888' }}>
-          数据源: A股数据层 (13源) · 因子引擎 · 28机构 · 9策略 · Function Calling Agent
+          数据源: 多市场数据层 (CN/US/HK/JP/KR/Crypto) · 因子引擎 · 机构评级 · 策略 · Function Calling Agent
         </Text>
         <Text size={100} style={{ color: '#888' }}>
           开发: npm run dev → http://127.0.0.1:5173（API 后台自动代理）

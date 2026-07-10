@@ -1,6 +1,6 @@
 # Packages
 
-Opptrix monorepo 内部包说明。根目录 `npm run build:packages` 按 workspace 依赖顺序编译。
+Opptrix monorepo 内部包说明（覆盖 CN / US / HK / JP / KR / Crypto 等多市场数据与 Agent 工具）。根目录 `npm run build:packages` 按 workspace 依赖顺序编译。
 
 > Agent 协作：[docs/AGENT-GUIDE.md](../docs/AGENT-GUIDE.md) · 架构：[docs/ARCHITECTURE.md](../docs/ARCHITECTURE.md)
 

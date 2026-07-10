@@ -2,7 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electro
 const path = require('path')
 const fs = require('fs/promises')
 const { spawn } = require('node:child_process')
-const { APP_NAME, VERSION } = require('./app-meta.cjs')
+const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
 const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
@@ -305,7 +305,7 @@ function buildMainWindowOptions() {
     height,
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
-    title: 'Opptrix 你的A股投研助手',
+    title: APP_TITLE,
     backgroundColor: '#F5F5F7',
     show: false,
     center,

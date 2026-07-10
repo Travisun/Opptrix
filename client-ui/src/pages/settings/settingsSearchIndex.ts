@@ -86,7 +86,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', group: '音视频转写', title: 'Whisper', desc: '语音转写模型', keywords: ['语音', '转写', 'ASR'] },
 
   // 关于
-  { section: 'about', title: '关于 Opptrix', desc: '产品说明、项目主页与问题反馈', keywords: ['版本', '投研助手', '开源'] },
+  { section: 'about', title: '关于 Opptrix', desc: '全球多市场产品说明、版本与项目支持', keywords: ['版本', '全球', '多市场', '开源'] },
 ]
 
 const SECTION_LABEL: Record<SettingsSection, string> = {

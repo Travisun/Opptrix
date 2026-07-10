@@ -71,7 +71,7 @@ server · (desktop 仅壳层 + 打包)
 - **MarketDataEngine**（原 AshareEngine）：`queryInstrumentData(InstrumentRef, capability, opts?)` 为 **唯一标准入口**（见 [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md)）。
 - **Provider Registry**：`(market, assetClass, capability)` → 按优先级回退；各 Provider 以 `manifest.ts` + `bindingsFor` 注册。
 - **TDX**：纯 Node TCP 客户端；部分路径为性能保留 fast-path。
-- **多市场**：CN / US / HK / JP / KR / Crypto 等；区域 list/quote 已参数化，深度 scorecard 与 A 股组合 intentionally 以 CN 为主。
+- **多市场**：CN / US / HK / JP / KR / Crypto 等；`queryInstrumentData` 按市场路由 Provider；**A 股** 在本地因子库、行业、组合、深度评分卡上能力最全（见 [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)）。
 
 ### 本地层 `@opptrix/market-data-store`
 

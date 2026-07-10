@@ -1,7 +1,7 @@
 const { Menu, shell, dialog, app, BrowserWindow } = require('electron')
 const {
   APP_NAME,
-  APP_TITLE,
+  APP_TAGLINE,
   GITHUB_HOME,
   GITHUB_ISSUES,
   COPYRIGHT,
@@ -23,11 +23,12 @@ function showAboutDialog(parentWindow) {
     .showMessageBox(win, {
       type: 'info',
       title: `关于 ${APP_NAME}`,
-      message: APP_TITLE,
+      message: APP_NAME,
       detail: [
         `版本 ${VERSION}`,
         '',
-        '你的A股投研助手',
+        APP_TAGLINE,
+        '覆盖 A 股、美股、港股、日股、韩股与加密货币等市场。',
         '开源项目，仅供学习与研究。',
         '',
         COPYRIGHT,
