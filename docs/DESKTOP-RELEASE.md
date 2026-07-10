@@ -50,8 +50,8 @@
 
 | 用途 | 格式 | 典型文件名 | 适用机器 |
 |------|------|------------|----------|
-| 首次安装 | `.dmg` | `Opptrix-0.6.1-MacOS-x64-(Intel CPU).dmg` / `Opptrix-0.6.1-MacOS-arm64-(M CPU).dmg` | Intel / Apple Silicon |
-| **自动更新** | `.zip` | `Opptrix-0.6.1-MacOS-x64-(Intel CPU).zip` / `Opptrix-0.6.1-MacOS-arm64-(M CPU).zip` | 同上 |
+| 首次安装 | `.dmg` | `Opptrix-0.6.1-MacOS-x64-Intel-CPU.dmg` / `Opptrix-0.6.1-MacOS-arm64-M-CPU.dmg` | Intel / Apple Silicon |
+| **自动更新** | `.zip` | `Opptrix-0.6.1-MacOS-x64-Intel-CPU.zip` / `Opptrix-0.6.1-MacOS-arm64-M-CPU.zip` | 同上 |
 | 更新元数据 | `.yml` | `latest-mac.yml`（含多架构条目） | **是** |
 
 > macOS 自动更新依赖 **zip + latest-mac.yml**。在 Apple Silicon CI runner 上打 x64 包时，sidecar 通过 Rosetta 执行 `arch -x86_64 npm install` 安装 x64 原生依赖。
@@ -132,10 +132,10 @@ Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev
 
 ```text
 # macOS（CI 自动，分架构 → finalize 合并 latest-mac.yml）
-Opptrix-{version}-MacOS-x64-(Intel CPU).dmg
-Opptrix-{version}-MacOS-x64-(Intel CPU).zip
-Opptrix-{version}-MacOS-arm64-(M CPU).dmg
-Opptrix-{version}-MacOS-arm64-(M CPU).zip
+Opptrix-{version}-MacOS-x64-Intel-CPU.dmg
+Opptrix-{version}-MacOS-x64-Intel-CPU.zip
+Opptrix-{version}-MacOS-arm64-M-CPU.dmg
+Opptrix-{version}-MacOS-arm64-M-CPU.zip
 latest-mac.yml
 
 # Windows（CI 自动）
@@ -335,7 +335,7 @@ npm run build:desktop -- --publish always
 
 | 平台 | 实际下载的文件 |
 |------|----------------|
-| macOS | `Opptrix-*-MacOS-arm64-(M CPU).zip` / `Opptrix-*-MacOS-x64-(Intel CPU).zip` |
+| macOS | `Opptrix-*-MacOS-arm64-M-CPU.zip` / `Opptrix-*-MacOS-x64-Intel-CPU.zip` |
 | Windows | `Opptrix-*-Windows.exe` |
 | Linux | 主要为 `Opptrix-*-Linux.AppImage` |
 

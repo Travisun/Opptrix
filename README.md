@@ -91,8 +91,8 @@
 
 | 平台 | 下载 |
 |------|------|
-| **Apple Silicon Mac** | `Opptrix-{version}-MacOS-arm64-(M CPU).dmg` |
-| **Intel Mac** | `Opptrix-{version}-MacOS-x64-(Intel CPU).dmg` |
+| **Apple Silicon Mac** | `Opptrix-{version}-MacOS-arm64-M-CPU.dmg` |
+| **Intel Mac** | `Opptrix-{version}-MacOS-x64-Intel-CPU.dmg` |
 | **Windows** | `Opptrix-{version}-Windows.exe` |
 | **Linux** | `Opptrix-{version}-Linux.AppImage` |
 

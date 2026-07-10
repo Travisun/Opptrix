@@ -45,8 +45,8 @@ jobs:
           ## Opptrix Desktop ${VERSION}
 
           ### macOS 安装说明
-          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-arm64-(M CPU).dmg\`
-          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-x64-(Intel CPU).dmg\`
+          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-arm64-M-CPU.dmg\`
+          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-x64-Intel-CPU.dmg\`
           - 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
             \`\`\`bash
             xattr -cr /Applications/Opptrix.app
