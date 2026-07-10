@@ -3,11 +3,12 @@ const pkg = require('../package.json')
 const APP_NAME = 'Opptrix'
 const APP_TITLE = 'Opptrix'
 const APP_TAGLINE = '全球多市场投研数据助手'
-const AUTHOR_NAME = '催书书'
+const PROJECT_START_YEAR = 2026
+const AUTHOR_NAME = 'Opptrix contributors'
 const AUTHOR_EMAIL = 'imsorich@foxmail.com'
 const GITHUB_HOME = 'https://github.com/Travisun/Opptrix'
 const GITHUB_ISSUES = 'https://github.com/Travisun/Opptrix/issues'
-const COPYRIGHT = `Copyright © 2026 ${AUTHOR_NAME}`
+const COPYRIGHT = `Copyright © ${PROJECT_START_YEAR} ${AUTHOR_NAME}`
 const VERSION = pkg.version
 
 module.exports = {

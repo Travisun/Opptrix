@@ -36,7 +36,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
-  { id: 'about', label: '关于', icon: InfoRegular },
+  { id: 'about', label: '关于 Opptrix', icon: InfoRegular },
 ]
 
 const useStyles = makeStyles({
@@ -372,7 +372,7 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'multimodal':
       return '配置图片 OCR、语音转写与文章媒体自动提取策略'
     case 'about':
-      return '了解产品用途、访问主页与反馈问题'
+      return '了解产品、查看版本更新、法律说明与帮助反馈'
     default:
       return ''
   }

@@ -331,7 +331,7 @@ Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron ·
 
 ## 许可证
 
-本仓库采用 **[Apache License 2.0](LICENSE)** 发布（Copyright © 2025–2026 Opptrix contributors）。  
+本仓库采用 **[Apache License 2.0](LICENSE)** 发布（Copyright © 2026 Opptrix contributors）。  
 在遵守许可证条款的前提下，可自由使用、修改与分发本软件（含商业用途）；再分发时请保留版权声明与许可证全文。
 
 ---

@@ -5,7 +5,7 @@
   "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
   "homepage": "https://github.com/Travisun/Opptrix",
   "author": {
-    "name": "催书书",
+    "name": "Opptrix contributors",
     "email": "imsorich@foxmail.com"
   },
   "license": "Apache-2.0",
@@ -33,7 +33,7 @@
   "build": {
     "appId": "com.cuishushu.app.opptrix.desktop",
     "productName": "Opptrix",
-    "copyright": "Copyright © 2026 催书书",
+    "copyright": "Copyright © 2026 Opptrix contributors",
     "electronVersion": "35.7.5",
     "afterPack": "./scripts/after-pack-adhoc.cjs",
     "npmRebuild": false,
@@ -92,7 +92,7 @@
         "CFBundleName": "Opptrix",
         "CFBundleSpokenName": "Opptrix",
         "CFBundleGetInfoString": "Opptrix",
-        "NSHumanReadableCopyright": "Copyright © 2026 催书书",
+        "NSHumanReadableCopyright": "Copyright © 2026 Opptrix contributors",
         "NSUserNotificationUsageDescription": "Opptrix 需要在后台向你发送版本更新、任务完成等本地通知。",
         "NSHighResolutionCapable": true,
         "ITSAppUsesNonExemptEncryption": false,

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ArrowSyncRegular,
@@ -17,9 +17,14 @@ import {
   isAppUpdateCheckBusy,
 } from '../../utils/appUpdateUi'
 import {
+  OPPTRIX_DISCLAIMER,
   OPPTRIX_GITHUB_HOME,
   OPPTRIX_GITHUB_ISSUES,
+  OPPTRIX_PRIVACY_POLICY,
   OPPTRIX_SECURITY_POLICY,
+  OPPTRIX_USER_AGREEMENT,
+  OPPTRIX_WEBSITE,
+  formatAboutCopyrightLine,
 } from './aboutLinks'
 import {
   SettingsActionRow,
@@ -45,13 +50,6 @@ const useStyles = makeStyles({
   },
   proseFlush: {
     maxWidth: 'none',
-  },
-  title: {
-    fontSize: '15px',
-    fontWeight: 600,
-    letterSpacing: '-0.02em',
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.45,
   },
   lead: {
     fontSize: '14px',
@@ -137,19 +135,22 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   const checkBusy = isAppUpdateCheckBusy(updateStatus)
   const updatePanel = buildAppUpdatePanel(updateStatus, { checkedOnce })
   const showUpdateStatusRow = Boolean(updatePanel?.visible)
+  const copyrightLine = useMemo(
+    () => formatAboutCopyrightLine(typeof navigator !== 'undefined' ? navigator.language : undefined),
+    [],
+  )
 
   return (
     <div className={mergeClasses(s.root, contentFlush && s.rootFlush)}>
       <div className={mergeClasses(s.prose, contentFlush && s.proseFlush)}>
-        <Text className={s.title} block>Opptrix</Text>
         <Text className={s.lead} block>
-          开源的全球多市场投研数据助手，覆盖 A 股、美股、港股、日股、韩股与加密货币等市场。用自然语言提问，自动调用 40+ 投研工具获取行情、因子、新闻与结构化数据，并整理成可读的中文分析。支持多会话聊天、关注列表与右侧个股面板；Web 与桌面端共用同一套界面。
+          Opptrix 是一款面向个人投资者的投研助手。用日常中文提问，即可查看行情、阅读新闻与研报摘要，并把结果整理成易读的说明。支持 A 股、港股、美股等主要市场。
         </Text>
         <Text className={s.note} block>
-          适合自助研究与学习使用。本软件不是券商交易终端，不提供投资建议，也不支持自动下单；行情与研报结论仅供参考，投资决策请自行判断并遵守当地法规。
+          本软件仅供学习与研究参考，不构成投资建议，也不能代替券商下单或自动交易。请自行核实信息并独立做出投资决策。
         </Text>
         <Text className={s.note} block>
-          你的对话、配置与 API Key 默认保存在本机服务端，由你自行管理数据与模型提供商。
+          你的对话、关注列表和 API 密钥等数据默认保存在本机，由你自行管理；使用哪家大模型、哪些数据源，可在设置中调整。
         </Text>
       </div>
 
@@ -219,23 +220,56 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       </div>
 
       <div className={s.sectionBlock}>
+        <Text className={s.sectionLabel} block>法律与官网</Text>
+        <SettingsGroup>
+          <SettingsActionRow
+            title="官方网站"
+            desc="了解产品动态、使用指南与更多说明"
+            onClick={() => openExternalUrl(OPPTRIX_WEBSITE)}
+            icon={<ChevronRightRegular fontSize={16} />}
+            separated={false}
+          />
+          <SettingsActionRow
+            title="用户协议"
+            desc="使用 Opptrix 前请阅读并知悉相关条款"
+            onClick={() => openExternalUrl(OPPTRIX_USER_AGREEMENT)}
+            icon={<ChevronRightRegular fontSize={16} />}
+          />
+          <SettingsActionRow
+            title="隐私政策"
+            desc="了解我们如何收集、使用与保护你的信息"
+            onClick={() => openExternalUrl(OPPTRIX_PRIVACY_POLICY)}
+            icon={<ChevronRightRegular fontSize={16} />}
+          />
+          <SettingsActionRow
+            title="免责声明"
+            desc="关于投资风险、数据局限与 AI 生成内容的说明"
+            onClick={() => openExternalUrl(OPPTRIX_DISCLAIMER)}
+            icon={<ChevronRightRegular fontSize={16} />}
+            separated={false}
+          />
+        </SettingsGroup>
+      </div>
+
+      <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>项目与支持</Text>
         <SettingsGroup>
           <SettingsActionRow
             title="访问项目主页"
-            desc="查看介绍、使用说明与源代码（GitHub）"
+            desc="在 GitHub 查看介绍、文档与源代码"
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_HOME)}
             icon={<ChevronRightRegular fontSize={16} />}
+            separated={false}
           />
           <SettingsActionRow
             title="反馈问题或功能建议"
-            desc="遇到缺陷、异常或希望新增能力时，可在 Issues 留言"
+            desc="遇到异常或希望新增功能时，可在 Issues 留言"
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_ISSUES)}
             icon={<BugRegular fontSize={16} />}
           />
           <SettingsActionRow
             title="报告安全漏洞"
-            desc="查看安全说明并按指引提交；请勿在公开工单中披露可利用细节"
+            desc="按安全说明私下报告；请勿在公开渠道披露细节"
             onClick={() => openExternalUrl(OPPTRIX_SECURITY_POLICY)}
             icon={<ShieldRegular fontSize={16} />}
             separated={false}
@@ -244,7 +278,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
       </div>
 
       <Text className={s.license} block>
-        Apache License 2.0 开源 · Copyright © 2025 Opptrix contributors
+        {copyrightLine}
       </Text>
     </div>
   )

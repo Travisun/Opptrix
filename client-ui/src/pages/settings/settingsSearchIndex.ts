@@ -30,10 +30,14 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
-  { section: 'about', title: '关于', desc: '产品说明、项目主页与问题反馈' },
+  { section: 'about', title: '关于 Opptrix', desc: '产品说明、版本更新、法律条款与帮助反馈' },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
   { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
-  { section: 'about', title: '项目主页', desc: 'GitHub 仓库与文档', keywords: ['github', '官网', '主页', '源代码'] },
+  { section: 'about', title: '官方网站', desc: 'Opptrix 官网', keywords: ['官网', 'opptrix.org', '网站'] },
+  { section: 'about', title: '用户协议', keywords: ['条款', 'legal', 'agreement'] },
+  { section: 'about', title: '隐私政策', keywords: ['privacy', '隐私'] },
+  { section: 'about', title: '免责声明', keywords: ['免责', 'disclaimer', '风险'] },
+  { section: 'about', title: '项目主页', desc: 'GitHub 仓库与文档', keywords: ['github', '主页', '源代码'] },
   { section: 'about', title: '反馈问题', desc: '报告缺陷或提议功能', keywords: ['bug', 'issue', '建议', '功能缺陷'] },
   { section: 'about', title: '安全漏洞', desc: '按安全政策报告安全问题', keywords: ['漏洞', 'security', '安全政策'] },
 
@@ -86,7 +90,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', group: '音视频转写', title: 'Whisper', desc: '语音转写模型', keywords: ['语音', '转写', 'ASR'] },
 
   // 关于
-  { section: 'about', title: '关于 Opptrix', desc: '全球多市场产品说明、版本与项目支持', keywords: ['版本', '全球', '多市场', '开源'] },
 ]
 
 const SECTION_LABEL: Record<SettingsSection, string> = {
@@ -97,7 +100,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   news_feed: '新闻订阅',
   translation: '翻译',
   multimodal: '多模态',
-  about: '关于',
+  about: '关于 Opptrix',
 }
 
 export function settingsSectionLabel(section: SettingsSection): string {
