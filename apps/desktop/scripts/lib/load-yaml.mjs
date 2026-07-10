@@ -10,8 +10,8 @@ function resolveYamlModule() {
   const candidates = [
     'js-yaml',
     'electron-updater/node_modules/js-yaml',
-    path.join(DESKTOP_ROOT, 'build/updater-deps/node_modules/js-yaml'),
-    path.join(DESKTOP_ROOT, 'build/updater-deps/node_modules/electron-updater/node_modules/js-yaml'),
+    path.join(DESKTOP_ROOT, 'build/updater-deps/packages/js-yaml'),
+    path.join(DESKTOP_ROOT, 'build/updater-deps/packages/electron-updater/node_modules/js-yaml'),
   ]
   for (const candidate of candidates) {
     try {

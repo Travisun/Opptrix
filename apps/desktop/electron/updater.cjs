@@ -1,13 +1,24 @@
 const path = require('path')
+const Module = require('module')
 const { app, BrowserWindow } = require('electron')
 const { showLocalNotification } = require('./notifications.cjs')
+
+const UPDATER_VENDOR_DIR = path.join(__dirname, '../build/updater-deps/packages')
+
+function prependNodePath(dir) {
+  const sep = path.delimiter
+  const parts = (process.env.NODE_PATH || '').split(sep).filter(Boolean)
+  if (parts.includes(dir)) return
+  process.env.NODE_PATH = parts.length > 0 ? `${dir}${sep}${parts.join(sep)}` : dir
+  Module._initPaths()
+}
 
 function loadAutoUpdater() {
   try {
     return require('electron-updater').autoUpdater
   } catch {
-    const staged = path.join(__dirname, '../build/updater-deps/node_modules/electron-updater')
-    return require(staged).autoUpdater
+    prependNodePath(UPDATER_VENDOR_DIR)
+    return require(path.join(UPDATER_VENDOR_DIR, 'electron-updater')).autoUpdater
   }
 }
 

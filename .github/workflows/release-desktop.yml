@@ -244,6 +244,10 @@ jobs:
         shell: bash
         run: node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release
 
+      - name: Verify electron-updater is bundled in app
+        shell: bash
+        run: node apps/desktop/scripts/verify-packaged-updater.mjs apps/desktop/release
+
       - name: Upload artifacts to GitHub Release
         shell: bash
         env:

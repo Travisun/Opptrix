@@ -174,6 +174,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **macOS 分架构** | 矩阵 job 上传 `latest-mac-arm64.yml` + `latest-mac-x64.yml` → finalize 合并 | 合并后 yml 内须同时含 `arm64` 与 `x64` 的 `.zip` |
 | **安装包命名** | 仅字母、数字、连字符（如 `MacOS-arm64-M-CPU`） | 禁止空格/括号；须与 yml 中 `url` **逐字一致** |
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
+| **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
 
 **版本升级语义（electron-updater）**
@@ -187,6 +188,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 ```bash
 npm run verify:release-metadata-policy -w @opptrix/desktop   # 策略常量（改命名/通道后必跑）
 node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release  # 构建后 yml ↔ 本地文件
+node apps/desktop/scripts/verify-packaged-updater.mjs apps/desktop/release   # 构建后 .app 内须含 electron-updater
 node apps/desktop/scripts/verify-release-coherence.mjs desktop-vX.Y.Z /path/to/release-assets  # 与 tag 一致
 ```
 
@@ -457,11 +459,18 @@ open /Applications/Opptrix.app
 
 ## 8. 常见问题
 
+### Q：客户端提示「更新组件不可用，请重新安装…」
+
+- **不是** 用户数据或 CORS 问题；表示安装包内 **未打入** `electron-updater`（`autoUpdater` 加载失败）。
+- 常见原因：Updater 被放在 `build/updater-deps/node_modules/` 下被打包工具跳过（dev.19 及更早 CI 产物）。
+- 修复版本须含 `build/updater-deps/packages/electron-updater/`；CI 会在打包后运行 `verify-packaged-updater.mjs`。
+- 已装旧包的用户需 **手动下载新版 DMG/EXE** 安装一次，之后才能恢复自动更新。
+
 ### Q：客户端提示「无法连接更新服务器」
 
+- 本机网络能否访问 `update.opptrix.org`（R2 + CDN）；
 - 是否已有 **至少一个** `desktop-v*` Release 且含对应平台 `latest-*.yml`；
-- 仓库是否为私有（私有仓库的 Release 下载可能需要登录，公开仓库对自动更新更友好）；
-- 本机网络能否访问 `github.com`。
+- 安装包内 `app-update.yml` 是否指向正确的 CDN URL（非示例域或旧 GitHub 源）。
 
 ### Q：有新版但 Mac 不更新
 
@@ -499,6 +508,7 @@ open /Applications/Opptrix.app
 [ ] apps/desktop/package.json version = X.Y.Z
 [ ] git tag desktop-vX.Y.Z 已推送
 [ ] CI macOS（x64 + arm64）/ Windows / Linux job 均成功
+[ ] verify-packaged-updater 通过（.app / win-unpacked 内含 electron-updater）
 [ ] Release 附件含 Mac 双架构 dmg/zip + latest-mac.yml，以及 Win / Linux 产物与 yml
 [ ] Release Notes 已填写
 [ ] 在目标平台安装旧版 → 检查更新 → 下载 → 重启验证
