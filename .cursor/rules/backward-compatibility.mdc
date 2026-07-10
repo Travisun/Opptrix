@@ -1,0 +1,51 @@
+---
+description: 硬性规则 — 数据库/数据架构/升级必须兼容旧客户端，禁止断代
+alwaysApply: true
+---
+
+# 向后兼容与迁移（硬性规则）
+
+**禁止断代**：任何已发布客户端（桌面/Web 自托管、旧版安装包）在升级后仍须能 **打开、读数据、逐步迁移**；不得因 schema/架构/配置格式变更导致 **数据丢失、白屏、无法启动或无法更新**。
+
+涉及 **SQLite schema**、**本地/用户数据格式**、**Hub/API 契约**、**自动更新源/安装包**、**Provider/数据层路由** 替换时，必须先设计 **兼容 + 迁移**，再改实现。
+
+## 动手前必读（按场景）
+
+| 场景 | 参考 |
+|------|------|
+| 用户 SQLite（`~/.opptrix/opptrix.db`） | `packages/user-store/src/store.ts`（`meta` 迁移标记、`migrateFromLegacyFiles`） |
+| 本地因子库 / market-data | `packages/market-data-store`（`SCHEMA_VERSION`、`MIGRATION_SQL`） |
+| 新闻/订阅/文档 JSON | `packages/news-feed/src/store.ts`（`ensureMigrated`、懒迁移） |
+| Provider / 设置迁移 | `packages/user-store` → `providerSettings.migrateFromLegacy` |
+| 桌面自动更新 | `docs/DESKTOP-RELEASE.md`；旧包更新源与 R2/CDN 切换须有过渡说明 |
+| 对外 API / Agent tools | 旧字段保留或双读；破坏性变更须版本化或 feature flag |
+
+## 必须遵守
+
+1. **可升级路径**：新版本启动时 **自动检测** 旧格式/schema，**幂等** 迁移（重复运行安全）；用 `meta` 键或 `SCHEMA_VERSION` 记录已完成步骤。
+2. **双读 / 双写（过渡期）**：读逻辑优先新格式，**回退读旧格式**；写可双写或迁移后单写，直到确认无旧数据残留（或文档声明弃用版本下限）。
+3. **只增不破（默认）**：SQLite 优先 `ALTER TABLE` / 新表 + 回填；**禁止**无迁移地 `DROP`/重命名列/改 namespace 导致旧客户端或旧 server 读失败。
+4. **降级友好**：迁移失败须 **可诊断**（日志/用户可见提示），尽量 **保留原数据** 不静默覆盖；禁止「失败就删库重建」作为唯一路径。
+5. **跨版本客户端**：旧桌面/Web 客户端连 **新 server** 时，API 不得返回无法解析的结构；新客户端连 **旧 server** 时应有降级或明确错误提示。
+6. **自动更新不断链**：改 `app-update.yml` / 更新 CDN / 文件名规则时，须保证 **已发布旧版** 仍能完成 **至少一次** 升级到过渡版或新版（或文档 + Release 说明手动升级路径）。
+7. **数据层架构替换**：换 Provider、Hub feature、存储位置时，须 **映射旧 capability/旧路径** 或提供一次性 import/migrate；不得让旧配置静默失效。
+
+## 禁止（反模式）
+
+- ❌ 改 schema/JSON 结构却不写迁移，依赖用户删 `opptrix.db` 或重装
+- ❌ 重命名 `documents.namespace` / 配置 key / env 名且无读取旧 key 的兼容层
+- ❌ 仅在新版本写数据，旧版本打开即空数据或崩溃
+- ❌ 更换更新 URL/渠道后，旧安装包 **永久无法** 自动更新且无说明
+- ❌ 「开发环境清库即可」作为对 **已发布用户** 的解决方案
+
+## 改动自检（PR / 提交前）
+
+- [ ] 是否动到 DB schema、本地文件格式、API 响应或更新元数据？
+- [ ] 是否有 **幂等迁移** + 版本/标记记录？
+- [ ] 旧数据是否能在 **不手动干预** 下被新版本读取并转换？
+- [ ] 旧客户端（低 1～2 个小版本）是否仍可启动或收到可理解的升级提示？
+- [ ] 是否更新 `docs/` 或 Release Notes 中的 **最低兼容版本 / 手动步骤**（若无法自动迁移）？
+
+## 无法自动迁移时
+
+须 **显式** 在 PR 与面向用户的 Release 说明中写清：影响范围、备份建议、手动步骤、支持的最低旧版本；**不得** 默认用户可接受数据清空。

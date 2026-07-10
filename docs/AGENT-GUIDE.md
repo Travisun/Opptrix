@@ -31,8 +31,23 @@
 | 在 UI 中面向投资者写易懂文案 | 在界面裸露技术词（MCP、hydrate、F10）而不解释 |
 | 小步增量 PR | 未经讨论的大范围重构、擅自改导航/布局模式 |
 | 数据层走 `queryInstrumentData` 标准 API | Hub/UI 直连 Provider |
+| **向后兼容与迁移**（硬性，禁止断代） | 无迁移改 DB/schema/API/更新源导致旧客户端不可用或丢数据 |
 
 **免责声明**：本软件输出仅供参考与学习，**不构成投资建议**；协作者不得在文案或逻辑中暗示「保证盈利」。详见 [README.md](../README.md) 风险提示。
+
+### 1.2 向后兼容与迁移（硬性）
+
+任何 **SQLite schema**、**本地/用户数据格式**、**Hub/API 契约**、**自动更新源/安装包**、**Provider/数据层路由** 变更，必须先设计 **旧版兼容 + 幂等迁移**，**禁止断代**（旧客户端无法打开、丢数据、或永久无法更新）。
+
+| 必须 | 禁止 |
+|------|------|
+| 启动时自动检测旧格式并幂等迁移（`meta` / `SCHEMA_VERSION`） | 无迁移 `DROP`/重命名导致旧数据不可读 |
+| 过渡期双读旧格式；更新 URL 变更须保证旧包至少能升一次 | 让用户删 `opptrix.db` 或重装作为唯一方案 |
+| 迁移失败可诊断、尽量保留原数据 | 旧安装包永久无法自动更新且无说明 |
+
+**参考实现**：`packages/user-store`（`migrateFromLegacyFiles`）、`packages/market-data-store`（`SCHEMA_VERSION`）、`packages/news-feed`（`ensureMigrated`）、桌面更新见 [DESKTOP-RELEASE.md](./DESKTOP-RELEASE.md)。
+
+完整规则：`.cursor/rules/backward-compatibility.mdc`。
 
 ---
 
@@ -169,7 +184,7 @@ Opptrix/
 
 ### 5.1 开始任务前
 
-1. 阅读本文件与 `.cursor/rules/engineering-guidelines.mdc`
+1. 阅读本文件与 `.cursor/rules/engineering-guidelines.mdc`、`.cursor/rules/backward-compatibility.mdc`
 2. 若涉及 UI：阅读 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；桌面行为见 `docs/DESKTOP.md`
 3. 若涉及 API：阅读 `docs/API.md`
 4. 用 `rg` / 语义搜索定位现有实现，**模仿邻近代码风格**
@@ -210,6 +225,7 @@ npm run serve               # 生产预览
 - [ ] 未提交密钥、`.env`、`apps/server/data/config.json` 中的 API Key
 - [ ] UI 文案面向投资者、符合设计 Token
 - [ ] 改动范围最小，无无关格式化或重构
+- [ ] 若改 DB/本地存储/API/更新元数据：已做兼容与迁移，旧客户端可升级（见 §1.2）
 - [ ] 若改 API/feature，已更新 `docs/API.md`（如适用）
 
 ---
@@ -289,6 +305,7 @@ npm run serve               # 生产预览
 | [UI-LAYOUT.md](./UI-LAYOUT.md) | 布局与页面模板 |
 | [packages/README.md](../packages/README.md) | 各 npm 包职责 |
 | `.cursor/rules/engineering-guidelines.mdc` | Cursor 自动应用的工程规则 |
+| `.cursor/rules/backward-compatibility.mdc` | **硬性** — 数据库/数据架构/升级兼容与迁移 |
 
 ---
 

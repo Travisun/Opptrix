@@ -5,14 +5,18 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { appendDesktopArtifactNameArgs } from './lib/desktop-artifact-names.mjs'
 import { NPM_CMD, NPM_SHELL } from './lib/commands.mjs'
+import { resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const platformArgs = process.argv.slice(2)
 const publishToGitHub = platformArgs.includes('--publish')
+const updateFeedUrl = resolveUpdateFeedUrl()
 
 const ebArgs = [
   '--config.npmRebuild=false',
   ...(publishToGitHub ? [] : ['--publish', 'never']),
+  '-c.publish.0.provider=generic',
+  `-c.publish.0.url=${updateFeedUrl}`,
   ...platformArgs,
 ]
 appendDesktopArtifactNameArgs(ebArgs, platformArgs)

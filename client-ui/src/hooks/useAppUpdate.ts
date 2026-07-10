@@ -20,8 +20,20 @@ export function useAppUpdate() {
 
   const checkNow = useCallback(async () => {
     if (!isElectron()) return
-    const res = await window.electronAPI?.appUpdateCheck?.()
-    if (res) setStatus(res)
+    setStatus(prev => ({
+      ...prev,
+      state: 'checking',
+      message: '正在检查更新…',
+    }))
+    try {
+      const res = await window.electronAPI?.appUpdateCheck?.()
+      if (res) setStatus(res)
+    } catch {
+      setStatus({
+        state: 'error',
+        message: '无法连接更新服务器',
+      })
+    }
   }, [])
 
   const installUpdate = useCallback(async () => {
