@@ -45,8 +45,8 @@ jobs:
           ## Opptrix Desktop ${VERSION}
 
           ### macOS 安装说明
-          - **Apple Silicon** 下载 \`Opptrix-${VERSION}-arm64.dmg\`
-          - **Intel Mac** 下载 \`Opptrix-${VERSION}-x64.dmg\`
+          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-(M CPU).dmg\`
+          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-(Intel CPU).dmg\`
           - 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
             \`\`\`bash
             xattr -cr /Applications/Opptrix.app
@@ -54,10 +54,10 @@ jobs:
           - 或在 Finder 中 **右键 → 打开** 一次
 
           ### Windows
-          运行 \`Opptrix Setup ${VERSION}.exe\`；未签名包可能触发 SmartScreen，选「仍要运行」
+          运行 \`Opptrix-${VERSION}-Windows.exe\`；未签名包可能触发 SmartScreen，选「仍要运行」
 
           ### Linux
-          \`chmod +x Opptrix-${VERSION}.AppImage && ./Opptrix-${VERSION}.AppImage\`
+          \`chmod +x Opptrix-${VERSION}-Linux.AppImage && ./Opptrix-${VERSION}-Linux.AppImage\`
           EOF
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -194,6 +194,14 @@ jobs:
           APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
           OPPTRIX_RUNTIME_ARCH: ${{ matrix.electron_arch }}
         run: |
+          if [[ "${{ runner.os }}" == "macOS" && -n "${CSC_KEYCHAIN:-}" ]]; then
+            cleanup_signing_keychain() {
+              security delete-keychain "$CSC_KEYCHAIN" 2>/dev/null || true
+              echo "Cleaned up signing keychain: $CSC_KEYCHAIN"
+            }
+            trap cleanup_signing_keychain EXIT
+          fi
+
           case "$SIGN_MODE" in
             mac)
               # Certificate already imported in Configure step; reuse CSC_KEYCHAIN (do not pass CSC_LINK — electron-builder would recreate a temp keychain without headless ACL).
@@ -223,8 +231,10 @@ jobs:
           esac
 
       - name: Clean up signing keychain
-        if: always() && runner.os == 'macOS' && steps.signcfg.outputs.mode == 'mac'
-        run: security delete-keychain "$CSC_KEYCHAIN" 2>/dev/null || true
+        if: always() && runner.os == 'macOS' && env.CSC_KEYCHAIN != ''
+        run: |
+          security delete-keychain "$CSC_KEYCHAIN" 2>/dev/null || true
+          echo "Cleaned up signing keychain: $CSC_KEYCHAIN"
 
       - name: Upload artifacts to GitHub Release
         shell: bash

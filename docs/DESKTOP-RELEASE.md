@@ -49,8 +49,8 @@
 
 | 用途 | 格式 | 典型文件名 | 适用机器 |
 |------|------|------------|----------|
-| 首次安装 | `.dmg` | `Opptrix-0.6.1-x64.dmg` / `Opptrix-0.6.1-arm64.dmg` | Intel / Apple Silicon |
-| **自动更新** | `.zip` | `Opptrix-0.6.1-x64-mac.zip` / `Opptrix-0.6.1-arm64-mac.zip` | 同上 |
+| 首次安装 | `.dmg` | `Opptrix-0.6.1-MacOS-(Intel CPU).dmg` / `Opptrix-0.6.1-MacOS-(M CPU).dmg` | Intel / Apple Silicon |
+| **自动更新** | `.zip` | `Opptrix-0.6.1-MacOS-(Intel CPU).zip` / `Opptrix-0.6.1-MacOS-(M CPU).zip` | 同上 |
 | 更新元数据 | `.yml` | `latest-mac.yml`（含多架构条目） | **是** |
 
 > macOS 自动更新依赖 **zip + latest-mac.yml**。在 Apple Silicon CI runner 上打 x64 包时，sidecar 通过 Rosetta 执行 `arch -x86_64 npm install` 安装 x64 原生依赖。
@@ -59,15 +59,15 @@
 
 | 用途 | 格式 | 典型文件名 | 是否自动更新必需 |
 |------|------|------------|------------------|
-| 安装包 | NSIS `.exe` | `Opptrix Setup 0.6.1.exe` | **是** |
+| 安装包 | NSIS `.exe` | `Opptrix-0.6.1-Windows.exe` | **是** |
 | 更新元数据 | `.yml` | `latest.yml` | **是** |
-| 差分（可选） | `.blockmap` | `Opptrix Setup 0.6.1.exe.blockmap` | 建议保留 |
+| 差分（可选） | `.blockmap` | `Opptrix-0.6.1-Windows.exe.blockmap` | 建议保留 |
 
 ### Linux
 
 | 用途 | 格式 | 典型文件名 | 是否自动更新必需 |
 |------|------|------------|------------------|
-| 便携运行 | AppImage | `Opptrix-0.6.1.AppImage` | **是**（AppImage 用户） |
+| 便携运行 | AppImage | `Opptrix-0.6.1-Linux.AppImage` | **是**（AppImage 用户） |
 | 包管理器安装 | `.deb` | `opptrix_0.6.1_amd64.deb` | 手动安装；deb 自动更新支持有限 |
 | 更新元数据 | `.yml` | `latest-linux.yml` | **是** |
 
@@ -129,18 +129,18 @@ Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev
 
 ```text
 # macOS（CI 自动，分架构）
-Opptrix-{version}-x64.dmg
-Opptrix-{version}-x64-mac.zip
-Opptrix-{version}-arm64.dmg
-Opptrix-{version}-arm64-mac.zip
+Opptrix-{version}-MacOS-(Intel CPU).dmg
+Opptrix-{version}-MacOS-(Intel CPU).zip
+Opptrix-{version}-MacOS-(M CPU).dmg
+Opptrix-{version}-MacOS-(M CPU).zip
 latest-mac.yml
 
 # Windows（CI 自动）
-Opptrix Setup {version}.exe
+Opptrix-{version}-Windows.exe
 latest.yml
 
 # Linux（CI 自动）
-Opptrix-{version}.AppImage
+Opptrix-{version}-Linux.AppImage
 opptrix_{version}_amd64.deb
 latest-linux.yml
 ```
@@ -198,9 +198,9 @@ npm run build:desktop -- --publish always
 
 | 平台 | 实际下载的文件 |
 |------|----------------|
-| macOS | `*-mac.zip` |
-| Windows | `Opptrix Setup *.exe` |
-| Linux | 主要为 `*.AppImage` |
+| macOS | `Opptrix-*-MacOS-(M CPU).zip` / `Opptrix-*-MacOS-(Intel CPU).zip` |
+| Windows | `Opptrix-*-Windows.exe` |
+| Linux | 主要为 `Opptrix-*-Linux.AppImage` |
 
 用户数据（SQLite、配置等）一般在用户目录，整包替换 **不会** 清空对话与设置。
 

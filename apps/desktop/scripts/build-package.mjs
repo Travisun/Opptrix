@@ -3,12 +3,19 @@
 import { spawnSync } from 'node:child_process'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { appendDesktopArtifactNameArgs } from './lib/desktop-artifact-names.mjs'
 import { NPM_CMD, NPM_SHELL } from './lib/commands.mjs'
 
 const DESKTOP_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const platformArgs = process.argv.slice(2)
+const publishToGitHub = platformArgs.includes('--publish')
 
-const ebArgs = ['--config.npmRebuild=false', '--publish', 'never', ...platformArgs]
+const ebArgs = [
+  '--config.npmRebuild=false',
+  ...(publishToGitHub ? [] : ['--publish', 'never']),
+  ...platformArgs,
+]
+appendDesktopArtifactNameArgs(ebArgs, platformArgs)
 
 const isMacBuild = platformArgs.includes('--mac')
 const macUnsigned = process.env.OPPTRIX_MAC_UNSIGNED === '1'

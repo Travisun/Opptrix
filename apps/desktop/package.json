@@ -22,9 +22,9 @@
     "build:package": "node scripts/prebuild.mjs && node scripts/build-package.mjs",
     "build:package:mac-arm64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --arm64",
     "build:package:mac-x64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --x64",
-    "build:publish": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --publish always",
-    "build:publish:mac-arm64": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --mac --arm64 --publish always",
-    "build:publish:mac-x64": "node scripts/prebuild.mjs && electron-builder --config.npmRebuild=false --mac --x64 --publish always",
+    "build:publish": "node scripts/prebuild.mjs && node scripts/build-package.mjs --publish always",
+    "build:publish:mac-arm64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --arm64 --publish always",
+    "build:publish:mac-x64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --x64 --publish always",
     "verify:runtime": "node scripts/verify-runtime.mjs"
   },
   "build": {
@@ -130,6 +130,7 @@
     "win": {
       "icon": "build/icons/icon.ico",
       "legalTrademarks": "Opptrix",
+      "artifactName": "${productName}-${version}-Windows.${ext}",
       "target": [
         "nsis"
       ],
@@ -155,7 +156,7 @@
       "category": "Office;Finance",
       "synopsis": "你的A股投研助手",
       "description": "Opptrix 桌面端：聊天投研、个股研究、新闻订阅与本地数据分析。",
-      "artifactName": "${productName}-${version}.${ext}",
+      "artifactName": "${productName}-${version}-Linux.${ext}",
       "executableName": "opptrix",
       "desktop": {
         "Name": "Opptrix",
