@@ -240,8 +240,9 @@ npm run build:desktop -- --publish always
    | `APPLE_TEAM_ID` | 开发者团队 10 位 ID |
 
 3. 配置 secrets 后 **无需改 workflow**；未配置 `CSC_LINK` 时 workflow 自动跳过签名并继续构建。
-4. 项目已内置公证用 entitlements（`apps/desktop/resources/entitlements.mac.plist` 及 `.inherit.plist`），覆盖 Electron 主进程与 sidecar 子进程的原生模块加载；**不要**在签名时移除。
-5. 重新打 `desktop-v*` 标签发布。
+4. CI 会在无 GUI 的 runner 上预建临时钥匙串，并执行 `security set-key-partition-list`，避免 `codesign` 等待钥匙串弹窗导致签名步骤卡住并以 `The operation was canceled` 失败。
+5. 项目已内置公证用 entitlements（`apps/desktop/resources/entitlements.mac.plist` 及 `.inherit.plist`），覆盖 Electron 主进程与 sidecar 子进程的原生模块加载；**不要**在签名时移除。
+6. 重新打 `desktop-v*` 标签发布。
 
 `electron-builder` 检测到 `CSC_*` 后会自动签名；提供 `APPLE_*` 时会尝试公证。本地 Mac 若 Keychain 已有证书，也可直接 `npm run build:desktop` 无需导 p12。
 
