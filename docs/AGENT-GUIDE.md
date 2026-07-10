@@ -8,11 +8,13 @@
 
 ## 1. 项目是什么
 
-**Opptrix** 是一款 **你的A股投研助手**，面向 A 股投资者（非券商、非投顾产品）：
+**Opptrix** 是一款 **A 股为主的投研数据查询与信息整理工具**（非券商、非投顾、非交易终端）：
 
-- 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取真实行情、因子、机构观点等数据，再生成中文分析。
-- 提供 **Web**（浏览器 + Vite）与 **Desktop**（Electron 壳 + 本地 API sidecar）两种运行形态，**共用同一套 React UI 与 Fastify API**。
-- 核心能力：个股诊断、条件选股、本地因子库筛选、机构评级、策略信号与回测、市场报告、产业透视、关注列表与组合账本等。
+- 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取行情、因子、新闻、机构观点等 **结构化数据**，再生成中文分析。
+- 提供 **Web** 与 **Desktop**（Electron + 本地 API sidecar），**共用同一套 React UI 与 Fastify API**。
+- 核心能力：个股诊断、多市场筛选、本地因子库、新闻订阅、行情动态、机构评级、策略回测、关注列表与组合账本等。
+
+**面向用户的完整说明与醒目风险提示**见根目录 [README.md](../README.md) 顶部「重要风险提示与用户须知」。
 
 <p align="center">
   <img src="../screenshot.jpg" alt="Opptrix 主界面示意" width="880" />
@@ -28,8 +30,9 @@
 | 调用公开/授权数据源 | 绕过付费接口、爬取违反 ToS 的数据 |
 | 在 UI 中面向投资者写易懂文案 | 在界面裸露技术词（MCP、hydrate、F10）而不解释 |
 | 小步增量 PR | 未经讨论的大范围重构、擅自改导航/布局模式 |
+| 数据层走 `queryInstrumentData` 标准 API | Hub/UI 直连 Provider |
 
-**免责声明**：本软件输出仅供参考与学习，不构成投资建议。协作者不得在文案或逻辑中暗示「保证盈利」。
+**免责声明**：本软件输出仅供参考与学习，**不构成投资建议**；协作者不得在文案或逻辑中暗示「保证盈利」。详见 [README.md](../README.md) 风险提示。
 
 ---
 
@@ -74,16 +77,18 @@ Opptrix/
 │       ├── api/             # 前端 API 客户端
 │       └── platform/        # isElectron 等运行时检测
 ├── packages/
-│   ├── shared/              # 共享类型、ResearchResult
-│   ├── a-stock-layer/       # AshareEngine、14 个 driver、TDX、账本
-│   ├── market-data/         # 本地 SQLite 因子库、同步、本地筛选
-│   ├── stock-eval/          # 40 因子、评分卡、回测、快照
-│   ├── institutions/        # 28 机构 config-driven 评级
-│   ├── t-strategy/          # 9 策略、verifyStrategy、组合权重
-│   ├── skills/              # 收盘/早报、产业透视、Mermaid
-│   ├── research-hub/        # ResearchHub.dispatch 统一入口
-│   └── agent/               # LLM、ToolRegistry、MCP、多会话
-├── docs/                    # 架构、API、UI、本文件
+│   ├── shared/
+│   ├── a-stock-layer/       # MarketDataEngine、Provider、TDX
+│   ├── market-data-core/ · market-data-store/
+│   ├── market-data-providers-{cn,us,crypto}/
+│   ├── provider-sdk/
+│   ├── stock-eval/ · institutions/ · t-strategy/ · skills/
+│   ├── research-hub/ · search-hub/
+│   ├── news-feed/ · article-enrichment/
+│   ├── local-inference/
+│   ├── user-store/          # SQLite 用户数据
+│   └── agent/
+├── docs/                    # 架构、API、UI；入口 docs/README.md
 ├── tests/                   # smoke + integration tests (*.test.mjs)
 ├── .cursor/rules/           # Cursor 工程规则（UI 与改动原则）
 ├── package.json             # 根脚本：dev / build / test / dev:desktop

@@ -74,7 +74,7 @@ cp example/data-sources/tushare.example.json "$OPPTRIX_DATA_DIR/tushare-config.j
 | `~/.opptrix/opptrix.db` | 用户数据主存储（配置、会话、关注列表等） |
 | `apps/server/data/config.json` | 旧版 LLM 配置路径，首次读取后会迁移入库 |
 
-更多说明见 [README.md](../README.md) 与 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)。
+更多说明见 [README.md](../README.md)、[docs/README.md](../docs/README.md) 与 [docs/DEVELOPMENT.md](../docs/DEVELOPMENT.md)。
 
 ## 贡献示例
 
