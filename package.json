@@ -1,6 +1,27 @@
 {
   "name": "opptrix",
   "private": true,
+  "description": "Opptrix — 面向个人投资者的多市场投研数据助手（Web + Electron 桌面端）",
+  "homepage": "https://www.opptrix.org",
+  "license": "Apache-2.0",
+  "author": "Opptrix contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travisun/Opptrix.git"
+  },
+  "bugs": {
+    "url": "https://github.com/Travisun/Opptrix/issues"
+  },
+  "keywords": [
+    "opptrix",
+    "investment-research",
+    "stock",
+    "a-share",
+    "agent",
+    "electron",
+    "fastify",
+    "react"
+  ],
   "workspaces": [
     "packages/*",
     "apps/*",

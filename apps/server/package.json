@@ -2,6 +2,18 @@
   "name": "@opptrix/server",
   "version": "0.4.0",
   "private": true,
+  "description": "Opptrix 本地 API 服务（Fastify + Agent 投研引擎）",
+  "homepage": "https://www.opptrix.org",
+  "license": "Apache-2.0",
+  "author": "Opptrix contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travisun/Opptrix.git",
+    "directory": "apps/server"
+  },
+  "bugs": {
+    "url": "https://github.com/Travisun/Opptrix/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "npm run build && concurrently -k -n tsc,api \"tsc -p tsconfig.json --watch --preserveWatchOutput\" \"node scripts/dev.mjs\"",

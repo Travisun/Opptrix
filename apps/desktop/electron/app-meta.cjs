@@ -8,6 +8,7 @@ const AUTHOR_NAME = 'Opptrix contributors'
 const AUTHOR_EMAIL = 'imsorich@foxmail.com'
 const GITHUB_HOME = 'https://github.com/Travisun/Opptrix'
 const GITHUB_ISSUES = 'https://github.com/Travisun/Opptrix/issues'
+const WEBSITE = 'https://www.opptrix.org'
 const COPYRIGHT = `Copyright © ${PROJECT_START_YEAR} ${AUTHOR_NAME}`
 const VERSION = pkg.version
 
@@ -19,6 +20,7 @@ module.exports = {
   AUTHOR_EMAIL,
   GITHUB_HOME,
   GITHUB_ISSUES,
+  WEBSITE,
   COPYRIGHT,
   VERSION,
 }

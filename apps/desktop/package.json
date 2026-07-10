@@ -1,18 +1,31 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.0-dev.26",
+  "version": "0.6.0-dev.27",
   "private": true,
-  "description": "Opptrix cross-platform desktop shell (Electron + Node sidecar)",
-  "homepage": "https://github.com/Travisun/Opptrix",
+  "description": "Opptrix 桌面端：Electron 壳 + 本地投研 API，支持自动更新与离线数据",
+  "homepage": "https://www.opptrix.org",
   "author": {
     "name": "Opptrix contributors",
-    "email": "imsorich@foxmail.com"
+    "email": "imsorich@foxmail.com",
+    "url": "https://www.opptrix.org"
   },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/Travisun/Opptrix.git"
+    "url": "git+https://github.com/Travisun/Opptrix.git",
+    "directory": "apps/desktop"
   },
+  "bugs": {
+    "url": "https://github.com/Travisun/Opptrix/issues"
+  },
+  "keywords": [
+    "opptrix",
+    "desktop",
+    "electron",
+    "investment-research",
+    "stock",
+    "finance"
+  ],
   "main": "electron/main.cjs",
   "scripts": {
     "dev": "node scripts/dev.mjs",
@@ -91,7 +104,7 @@
         "CFBundleDisplayName": "Opptrix",
         "CFBundleName": "Opptrix",
         "CFBundleSpokenName": "Opptrix",
-        "CFBundleGetInfoString": "Opptrix",
+        "CFBundleGetInfoString": "Opptrix — 全球多市场投研数据助手",
         "NSHumanReadableCopyright": "Copyright © 2026 Opptrix contributors",
         "NSUserNotificationUsageDescription": "Opptrix 需要在后台向你发送版本更新、任务完成等本地通知。",
         "NSHighResolutionCapable": true,
@@ -156,13 +169,13 @@
     "linux": {
       "icon": "build/icons/linux",
       "category": "Office;Finance",
-      "synopsis": "全球多市场投研数据助手",
-      "description": "Opptrix 桌面端：全球多市场聊天投研、个股研究、新闻订阅与本地数据分析。",
+      "synopsis": "面向个人投资者的多市场投研助手",
+      "description": "Opptrix 桌面端：自然语言提问即可查看行情、新闻与研报摘要，数据默认保存在本机。",
       "artifactName": "${productName}-${version}-Linux.${ext}",
       "executableName": "opptrix",
       "desktop": {
         "Name": "Opptrix",
-        "Comment": "全球多市场投研数据助手",
+        "Comment": "面向个人投资者的多市场投研助手",
         "GenericName": "投研助手",
         "Keywords": "股票;投研;全球;美股;港股;加密货币;财经;",
         "StartupWMClass": "Opptrix",

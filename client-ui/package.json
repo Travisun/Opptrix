@@ -2,6 +2,18 @@
   "name": "opptrix-client",
   "version": "0.6.0",
   "private": true,
+  "description": "Opptrix 客户端界面（React + Fluent UI，Web 与桌面共用）",
+  "homepage": "https://www.opptrix.org",
+  "license": "Apache-2.0",
+  "author": "Opptrix contributors",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Travisun/Opptrix.git",
+    "directory": "client-ui"
+  },
+  "bugs": {
+    "url": "https://github.com/Travisun/Opptrix/issues"
+  },
   "type": "module",
   "scripts": {
     "dev": "vite",
