@@ -82,6 +82,9 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.separator,
     margin: '0 18px',
   },
+  rowDividerFull: {
+    margin: '0',
+  },
   panelHeader: {
     display: 'flex',
     alignItems: 'center',
@@ -236,28 +239,32 @@ const useStyles = makeStyles({
     paddingRight: '12px',
   },
   actionRow: {
-    display: 'flex',
+    display: 'block',
     width: '100%',
+    boxSizing: 'border-box',
     ...nativeIconInteractive,
     backgroundColor: 'transparent',
     textAlign: 'left',
     borderRadius: 0,
     border: 'none',
-    borderTop: `1px solid ${opptrixCssVars.gray200}`,
-    transitionProperty: 'background-color, color, border-color',
+    padding: 0,
+    cursor: 'pointer',
+    transitionProperty: 'background-color, color',
     transitionDuration: motion.fast,
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     ':hover': {
       backgroundColor: opptrixCssVars.gray100,
       color: opptrixCssVars.textPrimary,
-      borderTopColor: opptrixCssVars.borderStrong,
-    },
-    ':focus-visible': {
-      borderTopColor: opptrixCssVars.borderStrong,
     },
   },
-  actionRowFlush: {
-    borderTop: 'none',
+  actionRowBody: {
+    width: '100%',
+  },
+  actionRowIcon: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
   },
 })
 
@@ -440,29 +447,41 @@ export function SettingsActionRow({
   desc,
   onClick,
   icon,
-  separated = true,
+  last = false,
+  dividerFullWidth = false,
 }: {
   title: string
   desc?: string
   onClick: () => void
   icon?: ReactNode
-  separated?: boolean
+  last?: boolean
+  dividerFullWidth?: boolean
 }) {
   const s = useStyles()
   return (
-    <button
-      type="button"
-      className={mergeClasses(s.actionRow, !separated && s.actionRowFlush, 'opptrix-focusable')}
-      onClick={onClick}
-    >
-      <SettingsRow title={title} desc={desc} control={icon} last />
-    </button>
+    <>
+      <button
+        type="button"
+        className={mergeClasses(s.actionRow, 'opptrix-focusable')}
+        onClick={onClick}
+      >
+        <div className={s.actionRowBody}>
+          <SettingsRow
+            title={title}
+            desc={desc}
+            control={icon != null ? <span className={s.actionRowIcon}>{icon}</span> : undefined}
+            last
+          />
+        </div>
+      </button>
+      {!last && <SettingsDivider fullWidth={dividerFullWidth} />}
+    </>
   )
 }
 
-export function SettingsDivider() {
+export function SettingsDivider({ fullWidth = false }: { fullWidth?: boolean } = {}) {
   const s = useStyles()
-  return <div className={s.rowDivider} aria-hidden />
+  return <div className={mergeClasses(s.rowDivider, fullWidth && s.rowDividerFull)} aria-hidden />
 }
 
 export function SettingsPanelHeader({

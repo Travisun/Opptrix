@@ -155,6 +155,34 @@ function attachNativeBeforeQuitHook() {
   }
 }
 
+function focusMainWindowForUpdate() {
+  const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed())
+  if (!win) return
+  if (win.isMinimized()) win.restore()
+  win.show()
+  win.focus()
+}
+
+function notifyUpdateAvailable(version) {
+  if (!version) return
+  showLocalNotification({
+    title: '发现 Opptrix 新版本',
+    body: `版本 ${version} 正在后台下载，完成后会通知你重启。`,
+    tag: 'app-update-available',
+    onClick: focusMainWindowForUpdate,
+  })
+}
+
+function notifyUpdateReady(version) {
+  if (!version) return
+  showLocalNotification({
+    title: 'Opptrix 更新已就绪',
+    body: `新版本 ${version} 已下载，点击打开应用并重启更新。`,
+    tag: 'app-update-ready',
+    onClick: focusMainWindowForUpdate,
+  })
+}
+
 function bindAutoUpdaterEvents(currentVersion) {
   if (!autoUpdater || autoUpdaterEventsBound) return
   autoUpdaterEventsBound = true
@@ -177,6 +205,7 @@ function bindAutoUpdaterEvents(currentVersion) {
       percent: 0,
       message: `发现新版本 ${info.version}`,
     })
+    notifyUpdateAvailable(info.version)
   })
 
   autoUpdater.on('update-not-available', () => {
@@ -213,24 +242,7 @@ function bindAutoUpdaterEvents(currentVersion) {
       percent: 100,
       message: `新版本 ${info.version} 已就绪，重启后即可完成更新`,
     })
-
-    const focusedWindow = BrowserWindow.getAllWindows().find(
-      (win) => !win.isDestroyed() && win.isVisible() && win.isFocused(),
-    )
-    if (!focusedWindow) {
-      showLocalNotification({
-        title: 'Opptrix 更新已就绪',
-        body: `新版本 ${info.version} 已下载，点击打开应用并重启更新。`,
-        tag: 'app-update',
-        onClick: () => {
-          const win = BrowserWindow.getAllWindows().find((item) => !item.isDestroyed())
-          if (!win) return
-          if (win.isMinimized()) win.restore()
-          win.show()
-          win.focus()
-        },
-      })
-    }
+    notifyUpdateReady(info.version)
   })
 
   autoUpdater.on('error', (err) => {

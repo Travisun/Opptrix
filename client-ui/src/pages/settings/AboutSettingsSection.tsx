@@ -2,9 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ArrowSyncRegular,
-  BugRegular,
   ChevronRightRegular,
-  ShieldRegular,
 } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { getHealth } from '../../api/client'
@@ -191,7 +189,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
           />
           {showUpdateStatusRow && updatePanel && (
             <>
-              <SettingsDivider />
+              <SettingsDivider fullWidth />
               <div className={s.updateStatusBlock}>
                 <Text className={s.updateTitle} block>{updatePanel.title}</Text>
                 <div className={s.updatePanel}>
@@ -245,26 +243,29 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
             desc="了解产品动态、使用指南与更多说明"
             onClick={() => openExternalUrl(OPPTRIX_WEBSITE)}
             icon={<ChevronRightRegular fontSize={16} />}
-            separated={false}
+            dividerFullWidth
           />
           <SettingsActionRow
             title="用户协议"
             desc="使用 Opptrix 前请阅读并知悉相关条款"
             onClick={() => openExternalUrl(OPPTRIX_USER_AGREEMENT)}
             icon={<ChevronRightRegular fontSize={16} />}
+            dividerFullWidth
           />
           <SettingsActionRow
             title="隐私政策"
             desc="了解我们如何收集、使用与保护你的信息"
             onClick={() => openExternalUrl(OPPTRIX_PRIVACY_POLICY)}
             icon={<ChevronRightRegular fontSize={16} />}
+            dividerFullWidth
           />
           <SettingsActionRow
             title="免责声明"
             desc="关于投资风险、数据局限与 AI 生成内容的说明"
             onClick={() => openExternalUrl(OPPTRIX_DISCLAIMER)}
             icon={<ChevronRightRegular fontSize={16} />}
-            separated={false}
+            dividerFullWidth
+            last
           />
         </SettingsGroup>
       </div>
@@ -277,20 +278,22 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
             desc="在 GitHub 查看介绍、文档与源代码"
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_HOME)}
             icon={<ChevronRightRegular fontSize={16} />}
-            separated={false}
+            dividerFullWidth
           />
           <SettingsActionRow
             title="反馈问题或功能建议"
             desc="遇到异常或希望新增功能时，可在 Issues 留言"
             onClick={() => openExternalUrl(OPPTRIX_GITHUB_ISSUES)}
-            icon={<BugRegular fontSize={16} />}
+            icon={<ChevronRightRegular fontSize={16} />}
+            dividerFullWidth
           />
           <SettingsActionRow
             title="报告安全漏洞"
             desc="按安全说明私下报告；请勿在公开渠道披露细节"
             onClick={() => openExternalUrl(OPPTRIX_SECURITY_POLICY)}
-            icon={<ShieldRegular fontSize={16} />}
-            separated={false}
+            icon={<ChevronRightRegular fontSize={16} />}
+            dividerFullWidth
+            last
           />
         </SettingsGroup>
       </div>

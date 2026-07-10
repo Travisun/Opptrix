@@ -18,6 +18,7 @@ import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
+import AppUpdateNotice from '../../desktop/AppUpdateNotice'
 import {
   searchSettingsEntries,
   settingsSectionLabel,
@@ -190,6 +191,11 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     textAlign: 'center',
   },
+  footer: {
+    flexShrink: 0,
+    padding: '0 8px 8px',
+    marginTop: 'auto',
+  },
 })
 
 interface SettingsSidebarProps {
@@ -316,6 +322,12 @@ export default function SettingsSidebar({
           )
         })}
       </nav>
+
+      {!isMobile && (
+        <div className={s.footer}>
+          <AppUpdateNotice />
+        </div>
+      )}
     </>
   )
 
