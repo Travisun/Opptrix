@@ -8,6 +8,7 @@ import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
 import type { SettingsSection } from '../pages/settings/SettingsSidebar'
+import { normalizeSettingsSection } from '../pages/settings/settingsTypes'
 import RightPanel from './RightPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
 import WorkspaceSplitDivider from './WorkspaceSplitDivider'
@@ -327,7 +328,7 @@ export default function ChatApp() {
 
   const openSettings = useCallback((section?: SettingsSection) => {
     closeDrawer()
-    setSettingsInitialSection(section)
+    setSettingsInitialSection(normalizeSettingsSection(section))
     navigate('settings')
   }, [closeDrawer, navigate])
 

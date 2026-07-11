@@ -10,6 +10,7 @@ import ProviderWizard from './ProviderWizard'
 import SettingsSidebar, {
   settingsSectionTitle, settingsSectionSubtitle, type SettingsSection,
 } from './settings/SettingsSidebar'
+import { normalizeSettingsSection } from './settings/settingsTypes'
 import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
@@ -307,7 +308,7 @@ function SettingsPageView({
   const { preference: themePreference, setPreference: setThemePreference } = useTheme()
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
-  const [section, setSection] = useState<SettingsSection>(initialSection ?? 'general')
+  const [section, setSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection))
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
@@ -363,7 +364,7 @@ function SettingsPageView({
   }, [refresh, toast])
 
   useEffect(() => {
-    if (initialSection) setSection(initialSection)
+    setSection(normalizeSettingsSection(initialSection))
   }, [initialSection])
 
   useDebouncedEffect(() => {
