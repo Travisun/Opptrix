@@ -410,6 +410,25 @@ export default function ChatApp() {
     }
   }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn, view])
 
+  const abortActiveChatStream = useCallback(async () => {
+    if (!loading && !chatAbortRef.current) return
+    chatStreamGenRef.current += 1
+    stoppingRef.current = true
+    const sid = activeId
+    chatAbortRef.current?.abort()
+    if (sid) {
+      try {
+        await cancelSessionChat(sid)
+      } catch {
+        /* stream may have already ended */
+      }
+    }
+    streamUiRef.current?.resetStreamUi()
+    setLoading(false)
+    stoppingRef.current = false
+    chatAbortRef.current = null
+  }, [activeId, loading])
+
   const handleSelect = useCallback(async (id: string) => {
     restoreChatColumn()
     if (id === activeId) {
@@ -639,25 +658,6 @@ export default function ChatApp() {
       }
     }
     chatAbortRef.current?.abort()
-  }, [activeId, loading])
-
-  const abortActiveChatStream = useCallback(async () => {
-    if (!loading && !chatAbortRef.current) return
-    chatStreamGenRef.current += 1
-    stoppingRef.current = true
-    const sid = activeId
-    chatAbortRef.current?.abort()
-    if (sid) {
-      try {
-        await cancelSessionChat(sid)
-      } catch {
-        /* stream may have already ended */
-      }
-    }
-    streamUiRef.current?.resetStreamUi()
-    setLoading(false)
-    stoppingRef.current = false
-    chatAbortRef.current = null
   }, [activeId, loading])
 
   const activeIdRef = useRef(activeId)

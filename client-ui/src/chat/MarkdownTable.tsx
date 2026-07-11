@@ -14,6 +14,7 @@ import {
 import { CheckmarkCircleFilled, ClipboardPasteRegular } from '@fluentui/react-icons'
 
 const COPY_COL_CLASS = 'opptrix-md-table-copy-col'
+const COPY_COL_KEY = 'opptrix-md-table-copy-col'
 
 function escapeCell(text: string): string {
   return text.trim().replace(/\|/g, '\\|').replace(/\s+/g, ' ')
@@ -84,15 +85,19 @@ function appendCopyColumnCell(row: ReactElement, copyButton: ReactNode | null): 
   const cells = Children.toArray(row.props.children)
   const usesHeaderCell = cells.some(cell => isValidElement(cell) && cell.type === 'th')
   const cellType = usesHeaderCell ? 'th' : 'td'
+  const keyedCells = cells.map((cell, index) => {
+    if (!isValidElement(cell) || cell.key != null) return cell
+    return cloneElement(cell, { key: `md-cell-${index}` })
+  })
 
   return cloneElement(
     row as ReactElement<{ children?: ReactNode }>,
     {},
     [
-      ...cells,
+      ...keyedCells,
       createElement(
         cellType,
-        { className: COPY_COL_CLASS, 'aria-hidden': true },
+        { key: COPY_COL_KEY, className: COPY_COL_CLASS, 'aria-hidden': true },
         copyButton,
       ),
     ],
@@ -107,16 +112,22 @@ function injectCopyColumn(children: ReactNode, copyButton: ReactNode): ReactNode
       return section
     }
 
-    const rows = Children.toArray(section.props.children).map(row => {
+    const rows = Children.toArray(section.props.children).map((row, rowIndex) => {
       if (!isValidElement(row) || row.type !== 'tr') return row
 
       const hostCopy = !copyHostAssigned
       if (hostCopy) copyHostAssigned = true
 
-      return appendCopyColumnCell(
+      const updated = appendCopyColumnCell(
         row as ReactElement<{ children?: ReactNode }>,
         hostCopy ? copyButton : null,
       )
+
+      if (isValidElement(updated) && updated.key == null) {
+        const rowKey = isValidElement(row) && row.key != null ? row.key : `md-row-${rowIndex}`
+        return cloneElement(updated, { key: rowKey })
+      }
+      return updated
     })
 
     return cloneElement(section as ReactElement<{ children?: ReactNode }>, {}, rows)
