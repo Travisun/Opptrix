@@ -66,7 +66,8 @@ const useStyles = makeStyles({
     gap: '1px',
     padding: `0 ${CONTENT_PAD} 6px`,
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto auto',
     gap: '6px 8px',
@@ -74,8 +75,7 @@ const useStyles = makeStyles({
     padding: '6px 8px',
     minHeight: '28px',
     borderRadius: '6px',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowQuad: {
     gridTemplateColumns: 'minmax(0, 1fr) auto',
@@ -126,7 +126,8 @@ const useStyles = makeStyles({
     fontSize: '10px',
     minWidth: '40px',
   },
-  pctUp: { color: MARKET_UP },
+  pctUp: {...ghostInteractive,
+ color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   pctFlat: { color: opptrixCssVars.textSecondary },
   manageBtn: {
@@ -142,8 +143,7 @@ const useStyles = makeStyles({
     padding: '2px 4px',
     borderRadius: '6px',
     flexShrink: 0,
-    ...ghostInteractive,
-    ':hover': { color: opptrixCssVars.textPrimary },
+':hover': { color: opptrixCssVars.textPrimary },
   },
   iconBox: {
     display: 'inline-flex',
@@ -178,7 +178,8 @@ const useStyles = makeStyles({
     maxHeight: '160px',
     overflowY: 'auto',
   },
-  hitBtn: {
+  hitBtn: {...ghostInteractive,
+
     width: '100%',
     border: 'none',
     background: 'transparent',
@@ -186,8 +187,7 @@ const useStyles = makeStyles({
     padding: '6px 8px',
     borderRadius: '6px',
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   empty: {
     padding: '8px 10px 12px',

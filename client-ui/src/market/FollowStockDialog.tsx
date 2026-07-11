@@ -200,7 +200,8 @@ const useStyles = makeStyles({
     width: 'fit-content',
     flexShrink: 0,
   },
-  tabBtn: {
+  tabBtn: {...ghostInteractive,
+
     border: 'none',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textSecondary,
@@ -211,8 +212,7 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusFull,
     cursor: 'pointer',
     whiteSpace: 'nowrap',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.08)',
       color: opptrixCssVars.textPrimary,
     },
@@ -252,7 +252,8 @@ const useStyles = makeStyles({
     display: 'flex',
     gap: '4px',
   },
-  sideBtn: {
+  sideBtn: {...ghostInteractive,
+
     flex: 1,
     minHeight: '26px',
     borderRadius: opptrixTokens.radiusFull,
@@ -261,8 +262,7 @@ const useStyles = makeStyles({
     fontSize: '11px',
     fontWeight: 600,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: 'rgba(29, 29, 31, 0.1)',
     },
   },
@@ -386,7 +386,7 @@ export default function FollowStockDialog({
   })
 
   const stockRef = stock ? resolveWatchlistInstrument(stock) : null
-  const tradeCode = stockRef
+  const tradeCode = stockRef && stock
     ? stockRef.market === 'CN'
       ? stock.code.padStart(6, '0')
       : stock.code

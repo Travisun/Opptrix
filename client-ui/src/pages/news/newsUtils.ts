@@ -80,7 +80,7 @@ function setupExternalTwitterVideo(video: HTMLVideoElement, src: string) {
   video.preload = 'metadata'
   video.muted = true
   video.playsInline = true
-  video.referrerPolicy = 'no-referrer'
+  video.setAttribute('referrerpolicy', 'no-referrer')
 
   const parent = video.parentNode
   if (!parent || video.closest('.opptrix-news-video-external')) return
@@ -117,7 +117,7 @@ export function enhanceFeedMedia(root: HTMLElement): void {
 
     el.controls = true
     el.playsInline = true
-    el.referrerPolicy = 'no-referrer'
+    el.setAttribute('referrerpolicy', 'no-referrer')
     if (!el.preload) el.preload = 'metadata'
     bindMediaInteractionStop(el)
   })

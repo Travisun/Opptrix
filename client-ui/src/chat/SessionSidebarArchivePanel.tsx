@@ -127,15 +127,15 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
   },
-  folderHead: {
+  folderHead: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: '5px 10px',
     borderRadius: opptrixTokens.radiusMd,
     minHeight: '30px',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
     },
   },
@@ -265,7 +265,8 @@ const useStyles = makeStyles({
     gap: '2px',
     paddingLeft: '22px',
   },
-  sessionItem: {
+  sessionItem: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
@@ -273,16 +274,15 @@ const useStyles = makeStyles({
     minHeight: '30px',
     borderRadius: opptrixTokens.radiusMd,
     color: opptrixCssVars.textPrimary,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
     },
   },
   sessionConfirm: {
     padding: '4px 8px',
   },
-  sessionActive: {
-    ...sidebarItemSelected,
+  sessionActive: {...sidebarItemSelected,
+
   },
   sessionTitle: {
     flex: 1,

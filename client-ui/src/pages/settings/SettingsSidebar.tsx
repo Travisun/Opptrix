@@ -76,9 +76,8 @@ const useStyles = makeStyles({
   searchWrapOverlay: {
     padding: '8px 10px 6px',
   },
-  searchShell: {
-    ...inputShellInteractive,
-    padding: '0 8px',
+  searchShell: {...inputShellInteractive,
+padding: '0 8px',
     minHeight: '28px',
     display: 'flex',
     alignItems: 'center',
@@ -103,7 +102,8 @@ const useStyles = makeStyles({
     overflowX: 'auto',
     padding: '8px 12px 12px',
   },
-  navItem: {
+  navItem: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '9px',
@@ -119,7 +119,6 @@ const useStyles = makeStyles({
     textAlign: 'left',
     transitionProperty: 'background-color',
     transitionDuration: motion.fast,
-    ...ghostInteractive,
   },
   navItemOverlay: {
     ...sidebarTopMenuRow,
@@ -132,8 +131,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
-  navItemActive: {
-    ...sidebarItemSelected,
+  navItemActive: {...sidebarItemSelected,
+
   },
   navIcon: {
     color: opptrixCssVars.textTertiary,
@@ -155,9 +154,8 @@ const useStyles = makeStyles({
   searchResultsOverlay: {
     padding: '2px 0 16px',
   },
-  searchHit: {
-    ...ghostInteractive,
-    display: 'flex',
+  searchHit: {...ghostInteractive,
+display: 'flex',
     flexDirection: 'column',
     alignItems: 'flex-start',
     gap: '1px',

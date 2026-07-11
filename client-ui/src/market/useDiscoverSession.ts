@@ -62,20 +62,20 @@ export function useDiscoverSession(): DiscoverSessionState {
     }
   }, [])
 
-  const refreshHistory = useCallback(async () => {
+  const refreshHistory = useCallback(async (): Promise<void> => {
     try {
       const resp = await listDiscoverJobs()
       const jobs = resp.jobs ?? []
       setHistory(jobs)
-      return jobs
     } catch {
-      return []
+      setHistory([])
     }
   }, [])
 
   useEffect(() => {
     void (async () => {
-      const jobs = await refreshHistory()
+      await refreshHistory()
+      const jobs = historyRef.current
       const runningJob = jobs.find(j => j.status === 'running')
       if (runningJob) {
         setActiveJobId(runningJob.id)
@@ -249,8 +249,10 @@ export function useDiscoverSession(): DiscoverSessionState {
       )
       setHistory(prevHistory)
       if (viewingDeleted) {
-        const jobs = await refreshHistory()
-        const restored = jobs.find(j => j.id === jobId)
+        const resp = await listDiscoverJobs()
+        const jobs = resp.jobs ?? []
+        setHistory(jobs)
+        const restored = jobs.find((j: DiscoverJobSnapshot) => j.id === jobId)
         if (restored) {
           setJob(restored)
           setResult(restored.result)

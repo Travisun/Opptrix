@@ -51,12 +51,12 @@ export function useNewsFeed() {
     await setNewsFeedTimelineDate(date)
   }, [])
 
-  const setGroupFilter = useCallback((groupId: string) => {
-    setNewsFeedGroupFilter(groupId)
+  const setGroupFilter = useCallback((groupId: string | null) => {
+    if (groupId) setNewsFeedGroupFilter(groupId)
   }, [])
 
-  const setSourceFilter = useCallback((subscriptionId: string) => {
-    setNewsFeedSourceFilter(subscriptionId)
+  const setSourceFilter = useCallback((subscriptionId: string | null) => {
+    if (subscriptionId) setNewsFeedSourceFilter(subscriptionId)
   }, [])
 
   const listReady = snap.hydrated || (

@@ -5,6 +5,7 @@ import type { EtfScorecardData } from '../types/market'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { formatScoreSummary, formatScorecardDisplayName, getScoreGradeInfo } from './scoreGrade'
 import { scoreMetricTone, type DecisionMetricTone } from './decisionCardTone'
+import { listRowKey } from '../utils/listRowKey'
 
 const ETF_SCORE_LEGEND =
   '基于折溢价、规模与成交、管理费、净值波动及同类对比的本地评分（0–100 分），供挑选与换仓参考，不构成买卖建议。'
@@ -241,8 +242,8 @@ export default function EtfDecisionCard({ data, loading, error, onRefresh }: Pro
         <div>
           <Text className={s.sectionTitle} block>亮点</Text>
           <div className={s.bulletList}>
-            {data.highlights.map(item => (
-              <span key={item} className={mergeClasses(s.bullet, s.bulletPositive)}>{item}</span>
+            {data.highlights.map((item, index) => (
+              <span key={listRowKey(index, item)} className={mergeClasses(s.bullet, s.bulletPositive)}>{item}</span>
             ))}
           </div>
         </div>
@@ -252,8 +253,8 @@ export default function EtfDecisionCard({ data, loading, error, onRefresh }: Pro
         <div>
           <Text className={s.sectionTitle} block>留意</Text>
           <div className={s.bulletList}>
-            {data.risks.map(item => (
-              <span key={item} className={mergeClasses(s.bullet, s.bulletRisk)}>{item}</span>
+            {data.risks.map((item, index) => (
+              <span key={listRowKey(index, item)} className={mergeClasses(s.bullet, s.bulletRisk)}>{item}</span>
             ))}
           </div>
         </div>

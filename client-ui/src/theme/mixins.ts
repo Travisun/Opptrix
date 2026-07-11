@@ -37,7 +37,7 @@ export const inputShellInteractive = {
   },
   ':focus-within': {
     backgroundColor: opptrixCssVars.inputBgFocus,
-    borderColor: opptrixCssVars.borderStrong,
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
     boxShadow: 'none',
   },
 } as const
@@ -93,10 +93,10 @@ export const composerSurface = {
   border: `1px solid ${opptrixCssVars.border}`,
   boxShadow: 'none',
   ':hover': {
-    borderColor: opptrixCssVars.borderStrong,
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
   },
   ':focus-within': {
-    borderColor: opptrixCssVars.borderStrong,
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
     backgroundColor: opptrixCssVars.canvas,
     boxShadow: 'none',
   },
@@ -210,22 +210,18 @@ export const SIDEBAR_TOP_MENU_ICON_SIZE = 18
 
 /** Shared layout for sidebar top menu rows — keep overlay settings nav in sync */
 export const sidebarTopMenuRow = {
+  ...ghostInteractive,
   display: 'flex',
   alignItems: 'center',
   gap: '10px',
   padding: '5px 10px',
   marginLeft: '10px',
   marginRight: '10px',
-  borderRadius: opptrixTokens.radiusMd,
-  cursor: 'pointer',
-  border: 'none',
-  backgroundColor: 'transparent',
   color: opptrixCssVars.textPrimary,
   fontSize: '13px',
   fontWeight: 500,
   width: 'calc(100% - 20px)',
   textAlign: 'left' as const,
-  ...ghostInteractive,
 } as const
 
 export const sidebarTopMenuIcon = {

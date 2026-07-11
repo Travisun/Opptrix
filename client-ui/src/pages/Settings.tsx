@@ -29,8 +29,8 @@ export default function Settings() {
   useEffect(() => {
     getConfig()
       .then(cfg => {
-        setProvider(cfg.llm?.provider || 'DeepSeek')
-        setModel(cfg.llm?.model || 'deepseek-chat')
+        setProvider(cfg.default_model?.split('-')[0] ?? 'DeepSeek')
+        setModel(cfg.default_model || 'deepseek-chat')
         setScorecard(cfg.default_scorecard || '综合评估')
       })
       .catch(() => setError('无法读取后端配置，请确认 npm run dev 已启动'))

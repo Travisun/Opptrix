@@ -92,7 +92,8 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0,
   },
-  iconBtn: {
+  iconBtn: {...ghostInteractive,
+
     border: 'none',
     background: 'transparent',
     color: opptrixCssVars.textTertiary,
@@ -100,7 +101,6 @@ const useStyles = makeStyles({
     padding: '2px',
     lineHeight: 0,
     flexShrink: 0,
-    ...ghostInteractive,
   },
   meta: {
     fontSize: '10px',
@@ -123,7 +123,8 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: '1fr auto auto',
     gap: '8px',
@@ -131,18 +132,17 @@ const useStyles = makeStyles({
     padding: ITEM_INNER_PAD,
     marginBottom: 0,
     cursor: 'pointer',
-    ...ghostInteractive,
-    borderRadius: 0,
+borderRadius: 0,
   },
-  stockRow: {
+  stockRow: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
     padding: ITEM_INNER_PAD,
     marginBottom: 0,
     cursor: 'pointer',
-    ...ghostInteractive,
-    borderRadius: 0,
+borderRadius: 0,
   },
   industryName: {
     fontSize: '12px',
@@ -601,7 +601,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
               )}
             </div>
           ) : (
-            <div className={mergeClasses(s.chainPane, mining && s.chainPaneFilled)}>
+            <div className={mergeClasses(s.chainPane, mining != null && s.chainPaneFilled)}>
               {miningLoading ? (
                 <div className={s.center}>
                   <Spinner size="tiny" />

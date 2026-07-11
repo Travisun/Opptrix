@@ -63,11 +63,11 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     color: 'inherit',
   },
-  indexCellClickable: {
+  indexCellClickable: {...interactiveTransition,
+
     cursor: 'pointer',
     borderRadius: '6px',
-    ...interactiveTransition,
-    ...focusVisibleRing,
+...focusVisibleRing,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   indexName: {

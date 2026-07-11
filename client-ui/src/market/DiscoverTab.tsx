@@ -10,12 +10,12 @@ import DiscoverProfileTabList, { isDiscoverProfileMiningReady } from './Discover
 import {
   defaultDiscoverProfile,
   DISCOVER_PROFILE_LABELS,
+  inferBuiltinStrategyProfile,
   regimeDetailForProfile,
   regimeSuggestedIds,
 } from './discoverProfiles'
 import { factorLabel } from './factorLabels'
 import {
-  inferBuiltinStrategyProfile,
   normalizeWatchlistItem,
   parseInstrumentInput,
   watchlistItemKey,
@@ -167,7 +167,8 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto',
     gap: '6px',
@@ -175,8 +176,7 @@ const useStyles = makeStyles({
     padding: `8px ${ITEM_INNER_PAD}`,
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowMain: {
     minWidth: 0,
@@ -232,7 +232,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     paddingTop: '2px',
   },
-  iconBtn: {
+  iconBtn: {...ghostInteractive,
+
     border: 'none',
     background: 'transparent',
     color: opptrixCssVars.textTertiary,
@@ -241,8 +242,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       color: opptrixCssVars.textPrimary,
       backgroundColor: opptrixCssVars.accentSoft,
     },
@@ -263,7 +263,8 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
   },
-  historyRow: {
+  historyRow: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto',
     gap: '6px',
@@ -271,8 +272,7 @@ const useStyles = makeStyles({
     padding: `8px ${ITEM_INNER_PAD}`,
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.surfaceHover },
+':hover': { backgroundColor: opptrixCssVars.surfaceHover },
   },
   historyRowActive: {
     backgroundColor: opptrixCssVars.accentSoft,
@@ -303,7 +303,8 @@ const useStyles = makeStyles({
     gap: '2px',
     flexShrink: 0,
   },
-  deleteBtn: {
+  deleteBtn: {...ghostInteractive,
+
     border: 'none',
     background: 'transparent',
     color: opptrixCssVars.textTertiary,
@@ -312,8 +313,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     display: 'inline-flex',
     alignItems: 'center',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       color: opptrixCssVars.error,
       backgroundColor: opptrixCssVars.accentSoft,
     },

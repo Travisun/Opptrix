@@ -1,3 +1,4 @@
+import { ColorType } from 'lightweight-charts'
 import type { ColorScheme } from '../theme/tokens'
 import { getOpptrixTokens } from '../theme/tokens'
 
@@ -7,7 +8,7 @@ export const MARKET_DOWN = '#34C759'
 export function getChartLayout(scheme: ColorScheme) {
   const t = getOpptrixTokens(scheme)
   return {
-    background: { type: 'solid' as const, color: t.canvas },
+    background: { type: ColorType.Solid, color: t.canvas },
     textColor: t.textTertiary,
     fontSize: 10,
     fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',

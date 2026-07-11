@@ -6,6 +6,7 @@ import { ArrowSyncRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
 import { research } from '../api/client'
 import type { InstitutionRatingData } from '../types/schemas'
+import { listRowKey } from '../utils/listRowKey'
 
 const useStyles = makeStyles({
   row: {
@@ -88,8 +89,8 @@ export default function InstitutionRating({ globalStock }: Props) {
           {Object.entries(data.group_stats).map(([g, st]) => (
             <div key={g} className={s.groupBar}>
               <Text style={{ width: 80, color: groupColors[g] }}>{g}</Text>
-              <ProgressBar value={st.avg / 10} thickness="small"
-                color={st.avg >= 6 ? 'success' : st.avg >= 4 ? 'warning' : 'danger'}
+              <ProgressBar value={st.avg / 10} thickness="medium"
+                color={st.avg >= 6 ? 'success' : st.avg >= 4 ? 'warning' : 'error'}
                 style={{ flex: 1 }} />
               <Text style={{ width: 40, textAlign: 'right' }}>{st.avg.toFixed(1)}</Text>
               <Text style={{ width: 80, color: '#888', fontSize: 10 }}>买入{st.buy} 卖出{st.sell}</Text>
@@ -117,24 +118,24 @@ export default function InstitutionRating({ globalStock }: Props) {
               <div className={s.row} style={{ cursor: 'pointer' }}
                 onClick={() => setExpanded(expanded === r.institution_short ? null : r.institution_short)}>
                 <Text>{r.institution_short}</Text>
-                <Badge size="small"
+                <Badge
                   color={r.rating === 'buy' || r.rating === 'strong_buy' ? 'success' :
                          r.rating === 'sell' || r.rating === 'strong_sell' ? 'danger' : 'warning'}>
                   {r.rating_cn}
                 </Badge>
                 <Text style={{ textAlign: 'right' }}>{r.confidence.toFixed(1)}</Text>
-                <ProgressBar value={r.confidence / 10} thickness="small" style={{ flex: 1 }} />
-                <Badge size="small" appearance="tint">
+                <ProgressBar value={r.confidence / 10} thickness="medium" style={{ flex: 1 }} />
+                <Badge appearance="tint">
                   {r.method_source === 'documented' ? '官方' : r.method_source === 'partial' ? '部分' : '推断'}
                 </Badge>
                 <Text style={{ fontSize: 10, color: '#888' }}>{r.model_name.slice(0, 12)}</Text>
               </div>
               {expanded === r.institution_short && r.dimensions && (
                 <div style={{ backgroundColor: 'rgba(255,255,255,0.03)' }}>
-                  {r.dimensions.map(d => (
-                    <div key={d.name} className={s.dimRow}>
+                  {r.dimensions.map((d, index) => (
+                    <div key={listRowKey(index, d.name)} className={s.dimRow}>
                       <Text style={{ width: 120 }}>{d.name}</Text>
-                      <ProgressBar value={d.score / 10} thickness="small"
+                      <ProgressBar value={d.score / 10} thickness="medium"
                         style={{ flex: 1, maxWidth: 200 }} />
                       <Text style={{ width: 30, textAlign: 'right' }}>{d.score.toFixed(1)}</Text>
                       <Text style={{ color: '#666' }}>{d.detail}</Text>

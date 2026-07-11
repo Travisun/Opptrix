@@ -8,6 +8,7 @@ import MetricTile from '../components/MetricTile'
 import StatusBanner from '../components/StatusBanner'
 import { research } from '../api/client'
 import type { StrategySignalData, StrategyVerifyData } from '../types/schemas'
+import { listRowKey } from '../utils/listRowKey'
 
 interface Props {
   globalStock?: { code: string; name: string } | null
@@ -75,17 +76,17 @@ export default function StrategySignals({ globalStock }: Props) {
           <SectionCard title="策略明细">
             {data.signals.length === 0 ? (
               <Text size={200} style={{ color: '#888', whiteSpace: 'pre-wrap' }}>{data.summary}</Text>
-            ) : data.signals.map(sig => (
-              <div key={sig.name}
+            ) : data.signals.map((sig, index) => (
+              <div key={listRowKey(index, sig.name)}
                 style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '4px 0' }}>
                 <Text style={{ width: 80 }}>{sig.name}</Text>
-                <Badge size="small"
+                <Badge
                   color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'danger' : 'warning'}>
                   {sig.direction}
                 </Badge>
                 <div style={{ flex: 1 }}>
-                  <ProgressBar value={sig.confidence} thickness="small"
-                    color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'danger' : 'warning'} />
+                  <ProgressBar value={sig.confidence} thickness="medium"
+                    color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'error' : 'warning'} />
                 </div>
                 <Text style={{ width: 40, textAlign: 'right', fontSize: 11 }}>
                   {sig.confidence.toFixed(2)}
@@ -102,11 +103,11 @@ export default function StrategySignals({ globalStock }: Props) {
                 · 平均胜率 {(verifyData.avg_win_rate * 100).toFixed(0)}%
                 {verifyData.best_strategy && ` · 最佳 ${verifyData.best_strategy.name} (${(verifyData.best_strategy.win_rate * 100).toFixed(0)}%)`}
               </Text>
-              {verifyData.performances.map(p => (
-                <div key={p.name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 11 }}>
+              {verifyData.performances.map((p, index) => (
+                <div key={listRowKey(index, p.name)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '3px 0', fontSize: 11 }}>
                   <Text style={{ width: 100 }}>{p.name}</Text>
                   <Text style={{ width: 60 }}>{(p.overall_win_rate * 100).toFixed(0)}%</Text>
-                  <ProgressBar value={p.overall_win_rate} thickness="small" style={{ flex: 1, maxWidth: 180 }} />
+                  <ProgressBar value={p.overall_win_rate} thickness="medium" style={{ flex: 1, maxWidth: 180 }} />
                   <Text style={{ width: 60, color: p.avg_return >= 0 ? '#4caf50' : '#f44336' }}>
                     {p.avg_return >= 0 ? '+' : ''}{(p.avg_return * 100).toFixed(1)}%
                   </Text>

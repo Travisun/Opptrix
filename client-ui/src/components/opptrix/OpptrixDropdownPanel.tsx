@@ -17,7 +17,9 @@ export function mergeOpptrixDropdownListboxProps(
   if (listbox != null && typeof listbox !== 'object') {
     return listbox
   }
-  const base = listbox ?? {}
+  const base = (listbox != null && typeof listbox === 'object' && !Array.isArray(listbox))
+    ? listbox as { className?: string }
+    : {}
   return {
     ...base,
     className: mergeClasses(

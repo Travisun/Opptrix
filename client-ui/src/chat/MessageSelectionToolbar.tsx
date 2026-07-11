@@ -15,6 +15,7 @@ import type { EphemeralAskTurn, MessageSelection } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion } from '../theme/mixins'
 import { useRotatingPhrase } from '../hooks/useRotatingPhrase'
+import { listRowKey } from '../utils/listRowKey'
 
 const QUICK_ASKS = [
   { label: '解释一下', message: '请解释一下这段内容的含义。' },
@@ -412,9 +413,9 @@ export default function MessageSelectionToolbar({
 
       {mode === 'ask' && (
         <div className={s.askGrid}>
-          {QUICK_ASKS.map(item => (
+          {QUICK_ASKS.map((item, index) => (
             <button
-              key={item.label}
+              key={listRowKey(index, item.label)}
               type="button"
               className={mergeClasses(s.btn, s.askBtn)}
               disabled={loading}

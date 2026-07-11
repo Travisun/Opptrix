@@ -30,7 +30,8 @@ const useStyles = makeStyles({
     gap: '1px',
     padding: `0 ${CONTENT_PAD} 6px`,
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto auto',
     gap: '4px 6px',
@@ -38,8 +39,7 @@ const useStyles = makeStyles({
     padding: '5px 8px',
     minHeight: '26px',
     borderRadius: '6px',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowCompact: {
     gridTemplateColumns: 'minmax(0, 1fr) auto',

@@ -281,7 +281,8 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
   },
-  panelFooterDir: {
+  panelFooterDir: {...ghostInteractive,
+
     display: 'block',
     width: '100%',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
@@ -296,8 +297,7 @@ const useStyles = makeStyles({
     background: 'transparent',
     cursor: 'pointer',
     lineHeight: 1.45,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       color: opptrixCssVars.accent,
       opacity: 0.85,
     },
@@ -305,6 +305,19 @@ const useStyles = makeStyles({
 })
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
+
+const DEFAULT_ENRICHMENT: NewsSettings['enrichment'] = {
+  enabled: false,
+  processing_mode: 'on_demand',
+  extract_images: true,
+  extract_audio: true,
+  extract_video: true,
+  service_mode: 'remote',
+  offline_vision_model: '__auto__',
+  offline_whisper_model: 'tiny',
+  remote_provider_id: null,
+  remote_model: null,
+}
 
 const DEFAULT_TRANSLATION: NewsTranslationSettings = {
   service_mode: 'remote',
@@ -342,6 +355,7 @@ export default function TranslationSettingsSection() {
     retention_years: 3,
     max_articles: null,
     translation: DEFAULT_TRANSLATION,
+    enrichment: DEFAULT_ENRICHMENT,
   })
   const [providers, setProviders] = useState<PublicProvider[]>([])
   const [status, setStatus] = useState<TranslationEngineStatus | null>(null)

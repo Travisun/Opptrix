@@ -16,6 +16,7 @@ import { indicatorColors, getMaColors } from './chartTheme'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { ghostInteractive } from '../theme/mixins'
+import { isUnifiedChart, unifiedChartToStockChart } from './instrument-adapters'
 
 const PERIODS: { id: ChartPeriod; label: string; tradingOnly?: boolean }[] = [
   { id: 'intraday', label: '分时', tradingOnly: true },
@@ -65,7 +66,8 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
     border: `1px solid ${opptrixCssVars.separator}`,
   },
-  periodBtn: {
+  periodBtn: {...ghostInteractive,
+
     border: 'none',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textTertiary,
@@ -75,7 +77,6 @@ const useStyles = makeStyles({
     borderRadius: '6px',
     cursor: 'pointer',
     lineHeight: 1.2,
-    ...ghostInteractive,
   },
   periodBtnActive: {
     backgroundColor: opptrixCssVars.canvas,
@@ -191,7 +192,8 @@ const useStyles = makeStyles({
     gap: '6px',
     flexWrap: 'wrap',
   },
-  zoomBtn: {
+  zoomBtn: {...ghostInteractive,
+
     border: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
@@ -200,7 +202,6 @@ const useStyles = makeStyles({
     padding: '3px 8px',
     borderRadius: '6px',
     cursor: 'pointer',
-    ...ghostInteractive,
   },
   empty: {
     height: '222px',
@@ -422,7 +423,10 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         addedBarsRef.current = 0
       }
       fetchCountRef.current = count
-      setData(resp.data)
+      const chartData = isUnifiedChart(resp.data)
+        ? unifiedChartToStockChart(resp.data, instrumentRef.symbol)
+        : resp.data
+      setData(chartData)
     } catch (e) {
       if (seq !== loadSeqRef.current || signal?.aborted) return
       if (e instanceof Error && e.name !== 'AbortError') {

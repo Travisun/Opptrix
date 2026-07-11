@@ -31,9 +31,8 @@ const useStyles = makeStyles({
     maxWidth: '160px',
     minWidth: '100px',
   },
-  trigger: {
-    ...ghostInteractive,
-    display: 'inline-flex',
+  trigger: {...ghostInteractive,
+display: 'inline-flex',
     alignItems: 'center',
     gap: '2px',
     height: '34px',

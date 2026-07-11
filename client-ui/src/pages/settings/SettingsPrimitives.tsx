@@ -100,9 +100,8 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
-  inlineInput: {
-    ...inputShellInteractive,
-    width: '100%',
+  inlineInput: {...inputShellInteractive,
+width: '100%',
     minWidth: '160px',
     maxWidth: '240px',
     minHeight: '32px',
@@ -184,9 +183,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '2px',
   },
-  credentialCombo: {
-    ...inputShellInteractive,
-    width: '100%',
+  credentialCombo: {...inputShellInteractive,
+width: '100%',
     minWidth: 0,
     minHeight: '32px',
     display: 'flex',

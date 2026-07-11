@@ -14,9 +14,8 @@ const useStyles = makeStyles({
     gap: '2px',
     padding: '4px',
   },
-  folderItem: {
-    ...ghostInteractive,
-    display: 'flex',
+  folderItem: {...ghostInteractive,
+display: 'flex',
     alignItems: 'center',
     gap: '8px',
     width: '100%',

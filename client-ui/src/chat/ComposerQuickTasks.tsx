@@ -8,6 +8,7 @@ import ComposerTooltipMenu, {
 } from './ComposerTooltipMenu'
 import { QUICK_TASK_CATALOG } from './quickTaskCatalog'
 import { useComposerQuickTasks } from './useComposerQuickTasks'
+import { listRowKey } from '../utils/listRowKey'
 
 interface Props {
   disabled?: boolean
@@ -124,8 +125,8 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
         )}
       >
         {manageMode ? (
-          pinnedTasks.length ? pinnedTasks.map(task => (
-            <div key={task} className="opptrix-composer-quick-menu__manage-row">
+          pinnedTasks.length ? pinnedTasks.map((task, index) => (
+            <div key={listRowKey(index, task)} className="opptrix-composer-quick-menu__manage-row">
               <span className="opptrix-composer-quick-menu__manage-text" title={task}>
                 {task}
               </span>
@@ -148,9 +149,9 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
             {!pinnedTasks.length ? null : (
               <>
                 <div className="opptrix-composer-quick-menu__section-head">我的常用</div>
-                {pinnedTasks.map(task => (
+                {pinnedTasks.map((task, index) => (
                   <ComposerTooltipMenuItem
-                    key={`pin-${task}`}
+                    key={listRowKey(index, 'pin', task)}
                     onClick={() => handleApply(task)}
                   >
                     <span className="opptrix-composer-tooltip-menu__item-title opptrix-composer-quick-menu__task-text">
@@ -164,9 +165,9 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
             {QUICK_TASK_CATALOG.map(section => (
               <div key={section.id} className="opptrix-composer-quick-menu__section">
                 <div className="opptrix-composer-quick-menu__section-head">{section.title}</div>
-                {section.tasks.map(task => (
+                {section.tasks.map((task, index) => (
                   <ComposerTooltipMenuItem
-                    key={`${section.id}-${task}`}
+                    key={listRowKey(index, section.id, task)}
                     onClick={() => handleApply(task)}
                   >
                     <span className="opptrix-composer-tooltip-menu__item-title opptrix-composer-quick-menu__task-text">

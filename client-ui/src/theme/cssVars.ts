@@ -59,7 +59,7 @@ export const CSS_VAR_KEYS = [
   'glass-surface-border',
 ] as const
 
-type TokenColorSource = typeof opptrixTokensLight
+type TokenColorSource = typeof opptrixTokensLight | typeof opptrixTokensDark
 
 function tokenToCssVarMap(tokens: TokenColorSource): Record<string, string> {
   return {

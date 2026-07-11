@@ -4,7 +4,8 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 
 const useStyles = makeStyles({
-  root: {
+  root: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: tokens.spacingHorizontalS,
@@ -13,8 +14,7 @@ const useStyles = makeStyles({
     width: '100%',
     textAlign: 'left' as const,
     position: 'relative' as const,
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.surfaceMuted },
+':hover': { backgroundColor: opptrixCssVars.surfaceMuted },
   },
   active: {
     backgroundColor: opptrixCssVars.surfaceMuted,

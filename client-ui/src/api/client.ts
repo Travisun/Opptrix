@@ -109,7 +109,7 @@ type InstrumentEnvelope<T> = { success: boolean; data?: T; message?: string }
 
 function toApiResponse<T>(
   feature: string,
-  resp: InstrumentEnvelope<T>,
+  resp: { success: boolean; data?: unknown; message?: string },
   fallback: T,
   mapped?: T,
 ): ApiResponse<T> {
@@ -208,7 +208,15 @@ export const research = {
         avg_raw_confidence: 0,
         consensus_rating: '',
         consensus_rating_cn: '',
-        items: [],
+        confidence_std: 0,
+        agreement_rate: 0,
+        rating_distribution: {},
+        bullish_count: 0,
+        bearish_count: 0,
+        neutral_count: 0,
+        group_stats: {},
+        ratings: [],
+        avg_data_quality: 0,
       },
       signal,
       20000,
@@ -1199,6 +1207,33 @@ export async function patchConfig(payload: {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(payload),
+  })
+}
+
+/** @deprecated legacy AgentDrawer — use session chat APIs */
+export async function sendChat(message: string, _context?: unknown) {
+  return jsonFetch<{ reply: string; tools_used?: string[] }>('/chat', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message }),
+  })
+}
+
+/** @deprecated legacy AgentDrawer */
+export async function resetChat() {
+  return { ok: true as const }
+}
+
+/** @deprecated legacy Settings page */
+export async function saveConfig(payload: {
+  provider?: string
+  model?: string
+  scorecard?: string
+  api_key?: string
+}) {
+  return patchConfig({
+    default_scorecard: payload.scorecard,
+    default_model: payload.model,
   })
 }
 

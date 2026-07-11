@@ -60,7 +60,8 @@ const useStyles = makeStyles({
     textDecoration: 'none',
     ':hover': { textDecoration: 'underline' },
   },
-  metaAction: {
+  metaAction: {...ghostInteractive,
+
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
@@ -73,8 +74,7 @@ const useStyles = makeStyles({
     verticalAlign: 'middle',
     lineHeight: 1,
     borderRadius: opptrixTokens.radiusSm,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       color: opptrixCssVars.accent,
       backgroundColor: opptrixCssVars.accentSoft,
     },
@@ -178,7 +178,8 @@ const useStyles = makeStyles({
     gap: '2px',
     marginLeft: '2px',
   },
-  viewToggleBtn: {
+  viewToggleBtn: {...ghostInteractive,
+
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -193,14 +194,13 @@ const useStyles = makeStyles({
     lineHeight: 1,
     cursor: 'pointer',
     borderRadius: opptrixTokens.radiusSm,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
       color: opptrixCssVars.textPrimary,
     },
   },
   viewToggleBtnActive: {
-    borderColor: opptrixCssVars.accentSoft,
+    border: `1px solid ${opptrixCssVars.accentSoft}`,
     backgroundColor: opptrixCssVars.accentSoft,
     color: opptrixCssVars.accent,
     fontWeight: 600,
@@ -438,7 +438,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           block
           className={mergeClasses(
             s.translateHint,
-            (translation.error || enrichment.error) && s.translateError,
+            (translation.error || enrichment.error) ? s.translateError : undefined,
           )}
         >
           {translation.error

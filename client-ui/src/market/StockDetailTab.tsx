@@ -85,7 +85,8 @@ const useStyles = makeStyles({
     gap: '6px',
     flexShrink: 0,
   },
-  manageBtn: {
+  manageBtn: {...ghostInteractive,
+
     border: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
@@ -98,7 +99,6 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '3px',
     lineHeight: 1.2,
-    ...ghostInteractive,
   },
   price: {
     fontSize: '20px',
@@ -151,7 +151,8 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvasAlt,
   },
-  prepHead: {
+  prepHead: {...ghostInteractive,
+
     width: '100%',
     display: 'flex',
     alignItems: 'center',
@@ -161,7 +162,6 @@ const useStyles = makeStyles({
     background: 'transparent',
     cursor: 'pointer',
     textAlign: 'left',
-    ...ghostInteractive,
   },
   prepHeadMain: {
     flex: 1,
@@ -493,7 +493,7 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              onClick={event => openExternalUrl(item.url, event)}
+              onClick={event => openExternalUrl(item.url!, event)}
             >
               {item.title}
             </Link>
@@ -1048,7 +1048,8 @@ export default function StockDetailTab({
                   target="_blank"
                   rel="noreferrer"
                   onClick={event => {
-                    const href = profile.website.startsWith('http') ? profile.website : `https://${profile.website}`
+                    const website = profile.website!
+                    const href = website.startsWith('http') ? website : `https://${website}`
                     openExternalUrl(href, event)
                   }}
                 >

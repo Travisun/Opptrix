@@ -1,4 +1,5 @@
 import { memo, useMemo } from 'react'
+import type { Pluggable } from 'unified'
 import ReactMarkdown from 'react-markdown'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
@@ -26,7 +27,7 @@ function MarkdownMessage({ content, className }: Props) {
     <div className={`opptrix-md ${className ?? ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
-        rehypePlugins={rehypePlugins}
+        rehypePlugins={rehypePlugins as Pluggable[]}
         components={components}
       >
         {content}

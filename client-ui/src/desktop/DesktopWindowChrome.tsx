@@ -147,6 +147,14 @@ interface DesktopWindowChromeProps {
   onToggleChatColumn?: () => void
 }
 
+type DragClipStyle = {
+  right?: string
+  width?: number | string
+  pointerEvents?: CSSProperties['pointerEvents']
+  overflow?: CSSProperties['overflow']
+  WebkitAppRegion?: string
+}
+
 function resolveDragRightClip(
   isStandalonePanel: boolean,
   isSettings: boolean,
@@ -154,7 +162,7 @@ function resolveDragRightClip(
   chatColumnVisible: boolean,
   sidebarInline: boolean,
   rightPanelWidth: number,
-): Pick<CSSProperties, 'right' | 'width' | 'pointerEvents' | 'WebkitAppRegion'> {
+): DragClipStyle {
   if (isStandalonePanel) {
     const right = electronPlatform() === 'darwin'
       ? DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN
@@ -313,7 +321,7 @@ export default function DesktopWindowChrome({
 
         {showPageTitle && (
           <div
-            className={mergeClasses(s.title, titleSlot && s.titleInteractive)}
+            className={mergeClasses(s.title, titleSlot != null && titleSlot !== false && s.titleInteractive)}
             style={{
               left: `${titleLeft}px`,
               maxWidth: `${titleMaxWidth}px`,

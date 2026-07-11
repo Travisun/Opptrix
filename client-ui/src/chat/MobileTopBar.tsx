@@ -22,9 +22,8 @@ const useStyles = makeStyles({
     zIndex: 10,
     minHeight: '44px',
   },
-  menuBtn: {
-    ...ghostInteractive,
-    minWidth: '44px',
+  menuBtn: {...ghostInteractive,
+minWidth: '44px',
     height: '44px',
     color: opptrixCssVars.textPrimary,
     flexShrink: 0,
@@ -64,9 +63,8 @@ const useStyles = makeStyles({
     gap: '2px',
     flexShrink: 0,
   },
-  actionBtn: {
-    ...ghostInteractive,
-    minWidth: '44px',
+  actionBtn: {...ghostInteractive,
+minWidth: '44px',
     height: '44px',
     color: opptrixCssVars.textSecondary,
   },

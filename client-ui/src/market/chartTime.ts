@@ -36,7 +36,9 @@ export function toChartTime(value: string, forceTimestamp = false, timeZone?: st
 }
 
 export function timeSortKey(time: Time): number | string {
-  return typeof time === 'number' ? time : time
+  if (typeof time === 'number') return time
+  if (typeof time === 'string') return time
+  return `${time.year}-${time.month}-${time.day}`
 }
 
 export function chartTimeForPeriod(raw: string, period: string, timeZone?: string): Time {

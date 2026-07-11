@@ -109,7 +109,8 @@ const useStyles = makeStyles({
     gap: '6px',
     flexShrink: 0,
   },
-  manageBtn: {
+  manageBtn: {...ghostInteractive,
+
     border: `1px solid ${opptrixCssVars.separator}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
@@ -122,7 +123,6 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '3px',
     lineHeight: 1.2,
-    ...ghostInteractive,
   },
   price: {
     fontSize: '20px',
@@ -322,7 +322,8 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  peerRow: {
+  peerRow: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 0.55fr) minmax(0, 0.45fr)',
     gap: '4px',
@@ -336,7 +337,6 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': { borderBottom: 'none' },
-    ...ghostInteractive,
   },
   distRow: {
     display: 'grid',
@@ -479,7 +479,7 @@ function NewsPanel({ items, emptyHint }: { items: StockNewsItem[]; emptyHint: st
               href={item.url}
               target="_blank"
               rel="noreferrer"
-              onClick={event => openExternalUrl(item.url, event)}
+              onClick={event => openExternalUrl(item.url!, event)}
             >
               {item.title}
             </Link>
@@ -775,7 +775,7 @@ async function loadSnapshot(ref: InstrumentRef): Promise<EquityDetail | CryptoSn
 
 function asProfile(raw: Record<string, unknown> | null | undefined): StockProfileData | null {
   if (!raw || typeof raw !== 'object') return null
-  return raw as StockProfileData
+  return raw as unknown as StockProfileData
 }
 
 export default function CrossMarketSnapshotDetail({

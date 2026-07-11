@@ -60,7 +60,8 @@ const useStyles = makeStyles({
       ':focus-visible': { backgroundColor: 'transparent' },
     },
   },
-  closeBtn: {
+  closeBtn: {...ghostInteractive,
+
     flex: '0 0 auto',
     border: 'none',
     background: 'transparent',
@@ -73,8 +74,7 @@ const useStyles = makeStyles({
     fontWeight: 600,
     padding: '4px 6px',
     borderRadius: '6px',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   body: {
     flex: 1,
@@ -231,7 +231,8 @@ const useStyles = makeStyles({
     gap: '1px',
     padding: `0 ${CONTENT_PAD} 10px`,
   },
-  newsRow: {
+  newsRow: {...ghostInteractive,
+
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
@@ -239,8 +240,7 @@ const useStyles = makeStyles({
     minHeight: '28px',
     borderRadius: '6px',
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   newsTitle: {
     fontSize: '12px',

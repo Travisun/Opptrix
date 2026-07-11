@@ -19,6 +19,7 @@ import {
 import TradingViewChart from './TradingViewChart'
 import EtfDecisionCard from './EtfDecisionCard'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { listRowKey } from '../utils/listRowKey'
 
 type EtfTab = 'overview' | 'decision' | 'chart' | 'nav' | 'holdings'
 
@@ -495,8 +496,8 @@ export default function EtfDetailTab({ stock }: Props) {
                   <span className={s.tableHeadCell}>涨跌幅</span>
                   <span className={s.tableHeadCell}>溢价率</span>
                 </div>
-                {navRows.slice(0, 60).map(row => (
-                  <div key={row.date} className={s.tableRow}>
+                {navRows.slice(0, 60).map((row, index) => (
+                  <div key={listRowKey(index, row.date)} className={s.tableRow}>
                     <span className={s.tableCell}>{row.date}</span>
                     <span className={s.tableCell}>{formatPrice(row.nav)}</span>
                     <span className={s.tableCell}>{formatPct(row.changePct ?? null)}</span>
@@ -520,8 +521,8 @@ export default function EtfDetailTab({ stock }: Props) {
                   <span className={s.tableHeadCell}>占比</span>
                   <span className={s.tableHeadCell}>市值</span>
                 </div>
-                {holdings.slice(0, 30).map(row => (
-                  <div key={`${row.reportDate}-${row.holdingSymbol}`} className={s.tableRowWide}>
+                {holdings.slice(0, 30).map((row, index) => (
+                  <div key={listRowKey(index, row.reportDate, row.holdingSymbol)} className={s.tableRowWide}>
                     <span className={s.tableCellName} title={row.holdingName}>
                       {row.holdingName || row.holdingSymbol}
                     </span>

@@ -9,6 +9,7 @@ import { getConfig, research } from '../api/client'
 import type { StockContext } from '../context/AppContext'
 import { normalizeInstrumentRefLocal, parseInstrumentInput, toStockContext } from '../market/instrument'
 import type { StockDiagnosisData, InstitutionRatingData, StrategySignalData } from '../types/schemas'
+import { listRowKey } from '../utils/listRowKey'
 
 const useStyles = makeStyles({
   headerRow: { display: 'flex', alignItems: 'center', gap: tokens.spacingHorizontalS },
@@ -136,8 +137,8 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
               tooltip={`${diagnosis.name}(${diagnosis.code}) 综合评估评分`} />
             <MetricTile label="有效因子" value={`${diagnosis.valid_factor_count}/${diagnosis.total_factor_count}`}
               tooltip="有效因子数量/总因子数量" />
-            {diagnosis.factors.slice(0, 3).map(f => (
-              <MetricTile key={f.name} label={f.name}
+            {diagnosis.factors.slice(0, 3).map((f, index) => (
+              <MetricTile key={listRowKey(index, f.name)} label={f.name}
                 value={f.value != null ? f.value.toFixed(f.category === 'valuation' || f.category === 'momentum' ? 2 : 1) : 'N/A'}
                 tooltip={`${f.name} (${catLabels[f.category] || f.category})`} />
             ))}
@@ -163,8 +164,8 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
                         style={{ color: catColors[cat] || '#888', display: 'block', marginBottom: 4 }}>
                         {catLabels[cat] || cat} ({catFactors.length})
                       </Text>
-                      {catFactors.slice(0, 6).map(f => (
-                        <div key={f.name} className={s.factorRow}>
+                      {catFactors.slice(0, 6).map((f, index) => (
+                        <div key={listRowKey(index, cat, f.name)} className={s.factorRow}>
                           <Text className={s.factorName}>{f.name}</Text>
                           <Text className={s.factorValue}>
                             {f.value != null ? (f.value < 1 && f.value > -1 ? f.value.toFixed(3) : f.value.toFixed(2)) : '-'}
@@ -173,7 +174,7 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
                             <ProgressBar
                               value={f.value != null ? Math.max(0, Math.min(1, (f.value + 100) / 200)) : 0.5}
                               color={f.value != null && f.value >= 0 ? 'success' : 'error'}
-                              thickness="small"
+                              thickness="medium"
                             />
                           </div>
                         </div>
@@ -194,13 +195,12 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
                   <MetricTile label="一致率" value={`${(ratings.agreement_rate * 100).toFixed(0)}%`} />
                   <MetricTile label="看多/看空" value={`${ratings.bullish_count}/${ratings.bearish_count}`} />
                 </div>
-                {ratings.ratings.slice(0, 15).map(r => (
-                  <div key={r.institution_short} className={s.ratingRow}>
+                {ratings.ratings.slice(0, 15).map((r, index) => (
+                  <div key={listRowKey(index, r.institution_short)} className={s.ratingRow}>
                     <Text style={{ width: 100 }}>{r.institution_short}</Text>
                     <Badge
                       color={r.rating === 'buy' || r.rating === 'strong_buy' ? 'success' :
                              r.rating === 'sell' || r.rating === 'strong_sell' ? 'danger' : 'warning'}
-                      size="small"
                     >
                       {r.rating_cn}
                     </Badge>
@@ -208,8 +208,8 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
                     <div style={{ flex: 1 }}>
                       <ProgressBar
                         value={r.confidence / 10}
-                        thickness="small"
-                        color={r.confidence >= 7 ? 'success' : r.confidence >= 5 ? 'warning' : 'danger'}
+                        thickness="medium"
+                        color={r.confidence >= 7 ? 'success' : r.confidence >= 5 ? 'warning' : 'error'}
                       />
                     </div>
                     <Text style={{ width: 60, fontSize: 10, color: '#888' }}>
@@ -227,16 +227,16 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
                 <Text size={200} style={{ display: 'block', marginBottom: 8 }}>
                   综合: {signals.summary}  ({signals.bullish_count}多/{signals.bearish_count}空/{signals.neutral_count}中)
                 </Text>
-                {signals.signals.map(sig => (
-                  <div key={sig.name} className={s.dimRow}>
+                {signals.signals.map((sig, index) => (
+                  <div key={listRowKey(index, sig.name)} className={s.dimRow}>
                     <Text style={{ width: 80 }}>{sig.name}</Text>
-                    <Badge size="small"
+                    <Badge
                       color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'danger' : 'warning'}>
                       {sig.direction}
                     </Badge>
                     <div style={{ flex: 1 }}>
-                      <ProgressBar value={sig.confidence} thickness="small" 
-                        color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'danger' : 'warning'} />
+                      <ProgressBar value={sig.confidence} thickness="medium" 
+                        color={sig.direction === '看多' ? 'success' : sig.direction === '看空' ? 'error' : 'warning'} />
                     </div>
                     <Text style={{ width: 40, textAlign: 'right', fontSize: 11 }}>
                       {sig.confidence.toFixed(2)}

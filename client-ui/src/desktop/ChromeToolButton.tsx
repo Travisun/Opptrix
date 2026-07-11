@@ -5,7 +5,8 @@ import { ghostInteractive } from '../theme/mixins'
 import { DESKTOP_TOOL_ICON_PADDING, DESKTOP_TOOL_SIZE } from './constants'
 
 const useStyles = makeStyles({
-  btn: {
+  btn: {...ghostInteractive,
+
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
@@ -13,8 +14,7 @@ const useStyles = makeStyles({
     height: `${DESKTOP_TOOL_SIZE}px`,
     minWidth: `${DESKTOP_TOOL_SIZE}px`,
     boxSizing: 'border-box',
-    ...ghostInteractive,
-    borderRadius: opptrixTokens.radiusSm,
+borderRadius: opptrixTokens.radiusSm,
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     WebkitAppRegion: 'no-drag',

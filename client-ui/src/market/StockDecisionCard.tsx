@@ -26,6 +26,7 @@ import {
 import { useStockDecisionCard } from './useStockDecisionCard'
 import { resolveWatchlistInstrument } from './instrument'
 import { useStockAnalysis, type AnalysisStep } from './useStockAnalysis'
+import { listRowKey } from '../utils/listRowKey'
 
 const useStyles = makeStyles({
   panel: {
@@ -546,8 +547,8 @@ export default function StockDecisionCard({
       {contextMetrics.length > 0 && (
         <Section title="持仓 · 筹码 · 资金">
           <div className={s.metricGrid3}>
-            {contextMetrics.map(item => (
-              <Metric key={item.label} label={item.label} value={item.value} tone={item.tone} />
+            {contextMetrics.map((item, index) => (
+              <Metric key={listRowKey(index, item.label)} label={item.label} value={item.value} tone={item.tone} />
             ))}
           </div>
         </Section>
@@ -556,8 +557,8 @@ export default function StockDecisionCard({
       <Section title="看好理由">
         {vm.thesis.length > 0 ? (
           <div className={s.bulletList}>
-            {vm.thesis.map(item => (
-              <div key={item} className={mergeClasses(s.bullet, s.bulletPositive)}>{item}</div>
+            {vm.thesis.map((item, index) => (
+              <div key={listRowKey(index, item)} className={mergeClasses(s.bullet, s.bulletPositive)}>{item}</div>
             ))}
           </div>
         ) : (
@@ -568,8 +569,8 @@ export default function StockDecisionCard({
       <Section title="需要注意">
         {vm.risks.length > 0 ? (
           <div className={s.bulletList}>
-            {vm.risks.map(item => (
-              <div key={item} className={mergeClasses(s.bullet, s.bulletRisk)}>{item}</div>
+            {vm.risks.map((item, index) => (
+              <div key={listRowKey(index, item)} className={mergeClasses(s.bullet, s.bulletRisk)}>{item}</div>
             ))}
           </div>
         ) : (
@@ -580,10 +581,10 @@ export default function StockDecisionCard({
       {strategy?.signals?.length ? (
         <Section title="各策略看法">
           <div className={s.bulletList}>
-            {strategy.signals.slice(0, 6).map(sig => {
+            {strategy.signals.slice(0, 6).map((sig, index) => {
               const dirTone = signalDirectionTone(sig.direction)
               return (
-                <div key={sig.name} className={s.signalRow}>
+                <div key={listRowKey(index, sig.name)} className={s.signalRow}>
                   <span className={s.signalName} title={sig.name}>{sig.name}</span>
                   <span className={mergeClasses(s.signalDir, toneClass(s, dirTone))}>{sig.direction}</span>
                   <span className={s.signalConf}>{Math.round(sig.confidence * 100)}%</span>

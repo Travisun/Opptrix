@@ -23,6 +23,7 @@ interface AppContextValue {
   agentOpen: boolean
   setAgentOpen: (open: boolean) => void
   agentPrefill: string
+  setAgentPrefill: (prefill: string) => void
   openAgent: (prefill?: string) => void
 }
 
@@ -44,7 +45,7 @@ export function AppProvider({ children }: { children: ReactNode }) {
       globalStock, setGlobalStock,
       pageContext, setPageContext,
       agentOpen, setAgentOpen,
-      agentPrefill, openAgent,
+      agentPrefill, setAgentPrefill, openAgent,
     }}>
       {children}
     </AppContext.Provider>

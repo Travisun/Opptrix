@@ -5,8 +5,8 @@ import {
   useRef,
   useState,
   type CSSProperties,
-  type KeyboardEvent,
-  type MouseEvent,
+  type KeyboardEvent as ReactKeyboardEvent,
+  type MouseEvent as ReactMouseEvent,
 } from 'react'
 import { createPortal } from 'react-dom'
 import { Input, mergeClasses } from '@fluentui/react-components'
@@ -224,7 +224,7 @@ export default function ChatSessionTitleTools({
     setRenameDraft(title)
   }, [title])
 
-  const handleRenameKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       void commitRename()
@@ -244,7 +244,7 @@ export default function ChatSessionTitleTools({
     })
   }
 
-  const handleTitleMouseDown = (e: MouseEvent<HTMLButtonElement>) => {
+  const handleTitleMouseDown = (e: ReactMouseEvent<HTMLElement>) => {
     if (disabled || renaming || !canUseTools) return
     e.stopPropagation()
   }
@@ -280,7 +280,7 @@ export default function ChatSessionTitleTools({
     }
   }
 
-  const handleCreateFolderKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
+  const handleCreateFolderKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       void handleCreateFolderConfirm()

@@ -62,9 +62,8 @@ const useStyles = makeStyles({
   input: {
     width: '100%',
   },
-  calendarBtn: {
-    ...ghostInteractive,
-    display: 'inline-flex',
+  calendarBtn: {...ghostInteractive,
+display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     border: 'none',
@@ -89,9 +88,8 @@ const useStyles = makeStyles({
     gap: '4px',
     marginBottom: '6px',
   },
-  navBtn: {
-    ...ghostInteractive,
-    display: 'inline-flex',
+  navBtn: {...ghostInteractive,
+display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     width: '24px',
@@ -130,9 +128,8 @@ const useStyles = makeStyles({
     gridTemplateColumns: 'repeat(7, 1fr)',
     gap: '2px',
   },
-  dayCell: {
-    ...ghostInteractive,
-    border: 'none',
+  dayCell: {...ghostInteractive,
+border: 'none',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'transparent',
     color: opptrixCssVars.textPrimary,
@@ -174,9 +171,8 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
     marginTop: '6px',
   },
-  todayBtn: {
-    ...ghostInteractive,
-    border: 'none',
+  todayBtn: {...ghostInteractive,
+border: 'none',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: 'rgba(29, 29, 31, 0.06)',
     color: opptrixCssVars.textSecondary,
@@ -290,7 +286,6 @@ export default function TradeDateField({
       >
         <OpptrixPopoverPanel
           className={s.surface}
-          anchor={anchorRef.current ?? undefined}
         >
           <div className={s.header}>
             <button type="button" className={s.navBtn} aria-label="上一月" onClick={() => goMonth(-1)}>

@@ -60,7 +60,8 @@ const useStyles = makeStyles({
     gap: '2px',
     minHeight: '88px',
   },
-  resultItem: {
+  resultItem: {...ghostInteractive,
+
     width: '100%',
     border: 'none',
     background: 'transparent',
@@ -74,8 +75,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     textAlign: 'left',
     boxSizing: 'border-box',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
   },
@@ -101,7 +101,8 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -113,17 +114,15 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     color: opptrixCssVars.textPrimary,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
   },
-  rowActive: {
-    ...sidebarItemSelected,
-    ':hover': {
+  rowActive: {...sidebarItemSelected,
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
@@ -276,14 +275,14 @@ const useStyles = makeStyles({
     gap: '8px',
     flexShrink: 0,
   },
-  iconBtn: {
+  iconBtn: {...ghostInteractive,
+
     border: 'none',
     background: 'transparent',
     color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     padding: '2px',
     lineHeight: 0,
-    ...ghostInteractive,
   },
 })
 

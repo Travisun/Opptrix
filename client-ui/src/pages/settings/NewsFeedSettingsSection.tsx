@@ -273,6 +273,26 @@ const useStyles = makeStyles({
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 
+const DEFAULT_TRANSLATION: NewsSettings['translation'] = {
+  service_mode: 'remote',
+  offline_model: '__auto__',
+  remote_provider_id: null,
+  remote_model: null,
+}
+
+const DEFAULT_ENRICHMENT: NewsSettings['enrichment'] = {
+  enabled: false,
+  processing_mode: 'on_demand',
+  extract_images: true,
+  extract_audio: true,
+  extract_video: true,
+  service_mode: 'remote',
+  offline_vision_model: '__auto__',
+  offline_whisper_model: 'tiny',
+  remote_provider_id: null,
+  remote_model: null,
+}
+
 export default function NewsFeedSettingsSection() {
   const s = useStyles()
   const toast = useSettingsToast()
@@ -282,6 +302,8 @@ export default function NewsFeedSettingsSection() {
     refresh_interval_min: 15,
     retention_years: 3,
     max_articles: null,
+    translation: DEFAULT_TRANSLATION,
+    enrichment: DEFAULT_ENRICHMENT,
   })
   const [subs, setSubs] = useState<FeedSubscription[]>([])
   const [groups, setGroups] = useState<FeedGroup[]>([])
@@ -693,7 +715,7 @@ export default function NewsFeedSettingsSection() {
                       </span>
                     </button>
                     {expandedSubIds[sub.id] && (
-                      <Text className={s.urlFull} block selectable>
+                      <Text className={s.urlFull} block>
                         {sub.url}
                       </Text>
                     )}
@@ -859,7 +881,7 @@ export default function NewsFeedSettingsSection() {
                 }}
               >
                 {REFRESH_INTERVAL_OPTIONS.map(min => (
-                  <OpptrixOption key={min} value={String(min)}>{min} 分钟</OpptrixOption>
+                  <OpptrixOption key={min} value={String(min)} text={`${min} 分钟`}>{min} 分钟</OpptrixOption>
                 ))}
               </OpptrixSelect>
             )}

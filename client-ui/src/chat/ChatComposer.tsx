@@ -16,6 +16,7 @@ import type { WatchlistItem } from '../types/market'
 import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
+import { listRowKey } from '../utils/listRowKey'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
@@ -99,9 +100,8 @@ const useStyles = makeStyles({
       ')',
     ].join(' '),
   },
-  panel: {
-    ...interactiveTransition,
-    position: 'relative',
+  panel: {...interactiveTransition,
+position: 'relative',
     zIndex: 1,
     display: 'flex',
     flexDirection: 'column',
@@ -199,9 +199,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     flexShrink: 0,
   },
-  sendBtn: {
-    ...primaryInteractive,
-    borderRadius: opptrixTokens.radiusFull,
+  sendBtn: {...primaryInteractive,
+borderRadius: opptrixTokens.radiusFull,
     minWidth: '28px',
     width: '28px',
     height: '28px',
@@ -417,9 +416,9 @@ export default function ChatComposer({
         <div key={`starters-${welcomeKey}`} className={s.startersSection}>
           <Text className={s.startersLabel}>你可以这样问</Text>
           <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
-            {starters.map(st => (
+            {starters.map((st, index) => (
               <OpptrixButton
-                key={st}
+                key={listRowKey(index, st)}
                 className={s.starterChip}
                 variant="pill"
                 size="small"

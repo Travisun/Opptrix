@@ -9,6 +9,7 @@ import { research, portfolioTrade } from '../api/client'
 import type {
   PortfolioAnalysisData, PortfolioLedgerData, PortfolioSummaryData,
 } from '../types/schemas'
+import { listRowKey } from '../utils/listRowKey'
 
 interface Holding { code: string; name: string; weight: number }
 
@@ -131,16 +132,16 @@ export default function Portfolio() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
                 <div style={{ backgroundColor: 'var(--colorNeutralBackground2)', padding: 8 }}>
                   <Text size={200} weight="bold">行业分布</Text>
-                  {Object.entries(data.industry_exposure).map(([ind, w]) => (
-                    <div key={ind} style={{ fontSize: 11, padding: '2px 0' }}>
+                  {Object.entries(data.industry_exposure).map(([ind, w], index) => (
+                    <div key={listRowKey(index, ind)} style={{ fontSize: 11, padding: '2px 0' }}>
                       {ind}: {(w * 100).toFixed(0)}%
                     </div>
                   ))}
                 </div>
                 <div style={{ backgroundColor: 'var(--colorNeutralBackground2)', padding: 8 }}>
                   <Text size={200} weight="bold">因子暴露</Text>
-                  {data.factor_exposures.map(fe => (
-                    <div key={fe.factor} style={{ fontSize: 11, padding: '2px 0' }}>
+                  {data.factor_exposures.map((fe, index) => (
+                    <div key={listRowKey(index, fe.factor)} style={{ fontSize: 11, padding: '2px 0' }}>
                       {fe.factor}: {fe.active?.toFixed(2) ?? '-'}
                     </div>
                   ))}

@@ -17,6 +17,7 @@ import OpptrixTextarea from '../../components/opptrix/OpptrixTextarea'
 import { factorLabel } from '../../market/factorLabels'
 import type { CustomDiscoverStrategy, DiscoverStrategyDetail } from '../../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import { listRowKey } from '../../utils/listRowKey'
 
 export type StrategyDraft = {
   name: string
@@ -160,8 +161,8 @@ function BuiltinViewBody({ detail }: { detail: DiscoverStrategyDetail }) {
       <StrategyViewField label="执行说明">{detail.description}</StrategyViewField>
       <StrategyViewField label="参考因子（执行时由 AI 解析）">
         <div className={s.conditions}>
-          {detail.conditions.map(c => (
-            <div key={`${c.factor}-${c.op}-${c.value}`} className={s.conditionRow}>
+          {detail.conditions.map((c, index) => (
+            <div key={listRowKey(index, c.factor, c.op, c.value)} className={s.conditionRow}>
               {`${factorLabel(c.factor) ?? c.factor} ${c.op} ${c.value}`}
             </div>
           ))}

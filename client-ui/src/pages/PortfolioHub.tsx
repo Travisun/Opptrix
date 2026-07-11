@@ -31,8 +31,8 @@ export default function PortfolioHub(props: Props) {
         <Tab value="screening">智能选股</Tab>
         <Tab value="portfolio">组合 · 账本</Tab>
       </TabList>
-      {tab === 'screening' && <Screening {...props} />}
-      {tab === 'portfolio' && <Portfolio {...props} />}
+      {tab === 'screening' && <Screening navigate={props.navigate} setGlobalStock={props.setGlobalStock} />}
+      {tab === 'portfolio' && <Portfolio />}
     </PageShell>
   )
 }

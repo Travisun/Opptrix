@@ -1,24 +1,22 @@
-import { Button, type ButtonProps, mergeClasses, makeStyles } from '@fluentui/react-components'
+import { Button, mergeClasses, makeStyles } from '@fluentui/react-components'
+import type { ComponentProps } from 'react'
 import {
   ghostInteractive, primaryInteractive, secondaryInteractive, focusVisibleRing, motion,
 } from '../../theme/mixins'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 
 const useStyles = makeStyles({
-  primary: {
-    ...primaryInteractive,
-    borderRadius: opptrixTokens.radiusMd,
+  primary: {...primaryInteractive,
+borderRadius: opptrixTokens.radiusMd,
     fontWeight: 600,
     fontSize: '14px',
   },
-  secondary: {
-    ...secondaryInteractive,
-    fontWeight: 500,
+  secondary: {...secondaryInteractive,
+fontWeight: 500,
     fontSize: '14px',
   },
-  ghost: {
-    ...ghostInteractive,
-    color: opptrixCssVars.textSecondary,
+  ghost: {...ghostInteractive,
+color: opptrixCssVars.textSecondary,
     fontWeight: 500,
     fontSize: '14px',
     ':hover': {
@@ -38,16 +36,15 @@ const useStyles = makeStyles({
     ':hover': {
       backgroundColor: opptrixCssVars.canvasAlt,
       color: opptrixCssVars.textPrimary,
-      borderColor: opptrixCssVars.separatorStrong,
+      border: `1px solid ${opptrixCssVars.separatorStrong}`,
     },
     ':active': {
       opacity: opptrixTokens.activeOpacity,
     },
     ...focusVisibleRing,
   },
-  iconBtn: {
-    ...ghostInteractive,
-    minWidth: '32px',
+  iconBtn: {...ghostInteractive,
+minWidth: '32px',
     height: '32px',
     borderRadius: opptrixTokens.radiusSm,
     color: opptrixCssVars.textTertiary,
@@ -60,7 +57,7 @@ const useStyles = makeStyles({
 
 type Variant = 'primary' | 'secondary' | 'ghost' | 'pill' | 'icon'
 
-interface Props extends ButtonProps {
+type Props = ComponentProps<typeof Button> & {
   variant?: Variant
 }
 

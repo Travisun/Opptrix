@@ -139,7 +139,8 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '2px',
   },
-  item: {
+  item: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -147,13 +148,12 @@ const useStyles = makeStyles({
     minHeight: '30px',
     borderRadius: opptrixTokens.radiusMd,
     color: opptrixCssVars.textPrimary,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
     },
   },
-  itemActive: {
-    ...sidebarItemSelected,
+  itemActive: {...sidebarItemSelected,
+
   },
   itemTitle: {
     flex: 1,

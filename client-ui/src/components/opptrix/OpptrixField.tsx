@@ -17,9 +17,8 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
-  control: {
-    ...inputShellInteractive,
-    minHeight: '44px',
+  control: {...inputShellInteractive,
+minHeight: '44px',
     padding: '0 14px',
     display: 'flex',
     alignItems: 'center',

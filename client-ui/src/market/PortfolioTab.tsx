@@ -6,8 +6,8 @@ import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
-import { instrumentKey, parseInstrumentInput } from './instrument'
-import { marketDisplayName } from './instrument'
+import { instrumentKey, marketDisplayName, parseInstrumentInput } from './instrument'
+import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
@@ -34,7 +34,7 @@ const useStyles = makeStyles({
   metric: {
     padding: '5px 8px',
     borderRadius: opptrixTokens.radiusMd,
-    backgroundColor: opptrixCssVars.surfaceSubtle,
+    backgroundColor: opptrixCssVars.surfaceMuted,
     display: 'flex',
     flexDirection: 'column',
     gap: '1px',
@@ -69,7 +69,8 @@ const useStyles = makeStyles({
     alignItems: 'center',
     paddingBottom: '10px',
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
@@ -81,17 +82,15 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     color: opptrixCssVars.textPrimary,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
   },
-  rowActive: {
-    ...sidebarItemSelected,
-    ':hover': {
+  rowActive: {...sidebarItemSelected,
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-within': {
@@ -279,7 +278,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
         ) : (
           holdings.map((h) => {
             const displayCode = portfolioHoldingsKey(h.code, h.market)
-            const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market) : null
+            const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market as Market) : null
             const selected = selectedCode != null && (
               h.code === selectedCode
               || portfolioHoldingsKey(selectedCode, h.market) === displayCode

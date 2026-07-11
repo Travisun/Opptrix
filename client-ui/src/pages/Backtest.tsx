@@ -4,6 +4,7 @@ import { BeakerRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
 import { research } from '../api/client'
 import type { BacktestResultData } from '../types/schemas'
+import { listRowKey } from '../utils/listRowKey'
 
 export default function Backtest() {
   const [codes, setCodes] = useState('600519,000858')
@@ -40,17 +41,17 @@ export default function Backtest() {
           </div>
           <div style={{ backgroundColor: 'var(--colorNeutralBackground2)', padding: '8px' }}>
             <Text size={200} weight="bold">因子IC表现</Text>
-            {data.factor_ics.slice(0, 10).map(f => (
-              <div key={f.factor_name} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0', fontSize: 11 }}>
+            {data.factor_ics.slice(0, 10).map((f, index) => (
+              <div key={listRowKey(index, f.factor_name)} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '2px 0', fontSize: 11 }}>
                 <Text style={{ width: 120 }}>{f.factor_name}</Text>
                 <Text style={{ width: 60, color: (f.mean_ic || 0) > 0 ? '#4caf50' : '#f44336' }}>
                   IC={f.mean_ic?.toFixed(3) ?? '-'}
                 </Text>
                 <ProgressBar
                   value={Math.max(0, Math.min(1, ((f.mean_ic || 0) + 0.1) / 0.2))}
-                  thickness="small" style={{ flex: 1, maxWidth: 150 }}
-                  color={(f.mean_ic || 0) > 0 ? 'success' : 'danger'} />
-                <Badge size="small">{(f.hit_rate || 0) > 0 ? `${(f.hit_rate! * 100).toFixed(0)}%` : '-'}</Badge>
+                  thickness="medium" style={{ flex: 1, maxWidth: 150 }}
+                  color={(f.mean_ic || 0) > 0 ? 'success' : 'error'} />
+                <Badge>{(f.hit_rate || 0) > 0 ? `${(f.hit_rate! * 100).toFixed(0)}%` : '-'}</Badge>
               </div>
             ))}
           </div>

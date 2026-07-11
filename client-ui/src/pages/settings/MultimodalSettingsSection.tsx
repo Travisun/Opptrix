@@ -157,7 +157,8 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
     padding: '8px 2px 0',
   },
-  panelFooterDir: {
+  panelFooterDir: {...ghostInteractive,
+
     display: 'block',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     fontSize: '11px',
@@ -170,7 +171,6 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     textAlign: 'left',
     textDecoration: 'underline',
-    ...ghostInteractive,
   },
 })
 

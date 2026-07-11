@@ -33,12 +33,12 @@ const useStyles = makeStyles({
     ...focusVisibleRing,
     ':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
-      borderColor: opptrixCssVars.separatorStrong,
+      border: `1px solid ${opptrixCssVars.separatorStrong}`,
     },
   },
   triggerOpen: {
     backgroundColor: opptrixCssVars.canvas,
-    borderColor: opptrixCssVars.borderStrong,
+    border: `1px solid ${opptrixCssVars.borderStrong}`,
   },
   triggerMain: {
     flex: 1,
@@ -97,7 +97,8 @@ const useStyles = makeStyles({
     width: '100%',
     zIndex: 30,
   },
-  menuItem: {
+  menuItem: {...ghostInteractive,
+
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
@@ -110,8 +111,7 @@ const useStyles = makeStyles({
     width: '100%',
     transitionProperty: 'background-color',
     transitionDuration: motion.fast,
-    ...ghostInteractive,
-    ':hover': {
+':hover': {
       backgroundColor: opptrixCssVars.accentSoft,
     },
     ':focus-visible': {

@@ -27,7 +27,8 @@ const useStyles = makeStyles({
     letterSpacing: '0.03em',
     padding: '8px 8px 3px',
   },
-  sectionHeadButton: {
+  sectionHeadButton: {...ghostInteractive,
+
     display: 'flex',
     alignItems: 'center',
     gap: '4px',
@@ -39,7 +40,6 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     textAlign: 'left',
     borderRadius: opptrixTokens.radiusSm,
-    ...ghostInteractive,
   },
   sectionHeadLabel: {
     flex: 1,
@@ -57,7 +57,8 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     opacity: 0.75,
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'flex',
     flexDirection: 'column',
     gap: '3px',
@@ -65,8 +66,7 @@ const useStyles = makeStyles({
     minHeight: '28px',
     borderRadius: opptrixTokens.radiusSm,
     cursor: 'pointer',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowCompact: {
     padding: '6px 8px',

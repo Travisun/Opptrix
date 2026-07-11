@@ -60,7 +60,9 @@ function volumeColor(change: number | null | undefined, scheme: ColorScheme): st
 }
 
 function timeKey(time: Time): string {
-  return typeof time === 'number' ? String(time) : time
+  if (typeof time === 'number') return String(time)
+  if (typeof time === 'string') return time
+  return `${time.year}-${String(time.month).padStart(2, '0')}-${String(time.day).padStart(2, '0')}`
 }
 
 function dedupeByTime<T extends { time: Time }>(rows: T[]): T[] {

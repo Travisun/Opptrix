@@ -31,8 +31,8 @@ export default function MarketInsight(props: Props) {
         <Tab value="market">市场日报</Tab>
         <Tab value="industry">产业透视</Tab>
       </TabList>
-      {tab === 'market' && <MarketReport {...props} />}
-      {tab === 'industry' && <IndustryMining {...props} />}
+      {tab === 'market' && <MarketReport />}
+      {tab === 'industry' && <IndustryMining />}
     </PageShell>
   )
 }

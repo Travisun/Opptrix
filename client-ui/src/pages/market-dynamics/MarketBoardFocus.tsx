@@ -63,7 +63,8 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflowY: 'auto',
   },
-  row: {
+  row: {...ghostInteractive,
+
     display: 'grid',
     gridTemplateColumns: 'minmax(0, 1fr) auto',
     gap: '4px',
@@ -71,8 +72,7 @@ const useStyles = makeStyles({
     padding: '4px 6px',
     minHeight: '24px',
     borderRadius: '6px',
-    ...ghostInteractive,
-    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
+':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowWide: {
     gridTemplateColumns: 'minmax(0, 1fr) auto auto',
