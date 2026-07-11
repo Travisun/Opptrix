@@ -815,12 +815,12 @@ export default function ChatApp() {
       if (streamGen !== chatStreamGenRef.current) {
         chatAbortRef.current = null
         stoppingRef.current = false
-        return
+      } else {
+        chatAbortRef.current = null
+        stoppingRef.current = false
+        streamUiRef.current?.resetStreamUi()
+        setLoading(false)
       }
-      chatAbortRef.current = null
-      stoppingRef.current = false
-      streamUiRef.current?.resetStreamUi()
-      setLoading(false)
     }
   }
 

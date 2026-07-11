@@ -58,7 +58,7 @@ export function useArticleEnrichment(article: FeedArticle | null) {
     }).catch(() => {})
 
     return clearPoll
-  }, [article?.id, clearPoll, loadEnrichment])
+  }, [article, clearPoll, loadEnrichment])
 
   const pollJob = useCallback((jobId: string, articleId: string) => {
     clearPoll()

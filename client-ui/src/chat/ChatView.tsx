@@ -18,6 +18,7 @@ import { useMessageSelection, type MessageSelectionAnchor } from '../hooks/useMe
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { isElectron } from '../platform/detect'
+import { listRowKey } from '../utils/listRowKey'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   PanelRightExpandRegular,
@@ -607,7 +608,7 @@ function ChatView({
             >
               {isEmpty && (
                 <div
-                  key={`welcome-${welcomeEpoch}`}
+                  key={welcomeEpoch}
                   className={mergeClasses(s.welcomeBanner, isMobile && s.welcomeBannerMobile)}
                 >
                   <div className={mergeClasses(s.welcomeBrand, s.welcomeEnter)} aria-hidden>
@@ -632,7 +633,7 @@ function ChatView({
 
               {messages.map((m, i) => (
                 <ChatMessageItem
-                  key={`${m.at}-${i}`}
+                  key={listRowKey(i, m.at, m.role)}
                   message={m}
                   index={i}
                   isMobile={isMobile}

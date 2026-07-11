@@ -439,7 +439,7 @@ export default function TradingViewChart({ code, instrument, expanded = false, a
         setRefreshing(false)
       }
     }
-  }, [code, instrumentRef, cnEquityChart, crossMarketChart, canChart])
+  }, [instrumentRef, cnEquityChart, canChart])
 
   const handleNeedHistory = useCallback(() => {
     const now = Date.now()

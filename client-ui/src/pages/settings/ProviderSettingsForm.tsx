@@ -105,7 +105,7 @@ export function ProviderSettingsForm({
   useEffect(() => {
     setDraft({ ...provider.values })
     setSecrets(readSecretValues(provider))
-  }, [provider.providerId, provider.updatedAt])
+  }, [provider])
 
   const extraStorageFields = useMemo(
     () => provider.settingsFields.filter(isExtraStorageField),

@@ -4,6 +4,7 @@ import { formatCompactNumber, formatPct, pctTone } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import { opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
+import { listRowKey } from '../../utils/listRowKey'
 
 const CONTENT_PAD = '8px'
 
@@ -114,8 +115,8 @@ export default function MarketDragonTigerList({ items }: Props) {
 
   return (
     <div className={s.list}>
-      {items.map(item => (
-        <div key={`${item.date}-${item.code}`} className={s.row}>
+      {items.map((item, index) => (
+        <div key={listRowKey(index, item.date, item.code)} className={s.row}>
           <div className={s.rowBody}>
             <span className={s.rowTitle}>{item.name}</span>
             <span className={s.rowMeta}>

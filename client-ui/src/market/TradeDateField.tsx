@@ -9,6 +9,7 @@ import { CalendarRegular, ChevronLeftRegular, ChevronRightRegular } from '@fluen
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import { OpptrixPopoverPanel } from '../components/opptrix/OpptrixDropdownPanel'
+import { listRowKey } from '../utils/listRowKey'
 
 const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'] as const
 
@@ -304,14 +305,14 @@ export default function TradeDateField({
           <div className={s.dayGrid}>
             {monthCells.map((cell, idx) => {
               if (!cell) {
-                return <span key={`empty-${idx}`} className={mergeClasses(s.dayCell, s.dayCellMuted)} aria-hidden />
+                return <span key={listRowKey(idx, 'empty')} className={mergeClasses(s.dayCell, s.dayCellMuted)} aria-hidden />
               }
               const disabled = startOfDay(cell.date) > today
               const selected = parsed ? isSameDay(cell.date, parsed) : false
               const isToday = isSameDay(cell.date, today)
               return (
                 <button
-                  key={cell.day}
+                  key={listRowKey(idx, cell.day)}
                   type="button"
                   disabled={disabled}
                   className={mergeClasses(

@@ -25,6 +25,7 @@ import {
   type SettingsSearchEntry,
 } from './settingsSearchIndex'
 import type { SettingsSection } from './settingsTypes'
+import { listRowKey } from '../../utils/listRowKey'
 
 export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
@@ -275,9 +276,9 @@ export default function SettingsSidebar({
           <div className={s.searchEmpty}>没有匹配的设置项</div>
         )}
 
-        {searchActive && searchHits.map(hit => (
+        {searchActive && searchHits.map((hit, index) => (
           <button
-            key={`${hit.section}-${hit.group ?? ''}-${hit.title}`}
+            key={listRowKey(index, hit.section, hit.group, hit.title)}
             type="button"
             className={mergeClasses(s.searchHit, 'opptrix-focusable')}
             onClick={() => pickSearchHit(hit)}

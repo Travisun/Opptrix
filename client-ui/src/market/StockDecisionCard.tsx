@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowClockwiseRegular, ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
@@ -422,7 +422,8 @@ export default function StockDecisionCard({
 }: Props) {
   const s = useStyles()
   const [stepsExpanded, setStepsExpanded] = useState(false)
-  const analysis = useStockAnalysis(stock.code, resolveWatchlistInstrument(stock))
+  const instrumentRef = useMemo(() => resolveWatchlistInstrument(stock), [stock])
+  const analysis = useStockAnalysis(stock.code, instrumentRef)
   const { data } = useStockDecisionCard(stock, analysis.raw, holding, price, moneyFlow, quotePe, quotePb)
 
   const handleDiscuss = (topic: DiscussTopic) => {

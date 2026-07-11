@@ -28,9 +28,10 @@ export function useMarketDynamics() {
       if (!mountedRef.current) return
       setError(e instanceof Error ? e.message : '加载失败，请检查网络后重试')
     } finally {
-      if (!mountedRef.current) return
-      setLoading(false)
-      setRefreshing(false)
+      if (mountedRef.current) {
+        setLoading(false)
+        setRefreshing(false)
+      }
     }
   }, [])
 

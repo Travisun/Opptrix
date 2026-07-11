@@ -45,6 +45,7 @@ import { hasApplicationCapability } from './capabilities'
 import TradingViewChart from './TradingViewChart'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
+import { listRowKey } from '../utils/listRowKey'
 
 const CONTENT_PAD = '15px'
 
@@ -471,7 +472,7 @@ function NewsPanel({ items, emptyHint }: { items: StockNewsItem[]; emptyHint: st
   return (
     <div className={s.flatList}>
       {items.map((item, index) => (
-        <div key={`${item.date}-${item.title}-${item.url ?? index}`} className={s.annRow}>
+        <div key={listRowKey(index, item.date, item.title, item.url)} className={s.annRow}>
           <span className={s.listDate}>{item.date || '—'}</span>
           {item.url ? (
             <Link
@@ -514,13 +515,13 @@ function RelatedStocksPanel({
   }
   return (
     <div className={s.flatList}>
-      {items.slice(0, 12).map(item => {
+      {items.slice(0, 12).map((item, index) => {
         const tone = pctTone(item.changePct ?? null)
         const toneClass = pctClass(s, tone)
         const label = `${item.name} (${item.code})`
         return (
           <button
-            key={`${item.market}-${item.code}`}
+            key={listRowKey(index, item.market, item.code)}
             type="button"
             className={s.peerRow}
             title={onSelectPeer ? `查看 ${label}` : label}
@@ -568,12 +569,12 @@ function TradingDistributionPanel({
         <Text className={s.muted}>大单成交占比约 {data.largeOrderPct.toFixed(1)}%</Text>
       ) : null}
       <div className={s.flatList}>
-        {levels.map(row => {
+        {levels.map((row, index) => {
           const widthPct = row.volumeRatio != null
             ? Math.max(4, (row.volumeRatio / maxRatio) * 100)
             : 4
           return (
-            <div key={`${row.price}-${row.volume}`} className={s.distRow}>
+            <div key={listRowKey(index, row.price, row.volume)} className={s.distRow}>
               <span className={s.tableCell}>{formatPrice(row.price)}</span>
               <div className={s.distBarTrack}>
                 <div className={s.distBarFill} style={{ width: `${widthPct}%` }} />
@@ -601,8 +602,8 @@ function SeniorTradesPanel({ items }: { items: SeniorTradeItem[] }) {
         <span className={s.tableHeadCell}>金额</span>
         <span className={s.tableHeadCell}>说明</span>
       </div>
-      {items.slice(0, 12).map(item => (
-        <div key={`${item.tradeDate}-${item.personName}-${item.shares}`} className={s.tableRowWide}>
+      {items.slice(0, 12).map((item, index) => (
+        <div key={listRowKey(index, item.tradeDate, item.personName, item.shares)} className={s.tableRowWide}>
           <span className={s.tableCell}>{item.tradeDate || '—'}</span>
           <span className={s.tableCellName} title={item.personName}>{item.personName}</span>
           <span className={s.tableCell}>{formatVolume(item.shares ?? null)}</span>
@@ -629,8 +630,8 @@ function RevenueBreakdownPanel({ blocks }: { blocks: RevenueBreakdownBlock[] }) 
           <span className={s.tableHeadCell}>收入</span>
           <span className={s.tableHeadCell}>占比</span>
         </div>
-        {latest.segments.map(seg => (
-          <div key={seg.label} className={s.tableRowWide}>
+        {latest.segments.map((seg, index) => (
+          <div key={listRowKey(index, seg.label)} className={s.tableRowWide}>
             <span className={s.tableCellName} title={seg.label}>{seg.label}</span>
             <span className={s.tableCell}>{seg.sales || '—'}</span>
             <span className={s.tableCell}>{seg.ratio || '—'}</span>
@@ -658,8 +659,8 @@ function DividendPanel({ items }: { items: StockDividendItem[] }) {
         <span className={s.tableHeadCell}>除权日</span>
         <span className={s.tableHeadCell}>派息日</span>
       </div>
-      {items.slice(0, 12).map(item => (
-        <div key={`${item.exDate}-${item.plan}`} className={s.tableRowWide}>
+      {items.slice(0, 12).map((item, index) => (
+        <div key={listRowKey(index, item.exDate, item.plan)} className={s.tableRowWide}>
           <span className={s.tableCellName} title={item.plan}>{item.plan || '—'}</span>
           <span className={s.tableCell}>{item.progress || '—'}</span>
           <span className={s.tableCell}>{item.recordDate || '—'}</span>
@@ -688,8 +689,8 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
         <span className={s.tableHeadCell}>占比</span>
         <span className={s.tableHeadCell}>变动</span>
       </div>
-      {top10.slice(0, 10).map(row => (
-        <div key={`${row.rank}-${row.name}`} className={s.tableRow}>
+      {top10.slice(0, 10).map((row, index) => (
+        <div key={listRowKey(index, row.rank, row.name)} className={s.tableRow}>
           <span className={s.tableCellName} title={row.name}>{row.name}</span>
           <span className={s.tableCell}>{formatCompactNumber(row.sharesHeld ?? null)}</span>
           <span className={s.tableCell}>
@@ -718,8 +719,8 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
         <span className={s.tableHeadCell}>净利</span>
         <span className={s.tableHeadCell}>负债率</span>
       </div>
-      {rows.slice(0, 12).map(row => (
-        <div key={`${row.reportDate}-${row.reportType}`} className={s.tableRowWide}>
+      {rows.slice(0, 12).map((row, index) => (
+        <div key={listRowKey(index, row.reportDate, row.reportType)} className={s.tableRowWide}>
           <span className={s.tableCell}>{row.reportDate || '—'}</span>
           <span className={s.tableCell}>{row.reportType || '—'}</span>
           <span className={s.tableCell}>{formatCompactNumber(row.revenue)}</span>
@@ -751,7 +752,7 @@ function MiniKline({
         const down = (bar.changePct ?? 0) < 0
         return (
           <div
-            key={`${bar.close}-${i}`}
+            key={listRowKey(i, bar.close)}
             className={mergeClasses(s.klineBar, down ? s.klineBarDown : undefined)}
             style={{ height: `${h}px` }}
             title={formatPriceLabel(bar.close)}

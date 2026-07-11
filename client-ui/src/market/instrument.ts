@@ -193,7 +193,7 @@ export function tryParseInstrumentInput(raw: string): InstrumentRef | null {
     return parseInstrumentInput(input)
   }
   if ((input.includes('/') || input.includes('-'))
-    && /^[A-Z0-9]+[\/\-][A-Z0-9]+$/i.test(input)) {
+    && /^[A-Z0-9]+[/-][A-Z0-9]+$/i.test(input)) {
     return parseInstrumentInput(input)
   }
   // 1-5 位纯数字等歧义场景 → null，交给搜索层

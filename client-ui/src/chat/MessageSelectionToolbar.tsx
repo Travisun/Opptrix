@@ -477,7 +477,7 @@ export default function MessageSelectionToolbar({
 
           <div ref={threadRef} className={mergeClasses(s.thread, 'opptrix-scroll')}>
             {turns.map((turn, i) => (
-              <div key={`${turn.role}-${i}`}>
+              <div key={listRowKey(i, turn.role)}>
                 {turn.role === 'user' ? (
                   <div className={s.turnUser}>{turn.content}</div>
                 ) : (

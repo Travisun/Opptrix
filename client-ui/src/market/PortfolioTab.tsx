@@ -11,6 +11,7 @@ import type { Market } from '../types/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
 import { MARKET_DOWN, MARKET_UP } from './chartTheme'
+import { listRowKey } from '../utils/listRowKey'
 
 const CONTENT_PAD = '15px'
 const ITEM_BG_INSET = '10px'
@@ -276,7 +277,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
             hint="在个股详情里录入买卖后，会在这里汇总市值与盈亏"
           />
         ) : (
-          holdings.map((h) => {
+          holdings.map((h, index) => {
             const displayCode = portfolioHoldingsKey(h.code, h.market)
             const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market as Market) : null
             const selected = selectedCode != null && (
@@ -298,7 +299,7 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
             ].filter(Boolean).join(' · ')
             return (
               <div
-                key={`${h.market ?? 'CN'}:${displayCode}`}
+                key={listRowKey(index, h.market, displayCode)}
                 className={mergeClasses(s.row, 'opptrix-focusable', selected && s.rowActive)}
                 role="button"
                 tabIndex={0}

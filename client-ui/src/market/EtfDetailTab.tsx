@@ -256,6 +256,8 @@ export default function EtfDetailTab({ stock }: Props) {
   const [scorecardLoading, setScorecardLoading] = useState(false)
   const [scorecardError, setScorecardError] = useState('')
 
+  const stockCode = stock?.code ?? null
+
   const loadScorecard = (code: string, signal?: { cancelled: boolean }) => {
     setScorecardLoading(true)
     setScorecardError('')
@@ -281,7 +283,7 @@ export default function EtfDetailTab({ stock }: Props) {
   }
 
   useEffect(() => {
-    if (!stock) {
+    if (!stockCode) {
       setSnapshot(null)
       setNavRows([])
       setHoldings([])
@@ -294,7 +296,7 @@ export default function EtfDetailTab({ stock }: Props) {
     setTab('overview')
     setLoading(true)
     setError('')
-    research.etfSnapshot(stock.code)
+    research.etfSnapshot(stockCode)
       .then(resp => {
         if (cancelled) return
         if (!resp.success || !resp.data) {
@@ -314,20 +316,20 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setLoading(false)
       })
     return () => { cancelled = true }
-  }, [stock?.code])
+  }, [stockCode])
 
   useEffect(() => {
-    if (!stock || tab !== 'decision') return undefined
+    if (!stockCode || tab !== 'decision') return undefined
     const signal = { cancelled: false }
-    loadScorecard(stock.code, signal)
+    loadScorecard(stockCode, signal)
     return () => { signal.cancelled = true }
-  }, [stock?.code, tab])
+  }, [stockCode, tab])
 
   useEffect(() => {
-    if (!stock || tab !== 'nav') return undefined
+    if (!stockCode || tab !== 'nav') return undefined
     let cancelled = false
     setNavLoading(true)
-    research.etfNav(stock.code)
+    research.etfNav(stockCode)
       .then(resp => {
         if (cancelled) return
         setNavRows(resp.data?.items ?? [])
@@ -339,13 +341,13 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setNavLoading(false)
       })
     return () => { cancelled = true }
-  }, [stock?.code, tab])
+  }, [stockCode, tab])
 
   useEffect(() => {
-    if (!stock || tab !== 'holdings') return undefined
+    if (!stockCode || tab !== 'holdings') return undefined
     let cancelled = false
     setHoldingsLoading(true)
-    research.etfHoldings(stock.code)
+    research.etfHoldings(stockCode)
       .then(resp => {
         if (cancelled) return
         setHoldings(resp.data?.items ?? [])
@@ -357,15 +359,15 @@ export default function EtfDetailTab({ stock }: Props) {
         if (!cancelled) setHoldingsLoading(false)
       })
     return () => { cancelled = true }
-  }, [stock?.code, tab])
+  }, [stockCode, tab])
 
   const profile: EtfProfileData | null = snapshot?.profile ?? null
   const quote = snapshot?.quote
   const latestNav = snapshot?.nav ?? navRows[0] ?? null
 
   const displayName = useMemo(
-    () => resolveDisplayStockName(stock?.code ?? '', profile?.name, stock?.name),
-    [stock, profile, quote],
+    () => resolveDisplayStockName(stockCode ?? '', profile?.name, stock?.name),
+    [stockCode, stock?.name, profile],
   )
 
   if (!stock) {

@@ -16,7 +16,7 @@ function missingPkg(name) {
   }
 }
 
-const deps = ['typescript', '@types/node'].filter(missingPkg)
+const deps = ['typescript', '@types/node', 'eslint', 'typescript-eslint'].filter(missingPkg)
 if (deps.length) {
   console.error(
     `\n[@opptrix] Missing dev dependencies: ${deps.join(', ')}\n` +

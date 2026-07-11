@@ -285,7 +285,7 @@ export default function ChatComposer({
     if (!draftSync) return
     setInput(draftSync.text)
     setStockRefs([])
-  }, [draftSync?.revision, draftSync?.text])
+  }, [draftSync])
   const {
     state: mentionState,
     matches: mentionMatches,
@@ -413,7 +413,7 @@ export default function ChatComposer({
   return (
     <div className={s.wrap}>
       {isEmpty && (
-        <div key={`starters-${welcomeKey}`} className={s.startersSection}>
+        <div key={welcomeKey} className={s.startersSection}>
           <Text className={s.startersLabel}>你可以这样问</Text>
           <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
             {starters.map((st, index) => (

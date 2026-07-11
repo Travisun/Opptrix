@@ -3,7 +3,7 @@ import { getConfig, research } from '../api/client'
 import type { InstitutionRatingData, LatestEvalData, StrategySignalData } from '../types/schemas'
 import type { ChipDistributionPoint } from '../types/market'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { displayCodeFromInstrument, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, parseInstrumentInput } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
 import { normalizeCode } from './format'
@@ -82,8 +82,14 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
   }, [instrumentRef])
 
   useEffect(() => {
-    reset()
-  }, [code, instrumentRef, reset])
+    abortRef.current?.abort()
+    abortRef.current = null
+    setStatus('idle')
+    setSteps(freshSteps(instrumentRef))
+    setPercent(0)
+    setRaw(null)
+    setError('')
+  }, [code, instrumentRef])
 
   const start = useCallback(async (force = false) => {
     if (!code || status === 'running') return

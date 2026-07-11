@@ -168,7 +168,7 @@ function MarketDynamicsContent({ electronChrome = false }: Props) {
   const { data, loading, refreshing, error, refreshedAt, refresh } = useMarketDynamics()
   const insights = useMarketInsights()
 
-  const sections = data?.sections ?? []
+  const sections = useMemo(() => data?.sections ?? [], [data?.sections])
   const cnIndices = useMemo(
     () => sections.find(sec => sec.id === 'cn_major')?.items ?? [],
     [sections],

@@ -1,5 +1,5 @@
 ---
-description: 改码后收尾验证 — client-ui TypeScript 与格式检查（硬性）
+description: 改码后收尾验证 — client-ui TypeScript / ESLint / React 模式检查（硬性）
 alwaysApply: true
 ---
 
@@ -7,30 +7,59 @@ alwaysApply: true
 
 凡在本仓库**完成代码修改**（实现、修 bug、重构）后，**不得**在未通过本地检查前宣告任务完成。
 
+## 统一入口（client-ui 必跑）
+
+改动 `client-ui/**` 后，**必须**执行：
+
+```bash
+npm run check:ui
+```
+
+该命令依次运行：
+
+| 步骤 | 脚本 | 能抓什么 |
+|---|---|---|
+| 类型 | `typecheck:ui` | TS 类型错误、错误 props、缺导出 |
+| ESLint | `lint:ui` | Hooks 规则、`exhaustive-deps`（不稳定依赖→无限 setState）、`react/jsx-key` |
+| 模式审查 | `audit:ui` | 内联 instrument 传 hook、`listRowKey` 缺失、effect 依赖 `reset` |
+
+三项**全部退出码 0** 才算完成。可单独跑 `npm run typecheck:ui` / `lint:ui` / `audit:ui` 定位问题。
+
 ## 何时必须跑
 
 | 改动范围 | 必跑命令 |
 |---|---|
-| `client-ui/**`（`.ts` / `.tsx` / 样式 / 主题） | `npm run typecheck:ui` |
-| 仅 `packages/**`、`apps/server/**` 且未动 client-ui | `npm run build:packages`（或对应 workspace 的 `tsc`） |
-| 同时改了 client-ui 与 packages | **先** `build:packages`，**再** `typecheck:ui` |
+| `client-ui/**` | **`npm run check:ui`** |
+| 仅 `packages/**`、`apps/server/**` 且未动 client-ui | `npm run build:packages` |
+| 同时改了 client-ui 与 packages | **先** `build:packages`，**再** `check:ui` |
 
-纯文档、`.cursor/rules`、非代码配置且确定不影响 TS 编译路径时，可跳过；**有疑虑时一律跑 `typecheck:ui`**。
+纯文档、`.cursor/rules`、非代码配置且确定不影响编译时，可跳过；**有疑虑时一律跑 `check:ui`**。
 
 ## 执行要求
 
-1. **必须本地执行**：用 Shell 跑上述命令，根据终端报错定位并修复，**循环直到退出码为 0**。
+1. **必须本地执行**：用 Shell 跑 `check:ui`，根据报错修复，**循环直到通过**。
 2. **不得**仅凭「应该没问题」、未跑命令就结束回合。
-3. 修 TS 错误时**只改与报错相关**的最小范围，不顺手做大范围格式化或无关重构。
-4. 向用户汇报完成时，简要说明已跑过哪条命令且通过（例如：`typecheck:ui` 0 错误）。
+3. 修错时**只改与报错相关**的最小范围，不顺手做大范围格式化或无关重构。
+4. 向用户汇报完成时，说明已通过 `check:ui`（或分步结果）。
 
-## 格式检查（当前）
+## 工具说明（为何需要多层）
 
-- 仓库**尚未**配置 Prettier / ESLint；**语法与类型**以 `npm run typecheck:ui` 为准。
-- **格式**：保持与周围代码一致（缩进、引号、尾逗号、import 顺序）；Griffel `makeStyles` 与现有 `mixins` 写法勿擅自统一成另一风格。
-- 若项目已添加 `format:check` / `lint` 脚本（见 `package.json`），则与 `typecheck:ui` **一并必跑**，全部通过才算完成。
+| 问题类型 | 主要工具 | 局限 |
+|---|---|---|
+| 类型 / API 契约 | TypeScript (`tsc`) | 抓不到运行时无限循环 |
+| Hooks 依赖数组 | ESLint `react-hooks/exhaustive-deps` | 需人工判断合理抑制 |
+| 列表缺 key | ESLint `react/jsx-key` | 不保证业务字段唯一 |
+| 重复 key / 不稳定 hook 参数 | `audit:ui` 定制规则 | 启发式，随坑位扩展 |
+| 运行时白屏 / 重复 key 控制台 | 开发时 React Strict Mode + 手测 | 无法全自动替代 |
+
+**无限 `setState` 循环**无法靠单一工具 100% 静态检出；`check:ui` 用 ESLint + 模式审查降低复发概率。
+
+## 格式
+
+- 仓库**未**配置 Prettier；格式保持与周围代码一致。
+- 若后续添加 `format:check`，纳入 `check:ui` 一并执行。
 
 ## 失败时
 
-- 禁止把 TS / 构建失败留到用户或 CI 才发现。
-- 单次修不完时：说明剩余错误文件与条数，并继续修到通过或明确阻塞点。
+- 禁止把失败留到用户或 CI。
+- 单次修不完：说明失败步骤、文件与条数，继续修到通过或明确阻塞点。

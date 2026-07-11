@@ -28,6 +28,7 @@ import TradingViewChart from './TradingViewChart'
 import { resolveWatchlistInstrument } from './instrument'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import StockTrendTab from './StockTrendTab'
+import { listRowKey } from '../utils/listRowKey'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
@@ -485,7 +486,7 @@ function NewsPanel({ items }: { items: StockNewsItem[] }) {
   return (
     <div className={s.flatList}>
       {items.map((item, index) => (
-        <div key={`${item.date}-${item.title}-${item.url ?? index}`} className={s.annRow}>
+        <div key={listRowKey(index, item.date, item.title, item.url)} className={s.annRow}>
           <span className={s.listDate}>{item.date || '—'}</span>
           {item.url ? (
             <Link
@@ -520,8 +521,8 @@ function DividendPanel({ items }: { items: StockDividendItem[] }) {
         <span className={s.tableHeadCell}>除权日</span>
         <span className={s.tableHeadCell}>派息日</span>
       </div>
-      {items.slice(0, 10).map(item => (
-        <div key={`${item.exDate}-${item.plan}`} className={s.tableRowWide}>
+      {items.slice(0, 10).map((item, index) => (
+        <div key={listRowKey(index, item.exDate, item.plan)} className={s.tableRowWide}>
           <span className={s.tableCellName} title={item.plan}>{item.plan || '—'}</span>
           <span className={s.tableCell}>{item.progress || '—'}</span>
           <span className={s.tableCell}>{item.recordDate || '—'}</span>
@@ -546,8 +547,8 @@ function MoneyFlowPanel({ items }: { items: StockMoneyFlowItem[] }) {
         <span className={s.tableHeadCell}>占比</span>
         <span className={s.tableHeadCell}>涨跌</span>
       </div>
-      {[...items].reverse().slice(0, 8).map(item => (
-        <div key={item.date} className={s.tableRow}>
+      {[...items].reverse().slice(0, 8).map((item, index) => (
+        <div key={listRowKey(index, item.date)} className={s.tableRow}>
           <span className={s.tableCell}>{item.date}</span>
           <span className={s.tableCell}>{formatCompactNumber(item.mainNet ?? null)}</span>
           <span className={s.tableCell}>
@@ -587,8 +588,8 @@ function ShareholderPanel({ data }: { data: StockShareholderData | null | undefi
             <span className={s.tableHeadCell}>占比</span>
             <span className={s.tableHeadCell}>变动</span>
           </div>
-          {top10.slice(0, 10).map(row => (
-            <div key={`${row.rank}-${row.name}`} className={s.tableRow}>
+          {top10.slice(0, 10).map((row, index) => (
+            <div key={listRowKey(index, row.rank, row.name)} className={s.tableRow}>
               <span className={s.tableCellName} title={row.name}>{row.name}</span>
               <span className={s.tableCell}>{formatCompactNumber(row.sharesHeld ?? null)}</span>
               <span className={s.tableCell}>
@@ -623,9 +624,9 @@ function PlateTags({ title, plates }: { title: string; plates: ProfilePlateItem[
   return (
     <MetricSection title={title}>
       <div className={s.tagRow}>
-        {plates.slice(0, 20).map(plate => (
+        {plates.slice(0, 20).map((plate, index) => (
           <span
-            key={`${title}-${plate.code ?? plate.name}`}
+            key={listRowKey(index, title, plate.code, plate.name)}
             className={mergeClasses(s.tag, plate.tag && s.tagHot)}
             title={plate.tag ? `${plate.name} · ${plate.tag}` : plate.name}
           >
@@ -667,8 +668,8 @@ function InstitutionRatingPanel({ rating }: { rating: ProfileInstitutionRating }
       )}
       {reports.length > 0 && (
         <div className={s.flatList}>
-          {reports.map(item => (
-            <div key={`${item.date}-${item.title}`} className={s.annRow}>
+          {reports.map((item, index) => (
+            <div key={listRowKey(index, item.date, item.title)} className={s.annRow}>
               <span className={s.listDate}>{item.date || '—'}</span>
               <span className={s.listTitle}>
                 {item.rating ? `[${item.rating}] ` : ''}{item.title}
@@ -695,8 +696,8 @@ function FinancialHistoryPanel({ rows }: { rows: FinancialSummaryData[] }) {
         <span className={s.tableHeadCell}>净利</span>
         <span className={s.tableHeadCell}>ROE</span>
       </div>
-      {rows.slice(0, 12).map(row => (
-        <div key={`${row.reportDate}-${row.reportType}`} className={s.tableRowWide}>
+      {rows.slice(0, 12).map((row, index) => (
+        <div key={listRowKey(index, row.reportDate, row.reportType)} className={s.tableRowWide}>
           <span className={s.tableCell}>{row.reportDate || '—'}</span>
           <span className={s.tableCell}>{row.reportType || '—'}</span>
           <span className={s.tableCell}>{formatCompactNumber(row.revenue)}</span>
@@ -944,8 +945,8 @@ export default function StockDetailTab({
             {profile?.profileMetrics?.length ? (
               <MetricSection title={`最新指标${profile.metricsReportDate ? ` · ${profile.metricsReportDate}` : ''}`}>
                 <div className={s.metricGrid3}>
-                  {profile.profileMetrics.slice(0, 9).map(item => (
-                    <Metric key={item.label} label={item.label} value={item.value} />
+                  {profile.profileMetrics.slice(0, 9).map((item, index) => (
+                    <Metric key={listRowKey(index, item.label)} label={item.label} value={item.value} />
                   ))}
                 </div>
               </MetricSection>
@@ -1012,8 +1013,8 @@ export default function StockDetailTab({
                     <span className={s.tableHeadCell}>离任日期</span>
                     <span className={s.tableHeadCell} />
                   </div>
-                  {profile.executives.slice(0, 10).map(exec => (
-                    <div key={`${exec.name}-${exec.title ?? ''}`} className={s.tableRowWide}>
+                  {profile.executives.slice(0, 10).map((exec, index) => (
+                    <div key={listRowKey(index, exec.name, exec.title, exec.startDate)} className={s.tableRowWide}>
                       <span className={s.tableCellName}>{exec.name}</span>
                       <span className={s.tableCell}>{exec.title || '—'}</span>
                       <span className={s.tableCell}>{exec.startDate || '—'}</span>
@@ -1028,9 +1029,9 @@ export default function StockDetailTab({
             {profile?.indexMembership?.length ? (
               <MetricSection title="指数成分">
                 <div className={s.tagRow}>
-                  {profile.indexMembership.map(item => (
+                  {profile.indexMembership.map((item, index) => (
                     <span
-                      key={`${item.indexCode ?? item.indexName}`}
+                      key={listRowKey(index, item.indexCode, item.indexName)}
                       className={s.tag}
                       title={item.enterDate ? `纳入 ${item.enterDate}` : item.indexName}
                     >
@@ -1065,8 +1066,8 @@ export default function StockDetailTab({
             {!profile?.conceptPlates?.length && profile?.concepts?.length ? (
               <MetricSection title="板块 · 题材">
                 <div className={s.tagRow}>
-                  {profile.concepts.slice(0, 16).map(tag => (
-                    <span key={tag} className={s.tag}>{tag}</span>
+                  {profile.concepts.slice(0, 16).map((tag, index) => (
+                    <span key={listRowKey(index, tag)} className={s.tag}>{tag}</span>
                   ))}
                 </div>
               </MetricSection>
