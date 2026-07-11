@@ -5,7 +5,7 @@ import {
   normalizeInstrumentRef,
   parseInstrumentNamespace,
 } from '@opptrix/shared'
-import { normalizeInstrumentExchange, normalizeStockCode } from './utils.js'
+import { normalizeInstrumentExchange, normalizeStockCode, nowIso } from './utils.js'
 
 /** 子表需回填 instrument_ns 的 CN 股票维度表（不含 instruments 自身） */
 export const CN_STOCK_CHILD_TABLES = [
@@ -76,6 +76,118 @@ function instrumentNsFromRow(row: {
   return instrumentRefToNs(ref)
 }
 
+type InstrumentNsRow = {
+  code: string
+  market: string
+  asset_class: string
+  exchange: string
+  extra: string | null
+  instrument_ns: string | null
+}
+
+function instrumentCompositeKey(row: Pick<InstrumentNsRow, 'market' | 'exchange' | 'code' | 'asset_class'>): string {
+  return [
+    row.market,
+    normalizeInstrumentExchange(row.exchange),
+    row.code,
+    row.asset_class,
+  ].join('\0')
+}
+
+/** 命名空间不含 asset_class 时，对同码不同类标的做本地去重后缀 */
+function assignInstrumentNsValues(rows: InstrumentNsRow[]): Map<string, string> {
+  const baseByKey = new Map<string, string>()
+  for (const row of rows) {
+    baseByKey.set(instrumentCompositeKey(row), instrumentNsFromRow(row))
+  }
+
+  const keysByBase = new Map<string, string[]>()
+  for (const [key, baseNs] of baseByKey) {
+    const group = keysByBase.get(baseNs) ?? []
+    group.push(key)
+    keysByBase.set(baseNs, group)
+  }
+
+  const assigned = new Map<string, string>()
+  for (const [baseNs, keys] of keysByBase) {
+    if (keys.length === 1) {
+      assigned.set(keys[0]!, baseNs)
+      continue
+    }
+
+    const sorted = [...keys].sort((a, b) => {
+      const assetA = a.split('\0')[3] ?? ''
+      const assetB = b.split('\0')[3] ?? ''
+      if (assetA === 'EQUITY' && assetB !== 'EQUITY') return -1
+      if (assetA !== 'EQUITY' && assetB === 'EQUITY') return 1
+      return a.localeCompare(b)
+    })
+
+    for (let i = 0; i < sorted.length; i++) {
+      const key = sorted[i]!
+      const assetClass = key.split('\0')[3] ?? ''
+      if (i === 0 && assetClass === 'EQUITY') {
+        assigned.set(key, baseNs)
+      } else {
+        assigned.set(key, `${baseNs}@${assetClass}`)
+      }
+    }
+  }
+  return assigned
+}
+
+/** stocks 行存在但 instruments 缺失时，补 CN EQUITY 行供 stock_profiles FK 锚定 */
+function ensureCnEquityInstrumentForProfile(db: Database.Database, code: string): string | null {
+  const normalized = normalizeStockCode(code)
+  const existing = db.prepare(`
+    SELECT instrument_ns
+    FROM instruments
+    WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ?
+    ORDER BY instrument_ns IS NOT NULL DESC
+    LIMIT 1
+  `).get(normalized) as { instrument_ns: string | null } | undefined
+  if (existing?.instrument_ns) return existing.instrument_ns
+
+  const stock = db.prepare(`
+    SELECT code, name, market, status
+    FROM stocks
+    WHERE code = ?
+  `).get(normalized) as {
+    code: string
+    name: string | null
+    market: string | null
+    status: string | null
+  } | undefined
+  if (!stock) return null
+
+  const exchange = normalizeInstrumentExchange(stock.market)
+  const instrumentNs = cnEquityNs(normalized, exchange)
+  db.prepare(`
+    INSERT INTO instruments (
+      code, market, asset_class, name, exchange, status, updated_at, instrument_ns
+    ) VALUES (?, 'CN', 'EQUITY', ?, ?, ?, ?, ?)
+    ON CONFLICT(market, exchange, code, asset_class) DO UPDATE SET
+      name = COALESCE(excluded.name, instruments.name),
+      status = COALESCE(excluded.status, instruments.status),
+      updated_at = excluded.updated_at,
+      instrument_ns = COALESCE(instruments.instrument_ns, excluded.instrument_ns)
+  `).run(
+    normalized,
+    stock.name ?? null,
+    exchange,
+    stock.status ?? 'active',
+    nowIso(),
+    instrumentNs,
+  )
+
+  const row = db.prepare(`
+    SELECT instrument_ns
+    FROM instruments
+    WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ? AND exchange = ?
+  `).get(normalized, exchange) as { instrument_ns: string | null } | undefined
+  return row?.instrument_ns ?? instrumentNs
+}
+
 export function hasInstrumentNsColumn(db: Database.Database): boolean {
   const cols = db.prepare('PRAGMA table_info(instruments)').all() as { name: string }[]
   return cols.some(c => c.name === 'instrument_ns')
@@ -86,8 +198,7 @@ function tableHasColumn(db: Database.Database, table: string, column: string): b
   return cols.some(c => c.name === column)
 }
 
-const INSTRUMENT_NS_INDEX_SQL = `
-CREATE UNIQUE INDEX IF NOT EXISTS idx_instruments_ns ON instruments(instrument_ns);
+const INSTRUMENT_NS_CHILD_INDEX_SQL = `
 CREATE INDEX IF NOT EXISTS idx_financials_instrument_ns ON stock_financials(instrument_ns);
 CREATE INDEX IF NOT EXISTS idx_segments_instrument_ns ON stock_business_segments(instrument_ns);
 CREATE INDEX IF NOT EXISTS idx_partners_instrument_ns ON stock_partners(instrument_ns);
@@ -106,6 +217,10 @@ CREATE INDEX IF NOT EXISTS idx_insider_trades_ns ON stock_insider_trades(instrum
 CREATE INDEX IF NOT EXISTS idx_buybacks_instrument_ns ON stock_buybacks(instrument_ns);
 `
 
+const INSTRUMENT_NS_UNIQUE_INDEX_SQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_instruments_ns ON instruments(instrument_ns);
+`
+
 /** v9 DDL — 按表幂等补列，避免整批 SQL 在首列 duplicate 时跳过后续表 */
 export function ensureInstrumentNsSchema(db: Database.Database): void {
   const tables = ['instruments', ...CN_STOCK_CHILD_TABLES] as const
@@ -118,7 +233,13 @@ export function ensureInstrumentNsSchema(db: Database.Database): void {
       db.exec(`ALTER TABLE ${table} ADD COLUMN instrument_ns TEXT`)
     }
   }
-  db.exec(INSTRUMENT_NS_INDEX_SQL)
+  db.exec(INSTRUMENT_NS_CHILD_INDEX_SQL)
+}
+
+/** 回填去重后再建 instruments(instrument_ns) 唯一索引 */
+export function ensureInstrumentNsUniqueIndex(db: Database.Database): void {
+  if (!hasInstrumentNsColumn(db)) return
+  db.exec(INSTRUMENT_NS_UNIQUE_INDEX_SQL)
 }
 
 export function isInstrumentNsSchemaComplete(db: Database.Database): boolean {
@@ -133,24 +254,19 @@ export function isInstrumentNsSchemaComplete(db: Database.Database): boolean {
   return true
 }
 
-/** 为 instruments 行计算并写入 instrument_ns（幂等） */
+/** 为 instruments 行计算并写入 instrument_ns（幂等，冲突行加 @asset_class 后缀） */
 export function backfillInstrumentsNs(db: Database.Database): number {
   if (!hasInstrumentNsColumn(db)) return 0
   const rows = db.prepare(`
     SELECT code, market, asset_class, exchange, extra, instrument_ns
     FROM instruments
-  `).all() as {
-    code: string
-    market: string
-    asset_class: string
-    exchange: string
-    extra: string | null
-    instrument_ns: string | null
-  }[]
+  `).all() as InstrumentNsRow[]
+  const assigned = assignInstrumentNsValues(rows)
   const upd = db.prepare('UPDATE instruments SET instrument_ns = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?')
   let n = 0
   for (const row of rows) {
-    const ns = instrumentNsFromRow(row)
+    const key = instrumentCompositeKey(row)
+    const ns = assigned.get(key) ?? instrumentNsFromRow(row)
     if (row.instrument_ns === ns) continue
     upd.run(ns, row.market, normalizeInstrumentExchange(row.exchange), row.code, row.asset_class)
     n++
@@ -244,7 +360,8 @@ export function migrateStockProfilesToInstrumentNs(db: Database.Database): void 
         CASE WHEN s.code IS NOT NULL AND i.exchange = COALESCE(NULLIF(TRIM(s.market), ''), i.exchange) THEN 0 ELSE 1 END
       LIMIT 1
     `).get(code) as { instrument_ns: string } | undefined
-    const instrumentNs = match?.instrument_ns ?? cnEquityNs(code, null)
+    const instrumentNs = match?.instrument_ns ?? ensureCnEquityInstrumentForProfile(db, code)
+    if (!instrumentNs) continue
     ins.run({
       instrument_ns: instrumentNs,
       code,
@@ -334,6 +451,7 @@ export function refreshInstrumentViews(db: Database.Database): void {
 export function runInstrumentNsBackfill(db: Database.Database): void {
   if (!hasInstrumentNsColumn(db)) return
   backfillInstrumentsNs(db)
+  ensureInstrumentNsUniqueIndex(db)
   for (const table of CN_STOCK_CHILD_TABLES) {
     backfillChildTableNs(db, table)
   }

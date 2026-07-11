@@ -45,6 +45,7 @@ import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
 import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
+import { WatchlistProvider } from '../market/WatchlistContext'
 
 const useStyles = makeStyles({
   root: {
@@ -983,6 +984,7 @@ export default function ChatApp() {
   }
 
   return (
+    <WatchlistProvider>
     <>
       <WorkspaceSearchDialog
         open={searchOpen}
@@ -1220,5 +1222,6 @@ export default function ChatApp() {
         </div>
       </div>
     </>
+    </WatchlistProvider>
   )
 }

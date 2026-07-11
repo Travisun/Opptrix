@@ -1,0 +1,66 @@
+---
+description: 硬性规则 — SQLite schema 变更必须注册迁移步骤、写测试、保证幂等与可恢复
+alwaysApply: true
+---
+
+# SQLite Schema 迁移（硬性规则）
+
+涉及 **SQLite schema** 改动时，必须先设计 **兼容 + 迁移**，再改 DDL/读写逻辑。总原则见 `.cursor/rules/backward-compatibility.mdc`；本规则规定 **实现与测试** 要求。
+
+## 适用包
+
+| 包 | 入口 / 参考 |
+|---|---|
+| `packages/market-data` | `schema-migrate.ts`（`MIGRATION_STEPS`）、`schema.ts`（`SCHEMA_VERSION`、`MIGRATION_VN_SQL`）、`instrument-ns.ts` |
+| `packages/market-data-store` | `SCHEMA_VERSION`、`MIGRATION_SQL` |
+| `packages/user-store` | `store.ts`（`meta` 迁移键、`migrateFromLegacyFiles`） |
+| `packages/news-feed` | `store.ts`（`ensureMigrated`、懒迁移） |
+
+## 必须遵守（所有 SQLite 包）
+
+1. **注册迁移步骤**：每增一版须 `up()` + `isApplied()`；启动时自动检测旧 schema 并逐步升级。
+2. **版本号一致**：`SCHEMA_VERSION`（或等价常量）与注册表步数 **必须匹配**（market-data：`MIGRATION_STEPS.length === SCHEMA_VERSION`）。
+3. **幂等**：重复 `migrate` 安全；`isApplied` 为真时 **不得** 再执行破坏性 DDL。
+4. **失败可重试**：`up` 后 `isApplied` 校验失败 → 抛错且 **不写** 完成标记（market-data：不写 `schema_meta`）；下次启动可继续。
+5. **只增不破（默认）**：优先 `ALTER TABLE` / 新表 + 回填；**禁止**无迁移路径的 `DROP`/重命名列/改 FK 锚点。
+6. **过渡期双读/双写**：读优先新列/新表，**回退读旧列**；写可双写直至回填完成（参考 v9 `instrument_ns` + 旧 `code` 列）。
+7. **必须加测试**（见下）；不得仅依赖「开发环境清库」。
+
+## market-data 专用清单
+
+新增 **v(N+1)** 时按序完成：
+
+1. `schema.ts`：`SCHEMA_VERSION += 1`，追加 `MIGRATION_V(N+1)_SQL`（若 DDL 为纯 SQL）。
+2. `schema-migrate.ts`：在 `MIGRATION_STEPS` 注册 `{ version, description, isApplied, up }`。
+3. `isApplied`：用 **可观测结构** 判断（表/列/视图/PK DDL），勿仅信 `schema_meta`。
+4. 复杂回填（多表、FK 改锚）：逻辑放 `instrument-ns.ts` 或同级模块，`up` 中调用；必要时启动后幂等补跑（如 v9 `runInstrumentNsBackfill`）。
+5. 读写层：过渡期同时支持新旧键，直至 `isApplied` 可判定全员落地。
+
+## 必须加的测试（`tests/instruments-composite-key.test.mjs` 为范本）
+
+每版 schema 变更至少覆盖：
+
+| 场景 | 做法 |
+|---|---|
+| **跨版本跃迁** | `seedDatabaseThroughVersion(db, priorVersion)` 或手工 seed 到 **上一版**，`MarketDataStore` 打开后断言 `detectAppliedSchemaVersion === SCHEMA_VERSION` 且数据保留 |
+| **幂等** | 已在最新版的库上连续 `migrate(db)` 两次，行数/结构不变 |
+| **部分失败恢复** | 模拟「`schema_meta` 超前」或「vN 只落了一半列」，再次打开须补齐结构（如 `partial v9 schema recovers missing child columns`） |
+| **注册表一致** | `MIGRATION_STEPS.length === SCHEMA_VERSION` 且 version 连续 1…N |
+
+新包或无 `.test.mjs` 时，在对应 `tests/` 用同等模式补测。
+
+## 禁止（反模式）
+
+- ❌ 只改 `CREATE TABLE` / 查询，不注册 `MIGRATION_STEPS` 或不 bump `SCHEMA_VERSION`
+- ❌ `isApplied` 恒为 `true` 或只查 `schema_meta`（无法检测半迁移库）
+- ❌ 无迁移地 `DROP TABLE`/删列，指望用户删库重装
+- ❌ 新代码只写新列、读路径不双读，导致旧库或半迁移库白屏/空数据
+- ❌ 迁移失败静默吞掉或「删库重建」作为唯一路径
+
+## 改动自检（PR / 提交前）
+
+- [ ] 已注册 `up` + `isApplied`，`SCHEMA_VERSION` 已 bump 且与步数一致
+- [ ] 从 **至少一个旧版本** 跃迁测试通过
+- [ ] 幂等 +（若适用）部分失败恢复测试通过
+- [ ] 读写过渡期双读/双写已落实或文档声明弃用下限
+- [ ] 与 `.cursor/rules/backward-compatibility.mdc` 自检项一并核对

@@ -630,6 +630,103 @@ FROM v_instruments_unified u
 WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
 `
 
+/** v8 variant — preserve instrument_ns when v8 re-runs after partial v9 column add */
+export const MIGRATION_V8_PRESERVE_NS_SQL = `
+DROP VIEW IF EXISTS v_cn_equity_stocks;
+DROP VIEW IF EXISTS v_instruments_unified;
+
+CREATE TABLE instruments_new (
+  code TEXT NOT NULL,
+  market TEXT NOT NULL,
+  asset_class TEXT NOT NULL,
+  name TEXT,
+  exchange TEXT NOT NULL DEFAULT '',
+  list_date TEXT,
+  delist_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  extra TEXT,
+  updated_at TEXT NOT NULL,
+  instrument_ns TEXT,
+  PRIMARY KEY (market, exchange, code, asset_class)
+);
+
+INSERT INTO instruments_new (
+  code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at, instrument_ns
+)
+SELECT
+  code,
+  market,
+  asset_class,
+  name,
+  COALESCE(exchange, ''),
+  list_date,
+  delist_date,
+  status,
+  extra,
+  updated_at,
+  instrument_ns
+FROM instruments;
+
+DROP TABLE instruments;
+ALTER TABLE instruments_new RENAME TO instruments;
+
+CREATE INDEX IF NOT EXISTS idx_instruments_market_class ON instruments(market, asset_class);
+CREATE INDEX IF NOT EXISTS idx_instruments_symbol ON instruments(code);
+CREATE INDEX IF NOT EXISTS idx_instruments_lookup ON instruments(market, code, asset_class);
+
+CREATE VIEW v_instruments_unified AS
+SELECT
+  code,
+  market,
+  asset_class,
+  name,
+  NULLIF(exchange, '') AS exchange,
+  list_date,
+  delist_date,
+  status,
+  extra,
+  updated_at
+FROM instruments
+UNION ALL
+SELECT
+  s.code,
+  'CN' AS market,
+  'EQUITY' AS asset_class,
+  s.name,
+  s.market AS exchange,
+  s.listing_date AS list_date,
+  NULL AS delist_date,
+  s.status,
+  json_object(
+    'industry', s.industry,
+    'industry_csrc', s.industry_csrc,
+    'is_st', s.is_st
+  ) AS extra,
+  s.updated_at
+FROM stocks s
+WHERE NOT EXISTS (
+  SELECT 1 FROM instruments i
+  WHERE i.code = s.code
+    AND i.market = 'CN'
+    AND i.asset_class = 'EQUITY'
+    AND i.exchange = COALESCE(s.market, '')
+);
+
+CREATE VIEW v_cn_equity_stocks AS
+SELECT
+  u.code,
+  u.name,
+  u.exchange AS market,
+  json_extract(u.extra, '$.industry') AS industry,
+  json_extract(u.extra, '$.industry_csrc') AS industry_csrc,
+  u.list_date AS listing_date,
+  CAST(COALESCE(json_extract(u.extra, '$.is_st'), 0) AS INTEGER) AS is_st,
+  u.status,
+  u.updated_at
+FROM v_instruments_unified u
+WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
+`
+
 /** v9 — instrument_ns on instruments + CN stock child tables; stock_profiles FK → instruments(instrument_ns) */
 export const MIGRATION_V9_SQL = `
 ALTER TABLE instruments ADD COLUMN instrument_ns TEXT;

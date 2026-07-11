@@ -8,10 +8,12 @@ import {
   MIGRATION_V6_SQL,
   MIGRATION_V7_SQL,
   MIGRATION_V8_SQL,
+  MIGRATION_V8_PRESERVE_NS_SQL,
   SCHEMA_VERSION,
 } from './schema.js'
 import {
   ensureInstrumentNsSchema,
+  hasInstrumentNsColumn,
   isInstrumentNsSchemaComplete,
   runInstrumentNsBackfill,
   stockProfilesUsesInstrumentNs,
@@ -152,9 +154,8 @@ export const MIGRATION_STEPS: SchemaMigrationStep[] = [
     description: 'instruments composite primary key',
     isApplied: (db) => hasInstrumentCompositeKey(db),
     up: (db) => {
-      if (!hasInstrumentCompositeKey(db)) {
-        db.exec(MIGRATION_V8_SQL)
-      }
+      if (hasInstrumentCompositeKey(db)) return
+      db.exec(hasInstrumentNsColumn(db) ? MIGRATION_V8_PRESERVE_NS_SQL : MIGRATION_V8_SQL)
     },
   },
   {

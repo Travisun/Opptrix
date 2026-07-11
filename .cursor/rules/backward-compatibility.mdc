@@ -13,8 +13,9 @@ alwaysApply: true
 
 | 场景 | 参考 |
 |------|------|
+| **SQLite schema 实现细则**（注册步骤、测试、幂等） | `.cursor/rules/schema-migration.mdc` |
 | 用户 SQLite（`~/.opptrix/opptrix.db`） | `packages/user-store/src/store.ts`（`meta` 迁移标记、`migrateFromLegacyFiles`） |
-| 本地因子库 / market-data | `packages/market-data-store`（`SCHEMA_VERSION`、`MIGRATION_SQL`） |
+| 本地因子库 / market-data | `packages/market-data-store`（`SCHEMA_VERSION`、`MIGRATION_SQL`）；行情库见 `packages/market-data/src/schema-migrate.ts` |
 | 新闻/订阅/文档 JSON | `packages/news-feed/src/store.ts`（`ensureMigrated`、懒迁移） |
 | Provider / 设置迁移 | `packages/user-store` → `providerSettings.migrateFromLegacy` |
 | 桌面自动更新 | `docs/DESKTOP-RELEASE.md`；旧包更新源与 R2/CDN 切换须有过渡说明 |
