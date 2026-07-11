@@ -1,5 +1,5 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import { isBseCode, isTushareEnabled, isRegionalTradingDay, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString } from '@opptrix/a-stock-layer'
+import { isBseCode, isTushareEnabled, isRegionalTradingDay, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString, type StockProfile } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, QueryResult, StockListItem, StockRealtime } from '@opptrix/shared'
 import { normalizeInstrumentRef } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
@@ -32,7 +32,7 @@ import {
   type InitialSyncCallbacks,
 } from './initial-sync.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
-import { cnEtfListRef, cnEtfRef, cnEquityRef } from './instrument-gateway.js'
+import { cnEtfListRef, cnEtfRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
 import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
@@ -520,6 +520,10 @@ export class MarketDataSyncEngine {
 
   private markError(job: string, code: string, scopeKey: string): void {
     this.store.markJobProgress(job, code, scopeKey, 'error')
+  }
+
+  private cnSyncRef(code: string) {
+    return cnRefFromCode(this.store, code)
   }
 
   private createGateway(options: SyncOptions): StandardInstrumentGateway {
@@ -1033,7 +1037,7 @@ export class MarketDataSyncEngine {
           await mapPool(missing, cfg.concurrency, cfg.delayMs, async code => {
             try {
               const single = await this.callApi(
-                () => this.de.queryInstrumentData(cnEquityRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
+                () => this.de.queryInstrumentData(this.cnSyncRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
                 'default',
               )
               if (!single.success || !single.data?.[0]) throw new Error(single.error ?? 'realtime failed')
@@ -1051,7 +1055,7 @@ export class MarketDataSyncEngine {
         await mapPool(chunk, cfg.concurrency, cfg.delayMs, async code => {
           try {
             const resp = await this.callApi(
-              () => this.de.queryInstrumentData(cnEquityRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
+              () => this.de.queryInstrumentData(this.cnSyncRef(code), 'realtime') as Promise<QueryResult<StockRealtime[]>>,
               'default',
             )
             if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'realtime failed')
@@ -1093,13 +1097,18 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'profiles', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.profile(code), this.laneForJob('profiles'))
+        const ref = this.cnSyncRef(code)
+        const resp = await this.callApi(
+          () => this.de.queryInstrumentData(ref, 'profile') as Promise<QueryResult<StockProfile[]>>,
+          this.laneForJob('profiles'),
+        )
         if (!resp.success || !resp.data?.[0]) throw new Error(resp.error ?? 'profile failed')
         const p = resp.data[0]
         this.store.replaceProfile(code, p as unknown as Record<string, unknown>)
         this.store.upsertStock({
           code,
           name: p.name ?? code,
+          market: ref.exchange ?? undefined,
           industry: p.industry,
           industry_csrc: p.industryCsrc,
           listing_date: p.listingDate,
@@ -1289,7 +1298,8 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'dividends', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.dividend(code), this.laneForJob('dividends'))
+        const wiredCode = cnLegacyProviderCode(this.cnSyncRef(code))
+        const resp = await this.callApi(() => this.de.dividend(wiredCode), this.laneForJob('dividends'))
         if (resp.success && resp.data?.length) {
           this.store.replaceDividends(code, resp.data as unknown as Record<string, unknown>[])
         }
@@ -1322,7 +1332,8 @@ export class MarketDataSyncEngine {
     await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
       options.onProgress?.({ job: 'shareholders', current: index + 1, total: codes.length })
       try {
-        const resp = await this.callApi(() => this.de.shareholders(code), this.laneForJob('shareholders'))
+        const wiredCode = cnLegacyProviderCode(this.cnSyncRef(code))
+        const resp = await this.callApi(() => this.de.shareholders(wiredCode), this.laneForJob('shareholders'))
         if (resp.success && resp.data?.[0]) {
           this.store.replaceShareholders(code, resp.data[0] as Record<string, unknown>)
         }

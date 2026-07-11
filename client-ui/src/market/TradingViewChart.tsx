@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { research } from '../api/client'
 import { parseInstrumentInput } from './instrument'
+import type { InstrumentRef } from '../types/instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ChartPeriod, OhlcChartBar, StockChartData } from '../types/market'
 import { ChartWorkspace } from './chartEngine'
@@ -271,15 +272,20 @@ const useStyles = makeStyles({
 
 interface Props {
   code: string
+  /** 完整标的身份（含 exchange）— 优先于 code 解析 */
+  instrument?: InstrumentRef
   /** Fill parent height (chart tab). */
   expanded?: boolean
   /** Tab/panel visible — triggers chart resize after layout. */
   active?: boolean
 }
 
-export default function TradingViewChart({ code, expanded = false, active = true }: Props) {
+export default function TradingViewChart({ code, instrument, expanded = false, active = true }: Props) {
   const s = useStyles()
-  const instrumentRef = useMemo(() => parseInstrumentInput(code), [code])
+  const instrumentRef = useMemo(
+    () => instrument ?? parseInstrumentInput(code),
+    [code, instrument],
+  )
   const crossMarketChart = (instrumentRef.market === 'US' || instrumentRef.market === 'HK')
     && hasApplicationCapability(instrumentRef, 'chart_daily')
   const cnEquityChart = instrumentRef.market === 'CN'
@@ -372,7 +378,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
 
       const resp = useStockApi
         ? await research.stockChart(
-          code,
+          instrumentRef,
           nextPeriod,
           count,
           signal,
@@ -500,7 +506,7 @@ export default function TradingViewChart({ code, expanded = false, active = true
     }
     const controller = new AbortController()
     const probe = cnEquityChart
-      ? research.stockChart(code, 'intraday', undefined, controller.signal)
+      ? research.stockChart(instrumentRef, 'intraday', undefined, controller.signal)
       : research.instrumentChart(instrumentRef, 'intraday', 1, controller.signal)
     probe
       .then(resp => {

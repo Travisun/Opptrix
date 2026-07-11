@@ -1,5 +1,5 @@
 import type { AssetClass, InstrumentRef, Market } from './market-data.js'
-import { normalizeInstrumentRef } from './instrument-symbol.js'
+import { buildInstrumentNamespace, normalizeInstrumentRef, parseInstrumentNamespace } from './instrument-symbol.js'
 
 const MARKETS: Market[] = ['CN', 'US', 'HK', 'CRYPTO', 'JP', 'KR']
 const ASSET_CLASSES: AssetClass[] = ['EQUITY', 'ETF', 'INDEX', 'FUND', 'CRYPTO_SPOT', 'CRYPTO_PERP']
@@ -16,8 +16,13 @@ export function isAssetClass(v: string): v is AssetClass {
 export function parseInstrumentRef(input: unknown): InstrumentRef | null {
   if (!input || typeof input !== 'object') return null
   const row = input as Record<string, unknown>
+  const symbolRaw = String(row.symbol ?? row.code ?? '').trim()
+  if (symbolRaw) {
+    const fromNs = parseInstrumentNamespace(symbolRaw)
+    if (fromNs) return fromNs
+  }
   const marketRaw = String(row.market ?? '').trim().toUpperCase()
-  const symbol = String(row.symbol ?? row.code ?? '').trim()
+  const symbol = symbolRaw
   if (!symbol || !isMarket(marketRaw)) return null
   const assetRaw = String(row.assetClass ?? row.asset_class ?? 'EQUITY').trim().toUpperCase()
   const assetClass = isAssetClass(assetRaw) ? assetRaw : 'EQUITY'
@@ -33,22 +38,14 @@ export function instrumentRefFromParams(params: Record<string, unknown>): Instru
   return parseInstrumentRef(params)
 }
 
-/** Stable dedupe key — aligns with a-stock-layer instrumentId semantics */
+/** Stable dedupe key — Stock-index 命名空间，不含 assetClass */
 export function instrumentRefKey(ref: InstrumentRef): string {
-  const quote = ref.quote ? `:${ref.quote}` : ''
-  const exchange = ref.exchange ? `:${ref.exchange}` : ''
-  return `${ref.market}:${ref.assetClass}:${ref.symbol}${quote}${exchange}`
+  return buildInstrumentNamespace(ref)
 }
 
-/** Display / map key for non-crypto cross-market symbols (CN 6 位，HK 5 位等 canonical 格式) */
+/** 全局标的标识 — 与 Stock-index instrumentId / ref_label 一致 */
 export function instrumentDisplayCode(ref: InstrumentRef): string {
-  const n = normalizeInstrumentRef(ref)
-  if (n.market === 'CRYPTO' || n.assetClass === 'CRYPTO_SPOT' || n.assetClass === 'CRYPTO_PERP') {
-    if (n.symbol.includes('/')) return n.symbol
-    const quote = n.quote ?? 'USDT'
-    return `${n.symbol}/${quote}`
-  }
-  return n.symbol
+  return buildInstrumentNamespace(ref)
 }
 
 /** Legacy alias — prefer instrumentDisplayCode */

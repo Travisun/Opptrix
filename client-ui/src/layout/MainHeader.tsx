@@ -4,7 +4,7 @@ import {
 } from '@fluentui/react-components'
 import { BotRegular, DismissRegular, ArrowSyncRegular } from '@fluentui/react-icons'
 import { research } from '../api/client'
-import { hitToWatchlistItem, isAmbiguousNumericCode, isUnambiguousCnDigits, parseInstrumentInput, tryParseInstrumentInput, toStockContext, marketDisplayName } from '../market/instrument'
+import { hitToWatchlistItem, isAmbiguousNumericCode, parseInstrumentInput, tryParseInstrumentInput, toStockContext, marketDisplayName, normalizeWatchlistItem } from '../market/instrument'
 import { useApp } from '../context/AppContext'
 import type { FeatureRoute } from '../types/schemas'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -63,17 +63,20 @@ export default function MainHeader({ onNavigate, onRefresh }: Props) {
           if (exact) pick = exact
         }
         setGlobalStock(toStockContext(hitToWatchlistItem(pick)))
+      } else if (isAmbiguousNumericCode(q)) {
+        // 短数字码有跨市场歧义，不本地猜市场
+        return
       } else {
-        // 无搜索结果：明确 6 位 A 股/带前缀代码可本地解析；短数字码歧义保守兜底为 CN，
-        // 但保留原始长度（不 padStart 到 6 位），避免把 "700" 误当 "000700"。
         const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
-        setGlobalStock({ code: q, name: '', instrument: ref })
+        setGlobalStock(toStockContext(normalizeWatchlistItem({ code: q, name: '', instrument: ref })))
       }
       onNavigate('stock_research')
     } catch {
-      const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
-      setGlobalStock({ code: q, name: '', instrument: ref })
-      onNavigate('stock_research')
+      if (!isAmbiguousNumericCode(q)) {
+        const ref = tryParseInstrumentInput(q) ?? parseInstrumentInput(q)
+        setGlobalStock(toStockContext(normalizeWatchlistItem({ code: q, name: '', instrument: ref })))
+        onNavigate('stock_research')
+      }
     }
     setSearching(false)
   }

@@ -79,7 +79,7 @@ import type {
   PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
-import { cnEquityRef } from '../market/instrument'
+import { cnEquityRef, instrumentKey } from '../market/instrument'
 import {
   isUnifiedChart,
   isUnifiedSnapshot,
@@ -171,11 +171,13 @@ function ohlcBarsToKlines(code: string, bars: StockChartData['bars']): StockKlin
 }
 
 export const research = {
-  diagnose: (code: string, scorecard?: string) =>
-    callInstrumentApi<StockDiagnosisData>(
+  diagnose: (codeOrRef: string | InstrumentRef, scorecard?: string) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
+    return callInstrumentApi<StockDiagnosisData>(
       'stock_diagnosis',
       '/instruments/evaluation',
-      { instrument: cnEquityRef(code), ...(scorecard ? { scorecard } : {}) },
+      { instrument, ...(scorecard ? { scorecard } : {}) },
       {
         code,
         name: code,
@@ -189,13 +191,16 @@ export const research = {
       },
       undefined,
       60000,
-    ),
+    )
+  },
 
-  institutionRating: (code: string, groups?: string[], signal?: AbortSignal) =>
-    callInstrumentApi<InstitutionRatingData>(
+  institutionRating: (codeOrRef: string | InstrumentRef, groups?: string[], signal?: AbortSignal) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
+    return callInstrumentApi<InstitutionRatingData>(
       'institution_rating',
       '/instruments/institution-rating',
-      { instrument: cnEquityRef(code), ...(groups?.length ? { groups } : {}) },
+      { instrument, ...(groups?.length ? { groups } : {}) },
       {
         code,
         name: code,
@@ -207,7 +212,8 @@ export const research = {
       },
       signal,
       20000,
-    ),
+    )
+  },
 
   screen: (conditions: any[], scorecard = '综合评估', topN = 20, signal?: AbortSignal) =>
     apiCall<ScreeningData>('screening', { conditions, scorecard, top_n: topN }, { signal }, 120000),
@@ -223,11 +229,13 @@ export const research = {
       background ? 15000 : 600000,
     ),
 
-  strategySignals: (code: string, signal?: AbortSignal) =>
-    callInstrumentApi<StrategySignalData>(
+  strategySignals: (codeOrRef: string | InstrumentRef, signal?: AbortSignal) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
+    return callInstrumentApi<StrategySignalData>(
       'strategy_signal',
       '/instruments/strategy-signal',
-      { instrument: cnEquityRef(code) },
+      { instrument },
       {
         code,
         name: code,
@@ -239,8 +247,8 @@ export const research = {
       },
       signal,
       30000,
-    ),
-
+    )
+  },
   trendBrief: (code: string, holdingCost?: number | null, signal?: AbortSignal) =>
     apiCall<TrendBriefData>(
       'trend_brief',
@@ -321,8 +329,8 @@ export const research = {
     } satisfies ApiResponse<SearchStocksData>
   },
 
-  stockQuotes: async (codes: string[]) => {
-    const instruments = codes.map(c => cnEquityRef(c))
+  stockQuotes: async (codesOrRefs: (string | InstrumentRef)[]) => {
+    const instruments = codesOrRefs.map(c => cnEquityRef(c))
     const resp = await postInstrument<{ quotes: UnifiedInstrumentQuote[] }>(
       '/instruments/quotes',
       { instruments },
@@ -336,11 +344,17 @@ export const research = {
     )
   },
 
-  watchlistRadar: (codes: string[], signal?: AbortSignal) =>
-    apiCall<import('../types/schemas').WatchlistRadarData>('watchlist_radar', { codes }, { signal }, 15000),
+  watchlistRadar: (codesOrRefs: (string | import('../types/instrument').InstrumentRef)[], signal?: AbortSignal) =>
+    apiCall<import('../types/schemas').WatchlistRadarData>(
+      'watchlist_radar',
+      { codes: codesOrRefs.map(c => typeof c === 'string' ? c : instrumentKey(cnEquityRef(c))) },
+      { signal },
+      15000,
+    ),
 
-  stockKline: async (code: string, count = 90) => {
-    const instrument = cnEquityRef(code)
+  stockKline: async (codeOrRef: string | InstrumentRef, count = 90) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
     const resp = await postInstrument<StockChartData | UnifiedInstrumentChartDto>(
       '/instruments/chart',
       { instrument, period: 'daily', count },
@@ -360,14 +374,15 @@ export const research = {
   },
 
   stockChart: async (
-    code: string,
+    codeOrRef: string | InstrumentRef,
     period: ChartPeriod,
     count?: number,
     signal?: AbortSignal,
     before?: string,
     tail?: number,
   ) => {
-    const instrument = cnEquityRef(code)
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
     const body: Record<string, unknown> = { instrument, period }
     if (count != null) body.count = count
     if (before) body.before = before
@@ -388,8 +403,9 @@ export const research = {
     return toApiResponse<StockChartData>('stock_chart', resp, fallback)
   },
 
-  stockCyq: async (code: string, signal?: AbortSignal) => {
-    const instrument = cnEquityRef(code)
+  stockCyq: async (codeOrRef: string | InstrumentRef, signal?: AbortSignal) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
     const resp = await postInstrument<{
       code: string
       rows: ChipDistributionPoint[]
@@ -402,8 +418,9 @@ export const research = {
     })
   },
 
-  stockDetail: async (code: string) => {
-    const instrument = cnEquityRef(code)
+  stockDetail: async (codeOrRef: string | InstrumentRef) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
     const resp = await postInstrument<StockDetailData | UnifiedInstrumentSnapshotDto>(
       '/instruments/snapshot',
       { instrument },
@@ -612,12 +629,14 @@ export const research = {
   backtest: (codes: string[], scorecard = '综合评估', periods = 5) =>
     apiCall<BacktestResultData>('backtest', { codes, scorecard, periods }),
 
-  latestEval: (code: string, signal?: AbortSignal, scorecard?: string, force = false) =>
-    callInstrumentApi<LatestEvalData>(
+  latestEval: (codeOrRef: string | InstrumentRef, signal?: AbortSignal, scorecard?: string, force = false) => {
+    const instrument = cnEquityRef(codeOrRef)
+    const code = instrument.symbol
+    return callInstrumentApi<LatestEvalData>(
       'latest_evaluation',
       '/instruments/latest-evaluation',
       {
-        instrument: cnEquityRef(code),
+        instrument,
         ...(scorecard ? { scorecard } : {}),
         ...(force ? { force: true } : {}),
       },
@@ -631,7 +650,8 @@ export const research = {
       },
       signal,
       90000,
-    ),
+    )
+  },
 
   strategyReport: (code: string) =>
     apiCall<ReportTextData>('strategy_report', { code }),

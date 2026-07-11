@@ -1,7 +1,15 @@
 import type { WatchlistItem } from '../types/market'
 import type { DetailPanelKind, InstrumentRef, LocalInstrumentHit, Market } from '../types/instrument'
 import type { StockContext } from '../context/AppContext'
-import { isCnEtfCode, isCnIndexCode, normalizeCode } from './format'
+import { inferCnExchangeFromCode, isCnEtfCode, normalizeCode } from './format'
+
+function inferCnAssetClass(code: string, exchange: 'SH' | 'SZ' | 'BJ'): InstrumentRef['assetClass'] {
+  const c = normalizeCode(code)
+  if (isCnEtfCode(c)) return 'ETF'
+  if (exchange === 'SZ') return c.startsWith('399') ? 'INDEX' : 'EQUITY'
+  if (exchange === 'SH') return (c.startsWith('000') && c.length === 6) ? 'INDEX' : 'EQUITY'
+  return 'EQUITY'
+}
 
 const US_PREFIX = /^(US|NYSE|NASDAQ|AMEX):/i
 const CRYPTO_PREFIX = /^(CRYPTO|BINANCE|OKX):/i
@@ -24,10 +32,90 @@ export function isAmbiguousNumericCode(raw: string): boolean {
   return /^\d{1,5}$/.test(s)
 }
 
+const CN_EXCHANGE_PREFIX = /^(SH|SZ|BJ):(\d{6})$/i
+const CN_DOT_SUFFIX = /^(\d{6})\.(SH|SZ|BJ)$/i
+const CN_NAMESPACE = /^CN:(SH|SZ|BJ)[.:](\d{6})$/i
+const US_NAMESPACE = /^US:(?:(NYSE|NASDAQ|AMEX)\.)?([A-Z0-9.-]+)$/i
+const HK_NAMESPACE = /^HK:(\d{5})$/i
+const CRYPTO_NAMESPACE = /^CRYPTO:(?:(BINANCE|OKX)\.)?([A-Z0-9]+)\/([A-Z0-9]+)$/i
+
+/** Stock-index 统一命名空间 — 与 @opptrix/shared buildInstrumentNamespace 对齐 */
+export function buildInstrumentNamespace(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRefLocal(ref)
+  if (n.market === 'CN') {
+    const ex = (n.exchange ?? inferCnExchangeFromCode(n.symbol)).toUpperCase()
+    return `CN:${ex}.${n.symbol}`
+  }
+  if (n.market === 'HK') return `HK:${n.symbol}`
+  if (n.market === 'US') {
+    const ex = n.exchange?.toUpperCase()
+    if (ex && (ex === 'NYSE' || ex === 'NASDAQ' || ex === 'AMEX')) {
+      return `US:${ex}.${n.symbol}`
+    }
+    return `US:${n.symbol}`
+  }
+  if (n.market === 'CRYPTO') {
+    const quote = n.quote ?? 'USDT'
+    const ex = (n.exchange ?? 'BINANCE').toUpperCase()
+    return `CRYPTO:${ex}.${n.symbol}/${quote}`
+  }
+  return `${n.market}:${n.symbol}`
+}
+
+function parseInstrumentNamespaceLocal(raw: string): InstrumentRef | null {
+  const text = raw.trim()
+  const cn = CN_NAMESPACE.exec(text)
+  if (cn) {
+    const sym = normalizeCode(cn[2]!)
+    const exchange = cn[1]!.toUpperCase() as 'SH' | 'SZ' | 'BJ'
+    return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
+  }
+  const us = US_NAMESPACE.exec(text)
+  if (us) {
+    return {
+      market: 'US',
+      assetClass: 'EQUITY',
+      symbol: us[2]!.toUpperCase(),
+      exchange: us[1]?.toUpperCase(),
+    }
+  }
+  const hk = HK_NAMESPACE.exec(text)
+  if (hk) {
+    return { market: 'HK', assetClass: 'EQUITY', symbol: hk[1]!, exchange: 'HK' }
+  }
+  const crypto = CRYPTO_NAMESPACE.exec(text)
+  if (crypto) {
+    return {
+      market: 'CRYPTO',
+      assetClass: 'CRYPTO_SPOT',
+      symbol: crypto[2]!.toUpperCase(),
+      quote: crypto[3]!.toUpperCase(),
+      exchange: crypto[1]?.toLowerCase() ?? 'binance',
+    }
+  }
+  return null
+}
+
 export function parseInstrumentInput(raw: string): InstrumentRef {
   const input = raw.trim()
   if (!input) {
-    return { market: 'CN', assetClass: 'EQUITY', symbol: '000000' }
+    return { market: 'CN', assetClass: 'EQUITY', symbol: '000000', exchange: 'SZ' }
+  }
+
+  const fromNamespace = parseInstrumentNamespaceLocal(input)
+  if (fromNamespace) return fromNamespace
+
+  const cnExPrefix = CN_EXCHANGE_PREFIX.exec(input)
+  if (cnExPrefix) {
+    const sym = normalizeCode(cnExPrefix[2]!)
+    const exchange = cnExPrefix[1]!.toUpperCase() as 'SH' | 'SZ' | 'BJ'
+    return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
+  }
+  const cnDotSuffix = CN_DOT_SUFFIX.exec(input)
+  if (cnDotSuffix) {
+    const sym = normalizeCode(cnDotSuffix[1]!)
+    const exchange = cnDotSuffix[2]!.toUpperCase() as 'SH' | 'SZ' | 'BJ'
+    return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
   }
   if (US_PREFIX.test(input)) {
     const sym = input.replace(US_PREFIX, '').toUpperCase().replace(/[^A-Z0-9.-]/g, '')
@@ -67,8 +155,8 @@ export function parseInstrumentInput(raw: string): InstrumentRef {
   // 短码必须先走跨市场 instrument_search 获取带正确 market 的 ref。
   if (/^\d{6}$/.test(input)) {
     const sym = normalizeCode(input)
-    const assetClass = isCnEtfCode(sym) ? 'ETF' : isCnIndexCode(sym) ? 'INDEX' : 'EQUITY'
-    return { market: 'CN', assetClass, symbol: sym }
+    const exchange = inferCnExchangeFromCode(sym)
+    return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
   }
   if (/^[A-Z][A-Z0-9.-]{0,11}$/.test(input.toUpperCase())) {
     return { market: 'US', assetClass: 'EQUITY', symbol: input.toUpperCase() }
@@ -97,7 +185,7 @@ export function tryParseInstrumentInput(raw: string): InstrumentRef | null {
   if (!input) return null
   // 带前缀 / 6 位纯数字 / 字母 ticker / crypto 对 → 复用 parseInstrumentInput 判定
   if (US_PREFIX.test(input) || CRYPTO_PREFIX.test(input) || HK_PREFIX.test(input)
-    || JP_PREFIX.test(input) || KR_PREFIX.test(input)) {
+    || JP_PREFIX.test(input) || KR_PREFIX.test(input) || CN_NAMESPACE.test(input)) {
     return parseInstrumentInput(input)
   }
   if (isUnambiguousCnDigits(input)) return parseInstrumentInput(input)
@@ -112,22 +200,26 @@ export function tryParseInstrumentInput(raw: string): InstrumentRef | null {
   return null
 }
 
-/** CN A-share / ETF instrument ref from a bare code or alias string. */
-export function cnEquityRef(code: string): InstrumentRef {
-  return parseInstrumentInput(code)
+/** 解析 API 请求用的 InstrumentRef — 优先保留已有 exchange */
+export function resolveApiInstrumentRef(input: string | InstrumentRef): InstrumentRef {
+  if (typeof input === 'object' && input != null && 'symbol' in input) {
+    return normalizeInstrumentRefLocal(input)
+  }
+  return parseInstrumentInput(input)
+}
+
+/** CN A-share / ETF instrument ref — 支持传入完整 InstrumentRef（含 exchange） */
+export function cnEquityRef(code: string | InstrumentRef): InstrumentRef {
+  return resolveApiInstrumentRef(code)
 }
 
 export function displayCodeFromInstrument(ref: InstrumentRef): string {
-  if (ref.market === 'CRYPTO' && ref.quote) return `${ref.symbol}/${ref.quote}`
-  if (ref.market === 'CN') return normalizeCode(ref.symbol)
-  return ref.symbol
+  return buildInstrumentNamespace(ref)
 }
 
-/** @ 引用标签 — 与 @opptrix/shared instrumentRefLabel 保持一致 */
+/** @ 引用标签 — Stock-index 统一命名空间 */
 export function formatInstrumentLabel(ref: InstrumentRef): string {
-  if (ref.market === 'CN') return normalizeCode(ref.symbol)
-  if (ref.market === 'CRYPTO' && ref.quote) return `CRYPTO:${ref.symbol}/${ref.quote}`
-  return `${ref.market}:${ref.symbol}`
+  return buildInstrumentNamespace(ref)
 }
 
 export function isLikelyCnEquityInput(raw: string): boolean {
@@ -139,28 +231,35 @@ export function isLikelyCnEquityInput(raw: string): boolean {
   return isUnambiguousCnDigits(s)
 }
 
-/** 与 @opptrix/shared instrumentRefKey 保持一致：symbol → quote → exchange */
+/** 与 @opptrix/shared instrumentRefKey 保持一致 — Stock-index 命名空间 */
 export function instrumentKey(ref: InstrumentRef): string {
-  const quote = ref.quote ? `:${ref.quote}` : ''
-  const exchange = ref.exchange ? `:${ref.exchange}` : ''
-  return `${ref.market}:${ref.assetClass}:${ref.symbol}${quote}${exchange}`
+  return buildInstrumentNamespace(ref)
 }
 
 function refToParseInput(ref: InstrumentRef): string {
-  if (ref.market === 'CN') return ref.symbol
+  if (ref.market === 'CN' && ref.exchange) {
+    return `CN:${ref.exchange}.${normalizeCode(ref.symbol)}`
+  }
   if (ref.market === 'CRYPTO') {
     return ref.quote ? `${ref.symbol}/${ref.quote}` : ref.symbol
   }
   return `${ref.market}:${ref.symbol}`
 }
 
+function normalizeCnInstrumentRef(ref: InstrumentRef): InstrumentRef {
+  const sym = normalizeCode(ref.symbol)
+  const exchange = (ref.exchange ?? inferCnExchangeFromCode(sym)).toUpperCase() as 'SH' | 'SZ' | 'BJ'
+  return { market: 'CN', assetClass: inferCnAssetClass(sym, exchange), symbol: sym, exchange }
+}
+
 /** 将 InstrumentRef 规范化为应用内 canonical 格式（与 shared normalizeInstrumentRef 对齐） */
 export function normalizeInstrumentRefLocal(ref: InstrumentRef): InstrumentRef {
+  if (ref.market === 'CN') return normalizeCnInstrumentRef(ref)
   return parseInstrumentInput(refToParseInput(ref))
 }
 
 export function resolveWatchlistInstrument(item: WatchlistItem): InstrumentRef {
-  if (item.instrument) return item.instrument
+  if (item.instrument) return normalizeInstrumentRefLocal(item.instrument)
   return parseInstrumentInput(item.code)
 }
 
@@ -201,7 +300,7 @@ export function resolveStockContextInstrument(
   stock: Pick<StockContext, 'code' | 'instrument'> | null | undefined,
 ): InstrumentRef | null {
   if (!stock) return null
-  if (stock.instrument) return stock.instrument
+  if (stock.instrument) return normalizeInstrumentRefLocal(stock.instrument)
   const code = stock.code?.trim()
   if (!code) return null
   return parseInstrumentInput(code)
@@ -230,10 +329,13 @@ export function marketDisplayName(market: Market): string {
 }
 
 export function hitToWatchlistItem(hit: LocalInstrumentHit): WatchlistItem {
+  const industry = hit.market === 'CN' && hit.exchange
+    ? `${marketDisplayName(hit.market)} · ${hit.exchange === 'SH' ? '上交所' : hit.exchange === 'SZ' ? '深交所' : hit.exchange === 'BJ' ? '北交所' : hit.exchange}`
+    : marketDisplayName(hit.market)
   return normalizeWatchlistItem({
     code: hit.code,
     name: hit.name ?? hit.code,
-    industry: `${marketDisplayName(hit.market)} · ${hit.assetClass}`,
+    industry,
     instrument: hit.instrument,
   })
 }

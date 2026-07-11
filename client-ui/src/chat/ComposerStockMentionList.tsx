@@ -1,7 +1,7 @@
 import { mergeClasses } from '@fluentui/react-components'
 import type { WatchlistItem } from '../types/market'
 import {
-  formatInstrumentLabel,
+  displayCodeFromInstrument,
   normalizeWatchlistItem,
   resolveWatchlistInstrument,
   watchlistItemKey,
@@ -46,14 +46,13 @@ export default function ComposerStockMentionList({
       {!items.length ? (
         <div className="opptrix-composer-tooltip-menu__empty">
           {query
-            ? '没有匹配的标的，可尝试 US:AAPL、CRYPTO:BTC/USDT 或 6 位 A 股代码'
+            ? '没有匹配的标的，可尝试 CN:SZ.000009、US:AAPL 或股票名称'
             : '输入 @ 搜索关注列表或本地 instruments'}
         </div>
       ) : (
         items.map((item, index) => {
           const row = normalizeWatchlistItem(item)
-          const ref = resolveWatchlistInstrument(row)
-          const codeLabel = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
+          const codeLabel = displayCodeFromInstrument(resolveWatchlistInstrument(row))
           const active = index === activeIndex
           return (
             <ComposerTooltipMenuItem

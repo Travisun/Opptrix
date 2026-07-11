@@ -8,7 +8,8 @@ import type { IndustryMiningData, IndustryStatItem, IndustryStockItem } from '..
 import type { MarketQuote, WatchlistItem } from '../types/market'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MermaidBlock from '../chat/MermaidBlock'
-import { formatPct, formatPrice, normalizeCode, pctTone } from './format'
+import { formatPct, formatPrice, pctTone } from './format'
+import { cnEquityRef, instrumentKey } from './instrument'
 import { industryDisplayName, industryMatchesFilter, industryMiningQuery } from './industryLabels'
 import {
   INDUSTRY_QUOTES_POLL_MS,
@@ -261,14 +262,18 @@ function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefi
   return s.pctFlat
 }
 
+function industryStockKey(row: IndustryStockItem): string {
+  return instrumentKey(cnEquityRef(row.code))
+}
+
 function stockChangePct(
   row: IndustryStockItem,
   quotes: Record<string, MarketQuote>,
   useLive: boolean,
 ): number | null {
   if (useLive) {
-    const code = normalizeCode(row.code)
-    const live = quotes[code]?.changePct
+    const key = industryStockKey(row)
+    const live = quotes[key]?.changePct
     if (live != null) return live
   }
   return row.change_pct
@@ -282,11 +287,11 @@ function sortStocksByChange(
   return [...stocks].sort((a, b) => {
     const pctA = stockChangePct(a, quotes, useLive)
     const pctB = stockChangePct(b, quotes, useLive)
-    if (pctA == null && pctB == null) return normalizeCode(a.code).localeCompare(normalizeCode(b.code))
+    if (pctA == null && pctB == null) return industryStockKey(a).localeCompare(industryStockKey(b))
     if (pctA == null) return 1
     if (pctB == null) return -1
     if (pctB !== pctA) return pctB - pctA
-    return normalizeCode(a.code).localeCompare(normalizeCode(b.code))
+    return industryStockKey(a).localeCompare(industryStockKey(b))
   })
 }
 
@@ -438,7 +443,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   }, [])
 
   const stockCodes = useMemo(
-    () => stocks.map(row => normalizeCode(row.code)),
+    () => stocks.map(row => cnEquityRef(row.code)),
     [stocks],
   )
 
@@ -450,7 +455,10 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
         const resp = await research.stockQuotes(stockCodes)
         if (cancelled || !resp.success || !resp.data?.quotes) return
         const map: Record<string, MarketQuote> = {}
-        for (const q of resp.data.quotes) map[normalizeCode(q.code)] = q
+        for (const q of resp.data.quotes) {
+          const key = instrumentKey(cnEquityRef(q.code))
+          map[key] = q
+        }
         setQuotes(map)
       } catch {
         /* ignore transient quote errors */
@@ -471,10 +479,12 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
   }, [view, detailTab, selectedIndustry, miningLoadedFor, miningLoading, loadMining])
 
   const pickStock = useCallback((row: IndustryStockItem) => {
+    const ref = cnEquityRef(row.code)
     onSelectStock?.({
-      code: normalizeCode(row.code),
+      code: instrumentKey(ref),
       name: row.name,
       industry: row.industry ?? undefined,
+      instrument: ref,
     })
   }, [onSelectStock])
 
@@ -554,13 +564,13 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                 />
               ) : (
                 sortedStocks.map(row => {
-                  const code = normalizeCode(row.code)
-                  const quote = useLiveStocks ? quotes[code] : undefined
+                  const key = industryStockKey(row)
+                  const quote = useLiveStocks ? quotes[key] : undefined
                   const price = quote?.price ?? row.price
                   const changePct = stockChangePct(row, quotes, useLiveStocks)
                   return (
                     <div
-                      key={code}
+                      key={key}
                       className={mergeClasses(s.stockRow, s.listItem)}
                       role="button"
                       tabIndex={0}
@@ -575,7 +585,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
                       <div className={s.stockBody}>
                         <Text className={s.stockName}>{row.name}</Text>
                         <Text className={s.stockMeta}>
-                          {code}
+                          {key}
                           {row.total_score != null ? ` · 评分 ${row.total_score.toFixed(1)}` : ''}
                         </Text>
                       </div>

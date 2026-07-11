@@ -285,8 +285,9 @@ test('normalizeRegionalSymbol and regionalTodayString', async () => {
 
 test('stock-index client maps instrument ids', async () => {
   const { stockIndexItemToInstrumentRef } = await import('../packages/a-stock-layer/dist/providers/stockindex/normalize.js')
+  const { buildInstrumentNamespace } = await import('../packages/shared/dist/instrument-symbol.js')
   const ref = stockIndexItemToInstrumentRef({
-    id: 'CN:SH.600519',
+    instrumentId: 'CN:SH.600519',
     code: '600519',
     nameCn: '贵州茅台',
     market: 'CN',
@@ -294,6 +295,7 @@ test('stock-index client maps instrument ids', async () => {
   })
   assert.equal(ref?.market, 'CN')
   assert.equal(ref?.symbol, '600519')
+  assert.equal(buildInstrumentNamespace(ref), 'CN:SH.600519')
 })
 
 test('parseYahooSearchQuotes extracts symbols', async () => {

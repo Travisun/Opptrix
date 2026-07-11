@@ -1,6 +1,12 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import type { EvalDimension, InstitutionRatingItem, MethodSource } from '@opptrix/shared'
+import type { EvalDimension, InstitutionRatingItem, MethodSource, InstrumentRef, FinancialSummary, StockKline, StockRealtime } from '@opptrix/shared'
+import { normalizeInstrumentRef } from '@opptrix/shared'
 import { buildQuality, makeRating, ratingFromConfidence } from './evaluator.js'
+
+export function queryInstrumentRows<T>(r: Awaited<ReturnType<AshareEngine['queryInstrumentData']>>): T[] {
+  if (!r.success || !('data' in r) || !Array.isArray(r.data)) return []
+  return r.data as T[]
+}
 
 export { ratingFromConfidence }
 
@@ -20,12 +26,19 @@ export class ConfigurableEvaluator {
     public config: EvaluatorConfig,
   ) {}
 
-  async evaluate(code: string): Promise<InstitutionRatingItem> {
+  async evaluate(input: string | InstrumentRef): Promise<InstitutionRatingItem> {
+    const ref = typeof input === 'string'
+      ? normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: input })
+      : normalizeInstrumentRef(input)
+    const code = ref.symbol
     const [finR, kR, rtR] = await Promise.all([
-      this.de.financials(code), this.de.kline(code, 260), this.de.realtime(code),
+      this.de.queryInstrumentData(ref, 'financials'),
+      this.de.queryInstrumentData(ref, 'kline', { count: 260 }),
+      this.de.queryInstrumentData(ref, 'realtime'),
     ])
-    const fin = finR.data?.[0]
-    const k = kR.data ?? []
+    const fin = queryInstrumentRows<FinancialSummary>(finR)[0]
+    const k = queryInstrumentRows<StockKline>(kR)
+    const rtRows = queryInstrumentRows<StockRealtime>(rtR)
     const dims: EvalDimension[] = []
 
     for (const [name, weight] of Object.entries(this.config.dimensions)) {
@@ -39,8 +52,8 @@ export class ConfigurableEvaluator {
         const roe = fin.roe ?? 0
         score = roe > 20 ? 8.5 : roe > 12 ? 7 : roe > 8 ? 5.5 : 4
         detail = `ROE ${Number(roe).toFixed(1)}%`
-      } else if (name.includes('估值') && rtR.data?.[0]) {
-        const pe = rtR.data[0].pe ?? 30
+      } else if (name.includes('估值') && rtRows[0]) {
+        const pe = rtRows[0].pe ?? 30
         score = pe < 15 ? 8 : pe < 25 ? 6 : pe < 40 ? 5 : 3.5
         detail = `PE ${Number(pe).toFixed(1)}`
       } else if (name.includes('质量') && fin) {
@@ -62,11 +75,11 @@ export class ConfigurableEvaluator {
 
     const planned = Object.keys(this.config.dimensions).length
     const quality = buildQuality(planned, {
-      hasRealtime: !!(rtR.success && rtR.data?.length),
+      hasRealtime: rtRows.length > 0,
       hasKline: k.length > 0,
-      hasFinancials: !!(finR.success && finR.data?.length),
+      hasFinancials: queryInstrumentRows<FinancialSummary>(finR).length > 0,
       klineDays: k.length,
-      financialPeriods: finR.data?.length ?? 0,
+      financialPeriods: queryInstrumentRows<FinancialSummary>(finR).length,
       actualDimensions: dims.length,
     })
     const summary = dims.map(d => `${d.name}${d.score.toFixed(1)}`).join(' · ') || '数据有限'

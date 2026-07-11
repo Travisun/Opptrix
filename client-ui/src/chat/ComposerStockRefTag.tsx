@@ -2,7 +2,7 @@ import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { WatchlistItem } from '../types/market'
 import {
-  formatInstrumentLabel,
+  displayCodeFromInstrument,
   marketDisplayName,
   normalizeWatchlistItem,
   resolveWatchlistInstrument,
@@ -77,7 +77,7 @@ export default function ComposerStockRefTag({ item, onRemove }: Props) {
   const s = useStyles()
   const row = normalizeWatchlistItem(item)
   const ref = resolveWatchlistInstrument(row)
-  const codeLabel = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
+  const codeLabel = displayCodeFromInstrument(ref)
   const market = ref.market !== 'CN' ? marketDisplayName(ref.market) : null
 
   return (

@@ -1,5 +1,5 @@
 import type { WatchlistItem } from '../types/market'
-import { formatInstrumentLabel, normalizeWatchlistItem, resolveWatchlistInstrument, watchlistItemKey } from '../market/instrument'
+import { displayCodeFromInstrument, normalizeWatchlistItem, resolveWatchlistInstrument, watchlistItemKey } from '../market/instrument'
 
 /** 发送时将输入框标签 + 正文合成为 Agent 可读消息 */
 export function composeComposerMessage(text: string, refs: WatchlistItem[]): string {
@@ -10,7 +10,7 @@ export function composeComposerMessage(text: string, refs: WatchlistItem[]): str
     .map(r => {
       const item = normalizeWatchlistItem(r)
       const ref = resolveWatchlistInstrument(item)
-      const label = ref.market === 'CN' ? ref.symbol : formatInstrumentLabel(ref)
+      const label = displayCodeFromInstrument(ref)
       return `${item.name}(${label})`
     })
     .join('、')

@@ -1,6 +1,7 @@
 import type {
   FinancialSummary, QueryResult, StockKline, StockListItem, StockRealtime,
 } from '@opptrix/shared'
+import { inferCnAssetClassFromSymbol } from '@opptrix/shared'
 import { CACHE_TYPE, Capability } from './core/capabilities.js'
 import { Cache } from './core/cache.js'
 import { watchlistCacheTtl } from '@opptrix/market-data-core'
@@ -22,6 +23,7 @@ import { validateResponse } from './core/data-validator.js'
 import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods, type CustomMethodDef } from './core/custom-methods.js'
 import { listCustomMethodsForAgent } from './core/custom-methods-agent.js'
 import { normalizeCustomMethodArgs } from './core/custom-method-args.js'
+import { wireRegistryMethodArgs } from './core/provider-wire.js'
 import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
 import { resolveProviderAlias } from './providers/common/provider-aliases.js'
@@ -152,6 +154,7 @@ export class MarketDataEngine {
     useCache: boolean,
     args: unknown[],
     providerTimeoutMs = 15_000,
+    instrumentRef?: InstrumentRef,
   ): Promise<QueryResult<T[]>> {
     const cacheParams = { method, market, assetClass, args: JSON.stringify(args) }
     const watchlistCache = useCache && cacheType && this.isWatchlistTarget(market, assetClass, args)
@@ -205,7 +208,10 @@ export class MarketDataEngine {
       this.registry.notifyAcquire(driver.name)
 
       try {
-        const call = () => fn.apply(driver, args) as Promise<unknown[] | null>
+        const wiredArgs = instrumentRef
+          ? wireRegistryMethodArgs(driver.name, method, args, instrumentRef)
+          : args
+        const call = () => fn.apply(driver, wiredArgs) as Promise<unknown[] | null>
         const t0 = Date.now()
         const data = driver.selfThrottled
           ? await call()
@@ -313,7 +319,9 @@ export class MarketDataEngine {
 
   // ── Core market data ──
   realtime(code: string, market?: import('./utils/helpers.js').StockMarket): Promise<QueryResult<StockRealtime[]>> {
-    const assetClass = inferCnAssetClass(code)
+    const assetClass = market
+      ? inferCnAssetClassFromSymbol(code, market)
+      : inferCnAssetClass(code)
     if (assetClass === 'INDEX') {
       return this.qScoped<import('./core/schema.js').IndexRealtime>(
         'CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, code,
@@ -363,7 +371,10 @@ export class MarketDataEngine {
     count?: number,
     market?: import('./utils/helpers.js').StockMarket,
   ) {
-    if (inferCnAssetClass(code) === 'INDEX') {
+    const assetClass = market
+      ? inferCnAssetClassFromSymbol(code, market)
+      : inferCnAssetClass(code)
+    if (assetClass === 'INDEX') {
       if (typeof periodOrCount === 'number') {
         return this.indexKline(code, periodOrCount) as Promise<QueryResult<StockKline[]>>
       }
@@ -818,7 +829,7 @@ export class MarketDataEngine {
 
     switch (plan.kind) {
       case 'cn_realtime':
-        return this.realtime(plan.symbol)
+        return this.realtime(plan.symbol, plan.exchange as import('./utils/helpers.js').StockMarket | undefined)
       case 'cn_kline':
         if ((plan.period && plan.period !== 'daily') || plan.start || plan.end) {
           return this.kline(
@@ -827,9 +838,17 @@ export class MarketDataEngine {
             plan.start ?? '',
             plan.end ?? '',
             plan.count,
+            plan.exchange as import('./utils/helpers.js').StockMarket | undefined,
           )
         }
-        return this.kline(plan.symbol, plan.count)
+        return this.kline(
+          plan.symbol,
+          'daily',
+          '',
+          '',
+          plan.count ?? 120,
+          plan.exchange as import('./utils/helpers.js').StockMarket | undefined,
+        )
       case 'composite_snapshot':
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
         if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
@@ -837,15 +856,20 @@ export class MarketDataEngine {
           return this.regionalSnapshot(plan.market, plan.symbol)
         }
         return Promise.resolve({ success: false, error: `不支持 snapshot: ${plan.market}` })
-      case 'registry':
-        return this.qScoped(
+      case 'registry': {
+        const cacheType = CACHE_TYPE[plan.capability] ?? plan.method
+        return this.queryScoped(
           plan.market,
           plan.assetClass,
           plan.capability,
           plan.method,
+          cacheType,
           plan.useCache,
-          ...plan.args,
+          plan.args,
+          15_000,
+          plan.ref,
         )
+      }
       case 'cn_etf_snapshot':
         return this.etfSnapshot(plan.symbol)
       default:

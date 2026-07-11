@@ -85,9 +85,7 @@ export function useStockMention(items: WatchlistItem[]) {
       if (!q) return true
       const normalized = normalizeWatchlistItem(item)
       const code = normalized.code.toLowerCase()
-      const label = normalized.instrument
-        ? `${normalized.instrument.market}:${normalized.instrument.symbol}`.toLowerCase()
-        : code
+      const label = code
       return item.name.toLowerCase().includes(q)
         || code.includes(q)
         || label.includes(q)

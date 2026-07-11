@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 7
+export const SCHEMA_VERSION = 9
 
 export const MIGRATION_SQL = `
 PRAGMA journal_mode = WAL;
@@ -528,4 +528,139 @@ SELECT
   change_pct,
   synced_at
 FROM stock_klines_daily;
+`
+
+/** v8 — instruments composite key (market, exchange, code, asset_class) */
+export const MIGRATION_V8_SQL = `
+DROP VIEW IF EXISTS v_cn_equity_stocks;
+DROP VIEW IF EXISTS v_instruments_unified;
+
+CREATE TABLE instruments_new (
+  code TEXT NOT NULL,
+  market TEXT NOT NULL,
+  asset_class TEXT NOT NULL,
+  name TEXT,
+  exchange TEXT NOT NULL DEFAULT '',
+  list_date TEXT,
+  delist_date TEXT,
+  status TEXT NOT NULL DEFAULT 'active',
+  extra TEXT,
+  updated_at TEXT NOT NULL,
+  PRIMARY KEY (market, exchange, code, asset_class)
+);
+
+INSERT INTO instruments_new (
+  code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+)
+SELECT
+  code,
+  market,
+  asset_class,
+  name,
+  COALESCE(exchange, ''),
+  list_date,
+  delist_date,
+  status,
+  extra,
+  updated_at
+FROM instruments;
+
+DROP TABLE instruments;
+ALTER TABLE instruments_new RENAME TO instruments;
+
+CREATE INDEX IF NOT EXISTS idx_instruments_market_class ON instruments(market, asset_class);
+CREATE INDEX IF NOT EXISTS idx_instruments_symbol ON instruments(code);
+CREATE INDEX IF NOT EXISTS idx_instruments_lookup ON instruments(market, code, asset_class);
+
+CREATE VIEW v_instruments_unified AS
+SELECT
+  code,
+  market,
+  asset_class,
+  name,
+  NULLIF(exchange, '') AS exchange,
+  list_date,
+  delist_date,
+  status,
+  extra,
+  updated_at
+FROM instruments
+UNION ALL
+SELECT
+  s.code,
+  'CN' AS market,
+  'EQUITY' AS asset_class,
+  s.name,
+  s.market AS exchange,
+  s.listing_date AS list_date,
+  NULL AS delist_date,
+  s.status,
+  json_object(
+    'industry', s.industry,
+    'industry_csrc', s.industry_csrc,
+    'is_st', s.is_st
+  ) AS extra,
+  s.updated_at
+FROM stocks s
+WHERE NOT EXISTS (
+  SELECT 1 FROM instruments i
+  WHERE i.code = s.code
+    AND i.market = 'CN'
+    AND i.asset_class = 'EQUITY'
+    AND i.exchange = COALESCE(s.market, '')
+);
+
+CREATE VIEW v_cn_equity_stocks AS
+SELECT
+  u.code,
+  u.name,
+  u.exchange AS market,
+  json_extract(u.extra, '$.industry') AS industry,
+  json_extract(u.extra, '$.industry_csrc') AS industry_csrc,
+  u.list_date AS listing_date,
+  CAST(COALESCE(json_extract(u.extra, '$.is_st'), 0) AS INTEGER) AS is_st,
+  u.status,
+  u.updated_at
+FROM v_instruments_unified u
+WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
+`
+
+/** v9 — instrument_ns on instruments + CN stock child tables; stock_profiles FK → instruments(instrument_ns) */
+export const MIGRATION_V9_SQL = `
+ALTER TABLE instruments ADD COLUMN instrument_ns TEXT;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_instruments_ns ON instruments(instrument_ns);
+
+ALTER TABLE stock_financials ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_business_segments ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_partners ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_quotes_daily ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_factors ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_scores ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_klines_daily ADD COLUMN instrument_ns TEXT;
+ALTER TABLE sync_job_progress ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_announcements ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_dividends ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_shareholder_summary ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_forecasts ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_inst_holdings ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_insider_trades ADD COLUMN instrument_ns TEXT;
+ALTER TABLE stock_buybacks ADD COLUMN instrument_ns TEXT;
+
+CREATE INDEX IF NOT EXISTS idx_financials_instrument_ns ON stock_financials(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_segments_instrument_ns ON stock_business_segments(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_partners_instrument_ns ON stock_partners(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_quotes_instrument_ns ON stock_quotes_daily(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_factors_instrument_ns ON stock_factors(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_scores_instrument_ns ON stock_scores(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_klines_instrument_ns ON stock_klines_daily(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_job_progress_instrument_ns ON sync_job_progress(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_announcements_instrument_ns ON stock_announcements(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_dividends_instrument_ns ON stock_dividends(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_shareholder_summary_ns ON stock_shareholder_summary(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_shareholder_top10_ns ON stock_shareholder_top10(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_forecasts_instrument_ns ON stock_forecasts(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_inst_holdings_ns ON stock_inst_holdings(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_insider_trades_ns ON stock_insider_trades(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_buybacks_instrument_ns ON stock_buybacks(instrument_ns);
 `

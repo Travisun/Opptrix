@@ -2,7 +2,7 @@ import type { AssetClass, InstrumentRef, Market } from './market-data.js'
 import type { StockKline } from './types.js'
 import type { UnifiedInstrumentQuote } from './application-api.js'
 import { instrumentDisplayCode } from './instrument-ref.js'
-import { normalizeInstrumentRef } from './instrument-symbol.js'
+import { buildInstrumentNamespace, normalizeInstrumentRef } from './instrument-symbol.js'
 
 /** 本地 L0 离线因子摘要 — 仅 CN 同步库就绪时有值；不替代 local_universe_screen */
 export interface LocalInstrumentInsights {
@@ -192,14 +192,15 @@ export function localHitToSearchHit(hit: {
   refLabel: string
 }): UnifiedInstrumentSearchHit {
   const instrument = normalizeInstrumentRef(hit.instrument)
+  const ns = buildInstrumentNamespace(instrument)
   return {
     instrument,
-    code: hit.code,
-    ref_label: hit.refLabel,
+    code: ns,
+    ref_label: ns,
     name: hit.name,
     market: instrument.market,
     asset_class: instrument.assetClass,
-    exchange: hit.exchange,
+    exchange: instrument.exchange ?? hit.exchange,
     source: 'local',
   }
 }
@@ -215,14 +216,15 @@ export function onlineHitToSearchHit(hit: {
   source: 'stock_index' | 'tencent'
 }): UnifiedInstrumentSearchHit {
   const instrument = normalizeInstrumentRef(hit.instrument)
+  const ns = buildInstrumentNamespace(instrument)
   return {
     instrument,
-    code: hit.code,
-    ref_label: hit.refLabel,
+    code: ns,
+    ref_label: ns,
     name: hit.name,
     market: instrument.market,
     asset_class: instrument.assetClass,
-    exchange: hit.exchange,
+    exchange: instrument.exchange ?? hit.exchange,
     source: hit.source,
   }
 }
@@ -246,7 +248,7 @@ export function normalizeInstrumentSnapshot(
     const quoteRow = raw.quote as Record<string, unknown>
     return {
       instrument,
-      code: str(raw.code, code),
+      code,
       name: str(raw.name, instrument.symbol),
       quote: quoteFromProviderRow(instrument, quoteRow, opts?.source ?? 'mixed'),
       profile: (raw.profile as Record<string, unknown> | null) ?? null,
@@ -272,11 +274,10 @@ export function normalizeInstrumentSnapshot(
 
   // ETF / 跨市场 composite（Crypto 等）
   const quoteRow = (raw.quote ?? null) as Record<string, unknown> | null
-  const pairCode = str(raw.pair, code)
 
   return {
     instrument,
-    code: str(raw.code, pairCode || code),
+    code,
     name: str(raw.name ?? (quoteRow?.name), instrument.symbol),
     quote: quoteRow ? quoteFromProviderRow(instrument, quoteRow, opts?.source ?? 'live') : null,
     profile: (raw.profile as Record<string, unknown> | null) ?? null,
@@ -303,7 +304,7 @@ export function normalizeInstrumentChart(
   if (Array.isArray(raw.bars)) {
     return {
       instrument,
-      code: str(raw.code, code),
+      code,
       name: str(raw.name, instrument.symbol),
       period: str(raw.period, period),
       pre_close: num(raw.preClose ?? raw.pre_close),
@@ -349,7 +350,7 @@ export function normalizeInstrumentChart(
     : klinesToChartBars(items, period)
   return {
     instrument,
-    code: str(raw.symbol ?? raw.pair ?? raw.code, code),
+    code,
     name: str(raw.name, instrument.symbol),
     period,
     pre_close: num(raw.preClose ?? raw.pre_close),

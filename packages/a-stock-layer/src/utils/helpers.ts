@@ -46,7 +46,7 @@ export function resolveMarket(code: string): 'BJ' | 'SH' | 'SZ' {
   const c = normalizeCode(code)
   if (isBseCode(c)) return 'BJ'
   if (c.startsWith('399')) return 'SZ'
-  if (SH_INDEX_CODES.has(c) || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)) {
+  if (isShIndexCode(c)) {
     return 'SH'
   }
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return 'SH'
@@ -55,7 +55,7 @@ export function resolveMarket(code: string): 'BJ' | 'SH' | 'SZ' {
 
 export function resolveSecId(code: string): string {
   const c = normalizeCode(code)
-  if (SH_INDEX_CODES.has(c) || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)) {
+  if (isShIndexCode(c)) {
     return `1.${c}`
   }
   if (c.startsWith('399')) return `0.${c}`
@@ -77,21 +77,57 @@ export function resolveStockSecId(
   return isBse920Code(c) ? `3.${c}` : `0.${c}`
 }
 
-/** Sina / Tencent 等行情 list 参数（如 bj920002、sh600519） */
-export function secFullCode(code: string): string {
-  const c = normalizeCode(code)
+/** 从 wire/用户输入提取 6 位 A 股裸码（支持 sh600519、000977.SZ、600519） */
+export function bareCnSymbol(code: string): string {
+  const raw = String(code ?? '').trim()
+  const sec = /^(sh|sz|bj)(\d{6})$/i.exec(raw)
+  if (sec) return sec[2]!
+  const dot = /^(\d{6})\.(SH|SZ|BJ)$/i.exec(raw)
+  if (dot) return dot[1]!
+  const baostock = /^(sh|sz)\.(\d{6})$/i.exec(raw)
+  if (baostock) return baostock[2]!
+  return normalizeCode(raw)
+}
+
+/** 是否已为新浪/腾讯 sec 符号（sh600519） */
+export function isCnSecPrefixed(code: string): boolean {
+  return /^(sh|sz|bj)\d{6}$/i.test(String(code ?? '').trim())
+}
+
+/** 构造 sec 符号；已带前缀时幂等返回小写形式 */
+export function ensureCnSecSymbol(code: string): string {
+  const raw = String(code ?? '').trim()
+  const sec = /^(sh|sz|bj)(\d{6})$/i.exec(raw)
+  if (sec) return `${sec[1]!.toLowerCase()}${sec[2]!}`
+  return buildSecFromBare(bareCnSymbol(raw))
+}
+
+function buildSecFromBare(c: string): string {
   if (isBseCode(c)) return `bj${c}`
   if (c.startsWith('399') || (c.startsWith('0') && !c.startsWith('000'))) return `sz${c}`
-  if (c.startsWith('000') && parseInt(c, 10) < 1000) return `sh${c}`
+  if (isShIndexCode(c)) return `sh${c}`
   if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c))) return `sh${c}`
   return `sz${c}`
+}
+
+/** Sina / Tencent 等行情 list 参数（如 bj920002、sh600519） */
+export function secFullCode(code: string): string {
+  return ensureCnSecSymbol(code)
+}
+
+/** 显式 exchange 时构造行情 sec 符号，避免同码异名（如 000977）走错交易所 */
+export function cnSecSymbol(code: string, exchange?: string | null): string {
+  const c = normalizeCode(code)
+  const ex = parseStockMarket(exchange)
+  if (ex) return `${ex.toLowerCase()}${c}`
+  return secFullCode(c)
 }
 
 /** 雪球 symbol（如 BJ920002） */
 export function secXueqiuSymbol(code: string): string {
   const c = normalizeCode(code)
   if (isBseCode(c)) return `BJ${c}`
-  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || (c.startsWith('000') && parseInt(c, 10) < 1000)) {
+  if (c.startsWith('6') || (c.startsWith('9') && !isBseCode(c)) || isShIndexCode(c)) {
     return `SH${c}`
   }
   return `SZ${c}`

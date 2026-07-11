@@ -3,7 +3,7 @@ import { getConfig, research } from '../api/client'
 import type { InstitutionRatingData, LatestEvalData, StrategySignalData } from '../types/schemas'
 import type { ChipDistributionPoint } from '../types/market'
 import type { WatchlistRadarItem } from '../types/schemas'
-import { parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
+import { displayCodeFromInstrument, instrumentKey, parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
 import { normalizeCode } from './format'
@@ -147,7 +147,7 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
       await runStep('eval', STEP_HINTS.eval, async () => {
         const cfg = await getConfig().catch(() => null)
         const scorecard = cfg?.default_scorecard || 'G=B+M'
-        const resp = await research.latestEval(code, controller.signal, scorecard, force)
+        const resp = await research.latestEval(instrumentRef, controller.signal, scorecard, force)
         if (resp.success && resp.data) payload.evalData = resp.data
         const label = resp.data?.scorecard ?? scorecard
         return {
@@ -161,28 +161,36 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
       })
 
       await runStep('strategy', STEP_HINTS.strategy, async () => {
-        const resp = await research.strategySignals(code, controller.signal)
+        const resp = await research.strategySignals(instrumentRef, controller.signal)
         if (resp.success && resp.data) payload.strategy = resp.data
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
 
       await runStep('institution', STEP_HINTS.institution, async () => {
-        const resp = await research.institutionRating(code, undefined, controller.signal)
+        const resp = await research.institutionRating(instrumentRef!, undefined, controller.signal)
         if (resp.success && resp.data) payload.institution = resp.data
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
 
       await runStep('cyq', STEP_HINTS.cyq, async () => {
-        const resp = await research.stockCyq(code, controller.signal)
+        const resp = await research.stockCyq(instrumentRef, controller.signal)
         if (resp.success && resp.data?.latest) payload.cyq = resp.data.latest
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
 
       await runStep('radar', STEP_HINTS.radar, async () => {
-        const resp = await research.watchlistRadar([code], controller.signal)
-        const norm = normalizeCode(code)
+        const ref = instrumentRef ?? (code ? parseInstrumentInput(code) : null)
+        const radarInput = ref ? displayCodeFromInstrument(ref) : (code ?? '')
+        const resp = await research.watchlistRadar([radarInput], controller.signal)
+        const matchKey = ref ? instrumentKey(ref) : (code ? instrumentKey(parseInstrumentInput(code)) : '')
         const items = resp.success ? (resp.data?.items ?? []) : []
-        payload.radar = items.find(item => normalizeCode(item.code) === norm) ?? items[0] ?? null
+        payload.radar = items.find(item => item.code === matchKey)
+          ?? items.find(item => {
+            const parsed = parseInstrumentInput(item.code)
+            return parsed ? instrumentKey(parsed) === matchKey : false
+          })
+          ?? items[0]
+          ?? null
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
 

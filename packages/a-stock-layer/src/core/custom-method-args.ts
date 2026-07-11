@@ -9,7 +9,8 @@ import {
   parseInstrumentRef,
 } from '@opptrix/shared'
 import type { CustomMethodDef, CustomMethodParam } from './custom-methods.js'
-import { normalizeCode, secFullCode } from '../utils/helpers.js'
+import { normalizeCode } from '../utils/helpers.js'
+import { wireProviderSymbolArg } from './provider-wire.js'
 
 const SYMBOL_PARAM_NAMES = new Set([
   'code', 'symbol', 'stock', 'stockcode', 'stock_code', 'ticker',
@@ -55,6 +56,7 @@ function parseInstrumentLikeValue(value: unknown): InstrumentRef | null {
       market: 'CN',
       assetClass: 'EQUITY',
       symbol: secPrefix[2]!,
+      exchange: secPrefix[1]!.toUpperCase(),
     })
   }
 
@@ -64,6 +66,7 @@ function parseInstrumentLikeValue(value: unknown): InstrumentRef | null {
       market: 'CN',
       assetClass: 'EQUITY',
       symbol: baostockDot[2]!,
+      exchange: baostockDot[1]!.toUpperCase(),
     })
   }
 
@@ -73,6 +76,7 @@ function parseInstrumentLikeValue(value: unknown): InstrumentRef | null {
       market: 'CN',
       assetClass: 'EQUITY',
       symbol: dotSuffix[1]!,
+      exchange: dotSuffix[2]!.toUpperCase(),
     })
   }
 
@@ -107,36 +111,9 @@ function formatSymbolForProvider(
   providerId: string,
   paramName: string,
   ref: InstrumentRef,
+  method = '',
 ): string {
-  const n = normalizeInstrumentRef(ref)
-
-  if (providerId === 'baostock') {
-    return canonicalCnSymbol(n.symbol)
-  }
-
-  if (providerId === 'tencent' || providerId === 'sinafinance') {
-    if (n.market === 'CN' && (paramName === 'codes' || paramName === 'code')) {
-      return secFullCode(n.symbol)
-    }
-    if (n.market === 'CN') return canonicalCnSymbol(n.symbol)
-    return instrumentProviderSymbol(n)
-  }
-
-  if (providerId === 'tickflow' || providerId === 'zzshare') {
-    return canonicalCnSymbol(n.symbol)
-  }
-
-  if (providerId === 'stockindex' || providerId === 'akshare') {
-    switch (n.market) {
-      case 'US': return canonicalUsSymbol(n.symbol)
-      case 'HK': return canonicalHkSymbol(n.symbol)
-      case 'CN': return canonicalCnSymbol(n.symbol)
-      case 'CRYPTO': return instrumentProviderSymbol(n)
-      default: return instrumentProviderSymbol(n)
-    }
-  }
-
-  return instrumentProviderSymbol(n)
+  return wireProviderSymbolArg(providerId, paramName, method, ref)
 }
 
 function normalizeSymbolArg(
@@ -144,10 +121,11 @@ function normalizeSymbolArg(
   paramName: string,
   value: unknown,
   marketHint: Market,
+  method = '',
 ): unknown {
   const ref = parseInstrumentLikeValue(value)
   if (ref) {
-    return formatSymbolForProvider(providerId, paramName, ref)
+    return formatSymbolForProvider(providerId, paramName, ref, method)
   }
 
   if (typeof value !== 'string') return value
@@ -156,19 +134,15 @@ function normalizeSymbolArg(
   if (!raw) return value
 
   if (CN_PROVIDER_IDS.has(providerId) || providerId === 'akshare') {
-    if (/^\d{1,6}$/.test(raw) || /^(\d{6})\.(SH|SZ)$/i.test(raw)) {
-      const sym = canonicalCnSymbol(raw)
-      if ((providerId === 'tencent' || providerId === 'sinafinance') && paramName === 'codes') {
-        return secFullCode(sym)
-      }
-      return sym
+    const parsed = parseInstrumentLikeValue(raw)
+    if (parsed) {
+      return wireProviderSymbolArg(providerId, paramName, method, parsed)
+    }
+    if (/^\d{1,6}$/.test(raw) || /^(\d{6})\.(SH|SZ|BJ)$/i.test(raw)) {
+      return canonicalCnSymbol(raw)
     }
     if (/^(sh|sz|bj)\d{6}$/i.test(raw)) {
-      const sym = normalizeCode(raw.replace(/^(sh|sz|bj)/i, ''))
-      if ((providerId === 'tencent' || providerId === 'sinafinance') && paramName === 'codes') {
-        return secFullCode(sym)
-      }
-      return sym
+      return raw.toLowerCase()
     }
     if (/^(sh|sz)\.\d{6}$/i.test(raw)) {
       return normalizeCode(raw.split('.')[1] ?? raw)
@@ -185,9 +159,9 @@ function normalizeSymbolArg(
   return value
 }
 
-function normalizeCodesArg(providerId: string, value: unknown, marketHint: Market): unknown {
+function normalizeCodesArg(providerId: string, value: unknown, marketHint: Market, method = ''): unknown {
   if (Array.isArray(value)) {
-    return value.map(item => normalizeSymbolArg(providerId, 'codes', item, marketHint))
+    return value.map(item => normalizeSymbolArg(providerId, 'codes', item, marketHint, method))
   }
   if (typeof value === 'string') {
     const trimmed = value.trim()
@@ -195,7 +169,7 @@ function normalizeCodesArg(providerId: string, value: unknown, marketHint: Marke
       try {
         const parsed = JSON.parse(trimmed) as unknown
         if (Array.isArray(parsed)) {
-          return normalizeCodesArg(providerId, parsed, marketHint)
+          return normalizeCodesArg(providerId, parsed, marketHint, method)
         }
       } catch {
         // fall through
@@ -203,11 +177,11 @@ function normalizeCodesArg(providerId: string, value: unknown, marketHint: Marke
     }
     if (providerId === 'tencent' || providerId === 'sinafinance') {
       return trimmed.split(',')
-        .map(part => String(normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint)))
+        .map(part => String(normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint, method)))
         .join(',')
     }
     return trimmed.split(',')
-      .map(part => normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint))
+      .map(part => normalizeSymbolArg(providerId, 'codes', part.trim(), marketHint, method))
   }
   return value
 }
@@ -217,6 +191,7 @@ function normalizeArgValue(
   param: CustomMethodParam,
   value: unknown,
   marketHint: Market,
+  method = '',
 ): unknown {
   const name = param.name.toLowerCase()
 
@@ -225,11 +200,11 @@ function normalizeArgValue(
   }
 
   if (CODES_PARAM_NAMES.has(name)) {
-    return normalizeCodesArg(providerId, value, marketHint)
+    return normalizeCodesArg(providerId, value, marketHint, method)
   }
 
   if (SYMBOL_PARAM_NAMES.has(name)) {
-    return normalizeSymbolArg(providerId, name, value, marketHint)
+    return normalizeSymbolArg(providerId, name, value, marketHint, method)
   }
 
   return value
@@ -264,7 +239,7 @@ export function normalizeCustomMethodArgs(
       continue
     }
 
-    const next = normalizeArgValue(providerId, param, raw, marketHint)
+    const next = normalizeArgValue(providerId, param, raw, marketHint, def.method)
     args.push(next)
     if (JSON.stringify(next) !== JSON.stringify(raw)) {
       transforms.push(`${param.name}: ${JSON.stringify(raw)} → ${JSON.stringify(next)}`)

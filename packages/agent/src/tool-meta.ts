@@ -21,13 +21,11 @@ export interface ToolMeta {
 }
 
 const INSTRUMENT_REF_USAGE = [
-  'InstrumentRef 示例：',
-  'CN {market:"CN", symbol:"600519"}',
-  'US {market:"US", symbol:"AAPL"}',
-  'HK {market:"HK", symbol:"00700"}',
-  'Crypto {market:"CRYPTO", symbol:"BTC", quote:"USDT"}',
-  'JP/KR 暂未接入行情与快照。',
-  '也可平传 market + symbol；不熟悉市场时先 get_instrument_capabilities。',
+  '标的标识（Stock-index 命名空间）：',
+  '首选 search_instruments 返回的 instrument 对象（market + symbol + exchange）或 code/ref_label（如 CN:SZ.000009）',
+  'A 股 CN 须带 exchange 消歧：{market:"CN", symbol:"000009", exchange:"SZ"} 或 code:"CN:SZ.000009"',
+  '美股 US:AAPL / 港股 HK:00700 / Crypto CRYPTO:BINANCE.BTC/USDT',
+  'instrument.symbol 为裸代码，勿写入 CN:SZ.xxx 命名空间；不熟悉时先 search_instruments。',
 ].join(' ')
 
 export const TOOL_META: Record<string, ToolMeta> = {
@@ -155,7 +153,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'instrument_search',
     miningEligible: true,
     usageGuide: '跨市场在线搜索标的（CN/US/HK/Crypto 等）；不熟悉代码或需多市场检索时的首选入口。',
-    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤；结果 InstrumentRef 用于后续 get_instrument_*。',
+    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤；命中 code/ref_label 为命名空间（CN:SZ.xxx），后续 get_instrument_* 须用返回的 instrument 或 code。',
   },
   get_instrument_capabilities: {
     hubFeature: 'instrument_capabilities',
@@ -383,7 +381,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'provider_invoke_custom',
     miningEligible: false,
     usageGuide: '执行 list_provider_custom_methods 查到的自定义方法；标准 get_instrument_* 能覆盖的需求勿调用。',
-    compliance: 'provider_id + method 必填；args 为 JSON 数组；code/symbol 可传 InstrumentRef 或 CN:600519；同一 method 每任务最多 1 次。',
+    compliance: 'provider_id + method 必填；args 为 JSON 数组；code/symbol 可传命名空间 CN:SZ.000009 或 InstrumentRef；同一 method 每任务最多 1 次。',
   },
 }
 

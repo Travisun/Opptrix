@@ -42,7 +42,6 @@ function ymdDaysAgo(days: number): string {
 function isIndexCode(code: string): boolean {
   const c = normalizeCode(code)
   return isShIndexCode(c) || c.startsWith('399') || c.startsWith('88')
-    || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)
 }
 
 /** 同花顺金融数据 API（fuyao.aicubes.cn） */

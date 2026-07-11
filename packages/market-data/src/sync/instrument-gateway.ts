@@ -1,7 +1,29 @@
 import type { AshareEngine, InstrumentDataCapability, InstrumentQueryOpts } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, QueryResult } from '@opptrix/shared'
 import { normalizeInstrumentRef } from '@opptrix/shared'
+import type { MarketDataStore } from '../store.js'
+import { normalizeStockCode } from '../utils.js'
 import { sleep } from './pool.js'
+
+type CnEquityRefStore = Pick<MarketDataStore, 'stockMeta' | 'stockMarket'>
+
+export type CnEquityRefOpts = {
+  exchange?: string | null
+  assetClass?: InstrumentRef['assetClass']
+  store?: CnEquityRefStore
+}
+
+function normalizeCnSymbol(code: string): string {
+  const bare = code.trim().replace(/^(sh|sz|bj)/i, '').replace(/\D/g, '')
+  return bare.length <= 6 ? bare.padStart(6, '0') : bare.slice(-6)
+}
+
+function resolveCnExchangeFromStore(store: CnEquityRefStore, symbol: string): string | undefined {
+  const meta = store.stockMeta(symbol)
+  const fromMeta = meta?.exchange
+  if (fromMeta) return fromMeta
+  return store.stockMarket(symbol) ?? undefined
+}
 
 export type InitialEquityMarket = 'CN' | 'HK' | 'US'
 
@@ -26,14 +48,36 @@ export function cnEtfListRef(): InstrumentRef {
   return cnEtfRef('510300')
 }
 
-export function cnEquityRef(code: string): InstrumentRef {
-  const bare = code.trim().replace(/\D/g, '')
-  const symbol = bare.length <= 6 ? bare.padStart(6, '0') : bare.slice(-6)
+export function cnEquityRef(code: string, opts?: CnEquityRefOpts): InstrumentRef {
+  const symbol = normalizeCnSymbol(code) || '000001'
+  const exchange = opts?.exchange
+    ?? (opts?.store ? resolveCnExchangeFromStore(opts.store, symbol) : undefined)
   return normalizeInstrumentRef({
     market: 'CN',
-    assetClass: 'EQUITY',
-    symbol: symbol || '000001',
+    assetClass: opts?.assetClass ?? 'EQUITY',
+    symbol,
+    exchange: exchange ?? undefined,
   })
+}
+
+/** 从本地库解析 exchange，构造 CN InstrumentRef — sync / Hub 消歧主路径 */
+export function cnRefFromCode(
+  store: CnEquityRefStore,
+  code: string,
+  opts?: Omit<CnEquityRefOpts, 'store'>,
+): InstrumentRef {
+  const symbol = normalizeStockCode(normalizeCnSymbol(code))
+  const exchange = opts?.exchange ?? resolveCnExchangeFromStore(store, symbol)
+  return cnEquityRef(symbol, { ...opts, exchange })
+}
+
+/** 资料类 deprecated API（dividend / shareholders）可用的 A 股线格式 */
+export function cnLegacyProviderCode(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRef(ref)
+  if (n.market !== 'CN') return n.symbol
+  const ex = n.exchange?.toUpperCase()
+  if (ex === 'SH' || ex === 'SZ' || ex === 'BJ') return `${n.symbol}.${ex}`
+  return n.symbol
 }
 
 export function equityListRef(market: InitialEquityMarket): InstrumentRef {

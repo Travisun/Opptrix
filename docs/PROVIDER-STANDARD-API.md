@@ -1,6 +1,7 @@
 # Provider 标准 API 开发规范
 
-> 与 `InstrumentDataCapability` / `queryInstrumentData` 对齐。Hub、Agent、同步层**只**经标准入口调用；未纳入标准能力表的接口必须登记为**自定义方法**。
+> 与 `InstrumentDataCapability` / `queryInstrumentData` 对齐。Hub、Agent、同步层**只**经标准入口调用；未纳入标准能力表的接口必须登记为**自定义方法**。  
+> 标的身份与命名空间细则见 [INSTRUMENT-PROTOCOL.md](./INSTRUMENT-PROTOCOL.md)。
 
 ## 1. 三层边界
 
@@ -16,6 +17,7 @@
 realtime | kline | snapshot | profile | financials
 stock_list | instrument_search | sector_list
 etf_list | etf_nav | etf_holdings | etf_snapshot
+dividend | news | notices | shareholders | money_flow | technical_analysis
 ```
 
 新增产品级能力时：**先**扩展 `packages/a-stock-layer/src/core/instrument-query.ts` 与 `resolveInstrumentQueryPlan`，**再**让 Provider 实现对应标准方法名。
@@ -76,9 +78,9 @@ bindingsFor: () => []
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆** |
 | **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
 | **sinafinance** | ✅ | cnEquityEtfIndex + SINA_ETF | CN | ✅ | ✅ | F10 深度 custom | **合规**；部分 `sinaEtf*` custom 与标准重复，宜标注 deprecated |
-| **tencent** | ✅ | CN only + TENCENT_ETF | binding 仅 CN | ✅ | ✅ CN | HK/US 列表等 custom | **部分合规**：HK/US 能力仅 custom，不经 Registry |
+| **tencent** | ✅ | CN + **US/HK registry binding**；`mixTencent*Equity` 单 Driver 内路由 | ✅ CN ETF | ✅ 三市场标准方法 + US/HK 详情维度（news/notices/shareholders/dividend/technical） | HK/US 深度财报等 custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex | CN | 弱（无 ETF_LIST） | ✅ | 无 | **合规（CN）** |
-| **zzshare** | ✅ | CN；ETF 仅默认 realtime/kline | CN | 弱 | ✅ | custom | **基本合规**；无 ETF_LIST/NAV binding |
+| **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
 | **tonghuashun** | ✅ | CN；无 ETF cap | CN | ❌ | ✅ | 无 | **合规（CN 个股）** |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
 | **akshare** | ⚠️ 须 register | `capabilities: []` | 另类数据 | N/A | 无（设计如此） | 216+ custom | **自定义专用**；须注册 Driver 否则 invoke 失败 |

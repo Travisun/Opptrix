@@ -9,6 +9,7 @@ import {
   inferCnAssetClassFromSymbol,
   normalizeInstrumentRef,
   parseCanonicalInstrumentInput,
+  parseInstrumentNamespace,
 } from './instrument-symbol.js'
 
 function isCryptoPairNotation(raw: string): boolean {
@@ -31,6 +32,7 @@ export function resolveInstrumentFromParams(params: Record<string, unknown>): In
   if (nested) return nested
 
   const rawCode = String(params.code ?? params.symbol ?? params.pair ?? '').trim()
+  const exchangeRaw = params.exchange != null ? String(params.exchange).trim().toUpperCase() : undefined
   if (rawCode) {
     const parsed = parseCanonicalInstrumentInput(rawCode)
     if (parsed) return parsed
@@ -41,8 +43,9 @@ export function resolveInstrumentFromParams(params: Record<string, unknown>): In
       const base: InstrumentRef = marketRaw === 'CN'
         ? {
           market: 'CN',
-          assetClass: assetRaw === 'ETF' || assetRaw === 'INDEX' ? assetRaw as InstrumentRef['assetClass'] : inferCnAssetClassFromSymbol(rawCode),
+          assetClass: assetRaw === 'ETF' || assetRaw === 'INDEX' ? assetRaw as InstrumentRef['assetClass'] : inferCnAssetClassFromSymbol(rawCode, exchangeRaw),
           symbol: rawCode,
+          exchange: exchangeRaw,
         }
         : marketRaw === 'CRYPTO'
           ? {

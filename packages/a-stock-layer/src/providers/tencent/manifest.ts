@@ -34,6 +34,8 @@ const TENCENT_US_EQUITY_CAPS = [
   Capability.STOCK_KLINE,
   Capability.STOCK_PROFILE,
   Capability.STOCK_LIST,
+  Capability.NEWS,
+  Capability.SHAREHOLDER,
 ]
 
 const TENCENT_HK_EQUITY_CAPS = [
@@ -41,6 +43,9 @@ const TENCENT_HK_EQUITY_CAPS = [
   Capability.STOCK_KLINE,
   Capability.STOCK_PROFILE,
   Capability.STOCK_LIST,
+  Capability.NEWS,
+  Capability.DIVIDEND,
+  Capability.TECH_INDICATOR,
 ]
 
 const EQUITY_CAPS = TENCENT_CAPS.filter(c => !INDEX_CAPS.includes(c))

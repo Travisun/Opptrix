@@ -30,11 +30,11 @@ const INSTRUMENT_OBJECT_PROPERTIES: Record<string, { type: string; description?:
   },
   symbol: {
     type: 'string',
-    description: '标的代码，如 600519、AAPL、00700、BTC',
+    description: '裸标的代码（如 000009、AAPL）；A 股须配合 exchange；勿填 CN:SZ.xxx 命名空间',
   },
   assetClass: {
     type: 'string',
-    description: '可选资产类型：EQUITY | ETF | INDEX | FUND | CRYPTO_SPOT | CRYPTO_PERP',
+    description: '可选资产类型：EQUITY | ETF | INDEX | FUND | CRYPTO_SPOT | CRYPTO_PERP（通常由 search 命中提供，勿自行推断指数）',
   },
   quote: {
     type: 'string',
@@ -42,7 +42,11 @@ const INSTRUMENT_OBJECT_PROPERTIES: Record<string, { type: string; description?:
   },
   exchange: {
     type: 'string',
-    description: '可选交易所或板块标识',
+    description: 'A 股交易所 SH | SZ | BJ（消歧同码异名，必填）',
+  },
+  code: {
+    type: 'string',
+    description: 'Stock-index 命名空间（推荐）：CN:SZ.000009、US:AAPL、HK:00700；引擎自动解析',
   },
 }
 
@@ -50,17 +54,18 @@ const INSTRUMENT_OBJECT_PROPERTIES: Record<string, { type: string; description?:
 export const INSTRUMENT_REF_SCHEMA: JsonSchema['properties'] = {
   instrument: {
     type: 'object',
-    description: 'InstrumentRef 对象（推荐）：含 market、symbol；Crypto 需 quote',
+    description: 'InstrumentRef（推荐）：search_instruments 返回的 instrument；含 market、symbol、exchange',
     properties: INSTRUMENT_OBJECT_PROPERTIES,
     required: ['market', 'symbol'],
   },
+  code: INSTRUMENT_OBJECT_PROPERTIES.code,
   market: {
     type: 'string',
-    description: '平铺写法：市场 CN | US | HK | CRYPTO（JP/KR 暂未接入；与 instrument 二选一）',
+    description: '平铺写法：市场 CN | US | HK | CRYPTO（与 instrument/code 二选一）',
   },
   symbol: {
     type: 'string',
-    description: '平铺写法：标的代码（与 instrument 二选一）',
+    description: '平铺写法：裸代码 + exchange（与 instrument/code 二选一）',
   },
   assetClass: INSTRUMENT_OBJECT_PROPERTIES.assetClass,
   quote: INSTRUMENT_OBJECT_PROPERTIES.quote,

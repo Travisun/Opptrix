@@ -29,6 +29,7 @@ import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { feedArticleToContextRef } from '../pages/news/newsUtils'
 import { setNewsFeedSelectedId } from '../pages/news/newsFeedSession'
 import WorkspaceSearchDialog, { type WorkspaceSearchAction } from './WorkspaceSearchDialog'
+import { normalizeWatchlistItem } from '../market/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
@@ -594,7 +595,7 @@ export default function ChatApp() {
     }
     if (action.type === 'stock') {
       restoreChatColumn()
-      setFocusStockCode(action.code)
+      setFocusStockCode(normalizeWatchlistItem({ code: action.code, name: action.name }).code)
       if (!rightPanelVisible) handleToggleRightPanel()
       if (view !== 'chat') navigate('chat')
       return

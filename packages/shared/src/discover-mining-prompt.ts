@@ -2,7 +2,7 @@ import type { DiscoverStrategyProfile } from './discover-profile-types.js'
 import { getDiscoverProfileDefinition } from './discover-profile-registry.js'
 import { discoverMiningToolNamesForProfile } from './discover-mining-tools.js'
 import { discoverPrescreenMode } from './discover-profiles.js'
-import { buildInstrumentAnalysisPlaybook, buildNewsRetrievalPlaybook, buildProviderCustomMethodPlaybook } from './agent-prompt-guide.js'
+import { buildInstrumentAnalysisPlaybook, buildInstrumentNamespacePlaybook, buildNewsRetrievalPlaybook, buildProviderCustomMethodPlaybook } from './agent-prompt-guide.js'
 
 /** 策略解析 / 执行提示中的资产类型描述 */
 export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): string {
@@ -80,6 +80,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
           : `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。`
     return [
       `你是 Opptrix ${packHint}挖掘 Agent。候选来自本地列表初选。`,
+      buildInstrumentNamespacePlaybook(),
       toolLine,
       extra,
       footer,
@@ -95,6 +96,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
       '3) 策略涉及用户持仓/关注：get_watchlist、get_watchlist_radar、get_portfolio_holdings、portfolio_trades',
       '4) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
       '5) 板块/宏观/情绪等非标准数据：list_provider_custom_methods → invoke_provider_custom_method',
+      buildInstrumentNamespacePlaybook(),
       buildInstrumentAnalysisPlaybook(),
       buildProviderCustomMethodPlaybook(),
       buildNewsRetrievalPlaybook(),

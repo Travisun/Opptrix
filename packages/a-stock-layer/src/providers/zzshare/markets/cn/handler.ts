@@ -63,7 +63,6 @@ function resolveQueryDate(date = ''): string {
 function isCnIndexCode(code: string): boolean {
   const c = normalizeCode(code)
   return isShIndexCode(c) || c.startsWith('399')
-    || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)
 }
 
 function isPlateCode(code: string): boolean {

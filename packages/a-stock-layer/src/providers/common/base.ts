@@ -1,7 +1,7 @@
 import { Capability } from '../../core/capabilities.js'
 import type { ProviderBinding } from '@opptrix/shared'
 import { cnEquityBindings } from '../../core/bindings.js'
-import { isBseCode, normalizeCode, secFullCode } from '../../utils/helpers.js'
+import { isBseCode, isShIndexCode, normalizeCode, secFullCode } from '../../utils/helpers.js'
 
 /** Base driver — all aaashare data sources extend this */
 export abstract class BaseDriver {
@@ -26,7 +26,7 @@ export abstract class BaseDriver {
   protected isSh(code: string) {
     const c = normalizeCode(code)
     if (isBseCode(c)) return false
-    return c.startsWith('6') || c.startsWith('9') || (c.startsWith('000') && parseInt(c, 10) < 1000)
+    return c.startsWith('6') || c.startsWith('9') || isShIndexCode(c)
   }
 
   protected secFullCode(code: string): string {

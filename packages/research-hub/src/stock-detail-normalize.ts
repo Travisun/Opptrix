@@ -496,26 +496,30 @@ export function mergeDetailQuoteRows(
   fallback: Record<string, unknown> | null | undefined,
 ): Record<string, unknown> | null {
   if (!preferred && !fallback) return null
-  const pick = (key: string) => {
+  const pickEnriched = (key: string) => {
     const p = preferred?.[key]
     if (p != null && p !== '') return p
     const f = fallback?.[key]
     return f != null && f !== '' ? f : p
   }
+  const fallbackName = fallback?.name
+  const identityName = typeof fallbackName === 'string' && fallbackName.trim()
+    ? fallbackName
+    : pickEnriched('name')
   return {
-    ...(fallback ?? {}),
     ...(preferred ?? {}),
-    code,
-    name: pick('name'),
-    price: pick('price'),
-    preClose: pick('preClose'),
-    open: pick('open'),
-    high: pick('high'),
-    low: pick('low'),
+    ...(fallback ?? {}),
+    code: (fallback?.code as string) ?? code,
+    name: identityName,
+    price: fallback?.price ?? preferred?.price ?? null,
+    preClose: fallback?.preClose ?? preferred?.preClose ?? null,
+    open: fallback?.open ?? preferred?.open ?? null,
+    high: fallback?.high ?? preferred?.high ?? null,
+    low: fallback?.low ?? preferred?.low ?? null,
     volume: fallback?.volume ?? preferred?.volume ?? null,
     amount: fallback?.amount ?? preferred?.amount ?? null,
-    changePct: pick('changePct'),
-    change: pick('change'),
+    changePct: fallback?.changePct ?? pickEnriched('changePct'),
+    change: fallback?.change ?? pickEnriched('change'),
     pe: preferred?.pe ?? fallback?.pe ?? null,
     pb: preferred?.pb ?? fallback?.pb ?? null,
     turnoverRate: preferred?.turnoverRate ?? fallback?.turnoverRate ?? null,

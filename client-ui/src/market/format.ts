@@ -68,11 +68,40 @@ export function portfolioHoldingsKey(code: string, market?: string): string {
   return trimmed
 }
 
-/** A 股指数代码（上证 000xxx、深证 399xxx） */
-export function isCnIndexCode(code: string): boolean {
+/** 无 exchange 时可安全判为上证指数的常见代码（不含 000001） */
+const SH_CN_INDEX_CODES = new Set([
+  '000016', '000300', '000688', '000905', '000906', '000985',
+])
+
+/** 从代码段推断交易所（无 exchange 时兜底，与 shared inferCnExchangeFromSymbol 对齐） */
+export function inferCnExchangeFromCode(code: string): 'SH' | 'SZ' | 'BJ' {
   const c = normalizeCode(code)
-  if (c.startsWith('399')) return true
-  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) return true
+  if (c.startsWith('92') || c.startsWith('43') || c.startsWith('83') || c.startsWith('87')) return 'BJ'
+  if (c.startsWith('399')) return 'SZ'
+  if (c.startsWith('6')) return 'SH'
+  if (c.startsWith('9')) return 'SH'
+  if (c.startsWith('3') || c.startsWith('2')) return 'SZ'
+  if (c === '000001') return 'SZ'
+  if (SH_CN_INDEX_CODES.has(c)) return 'SH'
+  if (c.startsWith('0')) return 'SZ'
+  return 'SZ'
+}
+
+function inferCnAssetClass(code: string, exchange: 'SH' | 'SZ' | 'BJ'): 'EQUITY' | 'ETF' | 'INDEX' {
+  const c = normalizeCode(code)
+  if (isCnEtfCode(c)) return 'ETF'
+  if (exchange === 'SZ') return c.startsWith('399') ? 'INDEX' : 'EQUITY'
+  if (exchange === 'SH') return (c.startsWith('000') && c.length === 6) ? 'INDEX' : 'EQUITY'
+  return 'EQUITY'
+}
+
+/** A 股指数判定 — 以 exchange 为主键 */
+export function isCnIndexCode(code: string, exchange?: string | null): boolean {
+  const c = normalizeCode(code)
+  if (isCnEtfCode(c)) return false
+  const ex = (exchange ?? inferCnExchangeFromCode(c)).toUpperCase()
+  if (ex === 'SZ') return c.startsWith('399')
+  if (ex === 'SH') return c.startsWith('000') && c.length === 6
   return false
 }
 

@@ -3,7 +3,7 @@ import { normalizeInstrumentRef } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 import { KLINE_BOOTSTRAP_DAYS } from './config.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
-import { StandardInstrumentGateway } from './instrument-gateway.js'
+import { cnRefFromCode, StandardInstrumentGateway } from './instrument-gateway.js'
 import { mapPool } from './pool.js'
 import type { JobSyncConfig } from './config.js'
 
@@ -12,7 +12,8 @@ export interface KlineSyncCallbacks {
   onProgress?: (job: string, current: number, total: number) => void
 }
 
-function instrumentRef(market: InitialEquityMarket, code: string): InstrumentRef {
+function instrumentRef(store: MarketDataStore, market: InitialEquityMarket, code: string): InstrumentRef {
+  if (market === 'CN') return cnRefFromCode(store, code)
   return normalizeInstrumentRef({
     market,
     assetClass: 'EQUITY',
@@ -66,7 +67,7 @@ export async function syncInstrumentKlines(
   code: string,
   count: number,
 ): Promise<number> {
-  const ref = instrumentRef(market, code)
+  const ref = instrumentRef(store, market, code)
   const resp = await gateway.query<StockKline[]>(ref, 'kline', { count, period: 'daily' })
   if (!resp.success || !resp.data?.length) {
     throw new Error(resp.error ?? 'kline 无数据')

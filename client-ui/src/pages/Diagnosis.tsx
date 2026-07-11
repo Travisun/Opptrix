@@ -7,7 +7,7 @@ import { ArrowSyncRegular } from '@fluentui/react-icons'
 import MetricTile from '../components/MetricTile'
 import { getConfig, research } from '../api/client'
 import type { StockContext } from '../context/AppContext'
-import { parseInstrumentInput } from '../market/instrument'
+import { normalizeInstrumentRefLocal, parseInstrumentInput, toStockContext } from '../market/instrument'
 import type { StockDiagnosisData, InstitutionRatingData, StrategySignalData } from '../types/schemas'
 
 const useStyles = makeStyles({
@@ -64,25 +64,28 @@ export default function Diagnosis({ globalStock, setGlobalStock }: Props) {
   }, [globalStock])
 
   const load = async () => {
-    if (!code.trim()) return
+    const trimmed = code.trim()
+    if (!trimmed) return
+    const instrument = globalStock?.instrument && globalStock.code === trimmed
+      ? normalizeInstrumentRefLocal(globalStock.instrument)
+      : parseInstrumentInput(trimmed)
     setLoading(true)
     try {
       const cfg = await getConfig().catch(() => null)
       const scorecard = cfg?.default_scorecard || 'G=B+M'
       const [d, r, sg] = await Promise.all([
-        research.diagnose(code.trim(), scorecard),
-        research.institutionRating(code.trim()),
-        research.strategySignals(code.trim()).catch(() => null),
+        research.diagnose(instrument, scorecard),
+        research.institutionRating(instrument),
+        research.strategySignals(instrument).catch(() => null),
       ])
       if (d.success) setDiagnosis(d.data)
       if (r.success) setRatings(r.data)
       if (sg?.success) setSignals(sg.data)
-      const trimmed = code.trim()
-      setGlobalStock({
+      setGlobalStock(toStockContext({
         code: trimmed,
         name: d.data?.name || globalStock?.name || '',
-        instrument: globalStock?.instrument ?? parseInstrumentInput(trimmed),
-      })
+        instrument,
+      }))
     } catch (e) {
       console.error(e)
     }

@@ -2,6 +2,19 @@ import type { InstrumentRef } from './market-data.js'
 import { resolveInstrumentAnalyticsProfile } from './instrument-analytics.js'
 import { crossMarketNewsHints } from './news-source-hints.js'
 
+/** Stock-index 统一命名空间 — Agent/搜索/关注列表的全局标的 ID */
+export function buildInstrumentNamespacePlaybook(): string {
+  return [
+    '【标的命名空间 — Stock-index 全局唯一 ID，查询时必须遵循】',
+    '- 格式：CN:交易所.代码（如 CN:SZ.000009、CN:SH.600519）、US:AAPL、HK:00700、CRYPTO:BINANCE.BTC/USDT',
+    '- 命名空间仅含 market + exchange + symbol，不含 INDEX/ETF 等业务分类；同码异名靠 exchange 区分（例：CN:SZ.000977=浪潮信息，CN:SH.000977=内地低碳）',
+    '- 不熟悉代码时：先 search_instruments → 使用返回的 instrument 对象（market/symbol/exchange）或 code/ref_label 命名空间调用 get_instrument_*',
+    '- 推荐传参：instrument:{market,symbol,exchange}（symbol 为裸代码）；或平铺 code:"CN:SZ.000009"',
+    '- A 股禁止仅用裸 6 位码（如 000977）调用快照/行情，须先搜索拿到带 exchange 的命中',
+    '- 勿把命名空间字符串塞进 instrument.symbol 字段；symbol 始终是裸代码，exchange 单独字段',
+  ].join('\n')
+}
+
 /** 标准 Instrument API 能力清单 — 与 data-layer InstrumentDataCapability 对齐 */
 export const STANDARD_INSTRUMENT_API_CAPABILITIES = [
   'realtime', 'kline', 'snapshot', 'profile', 'financials',
@@ -14,7 +27,7 @@ export function buildStandardInstrumentApiPlaybook(): string {
   return [
     '【标准 Instrument API — 优先使用，对应 get_instrument_* / search_instruments】',
     `- 能力：${STANDARD_INSTRUMENT_API_CAPABILITIES.join('、')}`,
-    '- 搜索：search_instruments（跨市场 keyword，可 markets 过滤）',
+    '- 搜索：search_instruments（跨市场 keyword，可 markets 过滤）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart',
     '- A 股批量截面：batch_instrument_snapshots；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
@@ -31,7 +44,7 @@ export function buildProviderCustomMethodPlaybook(): string {
     '1) list_enabled_providers：确认 baostock / zzshare / stockindex / akshare 等是否可用',
     '2) list_provider_custom_methods：必须带 provider_id 或 keyword；akshare 方法多，禁止无过滤全量拉取',
     '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
-    '4) args 中的 code/symbol 可传 InstrumentRef、CN:600519、600519.SH、sh600519 等；引擎会自动转为 Provider 格式（如 A 股 6 位、腾讯 sh600519）',
+    '4) args 中的 code/symbol 可传命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',
     '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav，勿调 sinaEtfNav）',
     '6) 同一任务对同一 method 最多调用 1 次；失败时换 provider 或说明数据不可用，勿编造',
   ].join('\n')
@@ -41,7 +54,7 @@ export function buildProviderCustomMethodPlaybook(): string {
 export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具】',
-    '0) 不确定时：get_instrument_capabilities → 仅调用返回支持的能力',
+    '0) 不确定时：search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
     '1) CN 股票（EQUITY）：search_instruments / screen_stocks 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → evaluate_instrument（因子评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq',
     '2) CN ETF：search_etfs → get_etf_snapshot → evaluate_instrument（决策雷达）→ get_instrument_strategy_signal；勿用 A 股股票因子筛选',
     '3) 美股/港股：get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
@@ -139,7 +152,8 @@ export function buildAgentSystemRules(): string {
   return [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
-    '- 跨市场标的统一用 InstrumentRef（market + symbol）；不熟悉代码时 search_instruments',
+    '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
+    buildInstrumentNamespacePlaybook(),
     buildStandardInstrumentApiPlaybook(),
     buildInstrumentAnalysisPlaybook(),
     buildIndustryAnalysisPlaybook(),

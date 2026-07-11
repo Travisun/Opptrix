@@ -3,6 +3,7 @@ import {
   fail,
   hasApplicationCapability,
   instrumentDisplayCode,
+  instrumentRefKey,
   instrumentRefsFromList,
   normalizeInstrumentChart,
   normalizeInstrumentSnapshot,
@@ -17,12 +18,12 @@ import {
 } from '@opptrix/shared'
 
 export type InstrumentRouteHandlers = {
-  stockDetail: (code: string) => Promise<ResearchResult>
+  stockDetail: (ref: InstrumentRef) => Promise<ResearchResult>
   etfSnapshot: (code: string) => Promise<ResearchResult>
   usSnapshot: (symbol: string) => Promise<ResearchResult>
   regionalSnapshot: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
-  stockQuotes: (codes: string[]) => Promise<ResearchResult>
+  stockQuotes: (refs: InstrumentRef[]) => Promise<ResearchResult>
   usRealtime: (symbol: string) => Promise<ResearchResult>
   regionalRealtime: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoRealtime: (pair: string) => Promise<ResearchResult>
@@ -50,9 +51,9 @@ export type InstrumentRouteHandlers = {
     tail: number,
   ) => Promise<ResearchResult>
   cryptoKline: (pair: string, period: string, count: number) => Promise<ResearchResult>
-  stockCyq: (code: string) => Promise<ResearchResult>
-  institutionRating: (code: string, groups?: string[]) => Promise<ResearchResult>
-  institutionReport: (code: string, groups?: string[]) => Promise<ResearchResult>
+  stockCyq: (ref: InstrumentRef) => Promise<ResearchResult>
+  institutionRating: (ref: InstrumentRef, groups?: string[]) => Promise<ResearchResult>
+  institutionReport: (params: Record<string, unknown>, groups?: string[]) => Promise<ResearchResult>
   searchInstruments: (
     keyword: string,
     limit: number,
@@ -99,7 +100,7 @@ export async function routeInstrumentSnapshot(
     return wrapSnapshot(ref, await handlers.etfSnapshot(ref.symbol), handlers)
   }
   if (ref.market === 'CN') {
-    return wrapSnapshot(ref, await handlers.stockDetail(ref.symbol), handlers)
+    return wrapSnapshot(ref, await handlers.stockDetail(ref), handlers)
   }
   if (ref.market === 'US') {
     return wrapSnapshot(ref, await handlers.usSnapshot(ref.symbol), handlers)
@@ -134,15 +135,22 @@ export async function routeInstrumentQuotes(
   if (!refs.length) return fail('instruments 必填')
 
   const quotes: UnifiedInstrumentQuote[] = []
-  const cnCodes = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF').map(r => r.symbol)
-  if (cnCodes.length) {
-    const resp = await handlers.stockQuotes(cnCodes)
+  const cnRefs = refs.filter(r => r.market === 'CN' && r.assetClass !== 'ETF')
+  if (cnRefs.length) {
+    const resp = await handlers.stockQuotes(cnRefs)
     if (resp.success && resp.data && typeof resp.data === 'object') {
       const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-      for (const row of rows) {
-        const code = String(row.code ?? '')
-        const ref = refs.find(r => r.market === 'CN' && r.symbol === code)
-        if (ref) {
+      for (let i = 0; i < cnRefs.length; i++) {
+        const ref = cnRefs[i]!
+        const row = rows[i] ?? rows.find(r => {
+          const code = String(r.code ?? '')
+          return code === ref.symbol && (
+            !ref.exchange
+            || !r.exchange
+            || String(r.exchange).toUpperCase() === ref.exchange.toUpperCase()
+          )
+        })
+        if (row) {
           quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
         }
       }
@@ -173,10 +181,10 @@ export async function routeInstrumentQuotes(
       }
     }
     if (ref.market === 'CN' && ref.assetClass === 'ETF') {
-      const resp = await handlers.stockQuotes([ref.symbol])
+      const resp = await handlers.stockQuotes([ref])
       if (resp.success && resp.data && typeof resp.data === 'object') {
         const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-        const row = rows.find(r => String(r.code) === ref.symbol)
+        const row = rows[0] ?? rows.find(r => String(r.code) === ref.symbol)
         if (row) quotes.push(quoteFromProviderRow(ref, row, 'mixed'))
       }
     }
@@ -252,7 +260,7 @@ export async function routeInstrumentCyq(
     return fail('该标的暂不支持筹码分布')
   }
   if (ref.market !== 'CN') return fail('筹码分布仅支持 A 股')
-  return handlers.stockCyq(ref.symbol)
+  return handlers.stockCyq(ref)
 }
 
 export async function routeInstrumentInstitutionRating(
@@ -266,7 +274,7 @@ export async function routeInstrumentInstitutionRating(
   }
   if (ref.market !== 'CN') return fail('机构评级仅支持 A 股')
   const groups = Array.isArray(params.groups) ? params.groups.map(String) : undefined
-  return handlers.institutionRating(ref.symbol, groups)
+  return handlers.institutionRating(ref, groups)
 }
 
 export async function routeInstrumentInstitutionReport(
@@ -280,7 +288,7 @@ export async function routeInstrumentInstitutionReport(
   }
   if (ref.market !== 'CN') return fail('机构研报仅支持 A 股')
   const groups = Array.isArray(params.groups) ? params.groups.map(String) : undefined
-  return handlers.institutionReport(ref.symbol, groups)
+  return handlers.institutionReport({ ...params, instrument: ref }, groups)
 }
 
 export type { UnifiedInstrumentSearchHit }

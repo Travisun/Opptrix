@@ -4,6 +4,8 @@ import { SessionStore } from '@opptrix/agent'
 import { getEnrichmentStore } from '@opptrix/article-enrichment'
 import { NewsFeedStore } from '@opptrix/news-feed'
 import { getUserDataStore } from '@opptrix/user-store'
+import { buildInstrumentNamespace, inferCnAssetClassFromSymbol } from '@opptrix/shared'
+import type { CnExchange } from '@opptrix/shared'
 import { rebuildNewsSearchIndex } from './news-index.js'
 import { rebuildSessionSearchIndex } from './session-index.js'
 
@@ -104,13 +106,22 @@ export class SearchHub {
     })
 
     const stocks: StockSearchHit[] = q.length >= 2
-      ? this.hub.marketData.searchStocks(q, cap).map(s => ({
-        kind: 'stock' as const,
-        code: s.code,
-        name: s.name,
-        industry: s.industry,
-        market: s.market,
-      }))
+      ? this.hub.marketData.searchStocks(q, cap).map(s => {
+        const exchange = (s.market?.trim().toUpperCase() || 'SH') as CnExchange
+        const instrument = {
+          market: 'CN' as const,
+          assetClass: inferCnAssetClassFromSymbol(s.code, exchange),
+          symbol: s.code,
+          exchange,
+        }
+        return {
+          kind: 'stock' as const,
+          code: buildInstrumentNamespace(instrument),
+          name: s.name,
+          industry: s.industry,
+          market: s.market,
+        }
+      })
       : []
 
     const newsRows = q.length >= 1 ? store.searchNews(q, cap) : []

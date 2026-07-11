@@ -26,7 +26,8 @@ import {
 } from '../chat/chatIcons'
 import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
-import { normalizeCode, portfolioHoldingsKey } from './format'
+import { portfolioHoldingsKey } from './format'
+import { instrumentKey, parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
 import {
   detailPanelKind,
   normalizeWatchlistItem,
@@ -237,9 +238,11 @@ export default function RightMarketPanel({
       const ref = resolveWatchlistInstrument(item)
       const itemKey = portfolioHoldingsKey(item.code, ref.market)
       const targetKey = portfolioHoldingsKey(code, market ?? ref.market)
+      const parsedTarget = parseInstrumentInput(code)
+      const targetInstrumentKey = parsedTarget ? instrumentKey(parsedTarget) : itemKey
       return itemKey === targetKey
+        || instrumentKey(ref) === targetInstrumentKey
         || item.code === code
-        || normalizeCode(item.code) === normalizeCode(code)
     })
     const ref = fromList
       ? resolveWatchlistInstrument(fromList)
@@ -250,6 +253,7 @@ export default function RightMarketPanel({
     const item: WatchlistItem = fromList ?? normalizeWatchlistItem({
       code,
       name: holding?.name ?? code,
+      instrument: ref,
     })
     setSelected(item)
     setTab('detail')

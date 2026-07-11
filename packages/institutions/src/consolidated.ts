@@ -1,6 +1,7 @@
 import type { AshareEngine } from '@opptrix/a-stock-layer'
-import type { InstitutionRatingItem, RatingLevel } from '@opptrix/shared'
-import { ConfigurableEvaluator, type EvaluatorConfig, ratingFromConfidence } from './base.js'
+import type { InstitutionRatingItem, RatingLevel, InstrumentRef } from '@opptrix/shared'
+import { normalizeInstrumentRef, buildInstrumentNamespace } from '@opptrix/shared'
+import { ConfigurableEvaluator, type EvaluatorConfig, ratingFromConfidence, queryInstrumentRows } from './base.js'
 import { EVALUATOR_CONFIGS } from './registry.js'
 
 const RATING_CN: Record<RatingLevel, string> = {
@@ -36,11 +37,17 @@ export class ConsolidatedEngine {
     this.evaluators = EVALUATOR_CONFIGS.map(c => new ConfigurableEvaluator(de, c))
   }
 
-  async evaluate(code: string, groups?: string[]) {
+  async evaluate(input: string | InstrumentRef, groups?: string[]) {
+    const ref = typeof input === 'string'
+      ? normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: input })
+      : normalizeInstrumentRef(input)
+    const code = ref.symbol
+    const ns = buildInstrumentNamespace(ref)
     const t0 = Date.now()
-    let name = code
-    const rt = await this.de.realtime(code)
-    if (rt.success && rt.data?.[0]) name = rt.data[0].name || code
+    let name = ns
+    const rt = await this.de.queryInstrumentData(ref, 'realtime')
+    const rtRow = queryInstrumentRows<import('@opptrix/shared').StockRealtime>(rt)[0]
+    if (rtRow?.name) name = rtRow.name
 
     const selected = groups?.length
       ? this.evaluators.filter(e => groups.includes(e.config.group))
@@ -48,7 +55,7 @@ export class ConsolidatedEngine {
 
     const ratings: InstitutionRatingItem[] = []
     for (const ev of selected) {
-      ratings.push(await ev.evaluate(code))
+      ratings.push(await ev.evaluate(ref))
     }
 
     const confidences = ratings.map(r => r.confidence)
@@ -81,7 +88,7 @@ export class ConsolidatedEngine {
     const agreement = (distribution[topRating.rating] ?? 0) / ratings.length
 
     return {
-      code, name,
+      code: ns, name,
       avg_confidence: Math.round(avg * 10) / 10,
       avg_raw_confidence: Math.round(avg * 10) / 10,
       consensus_rating: consensus,

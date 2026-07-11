@@ -5,7 +5,7 @@ import type {
   IndexKline, IndexRealtime, MoneyFlow, NewsItem, StockKline, StockListItem,
   StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
-import { normalizeCode } from '../../../../utils/helpers.js'
+import { bareCnSymbol, ensureCnSecSymbol, normalizeCode } from '../../../../utils/helpers.js'
 import type { StockMarket } from '../../../../utils/helpers.js'
 import { cnTodayString } from '../../../../utils/market-session.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
@@ -94,12 +94,15 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
 
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
-    const normalized = codes.map(c => normalizeCode(c))
+    const entries = codes.map(c => ({
+      bare: bareCnSymbol(c),
+      symbol: ensureCnSecSymbol(c),
+    }))
     const out = new Map<string, StockRealtime>()
     let lastError: SinafinanceHttpError | undefined
 
     try {
-      const pairs = normalized.map(code => ({ code, symbol: toSinaListSymbol(code) }))
+      const pairs = entries.map(e => ({ code: e.bare, symbol: e.symbol }))
       const sinaRows = await fetchSinaQuotesBySymbols(pairs.map(p => p.symbol))
       const byKey = new Map(sinaRows.map(r => [r!.key, r!]))
       for (const pair of pairs) {
@@ -113,7 +116,7 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
       else throw e
     }
 
-    const results = normalized.map(c => out.get(c)).filter(Boolean) as StockRealtime[]
+    const results = entries.map(e => out.get(e.bare)).filter(Boolean) as StockRealtime[]
     if (!results.length && lastError) throw lastError
     return results.length ? results : null
   }
@@ -361,7 +364,7 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
   }
 
   async moneyFlow(code: string, _days = 1): Promise<MoneyFlow[] | null> {
-    const bare = normalizeCode(code)
+    const bare = bareCnSymbol(code)
     if (!bare) return null
     const snap = await fetchSinaMoneyFlow(bare)
     const row = mapSinaMoneyFlow(bare, snap)

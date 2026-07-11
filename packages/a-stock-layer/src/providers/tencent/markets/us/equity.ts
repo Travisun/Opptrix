@@ -1,9 +1,13 @@
-import type { StockKline, StockListItem, StockProfile, StockRealtime } from '../../../../core/schema.js'
+import type { StockKline, StockListItem, StockProfile, StockRealtime, NewsItem } from '../../../../core/schema.js'
 import { isValidUsSymbol } from '../../../../utils/us-market.js'
+import { isCnSecPrefixed } from '../../../../utils/helpers.js'
 import {
   fetchTencentUsStockKline,
+  fetchTencentUsStockNews,
+  fetchTencentUsStockNotices,
   fetchTencentUsStockProfile,
   fetchTencentUsStockQuote,
+  fetchTencentUsShareholderStats,
   resolveTencentUsKlinePeriod,
 } from '../../api/us-detail-service.js'
 import { fetchTencentUsStockList } from '../../api/us-stock-service.js'
@@ -96,7 +100,11 @@ function isUsStockListCall(market: unknown): boolean {
 }
 
 function isUsBatch(codes: unknown[]): boolean {
-  return codes.length > 0 && codes.every(c => isValidUsSymbol(String(c)))
+  return codes.length > 0 && codes.every(c => {
+    const s = String(c)
+    if (isCnSecPrefixed(s) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(s.trim())) return false
+    return isValidUsSymbol(s)
+  })
 }
 
 /** 在 Tencent CN handler 上叠加美股标准能力（realtime / kline / profile / list）路由 */
@@ -105,6 +113,9 @@ export function mixTencentUsEquity(DriverClass: typeof TencentCnHandler): void {
 
   const origRealtime = proto.realtime.bind(proto)
   proto.realtime = async function realtime(code: string) {
+    if (isCnSecPrefixed(code) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(code.trim())) {
+      return origRealtime(code)
+    }
     if (isValidUsSymbol(code)) return tencentUsRealtime(code)
     return origRealtime(code)
   }
@@ -112,6 +123,7 @@ export function mixTencentUsEquity(DriverClass: typeof TencentCnHandler): void {
   const origBatchRealtime = proto.batchRealtime.bind(proto)
   proto.batchRealtime = async function batchRealtime(codes: string[]) {
     if (isUsBatch(codes)) return tencentUsBatchRealtime(codes)
+    if (codes.some(c => isCnSecPrefixed(c))) return origBatchRealtime(codes)
     return origBatchRealtime(codes)
   }
 
@@ -123,6 +135,9 @@ export function mixTencentUsEquity(DriverClass: typeof TencentCnHandler): void {
     end = '',
     count?: number,
   ) {
+    if (isCnSecPrefixed(code) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(code.trim())) {
+      return origKline(code, period, start, end, count)
+    }
     if (isValidUsSymbol(code)) {
       return tencentUsKline(code, period, start, end, count)
     }
@@ -131,6 +146,9 @@ export function mixTencentUsEquity(DriverClass: typeof TencentCnHandler): void {
 
   const origProfile = proto.profile.bind(proto)
   proto.profile = async function profile(code: string) {
+    if (isCnSecPrefixed(code) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(code.trim())) {
+      return origProfile(code)
+    }
     if (isValidUsSymbol(code)) return tencentUsProfile(code)
     return origProfile(code)
   }
@@ -142,4 +160,38 @@ export function mixTencentUsEquity(DriverClass: typeof TencentCnHandler): void {
     }
     return origStockList(market)
   }
+
+  const origNews = proto.news.bind(proto)
+  ;(proto as { news: typeof origNews }).news = async function news(
+    code: string,
+    page = 1,
+    pageSize = 20,
+    newsType = 'all',
+  ): Promise<NewsItem[] | null> {
+    if (isCnSecPrefixed(code) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(code.trim())) {
+      return origNews(code, page, pageSize, newsType)
+    }
+    if (!isValidUsSymbol(code)) return origNews(code, page, pageSize, newsType)
+    const bare = String(code).trim()
+    const pg = Math.max(1, page)
+    const n = Math.max(1, Math.min(pageSize, 50))
+    const channel = String(newsType ?? '').trim().toLowerCase()
+    if (channel === 'notice') {
+      const result = await fetchTencentUsStockNotices({ code: bare, page: pg, pageSize: n })
+      if (!result.items.length && !result.total) return null
+      return [{ code: bare, ...result, source: 'tencent_us_notice' } as unknown as NewsItem]
+    }
+    const result = await fetchTencentUsStockNews({ code: bare, page: pg, pageSize: n })
+    if (!result.items.length && !result.total) return null
+    return [{ code: bare, ...result, source: 'tencent_us_news' } as unknown as NewsItem]
+  }
+
+  ;(proto as { shareholders?: unknown }).shareholders = async function shareholders(code: string, page = 1) {
+      if (isCnSecPrefixed(code) || /^\d{6}(\.(SH|SZ|BJ))?$/i.test(code.trim())) return null
+      if (!isValidUsSymbol(code)) return null
+      const bare = String(code).trim()
+      const result = await fetchTencentUsShareholderStats({ code: bare, page: Math.max(1, page) })
+      if (!result.items.length) return null
+      return [{ code: bare, ...result, source: 'tencent_us_shareholder' }]
+    }
 }

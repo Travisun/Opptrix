@@ -5,11 +5,12 @@
 import type { AssetClass, InstrumentRef, Market, StockListItem } from '@opptrix/shared'
 import {
   canonicalCnSymbol,
+  buildInstrumentNamespace,
   inferCnAssetClassFromSymbol,
-  instrumentDisplayCode,
-  instrumentRefLabel,
+  instrumentRefKey,
   normalizeInstrumentRef,
 } from '@opptrix/shared'
+import { exchangeFromTencentSecSymbol } from '../core/provider-wire.js'
 import type { MarketDataEngine } from '../engine.js'
 import type { StockIndexItem } from '../providers/stockindex/api/client.js'
 import { stockIndexSearch } from '../providers/stockindex/api/client.js'
@@ -44,36 +45,47 @@ function cacheKey(keyword: string, limit: number, markets?: Market[]): string {
 function hitFromStockIndexItem(item: StockIndexItem): InstrumentSearchHit | null {
   const instrument = stockIndexItemToInstrumentRef(item)
   if (!instrument) return null
+  const ns = item.instrumentId?.trim() || buildInstrumentNamespace(instrument)
   return {
-    code: instrumentDisplayCode(instrument),
+    code: ns,
     name: item.nameCn ?? item.code,
     market: instrument.market,
     assetClass: instrument.assetClass,
     exchange: instrument.exchange ?? item.exchange ?? null,
     instrument,
-    refLabel: instrumentRefLabel(instrument),
+    refLabel: ns,
     source: 'stock_index',
   }
+}
+
+function exchangeFromTencentCode(raw: string): 'SH' | 'SZ' | 'BJ' | undefined {
+  return exchangeFromTencentSecSymbol(raw)
 }
 
 function hitFromStockListItem(row: StockListItem, market: Market): InstrumentSearchHit | null {
   const rawCode = String(row.code ?? '').trim()
   if (!rawCode) return null
   const code = market === 'CN' ? canonicalCnSymbol(rawCode) : rawCode
+  const exchange = market === 'HK'
+    ? 'HK'
+    : row.market === 'SH' || row.market === 'SZ' || row.market === 'BJ'
+      ? row.market
+      : undefined
   const instrument = normalizeInstrumentRef({
     market,
-    assetClass: market === 'CN' ? inferCnAssetClassFromSymbol(code) : 'EQUITY',
+    assetClass: market === 'CN' ? inferCnAssetClassFromSymbol(code, exchange) : 'EQUITY',
     symbol: code,
-    exchange: market === 'HK' ? 'HK' : row.market === 'SH' || row.market === 'SZ' ? row.market : undefined,
+    exchange,
   })
+  const ns = buildInstrumentNamespace(instrument)
   return {
-    code: instrumentDisplayCode(instrument),
+    code: ns,
     name: row.name ?? code,
     market,
     assetClass: instrument.assetClass,
-    exchange: row.market ?? instrument.exchange ?? null,
+    exchange: instrument.exchange ?? exchange ?? null,
     instrument,
-    refLabel: instrumentRefLabel(instrument),
+    refLabel: ns,
     source: 'stock_index',
   }
 }
@@ -119,21 +131,25 @@ async function tencentCnSearchFallback(
   const rows = resp.data as Record<string, unknown>[]
   const out: InstrumentSearchHit[] = []
   for (const r of rows) {
-    const code = canonicalCnSymbol(String(r.code ?? r.symbol ?? r.stockCode ?? ''))
+    const rawCode = String(r.code ?? r.symbol ?? r.stockCode ?? '')
+    const exchange = exchangeFromTencentCode(rawCode)
+    const code = canonicalCnSymbol(rawCode.replace(/^(sh|sz|bj)/i, ''))
     if (!code || code === '000000') continue
     const instrument = normalizeInstrumentRef({
       market: 'CN',
-      assetClass: inferCnAssetClassFromSymbol(code),
+      assetClass: inferCnAssetClassFromSymbol(code, exchange),
       symbol: code,
+      exchange,
     })
+    const ns = buildInstrumentNamespace(instrument)
     out.push({
-      code: instrument.symbol,
+      code: ns,
       name: String(r.name ?? r.stockName ?? r.shortname ?? code),
       market: 'CN',
       assetClass: instrument.assetClass,
-      exchange: null,
+      exchange: instrument.exchange ?? null,
       instrument,
-      refLabel: instrumentRefLabel(instrument),
+      refLabel: ns,
       source: 'tencent',
     })
     if (out.length >= limit) break
@@ -165,7 +181,7 @@ export async function searchInstrumentsOnline(
   for (const market of targetMarkets) {
     try {
       for (const hit of await searchMarketViaStandardApi(de, market, kw, limit)) {
-        const key = `${hit.market}:${hit.instrument.symbol}:${hit.instrument.assetClass}`
+        const key = instrumentRefKey(hit.instrument)
         if (seen.has(key)) continue
         seen.add(key)
         hits.push(hit)
@@ -178,7 +194,7 @@ export async function searchInstrumentsOnline(
   if (!hits.length && (!markets?.length || markets.includes('CN'))) {
     try {
       for (const hit of await tencentCnSearchFallback(de, kw, limit)) {
-        const key = `${hit.market}:${hit.instrument.symbol}`
+        const key = instrumentRefKey(hit.instrument)
         if (seen.has(key)) continue
         seen.add(key)
         hits.push(hit)

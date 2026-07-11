@@ -25,6 +25,7 @@ import {
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { openExternalUrl } from '../platform/openUrl'
 import TradingViewChart from './TradingViewChart'
+import { resolveWatchlistInstrument } from './instrument'
 import StockDecisionCard, { type StockDiscussPayload } from './StockDecisionCard'
 import StockTrendTab from './StockTrendTab'
 import type { HoldingSnapshot } from './useFollowPortfolio'
@@ -733,7 +734,8 @@ export default function StockDetailTab({
     setLoading(true)
     setError('')
 
-    research.stockDetail(stock.code)
+    const ref = resolveWatchlistInstrument(stock)
+    research.stockDetail(ref)
       .then(resp => {
         if (cancelled) return
         if (!resp.success || !resp.data) {
@@ -888,6 +890,7 @@ export default function StockDetailTab({
           <div className={s.chartPanel}>
             <TradingViewChart
               code={detail.code}
+              instrument={resolveWatchlistInstrument(stock)}
               expanded
               active={detailTab === 'chart'}
             />

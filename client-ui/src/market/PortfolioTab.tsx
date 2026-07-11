@@ -5,7 +5,8 @@ import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { PortfolioSummaryData } from '../types/schemas'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { formatPct, formatPrice, formatPriceForMarket, normalizeCode, pctTone, portfolioHoldingsKey } from './format'
+import { formatPct, formatPrice, formatPriceForMarket, pctTone, portfolioHoldingsKey } from './format'
+import { instrumentKey, parseInstrumentInput } from './instrument'
 import { marketDisplayName } from './instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, sidebarItemSelected } from '../theme/mixins'
@@ -281,8 +282,15 @@ export default function PortfolioTab({ active = true, selectedCode, onSelect }: 
             const marketLabel = h.market && h.market !== 'CN' ? marketDisplayName(h.market) : null
             const selected = selectedCode != null && (
               h.code === selectedCode
-              || normalizeCode(h.code) === normalizeCode(selectedCode)
               || portfolioHoldingsKey(selectedCode, h.market) === displayCode
+              || (() => {
+                const parsed = parseInstrumentInput(selectedCode)
+                return parsed ? instrumentKey(parsed) === instrumentKey({
+                  market: (h.market ?? 'CN') as import('../types/instrument').Market,
+                  assetClass: 'EQUITY',
+                  symbol: h.code,
+                }) : false
+              })()
             )
             const sharesLabel = formatShares(h.shares)
             const note = [

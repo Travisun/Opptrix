@@ -2,7 +2,7 @@ import type {
   IndexKline, IndexRealtime, MoneyFlow, NewsItem, StockKline, StockListItem,
   StockProfile, StockRealtime,
 } from '../../../../core/schema.js'
-import { normalizeCode, safeFloat } from '../../../../utils/helpers.js'
+import { bareCnSymbol, ensureCnSecSymbol, normalizeCode, safeFloat } from '../../../../utils/helpers.js'
 import { cnTodayString } from '../../../../utils/market-session.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { minuteKlinesToIntradaySessions } from '../../../../utils/intraday-trends.js'
@@ -23,6 +23,7 @@ import {
   fetchTencentSmartboxSearch,
   fetchTencentSqtQuotes,
   resolveTencentBoardCode,
+  fromTencentSymbol,
 } from '../../api/proxy.js'
 import { fetchTencentGlobalIndexList } from '../../api/global-index-service.js'
 import { fetchTencentExchangeRateList } from '../../api/exchange-rate-service.js'
@@ -88,16 +89,18 @@ async function runTencentPartial<T>(fn: () => Promise<T>): Promise<T | null> {
 export class TencentCnHandler extends MarketHandlerShell {
 
   private async loadRealtime(code: string): Promise<StockRealtime | null> {
-    const sqtRows = await runTencentPartial(() => fetchTencentSqtQuotes([code]))
+    const sec = ensureCnSecSymbol(code)
+    const bare = bareCnSymbol(code)
+    const sqtRows = await runTencentPartial(() => fetchTencentSqtQuotes([bare]))
     const sqtHit = sqtRows?.[0]
     if (sqtHit) {
-      const mapped = mapTencentSqtRealtime(code, sqtHit.fields)
+      const mapped = mapTencentSqtRealtime(bare, sqtHit.fields)
       if (mapped) return mapped
     }
-    const rows = await fetchTencentQuotes([code])
+    const rows = await fetchTencentQuotes([sec], { rawSymbols: true })
     const hit = rows[0]
     if (!hit) return null
-    return mapTencentRealtime(code, hit.parts)
+    return mapTencentRealtime(bare, hit.parts)
   }
 
   async realtime(code: string): Promise<StockRealtime[] | null> {
@@ -105,30 +108,49 @@ export class TencentCnHandler extends MarketHandlerShell {
     return q ? [q] : null
   }
 
+  /** 按已构造的 sec 符号拉行情（如 sh000977 / sz000977），用于 exchange 消歧 */
+  async realtimeSec(secSymbol: string): Promise<StockRealtime[] | null> {
+    const sym = secSymbol.trim().toLowerCase()
+    if (!sym) return null
+    const rows = await fetchTencentQuotes([sym], { rawSymbols: true })
+    const hit = rows[0]
+    if (!hit) return null
+    const code = normalizeCode(fromTencentSymbol(sym))
+    const mapped = mapTencentRealtime(code, hit.parts)
+    return mapped ? [mapped] : null
+  }
+
   async batchRealtime(codes: string[]): Promise<StockRealtime[] | null> {
     if (!codes.length) return null
-    const normalized = codes.map(c => normalizeCode(c))
+    const entries = codes.map(c => ({
+      sec: ensureCnSecSymbol(c),
+      bare: bareCnSymbol(c),
+    }))
     const out = new Map<string, StockRealtime>()
 
-    const sqtRows = await runTencentPartial(() => fetchTencentSqtQuotes(normalized))
+    const bareList = entries.map(e => e.bare)
+    const sqtRows = await runTencentPartial(() => fetchTencentSqtQuotes(bareList))
     if (sqtRows) {
       for (let i = 0; i < sqtRows.length; i += 1) {
         const row = sqtRows[i]!
-        const mapped = mapTencentSqtRealtime(normalized[i] ?? row.symbol, row.fields)
+        const bare = entries[i]?.bare ?? bareCnSymbol(row.symbol)
+        const mapped = mapTencentSqtRealtime(bare, row.fields)
         if (mapped) out.set(mapped.code, mapped)
       }
     }
 
-    const missing = normalized.filter(c => !out.has(c))
+    const missing = entries.filter(e => !out.has(e.bare))
     if (missing.length) {
-      const rows = await fetchTencentQuotes(missing)
-      for (const row of rows) {
-        const q = mapTencentRealtime(row.code, row.parts)
+      const rows = await fetchTencentQuotes(missing.map(e => e.sec), { rawSymbols: true })
+      for (let i = 0; i < rows.length; i += 1) {
+        const row = rows[i]!
+        const bare = missing[i]?.bare ?? bareCnSymbol(row.code)
+        const q = mapTencentRealtime(bare, row.parts)
         out.set(q.code, q)
       }
     }
 
-    const results = normalized.map(c => out.get(c)).filter(Boolean) as StockRealtime[]
+    const results = bareList.map(c => out.get(c)).filter(Boolean) as StockRealtime[]
     return results.length ? results : null
   }
 
@@ -304,7 +326,7 @@ export class TencentCnHandler extends MarketHandlerShell {
   }
 
   async profile(code: string): Promise<StockProfile[] | null> {
-    const bare = normalizeCode(code)
+    const bare = bareCnSymbol(code)
     if (!bare) return null
     const data = await fetchTencentJiankuang(bare)
     const profile = mapTencentJiankuangProfile(bare, data)
@@ -312,7 +334,7 @@ export class TencentCnHandler extends MarketHandlerShell {
   }
 
   async moneyFlow(code: string): Promise<MoneyFlow[] | null> {
-    const bare = normalizeCode(code)
+    const bare = bareCnSymbol(code)
     if (!bare) return null
     const data = await fetchTencentFundFlow(
       bare,

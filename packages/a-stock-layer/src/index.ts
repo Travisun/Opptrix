@@ -116,7 +116,7 @@ export { WatchlistManager } from './watchlist/manager.js'
 export type { WatchlistItem } from './watchlist/models.js'
 export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
 
-export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, secXueqiuSymbol } from './utils/helpers.js'
+export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, cnSecSymbol, secXueqiuSymbol } from './utils/helpers.js'
 export { instrumentRefKey } from '@opptrix/shared'
 export { isCnEtfCode, toInstrumentRef, inferCnAssetClass, inferMarketFromSymbol, instrumentId } from './core/instrument.js'
 export {
@@ -165,6 +165,13 @@ export {
   type InstrumentQueryOpts,
   type InstrumentQueryPlan,
 } from './core/instrument-query.js'
+export {
+  wireProviderSymbolArg,
+  wireRegistryMethodArgs,
+  formatProviderMethodArgs,
+  exchangeFromTencentSecSymbol,
+  tencentSecSymbol,
+} from './core/provider-wire.js'
 export { resolveInstrumentFromParams, instrumentRefsFromList, normalizeInstrumentHubParams, instrumentProviderSymbol } from '@opptrix/shared'
 export {
   normalizeInstrumentRef,

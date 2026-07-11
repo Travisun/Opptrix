@@ -6,9 +6,9 @@
  */
 
 import type { AssetClass, InstrumentRef, Market } from '@opptrix/shared'
-import { instrumentDisplayCode, normalizeInstrumentRef } from '@opptrix/shared'
+import { instrumentProviderSymbol, normalizeInstrumentRef } from '@opptrix/shared'
 import { Capability } from './capabilities.js'
-import { inferCnAssetClass, isCnEtfCode } from './instrument.js'
+import { isCnEtfCode } from './instrument.js'
 import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regional-symbol.js'
 
 /**
@@ -29,6 +29,12 @@ import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regi
  * - etf_nav:        ETF 净值序列
  * - etf_holdings:   ETF 持仓成分
  * - etf_snapshot:   ETF 聚合快照（概况 + 净值 + 行情）
+ * - dividend:       分红送转记录
+ * - news:           个股资讯/新闻
+ * - notices:        公司公告（news 的 notice 通道）
+ * - shareholders:   股东结构/持仓统计
+ * - money_flow:     个股资金流向
+ * - technical_analysis: 技术面摘要（港股成交分布等）
  */
 export type InstrumentDataCapability =
   | 'realtime'
@@ -43,6 +49,12 @@ export type InstrumentDataCapability =
   | 'etf_nav'
   | 'etf_holdings'
   | 'etf_snapshot'
+  | 'dividend'
+  | 'news'
+  | 'notices'
+  | 'shareholders'
+  | 'money_flow'
+  | 'technical_analysis'
 
 /**
  * 标的查询可选参数 — 控制返回数量、关键词、报告日期/类型、周期等。
@@ -71,6 +83,8 @@ export interface InstrumentQueryOpts {
   startDate?: string
   /** K 线结束日期 YYYY-MM-DD（CN cn_kline） */
   endDate?: string
+  /** news / notices 资讯类型（CN：all|notice|research；US/HK：all|notice） */
+  newsType?: string
 }
 
 /**
@@ -95,6 +109,8 @@ export type InstrumentQueryPlan =
     useCache: boolean
     /** 方法参数列表 */
     args: unknown[]
+    /** 标的身份 — qScoped 按 Provider 线格式重写 args */
+    ref?: InstrumentRef
   }
   | {
     /** 跨市场复合快照（聚合多维度数据） */
@@ -106,11 +122,13 @@ export type InstrumentQueryPlan =
     /** A 股实时行情专用路径 */
     kind: 'cn_realtime'
     symbol: string
+    exchange?: string
   }
   | {
     /** A 股 K 线专用路径 */
     kind: 'cn_kline'
     symbol: string
+    exchange?: string
     count: number
     period?: string
     start?: string
@@ -125,9 +143,7 @@ export type InstrumentQueryPlan =
 // ── 内部辅助函数 ──
 
 function cnAssetClass(ref: InstrumentRef): AssetClass {
-  if (ref.assetClass === 'ETF' || isCnEtfCode(ref.symbol)) return 'ETF'
-  if (ref.assetClass === 'INDEX' || inferCnAssetClass(ref.symbol) === 'INDEX') return 'INDEX'
-  return 'EQUITY'
+  return normalizeInstrumentRef(ref).assetClass
 }
 
 function cnSymbol(ref: InstrumentRef): string {
@@ -143,7 +159,7 @@ function regionalSymbol(ref: InstrumentRef): string {
 }
 
 function cryptoPair(ref: InstrumentRef): string {
-  return instrumentDisplayCode(normalizeInstrumentRef(ref))
+  return instrumentProviderSymbol(normalizeInstrumentRef(ref))
 }
 
 function registryPlan(
@@ -153,8 +169,29 @@ function registryPlan(
   method: string,
   useCache: boolean,
   args: unknown[],
+  ref?: InstrumentRef,
 ): InstrumentQueryPlan {
-  return { kind: 'registry', market, assetClass, capability, method, useCache, args }
+  return { kind: 'registry', market, assetClass, capability, method, useCache, args, ref }
+}
+
+function detailNewsPlan(
+  market: Market,
+  normalized: InstrumentRef,
+  symbol: string,
+  opts: InstrumentQueryOpts,
+  newsType: string,
+): InstrumentQueryPlan {
+  const page = opts.page ?? 1
+  const pageSize = opts.pageSize ?? 20
+  return registryPlan(
+    market,
+    'EQUITY',
+    Capability.NEWS,
+    'news',
+    page <= 2,
+    [symbol, page, pageSize, newsType],
+    normalized,
+  )
 }
 
 function instrumentSearchPlan(
@@ -187,36 +224,31 @@ export function resolveInstrumentQueryPlan(
 
   // ── A 股市场 ──
   if (ref.market === 'CN') {
-    const symbol = cnSymbol(ref)
-    const assetClass = cnAssetClass(ref)
+    const normalized = normalizeInstrumentRef(ref)
+    const symbol = normalized.symbol
+    const assetClass = normalized.assetClass
+    const exchange = normalized.exchange
     switch (dataCap) {
       case 'realtime':
-        if (assetClass === 'INDEX') {
-          return registryPlan('CN', 'INDEX', Capability.INDEX_REALTIME, 'indexRealtime', false, [symbol])
-        }
-        return { kind: 'cn_realtime', symbol }
+        return { kind: 'cn_realtime', symbol, exchange }
       case 'kline':
-        if (assetClass === 'INDEX') {
-          return registryPlan('CN', 'INDEX', Capability.INDEX_KLINE, 'indexKline', true, [
-            symbol, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
-          ])
-        }
         return {
           kind: 'cn_kline',
           symbol,
+          exchange,
           count,
           period: opts.period ?? 'daily',
           start: opts.startDate,
           end: opts.endDate,
         }
       case 'snapshot':
-        return { kind: 'cn_realtime', symbol }
+        return { kind: 'cn_realtime', symbol, exchange }
       case 'profile':
-        return registryPlan('CN', assetClass, Capability.STOCK_PROFILE, 'profile', true, [symbol])
+        return registryPlan('CN', assetClass, Capability.STOCK_PROFILE, 'profile', true, [symbol], normalized)
       case 'financials':
         return registryPlan('CN', assetClass, Capability.FINANCIAL_SUMMARY, 'financials', true, [
           symbol, opts.reportDate ?? '', opts.reportType ?? 'annual',
-        ])
+        ], normalized)
       case 'stock_list': {
         const args: unknown[] = [opts.keyword ?? '']
         if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
@@ -244,12 +276,12 @@ export function resolveInstrumentQueryPlan(
         return null
       case 'etf_nav':
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, [symbol])
+          return registryPlan('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, [symbol], normalized)
         }
         return null
       case 'etf_holdings':
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return registryPlan('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, [symbol])
+          return registryPlan('CN', 'ETF', Capability.ETF_HOLDINGS, 'etfHoldings', true, [symbol], normalized)
         }
         return null
       case 'etf_snapshot':
@@ -257,6 +289,24 @@ export function resolveInstrumentQueryPlan(
           return { kind: 'cn_etf_snapshot', symbol }
         }
         return null
+      case 'dividend':
+        return registryPlan('CN', assetClass, Capability.DIVIDEND, 'dividend', true, [symbol], normalized)
+      case 'news':
+        return detailNewsPlan('CN', normalized, symbol, opts, opts.newsType ?? 'all')
+      case 'notices':
+        return detailNewsPlan('CN', normalized, symbol, opts, 'notice')
+      case 'shareholders':
+        return registryPlan(
+          'CN',
+          assetClass,
+          Capability.SHAREHOLDER,
+          'shareholders',
+          true,
+          [symbol, opts.reportDate ?? ''],
+          normalized,
+        )
+      case 'money_flow':
+        return registryPlan('CN', assetClass, Capability.STOCK_MONEY_FLOW, 'moneyFlow', true, [symbol], normalized)
       default:
         return null
     }
@@ -264,22 +314,23 @@ export function resolveInstrumentQueryPlan(
 
   // ── 美股市场 ──
   if (ref.market === 'US' && ref.assetClass === 'EQUITY') {
+    const normalized = normalizeInstrumentRef(ref)
     const sym = usSymbol(ref)
     switch (dataCap) {
       case 'realtime':
-        return registryPlan('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym])
+        return registryPlan('US', 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym], normalized)
       case 'kline':
         return registryPlan('US', 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
           sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
-        ])
+        ], normalized)
       case 'snapshot':
         return { kind: 'composite_snapshot', market: 'US', symbol: sym }
       case 'profile':
-        return registryPlan('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym])
+        return registryPlan('US', 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym], normalized)
       case 'financials':
         return registryPlan('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, [
           sym, opts.reportDate ?? '', opts.reportType ?? 'annual',
-        ])
+        ], normalized)
       case 'stock_list': {
         const args: unknown[] = ['US', opts.keyword ?? '']
         if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
@@ -297,6 +348,20 @@ export function resolveInstrumentQueryPlan(
           true,
           [opts.plateType ?? 'boards:US'],
         )
+      case 'news':
+        return detailNewsPlan('US', normalized, sym, opts, opts.newsType ?? 'all')
+      case 'notices':
+        return detailNewsPlan('US', normalized, sym, opts, 'notice')
+      case 'shareholders':
+        return registryPlan(
+          'US',
+          'EQUITY',
+          Capability.SHAREHOLDER,
+          'shareholders',
+          true,
+          [sym, opts.page ?? 1],
+          normalized,
+        )
       default:
         return null
     }
@@ -306,16 +371,19 @@ export function resolveInstrumentQueryPlan(
   if (isRegionalEquityMarket(ref.market)) {
     const market = ref.market as RegionalEquityMarket
     if (market === 'JP' || market === 'KR') return null
+    const normalized = normalizeInstrumentRef(ref)
     const sym = regionalSymbol(ref)
     switch (dataCap) {
       case 'realtime':
-        return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym])
+        return registryPlan(market, 'EQUITY', Capability.STOCK_REALTIME, 'realtime', true, [sym], normalized)
       case 'kline':
         return registryPlan(market, 'EQUITY', Capability.STOCK_KLINE, 'kline', true, [
           sym, opts.period ?? 'daily', opts.startDate ?? '', opts.endDate ?? '', count,
-        ])
+        ], normalized)
       case 'snapshot':
         return { kind: 'composite_snapshot', market, symbol: sym }
+      case 'profile':
+        return registryPlan(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym], normalized)
       case 'stock_list': {
         const args: unknown[] = [market, opts.keyword ?? '']
         if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
@@ -333,6 +401,36 @@ export function resolveInstrumentQueryPlan(
           true,
           [opts.plateType ?? `boards:${market}`],
         )
+      case 'news':
+        return detailNewsPlan(market, normalized, sym, opts, opts.newsType ?? 'all')
+      case 'notices':
+        return detailNewsPlan(market, normalized, sym, opts, 'notice')
+      case 'dividend':
+        if (market === 'HK') {
+          return registryPlan(
+            'HK',
+            'EQUITY',
+            Capability.DIVIDEND,
+            'dividend',
+            true,
+            [sym, opts.page ?? 1, opts.pageSize ?? 10, true],
+            normalized,
+          )
+        }
+        return null
+      case 'technical_analysis':
+        if (market === 'HK') {
+          return registryPlan(
+            'HK',
+            'EQUITY',
+            Capability.TECH_INDICATOR,
+            'technicalAnalysis',
+            true,
+            [sym],
+            normalized,
+          )
+        }
+        return null
       default:
         return null
     }
@@ -340,14 +438,15 @@ export function resolveInstrumentQueryPlan(
 
   // ── 加密货币市场 ──
   if (ref.market === 'CRYPTO') {
+    const normalized = normalizeInstrumentRef(ref)
     const pair = cryptoPair(ref)
     switch (dataCap) {
       case 'realtime':
-        return registryPlan('CRYPTO', 'CRYPTO_SPOT', Capability.STOCK_REALTIME, 'realtime', true, [pair])
+        return registryPlan('CRYPTO', 'CRYPTO_SPOT', Capability.STOCK_REALTIME, 'realtime', true, [pair], normalized)
       case 'kline':
         return registryPlan('CRYPTO', 'CRYPTO_SPOT', Capability.STOCK_KLINE, 'kline', true, [
           pair, opts.period ?? 'daily', '', '', count,
-        ])
+        ], normalized)
       case 'snapshot':
         return { kind: 'composite_snapshot', market: 'CRYPTO', symbol: pair }
       case 'stock_list':

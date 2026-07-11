@@ -1,4 +1,5 @@
 import type { MoneyFlow, StockKline, StockListItem, StockRealtime } from '../../../core/schema.js'
+import { exchangeFromTencentSecSymbol } from '../../../core/provider-wire.js'
 import { normalizeCode, safeFloat } from '../../../utils/helpers.js'
 import { fromTencentSymbol } from '../api/proxy.js'
 import { tencentMarketCapYuan } from './quote.js'
@@ -377,13 +378,16 @@ export function mapTencentTradeDetailRows(
  */
 export function mapTencentSmartboxStocks(rows: TencentSmartboxStock[]): StockListItem[] {
   return rows.map(row => {
-    const code = fromTencentSymbol(String(row.code ?? ''))
+    const raw = String(row.code ?? '')
+    const code = fromTencentSymbol(raw)
+    const ex = exchangeFromTencentSecSymbol(raw)
+    const market = ex ?? (code.startsWith('6') ? 'SH' : 'SZ')
     const industry = String(row.type ?? '').replace(/^GP-A-/, '') || ''
     return {
       code,
       name: String(row.name ?? code),
       industry,
-      market: code.startsWith('6') ? 'SH' : 'SZ',
+      market,
     }
   }).filter(item => item.code && item.name)
 }

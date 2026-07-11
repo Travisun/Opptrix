@@ -87,48 +87,87 @@ function isCnEtfSymbol(symbol: string): boolean {
 }
 
 /**
+ * 无 exchange 时可安全判为上证指数的常见代码（不含 000001 — 默认深市平安银行）。
+ * 其余 000xxx（如 000977 浪潮信息）默认深市个股，避免与上证同名指数混淆。
+ */
+const SH_CN_INDEX_CODES = new Set([
+  '000016', '000300', '000688', '000905', '000906', '000985',
+])
+
+/** 常见上证指数白名单（供无 exchange 场景消歧） */
+export function isKnownShCnIndexCode(symbol: string): boolean {
+  return SH_CN_INDEX_CODES.has(canonicalCnSymbol(symbol))
+}
+
+/**
  * A 股指数代码段识别（纯代码段推断，主要用于无 exchange 的场景）。
- * - 深证 399xxx 系列 → 总是深证指数
- * - 上证 000xxx（000001-000999）→ 默认指数，但若明确来自 SZ 交易所（如 000001 平安银行）则为 EQUITY
+ * - 深证 399xxx → 指数
+ * - 常见上证 000xxx 白名单 → 指数
+ * - 其余 000xxx（000002–000999 深市个股段）→ 非指数
  */
 function isCnIndexSymbol(symbol: string): boolean {
   const c = canonicalCnSymbol(symbol)
   if (c.startsWith('399')) return true
-  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) return true
-  return false
+  return isKnownShCnIndexCode(c)
 }
 
 /**
  * 判断 A 股代码是否为指数，支持 exchange 消歧。
- * 000001-000999 段在 SH 市场默认指数，在 SZ 市场（如平安银行 000001）为 EQUITY。
+ * SH 市场 000xxx 均为指数；SZ 市场 000xxx 均为个股（399xxx 为深证指数）。
  */
 export function isCnIndexSymbolByExchange(symbol: string, exchange?: string | null): boolean {
   const c = canonicalCnSymbol(symbol)
   if (c.startsWith('399')) return true
-  if (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000) {
-    // 399xxx 之外：SZ 市场的 000xxx 是个股（平安银行等），SH 市场的 000xxx 是指数
-    if (exchange && exchange.toUpperCase() === 'SZ') return false
-    return true
+  if (exchange && exchange.toUpperCase() === 'SZ') return false
+  if (exchange && exchange.toUpperCase() === 'SH') {
+    return c.startsWith('000') && c.length === 6
   }
-  return false
+  return isKnownShCnIndexCode(c)
+}
+
+/** A 股交易所 — CN 标的内部身份的一部分，与 symbol 共同消歧 */
+export type CnExchange = 'SH' | 'SZ' | 'BJ'
+
+/**
+ * 无 exchange 时从代码段推断交易所（兜底，非权威）。
+ * 同码异名（如 000977）须由搜索/用户选择带回 exchange，不可仅靠此推断。
+ */
+export function inferCnExchangeFromSymbol(symbol: string): CnExchange {
+  const c = canonicalCnSymbol(symbol)
+  if (c.startsWith('92') || c.startsWith('43') || c.startsWith('83') || c.startsWith('87')) return 'BJ'
+  if (c.startsWith('399')) return 'SZ'
+  if (c.startsWith('6')) return 'SH'
+  if (c.startsWith('9')) return 'SH'
+  if (c.startsWith('3') || c.startsWith('2')) return 'SZ'
+  if (c === '000001') return 'SZ'
+  if (isKnownShCnIndexCode(c)) return 'SH'
+  if (c.startsWith('0')) return 'SZ'
+  return 'SZ'
 }
 
 /**
- * 推断 A 股 assetClass，支持 exchange 消歧。
- * 当 exchange 为明确值时，优先按 exchange 区分 SH 指数 vs SZ 个股；
- * 无 exchange 时回退到纯代码段推断（旧行为，用于无 exchange 的场景如用户文本输入）。
+ * 解析 CN 标的完整身份 — exchange 优先，assetClass 由 exchange + 代码段推导。
+ * 搜索命中、关注列表、Hub API 应始终传递并保留 exchange。
+ */
+export function resolveCnInstrumentIdentity(ref: InstrumentRef): InstrumentRef {
+  const symbol = canonicalCnSymbol(ref.symbol)
+  const exchange = (ref.exchange ?? inferCnExchangeFromSymbol(symbol)).toUpperCase() as CnExchange
+  const assetClass = inferCnAssetClassFromSymbol(symbol, exchange)
+  return { market: 'CN', assetClass, symbol, exchange }
+}
+
+/**
+ * 推断 A 股 assetClass — 以 exchange 为主键：
+ * - SZ：399xxx 为指数，其余为个股/ETF
+ * - SH：000xxx 为指数，其余为个股/ETF
+ * - 无 exchange：先推断交易所再分类
  */
 export function inferCnAssetClassFromSymbol(symbol: string, exchange?: string | null): AssetClass {
   const c = canonicalCnSymbol(symbol)
-  if (exchange && exchange.toUpperCase() === 'SZ') {
-    // SZ 指数仅 399xxx；000xxx 在 SZ 是个股
-    if (c.startsWith('399')) return 'INDEX'
-  } else if (exchange && exchange.toUpperCase() === 'SH') {
-    if (isCnIndexSymbolByExchange(c, 'SH')) return 'INDEX'
-  } else {
-    if (isCnIndexSymbol(c)) return 'INDEX'
-  }
   if (isCnEtfSymbol(c)) return 'ETF'
+  const ex = (exchange ?? inferCnExchangeFromSymbol(c)).toUpperCase() as CnExchange
+  if (ex === 'SZ') return c.startsWith('399') ? 'INDEX' : 'EQUITY'
+  if (ex === 'SH') return (c.startsWith('000') && c.length === 6) ? 'INDEX' : 'EQUITY'
   return 'EQUITY'
 }
 
@@ -170,13 +209,13 @@ export function normalizeInstrumentRef(ref: InstrumentRef): InstrumentRef {
   }
 
   const symbol = canonicalSymbolForMarket(market, ref.symbol)
-  let assetClass = ref.assetClass
   if (market === 'CN') {
-    // 有 exchange 信息时传入，用于 000001 这类 SH(指数)/SZ(个股) 同代码消歧
-    assetClass = ref.assetClass === 'ETF' || ref.assetClass === 'INDEX'
-      ? ref.assetClass
-      : inferCnAssetClassFromSymbol(symbol, ref.exchange)
-  } else if (assetClass !== 'ETF' && assetClass !== 'INDEX') {
+    const resolved = resolveCnInstrumentIdentity({ ...ref, symbol })
+    return { ...resolved, quote: ref.quote }
+  }
+
+  let assetClass = ref.assetClass
+  if (assetClass !== 'ETF' && assetClass !== 'INDEX') {
     assetClass = 'EQUITY'
   }
 
@@ -189,10 +228,129 @@ export function normalizeInstrumentRef(ref: InstrumentRef): InstrumentRef {
   }
 }
 
-/** 从带前缀字符串解析并规范化，如 HK:700 / US:AAPL / 600519 */
+/**
+ * Stock-index 统一命名空间 — 全局标的唯一标识。
+ * 格式：CN:SZ.000009、US:AAPL、HK:00700、CRYPTO:BINANCE.BTC/USDT
+ * 不含 assetClass / 指数等业务分类，仅 MARKET[:EXCHANGE].SYMBOL。
+ */
+export function buildInstrumentNamespace(ref: InstrumentRef): string {
+  const n = normalizeInstrumentRef(ref)
+  switch (n.market) {
+    case 'CN': {
+      const ex = (n.exchange ?? inferCnExchangeFromSymbol(n.symbol)).toUpperCase()
+      return `CN:${ex}.${n.symbol}`
+    }
+    case 'HK':
+      return `HK:${n.symbol}`
+    case 'US': {
+      const ex = n.exchange?.toUpperCase()
+      if (ex && (ex === 'NYSE' || ex === 'NASDAQ' || ex === 'AMEX')) {
+        return `US:${ex}.${n.symbol}`
+      }
+      return `US:${n.symbol}`
+    }
+    case 'CRYPTO': {
+      const quote = n.quote ?? 'USDT'
+      const ex = (n.exchange ?? 'BINANCE').toUpperCase()
+      return `CRYPTO:${ex}.${n.symbol}/${quote}`
+    }
+    case 'JP':
+    case 'KR': {
+      const ex = n.exchange ?? n.market
+      return `${n.market}:${ex}.${n.symbol}`
+    }
+    default:
+      return `${n.market}:${n.symbol}`
+  }
+}
+
+/** 解析 Stock-index 命名空间字符串 → InstrumentRef */
+export function parseInstrumentNamespace(raw: string): InstrumentRef | null {
+  const text = raw.trim()
+  if (!text) return null
+
+  const cn = /^CN:(SH|SZ|BJ)[.:](\d{6})$/i.exec(text)
+  if (cn) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      symbol: cn[2]!,
+      exchange: cn[1]!.toUpperCase(),
+      assetClass: 'EQUITY',
+    })
+  }
+
+  const us = /^US:(?:(NYSE|NASDAQ|AMEX)\.)?([A-Z0-9.-]+)$/i.exec(text)
+  if (us) {
+    return normalizeInstrumentRef({
+      market: 'US',
+      assetClass: 'EQUITY',
+      symbol: us[2]!.toUpperCase(),
+      exchange: us[1]?.toUpperCase(),
+    })
+  }
+
+  const hk = /^HK:(\d{5})$/i.exec(text)
+  if (hk) {
+    return normalizeInstrumentRef({
+      market: 'HK',
+      assetClass: 'EQUITY',
+      symbol: hk[1]!,
+      exchange: 'HK',
+    })
+  }
+
+  const crypto = /^CRYPTO:(?:(BINANCE|OKX)\.)?([A-Z0-9]+)\/([A-Z0-9]+)$/i.exec(text)
+  if (crypto) {
+    return normalizeInstrumentRef({
+      market: 'CRYPTO',
+      assetClass: 'CRYPTO_SPOT',
+      symbol: crypto[2]!.toUpperCase(),
+      quote: crypto[3]!.toUpperCase(),
+      exchange: crypto[1]?.toLowerCase() ?? 'binance',
+    })
+  }
+
+  const regional = /^(JP|KR):([A-Z0-9]+)\.(.+)$/i.exec(text)
+  if (regional) {
+    const market = regional[1]!.toUpperCase() as Market
+    return normalizeInstrumentRef({
+      market,
+      assetClass: 'EQUITY',
+      symbol: regional[3]!,
+      exchange: regional[2]!.toUpperCase(),
+    })
+  }
+
+  return null
+}
+
+/** 从带前缀字符串解析并规范化，如 CN:SZ.000009 / HK:700 / US:AAPL / 600519 */
 export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null {
   const text = raw.trim()
   if (!text) return null
+
+  const fromNamespace = parseInstrumentNamespace(text)
+  if (fromNamespace) return fromNamespace
+
+  // A 股交易所前缀 / 后缀 — 显式消歧（SZ:000977 / 000977.SZ）
+  const cnExPrefix = /^(SH|SZ|BJ):(\d{6})$/i.exec(text)
+  if (cnExPrefix) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      symbol: cnExPrefix[2]!,
+      exchange: cnExPrefix[1]!.toUpperCase(),
+      assetClass: 'EQUITY',
+    })
+  }
+  const cnDotSuffix = /^(\d{6})\.(SH|SZ|BJ)$/i.exec(text)
+  if (cnDotSuffix) {
+    return normalizeInstrumentRef({
+      market: 'CN',
+      symbol: cnDotSuffix[1]!,
+      exchange: cnDotSuffix[2]!.toUpperCase(),
+      assetClass: 'EQUITY',
+    })
+  }
 
   const prefixed = stripMarketPrefix(text)
   if (prefixed.market) {
@@ -208,6 +366,15 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
       })
     }
     if (market === 'CN') {
+      const exBody = /^(SH|SZ|BJ):(\d{6})$/i.exec(prefixed.body)
+      if (exBody) {
+        return normalizeInstrumentRef({
+          market: 'CN',
+          symbol: exBody[2]!,
+          exchange: exBody[1]!.toUpperCase(),
+          assetClass: 'EQUITY',
+        })
+      }
       const symbol = canonicalCnSymbol(prefixed.body)
       return normalizeInstrumentRef({
         market: 'CN',
@@ -229,11 +396,7 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
   // 可用 isAmbiguousNumericCode(text) 判断并走搜索路径。
   if (isUnambiguousCnDigits(text)) {
     const symbol = canonicalCnSymbol(text)
-    return normalizeInstrumentRef({
-      market: 'CN',
-      assetClass: inferCnAssetClassFromSymbol(symbol),
-      symbol,
-    })
+    return resolveCnInstrumentIdentity({ market: 'CN', assetClass: 'EQUITY', symbol })
   }
   if (isAmbiguousNumericCode(text)) {
     // 跨市场歧义的短数字码（1-5 位）：不经过 canonicalCnSymbol 规范化（避免 padStart 到 6 位
@@ -266,12 +429,9 @@ export function parseCanonicalInstrumentInput(raw: string): InstrumentRef | null
   return null
 }
 
-/** @ 引用 / 搜索展示标签 — CN 裸代码，跨市场 MARKET:symbol */
+/** @ 引用 / 搜索展示标签 — Stock-index 统一命名空间 */
 export function instrumentRefLabel(ref: InstrumentRef): string {
-  const n = normalizeInstrumentRef(ref)
-  if (n.market === 'CN') return n.symbol
-  if (n.market === 'CRYPTO' && n.quote) return `CRYPTO:${n.symbol}/${n.quote}`
-  return `${n.market}:${n.symbol}`
+  return buildInstrumentNamespace(ref)
 }
 
 /**

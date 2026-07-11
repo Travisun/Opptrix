@@ -1,7 +1,22 @@
 import Database from 'better-sqlite3'
 import { parseStockMarket, type StockMarket, normalizeUsSymbol } from '@opptrix/a-stock-layer'
 import { marketDbPath } from './paths.js'
-import { migrate, nowIso, todayTradeDate, daysSince, normalizeStockCode } from './utils.js'
+import {
+  migrate,
+  nowIso,
+  todayTradeDate,
+  daysSince,
+  normalizeStockCode,
+  normalizeInstrumentExchange,
+} from './utils.js'
+import {
+  cnEquityNs,
+  instrumentRefToNs,
+  resolveCodeOrNsInput,
+  stockProfilesUsesInstrumentNs,
+} from './instrument-ns.js'
+import type { InstrumentRef } from '@opptrix/shared'
+import { normalizeInstrumentRef } from '@opptrix/shared'
 
 export interface JobProgressSummary {
   done: number
@@ -69,6 +84,33 @@ export class MarketDataStore {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
+  }
+
+  /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */
+  resolveCnEquityInstrumentNs(code: string, exchange?: string | null): string {
+    const { code: bare, instrumentNs } = resolveCodeOrNsInput(code)
+    if (instrumentNs) return instrumentNs
+    const normalized = normalizeStockCode(bare)
+    const ex = normalizeInstrumentExchange(exchange ?? this.stockMarket(normalized) ?? undefined)
+    const row = this.db.prepare(`
+      SELECT instrument_ns FROM instruments
+      WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ?
+        AND (? = '' OR exchange = ?)
+        AND instrument_ns IS NOT NULL
+      LIMIT 1
+    `).get(normalized, ex, ex) as { instrument_ns: string } | undefined
+    if (row?.instrument_ns) return row.instrument_ns
+    return cnEquityNs(normalized, ex || (this.stockMarket(normalized) ?? undefined))
+  }
+
+  private writeInstrumentNs(
+    table: string,
+    code: string,
+    exchange?: string | null,
+  ): string | null {
+    const cols = this.db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+    if (!cols.some(c => c.name === 'instrument_ns')) return null
+    return this.resolveCnEquityInstrumentNs(code, exchange)
   }
 
   close(): void {
@@ -302,9 +344,10 @@ export class MarketDataStore {
     const ts = nowIso()
     const stmt = this.db.prepare(`
       INSERT INTO stock_klines_daily (
-        trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        trade_date, code, instrument_ns, open, high, low, close, volume, amount, change_pct, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(trade_date, code) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, stock_klines_daily.instrument_ns),
         open = excluded.open,
         high = excluded.high,
         low = excluded.low,
@@ -316,9 +359,12 @@ export class MarketDataStore {
     `)
     const tx = this.db.transaction((batch: typeof rows) => {
       for (const r of batch) {
+        const normalized = normalizeStockCode(resolveCodeOrNsInput(r.code).code)
+        const instrumentNs = this.writeInstrumentNs('stock_klines_daily', normalized)
         stmt.run(
           r.tradeDate,
-          r.code,
+          normalized,
+          instrumentNs,
           r.open ?? null,
           r.high ?? null,
           r.low ?? null,
@@ -562,49 +608,129 @@ export class MarketDataStore {
     return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
   }
 
-  stockMeta(code: string): { code: string; name: string; industry: string | null } | null {
+  stockMeta(
+    code: string,
+    exchange?: string | null,
+  ): { code: string; name: string; industry: string | null; exchange?: string | null } | null {
+    const normalized = normalizeStockCode(code)
+    const ex = exchange ? parseStockMarket(exchange) : null
+    type Row = { code: string; name: string; industry: string | null; market: string | null }
+    if (ex) {
+      const row = this.db.prepare(
+        'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
+      ).get(normalized, ex) as Row | undefined
+      if (row) {
+        return { code: row.code, name: row.name, industry: row.industry, exchange: row.market }
+      }
+    }
     const row = this.db.prepare(
-      'SELECT code, name, industry FROM v_cn_equity_stocks WHERE code = ?',
-    ).get(code) as { code: string; name: string; industry: string | null } | undefined
-    return row ?? null
+      'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
+    ).get(normalized) as Row | undefined
+    if (!row) return null
+    return { code: row.code, name: row.name, industry: row.industry, exchange: row.market }
   }
 
-  stockMarket(code: string): StockMarket | null {
+  /** 复合键：有交易所时 `SZ:000977`，否则裸码 */
+  stockMetaLookupKey(code: string, exchange?: string | null): string {
+    const normalized = normalizeStockCode(code)
+    const ex = exchange ? parseStockMarket(exchange) : null
+    return ex ? `${ex}:${normalized}` : normalized
+  }
+
+  stockMarket(code: string, exchange?: string | null): StockMarket | null {
+    const normalized = normalizeStockCode(code)
+    const ex = exchange ? parseStockMarket(exchange) : null
+    if (ex) {
+      const row = this.db.prepare(
+        'SELECT market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
+      ).get(normalized, ex) as { market: string | null } | undefined
+      return parseStockMarket(row?.market)
+    }
     const row = this.db.prepare(
-      'SELECT market FROM v_cn_equity_stocks WHERE code = ?',
-    ).get(code) as { market: string | null } | undefined
+      'SELECT market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
+    ).get(normalized) as { market: string | null } | undefined
     return parseStockMarket(row?.market)
   }
 
-  stockMarketBatch(codes: string[]): Map<string, StockMarket> {
-    const normalized = [...new Set(codes.map(c => String(c).padStart(6, '0')).filter(Boolean))]
+  /** 复合键：有交易所时 `SZ:000977`，否则裸码 — 与 stockMetaLookupKey 一致 */
+  stockMarketLookupKey(code: string, exchange?: string | null): string {
+    return this.stockMetaLookupKey(code, exchange)
+  }
+
+  stockMarketBatch(
+    codes: string[],
+    exchangeByCode?: ReadonlyMap<string, string | null | undefined>,
+  ): Map<string, StockMarket> {
+    const normalized = [...new Set(codes.map(c => normalizeStockCode(c)).filter(Boolean))]
     const out = new Map<string, StockMarket>()
     if (!normalized.length) return out
-    const placeholders = normalized.map(() => '?').join(',')
-    const rows = this.db.prepare(
-      `SELECT code, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
-    ).all(...normalized) as { code: string; market: string | null }[]
-    for (const row of rows) {
-      const market = parseStockMarket(row.market)
-      if (market) out.set(row.code, market)
+
+    const withExchange = normalized.filter(c => exchangeByCode?.get(c) && parseStockMarket(exchangeByCode.get(c)))
+    const bareOnly = normalized.filter(c => !withExchange.includes(c))
+
+    if (bareOnly.length) {
+      const placeholders = bareOnly.map(() => '?').join(',')
+      const rows = this.db.prepare(
+        `SELECT code, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
+      ).all(...bareOnly) as { code: string; market: string | null }[]
+      for (const row of rows) {
+        const market = parseStockMarket(row.market)
+        if (market) out.set(row.code, market)
+      }
     }
+
+    for (const code of withExchange) {
+      const market = this.stockMarket(code, exchangeByCode!.get(code))
+      if (market) out.set(this.stockMarketLookupKey(code, exchangeByCode!.get(code)), market)
+    }
+
     return out
   }
 
-  stockMetaBatch(codes: string[]): Map<string, { code: string; name: string; industry: string | null }> {
-    const normalized = [...new Set(codes.map(c => String(c).padStart(6, '0')).filter(Boolean))]
-    const out = new Map<string, { code: string; name: string; industry: string | null }>()
+  stockMetaBatch(
+    codes: string[],
+    exchangeByCode?: ReadonlyMap<string, string | null | undefined>,
+  ): Map<string, { code: string; name: string; industry: string | null; exchange?: string | null }> {
+    const normalized = [...new Set(codes.map(c => normalizeStockCode(c)).filter(Boolean))]
+    const out = new Map<string, { code: string; name: string; industry: string | null; exchange?: string | null }>()
     if (!normalized.length) return out
-    const placeholders = normalized.map(() => '?').join(',')
-    const rows = this.db.prepare(
-      `SELECT code, name, industry FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
-    ).all(...normalized) as { code: string; name: string; industry: string | null }[]
-    for (const row of rows) out.set(row.code, row)
+
+    const withExchange = normalized.filter(c => exchangeByCode?.get(c) && parseStockMarket(exchangeByCode.get(c)))
+    const bareOnly = normalized.filter(c => !withExchange.includes(c))
+
+    if (bareOnly.length) {
+      const placeholders = bareOnly.map(() => '?').join(',')
+      const rows = this.db.prepare(
+        `SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
+      ).all(...bareOnly) as { code: string; name: string; industry: string | null; market: string | null }[]
+      for (const row of rows) {
+        out.set(row.code, {
+          code: row.code,
+          name: row.name,
+          industry: row.industry,
+          exchange: row.market,
+        })
+      }
+    }
+
+    for (const code of withExchange) {
+      const meta = this.stockMeta(code, exchangeByCode!.get(code))
+      if (meta) out.set(this.stockMetaLookupKey(code, exchangeByCode!.get(code)), meta)
+    }
+
     return out
   }
 
   profileSyncedAt(code: string): string | null {
-    const row = this.db.prepare('SELECT synced_at FROM stock_profiles WHERE code = ?').get(code) as
+    const normalized = normalizeStockCode(code)
+    const ns = this.resolveCnEquityInstrumentNs(code)
+    if (stockProfilesUsesInstrumentNs(this.db)) {
+      const row = this.db.prepare(
+        'SELECT synced_at FROM stock_profiles WHERE instrument_ns = ? OR code = ?',
+      ).get(ns, normalized) as { synced_at: string } | undefined
+      return row?.synced_at ?? null
+    }
+    const row = this.db.prepare('SELECT synced_at FROM stock_profiles WHERE code = ?').get(normalized) as
       | { synced_at: string }
       | undefined
     return row?.synced_at ?? null
@@ -612,6 +738,49 @@ export class MarketDataStore {
 
   replaceProfile(code: string, profile: Record<string, unknown>): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(code)
+    const instrumentNs = this.resolveCnEquityInstrumentNs(code)
+    if (stockProfilesUsesInstrumentNs(this.db)) {
+      this.db.prepare(`
+        INSERT INTO stock_profiles (
+          instrument_ns, code, org_name, province, city, employees, main_business, org_profile,
+          business_scope, website, chairman, total_market_cap, circulating_market_cap, synced_at
+        ) VALUES (
+          @instrument_ns, @code, @org_name, @province, @city, @employees, @main_business, @org_profile,
+          @business_scope, @website, @chairman, @total_market_cap, @circulating_market_cap, @synced_at
+        )
+        ON CONFLICT(instrument_ns) DO UPDATE SET
+          code = excluded.code,
+          org_name = excluded.org_name,
+          province = excluded.province,
+          city = excluded.city,
+          employees = excluded.employees,
+          main_business = excluded.main_business,
+          org_profile = excluded.org_profile,
+          business_scope = excluded.business_scope,
+          website = excluded.website,
+          chairman = excluded.chairman,
+          total_market_cap = excluded.total_market_cap,
+          circulating_market_cap = excluded.circulating_market_cap,
+          synced_at = excluded.synced_at
+      `).run({
+        instrument_ns: instrumentNs,
+        code: normalized,
+        org_name: profile.orgName ?? null,
+        province: profile.province ?? null,
+        city: profile.city ?? null,
+        employees: profile.employees ?? null,
+        main_business: profile.mainBusiness ?? null,
+        org_profile: profile.orgProfile ?? null,
+        business_scope: profile.businessScope ?? null,
+        website: profile.website ?? null,
+        chairman: profile.chairman ?? null,
+        total_market_cap: profile.totalMarketCap ?? null,
+        circulating_market_cap: profile.circulatingMarketCap ?? null,
+        synced_at: ts,
+      })
+      return
+    }
     this.db.prepare(`
       INSERT INTO stock_profiles (
         code, org_name, province, city, employees, main_business, org_profile,
@@ -652,15 +821,18 @@ export class MarketDataStore {
 
   replaceFinancial(code: string, fin: Record<string, unknown>): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_financials', normalized)
     this.db.prepare(`
       INSERT INTO stock_financials (
-        code, report_date, report_type, revenue, net_profit, roe, gross_margin, debt_ratio,
+        code, instrument_ns, report_date, report_type, revenue, net_profit, roe, gross_margin, debt_ratio,
         eps, bps, revenue_yoy, net_profit_yoy, synced_at
       ) VALUES (
-        @code, @report_date, @report_type, @revenue, @net_profit, @roe, @gross_margin, @debt_ratio,
+        @code, @instrument_ns, @report_date, @report_type, @revenue, @net_profit, @roe, @gross_margin, @debt_ratio,
         @eps, @bps, @revenue_yoy, @net_profit_yoy, @synced_at
       )
       ON CONFLICT(code, report_date, report_type) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, stock_financials.instrument_ns),
         revenue = excluded.revenue,
         net_profit = excluded.net_profit,
         roe = excluded.roe,
@@ -672,7 +844,8 @@ export class MarketDataStore {
         net_profit_yoy = excluded.net_profit_yoy,
         synced_at = excluded.synced_at
     `).run({
-      code,
+      code: normalized,
+      instrument_ns: instrumentNs,
       report_date: fin.reportDate ?? '',
       report_type: fin.reportType ?? 'annual',
       revenue: fin.revenue ?? null,
@@ -690,17 +863,20 @@ export class MarketDataStore {
 
   replaceBusinessSegments(code: string, reportDate: string, segments: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_business_segments', normalized)
     const del = this.db.prepare('DELETE FROM stock_business_segments WHERE code = ?')
     const ins = this.db.prepare(`
       INSERT INTO stock_business_segments (
-        code, report_date, segment_name, segment_type, revenue, revenue_pct, gross_margin, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, report_date, segment_name, segment_type, revenue, revenue_pct, gross_margin, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const seg of segments) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           reportDate,
           String(seg.name ?? ''),
           String(seg.type ?? ''),
@@ -716,16 +892,19 @@ export class MarketDataStore {
 
   replacePartners(code: string, direction: string, partners: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_partners', normalized)
     const del = this.db.prepare('DELETE FROM stock_partners WHERE code = ? AND direction = ?')
     const ins = this.db.prepare(`
-      INSERT INTO stock_partners (code, direction, partner_name, amount, ratio, report_date, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO stock_partners (code, instrument_ns, direction, partner_name, amount, ratio, report_date, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code, direction)
+      del.run(normalized, direction)
       for (const p of partners.slice(0, 20)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           direction,
           String(p.name ?? ''),
           p.amount ?? null,
@@ -740,11 +919,14 @@ export class MarketDataStore {
 
   upsertQuoteDaily(tradeDate: string, code: string, quote: Record<string, unknown>): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_quotes_daily', normalized)
     this.db.prepare(`
       INSERT INTO stock_quotes_daily (
-        trade_date, code, close, pe, pb, market_cap, turnover_rate, volume_ratio, change_pct, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        trade_date, code, instrument_ns, close, pe, pb, market_cap, turnover_rate, volume_ratio, change_pct, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(trade_date, code) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, stock_quotes_daily.instrument_ns),
         close = excluded.close,
         pe = excluded.pe,
         pb = excluded.pb,
@@ -755,7 +937,8 @@ export class MarketDataStore {
         synced_at = excluded.synced_at
     `).run(
       tradeDate,
-      code,
+      normalized,
+      instrumentNs,
       quote.price ?? quote.close ?? null,
       quote.pe ?? null,
       quote.pb ?? null,
@@ -769,16 +952,18 @@ export class MarketDataStore {
 
   replaceFactors(tradeDate: string, code: string, factors: Record<string, number | null>): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_factors', normalized)
     const del = this.db.prepare('DELETE FROM stock_factors WHERE trade_date = ? AND code = ?')
     const ins = this.db.prepare(`
-      INSERT INTO stock_factors (trade_date, code, factor_name, factor_value, synced_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO stock_factors (trade_date, code, instrument_ns, factor_name, factor_value, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(tradeDate, code)
+      del.run(tradeDate, normalized)
       for (const [name, value] of Object.entries(factors)) {
         if (value == null || Number.isNaN(value)) continue
-        ins.run(tradeDate, code, name, value, ts)
+        ins.run(tradeDate, normalized, instrumentNs, name, value, ts)
       }
     })
     tx()
@@ -786,13 +971,16 @@ export class MarketDataStore {
 
   upsertScore(tradeDate: string, code: string, scorecard: string, totalScore: number | null): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_scores', normalized)
     this.db.prepare(`
-      INSERT INTO stock_scores (trade_date, code, scorecard, total_score, synced_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO stock_scores (trade_date, code, instrument_ns, scorecard, total_score, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(trade_date, code, scorecard) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, stock_scores.instrument_ns),
         total_score = excluded.total_score,
         synced_at = excluded.synced_at
-    `).run(tradeDate, code, scorecard, totalScore, ts)
+    `).run(tradeDate, normalized, instrumentNs, scorecard, totalScore, ts)
   }
 
   rebuildIndustryStats(tradeDate: string): number {
@@ -832,20 +1020,26 @@ export class MarketDataStore {
   }
 
   isJobDone(jobName: string, code: string, scopeKey = ''): boolean {
+    const { code: bare, instrumentNs } = resolveCodeOrNsInput(code)
+    const normalized = normalizeStockCode(bare)
     const row = this.db.prepare(`
       SELECT 1 FROM sync_job_progress
-      WHERE job_name = ? AND code = ? AND scope_key = ? AND status = 'done'
+      WHERE job_name = ? AND scope_key = ? AND status = 'done'
+        AND (code = ? OR (? IS NOT NULL AND instrument_ns = ?))
       LIMIT 1
-    `).get(jobName, code, scopeKey)
+    `).get(jobName, scopeKey, normalized, instrumentNs, instrumentNs)
     return Boolean(row)
   }
 
   isJobError(jobName: string, code: string, scopeKey = ''): boolean {
+    const { code: bare, instrumentNs } = resolveCodeOrNsInput(code)
+    const normalized = normalizeStockCode(bare)
     const row = this.db.prepare(`
       SELECT 1 FROM sync_job_progress
-      WHERE job_name = ? AND code = ? AND scope_key = ? AND status = 'error'
+      WHERE job_name = ? AND scope_key = ? AND status = 'error'
+        AND (code = ? OR (? IS NOT NULL AND instrument_ns = ?))
       LIMIT 1
-    `).get(jobName, code, scopeKey)
+    `).get(jobName, scopeKey, normalized, instrumentNs, instrumentNs)
     return Boolean(row)
   }
 
@@ -866,13 +1060,16 @@ export class MarketDataStore {
   }
 
   markJobProgress(jobName: string, code: string, scopeKey: string, status: 'done' | 'error'): void {
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('sync_job_progress', normalized)
     this.db.prepare(`
-      INSERT INTO sync_job_progress (job_name, code, scope_key, status, synced_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO sync_job_progress (job_name, code, instrument_ns, scope_key, status, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?)
       ON CONFLICT(job_name, code, scope_key) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, sync_job_progress.instrument_ns),
         status = excluded.status,
         synced_at = excluded.synced_at
-    `).run(jobName, code, scopeKey, status, nowIso())
+    `).run(jobName, normalized, instrumentNs, scopeKey, status, nowIso())
   }
 
   clearJobProgress(jobName?: string): number {
@@ -943,21 +1140,25 @@ export class MarketDataStore {
 
   replaceAnnouncements(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_announcements', normalized)
     const del = this.db.prepare('DELETE FROM stock_announcements WHERE code = ?')
     const ins = this.db.prepare(`
-      INSERT INTO stock_announcements (code, pub_date, title, url, source, category, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO stock_announcements (code, instrument_ns, pub_date, title, url, source, category, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(code, pub_date, title) DO UPDATE SET
+        instrument_ns = COALESCE(excluded.instrument_ns, stock_announcements.instrument_ns),
         url = excluded.url,
         source = excluded.source,
         category = excluded.category,
         synced_at = excluded.synced_at
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 60)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           String(item.date ?? item.pub_date ?? ''),
           String(item.title ?? ''),
           item.url ?? null,
@@ -972,17 +1173,20 @@ export class MarketDataStore {
 
   replaceDividends(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_dividends', normalized)
     const del = this.db.prepare('DELETE FROM stock_dividends WHERE code = ?')
     const ins = this.db.prepare(`
       INSERT INTO stock_dividends (
-        code, year, ex_date, record_date, pay_date, cash_bonus, stock_bonus, plan, progress, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, year, ex_date, record_date, pay_date, cash_bonus, stock_bonus, plan, progress, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 30)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           item.year ?? null,
           item.exDate ?? item.ex_date ?? null,
           item.recordDate ?? item.record_date ?? null,
@@ -1000,26 +1204,29 @@ export class MarketDataStore {
 
   replaceShareholders(code: string, row: Record<string, unknown>): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_shareholder_summary', normalized)
     const reportDate = String(row.reportDate ?? row.report_date ?? '')
     const delSummary = this.db.prepare('DELETE FROM stock_shareholder_summary WHERE code = ?')
     const delTop = this.db.prepare('DELETE FROM stock_shareholder_top10 WHERE code = ?')
     const insSummary = this.db.prepare(`
       INSERT INTO stock_shareholder_summary (
-        code, report_date, shareholder_count, shareholder_count_change,
+        code, instrument_ns, report_date, shareholder_count, shareholder_count_change,
         avg_holding_value, hold_focus, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const insTop = this.db.prepare(`
       INSERT INTO stock_shareholder_top10 (
-        code, report_date, rank, holder_name, shares_held, share_pct, share_change, share_type, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, report_date, rank, holder_name, shares_held, share_pct, share_change, share_type, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const top10 = (row.top10Shareholders as Record<string, unknown>[] | undefined) ?? []
     const tx = this.db.transaction(() => {
-      delSummary.run(code)
-      delTop.run(code)
+      delSummary.run(normalized)
+      delTop.run(normalized)
       insSummary.run(
-        code,
+        normalized,
+        instrumentNs,
         reportDate,
         row.shareholderCount ?? row.shareholder_count ?? null,
         row.shareholderCountChange ?? row.shareholder_count_change ?? null,
@@ -1029,7 +1236,8 @@ export class MarketDataStore {
       )
       for (const h of top10.slice(0, 10)) {
         insTop.run(
-          code,
+          normalized,
+          instrumentNs,
           reportDate,
           h.rank ?? null,
           String(h.name ?? ''),
@@ -1046,17 +1254,20 @@ export class MarketDataStore {
 
   replaceForecasts(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_forecasts', normalized)
     const del = this.db.prepare('DELETE FROM stock_forecasts WHERE code = ?')
     const ins = this.db.prepare(`
       INSERT INTO stock_forecasts (
-        code, report_date, ann_date, forecast_type, summary, profit_lower, profit_upper, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, report_date, ann_date, forecast_type, summary, profit_lower, profit_upper, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 20)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           String(item.reportDate ?? item.report_date ?? ''),
           item.annDate ?? item.ann_date ?? null,
           item.forecastType ?? item.forecast_type ?? null,
@@ -1072,17 +1283,20 @@ export class MarketDataStore {
 
   replaceInstHoldings(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_inst_holdings', normalized)
     const del = this.db.prepare('DELETE FROM stock_inst_holdings WHERE code = ?')
     const ins = this.db.prepare(`
       INSERT INTO stock_inst_holdings (
-        code, report_date, institution_type, shares_held, share_pct, market_value, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, report_date, institution_type, shares_held, share_pct, market_value, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 30)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           String(item.reportDate ?? item.report_date ?? ''),
           item.institutionType ?? item.institution_type ?? null,
           item.sharesHeld ?? item.shares_held ?? null,
@@ -1097,17 +1311,20 @@ export class MarketDataStore {
 
   replaceInsiderTrades(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_insider_trades', normalized)
     const del = this.db.prepare('DELETE FROM stock_insider_trades WHERE code = ?')
     const ins = this.db.prepare(`
       INSERT INTO stock_insider_trades (
-        code, trade_date, person_name, position, change_type, shares_changed, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+        code, instrument_ns, trade_date, person_name, position, change_type, shares_changed, synced_at
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 30)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           String(item.date ?? item.trade_date ?? ''),
           item.name ?? item.person_name ?? null,
           item.position ?? null,
@@ -1122,16 +1339,19 @@ export class MarketDataStore {
 
   replaceBuybacks(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
+    const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
+    const instrumentNs = this.writeInstrumentNs('stock_buybacks', normalized)
     const del = this.db.prepare('DELETE FROM stock_buybacks WHERE code = ?')
     const ins = this.db.prepare(`
-      INSERT INTO stock_buybacks (code, ann_date, amount, shares, synced_at)
-      VALUES (?, ?, ?, ?, ?)
+      INSERT INTO stock_buybacks (code, instrument_ns, ann_date, amount, shares, synced_at)
+      VALUES (?, ?, ?, ?, ?, ?)
     `)
     const tx = this.db.transaction(() => {
-      del.run(code)
+      del.run(normalized)
       for (const item of items.slice(0, 20)) {
         ins.run(
-          code,
+          normalized,
+          instrumentNs,
           String(item.date ?? item.ann_date ?? ''),
           item.amount ?? null,
           item.shares ?? null,
@@ -1277,15 +1497,48 @@ export class MarketDataStore {
       : row.market === 'CN'
         ? normalizeStockCode(row.code)
         : row.code.trim()
+    const exchange = normalizeInstrumentExchange(row.exchange)
     const now = nowIso()
+    const instrumentNs = instrumentRefToNs(normalizeInstrumentRef({
+      market: row.market as InstrumentRef['market'],
+      assetClass: row.assetClass as InstrumentRef['assetClass'],
+      symbol: code,
+      exchange: exchange || undefined,
+    }))
+    const hasNs = (this.db.prepare('PRAGMA table_info(instruments)').all() as { name: string }[])
+      .some(c => c.name === 'instrument_ns')
+    if (hasNs) {
+      this.db.prepare(`
+        INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at, instrument_ns)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(market, exchange, code, asset_class) DO UPDATE SET
+          name = COALESCE(excluded.name, instruments.name),
+          list_date = COALESCE(excluded.list_date, instruments.list_date),
+          delist_date = COALESCE(excluded.delist_date, instruments.delist_date),
+          status = COALESCE(excluded.status, instruments.status),
+          extra = COALESCE(excluded.extra, instruments.extra),
+          updated_at = excluded.updated_at,
+          instrument_ns = COALESCE(excluded.instrument_ns, instruments.instrument_ns)
+      `).run(
+        code,
+        row.market,
+        row.assetClass,
+        row.name ?? null,
+        exchange,
+        row.listDate ?? null,
+        row.delistDate ?? null,
+        row.status ?? 'active',
+        row.extra ?? null,
+        now,
+        instrumentNs,
+      )
+      return
+    }
     this.db.prepare(`
       INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(code) DO UPDATE SET
-        market = excluded.market,
-        asset_class = excluded.asset_class,
+      ON CONFLICT(market, exchange, code, asset_class) DO UPDATE SET
         name = COALESCE(excluded.name, instruments.name),
-        exchange = COALESCE(excluded.exchange, instruments.exchange),
         list_date = COALESCE(excluded.list_date, instruments.list_date),
         delist_date = COALESCE(excluded.delist_date, instruments.delist_date),
         status = COALESCE(excluded.status, instruments.status),
@@ -1296,13 +1549,78 @@ export class MarketDataStore {
       row.market,
       row.assetClass,
       row.name ?? null,
-      row.exchange ?? null,
+      exchange,
       row.listDate ?? null,
       row.delistDate ?? null,
       row.status ?? 'active',
       row.extra ?? null,
       now,
     )
+  }
+
+  /** Dual-read: prefer composite key; fall back to first match by code when exchange omitted */
+  getInstrument(row: {
+    market: string
+    code: string
+    assetClass: string
+    exchange?: string | null
+  }): {
+    code: string
+    market: string
+    assetClass: string
+    name: string | null
+    exchange: string | null
+    listDate: string | null
+    delistDate: string | null
+    status: string
+    extra: string | null
+    updatedAt: string
+  } | null {
+    const code = row.market === 'US'
+      ? normalizeUsSymbol(row.code)
+      : row.market === 'CN'
+        ? normalizeStockCode(row.code)
+        : row.code.trim()
+    type Raw = {
+      code: string
+      market: string
+      asset_class: string
+      name: string | null
+      exchange: string
+      list_date: string | null
+      delist_date: string | null
+      status: string
+      extra: string | null
+      updated_at: string
+    }
+    const mapRow = (r: Raw) => ({
+      code: r.code,
+      market: r.market,
+      assetClass: r.asset_class,
+      name: r.name,
+      exchange: r.exchange || null,
+      listDate: r.list_date,
+      delistDate: r.delist_date,
+      status: r.status,
+      extra: r.extra,
+      updatedAt: r.updated_at,
+    })
+    if (row.exchange != null && String(row.exchange).trim()) {
+      const exact = this.db.prepare(`
+        SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+        FROM instruments
+        WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?
+      `).get(row.market, normalizeInstrumentExchange(row.exchange), code, row.assetClass) as Raw | undefined
+      return exact ? mapRow(exact) : null
+    }
+    const fallback = this.db.prepare(`
+      SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+      FROM instruments
+      WHERE market = ? AND code = ? AND asset_class = ?
+      ORDER BY updated_at DESC
+      LIMIT 1
+    `).get(row.market, code, row.assetClass) as Raw | undefined
+    return fallback ? mapRow(fallback) : null
   }
 
   upsertEtfProfile(code: string, profile: Record<string, unknown>): void {

@@ -48,7 +48,7 @@ export default function StrategySignals({ globalStock }: Props) {
       subtitle="9 套投行级策略 · 历史胜率验证"
       actions={(
         <>
-          <SearchBox size="small" placeholder="股票代码" value={code}
+          <SearchBox size="small" placeholder="如 CN:SZ.000977" value={code}
             onChange={(_, d) => setCode(d.value || '')}
             onKeyDown={(e) => { if (e.key === 'Enter') load() }}
             style={{ width: 200 }} />

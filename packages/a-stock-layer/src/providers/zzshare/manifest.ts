@@ -2,6 +2,7 @@ import { Capability } from '../../core/capabilities.js'
 import { type ProviderManifestSpec } from '../common/types.js'
 import { providerManifestEntry } from '../common/manifest.js'
 import { cnEquityEtfIndex } from '../common/bindings.js'
+import { FREE_CN_ETF_CAPABILITIES } from '../common/etf-capabilities.js'
 import { ZZSHARE_SETTINGS } from './settings.js'
 
 export const ZZSHARE_CAPS = [
@@ -43,7 +44,13 @@ export const ZZSHARE_SPEC: ProviderManifestSpec = {
   defaultPriority: 110,
   maxConcurrent: 5,
   capabilities: ZZSHARE_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, undefined, maxConcurrent),
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
+    EQUITY_CAPS,
+    INDEX_CAPS,
+    p,
+    [...FREE_CN_ETF_CAPABILITIES],
+    maxConcurrent,
+  ),
   settings: ZZSHARE_SETTINGS,
   supportsTest: true,
 }

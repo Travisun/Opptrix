@@ -1,23 +1,24 @@
-import { isShIndexCode, normalizeCode, resolveMarket, secFullCode } from '../../../utils/helpers.js'
+import { bareCnSymbol, ensureCnSecSymbol, isCnSecPrefixed, isShIndexCode, normalizeCode, resolveMarket, secFullCode } from '../../../utils/helpers.js'
 
 /** Sina hq.sinajs.cn list key（如 sh600519） */
 export function toSinaListSymbol(code: string): string {
-  return secFullCode(code)
+  return ensureCnSecSymbol(code)
 }
 
 /** 新浪指数精简快照前缀（如 s_sh000001） */
 export function toSinaIndexListSymbol(code: string): string {
-  return `s_${secFullCode(code)}`
+  return `s_${ensureCnSecSymbol(code)}`
 }
 
 /** 新浪 K 线 symbol */
 export function toSinaKlineSymbol(code: string): string {
-  const c = normalizeCode(code)
-  if (isShIndexCode(c) || (c.startsWith('000') && c.length === 6 && parseInt(c, 10) < 1000)) {
+  if (isCnSecPrefixed(code)) return ensureCnSecSymbol(code)
+  const c = bareCnSymbol(code)
+  if (isShIndexCode(c)) {
     return `sh${c}`
   }
   if (c.startsWith('399')) return `sz${c}`
-  return secFullCode(c)
+  return ensureCnSecSymbol(c)
 }
 
 export function fromSinaListSymbol(symbol: string): string {
