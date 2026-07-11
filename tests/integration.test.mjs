@@ -98,7 +98,7 @@ test('API watchlist round-trip persists via user store', async () => {
     const body = await getResp.json()
     assert.ok(body.success)
     assert.equal(body.data?.items?.length, 1)
-    assert.equal(body.data.items[0].code, '600519')
+    assert.equal(body.data.items[0].code, 'CN:SH.600519')
   } finally {
     await stopProcess(child)
   }
