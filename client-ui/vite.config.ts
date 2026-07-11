@@ -2,6 +2,7 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 
 const API_TARGET = process.env.API_PROXY_TARGET ?? 'http://127.0.0.1:8711'
+const WEB_PORT = Number(process.env.WEB_PORT ?? 5173)
 
 export default defineConfig({
   plugins: [react()],
@@ -24,7 +25,7 @@ export default defineConfig({
   },
   server: {
     host: '127.0.0.1',
-    port: 5173,
+    port: WEB_PORT,
     strictPort: true,
     proxy: {
       '/api': {
@@ -34,7 +35,7 @@ export default defineConfig({
     },
   },
   preview: {
-    port: 5173,
+    port: WEB_PORT,
     strictPort: true,
     proxy: {
       '/api': {

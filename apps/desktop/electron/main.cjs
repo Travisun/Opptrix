@@ -32,10 +32,18 @@ const {
   maybeBootstrapOfflineModelDownloads,
   disposeTranslation,
 } = require('./translation-service.cjs')
+const {
+  resolveApiPort,
+  resolveWebPort,
+  logPortPlan,
+} = require('./resolve-ports.cjs')
 
 const isDev = !app.isPackaged
 const API_HOST = '127.0.0.1'
-const API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
+let API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
+let WEB_DEV_PORT = process.env.WEB_PORT ?? '5173'
+/** @type {'use' | 'reuse' | 'bump'} */
+let apiPortMode = process.env.OPPTRIX_API_PORT_MODE ?? 'use'
 const MIN_SPLASH_MS = 2200
 const SPLASH_HTML = path.join(__dirname, 'splash.html')
 const SPLASH_CANVAS = '#F5F5F7'
@@ -231,8 +239,77 @@ function stopSidecar() {
 }
 
 function appUrl() {
-  if (isDev) return 'http://127.0.0.1:5173'
+  if (isDev) return `http://127.0.0.1:${WEB_DEV_PORT}`
   return `http://${API_HOST}:${API_PORT}`
+}
+
+async function initResolvedPorts() {
+  if (process.env.OPPTRIX_PORTS_RESOLVED === '1') {
+    API_PORT = String(process.env.STOCK_RESEARCH_PORT ?? '8711')
+    WEB_DEV_PORT = String(process.env.WEB_PORT ?? '5173')
+    apiPortMode = process.env.OPPTRIX_API_PORT_MODE ?? 'use'
+    return true
+  }
+
+  try {
+    const apiPlan = await resolveApiPort({
+      isDev,
+      allowBump: isDev,
+      allowReuse: true,
+      allowCleanup: true,
+    })
+    API_PORT = String(apiPlan.port)
+    apiPortMode = apiPlan.mode
+    process.env.STOCK_RESEARCH_PORT = API_PORT
+    process.env.OPPTRIX_API_PORT_MODE = apiPlan.mode
+
+    if (isDev) {
+      const webPlan = await resolveWebPort({ allowBump: true, allowReuse: true })
+      WEB_DEV_PORT = String(webPlan.port)
+      process.env.WEB_PORT = WEB_DEV_PORT
+      process.env.OPPTRIX_WEB_PORT_MODE = webPlan.mode
+      logPortPlan(apiPlan, webPlan)
+    } else if (apiPlan.mode === 'reuse') {
+      console.log(`[ports] 复用已在运行的 Opptrix API（:${API_PORT}）`)
+    } else {
+      console.log(`[ports] API → ${API_PORT}`)
+    }
+
+    return true
+  } catch (err) {
+    const detail = err instanceof Error ? err.message : String(err)
+    if (app.isReady()) {
+      await dialog.showMessageBox({
+        type: 'error',
+        title: APP_NAME,
+        message: '无法启动本地服务',
+        detail,
+        buttons: ['知道了'],
+      })
+    } else {
+      console.error(`[ports] ${detail}`)
+    }
+    return false
+  }
+}
+
+async function reportBootstrapFailure(err) {
+  const detail = err instanceof Error ? err.message : String(err)
+  const hint = isDev
+    ? '请确认 API 与 Vite 开发服务已启动，或重新运行 npm run dev:desktop。'
+    : '可尝试重启应用；若仍失败，请检查本机 8711 端口是否被其他程序占用。'
+  const win = getMainWindow()
+  if (win && !win.isDestroyed()) {
+    await dialog.showMessageBox(win, {
+      type: 'error',
+      title: APP_NAME,
+      message: '应用加载失败',
+      detail: `${detail}\n\n${hint}`,
+      buttons: ['知道了'],
+    })
+  } else {
+    console.error(`[bootstrap] ${detail}`)
+  }
 }
 
 function windowIconOptions() {
@@ -448,7 +525,14 @@ async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
 }
 
 async function ensureSidecarReady() {
-  if (isDev) return
+  if (isDev) {
+    await waitForHealth()
+    return
+  }
+  if (apiPortMode === 'reuse') {
+    await waitForHealth()
+    return
+  }
   if (!serverProcess) spawnSidecar()
   await waitForHealth()
 }
@@ -607,61 +691,87 @@ function setupDesktopChrome() {
   })
 }
 
-app.whenReady().then(async () => {
-  configureNotificationIdentity(APP_ID)
-  applyAppIcon(app)
-  setupDesktopChrome()
-  registerWindowIpc()
-
-  if (app.isPackaged) {
-    const quittingForUpdate = await resumePendingUpdateOnStartup({ version: VERSION })
-    if (quittingForUpdate) return
-  }
-
-  createTray({
-    onShowMainWindow: () => {
-      void openMainWindowFromMenu()
-    },
-    onQuit: quitApp,
-  })
-  await bootstrapApp()
-
-  const launchUrl = findProtocolUrl()
-  if (launchUrl) deliverProtocolUrl(launchUrl)
-  else flushPendingProtocolUrl()
-
-  if (app.isPackaged) {
-    void requestNotificationPermission()
-  }
-
-  void preloadTranslationModel(repoRoot())
-  void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
-    for (const win of BrowserWindow.getAllWindows()) {
-      if (!win.isDestroyed()) {
-        win.webContents.send('translation-download-progress', progress)
-      }
-    }
-  })
-  initUpdater({ version: VERSION })
-
-  app.on('activate', async () => {
-    if (!mainWindow || mainWindow.isDestroyed()) {
-      await bootstrapApp()
-    } else {
-      focusMainWindow()
-    }
-  })
-})
-
-app.on('window-all-closed', () => {
-  if (app.isPackaged && hasTray()) return
-  stopSidecar()
+const gotTheLock = app.requestSingleInstanceLock()
+if (!gotTheLock) {
   app.quit()
-})
+} else {
+  app.on('second-instance', () => {
+    focusMainWindow()
+  })
 
-app.on('before-quit', () => {
-  app.isQuitting = true
-  destroyTray()
-  stopSidecar()
-  void disposeTranslation()
-})
+  app.whenReady().then(async () => {
+    configureNotificationIdentity(APP_ID)
+    applyAppIcon(app)
+    setupDesktopChrome()
+    registerWindowIpc()
+
+    const portsOk = await initResolvedPorts()
+    if (!portsOk) {
+      app.quit()
+      return
+    }
+
+    if (app.isPackaged) {
+      const quittingForUpdate = await resumePendingUpdateOnStartup({ version: VERSION })
+      if (quittingForUpdate) return
+    }
+
+    createTray({
+      onShowMainWindow: () => {
+        void openMainWindowFromMenu()
+      },
+      onQuit: quitApp,
+    })
+
+    try {
+      await bootstrapApp()
+    } catch (err) {
+      await reportBootstrapFailure(err)
+      app.quit()
+      return
+    }
+
+    const launchUrl = findProtocolUrl()
+    if (launchUrl) deliverProtocolUrl(launchUrl)
+    else flushPendingProtocolUrl()
+
+    if (app.isPackaged) {
+      void requestNotificationPermission()
+    }
+
+    void preloadTranslationModel(repoRoot())
+    void maybeBootstrapOfflineModelDownloads(repoRoot(), progress => {
+      for (const win of BrowserWindow.getAllWindows()) {
+        if (!win.isDestroyed()) {
+          win.webContents.send('translation-download-progress', progress)
+        }
+      }
+    })
+    initUpdater({ version: VERSION })
+
+    app.on('activate', async () => {
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        try {
+          await bootstrapApp()
+        } catch (err) {
+          await reportBootstrapFailure(err)
+        }
+      } else {
+        focusMainWindow()
+      }
+    })
+  })
+
+  app.on('window-all-closed', () => {
+    if (app.isPackaged && hasTray()) return
+    stopSidecar()
+    app.quit()
+  })
+
+  app.on('before-quit', () => {
+    app.isQuitting = true
+    destroyTray()
+    stopSidecar()
+    void disposeTranslation()
+  })
+}

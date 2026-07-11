@@ -3,10 +3,14 @@
  * Electron dev: API sidecar + Vite HMR, then open the desktop window.
  */
 import { spawn, spawnSync } from 'node:child_process'
+import { createRequire } from 'node:module'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { resolveElectronExecutable } from './ensure-electron.mjs'
 import { NODE_CMD } from './lib/commands.mjs'
+
+const require = createRequire(import.meta.url)
+const { resolveApiPort, resolveWebPort, logPortPlan, applyPortEnv } = require('../electron/resolve-ports.cjs')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const DESKTOP_ROOT = path.resolve(__dirname, '..')
@@ -30,10 +34,20 @@ async function waitForUrl(url, timeoutMs = 60_000) {
   throw new Error(`Timed out waiting for ${url}`)
 }
 
+const apiPlan = await resolveApiPort({ isDev: true, allowBump: true })
+const webPlan = await resolveWebPort({ allowBump: true })
+logPortPlan(apiPlan, webPlan)
+
+const portEnv = applyPortEnv(apiPlan, webPlan)
+
 const stack = spawn(NODE_CMD, ['scripts/dev-stack.mjs'], {
   cwd: DESKTOP_ROOT,
   stdio: 'inherit',
   shell: false,
+  env: {
+    ...process.env,
+    ...portEnv,
+  },
 })
 
 stack.on('error', (err) => {
@@ -54,8 +68,8 @@ process.on('SIGTERM', () => {
   process.exit(0)
 })
 
-await waitForUrl(`http://127.0.0.1:${process.env.STOCK_RESEARCH_PORT ?? 8711}/api/health`)
-await waitForUrl('http://127.0.0.1:5173')
+await waitForUrl(`http://127.0.0.1:${apiPlan.port}/api/health`)
+await waitForUrl(`http://127.0.0.1:${webPlan.port}/`)
 
 const electronPath = resolveElectronExecutable()
 const electron = spawn(electronPath, ['.'], {
@@ -64,6 +78,7 @@ const electron = spawn(electronPath, ['.'], {
   shell: false,
   env: {
     ...process.env,
+    ...portEnv,
     VITE_DESKTOP: '1',
   },
 })

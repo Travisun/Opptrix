@@ -28,7 +28,7 @@
     "client-ui"
   ],
   "scripts": {
-    "dev": "concurrently -n api,web -c blue,cyan \"npm run dev:api\" \"npm run dev:web\"",
+    "dev": "node scripts/dev-with-ports.mjs",
     "dev:desktop": "npm run build:packages && npm run dev -w @opptrix/desktop",
     "dev:api": "npm run dev -w @opptrix/server",
     "dev:web": "npm run dev -w opptrix-client",
