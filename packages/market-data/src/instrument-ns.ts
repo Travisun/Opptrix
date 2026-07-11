@@ -81,6 +81,58 @@ export function hasInstrumentNsColumn(db: Database.Database): boolean {
   return cols.some(c => c.name === 'instrument_ns')
 }
 
+function tableHasColumn(db: Database.Database, table: string, column: string): boolean {
+  const cols = db.prepare(`PRAGMA table_info(${table})`).all() as { name: string }[]
+  return cols.some(c => c.name === column)
+}
+
+const INSTRUMENT_NS_INDEX_SQL = `
+CREATE UNIQUE INDEX IF NOT EXISTS idx_instruments_ns ON instruments(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_financials_instrument_ns ON stock_financials(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_segments_instrument_ns ON stock_business_segments(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_partners_instrument_ns ON stock_partners(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_quotes_instrument_ns ON stock_quotes_daily(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_factors_instrument_ns ON stock_factors(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_scores_instrument_ns ON stock_scores(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_klines_instrument_ns ON stock_klines_daily(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_job_progress_instrument_ns ON sync_job_progress(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_announcements_instrument_ns ON stock_announcements(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_dividends_instrument_ns ON stock_dividends(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_shareholder_summary_ns ON stock_shareholder_summary(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_shareholder_top10_ns ON stock_shareholder_top10(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_forecasts_instrument_ns ON stock_forecasts(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_inst_holdings_ns ON stock_inst_holdings(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_insider_trades_ns ON stock_insider_trades(instrument_ns);
+CREATE INDEX IF NOT EXISTS idx_buybacks_instrument_ns ON stock_buybacks(instrument_ns);
+`
+
+/** v9 DDL — 按表幂等补列，避免整批 SQL 在首列 duplicate 时跳过后续表 */
+export function ensureInstrumentNsSchema(db: Database.Database): void {
+  const tables = ['instruments', ...CN_STOCK_CHILD_TABLES] as const
+  for (const table of tables) {
+    const exists = db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type IN ('table','view') AND name = ?",
+    ).get(table)
+    if (!exists) continue
+    if (!tableHasColumn(db, table, 'instrument_ns')) {
+      db.exec(`ALTER TABLE ${table} ADD COLUMN instrument_ns TEXT`)
+    }
+  }
+  db.exec(INSTRUMENT_NS_INDEX_SQL)
+}
+
+export function isInstrumentNsSchemaComplete(db: Database.Database): boolean {
+  if (!tableHasColumn(db, 'instruments', 'instrument_ns')) return false
+  for (const table of CN_STOCK_CHILD_TABLES) {
+    const exists = db.prepare(
+      "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = ?",
+    ).get(table)
+    if (!exists) continue
+    if (!tableHasColumn(db, table, 'instrument_ns')) return false
+  }
+  return true
+}
+
 /** 为 instruments 行计算并写入 instrument_ns（幂等） */
 export function backfillInstrumentsNs(db: Database.Database): number {
   if (!hasInstrumentNsColumn(db)) return 0

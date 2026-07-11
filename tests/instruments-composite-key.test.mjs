@@ -15,10 +15,34 @@ import {
   MIGRATION_V8_SQL,
   SCHEMA_VERSION,
 } from '../packages/market-data/dist/schema.js'
-import { migrate, normalizeInstrumentExchange } from '../packages/market-data/dist/utils.js'
+import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion } from '../packages/market-data/dist/utils.js'
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
 
 let dataDir = ''
+
+/** 构造指定声明版本的老库（仅写 schema_meta + 逐步 SQL） */
+function seedDatabaseThroughVersion(dbPath, targetVersion, seedRows) {
+  const db = new Database(dbPath)
+  const ts = new Date().toISOString()
+  db.exec(MIGRATION_SQL)
+  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
+  const steps = [
+    [2, MIGRATION_V2_SQL],
+    [3, MIGRATION_V3_SQL],
+    [4, MIGRATION_V4_SQL],
+    [5, MIGRATION_V5_SQL],
+    [6, MIGRATION_V6_SQL],
+    [7, MIGRATION_V7_SQL],
+    [8, MIGRATION_V8_SQL],
+  ]
+  for (const [v, sql] of steps) {
+    if (v > targetVersion) break
+    db.exec(sql)
+    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(v, ts)
+  }
+  seedRows?.(db, ts)
+  db.close()
+}
 
 before(async () => {
   dataDir = await mkdtemp(join(tmpdir(), 'opmd-composite-'))
@@ -333,6 +357,137 @@ test('stockMarketBatch — exchangeByCode uses composite keys', () => {
   assert.equal(batch.get('SZ:000977'), 'SZ')
   assert.equal(batch.get('600519'), 'SH')
   store.close()
+})
+
+test('declared and applied schema version stay in sync after migrate', () => {
+  const dbPath = join(dataDir, 'version-sync.db')
+  const store = new MarketDataStore(dbPath)
+  assert.equal(readDeclaredSchemaVersion(store.db), SCHEMA_VERSION)
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
+  store.close()
+})
+
+test('v3 database leaps to latest schema', () => {
+  const dbPath = join(dataDir, 'leap-v3.db')
+  seedDatabaseThroughVersion(dbPath, 3, (db, ts) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('000001', '平安银行', 'SZ', 0, 'active', ?)
+    `).run(ts)
+  })
+  const store = new MarketDataStore(dbPath)
+  assert.equal(readDeclaredSchemaVersion(store.db), 9)
+  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  const inst = store.db.prepare(
+    'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
+  ).get('000001', 'CN', 'EQUITY')
+  assert.equal(inst?.instrument_ns, 'CN:SZ.000001')
+  store.close()
+})
+
+test('v5 database leaps to latest schema', () => {
+  const dbPath = join(dataDir, 'leap-v5.db')
+  seedDatabaseThroughVersion(dbPath, 5, (db, ts) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('600036', '招商银行', 'SH', 0, 'active', ?)
+    `).run(ts)
+  })
+  const store = new MarketDataStore(dbPath)
+  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  store.close()
+})
+
+test('schema_meta ahead of DDL self-heals on open', () => {
+  const dbPath = join(dataDir, 'meta-ahead.db')
+  const ts = new Date().toISOString()
+  seedDatabaseThroughVersion(dbPath, 8, (d, t) => {
+    d.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('601318', '中国平安', 'SH', 0, 'active', ?)
+    `).run(t)
+  })
+  const db = new Database(dbPath)
+  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
+  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(9, ts)
+  const finHasNsBefore = db.prepare('PRAGMA table_info(stock_financials)').all()
+    .some(c => c.name === 'instrument_ns')
+  assert.equal(finHasNsBefore, false)
+  db.close()
+
+  const store = new MarketDataStore(dbPath)
+  const finHasNsAfter = store.db.prepare('PRAGMA table_info(stock_financials)').all()
+    .some(c => c.name === 'instrument_ns')
+  assert.ok(finHasNsAfter)
+  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  store.close()
+})
+
+test('partial v9 schema recovers missing child columns', () => {
+  const dbPath = join(dataDir, 'partial-v9-recover.db')
+  const db = new Database(dbPath)
+  const ts = new Date().toISOString()
+  db.exec(MIGRATION_SQL)
+  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
+  for (const [v, sql] of [
+    [2, MIGRATION_V2_SQL],
+    [3, MIGRATION_V3_SQL],
+    [4, MIGRATION_V4_SQL],
+    [5, MIGRATION_V5_SQL],
+    [6, MIGRATION_V6_SQL],
+    [7, MIGRATION_V7_SQL],
+    [8, MIGRATION_V8_SQL],
+  ]) {
+    db.exec(sql)
+    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(v, ts)
+  }
+  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
+  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(9, ts)
+  db.close()
+
+  const store = new MarketDataStore(dbPath)
+  const finHasNs = store.db.prepare('PRAGMA table_info(stock_financials)').all()
+    .some(c => c.name === 'instrument_ns')
+  const partnersHasNs = store.db.prepare('PRAGMA table_info(stock_partners)').all()
+    .some(c => c.name === 'instrument_ns')
+  assert.ok(finHasNs)
+  assert.ok(partnersHasNs)
+  store.close()
+})
+
+test('v1 database leaps to v9 preserving stock child data', () => {
+  const dbPath = join(dataDir, 'leap-v1-v9.db')
+  const db = new Database(dbPath)
+  const ts = new Date().toISOString()
+  db.exec(MIGRATION_SQL)
+  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
+  db.prepare(`
+    INSERT INTO stocks (code, name, market, industry, is_st, status, updated_at)
+    VALUES ('600519', '贵州茅台', 'SH', '白酒', 0, 'active', ?)
+  `).run(ts)
+  db.prepare(`
+    INSERT INTO stock_quotes_daily (trade_date, code, close, synced_at)
+    VALUES ('2026-01-02', '600519', 1800, ?)
+  `).run(ts)
+  db.close()
+
+  const store = new MarketDataStore(dbPath)
+  const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
+  assert.equal(ver.v, 9)
+  const quote = store.db.prepare(
+    'SELECT instrument_ns FROM stock_quotes_daily WHERE code = ?',
+  ).get('600519')
+  assert.equal(quote.instrument_ns, 'CN:SH.600519')
+  store.close()
+})
+
+test('MIGRATION_STEPS count matches SCHEMA_VERSION', async () => {
+  const { MIGRATION_STEPS } = await import('../packages/market-data/dist/schema-migrate.js')
+  assert.equal(MIGRATION_STEPS.length, SCHEMA_VERSION)
+  assert.deepEqual(
+    MIGRATION_STEPS.map(s => s.version),
+    Array.from({ length: SCHEMA_VERSION }, (_, i) => i + 1),
+  )
 })
 
 test('cnRefFromCode resolves exchange from local store', async () => {

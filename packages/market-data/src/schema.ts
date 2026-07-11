@@ -1,6 +1,11 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
 export const SCHEMA_VERSION = 9
 
+/**
+ * 版本迁移注册表见 `schema-migrate.ts`（MIGRATION_STEPS）。
+ * 新增 v10+ 时：在此追加 MIGRATION_V10_SQL，在 MIGRATION_STEPS 注册 up/isApplied，并将 SCHEMA_VERSION +1。
+ */
+
 export const MIGRATION_SQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA synchronous = NORMAL;
