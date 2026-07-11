@@ -97,6 +97,42 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.28': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      'v0.6.28 已就绪：更顺的启程引导、更稳的聊天体验、更清爽的市场动态看板。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置已保留，可直接继续投研。',
+    features: [
+      {
+        kicker: '这一版',
+        title: '升级后，先带你走完启程引导',
+        desc:
+          '连接大模型、确认行情来源、阅读协议——几步即可进入状态，不必自己摸索入口。',
+        note: '老用户升级后也会看到本版亮点说明。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+      {
+        kicker: '替你聚焦',
+        title: '市场动态，一屏看清盘面',
+        desc:
+          '主要指数、涨跌榜、美股龙头与关注标的报价集中展示，快速把握当下市况。',
+        note: '常用行情开箱即用。',
+      },
+      {
+        kicker: '更顺手',
+        title: '聊天与界面更稳、更静',
+        desc:
+          '流式对话时布局不再抖动；设置、新闻与桌面壳层细节打磨，日常操作更顺畅。',
+        note: '把精力留给判断，而不是和界面对抗。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
