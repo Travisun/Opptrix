@@ -26,11 +26,11 @@ export const DESKTOP_TOOLBAR_TOOL_COUNT = 4
 /** Settings nav column (Codex-style) */
 export const DESKTOP_SETTINGS_SIDEBAR_WIDTH = 210
 
-/** sidebarWidth (228) × 2.5 — below this, expanded sidebar floats over content */
-export const DESKTOP_SIDEBAR_OVERLAY_THRESHOLD = 570
+/** sidebarWidth (200) × 2.5 — below this, expanded sidebar floats over content */
+export const DESKTOP_SIDEBAR_OVERLAY_THRESHOLD = 500
 
-/** sidebarWidth (228) × 3 — at/above this width, auto-expand inline sidebar when growing */
-export const DESKTOP_SIDEBAR_EXPAND_THRESHOLD = 684
+/** sidebarWidth (200) × 3 — at/above this width, auto-expand inline sidebar when growing */
+export const DESKTOP_SIDEBAR_EXPAND_THRESHOLD = 600
 
 /** Shared duration for inline panel width + title chrome when sidebar toggles */
 export const DESKTOP_SIDEBAR_LAYOUT_MS = 340
@@ -44,9 +44,9 @@ export const DESKTOP_CHAT_MIN_WIDTH = 510
 
 /** Draggable split between chat column and right panel */
 export const WORKSPACE_CHAT_MIN_WIDTH = 350
-/** Default right panel width = sidebarWidth (228) × 2 */
-export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 456
-export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 228
+/** Default right panel width — slightly narrower than 2× sidebar */
+export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 360
+export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 200
 export const WORKSPACE_SPLITTER_WIDTH = 1
 /** Invisible drag padding on each side of the 1px splitter line (overlay; no layout gap) */
 export const WORKSPACE_SPLITTER_HIT_SLOP = 1
@@ -54,7 +54,7 @@ export const WORKSPACE_SPLITTER_HIT_SLOP = 1
 export const WORKSPACE_SPLITTER_Z_INDEX = 50
 
 /** Inline left sidebar width — keep in sync with opptrixTokens.sidebarWidthPx */
-export const SIDEBAR_INLINE_WIDTH = 228
+export const SIDEBAR_INLINE_WIDTH = 200
 
 /**
  * Minimum workspace width (chat area) to keep chat + splitter + right panel open.

@@ -80,9 +80,13 @@
 
 ### 4.1 发布前检查
 
+> **Agent**：必须按 `.cursor/rules/desktop-release.mdc` Phase A–D **逐项执行并验证**后再打标签；下列与规则 Checklist 对齐。
+
 - [ ] 已在 `main`（或约定发布分支）合并待发布代码
 - [ ] 已执行 `npm run build:packages` 与 `npm run build -w opptrix-client` 无错误（CI 会重新构建，本地可先冒烟）
 - [ ] 已更新 `apps/desktop/package.json` 的 `version`
+- [ ] 已按 `.cursor/rules/onboarding.mdc` 配置引导激活：`ONBOARDING_RELEASE_BY_VERSION` 新版本亮点；若改版引导或协议则 bump `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION`（`shared` 与 `client-ui/.../constants.ts` 同步）
+- [ ] 若同步发布 Web UI，已 bump `client-ui/package.json` 的 `version`（供 `__OPPTRIX_CLIENT_VERSION__` 触发自托管用户引导）
 - [ ] 若升级 Electron，已同步修改 `build.electronVersion` 并做三端冒烟
 - [ ] Release Notes 已起草（面向用户：新功能、修复、已知问题）
 - [ ] （可选）macOS 代码签名 / Windows 签名证书已配置（未签名时更新可能触发系统安全提示）
@@ -503,6 +507,8 @@ open /Applications/Opptrix.app
 ---
 
 ## 9. 发布清单（可打印）
+
+> **Agent**：完整分阶段清单见 `.cursor/rules/desktop-release.mdc`（Phase A–F）；打标签前至少完成 A–D。
 
 ```text
 [ ] apps/desktop/package.json version = X.Y.Z

@@ -525,17 +525,19 @@ function ProviderListRow({
   provider,
   marketLabel,
   onSaved,
+  settingsMode = 'full',
 }: {
   provider: PublicProviderRuntime
   marketLabel: string
   onSaved: () => void
+  settingsMode?: 'full' | 'toggle-only'
 }) {
   const s = useListStyles()
   const toast = useSettingsToast()
   const [expanded, setExpanded] = useState(false)
   const [toggling, setToggling] = useState(false)
 
-  const hasSettings = provider.settingsFields.some(isExpandableSettingsField)
+  const hasSettings = settingsMode === 'full' && provider.settingsFields.some(isExpandableSettingsField)
 
   const handleToggleEnabled = async (checked: boolean) => {
     if (checked && !provider.canEnable) {
@@ -597,9 +599,15 @@ function ProviderListRow({
 export function ProviderCatalogListPanel({
   catalog,
   onSaved,
+  showInstalled = true,
+  settingsMode = 'full',
+  panelHeight = '360px',
 }: {
   catalog: ProviderCatalogResponse
   onSaved: () => void
+  showInstalled?: boolean
+  settingsMode?: 'full' | 'toggle-only'
+  panelHeight?: string | number
 }) {
   const s = useListStyles()
   const allProviders = catalog.groups.flatMap(g =>
@@ -620,13 +628,17 @@ export function ProviderCatalogListPanel({
 
   return (
     <>
-      <InstalledProvidersSection onChanged={onSaved} />
-      <div className={s.listPanel}>
+      {showInstalled && <InstalledProvidersSection onChanged={onSaved} />}
+      <div className={s.listPanel} style={{ height: panelHeight }}>
         <div className={s.listHeader}>
           <Text className={s.listHeaderMeta} block>
-            {enabledCount > 0
-              ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
-              : '配置连接信息并启用数据源，即可获取对应市场行情'}
+            {settingsMode === 'toggle-only'
+              ? (enabledCount > 0
+                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
+                : '以下为内置数据源；付费源需填写密钥后可在设置中启用')
+              : (enabledCount > 0
+                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
+                : '配置连接信息并启用数据源，即可获取对应市场行情')}
           </Text>
         </div>
         <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
@@ -636,6 +648,7 @@ export function ProviderCatalogListPanel({
               provider={provider}
               marketLabel={marketLabel}
               onSaved={onSaved}
+              settingsMode={settingsMode}
             />
           ))}
         </div>

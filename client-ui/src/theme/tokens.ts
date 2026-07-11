@@ -11,8 +11,8 @@ const layoutTokens = {
   focusRingOffset: '2px',
   activeOpacity: 0.72,
 
-  sidebarWidth: '228px',
-  sidebarWidthPx: 228,
+  sidebarWidth: '200px',
+  sidebarWidthPx: 200,
   settingsSidebarWidth: '210px',
   settingsSidebarWidthPx: 210,
   settingsContentWidth: '68%',

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import {
   Text, Checkbox, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
@@ -138,6 +138,26 @@ interface ProviderWizardProps {
   onCancel: () => void
   onDone: () => void
   provider?: PublicProvider | null
+  /** 嵌入引导等场景：隐藏底部导航，由外层统一控制 */
+  hideFooter?: boolean
+  /** 嵌入引导：隐藏顶部三步进度条 */
+  compact?: boolean
+  /** 为 true 时第一步不显示「取消」 */
+  hideCancel?: boolean
+  /** 引导流程：统一「继续」等文案，并通过 onNavStateChange 交出导航 */
+  flowMode?: 'default' | 'onboarding'
+  onNavStateChange?: (nav: ProviderWizardNavState | null) => void
+}
+
+export interface ProviderWizardNavState {
+  step: number
+  canWizardBack: boolean
+  canAdvance: boolean
+  advancing: boolean
+  saving: boolean
+  advanceLabel: string
+  goWizardBack: () => void
+  advance: () => void | Promise<void>
 }
 
 const DEFAULT_PRESETS: ProviderPreset[] = [
@@ -147,7 +167,16 @@ const DEFAULT_PRESETS: ProviderPreset[] = [
   { id: 'custom', name: '自定义', base_url: '' },
 ]
 
-export default function ProviderWizard({ onCancel, onDone, provider = null }: ProviderWizardProps) {
+export default function ProviderWizard({
+  onCancel,
+  onDone,
+  provider = null,
+  hideFooter = false,
+  hideCancel = false,
+  compact = false,
+  flowMode = 'default',
+  onNavStateChange,
+}: ProviderWizardProps) {
   const s = useStyles()
   const toast = useSettingsToast()
   const isEdit = Boolean(provider)
@@ -306,19 +335,82 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
 
   const handleBack = () => {
     if (step === 1) {
-      onCancel()
+      if (!hideCancel) onCancel()
       return
     }
     setStep(step - 1)
   }
 
+  const isOnboarding = flowMode === 'onboarding'
+
+  const advanceLabel = step < 3
+    ? (step === 2 && discovering ? '验证中…' : (isOnboarding ? '继续' : '下一步'))
+    : (saving
+      ? '保存中…'
+      : (isOnboarding ? '完成配置' : (isEdit ? '保存更改' : '完成添加')))
+
+  const canAdvance = step === 1
+    ? canNextStep1
+    : step === 2
+      ? canNextStep2 && !discovering
+      : canSave && !saving
+
+  const navActionsRef = useRef({
+    goWizardBack: handleBack,
+    advance: async () => {
+      if (step < 3) await handleNext()
+      else await handleSave()
+    },
+  })
+
+  navActionsRef.current = {
+    goWizardBack: handleBack,
+    advance: async () => {
+      if (step < 3) await handleNext()
+      else await handleSave()
+    },
+  }
+
+  const reportNav = useCallback(() => {
+    if (!hideFooter || !onNavStateChange) return
+    onNavStateChange({
+      step,
+      canWizardBack: step > 1,
+      canAdvance,
+      advancing: discovering,
+      saving,
+      advanceLabel,
+      goWizardBack: () => navActionsRef.current.goWizardBack(),
+      advance: () => navActionsRef.current.advance(),
+    })
+  }, [
+    hideFooter,
+    onNavStateChange,
+    step,
+    canAdvance,
+    discovering,
+    saving,
+    advanceLabel,
+  ])
+
+  useEffect(() => {
+    reportNav()
+  }, [reportNav])
+
+  useEffect(() => {
+    if (!hideFooter || !onNavStateChange) return
+    return () => { onNavStateChange(null) }
+  }, [hideFooter, onNavStateChange])
+
   return (
     <div className={s.root}>
+      {!compact && (
       <div className={s.steps}>
         {[1, 2, 3].map(n => (
           <div key={n} className={mergeClasses(s.stepDot, n <= step && s.stepActive)} />
         ))}
       </div>
+      )}
 
       <div className={`${s.scroll} opptrix-scroll`}>
         <div className={s.bodyInner}>
@@ -369,7 +461,9 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
                 <Text className={s.stepDesc} block>
                   {isEdit
                     ? '留空表示沿用已保存的密钥；填写新密钥将重新验证并拉取模型列表。'
-                    : '密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。'}
+                    : isOnboarding
+                      ? '密钥保存在你的电脑上。点「继续」将自动验证并拉取可用模型。'
+                      : '密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。'}
                 </Text>
               </div>
               <div className={s.formGrid}>
@@ -443,7 +537,9 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
         </div>
       </div>
 
+      {!hideFooter && (
       <div className={s.footer}>
+        {!(hideCancel && step === 1) && (
         <OpptrixButton
           className={s.footerBack}
           variant="secondary"
@@ -451,6 +547,7 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
         >
           {step === 1 ? '取消' : '上一步'}
         </OpptrixButton>
+        )}
         {step < 3 ? (
           <OpptrixButton
             variant="primary"
@@ -473,6 +570,7 @@ export default function ProviderWizard({ onCancel, onDone, provider = null }: Pr
           </OpptrixButton>
         )}
       </div>
+      )}
     </div>
   )
 }

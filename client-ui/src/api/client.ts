@@ -1169,6 +1169,15 @@ export async function getHealth() {
   }>
 }
 
+export async function getLegalUserAgreement(): Promise<{ html: string; sourceUrl: string }> {
+  const resp = await fetchWithTimeout(`${API_BASE}/legal/user-agreement`)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `协议加载失败（${resp.status}）`)
+  }
+  return resp.json() as Promise<{ html: string; sourceUrl: string }>
+}
+
 export interface PublicProvider {
   id: string
   name: string

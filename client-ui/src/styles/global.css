@@ -200,6 +200,43 @@ html.opptrix-electron .opptrix-app-main {
   background: var(--opptrix-canvas) !important;
 }
 
+/** 启动引导全屏层 — Electron 透明窗口下须实底，避免「白屏/空屏」 */
+html.opptrix-electron .opptrix-onboarding-shell {
+  background: var(--opptrix-canvas) !important;
+}
+
+html.opptrix-electron .opptrix-onboarding-title-bar {
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+html.opptrix-electron .opptrix-onboarding-title-drag {
+  pointer-events: auto;
+  -webkit-app-region: drag;
+}
+
+/** 引导协议勾选 — 去掉 Checkbox focus outline */
+.opptrix-onboarding-agree-checkbox .fui-Checkbox:focus-within .fui-Checkbox__indicator,
+.opptrix-onboarding-agree-checkbox .fui-Checkbox input:focus-visible + .fui-Checkbox__indicator,
+.opptrix-onboarding-agree-checkbox .fui-Checkbox__input:focus-visible + .fui-Checkbox__indicator {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
+/** 引导协议正文 — 外部页面字号缩放 */
+.opptrix-onboarding-legal-doc {
+  font-size: 86%;
+  line-height: 1.55;
+}
+
+.opptrix-onboarding-legal-doc a {
+  color: var(--opptrix-accent);
+  cursor: pointer;
+}
+
 html.opptrix-electron .opptrix-settings-host {
   background: transparent !important;
 }

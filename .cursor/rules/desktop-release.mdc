@@ -1,0 +1,141 @@
+---
+description: 桌面端发版 — Agent 发布前必须逐步完成 Checklist（硬性）；版本号、标签、onboarding、CI
+globs:
+  - apps/desktop/package.json
+  - apps/desktop/electron/**
+  - apps/desktop/scripts/**
+  - .github/workflows/release-desktop.yml
+  - docs/DESKTOP-RELEASE.md
+  - client-ui/package.json
+alwaysApply: false
+---
+
+# 桌面端发版（Agent 硬性流程）
+
+当用户要求 **发布桌面版、打标签、bump 版本、推送 `desktop-v*`、准备 Release** 时，Agent **必须**按本规则与 `docs/DESKTOP-RELEASE.md` **逐步完成 Checklist**，**不得**跳过项、不得凭记忆勾选、不得在必选项未验证前执行 `git tag` / `git push` 标签。
+
+**配套规则**：引导激活参数见 `onboarding.mdc`；schema/用户数据/更新源兼容见 `backward-compatibility.mdc`。
+
+---
+
+## Agent 必须遵守的执行顺序
+
+1. **先 Read** 本文件 + `onboarding.mdc`「发版激活 onboarding」+ `docs/DESKTOP-RELEASE.md` §4–§9（细节与 FAQ 以文档为准）。
+2. **建立任务清单**：用 TodoWrite（或向用户列出同等条目）展开下方 **Phase A–F**，逐项 `in_progress` → `completed`。
+3. **每项须可验证**：运行命令、读文件或 diff 确认；写「已完成」须附带证据（命令输出摘要 / 文件字段值）。
+4. **本地构建 / `check:ui`**：能跑则跑；失败则停止发版并修复，**禁止**带红打标签。
+5. **打标签前汇报**：向用户展示 Checklist 完成情况；用户未明确说「直接发布 / 跳过」时，**待确认后再** `git tag` + `git push`。
+6. **禁止**：未改 `version` 就打标签；标签名与 `package.json` 不一致；手动改名 `latest-*.yml` 或安装包；无迁移地破坏旧客户端更新链（见 `backward-compatibility.mdc`）。
+
+---
+
+## Phase A — 代码就绪
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| A1 | 待发布代码已在目标分支（通常 `main`）且工作区无未提交的意外改动 | `git status`；与用户确认范围 |
+| A2 | 若本次含 `client-ui` 改动 | `npm run check:ui` 退出码 0 |
+| A3 | 若本次含 `packages` / server 改动 | `npm run build:packages` 无错误 |
+| A4 | 发版前本地 UI 构建冒烟 | `npm run build -w opptrix-client` 无错误 |
+
+---
+
+## Phase B — 版本号与 onboarding 激活
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| B1 | **`apps/desktop/package.json` `version` 已 bump** 为本次发布号（语义化版本；真源） | `node -p "require('./apps/desktop/package.json').version"` |
+| B2 | 若同步发 Web UI：**`client-ui/package.json` `version` 已 bump** | 读文件或与桌面版对齐 |
+| B3 | **引导亮点**：`ONBOARDING_RELEASE_BY_VERSION` 已添加/更新**与新版本前缀匹配**的键 | 读 `client-ui/src/onboarding/manifest.ts` |
+| B4 | 若改版引导 UI/步骤：`ONBOARDING_FLOW_VERSION` 已在 **`packages/shared/src/onboarding.ts` 与 `client-ui/src/onboarding/constants.ts` 同步 bump** | 两文件同值 |
+| B5 | 若协议变更：`LEGAL_AGREEMENTS_VERSION` 两处同步 bump；`aboutLinks.ts` URL 已核对 | 两文件同值 |
+| B6 | 版本号变更已 **commit**（含 onboarding 相关文件） | `git log -1` 含 version / manifest 等 |
+
+细则与决策表见 `onboarding.mdc` §发版激活 onboarding。
+
+---
+
+## Phase C — 兼容性与发布说明（按需）
+
+| # | 检查项 | 何时必做 |
+|---|--------|----------|
+| C1 | SQLite / 用户 preference / 本地 JSON 格式变更已有 **幂等迁移** | 动过 schema 或存储格式 |
+| C2 | Hub/API 破坏性变更已版本化或双读；旧客户端可升级或收到明确提示 | 动过 API 契约 |
+| C3 | `app-update.yml` / R2 / CDN 变更不会使**已发布旧版**永久无法更新 | 动过更新源 |
+| C4 | **Release Notes** 已起草（面向用户：新功能、修复、已知问题、手动步骤若有） | 每次发版 |
+| C5 | 若升级 Electron：`build.electronVersion` 已更新且三端冒烟计划已说明 | 升 Electron 时 |
+
+---
+
+## Phase D — 打标签前最后确认
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| D1 | 计划标签名 = `desktop-v{version}`，且 `{version}` **等于** `apps/desktop/package.json` `version` | 字符串完全一致 |
+| D2 | 该标签尚未存在 | `git tag -l 'desktop-v*' \| grep 目标标签` 为空 |
+| D3 | 已向用户汇报 Phase A–C（及 D）完成情况 | 对话中可见 |
+
+**打标签命令模板**（版本示例 `0.6.1`，以 B1 实测为准）：
+
+```bash
+node -p "require('./apps/desktop/package.json').version"
+git push origin main   # 确保含 version bump 的提交已推送
+git tag desktop-v0.6.1
+git push origin desktop-v0.6.1
+```
+
+---
+
+## Phase E — CI 与产物（推送标签后）
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| E1 | GitHub Actions `release-desktop` workflow 各 job 成功 | `gh run list` / Actions UI |
+| E2 | Release 附件含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`** | `gh release view desktop-v{version}` |
+| E3 | `verify-packaged-updater`（或同等校验）通过 | CI 日志 |
+| E4 | Release Notes 已填入 GitHub Release | Release 页面 |
+| E5 | R2 同步 job 成功（若启用） | CI `sync-r2` |
+
+**禁止**手动改名 electron-builder 产物或 yml 内 `url`/`version`。
+
+---
+
+## Phase F — 发版后冒烟（建议，用户要求时必做）
+
+| # | 检查项 |
+|---|--------|
+| F1 | 在至少一个目标平台：旧版安装 → 检查更新 → 下载 → 重启 → 新版本启动 |
+| F2 | 升级后 **onboarding** 按预期出现（版本 bump 或 flow/agreements bump） |
+| F3 | 核心路径：登录/会话、LLM 配置、行情、聊天可用了 |
+
+本地重置 onboarding 测引导：`onboarding.mdc` §本地验证 `curl` 示例。
+
+---
+
+## 快速命令索引
+
+```bash
+# 当前桌面版本（真源）
+node -p "require('./apps/desktop/package.json').version"
+
+# 发版前构建
+npm run build:packages
+npm run check:ui
+npm run build -w opptrix-client
+
+# 已有桌面标签
+git tag -l 'desktop-v*' --sort=-v:refname | head
+
+# 查看 Release
+gh release view desktop-vX.Y.Z
+```
+
+完整说明、产物命名、FAQ：`docs/DESKTOP-RELEASE.md`。
+
+## 禁止（反模式）
+
+- ❌ 未 Read 本规则与用户确认就 `git push` 标签
+- ❌ Checklist 未逐项验证就宣称「可以发布」
+- ❌ 只改文案不 bump `version` / `ONBOARDING_*` / `LEGAL_*` 却期望老用户看到新引导
+- ❌ `desktop-v*` 与 `package.json` version 不一致
+- ❌ 修改已发布 Release 的 yml 糊弄版本；应新发正确版本并在 Notes 说明

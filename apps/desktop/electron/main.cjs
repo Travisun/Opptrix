@@ -430,6 +430,22 @@ function attachMainWindowHandlers(win) {
     return { action: 'deny' }
   })
 
+  win.webContents.on('will-frame-navigate', (event, url) => {
+    if (!/^https?:\/\//i.test(url)) return
+    try {
+      const current = win.webContents.getURL()
+      if (current) {
+        const currentOrigin = new URL(current).origin
+        const targetOrigin = new URL(url).origin
+        if (currentOrigin === targetOrigin) return
+      }
+    } catch {
+      /* open externally */
+    }
+    event.preventDefault()
+    void shell.openExternal(url)
+  })
+
   const notifyFullscreen = () => {
     win.webContents.send('window-fullscreen-changed', win.isFullScreen())
   }

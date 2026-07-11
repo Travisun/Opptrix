@@ -37,6 +37,7 @@ import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
 import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
 import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
+import { fetchUserAgreementHtml } from './legal-document.js'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -112,6 +113,15 @@ app.get('/api/health', async () => ({
   mining_tools: agent.tools.miningTools().length,
   factors: REGISTRY.count(),
 }))
+
+app.get('/api/legal/user-agreement', async (_req, reply) => {
+  try {
+    return await fetchUserAgreementHtml()
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '协议页面加载失败'
+    return reply.code(502).send({ error: message })
+  }
+})
 
 app.get<{ Querystring: { mining?: string } }>('/api/mcp/tools', async (req) => {
   const miningOnly = req.query.mining === '1' || req.query.mining === 'true'

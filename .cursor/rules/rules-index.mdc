@@ -9,7 +9,8 @@ alwaysApply: true
 
 | 场景 | 细则（glob 自动挂载；未命中时动手前 Read） |
 |------|------|
-| 改 `client-ui` | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc`；`docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
+| 改 `client-ui` | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc`、`onboarding.mdc`（引导流程与发版激活参数）；`docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
+| **桌面发版 / 打标签 / bump 版本** | **`desktop-release.mdc`（Agent 必须逐步完成 Phase A–F Checklist）**、`onboarding.mdc`、`docs/DESKTOP-RELEASE.md` |
 | SQLite / 本地用户数据 | `backward-compatibility.mdc`、`schema-migration.mdc` |
 | 行情 / Hub / 研究 API | `data-layer-standard-api.mdc`；`docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
 | Provider 实现 | `provider-standard-api.mdc`、`data-provider-docs.mdc` |
@@ -17,6 +18,7 @@ alwaysApply: true
 ## 硬性（全仓库）
 
 - **禁止断代**：schema、用户数据、Hub/API、更新源变更须兼容 + 幂等迁移（细则 `backward-compatibility.mdc`）。
+- **桌面发版**：用户要求发布 / 打 `desktop-v*` 标签前，Agent **必须先 Read `desktop-release.mdc`**，用 Checklist **逐项验证**（Phase A–D 完成前不得 push 标签）；引导参数见 `onboarding.mdc`。
 - **增量改动**：按用户最新指示做最小 diff；不顺手重构；用户已确认的 UI 行为勿擅自改。
 - **探索再改**：CodeGraph 定位符号与调用链后再 Read/编辑；返回源码视为已读，勿重复打开。
 - **client-ui 收尾**：改动 `client-ui/**` 后跑 `npm run check:ui`，通过再宣告完成。

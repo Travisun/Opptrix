@@ -1,7 +1,10 @@
 /** Public project & legal URLs — keep aligned with README.md and apps/desktop/electron/app-meta.cjs */
 export const OPPTRIX_WEBSITE = 'https://www.opptrix.org'
-export const OPPTRIX_USER_AGREEMENT = 'https://opptrix.org/legal/user-agreement'
-export const OPPTRIX_PRIVACY_POLICY = 'https://opptrix.org/legal/privacy-policy'
+/** 外链打开（关于页等） */
+export const OPPTRIX_USER_AGREEMENT = 'https://www.opptrix.org/user-agreement.html'
+/** 引导内嵌 iframe — 与站点路由一致 */
+export const OPPTRIX_USER_AGREEMENT_EMBED = 'https://www.opptrix.org/user-agreement'
+export const OPPTRIX_PRIVACY_POLICY = 'https://www.opptrix.org/privacy-policy.html'
 export const OPPTRIX_DISCLAIMER = 'https://opptrix.org/legal/disclaimer'
 
 export const OPPTRIX_GITHUB_HOME = 'https://github.com/Travisun/Opptrix'

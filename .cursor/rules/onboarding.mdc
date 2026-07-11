@@ -1,0 +1,152 @@
+---
+description: 启动引导 — 首次使用/版本更新后的欢迎流程、发版激活参数与文案维护
+globs:
+  - client-ui/src/onboarding/**/*
+  - client-ui/vite.config.ts
+  - client-ui/src/pages/settings/aboutLinks.ts
+  - packages/shared/src/onboarding.ts
+  - apps/server/src/legal-document.ts
+  - apps/desktop/package.json
+  - client-ui/package.json
+alwaysApply: false
+---
+
+# 启动引导（Onboarding）
+
+用户**首次启动**、**版本更新后**、**引导流程改版**或**协议版本 bump** 后须走完整引导；状态存 `user-store` → `preference` / `onboarding_state`（经 `GET/PUT /api/preferences/onboarding_state`）。
+
+## 步骤顺序（勿擅自调整）
+
+1. **介绍** — `OnboardingIntroCarousel` 自动轮播欢迎 + `manifest.features`；用户点一次「开始配置」进入配置
+2. **模型** — `ProviderWizard`（`hideFooter` + 引导底栏统一导航）
+3. **行情** — `OnboardingDataList` 默认圆角卡片列表
+4. **协议** — `OnboardingLegalPanel` 经 `GET /api/legal/user-agreement` 拉取 HTML 展示；链接点击走 `openExternalUrl`（系统浏览器）；勾选后「进入 Opptrix」
+
+视觉：沿用 `opptrixCssVars` 陶土橙与默认组件样式；全屏画布、内容区居中；无 shadow；Electron 顶栏支持拖拽。介绍步自动轮播（`ONBOARDING_INTRO_SLIDE_MS`）+ `OnboardingHeroBlock` 大标题排版。**配置步标题**统一用 `useOnboardingShellStyles().sectionTitle` / `sectionLead`（勿在单步组件内另写更小字号）。
+
+---
+
+## 发版激活 onboarding（核心）
+
+升级后是否重走引导，由 `shouldShowOnboarding` 判定。发版时**必须明确要选哪一种激活方式**，并更新对应参数；**只改文案却不 bump 任何参数，老用户不会重走引导**。
+
+### 决策表：改什么 → 激活什么
+
+| 发版目的 | 必须更新的参数 / 文件 | 触发条件（用户侧） |
+|----------|----------------------|-------------------|
+| **常规版本发布**（老用户应看到「欢迎回来 / 本版亮点」） | ① **桌面**：`apps/desktop/package.json` → `version`（真源，见 `docs/DESKTOP-RELEASE.md`）<br>② **Web 前端**：`client-ui/package.json` → `version`（Vite 注入 `__OPPTRIX_CLIENT_VERSION__`）<br>③ **亮点文案**：`client-ui/src/onboarding/manifest.ts` → `ONBOARDING_RELEASE_BY_VERSION` 增加或更新**与新版本前缀匹配**的键（如 `0.6.1`） | `normalizeAppVersion(lastCompletedVersion) !== normalizeAppVersion(当前版本)` |
+| **仅改版引导**（UI、步骤顺序、交互；应用版本号不变） | `packages/shared/src/onboarding.ts` **与** `client-ui/src/onboarding/constants.ts` → **同步 bump** `ONBOARDING_FLOW_VERSION`（如 `'1'` → `'2'`） | `onboardingFlowVersion !== ONBOARDING_FLOW_VERSION`（旧数据缺字段视为未完成） |
+| **法律文本 / 协议 URL 变更**（须重新勾选同意） | 两处同步 bump `LEGAL_AGREEMENTS_VERSION`（如 `'2026-03'` → `'2026-04'`）；`aboutLinks.ts` URL；必要时 `apps/server/src/legal-document.ts` 拉取地址 | `agreementsVersion !== LEGAL_AGREEMENTS_VERSION` |
+| **首次安装** | 无需额外参数 | 无 `completedAt` |
+
+**可同时组合**：例如发 `0.6.1` 且改版引导 → bump 桌面/Web `version` **并** bump `ONBOARDING_FLOW_VERSION`，并更新 `ONBOARDING_RELEASE_BY_VERSION['0.6.1']`。
+
+### 版本号与 onboarding 比对来源
+
+| 运行环境 | `useAppVersion` 读取顺序 | 与 `lastCompletedVersion` 比对 |
+|----------|-------------------------|-------------------------------|
+| **Electron 桌面** | `electronAPI.clientVersion()` → 构建版本 → `getHealth().version` | 以 **`apps/desktop/package.json` `version`** 为准（经 preload IPC） |
+| **Web / 自托管 UI** | `__OPPTRIX_CLIENT_VERSION__`（`client-ui/package.json`）→ `getHealth().version` | 自托管**仅替换前端静态资源**时须 bump **`client-ui/package.json` `version`**，否则 health 未变不会触发 |
+| **服务端 health 回退** | `OPPTRIX_APP_VERSION`（桌面壳启动时注入）或默认 `0.6.0` | 仅在前两项不可用时的兜底，**不能**作为发版激活的唯一手段 |
+
+`normalizeAppVersion` 会去掉 `v` 前缀再比较（`0.6.0` 与 `v0.6.0` 等价）。`ONBOARDING_RELEASE_BY_VERSION` 的键用**无前缀**语义化版本，按**最长前缀匹配**（`0.6.0-dev.27` 可匹配键 `0.6.0`）。
+
+### 双写同步（硬性）
+
+下列符号在以下两文件**必须完全一致**（改一处必须改另一处）：
+
+- `packages/shared/src/onboarding.ts`
+- `client-ui/src/onboarding/constants.ts`
+
+同步项：`ONBOARDING_STATE_KEY`、`LEGAL_AGREEMENTS_VERSION`、`ONBOARDING_FLOW_VERSION`、`OnboardingState` 字段、`shouldShowOnboarding` / `normalizeAppVersion` 逻辑。
+
+`client-ui` **禁止**从 `@opptrix/shared` **主入口**导入（会拖入 `node:path` 导致 Vite 白屏）；浏览器侧只用 `constants.ts`，服务端/包可用 `@opptrix/shared/onboarding`。
+
+### 完成时持久化字段（`saveOnboardingComplete`）
+
+| 字段 | 含义 |
+|------|------|
+| `completedAt` | 最近一次完整走完引导 |
+| `lastCompletedVersion` | 完成时的 `useAppVersion` 结果（已规范化比较用） |
+| `onboardingFlowVersion` | 完成时的 `ONBOARDING_FLOW_VERSION` |
+| `agreementsVersion` | 完成时的 `LEGAL_AGREEMENTS_VERSION` |
+| `agreementsAcceptedAt` | 勾选协议时间 |
+| `llmSkipped` | 是否跳过模型配置 |
+
+`OnboardingGate` 在版本/状态刷新、Electron 更新就绪、页面重新可见时会重新判定并重置 `dismissed`。**禁止**仅 `setDismissed(true)` 而不落库。
+
+---
+
+## 发版 Checklist（维护者）
+
+发布前按目标勾选：
+
+- [ ] 已确定激活原因：**版本** / **流程改版** / **协议**（至少一项）
+- [ ] **常规发版**：已 bump `apps/desktop/package.json` `version`；Web 同步 bump `client-ui/package.json` `version`（若发 UI）
+- [ ] **常规发版**：已在 `ONBOARDING_RELEASE_BY_VERSION` 添加新版本键与亮点文案（`updateLine` 给回归用户）
+- [ ] **流程改版**：已两处同步 bump `ONBOARDING_FLOW_VERSION`
+- [ ] **协议变更**：已两处同步 bump `LEGAL_AGREEMENTS_VERSION` 并核对 `aboutLinks.ts`
+- [ ] `shared/onboarding.ts` 与 `client-ui/.../constants.ts` 已对齐
+- [ ] 改动了 `client-ui/**` → `npm run check:ui` 通过
+- [ ] 本地冒烟：见下方验证
+
+桌面发版流程其余项见 **`desktop-release.mdc`（Agent Checklist）** 与 `docs/DESKTOP-RELEASE.md`（标签 `desktop-v{version}`、CI、产物等）。
+
+---
+
+## 判定逻辑（`shouldShowOnboarding`）
+
+满足**任一**即显示引导：
+
+1. 无 `completedAt`
+2. `normalizeAppVersion(lastCompletedVersion) !== normalizeAppVersion(当前版本)`
+3. `onboardingFlowVersion !== ONBOARDING_FLOW_VERSION`
+4. `agreementsVersion !== LEGAL_AGREEMENTS_VERSION`
+
+---
+
+## 本地验证
+
+**重置引导状态**（开发 / 冒烟）：
+
+```bash
+curl -sS -X PUT 'http://127.0.0.1:8711/api/preferences/onboarding_state' \
+  -H 'Content-Type: application/json' \
+  -d '{"value":null}'
+```
+
+验证路径建议：
+
+1. 清空 `onboarding_state` → 应出现完整四步引导
+2. 走完引导后刷新 → 不应再出现
+3. 仅 bump `ONBOARDING_FLOW_VERSION`（或改 `version`）→ 应再次出现，且介绍步文案符合 `ONBOARDING_RELEASE_BY_VERSION`
+4. 协议步内链接 → 系统浏览器打开，非 iframe 内跳转
+
+---
+
+## 其他维护项
+
+| 变更类型 | 改哪里 |
+|----------|--------|
+| 各步用户向文案（标题/说明） | `client-ui/src/onboarding/manifest.ts` → `ONBOARDING_COPY` |
+| 新增引导步骤 | `onboardingTheme.ts` `buildOnboardingSteps` + `OnboardingWizard.tsx` + 本规则步骤表 |
+| 协议代理 / 外链 | `apps/server/src/legal-document.ts`；Electron `apps/desktop/electron/main.cjs` `will-frame-navigate` |
+| Vite 客户端版本注入 | `client-ui/vite.config.ts` → `define.__OPPTRIX_CLIENT_VERSION__` |
+
+---
+
+## UI
+
+- 遵循 `client-ui-guidelines.mdc`、`ui-overlay-components.mdc`；全屏卡片式，不用原生 `alert/confirm`
+- 外链用 `openExternalUrl`；协议与关于页共用 `OPPTRIX_USER_AGREEMENT` / `OPPTRIX_PRIVACY_POLICY`（`aboutLinks.ts`）
+- 改 `client-ui/src/onboarding/**` 后跑 `npm run check:ui`
+
+## 禁止
+
+- ❌ 硬编码引导文案在组件内而不进 `manifest.ts`
+- ❌ 发版只改亮点文案却不 bump `version` / `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION` 却期望老用户重走引导
+- ❌ 只改 `shared/onboarding.ts` 不同步 `client-ui/.../constants.ts`
+- ❌ 跳过 preference 持久化
+- ❌ 破坏旧用户：无 `onboarding_state` 时视为未完成，须能正常走引导
+- ❌ 协议步用 iframe 内跳转代替系统浏览器打开链接
+- ❌ 配置步标题用独立小字号样式，与 `sectionTitle` 不一致
