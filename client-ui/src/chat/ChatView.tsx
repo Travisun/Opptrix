@@ -7,6 +7,8 @@ import type {
   AvailableModel,
 } from '../types/chat'
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
+import { submitUserPromptResponse } from '../api/client'
+import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
@@ -232,9 +234,9 @@ interface ChatViewProps {
   chatScrollEpoch?: number
   messages: ChatDisplayMessage[]
   contextRef?: SessionContextRef | null
-  input: string
+  composerDraft?: { revision: number; text: string }
   loading: boolean
-  liveTrace?: ChatLiveTrace | null
+  streamUiRef?: ChatStreamUiRef
   error: string
   availableModels?: AvailableModel[]
   sessionModel?: string
@@ -242,7 +244,6 @@ interface ChatViewProps {
   sidebarVisible?: boolean
   llmLabel?: string
   backendOk?: boolean
-  onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
   onStop?: () => void
   onForkMessage?: (messageIndex: number) => void
@@ -262,29 +263,67 @@ interface ChatViewProps {
   onToggleRightPanel?: () => void
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
-  userPrompt?: ChatUserPromptPayload | null
-  userPromptSubmitting?: boolean
-  onUserPromptSubmit?: (answer: UserPromptAnswerPayload) => void
+  onStreamError?: (message: string) => void
 }
 
 export default function ChatView({
-  title = '新对话', titleSlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, input, loading, liveTrace = null, error,
+  title = '新对话', titleSlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onInputChange, onSubmit, onStop, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
+  onSubmit, onStop, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
   onToggleRightPanel,
   chatColumnVisible = true,
   onToggleChatColumn,
-  userPrompt = null,
-  userPromptSubmitting = false,
-  onUserPromptSubmit,
+  onStreamError,
 }: ChatViewProps) {
   const s = useStyles()
+  const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
+  const [pendingUserPrompt, setPendingUserPrompt] = useState<ChatUserPromptPayload | null>(null)
+  const [userPromptSubmitting, setUserPromptSubmitting] = useState(false)
+  const pendingUserPromptRef = useRef(pendingUserPrompt)
+  const userPromptSubmittingRef = useRef(userPromptSubmitting)
+  pendingUserPromptRef.current = pendingUserPrompt
+  userPromptSubmittingRef.current = userPromptSubmitting
+
+  useEffect(() => {
+    if (!streamUiRef) return undefined
+    streamUiRef.current = {
+      setLiveTrace,
+      setPendingUserPrompt,
+      setUserPromptSubmitting,
+      readPendingUserPrompt: () => pendingUserPromptRef.current,
+      readUserPromptSubmitting: () => userPromptSubmittingRef.current,
+      resetStreamUi: () => {
+        setLiveTrace(null)
+        setPendingUserPrompt(null)
+        setUserPromptSubmitting(false)
+      },
+    }
+    return () => {
+      streamUiRef.current = null
+    }
+  }, [streamUiRef])
+
+  const handleUserPromptSubmit = useCallback(async (answer: UserPromptAnswerPayload) => {
+    const sid = sessionId
+    const prompt = pendingUserPromptRef.current
+    if (!sid || !prompt || userPromptSubmittingRef.current) return
+    setUserPromptSubmitting(true)
+    onStreamError?.('')
+    try {
+      await submitUserPromptResponse(sid, prompt.id, answer)
+      setPendingUserPrompt(null)
+    } catch (e) {
+      onStreamError?.(e instanceof Error ? e.message : '提交失败，请重试')
+    } finally {
+      setUserPromptSubmitting(false)
+    }
+  }, [onStreamError, sessionId])
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const bodyShellRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
@@ -626,7 +665,7 @@ export default function ChatView({
               : undefined}
           >
             <ChatComposer
-              input={input}
+              draftSync={composerDraft}
               loading={loading}
               error={error}
               isEmpty={isEmpty}
@@ -636,14 +675,13 @@ export default function ChatView({
               welcomeKey={welcomeEpoch}
               availableModels={availableModels}
               sessionModel={sessionModel}
-              onInputChange={onInputChange}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModelChange={onModelChange}
               onClearContextRef={onClearContextRef}
-              userPrompt={userPrompt}
+              userPrompt={pendingUserPrompt}
               userPromptSubmitting={userPromptSubmitting}
-              onUserPromptSubmit={onUserPromptSubmit}
+              onUserPromptSubmit={pendingUserPrompt ? handleUserPromptSubmit : undefined}
             />
           </div>
         </div>

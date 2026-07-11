@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, memo } from 'react'
 import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
@@ -139,7 +139,7 @@ interface Props {
   onDiscussInChat?: (payload: StockDiscussPayload) => void
 }
 
-export default function RightMarketPanel({
+function RightMarketPanel({
   electronChrome = false,
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
@@ -456,3 +456,5 @@ export default function RightMarketPanel({
     </div>
   )
 }
+
+export default memo(RightMarketPanel)

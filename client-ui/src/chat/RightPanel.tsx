@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   DESKTOP_SIDEBAR_LAYOUT_EASE,
@@ -57,7 +58,7 @@ interface Props {
   onDiscussInChat?: (payload: StockDiscussPayload) => void
 }
 
-export default function RightPanel({
+function RightPanel({
   visible,
   width = WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
   fullWidth = false,
@@ -111,3 +112,5 @@ export default function RightPanel({
     </div>
   )
 }
+
+export default memo(RightPanel)

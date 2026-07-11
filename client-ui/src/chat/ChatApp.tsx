@@ -1,8 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import SessionSidebar, { type SidebarListTab } from './SessionSidebar'
 import type { ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ChatView from './ChatView'
+import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
@@ -14,7 +15,6 @@ import {
   listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
-  submitUserPromptResponse,
   archiveSession,
   listArchivedSessions, createSessionArchiveFolder, renameSessionArchiveFolder, deleteSessionArchiveFolder,
   clearSessionArchiveFolder, renameSession,
@@ -23,7 +23,6 @@ import type {
   ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
   SessionMeta, AvailableModel,
 } from '../types/chat'
-import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
 import { feedArticleToContextRef } from '../pages/news/newsUtils'
@@ -231,11 +230,12 @@ export default function ChatApp() {
   const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
-  const [input, setInput] = useState('')
+  const [composerDraft, setComposerDraft] = useState({ revision: 0, text: '' })
+  const pushComposerDraft = useCallback((text: string) => {
+    setComposerDraft(prev => ({ revision: prev.revision + 1, text }))
+  }, [])
   const [loading, setLoading] = useState(false)
-  const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
-  const [pendingUserPrompt, setPendingUserPrompt] = useState<ChatUserPromptPayload | null>(null)
-  const [userPromptSubmitting, setUserPromptSubmitting] = useState(false)
+  const streamUiRef = useRef<ChatStreamUiRef['current']>(null)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
@@ -378,7 +378,7 @@ export default function ChatApp() {
     openNews: handleProtocolNews,
   })
 
-  const handleNew = async () => {
+  const handleNew = useCallback(async () => {
     restoreChatColumn()
     try {
       const { session } = await createSession()
@@ -389,7 +389,7 @@ export default function ChatApp() {
       setMessages([])
       setContextRef(null)
       setSessionModelState(undefined)
-      setInput('')
+      pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
       closeDrawer()
@@ -397,12 +397,10 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
-  }
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn, view])
 
-  const handleSelect = async (id: string) => {
+  const handleSelect = useCallback(async (id: string) => {
     restoreChatColumn()
-    // If we're already on this session but currently viewing news/market,
-    // just navigate back to chat without reloading.
     if (id === activeId) {
       if (view !== 'chat') navigate('chat')
       return
@@ -413,9 +411,9 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载对话失败')
     }
-  }
+  }, [activeId, loadSession, navigate, restoreChatColumn, view])
 
-  const handleDelete = async (id: string) => {
+  const handleDelete = useCallback(async (id: string) => {
     const ok = await confirm({
       title: '确定删除此对话？',
       message: '删除后无法恢复。',
@@ -439,9 +437,9 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }
+  }, [activeId, confirm, loadSession, refreshSessions])
 
-  const handleArchive = async (id: string, folderId: string) => {
+  const handleArchive = useCallback(async (id: string, folderId: string) => {
     try {
       await archiveSession(id, folderId)
       const list = await refreshSessions()
@@ -461,7 +459,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '归档失败')
     }
-  }
+  }, [activeId, loadSession, refreshArchived, refreshSessions])
 
   const handleCreateArchiveFolder = useCallback(async (title: string) => {
     try {
@@ -629,7 +627,7 @@ export default function ChatApp() {
   }, [activeId, loading])
 
   const handleSubmit = async (text?: string) => {
-    const msg = (text ?? input).trim()
+    const msg = (text ?? '').trim()
     if (!msg || loading) return
 
     let sessionId = activeId
@@ -645,11 +643,11 @@ export default function ChatApp() {
       }
     }
 
-    setInput('')
     setLoading(true)
-    setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
-    setPendingUserPrompt(null)
-    setUserPromptSubmitting(false)
+    const streamUi = streamUiRef.current
+    streamUi?.setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
+    streamUi?.setPendingUserPrompt(null)
+    streamUi?.setUserPromptSubmitting(false)
     setError('')
 
     const optimistic: ChatDisplayMessage = {
@@ -666,8 +664,10 @@ export default function ChatApp() {
 
     try {
       await streamSessionChat(sessionId, msg, (event) => {
+        const ui = streamUiRef.current
+        if (!ui) return
         if (event.type === 'thinking') {
-          setLiveTrace(prev => ({
+          ui.setLiveTrace(prev => ({
             steps: prev?.steps ?? [],
             thinkingLabel: event.label,
             thinkingSnippet: event.snippet ?? prev?.thinkingSnippet,
@@ -675,8 +675,8 @@ export default function ChatApp() {
           return
         }
         if (event.type === 'user_prompt') {
-          setPendingUserPrompt(event.prompt)
-          setLiveTrace(prev => ({
+          ui.setPendingUserPrompt(event.prompt)
+          ui.setLiveTrace(prev => ({
             steps: prev?.steps ?? [],
             thinkingLabel: '等待你的确认…',
             thinkingSnippet: prev?.thinkingSnippet,
@@ -684,7 +684,7 @@ export default function ChatApp() {
           return
         }
         if (event.type === 'tool_start') {
-          setLiveTrace(prev => ({
+          ui.setLiveTrace(prev => ({
             thinkingLabel: prev?.thinkingLabel,
             thinkingSnippet: prev?.thinkingSnippet,
             steps: [...(prev?.steps ?? []), event.step],
@@ -693,9 +693,9 @@ export default function ChatApp() {
         }
         if (event.type === 'tool_done') {
           if (event.step.tool === 'ask_user') {
-            setPendingUserPrompt(null)
+            ui.setPendingUserPrompt(null)
           }
-          setLiveTrace(prev => ({
+          ui.setLiveTrace(prev => ({
             thinkingLabel: prev?.thinkingLabel ?? '模型正在整理结果…',
             thinkingSnippet: prev?.thinkingSnippet,
             steps: (prev?.steps ?? []).map(step =>
@@ -705,7 +705,7 @@ export default function ChatApp() {
           return
         }
         if (event.type === 'reply') {
-          setLiveTrace(prev => ({
+          ui.setLiveTrace(prev => ({
             steps: prev?.steps ?? [],
             thinkingLabel: '正在生成回复…',
             thinkingSnippet: prev?.thinkingSnippet,
@@ -747,7 +747,7 @@ export default function ChatApp() {
         }
         return
       }
-      setInput(msg)
+      pushComposerDraft(msg)
       setError(e instanceof Error ? e.message : '发送失败')
       try {
         const fresh = await getSession(sessionId)
@@ -760,28 +760,14 @@ export default function ChatApp() {
     } finally {
       chatAbortRef.current = null
       stoppingRef.current = false
-      setLiveTrace(null)
-      setPendingUserPrompt(null)
-      setUserPromptSubmitting(false)
+      streamUiRef.current?.resetStreamUi()
       setLoading(false)
     }
   }
 
-  const handleUserPromptSubmit = useCallback(async (answer: UserPromptAnswerPayload) => {
-    const sid = activeId
-    const prompt = pendingUserPrompt
-    if (!sid || !prompt || userPromptSubmitting) return
-    setUserPromptSubmitting(true)
-    setError('')
-    try {
-      await submitUserPromptResponse(sid, prompt.id, answer)
-      setPendingUserPrompt(null)
-    } catch (e) {
-      setError(e instanceof Error ? e.message : '提交失败，请重试')
-    } finally {
-      setUserPromptSubmitting(false)
-    }
-  }, [activeId, pendingUserPrompt, userPromptSubmitting])
+  const handleStreamError = useCallback((message: string) => {
+    setError(message)
+  }, [])
 
   const handleForkFromMessage = async (messageIndex: number) => {
     if (!activeId) return
@@ -793,7 +779,7 @@ export default function ChatApp() {
       setMessages(data.messages)
       setContextRef(data.contextRef ?? null)
       setSessionModelState(data.session.model)
-      setInput('')
+      pushComposerDraft('')
       setError('')
       closeDrawer()
       if (view !== 'chat') navigate('chat')
@@ -837,6 +823,10 @@ export default function ChatApp() {
     }
   }
 
+  const handleFocusStockConsumed = useCallback(() => {
+    setFocusStockCode(null)
+  }, [])
+
   const handleStockDiscuss = useCallback(async (payload: StockDiscussPayload) => {
     if (!activeId) {
       setError('请先新建或选择一个对话')
@@ -859,12 +849,12 @@ export default function ChatApp() {
       }
       const data = await setSessionContext(activeId, nextRef)
       setContextRef(data.contextRef ?? nextRef)
-      setInput(payload.prompt)
+      pushComposerDraft(payload.prompt)
       setError('')
     } catch (e) {
       setError(e instanceof Error ? e.message : '设置研讨上下文失败')
     }
-  }, [activeId])
+  }, [activeId, pushComposerDraft])
 
   const handleDiscussArticle = useCallback(async (article: FeedArticle) => {
     restoreChatColumn()
@@ -879,7 +869,7 @@ export default function ChatApp() {
       const data = await setSessionContext(session.id, nextRef)
       setContextRef(data.contextRef ?? nextRef)
       setSessionModelState(session.model)
-      setInput('')
+      pushComposerDraft('')
       setError('')
       setWelcomeEpoch(epoch => epoch + 1)
       closeDrawer()
@@ -887,7 +877,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
-  }, [closeDrawer, navigate, refreshSessions, restoreChatColumn])
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn])
 
   const handleEphemeralAsk = useCallback(async (
     message: string,
@@ -959,17 +949,22 @@ export default function ChatApp() {
     setSidebarVisible(true)
   }, [isSettings, setSidebarVisible])
 
-  const sidebarProps = {
+  const handleSidebarClose = useCallback(() => {
+    setSidebarVisible(false)
+  }, [setSidebarVisible])
+
+  const sidebarActiveRoute = isNews ? 'news' as const : isMarket ? 'market' as const : 'chat' as const
+  const sidebarProps = useMemo(() => ({
     sessions,
     activeId,
-    activeRoute: isNews ? 'news' as const : isMarket ? 'market' as const : 'chat' as const,
+    activeRoute: sidebarActiveRoute,
     busySessionId: loading ? activeId : null,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
     onArchive: handleArchive,
     onOpenSearch: handleOpenSearch,
-    onOpenSettings: () => { openSettings() },
+    onOpenSettings: openSettings,
     onOpenNewsCenter: openNewsCenter,
     onOpenMarketDynamics: openMarketDynamics,
     listTab: sidebarListTab,
@@ -980,7 +975,28 @@ export default function ChatApp() {
     onDeleteArchiveFolder: handleDeleteArchiveFolder,
     onClearArchiveFolder: handleClearArchiveFolder,
     onDeleteArchivedSession: handleDeleteArchivedSession,
-  }
+  }), [
+    sessions,
+    activeId,
+    sidebarActiveRoute,
+    loading,
+    handleSelect,
+    handleNew,
+    handleDelete,
+    handleArchive,
+    handleOpenSearch,
+    openSettings,
+    openNewsCenter,
+    openMarketDynamics,
+    sidebarListTab,
+    handleSidebarListTabChange,
+    archivedGroups,
+    handleCreateArchiveFolder,
+    handleRenameArchiveFolder,
+    handleDeleteArchiveFolder,
+    handleClearArchiveFolder,
+    handleDeleteArchivedSession,
+  ])
 
   return (
     <>
@@ -1028,7 +1044,7 @@ export default function ChatApp() {
           <SessionSidebar
             mode={sidebarOverlayMode ? 'overlay' : 'panel'}
             visible={sidebarVisible}
-            onClose={() => setSidebarVisible(false)}
+            onClose={handleSidebarClose}
             {...sidebarProps}
           />
         )}
@@ -1156,16 +1172,15 @@ export default function ChatApp() {
                     chatScrollEpoch={chatScrollEpoch}
                     messages={messages}
                     contextRef={contextRef}
-                    input={input}
+                    composerDraft={composerDraft}
                     loading={loading}
-                    liveTrace={liveTrace}
+                    streamUiRef={streamUiRef}
                     error={error}
                     availableModels={availableModels}
                     sessionModel={sessionModel}
                     isMobile={isMobile}
                     llmLabel={llmLabel}
                     backendOk={backendOk}
-                    onInputChange={setInput}
                     onSubmit={handleSubmit}
                     onStop={handleStop}
                     onForkMessage={handleForkFromMessage}
@@ -1180,9 +1195,7 @@ export default function ChatApp() {
                     chatColumnVisible={chatVisible}
                     onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
                     onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
-                    userPrompt={pendingUserPrompt}
-                    userPromptSubmitting={userPromptSubmitting}
-                    onUserPromptSubmit={pendingUserPrompt ? handleUserPromptSubmit : undefined}
+                    onStreamError={handleStreamError}
                   />
                 </div>
               </div>
@@ -1206,7 +1219,7 @@ export default function ChatApp() {
                 chatColumnVisible={chatVisible}
                 chromeToolbarReserve={chromeToolbarReserve}
                 focusStockCode={focusStockCode}
-                onFocusStockConsumed={() => setFocusStockCode(null)}
+                onFocusStockConsumed={handleFocusStockConsumed}
                 onToggleRightPanel={handleToggleRightPanel}
                 onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
                 onDiscussInChat={handleStockDiscuss}

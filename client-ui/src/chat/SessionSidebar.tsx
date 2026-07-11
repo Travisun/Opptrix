@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, memo } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
@@ -100,6 +100,9 @@ const useStyles = makeStyles({
   menuSection: {
     marginTop: '15px',
     flexShrink: 0,
+    position: 'relative',
+    zIndex: 1,
+    isolation: 'isolate',
   },
   menuRow: {
     ...sidebarTopMenuRow,
@@ -291,7 +294,7 @@ function formatDate(iso: string) {
   return new Date(iso).toLocaleDateString('zh-CN', { month: 'numeric', day: 'numeric' })
 }
 
-export default function SessionSidebar({
+function SessionSidebar({
   mode, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat', busySessionId = null,
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
@@ -351,7 +354,7 @@ export default function SessionSidebar({
         </div>
       )}
 
-      <div className={s.menuSection}>
+      <div className={mergeClasses(s.menuSection, 'opptrix-sidebar-menu')}>
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
@@ -558,3 +561,5 @@ export default function SessionSidebar({
     </div>
   )
 }
+
+export default memo(SessionSidebar)

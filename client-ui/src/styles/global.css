@@ -297,6 +297,12 @@ html.opptrix-electron .opptrix-glass-sidebar {
   -webkit-backdrop-filter: none !important;
 }
 
+/* Isolate top menu icons from backdrop-filter repaints triggered by chat-area animations */
+html.opptrix-electron .opptrix-glass-sidebar .opptrix-sidebar-menu {
+  transform: translateZ(0);
+  will-change: transform;
+}
+
 [data-theme="dark"] .opptrix-overlay-sidebar {
   background: var(--opptrix-canvas-alt) !important;
   backdrop-filter: none !important;

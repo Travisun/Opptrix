@@ -235,7 +235,8 @@ const useStyles = makeStyles({
 })
 
 interface ChatComposerProps {
-  input: string
+  /** 父组件注入草稿（revision 递增时同步到输入框） */
+  draftSync?: { revision: number; text: string }
   loading: boolean
   error: string
   isEmpty: boolean
@@ -245,7 +246,6 @@ interface ChatComposerProps {
   welcomeKey?: number
   availableModels: AvailableModel[]
   sessionModel?: string
-  onInputChange: (v: string) => void
   onSubmit: (text?: string) => void
   onStop?: () => void
   onModelChange?: (ref: string) => void
@@ -256,7 +256,7 @@ interface ChatComposerProps {
 }
 
 export default function ChatComposer({
-  input,
+  draftSync,
   loading,
   error,
   isEmpty,
@@ -266,7 +266,6 @@ export default function ChatComposer({
   welcomeKey = 0,
   availableModels,
   sessionModel,
-  onInputChange,
   onSubmit,
   onStop,
   onModelChange,
@@ -278,9 +277,16 @@ export default function ChatComposer({
   const s = useStyles()
   const textareaRef = useRef<HTMLTextAreaElement>(null)
   const mentionAnchorRef = useRef<HTMLSpanElement>(null)
+  const [input, setInput] = useState('')
   const [stockRefs, setStockRefs] = useState<WatchlistItem[]>([])
   const hasInlineRefs = Boolean(contextRef) || stockRefs.length > 0
   const { items: watchlistItems } = useWatchlist()
+
+  useEffect(() => {
+    if (!draftSync) return
+    setInput(draftSync.text)
+    setStockRefs([])
+  }, [draftSync?.revision, draftSync?.text])
   const {
     state: mentionState,
     matches: mentionMatches,
@@ -311,16 +317,16 @@ export default function ChatComposer({
   }, [input, hasInlineRefs, syncHeight])
 
   const handleInputChange = useCallback((value: string) => {
-    onInputChange(value)
+    setInput(value)
     const cursor = textareaRef.current?.selectionStart ?? value.length
     syncMentionFromInput(value, cursor)
-  }, [onInputChange, syncMentionFromInput])
+  }, [syncMentionFromInput])
 
   const handleApplyQuickTask = useCallback((text: string) => {
-    onInputChange(text)
+    setInput(text)
     closeMention()
     textareaRef.current?.focus()
-  }, [closeMention, onInputChange])
+  }, [closeMention])
 
   const handleSelectMention = useCallback((item: WatchlistItem) => {
     const el = textareaRef.current
@@ -328,12 +334,12 @@ export default function ChatComposer({
     const cursor = el.selectionStart ?? input.length
     const { nextText, nextCursor } = applyMentionSelection(input, cursor)
     setStockRefs(prev => mergeStockRef(prev, item))
-    onInputChange(nextText)
+    setInput(nextText)
     window.requestAnimationFrame(() => {
       el.focus()
       el.setSelectionRange(nextCursor, nextCursor)
     })
-  }, [applyMentionSelection, input, onInputChange])
+  }, [applyMentionSelection, input])
 
   const handleRemoveStockRef = useCallback((code: string) => {
     setStockRefs(prev => prev.filter(r => stockRefKey(r) !== code))
@@ -343,12 +349,14 @@ export default function ChatComposer({
     const explicit = text?.trim()
     if (explicit) {
       onSubmit(explicit)
+      setInput('')
       setStockRefs([])
       return
     }
     const composed = composeComposerMessage(input, stockRefs)
     if (!composed.trim() || loading) return
     onSubmit(composed)
+    setInput('')
     setStockRefs([])
   }, [input, loading, onSubmit, stockRefs])
 
@@ -375,7 +383,7 @@ export default function ChatComposer({
         const result = selectMentionActive(input, cursor)
         if (result) {
           setStockRefs(prev => mergeStockRef(prev, result.item))
-          onInputChange(result.nextText)
+          setInput(result.nextText)
           window.requestAnimationFrame(() => {
             el.focus()
             el.setSelectionRange(result.nextCursor, result.nextCursor)
