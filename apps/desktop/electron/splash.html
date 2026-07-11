@@ -61,10 +61,14 @@
 
       .tagline {
         margin-top: 14px;
+        max-width: 340px;
+        padding: 0 20px;
         font-size: 14px;
         font-weight: 500;
         color: var(--text-mid);
         letter-spacing: 0.02em;
+        line-height: 1.55;
+        text-align: center;
         opacity: 0;
         animation: brand-in 0.5s ease-out 0.7s forwards;
       }
@@ -146,7 +150,16 @@
       <div class="brand" aria-hidden="true">
         <span>O</span><span>p</span><span>p</span><span>t</span><span>r</span><span>i</span><span>x</span>
       </div>
-      <p class="tagline">正在打开 Opptrix</p>
+      <p class="tagline" id="splash-tip">正在打开 Opptrix</p>
     </div>
+    <script src="splash-tips.js"></script>
+    <script>
+      (function pickSplashTip() {
+        const tips = window.OPPTRIX_SPLASH_TIPS
+        const el = document.getElementById('splash-tip')
+        if (!el || !Array.isArray(tips) || tips.length === 0) return
+        el.textContent = tips[Math.floor(Math.random() * tips.length)]
+      })()
+    </script>
   </body>
 </html>
