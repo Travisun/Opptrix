@@ -1,0 +1,36 @@
+---
+description: 改码后收尾验证 — client-ui TypeScript 与格式检查（硬性）
+alwaysApply: true
+---
+
+# 改码后收尾验证（硬性）
+
+凡在本仓库**完成代码修改**（实现、修 bug、重构）后，**不得**在未通过本地检查前宣告任务完成。
+
+## 何时必须跑
+
+| 改动范围 | 必跑命令 |
+|---|---|
+| `client-ui/**`（`.ts` / `.tsx` / 样式 / 主题） | `npm run typecheck:ui` |
+| 仅 `packages/**`、`apps/server/**` 且未动 client-ui | `npm run build:packages`（或对应 workspace 的 `tsc`） |
+| 同时改了 client-ui 与 packages | **先** `build:packages`，**再** `typecheck:ui` |
+
+纯文档、`.cursor/rules`、非代码配置且确定不影响 TS 编译路径时，可跳过；**有疑虑时一律跑 `typecheck:ui`**。
+
+## 执行要求
+
+1. **必须本地执行**：用 Shell 跑上述命令，根据终端报错定位并修复，**循环直到退出码为 0**。
+2. **不得**仅凭「应该没问题」、未跑命令就结束回合。
+3. 修 TS 错误时**只改与报错相关**的最小范围，不顺手做大范围格式化或无关重构。
+4. 向用户汇报完成时，简要说明已跑过哪条命令且通过（例如：`typecheck:ui` 0 错误）。
+
+## 格式检查（当前）
+
+- 仓库**尚未**配置 Prettier / ESLint；**语法与类型**以 `npm run typecheck:ui` 为准。
+- **格式**：保持与周围代码一致（缩进、引号、尾逗号、import 顺序）；Griffel `makeStyles` 与现有 `mixins` 写法勿擅自统一成另一风格。
+- 若项目已添加 `format:check` / `lint` 脚本（见 `package.json`），则与 `typecheck:ui` **一并必跑**，全部通过才算完成。
+
+## 失败时
+
+- 禁止把 TS / 构建失败留到用户或 CI 才发现。
+- 单次修不完时：说明剩余错误文件与条数，并继续修到通过或明确阻塞点。

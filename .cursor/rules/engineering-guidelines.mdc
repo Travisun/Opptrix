@@ -28,6 +28,7 @@ alwaysApply: true
 - 缩小窗口、侧栏浮层等行为以用户描述为准（例如：全高侧栏、仅右侧圆角、hover 收起），不得擅自改为卡片式内缩、替换顶栏等。
 - 改动前**先用 CodeGraph（`codegraph_explore`）定位相关符号与调用链**，再 Read 目标文件；新代码应像同一作者所写（详见 `.cursor/rules/codegraph.mdc`）。
 - 范围最小化：只改完成任务所需的文件与行，避免无关重构。
+- **改码后验证（硬性）**：完成实现后必须跑 `npm run typecheck:ui`（及适用的 `build:packages`），全部通过才能结束；细则见 `.cursor/rules/post-edit-verification.mdc`。
 
 ## 桌面 / 聊天 UI 备忘
 
