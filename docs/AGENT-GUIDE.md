@@ -184,7 +184,7 @@ Opptrix/
 
 ### 5.1 开始任务前
 
-1. 阅读本文件与 `.cursor/rules/engineering-guidelines.mdc`、`.cursor/rules/backward-compatibility.mdc`
+1. 阅读本文件与 `.cursor/rules/rules-index.mdc`、`.cursor/rules/backward-compatibility.mdc`
 2. 若涉及 UI：阅读 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；桌面行为见 `docs/DESKTOP.md`
 3. 若涉及 API：阅读 `docs/API.md`
 4. 用 `rg` / 语义搜索定位现有实现，**模仿邻近代码风格**
@@ -232,7 +232,7 @@ npm run serve               # 生产预览
 
 ## 6. UI / UX 硬性规范（摘要）
 
-完整规范见 `docs/UI-DESIGN-SYSTEM.md` 与 `.cursor/rules/engineering-guidelines.mdc`。
+完整规范见 `docs/UI-DESIGN-SYSTEM.md` 与 `.cursor/rules/client-ui-guidelines.mdc`。
 
 ### 6.1 视觉
 
@@ -304,7 +304,8 @@ npm run serve               # 生产预览
 | [UI-DESIGN-SYSTEM.md](./UI-DESIGN-SYSTEM.md) | 颜色、组件、Markdown |
 | [UI-LAYOUT.md](./UI-LAYOUT.md) | 布局与页面模板 |
 | [packages/README.md](../packages/README.md) | 各 npm 包职责 |
-| `.cursor/rules/engineering-guidelines.mdc` | Cursor 自动应用的工程规则 |
+| `.cursor/rules/rules-index.mdc` | Cursor 常驻规则索引（薄层） |
+| `.cursor/rules/client-ui-guidelines.mdc` | client-ui UI/UX 与文案规范（glob 挂载） |
 | `.cursor/rules/backward-compatibility.mdc` | **硬性** — 数据库/数据架构/升级兼容与迁移 |
 
 ---

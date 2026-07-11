@@ -78,7 +78,7 @@ export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
   WORKSPACE_CHAT_RIGHT_MIN_WIDTH + WORKSPACE_PANEL_HYSTERESIS
 
 /**
- * Title bar stacking (low → high). Keep in sync with engineering-guidelines / DESKTOP.md.
+ * Title bar stacking (low → high). Keep in sync with client-ui-guidelines / DESKTOP.md.
  * 1100 title drag layer → 1150 overlay sidebar → 1200 panel title bands →
  * 1300 global toolbar + window controls → 1310 clickable session title.
  */

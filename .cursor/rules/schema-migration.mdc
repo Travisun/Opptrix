@@ -1,6 +1,13 @@
 ---
 description: 硬性规则 — SQLite schema 变更必须注册迁移步骤、写测试、保证幂等与可恢复
-alwaysApply: true
+globs:
+  - packages/**/store.ts
+  - packages/**/schema*.ts
+  - packages/market-data/**/*
+  - packages/market-data-store/**/*
+  - packages/user-store/**/*
+  - packages/news-feed/**/*
+alwaysApply: false
 ---
 
 # SQLite Schema 迁移（硬性规则）

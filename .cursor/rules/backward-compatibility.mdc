@@ -1,6 +1,10 @@
 ---
 description: 硬性规则 — 数据库/数据架构/升级必须兼容旧客户端，禁止断代
-alwaysApply: true
+globs:
+  - packages/**/*
+  - apps/**/*
+  - client-ui/src/api/**/*
+alwaysApply: false
 ---
 
 # 向后兼容与迁移（硬性规则）

@@ -94,7 +94,7 @@ npm run test        # 或 CI 等价：npm run build && npm run test:ci
 |------|------|
 | 新 MCP 工具 | `tools.ts` + `tool-meta.ts` + hub（如需）+ API 文档 |
 | 新 REST | `apps/server` + `docs/API.md` |
-| 聊天 UI | `client-ui/src/chat/`，遵守 engineering-guidelines |
+| 聊天 UI | `client-ui/src/chat/`，遵守 `client-ui-guidelines` |
 | 数据源 | `a-stock-layer` driver + 错误回退测试说明 |
 | 仅文档 | 可直接 `docs/` PR，无需 build（若未改代码） |
 

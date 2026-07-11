@@ -12,7 +12,7 @@
 | **Card-First** | 信息以圆角卡片分组，轻阴影分层 |
 | **Accent Sparingly** | 陶土橙仅用于品牌、选中态、关键 CTA |
 | **Compact Clarity** | 紧凑间距，但保持 12px+ 正文可读性 |
-| **Plain Language** | 按钮、提示、空状态等文案面向最终用户，易懂、可操作；细则见 `.cursor/rules/engineering-guidelines.mdc` |
+| **Plain Language** | 按钮、提示、空状态等文案面向最终用户，易懂、可操作；细则见 `.cursor/rules/client-ui-guidelines.mdc` |
 | **Icon Consistency** | 统一 `@fluentui/react-icons` Regular 20px |
 
 ## 1.1 界面参考

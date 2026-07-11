@@ -1,0 +1,22 @@
+---
+description: Opptrix 规则索引 — 常驻薄层；细则按路径 glob 挂载或动手前 Read
+alwaysApply: true
+---
+
+# Opptrix 规则索引
+
+**探索代码**：必须先 `codegraph_explore`（全文见 `.cursor/rules/codegraph.mdc`）。
+
+| 场景 | 细则（glob 自动挂载；未命中时动手前 Read） |
+|------|------|
+| 改 `client-ui` | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc`；`docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
+| SQLite / 本地用户数据 | `backward-compatibility.mdc`、`schema-migration.mdc` |
+| 行情 / Hub / 研究 API | `data-layer-standard-api.mdc`；`docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
+| Provider 实现 | `provider-standard-api.mdc`、`data-provider-docs.mdc` |
+
+## 硬性（全仓库）
+
+- **禁止断代**：schema、用户数据、Hub/API、更新源变更须兼容 + 幂等迁移（细则 `backward-compatibility.mdc`）。
+- **增量改动**：按用户最新指示做最小 diff；不顺手重构；用户已确认的 UI 行为勿擅自改。
+- **探索再改**：CodeGraph 定位符号与调用链后再 Read/编辑；返回源码视为已读，勿重复打开。
+- **client-ui 收尾**：改动 `client-ui/**` 后跑 `npm run check:ui`，通过再宣告完成。

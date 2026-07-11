@@ -6,7 +6,7 @@ alwaysApply: false
 
 # UI 浮层与反馈组件
 
-> 动手改 `client-ui` 可见界面前，**必须先读** `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；Electron 壳层另读 `docs/DESKTOP.md`。细则与 `.cursor/rules/engineering-guidelines.mdc` 并列。
+> 动手改 `client-ui` 可见界面前，**必须先读** `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；Electron 壳层另读 `docs/DESKTOP.md`。总则见 `client-ui-guidelines.mdc`。
 
 ## 禁止
 

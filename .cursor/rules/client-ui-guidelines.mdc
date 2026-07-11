@@ -1,0 +1,29 @@
+---
+description: client-ui 工程规范 — UI/UX、桌面布局、面向用户文案
+globs:
+  - client-ui/**/*
+alwaysApply: false
+---
+
+# client-ui 工程规范
+
+## UI / UX 风格
+
+- **设计前必读**：改任何可见界面前先读 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；Electron 壳读 `docs/DESKTOP.md`；浮层/Dialog 读 `ui-overlay-components.mdc`。
+- **沿用现有设计语言**：React + Fluent UI v9、项目 tokens（`theme/tokens.ts`）、mixins、`global.css`；优先 `OpptrixButton`、`OpptrixField`、`OpptrixDialogAlert` 等封装。
+- **勿擅自发明**：未获指示不引入移动版布局、额外 header、与设计体系冲突的 shadow/圆角/间距；不用 `window.confirm` / `alert` / `prompt`。
+
+## 桌面 / 聊天 UI
+
+- Electron **始终 desktop 布局**（不因窗口变窄切 MobileTopBar）。
+- 小窗口侧栏：宽 < 侧栏 × 2.5 时**全高浮层**（`top:0; bottom:0`），白底轻毛玻璃，**无全屏遮罩**。
+- 标题栏 z-index（低→高）：`DESKTOP_Z_TITLE` → `DESKTOP_Z_OVERLAY_SIDEBAR` → `DESKTOP_Z_PANEL_TITLE` → `DESKTOP_Z_TOPBAR` → `DESKTOP_Z_SESSION_TITLE`（`desktop/constants.ts`）。
+- 最小宽度 `DESKTOP_CHAT_MIN_WIDTH`（510px），与 `apps/desktop/electron/main.cjs` 同步。
+- 小窗口左侧 8px 边缘 hover 可唤出浮层侧栏。
+
+## 界面文案（面向投资者）
+
+- 写给使用者，非开发者；日常中文，避免裸用 hydrate、MCP、F10 等词。
+- 按钮/标题用动词或明确结果；耗时操作给预期；失败说明可采取动作。
+- 一句能说清不写两句；空状态说明「为什么没有」和「下一步」。
+- 未经要求不批量改 Agent 系统提示或后端日志。

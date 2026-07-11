@@ -1,6 +1,12 @@
 ---
 description: 数据层标准 API 优先 — 新功能/改动前必查已有能力，禁止绕过标准层直连 Provider
-alwaysApply: true
+globs:
+  - packages/a-stock-layer/**/*
+  - packages/research-hub/**/*
+  - apps/server/**/*
+  - client-ui/src/api/**/*
+  - client-ui/src/market/**/*
+alwaysApply: false
 ---
 
 # 数据层标准 API 优先（强制）

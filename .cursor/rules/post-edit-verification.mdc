@@ -1,6 +1,8 @@
 ---
 description: 改码后收尾验证 — client-ui TypeScript / ESLint / React 模式检查（硬性）
-alwaysApply: true
+globs:
+  - client-ui/**/*
+alwaysApply: false
 ---
 
 # 改码后收尾验证（硬性）
@@ -41,23 +43,6 @@ npm run check:ui
 2. **不得**仅凭「应该没问题」、未跑命令就结束回合。
 3. 修错时**只改与报错相关**的最小范围，不顺手做大范围格式化或无关重构。
 4. 向用户汇报完成时，说明已通过 `check:ui`（或分步结果）。
-
-## 工具说明（为何需要多层）
-
-| 问题类型 | 主要工具 | 局限 |
-|---|---|---|
-| 类型 / API 契约 | TypeScript (`tsc`) | 抓不到运行时无限循环 |
-| Hooks 依赖数组 | ESLint `react-hooks/exhaustive-deps` | 需人工判断合理抑制 |
-| 列表缺 key | ESLint `react/jsx-key` | 不保证业务字段唯一 |
-| 重复 key / 不稳定 hook 参数 | `audit:ui` 定制规则 | 启发式，随坑位扩展 |
-| 运行时白屏 / 重复 key 控制台 | 开发时 React Strict Mode + 手测 | 无法全自动替代 |
-
-**无限 `setState` 循环**无法靠单一工具 100% 静态检出；`check:ui` 用 ESLint + 模式审查降低复发概率。
-
-## 格式
-
-- 仓库**未**配置 Prettier；格式保持与周围代码一致。
-- 若后续添加 `format:check`，纳入 `check:ui` 一并执行。
 
 ## 失败时
 
