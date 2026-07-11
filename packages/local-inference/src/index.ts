@@ -3,6 +3,7 @@ export * from './paths.js'
 export {
   MODEL_CATALOG,
   BOOTSTRAP_MODEL_IDS,
+  TRANSLATION_BOOTSTRAP_MODEL_IDS,
   getCatalogModel,
   getDefaultDownloadSourceLabel,
   getCatalogPurposeLabel,
@@ -12,7 +13,6 @@ export {
   listInstalledGgufModels,
   isCatalogModelInstalled,
   resolveTranslationModelPath,
-  resolveVisionModelPaths,
 } from './catalog/installed.js'
 export {
   downloadCatalogModel,
@@ -21,12 +21,17 @@ export {
   isDownloadActive,
   bootstrapModels,
 } from './catalog/download.js'
+export {
+  isOfflineTranslationEnabled,
+  shouldBootstrapWhisper,
+  maybeBootstrapTranslationModel,
+  type TranslationBootstrapSettings,
+  type EnrichmentBootstrapSettings,
+} from './catalog/bootstrap-policy.js'
 export { globalInferenceQueue, InferenceJobQueue } from './runtime/job-queue.js'
 export { LlamaRuntime, llamaRuntime } from './llama/llama-runtime.js'
 export * from './llama/prompts.js'
 export { FfmpegRuntime, ffmpegRuntime } from './media/ffmpeg-runtime.js'
 export { WhisperRuntime, whisperRuntime, isWhisperModelInstalled } from './whisper/whisper-runtime.js'
-export { VisionRuntime, visionRuntime } from './vision/vision-runtime.js'
 export { cleanVisionOutput, isLowQualityImageExtraction } from './vision/image-quality.js'
-export { resolveMtmdCli, getMtmdCliStatus, getLlamaCppToolsDir, probeMtmdCliPath } from './vision/mtmd-binary.js'
 export { getMultimodalRuntimeStatus, type MultimodalRuntimeStatus } from './multimodal-status.js'

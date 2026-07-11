@@ -554,23 +554,11 @@ export interface ArticleEnrichment {
 export interface MultimodalRuntimeStatus {
   platform: string
   ffmpeg: { ready: boolean; path: string | null }
-  vision: {
-    modelInstalled: boolean
-    mmprojInstalled: boolean
-    modelName: string | null
-    mmprojName: string | null
-    mtmdSupported: boolean
-    mtmdReady: boolean
-    mtmdPath: string | null
-    mtmdRelease: string
-    mtmdToolsDir: string
-  }
   whisper: {
     modelName: string
     ready: boolean
     modelsDir: string
   }
-  canEnrichOffline: boolean
 }
 
 export interface MultimodalStatusResponse {
@@ -581,6 +569,12 @@ export interface MultimodalStatusResponse {
   canEnrichImages: boolean
   canEnrichSpeech: boolean
   canEnrich: boolean
+  translation?: {
+    offlineEnabled: boolean
+    modelInstalled: boolean
+    modelName: string | null
+    downloading: boolean
+  }
 }
 
 export interface FeedPageResult {

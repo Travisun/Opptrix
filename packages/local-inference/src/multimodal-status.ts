@@ -1,11 +1,5 @@
 import { createRequire } from 'node:module'
-import {
-  getMtmdCliStatus,
-  getLlamaCppToolsDir,
-  probeMtmdCliPath,
-} from './vision/mtmd-binary.js'
 import { isWhisperModelInstalled } from './whisper/whisper-runtime.js'
-import { resolveVisionModelPaths } from './catalog/installed.js'
 import { getWhisperModelsDir } from './paths.js'
 
 const require = createRequire(import.meta.url)
@@ -16,33 +10,17 @@ export type MultimodalRuntimeStatus = {
     ready: boolean
     path: string | null
   }
-  vision: {
-    modelInstalled: boolean
-    mmprojInstalled: boolean
-    modelName: string | null
-    mmprojName: string | null
-    mtmdSupported: boolean
-    mtmdReady: boolean
-    mtmdPath: string | null
-    mtmdRelease: string
-    mtmdToolsDir: string
-  }
   whisper: {
     modelName: string
     ready: boolean
     modelsDir: string
   }
-  canEnrichOffline: boolean
 }
 
 export function getMultimodalRuntimeStatus(
-  repoRoot?: string,
+  _repoRoot?: string,
   whisperModel = 'tiny',
 ): MultimodalRuntimeStatus {
-  const mtmdStatus = getMtmdCliStatus()
-  const mtmdPath = probeMtmdCliPath(mtmdStatus.release)
-  const visionPaths = resolveVisionModelPaths(repoRoot)
-
   let ffmpegPath: string | null = null
   try {
     ffmpegPath = require('ffmpeg-static') as string | null
@@ -50,37 +28,19 @@ export function getMultimodalRuntimeStatus(
     ffmpegPath = process.env.FFMPEG_PATH ?? null
   }
 
-  const modelInstalled = Boolean(visionPaths?.modelPath)
-  const mmprojInstalled = Boolean(visionPaths?.mmprojPath)
-  const mtmdReady = Boolean(mtmdPath)
   const whisperReady = isWhisperModelInstalled(whisperModel)
   const ffmpegReady = Boolean(ffmpegPath)
 
   return {
-    platform: mtmdStatus.platform,
+    platform: process.platform,
     ffmpeg: {
       ready: ffmpegReady,
       path: ffmpegPath,
-    },
-    vision: {
-      modelInstalled,
-      mmprojInstalled,
-      modelName: visionPaths?.modelPath?.split(/[/\\]/).pop() ?? null,
-      mmprojName: visionPaths?.mmprojPath?.split(/[/\\]/).pop() ?? null,
-      mtmdSupported: mtmdStatus.supported,
-      mtmdReady,
-      mtmdPath,
-      mtmdRelease: mtmdStatus.release,
-      mtmdToolsDir: getLlamaCppToolsDir(mtmdStatus.release),
     },
     whisper: {
       modelName: whisperModel,
       ready: whisperReady,
       modelsDir: getWhisperModelsDir(),
     },
-    canEnrichOffline: ffmpegReady
-      && modelInstalled
-      && mmprojInstalled
-      && (mtmdReady || mtmdStatus.supported),
   }
 }

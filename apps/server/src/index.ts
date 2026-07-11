@@ -27,11 +27,15 @@ import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrate
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
-import { startNewsFeedScheduler } from '@opptrix/news-feed'
-import { startEnrichmentScheduler } from '@opptrix/article-enrichment'
+import {
+  startNewsFeedScheduler,
+  getNewsSettings,
+  setNewsArticlePersistHook,
+  getArticle,
+} from '@opptrix/news-feed'
+import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
+import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
-import { setNewsArticlePersistHook, getArticle } from '@opptrix/news-feed'
-import { getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
@@ -1161,6 +1165,7 @@ async function bootstrap() {
   registerSearchRoutes(app, hub, agent)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
+  void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
   serveUi = shouldServeUi()
   if (serveUi) {
     serveUi = await registerStaticUi(app)

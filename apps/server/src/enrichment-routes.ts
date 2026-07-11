@@ -9,6 +9,11 @@ import {
 } from '@opptrix/article-enrichment'
 import {
   getMultimodalRuntimeStatus,
+  getDownloadState,
+  isOfflineTranslationEnabled,
+  maybeBootstrapTranslationModel,
+  resolveTranslationModelPath,
+  shouldBootstrapWhisper,
   whisperRuntime,
 } from '@opptrix/local-inference'
 import { resolveProjectRoot } from '@opptrix/agent'
@@ -42,6 +47,9 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
     )
 
     const caps = canEnrichWithSettings(settings.enrichment, runtime.ffmpeg.ready)
+    const translation = settings.translation
+    const translationModelPath = resolveTranslationModelPath(repoRoot, translation.offline_model)
+    const offlineTranslation = isOfflineTranslationEnabled(translation)
 
     return {
       settings: settings.enrichment,
@@ -51,11 +59,20 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
       canEnrichImages: caps.images,
       canEnrichSpeech: caps.speech,
       canEnrich: caps.any,
+      translation: {
+        offlineEnabled: offlineTranslation,
+        modelInstalled: Boolean(translationModelPath),
+        modelName: translationModelPath?.split(/[/\\]/).pop() ?? null,
+        downloading: getDownloadState()?.status === 'downloading',
+      },
     }
   })
 
   app.post('/api/news/multimodal/whisper/ensure', async (_req, reply) => {
     const settings = getNewsSettings()
+    if (!shouldBootstrapWhisper(settings.enrichment)) {
+      return reply.code(400).send({ error: '请先开启媒体提取并勾选音视频转写' })
+    }
     const modelName = settings.enrichment.offline_whisper_model || 'tiny'
     try {
       await whisperRuntime.ensureModel(modelName)

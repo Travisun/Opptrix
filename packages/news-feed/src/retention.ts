@@ -36,7 +36,7 @@ export function normalizeEnrichmentSettings(
     : String(merged.remote_model).trim() || null
 
   return {
-    enabled: merged.enabled !== false,
+    enabled: merged.enabled === true,
     processing_mode: processingMode,
     extract_images: merged.extract_images !== false,
     extract_audio: merged.extract_audio !== false,

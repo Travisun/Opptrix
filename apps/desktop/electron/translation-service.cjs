@@ -499,6 +499,9 @@ async function translateArticle(repoRoot, payload, onProgress) {
 
 async function maybeBootstrapOfflineModelDownloads(repoRoot, onProgress) {
   try {
+    const settings = await fetchNewsSettings()
+    if (settings?.translation?.service_mode === 'remote') return null
+
     const installed = listInstalledModels(repoRoot)
     const installedNames = new Set(installed.map(item => item.filename))
 

@@ -23,7 +23,16 @@ import {
   type NewsSettings,
   type NewsTranslationSettings,
 } from '@opptrix/news-feed'
+import { maybeBootstrapTranslationModel, shouldBootstrapWhisper, whisperRuntime } from '@opptrix/local-inference'
 import { translateArticleRemote } from './translation-remote.js'
+
+function scheduleOfflineModelBootstrap(settings: NewsSettings): void {
+  void maybeBootstrapTranslationModel(settings.translation).catch(() => {})
+  if (shouldBootstrapWhisper(settings.enrichment)) {
+    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'tiny'
+    void whisperRuntime.ensureModel(modelName).catch(() => {})
+  }
+}
 
 export async function registerNewsRoutes(app: FastifyInstance) {
   app.get('/api/news/settings', async () => ({
@@ -45,6 +54,7 @@ export async function registerNewsRoutes(app: FastifyInstance) {
         ...(req.body?.enrichment ?? {}),
       },
     })
+    scheduleOfflineModelBootstrap(next)
     return { settings: next }
   })
 

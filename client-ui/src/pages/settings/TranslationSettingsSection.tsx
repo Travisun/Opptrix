@@ -307,7 +307,7 @@ const useStyles = makeStyles({
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
 
 const DEFAULT_TRANSLATION: NewsTranslationSettings = {
-  service_mode: 'offline',
+  service_mode: 'remote',
   offline_model: '__auto__',
   remote_provider_id: null,
   remote_model: null,

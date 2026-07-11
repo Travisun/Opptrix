@@ -30,7 +30,7 @@ import { ghostInteractive } from '../../theme/mixins'
 const SETTINGS_SAVE_MS = 500
 
 const DEFAULT_ENRICHMENT: NewsEnrichmentSettings = {
-  enabled: true,
+  enabled: false,
   processing_mode: 'on_demand',
   extract_images: true,
   extract_audio: true,
@@ -185,7 +185,7 @@ export default function MultimodalSettingsSection() {
     retention_years: 3,
     max_articles: null,
     translation: {
-      service_mode: 'offline',
+      service_mode: 'remote',
       offline_model: '__auto__',
       remote_provider_id: null,
       remote_model: null,
@@ -197,7 +197,7 @@ export default function MultimodalSettingsSection() {
   const [whisperEnsuring, setWhisperEnsuring] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipSettingsSave = useRef(true)
-  const settingsBaseline = useRef<NewsEnrichmentSettings | null>(null)
+  const settingsBaseline = useRef<{ enrichment: NewsEnrichmentSettings; translation: NewsSettings['translation'] } | null>(null)
 
   const refreshStatus = useCallback(async () => {
     const status = await news.getMultimodalStatus()
@@ -212,7 +212,10 @@ export default function MultimodalSettingsSection() {
         getConfig().catch(() => null),
       ])
       setSettings(st.settings)
-      settingsBaseline.current = st.settings.enrichment
+      settingsBaseline.current = {
+        enrichment: st.settings.enrichment,
+        translation: st.settings.translation,
+      }
       skipSettingsSave.current = true
       setProviders(cfg?.providers ?? [])
       await refreshStatus()
@@ -232,14 +235,21 @@ export default function MultimodalSettingsSection() {
     }
     const baseline = settingsBaseline.current
     if (!baseline) return
-    const next = settings.enrichment
-    if (JSON.stringify(baseline) === JSON.stringify(next)) return
+    const nextEnrichment = settings.enrichment
+    const nextTranslation = settings.translation
+    if (
+      JSON.stringify(baseline.enrichment) === JSON.stringify(nextEnrichment)
+      && JSON.stringify(baseline.translation) === JSON.stringify(nextTranslation)
+    ) return
 
     setSaveState('pending')
-    news.saveSettings({ enrichment: next })
+    news.saveSettings({ enrichment: nextEnrichment, translation: nextTranslation })
       .then(resp => {
         setSettings(resp.settings)
-        settingsBaseline.current = resp.settings.enrichment
+        settingsBaseline.current = {
+          enrichment: resp.settings.enrichment,
+          translation: resp.settings.translation,
+        }
         setSaveState('saved')
         toast.showSuccess('已保存')
         void refreshStatus()
@@ -249,13 +259,20 @@ export default function MultimodalSettingsSection() {
         setSaveState('error')
         toast.showError(e instanceof Error ? e.message : '保存失败')
       })
-  }, [settings.enrichment, loading, refreshStatus, toast], SETTINGS_SAVE_MS)
+  }, [settings.enrichment, settings.translation, loading, refreshStatus, toast], SETTINGS_SAVE_MS)
 
   const selectedProvider = providers.find(p => p.id === settings.enrichment.remote_provider_id) ?? null
   const providerModels = selectedProvider?.models ?? []
   const runtime = mmStatus?.runtime
 
+  const speechExtractionEnabled = settings.enrichment.enabled
+    && (settings.enrichment.extract_audio || settings.enrichment.extract_video)
+
   const handleEnsureWhisper = async () => {
+    if (!speechExtractionEnabled) {
+      toast.showError('请先开启媒体提取并勾选音视频')
+      return
+    }
     setWhisperEnsuring(true)
     try {
       await news.ensureWhisperModel()
@@ -282,7 +299,7 @@ export default function MultimodalSettingsSection() {
     }
     if (settings.enrichment.extract_audio || settings.enrichment.extract_video) {
       parts.push(mmStatus?.canEnrichSpeech
-        ? '音视频：本机 ffmpeg + Whisper 转写（可先预下载语音模型）'
+        ? '音视频：本机 ffmpeg + Whisper 转写'
         : '音视频：ffmpeg 未就绪，请检查服务端依赖')
     }
     return parts.join(' · ') || '请在下方配置提取能力'
@@ -382,6 +399,60 @@ export default function MultimodalSettingsSection() {
       <div className={s.sectionBlock}>
         <div className={s.sectionHeaderRow}>
           <div className={s.sectionHeaderLeft}>
+            <Text className={s.sectionLabel}>离线翻译</Text>
+            <span className={mergeClasses(
+              s.statusBadge,
+              settings.translation.service_mode !== 'remote' && mmStatus?.translation?.modelInstalled && s.statusReady,
+            )}>
+              {settings.translation.service_mode === 'remote'
+                ? '未启用'
+                : mmStatus?.translation?.downloading
+                  ? '下载中…'
+                  : mmStatus?.translation?.modelInstalled
+                    ? <><CheckmarkCircleRegular fontSize={14} /> 模型已就绪</>
+                    : '待下载 HY-MT'}
+            </span>
+          </div>
+        </div>
+        <SettingsGroup>
+          <SettingsRow
+            title="启用离线翻译"
+            desc="开启后后台检测并自动下载 HY-MT 模型（约 1.1 GB）；关闭则使用远程大模型翻译"
+            control={(
+              <OpptrixSelect
+                className={s.intervalSelect}
+                size="small"
+                selectedOptions={[settings.translation.service_mode === 'offline' ? 'on' : 'off']}
+                onOptionSelect={(_, d) => {
+                  const offline = d.optionValue === 'on'
+                  setSettings(prev => ({
+                    ...prev,
+                    translation: {
+                      ...prev.translation,
+                      service_mode: offline ? 'offline' : 'remote',
+                    },
+                  }))
+                }}
+              >
+                <OpptrixOption value="off">关闭（默认）</OpptrixOption>
+                <OpptrixOption value="on">开启</OpptrixOption>
+              </OpptrixSelect>
+            )}
+            last
+          />
+        </SettingsGroup>
+        {settings.translation.service_mode === 'offline' && (
+          <Text className={s.panelFooter} block>
+            {mmStatus?.translation?.modelInstalled
+              ? `当前模型：${mmStatus.translation.modelName ?? 'HY-MT'}`
+              : '保存后后台将自动下载推荐模型 HY-MT1.5 Q4_K_M；也可在「翻译」页手动选择版本'}
+          </Text>
+        )}
+      </div>
+
+      <div className={s.sectionBlock}>
+        <div className={s.sectionHeaderRow}>
+          <div className={s.sectionHeaderLeft}>
             <Text className={s.sectionLabel}>图片理解（远程）</Text>
             <span className={mergeClasses(s.statusBadge, mmStatus?.canEnrichImages && s.statusReady)}>
               {mmStatus?.canEnrichImages
@@ -476,6 +547,7 @@ export default function MultimodalSettingsSection() {
         </SettingsGroup>
       </div>
 
+      {speechExtractionEnabled ? (
       <div className={s.sectionBlock}>
         <div className={s.sectionHeaderRow}>
           <div className={s.sectionHeaderLeft}>
@@ -519,7 +591,7 @@ export default function MultimodalSettingsSection() {
               <Text className={s.listRowMeta} block>
                 {runtime?.whisper.ready
                   ? '模型已缓存，可直接转写'
-                  : '首次转写时自动下载（约 75 MB），也可点击下方预下载'}
+                  : '开启媒体提取后后台将自动检测并下载（约 75 MB），也可点击下方预下载'}
               </Text>
             </div>
             {!runtime?.whisper.ready ? (
@@ -542,6 +614,11 @@ export default function MultimodalSettingsSection() {
           </Text>
         )}
       </div>
+      ) : (
+        <Text className={s.panelFooter} block>
+          音视频转写需先开启「启用媒体提取」并在提取范围中勾选音频或视频。
+        </Text>
+      )}
     </>
   )
 }

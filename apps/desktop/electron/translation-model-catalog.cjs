@@ -46,28 +46,10 @@ const TRANSLATION_MODEL_CATALOG = [
     family: 'hy-mt',
     purpose: 'translation',
   },
-  {
-    id: 'smolvlm-q8',
-    name: 'SmolVLM-256M-Instruct Q8_0',
-    filename: 'SmolVLM-256M-Instruct-Q8_0.gguf',
-    urls: buildHfDownloadUrls('ggml-org/SmolVLM-256M-Instruct-GGUF', 'SmolVLM-256M-Instruct-Q8_0.gguf'),
-    sizeBytes: 175_054_528,
-    family: 'smolvlm',
-    purpose: 'vision',
-  },
-  {
-    id: 'smolvlm-mmproj-q8',
-    name: 'SmolVLM-256M mmproj Q8_0',
-    filename: 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf',
-    urls: buildHfDownloadUrls('ggml-org/SmolVLM-256M-Instruct-GGUF', 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf'),
-    sizeBytes: 103_769_856,
-    family: 'smolvlm',
-    purpose: 'vision',
-  },
 ]
 
-/** 应用启动时后台预拉取的默认模型（翻译 + 视觉 + mmproj） */
-const BOOTSTRAP_MODEL_IDS = ['hy-mt-q4', 'smolvlm-q8', 'smolvlm-mmproj-q8']
+/** 启用离线翻译时后台预拉 HY-MT */
+const BOOTSTRAP_MODEL_IDS = ['hy-mt-q4']
 
 function listSearchDirs(repoRoot) {
   return [

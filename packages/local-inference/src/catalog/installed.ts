@@ -80,11 +80,3 @@ export function resolveTranslationModelPath(
   if (q4) return q4.path
   return translation[0]?.path ?? null
 }
-
-export function resolveVisionModelPaths(repoRoot?: string): { modelPath: string; mmprojPath: string } | null {
-  const installed = listInstalledGgufModels(repoRoot)
-  const model = installed.find(p => /smolvlm/i.test(p.filename) && !/mmproj/i.test(p.filename))
-  const mmproj = installed.find(p => /mmproj/i.test(p.filename) && /smolvlm/i.test(p.filename))
-  if (!model || !mmproj) return null
-  return { modelPath: model.path, mmprojPath: mmproj.path }
-}

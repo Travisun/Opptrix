@@ -42,33 +42,13 @@ export const MODEL_CATALOG: CatalogModel[] = [
     family: 'hy-mt',
     purpose: 'translation',
   },
-  {
-    id: 'smolvlm-q8',
-    name: 'SmolVLM-256M-Instruct Q8_0',
-    filename: 'SmolVLM-256M-Instruct-Q8_0.gguf',
-    urls: buildHfDownloadUrls('ggml-org/SmolVLM-256M-Instruct-GGUF', 'SmolVLM-256M-Instruct-Q8_0.gguf'),
-    sizeBytes: 175_054_528,
-    family: 'smolvlm',
-    purpose: 'vision',
-    pairsWith: 'smolvlm-mmproj-q8',
-  },
-  {
-    id: 'smolvlm-mmproj-q8',
-    name: 'SmolVLM-256M mmproj Q8_0',
-    filename: 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf',
-    urls: buildHfDownloadUrls('ggml-org/SmolVLM-256M-Instruct-GGUF', 'mmproj-SmolVLM-256M-Instruct-Q8_0.gguf'),
-    sizeBytes: 103_769_856,
-    family: 'smolvlm',
-    purpose: 'vision_mmproj',
-  },
 ]
 
-/** 启动时后台预拉：翻译 + 视觉 + mmproj */
-export const BOOTSTRAP_MODEL_IDS = [
-  'hy-mt-q4',
-  'smolvlm-q8',
-  'smolvlm-mmproj-q8',
-] as const
+/** 启用离线翻译时后台预拉 HY-MT（仅翻译模型） */
+export const TRANSLATION_BOOTSTRAP_MODEL_IDS = ['hy-mt-q4'] as const
+
+/** @deprecated 使用 TRANSLATION_BOOTSTRAP_MODEL_IDS */
+export const BOOTSTRAP_MODEL_IDS = TRANSLATION_BOOTSTRAP_MODEL_IDS
 
 export function getCatalogModel(modelId: string): CatalogModel | undefined {
   return MODEL_CATALOG.find(item => item.id === modelId)

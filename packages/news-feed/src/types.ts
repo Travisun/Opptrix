@@ -154,7 +154,7 @@ export interface ValidateFeedResult {
 }
 
 export const DEFAULT_ENRICHMENT_SETTINGS: NewsEnrichmentSettings = {
-  enabled: true,
+  enabled: false,
   processing_mode: 'on_demand',
   extract_images: true,
   extract_audio: true,
@@ -167,7 +167,7 @@ export const DEFAULT_ENRICHMENT_SETTINGS: NewsEnrichmentSettings = {
 }
 
 export const DEFAULT_TRANSLATION_SETTINGS: NewsTranslationSettings = {
-  service_mode: 'offline',
+  service_mode: 'remote',
   offline_model: '__auto__',
   remote_provider_id: null,
   remote_model: null,
