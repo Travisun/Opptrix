@@ -317,6 +317,57 @@ html.opptrix-electron .opptrix-market-dynamics-title-drag {
   min-width: 8px;
 }
 
+/** 可滚动但隐藏滚动条（保留滚轮 / 触控滑动） */
+.opptrix-scroll-hidden {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.opptrix-scroll-hidden::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+/** 市场动态 — 各面板统一隐藏滚动条（Windows/Linux 系统滚动条尤其明显） */
+.opptrix-market-dynamics .opptrix-scroll,
+.opptrix-market-dynamics .opptrix-scroll-hover,
+.opptrix-market-dynamics .opptrix-scroll-hidden,
+.opptrix-market-dynamics .opptrix-scroll-x,
+.opptrix-market-dynamics .opptrix-market-board-strip {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.opptrix-market-dynamics .opptrix-scroll::-webkit-scrollbar,
+.opptrix-market-dynamics .opptrix-scroll-hover::-webkit-scrollbar,
+.opptrix-market-dynamics .opptrix-scroll-hidden::-webkit-scrollbar,
+.opptrix-market-dynamics .opptrix-scroll-x::-webkit-scrollbar,
+.opptrix-market-dynamics .opptrix-market-board-strip::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+.opptrix-market-dynamics .opptrix-scroll-hover:hover {
+  scrollbar-color: transparent transparent;
+}
+
+.opptrix-market-dynamics .fui-TabList,
+.opptrix-market-dynamics-sidebar .fui-TabList,
+.opptrix-market-dynamics-detail .fui-TabList {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.opptrix-market-dynamics .fui-TabList::-webkit-scrollbar,
+.opptrix-market-dynamics-sidebar .fui-TabList::-webkit-scrollbar,
+.opptrix-market-dynamics-detail .fui-TabList::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
 html.opptrix-electron .opptrix-right-panel-title-bar {
   background: var(--opptrix-canvas) !important;
   border-bottom: 1px solid var(--opptrix-separator-strong) !important;

@@ -281,7 +281,7 @@ export default function MarketDynamicsSidebar({
         )}
       </div>
 
-      <div className={mergeClasses(s.scroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+      <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
         <div className={s.sectionHead}>
           <Text className={s.sectionTitle}>指数列表</Text>
           <Text className={s.sectionHint}>A 股指数可点查看 K 线</Text>

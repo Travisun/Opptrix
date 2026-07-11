@@ -150,7 +150,7 @@ export default function MarketBoardStrip({
   const showBrief = Boolean(briefTitle || briefSummary)
 
   return (
-    <div className={mergeClasses(s.root, 'opptrix-market-board-strip')}>
+    <div className={mergeClasses(s.root, 'opptrix-market-board-strip', 'opptrix-scroll-x')}>
       <div className={s.moodCell}>
         <Text className={s.moodLabel} block>{mood.label}</Text>
         <Text className={s.moodMeta} block>涨 {mood.up} · 跌 {mood.down}</Text>

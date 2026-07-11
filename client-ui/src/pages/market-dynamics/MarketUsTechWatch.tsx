@@ -315,7 +315,7 @@ export function MarketUsTechWatchProvider({ children }: { children: ReactNode })
                 onChange={(_, data) => setKeyword(data.value)}
                 contentAfter={searching ? <Spinner size="tiny" /> : undefined}
               />
-              <div className={mergeClasses(s.searchHits, 'opptrix-scroll')}>
+              <div className={mergeClasses(s.searchHits, 'opptrix-scroll-hidden')}>
                 {hits.map(hit => (
                   <button
                     key={hit.symbol}

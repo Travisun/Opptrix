@@ -400,7 +400,7 @@ export default function MarketDynamicsDetail({
                 <span className={s.sectionHeadHint}>{dragonTigerDate}</span>
               )}
             </div>
-            <div className={mergeClasses(s.briefScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+            <div className={mergeClasses(s.briefScroll, 'opptrix-scroll-hidden')}>
               {briefTab === 'report' ? (
                 <div className={s.briefScrollReport}>
                   {insightsLoading && !report ? (
@@ -440,7 +440,7 @@ export default function MarketDynamicsDetail({
                 <div>暂无资讯，可在新闻中心添加订阅</div>
               </div>
             ) : (
-              <div className={mergeClasses(s.newsScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+              <div className={mergeClasses(s.newsScroll, 'opptrix-scroll-hidden')}>
                 <div className={s.newsList}>
                   {articles.map(article => (
                     <div

@@ -187,7 +187,7 @@ function PanelCol({ title, s, stacked, headAction, children }: PanelColProps) {
         <span className={s.colHeadTitle}>{title}</span>
         {headAction}
       </div>
-      <div className={mergeClasses(s.colScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+      <div className={mergeClasses(s.colScroll, 'opptrix-scroll-hidden')}>
         {children}
       </div>
     </div>
