@@ -32,6 +32,7 @@ jobs:
         shell: bash
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OPPTRIX_RELEASE_STRICT: '1'
         run: |
           TAG="${{ github.ref_name }}"
           VERSION="${TAG#desktop-v}"
@@ -41,24 +42,7 @@ jobs:
             PRERELEASE_FLAG="--prerelease"
           fi
 
-          cat > "$NOTES_FILE" <<EOF
-          ## Opptrix Desktop ${VERSION}
-
-          ### macOS 安装说明
-          - **Apple Silicon (M 系列)** 下载 \`Opptrix-${VERSION}-MacOS-arm64-M-CPU.dmg\`
-          - **Intel Mac** 下载 \`Opptrix-${VERSION}-MacOS-x64-Intel-CPU.dmg\`
-          - 若提示「已损坏，无法打开」（未签名/dev 包常见），在终端执行后重新打开：
-            \`\`\`bash
-            xattr -cr /Applications/Opptrix.app
-            \`\`\`
-          - 或在 Finder 中 **右键 → 打开** 一次
-
-          ### Windows
-          运行 \`Opptrix-${VERSION}-Windows.exe\`；未签名包可能触发 SmartScreen，选「仍要运行」
-
-          ### Linux
-          \`chmod +x Opptrix-${VERSION}-Linux.AppImage && ./Opptrix-${VERSION}-Linux.AppImage\`
-          EOF
+          node scripts/assemble-release-notes.mjs "$VERSION" > "$NOTES_FILE"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release $TAG already exists"

@@ -39,6 +39,7 @@
     "lint:ui": "eslint client-ui/src --max-warnings 9999 --quiet",
     "audit:ui": "node scripts/audit-client-ui-react.mjs",
     "check:ui": "node scripts/check-client-ui.mjs",
+    "release:notes": "node scripts/assemble-release-notes.mjs",
     "start": "npm run start -w @opptrix/server",
     "serve": "concurrently -k -n api,web -c blue,cyan \"npm run start\" \"npm run preview -w opptrix-client -- --host 0.0.0.0\"",
     "clean": "find packages apps -name dist -type d -prune -exec rm -rf {} + 2>/dev/null; find packages apps -name tsconfig.tsbuildinfo -delete 2>/dev/null; rm -rf client-ui/dist",

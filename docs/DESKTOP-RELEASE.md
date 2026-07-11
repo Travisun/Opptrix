@@ -88,7 +88,8 @@
 - [ ] 已按 `.cursor/rules/onboarding.mdc` 配置引导激活：`ONBOARDING_RELEASE_BY_VERSION` 新版本亮点；若改版引导或协议则 bump `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION`（`shared` 与 `client-ui/.../constants.ts` 同步）
 - [ ] 若同步发布 Web UI，已 bump `client-ui/package.json` 的 `version`（供 `__OPPTRIX_CLIENT_VERSION__` 触发自托管用户引导）
 - [ ] 若升级 Electron，已同步修改 `build.electronVersion` 并做三端冒烟
-- [ ] Release Notes 已起草（面向用户：新功能、修复、已知问题）
+- [ ] **更新日志**已写入 `docs/releases/{version}.md`（复制 `TEMPLATE.md`；必填 `## 新功能` 与 `## 修复`；面向用户简要条目）
+- [ ] 本地预览 Release 正文：`OPPTRIX_RELEASE_STRICT=1 node scripts/assemble-release-notes.mjs {version}` 通过
 - [ ] （可选）macOS 代码签名 / Windows 签名证书已配置（未签名时更新可能触发系统安全提示）
 
 ### 4.2 打标签触发 CI
@@ -154,7 +155,7 @@ latest-linux.yml
 
 （另可有 `.blockmap` 等辅助文件。）
 
-编辑 Release 说明，补充 **面向用户** 的更新内容。
+Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装（含新功能/修复清单 + 安装说明）。细则见 [`docs/releases/README.md`](./releases/README.md) 与 `.cursor/rules/desktop-release.mdc`。
 
 ### 4.4 Cloudflare R2 + CDN（`update.opptrix.org`）
 
@@ -512,6 +513,7 @@ open /Applications/Opptrix.app
 
 ```text
 [ ] apps/desktop/package.json version = X.Y.Z
+[ ] docs/releases/X.Y.Z.md 已撰写（新功能 + 修复）
 [ ] git tag desktop-vX.Y.Z 已推送
 [ ] CI macOS（x64 + arm64）/ Windows / Linux job 均成功
 [ ] verify-packaged-updater 通过（.app / win-unpacked 内含 electron-updater）
@@ -527,6 +529,8 @@ open /Applications/Opptrix.app
 | 文件 | 作用 |
 |------|------|
 | `apps/desktop/package.json` | 版本号、electron-builder 目标格式、GitHub publish 配置 |
+| `docs/releases/{version}.md` | 发版更新日志（新功能 / 修复）；CI 组装进 GitHub Release |
+| `scripts/assemble-release-notes.mjs` | 更新日志 + 安装说明 → Release 正文 |
 | `apps/desktop/electron/updater.cjs` | 自动检查、下载、重启安装 |
 | `apps/desktop/scripts/prebuild.mjs` | 构建前编译 packages、UI、打 runtime |
 | `.github/workflows/release-desktop.yml` | 标签触发三平台构建与上传 |
