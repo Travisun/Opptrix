@@ -296,13 +296,23 @@ function GateMessage({
   return (
     <div className={mergeClasses(s.root, 'opptrix-onboarding-shell')}>
       <div className={s.stage}>
-        <div className={mergeClasses(s.content, s.contentDisplay)}>
-          <OnboardingHeroBlock>
-            <Text className={s.displayTitle} block>{title}</Text>
-            <Text className={s.displayLead} block>{desc}</Text>
-          </OnboardingHeroBlock>
-          {action && <div className={mergeClasses(s.footer, s.footerDisplay)}>{action}</div>}
+        <div className={mergeClasses(s.scrollViewport, 'opptrix-onboarding-scroll')}>
+          <div className={mergeClasses(s.scrollInner, s.scrollInnerDisplay)}>
+            <div className={mergeClasses(s.content, s.contentDisplay)}>
+              <OnboardingHeroBlock>
+                <Text className={s.displayTitle} block>{title}</Text>
+                <Text className={s.displayLead} block>{desc}</Text>
+              </OnboardingHeroBlock>
+            </div>
+          </div>
         </div>
+        {action && (
+          <div className={mergeClasses(s.footerDock, 'opptrix-onboarding-footer-dock')}>
+            <div className={mergeClasses(s.chromeRail, s.chromeRailDisplay)}>
+              <footer className={s.footerSingle}>{action}</footer>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

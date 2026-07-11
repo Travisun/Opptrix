@@ -68,14 +68,30 @@ export const useOnboardingShellStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 'clamp(24px, 5vh, 56px) clamp(24px, 8vw, 72px)',
-    overflowY: 'auto',
+    overflow: 'hidden',
   },
-  stageFlush: {
+  scrollViewport: {
+    flex: 1,
+    minHeight: 0,
+    overflowY: 'auto',
+    overflowX: 'hidden',
+    width: '100%',
+  },
+  scrollInner: {
+    width: '100%',
+    minHeight: '100%',
+    boxSizing: 'border-box',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    padding: 'clamp(16px, 3vh, 28px) clamp(24px, 8vw, 72px)',
+    paddingBottom: 'clamp(16px, 3vh, 28px)',
+  },
+  scrollInnerFlush: {
     justifyContent: 'flex-start',
-    paddingTop: 'clamp(20px, 4vh, 40px)',
+  },
+  scrollInnerDisplay: {
+    justifyContent: 'center',
   },
   webHead: {
     position: 'relative',
@@ -103,7 +119,6 @@ export const useOnboardingShellStyles = makeStyles({
   },
   contentDisplay: {
     maxWidth: '640px',
-    minHeight: 'min(56vh, 520px)',
   },
   contentWide: {
     maxWidth: '600px',
@@ -112,27 +127,42 @@ export const useOnboardingShellStyles = makeStyles({
     alignItems: 'stretch',
     textAlign: 'left',
   },
-  progress: {
+  chromeRail: {
     width: '100%',
+    maxWidth: '520px',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+  },
+  chromeRailDisplay: {
+    maxWidth: '640px',
+  },
+  chromeRailWide: {
+    maxWidth: '600px',
+  },
+  progressDock: {
+    flexShrink: 0,
+    width: '100%',
+    backgroundColor: opptrixCssVars.canvas,
+    padding: 'clamp(14px, 2.5vh, 20px) clamp(24px, 8vw, 72px)',
+  },
+  progressDots: {
     display: 'flex',
-    gap: '6px',
-    marginBottom: 'clamp(24px, 4vh, 40px)',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '8px',
   },
-  progressDisplay: {
-    marginBottom: 'clamp(28px, 5vh, 48px)',
-  },
-  progressSeg: {
-    flex: 1,
-    height: '3px',
+  progressDot: {
+    width: '6px',
+    height: '6px',
     borderRadius: '999px',
     backgroundColor: opptrixCssVars.separator,
     transitionProperty: 'background-color, opacity',
     transitionDuration: '220ms',
   },
-  progressActive: {
+  progressDotActive: {
     backgroundColor: opptrixCssVars.accent,
   },
-  progressDone: {
+  progressDotDone: {
     backgroundColor: opptrixCssVars.accentMuted,
   },
   heroBlock: {
@@ -242,31 +272,40 @@ export const useOnboardingShellStyles = makeStyles({
     gap: '12px',
     minHeight: '200px',
   },
+  footerDock: {
+    flexShrink: 0,
+    width: '100%',
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+    padding: 'clamp(14px, 2.5vh, 20px) clamp(24px, 8vw, 72px)',
+    paddingBottom: 'max(clamp(14px, 2.5vh, 20px), env(safe-area-inset-bottom, 0px))',
+  },
   footer: {
     width: '100%',
-    marginTop: 'clamp(28px, 4vh, 40px)',
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     gap: '12px',
-    flexWrap: 'wrap',
     flexShrink: 0,
   },
-  footerDisplay: {
-    marginTop: 'clamp(32px, 5vh, 56px)',
-  },
-  footerSpread: {
-    justifyContent: 'flex-start',
+  footerSingle: {
+    width: '100%',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    gap: '12px',
+    flexWrap: 'wrap',
   },
   footerBack: {
     flexShrink: 0,
-    marginRight: 'auto',
   },
   footerEnd: {
     display: 'flex',
     alignItems: 'center',
+    justifyContent: 'flex-end',
     gap: '10px',
     flexShrink: 0,
+    flexWrap: 'wrap',
   },
 })
 
@@ -285,6 +324,52 @@ interface OnboardingShellProps {
   footerSecondary?: ReactNode
   footerPrimary: ReactNode
   children: ReactNode
+}
+
+function chromeRailClass(
+  s: ReturnType<typeof useOnboardingShellStyles>,
+  opts: { isDisplay: boolean; contentWide: boolean },
+) {
+  return mergeClasses(
+    s.chromeRail,
+    opts.isDisplay && s.chromeRailDisplay,
+    opts.contentWide && s.chromeRailWide,
+  )
+}
+
+function OnboardingFooterBar({
+  s,
+  canBack,
+  onBack,
+  footerSecondary,
+  footerPrimary,
+}: {
+  s: ReturnType<typeof useOnboardingShellStyles>
+  canBack?: boolean
+  onBack?: () => void
+  footerSecondary?: ReactNode
+  footerPrimary: ReactNode
+}) {
+  if (!canBack || !onBack) {
+    return (
+      <footer className={s.footerSingle}>
+        {footerSecondary}
+        {footerPrimary}
+      </footer>
+    )
+  }
+
+  return (
+    <footer className={s.footer}>
+      <OpptrixButton variant="secondary" className={s.footerBack} onClick={onBack}>
+        返回
+      </OpptrixButton>
+      <div className={s.footerEnd}>
+        {footerSecondary}
+        {footerPrimary}
+      </div>
+    </footer>
+  )
 }
 
 export function OnboardingShell({
@@ -306,6 +391,7 @@ export function OnboardingShell({
   const electronChrome = isElectron()
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
   const isDisplay = layoutMode === 'display'
+  const railClass = chromeRailClass(s, { isDisplay, contentWide })
 
   const electronTitleBar = electronChrome ? (
     <header
@@ -337,58 +423,72 @@ export function OnboardingShell({
     >
       {electronTitleBar}
 
-      <div className={mergeClasses(s.stage, bodyFlush && s.stageFlush, 'opptrix-scroll')}>
-        {!electronChrome && (
-          <div className={s.webHead}>
-            <Text className={s.titleBarBrand} block>Opptrix</Text>
-            <Text className={mergeClasses(s.titleBarMeta, s.webHeadMeta)} block>
-              {stepCounter(stepIndex, steps.length)}
-            </Text>
+      <div className={s.stage}>
+        {!hideProgress && (
+          <div className={mergeClasses(s.progressDock, 'opptrix-onboarding-progress-dock')}>
+            <div className={s.progressDots} aria-hidden>
+              {steps.map((_, i) => (
+                <div
+                  key={i}
+                  className={mergeClasses(
+                    s.progressDot,
+                    i < stepIndex && s.progressDotDone,
+                    i === stepIndex && s.progressDotActive,
+                  )}
+                />
+              ))}
+            </div>
           </div>
         )}
 
         <div
           className={mergeClasses(
-            s.content,
-            isDisplay && s.contentDisplay,
-            contentWide && s.contentWide,
-            contentAlignStart && s.contentAlignStart,
+            s.scrollViewport,
+            'opptrix-onboarding-scroll',
           )}
         >
-          {!hideProgress && (
-            <div
-              className={mergeClasses(s.progress, isDisplay && s.progressDisplay)}
-              aria-hidden
-            >
-              {steps.map((_, i) => (
-                <div
-                  key={i}
-                  className={mergeClasses(
-                    s.progressSeg,
-                    i < stepIndex && s.progressDone,
-                    i === stepIndex && s.progressActive,
-                  )}
-                />
-              ))}
-            </div>
-          )}
-
-          {children}
-
-          {!hideFooter && (
-            <footer className={mergeClasses(s.footer, isDisplay && s.footerDisplay, canBack && s.footerSpread)}>
-              {canBack ? (
-                <OpptrixButton variant="secondary" className={s.footerBack} onClick={onBack}>
-                  返回
-                </OpptrixButton>
-              ) : null}
-              <div className={s.footerEnd}>
-                {footerSecondary}
-                {footerPrimary}
+          <div
+            className={mergeClasses(
+              s.scrollInner,
+              bodyFlush && s.scrollInnerFlush,
+              isDisplay && s.scrollInnerDisplay,
+            )}
+          >
+            {!electronChrome && (
+              <div className={s.webHead}>
+                <Text className={s.titleBarBrand} block>Opptrix</Text>
+                <Text className={mergeClasses(s.titleBarMeta, s.webHeadMeta)} block>
+                  {stepCounter(stepIndex, steps.length)}
+                </Text>
               </div>
-            </footer>
-          )}
+            )}
+
+            <div
+              className={mergeClasses(
+                s.content,
+                isDisplay && s.contentDisplay,
+                contentWide && s.contentWide,
+                contentAlignStart && s.contentAlignStart,
+              )}
+            >
+              {children}
+            </div>
+          </div>
         </div>
+
+        {!hideFooter && (
+          <div className={mergeClasses(s.footerDock, 'opptrix-onboarding-footer-dock')}>
+            <div className={railClass}>
+              <OnboardingFooterBar
+                s={s}
+                canBack={canBack}
+                onBack={onBack}
+                footerSecondary={footerSecondary}
+                footerPrimary={footerPrimary}
+              />
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

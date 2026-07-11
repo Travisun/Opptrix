@@ -217,6 +217,28 @@ html.opptrix-electron .opptrix-onboarding-title-drag {
   -webkit-app-region: drag;
 }
 
+/** 引导中间区域 — 可滚动但隐藏滚动条 */
+.opptrix-onboarding-scroll {
+  overflow-y: auto;
+  overflow-x: hidden;
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+
+.opptrix-onboarding-scroll::-webkit-scrollbar {
+  display: none;
+  width: 0;
+  height: 0;
+}
+
+html.opptrix-electron .opptrix-onboarding-footer-dock {
+  background: var(--opptrix-canvas) !important;
+}
+
+html.opptrix-electron .opptrix-onboarding-progress-dock {
+  background: var(--opptrix-canvas) !important;
+}
+
 /** 引导协议勾选 — 去掉 Checkbox focus outline */
 .opptrix-onboarding-agree-checkbox .fui-Checkbox:focus-within .fui-Checkbox__indicator,
 .opptrix-onboarding-agree-checkbox .fui-Checkbox input:focus-visible + .fui-Checkbox__indicator,
