@@ -239,20 +239,10 @@ const useStyles = makeStyles({
     whiteSpace: 'pre-wrap',
     wordBreak: 'break-word',
   },
-  empty: {
-    flex: 1,
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: '48px 24px',
-    textAlign: 'center',
-    fontSize: '13px',
-    color: opptrixCssVars.textTertiary,
-  },
 })
 
 type Props = {
-  article: FeedArticle | null
+  article: FeedArticle
   onDiscussArticle?: (article: FeedArticle) => void
 }
 
@@ -279,22 +269,18 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
   const translation = useArticleTranslation(article)
   const enrichment = useArticleEnrichment(article)
 
-  const raw = article?.content_html || article?.summary || ''
-  const html = article ? sanitizeFeedHtml(raw) : ''
+  const raw = article.content_html || article.summary || ''
+  const html = sanitizeFeedHtml(raw)
   const hasHtml = html.includes('<')
-  const htmlKey = article ? `${article.id}\0${html}` : ''
+  const htmlKey = `${article.id}\0${html}`
   const plainFallback = stripHtml(html) || '暂无正文，可点击上方原文链接查看。'
   const displayTitle = translation.viewMode === 'translated' && translation.translatedTitle
     ? translation.translatedTitle
-    : article?.title
+    : article.title
 
   useEffect(() => {
     const el = contentRef.current
-    if (!el || !article) {
-      if (el) el.innerHTML = ''
-      mountedHtmlKey.current = ''
-      return
-    }
+    if (!el) return
     if (mountedHtmlKey.current === htmlKey) return
     mountedHtmlKey.current = htmlKey
 
@@ -306,7 +292,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
       el.innerHTML = ''
     }
     enhanceFeedMedia(el)
-  }, [article, hasHtml, html, htmlKey, plainFallback])
+  }, [hasHtml, html, htmlKey, plainFallback])
 
   useEffect(() => {
     const el = contentRef.current
@@ -316,18 +302,10 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
     enhanceFeedMedia(el)
   }, [translation.viewMode, translation.translatedBlocks, translation.translationLayout, translation.hasTranslation, htmlKey])
 
-  if (!article) {
-    return (
-      <div className={s.empty}>
-        <Text block>从左侧选择一篇文章开始阅读</Text>
-      </div>
-    )
-  }
-
   const progressLabel = translation.translating && translation.progress
     ? `正在翻译 ${translation.progress.current}/${translation.progress.total}…`
     : translation.translating && !translation.status?.ready
-      ? '正在加载翻译模型，首次约需十几秒…'
+      ? '正在准备翻译，首次约需十几秒…'
       : translation.translating
         ? '准备翻译…'
         : ''
@@ -418,8 +396,8 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
                   s.metaAction,
                   (!enrichment.canEnrich && !enrichment.hasExtraction) && s.metaActionDisabled,
                 )}
-                title={enrichment.hasExtraction ? '查看媒体解析结果' : '解析文章中的图片与音视频'}
-                aria-label="媒体解析"
+                title={enrichment.hasExtraction ? '查看图片与音视频说明' : '识别文章中的图片与音视频'}
+                aria-label="图片与音视频"
                 disabled={!enrichment.canEnrich && !enrichment.hasExtraction}
                 onClick={() => {
                   if (enrichment.hasExtraction) {
@@ -432,7 +410,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
                 {enrichment.enriching
                   ? <Spinner size="extra-tiny" />
                   : <ImageRegular fontSize={14} />}
-                <span className={s.metaActionLabel}>媒体解析</span>
+                <span className={s.metaActionLabel}>配图音视频</span>
               </button>
             </>
           )}
@@ -468,7 +446,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
             || enrichment.progressLabel
             || progressLabel
             || (!translation.available && isElectron()
-              ? '翻译不可用：请在设置 → 翻译中下载离线模型或配置远程大模型'
+              ? '翻译暂不可用：请在设置中开启翻译功能'
               : !translation.canTranslate && translation.available && !translation.hasTranslation
                 ? '内容主要为中文，通常无需翻译'
                 : '')}
@@ -492,7 +470,7 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
         <div ref={contentRef} className={s.content} />
         {enrichment.showExtracted && enrichment.enrichment?.segments?.length ? (
           <div className={s.extractedBlock}>
-            <Text className={s.extractedHeading} block>媒体提取</Text>
+            <Text className={s.extractedHeading} block>图片与音视频</Text>
             {enrichment.enrichment.segments.map(seg => (
               <div key={seg.id} className={s.extractedSegment}>{seg.text}</div>
             ))}

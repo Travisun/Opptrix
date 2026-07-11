@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { Spinner, Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Spinner, Tab, TabList, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { NewsGroupedFeed } from '../../types/schemas'
 import type { NewsListView } from './useNewsFeed'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
@@ -57,6 +57,15 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
   },
+  errorHint: {
+    flexShrink: 0,
+    padding: '8px 10px 6px',
+    fontSize: '12px',
+    lineHeight: 1.5,
+    color: opptrixCssVars.error,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
+  },
 })
 
 type Section = { key: string; label: string; articles: FeedArticle[] }
@@ -82,7 +91,10 @@ type Props = {
   loadingMore: boolean
   hasMore: boolean
   total: number
+  hasAnyArticles: boolean
+  hasSubscriptions: boolean
   onLoadMore: () => void
+  error?: string
 }
 
 function buildGroupSections(
@@ -127,7 +139,10 @@ export default function NewsFeedSidebar({
   loadingMore,
   hasMore,
   total,
+  hasAnyArticles,
+  hasSubscriptions,
   onLoadMore,
+  error = '',
 }: Props) {
   const s = useStyles()
 
@@ -181,9 +196,14 @@ export default function NewsFeedSidebar({
         />
       </div>
       <div className={s.body}>
+        {error && (
+          <Text className={s.errorHint} block role="alert">
+            {error}。请检查网络后点击刷新重试。
+          </Text>
+        )}
         {loading ? (
           <div className={s.loading}>
-            <Spinner size="small" label="加载资讯…" />
+            <Spinner size="small" label="正在加载资讯…" />
           </div>
         ) : (
           <NewsArticleList
@@ -196,6 +216,8 @@ export default function NewsFeedSidebar({
             loadingMore={loadingMore || listSyncing}
             hasMore={view === 'timeline' ? hasMore : false}
             onLoadMore={view === 'timeline' ? onLoadMore : undefined}
+            hasAnyArticles={hasAnyArticles}
+            hasSubscriptions={hasSubscriptions}
           />
         )}
       </div>

@@ -52,6 +52,12 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
+  statusRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    minWidth: 0,
+  },
   actions: {
     display: 'flex',
     alignItems: 'center',
@@ -106,8 +112,11 @@ export default function MobileTopBar({
       />
       <div className={s.center}>
         <Text className={s.title}>{title || '新对话'}</Text>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <span className={mergeClasses(s.statusDot, backendOk ? s.statusOk : s.statusErr)} />
+        <div className={s.statusRow}>
+          <span
+            className={mergeClasses(s.statusDot, backendOk ? s.statusOk : s.statusErr)}
+            aria-label={backendOk ? '服务已连接' : '服务未连接'}
+          />
           {onModelChange && availableModels.length > 0 ? (
             <ModelSelector
               models={availableModels}

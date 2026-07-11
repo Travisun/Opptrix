@@ -85,3 +85,35 @@ export function buildAppUpdatePanel(
 export function isAppUpdateCheckBusy(status: AppUpdateStatus): boolean {
   return status.state === 'checking'
 }
+
+/** Title-bar hint when sidebar footer notice is hidden (overlay collapsed, etc.). */
+export function shouldShowAppUpdateChromeHint(status: AppUpdateStatus): boolean {
+  return (
+    status.state === 'downloading'
+    || status.state === 'available'
+    || status.state === 'ready'
+    || status.state === 'installing'
+    || status.state === 'error'
+  )
+}
+
+export function getAppUpdateChromeHintLabel(status: AppUpdateStatus): string {
+  switch (status.state) {
+    case 'downloading':
+    case 'available':
+      if (status.percent != null && status.percent > 0) {
+        return status.version
+          ? `下载 v${status.version} ${status.percent}%`
+          : `下载更新 ${status.percent}%`
+      }
+      return status.version ? `下载 v${status.version}` : '正在下载更新'
+    case 'ready':
+      return status.version ? `v${status.version} 可更新` : '新版本可更新'
+    case 'installing':
+      return '正在安装…'
+    case 'error':
+      return '更新失败'
+    default:
+      return ''
+  }
+}

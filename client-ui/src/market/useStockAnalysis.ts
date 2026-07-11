@@ -34,7 +34,7 @@ const STEP_CAPS: Record<string, ApplicationCapability> = {
 }
 
 const STEP_DEFS = [
-  { id: 'eval', label: 'G=B+M 评分' },
+  { id: 'eval', label: '综合评分' },
   { id: 'strategy', label: '多空倾向' },
   { id: 'institution', label: '研报观点' },
   { id: 'cyq', label: '筹码分布' },
@@ -154,7 +154,7 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
           ok: resp.success,
           message: resp.success
             ? (resp.data?.gbm
-              ? `${label} · B ${resp.data.gbm.b_score} / M ${resp.data.gbm.m_score}`
+              ? `${label} · 基本面 ${resp.data.gbm.b_score} / 动量 ${resp.data.gbm.m_score}`
               : label)
             : (resp.message ?? '未能完成'),
         }

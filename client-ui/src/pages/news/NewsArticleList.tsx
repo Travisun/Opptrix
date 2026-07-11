@@ -105,9 +105,14 @@ const useStyles = makeStyles({
   loadMore: {
     display: 'flex',
     justifyContent: 'center',
+    alignItems: 'center',
     padding: '12px',
     fontSize: '12px',
     color: opptrixCssVars.textTertiary,
+  },
+  loadMoreIcon: {
+    marginRight: '6px',
+    verticalAlign: 'middle',
   },
 })
 
@@ -125,6 +130,8 @@ type Props = {
   listPulseEpoch?: number
   /** 全部分组 / 全部来源时，各区块可展开收起 */
   sectionsCollapsible?: boolean
+  hasAnyArticles?: boolean
+  hasSubscriptions?: boolean
 }
 
 export default function NewsArticleList({
@@ -138,6 +145,8 @@ export default function NewsArticleList({
   onLoadMore,
   listPulseEpoch = 0,
   sectionsCollapsible = false,
+  hasAnyArticles = false,
+  hasSubscriptions = false,
 }: Props) {
   const s = useStyles()
   const [pulseActive, setPulseActive] = useState(false)
@@ -268,14 +277,18 @@ export default function NewsArticleList({
         )}
         {!sections && !loadingMore && hasMore && articles.length > 0 && (
           <div className={s.loadMore}>
-            <BookOpenRegular style={{ marginRight: 6, verticalAlign: 'middle' }} />
+            <BookOpenRegular className={s.loadMoreIcon} />
             继续下滑加载更多
           </div>
         )}
         {flatArticles.length === 0 && (
           <div className={s.loadMore}>
-            <NewsRegular style={{ marginRight: 6, verticalAlign: 'middle' }} />
-            暂无文章
+            <NewsRegular className={s.loadMoreIcon} />
+            {!hasSubscriptions
+              ? '还没有订阅来源，请前往「订阅设置」添加'
+              : !hasAnyArticles
+                ? '暂无资讯，点击刷新获取最新内容'
+                : '当前筛选条件下暂无资讯，可调整筛选或点刷新'}
           </div>
         )}
       </div>

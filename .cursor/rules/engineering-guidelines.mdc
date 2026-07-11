@@ -33,7 +33,7 @@ alwaysApply: true
 
 - Electron 下 **始终使用 desktop 布局**（不因窗口变窄切换 MobileTopBar）。
 - 小窗口侧栏：宽度 < 侧栏宽度 × 2.5 时浮层覆盖内容区，**全高**（`top: 0; bottom: 0`），白底轻毛玻璃，**无全屏遮罩**。
-- 标题栏图层（低→高）：标题 `1100` → 浮层侧栏 `1150` → 顶栏工具按钮 / 窗口控件 `1210`。
+- 标题栏图层（低→高）：标题 `1100` → 浮层侧栏 `1150` → 面板标题带 `1200` → 顶栏工具按钮 / 窗口控件 `1300` → 可点击会话标题 `1310`（见 `client-ui/src/desktop/constants.ts` 中 `DESKTOP_Z_*`）。
 - 最小窗口宽度：`DESKTOP_CHAT_MIN_WIDTH`（当前 510px），与 `apps/desktop/electron/main.cjs` 保持同步。
 - 小窗口下左侧 8px 边缘 hover 可唤出浮层侧栏（聊天与设置均适用）。
 

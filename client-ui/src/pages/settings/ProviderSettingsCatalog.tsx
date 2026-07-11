@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
-  Spinner,
   Switch,
   Tab,
   TabList,
@@ -27,6 +26,7 @@ import { useSettingsToast } from './SettingsToast'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { motion } from '../../theme/mixins'
+import { SettingsListPanelSkeleton } from './SettingsListPanelSkeleton'
 
 const useListStyles = makeStyles({
   listPanel: {
@@ -765,5 +765,5 @@ export function ProviderPriorityPanels({
 }
 
 export function ProviderCatalogLoading() {
-  return <Spinner size="tiny" label="加载数据源…" />
+  return <SettingsListPanelSkeleton aria-label="加载数据源…" />
 }

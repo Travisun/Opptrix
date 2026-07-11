@@ -3,6 +3,7 @@ import ReactDOM from 'react-dom/client'
 import { FluentProvider } from '@fluentui/react-components'
 import App from './App'
 import { OpptrixDialogAlertProvider } from './components/opptrix/OpptrixDialogAlert'
+import { AppUpdateProvider } from './desktop/AppUpdateProvider'
 import { WatchlistProvider } from './market/WatchlistContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
@@ -26,9 +27,11 @@ function ThemedApp() {
   return (
     <FluentProvider theme={getOpptrixFluentTheme(resolvedScheme)}>
       <OpptrixDialogAlertProvider>
-        <WatchlistProvider>
-          <App />
-        </WatchlistProvider>
+        <AppUpdateProvider>
+          <WatchlistProvider>
+            <App />
+          </WatchlistProvider>
+        </AppUpdateProvider>
       </OpptrixDialogAlertProvider>
     </FluentProvider>
   )

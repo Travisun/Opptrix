@@ -245,7 +245,7 @@ npm run serve               # 生产预览
 
 - **始终 desktop 布局**，窗口变窄也不切换 `MobileTopBar`
 - 窄窗：侧栏变为 **全高浮层**（`top:0; bottom:0`），白底轻毛玻璃，**无全屏遮罩**
-- z-index：标题 `1100` → 浮层侧栏 `1150` → 顶栏控件 `1210`
+- z-index：标题 `1100` → 浮层侧栏 `1150` → 面板标题带 `1200` → 顶栏控件 `1300` → 可点击会话标题 `1310`（`DESKTOP_Z_*` in `client-ui/src/desktop/constants.ts`）
 - 最小宽度 `DESKTOP_CHAT_MIN_WIDTH`（510px），与 `apps/desktop/electron/main.cjs` 同步
 
 ### 6.3 文案

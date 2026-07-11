@@ -39,6 +39,7 @@ import {
   type DesktopViewMode,
 } from './layout'
 import ChromeToolButton from './ChromeToolButton'
+import AppUpdateChromeHint from './AppUpdateChromeHint'
 import WindowControls from './WindowControls'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 
@@ -341,8 +342,12 @@ export default function DesktopWindowChrome({
                 : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
             </ChromeToolButton>
           )}
-          {!isSettings && onGoBack && (
-            <ChromeToolButton label="后退" disabled={!canGoBack} onClick={onGoBack}>
+          {onGoBack && (
+            <ChromeToolButton
+              label={isSettings ? '返回应用' : '后退'}
+              disabled={!canGoBack}
+              onClick={onGoBack}
+            >
               <ArrowLeftRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
             </ChromeToolButton>
           )}
@@ -356,6 +361,12 @@ export default function DesktopWindowChrome({
               <ChatAddRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
             </ChromeToolButton>
           )}
+          <AppUpdateChromeHint
+            sidebarOpen={sidebarOpen}
+            sidebarHoverReveal={sidebarHoverReveal}
+            onRevealSidebar={onRevealSidebar}
+            onToggleSidebar={onToggleSidebar}
+          />
         </div>
       </header>
 

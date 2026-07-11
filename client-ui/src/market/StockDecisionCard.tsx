@@ -504,7 +504,7 @@ export default function StockDecisionCard({
       <Section title="核心结论">
         <div className={s.metricGrid3}>
           <Metric
-            label={vm.gbmLabel ? 'G=B+M 评分' : '综合评分'}
+            label={vm.gbmLabel ? '基本面+动量' : '综合评分'}
             value={vm.gbmLabel ? `${vm.scoreSummary}（${vm.gbmLabel}）` : vm.scoreSummary}
             tone={scoreTone}
           />
@@ -516,7 +516,7 @@ export default function StockDecisionCard({
         </div>
         <div className={s.guideBox}>
           <Text className={s.guideText}>
-            <span className={s.guideHighlight}>{vm.gbmLabel ? 'G=B+M 评分：' : '综合评分：'}</span>
+            <span className={s.guideHighlight}>{vm.gbmLabel ? '基本面+动量：' : '综合评分：'}</span>
             <span className={mergeClasses(s.guideValue, toneClass(s, scoreTone))}>
               {vm.scoreSummary}
             </span>

@@ -165,6 +165,7 @@ function NewsCenterContent({
     setSourceFilter,
     loadMore,
     refresh,
+    error,
   } = feed
 
   const hasAnyArticles = (grouped?.by_source.length ?? 0) > 0
@@ -273,18 +274,24 @@ function NewsCenterContent({
             loadingMore={loadingMore}
             hasMore={hasMore}
             total={total}
+            hasAnyArticles={hasAnyArticles}
+            hasSubscriptions={subscriptions.length > 0}
             onLoadMore={() => { void loadMore() }}
+            error={error}
           />
         </div>
         <div className={s.detail}>
           {loading && !selected ? (
             <div className={s.detailLoading}>
-              <Spinner size="medium" label="正在加载…" />
+              <Spinner size="medium" label="正在加载资讯…" />
             </div>
           ) : selected ? (
             <NewsArticleDetail article={selected} onDiscussArticle={onDiscussArticle} />
           ) : (
-            <NewsReaderEmpty hasArticles={hasAnyArticles} />
+            <NewsReaderEmpty
+              hasArticles={hasAnyArticles}
+              hasSubscriptions={subscriptions.length > 0}
+            />
           )}
         </div>
       </div>

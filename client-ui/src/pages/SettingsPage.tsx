@@ -316,11 +316,18 @@ function SettingsPageView({
   const [strategyNames, setStrategyNames] = useState<string[]>([])
   const [newsSearchEntries, setNewsSearchEntries] = useState<SettingsSearchEntry[]>([])
   const [scorecard, setScorecard] = useState('综合评估')
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(() => {
+    const sec = normalizeSettingsSection(initialSection)
+    return sec === 'general' || sec === 'models'
+  })
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipScorecardSave = useRef(true)
   const scorecardBaseline = useRef<string | null>(null)
+  const strategiesSearchLoaded = useRef(false)
+  const newsSearchLoaded = useRef(false)
   const electronChrome = isElectron() && !isMobile
+  const searchActive = Boolean(search.trim()) && !isMobile
+  const needsConfig = section === 'general' || section === 'models'
 
   const refresh = useCallback(async () => {
     const cfg = await getConfig()
@@ -333,13 +340,32 @@ function SettingsPageView({
   }, [])
 
   useEffect(() => {
+    if (!needsConfig || config !== null) return
+    let cancelled = false
     setLoading(true)
     refresh()
-      .catch(() => toast.showError('无法读取后端配置，请确认服务已启动'))
-      .finally(() => setLoading(false))
+      .catch(() => {
+        if (!cancelled) toast.showError('无法读取后端配置，请确认服务已启动')
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false)
+      })
+    return () => { cancelled = true }
+  }, [needsConfig, config, refresh, toast])
+
+  useEffect(() => {
+    if (section !== 'discover_strategies' && !searchActive) return
+    if (strategiesSearchLoaded.current) return
+    strategiesSearchLoaded.current = true
     listDiscoverStrategies()
       .then(res => setStrategyNames(res.strategies.map(item => item.name)))
       .catch(() => setStrategyNames([]))
+  }, [section, searchActive])
+
+  useEffect(() => {
+    if (section !== 'news_feed' && !searchActive) return
+    if (newsSearchLoaded.current) return
+    newsSearchLoaded.current = true
     news.listSubscriptions()
       .then(res => {
         const entries: SettingsSearchEntry[] = []
@@ -361,7 +387,7 @@ function SettingsPageView({
         setNewsSearchEntries(entries)
       })
       .catch(() => setNewsSearchEntries([]))
-  }, [refresh, toast])
+  }, [section, searchActive])
 
   useEffect(() => {
     setSection(normalizeSettingsSection(initialSection))
@@ -431,7 +457,7 @@ function SettingsPageView({
     }
   }
 
-  const providers = config?.providers ?? []
+  const providers = useMemo(() => config?.providers ?? [], [config?.providers])
 
   const dynamicSearchEntries = useMemo((): SettingsSearchEntry[] => {
     const entries: SettingsSearchEntry[] = []
@@ -458,7 +484,7 @@ function SettingsPageView({
     switch (saveState) {
       case 'pending': return '正在保存…'
       case 'saved': return '已保存'
-      case 'error': return ''
+      case 'error': return '保存失败，请重试'
       default: return ''
     }
   })()
@@ -466,7 +492,7 @@ function SettingsPageView({
   const contentFlush = isMobile || sidebarOverlayMode
 
   const renderSection = () => {
-    if (loading) return <Spinner size="tiny" label="加载配置..." />
+    if (loading && needsConfig) return <Spinner size="tiny" label="加载配置…" />
 
     switch (section) {
       case 'general':

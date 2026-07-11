@@ -34,8 +34,8 @@ export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = 
 }
 
 export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, string> = {
-  cn_equity: '全 A 股票池 · 本地因子库初选与 AI 精选',
-  cn_etf: 'ETF 折溢价、规模与同类对比 · 决策雷达',
+  cn_equity: '全 A 股票池 · 本地初筛与 AI 精选',
+  cn_etf: 'ETF 折溢价、规模与同类对比 · 综合评分',
   us_equity: '美股本地列表筛选（需开启美股数据包）',
   crypto_spot: 'Crypto 交易对筛选（需开启 Crypto 数据包）',
   jp_equity: '日股本地列表筛选（需开启日本数据包）',
@@ -90,9 +90,9 @@ export const US_REGIME_STRATEGY_IDS: Record<MarketRegimeKind, string[]> = {
 
 export const US_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
   panic: 'SPY 回撤偏大，可优先广谱样本策略，精选流动性好、基本面清晰的标的。',
-  cautious: '动量偏弱，宜广谱初选后由 Agent 结合概况筛选。',
-  neutral: '可按广谱或科技聚焦策略在本地列表中初选。',
-  euphoria: '动量偏强，科技聚焦策略可配合 Agent 深挖，注意估值纪律。',
+  cautious: '动量偏弱，宜先用广谱策略初筛，再结合概况做进一步筛选。',
+  neutral: '可按广谱或科技聚焦策略，在本地列表中逐步缩小范围。',
+  euphoria: '动量偏强，科技聚焦策略可深入比对，注意估值纪律。',
 }
 
 export function resolveRegimeStrategyIds(

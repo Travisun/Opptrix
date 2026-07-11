@@ -46,7 +46,27 @@ export default function DataProvidersSettingsSection() {
   const { catalog, loading, refresh, setCatalog } = useProviderCatalog()
 
   if (loading && !catalog) {
-    return <ProviderCatalogLoading />
+    return (
+      <div className={s.root}>
+        <div className={s.tabBar}>
+          <TabList
+            className={s.tabList}
+            size="small"
+            selectedValue={tab}
+            onTabSelect={(_, data) => setTab(data.value as DataProviderTab)}
+          >
+            <Tab value="providers">提供商</Tab>
+            <Tab value="priority">优先级</Tab>
+          </TabList>
+        </div>
+        <div className={s.tabPanel}>
+          <Text className={s.tabHint} block>
+            为各数据源配置连接信息，并通过开关控制是否参与行情拉取。
+          </Text>
+          <ProviderCatalogLoading />
+        </div>
+      </div>
+    )
   }
 
   if (!catalog) {

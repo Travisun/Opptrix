@@ -288,6 +288,7 @@ const useStyles = makeStyles({
 })
 
 interface Props {
+  active?: boolean
   items: WatchlistItem[]
   selectedCode?: string | null
   holdingsByCode: Record<string, HoldingSnapshot>
@@ -299,6 +300,7 @@ interface Props {
 }
 
 export default function WatchlistTab({
+  active = true,
   items,
   selectedCode,
   holdingsByCode,
@@ -393,13 +395,14 @@ export default function WatchlistTab({
   }, [items])
 
   useEffect(() => {
+    if (!active) return undefined
     void refreshRadar()
     const timer = window.setInterval(() => { void refreshRadar() }, 60000)
     return () => window.clearInterval(timer)
-  }, [refreshRadar])
+  }, [refreshRadar, active])
 
   useEffect(() => {
-    if (!selectedCode) return undefined
+    if (!active || !selectedCode) return undefined
     const item = items.find(row => row.code === selectedCode || watchlistItemKey(row) === selectedCode)
     if (!item) return undefined
     const ref = resolveWatchlistInstrument(item)
@@ -413,13 +416,14 @@ export default function WatchlistTab({
       ))
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [selectedCode, items])
+  }, [active, selectedCode, items])
 
   useEffect(() => {
+    if (!active) return undefined
     void refreshQuotes()
     const timer = window.setInterval(() => { void refreshQuotes() }, 15000)
     return () => window.clearInterval(timer)
-  }, [refreshQuotes])
+  }, [refreshQuotes, active])
 
   useEffect(() => {
     for (const item of items) {

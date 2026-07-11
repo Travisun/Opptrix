@@ -327,8 +327,8 @@ const useStyles = makeStyles({
 
 const PHASE_LABEL: Record<string, string> = {
   parsing: '理解策略',
-  prescreen: '快速初选',
-  mining: '深度挖掘',
+  prescreen: '初筛候选',
+  mining: '精选比对',
   done: '已完成',
   error: '出错了',
 }
@@ -402,7 +402,7 @@ function toBuiltinOptions(list: DiscoverStrategyPublic[]): DiscoverStrategyOptio
     tagline: st.tagline,
     source: 'builtin' as const,
     category: st.category,
-    meta: `${CATEGORY_LABEL[st.category]} · ${st.condition_count} 条因子 · 精选 ${st.final_top_n} 只`,
+    meta: `${CATEGORY_LABEL[st.category]} · ${st.condition_count} 项条件 · 精选 ${st.final_top_n} 只`,
   }))
 }
 
@@ -616,8 +616,8 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
         />
         <Text className={s.headHint} block>
           {profileMiningReady
-            ? '选好策略后点击「开始挖掘」；自编策略可在设置 → 选股策略中管理。'
-            : '该资产类型的挖掘策略筹备中，可先开启对应数据包或关注后续更新。'}
+            ? '选好策略后点击「开始选股」；自编策略可在设置 → 选股策略中管理。'
+            : '该资产类型的选股策略筹备中，可先开启对应数据包或关注后续更新。'}
         </Text>
         {readiness && (
           <div className={readiness.ready ? s.dbBanner : s.regimeBanner}>
@@ -643,7 +643,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
             disabled={running || !selectedId || readiness?.ready === false}
             onClick={handleRun}
           >
-            {running ? '挖掘中…' : '开始挖掘'}
+            {running ? '选股中…' : '开始选股'}
           </OpptrixButton>
           {running && (
             <OpptrixButton className={s.runBtn} variant="secondary" onClick={() => { void cancelRun() }}>
@@ -653,11 +653,11 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           {running && <Spinner size="tiny" />}
           <Text className={s.runHint}>
             {profile === 'cn_etf'
-              ? '加载条件 → ETF 初选 → 决策雷达排序 → 精选标的'
+              ? '加载条件 → 初筛 ETF → 综合评分排序 → 精选标的'
               : readiness?.mode === 'online'
-                ? '解析条件 → 在线初选 → 精选标的'
-                : '解析条件 → 因子初选 → 精选标的'}
-            {llmReady === false ? ' · 需配置大模型' : ''}
+                ? '解析条件 → 在线初筛 → 精选标的'
+                : '解析条件 → 条件初筛 → 精选标的'}
+            {llmReady === false ? ' · 需在设置中配置 AI 助手' : ''}
           </Text>
         </div>
           </>
@@ -721,9 +721,8 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           <Text className={s.summaryTitle} block>{result.strategy_title}</Text>
           <Text className={s.summaryText} block>{result.strategy_summary}</Text>
           <Text className={s.stats} block>
-            {`初选扫描 ${result.prescreen.scanned} 只 · 通过 ${result.prescreen.passed} 只 · 最终 ${result.items.length} 只`}
+            {`初筛 ${result.prescreen.scanned} 只 · 通过 ${result.prescreen.passed} 只 · 最终 ${result.items.length} 只`}
             {result.prescreen.source ? ` · ${result.prescreen.source === 'local' ? '本地' : '在线'}` : ''}
-            {result.tools_used?.length ? ` · 工具 ${result.tools_used.length} 次` : ''}
           </Text>
         </div>
       )}
@@ -731,7 +730,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       <div className={mergeClasses(s.list, 'opptrix-scroll')}>
         {!result && !running && !error && (
           <Text className={s.empty}>
-            选好策略并点击「开始挖掘」；任务在后台运行，切换页面不会中断。
+            选好策略并点击「开始选股」；任务在后台运行，切换页面不会中断。
           </Text>
         )}
         {result?.items.map(item => {
@@ -803,7 +802,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
           )}
           {historyJobs.length === 0 && (
             <Text className={s.empty}>
-              暂无历史记录。完成一次挖掘后，结果会保存在这里，可随时回看或删除。
+              暂无历史记录。完成一次选股后，结果会保存在这里，可随时回看或删除。
             </Text>
           )}
           {historyJobs.map(histJob => (
@@ -833,7 +832,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
                   type="button"
                   className={s.deleteBtn}
                   title="删除记录"
-                  aria-label={`删除 ${histJob.strategy_name} 的挖掘记录`}
+                  aria-label={`删除 ${histJob.strategy_name} 的选股记录`}
                   onMouseDown={e => e.stopPropagation()}
                   onClick={e => handleDeleteHistory(e, histJob.id)}
                 >

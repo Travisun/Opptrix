@@ -83,7 +83,7 @@ export function useArticleEnrichment(article: FeedArticle | null) {
           clearPoll()
           setEnriching(false)
           setProgress(null)
-          setError(resp.job.error ?? '媒体提取失败')
+          setError(resp.job.error ?? '图片与音视频识别失败')
         }
       }).catch(e => {
         clearPoll()
@@ -113,7 +113,7 @@ export function useArticleEnrichment(article: FeedArticle | null) {
     } catch (e) {
       setEnriching(false)
       setProgress(null)
-      setError(e instanceof Error ? e.message : '无法启动媒体提取')
+      setError(e instanceof Error ? e.message : '暂时无法识别配图与音视频')
     }
   }, [article, enriching, enrichment, pollJob])
 
@@ -123,10 +123,10 @@ export function useArticleEnrichment(article: FeedArticle | null) {
   const progressLabel = enriching && progress
     ? progress.message
       || (progress.total > 0
-        ? `正在提取 ${progress.current}/${progress.total}…`
-        : '正在扫描文章中的媒体…')
+        ? `正在识别配图与音视频 ${progress.current}/${progress.total}…`
+        : '正在查找文章中的图片与音视频…')
     : enriching
-      ? '正在准备多模态服务…'
+      ? '正在准备配图与音视频识别…'
       : ''
 
   return {

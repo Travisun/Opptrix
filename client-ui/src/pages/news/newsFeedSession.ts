@@ -348,7 +348,8 @@ export async function refreshNewsFeed(): Promise<NewsFeedRefreshResult> {
     pruneSelection()
     return { ok: true }
   } catch (e) {
-    const message = e instanceof Error ? e.message : '刷新列表失败'
+    const message = e instanceof Error ? e.message : '刷新列表失败，请稍后再试'
+    patch({ error: message })
     return { ok: false, message }
   } finally {
     patch({ refreshing: false })

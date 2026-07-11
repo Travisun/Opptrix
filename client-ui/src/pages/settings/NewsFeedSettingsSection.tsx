@@ -5,7 +5,6 @@ import {
   DialogContent,
   DialogSurface,
   DialogTitle,
-  Spinner,
   Switch,
   Text,
   makeStyles,
@@ -35,6 +34,7 @@ import {
 import { useSettingsToast } from './SettingsToast'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import { useDebouncedEffect } from '../../hooks/useDebouncedEffect'
+import { SettingsListPanelSkeleton } from './SettingsListPanelSkeleton'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { findDuplicateSubscription, formatSubscriptionUrlShort } from '../news/newsUtils'
 import {
@@ -358,6 +358,7 @@ export default function NewsFeedSettingsSection() {
       .catch((e: unknown) => {
         setSaveState('error')
         toast.showError(e instanceof Error ? e.message : '保存失败')
+        window.setTimeout(() => setSaveState('idle'), 2000)
       })
   }, [settings.refresh_interval_min, settings.retention_years, settings.max_articles, loading], SETTINGS_SAVE_MS)
 
@@ -610,12 +611,10 @@ export default function NewsFeedSettingsSection() {
     switch (saveState) {
       case 'pending': return '保存中…'
       case 'saved': return '已保存'
-      case 'error': return ''
+      case 'error': return '保存失败，请重试'
       default: return ''
     }
   })()
-
-  if (loading) return <Spinner size="tiny" label="加载订阅…" />
 
   return (
     <>
@@ -627,6 +626,13 @@ export default function NewsFeedSettingsSection() {
         onChange={e => { void handleImportFile(e.target.files?.[0] ?? null) }}
       />
 
+      {loading ? (
+        <SettingsListPanelSkeleton
+          showHeaderActions
+          headerActionCount={3}
+          aria-label="加载订阅…"
+        />
+      ) : (
       <div className={s.listPanel}>
         <div className={s.listHeader}>
           <Text className={s.listHeaderMeta} block>
@@ -723,6 +729,7 @@ export default function NewsFeedSettingsSection() {
           </div>
         )}
       </div>
+      )}
 
       <div className={s.sectionBlock}>
         <div className={s.listPanel}>

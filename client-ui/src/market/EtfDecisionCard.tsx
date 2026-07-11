@@ -3,7 +3,7 @@ import { ArrowClockwiseRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import type { EtfScorecardData } from '../types/market'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { formatScoreSummary, getScoreGradeInfo } from './scoreGrade'
+import { formatScoreSummary, formatScorecardDisplayName, getScoreGradeInfo } from './scoreGrade'
 import { scoreMetricTone, type DecisionMetricTone } from './decisionCardTone'
 
 const ETF_SCORE_LEGEND =
@@ -164,13 +164,17 @@ interface Props {
   onRefresh: () => void
 }
 
+function normalizeScorecardError(msg: string): string {
+  return msg.replace(/决策雷达/g, '综合评分')
+}
+
 export default function EtfDecisionCard({ data, loading, error, onRefresh }: Props) {
   const s = useStyles()
 
   if (loading && !data) {
     return (
       <div className={s.center}>
-        <Spinner size="small" label="正在计算决策雷达…" />
+        <Spinner size="small" label="正在计算综合评分…" />
       </div>
     )
   }
@@ -178,7 +182,7 @@ export default function EtfDecisionCard({ data, loading, error, onRefresh }: Pro
   if (error && !data) {
     return (
       <div className={s.panel}>
-        <Text className={s.error} block>{error}</Text>
+        <Text className={s.error} block>{normalizeScorecardError(error)}</Text>
         <OpptrixButton variant="secondary" onClick={onRefresh}>重试</OpptrixButton>
       </div>
     )
@@ -193,7 +197,7 @@ export default function EtfDecisionCard({ data, loading, error, onRefresh }: Pro
     <div className={mergeClasses(s.panel, 'opptrix-etf-decision-card')}>
       <div className={s.headRow}>
         <div className={s.headMain}>
-          <Text className={s.title} block>{data.scorecard}</Text>
+          <Text className={s.title} block>{formatScorecardDisplayName(data.scorecard)}</Text>
           <span className={mergeClasses(s.scoreLine, toneClass(s, scoreTone))}>
             {formatScoreSummary(data.total_score)}
           </span>

@@ -44,7 +44,7 @@ import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -109,7 +109,7 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
     borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
     position: 'relative',
-    zIndex: 2,
+    zIndex: DESKTOP_Z_TITLE,
   },
   chatPanel: {
     flex: 1,
@@ -244,6 +244,7 @@ export default function ChatApp() {
   const [backendOk, setBackendOk] = useState(false)
   const chatAbortRef = useRef<AbortController | null>(null)
   const stoppingRef = useRef(false)
+  const chatStreamGenRef = useRef(0)
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -270,11 +271,11 @@ export default function ChatApp() {
       if (health.llm_configured && models.length) {
         setLlmLabel(`${models.length} 个可用模型`)
       } else {
-        setLlmLabel(health.llm_configured ? 'LLM 已配置' : 'LLM 未配置')
+        setLlmLabel(health.llm_configured ? '模型已就绪' : '请先在设置中配置 AI 模型')
       }
     } catch {
       setBackendOk(false)
-      setLlmLabel('API 未连接')
+      setLlmLabel('服务未连接，请检查网络')
     }
   }, [refreshModels])
 
@@ -291,6 +292,7 @@ export default function ChatApp() {
   }, [])
 
   const loadSession = useCallback(async (id: string) => {
+    pushComposerDraft('')
     const data = await getSession(id)
     setActiveId(id)
     setActiveSessionMeta(data.session)
@@ -299,7 +301,7 @@ export default function ChatApp() {
     setSessionModelState(data.session.model)
     setError('')
     setChatScrollEpoch(epoch => epoch + 1)
-  }, [])
+  }, [pushComposerDraft])
 
   useEffect(() => {
     let cancelled = false
@@ -349,6 +351,14 @@ export default function ChatApp() {
   const handleExitSettings = useCallback(() => {
     navigate('chat')
   }, [navigate])
+
+  const handleChromeGoBack = useCallback(() => {
+    if (view === 'settings' && !canGoBack) {
+      handleExitSettings()
+      return
+    }
+    goBack()
+  }, [view, canGoBack, goBack, handleExitSettings])
 
   const restoreChatColumn = useCallback(() => {
     if (!chatVisible && canToggleChatColumn) {
@@ -406,13 +416,16 @@ export default function ChatApp() {
       if (view !== 'chat') navigate('chat')
       return
     }
+    if (loading) {
+      await abortActiveChatStream()
+    }
     try {
       await loadSession(id)
       if (view !== 'chat') navigate('chat')
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载对话失败')
     }
-  }, [activeId, loadSession, navigate, restoreChatColumn, view])
+  }, [abortActiveChatStream, activeId, loadSession, loading, navigate, restoreChatColumn, view])
 
   const handleDelete = useCallback(async (id: string) => {
     const ok = await confirm({
@@ -615,6 +628,7 @@ export default function ChatApp() {
 
   const handleStop = useCallback(async () => {
     if (!loading || stoppingRef.current) return
+    chatStreamGenRef.current += 1
     stoppingRef.current = true
     const sid = activeId
     if (sid) {
@@ -627,11 +641,39 @@ export default function ChatApp() {
     chatAbortRef.current?.abort()
   }, [activeId, loading])
 
-  const handleSubmit = async (text?: string) => {
-    const msg = (text ?? '').trim()
-    if (!msg || loading) return
+  const abortActiveChatStream = useCallback(async () => {
+    if (!loading && !chatAbortRef.current) return
+    chatStreamGenRef.current += 1
+    stoppingRef.current = true
+    const sid = activeId
+    chatAbortRef.current?.abort()
+    if (sid) {
+      try {
+        await cancelSessionChat(sid)
+      } catch {
+        /* stream may have already ended */
+      }
+    }
+    streamUiRef.current?.resetStreamUi()
+    setLoading(false)
+    stoppingRef.current = false
+    chatAbortRef.current = null
+  }, [activeId, loading])
 
-    let sessionId = activeId
+  const activeIdRef = useRef(activeId)
+  const loadingRef = useRef(loading)
+  const sessionModelRef = useRef(sessionModel)
+  activeIdRef.current = activeId
+  loadingRef.current = loading
+  sessionModelRef.current = sessionModel
+
+  const submitImplRef = useRef<(text?: string) => Promise<void>>(async () => {})
+
+  submitImplRef.current = async (text?: string) => {
+    const msg = (text ?? '').trim()
+    if (!msg || loadingRef.current) return
+
+    let sessionId = activeIdRef.current
     if (!sessionId) {
       try {
         const { session } = await createSession()
@@ -645,6 +687,7 @@ export default function ChatApp() {
     }
 
     setLoading(true)
+    const streamGen = ++chatStreamGenRef.current
     const streamUi = streamUiRef.current
     streamUi?.setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
     streamUi?.setPendingUserPrompt(null)
@@ -716,18 +759,22 @@ export default function ChatApp() {
         if (event.type === 'done') {
           resolvedSessionId = event.session_id || resolvedSessionId
         }
-      }, sessionModel, abortController.signal)
+      }, sessionModelRef.current, abortController.signal)
+
+      if (streamGen !== chatStreamGenRef.current) return
 
       const sid = resolvedSessionId
       if (sid !== sessionId) {
         setActiveId(sid)
       }
       const fresh = await getSession(sid)
+      if (streamGen !== chatStreamGenRef.current) return
       setActiveSessionMeta(fresh.session)
       setMessages(fresh.messages)
       setContextRef(fresh.contextRef ?? null)
       setSessionModelState(fresh.session.model)
       const list = await refreshSessions()
+      if (streamGen !== chatStreamGenRef.current) return
       setSessions(list)
     } catch (e) {
       const aborted = (
@@ -735,30 +782,41 @@ export default function ChatApp() {
         || (e instanceof Error && e.name === 'AbortError')
       )
       if (aborted) {
+        if (streamGen !== chatStreamGenRef.current) return
         try {
           const fresh = await getSession(sessionId)
+          if (streamGen !== chatStreamGenRef.current) return
           setActiveSessionMeta(fresh.session)
           setMessages(fresh.messages)
           setContextRef(fresh.contextRef ?? null)
           setSessionModelState(fresh.session.model)
           const list = await refreshSessions()
+          if (streamGen !== chatStreamGenRef.current) return
           setSessions(list)
         } catch {
           /* keep current messages */
         }
         return
       }
+      if (streamGen !== chatStreamGenRef.current) return
       pushComposerDraft(msg)
       setError(e instanceof Error ? e.message : '发送失败')
       try {
         const fresh = await getSession(sessionId)
+        if (streamGen !== chatStreamGenRef.current) return
         setActiveSessionMeta(fresh.session)
         setMessages(fresh.messages)
         setContextRef(fresh.contextRef ?? null)
       } catch {
+        if (streamGen !== chatStreamGenRef.current) return
         setMessages(prev => prev.slice(0, -1))
       }
     } finally {
+      if (streamGen !== chatStreamGenRef.current) {
+        chatAbortRef.current = null
+        stoppingRef.current = false
+        return
+      }
       chatAbortRef.current = null
       stoppingRef.current = false
       streamUiRef.current?.resetStreamUi()
@@ -766,11 +824,15 @@ export default function ChatApp() {
     }
   }
 
+  const handleSubmit = useCallback((text?: string) => {
+    void submitImplRef.current(text)
+  }, [])
+
   const handleStreamError = useCallback((message: string) => {
     setError(message)
   }, [])
 
-  const handleForkFromMessage = async (messageIndex: number) => {
+  const handleForkFromMessage = useCallback(async (messageIndex: number) => {
     if (!activeId) return
     try {
       const data = await forkSession(activeId, messageIndex)
@@ -787,9 +849,9 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '分叉对话失败')
     }
-  }
+  }, [activeId, closeDrawer, navigate, pushComposerDraft, refreshSessions, view])
 
-  const handleClearContextRef = async () => {
+  const handleClearContextRef = useCallback(async () => {
     if (!activeId) return
     try {
       await clearSessionContext(activeId)
@@ -797,9 +859,9 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '移除引用失败')
     }
-  }
+  }, [activeId])
 
-  const handleQuoteSelection = async (selection: MessageSelection) => {
+  const handleQuoteSelection = useCallback(async (selection: MessageSelection) => {
     if (!activeId) return
     try {
       const at = messages[selection.messageIndex]?.at ?? new Date().toISOString()
@@ -822,13 +884,14 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '设置引用失败')
     }
-  }
+  }, [activeId, messages])
 
   const handleFocusStockConsumed = useCallback(() => {
     setFocusStockCode(null)
   }, [])
 
   const handleStockDiscuss = useCallback(async (payload: StockDiscussPayload) => {
+    restoreChatColumn()
     if (!activeId) {
       setError('请先新建或选择一个对话')
       return
@@ -853,9 +916,9 @@ export default function ChatApp() {
       pushComposerDraft(payload.prompt)
       setError('')
     } catch (e) {
-      setError(e instanceof Error ? e.message : '设置研讨上下文失败')
+      setError(e instanceof Error ? e.message : '无法开始讨论，请稍后重试')
     }
-  }, [activeId, pushComposerDraft])
+  }, [activeId, pushComposerDraft, restoreChatColumn])
 
   const handleDiscussArticle = useCallback(async (article: FeedArticle) => {
     restoreChatColumn()
@@ -896,7 +959,7 @@ export default function ChatApp() {
     return reply
   }, [activeId, sessionModel])
 
-  const handleModelChange = async (ref: string) => {
+  const handleModelChange = useCallback(async (ref: string) => {
     setSessionModelState(ref)
     if (!activeId) return
     try {
@@ -907,7 +970,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '切换模型失败')
     }
-  }
+  }, [activeId])
 
   const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
@@ -1024,11 +1087,11 @@ export default function ChatApp() {
           showSidebarToggle={!isSettings || sidebarOverlayMode}
           sidebarHoverReveal={sidebarOverlayMode}
           onRevealSidebar={handleEdgeRevealSidebar}
-          canGoBack={!isSettings && canGoBack}
+          canGoBack={isSettings || canGoBack}
           canGoForward={!isSettings && canGoForward}
           onToggleSidebar={handleToggleSidebar}
           onNewChat={handleNew}
-          onGoBack={!isSettings ? goBack : undefined}
+          onGoBack={handleChromeGoBack}
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}

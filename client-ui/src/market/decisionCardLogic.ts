@@ -3,7 +3,7 @@ import type { ChipDistributionPoint, StockMoneyFlowItem, WatchlistItem } from '.
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { positiveFactorBullet, riskFactorBullet } from './factorLabels'
 import { formatCompactNumber, formatPct, formatPrice } from './format'
-import { formatScoreExplanation, formatScoreSummary, scoreGrade } from './scoreGrade'
+import { formatScoreExplanation, formatScoreSummary, formatScorecardDisplayName, scoreGrade } from './scoreGrade'
 import { formatValuationDisplay } from './watchlistRadar'
 
 export function formatStrategyDisplay(strategy: StrategySignalData | null): string | null {
@@ -173,7 +173,7 @@ export function buildDecisionCardViewModel(input: {
     grade: scoreGrade(totalScore),
     scoreSummary: formatScoreSummary(totalScore),
     scoreExplanation: formatScoreExplanation(totalScore),
-    scorecardLabel: scorecard,
+    scorecardLabel: scorecard ? formatScorecardDisplayName(scorecard) : null,
     gbmLabel,
     strategySummary: formatStrategyDisplay(input.strategy),
     institutionLabel,
@@ -204,8 +204,8 @@ export function buildStockResearchContext(input: {
     '## 摘要',
     `- 现价：${vm.priceLabel}`,
     vm.grade ? `- 综合评分：${vm.scoreSummary}` : '- 综合评分：待评估',
-    vm.scorecardLabel ? `- 评分模板：${vm.scorecardLabel}` : null,
-    vm.gbmLabel ? `- G=B+M：${vm.gbmLabel}` : null,
+    vm.scorecardLabel ? `- 评分方式：${vm.scorecardLabel}` : null,
+    vm.gbmLabel ? `- 基本面与动量：${vm.gbmLabel}` : null,
     vm.scoreExplanation ? `- 评分说明：${vm.scoreExplanation}` : null,
     vm.strategySummary ? `- 策略倾向：${vm.strategySummary}` : null,
     vm.institutionLabel ? `- 机构共识：${vm.institutionLabel}` : null,
@@ -215,8 +215,8 @@ export function buildStockResearchContext(input: {
     vm.flowLabel ? `- 资金：${vm.flowLabel}` : null,
     stock.note ? `- 关注备注：${stock.note}` : null,
     '',
-    '## 投资逻辑（因子）',
-    ...(vm.thesis.length ? vm.thesis.map(t => `- ${t}`) : ['- （暂无显著正向因子，需结合定性判断）']),
+    '## 看好理由',
+    ...(vm.thesis.length ? vm.thesis.map(t => `- ${t}`) : ['- （暂无显著正向亮点，需结合定性判断）']),
     '',
     '## 风险提示',
     ...(vm.risks.length ? vm.risks.map(t => `- ${t}`) : ['- （暂无显著风险项）']),

@@ -258,6 +258,7 @@ export default function MultimodalSettingsSection() {
       .catch((e: unknown) => {
         setSaveState('error')
         toast.showError(e instanceof Error ? e.message : '保存失败')
+        window.setTimeout(() => setSaveState('idle'), 2000)
       })
   }, [settings.enrichment, settings.translation, loading, refreshStatus, toast], SETTINGS_SAVE_MS)
 
@@ -285,7 +286,14 @@ export default function MultimodalSettingsSection() {
     }
   }
 
-  const saveHintText = saveState === 'pending' ? '保存中…' : saveState === 'saved' ? '已保存' : ''
+  const saveHintText = (() => {
+    switch (saveState) {
+      case 'pending': return '保存中…'
+      case 'saved': return '已保存'
+      case 'error': return '保存失败，请重试'
+      default: return ''
+    }
+  })()
 
   const engineHint = (() => {
     if (!settings.enrichment.enabled) {

@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, memo } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
@@ -266,7 +266,7 @@ interface ChatViewProps {
   onStreamError?: (message: string) => void
 }
 
-export default function ChatView({
+function ChatView({
   title = '新对话', titleSlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
@@ -289,6 +289,12 @@ export default function ChatView({
   const userPromptSubmittingRef = useRef(userPromptSubmitting)
   pendingUserPromptRef.current = pendingUserPrompt
   userPromptSubmittingRef.current = userPromptSubmitting
+
+  useEffect(() => {
+    setLiveTrace(null)
+    setPendingUserPrompt(null)
+    setUserPromptSubmitting(false)
+  }, [sessionId])
 
   useEffect(() => {
     if (!streamUiRef) return undefined
@@ -689,3 +695,5 @@ export default function ChatView({
     </div>
   )
 }
+
+export default memo(ChatView)

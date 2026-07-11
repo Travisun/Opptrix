@@ -104,7 +104,7 @@ const useStyles = makeStyles({
     },
   },
   stepLabelError: {
-    color: '#B42318',
+    color: opptrixCssVars.error,
   },
   stepBody: {
     padding: '0 10px 8px 30px',

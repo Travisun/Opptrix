@@ -126,6 +126,8 @@ const useStyles = makeStyles({
 })
 
 interface Props {
+  /** Right panel shell is open (not collapsed to zero width). */
+  panelVisible?: boolean
   electronChrome?: boolean
   chatColumnVisible?: boolean
   /** Skip left global toolbar band when sidebar overlay + panel spans full width. */
@@ -140,6 +142,7 @@ interface Props {
 }
 
 function RightMarketPanel({
+  panelVisible = true,
   electronChrome = false,
   chatColumnVisible = true,
   chromeToolbarReserve = 0,
@@ -152,6 +155,7 @@ function RightMarketPanel({
 }: Props) {
   const s = useStyles()
   const { items, addItem, updateItem, removeItem } = useWatchlist()
+  const [tab, setTab] = useState<MarketTab>('watchlist')
   const {
     holdingsByCode,
     loadTrades,
@@ -159,8 +163,9 @@ function RightMarketPanel({
     deleteTrade,
     clearPortfolioForCode,
     refreshHoldings,
-  } = useFollowPortfolio()
-  const [tab, setTab] = useState<MarketTab>('watchlist')
+  } = useFollowPortfolio({
+    enabled: panelVisible && (tab === 'watchlist' || tab === 'portfolio'),
+  })
   const [selected, setSelected] = useState<WatchlistItem | null>(null)
   const [manageStock, setManageStock] = useState<WatchlistItem | null>(null)
   const [dialogPrice, setDialogPrice] = useState<number | null>(null)
@@ -273,6 +278,28 @@ function RightMarketPanel({
     handleSelect(normalizeWatchlistItem(item))
   }, [handleSelect])
 
+  const handleRemove = useCallback((item: WatchlistItem) => {
+    const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
+    void clearPortfolioForCode(item.code, ref.market)
+    removeItem(item.code)
+    const selectedKey = selected
+      ? watchlistItemKey(normalizeWatchlistItem(selected))
+      : null
+    const removedKey = watchlistItemKey(normalizeWatchlistItem(item))
+    if (selected?.code === item.code || selectedKey === removedKey) {
+      setSelected(null)
+      setTab('watchlist')
+    }
+    if (manageStock?.code === item.code) {
+      setManageStock(null)
+      setDialogPrice(null)
+    }
+  }, [clearPortfolioForCode, removeItem, selected, manageStock])
+
+  const handleManageClick = useCallback((item: WatchlistItem) => {
+    void handleManage(item)
+  }, [handleManage])
+
   useEffect(() => {
     if (!focusStockCode) return
     handlePortfolioSelect(focusStockCode)
@@ -367,35 +394,20 @@ function RightMarketPanel({
       <div className={s.content}>
         <div className={mergeClasses(s.tabPane, tab !== 'watchlist' && s.tabPaneHidden)}>
           <WatchlistTab
+            active={panelVisible && tab === 'watchlist'}
             items={items}
             selectedCode={selectedCode}
             holdingsByCode={holdingsByCode}
             onSelect={handleSelect}
-            onManage={item => { void handleManage(item) }}
+            onManage={handleManageClick}
             onAdd={handleAdd}
             onPatchItem={updateItem}
-            onRemove={item => {
-              const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
-              void clearPortfolioForCode(item.code, ref.market)
-              removeItem(item.code)
-              const selectedKey = selected
-                ? watchlistItemKey(normalizeWatchlistItem(selected))
-                : null
-              const removedKey = watchlistItemKey(normalizeWatchlistItem(item))
-              if (selected?.code === item.code || selectedKey === removedKey) {
-                setSelected(null)
-                setTab('watchlist')
-              }
-              if (manageStock?.code === item.code) {
-                setManageStock(null)
-                setDialogPrice(null)
-              }
-            }}
+            onRemove={handleRemove}
           />
         </div>
         <div className={mergeClasses(s.tabPane, tab !== 'portfolio' && s.tabPaneHidden)}>
           <PortfolioTab
-            active={tab === 'portfolio'}
+            active={panelVisible && tab === 'portfolio'}
             selectedCode={selectedCode}
             onSelect={handlePortfolioSelect}
           />

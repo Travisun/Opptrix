@@ -77,13 +77,17 @@ export const WORKSPACE_PANEL_HYSTERESIS = 28
 export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
   WORKSPACE_CHAT_RIGHT_MIN_WIDTH + WORKSPACE_PANEL_HYSTERESIS
 
-/** Title bar stacking — overlay sidebar sits between title and toolbar */
+/**
+ * Title bar stacking (low → high). Keep in sync with engineering-guidelines / DESKTOP.md.
+ * 1100 title drag layer → 1150 overlay sidebar → 1200 panel title bands →
+ * 1300 global toolbar + window controls → 1310 clickable session title.
+ */
 export const DESKTOP_Z_TITLE = 1100
-export const DESKTOP_Z_PANEL_TITLE = 1200
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
+export const DESKTOP_Z_PANEL_TITLE = 1200
 /** Global fixed toolbar / window controls — always above panel title bands */
 export const DESKTOP_Z_CHROME_TOOLS = 1300
-/** Clickable session title — above drag layer, below window controls hit targets */
+/** Clickable session title — above chrome tools hit layer when overlapping */
 export const DESKTOP_Z_TITLE_INTERACTIVE = 1310
 
 /** Reserve for chat title-bar panel toggle buttons (2 × tool + gap) */

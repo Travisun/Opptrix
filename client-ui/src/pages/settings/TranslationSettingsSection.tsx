@@ -440,6 +440,7 @@ export default function TranslationSettingsSection() {
       .catch((e: unknown) => {
         setSaveState('error')
         toast.showError(e instanceof Error ? e.message : '保存失败')
+        window.setTimeout(() => setSaveState('idle'), 2000)
       })
   }, [
     settings.translation.service_mode,
@@ -476,6 +477,7 @@ export default function TranslationSettingsSection() {
     switch (saveState) {
       case 'pending': return '保存中…'
       case 'saved': return '已保存'
+      case 'error': return '保存失败，请重试'
       default: return ''
     }
   })()

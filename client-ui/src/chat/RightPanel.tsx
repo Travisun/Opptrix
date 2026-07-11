@@ -98,6 +98,7 @@ function RightPanel({
         aria-hidden={!visible}
       >
         <RightMarketPanel
+          panelVisible={visible}
           electronChrome={electronChrome}
           chatColumnVisible={chatColumnVisible}
           chromeToolbarReserve={chromeToolbarReserve}

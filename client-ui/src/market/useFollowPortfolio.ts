@@ -5,7 +5,8 @@ import { normalizeCode, portfolioHoldingsKey } from './format'
 
 export type HoldingSnapshot = PortfolioSummaryData['holdings'][number]
 
-export function useFollowPortfolio() {
+export function useFollowPortfolio(options?: { enabled?: boolean }) {
+  const enabled = options?.enabled ?? true
   const [holdingsByCode, setHoldingsByCode] = useState<Record<string, HoldingSnapshot>>({})
   const [loading, setLoading] = useState(false)
   const tradesCache = useRef<Record<string, PortfolioTradeItem[]>>({})
@@ -32,10 +33,11 @@ export function useFollowPortfolio() {
   }, [])
 
   useEffect(() => {
+    if (!enabled) return undefined
     void refreshHoldings()
     const timer = window.setInterval(() => { void refreshHoldings() }, 20000)
     return () => window.clearInterval(timer)
-  }, [refreshHoldings])
+  }, [refreshHoldings, enabled])
 
   const loadTrades = useCallback(async (code: string, market?: string) => {
     const cacheKey = tradeCacheKey(code, market)

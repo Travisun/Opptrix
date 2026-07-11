@@ -298,9 +298,16 @@ html.opptrix-electron .opptrix-glass-sidebar {
 }
 
 /* Isolate top menu icons from backdrop-filter repaints triggered by chat-area animations */
-html.opptrix-electron .opptrix-glass-sidebar .opptrix-sidebar-menu {
+html.opptrix-electron .opptrix-glass-sidebar .opptrix-sidebar-menu,
+html.opptrix-electron .opptrix-overlay-sidebar .opptrix-sidebar-menu {
   transform: translateZ(0);
   will-change: transform;
+}
+
+html.opptrix-electron .opptrix-overlay-sidebar {
+  background: var(--opptrix-sidebar-glass) !important;
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 
 [data-theme="dark"] .opptrix-overlay-sidebar {

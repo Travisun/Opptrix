@@ -681,7 +681,7 @@ export default function IndustryTab({ onSelectStock }: IndustryTabProps) {
           <Text className={s.meta}>{quoteStatusHint(quoteDate, useLiveList)}</Text>
         ) : null}
         {tradeDate && tradeDate !== quoteDate ? (
-          <Text className={s.meta}>因子日期 {tradeDate}</Text>
+          <Text className={s.meta}>统计日期 {tradeDate}</Text>
         ) : null}
         {error ? <Text className={s.meta} style={{ color: opptrixCssVars.error }}>{error}</Text> : null}
       </div>

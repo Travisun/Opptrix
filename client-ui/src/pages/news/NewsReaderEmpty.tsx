@@ -55,9 +55,10 @@ const useStyles = makeStyles({
 
 type Props = {
   hasArticles: boolean
+  hasSubscriptions?: boolean
 }
 
-export default function NewsReaderEmpty({ hasArticles }: Props) {
+export default function NewsReaderEmpty({ hasArticles, hasSubscriptions = false }: Props) {
   const s = useStyles()
 
   if (hasArticles) {
@@ -84,7 +85,9 @@ export default function NewsReaderEmpty({ hasArticles }: Props) {
         </div>
         <Text className={s.title} block>还没有可读的资讯</Text>
         <Text className={s.hint} block>
-          前往「订阅设置」添加 RSS 源，刷新后即可在这里浏览
+          {hasSubscriptions
+            ? '点击上方刷新，获取最新资讯后即可在这里阅读'
+            : '前往「订阅设置」添加资讯来源，点击刷新后即可在这里阅读'}
         </Text>
       </div>
     </div>
