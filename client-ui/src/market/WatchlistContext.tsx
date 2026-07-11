@@ -136,8 +136,22 @@ export function WatchlistProvider({ children }: { children: ReactNode }) {
   )
 }
 
+const EMPTY_WATCHLIST: WatchlistContextValue = {
+  items: [],
+  addItem: () => {},
+  updateItem: () => {},
+  removeItem: () => {},
+  reorderItem: () => {},
+  setItems: () => {},
+}
+
 export function useWatchlist(): WatchlistContextValue {
   const ctx = useContext(WatchlistContext)
-  if (!ctx) throw new Error('useWatchlist must be used within WatchlistProvider')
+  if (!ctx) {
+    if (import.meta.env.DEV) {
+      console.warn('[Watchlist] useWatchlist called outside WatchlistProvider — using empty fallback')
+    }
+    return EMPTY_WATCHLIST
+  }
   return ctx
 }

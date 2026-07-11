@@ -27,9 +27,9 @@ import {
 import { electronPlatform } from '../platform/detect'
 import { research } from '../api/client'
 import { portfolioHoldingsKey } from './format'
-import { instrumentKey, parseInstrumentInput, resolveWatchlistInstrument } from './instrument'
 import {
   detailPanelKind,
+  instrumentKey,
   normalizeWatchlistItem,
   parseInstrumentInput,
   resolveWatchlistInstrument,
