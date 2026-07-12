@@ -384,9 +384,19 @@ export interface EtfProfileData {
   totalDividends?: number | null
   dividendCount?: number | null
   reportDate?: string
+  reportPeriods?: string[]
   assetAllocation?: Array<{ name: string; ratio: string }>
   industryAllocation?: Array<{ name: string; ratio: string }>
   topHoldings?: Array<{ name: string; code: string; ratio: string; rate?: string }>
+  bondHoldings?: Array<{ name: string; ratio?: string }>
+  fundHoldings?: Array<{ name: string; ratio?: string }>
+  commodityHoldings?: Array<{ name: string; ratio?: string }>
+  productHoldings?: Array<{ name: string; ratio?: string }>
+  totalStock?: number | null
+  totalBond?: number | null
+  totalFund?: number | null
+  totalCommodity?: number | null
+  totalProduct?: number | null
   performance?: {
     w1?: number | null
     w4?: number | null
@@ -428,6 +438,7 @@ export interface EtfHoldingRow {
   weight?: number | null
   shares?: number | null
   marketValue?: number | null
+  assetType?: string
 }
 
 export interface EtfSnapshotData {

@@ -98,8 +98,18 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
       row.assetAllocation = assetData.asset ?? []
       row.industryAllocation = assetData.industry ?? []
       row.topHoldings = Array.isArray(assetData.stock) ? (assetData.stock as unknown[]).slice(0, 10) : []
+      row.bondHoldings = assetData.bond ?? []
+      row.fundHoldings = assetData.fund ?? []
+      row.commodityHoldings = assetData.commodity ?? []
+      row.productHoldings = assetData.product ?? []
+      row.totalStock = safeFloat(assetData.total_stock)
+      row.totalBond = safeFloat(assetData.total_bond)
+      row.totalFund = safeFloat(assetData.total_fund)
+      row.totalCommodity = safeFloat(assetData.total_commodity)
+      row.totalProduct = safeFloat(assetData.total_product)
       row.reportDate = String(assetData.report_time ?? '').slice(0, 10) || undefined
       row.totalAUM = String(assetData.total_money ?? '').trim() || undefined
+      row.reportPeriods = assetData.selector ?? []
     }
 
     // 业绩排名
@@ -180,15 +190,15 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
    *
    * @sourceUrl https://zxg.txfund.com/ifzqgtimg/appstock/fund/baseInfo/asset?code={market}{code}
    * @param etfCode 6 位 ETF 代码
-   * @returns 标准 etfHoldings 行数组（reportDate, holdingSymbol, holdingName, weight, source），失败返回 null
+   * @returns 标准 etfHoldings 行数组（reportDate, holdingSymbol, holdingName, weight, assetType, source），失败返回 null
    * @usage `engine.queryInstrumentData(ref, { capability: "etfHoldings" })`
-   * @remarks 使用 fundAsset 接口的 stock[] 数组，映射为 StandardEtfHoldingRow 格式。
-   *   返回前十大持仓（stock[] 通常为 10 条）。
+   * @remarks 使用 fundAsset 接口，合并 stock[] / bond[] / fund[] / commodity[] / product[] 为统一持仓行。
+   *   每行附带 assetType 标识资产类别（stock / bond / fund / commodity / product）。
    * @example
    * ```ts
    * const handler = new TencentCnHandler()
    * const holdings = await handler.etfHoldings('159971')
-   * // [{ reportDate: '2026-03-31', holdingSymbol: '300750', holdingName: '宁德时代', weight: 19.65, ... }, ...]
+   * // [{ reportDate: '2026-03-31', holdingSymbol: '300750', holdingName: '宁德时代', weight: 19.65, assetType: 'stock', ... }, ...]
    * ```
    */
   p.etfHoldings = async function etfHoldings(etfCode: string): Promise<Record<string, unknown>[] | null> {
@@ -199,26 +209,109 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
     if (!result) return null
 
     const assetData = (result.data ?? result) as Record<string, unknown>
-    const stocks = assetData.stock as unknown[] | undefined
-    if (!Array.isArray(stocks)) return null
-
     const reportDate = String(assetData.report_time ?? '').slice(0, 10)
 
     const rows: Record<string, unknown>[] = []
-    for (const s of stocks) {
-      const item = s as Record<string, unknown>
-      const symbol = normalizeCode(String(item.code ?? item.symbol ?? ''))
-      if (!symbol) continue
-      rows.push({
-        reportDate,
-        holdingSymbol: symbol,
-        holdingName: String(item.name ?? '').trim() || null,
-        weight: safeFloat(item.ratio ?? item.weight),
-        changePct: safeFloat(item.rate),
-        shares: null,
-        marketValue: null,
-        source: 'tencent_fund_asset',
-      })
+
+    // 股票持仓
+    const stocks = assetData.stock as unknown[] | undefined
+    if (Array.isArray(stocks)) {
+      for (const s of stocks) {
+        const item = s as Record<string, unknown>
+        const symbol = normalizeCode(String(item.code ?? item.symbol ?? ''))
+        if (!symbol) continue
+        rows.push({
+          reportDate,
+          holdingSymbol: symbol,
+          holdingName: String(item.name ?? '').trim() || null,
+          weight: safeFloat(item.ratio ?? item.weight),
+          changePct: safeFloat(item.rate),
+          assetType: 'stock',
+          shares: null,
+          marketValue: null,
+          source: 'tencent_fund_asset',
+        })
+      }
+    }
+
+    // 债券持仓
+    const bonds = assetData.bond as unknown[] | undefined
+    if (Array.isArray(bonds)) {
+      for (const b of bonds) {
+        const item = b as Record<string, unknown>
+        const name = String(item.name ?? item.bondName ?? '').trim()
+        if (!name) continue
+        rows.push({
+          reportDate,
+          holdingSymbol: String(item.code ?? item.symbol ?? '').trim() || null,
+          holdingName: name,
+          weight: safeFloat(item.ratio ?? item.weight),
+          assetType: 'bond',
+          shares: null,
+          marketValue: null,
+          source: 'tencent_fund_asset',
+        })
+      }
+    }
+
+    // 基金持仓（FOF 等）
+    const funds = assetData.fund as unknown[] | undefined
+    if (Array.isArray(funds)) {
+      for (const f of funds) {
+        const item = f as Record<string, unknown>
+        const name = String(item.name ?? item.fundName ?? '').trim()
+        if (!name) continue
+        rows.push({
+          reportDate,
+          holdingSymbol: String(item.code ?? item.symbol ?? '').trim() || null,
+          holdingName: name,
+          weight: safeFloat(item.ratio ?? item.weight),
+          assetType: 'fund',
+          shares: null,
+          marketValue: null,
+          source: 'tencent_fund_asset',
+        })
+      }
+    }
+
+    // 商品持仓
+    const commodities = assetData.commodity as unknown[] | undefined
+    if (Array.isArray(commodities)) {
+      for (const c of commodities) {
+        const item = c as Record<string, unknown>
+        const name = String(item.name ?? '').trim()
+        if (!name) continue
+        rows.push({
+          reportDate,
+          holdingSymbol: null,
+          holdingName: name,
+          weight: safeFloat(item.ratio ?? item.weight),
+          assetType: 'commodity',
+          shares: null,
+          marketValue: null,
+          source: 'tencent_fund_asset',
+        })
+      }
+    }
+
+    // 产品持仓（其他）
+    const products = assetData.product as unknown[] | undefined
+    if (Array.isArray(products)) {
+      for (const pr of products) {
+        const item = pr as Record<string, unknown>
+        const name = String(item.name ?? '').trim()
+        if (!name) continue
+        rows.push({
+          reportDate,
+          holdingSymbol: null,
+          holdingName: name,
+          weight: safeFloat(item.ratio ?? item.weight),
+          assetType: 'product',
+          shares: null,
+          marketValue: null,
+          source: 'tencent_fund_asset',
+        })
+      }
     }
 
     return rows.length ? rows : null
