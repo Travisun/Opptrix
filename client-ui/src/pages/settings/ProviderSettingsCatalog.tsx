@@ -366,14 +366,21 @@ export function useProviderCatalog() {
   }, [toast])
 
   useEffect(() => {
-    let cancelled = false
-    void refresh()
-    // Safety timeout for Electron
-    const timer = setTimeout(() => {
-      if (!cancelled) setLoading(false)
-    }, 12000)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [refresh])
+    let active = true
+    getProviderCatalog()
+      .then((data) => {
+        if (!active) return
+        setLoading(false)
+        setCatalog(data)
+      })
+      .catch((e) => {
+        if (active) {
+          setLoading(false)
+          toast.showError(e instanceof Error ? e.message : '无法读取数据源列表')
+        }
+      })
+    return () => { active = false }
+  }, [toast])
 
   return { catalog, loading, refresh, setCatalog }
 }
@@ -427,13 +434,23 @@ function InstalledProvidersSection({ onChanged }: { onChanged: () => void }) {
   }, [])
 
   useEffect(() => {
-    let cancelled = false
-    void refresh()
-    const timer = setTimeout(() => {
-      if (!cancelled) setLoading(false)
-    }, 12000)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [refresh])
+    let active = true
+    listInstalledProviders()
+      .then((data) => {
+        if (!active) return
+        setLoading(false)
+        setItems(data.providers)
+        setProvidersDir(data.providersDir ?? '')
+      })
+      .catch(() => {
+        if (active) {
+          setLoading(false)
+          setItems([])
+          setProvidersDir('')
+        }
+      })
+    return () => { active = false }
+  }, [])
 
   const handleRescan = async () => {
     setScanning(true)

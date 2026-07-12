@@ -372,13 +372,8 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   const dismissedRef = useRef(false)
 
   useEffect(() => {
-    if (!version || loadError || loadingState) {
-      console.log('[gate] skip check: version=', version, 'loadError=', loadError, 'loadingState=', loadingState)
-      return
-    }
-    const show = shouldShowOnboarding(priorState, version)
-    console.log('[gate] shouldShow:', show, 'dismissed=', dismissed, 'version=', version, 'priorState=', priorState?.completedAt)
-    if (show) {
+    if (!version || loadError || loadingState) return
+    if (shouldShowOnboarding(priorState, version)) {
       setDismissed(false)
       dismissedRef.current = false
     } else {
@@ -402,7 +397,6 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
-      console.log('[gate] visible, dismissedRef=', dismissedRef.current)
       if (dismissedRef.current) return
       void reloadVersion()
       void reload()

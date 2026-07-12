@@ -341,25 +341,27 @@ function SettingsPageView({
 
   useEffect(() => {
     if (!needsConfig || config !== null) return
-    console.log('[settings] loading config...')
-    let cancelled = false
+    let active = true
     setLoading(true)
-    refresh()
-      .then(() => { if (!cancelled) console.log('[settings] config loaded') })
+    getConfig()
+      .then((cfg) => {
+        if (!active) return
+        setLoading(false)
+        setConfig(cfg)
+        const baseline = cfg.default_scorecard || '综合评估'
+        scorecardBaseline.current = baseline
+        skipScorecardSave.current = true
+        setScorecard(baseline)
+      })
       .catch((e) => {
         console.error('[settings] config load failed:', e)
-        if (!cancelled) toast.showError('无法读取后端配置，请确认服务已启动')
+        if (active) {
+          setLoading(false)
+          toast.showError('无法读取后端配置，请确认服务已启动')
+        }
       })
-      .finally(() => {
-        if (!cancelled) { setLoading(false); console.log('[settings] loading=false') }
-      })
-    // Safety timeout: if getConfig() hangs (e.g. Electron IPC issue),
-    // ensure loading resolves so settings content can render.
-    const timer = setTimeout(() => {
-      if (!cancelled) setLoading(false)
-    }, 12000)
-    return () => { cancelled = true; clearTimeout(timer) }
-  }, [needsConfig, config, refresh, toast])
+    return () => { active = false }
+  }, [needsConfig, toast])
 
   useEffect(() => {
     if (section !== 'discover_strategies' && !searchActive) return

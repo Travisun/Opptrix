@@ -18,29 +18,19 @@ function clientBuildVersion(): string | null {
 async function resolveAppVersion(): Promise<string | null> {
   if (isElectron()) {
     try {
-      console.log('[version] trying electron clientVersion...')
       const fromElectron = (await window.electronAPI?.clientVersion?.())?.trim()
-      console.log('[version] electron result:', fromElectron)
       if (fromElectron) return normalizeAppVersion(fromElectron)
-    } catch (e) {
-      console.warn('[version] electron clientVersion failed:', e)
-    }
+    } catch { /* fall through */ }
   }
 
   const fromBuild = clientBuildVersion()
-  if (fromBuild) {
-    console.log('[version] using build version:', fromBuild)
-    return fromBuild
-  }
+  if (fromBuild) return fromBuild
 
   try {
-    console.log('[version] trying health...')
     const health = await getHealth()
     const fromHealth = health.version?.trim()
-    console.log('[version] health version:', fromHealth)
     return fromHealth ? normalizeAppVersion(fromHealth) : null
-  } catch (e) {
-    console.warn('[version] health failed:', e)
+  } catch {
     return null
   }
 }
@@ -56,26 +46,17 @@ export function useAppVersion(): {
   const pendingRef = useRef(0)
 
   const reload = useCallback(async () => {
-    const generation = ++pendingRef.current
+    const gen = ++pendingRef.current
     setLoading(true)
     const v = await resolveAppVersion()
-    if (generation !== pendingRef.current) return
-    setVersion(v)
+    // Set loading BEFORE setVersion to avoid re-render race
+    if (gen !== pendingRef.current) return
     setLoading(false)
+    setVersion(v)
   }, [])
 
   useEffect(() => {
-    let cancelled = false
     void reload()
-    // Safety timeout: if resolveAppVersion() hangs (e.g. Electron IPC stuck),
-    // ensure loading resolves so the gate can render children.
-    const timer = setTimeout(() => {
-      if (!cancelled) setLoading(false)
-    }, 8000)
-    return () => {
-      cancelled = true
-      clearTimeout(timer)
-    }
   }, [reload])
 
   const label = version ? `v${version}` : null
