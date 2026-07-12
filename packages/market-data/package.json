@@ -21,7 +21,8 @@
     "@opptrix/shared": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
-    "better-sqlite3": "^11.7.0"
+    "better-sqlite3": "^11.7.0",
+    "parquet-wasm": "^0.7.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"

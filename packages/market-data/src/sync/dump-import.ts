@@ -1,10 +1,11 @@
 /**
  * Parquet dump import from tonghuashun (同花顺) API.
  *
- * Downloads Parquet dumps (daily K / adjustment factors), parses them,
- * and imports into local SQLite for offline factor screening.
+ * Downloads Parquet dumps (daily K / adjustment factors), parses them
+ * via parquet-wasm + apache-arrow (supports ZSTD compression), and
+ * imports into local SQLite for offline factor screening.
  *
- * @sourceUrl packages/market-data/src/sync/dump-import.ts
+ * @sourceUrl https://fuyao.aicubes.cn/docs/api-reference/market-dumps/
  */
 
 import type { MarketDataStore } from '../store.js'
@@ -17,94 +18,97 @@ export interface DumpImportResult {
   error?: string
 }
 
-/** HTTP GET — injected by caller to avoid cross-package import issues */
 export type DumpHttpGet = <T = Record<string, unknown>>(path: string, params?: Record<string, string | number | boolean | null | undefined>) => Promise<T>
 
-/** Strip .SH/.SZ/.BJ suffix → 6-digit code */
 function stripThsSuffix(thscode: string): string {
   return thscode.replace(/\.(SH|SZ|BJ)$/i, '').trim()
 }
 
-/** Epoch ms → YYYY-MM-DD (Asia/Shanghai) */
 function msToDate(ms: number): string {
   return new Date(ms).toLocaleDateString('sv-SE', { timeZone: 'Asia/Shanghai' })
 }
 
-/** Fetch pre-signed download URL from tonghuashun dump API */
 async function fetchDownloadUrl(get: DumpHttpGet, dumpId: string): Promise<string> {
-  const data = await get<{ download_url: string }>(`/dump/market-dumps/${dumpId}/download-url`)
-  return data.download_url
+  const pathMap: Record<string, string> = {
+    'a_share_daily_k_1d_none_10y': 'daily-k',
+    'a_share_daily_k_1d_none_10d': 'daily-k-10d',
+    'a_share_adjustment_factors_event_none_all': 'adjustment-factors',
+  }
+  const apiPath = pathMap[dumpId] ?? dumpId
+  const data = await get<{ presigned_url?: string; download_url?: string }>(
+    `/api/dump/market-dumps/${apiPath}/download-url`,
+  )
+  const url = data.presigned_url ?? data.download_url ?? ''
+  if (!url) throw new Error('未获取到下载链接')
+  return url
 }
 
-/** Download file from URL to Buffer */
 async function downloadBuffer(url: string): Promise<Buffer> {
   const resp = await fetch(url)
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
   return Buffer.from(await resp.arrayBuffer())
 }
 
-/** Parse daily K Parquet → store rows */
+/** Parse daily K Parquet via parquet-wasm + Arrow IPC (supports ZSTD) */
 async function parseDailyK(buffer: Buffer) {
-  // Dynamic import to avoid top-level dependency issues
-  const parquet = await import('@dsnp/parquetjs')
-  const reader = await parquet.ParquetReader.openBuffer(buffer)
-  const cursor = reader.getCursor()
+  const pq = await import('parquet-wasm')
+  const Arrow = await import('apache-arrow')
+  const pqTable = pq.readParquet(buffer)
+  const ipcData = pqTable.intoIPCStream()
+  const arrowTable = Arrow.tableFromIPC(ipcData)
+
   const rows: Array<{
     tradeDate: string; code: string
     open: number | null; high: number | null; low: number | null; close: number | null
     volume: number | null; amount: number | null
   }> = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let row: any
-  while ((row = await cursor.next()) !== null) {
-    const code = stripThsSuffix(row.thscode ?? '')
+
+  for (let i = 0; i < arrowTable.numRows; i++) {
+    const thscode = String(arrowTable.getChild('thscode')?.get(i) ?? '')
+    const code = stripThsSuffix(thscode)
     if (!code || code.length !== 6) continue
+    const dateMs = Number(arrowTable.getChild('date_ms')?.get(i))
+    if (!dateMs) continue
     rows.push({
-      tradeDate: msToDate(row.date_ms),
+      tradeDate: msToDate(dateMs),
       code,
-      open: row.open_price ?? null,
-      high: row.high_price ?? null,
-      low: row.low_price ?? null,
-      close: row.close_price ?? null,
-      volume: row.volume ?? null,
-      amount: row.turnover ?? null,
+      open: arrowTable.getChild('open_price')?.get(i) as number ?? null,
+      high: arrowTable.getChild('high_price')?.get(i) as number ?? null,
+      low: arrowTable.getChild('low_price')?.get(i) as number ?? null,
+      close: arrowTable.getChild('close_price')?.get(i) as number ?? null,
+      volume: arrowTable.getChild('volume')?.get(i) as number ?? null,
+      amount: arrowTable.getChild('turnover')?.get(i) as number ?? null,
     })
   }
-  await reader.close()
   return rows
 }
 
-/** Parse adjustment factors Parquet */
+/** Parse adjustment factors Parquet via parquet-wasm + Arrow IPC */
 async function parseAdjustmentFactors(buffer: Buffer) {
-  const parquet = await import('@dsnp/parquetjs')
-  const reader = await parquet.ParquetReader.openBuffer(buffer)
-  const cursor = reader.getCursor()
+  const pq = await import('parquet-wasm')
+  const Arrow = await import('apache-arrow')
+  const pqTable = pq.readParquet(buffer)
+  const ipcData = pqTable.intoIPCStream()
+  const arrowTable = Arrow.tableFromIPC(ipcData)
+
   const rows: Array<Record<string, unknown>> = []
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  let row: any
-  while ((row = await cursor.next()) !== null) {
+  for (let i = 0; i < arrowTable.numRows; i++) {
     rows.push({
-      thscode: row.thscode ?? '',
-      ticker: row.ticker ?? '',
-      exDateMs: row.ex_date_ms ?? 0,
-      dividendPerShare: row.dividend_per_share ?? null,
-      perShareBonus: row.per_share_bonus ?? null,
-      allotmentRatio: row.allotment_ratio ?? null,
-      allotmentPrice: row.allotment_price ?? null,
+      thscode: String(arrowTable.getChild('thscode')?.get(i) ?? ''),
+      ticker: String(arrowTable.getChild('ticker')?.get(i) ?? ''),
+      exDateMs: Number(arrowTable.getChild('ex_date_ms')?.get(i) ?? 0),
+      dividendPerShare: arrowTable.getChild('dividend_per_share')?.get(i) as number ?? null,
+      perShareBonus: arrowTable.getChild('per_share_bonus')?.get(i) as number ?? null,
+      allotmentRatio: arrowTable.getChild('allotment_ratio')?.get(i) as number ?? null,
+      allotmentPrice: arrowTable.getChild('allotment_price')?.get(i) as number ?? null,
     })
   }
-  await reader.close()
   return rows
 }
 
 /**
  * Import daily K dump (full 10y or incremental 10d).
- *
- * @param store - Market data store for SQLite operations
  * @param type - 'full' for 10-year, 'incremental' for 10-day
- * @param get - HTTP GET function from tonghuashun client
- *
- * @sourceUrl packages/market-data/src/sync/dump-import.ts
  */
 export async function importDailyKDump(
   store: MarketDataStore,
@@ -126,18 +130,12 @@ export async function importDailyKDump(
 
 /**
  * Import adjustment factors dump.
- *
- * @param store - Market data store for SQLite operations
- * @param get - HTTP GET function from tonghuashun client
- *
- * @sourceUrl packages/market-data/src/sync/dump-import.ts
  */
 export async function importAdjustmentFactors(store: MarketDataStore, get: DumpHttpGet): Promise<DumpImportResult> {
   try {
     const url = await fetchDownloadUrl(get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
     const buffer = await downloadBuffer(url)
     const rows = await parseAdjustmentFactors(buffer)
-    // TODO: store adjustment factors in SQLite when factor computation is implemented
     return { type: 'adjustments', rowsImported: rows.length, success: true }
   } catch (e) {
     return { type: 'adjustments', rowsImported: 0, success: false, error: e instanceof Error ? e.message : String(e) }
