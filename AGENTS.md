@@ -44,6 +44,7 @@ codegraph status
 - **唯一标准入口**：`engine.queryInstrumentData(ref, capability, opts?)`
 - 扩展顺序：复用 capability → 扩 `instrument-query.ts` → 扩 Provider 标准方法 → 最后才 `invokeCustomMethod` + 文档登记
 - **禁止** Hub / client-ui / Agent 主路径新增 `de.realtime()` / 直连第三方行情 URL
+- 腾讯 ETF 基金自定义方法（`invokeCustomMethod("tencent", ...)`）：`tencentFundProfile`（基金档案+溢价率）、`tencentFundAsset`（资产配置+持仓）、`tencentFundRankInfo`（业绩排名）、`tencentFundNavHistory`（全量历史净值）、`tencentEtfKline`（ETF 专用 K 线）、`tencentFundNotice`（公告）、`tencentSameTypeFunds`（同类基金）、`tencentSameSeriesFunds`（同系基金）。标准能力 `etfProfile`/`etfNav`/`etfHoldings` 已增强。
 
 ## client-ui（摘要）
 

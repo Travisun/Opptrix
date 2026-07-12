@@ -356,17 +356,59 @@ export interface StockDetailData {
 export interface EtfProfileData {
   code: string
   name?: string
+  fullName?: string
   nav?: number | null
+  accNav?: number | null
+  navDate?: string
   changePct?: number | null
+  changeAmt?: number | null
   premiumRate?: number | null
+  latestPrice?: number | null
+  open?: number | null
+  high?: number | null
+  low?: number | null
+  volume?: number | null
+  amount?: number | null
   fundType?: string
   trackingIndex?: string
   manager?: string
+  company?: string
+  custodian?: string
   expenseRatio?: number | null
   totalShares?: number | null
-  listingDate?: string
-  benchmark?: string
   scale?: number | null
+  totalAUM?: string
+  listingDate?: string
+  establishDate?: string
+  benchmark?: string
+  totalDividends?: number | null
+  dividendCount?: number | null
+  reportDate?: string
+  assetAllocation?: Array<{ name: string; ratio: string }>
+  industryAllocation?: Array<{ name: string; ratio: string }>
+  topHoldings?: Array<{ name: string; code: string; ratio: string; rate?: string }>
+  performance?: {
+    w1?: number | null
+    w4?: number | null
+    w13?: number | null
+    w26?: number | null
+    w52?: number | null
+    year?: number | null
+    total?: number | null
+    year3?: number | null
+  }
+  avgPerformance?: {
+    w1?: number | null
+    w4?: number | null
+    w13?: number | null
+    w26?: number | null
+    w52?: number | null
+    year?: number | null
+    total?: number | null
+    year3?: number | null
+  }
+  rankTotal?: number | null
+  source?: string
 }
 
 export interface EtfNavPoint {

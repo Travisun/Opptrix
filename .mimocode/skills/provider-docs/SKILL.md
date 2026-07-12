@@ -54,6 +54,24 @@ MCP 注册：`core/custom-methods.ts` 经 `toCustomMethodDef` 导入；扩展字
 
 参考：`providers/tencent/custom-method-docs.ts`、`providers/sinafinance/custom-method-docs.ts`。
 
+## 腾讯 ETF 基金专用自定义方法
+
+以下方法走 `invokeCustomMethod("tencent", ...)` 调用，数据源 gu.qq.com 基金净值页：
+
+| 方法 | 数据 |
+|------|------|
+| `tencentFundProfile` | 基金经理、管理人、托管人、净值、溢价率、规模、分红 |
+| `tencentFundAsset` | 资产配置（股票/债券比例）、行业分布、前十大持仓 |
+| `tencentFundRankInfo` | 业绩排名（近1/4/13/26/52周/今年/成立以来增长率） |
+| `tencentFundNavHistory` | 全量历史净值（成立至今） |
+| `tencentEtfKline` | ETF 专用 K 线（日/周/月，proxy.finance.qq.com） |
+| `tencentFundNotice` | 基金公告列表 |
+| `tencentSameTypeFunds` | 同类基金列表 |
+| `tencentSameSeriesFunds` | 同系基金列表（同一管理人） |
+
+标准能力 `etfProfile` / `etfNav` / `etfHoldings` 已由 `mixTencentFundProfile` 增强，
+优先走 `queryInstrumentData`；上述自定义方法用于获取标准能力未覆盖的补充数据。
+
 ## 提交前自检
 
 - [ ] `bindingsFor` 覆盖所有 capability × 市场 × assetClass
