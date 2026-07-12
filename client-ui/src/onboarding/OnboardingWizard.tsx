@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { Spinner, Text, mergeClasses } from '@fluentui/react-components'
 import type { OnboardingState } from './constants'
 import { shouldShowOnboarding } from './constants'
@@ -369,10 +369,15 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     void reload()
   }, [reload])
 
+  const dismissedRef = useRef(false)
+
   useEffect(() => {
     if (!version || loadError || loadingState) return
     if (shouldShowOnboarding(priorState, version)) {
       setDismissed(false)
+      dismissedRef.current = false
+    } else {
+      dismissedRef.current = true
     }
   }, [version, priorState, loadError, loadingState])
 
@@ -382,6 +387,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     if (!api?.onAppUpdateStatus) return
     return api.onAppUpdateStatus(status => {
       if (status.state === 'ready' || status.state === 'installing') {
+        dismissedRef.current = false
         void reloadVersion()
         void reload()
       }
@@ -391,6 +397,7 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   useEffect(() => {
     const onVisible = () => {
       if (document.visibilityState !== 'visible') return
+      if (dismissedRef.current) return
       void reloadVersion()
       void reload()
     }
