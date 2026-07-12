@@ -852,6 +852,7 @@ export class MarketDataEngine {
       case 'composite_snapshot':
         if (plan.market === 'US') return this.usSnapshot(plan.symbol)
         if (plan.market === 'CRYPTO') return this.cryptoSnapshot(plan.symbol)
+        if (plan.market === 'CN' && plan.assetClass === 'ETF') return this.etfSnapshot(plan.symbol)
         if (isRegionalEquityMarket(plan.market)) {
           return this.regionalSnapshot(plan.market, plan.symbol)
         }
@@ -870,8 +871,6 @@ export class MarketDataEngine {
           plan.ref,
         )
       }
-      case 'cn_etf_snapshot':
-        return this.etfSnapshot(plan.symbol)
       default:
         return Promise.resolve({
           success: false,

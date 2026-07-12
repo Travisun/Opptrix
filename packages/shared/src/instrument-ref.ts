@@ -1,5 +1,11 @@
 import type { AssetClass, InstrumentRef, Market } from './market-data.js'
-import { buildInstrumentNamespace, normalizeInstrumentRef, parseInstrumentNamespace } from './instrument-symbol.js'
+import {
+  buildInstrumentNamespace,
+  normalizeInstrumentRef,
+  parseCanonicalInstrumentInput,
+  parseInstrumentNamespace,
+  resolveCnInstrumentIdentity,
+} from './instrument-symbol.js'
 
 const MARKETS: Market[] = ['CN', 'US', 'HK', 'CRYPTO', 'JP', 'KR']
 const ASSET_CLASSES: AssetClass[] = ['EQUITY', 'ETF', 'INDEX', 'FUND', 'CRYPTO_SPOT', 'CRYPTO_PERP']
@@ -36,6 +42,25 @@ export function instrumentRefFromParams(params: Record<string, unknown>): Instru
   const nested = parseInstrumentRef(params.instrument)
   if (nested) return nested
   return parseInstrumentRef(params)
+}
+
+/**
+ * 解析 A 股 InstrumentRef — 支持 Stock-index 命名空间（CN:SH.510300）、裸代码或 InstrumentRef 对象。
+ * assetClass（EQUITY / ETF / INDEX）由 symbol + exchange 推导，与 capability 路由配合使用。
+ */
+export function resolveCnInstrumentRef(input: string | InstrumentRef): InstrumentRef {
+  if (typeof input === 'object' && input != null && input.market) {
+    return normalizeInstrumentRef(input)
+  }
+  const text = String(input).trim()
+  const parsed = parseCanonicalInstrumentInput(text)
+  if (parsed?.market === 'CN') return parsed
+  return resolveCnInstrumentIdentity({ market: 'CN', assetClass: 'EQUITY', symbol: text })
+}
+
+/** @deprecated 使用 resolveCnInstrumentRef — ETF 与个股共用同一解析入口 */
+export function resolveCnEtfRef(input: string | InstrumentRef): InstrumentRef {
+  return resolveCnInstrumentRef(input)
 }
 
 /** Stable dedupe key — Stock-index 命名空间，不含 assetClass */

@@ -19,7 +19,7 @@ import {
 
 export type InstrumentRouteHandlers = {
   stockDetail: (ref: InstrumentRef) => Promise<ResearchResult>
-  etfSnapshot: (code: string) => Promise<ResearchResult>
+  etfSnapshot: (ref: InstrumentRef) => Promise<ResearchResult>
   usSnapshot: (symbol: string) => Promise<ResearchResult>
   regionalSnapshot: (market: 'HK', symbol: string) => Promise<ResearchResult>
   cryptoSnapshot: (pair: string) => Promise<ResearchResult>
@@ -97,7 +97,7 @@ export async function routeInstrumentSnapshot(
   }
 
   if (ref.market === 'CN' && ref.assetClass === 'ETF') {
-    return wrapSnapshot(ref, await handlers.etfSnapshot(ref.symbol), handlers)
+    return wrapSnapshot(ref, await handlers.etfSnapshot(ref), handlers)
   }
   if (ref.market === 'CN') {
     return wrapSnapshot(ref, await handlers.stockDetail(ref), handlers)

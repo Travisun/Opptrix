@@ -43,10 +43,10 @@ import {
   isLikelyCnEquityInput,
   gateInstrumentAnalytics,
   resolveInstrumentFromParams,
+  resolveCnInstrumentRef,
   normalizeInstrumentHubParams,
   instrumentRefsFromList,
   normalizeInstrumentRef,
-  parseCanonicalInstrumentInput,
   instrumentRefKey,
   buildInstrumentNamespace,
   type InstrumentRef,
@@ -204,7 +204,7 @@ export class ResearchHub {
           if (ref && ref.market !== 'CN') {
             return fail('趋势研判暂仅支持 A 股', t0)
           }
-          const cnRef = ref ?? (params.code ? this.resolveCnRef(String(params.code)) : null)
+          const cnRef = ref ?? (params.code ? resolveCnInstrumentRef(String(params.code)) : null)
           if (!cnRef) return fail('code 或 instrument 必填', t0)
           return this.trendBrief(cnRef, params, t0)
         }
@@ -294,20 +294,22 @@ export class ResearchHub {
         case 'provider_installed_list': return this.providerInstalledList(t0)
         case 'etf_list': return this.etfList(params, t0)
         case 'etf_snapshot': {
-          const code = String(params.code ?? '').trim()
-          const ref = resolveInstrumentFromParams({ ...params, code, market: 'CN' })
-            ?? (code ? { market: 'CN' as const, assetClass: 'ETF' as const, symbol: code } : null)
-          if (!ref) return fail('code 必填', t0)
+          const ref = resolveInstrumentFromParams(params)
+          if (!ref) return fail('instrument 或 code 必填', t0)
           return this.dispatchInstrumentCapability('snapshot', { ...params, instrument: ref }, t0)
         }
-        case 'etf_nav': return this.etfNav(String(params.code ?? ''), t0)
-        case 'etf_holdings': return this.etfHoldings(String(params.code ?? ''), t0)
+        case 'etf_nav': return this.queryEtfInstrumentData(params, 'etf_nav', t0)
+        case 'etf_holdings': return this.queryEtfInstrumentData(params, 'etf_holdings', t0)
         case 'local_etf_list': return await this.localEtfList(params, t0)
         case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
         case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
         case 'local_etf_screen_schema': return this.localEtfScreenSchema(t0)
         case 'local_etf_screen': return this.localEtfScreen(params, t0)
-        case 'etf_scorecard': return this.etfScorecard(String(params.code ?? ''), t0)
+        case 'etf_scorecard': {
+          const ref = resolveInstrumentFromParams(params)
+          if (!ref) return fail('instrument 或 code 必填', t0)
+          return this.etfScorecard(ref, t0)
+        }
         case 'etf_scorecard_schema': return this.etfScorecardSchema(t0)
         case 'search_local_instruments':
           return this.instrumentSearch(params, t0)
@@ -412,7 +414,7 @@ export class ResearchHub {
   }
 
   private async stockDiagnosis(input: string | InstrumentRef, scorecardName: string, t0: number) {
-    const cnRef = this.resolveCnRef(input)
+    const cnRef = resolveCnInstrumentRef(input)
     const snap = await this.ee.analyze(cnRef.symbol)
     const card = createScorecard(scorecardName)
     await this.neutralizer.compute([snap as never])
@@ -440,14 +442,14 @@ export class ResearchHub {
   }
 
   private async institutionRating(ref: InstrumentRef, groups: string[] | undefined, t0: number) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const data = await this.institutions.evaluate(cnRef, groups)
     return ok(serializeInstitutionData(data as unknown as Record<string, unknown>), `${data.name} 机构共识 ${data.consensus_rating_cn}`, t0)
   }
 
   private async institutionReport(params: Record<string, unknown>, groups: string[] | undefined, t0: number) {
     const ref = resolveInstrumentFromParams(params)
-    const cnRef = ref ? this.resolveCnRef(ref) : null
+    const cnRef = ref ? resolveCnInstrumentRef(ref) : null
     const data = cnRef
       ? await this.institutions.evaluate(cnRef, groups)
       : await this.institutions.evaluate(String(params.code ?? ''), groups)
@@ -688,7 +690,12 @@ export class ResearchHub {
   private instrumentAnalyticsHandlers(t0: number): InstrumentAnalyticsRouteHandlers {
     return {
       cnFactorEvaluation: async ref => this.stockDiagnosis(ref, '综合评估', t0),
-      cnEtfEvaluation: async ref => this.etfScorecard(ref.symbol, t0),
+      cnEtfEvaluation: async ref => {
+        const card = this.marketData.etfScorecard(ref.symbol)
+        if (!card) return fail('暂时无法生成 ETF 决策雷达', t0)
+        const scoreHint = card.total_score != null ? ` ${card.total_score} 分` : ''
+        return ok(card, `${card.name} ETF决策雷达${scoreHint}`, t0)
+      },
       technicalEvaluation: async ref => {
         const data = await gatherStrategyData(this.de, ref)
         const evaluation = buildTechnicalEvaluation(data, ref)
@@ -781,7 +788,7 @@ export class ResearchHub {
   }
 
   private async trendBrief(ref: InstrumentRef, params: Record<string, unknown>, t0: number) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const normalized = cnRef.symbol
     const exchange = cnRef.exchange
     let klines = this.marketData.localDailyKlines(normalized, 280)
@@ -1139,21 +1146,10 @@ export class ResearchHub {
     // 名称由在线行情回填，不再读本地 universe
   }
 
-  private resolveCnRef(input: string | InstrumentRef): InstrumentRef {
-    if (typeof input === 'object' && input != null && input.market) {
-      return normalizeInstrumentRef(input)
-    }
-    const text = String(input).trim()
-    const parsed = parseCanonicalInstrumentInput(text)
-    if (parsed?.market === 'CN') return parsed
-    const sym = normalizeCode(text)
-    return normalizeInstrumentRef({ market: 'CN', assetClass: 'EQUITY', symbol: sym })
-  }
-
   private async stockQuotes(refs: (string | InstrumentRef)[] | undefined, t0: number) {
     const normalizedRefs = [...new Map(
       (refs ?? []).map(item => {
-        const ref = this.resolveCnRef(item)
+        const ref = resolveCnInstrumentRef(item)
         return [instrumentRefKey(ref), ref] as const
       }),
     ).values()]
@@ -1209,7 +1205,7 @@ export class ResearchHub {
     },
     cachedQuote?: { name?: string; pe?: number | null; pb?: number | null },
   ): Promise<WatchlistRadarItem> {
-    const ref = this.resolveCnRef(input)
+    const ref = resolveCnInstrumentRef(input)
     const symbol = normalizeCode(ref.symbol)
     const ns = buildInstrumentNamespace(ref)
     const stored = this.store.getLatest(symbol)
@@ -1258,7 +1254,7 @@ export class ResearchHub {
   }
 
   private async stockKline(input: string | InstrumentRef, count: number, t0: number) {
-    const cnRef = this.resolveCnRef(input)
+    const cnRef = resolveCnInstrumentRef(input)
     const code = buildInstrumentNamespace(cnRef)
     const safeCount = Math.max(20, Math.min(count, 240))
     const result = await this.de.queryInstrumentData(cnRef, 'kline', { count: safeCount })
@@ -1268,7 +1264,7 @@ export class ResearchHub {
   }
 
   private async stockCyq(ref: InstrumentRef, t0: number) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const normalized = cnRef.symbol
     const klineR = await this.de.queryInstrumentData(cnRef, 'kline', { count: 320 })
     const klines = instrumentQueryData<import('@opptrix/shared').StockKline[]>(klineR) ?? []
@@ -1346,7 +1342,7 @@ export class ResearchHub {
   }
 
   private async stockDetailNotices(ref: InstrumentRef): Promise<NewsItem[]> {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const r = await this.de.queryInstrumentData(cnRef, 'notices', { page: 1, pageSize: 30 })
     const rows = instrumentQueryData<NewsItem[]>(r) ?? []
     if (rows.length) return dedupeStockNewsItems(rows).slice(0, 30)
@@ -1360,7 +1356,7 @@ export class ResearchHub {
   }
 
   private async stockDetailShareholders(ref: InstrumentRef) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const engineR = await this.de.queryInstrumentData(cnRef, 'shareholders')
     const engineRows = instrumentQueryData<Record<string, unknown>[]>(engineR)
     if (engineRows?.length) {
@@ -1385,7 +1381,7 @@ export class ResearchHub {
   }
 
   private async stockDetailHolderHistory(ref: InstrumentRef) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const rows = await this.callDetailProviderMethod<Record<string, unknown>>(
       ['tushare'],
       'shareholderNumbers',
@@ -1397,7 +1393,7 @@ export class ResearchHub {
 
   /** 详情页行情：腾讯补全 PE/PB/量比/市值，fallback 保留准确 OHLCV/成交量 */
   private async stockDetailQuote(ref: InstrumentRef) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
     const secSym = formatProviderMethodArgs('tencent', 'realtimeSec', cnRef)[0] as string
     const [preferred, fallbackR] = await Promise.all([
@@ -1415,7 +1411,7 @@ export class ResearchHub {
 
   /** 详情页公司资料：绕过 queryScoped 测速，合并 sinafinance / tushare / 腾讯 + 扩展 enrichments */
   private async stockDetailProfile(ref: InstrumentRef): Promise<Record<string, unknown> | null> {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
     const engineProfileR = await this.de.queryInstrumentData(cnRef, 'profile')
     const engineRow = instrumentQueryData<Array<Record<string, unknown>>>(engineProfileR)?.[0] ?? null
@@ -1468,7 +1464,7 @@ export class ResearchHub {
   }
 
   private async stockDetail(ref: InstrumentRef, t0: number) {
-    const cnRef = this.resolveCnRef(ref)
+    const cnRef = resolveCnInstrumentRef(ref)
     const code = cnRef.symbol
     const [quoteR, profileR, financialAllR, newsR, dividendR, moneyFlowR, shareholdersR, holderHistoryR] = await Promise.all([
       this.stockDetailQuote(cnRef),
@@ -1659,7 +1655,7 @@ export class ResearchHub {
   }
 
   private async stockRealtime(input: string | InstrumentRef, explicitMarket?: string | null) {
-    const ref = this.resolveCnRef(input)
+    const ref = resolveCnInstrumentRef(input)
     const exchange = explicitMarket ?? ref.exchange
     const finalRef = exchange && exchange !== ref.exchange
       ? normalizeInstrumentRef({ ...ref, exchange })
@@ -1668,7 +1664,7 @@ export class ResearchHub {
   }
 
   private async stockBatchRealtime(refs: (string | InstrumentRef)[]) {
-    const normalizedRefs = refs.map(r => this.resolveCnRef(r))
+    const normalizedRefs = refs.map(r => resolveCnInstrumentRef(r))
     const rows = await Promise.all(
       normalizedRefs.map(async ref => {
         const result = await this.stockRealtime(ref)
@@ -1961,7 +1957,7 @@ export class ResearchHub {
     t0: number,
   ) {
     const normalized = code.padStart(6, '0')
-    const cnRef = this.resolveCnRef(
+    const cnRef = resolveCnInstrumentRef(
       explicitMarket
         ? { market: 'CN', assetClass: 'EQUITY', symbol: normalized, exchange: explicitMarket }
         : normalized,
@@ -2249,18 +2245,33 @@ export class ResearchHub {
     )
   }
 
-  private cnEtfRef(code: string): InstrumentRef {
-    const sym = code.trim() || '510300'
-    return { market: 'CN', assetClass: 'ETF', symbol: sym }
-  }
-
   private cnInstrumentRef(input: string | InstrumentRef): InstrumentRef {
-    return this.resolveCnRef(input)
+    return resolveCnInstrumentRef(input)
   }
 
   /** @deprecated Use cnInstrumentRef */
   private cnEquityRef(input: string | InstrumentRef): InstrumentRef {
     return this.cnInstrumentRef(input)
+  }
+
+  private async queryEtfInstrumentData(
+    params: Record<string, unknown>,
+    capability: 'etf_nav' | 'etf_holdings' | 'etf_snapshot',
+    t0: number,
+  ) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 code 必填', t0)
+    const labels = {
+      etf_nav: 'ETF 净值',
+      etf_holdings: 'ETF 持仓',
+      etf_snapshot: 'ETF 快照',
+    } as const
+    const r = await this.de.queryInstrumentData(ref, capability)
+    if (!r.success) return fail(instrumentQueryError(r, `${labels[capability]}获取失败`), t0)
+    const data = instrumentQueryData(r)
+    if (capability === 'etf_snapshot') return ok(data, labels[capability], t0)
+    const rows = (data as unknown[]) ?? []
+    return ok(rows, `${labels[capability]} ${rows.length} 条`, t0)
   }
 
   private async queryCnKline(
@@ -2278,7 +2289,7 @@ export class ResearchHub {
   private async etfList(params: Record<string, unknown>, t0: number) {
     const code = params.code != null ? String(params.code) : ''
     const r = await this.de.queryInstrumentData(
-      this.cnEtfRef(code || '510300'),
+      resolveCnInstrumentRef(code || '510300'),
       'etf_list',
       code ? { keyword: code } : {},
     )
@@ -2287,24 +2298,8 @@ export class ResearchHub {
     return ok(data, `ETF 列表 ${data.length} 条`, t0)
   }
 
-  private async etfSnapshot(code: string, t0: number) {
-    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_snapshot')
-    if (!r.success) return fail(instrumentQueryError(r, 'ETF 快照获取失败'), t0)
-    return ok(instrumentQueryData(r), 'ETF 快照', t0)
-  }
-
-  private async etfNav(code: string, t0: number) {
-    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_nav')
-    if (!r.success) return fail(instrumentQueryError(r, 'ETF 净值获取失败'), t0)
-    const data = instrumentQueryData<unknown[]>(r) ?? []
-    return ok(data, `ETF 净值 ${data.length} 条`, t0)
-  }
-
-  private async etfHoldings(code: string, t0: number) {
-    const r = await this.de.queryInstrumentData(this.cnEtfRef(code), 'etf_holdings')
-    if (!r.success) return fail(instrumentQueryError(r, 'ETF 持仓获取失败'), t0)
-    const data = instrumentQueryData<unknown[]>(r) ?? []
-    return ok(data, `ETF 持仓 ${data.length} 条`, t0)
+  private async etfSnapshot(ref: InstrumentRef, t0: number) {
+    return this.queryEtfInstrumentData({ instrument: ref }, 'etf_snapshot', t0)
   }
 
   private async localEtfList(params: Record<string, unknown>, t0: number) {
@@ -2312,13 +2307,11 @@ export class ResearchHub {
   }
 
   private async localEtfNav(code: string, params: Record<string, unknown>, t0: number) {
-    void params
-    return this.etfNav(code, t0)
+    return this.queryEtfInstrumentData({ ...params, code }, 'etf_nav', t0)
   }
 
   private async localEtfHoldings(code: string, params: Record<string, unknown>, t0: number) {
-    void params
-    return this.etfHoldings(code, t0)
+    return this.queryEtfInstrumentData({ ...params, code }, 'etf_holdings', t0)
   }
 
   private localEtfScreenSchema(t0: number) {
@@ -2330,13 +2323,11 @@ export class ResearchHub {
     return this.failLocalOffline(t0)
   }
 
-  private async etfScorecard(code: string, t0: number) {
-    const trimmed = code.trim()
-    if (!trimmed) return fail('code 必填', t0)
-    return this.instrumentEvaluation(
-      normalizeInstrumentHubParams({ code: trimmed, market: 'CN', assetClass: 'ETF' }),
-      t0,
-    )
+  private async etfScorecard(ref: InstrumentRef, t0: number) {
+    const card = this.marketData.etfScorecard(ref.symbol)
+    if (!card) return fail('暂时无法生成 ETF 决策雷达', t0)
+    const scoreHint = card.total_score != null ? ` ${card.total_score} 分` : ''
+    return ok(card, `${card.name} ETF决策雷达${scoreHint}`, t0)
   }
 
   private etfScorecardSchema(t0: number) {
@@ -2387,7 +2378,7 @@ export class ResearchHub {
   private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {
     return {
       stockDetail: ref => this.stockDetail(ref, t0),
-      etfSnapshot: code => this.etfSnapshot(code, t0),
+      etfSnapshot: ref => this.etfSnapshot(ref, t0),
       usSnapshot: symbol => this.usSnapshot(symbol, t0),
       regionalSnapshot: (market, symbol) => this.regionalSnapshot(market, symbol, t0),
       cryptoSnapshot: pair => this.cryptoSnapshot(pair, t0),
@@ -2540,7 +2531,7 @@ export class ResearchHub {
     if (keyword.length < 1) return fail('keyword 必填', t0)
     const limit = params.limit != null ? Number(params.limit) : 30
     const r = await this.de.queryInstrumentData(
-      this.cnEtfRef('510300'),
+      resolveCnInstrumentRef('510300'),
       'etf_list',
       { keyword },
     )

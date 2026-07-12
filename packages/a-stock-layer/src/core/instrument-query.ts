@@ -26,6 +26,7 @@ import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regi
  * - instrument_search:  跨市场关键词搜索（相关性排序）
  * - sector_list:        板块/行业列表
  * - etf_list:       ETF 列表（支持关键词）
+ * - etf_profile:    ETF 基本面资料
  * - etf_nav:        ETF 净值序列
  * - etf_holdings:   ETF 持仓成分
  * - etf_snapshot:   ETF 聚合快照（概况 + 净值 + 行情）
@@ -46,6 +47,7 @@ export type InstrumentDataCapability =
   | 'instrument_search'
   | 'sector_list'
   | 'etf_list'
+  | 'etf_profile'
   | 'etf_nav'
   | 'etf_holdings'
   | 'etf_snapshot'
@@ -117,6 +119,7 @@ export type InstrumentQueryPlan =
     kind: 'composite_snapshot'
     market: Market
     symbol: string
+    assetClass?: AssetClass
   }
   | {
     /** A 股实时行情专用路径 */
@@ -133,11 +136,6 @@ export type InstrumentQueryPlan =
     period?: string
     start?: string
     end?: string
-  }
-  | {
-    /** A 股 ETF 聚合快照 */
-    kind: 'cn_etf_snapshot'
-    symbol: string
   }
 
 // ── 内部辅助函数 ──
@@ -242,8 +240,14 @@ export function resolveInstrumentQueryPlan(
           end: opts.endDate,
         }
       case 'snapshot':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'ETF' }
+        }
         return { kind: 'cn_realtime', symbol, exchange }
       case 'profile':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
+        }
         return registryPlan('CN', assetClass, Capability.STOCK_PROFILE, 'profile', true, [symbol], normalized)
       case 'financials':
         return registryPlan('CN', assetClass, Capability.FINANCIAL_SUMMARY, 'financials', true, [
@@ -274,6 +278,11 @@ export function resolveInstrumentQueryPlan(
           ])
         }
         return null
+      case 'etf_profile':
+        if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
+          return registryPlan('CN', 'ETF', Capability.ETF_PROFILE, 'etfProfile', true, [symbol], normalized)
+        }
+        return null
       case 'etf_nav':
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
           return registryPlan('CN', 'ETF', Capability.ETF_NAV, 'etfNav', true, [symbol], normalized)
@@ -286,7 +295,7 @@ export function resolveInstrumentQueryPlan(
         return null
       case 'etf_snapshot':
         if (assetClass === 'ETF' || isCnEtfCode(symbol)) {
-          return { kind: 'cn_etf_snapshot', symbol }
+          return { kind: 'composite_snapshot', market: 'CN', symbol, assetClass: 'ETF' }
         }
         return null
       case 'dividend':

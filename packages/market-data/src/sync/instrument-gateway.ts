@@ -1,6 +1,6 @@
 import type { AshareEngine, InstrumentDataCapability, InstrumentQueryOpts } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, QueryResult } from '@opptrix/shared'
-import { normalizeInstrumentRef } from '@opptrix/shared'
+import { normalizeInstrumentRef, resolveCnInstrumentRef } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
 import { normalizeStockCode } from '../utils.js'
 import { sleep } from './pool.js'
@@ -37,11 +37,7 @@ const PLACEHOLDER_SYMBOL: Record<InitialEquityMarket, string> = {
 }
 
 export function cnEtfRef(code: string): InstrumentRef {
-  return normalizeInstrumentRef({
-    market: 'CN',
-    assetClass: 'ETF',
-    symbol: code.trim() || '510300',
-  })
+  return resolveCnInstrumentRef(code.trim() || '510300')
 }
 
 export function cnEtfListRef(): InstrumentRef {

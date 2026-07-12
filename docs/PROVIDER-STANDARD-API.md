@@ -16,7 +16,7 @@
 ```
 realtime | kline | snapshot | profile | financials
 stock_list | instrument_search | sector_list
-etf_list | etf_nav | etf_holdings | etf_snapshot
+etf_list | etf_nav | etf_holdings | etf_snapshot | etf_profile
 dividend | news | notices | shareholders | money_flow | technical_analysis
 ```
 

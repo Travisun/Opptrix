@@ -176,9 +176,38 @@ test('Engine resolveInstrumentQueryPlan CN ETF snapshot uses composite', () => {
     { market: 'CN', assetClass: 'ETF', symbol: '510300' },
     'etf_snapshot',
   )
-  assert.equal(plan?.kind, 'cn_etf_snapshot')
-  if (plan?.kind === 'cn_etf_snapshot') {
+  assert.equal(plan?.kind, 'composite_snapshot')
+  if (plan?.kind === 'composite_snapshot') {
+    assert.equal(plan.market, 'CN')
     assert.equal(plan.symbol, '510300')
+    assert.equal(plan.assetClass, 'ETF')
+  }
+})
+
+test('Engine resolveInstrumentQueryPlan CN ETF snapshot capability uses composite', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'CN', assetClass: 'ETF', symbol: '510300' },
+    'snapshot',
+  )
+  assert.equal(plan?.kind, 'composite_snapshot')
+  if (plan?.kind === 'composite_snapshot') {
+    assert.equal(plan.market, 'CN')
+    assert.equal(plan.symbol, '510300')
+    assert.equal(plan.assetClass, 'ETF')
+  }
+})
+
+test('Engine resolveInstrumentQueryPlan CN ETF profile uses etfProfile registry', () => {
+  const plan = resolveInstrumentQueryPlan(
+    { market: 'CN', assetClass: 'ETF', symbol: '510300' },
+    'profile',
+  )
+  assert.equal(plan?.kind, 'registry')
+  if (plan?.kind === 'registry') {
+    assert.equal(plan.market, 'CN')
+    assert.equal(plan.assetClass, 'ETF')
+    assert.equal(plan.method, 'etfProfile')
+    assert.deepEqual(plan.args, ['510300'])
   }
 })
 
@@ -243,6 +272,55 @@ test('parseInstrumentNamespace — CN:SZ.000009', async () => {
   assert.equal(ref?.exchange, 'SZ')
   assert.equal(buildInstrumentNamespace(ref), 'CN:SZ.000009')
   assert.equal(instrumentRefLabel(ref), 'CN:SZ.000009')
+})
+
+test('parseInstrumentNamespace — CN:SH.510300 ETF preserves exchange', async () => {
+  const { parseInstrumentNamespace, buildInstrumentNamespace } = await import(
+    '../packages/shared/dist/instrument-symbol.js'
+  )
+  const ref = parseInstrumentNamespace('CN:SH.510300')
+  assert.equal(ref?.market, 'CN')
+  assert.equal(ref?.symbol, '510300')
+  assert.equal(ref?.exchange, 'SH')
+  assert.equal(ref?.assetClass, 'ETF')
+  assert.equal(buildInstrumentNamespace(ref), 'CN:SH.510300')
+})
+
+test('resolveCnInstrumentRef — namespace and bare code', async () => {
+  const { resolveCnInstrumentRef, instrumentRefKey } = await import('../packages/shared/dist/instrument-ref.js')
+  const fromNs = resolveCnInstrumentRef('CN:SH.510300')
+  assert.equal(fromNs.market, 'CN')
+  assert.equal(fromNs.assetClass, 'ETF')
+  assert.equal(fromNs.symbol, '510300')
+  assert.equal(fromNs.exchange, 'SH')
+  assert.equal(instrumentRefKey(fromNs), 'CN:SH.510300')
+
+  const fromBare = resolveCnInstrumentRef('510300')
+  assert.equal(fromBare.assetClass, 'ETF')
+  assert.equal(fromBare.symbol, '510300')
+})
+
+test('resolveInstrumentRef — unified entry for namespace string', async () => {
+  const { resolveInstrumentRef } = await import('../packages/shared/dist/instrument-param.js')
+  const ref = resolveInstrumentRef('CN:SH.510300')
+  assert.equal(ref?.assetClass, 'ETF')
+  assert.equal(ref?.exchange, 'SH')
+  const fromParams = resolveInstrumentRef({ code: 'CN:SZ.159919' })
+  assert.equal(fromParams?.assetClass, 'ETF')
+  assert.equal(fromParams?.symbol, '159919')
+})
+
+test('resolveInstrumentQueryPlan CN ETF namespace snapshot uses composite', async () => {
+  const { resolveInstrumentQueryPlan } = await import('../packages/a-stock-layer/dist/core/instrument-query.js')
+  const { resolveCnInstrumentRef } = await import('../packages/shared/dist/instrument-ref.js')
+  const ref = resolveCnInstrumentRef('CN:SH.510300')
+  const plan = resolveInstrumentQueryPlan(ref, 'etf_snapshot')
+  assert.equal(plan?.kind, 'composite_snapshot')
+  if (plan?.kind === 'composite_snapshot') {
+    assert.equal(plan.market, 'CN')
+    assert.equal(plan.symbol, '510300')
+    assert.equal(plan.assetClass, 'ETF')
+  }
 })
 
 test('parseInstrumentRef resolves namespace in symbol field', async () => {

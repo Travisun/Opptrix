@@ -42,7 +42,7 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
         Capability.INDEX_REALTIME, Capability.INDEX_KLINE,
       ].includes(c)),
       p,
-      undefined,
+      [],
       maxConcurrent,
     ),
   settings: TUSHARE_SETTINGS,

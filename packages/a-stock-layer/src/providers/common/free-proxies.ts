@@ -8,8 +8,6 @@ export const CN_ETF_INDEX_PROXY: Record<string, string> = {
   '510300': '000300',
   '510500': '000905',
   '159919': '000300',
-  '159915': '399006',
-  '512100': '000852',
 }
 
 export function resolveEtfIndexProxy(etfCode: string): string | null {

@@ -27,6 +27,7 @@ export const ZZSHARE_CAPS = [
   Capability.STOCK_MONEY_FLOW,
   Capability.SECTOR_MONEY_FLOW,
   Capability.MARKET_MONEY_FLOW,
+  ...FREE_CN_ETF_CAPABILITIES,
 ]
 
 const INDEX_CAPS = [

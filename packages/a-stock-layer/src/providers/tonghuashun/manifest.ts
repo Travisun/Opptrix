@@ -35,7 +35,7 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   defaultPriority: 88,
   maxConcurrent: 5,
   capabilities: TONGHUASHUN_CAPS,
-  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, undefined, maxConcurrent),
+  bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, [], maxConcurrent),
   settings: TONGHUASHUN_SETTINGS,
   supportsTest: true,
 }

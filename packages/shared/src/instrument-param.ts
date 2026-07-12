@@ -114,4 +114,22 @@ export function normalizeInstrumentHubParams(
   return { ...params, instrument: ref }
 }
 
+/**
+ * 统一顶层 InstrumentRef 解析 — InstrumentRef 对象、命名空间字符串或 Hub params。
+ * 数据请求应经 queryInstrumentData(ref, capability) 而非按 assetClass 分叉 ref 解析器。
+ */
+export function resolveInstrumentRef(
+  input: string | InstrumentRef | Record<string, unknown>,
+): InstrumentRef | null {
+  if (typeof input === 'object' && input != null) {
+    if ('market' in input && typeof (input as InstrumentRef).market === 'string') {
+      return normalizeInstrumentRef(input as InstrumentRef)
+    }
+    return resolveInstrumentFromParams(input as Record<string, unknown>)
+  }
+  const text = String(input).trim()
+  if (!text) return null
+  return parseCanonicalInstrumentInput(text)
+}
+
 export { instrumentProviderSymbol } from './instrument-symbol.js'
