@@ -1,0 +1,15 @@
+# Local deps / lockfiles (not part of project skills)
+node_modules/
+package.json
+package-lock.json
+bun.lock
+
+# Secrets & credentials — never commit
+.env
+.env.*
+auth.json
+*credentials*
+*secret*
+*api*key*
+*.pem
+*.key

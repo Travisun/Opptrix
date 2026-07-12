@@ -1,0 +1,17 @@
+{
+  "$schema": "https://mimo.xiaomi.com/mimocode/config.json",
+  // Opptrix project config for MiMoCode.
+  // Engineering rules: AGENTS.md (auto-loaded) + .mimocode/skills/* (load via skill tool).
+  // Source of truth for Cursor: .cursor/rules/*.mdc — keep AGENTS.md / skills in sync when rules change.
+  // Do NOT put API keys or provider secrets here — use global ~/.config/mimocode/ or env vars.
+  "mcp": {
+    "codegraph": {
+      "type": "local",
+      "command": ["codegraph", "serve", "--mcp", "--path", "."],
+      "enabled": true,
+      "environment": {
+        "CODEGRAPH_TELEMETRY": "0"
+      }
+    }
+  }
+}

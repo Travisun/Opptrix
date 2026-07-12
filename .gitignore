@@ -28,11 +28,23 @@ Thumbs.db
 
 # Secrets & runtime data
 .env
-.env.local
+.env.*
+!.env.example
 *.key
 certs/
 api_keys.txt
 apps/server/data/
+
+# MiMoCode local secrets / credentials (keep skills + AGENTS.md)
+.mimocode/**/.env
+.mimocode/**/.env.*
+.mimocode/**/auth.json
+.mimocode/**/*credentials*
+.mimocode/**/*secret*
+.mimocode/**/*api*key*
+.mimocode/node_modules/
+.mimocode/package-lock.json
+.mimocode/bun.lock
 
 # User-local state (portfolio, market data, sessions)
 .opptrix/
