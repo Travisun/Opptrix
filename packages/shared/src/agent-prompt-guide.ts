@@ -1,6 +1,7 @@
 import type { InstrumentRef } from './market-data.js'
 import { resolveInstrumentAnalyticsProfile } from './instrument-analytics.js'
 import { crossMarketNewsHints } from './news-source-hints.js'
+import { TOOL_ROUTING } from './tool-routing.js'
 
 /** Stock-index 统一命名空间 — Agent/搜索/关注列表的全局标的 ID */
 export function buildInstrumentNamespacePlaybook(): string {
@@ -153,6 +154,7 @@ export function buildAgentSystemRules(): string {
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
     '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
+    TOOL_ROUTING,
     buildInstrumentNamespacePlaybook(),
     buildStandardInstrumentApiPlaybook(),
     buildInstrumentAnalysisPlaybook(),
@@ -160,14 +162,10 @@ export function buildAgentSystemRules(): string {
     buildMarketContextPlaybook(),
     buildProviderCustomMethodPlaybook(),
     buildUserInteractionPlaybook(),
-    '- A 股在线初选：screen_stocks；跨市场初选：search_instruments 或 screen_us_universe / screen_hk_universe / screen_crypto_universe',
     buildNewsRetrievalPlaybook(),
-    '- 每个工具描述含【何时使用】【调用规范】，严格遵守',
+    '- 每个工具描述含【何时使用】【何时不用】双面约束，严格遵守',
     '- 不推荐具体买卖，仅提供研究与数据解读',
     '- 可组合多个工具由浅入深补全数据',
-    '- 用户关注列表用 get_watchlist；关注池雷达用 get_watchlist_radar；实盘持仓用 get_portfolio_holdings / portfolio_summary（含 A/HK/US，返回带 market）；交易流水用 portfolio_trades（过滤港/美须带 market）',
-    '- 报告日期与时区用 get_current_time；环境/版本用 get_system_info；默认评分卡与模型用 get_app_settings',
-    '- 外部集成（Tushare）状态用 get_integration_status',
     '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
   ].join('\n')
 }

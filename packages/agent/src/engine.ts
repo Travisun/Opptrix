@@ -40,7 +40,9 @@ export interface ChatResult {
   title?: string
 }
 
-const MAX_TOOL_ROUNDS = 8
+// No hard limit on rounds — let the LLM naturally converge to a text response.
+// Safety: if 50 rounds reached without convergence, force stop.
+const MAX_SAFETY_ROUNDS = 50
 const TRUNCATE = 12_000
 
 export class ChatCancelledError extends Error {
@@ -329,7 +331,7 @@ export class AgentEngine {
     const openAiTools = await broker.openAiTools()
     const systemPrompt = this.tools.systemPrompt()
 
-    for (let round = 0; round < MAX_TOOL_ROUNDS; round++) {
+    for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const messages: ChatMessage[] = [
@@ -467,7 +469,7 @@ export class AgentEngine {
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
-    const reply = '⚠️ 工具调用轮次过多，请简化问题后重试。'
+    const reply = '⚠️ 分析轮次过多，请简化问题或明确分析方向后重试。'
     pushAssistant(reply, toolsUsed, toolSteps)
     emit({
       type: 'done',
