@@ -697,6 +697,105 @@ export const TENCENT_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     notes: 'symbol 为 us{TICKER}.OQ；前复权走 usfqkline/get。五日 fdays 为 m5 日 K 摘要（非港股式分时五日）。日 K 跨多年自动按年分批。',
     example: '{"provider":"tencent","method":"tencentUsStockKline","args":["usNVDA.OQ","week"]}',
   },
+
+  // ===== ETF 基金专用方法 =====
+
+  tencentFundProfile: {
+    method: 'tencentFundProfile',
+    description: 'ETF 基金概况（基金经理、管理人、托管人、净值、溢价率、规模、分红等）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getPriceZone?symbol={market}{code}',
+    pageUrl: 'https://gu.qq.com/{market}{code}',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码（如 159971）', required: true }],
+    returns: '{ code, data: { info: { jjdm, jjqc, jjjc, jjlx, jjjl, glrmc, tgrmc, dwjz, ljjz, zxgm, ... }, data: { zxjg, zyjl, jgzffd, ... }, profit: { ljfh, ljfhcs } } }',
+    usage: INVOKE('tencentFundProfile', '["159971"]'),
+    notes: 'JSONP 接口，info 含基金档案，data 含实时价格与溢价率，profit 含分红记录。',
+    example: '{"provider":"tencent","method":"tencentFundProfile","args":["159971"]}',
+  },
+
+  tencentFundAsset: {
+    method: 'tencentFundAsset',
+    description: 'ETF 资产配置（股票/债券比例、行业分布、前十大持仓）',
+    sourceUrl: 'https://zxg.txfund.com/ifzqgtimg/appstock/fund/baseInfo/asset?code={market}{code}',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码', required: true }],
+    returns: '{ code, data: { selector: string[], report_time, total_money, asset: [{name,ratio}], industry: [{name,ratio}], stock: [{name,code,ratio,rate}] } }',
+    usage: INVOKE('tencentFundAsset', '["159971"]'),
+    notes: 'JSONP 接口。stock[] 为前十大持仓，industry[] 为行业分布，asset[] 为大类资产配置。',
+    example: '{"provider":"tencent","method":"tencentFundAsset","args":["159971"]}',
+  },
+
+  tencentFundRankInfo: {
+    method: 'tencentFundRankInfo',
+    description: 'ETF 业绩排名（近1/4/13/26/52周/今年/成立以来净值增长率与同类平均）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getRankInfo?symbol={market}{code}',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码', required: true }],
+    returns: '{ code, data: { zxrq, total, jzzf: {w1,w4,w13,w26,w52,year,total,year3}, avg_hbl: {...} } }',
+    usage: INVOKE('tencentFundRankInfo', '["159971"]'),
+    notes: 'JSONP 接口。jzzf 为净值增长率，avg_hbl 为同类平均回报率。',
+    example: '{"provider":"tencent","method":"tencentFundRankInfo","args":["159971"]}',
+  },
+
+  tencentFundNavHistory: {
+    method: 'tencentFundNavHistory',
+    description: 'ETF 全量历史净值（从成立日至今的单位净值与累计净值）',
+    sourceUrl: 'https://stockjs.finance.qq.com/fundUnitNavAll/data/year_all/{code}.js',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码', required: true }],
+    returns: '{ code, data: [[date, nav, accNav], ...] }',
+    usage: INVOKE('tencentFundNavHistory', '["159971"]'),
+    notes: 'JS var 赋值格式，需提取 = 后 JSON。data 数组每项为 [日期YYYYMMDD, 单位净值, 累计净值]。',
+    example: '{"provider":"tencent","method":"tencentFundNavHistory","args":["159971"]}',
+  },
+
+  tencentEtfKline: {
+    method: 'tencentEtfKline',
+    description: 'ETF K 线（日/周/月，走 proxy.finance.qq.com 专用接口）',
+    sourceUrl: 'https://proxy.finance.qq.com/kline/app/get?code={market}{code}&period={period}',
+    params: [
+      { name: 'code', type: 'string', description: '6 位 ETF 代码', required: true },
+      { name: 'period', type: 'string', description: 'day / week / month', default: 'day' },
+      { name: 'limit', type: 'number', description: 'K 线条数，0 表示默认', default: 0 },
+    ],
+    returns: '{ stockCode, nodes: [{ date, open, last, high, low, volume, amount, exchange, dividend }] }',
+    usage: INVOKE('tencentEtfKline', '["159971","day",100]'),
+    notes: '与标准 kline 走 qt.gtimg.cn 不同，本接口走 proxy.finance.qq.com，返回含 exchange（换手率）、dividend（分红）等 ETF 专有字段。',
+    example: '{"provider":"tencent","method":"tencentEtfKline","args":["159971","week"]}',
+  },
+
+  tencentFundNotice: {
+    method: 'tencentFundNotice',
+    description: 'ETF 基金公告列表',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/fund/newfund/fundNotice/getNotice?symbol={market}{code}&page={page}&limit={limit}',
+    params: [
+      { name: 'code', type: 'string', description: '6 位 ETF 代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'limit', type: 'number', description: '每页条数', default: 20 },
+    ],
+    returns: '{ code, data: { [code]: { total, data: [{ id, title, date }] } } }',
+    usage: INVOKE('tencentFundNotice', '["159971",1,10]'),
+    notes: 'JSONP 接口。返回基金公告列表，含标题和发布日期。',
+    example: '{"provider":"tencent","method":"tencentFundNotice","args":["159971",1,10]}',
+  },
+
+  tencentSameTypeFunds: {
+    method: 'tencentSameTypeFunds',
+    description: '同类基金列表（ETF 详情页右侧边栏）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getSameLxFundList?type=1&symbol={market}{code}',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码', required: true }],
+    returns: '{ code, data: { list: [{ jjdm, jzrq, dwjz, jzzf, jzze, jjjc, sclx }] } }',
+    usage: INVOKE('tencentSameTypeFunds', '["159971"]'),
+    notes: 'JSONP 接口。type=1 为同类基金对比。',
+    example: '{"provider":"tencent","method":"tencentSameTypeFunds","args":["159971"]}',
+  },
+
+  tencentSameSeriesFunds: {
+    method: 'tencentSameSeriesFunds',
+    description: '同系基金列表（同一管理人旗下基金）',
+    sourceUrl: 'https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getSameLxFundList?type=2&symbol={market}{code}',
+    params: [{ name: 'code', type: 'string', description: '6 位 ETF 代码', required: true }],
+    returns: '{ code, data: { list: [{ jjdm, jzrq, dwjz, jzzf, jzze, jjjc, sclx, txjjlx }] } }',
+    usage: INVOKE('tencentSameSeriesFunds', '["159971"]'),
+    notes: 'JSONP 接口。type=2 为同系列基金（同一管理人旗下）。',
+    example: '{"provider":"tencent","method":"tencentSameSeriesFunds","args":["159971"]}',
+  },
 }
 
 export const TENCENT_CUSTOM = Object.values(TENCENT_METHOD_DOCS).map(toCustomMethodDef)

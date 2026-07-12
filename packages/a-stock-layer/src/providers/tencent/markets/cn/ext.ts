@@ -59,6 +59,16 @@ import {
   fetchTencentTradeDetails,
 } from '../../api/proxy.js'
 import {
+  fetchTencentFundProfile,
+  fetchTencentFundAsset,
+  fetchTencentFundRankInfo,
+  fetchTencentFundNavHistory,
+  fetchTencentEtfKline,
+  fetchTencentFundNotice,
+  fetchTencentSameTypeFunds,
+  fetchTencentSameSeriesFunds,
+} from '../../api/etf-service.js'
+import {
   mapTencentIndustryBoardRows,
   mapTencentIndustryConstituentRows,
   mapTencentIndustryRankRow,
@@ -958,5 +968,104 @@ export function mixTencentExt(Driver: { prototype: TencentCnHandler }) {
     })
     if (!result.items.length) return null
     return [{ ...result, source: 'tencent_us_kline' }]
+  }
+
+  // ===== ETF 基金专用方法 =====
+
+  /**
+   * ETF 基金概况（基金经理、管理人、净值、溢价率等）。
+   *
+   * @see tencentFundProfile in custom-method-docs.ts
+   * @sourceUrl https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getPriceZone?symbol={market}{code}
+   * @pageUrl https://gu.qq.com/{market}{code}
+   */
+  p.tencentFundProfile = async function tencentFundProfile(code: string) {
+    const result = await fetchTencentFundProfile(code)
+    return result ?? null
+  }
+
+  /**
+   * ETF 资产配置（股票/债券比例、行业分布、前十大持仓）。
+   *
+   * @see tencentFundAsset in custom-method-docs.ts
+   * @sourceUrl https://zxg.txfund.com/ifzqgtimg/appstock/fund/baseInfo/asset?code={market}{code}
+   */
+  p.tencentFundAsset = async function tencentFundAsset(code: string) {
+    const result = await fetchTencentFundAsset(code)
+    return result ?? null
+  }
+
+  /**
+   * ETF 业绩排名（近1/4/13/26/52周/今年/成立以来净值增长率与同类平均）。
+   *
+   * @see tencentFundRankInfo in custom-method-docs.ts
+   * @sourceUrl https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getRankInfo?symbol={market}{code}
+   */
+  p.tencentFundRankInfo = async function tencentFundRankInfo(code: string) {
+    const result = await fetchTencentFundRankInfo(code)
+    return result ?? null
+  }
+
+  /**
+   * ETF 全量历史净值（从成立日至今的单位净值与累计净值）。
+   *
+   * @see tencentFundNavHistory in custom-method-docs.ts
+   * @sourceUrl https://stockjs.finance.qq.com/fundUnitNavAll/data/year_all/{code}.js
+   */
+  p.tencentFundNavHistory = async function tencentFundNavHistory(code: string) {
+    const result = await fetchTencentFundNavHistory(code)
+    return result ?? null
+  }
+
+  /**
+   * ETF K 线（日/周/月，走 proxy.finance.qq.com 专用接口）。
+   *
+   * @see tencentEtfKline in custom-method-docs.ts
+   * @sourceUrl https://proxy.finance.qq.com/kline/app/get?code={market}{code}&period={period}
+   */
+  p.tencentEtfKline = async function tencentEtfKline(
+    code: string,
+    period = 'day',
+    limit = 0,
+  ) {
+    const result = await fetchTencentEtfKline(code, period, limit)
+    return result ?? null
+  }
+
+  /**
+   * ETF 基金公告列表。
+   *
+   * @see tencentFundNotice in custom-method-docs.ts
+   * @sourceUrl https://web.ifzq.gtimg.cn/fund/newfund/fundNotice/getNotice?symbol={market}{code}
+   */
+  p.tencentFundNotice = async function tencentFundNotice(
+    code: string,
+    page = 1,
+    limit = 20,
+  ) {
+    const result = await fetchTencentFundNotice(code, page, limit)
+    return result ?? null
+  }
+
+  /**
+   * 同类基金列表（ETF 详情页右侧边栏）。
+   *
+   * @see tencentSameTypeFunds in custom-method-docs.ts
+   * @sourceUrl https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getSameLxFundList?type=1&symbol={market}{code}
+   */
+  p.tencentSameTypeFunds = async function tencentSameTypeFunds(code: string) {
+    const result = await fetchTencentSameTypeFunds(code)
+    return result ?? null
+  }
+
+  /**
+   * 同系基金列表（同一管理人旗下基金）。
+   *
+   * @see tencentSameSeriesFunds in custom-method-docs.ts
+   * @sourceUrl https://web.ifzq.gtimg.cn/fund/newfund/fundBase/getSameLxFundList?type=2&symbol={market}{code}
+   */
+  p.tencentSameSeriesFunds = async function tencentSameSeriesFunds(code: string) {
+    const result = await fetchTencentSameSeriesFunds(code)
+    return result ?? null
   }
 }
