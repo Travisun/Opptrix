@@ -341,14 +341,17 @@ function SettingsPageView({
 
   useEffect(() => {
     if (!needsConfig || config !== null) return
+    console.log('[settings] loading config...')
     let cancelled = false
     setLoading(true)
     refresh()
-      .catch(() => {
+      .then(() => { if (!cancelled) console.log('[settings] config loaded') })
+      .catch((e) => {
+        console.error('[settings] config load failed:', e)
         if (!cancelled) toast.showError('无法读取后端配置，请确认服务已启动')
       })
       .finally(() => {
-        if (!cancelled) setLoading(false)
+        if (!cancelled) { setLoading(false); console.log('[settings] loading=false') }
       })
     // Safety timeout: if getConfig() hangs (e.g. Electron IPC issue),
     // ensure loading resolves so settings content can render.

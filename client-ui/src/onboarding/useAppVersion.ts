@@ -18,19 +18,29 @@ function clientBuildVersion(): string | null {
 async function resolveAppVersion(): Promise<string | null> {
   if (isElectron()) {
     try {
+      console.log('[version] trying electron clientVersion...')
       const fromElectron = (await window.electronAPI?.clientVersion?.())?.trim()
+      console.log('[version] electron result:', fromElectron)
       if (fromElectron) return normalizeAppVersion(fromElectron)
-    } catch { /* fall through */ }
+    } catch (e) {
+      console.warn('[version] electron clientVersion failed:', e)
+    }
   }
 
   const fromBuild = clientBuildVersion()
-  if (fromBuild) return fromBuild
+  if (fromBuild) {
+    console.log('[version] using build version:', fromBuild)
+    return fromBuild
+  }
 
   try {
+    console.log('[version] trying health...')
     const health = await getHealth()
     const fromHealth = health.version?.trim()
+    console.log('[version] health version:', fromHealth)
     return fromHealth ? normalizeAppVersion(fromHealth) : null
-  } catch {
+  } catch (e) {
+    console.warn('[version] health failed:', e)
     return null
   }
 }

@@ -24,6 +24,9 @@ const REQUEST_TIMEOUT = 10000 // 10s — quick reads / mutations
 const CHAT_REQUEST_TIMEOUT = 300_000
 
 async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<Response> {
+  const ts = Date.now()
+  const shortPath = path.replace(API_BASE, '')
+  console.log(`[api] → ${shortPath} (timeout ${timeoutMs}ms)`)
   const controller = new AbortController()
   let timedOut = false
   const timer = setTimeout(() => {
@@ -35,11 +38,16 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
   external?.addEventListener('abort', onExternalAbort)
   try {
     const { signal: _ignored, ...rest } = init ?? {}
-    return await fetch(path, { ...rest, signal: controller.signal })
+    const resp = await fetch(path, { ...rest, signal: controller.signal })
+    console.log(`[api] ← ${shortPath} ${resp.status} (${Date.now() - ts}ms)`)
+    return resp
   } catch (e) {
+    const ms = Date.now() - ts
     if (timedOut && e instanceof Error && e.name === 'AbortError') {
+      console.error(`[api] ✖ ${shortPath} TIMEOUT after ${ms}ms`)
       throw new Error('请求超时')
     }
+    console.error(`[api] ✖ ${shortPath} ERROR after ${ms}ms:`, e)
     throw e
   } finally {
     clearTimeout(timer)
