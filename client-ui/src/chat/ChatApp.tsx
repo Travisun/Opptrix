@@ -1091,7 +1091,7 @@ export default function ChatApp() {
           canGoForward={!isSettings && canGoForward}
           onToggleSidebar={handleToggleSidebar}
           onNewChat={handleNew}
-          onGoBack={handleChromeGoBack}
+          onGoBack={!isSettings ? handleChromeGoBack : undefined}
           onGoForward={!isSettings ? goForward : undefined}
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
