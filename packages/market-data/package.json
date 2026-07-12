@@ -16,10 +16,11 @@
     "sync": "npm run build && node dist/cli/sync.js"
   },
   "dependencies": {
+    "@dsnp/parquetjs": "^1.8.8",
     "@opptrix/a-stock-layer": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*",
     "@opptrix/stock-eval": "*",
+    "@opptrix/user-store": "*",
     "better-sqlite3": "^11.7.0"
   },
   "devDependencies": {

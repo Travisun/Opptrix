@@ -1,3 +1,5 @@
 export { TonghuashunDriver } from './driver.js'
 export { TONGHUASHUN_MANIFEST } from './manifest.js'
 export { TONGHUASHUN_SETTINGS } from './settings.js'
+export { FuyaoClient, testTonghuashunConnection } from './api/client.js'
+export { loadTonghuashunConfig, isTonghuashunEnabled, FUYAO_BASE_URL } from './config.js'

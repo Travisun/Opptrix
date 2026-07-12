@@ -27,8 +27,8 @@ function resolveCnExchangeFromStore(store: CnEquityRefStore, symbol: string): st
 
 export type InitialEquityMarket = 'CN' | 'HK' | 'US'
 
-/** 本地因子/K 线筛选已停用 — 指标与筛选改走在线 instrument_* 按需计算 */
-export const LOCAL_OFFLINE_SCREENING_ENABLED = false
+/** 本地因子/K 线筛选 — 通过同花顺 dump 导入本地数据启用 */
+export const LOCAL_OFFLINE_SCREENING_ENABLED = true
 
 const PLACEHOLDER_SYMBOL: Record<InitialEquityMarket, string> = {
   CN: '000001',

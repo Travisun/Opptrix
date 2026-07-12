@@ -11,6 +11,7 @@ import {
   ALL_SYNC_JOBS,
   BOOTSTRAP_SYNC_JOBS,
   DEFAULT_API_MIN_GAP_MS,
+  DUMP_IMPORT_CONFIG,
   EASTMONEY_HEAVY_JOBS,
   getSyncProfileSettings,
   getTushareSyncBoost,
@@ -20,6 +21,8 @@ import {
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
 } from './config.js'
+import { importDailyKDump } from './dump-import.js'
+import { FuyaoClient, isTonghuashunEnabled, loadTonghuashunConfig } from '@opptrix/a-stock-layer'
 import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
@@ -1687,5 +1690,112 @@ export class MarketDataSyncEngine {
     }
     this.store.setCursor('industry_stats', { trade_date: tradeDate, industries: n })
     this.store.finishRun(runId, 'success', { total: n, success: n, error: 0 })
+  }
+
+  /**
+   * Import dump data from tonghuashun Parquet files.
+   *
+   * Checks if tonghuashun is enabled, validates trading day and schedule,
+   * then downloads and imports the appropriate dump (full or incremental).
+   *
+   * @param options - Sync options with optional callbacks
+   * @returns Import result summary
+   *
+   * @sourceUrl packages/market-data/src/sync/engine.ts
+   */
+  async importDump(options: SyncOptions = {}): Promise<{
+    success: boolean
+    klineResult?: { type: string; rowsImported: number; error?: string }
+    adjustmentResult?: { type: string; rowsImported: number; error?: string }
+  }> {
+    const cfg = loadTonghuashunConfig()
+    if (!isTonghuashunEnabled(cfg)) {
+      options.onLog?.('同花顺未启用或 API Key 未配置，跳过 dump 导入')
+      return { success: false }
+    }
+
+    // Check if it's a trading day (skip non-trading days)
+    if (DUMP_IMPORT_CONFIG.tradingDayOnly) {
+      const dayOfWeek = new Date().getDay()
+      if (dayOfWeek === 0 || dayOfWeek === 6) {
+        options.onLog?.('非交易日（周末），跳过 dump 导入')
+        return { success: true }
+      }
+    }
+
+    // Check if update is due
+    const lastSuccess = this.store.getCursorLastSuccess('dump_import')
+    const now = new Date()
+    const hours = now.getHours()
+    const minutes = now.getMinutes()
+    const currentTimeMinutes = hours * 60 + minutes
+
+    // Parse dailyAfterTime (HH:MM)
+    const [afterHour, afterMinute] = DUMP_IMPORT_CONFIG.dailyAfterTime.split(':').map(Number)
+    const afterTimeMinutes = afterHour * 60 + afterMinute
+
+    if (DUMP_IMPORT_CONFIG.defaultFrequency === 'daily') {
+      if (currentTimeMinutes < afterTimeMinutes) {
+        options.onLog?.(`未到每日更新时间 ${DUMP_IMPORT_CONFIG.dailyAfterTime}，跳过`)
+        return { success: true }
+      }
+    } else {
+      const dayOfWeek = now.getDay()
+      if (dayOfWeek !== 1) {
+        options.onLog?.('非周一下午，跳过每周 dump 导入')
+        return { success: true }
+      }
+      if (currentTimeMinutes < afterTimeMinutes) {
+        options.onLog?.(`未到每周更新时间 ${DUMP_IMPORT_CONFIG.dailyAfterTime}，跳过`)
+        return { success: true }
+      }
+    }
+
+    // Check if already updated today
+    if (lastSuccess) {
+      const lastDate = new Date(lastSuccess)
+      const todayStr = todayTradeDate()
+      if (lastDate.toISOString().slice(0, 10) === todayStr) {
+        options.onLog?.('今日已导入 dump 数据，跳过')
+        return { success: true }
+      }
+    }
+
+    // Create tonghuashun client for API access
+    const client = FuyaoClient.fromConfig()
+    if (!client) {
+      options.onLog?.('无法创建同花顺客户端')
+      return { success: false }
+    }
+
+    options.onLog?.('开始导入同花顺 dump 数据...')
+
+    // Determine if full or incremental import
+    const hasData = this.store.hasKlineData()
+    const klineType = hasData ? 'incremental' : 'full'
+
+    options.onLog?.(`将导入 ${klineType === 'full' ? '全量（10年）' : '增量（10天）'} K 线数据`)
+
+    // Import K-line data — pass client.get as HTTP helper
+    const klineResult = await importDailyKDump(this.store, klineType, client.get.bind(client))
+
+    if (!klineResult.success) {
+      options.onLog?.(`K 线导入失败: ${klineResult.error}`)
+      return { success: false, klineResult }
+    }
+
+    options.onLog?.(`K 线导入完成: ${klineResult.rowsImported} 条`)
+
+    // Update cursor
+    this.store.setCursor('dump_import')
+
+    if (klineResult.rowsImported > 0) {
+      options.onLog?.('K 线数据已导入，因子计算将在下次同步时执行')
+    }
+
+    return {
+      success: true,
+      klineResult,
+    }
   }
 }

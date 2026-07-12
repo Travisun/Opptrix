@@ -434,6 +434,12 @@ export class MarketDataStore {
     return rows.length
   }
 
+  /** Check if K-line data exists in the database */
+  hasKlineData(): boolean {
+    const row = this.db.prepare('SELECT COUNT(*) as c FROM stock_klines_daily').get() as { c: number }
+    return row.c > 0
+  }
+
   countEquityInstruments(market: 'CN' | 'US' | 'HK'): number {
     if (market === 'CN') {
       return (this.db.prepare(

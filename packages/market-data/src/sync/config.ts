@@ -285,3 +285,19 @@ export const DEFAULT_API_MIN_GAP_MS = Number(
 
 export const QUOTES_BATCH_SIZE = getSyncProfileSettings().quotesBatchSize
 export const QUOTES_BATCH_DELAY_MS = getSyncProfileSettings().quotesBatchDelayMs
+
+/** Dump import configuration for tonghuashun Parquet data */
+export const DUMP_IMPORT_CONFIG = {
+  /** Default: weekly (every Monday after market close) */
+  defaultFrequency: 'weekly' as 'daily' | 'weekly',
+  /** Daily update after this time (HH:MM, Asia/Shanghai) */
+  dailyAfterTime: '15:30',
+  /** Only update on trading days */
+  tradingDayOnly: true,
+  /** Full dump ID */
+  fullDumpId: 'a_share_daily_k_1d_none_10y',
+  /** Incremental dump ID */
+  incrementalDumpId: 'a_share_daily_k_1d_none_10d',
+  /** Adjustment factors dump ID */
+  adjustmentDumpId: 'a_share_adjustment_factors_event_none_all',
+}

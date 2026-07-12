@@ -71,6 +71,11 @@ export {
 export type { TushareRuntimeConfig, PublicTushareConfig, TushareRow } from './providers/tushare/index.js'
 
 export {
+  FuyaoClient, testTonghuashunConnection,
+  loadTonghuashunConfig, isTonghuashunEnabled,
+} from './providers/tonghuashun/index.js'
+
+export {
   testTickflowConnection,
   loadTickflowConfig,
   isTickflowEnabled,
