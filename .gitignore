@@ -66,3 +66,8 @@ outputs/
 # Local trials when using example/ configs
 example/runtime-local/
 .akshare-ref/
+
+# Agent/MiMoCode generated files
+.agents/
+.mimocode/.cron-lock
+skills-lock.json
