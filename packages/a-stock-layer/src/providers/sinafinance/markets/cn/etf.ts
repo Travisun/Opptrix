@@ -8,10 +8,10 @@ import {
 } from '../../../common/standard-etf.js'
 import {
   fetchSinaEtfListAll,
-  fetchSinaFundNav,
   fetchSinaFundProfile,
   fetchSinaFundQuote,
 } from '../../api/fund-service.js'
+import { fetchSinaFundNavPage } from '../../api/fund.js'
 import { fetchSinaFundHoldings } from '../../api/corp-service.js'
 import type { SinafinanceCnHandler } from './handler.js'
 
@@ -54,12 +54,26 @@ export function mixSinafinanceEtf(Driver: { prototype: SinafinanceCnHandler }) {
   p.etfNav = async function etfNav(etfCode: string): Promise<Record<string, unknown>[] | null> {
     if (!isCnEtfCode(etfCode)) return null
     const bare = normalizeCode(etfCode)
-    const [navPage, quote] = await Promise.all([
-      fetchSinaFundNav(bare, 1, 60),
-      fetchSinaFundQuote(bare).catch(() => null),
-    ])
+
+    // 分页拉取全量净值（API 单页最大 100 条）
+    const allRows: Array<Record<string, unknown>> = []
+    let page = 1
+    const pageSize = 100
+    for (;;) {
+      const result = await fetchSinaFundNavPage(bare, page, pageSize)
+      if (!result.rows.length) break
+      allRows.push(...result.rows.map(r => ({ ...r, code: bare, source: 'sinafinance' })))
+      if (!result.hasNext || allRows.length >= result.total) break
+      page++
+      if (page > 50) break // 安全上限
+    }
+
+    if (!allRows.length) return null
+
+    // 取最新溢价率
+    const quote = await fetchSinaFundQuote(bare).catch(() => null)
     const premium = safeFloat((quote as Record<string, unknown> | null)?.premiumPct)
-    const rows = mapSinaFundNavRows(bare, navPage.rows, premium)
+    const rows = mapSinaFundNavRows(bare, allRows, premium)
     return rows.length ? rows : null
   }
 
