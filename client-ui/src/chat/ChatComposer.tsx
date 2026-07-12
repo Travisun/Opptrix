@@ -62,14 +62,21 @@ const useStyles = makeStyles({
     fontWeight: 500,
     fontSize: '13px',
     padding: '6px 14px',
-    border: 'none',
+    border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
+    transitionProperty: 'background-color, color, border-color, box-shadow',
+    transitionDuration: motion.fast,
     ':hover': {
-      backgroundColor: opptrixCssVars.canvasAlt,
+      backgroundColor: opptrixCssVars.surfaceHover,
       color: opptrixCssVars.textPrimary,
+      border: `1px solid ${opptrixCssVars.separatorStrong}`,
+    },
+    ':focus-visible': {
+      outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
+      outlineOffset: opptrixTokens.focusRingOffset,
     },
   },
   panelWrap: {
