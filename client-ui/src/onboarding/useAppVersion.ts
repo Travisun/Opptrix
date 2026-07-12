@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { getHealth } from '../api/client'
 import { isElectron } from '../platform/detect'
 import { normalizeAppVersion } from './constants'
@@ -43,16 +43,29 @@ export function useAppVersion(): {
 } {
   const [version, setVersion] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
+  const pendingRef = useRef(0)
 
   const reload = useCallback(async () => {
+    const generation = ++pendingRef.current
     setLoading(true)
     const v = await resolveAppVersion()
+    if (generation !== pendingRef.current) return
     setVersion(v)
     setLoading(false)
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     void reload()
+    // Safety timeout: if resolveAppVersion() hangs (e.g. Electron IPC stuck),
+    // ensure loading resolves so the gate can render children.
+    const timer = setTimeout(() => {
+      if (!cancelled) setLoading(false)
+    }, 8000)
+    return () => {
+      cancelled = true
+      clearTimeout(timer)
+    }
   }, [reload])
 
   const label = version ? `v${version}` : null
