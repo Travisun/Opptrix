@@ -12,6 +12,7 @@ import SettingsSidebar, {
 } from './settings/SettingsSidebar'
 import { normalizeSettingsSection } from './settings/settingsTypes'
 import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
+import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
@@ -646,6 +647,7 @@ function SettingsPageView({
           mode="panel"
           active={section}
           onSelect={setSection}
+          onBack={onBack}
           search={search}
           onSearchChange={setSearch}
           dynamicSearchEntries={dynamicSearchEntries}
@@ -659,6 +661,7 @@ function SettingsPageView({
           onClose={onSidebarClose}
           active={section}
           onSelect={setSection}
+          onBack={onBack}
           search={search}
           onSearchChange={setSearch}
           dynamicSearchEntries={dynamicSearchEntries}
@@ -685,6 +688,9 @@ function SettingsPageView({
             section === 'discover_strategies' && s.contentColumnFill,
           )}>
             <header className={mergeClasses(s.contentHeader, contentFlush && s.contentHeaderFlush)}>
+              {sidebarOverlayMode && !sidebarVisible && (
+                <SettingsBackRow className={s.contentBack} onClick={onBack} />
+              )}
               <Text className={s.pageTitle} block>{sectionTitle}</Text>
               <Text
                 className={mergeClasses(s.pageSubtitle, contentFlush && s.pageSubtitleFlush)}
