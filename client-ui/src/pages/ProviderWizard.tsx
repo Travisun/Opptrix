@@ -161,9 +161,9 @@ export interface ProviderWizardNavState {
 }
 
 const DEFAULT_PRESETS: ProviderPreset[] = [
-  { id: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com' },
-  { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com' },
-  { id: 'moonshot', name: 'Moonshot', base_url: 'https://api.moonshot.cn' },
+  { id: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1' },
+  { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1' },
+  { id: 'moonshot', name: 'Moonshot', base_url: 'https://api.moonshot.cn/v1' },
   { id: 'custom', name: '自定义', base_url: '' },
 ]
 
@@ -442,11 +442,11 @@ export default function ProviderWizard({
                   />
                 </OpptrixField>
                 {isCustom && (
-                  <OpptrixField label="Base URL" hint="无需包含 /v1，系统会自动补全">
+                  <OpptrixField label="Base URL" hint="请填写完整的 API 地址（含 /v1 等路径）">
                     <OpptrixInput
                       value={baseUrl}
                       onChange={(_, d) => setBaseUrl(d.value || '')}
-                      placeholder="https://api.example.com"
+                      placeholder="https://api.example.com/v1"
                     />
                   </OpptrixField>
                 )}

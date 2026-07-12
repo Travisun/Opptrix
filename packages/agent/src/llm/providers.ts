@@ -18,9 +18,7 @@ export interface AvailableModel {
 }
 
 export function normalizeBaseUrl(url: string): string {
-  let u = url.trim().replace(/\/$/, '')
-  if (!u.endsWith('/v1')) u += '/v1'
-  return u
+  return url.trim().replace(/\/$/, '')
 }
 
 export class ProviderRegistry {
