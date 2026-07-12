@@ -140,7 +140,9 @@ export class MarketDataService {
   }
 
   autoSyncOnBoot() {
-    // 本地离线市场库已停用
+    // 触发同花顺 Parquet dump 自动导入（后台执行，不阻塞启动）
+    void this.syncEngine.importDump({}).catch(() => {})
+    this.coordinator.autoSyncOnBoot()
   }
 
   /** @deprecated Use autoSyncOnBoot */

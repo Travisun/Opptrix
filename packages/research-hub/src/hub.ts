@@ -460,16 +460,22 @@ export class ResearchHub {
   }
 
   private async screening(params: Record<string, unknown>, t0: number) {
-    const conditions = (params.conditions ?? []) as { factor: string; op: string; value: number }[]
-    const scorecard = String(params.scorecard ?? '综合评估')
+    const conditions = (params.conditions ?? []) as Array<{ factor: string; op: '>' | '<' | '>=' | '<=' | '='; value: number }>
     const topN = Number(params.top_n ?? 20)
 
-    const data = await this.screener.run(conditions as never[], scorecard, topN)
-    return ok({
-      total_scanned: data.totalScanned, passed: data.passed, scorecard: data.scorecard,
-      source: 'live',
-      items: data.items.map(i => ({ code: i.code, name: i.name, total_score: i.total_score, key_factors: i.key_factors })),
-    }, `在线扫描 ${data.totalScanned} 通过 ${data.passed}`, t0)
+    try {
+      const data = this.marketData.screen(conditions, topN)
+      return ok({
+        total_scanned: data.items.length,
+        passed: data.passed,
+        scorecard: '综合评估',
+        source: 'local',
+        items: data.items.map(i => ({ code: i.code, name: i.name, total_score: i.total_score, industry: i.industry })),
+      }, `本地扫描 ${data.items.length} 通过 ${data.passed}`, t0)
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      return fail(`本地因子筛选不可用：${msg}。请先配置同花顺 API Key 并等待数据导入完成。`, t0)
+    }
   }
 
   private failLocalOffline(t0: number, hint?: string) {
