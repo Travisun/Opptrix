@@ -350,7 +350,12 @@ function SettingsPageView({
       .finally(() => {
         if (!cancelled) setLoading(false)
       })
-    return () => { cancelled = true }
+    // Safety timeout: if getConfig() hangs (e.g. Electron IPC issue),
+    // ensure loading resolves so settings content can render.
+    const timer = setTimeout(() => {
+      if (!cancelled) setLoading(false)
+    }, 12000)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [needsConfig, config, refresh, toast])
 
   useEffect(() => {

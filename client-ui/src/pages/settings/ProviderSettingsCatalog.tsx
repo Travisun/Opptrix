@@ -366,7 +366,13 @@ export function useProviderCatalog() {
   }, [toast])
 
   useEffect(() => {
+    let cancelled = false
     void refresh()
+    // Safety timeout for Electron
+    const timer = setTimeout(() => {
+      if (!cancelled) setLoading(false)
+    }, 12000)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [refresh])
 
   return { catalog, loading, refresh, setCatalog }
@@ -421,7 +427,12 @@ function InstalledProvidersSection({ onChanged }: { onChanged: () => void }) {
   }, [])
 
   useEffect(() => {
+    let cancelled = false
     void refresh()
+    const timer = setTimeout(() => {
+      if (!cancelled) setLoading(false)
+    }, 12000)
+    return () => { cancelled = true; clearTimeout(timer) }
   }, [refresh])
 
   const handleRescan = async () => {
