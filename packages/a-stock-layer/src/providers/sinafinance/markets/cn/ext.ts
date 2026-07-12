@@ -44,11 +44,16 @@ import {
   fetchSinaFundHolderStructure,
   fetchSinaFundHolderStructureHistory,
   fetchSinaFundIncomeStatement,
+  fetchSinaFundIndustryService,
+  fetchSinaFundManagerRatingService,
   fetchSinaFundNav,
   fetchSinaFundProfile,
   fetchSinaFundQuote,
   fetchSinaFundShareChange,
+  fetchSinaFundStockStyleService,
+  fetchSinaFundTopHoldService,
   fetchSinaFundTopHolders,
+  fetchSinaFundTypePerfService,
 } from '../../api/fund-service.js'
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
@@ -823,5 +828,84 @@ export function mixSinafinanceExt(Driver: { prototype: SinafinanceCnHandler }) {
     const bare = normalizeCode(code)
     if (!bare) return null
     return fetchSinaFundBalanceSheet(bare)
+  }
+
+/**
+ * 重仓股（JSONP API，比 HTML 解析更可靠）
+ * @sourceUrl https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/FdFundService.getTopHold?symbol={code}
+ * @pageUrl https://finance.sina.com.cn/fund/quotes/{code}/bc.shtml
+ * @returns 重仓股列表
+ * @usage engine.invokeCustomMethod("sinafinance", "sinaFundTopHold", ["159516"])
+ * @remarks Referer 须为 http://finance.sina.com.cn/（已在 sinafinance HTTP 客户端默认）。无数据时返回 null。
+ * @param code 6 位基金代码（必填）
+ * @example {"provider":"sinafinance","method":"sinaFundTopHold","args":["159516"]}
+ */
+  p.sinaFundTopHold = async function sinaFundTopHold(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundTopHoldService(bare)
+  }
+
+/**
+ * 行业配置
+ * @sourceUrl https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/CaihuiFundInfoService.getIndustry?symbol={code}
+ * @pageUrl https://finance.sina.com.cn/fund/quotes/{code}/bc.shtml
+ * @returns 行业配置列表
+ * @usage engine.invokeCustomMethod("sinafinance", "sinaFundIndustry", ["159516"])
+ * @remarks Referer 须为 http://finance.sina.com.cn/（已在 sinafinance HTTP 客户端默认）。无数据时返回 null。
+ * @param code 6 位基金代码（必填）
+ * @example {"provider":"sinafinance","method":"sinaFundIndustry","args":["159516"]}
+ */
+  p.sinaFundIndustry = async function sinaFundIndustry(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundIndustryService(bare)
+  }
+
+/**
+ * 基金经理评分
+ * @sourceUrl https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/XincaiFundInfoService.getFundManagerYJ?managerid={managerId}
+ * @pageUrl https://finance.sina.com.cn/fund/quotes/{code}/bc.shtml
+ * @returns 基金经理评分对象
+ * @usage engine.invokeCustomMethod("sinafinance", "sinaFundManagerRating", ["3000001"])
+ * @remarks Referer 须为 http://finance.sina.com.cn/（已在 sinafinance HTTP 客户端默认）。无数据时返回 null。
+ * @param managerId 基金经理 ID（必填）
+ * @example {"provider":"sinafinance","method":"sinaFundManagerRating","args":["3000001"]}
+ */
+  p.sinaFundManagerRating = async function sinaFundManagerRating(managerId: string) {
+    if (!managerId) return null
+    return fetchSinaFundManagerRatingService(managerId)
+  }
+
+/**
+ * 股票风格
+ * @sourceUrl https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/XincaiFundInfoService.FundStockStyle?symbol={code}
+ * @pageUrl https://finance.sina.com.cn/fund/quotes/{code}/bc.shtml
+ * @returns 股票风格信息
+ * @usage engine.invokeCustomMethod("sinafinance", "sinaFundStockStyle", ["159516"])
+ * @remarks Referer 须为 http://finance.sina.com.cn/（已在 sinafinance HTTP 客户端默认）。无数据时返回 null。
+ * @param code 6 位基金代码（必填）
+ * @example {"provider":"sinafinance","method":"sinaFundStockStyle","args":["159516"]}
+ */
+  p.sinaFundStockStyle = async function sinaFundStockStyle(code: string) {
+    const bare = normalizeCode(code)
+    if (!bare) return null
+    return fetchSinaFundStockStyleService(bare)
+  }
+
+/**
+ * 基金类型历史业绩
+ * @sourceUrl https://stock.finance.sina.com.cn/fundInfo/api/openapi.php/XincaiFundInfoService.getFundTypeYJ?companyId={companyId}&type2id={type2id}
+ * @pageUrl https://finance.sina.com.cn/fund/quotes/{code}/bc.shtml
+ * @returns 类型历史业绩列表
+ * @usage engine.invokeCustomMethod("sinafinance", "sinaFundTypePerf", ["800000","x2002"])
+ * @remarks Referer 须为 http://finance.sina.com.cn/（已在 sinafinance HTTP 客户端默认）。无数据时返回 null。
+ * @param companyId 基金公司 ID（必填）
+ * @param type2id 二级分类 ID（可选），默认 "x2002"
+ * @example {"provider":"sinafinance","method":"sinaFundTypePerf","args":["800000","x2002"]}
+ */
+  p.sinaFundTypePerf = async function sinaFundTypePerf(companyId: string, type2id = 'x2002') {
+    if (!companyId) return null
+    return fetchSinaFundTypePerfService(companyId, type2id)
   }
 }

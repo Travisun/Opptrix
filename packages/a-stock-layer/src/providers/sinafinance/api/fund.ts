@@ -604,3 +604,28 @@ export async function fetchSinaFundBalanceSheetRaw(
     { symbol: fundCode(code) },
   )
 }
+
+/** 重仓股 — FdFundService.getTopHold（JSONP，比 HTML 解析更可靠） */
+export async function fetchSinaFundTopHold(code: string) {
+  return fetchFundOpenApi<Record<string, unknown>>('FdFundService.getTopHold', { symbol: fundCode(code) })
+}
+
+/** 行业配置 — CaihuiFundInfoService.getIndustry */
+export async function fetchSinaFundIndustry(code: string) {
+  return fetchFundOpenApi<Record<string, unknown>>('CaihuiFundInfoService.getIndustry', { symbol: fundCode(code) })
+}
+
+/** 基金经理评分 — XincaiFundInfoService.getFundManagerYJ */
+export async function fetchSinaFundManagerRating(managerId: string) {
+  return fetchFundOpenApi<Record<string, unknown>>('XincaiFundInfoService.getFundManagerYJ', { managerid: managerId })
+}
+
+/** 股票风格 — XincaiFundInfoService.FundStockStyle */
+export async function fetchSinaFundStockStyle(code: string) {
+  return fetchFundOpenApi<Record<string, unknown>>('XincaiFundInfoService.FundStockStyle', { symbol: fundCode(code) })
+}
+
+/** 基金类型历史业绩 — XincaiFundInfoService.getFundTypeYJ */
+export async function fetchSinaFundTypePerf(companyId: string, type2id = 'x2002') {
+  return fetchFundOpenApi<Record<string, unknown>>('XincaiFundInfoService.getFundTypeYJ', { companyId, type2id })
+}

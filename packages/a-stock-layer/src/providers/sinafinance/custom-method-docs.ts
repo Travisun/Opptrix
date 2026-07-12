@@ -406,6 +406,46 @@ export const SINA_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     FUND_PAGE,
     [CODE_PARAM], '资产负债表行列',
   ),
+
+  sinaFundTopHold: sinaDoc(
+    'sinaFundTopHold', '重仓股（JSONP API，比 HTML 解析更可靠）',
+    `${FUND_API}/FdFundService.getTopHold?symbol={code}`,
+    FUND_PAGE,
+    [CODE_PARAM], '重仓股列表',
+  ),
+
+  sinaFundIndustry: sinaDoc(
+    'sinaFundIndustry', '行业配置',
+    `${FUND_API}/CaihuiFundInfoService.getIndustry?symbol={code}`,
+    FUND_PAGE,
+    [CODE_PARAM], '行业配置列表',
+  ),
+
+  sinaFundManagerRating: sinaDoc(
+    'sinaFundManagerRating', '基金经理评分',
+    `${FUND_API}/XincaiFundInfoService.getFundManagerYJ?managerid={managerId}`,
+    FUND_PAGE,
+    [{ name: 'managerId', type: 'string', description: '基金经理 ID', required: true }],
+    '基金经理评分对象',
+  ),
+
+  sinaFundStockStyle: sinaDoc(
+    'sinaFundStockStyle', '股票风格',
+    `${FUND_API}/XincaiFundInfoService.FundStockStyle?symbol={code}`,
+    FUND_PAGE,
+    [CODE_PARAM], '股票风格信息',
+  ),
+
+  sinaFundTypePerf: sinaDoc(
+    'sinaFundTypePerf', '基金类型历史业绩',
+    `${FUND_API}/XincaiFundInfoService.getFundTypeYJ?companyId={companyId}&type2id={type2id}`,
+    FUND_PAGE,
+    [
+      { name: 'companyId', type: 'string', description: '基金公司 ID', required: true },
+      { name: 'type2id', type: 'string', description: '二级分类 ID', default: 'x2002' },
+    ],
+    '类型历史业绩列表',
+  ),
 }
 
 export const SINA_CUSTOM = Object.values(SINA_METHOD_DOCS).map(toCustomMethodDef)

@@ -17,11 +17,16 @@ import {
   fetchSinaFundHolderStructureHistoryRaw,
   fetchSinaFundHolderStructureRaw,
   fetchSinaFundIncomeStatementRaw,
+  fetchSinaFundIndustry,
+  fetchSinaFundManagerRating,
   fetchSinaFundNavPage,
   fetchSinaFundProfileRaw,
   fetchSinaFundQuoteRaw,
   fetchSinaFundShareChangeRaw,
+  fetchSinaFundStockStyle,
+  fetchSinaFundTopHold,
   fetchSinaFundTopHoldersRaw,
+  fetchSinaFundTypePerf,
   mapFundStatementPeriods,
   type SinaFundMarketNode,
 } from './fund.js'
@@ -340,4 +345,42 @@ export async function fetchSinaFundBalanceSheet(code: string) {
     periods: mapFundStatementPeriods(raw, SINA_FUND_BALANCE_SHEET_FIELDS),
     source: SINA_SOURCE,
   }
+}
+
+/** 重仓股 JSONP API — `FdFundService.getTopHold` */
+export async function fetchSinaFundTopHoldService(code: string) {
+  const bare = normalizeCode(code)
+  const raw = await fetchSinaFundTopHold(bare)
+  if (!raw) return null
+  return withSource(bare, raw)
+}
+
+/** 行业配置 — `CaihuiFundInfoService.getIndustry` */
+export async function fetchSinaFundIndustryService(code: string) {
+  const bare = normalizeCode(code)
+  const raw = await fetchSinaFundIndustry(bare)
+  if (!raw) return null
+  return withSource(bare, raw)
+}
+
+/** 基金经理评分 — `XincaiFundInfoService.getFundManagerYJ` */
+export async function fetchSinaFundManagerRatingService(managerId: string) {
+  const raw = await fetchSinaFundManagerRating(managerId)
+  if (!raw) return null
+  return { ...raw, source: SINA_SOURCE }
+}
+
+/** 股票风格 — `XincaiFundInfoService.FundStockStyle` */
+export async function fetchSinaFundStockStyleService(code: string) {
+  const bare = normalizeCode(code)
+  const raw = await fetchSinaFundStockStyle(bare)
+  if (!raw) return null
+  return withSource(bare, raw)
+}
+
+/** 基金类型历史业绩 — `XincaiFundInfoService.getFundTypeYJ` */
+export async function fetchSinaFundTypePerfService(companyId: string, type2id = 'x2002') {
+  const raw = await fetchSinaFundTypePerf(companyId, type2id)
+  if (!raw) return null
+  return { ...raw, source: SINA_SOURCE }
 }
