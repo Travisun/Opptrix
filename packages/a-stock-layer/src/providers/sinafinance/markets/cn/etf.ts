@@ -1,7 +1,6 @@
 import { isCnEtfCode } from '../../../../core/instrument.js'
 import type { StockListItem } from '../../../../core/schema.js'
 import { normalizeCode, safeFloat } from '../../../../utils/helpers.js'
-import { etfHoldingsViaIndexProxy } from '../../../common/etf-holdings-proxy.js'
 import {
   mapSinaEtfListItems,
   mapSinaFundNavRows,
@@ -13,6 +12,7 @@ import {
   fetchSinaFundProfile,
   fetchSinaFundQuote,
 } from '../../api/fund-service.js'
+import { fetchSinaFundHoldings } from '../../api/corp-service.js'
 import type { SinafinanceCnHandler } from './handler.js'
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
@@ -64,6 +64,19 @@ export function mixSinafinanceEtf(Driver: { prototype: SinafinanceCnHandler }) {
   }
 
   p.etfHoldings = async function etfHoldings(etfCode: string): Promise<Record<string, unknown>[] | null> {
-    return etfHoldingsViaIndexProxy(etfCode)
+    if (!isCnEtfCode(etfCode)) return null
+    const bare = normalizeCode(etfCode)
+    const blocks = await fetchSinaFundHoldings(bare)
+    if (!blocks?.length) return null
+    const rows = blocks.map((row: Record<string, unknown>) => ({
+      reportDate: String(row.asOfDate ?? '').slice(0, 10),
+      holdingSymbol: normalizeCode(String(row.fundCode ?? '')),
+      holdingName: String(row.fundName ?? '').trim() || null,
+      weight: safeFloat(row.navPct ?? row.floatPct),
+      shares: safeFloat(row.shares),
+      marketValue: safeFloat(row.marketValue),
+      source: 'sinafinance',
+    }))
+    return rows.filter((r: Record<string, unknown>) => r.holdingSymbol).length ? rows : null
   }
 }

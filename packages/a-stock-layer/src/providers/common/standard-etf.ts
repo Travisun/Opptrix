@@ -124,6 +124,7 @@ export function mapSinaFundToEtfProfileRow(
     code: c,
     name: String(profile?.shortName ?? profile?.fullName ?? quote?.name ?? ''),
     fundType,
+    industry: fundType,
     trackingIndex: String(profile?.benchmark ?? fields.gzzs ?? fields.jz ?? '').trim() || undefined,
     manager: String(profile?.manager ?? fields.jjjl ?? '').trim() || undefined,
     company: profile?.company != null ? String(profile.company) : undefined,
