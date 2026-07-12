@@ -3,6 +3,7 @@ import { TENCENT_SPEC } from './manifest.js'
 import { TencentCnHandler } from './markets/cn/handler.js'
 import { mixTencentExt } from './markets/cn/ext.js'
 import { mixTencentEtf } from './markets/cn/etf.js'
+import { mixTencentFundProfile } from './markets/cn/etf-fund-profile.js'
 import { mixTencentUsEquity } from './markets/us/equity.js'
 import { mixTencentHkEquity } from './markets/hk/equity.js'
 
@@ -10,6 +11,7 @@ export class TencentDriver extends TencentCnHandler {}
 
 mixTencentExt(TencentDriver)
 mixTencentEtf(TencentDriver)
+mixTencentFundProfile(TencentDriver) // 必须在 mixTencentEtf 之后，覆盖 etfProfile/etfNav/etfHoldings
 mixTencentUsEquity(TencentDriver)
 mixTencentHkEquity(TencentDriver)
 applyManifestSpec(TencentDriver, TENCENT_SPEC)
