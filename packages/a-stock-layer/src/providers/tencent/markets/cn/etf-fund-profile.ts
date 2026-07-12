@@ -69,6 +69,7 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
       name: String(info.jjjc ?? info.jjqc ?? '').trim() || undefined,
       fullName: String(info.jjqc ?? '').trim() || undefined,
       fundType: String(info.txjjlx ?? info.jjlx ?? 'ETF').trim(),
+      industry: String(info.txjjlx ?? info.jjlx ?? 'ETF').trim(),
       manager: String(info.jjjl ?? '').trim() || undefined,
       company: String(info.glrmc ?? '').trim() || undefined,
       custodian: String(info.tgrmc ?? '').trim() || undefined,
@@ -169,7 +170,11 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
     const rows: Record<string, unknown>[] = []
     for (const item of raw) {
       if (!Array.isArray(item) || item.length < 3) continue
-      const date = String(item[0] ?? '').slice(0, 10)
+      // year_all 返回 YYYYMMDD，需转为 YYYY-MM-DD
+      const rawDate = String(item[0] ?? '')
+      const date = rawDate.length === 8
+        ? `${rawDate.slice(0, 4)}-${rawDate.slice(4, 6)}-${rawDate.slice(6, 8)}`
+        : rawDate.slice(0, 10)
       if (!date) continue
       rows.push({
         code: bare,
@@ -209,7 +214,7 @@ export function mixTencentFundProfile(Driver: { prototype: TencentCnHandler }) {
     if (!result) return null
 
     const assetData = (result.data ?? result) as Record<string, unknown>
-    const reportDate = String(assetData.report_time ?? '').slice(0, 10)
+    const reportDate = String(assetData.report_time ?? '').slice(0, 10) || new Date().toISOString().slice(0, 10)
 
     const rows: Record<string, unknown>[] = []
 
