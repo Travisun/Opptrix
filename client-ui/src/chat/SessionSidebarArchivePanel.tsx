@@ -331,7 +331,7 @@ interface Props {
   groups: ArchiveFolderGroup[]
   activeId: string | null
   activeRoute?: 'chat' | 'news' | 'market'
-  busySessionId?: string | null
+  busySessionIds?: readonly string[]
   onSelect: (id: string) => void
   onDeleteSession: (id: string) => void | Promise<void>
   onCreateFolder: (title: string) => void | Promise<void>
@@ -361,7 +361,7 @@ export default function SessionSidebarArchivePanel({
   groups,
   activeId,
   activeRoute = 'chat',
-  busySessionId = null,
+  busySessionIds = [],
   onSelect,
   onDeleteSession,
   onCreateFolder,
@@ -706,7 +706,7 @@ export default function SessionSidebarArchivePanel({
                     <div className={s.sessionList}>
                       {sessions.map(sess => {
                         const active = activeRoute === 'chat' && sess.id === activeId
-                        const busy = sess.id === busySessionId
+                        const busy = busySessionIds.includes(sess.id)
                         const isDeletingSession = deletingSessionId === sess.id
                         return isDeletingSession ? (
                           <div

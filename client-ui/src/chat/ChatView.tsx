@@ -9,6 +9,7 @@ import type {
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import { submitUserPromptResponse } from '../api/client'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
+import type { SessionStreamSnapshot } from './sessionStreamRuntime'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
@@ -265,6 +266,7 @@ interface ChatViewProps {
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
   onStreamError?: (message: string) => void
+  resolveStreamSnapshot?: (sessionId: string | null) => SessionStreamSnapshot | null
 }
 
 function ChatView({
@@ -281,6 +283,7 @@ function ChatView({
   chatColumnVisible = true,
   onToggleChatColumn,
   onStreamError,
+  resolveStreamSnapshot,
 }: ChatViewProps) {
   const s = useStyles()
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
@@ -292,10 +295,17 @@ function ChatView({
   userPromptSubmittingRef.current = userPromptSubmitting
 
   useEffect(() => {
+    const snapshot = resolveStreamSnapshot?.(sessionId) ?? null
+    if (snapshot) {
+      setLiveTrace(snapshot.liveTrace)
+      setPendingUserPrompt(snapshot.pendingUserPrompt)
+      setUserPromptSubmitting(snapshot.userPromptSubmitting)
+      return
+    }
     setLiveTrace(null)
     setPendingUserPrompt(null)
     setUserPromptSubmitting(false)
-  }, [sessionId])
+  }, [sessionId, resolveStreamSnapshot])
 
   useEffect(() => {
     if (!streamUiRef) return undefined

@@ -269,8 +269,8 @@ interface SessionSidebarProps {
   sessions: SessionMeta[]
   activeId: string | null
   activeRoute?: 'chat' | 'news' | 'market'
-  /** id of the session currently streaming a response (shows thinking dot) */
-  busySessionId?: string | null
+  /** ids of sessions currently streaming a response (shows thinking dot) */
+  busySessionIds?: readonly string[]
   onSelect: (id: string) => void
   onNew: () => void
   onDelete: (id: string) => void
@@ -296,7 +296,7 @@ function formatDate(iso: string) {
 
 function SessionSidebar({
   mode, visible = true, drawerOpen = false,
-  sessions, activeId, activeRoute = 'chat', busySessionId = null,
+  sessions, activeId, activeRoute = 'chat', busySessionIds = [],
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
   listTab: listTabProp,
   onListTabChange,
@@ -417,7 +417,7 @@ function SessionSidebar({
           // session row can be clicked (including the current one) to jump
           // back into the chat area.
           const active = activeRoute === 'chat' && sess.id === activeId
-          const busy = sess.id === busySessionId
+          const busy = busySessionIds.includes(sess.id)
           return (
             <div
               key={sess.id}
@@ -470,7 +470,7 @@ function SessionSidebar({
             groups={archivedGroups}
             activeId={activeId}
             activeRoute={activeRoute}
-            busySessionId={busySessionId}
+            busySessionIds={busySessionIds}
             onSelect={handleSelect}
             onDeleteSession={onDeleteArchivedSession}
             onCreateFolder={onCreateArchiveFolder}

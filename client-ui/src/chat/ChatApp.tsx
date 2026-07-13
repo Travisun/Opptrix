@@ -4,6 +4,13 @@ import SessionSidebar, { type SidebarListTab } from './SessionSidebar'
 import type { ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ChatView from './ChatView'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
+import {
+  applyChatProgressEvent,
+  createThinkingStreamSnapshot,
+  syncStreamSnapshotToUi,
+  type SessionStreamSnapshot,
+} from './sessionStreamRuntime'
+import type { ChatProgressEvent } from '../types/chatProgress'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
@@ -235,16 +242,53 @@ export default function ChatApp() {
   const pushComposerDraft = useCallback((text: string) => {
     setComposerDraft(prev => ({ revision: prev.revision + 1, text }))
   }, [])
-  const [loading, setLoading] = useState(false)
+  const [streamingSessionIds, setStreamingSessionIds] = useState<string[]>([])
   const streamUiRef = useRef<ChatStreamUiRef['current']>(null)
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
-  const chatAbortRef = useRef<AbortController | null>(null)
-  const stoppingRef = useRef(false)
-  const chatStreamGenRef = useRef(0)
+  const streamCacheRef = useRef(new Map<string, SessionStreamSnapshot>())
+  const streamHandlesRef = useRef(new Map<string, { abortController: AbortController; streamGen: number }>())
+  const sessionStreamGenRef = useRef(new Map<string, number>())
+  const stoppingSessionsRef = useRef(new Set<string>())
+  const streamingSessionIdsRef = useRef(new Set<string>())
+  const activeIdRef = useRef<string | null>(null)
+  const loading = activeId ? streamingSessionIds.includes(activeId) : false
+  const markSessionStreaming = useCallback((sessionId: string, streaming: boolean) => {
+    if (streaming) streamingSessionIdsRef.current.add(sessionId)
+    else streamingSessionIdsRef.current.delete(sessionId)
+    setStreamingSessionIds(Array.from(streamingSessionIdsRef.current))
+  }, [])
+
+  const pushStreamEvent = useCallback((targetSessionId: string, event: ChatProgressEvent) => {
+    const prev = streamCacheRef.current.get(targetSessionId) ?? createThinkingStreamSnapshot()
+    const next = applyChatProgressEvent(prev, event)
+    streamCacheRef.current.set(targetSessionId, next)
+    if (activeIdRef.current === targetSessionId) {
+      syncStreamSnapshotToUi(next, streamUiRef.current)
+    }
+  }, [])
+
+  const resolveStreamSnapshot = useCallback((id: string | null) => {
+    if (!id || !streamingSessionIdsRef.current.has(id)) return null
+    return streamCacheRef.current.get(id) ?? createThinkingStreamSnapshot()
+  }, [streamingSessionIds])
+
+  const abortSessionStream = useCallback(async (sessionId: string) => {
+    sessionStreamGenRef.current.set(
+      sessionId,
+      (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1,
+    )
+    stoppingSessionsRef.current.add(sessionId)
+    streamHandlesRef.current.get(sessionId)?.abortController.abort()
+    try {
+      await cancelSessionChat(sessionId)
+    } catch {
+      /* stream may have already ended */
+    }
+  }, [])
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
@@ -410,33 +454,11 @@ export default function ChatApp() {
     }
   }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn, view])
 
-  const abortActiveChatStream = useCallback(async () => {
-    if (!loading && !chatAbortRef.current) return
-    chatStreamGenRef.current += 1
-    stoppingRef.current = true
-    const sid = activeId
-    chatAbortRef.current?.abort()
-    if (sid) {
-      try {
-        await cancelSessionChat(sid)
-      } catch {
-        /* stream may have already ended */
-      }
-    }
-    streamUiRef.current?.resetStreamUi()
-    setLoading(false)
-    stoppingRef.current = false
-    chatAbortRef.current = null
-  }, [activeId, loading])
-
   const handleSelect = useCallback(async (id: string) => {
     restoreChatColumn()
     if (id === activeId) {
       if (view !== 'chat') navigate('chat')
       return
-    }
-    if (loading) {
-      await abortActiveChatStream()
     }
     try {
       await loadSession(id)
@@ -444,7 +466,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '加载对话失败')
     }
-  }, [abortActiveChatStream, activeId, loadSession, loading, navigate, restoreChatColumn, view])
+  }, [activeId, loadSession, navigate, restoreChatColumn, view])
 
   const handleDelete = useCallback(async (id: string) => {
     const ok = await confirm({
@@ -455,6 +477,9 @@ export default function ChatApp() {
     })
     if (!ok) return
     try {
+      if (streamingSessionIdsRef.current.has(id)) {
+        await abortSessionStream(id)
+      }
       await deleteSession(id)
       const list = await refreshSessions()
       if (activeId === id) {
@@ -470,7 +495,7 @@ export default function ChatApp() {
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败')
     }
-  }, [activeId, confirm, loadSession, refreshSessions])
+  }, [activeId, abortSessionStream, confirm, loadSession, refreshSessions])
 
   const handleArchive = useCallback(async (id: string, folderId: string) => {
     try {
@@ -646,21 +671,11 @@ export default function ChatApp() {
   ])
 
   const handleStop = useCallback(async () => {
-    if (!loading || stoppingRef.current) return
-    chatStreamGenRef.current += 1
-    stoppingRef.current = true
     const sid = activeId
-    if (sid) {
-      try {
-        await cancelSessionChat(sid)
-      } catch {
-        /* stream may have already ended */
-      }
-    }
-    chatAbortRef.current?.abort()
-  }, [activeId, loading])
+    if (!sid || !streamingSessionIdsRef.current.has(sid) || stoppingSessionsRef.current.has(sid)) return
+    await abortSessionStream(sid)
+  }, [abortSessionStream, activeId])
 
-  const activeIdRef = useRef(activeId)
   const loadingRef = useRef(loading)
   const sessionModelRef = useRef(sessionModel)
   activeIdRef.current = activeId
@@ -671,7 +686,7 @@ export default function ChatApp() {
 
   submitImplRef.current = async (text?: string) => {
     const msg = (text ?? '').trim()
-    if (!msg || loadingRef.current) return
+    if (!msg) return
 
     let sessionId = activeIdRef.current
     if (!sessionId) {
@@ -686,12 +701,17 @@ export default function ChatApp() {
       }
     }
 
-    setLoading(true)
-    const streamGen = ++chatStreamGenRef.current
-    const streamUi = streamUiRef.current
-    streamUi?.setLiveTrace({ steps: [], thinkingLabel: '模型正在思考…' })
-    streamUi?.setPendingUserPrompt(null)
-    streamUi?.setUserPromptSubmitting(false)
+    if (streamingSessionIdsRef.current.has(sessionId)) return
+
+    const streamGen = (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1
+    sessionStreamGenRef.current.set(sessionId, streamGen)
+    const initialSnapshot = createThinkingStreamSnapshot()
+    streamCacheRef.current.set(sessionId, initialSnapshot)
+    markSessionStreaming(sessionId, true)
+    stoppingSessionsRef.current.delete(sessionId)
+    if (activeIdRef.current === sessionId) {
+      syncStreamSnapshotToUi(initialSnapshot, streamUiRef.current)
+    }
     setError('')
 
     const optimistic: ChatDisplayMessage = {
@@ -699,127 +719,79 @@ export default function ChatApp() {
       content: msg,
       at: new Date().toISOString(),
     }
-    setMessages(prev => [...prev, optimistic])
+    if (activeIdRef.current === sessionId) {
+      setMessages(prev => [...prev, optimistic])
+    }
 
     let resolvedSessionId = sessionId
     const abortController = new AbortController()
-    chatAbortRef.current = abortController
-    stoppingRef.current = false
+    streamHandlesRef.current.set(sessionId, { abortController, streamGen })
+
+    const isStreamStale = () => streamGen !== (sessionStreamGenRef.current.get(sessionId) ?? 0)
+
+    const applyFreshSession = async (sid: string) => {
+      const fresh = await getSession(sid)
+      if (isStreamStale()) return
+      if (activeIdRef.current === sid) {
+        setActiveSessionMeta(fresh.session)
+        setMessages(fresh.messages)
+        setContextRef(fresh.contextRef ?? null)
+        setSessionModelState(fresh.session.model)
+      }
+      const list = await refreshSessions()
+      if (isStreamStale()) return
+      setSessions(list)
+    }
 
     try {
       await streamSessionChat(sessionId, msg, (event) => {
-        const ui = streamUiRef.current
-        if (!ui) return
-        if (event.type === 'thinking') {
-          ui.setLiveTrace(prev => ({
-            steps: prev?.steps ?? [],
-            thinkingLabel: event.label,
-            thinkingSnippet: event.snippet ?? prev?.thinkingSnippet,
-          }))
-          return
-        }
-        if (event.type === 'user_prompt') {
-          ui.setPendingUserPrompt(event.prompt)
-          ui.setLiveTrace(prev => ({
-            steps: prev?.steps ?? [],
-            thinkingLabel: '等待你的确认…',
-            thinkingSnippet: prev?.thinkingSnippet,
-          }))
-          return
-        }
-        if (event.type === 'tool_start') {
-          ui.setLiveTrace(prev => ({
-            thinkingLabel: prev?.thinkingLabel,
-            thinkingSnippet: prev?.thinkingSnippet,
-            steps: [...(prev?.steps ?? []), event.step],
-          }))
-          return
-        }
-        if (event.type === 'tool_done') {
-          if (event.step.tool === 'ask_user') {
-            ui.setPendingUserPrompt(null)
-          }
-          ui.setLiveTrace(prev => ({
-            thinkingLabel: prev?.thinkingLabel ?? '模型正在整理结果…',
-            thinkingSnippet: prev?.thinkingSnippet,
-            steps: (prev?.steps ?? []).map(step =>
-              step.id === event.step.id ? event.step : step,
-            ),
-          }))
-          return
-        }
-        if (event.type === 'reply') {
-          ui.setLiveTrace(prev => ({
-            steps: prev?.steps ?? [],
-            thinkingLabel: '正在生成回复…',
-            thinkingSnippet: prev?.thinkingSnippet,
-          }))
-          return
-        }
+        pushStreamEvent(sessionId, event)
         if (event.type === 'done') {
           resolvedSessionId = event.session_id || resolvedSessionId
         }
       }, sessionModelRef.current, abortController.signal)
 
-      if (streamGen !== chatStreamGenRef.current) return
+      if (isStreamStale()) return
 
       const sid = resolvedSessionId
-      if (sid !== sessionId) {
+      if (sid !== sessionId && activeIdRef.current === sessionId) {
         setActiveId(sid)
       }
-      const fresh = await getSession(sid)
-      if (streamGen !== chatStreamGenRef.current) return
-      setActiveSessionMeta(fresh.session)
-      setMessages(fresh.messages)
-      setContextRef(fresh.contextRef ?? null)
-      setSessionModelState(fresh.session.model)
-      const list = await refreshSessions()
-      if (streamGen !== chatStreamGenRef.current) return
-      setSessions(list)
+      await applyFreshSession(sid)
     } catch (e) {
       const aborted = (
         (e instanceof DOMException && e.name === 'AbortError')
         || (e instanceof Error && e.name === 'AbortError')
       )
       if (aborted) {
-        if (streamGen !== chatStreamGenRef.current) return
+        if (isStreamStale()) return
         try {
-          const fresh = await getSession(sessionId)
-          if (streamGen !== chatStreamGenRef.current) return
-          setActiveSessionMeta(fresh.session)
-          setMessages(fresh.messages)
-          setContextRef(fresh.contextRef ?? null)
-          setSessionModelState(fresh.session.model)
-          const list = await refreshSessions()
-          if (streamGen !== chatStreamGenRef.current) return
-          setSessions(list)
+          await applyFreshSession(sessionId)
         } catch {
           /* keep current messages */
         }
         return
       }
-      if (streamGen !== chatStreamGenRef.current) return
-      pushComposerDraft(msg)
-      setError(e instanceof Error ? e.message : '发送失败')
+      if (isStreamStale()) return
+      if (activeIdRef.current === sessionId) {
+        pushComposerDraft(msg)
+        setError(e instanceof Error ? e.message : '发送失败')
+      }
       try {
-        const fresh = await getSession(sessionId)
-        if (streamGen !== chatStreamGenRef.current) return
-        setActiveSessionMeta(fresh.session)
-        setMessages(fresh.messages)
-        setContextRef(fresh.contextRef ?? null)
+        await applyFreshSession(sessionId)
       } catch {
-        if (streamGen !== chatStreamGenRef.current) return
-        setMessages(prev => prev.slice(0, -1))
+        if (isStreamStale()) return
+        if (activeIdRef.current === sessionId) {
+          setMessages(prev => prev.slice(0, -1))
+        }
       }
     } finally {
-      if (streamGen !== chatStreamGenRef.current) {
-        chatAbortRef.current = null
-        stoppingRef.current = false
-      } else {
-        chatAbortRef.current = null
-        stoppingRef.current = false
+      streamHandlesRef.current.delete(sessionId)
+      stoppingSessionsRef.current.delete(sessionId)
+      streamCacheRef.current.delete(sessionId)
+      markSessionStreaming(sessionId, false)
+      if (activeIdRef.current === sessionId) {
         streamUiRef.current?.resetStreamUi()
-        setLoading(false)
       }
     }
   }
@@ -1022,7 +994,7 @@ export default function ChatApp() {
     sessions,
     activeId,
     activeRoute: sidebarActiveRoute,
-    busySessionId: loading ? activeId : null,
+    busySessionIds: streamingSessionIds,
     onSelect: handleSelect,
     onNew: handleNew,
     onDelete: handleDelete,
@@ -1043,7 +1015,7 @@ export default function ChatApp() {
     sessions,
     activeId,
     sidebarActiveRoute,
-    loading,
+    streamingSessionIds,
     handleSelect,
     handleNew,
     handleDelete,
@@ -1113,7 +1085,7 @@ export default function ChatApp() {
           />
         )}
 
-        {isSettings ? (
+        {isSettings && (
           <div className={mergeClasses(s.settingsHost, electronChrome && 'opptrix-settings-host')}>
             <SettingsPage
               isMobile={isMobile}
@@ -1126,83 +1098,20 @@ export default function ChatApp() {
               }}
             />
           </div>
-        ) : (
-          <>
-            {newsCenterMounted && (
-              <div
-                className={mergeClasses(
-                  s.contentWorkspace,
-                  isMobile && s.contentWorkspaceMobile,
-                  electronChrome && s.contentWorkspaceElectron,
-                  electronChrome && 'opptrix-app-main',
-                  !isNews && s.viewHidden,
-                )}
-                aria-hidden={!isNews}
-              >
-                {isMobile && isNews && (
-                  <SessionSidebar
-                    mode="drawer"
-                    drawerOpen={drawerOpen}
-                    onClose={closeDrawer}
-                    {...sidebarProps}
-                  />
-                )}
-                <div
-                  className={mergeClasses(
-                    s.chatColumn,
-                    electronChrome && s.chatColumnElectron,
-                  )}
-                >
-                  <NewsCenterPage
-                    electronChrome={electronChrome}
-                    onOpenSettings={openNewsSettings}
-                    onDiscussArticle={handleDiscussArticle}
-                  />
-                </div>
-              </div>
-            )}
+        )}
 
-            {marketDynamicsMounted && (
-              <div
-                className={mergeClasses(
-                  s.contentWorkspace,
-                  isMobile && s.contentWorkspaceMobile,
-                  electronChrome && s.contentWorkspaceElectron,
-                  electronChrome && 'opptrix-app-main',
-                  !isMarket && s.viewHidden,
-                )}
-                aria-hidden={!isMarket}
-              >
-                {isMobile && isMarket && (
-                  <SessionSidebar
-                    mode="drawer"
-                    drawerOpen={drawerOpen}
-                    onClose={closeDrawer}
-                    {...sidebarProps}
-                  />
-                )}
-                <div
-                  className={mergeClasses(
-                    s.chatColumn,
-                    electronChrome && s.chatColumnElectron,
-                  )}
-                >
-                  <MarketDynamicsPage electronChrome={electronChrome} />
-                </div>
-              </div>
-            )}
-
-            {!isNews && !isMarket && (
+        {newsCenterMounted && (
           <div
-            ref={workspaceRef}
             className={mergeClasses(
               s.contentWorkspace,
               isMobile && s.contentWorkspaceMobile,
               electronChrome && s.contentWorkspaceElectron,
               electronChrome && 'opptrix-app-main',
+              !isNews && s.viewHidden,
             )}
+            aria-hidden={!isNews}
           >
-            {isMobile && (
+            {isMobile && isNews && (
               <SessionSidebar
                 mode="drawer"
                 drawerOpen={drawerOpen}
@@ -1210,89 +1119,151 @@ export default function ChatApp() {
                 {...sidebarProps}
               />
             )}
-
-            {(isMobile || chatVisible) && (
-              <div
-                className={mergeClasses(
-                  s.chatColumn,
-                  electronChrome && s.chatColumnElectron,
-                  isDragging && s.chatColumnDragging,
-                )}
-                style={!isMobile ? {
-                  flex: showSplitter ? '0 0 auto' : 1,
-                  width: showSplitter ? chatWidth : undefined,
-                  minWidth: showSplitter ? chatWidth : 0,
-                } : undefined}
-              >
-                {electronChrome && (
-                  <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
-                )}
-                <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
-                  <ChatView
-                    title={activeSession?.title ?? '新对话'}
-                    titleSlot={electronChrome ? undefined : chatTitleSlot}
-                    sessionId={activeId}
-                    welcomeEpoch={welcomeEpoch}
-                    chatScrollEpoch={chatScrollEpoch}
-                    messages={messages}
-                    contextRef={contextRef}
-                    composerDraft={composerDraft}
-                    loading={loading}
-                    streamUiRef={streamUiRef}
-                    error={error}
-                    availableModels={availableModels}
-                    sessionModel={sessionModel}
-                    isMobile={isMobile}
-                    llmLabel={llmLabel}
-                    backendOk={backendOk}
-                    onSubmit={handleSubmit}
-                    onStop={handleStop}
-                    onForkMessage={handleForkFromMessage}
-                    onQuoteSelection={activeId ? handleQuoteSelection : undefined}
-                    onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
-                    onClearContextRef={contextRef ? handleClearContextRef : undefined}
-                    onModelChange={availableModels.length ? handleModelChange : undefined}
-                    onOpenSidebar={openDrawer}
-                    onNewChat={handleNew}
-                    onOpenSettings={openSettings}
-                    rightPanelOpen={rightPanelVisible}
-                    chatColumnVisible={chatVisible}
-                    onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
-                    onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
-                    onStreamError={handleStreamError}
-                  />
-                </div>
-              </div>
-            )}
-
-            {!isMobile && showSplitter && (
-              <WorkspaceSplitDivider
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+              )}
+            >
+              <NewsCenterPage
                 electronChrome={electronChrome}
-                isDragging={isDragging}
-                onBeginDrag={beginDrag}
+                onOpenSettings={openNewsSettings}
+                onDiscussArticle={handleDiscussArticle}
               />
-            )}
-
-            {!isMobile && (
-              <RightPanel
-                visible={rightPanelVisible}
-                width={rightPanelWidth}
-                fullWidth={!chatVisible}
-                transitionEnabled={!isDragging}
-                electronChrome={electronChrome}
-                chatColumnVisible={chatVisible}
-                chromeToolbarReserve={chromeToolbarReserve}
-                focusStockCode={focusStockCode}
-                onFocusStockConsumed={handleFocusStockConsumed}
-                onToggleRightPanel={handleToggleRightPanel}
-                onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
-                onDiscussInChat={handleStockDiscuss}
-              />
-            )}
+            </div>
           </div>
-            )}
-          </>
         )}
+
+        {marketDynamicsMounted && (
+          <div
+            className={mergeClasses(
+              s.contentWorkspace,
+              isMobile && s.contentWorkspaceMobile,
+              electronChrome && s.contentWorkspaceElectron,
+              electronChrome && 'opptrix-app-main',
+              !isMarket && s.viewHidden,
+            )}
+            aria-hidden={!isMarket}
+          >
+            {isMobile && isMarket && (
+              <SessionSidebar
+                mode="drawer"
+                drawerOpen={drawerOpen}
+                onClose={closeDrawer}
+                {...sidebarProps}
+              />
+            )}
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+              )}
+            >
+              <MarketDynamicsPage electronChrome={electronChrome} />
+            </div>
+          </div>
+        )}
+
+        <div
+          ref={workspaceRef}
+          className={mergeClasses(
+            s.contentWorkspace,
+            isMobile && s.contentWorkspaceMobile,
+            electronChrome && s.contentWorkspaceElectron,
+            electronChrome && 'opptrix-app-main',
+            (isSettings || isNews || isMarket) && s.viewHidden,
+          )}
+          aria-hidden={isSettings || isNews || isMarket}
+        >
+          {isMobile && !isNews && !isMarket && !isSettings && (
+            <SessionSidebar
+              mode="drawer"
+              drawerOpen={drawerOpen}
+              onClose={closeDrawer}
+              {...sidebarProps}
+            />
+          )}
+
+          {(isMobile || chatVisible) && (
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+                isDragging && s.chatColumnDragging,
+              )}
+              style={!isMobile ? {
+                flex: showSplitter ? '0 0 auto' : 1,
+                width: showSplitter ? chatWidth : undefined,
+                minWidth: showSplitter ? chatWidth : 0,
+              } : undefined}
+            >
+              {electronChrome && (
+                <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
+              )}
+              <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
+                <ChatView
+                  title={activeSession?.title ?? '新对话'}
+                  titleSlot={electronChrome ? undefined : chatTitleSlot}
+                  sessionId={activeId}
+                  welcomeEpoch={welcomeEpoch}
+                  chatScrollEpoch={chatScrollEpoch}
+                  messages={messages}
+                  contextRef={contextRef}
+                  composerDraft={composerDraft}
+                  loading={loading}
+                  streamUiRef={streamUiRef}
+                  error={error}
+                  availableModels={availableModels}
+                  sessionModel={sessionModel}
+                  isMobile={isMobile}
+                  llmLabel={llmLabel}
+                  backendOk={backendOk}
+                  onSubmit={handleSubmit}
+                  onStop={handleStop}
+                  onForkMessage={handleForkFromMessage}
+                  onQuoteSelection={activeId ? handleQuoteSelection : undefined}
+                  onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}
+                  onClearContextRef={contextRef ? handleClearContextRef : undefined}
+                  onModelChange={availableModels.length ? handleModelChange : undefined}
+                  onOpenSidebar={openDrawer}
+                  onNewChat={handleNew}
+                  onOpenSettings={openSettings}
+                  rightPanelOpen={rightPanelVisible}
+                  chatColumnVisible={chatVisible}
+                  onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
+                  onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
+                  onStreamError={handleStreamError}
+                  resolveStreamSnapshot={resolveStreamSnapshot}
+                />
+              </div>
+            </div>
+          )}
+
+          {!isMobile && showSplitter && (
+            <WorkspaceSplitDivider
+              electronChrome={electronChrome}
+              isDragging={isDragging}
+              onBeginDrag={beginDrag}
+            />
+          )}
+
+          {!isMobile && (
+            <RightPanel
+              visible={rightPanelVisible}
+              width={rightPanelWidth}
+              fullWidth={!chatVisible}
+              transitionEnabled={!isDragging}
+              electronChrome={electronChrome}
+              chatColumnVisible={chatVisible}
+              chromeToolbarReserve={chromeToolbarReserve}
+              focusStockCode={focusStockCode}
+              onFocusStockConsumed={handleFocusStockConsumed}
+              onToggleRightPanel={handleToggleRightPanel}
+              onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
+              onDiscussInChat={handleStockDiscuss}
+            />
+          )}
+        </div>
 
         </div>
       </div>
