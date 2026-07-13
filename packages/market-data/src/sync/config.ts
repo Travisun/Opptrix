@@ -335,6 +335,11 @@ export const DEFAULT_API_MIN_GAP_MS = Number(
 export const QUOTES_BATCH_SIZE = getSyncProfileSettings().quotesBatchSize
 export const QUOTES_BATCH_DELAY_MS = getSyncProfileSettings().quotesBatchDelayMs
 
+/** Dump import — parse batches in worker; turbo SQLite path (staging + bulk sync) */
+export const DUMP_IMPORT_BATCH = {
+  parseRowsPerBatch: 25_000,
+} as const
+
 /** Dump import configuration for tonghuashun Parquet data */
 export const DUMP_IMPORT_CONFIG = {
   /** Default: weekly (every Monday after market close) */

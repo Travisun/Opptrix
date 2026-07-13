@@ -36,6 +36,38 @@ export function spawnServer() {
   })
 }
 
+/** SIGTERM then SIGKILL — sidecar blocked on sync cannot exit on TERM alone. */
+export function stopManagedServer(proc) {
+  if (!proc || proc.killed) return Promise.resolve()
+  return new Promise((resolve) => {
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      resolve()
+    }
+    proc.once('exit', finish)
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      finish()
+      return
+    }
+    setTimeout(() => {
+      if (proc.exitCode != null || proc.killed) {
+        finish()
+        return
+      }
+      try {
+        proc.kill('SIGKILL')
+      } catch {
+        /* ignore */
+      }
+      setTimeout(finish, 200)
+    }, 3000)
+  })
+}
+
 export async function waitForHealth(
   port = Number(process.env.STOCK_RESEARCH_PORT ?? 8711),
   timeoutMs = 30_000,

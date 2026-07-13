@@ -34,13 +34,16 @@ export function queryLocalLatestQuote(store: MarketDataStore, code: string): Loc
   return row ?? null
 }
 
-/** Daily K-lines from local L0 store (newest-first query, returned ascending). */
+/** Daily K-lines from local L0 store (DuckDB 优先，SQLite 回退). */
 export function queryLocalDailyKlines(
   store: MarketDataStore,
   code: string,
   limit = 800,
   before?: string,
 ): StockKline[] {
+  const duckRows = store.queryDuckDailyKlines(code, limit, before)
+  if (duckRows.length) return duckRows
+
   const normalized = normalizeStockCode(code)
   const safeLimit = Math.max(1, Math.min(limit, 800))
   const params: unknown[] = [normalized]

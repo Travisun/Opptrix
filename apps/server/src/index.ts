@@ -38,6 +38,12 @@ import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook 
 import { setSessionPersistHooks } from '@opptrix/agent'
 import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
+import { createRequire } from 'node:module'
+
+const require = createRequire(import.meta.url)
+const { cleanupStaleApiListeners } = require('../../desktop/electron/resolve-ports.cjs') as {
+  cleanupStaleApiListeners: (port: number, opts?: { aggressive?: boolean }) => Promise<boolean>
+}
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
@@ -1165,6 +1171,29 @@ app.delete<{ Querystring: { code?: string; market?: string } }>('/api/portfolio/
 
 let serveUi = false
 
+async function listenWithStaleCleanup(): Promise<void> {
+  try {
+    await app.listen({ port: PORT, host: HOST })
+  } catch (err) {
+    const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+    if (code !== 'EADDRINUSE') throw err
+    console.warn(`[server] 端口 ${PORT} 被占用，尝试清理残留 Opptrix sidecar…`)
+    await cleanupStaleApiListeners(PORT, { aggressive: true })
+    try {
+      await app.listen({ port: PORT, host: HOST })
+      console.warn(`[server] 已清理残留进程并成功绑定 :${PORT}`)
+      return
+    } catch (retryErr) {
+      console.error(
+        `\n  无法绑定 http://${HOST}:${PORT}/ — 端口仍被占用。\n`
+        + `  手动清理：lsof -ti :${PORT} -sTCP:LISTEN | xargs kill -9\n`
+        + `  或设置环境变量 STOCK_RESEARCH_PORT 使用其他端口。\n`,
+      )
+      throw retryErr
+    }
+  }
+}
+
 async function bootstrap() {
   const outbound = await initOutboundNetwork()
   if (outbound.ipv6Available) {
@@ -1193,7 +1222,7 @@ async function bootstrap() {
     return reply.code(404).send({ error: 'not found' })
   })
 
-  await app.listen({ port: PORT, host: HOST })
+  await listenWithStaleCleanup()
   console.log(`\n  Opptrix API → http://${HOST}:${PORT}/api/health`)
   if (serveUi) {
     console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
@@ -1218,12 +1247,17 @@ async function shutdown(signal: string) {
   if (shuttingDown) return
   shuttingDown = true
   app.log.info(`received ${signal}, shutting down`)
+  const forceExit = setTimeout(() => {
+    app.log.warn('shutdown timeout — forcing exit (sync/import may have blocked the event loop)')
+    process.exit(signal === 'uncaughtException' ? 1 : 0)
+  }, 8_000)
   try {
     await app.close()
     getMarketDataService().store.close()
   } catch (err) {
     app.log.error({ err }, 'shutdown error')
   } finally {
+    clearTimeout(forceExit)
     process.exit(0)
   }
 }

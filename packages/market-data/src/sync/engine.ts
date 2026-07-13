@@ -582,6 +582,7 @@ export class MarketDataSyncEngine {
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
+    this.store.syncAnalyticsToDuck('dims')
   }
 
   private async syncInitialUniverseJob(
@@ -613,6 +614,7 @@ export class MarketDataSyncEngine {
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
+    this.store.syncAnalyticsToDuck('dims')
   }
 
   private async syncInitialTaxonomyJob(
@@ -636,6 +638,7 @@ export class MarketDataSyncEngine {
       success: result.nodes,
       error: 0,
     })
+    this.store.syncAnalyticsToDuck('dims')
   }
 
   private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
@@ -1093,6 +1096,7 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
+    this.store.syncAnalyticsToDuck('quotes')
   }
 
   private async syncProfiles(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -1643,6 +1647,7 @@ export class MarketDataSyncEngine {
       success,
       error: skipped,
     })
+    this.store.syncAnalyticsToDuck('factors')
     return Promise.resolve()
   }
 

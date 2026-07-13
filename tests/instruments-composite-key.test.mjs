@@ -63,12 +63,12 @@ test('normalizeInstrumentExchange maps null to empty string', () => {
   assert.equal(normalizeInstrumentExchange('sz'), 'SZ')
 })
 
-test('fresh database uses schema v9 with instrument_ns', () => {
+test('fresh database uses schema v11 with instrument_ns and analytics_storage', () => {
   const dbPath = join(dataDir, 'fresh-v9.db')
   const store = new MarketDataStore(dbPath)
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
   assert.equal(ver.v, SCHEMA_VERSION)
-  assert.equal(SCHEMA_VERSION, 9)
+  assert.equal(SCHEMA_VERSION, 11)
 
   const ddl = store.db.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instruments'",
@@ -83,6 +83,15 @@ test('fresh database uses schema v9 with instrument_ns', () => {
   ).get()
   assert.match(profileDdl.sql, /instrument_ns/)
   assert.match(profileDdl.sql, /REFERENCES instruments\(instrument_ns\)/)
+
+  const klineStorage = store.db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'kline_storage'",
+  ).get()
+  assert.match(klineStorage?.meta_json ?? '', /duckdb/)
+  const analyticsStorage = store.db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'analytics_storage'",
+  ).get()
+  assert.match(analyticsStorage?.meta_json ?? '', /dims/)
   store.close()
 })
 
@@ -190,7 +199,7 @@ test('v7 database migrates to v8 preserving instrument rows', () => {
 
   const store = new MarketDataStore(dbPath)
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, 9)
+  assert.equal(ver.v, SCHEMA_VERSION)
 
   const row = store.getInstrument({ market: 'CN', code: '600519', assetClass: 'EQUITY', exchange: 'SH' })
   assert.equal(row?.name, '贵州茅台')
@@ -257,7 +266,7 @@ test('v8 database migrates to v9 with instrument_ns backfill', () => {
 
   const store = new MarketDataStore(dbPath)
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, 9)
+  assert.equal(ver.v, SCHEMA_VERSION)
 
   const ns = store.resolveCnEquityInstrumentNs('000977', 'SZ')
   assert.equal(ns, 'CN:SZ.000977')
@@ -380,8 +389,8 @@ test('v3 database leaps to latest schema', () => {
     `).run(ts)
   })
   const store = new MarketDataStore(dbPath)
-  assert.equal(readDeclaredSchemaVersion(store.db), 9)
-  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  assert.equal(readDeclaredSchemaVersion(store.db), SCHEMA_VERSION)
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
   const inst = store.db.prepare(
     'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
   ).get('000001', 'CN', 'EQUITY')
@@ -398,7 +407,7 @@ test('v5 database leaps to latest schema', () => {
     `).run(ts)
   })
   const store = new MarketDataStore(dbPath)
-  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
   store.close()
 })
 
@@ -423,7 +432,7 @@ test('schema_meta ahead of DDL self-heals on open', () => {
   const finHasNsAfter = store.db.prepare('PRAGMA table_info(stock_financials)').all()
     .some(c => c.name === 'instrument_ns')
   assert.ok(finHasNsAfter)
-  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
   store.close()
 })
 
@@ -477,7 +486,7 @@ test('v1 database leaps to v9 preserving stock child data', () => {
 
   const store = new MarketDataStore(dbPath)
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, 9)
+  assert.equal(ver.v, SCHEMA_VERSION)
   const quote = store.db.prepare(
     'SELECT instrument_ns FROM stock_quotes_daily WHERE code = ?',
   ).get('600519')
@@ -533,7 +542,7 @@ test('meta v9 ahead of v8 composite self-heals on open', () => {
 
   const store = new MarketDataStore(dbPath)
   assert.equal(hasInstrumentCompositeKey(store.db), true)
-  assert.equal(detectAppliedSchemaVersion(store.db), 9)
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
   store.close()
 })
 

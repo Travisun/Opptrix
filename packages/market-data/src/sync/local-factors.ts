@@ -1,4 +1,6 @@
 import type { MarketDataStore } from '../store.js'
+import { queryKlinesViaSubprocess } from '../kline/spawn-import.js'
+import { computeScreenFactorsViaSubprocess, hasAnalyticsDimsViaSubprocess } from '../analytics/spawn-analytics.js'
 import { SCREEN_PACK_FACTORS } from './config.js'
 
 function round(v: number, d = 2): number {
@@ -91,11 +93,19 @@ export function computeSimpleScore(factors: Record<string, number | null>): numb
   return round(Math.min(100, Math.max(0, score)), 1)
 }
 
-export function buildLocalFactorInputs(store: MarketDataStore, codes: string[]): LocalFactorInput[] {
-  const klineStmt = store.db.prepare(`
-    SELECT trade_date, close, volume FROM stock_klines_daily
+function loadKlineSeries(store: MarketDataStore, code: string): { close: number | null; volume: number | null }[] {
+  const duck = queryKlinesViaSubprocess(code, 800, undefined, store.klineDuckDbPath)
+  if (duck.length) {
+    return duck.map(k => ({ close: k.close, volume: k.volume }))
+  }
+  const rows = store.db.prepare(`
+    SELECT close, volume FROM stock_klines_daily
     WHERE code = ? ORDER BY trade_date ASC
-  `)
+  `).all(code) as { close: number | null; volume: number | null }[]
+  return rows
+}
+
+export function buildLocalFactorInputs(store: MarketDataStore, codes: string[]): LocalFactorInput[] {
   const finStmt = store.db.prepare(`
     SELECT roe, gross_margin, debt_ratio, net_profit_yoy, net_profit
     FROM stock_financials
@@ -109,7 +119,7 @@ export function buildLocalFactorInputs(store: MarketDataStore, codes: string[]):
 
   const out: LocalFactorInput[] = []
   for (const code of codes) {
-    const krows = klineStmt.all(code) as { trade_date: string; close: number | null; volume: number | null }[]
+    const krows = loadKlineSeries(store, code)
     const fins = finStmt.all(code) as {
       roe: number | null
       gross_margin: number | null
@@ -144,6 +154,21 @@ export function runLocalScreenFactors(
   tradeDate: string,
   codes: string[],
 ): { success: number; skipped: number } {
+  if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
+    store.syncAnalyticsToDuck('quotes')
+    store.syncAnalyticsToDuck('financials')
+    const batch = computeScreenFactorsViaSubprocess(tradeDate, codes, store.klineDuckDbPath, store.dbPath)
+    if (batch.computed > 0) {
+      store.syncAnalyticsToDuck('factors')
+      let success = 0
+      for (const code of codes) {
+        store.markJobProgress('screen_factors', code, tradeDate, 'done')
+        success++
+      }
+      return { success: Math.min(batch.computed, codes.length), skipped: Math.max(0, codes.length - batch.computed) }
+    }
+  }
+
   let success = 0
   let skipped = 0
   for (const input of buildLocalFactorInputs(store, codes)) {

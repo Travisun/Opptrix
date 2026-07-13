@@ -33,6 +33,8 @@ export interface SyncStateSnapshot {
 
 const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 5000
+const DB_STATUS_CACHE_MS_RUNNING = 5000
+const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 12_000
 
 function computeOverallPercent(
   jobs: readonly string[],
@@ -65,17 +67,54 @@ export class MarketSyncCoordinator {
   private bootstrapProgressRepaired = false
 
   private dbStatus(): MarketDbStatus {
-    // 同步进行中始终读库，保证设置页「数据概览」计数随写入实时更新
-    if (this.running) {
-      return this.store.getStatus()
-    }
     const now = Date.now()
+    const currentJob = this.snapshot.current_job ?? null
+    const heavyImport = this.running
+      && currentJob != null
+      && THS_KLINE_DUMP_JOBS.has(currentJob)
+
+    if (this.running) {
+      const cacheMs = heavyImport ? DB_STATUS_CACHE_MS_HEAVY_IMPORT : DB_STATUS_CACHE_MS_RUNNING
+      if (this.dbStatusCache && now - this.dbStatusCache.at < cacheMs) {
+        return heavyImport
+          ? this.overlayThsKlineProgress(this.dbStatusCache.value)
+          : this.dbStatusCache.value
+      }
+      const value = heavyImport && this.dbStatusCache
+        ? this.store.getStatusLite(this.dbStatusCache.value)
+        : this.store.getStatus()
+      this.dbStatusCache = { at: now, value }
+      return heavyImport ? this.overlayThsKlineProgress(value) : value
+    }
+
     if (this.dbStatusCache && now - this.dbStatusCache.at < DB_STATUS_CACHE_MS_IDLE) {
       return this.dbStatusCache.value
     }
     const value = this.store.getStatus()
     this.dbStatusCache = { at: now, value }
     return value
+  }
+
+  /** Overlay in-memory dump import percent onto kline job progress (avoids COUNT DISTINCT during import). */
+  private overlayThsKlineProgress(status: MarketDbStatus): MarketDbStatus {
+    const job = this.snapshot.current_job
+    if (!job || !THS_KLINE_DUMP_JOBS.has(job)) return status
+    const current = this.snapshot.job_current ?? 0
+    const total = this.snapshot.job_total ?? 100
+    const stockCount = status.stock_count
+    const frac = total > 0 ? current / total : 0
+    const done = Math.min(stockCount, Math.round(frac * stockCount))
+    return {
+      ...status,
+      job_progress: {
+        ...status.job_progress,
+        [job]: {
+          done,
+          pending: Math.max(0, stockCount - done),
+          error: status.job_progress[job]?.error ?? 0,
+        },
+      },
+    }
   }
 
   /** Shared read path for Hub / API — avoids duplicate heavy getStatus() calls. */
@@ -337,6 +376,7 @@ export class MarketSyncCoordinator {
   /** Auto-start on app/server boot: resume interrupted sync or refresh stale daily data. */
   autoSyncOnBoot(): void {
     if (this.running) return
+    this.store.repairKlineImportArtifacts()
     this.store.reconcileStaleSyncState()
     const stale = this.store.getLatestSession()
     if (stale?.status === 'running') {
