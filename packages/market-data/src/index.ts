@@ -394,6 +394,13 @@ export function getMarketDataService(): MarketDataService {
 }
 
 export { getMarketDataStore, MarketDataStore } from './store.js'
+export {
+  getMarketDuckGateway,
+  resetMarketDuckGateways,
+  invalidateHasMarketDuckDataCache,
+  type MarketDuckGateway,
+  type MarketDuckStats,
+} from './duck/market-duck-gateway.js'
 export type { MarketDbStatus, BootstrapReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'

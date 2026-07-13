@@ -27,8 +27,7 @@ import {
   SYNC_JOB_CONFIG,
 } from './config.js'
 import { importDailyKDump } from './dump-import.js'
-import { spawnComputeScreenFactorsAsync } from '../analytics/spawn-analytics.js'
-import { klineStatsViaSubprocess } from '../kline/spawn-import.js'
+import { getMarketDuckGateway } from '../duck/market-duck-gateway.js'
 import { FuyaoClient, isTonghuashunEnabled, loadTonghuashunConfig } from '@opptrix/a-stock-layer'
 import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
@@ -495,7 +494,8 @@ export class MarketDataSyncEngine {
     options: SyncOptions,
     jobName: 'kline_bootstrap' | 'kline_daily',
   ): Promise<void> {
-    const stats = klineStatsViaSubprocess(this.store.klineDuckDbPath)
+    const gw = getMarketDuckGateway(this.store.klineDuckDbPath, this.store.dbPath)
+    const stats = gw.klineStatsSync()
     if (!stats.rows) return
 
     const tradeDate = stats.maxDate ?? todayTradeDate()
@@ -504,10 +504,8 @@ export class MarketDataSyncEngine {
 
     this.store.flushDuckWritesSync()
     try {
-      const result = await spawnComputeScreenFactorsAsync({
+      const result = await gw.spawnComputeFactorsAsync({
         tradeDate,
-        duckDbPath: this.store.klineDuckDbPath,
-        sqliteDbPath: this.store.dbPath,
         onProgress: (message, percent) => {
           options.onProgress?.({
             job: jobName,

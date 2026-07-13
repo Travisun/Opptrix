@@ -20,31 +20,29 @@ import {
 } from '../packages/market-data/dist/schema.js'
 import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion, hasInstrumentCompositeKey } from '../packages/market-data/dist/utils.js'
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
-import { duckQueryAllSync, duckQueryOneSync } from '../packages/market-data/dist/duck/market-duck-sync.js'
+import { getMarketDuckGateway } from '../packages/market-data/dist/duck/market-duck-gateway.js'
 import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
 
 let dataDir = ''
 
-function duckPathFor(store) {
-  return store.klineDuckDbPath
+function duckGw(store) {
+  return getMarketDuckGateway(store.klineDuckDbPath, store.dbPath)
 }
 
 function flushInstruments(store, where = '', params = []) {
   store.flushDuckWritesSync()
   const clause = where ? ` WHERE ${where}` : ''
-  return duckQueryAllSync(
+  return duckGw(store).queryAllSync(
     `SELECT code, market, asset_class, name, exchange, instrument_ns FROM instruments${clause} ORDER BY asset_class, exchange`,
     params,
-    duckPathFor(store),
   )
 }
 
 function flushQuoteRow(store, tradeDate, code) {
   store.flushDuckWritesSync()
-  return duckQueryOneSync(
+  return duckGw(store).queryOneSync(
     'SELECT instrument_ns, code FROM stock_quotes_daily WHERE trade_date = ? AND code = ?',
     [tradeDate, code],
-    duckPathFor(store),
   )
 }
 
@@ -341,18 +339,16 @@ test('migrate is idempotent on v9 database', () => {
     exchange: 'SZ',
   })
   store.flushDuckWritesSync()
-  const before = duckQueryOneSync(
+  const before = duckGw(store).queryOneSync(
     'SELECT COUNT(*)::INTEGER AS c FROM instruments',
     [],
-    duckPathFor(store),
   )?.c ?? 0
   migrate(store.db)
   migrate(store.db)
   store.flushDuckWritesSync()
-  const after = duckQueryOneSync(
+  const after = duckGw(store).queryOneSync(
     'SELECT COUNT(*)::INTEGER AS c FROM instruments',
     [],
-    duckPathFor(store),
   )?.c ?? 0
   assert.equal(before, after)
   store.close()

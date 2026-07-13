@@ -1,6 +1,4 @@
 import type { MarketDataStore } from '../store.js'
-import { queryKlinesViaSubprocess } from '../kline/spawn-import.js'
-import { computeScreenFactorsViaSubprocess, hasAnalyticsDimsViaSubprocess } from '../analytics/spawn-analytics.js'
 import { SCREEN_PACK_FACTORS } from './config.js'
 
 function round(v: number, d = 2): number {
@@ -95,7 +93,7 @@ function loadKlineSeries(
   store: MarketDataStore,
   code: string,
 ): { close: number | null; volume: number | null; high: number | null }[] {
-  const duck = queryKlinesViaSubprocess(code, 800, undefined, store.klineDuckDbPath)
+  const duck = store.duckGateway().queryKlinesSync(code, 800)
   if (duck.length) {
     return duck.map(k => ({ close: k.close, volume: k.volume, high: k.high }))
   }
@@ -125,9 +123,10 @@ export function runLocalScreenFactors(
   tradeDate: string,
   codes: string[],
 ): { success: number; skipped: number } {
-  if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
+  const gw = store.duckGateway()
+  if (gw.hasMarketData()) {
     store.flushDuckWritesSync()
-    const batch = computeScreenFactorsViaSubprocess(tradeDate, codes, store.klineDuckDbPath, store.dbPath)
+    const batch = gw.computeFactorsSync(tradeDate, codes)
     if (batch.computed > 0) {
       store.flushDuckWritesSync()
       let success = 0

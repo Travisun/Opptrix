@@ -6,7 +6,7 @@ import path from 'node:path'
 import type { MarketDataStore } from '../store.js'
 import { DUMP_IMPORT_CONFIG } from './config.js'
 import { marketDataDir } from '../paths.js'
-import { spawnKlineParquetImport } from '../kline/spawn-import.js'
+import { getMarketDuckGateway } from '../duck/market-duck-gateway.js'
 
 export interface DumpImportResult {
   type: 'full' | 'incremental' | 'adjustments'
@@ -164,10 +164,9 @@ async function importParquetFromCache(
 ): Promise<DumpImportResult> {
   store.flushDuckWritesSync({ throwOnError: true })
   hooks?.onPhase?.('DuckDB 子进程导入', fromCache ? 25 : 70)
-  const result = await spawnKlineParquetImport({
+  const result = await getMarketDuckGateway(store.klineDuckDbPath, store.dbPath).importParquetAsync({
     parquetPath,
     mode: type,
-    duckDbPath: store.klineDuckDbPath,
     onProgress: (message, percent) => hooks?.onPhase?.(message, percent),
   })
 

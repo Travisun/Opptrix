@@ -3,17 +3,11 @@ import type { MarketDataStore } from '../store.js'
 import { SCREEN_PACK_FACTORS } from '../sync/config.js'
 import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
 import { todayTradeDate } from '../utils.js'
-import { hasMarketDuckData } from '../duck/market-duck-sync.js'
-import {
-  queryIndustryStatsViaSubprocess,
-  queryIndustryStocksViaSubprocess,
-  queryUniverseScreenViaSubprocess,
-} from '../analytics/spawn-analytics.js'
 
 const OFFLINE_SCREEN_MSG = '本地因子筛选不可用：请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。'
 
 function useDuck(store: MarketDataStore): boolean {
-  return hasMarketDuckData(store.klineDuckDbPath)
+  return store.duckGateway().hasMarketData()
 }
 
 function assertOfflineScreeningEnabled(): void {
@@ -312,7 +306,7 @@ export function localUniverseScreen(
   const date = query.trade_date ?? latestFactorDate(store.db) ?? todayTradeDate()
 
   if (useDuck(store)) {
-    const duck = queryUniverseScreenViaSubprocess(query, date, store.klineDuckDbPath) as LocalUniverseScreenResult | null
+    const duck = store.duckGateway().queryUniverseScreenSync(query, date) as LocalUniverseScreenResult | null
     if (duck?.items != null) return duck
   }
 
@@ -507,7 +501,7 @@ export interface IndustryStockRow {
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
   const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   if (useDuck(store)) {
-    const duck = queryIndustryStatsViaSubprocess(factorDate, store.klineDuckDbPath) as {
+    const duck = store.duckGateway().queryIndustryStatsSync(factorDate) as {
       trade_date: string
       quote_date: string | null
       items: Array<{
@@ -632,7 +626,7 @@ export function queryIndustryStocks(
   const cap = Math.min(Math.max(limit, 1), 200)
 
   if (useDuck(store)) {
-    const duck = queryIndustryStocksViaSubprocess(key, factorDate, cap, store.klineDuckDbPath) as {
+    const duck = store.duckGateway().queryIndustryStocksSync(key, factorDate, cap) as {
       trade_date: string
       items: IndustryStockRow[]
     } | null

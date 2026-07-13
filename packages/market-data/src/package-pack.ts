@@ -5,7 +5,7 @@ import type { SupplementPackId } from '@opptrix/shared'
 import { isSupplementPackId } from '@opptrix/shared'
 import { marketDbPath, duckDbPathForMarketDb } from './paths.js'
 import { MarketDataStore } from './store.js'
-import { migrateMarketDataViaSubprocess, invalidateHasMarketDuckDataCache } from './duck/market-duck-sync.js'
+import { getMarketDuckGateway, invalidateHasMarketDuckDataCache } from './duck/market-duck-gateway.js'
 import { PACK_JOBS } from './sync/market-packs.js'
 import {
   exportMarketDataPackage,
@@ -189,7 +189,7 @@ function mergePackScopeIntoTarget(target: MarketDataStore, srcPath: string, pack
   } finally {
     db.exec('DETACH DATABASE src')
   }
-  migrateMarketDataViaSubprocess(target.klineDuckDbPath, target.dbPath, true)
+  getMarketDuckGateway(target.klineDuckDbPath, target.dbPath).migrateMarketDataSync(true)
   invalidateHasMarketDuckDataCache(target.klineDuckDbPath)
 }
 

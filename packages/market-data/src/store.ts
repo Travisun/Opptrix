@@ -19,21 +19,11 @@ import type { InstrumentRef } from '@opptrix/shared'
 import { normalizeInstrumentRef } from '@opptrix/shared'
 import { yieldToEventLoop } from './sync/event-loop.js'
 import {
-  klineStatsViaSubprocess,
-  migrateSqliteKlinesToDuckIfEmpty,
-  queryKlinesViaSubprocess,
-} from './kline/spawn-import.js'
-import {
-  applyDuckBatchSync,
-  duckMarketStatsSync,
-  duckQueryAllSync,
-  duckQueryOneSync,
-  hasMarketDuckData,
+  getMarketDuckGateway,
   invalidateHasMarketDuckDataCache,
-  migrateMarketDataViaSubprocess,
-  syncMarketDataToSqliteViaSubprocess,
-} from './duck/market-duck-sync.js'
-import { getMarketDuckGateway } from './duck/market-duck-gateway.js'
+  type MarketDuckGateway,
+  type MarketDuckStats,
+} from './duck/market-duck-gateway.js'
 import { isMarketSyncActive } from './duck/duck-subprocess-gate.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
 
@@ -128,11 +118,12 @@ export class MarketDataStore {
   private readonly duckFlushThreshold = 250
   /** 批量 taxonomy 写入时递增，避免每条 upsert 都 spawn Duck 子进程查 MAX(id) */
   private taxonomyIdSeq: number | null = null
-  private duckMarketStatsCache: { at: number; value: ReturnType<typeof duckMarketStatsSync> } | null = null
+  private duckMarketStatsCache: { at: number; value: MarketDuckStats } | null = null
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
 
-  private duckGw() {
+  /** 统一 DuckDB 访问入口 — 所有 market.duckdb 读写须经此 Gateway */
+  duckGateway(): MarketDuckGateway {
     return getMarketDuckGateway(this.klineDuckDbPath, this.dbPath)
   }
 
@@ -157,7 +148,7 @@ export class MarketDataStore {
           this.scheduleKlineBackendReady()
           return
         }
-        migrateSqliteKlinesToDuckIfEmpty(this.klineDuckDbPath, this.dbPath)
+        this.duckGateway().migrateSqliteKlinesIfEmptySync()
         this.ensureMarketDataOnDuck()
         this.invalidateKlineStatsCache()
         this.duckMarketStatsCache = null
@@ -176,8 +167,8 @@ export class MarketDataStore {
     }
     this.marketDataMigrated = true
     try {
-      if (hasMarketDuckData(this.klineDuckDbPath)) return
-      migrateMarketDataViaSubprocess(this.klineDuckDbPath, this.dbPath, false)
+      if (this.duckGateway().hasMarketData()) return
+      this.duckGateway().migrateMarketDataSync(false)
     } catch {
       /* 迁移失败不阻断；后续读写回退 SQLite */
       this.marketDataMigrated = false
@@ -197,7 +188,7 @@ export class MarketDataStore {
     const throwOnError = options?.throwOnError ?? true
     const batch = this.duckWriteQueue.splice(0)
     try {
-      applyDuckBatchSync(batch, this.klineDuckDbPath)
+      this.duckGateway().applyBatchSync(batch)
       this.taxonomyIdSeq = null
       this.invalidateDuckMarketStatsCache()
       invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
@@ -218,8 +209,8 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T | undefined,
   ): T | undefined {
-    if (hasMarketDuckData(this.klineDuckDbPath) && !this.shouldDeferDuckSubprocessRead()) {
-      const row = duckQueryOneSync<T>(sql, params, this.klineDuckDbPath)
+    if (this.duckGateway().hasMarketData() && !this.shouldDeferDuckSubprocessRead()) {
+      const row = this.duckGateway().queryOneSync<T>(sql, params)
       if (row) return row
     }
     return sqliteFallback()
@@ -230,8 +221,8 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T[],
   ): T[] {
-    if (hasMarketDuckData(this.klineDuckDbPath) && !this.shouldDeferDuckSubprocessRead()) {
-      const rows = duckQueryAllSync<T>(sql, params, this.klineDuckDbPath)
+    if (this.duckGateway().hasMarketData() && !this.shouldDeferDuckSubprocessRead()) {
+      const rows = this.duckGateway().queryAllSync<T>(sql, params)
       if (rows.length) return rows
     }
     return sqliteFallback()
@@ -239,11 +230,11 @@ export class MarketDataStore {
 
   /** @deprecated 保留兼容；新数据直写 DuckDB */
   syncAnalyticsToDuck(_scope: 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all' = 'all'): Record<string, number> {
-    return migrateMarketDataViaSubprocess(this.klineDuckDbPath, this.dbPath, false)
+    return this.duckGateway().migrateMarketDataSync(false)
   }
 
   hasAnalyticsDims(): boolean {
-    if (hasMarketDuckData(this.klineDuckDbPath)) return true
+    if (this.duckGateway().hasMarketData()) return true
     const row = this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }
     return row.c > 0
   }
@@ -257,17 +248,17 @@ export class MarketDataStore {
     if (this.klineStatsCache && now - this.klineStatsCache.at < 30_000) {
       return this.klineStatsCache
     }
-    const stats = klineStatsViaSubprocess(this.klineDuckDbPath)
+    const stats = this.duckGateway().klineStatsSync()
     this.klineStatsCache = { at: now, ...stats }
     return stats
   }
 
   queryDuckDailyKlines(code: string, limit = 800, before?: string) {
-    return queryKlinesViaSubprocess(code, limit, before, this.klineDuckDbPath)
+    return this.duckGateway().queryKlinesSync(code, limit, before)
   }
 
   duckLatestBars(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
-    return this.duckGw().latestBarsSync(tradeDate)
+    return this.duckGateway().latestBarsSync(tradeDate)
   }
 
   /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */
@@ -327,7 +318,7 @@ export class MarketDataStore {
     this.db.pragma('wal_checkpoint(TRUNCATE)')
     this.db.close()
     try {
-      syncMarketDataToSqliteViaSubprocess(this.klineDuckDbPath, this.dbPath)
+      this.duckGateway().syncMarketDataToSqliteSync()
     } finally {
       this.reopenDb()
     }
@@ -572,12 +563,12 @@ export class MarketDataStore {
     }
   }
 
-  private cachedDuckMarketStats(): ReturnType<typeof duckMarketStatsSync> {
+  private cachedDuckMarketStats(): MarketDuckStats {
     const now = Date.now()
     if (this.duckMarketStatsCache && now - this.duckMarketStatsCache.at < 8_000) {
       return this.duckMarketStatsCache.value
     }
-    const value = duckMarketStatsSync(this.klineDuckDbPath)
+    const value = this.duckGateway().marketStatsSync()
     this.duckMarketStatsCache = { at: now, value }
     return value
   }
@@ -818,7 +809,7 @@ export class MarketDataStore {
     stockCount?: number,
     _latestQuoteDate?: string | null,
     _latestFactorDate?: string | null,
-    duckStats?: ReturnType<typeof duckMarketStatsSync>,
+    duckStats?: MarketDuckStats,
   ): BootstrapReadiness {
     const duck = duckStats ?? this.cachedDuckMarketStats()
     const cnEquity = stockCount ?? (duck.cn_equity || this.countEquityInstruments('CN'))
@@ -869,8 +860,8 @@ export class MarketDataStore {
   screenFactorsStale(tradeDate = todayTradeDate()): boolean {
     const stats = this.klineStats()
     if (!stats.rows || !stats.maxDate) return false
-    const latestFactor = duckQueryOneSync<{ d: string | null }>(
-      'SELECT MAX(trade_date) AS d FROM stock_factors', [], this.klineDuckDbPath,
+    const latestFactor = this.duckGateway().queryOneSync<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_factors', [],
     )?.d ?? null
     if (!latestFactor) return true
     return latestFactor < stats.maxDate || latestFactor < tradeDate
@@ -931,7 +922,7 @@ export class MarketDataStore {
     if (!rows.length) return 0
     const batchSize = 2_000
     let written = 0
-    const gw = this.duckGw()
+    const gw = this.duckGateway()
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize)
       gw.upsertKlinesBatchSync(batch)
@@ -1104,7 +1095,7 @@ export class MarketDataStore {
     ).get() as { c: number }).c
     if (duckRows > 0 && barsRows < duckRows * 0.95) {
       try {
-        barsRepaired = this.duckGw().syncBarsToSqliteSync()
+        barsRepaired = this.duckGateway().syncBarsToSqliteSync()
       } catch {
         /* DuckDB 不可用时跳过 bars 修复 */
       }
@@ -1141,9 +1132,9 @@ export class MarketDataStore {
 
   countEquityInstruments(market: 'CN' | 'US' | 'HK'): number {
     if (market === 'CN') {
-      const row = duckQueryOneSync<{ c: number }>(
+      const row = this.duckGateway().queryOneSync<{ c: number }>(
         `SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
-        [], this.klineDuckDbPath,
+        [],
       )
       if (row?.c) return row.c
       return (this.db.prepare(
@@ -1155,9 +1146,9 @@ export class MarketDataStore {
   }
 
   countTaxonomyNodes(market: string, kind: string): number {
-    const row = duckQueryOneSync<{ c: number }>(
+    const row = this.duckGateway().queryOneSync<{ c: number }>(
       'SELECT COUNT(*)::INTEGER AS c FROM taxonomy_nodes WHERE market = ? AND kind = ?',
-      [market, kind], this.klineDuckDbPath,
+      [market, kind],
     )
     if (row?.c != null) return row.c
     return (this.db.prepare(
@@ -1217,9 +1208,9 @@ export class MarketDataStore {
   /** 用 taxonomy 行业分类回填 stocks.industry（syncInitialTaxonomy 收尾） */
   backfillCnStockIndustryFromTaxonomy(): number {
     this.flushDuckWritesSync()
-    if (hasMarketDuckData(this.klineDuckDbPath)) {
+    if (this.duckGateway().hasMarketData()) {
       type Row = { code: string; industry: string }
-      const rows = duckQueryAllSync<Row>(`
+      const rows = this.duckGateway().queryAllSync<Row>(`
         SELECT code, industry FROM (
           SELECT s.code, tn.name AS industry,
             ROW_NUMBER() OVER (PARTITION BY s.code ORDER BY tn.level DESC NULLS LAST, tn.id DESC) AS rn
@@ -1228,7 +1219,7 @@ export class MarketDataStore {
           INNER JOIN taxonomy_nodes tn ON tn.id = it.taxonomy_id AND tn.kind = 'industry'
           WHERE s.status = 'active'
         ) t WHERE rn = 1
-      `, [], this.klineDuckDbPath)
+      `, [])
       const ts = nowIso()
       for (const row of rows) {
         this.queueDuck({
@@ -1875,7 +1866,7 @@ export class MarketDataStore {
 
   listCodesWithMinKlines(minBars: number): string[] {
     try {
-      const codes = this.duckGw().codesWithMinKlinesSync(minBars)
+      const codes = this.duckGateway().codesWithMinKlinesSync(minBars)
       if (codes.length) return codes
     } catch { /* fallback */ }
     return (this.db.prepare(`
@@ -2355,8 +2346,8 @@ export class MarketDataStore {
 
   private allocateTaxonomyNodeId(): number {
     if (this.taxonomyIdSeq == null) {
-      let max = duckQueryOneSync<{ id: number }>(
-        'SELECT COALESCE(MAX(id), 0)::INTEGER AS id FROM taxonomy_nodes', [], this.klineDuckDbPath,
+      let max = this.duckGateway().queryOneSync<{ id: number }>(
+        'SELECT COALESCE(MAX(id), 0)::INTEGER AS id FROM taxonomy_nodes', [],
       )?.id ?? 0
       for (const op of this.duckWriteQueue) {
         if (op.op !== 'upsertTaxonomyNode') continue
