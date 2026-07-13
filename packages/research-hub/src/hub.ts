@@ -295,6 +295,7 @@ export class ResearchHub {
         case 'provider_list': return ok(this.de.listProviders(), '数据源列表', t0)
         case 'provider_config': return this.providerConfig(params, t0)
         case 'provider_config_save': return this.providerConfigSave(params, t0)
+        case 'provider_order_save': return this.providerOrderSave(params, t0)
         case 'provider_test': return this.providerTest(params, t0)
         case 'provider_binding_overrides': return this.providerBindingOverrides(params, t0)
         case 'provider_binding_override_save': return this.providerBindingOverrideSave(params, t0)
@@ -2263,8 +2264,29 @@ export class ResearchHub {
         enabled: params.enabled === undefined ? undefined : params.enabled === true,
         extra: (params.extra as Record<string, unknown> | undefined)
           ?? (params.token !== undefined ? { token: String(params.token).trim() } : undefined),
+        priorityMode: params.priority_mode === 'custom' || params.priority_mode === 'manifest'
+          ? params.priority_mode
+          : undefined,
+        priority: params.priority === undefined
+          ? undefined
+          : (params.priority == null ? null : Number(params.priority)),
+        sortOrder: params.sort_order === undefined
+          ? undefined
+          : (params.sort_order == null ? null : Number(params.sort_order)),
       })
       return ok(saved, '已保存', t0)
+    } catch (e) {
+      return fail(String(e), t0)
+    }
+  }
+
+  private providerOrderSave(params: Record<string, unknown>, t0: number) {
+    const providerIds = Array.isArray(params.provider_ids)
+      ? params.provider_ids.map(id => String(id))
+      : []
+    try {
+      const catalog = this.de.saveProviderOrder(providerIds)
+      return ok(catalog, '顺序已保存', t0)
     } catch (e) {
       return fail(String(e), t0)
     }

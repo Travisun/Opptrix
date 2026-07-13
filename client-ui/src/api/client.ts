@@ -50,8 +50,8 @@ async function fetchWithTimeout(path: string, init?: RequestInit, timeoutMs = RE
 async function jsonFetch<T>(path: string, init?: RequestInit, timeoutMs = REQUEST_TIMEOUT): Promise<T> {
   const resp = await fetchWithTimeout(`${API_BASE}${path}`, init, timeoutMs)
   if (!resp.ok) {
-    const err = await resp.json().catch(() => ({})) as { error?: string }
-    throw new Error(err.error || `API error: ${resp.status}`)
+    const err = await resp.json().catch(() => ({})) as { error?: string; message?: string }
+    throw new Error(err.message || err.error || `API error: ${resp.status}`)
   }
   return resp.json() as Promise<T>
 }
@@ -1056,6 +1056,24 @@ export async function saveProviderConfig(
   )
   if (!resp.success || !resp.data) {
     throw new Error(resp.message ?? '保存失败')
+  }
+  return resp.data
+}
+
+export async function saveProviderOrder(payload: {
+  provider_ids: string[]
+}) {
+  const resp = await jsonFetch<{
+    success: boolean
+    data: import('../types/provider').ProviderCatalogResponse
+    message?: string
+  }>('/data/providers/order', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+  if (!resp.success || !resp.data) {
+    throw new Error(resp.message ?? '保存排序失败')
   }
   return resp.data
 }

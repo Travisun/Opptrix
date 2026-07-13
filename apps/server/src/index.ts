@@ -330,6 +330,19 @@ app.post('/api/data/providers/rescan', async () => {
   return { success: r.success, data: r.data, message: r.message }
 })
 
+/** 静态路径须在 /:id/* 之前注册，避免被参数路由吞掉 */
+app.put<{
+  Body: {
+    provider_ids: string[]
+  }
+}>('/api/data/providers/order', async (req) => {
+  const body = req.body ?? { provider_ids: [] }
+  const r = await hub.dispatch('provider_order_save', {
+    provider_ids: body.provider_ids,
+  })
+  return { success: r.success, data: r.data, message: r.message }
+})
+
 app.delete<{ Params: { id: string } }>('/api/data/providers/installed/:id', async (req, reply) => {
   const r = await hub.dispatch('provider_uninstall', { provider_id: req.params.id })
   if (!r.success) return reply.code(404).send({ success: false, message: r.message })

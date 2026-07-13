@@ -6,6 +6,10 @@ import type {
   ProviderBindingOverrideRow,
   ProviderBindingOverridePatch,
 } from '@opptrix/shared'
+import {
+  defaultManifestTierPriority,
+  sortOrderToEffectivePriority,
+} from '@opptrix/shared'
 
 const MIGRATION_KEY = 'provider_settings_v1'
 const WEBFEED_REMOVED_KEY = 'webfeed_removed_v1'
@@ -314,15 +318,25 @@ export class ProviderSettingsRepository {
 }
 
 export function computeEffectivePriority(
-  providerId: string,
   manifestDefault: number,
   runtime: ProviderSettingsRow,
   secretsOk: boolean,
+  opts?: { requiresApiKey?: boolean; providerId?: string },
 ): number {
   if (!runtime.enabled) return 0
   if (!secretsOk) return 0
+  if (runtime.sortOrder != null) {
+    return sortOrderToEffectivePriority(runtime.sortOrder)
+  }
   if (runtime.priorityMode === 'custom' && runtime.priority != null) {
     return runtime.priority
+  }
+  if (opts?.requiresApiKey !== undefined) {
+    return defaultManifestTierPriority(
+      opts.providerId ?? runtime.providerId,
+      opts.requiresApiKey,
+      manifestDefault,
+    )
   }
   return manifestDefault
 }

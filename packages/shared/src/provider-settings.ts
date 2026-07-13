@@ -177,6 +177,14 @@ export interface PublicProviderRuntime {
   capabilities: string[]
   /** 最后更新时间 */
   updatedAt?: string
+  /** 用户自定义展示/回退顺序（越小越靠前） */
+  sortOrder: number | null
+  /** 是否需要配置 API Key / Token 才能启用 */
+  requiresApiKey: boolean
+  /** 是否满足启用 + 密钥条件，可参与该位置的优先级 */
+  priorityEligible: boolean
+  /** 在同市场分组内，对可生效源的顺位（1 起；不可生效为 null） */
+  effectiveRank: number | null
 }
 
 /**
@@ -197,8 +205,10 @@ export interface ProviderCatalogGroup {
  * Provider 目录响应 — 设置页面获取的完整 Provider 目录。
  */
 export interface ProviderCatalogResponse {
-  /** 按市场分组的 Provider 列表 */
+  /** 按市场分组的 Provider 列表（兼容） */
   groups: ProviderCatalogGroup[]
+  /** 全局统一排序后的 Provider 列表 */
+  providers: PublicProviderRuntime[]
 }
 
 /**

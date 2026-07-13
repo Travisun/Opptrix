@@ -32,6 +32,10 @@ export interface PublicProviderRuntime {
   supportsTest: boolean
   capabilities: string[]
   updatedAt?: string
+  sortOrder: number | null
+  requiresApiKey: boolean
+  priorityEligible: boolean
+  effectiveRank: number | null
 }
 
 export interface ProviderCatalogGroup {
@@ -42,6 +46,7 @@ export interface ProviderCatalogGroup {
 
 export interface ProviderCatalogResponse {
   groups: ProviderCatalogGroup[]
+  providers: PublicProviderRuntime[]
 }
 
 export interface InstalledProviderSummary {

@@ -1,8 +1,6 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import {
   Switch,
-  Tab,
-  TabList,
   Text,
   makeStyles,
   mergeClasses,
@@ -12,13 +10,14 @@ import {
   ChevronRightRegular,
   ChevronUpRegular,
 } from '@fluentui/react-icons'
-import type { InstalledProviderSummary, ProviderCatalogGroup, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
+import type { InstalledProviderSummary, ProviderCatalogResponse, PublicProviderRuntime } from '../../types/provider'
 import {
   getProviderCatalog,
   listInstalledProviders,
   rescanProviders,
   reloadInstalledProvider,
   saveProviderConfig,
+  saveProviderOrder,
   uninstallInstalledProvider,
 } from '../../api/client'
 import { ProviderSettingsForm, isExpandableSettingsField } from './ProviderSettingsForm'
@@ -173,6 +172,35 @@ const useListStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+    flexShrink: 0,
+  },
+  groupBlock: {
+    ':not(:first-of-type)': {
+      borderTop: `1px solid ${opptrixCssVars.separator}`,
+    },
+  },
+  groupHeader: {
+    display: 'flex',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: '10px',
+    padding: '8px 12px 4px',
+    position: 'sticky',
+    top: 0,
+    zIndex: 2,
+    backgroundColor: opptrixCssVars.canvas,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+  },
+  groupTitle: {
+    fontSize: '12px',
+    fontWeight: 650,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
+  groupMeta: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.4,
     flexShrink: 0,
   },
 })
@@ -385,6 +413,26 @@ export function useProviderCatalog() {
   return { catalog, loading, refresh, setCatalog }
 }
 
+function providerOrderStatusMeta(provider: PublicProviderRuntime): string {
+  const parts: string[] = []
+  if (provider.subtitle?.trim()) parts.push(provider.subtitle.trim())
+
+  if (provider.priorityEligible) {
+    parts.push('已启用，按此顺序参与行情回退')
+    return parts.join(' · ')
+  }
+  if (!provider.enabled) {
+    parts.push('已关闭，不会使用此数据源')
+    return parts.join(' · ')
+  }
+  if (provider.requiresApiKey) {
+    parts.push('请填写密钥并打开开关')
+    return parts.join(' · ')
+  }
+  parts.push('请打开开关后生效')
+  return parts.join(' · ')
+}
+
 function providerStatusMeta(provider: PublicProviderRuntime, marketLabel: string) {
   const parts: string[] = []
   if (marketLabel) parts.push(marketLabel)
@@ -554,18 +602,38 @@ function ProviderListRow({
   marketLabel,
   onSaved,
   settingsMode = 'full',
+  sortable = false,
+  saving = false,
+  onDragHandlePointerDown,
+  onMoveUp,
+  onMoveDown,
+  moveUpDisabled = false,
+  moveDownDisabled = false,
+  dragging = false,
 }: {
   provider: PublicProviderRuntime
   marketLabel: string
   onSaved: () => void
   settingsMode?: 'full' | 'toggle-only'
+  sortable?: boolean
+  saving?: boolean
+  onDragHandlePointerDown?: (e: ReactPointerEvent<HTMLSpanElement>) => void
+  onMoveUp?: () => void
+  onMoveDown?: () => void
+  moveUpDisabled?: boolean
+  moveDownDisabled?: boolean
+  dragging?: boolean
 }) {
   const s = useListStyles()
+  const priorityS = usePriorityStyles()
   const toast = useSettingsToast()
   const [expanded, setExpanded] = useState(false)
   const [toggling, setToggling] = useState(false)
 
   const hasSettings = settingsMode === 'full' && provider.settingsFields.some(isExpandableSettingsField)
+  const statusMeta = sortable
+    ? providerOrderStatusMeta(provider)
+    : providerStatusMeta(provider, marketLabel)
 
   const handleToggleEnabled = async (checked: boolean) => {
     if (checked && !provider.canEnable) {
@@ -585,12 +653,28 @@ function ProviderListRow({
   }
 
   return (
-    <div className={mergeClasses(s.listRow, expanded && hasSettings && s.listRowExpanded)}>
+    <div className={mergeClasses(
+      s.listRow,
+      expanded && hasSettings && s.listRowExpanded,
+      sortable && dragging && priorityS.dragRowDisabled,
+      sortable && !provider.priorityEligible && priorityS.dragRowDisabled,
+    )}>
       <div className={s.listRowTop}>
+        {sortable && (
+          <span
+            className={priorityS.dragHandle}
+            aria-label={`拖动 ${provider.title}`}
+            onPointerDown={onDragHandlePointerDown}
+          >
+            ≡
+          </span>
+        )}
         <div className={s.listRowMain}>
-          <Text className={s.listRowTitle} block title={provider.title}>{provider.title}</Text>
+          <Text className={s.listRowTitle} block title={provider.title}>
+            {provider.title}
+          </Text>
           <Text className={s.listRowMeta} block>
-            {providerStatusMeta(provider, marketLabel)}
+            {statusMeta}
           </Text>
           {hasSettings && (
             <button
@@ -607,6 +691,28 @@ function ProviderListRow({
           )}
         </div>
         <div className={s.listRowControls}>
+          {sortable && (
+            <div className={priorityS.moveControls}>
+              <button
+                type="button"
+                className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
+                disabled={moveUpDisabled || saving}
+                aria-label={`上移 ${provider.title}`}
+                onClick={onMoveUp}
+              >
+                <ChevronUpRegular fontSize={12} />
+              </button>
+              <button
+                type="button"
+                className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
+                disabled={moveDownDisabled || saving}
+                aria-label={`下移 ${provider.title}`}
+                onClick={onMoveDown}
+              >
+                <ChevronDownRegular fontSize={12} />
+              </button>
+            </div>
+          )}
           <Switch
             checked={provider.enabled}
             disabled={toggling}
@@ -627,21 +733,25 @@ function ProviderListRow({
 export function ProviderCatalogListPanel({
   catalog,
   onSaved,
+  onOrderSaved,
   showInstalled = true,
   settingsMode = 'full',
-  panelHeight = '360px',
+  panelHeight = '420px',
 }: {
   catalog: ProviderCatalogResponse
   onSaved: () => void
+  onOrderSaved?: (catalog: ProviderCatalogResponse) => void
   showInstalled?: boolean
   settingsMode?: 'full' | 'toggle-only'
   panelHeight?: string | number
 }) {
   const s = useListStyles()
-  const allProviders = catalog.groups.flatMap(g =>
-    g.providers.map(p => ({ provider: p, marketLabel: g.label })),
-  )
-  const enabledCount = allProviders.filter(item => item.provider.enabled).length
+  const priorityS = usePriorityStyles()
+  const allProviders = catalog.providers?.length
+    ? catalog.providers
+    : catalog.groups.flatMap(g => g.providers)
+  const enabledCount = allProviders.filter(p => p.enabled).length
+  const sortable = settingsMode === 'full' && !!onOrderSaved
 
   if (!allProviders.length) {
     return (
@@ -665,143 +775,207 @@ export function ProviderCatalogListPanel({
                 ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
                 : '以下为内置数据源；付费源需填写密钥后可在设置中启用')
               : (enabledCount > 0
-                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源`
-                : '配置连接信息并启用数据源，即可获取对应市场行情')}
+                ? `已启用 ${enabledCount} / ${allProviders.length} 个数据源 · 拖拽调整回退顺序`
+                : '配置连接并启用数据源；拖拽列表可调整行情回退顺序')}
           </Text>
         </div>
-        <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-          {allProviders.map(({ provider, marketLabel }) => (
-            <ProviderListRow
-              key={provider.providerId}
-              provider={provider}
-              marketLabel={marketLabel}
-              onSaved={onSaved}
-              settingsMode={settingsMode}
-            />
-          ))}
+        <div className={mergeClasses(s.listScroll, sortable && priorityS.dragList, 'opptrix-scroll', 'opptrix-scroll-hover')}>
+          {sortable
+            ? (
+              <ProviderOrderList
+                providers={allProviders}
+                onSaved={onSaved}
+                onOrderSaved={onOrderSaved!}
+              />
+            )
+            : allProviders.map(provider => (
+              <ProviderListRow
+                key={provider.providerId}
+                provider={provider}
+                marketLabel=""
+                onSaved={onSaved}
+                settingsMode={settingsMode}
+              />
+            ))}
         </div>
       </div>
     </>
   )
 }
 
-function MarketPriorityPanel({
-  group,
+function reorderList<T>(items: T[], from: number, to: number): T[] {
+  if (from === to || from < 0 || to < 0 || from >= items.length || to >= items.length) {
+    return items
+  }
+  const next = items.slice()
+  const [moved] = next.splice(from, 1)
+  next.splice(to, 0, moved!)
+  return next
+}
+
+function ProviderOrderList({
+  providers,
+  onSaved,
+  onOrderSaved,
 }: {
-  group: ProviderCatalogGroup
+  providers: PublicProviderRuntime[]
+  onSaved: () => void
+  onOrderSaved: (catalog: ProviderCatalogResponse) => void
 }) {
-  const listS = useListStyles()
   const priorityS = usePriorityStyles()
-  const [hoverIndex, setHoverIndex] = useState<number | null>(null)
+  const toast = useSettingsToast()
+  const [ordered, setOrdered] = useState(providers)
+  const [saving, setSaving] = useState(false)
+  const [draggingIndex, setDraggingIndex] = useState<number | null>(null)
+  const [dropIndex, setDropIndex] = useState<number | null>(null)
+  const [floatPos, setFloatPos] = useState<{ x: number; y: number } | null>(null)
+  const rowRefs = useRef<Array<HTMLDivElement | null>>([])
+  const listRef = useRef<HTMLDivElement | null>(null)
+  const dragRef = useRef<{ index: number; pointerId: number; offsetY: number } | null>(null)
 
-  const providerMap = useMemo(
-    () => new Map(group.providers.map(p => [p.providerId, p])),
-    [group.providers],
-  )
+  useEffect(() => {
+    setOrdered(providers)
+    setDraggingIndex(null)
+    setDropIndex(null)
+    setFloatPos(null)
+    dragRef.current = null
+  }, [providers])
 
-  const headerMeta = (() => {
-    const enabledCount = group.providers.filter(p => p.enabled).length
-    return `${group.providers.length} 个数据源 · ${enabledCount} 个已启用 · 按响应速度自动排序`
-  })()
+  const persistOrder = async (next: PublicProviderRuntime[]) => {
+    setSaving(true)
+    try {
+      const catalog = await saveProviderOrder({
+        provider_ids: next.map(p => p.providerId),
+      })
+      toast.showSuccess('顺序已保存')
+      onOrderSaved(catalog)
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '保存排序失败')
+      setOrdered(providers)
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  const applyReorder = (from: number, to: number) => {
+    if (saving || from === to || from < 0 || to < 0 || from >= ordered.length || to >= ordered.length) {
+      return
+    }
+    const next = reorderList(ordered, from, to)
+    setOrdered(next)
+    void persistOrder(next)
+  }
+
+  const resolveDropIndex = (clientY: number): number => {
+    const rows = rowRefs.current
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i]
+      if (!row) continue
+      const rect = row.getBoundingClientRect()
+      const mid = rect.top + rect.height / 2
+      if (clientY < mid) return i
+    }
+    return Math.max(0, rows.length - 1)
+  }
+
+  const endDrag = (pointerId: number) => {
+    const drag = dragRef.current
+    if (drag && dropIndex != null && dropIndex !== drag.index) {
+      applyReorder(drag.index, dropIndex)
+    } else {
+      setOrdered(providers)
+    }
+    dragRef.current = null
+    setDraggingIndex(null)
+    setDropIndex(null)
+    setFloatPos(null)
+    try {
+      listRef.current?.releasePointerCapture(pointerId)
+    } catch { /* ignore */ }
+  }
+
+  const onHandlePointerDown = (index: number, e: ReactPointerEvent<HTMLSpanElement>) => {
+    if (saving) return
+    e.preventDefault()
+    e.stopPropagation()
+    const row = rowRefs.current[index]
+    if (!row) return
+    const rect = row.getBoundingClientRect()
+    dragRef.current = {
+      index,
+      pointerId: e.pointerId,
+      offsetY: e.clientY - rect.top,
+    }
+    setDraggingIndex(index)
+    setDropIndex(index)
+    setFloatPos({ x: e.clientX, y: e.clientY })
+    listRef.current?.setPointerCapture(e.pointerId)
+  }
+
+  const onListPointerMove = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return
+    setFloatPos({ x: e.clientX, y: e.clientY })
+    setDropIndex(resolveDropIndex(e.clientY))
+  }
+
+  const onListPointerUp = (e: ReactPointerEvent<HTMLDivElement>) => {
+    if (!dragRef.current) return
+    endDrag(e.pointerId)
+  }
+
+  const draggedProvider = draggingIndex != null ? ordered[draggingIndex] : null
 
   return (
     <>
-      <div className={listS.listPanel}>
-        <div className={listS.listHeader}>
-          <Text className={listS.listHeaderMeta} block>
-            {headerMeta}
-          </Text>
-          <Text className={priorityS.saveHint} block>
-            数据来源按响应速度自动排序 · 速度越快越优先
-          </Text>
-        </div>
+      <div
+        ref={listRef}
+        className={priorityS.dragList}
+        onPointerMove={onListPointerMove}
+        onPointerUp={onListPointerUp}
+        onPointerCancel={onListPointerUp}
+      >
+        {dropIndex != null && draggingIndex != null && (
+          <div
+            className={priorityS.dropLine}
+            style={{
+              top: `${(rowRefs.current[dropIndex]?.offsetTop ?? dropIndex * 40) + (dropIndex > draggingIndex ? 38 : 0)}px`,
+              opacity: dropIndex === draggingIndex ? 0 : 1,
+            }}
+          />
+        )}
+        {ordered.map((provider, index) => (
+          <div
+            key={provider.providerId}
+            ref={(el) => { rowRefs.current[index] = el }}
+          >
+            <ProviderListRow
+              provider={provider}
+              marketLabel=""
+              onSaved={onSaved}
+              sortable
+              saving={saving}
+              dragging={draggingIndex === index}
+              onDragHandlePointerDown={(e) => { onHandlePointerDown(index, e) }}
+              onMoveUp={() => { applyReorder(index, index - 1) }}
+              onMoveDown={() => { applyReorder(index, index + 1) }}
+              moveUpDisabled={index === 0}
+              moveDownDisabled={index === ordered.length - 1}
+            />
+          </div>
+        ))}
+      </div>
+      {draggedProvider && floatPos && (
         <div
-          className={mergeClasses(listS.listScroll, priorityS.dragList, 'opptrix-scroll', 'opptrix-scroll-hover')}
+          className={priorityS.floatPreview}
+          style={{
+            left: `${floatPos.x + 12}px`,
+            top: `${floatPos.y - (dragRef.current?.offsetY ?? 20)}px`,
+          }}
         >
-          {group.providers.map((provider, index) => (
-            <div
-              key={provider.providerId}
-              className={mergeClasses(
-                priorityS.dragRow,
-                hoverIndex === index && priorityS.dragRowHover,
-                !provider.enabled && priorityS.dragRowDisabled,
-              )}
-              onMouseEnter={() => setHoverIndex(index)}
-              onMouseLeave={() => setHoverIndex(prev => (prev === index ? null : prev))}
-            >
-              <span className={priorityS.rankBadge}>{index + 1}</span>
-              <div className={priorityS.dragMain}>
-                <Text className={priorityS.dragTitle} block title={provider.title}>
-                  {provider.title}
-                </Text>
-                <Text className={priorityS.dragMeta} block>
-                  {provider.enabled
-                    ? `生效优先级 ${provider.effectivePriority}`
-                    : '已停用 · 不参与回退'}
-                </Text>
-              </div>
-            </div>
-          ))}
+          <Text className={priorityS.dragTitle} block>{draggedProvider.title}</Text>
         </div>
-      </div>
-    </>
-  )
-}
-
-export function ProviderPriorityPanels({
-  catalog,
-}: {
-  catalog: ProviderCatalogResponse
-}) {
-  const listS = useListStyles()
-  const priorityS = usePriorityStyles()
-  const [marketTab, setMarketTab] = useState(catalog.groups[0]?.marketGroup ?? '')
-
-  useEffect(() => {
-    if (!catalog.groups.some(g => g.marketGroup === marketTab)) {
-      setMarketTab(catalog.groups[0]?.marketGroup ?? '')
-    }
-  }, [catalog.groups, marketTab])
-
-  const activeGroup = useMemo(
-    () => catalog.groups.find(g => g.marketGroup === marketTab) ?? null,
-    [catalog.groups, marketTab],
-  )
-
-  if (!catalog.groups.length) {
-    return (
-      <div className={listS.listPanel}>
-        <div className={listS.emptyBlock}>
-          <Text className={listS.emptyTitle} block>暂无可用的数据源</Text>
-          <Text className={listS.emptyDesc} block>请先在「提供商」中启用数据源。</Text>
-        </div>
-      </div>
-    )
-  }
-
-  return (
-    <div className={priorityS.priorityRoot}>
-      <div className={priorityS.subTabBar}>
-        <TabList
-          className={priorityS.subTabList}
-          size="small"
-          selectedValue={marketTab}
-          onTabSelect={(_, data) => setMarketTab(String(data.value))}
-        >
-          {catalog.groups.map(group => (
-            <Tab key={group.marketGroup} value={group.marketGroup}>
-              {group.label}
-            </Tab>
-          ))}
-        </TabList>
-      </div>
-      {activeGroup && (
-        <MarketPriorityPanel
-          key={activeGroup.marketGroup}
-          group={activeGroup}
-        />
       )}
-    </div>
+    </>
   )
 }
 

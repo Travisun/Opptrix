@@ -1,6 +1,7 @@
 import { resolveUserDataRoot } from '@opptrix/shared'
 import type { ProviderSettingsPatch, ProviderSettingsRow, ProviderBindingOverrideRow, ProviderBindingOverridePatch, ProviderSettingsField } from '@opptrix/shared'
 import { computeEffectivePriority, getUserDataStore } from '@opptrix/user-store'
+import { providerRequiresApiKey } from '@opptrix/shared'
 import path from 'node:path'
 import { getProviderManifest } from './manifests.js'
 import { notifyProviderConfigChanged } from './common/permission-denial.js'
@@ -100,11 +101,13 @@ export class ProviderConfigStore {
     const manifest = getProviderManifest(resolvedId)
     const defaultP = manifestDefault ?? manifest?.defaultPriority ?? 0
     const runtime = this.getRuntime(resolvedId)
+    const fields = manifest?.settings?.fields ?? []
+    const requiresApiKey = providerRequiresApiKey(fields)
     return computeEffectivePriority(
-      resolvedId,
       defaultP,
       runtime,
       this.secretsOk(resolvedId, runtime),
+      { requiresApiKey, providerId: resolvedId },
     )
   }
 

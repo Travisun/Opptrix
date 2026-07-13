@@ -6,6 +6,15 @@ import type {
   TusharePublicConfigLegacy,
   PublicProviderBindingOverride,
   ProviderBindingOverridePatch,
+  ProviderPriorityMode,
+  MarketGroup,
+} from '@opptrix/shared'
+import {
+  assignSortOrders,
+  computeEffectiveRanks,
+  isProviderPriorityEligible,
+  providerRequiresApiKey,
+  sortProvidersForCatalog,
 } from '@opptrix/shared'
 import type { DriverRegistry } from '../core/registry.js'
 import { Capability } from '../core/capabilities.js'
@@ -19,6 +28,12 @@ import {
 } from './manifests.js'
 
 const TUSHARE_ENV = process.env.TUSHARE_TOKEN ?? ''
+
+/** 设置页 / 行情回退链：至少绑定一项标准能力；纯自定义方法源（如 akshare）不展示 */
+function isMarketDataCatalogProvider(registry: DriverRegistry, providerId: string): boolean {
+  const driver = registry.get(providerId)
+  return !!driver && driver.bindings().length > 0
+}
 
 function maskSecretFields(
   extra: Record<string, unknown>,
@@ -75,7 +90,9 @@ export class ProviderCatalogService {
   listCatalog(): ProviderCatalogResponse {
     const driverInfo = this.registry.listDriverInfo()
     const driverMap = new Map(driverInfo.map(d => [d.name, d]))
-    const manifests = listProviderManifests().filter(m => driverMap.has(m.providerId))
+    const manifests = listProviderManifests().filter(m =>
+      isMarketDataCatalogProvider(this.registry, m.providerId),
+    )
 
     const runtimes: PublicProviderRuntime[] = manifests.map(manifest => {
       const driver = driverMap.get(manifest.providerId)!
@@ -89,6 +106,8 @@ export class ProviderCatalogService {
           values.enabled = runtime.enabled
         }
       }
+      const requiresApiKey = providerRequiresApiKey(fields)
+      const priorityEligible = isProviderPriorityEligible(runtime.enabled, secretsOk)
       return {
         providerId: manifest.providerId,
         title: manifest.title,
@@ -107,14 +126,22 @@ export class ProviderCatalogService {
         supportsTest: manifest.settings?.supportsTest ?? false,
         capabilities: driver.capabilities.map(String),
         updatedAt: runtime.updatedAt || undefined,
+        sortOrder: runtime.sortOrder,
+        requiresApiKey,
+        priorityEligible,
+        effectiveRank: null,
       }
     })
 
+    const sorted = sortProvidersForCatalog(runtimes)
+    const rankMap = computeEffectiveRanks(sorted)
+    for (const provider of sorted) {
+      provider.effectiveRank = rankMap.get(provider.providerId) ?? null
+    }
+
     const groups: ProviderCatalogGroup[] = []
     for (const marketGroup of MARKET_GROUP_ORDER) {
-      const providers = runtimes
-        .filter(r => r.marketGroup === marketGroup)
-        .sort((a, b) => a.title.localeCompare(b.title))
+      const providers = sorted.filter(r => r.marketGroup === marketGroup)
       if (!providers.length) continue
       groups.push({
         marketGroup,
@@ -122,7 +149,7 @@ export class ProviderCatalogService {
         providers,
       })
     }
-    return { groups }
+    return { groups, providers: sorted }
   }
 
   getPublic(providerId: string): PublicProviderRuntime | null {
@@ -139,6 +166,9 @@ export class ProviderCatalogService {
     patch: {
       enabled?: boolean
       extra?: Record<string, unknown>
+      priorityMode?: ProviderPriorityMode
+      priority?: number | null
+      sortOrder?: number | null
     },
   ): PublicProviderRuntime {
     const manifest = getProviderManifest(providerId)
@@ -158,12 +188,47 @@ export class ProviderCatalogService {
       enabled = true
     }
 
-    this.configStore.save(providerId, { enabled, extra })
+    this.configStore.save(providerId, {
+      enabled,
+      extra,
+      priorityMode: patch.priorityMode,
+      priority: patch.priority,
+      sortOrder: patch.sortOrder,
+    })
 
     this.registry.refreshPriorities(this.configStore)
     const pub = this.getPublic(providerId)
     if (!pub) throw new Error(`保存后无法读取: ${providerId}`)
     return pub
+  }
+
+  saveProviderOrder(orderedProviderIds: string[]): ProviderCatalogResponse {
+    const allowed = listProviderManifests()
+      .filter(m => isMarketDataCatalogProvider(this.registry, m.providerId))
+      .map(m => m.providerId)
+
+    if (!orderedProviderIds.length) {
+      throw new Error('排序列表不能为空')
+    }
+    if (new Set(orderedProviderIds).size !== orderedProviderIds.length) {
+      throw new Error('排序列表包含重复项')
+    }
+    const allowedSet = new Set(allowed)
+    for (const id of orderedProviderIds) {
+      if (!allowedSet.has(id)) {
+        throw new Error(`未知数据源: ${id}`)
+      }
+    }
+    if (orderedProviderIds.length !== allowed.length) {
+      throw new Error('排序列表须包含全部数据源')
+    }
+
+    for (const row of assignSortOrders(orderedProviderIds)) {
+      this.configStore.save(row.providerId, { sortOrder: row.sortOrder })
+    }
+
+    this.registry.refreshPriorities(this.configStore)
+    return this.listCatalog()
   }
 
   async testConnection(providerId: string, overrides?: Record<string, unknown>) {

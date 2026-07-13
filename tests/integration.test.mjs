@@ -103,3 +103,45 @@ test('API watchlist round-trip persists via user store', async () => {
     await stopProcess(child)
   }
 })
+
+test('API PUT /api/data/providers/order saves global provider order', async () => {
+  const port = pickTestPort()
+  const child = spawn(process.execPath, ['apps/server/dist/index.js'], {
+    cwd: ROOT,
+    env: {
+      ...process.env,
+      OPPTRIX_DATA_DIR: dataDir,
+      STOCK_RESEARCH_HOST: '127.0.0.1',
+      STOCK_RESEARCH_PORT: String(port),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
+
+  try {
+    await waitForUrl(`http://127.0.0.1:${port}/api/health`)
+
+    const listResp = await fetch(`http://127.0.0.1:${port}/api/data/providers`)
+    assert.equal(listResp.status, 200)
+    const listBody = await listResp.json()
+    assert.ok(listBody.success)
+    const ids = (listBody.data?.providers ?? []).map(p => p.providerId)
+    assert.ok(ids.length >= 2)
+
+    const reversed = [...ids].reverse()
+    const putResp = await fetch(`http://127.0.0.1:${port}/api/data/providers/order`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ provider_ids: reversed }),
+    })
+    const putText = await putResp.text()
+    assert.equal(putResp.status, 200, putText)
+    const putBody = JSON.parse(putText)
+    assert.ok(putBody.success, putBody.message)
+    assert.deepEqual(
+      (putBody.data?.providers ?? []).map(p => p.providerId),
+      reversed,
+    )
+  } finally {
+    await stopProcess(child)
+  }
+})

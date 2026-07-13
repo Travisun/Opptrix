@@ -105,22 +105,23 @@ export class DriverRegistry {
   }
 
   private sortBindingList(bindingKey: string, list: string[], useSpeed: boolean) {
-    if (useSpeed) {
-      const ranked = this.speedRanker!.getRankedProviders(bindingKey)
-      const order = new Map(ranked.map((name, i: number) => [name, i]))
-      list.sort((a, b) => {
+    list.sort((a, b) => {
+      const pa = this.getEffectivePriority(a)
+      const pb = this.getEffectivePriority(b)
+      if (pa !== pb) return pb - pa
+      if (useSpeed) {
+        const ranked = this.speedRanker!.getRankedProviders(bindingKey)
+        const order = new Map(ranked.map((name, i: number) => [name, i]))
         const ai = order.get(a) ?? Number.MAX_SAFE_INTEGER
         const bi = order.get(b) ?? Number.MAX_SAFE_INTEGER
         return ai - bi
-      })
-    } else {
-      list.sort((a, b) => this.getEffectivePriority(b) - this.getEffectivePriority(a))
-    }
+      }
+      return 0
+    })
   }
 
   private sortCapList(cap: Capability, list: string[], useSpeed: boolean) {
     if (useSpeed) {
-      // 按所有 binding key 下该 capability 的平均排序位置聚合
       const scoreMap = new Map<string, { total: number; count: number }>()
       for (const [key, blist] of this.bindingIndex) {
         if (!key.endsWith(`::${cap}`)) continue
@@ -132,6 +133,9 @@ export class DriverRegistry {
         })
       }
       list.sort((a, b) => {
+        const pa = this.getEffectivePriority(a)
+        const pb = this.getEffectivePriority(b)
+        if (pa !== pb) return pb - pa
         const as = scoreMap.get(a), bs = scoreMap.get(b)
         const asScore = as && as.count > 0 ? as.total / as.count : Number.MAX_SAFE_INTEGER
         const bsScore = bs && bs.count > 0 ? bs.total / bs.count : Number.MAX_SAFE_INTEGER

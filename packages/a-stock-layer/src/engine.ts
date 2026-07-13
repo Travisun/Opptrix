@@ -1009,6 +1009,11 @@ export class MarketDataEngine {
     this.clearCacheForProvider(providerId)
     return result
   }
+  saveProviderOrder(orderedProviderIds: string[]) {
+    const catalog = this.providerCatalog.saveProviderOrder(orderedProviderIds)
+    for (const id of orderedProviderIds) this.clearCacheForProvider(id)
+    return catalog
+  }
   listProviderBindingOverrides(providerId: string) {
     return this.providerCatalog.listPublicBindingOverrides(providerId)
   }
