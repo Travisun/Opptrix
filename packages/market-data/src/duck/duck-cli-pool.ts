@@ -7,6 +7,7 @@
  *
  * 参考：better-sqlite3 WAL + worker_threads；DuckDB node-api cooperative tasks。
  */
+import { spawnSync } from 'node:child_process'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import PQueue from 'p-queue'
@@ -16,6 +17,7 @@ import type { DuckCliWorkerRequest, DuckCliWorkerResponse } from './duck-cli-wor
 const DEFAULT_MAX_BUFFER = 128 * 1024 * 1024
 const READ_CONCURRENCY = 3
 const WRITE_CONCURRENCY = 1
+const CLI_PATH = fileURLToPath(new URL('../kline/duck-cli.js', import.meta.url))
 
 /** UI / Hub 交互读 — 高于后台统计 */
 export const DUCK_READ_PRIORITY_INTERACTIVE = 10
@@ -29,6 +31,7 @@ export class DuckCliPool {
   private readonly readQueue = new PQueue({ concurrency: READ_CONCURRENCY })
   private readonly writeQueue = new PQueue({ concurrency: WRITE_CONCURRENCY })
   private workerBoot: Promise<void> | null = null
+  private syncWriteLock = false
 
   constructor(private readonly label = 'default') {}
 
@@ -64,6 +67,19 @@ export class DuckCliPool {
     return this.workerBoot
   }
 
+  private spawnCliSync(args: string[], maxBuffer: number): string {
+    const r = spawnSync(process.execPath, [CLI_PATH, ...args], {
+      encoding: 'utf8',
+      maxBuffer,
+      env: process.env,
+    })
+    if (r.error) throw r.error
+    if (r.status !== 0) {
+      throw new Error(r.stderr?.trim() || r.stdout?.trim() || `duck-cli exit ${r.status ?? 'null'}`)
+    }
+    return (r.stdout ?? '').trim()
+  }
+
   private dispatch(args: string[], maxBuffer: number): Promise<string> {
     return this.ensureWorker().then(() => new Promise((resolve, reject) => {
       const id = ++this.nextId
@@ -71,6 +87,30 @@ export class DuckCliPool {
       const req: DuckCliWorkerRequest = { id, args, maxBuffer }
       this.worker!.postMessage(req)
     }))
+  }
+
+  /** 同步边界 — 主进程 spawnSync duck-cli（与 worker 内相同 CLI；测试/导出专用，热路径用 exec） */
+  execSync(
+    args: string[],
+    mode: 'read' | 'write',
+    options: { maxBuffer?: number } = {},
+  ): string {
+    if (mode === 'write' && isDerivedMaintenanceActive()) {
+      throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
+    }
+    const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER
+    if (mode === 'write') {
+      while (this.syncWriteLock) {
+        Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 10)
+      }
+      this.syncWriteLock = true
+      try {
+        return this.spawnCliSync(args, maxBuffer)
+      } finally {
+        this.syncWriteLock = false
+      }
+    }
+    return this.spawnCliSync(args, maxBuffer)
   }
 
   /** 异步执行 duck-cli — 主进程 API / Hub 唯一入口 */

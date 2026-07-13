@@ -25,6 +25,7 @@ import {
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
 import { getMarketDataService, CN_MANUAL_SYNC_JOBS } from '@opptrix/market-data-store'
+import type { IndustryStockRow, LocalInstrumentHit, LocalScreenItem } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, momentumRegimeInputsFromKlines,
@@ -485,7 +486,7 @@ export class ResearchHub {
         passed: data.passed,
         scorecard: String(params.scorecard ?? '综合评估'),
         source: 'local',
-        items: data.items.map(i => ({
+        items: data.items.map((i: LocalScreenItem) => ({
           code: i.code,
           name: i.name,
           total_score: i.total_score,
@@ -597,7 +598,7 @@ export class ResearchHub {
     const modeRaw = String(params.mode ?? 'auto')
     if (modeRaw === 'auto') {
       const plan = this.marketData.planSync(force)
-      void this.marketData.syncAdaptive(force).catch(err => {
+      void this.marketData.syncAdaptive(force).catch((err: unknown) => {
         console.warn('[research-hub] syncAdaptive failed:', err)
       })
       return ok({
@@ -609,7 +610,7 @@ export class ResearchHub {
     }
     const jobs = [...CN_MANUAL_SYNC_JOBS]
     const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
-    void this.marketData.sync({ mode, jobs, force, background: true }).catch(err => {
+    void this.marketData.sync({ mode, jobs, force, background: true }).catch((err: unknown) => {
       console.warn('[research-hub] market_db_sync failed:', err)
     })
     return ok({
@@ -643,7 +644,7 @@ export class ResearchHub {
     const limitRaw = params.limit != null ? Number(params.limit) : 120
     const limit = Number.isFinite(limitRaw) ? limitRaw : 120
     const data = await this.marketData.industryStocks(industry, tradeDate || undefined, limit)
-    const items = data.items.map(item => {
+    const items = data.items.map((item: IndustryStockRow) => {
       const meta = this.marketData.store.stockMeta(item.code)
       const ref = normalizeInstrumentRef({
         market: 'CN',
@@ -1108,7 +1109,7 @@ export class ResearchHub {
 
   private async marketRegimeCn(t0: number) {
     const klines = this.marketData.localDailyKlines('000300', 280)
-    const klineBars = klines.map(k => ({ close: k.close, amount: k.amount }))
+    const klineBars = klines.map((k: StockKline) => ({ close: k.close, amount: k.amount }))
 
     let indexM6m: number | null = null
     let indexM1m: number | null = null
@@ -2532,7 +2533,7 @@ export class ResearchHub {
       ? params.markets.map(String) as import('@opptrix/shared').Market[]
       : undefined
     const hits = this.marketData.searchLocalInstruments(keyword, limit, markets)
-    const items = hits.map(h => ({
+    const items = hits.map((h: LocalInstrumentHit) => ({
       code: h.code,
       name: h.name,
       market: h.market,
@@ -2547,7 +2548,7 @@ export class ResearchHub {
 
   private localInstrumentsSummary(t0: number) {
     const items = this.marketData.localInstrumentsSummary()
-    return ok({ items, count: items.reduce((n, r) => n + r.count, 0) }, '本地名录汇总', t0)
+    return ok({ items, count: items.reduce((n: number, r: { count: number }) => n + r.count, 0) }, '本地名录汇总', t0)
   }
 
   private instrumentRouteHandlers(t0: number): InstrumentRouteHandlers {

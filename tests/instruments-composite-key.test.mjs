@@ -721,7 +721,7 @@ test('v8 re-run preserves instrument_ns column values', async () => {
   db.close()
 })
 
-test('v8 sqlite market data migrates fully to duck on open', () => {
+test('v8 sqlite market data migrates fully to duck on open', async () => {
   const dbPath = join(dataDir, 'duck-primary-v8.db')
   const duckPath = join(dataDir, 'duck-primary-v8.duckdb')
   seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
@@ -740,6 +740,7 @@ test('v8 sqlite market data migrates fully to duck on open', () => {
   })
 
   const store = new MarketDataStore(dbPath, duckPath)
+  assert.ok(await store.runDuckPrimaryMigrationAsync())
   assert.ok(isDuckPrimaryMigrationComplete(store.db))
   assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
 
@@ -752,7 +753,7 @@ test('v8 sqlite market data migrates fully to duck on open', () => {
   store.close()
 })
 
-test('partial duck with klines only backfills stocks from sqlite on primary migration', () => {
+test('partial duck with klines only backfills stocks from sqlite on primary migration', async () => {
   const dbPath = join(dataDir, 'partial-duck-v8.db')
   const duckPath = join(dataDir, 'partial-duck-v8.duckdb')
   seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
@@ -767,6 +768,7 @@ test('partial duck with klines only backfills stocks from sqlite on primary migr
   })
 
   const store = new MarketDataStore(dbPath, duckPath)
+  assert.ok(await store.runDuckPrimaryMigrationAsync())
   assert.ok(isDuckPrimaryMigrationComplete(store.db))
 
   store.db.prepare(`
@@ -777,7 +779,7 @@ test('partial duck with klines only backfills stocks from sqlite on primary migr
   assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c ?? 0, 0)
   assert.ok(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars')?.c > 0)
 
-  assert.ok(store.runDuckPrimaryMigrationSync())
+  assert.ok(await store.runDuckPrimaryMigrationAsync())
   assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c, 1)
   store.close()
 })

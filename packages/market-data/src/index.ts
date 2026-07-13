@@ -424,7 +424,7 @@ export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './sto
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
 export type { DerivedMaintenanceSnapshot } from './sync/derived-coordinator.js'
-export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult, LocalIndustryScreenQuery, IndustryListItem } from './query/screen.js'
+export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult, LocalIndustryScreenQuery, IndustryListItem, IndustryStockRow } from './query/screen.js'
 export type { LocalEtfScreenQuery, LocalEtfScreenResult, LocalEtfScreenItem } from './query/etf-screen.js'
 export type { LocalInstrumentHit } from './query/search-instruments.js'
 export type { LocalUsScreenQuery, LocalUsScreenResult, LocalUsScreenItem } from './query/us-screen.js'

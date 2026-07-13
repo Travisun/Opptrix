@@ -1,7 +1,7 @@
 import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { parseStockMarket, type StockMarket, normalizeUsSymbol } from '@opptrix/a-stock-layer'
-import { klineDuckDbPath, marketDbPath } from './paths.js'
+import { duckDbPathForMarketDb, marketDbPath } from './paths.js'
 import {
   migrate,
   nowIso,
@@ -32,6 +32,10 @@ import {
   markDuckPrimaryMigrationComplete,
 } from './duck/duck-primary-migration.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
+
+function isMemorySqlitePath(dbPath: string): boolean {
+  return dbPath === ':memory:' || dbPath.startsWith('file::memory:') || dbPath.includes('mode=memory')
+}
 
 export interface KlineUpsertRow {
   tradeDate: string
@@ -278,19 +282,39 @@ export class MarketDataStore {
     }
   }
 
-  constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
+  constructor(dbPath = marketDbPath(), duckPath?: string) {
     this.dbPath = dbPath
-    this.klineDuckDbPath = duckPath
+    this.klineDuckDbPath = duckPath ?? duckDbPathForMarketDb(dbPath)
     this.db = new Database(dbPath)
-    this.dbRead = new Database(dbPath, { readonly: true })
+    this.dbRead = isMemorySqlitePath(dbPath) ? this.db : new Database(dbPath, { readonly: true })
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
     if (!isDuckPrimaryMigrationComplete(this.db)) {
-      this.scheduleDuckPrimaryMigration()
+      if (this.canSkipDuckPrimaryMigrationForEmptyInstall()) {
+        markDuckPrimaryMigrationComplete(this.db)
+      } else {
+        this.scheduleDuckPrimaryMigration()
+      }
     }
     if (fs.existsSync(this.klineDuckDbPath)) {
       getDuckNeoReader(this.klineDuckDbPath).warmReadCaches()
+    }
+  }
+
+  /** 全新空库无需 spawn duck-cli 做 SQLite→Duck 全量迁移（测试 / 首次安装快路径） */
+  private canSkipDuckPrimaryMigrationForEmptyInstall(): boolean {
+    if (fs.existsSync(this.klineDuckDbPath)) return false
+    try {
+      const count = (sql: string) =>
+        (this.db.prepare(sql).get() as { c: number }).c
+      if (count('SELECT COUNT(*) AS c FROM stocks') > 0) return false
+      if (count('SELECT COUNT(*) AS c FROM instruments') > 0) return false
+      if (count('SELECT COUNT(*) AS c FROM stock_klines_daily') > 0) return false
+      if (count('SELECT COUNT(*) AS c FROM stock_quotes_daily') > 0) return false
+      return true
+    } catch {
+      return false
     }
   }
 
@@ -375,17 +399,16 @@ export class MarketDataStore {
     if (!this.duckWriteQueue.length) return
     const throwOnError = options?.throwOnError ?? true
     const batch = this.duckWriteQueue.splice(0)
-    void this.duckGateway().applyBatchAsync(batch)
-      .then(() => {
-        this.taxonomyIdSeq = null
-        this.invalidateDuckMarketStatsCache()
-        invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
-      })
-      .catch(err => {
-        this.duckWriteQueue.unshift(...batch)
-        if (throwOnError) throw err
-        console.warn('[market-data] duck batch flush failed (will retry at job boundary):', err)
-      })
+    try {
+      this.duckGateway().applyBatchSync(batch)
+      this.taxonomyIdSeq = null
+      this.invalidateDuckMarketStatsCache()
+      invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
+    } catch (err) {
+      this.duckWriteQueue.unshift(...batch)
+      if (throwOnError) throw err
+      console.warn('[market-data] duck batch flush failed (will retry at job boundary):', err)
+    }
   }
 
   /** 异步 flush — 同步引擎 / Hub 推荐路径（Worker 池写，不阻塞事件循环） */
@@ -552,13 +575,13 @@ export class MarketDataStore {
 
   close(): void {
     void this.flushDuckWritesAsync({ throwOnError: true })
-    this.dbRead.close()
+    if (this.dbRead !== this.db) this.dbRead.close()
     this.db.close()
   }
 
   private reopenDb(): void {
     this.db = new Database(this.dbPath)
-    this.dbRead = new Database(this.dbPath, { readonly: true })
+    this.dbRead = isMemorySqlitePath(this.dbPath) ? this.db : new Database(this.dbPath, { readonly: true })
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
   }

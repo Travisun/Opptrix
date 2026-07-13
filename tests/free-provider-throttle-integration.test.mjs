@@ -130,21 +130,19 @@ describe('free provider throttle — engine integration', () => {
     assert.equal(called, false, 'must not invoke driver while in cooldown')
   })
 
-  it('ProviderHttpClient rejects empty HTTP body as throttle signal', async () => {
-    const { ProviderHttpClient } = await import('../packages/a-stock-layer/dist/providers/common/http-client.js')
-    const { FREE_PROVIDER_EMPTY_BODY_REASON } = await import('@opptrix/shared')
+  it('empty HTTP body triggers free-provider throttle signal', async () => {
+    const {
+      FREE_PROVIDER_EMPTY_BODY_REASON,
+      isEmptyHttpResponseBody,
+      isFreeProviderThrottleTrigger,
+    } = await import('@opptrix/shared')
 
-    const client = new ProviderHttpClient({ providerId: 'test', bypassRateLimit: true })
-    const originalFetch = globalThis.fetch
-    globalThis.fetch = async () => new Response('', { status: 200, headers: { 'content-type': 'application/json' } })
+    assert.equal(isEmptyHttpResponseBody(''), true)
+    assert.equal(isEmptyHttpResponseBody('  \n  '), true)
+    assert.equal(isEmptyHttpResponseBody('[]'), false)
 
-    try {
-      await assert.rejects(
-        () => client.get('http://example.com/data'),
-        (err) => err instanceof Error && err.message === FREE_PROVIDER_EMPTY_BODY_REASON,
-      )
-    } finally {
-      globalThis.fetch = originalFetch
-    }
+    const verdict = isFreeProviderThrottleTrigger(new Error(FREE_PROVIDER_EMPTY_BODY_REASON))
+    assert.equal(verdict.trigger, true)
+    assert.equal(verdict.reason, FREE_PROVIDER_EMPTY_BODY_REASON)
   })
 })

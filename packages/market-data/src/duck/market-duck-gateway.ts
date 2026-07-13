@@ -125,6 +125,14 @@ export class MarketDuckGateway {
     return this.cliPool().exec(args, 'write', { maxBuffer })
   }
 
+  private execCliWriteSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
+    return this.cliPool().execSync(args, 'write', { maxBuffer })
+  }
+
+  private execCliReadSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
+    return this.cliPool().execSync(args, 'read', { maxBuffer })
+  }
+
   private neoReader() {
     return getDuckNeoReader(this.duckDbPath)
   }
@@ -188,9 +196,20 @@ export class MarketDuckGateway {
     }
   }
 
-  /** @deprecated 请 await applyBatchAsync */
+  /** 同步边界（测试 / 导出）— worker 池 + Atomics 等待，与 applyBatchAsync 同 duck-cli 路径 */
   applyBatchSync(ops: DuckWriteOp[]): number {
-    throw new Error('applyBatchSync 已移除，请使用 await applyBatchAsync')
+    if (!ops.length) return 0
+    const tmp = path.join(os.tmpdir(), `opptrix-duck-batch-${process.pid}-${Date.now()}.json`)
+    fs.writeFileSync(tmp, JSON.stringify(ops))
+    try {
+      const out = JSON.parse(
+        this.execCliWriteSync(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
+      ) as { applied?: number }
+      invalidateHasMarketDuckDataCache(this.duckDbPath)
+      return out.applied ?? 0
+    } finally {
+      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
+    }
   }
 
   async upsertKlinesBatchAsync(rows: unknown[]): Promise<number> {
@@ -315,9 +334,19 @@ export class MarketDuckGateway {
 
   // ─── 读路径（@duckdb/node-api 短查询 + duck-cli 重型读） ─────────────────
 
+  /** 同步边界 — worker 池 duck-cli 读（测试 flush 后校验）；async 短读仍走 neo */
   queryAllSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     if (!this.duckExists()) return []
-    return this.neoReader().queryAllSyncCached<T>(sql, params)
+    const tmp = path.join(os.tmpdir(), `opptrix-duck-query-${process.pid}-${Date.now()}.json`)
+    fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
+    try {
+      const raw = this.execCliReadSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
+      return JSON.parse(raw || '[]') as T[]
+    } catch {
+      return []
+    } finally {
+      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
+    }
   }
 
   queryOneSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T | undefined {
@@ -336,7 +365,7 @@ export class MarketDuckGateway {
 
   marketStatsSync(): MarketDuckStats {
     if (!this.duckExists()) return { ...EMPTY_MARKET_STATS }
-    return this.neoReader().marketStatsSyncCached()
+    return this.neoReader().marketStatsSyncBlocking()
   }
 
   marketStatsAsync(): Promise<MarketDuckStats> {
@@ -357,7 +386,7 @@ export class MarketDuckGateway {
 
   klineStatsSync(): KlineDuckStats {
     if (!this.duckExists()) return { rows: 0, codes: 0, maxDate: null }
-    return this.neoReader().klineStatsSyncCached()
+    return this.neoReader().klineStatsSyncBlocking()
   }
 
   klineStatsAsync(): Promise<KlineDuckStats> {
@@ -367,7 +396,7 @@ export class MarketDuckGateway {
 
   queryKlinesSync(code: string, limit = 800, before?: string): StockKline[] {
     if (!this.duckExists()) return []
-    return this.neoReader().queryKlinesSyncCached(normalizeStockCode(code), limit, before) as unknown as StockKline[]
+    return this.neoReader().queryKlinesSyncBlocking(normalizeStockCode(code), limit, before) as unknown as StockKline[]
   }
 
   async queryKlinesAsync(code: string, limit = 800, before?: string): Promise<StockKline[]> {
