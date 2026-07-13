@@ -14,6 +14,7 @@ import type { JobSyncConfig } from './config.js'
 import type { InitialSyncCallbacks } from './initial-sync.js'
 import { persistListRow } from './persist-universe.js'
 import { sleep } from './pool.js'
+import { yieldToEventLoop } from './event-loop.js'
 
 export type StockIndexUniverseMarket = 'CN' | 'HK' | 'US'
 
@@ -99,7 +100,8 @@ export async function syncStockIndexUniverse(
     if (i % 25 === 0 || i === items.length - 1) {
       callbacks.onProgress?.(i + 1, items.length, `写入${label}名录`)
     }
-    if (i > 0 && i % 200 === 0) store.flushDuckWritesSync()
+    if (i > 0 && i % 200 === 0) store.flushDuckWritesSync({ throwOnError: false })
+    if (i > 0 && i % 25 === 0) await yieldToEventLoop()
     if (cfg.delayMs > 0 && i % 50 === 0) await sleep(cfg.delayMs)
   }
 

@@ -307,14 +307,9 @@ DROP VIEW IF EXISTS fact_quotes_daily;
 DROP VIEW IF EXISTS fact_factors;
 DROP VIEW IF EXISTS fact_scores;
 DROP VIEW IF EXISTS dim_financials_latest;
-DROP TABLE IF EXISTS dim_cn_stocks;
-DROP TABLE IF EXISTS dim_instruments;
-DROP TABLE IF EXISTS dim_taxonomy;
-DROP TABLE IF EXISTS bridge_instrument_taxonomy;
-DROP TABLE IF EXISTS fact_quotes_daily;
-DROP TABLE IF EXISTS fact_factors;
-DROP TABLE IF EXISTS fact_scores;
-DROP TABLE IF EXISTS dim_financials_latest;
+DROP VIEW IF EXISTS v_instruments_unified;
+DROP VIEW IF EXISTS v_cn_equity_stocks;
+DROP VIEW IF EXISTS v_stock_latest;
 
 CREATE OR REPLACE VIEW dim_cn_stocks AS
   SELECT code, name, market, industry, industry_csrc, listing_date,

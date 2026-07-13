@@ -23,8 +23,8 @@ import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
-const POLL_RUNNING_MS = 2000
 const POLL_IDLE_MS = 30_000
+const POLL_BURST_MS = 800
 const THS_KLINE_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
 
 function runningBatchProgress(
@@ -105,6 +105,9 @@ const useStyles = makeStyles({
   },
   statusBannerReady: {
     backgroundColor: opptrixCssVars.successSoft,
+  },
+  statusBannerSyncing: {
+    backgroundColor: opptrixCssVars.infoSoft,
   },
   statusBannerIcon: {
     flexShrink: 0,
@@ -324,6 +327,45 @@ function runningJobDetail(
   return '同步中…'
 }
 
+/** 顶部 banner 与下方进度区共用 — 随 current_job / message / 批次进度动态更新 */
+function formatSyncRunningBanner(
+  syncState: MarketDataSyncState | null,
+  dbStatus: MarketDbStatusData | null,
+  overallPercent: number,
+): { title: string; desc: string } {
+  const job = syncState?.current_job ?? null
+  const jobLabel = job ? jobDisplayName(job) : null
+  const batch = runningBatchProgress(syncState)
+  const jobsCompleted = syncState?.jobs_completed ?? 0
+  const jobsTotal = syncState?.jobs_total ?? 0
+
+  let title = '基础数据同步中'
+  if (jobLabel) {
+    if (batch && batch.total > 0) {
+      const jobPct = Math.round((batch.current / batch.total) * 1000) / 10
+      title = `正在同步：${jobLabel}（${jobPct}%）`
+    } else {
+      title = `正在同步：${jobLabel}`
+    }
+  }
+
+  let phase = syncState?.message?.trim() || ''
+  if (!phase && job) {
+    phase = runningJobDetail(job, dbStatus, syncState)
+  }
+
+  const descParts: string[] = []
+  if (phase) descParts.push(phase)
+  descParts.push(`总进度 ${overallPercent.toFixed(1)}%`)
+  if (jobsTotal > 0) descParts.push(`任务 ${jobsCompleted}/${jobsTotal}`)
+  const mode = syncState?.mode
+  if (mode === 'incremental') descParts.push('增量')
+  else if (mode === 'resume') descParts.push('接续')
+  else if (mode === 'full') descParts.push('全量')
+
+  return { title, desc: descParts.join(' · ') }
+}
+
 function idleJobDetail(
   jobName: string,
   dbStatus: MarketDbStatusData | null,
@@ -474,6 +516,7 @@ export default function BasicDataSettingsSection() {
   const [loading, setLoading] = useState(true)
   const [syncing, setSyncing] = useState(false)
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  const logTextareaRef = useRef<HTMLTextAreaElement>(null)
   const mountedRef = useRef(true)
 
   const fetchAll = useCallback(async () => {
@@ -502,7 +545,7 @@ export default function BasicDataSettingsSection() {
 
   useEffect(() => {
     if (pollTimer.current) clearInterval(pollTimer.current)
-    const interval = isRunning ? POLL_RUNNING_MS : POLL_IDLE_MS
+    const interval = isRunning ? POLL_BURST_MS : POLL_IDLE_MS
     pollTimer.current = setInterval(fetchAll, interval)
     return () => {
       if (pollTimer.current) clearInterval(pollTimer.current)
@@ -510,7 +553,12 @@ export default function BasicDataSettingsSection() {
   }, [fetchAll, isRunning])
 
   useEffect(() => {
-    if (isRunning) void fetchAll()
+    if (isRunning) {
+      void fetchAll()
+      const burst = setInterval(fetchAll, POLL_BURST_MS)
+      return () => clearInterval(burst)
+    }
+    return undefined
   }, [isRunning, fetchAll])
 
   const handleSync = useCallback(async () => {
@@ -521,6 +569,7 @@ export default function BasicDataSettingsSection() {
       if (result?.started) {
         toast.showSuccess('已开始同步基础数据')
         void fetchAll()
+        window.setTimeout(() => { void fetchAll() }, 400)
       } else if (result?.running) {
         toast.showSuccess('同步已在运行中')
         void fetchAll()
@@ -537,7 +586,8 @@ export default function BasicDataSettingsSection() {
   const overallPercent = syncState?.overall_percent ?? 0
   const bootstrapReady = dbStatus?.bootstrap?.ready ?? false
   const dailyKlineReady = !bootstrapReady && hasCnDailyKline(dbStatus)
-  const bannerPositive = bootstrapReady || dailyKlineReady
+  const bannerPositive = (bootstrapReady || dailyKlineReady) && !isRunning
+  const syncBanner = isRunning ? formatSyncRunningBanner(syncState, dbStatus, overallPercent) : null
   const klineRecentRatio = dbStatus?.bootstrap?.kline_recent_ratio ?? 0
   const klineDepthRatio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
   const stockCount = dbStatus?.stock_count ?? 0
@@ -555,7 +605,7 @@ export default function BasicDataSettingsSection() {
         '',
       ]
       : []),
-    ...logLines.slice(-80).reverse(),
+    ...logLines.slice(-120),
   ].join('\n')
   const displayOverall = (() => {
     if (!dbStatus) return overallPercent
@@ -567,7 +617,13 @@ export default function BasicDataSettingsSection() {
     return Math.round((sum / SYNC_JOB_ITEMS.length) * 10) / 10
   })()
   const progressPercent = isRunning ? overallPercent : displayOverall
-  const showLogPanel = logText.trim().length > 0
+  const showLogPanel = isRunning || logText.trim().length > 0
+
+  useEffect(() => {
+    const el = logTextareaRef.current
+    if (!el) return
+    el.scrollTop = el.scrollHeight
+  }, [logText, isRunning])
   const cnKlineDate = dbStatus?.kline_dates?.CN ?? null
   const overviewItems = [
     { key: 'cn', label: 'A 股', count: stockCount, klineDate: cnKlineDate },
@@ -587,41 +643,46 @@ export default function BasicDataSettingsSection() {
   return (
     <div className={s.root}>
       <div
-        className={mergeClasses(s.statusBanner, bannerPositive && s.statusBannerReady)}
-        style={bannerPositive ? { borderColor: 'rgba(52, 199, 89, 0.3)' } : undefined}
+        className={mergeClasses(
+          s.statusBanner,
+          isRunning && s.statusBannerSyncing,
+          bannerPositive && s.statusBannerReady,
+        )}
+        style={
+          isRunning
+            ? { borderColor: 'rgba(0, 122, 255, 0.25)' }
+            : bannerPositive
+              ? { borderColor: 'rgba(52, 199, 89, 0.3)' }
+              : undefined
+        }
       >
         <div className={s.statusBannerIcon}>
-          {bootstrapReady || dailyKlineReady ? (
+          {isRunning ? (
+            <ArrowSyncCircleRegular fontSize={24} style={{ color: opptrixCssVars.accent }} />
+          ) : bootstrapReady || dailyKlineReady ? (
             <CheckmarkCircleFilled fontSize={24} style={{ color: opptrixCssVars.success }} />
-          ) : isRunning ? (
-            <ArrowSyncCircleRegular fontSize={24} style={{ color: opptrixCssVars.textSecondary }} />
           ) : (
             <DismissCircleRegular fontSize={24} style={{ color: opptrixCssVars.warning }} />
           )}
         </div>
         <div className={s.statusBannerText}>
           <Text className={s.statusBannerTitle} block>
-            {bootstrapReady
-              ? '基础数据已就绪'
-              : dailyKlineReady
-                ? '基础数据已具备'
-                : isRunning
-                  ? '基础数据同步中'
-                  : '基础数据未就绪'}
+            {syncBanner?.title
+              ?? (bootstrapReady
+                ? '基础数据已就绪'
+                : dailyKlineReady
+                  ? '基础数据已具备'
+                  : '基础数据未就绪')}
           </Text>
           <Text className={s.statusBannerDesc} block>
-            {bootstrapReady
-              ? '本地数据完整，可开始选股与挖掘'
-              : dailyKlineReady
-                ? '可查看 K 线、使用本地选股与行业数据；其余项目将自动更新'
-                : isRunning
-                  ? (syncState?.message
-                    ?? (syncState?.current_job
-                      ? `正在同步：${jobDisplayName(syncState.current_job)}（${overallPercent.toFixed(1)}%）`
-                      : '正在同步名录、行业与 K 线数据…'))
+            {syncBanner?.desc
+              ?? (bootstrapReady
+                ? '本地数据完整，可开始选股与挖掘'
+                : dailyKlineReady
+                  ? '可查看 K 线、使用本地选股与行业数据；其余项目将自动更新'
                   : klineRecentRatio >= 50 && klineDepthRatio < 95
                     ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
-                    : '需先完成名录、行业板块与历史 K 线同步'}
+                    : '需先完成名录、行业板块与历史 K 线同步')}
           </Text>
         </div>
         <div className={s.statusBannerAction}>
@@ -655,7 +716,7 @@ export default function BasicDataSettingsSection() {
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>同步状态</Text>
         <SettingsGroup>
-          {isRunning && (
+          {isRunning && syncBanner && (
             <div className={s.progressBarWrap}>
               <div className={s.progressInfoRow}>
                 <Text className={s.progressJobName} block>
@@ -668,8 +729,7 @@ export default function BasicDataSettingsSection() {
               </div>
               <ProgressBar max={100} value={progressPercent} style={{ height: '4px' }} />
               <Text style={{ fontSize: '11px', color: opptrixCssVars.textTertiary }} block>
-                {syncState?.message
-                  ?? `${syncState?.jobs_completed ?? 0}/${syncState?.jobs_total ?? 0} 个任务`}
+                {syncBanner.desc}
               </Text>
             </div>
           )}
@@ -688,7 +748,8 @@ export default function BasicDataSettingsSection() {
             const prog = dbStatus?.job_progress?.[jobName]
             const error = prog?.error ?? 0
             const jobError = failedJobMap.get(jobName)
-            const trailingText = jobError
+            const showJobError = !isComplete && (error > 0 || !!jobError)
+            const trailingText = showJobError && jobError
               ? truncateError(jobError)
               : jobTrailingText(
                 jobName,
@@ -714,14 +775,14 @@ export default function BasicDataSettingsSection() {
                   <Text
                     className={mergeClasses(
                       s.jobStats,
-                      !isJobRunning && !isComplete && !lastSync && !failedJobMap.has(jobName) && s.jobStatsMuted,
-                      (error > 0 || failedJobMap.has(jobName)) && s.jobStatsError,
+                      !isJobRunning && !isComplete && !lastSync && !showJobError && s.jobStatsMuted,
+                      showJobError && s.jobStatsError,
                     )}
                     block
-                    title={jobError ?? undefined}
+                    title={showJobError && jobError ? jobError : undefined}
                   >
                     {trailingText}
-                    {!THS_KLINE_JOBS.has(jobName) && error > 0 ? ` ×${error}` : ''}
+                    {!THS_KLINE_JOBS.has(jobName) && showJobError && error > 0 ? ` ×${error}` : ''}
                   </Text>
                 </div>
               </div>
@@ -742,9 +803,10 @@ export default function BasicDataSettingsSection() {
           )}
           <div className={s.logPanel}>
             <textarea
+              ref={logTextareaRef}
               className={s.logTextarea}
               readOnly
-              value={logText}
+              value={logText || (isRunning ? '等待同步日志…' : '')}
               aria-label="同步日志"
               spellCheck={false}
             />

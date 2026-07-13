@@ -1,6 +1,7 @@
 import { resetSharedMarketSyncCoordinator } from './sync/coordinator.js'
 import { resetSharedMarketDataStore } from './store.js'
 import { stopMarketDataRefreshScheduler } from './sync/scheduler.js'
+import { resetMarketDuckGateways } from './duck/market-duck-gateway.js'
 
 let resetServiceHook: (() => void) | null = null
 
@@ -15,4 +16,5 @@ export function resetMarketDataRuntime(): void {
   resetServiceHook?.()
   resetSharedMarketDataStore()
   resetSharedMarketSyncCoordinator()
+  resetMarketDuckGateways()
 }

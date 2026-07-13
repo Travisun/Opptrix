@@ -6,6 +6,7 @@ import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
+import { setMarketSyncActive, isMarketSyncActive } from '../duck/duck-subprocess-gate.js'
 import {
   computeBootstrapOverallPercent,
   countBootstrapCompletedJobs,
@@ -182,6 +183,7 @@ export class MarketSyncCoordinator {
     if (!this.bootstrapProgressRepaired) {
       this.bootstrapProgressRepaired = true
       setImmediate(() => {
+        if (this.running || isMarketSyncActive()) return
         try {
           this.store.repairBootstrapJobProgress()
         } catch { /* best-effort */ }
@@ -194,9 +196,7 @@ export class MarketSyncCoordinator {
       session = this.store.getLatestSession()
     }
     const dbStatus = this.dbStatus()
-    const logs = this.running
-      ? this.memoryLogs
-      : this.store.getRecentLogs(session?.id ?? null, MAX_MEMORY_LOGS)
+    const logs = this.logsForSnapshot(session)
 
     const jobsTotal = session?.jobs_total ?? this.snapshot.jobs_total ?? BOOTSTRAP_SYNC_JOBS.length
     const jobsList = jobsTotal >= ALL_SYNC_JOBS.length
@@ -289,8 +289,7 @@ export class MarketSyncCoordinator {
     session: ReturnType<MarketDataStore['getLatestSession']>,
   ): SyncFailedJob[] {
     if (session?.id != null && this.lastJobResultsSessionId === session.id) {
-      const fromMemory = this.failedJobsFromResults(this.lastJobResults)
-      if (fromMemory.length) return fromMemory
+      return this.failedJobsFromResults(this.lastJobResults)
     }
     if (session?.id != null && (session.status === 'partial' || session.status === 'interrupted')) {
       return this.store.getFailedRunsForSession(session.id)
@@ -300,6 +299,19 @@ export class MarketSyncCoordinator {
 
   isRunning(): boolean {
     return this.running
+  }
+
+  /** 运行中读内存；结束后优先 DB，DB 空则回退内存（appendLog 失败时仍可见） */
+  private logsForSnapshot(
+    session: ReturnType<MarketDataStore['getLatestSession']>,
+  ): string[] {
+    const sessionId = session?.id ?? null
+    if (this.running) return [...this.memoryLogs]
+    if (sessionId != null && this.lastJobResultsSessionId === sessionId && this.memoryLogs.length) {
+      return [...this.memoryLogs]
+    }
+    const dbLogs = this.store.getRecentLogs(sessionId, MAX_MEMORY_LOGS)
+    return dbLogs.length ? dbLogs : [...this.memoryLogs]
   }
 
   private log(sessionId: number | null, message: string): void {
@@ -337,6 +349,7 @@ export class MarketSyncCoordinator {
     }
 
     this.running = true
+    setMarketSyncActive(true)
     const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
     const latest = this.store.getLatestSession()
     const reuseSession = mode === 'resume'
@@ -351,12 +364,15 @@ export class MarketSyncCoordinator {
       this.log(sessionId, `接续同步 · 恢复会话 #${sessionId} · ${jobs.length} 个任务`)
     } else {
       this.memoryLogs = []
+      this.lastJobResults = {}
+      this.lastJobResultsSessionId = null
       sessionId = this.store.beginSession(mode, jobs.length)
       this.log(sessionId, `同步启动 · 模式 ${mode}${mode === 'incremental' ? '（按 TTL 跳过未到期数据）' : ''} · ${jobs.length} 个任务`)
     }
 
     void this.runSession(sessionId, { ...options, mode, jobs }).finally(() => {
       this.running = false
+      setMarketSyncActive(false)
       this.dbStatusCache = null
     })
 
@@ -368,6 +384,7 @@ export class MarketSyncCoordinator {
     try {
       const result = await engine.sync({
         ...options,
+        onLog: (message: string) => this.log(sessionId, message),
         onProgress: (p: SyncProgress) => {
           this.snapshot = {
             current_job: p.job,

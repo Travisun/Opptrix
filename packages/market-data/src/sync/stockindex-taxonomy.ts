@@ -18,6 +18,7 @@ import type { JobSyncConfig } from './config.js'
 import type { InitialSyncCallbacks } from './initial-sync.js'
 import { persistCnEquityListRow } from './persist-universe.js'
 import { sleep, withRetry } from './pool.js'
+import { yieldToEventLoop } from './event-loop.js'
 
 type TaxonomyKind = 'industry' | 'board'
 
@@ -132,7 +133,10 @@ async function syncTaxonomyNodes(
     nodes++
     links += store.replaceInstrumentTaxonomy('CN', nodeId, unique)
 
+    if ((i + 1) % 20 === 0) store.flushDuckWritesSync({ throwOnError: false })
+
     callbacks.onProgress?.(i + 1, entries.length, label)
+    if ((i + 1) % 10 === 0) await yieldToEventLoop()
     if (cfg.delayMs > 0) await sleep(cfg.delayMs)
   }
 
@@ -231,6 +235,8 @@ export async function syncStockIndexCnTaxonomy(
   )
   nodes += br.nodes
   links += br.links
+
+  store.flushDuckWritesSync()
 
   if (nodes > 0) {
     const filled = store.backfillCnStockIndustryFromTaxonomy()

@@ -12,6 +12,7 @@ import type { JobSyncConfig } from './config.js'
 import type { InitialSyncCallbacks } from './initial-sync.js'
 import { persistCnEtfRow } from './persist-universe.js'
 import { sleep } from './pool.js'
+import { yieldToEventLoop } from './event-loop.js'
 
 function cnEtfItems(items: StockIndexItem[]): StockIndexItem[] {
   return items.filter(
@@ -74,7 +75,8 @@ export async function syncStockIndexCnEtf(
     if (i % 25 === 0 || i === items.length - 1) {
       callbacks.onProgress?.(i + 1, items.length, '写入 A 股 ETF 名录')
     }
-    if (i > 0 && i % 200 === 0) store.flushDuckWritesSync()
+    if (i > 0 && i % 200 === 0) store.flushDuckWritesSync({ throwOnError: false })
+    if (i > 0 && i % 25 === 0) await yieldToEventLoop()
     if (cfg.delayMs > 0 && i % 50 === 0) await sleep(cfg.delayMs)
   }
 

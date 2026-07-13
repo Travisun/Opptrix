@@ -21,6 +21,7 @@ import {
   getTushareSyncBoost,
   isTushareBackedSyncJob,
   KLINE_BOOTSTRAP_DAYS,
+  STOCKINDEX_LIST_SYNC_JOBS,
   type JobSyncConfig,
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
@@ -317,7 +318,12 @@ export class MarketDataSyncEngine {
             continue
         }
         results[job] = this.jobFinishedEmpty ? 'skipped' : 'ok'
-        if (!this.jobFinishedEmpty) this.store.setCursor(job)
+        if (!this.jobFinishedEmpty) {
+          this.store.setCursor(job)
+          if ((STOCKINDEX_LIST_SYNC_JOBS as readonly string[]).includes(job)) {
+            this.store.clearJobProgressErrors(job)
+          }
+        }
         options.onJobFinish?.(job, results[job], jobIndex)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)

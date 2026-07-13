@@ -69,8 +69,22 @@ const PARQUET_SELECT = `
     AND length(regexp_replace(CAST(thscode AS VARCHAR), '\\.(SH|SZ|BJ)$', '', 'i')) = 6
 `
 
-async function ensureSchema(conn: ReturnType<typeof connectDuck>) {
-  await ensureAnalyticsSchema(conn)
+async function ensureKlineImportSchema(conn: ReturnType<typeof connectDuck>) {
+  await duckRun(conn, `
+    CREATE TABLE IF NOT EXISTS ${CN_TABLE} (
+      trade_date VARCHAR NOT NULL,
+      code VARCHAR NOT NULL,
+      open DOUBLE,
+      high DOUBLE,
+      low DOUBLE,
+      close DOUBLE,
+      volume DOUBLE,
+      amount DOUBLE,
+      change_pct DOUBLE,
+      synced_at VARCHAR NOT NULL,
+      PRIMARY KEY (trade_date, code)
+    );
+  `)
 }
 
 async function cmdImport(flags: Record<string, string>) {
@@ -89,7 +103,7 @@ async function cmdImport(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     emit({ type: 'progress', message: 'DuckDB 读取 Parquet', percent: 78 })
 
     if (mode === 'full') {
@@ -120,7 +134,7 @@ async function cmdStats(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const row = await duckGet<{ rows: number; codes: number; maxDate: string | null }>(conn, `
       SELECT
         COUNT(*)::INTEGER AS rows,
@@ -149,7 +163,7 @@ async function cmdQueryKlines(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const params: unknown[] = [code]
     let beforeClause = ''
     if (before) {
@@ -194,7 +208,7 @@ async function cmdMigrateFromSqlite(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const existing = await duckGet<{ c: number }>(conn, `SELECT COUNT(*)::INTEGER AS c FROM ${CN_TABLE}`)
     if ((existing?.c ?? 0) > 0) {
       emit({ type: 'done', rowsImported: 0, skipped: true })
@@ -227,7 +241,7 @@ async function cmdCodesWithMin(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const rows = await duckAll<{ code: string }>(conn, `
       SELECT code FROM ${CN_TABLE} GROUP BY code HAVING COUNT(*) >= ?
     `, min)
@@ -247,7 +261,7 @@ async function cmdLatestBars(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const rows = tradeDate
       ? await duckAll(conn, `SELECT code, close, change_pct FROM ${CN_TABLE} WHERE trade_date = ?`, tradeDate)
       : await duckAll(conn, `
@@ -281,7 +295,7 @@ async function cmdUpsert(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     const syncedAt = new Date().toISOString()
     await duckRun(conn, 'BEGIN TRANSACTION')
     for (const r of rows) {
@@ -330,7 +344,7 @@ async function cmdSyncBars(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureKlineImportSchema(conn)
     await attachSqlite(conn, sqlitePath, 'md', false)
     const missing = await duckGet<{ c: number }>(conn, `
       SELECT COUNT(*)::INTEGER AS c FROM ${CN_TABLE} k
@@ -370,7 +384,7 @@ async function cmdSyncAnalytics(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     const result = await syncAnalytics(conn, sqlitePath, scope)
     process.stdout.write(JSON.stringify(result))
   } finally {
@@ -391,7 +405,7 @@ async function cmdComputeFactors(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     const result = await computeScreenFactors(conn, sqlitePath, tradeDate, codes)
     process.stdout.write(JSON.stringify(result))
   } finally {
@@ -411,7 +425,7 @@ async function cmdAnalyticsStats(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     process.stdout.write(JSON.stringify(await analyticsStats(conn)))
   } finally {
     await closeDuck(db)
@@ -429,7 +443,7 @@ async function cmdQueryIndustryStats(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     const date = tradeDate || (await latestFactorDateDuck(conn)) || new Date().toISOString().slice(0, 10)
     process.stdout.write(JSON.stringify(await queryIndustryStatsDuck(conn, date)))
   } finally {
@@ -450,7 +464,7 @@ async function cmdQueryIndustryStocks(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     const date = tradeDate || (await latestFactorDateDuck(conn)) || new Date().toISOString().slice(0, 10)
     const items = await queryIndustryStocksDuck(conn, industry, date, limit)
     process.stdout.write(JSON.stringify({ trade_date: date, items }))
@@ -471,7 +485,7 @@ async function cmdScreenUniverse(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureSchema(conn)
+    await ensureAnalyticsSchema(conn)
     const tradeDate = query.trade_date?.slice(0, 10)
       || (await latestFactorDateDuck(conn))
       || new Date().toISOString().slice(0, 10)

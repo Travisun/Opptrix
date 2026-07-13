@@ -1,3 +1,7 @@
+/**
+ * @deprecated 生产路径请使用 getMarketDuckGateway() 子进程访问。
+ * 本模块保留供测试 / 工具脚本直连 DuckDB（勿与 Gateway 并发写同一文件）。
+ */
 import fs from 'node:fs'
 import path from 'node:path'
 import type { StockKline } from '@opptrix/shared'

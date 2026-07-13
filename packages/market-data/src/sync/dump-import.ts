@@ -162,6 +162,7 @@ async function importParquetFromCache(
   hooks?: DumpImportHooks,
   fromCache = true,
 ): Promise<DumpImportResult> {
+  store.flushDuckWritesSync({ throwOnError: true })
   hooks?.onPhase?.('DuckDB 子进程导入', fromCache ? 25 : 70)
   const result = await spawnKlineParquetImport({
     parquetPath,
@@ -171,7 +172,7 @@ async function importParquetFromCache(
   })
 
   store.invalidateKlineStatsCache()
-  store.flushDuckWritesSync()
+  store.flushDuckWritesSync({ throwOnError: false })
   hooks?.onPhase?.('完成', 100)
   return { type, rowsImported: result.rowsImported, success: true, fromCache }
 }

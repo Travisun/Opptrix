@@ -33,14 +33,9 @@ import {
   migrateMarketDataViaSubprocess,
   syncMarketDataToSqliteViaSubprocess,
 } from './duck/market-duck-sync.js'
+import { getMarketDuckGateway } from './duck/market-duck-gateway.js'
+import { isMarketSyncActive } from './duck/duck-subprocess-gate.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
-import os from 'node:os'
-import fs from 'node:fs'
-import path from 'node:path'
-import { execFileSync } from 'node:child_process'
-import { fileURLToPath } from 'node:url'
-
-const DUCK_CLI = fileURLToPath(new URL('./kline/duck-cli.js', import.meta.url))
 
 export interface KlineUpsertRow {
   tradeDate: string
@@ -131,9 +126,15 @@ export class MarketDataStore {
   private marketDataMigrated = false
   private duckWriteQueue: DuckWriteOp[] = []
   private readonly duckFlushThreshold = 250
+  /** 批量 taxonomy 写入时递增，避免每条 upsert 都 spawn Duck 子进程查 MAX(id) */
+  private taxonomyIdSeq: number | null = null
   private duckMarketStatsCache: { at: number; value: ReturnType<typeof duckMarketStatsSync> } | null = null
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
+
+  private duckGw() {
+    return getMarketDuckGateway(this.klineDuckDbPath, this.dbPath)
+  }
 
   constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
     this.dbPath = dbPath
@@ -148,8 +149,14 @@ export class MarketDataStore {
   private scheduleKlineBackendReady(): void {
     if (this.klineMigrated) return
     this.klineMigrated = true
-    setImmediate(() => {
+    // 推迟重迁移，避免启动/点同步瞬间 execFileSync 长时间占满事件循环
+    setTimeout(() => {
       try {
+        if (isMarketSyncActive()) {
+          this.klineMigrated = false
+          this.scheduleKlineBackendReady()
+          return
+        }
         migrateSqliteKlinesToDuckIfEmpty(this.klineDuckDbPath, this.dbPath)
         this.ensureMarketDataOnDuck()
         this.invalidateKlineStatsCache()
@@ -157,38 +164,53 @@ export class MarketDataStore {
       } catch {
         /* 首次迁移失败不阻断启动 */
       }
-    })
+    }, 8000)
   }
 
-  /** SQLite 市场数据 → DuckDB 一次性迁移（幂等） */
+  /** SQLite 市场数据 → DuckDB 一次性迁移（幂等；Duck 已有数据则跳过，避免覆盖同步写入） */
   private ensureMarketDataOnDuck(): void {
     if (this.marketDataMigrated) return
+    if (isMarketSyncActive()) {
+      setTimeout(() => this.ensureMarketDataOnDuck(), 5000)
+      return
+    }
     this.marketDataMigrated = true
     try {
+      if (hasMarketDuckData(this.klineDuckDbPath)) return
       migrateMarketDataViaSubprocess(this.klineDuckDbPath, this.dbPath, false)
     } catch {
       /* 迁移失败不阻断；后续读写回退 SQLite */
+      this.marketDataMigrated = false
     }
   }
 
   private queueDuck(op: DuckWriteOp): void {
     this.duckWriteQueue.push(op)
     if (this.duckWriteQueue.length >= this.duckFlushThreshold) {
-      this.flushDuckWritesSync()
+      this.flushDuckWritesSync({ throwOnError: false })
     }
   }
 
   /** 同步 flush — sync 任务边界调用 */
-  flushDuckWritesSync(): void {
+  flushDuckWritesSync(options?: { throwOnError?: boolean }): void {
     if (!this.duckWriteQueue.length) return
+    const throwOnError = options?.throwOnError ?? true
     const batch = this.duckWriteQueue.splice(0)
     try {
       applyDuckBatchSync(batch, this.klineDuckDbPath)
+      this.taxonomyIdSeq = null
       this.invalidateDuckMarketStatsCache()
       invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
-    } catch {
+    } catch (err) {
       this.duckWriteQueue.unshift(...batch)
+      if (throwOnError) throw err
+      console.warn('[market-data] duck batch flush failed (will retry at job boundary):', err)
     }
+  }
+
+  /** Duck 写入队列非空时跳过子进程读 — 未 flush 数据由 pendingInstrumentNsConflict 覆盖 */
+  private shouldDeferDuckSubprocessRead(): boolean {
+    return this.duckWriteQueue.length > 0
   }
 
   private duckRead<T extends Record<string, unknown>>(
@@ -196,7 +218,7 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T | undefined,
   ): T | undefined {
-    if (hasMarketDuckData(this.klineDuckDbPath)) {
+    if (hasMarketDuckData(this.klineDuckDbPath) && !this.shouldDeferDuckSubprocessRead()) {
       const row = duckQueryOneSync<T>(sql, params, this.klineDuckDbPath)
       if (row) return row
     }
@@ -208,7 +230,7 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T[],
   ): T[] {
-    if (hasMarketDuckData(this.klineDuckDbPath)) {
+    if (hasMarketDuckData(this.klineDuckDbPath) && !this.shouldDeferDuckSubprocessRead()) {
       const rows = duckQueryAllSync<T>(sql, params, this.klineDuckDbPath)
       if (rows.length) return rows
     }
@@ -245,15 +267,7 @@ export class MarketDataStore {
   }
 
   duckLatestBars(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
-    try {
-      const args = ['latest-bars', '--duckdb', this.klineDuckDbPath]
-      if (tradeDate) args.push('--date', tradeDate.slice(0, 10))
-      return JSON.parse(execFileSync(process.execPath, [DUCK_CLI, ...args], { encoding: 'utf8' })) as Array<{
-        code: string; close: number | null; change_pct: number | null
-      }>
-    } catch {
-      return []
-    }
+    return this.duckGw().latestBarsSync(tradeDate)
   }
 
   /** 解析 A 股 EQUITY 命名空间 — 优先 instruments 表，回退 stocks.market */
@@ -296,7 +310,7 @@ export class MarketDataStore {
   }
 
   close(): void {
-    this.flushDuckWritesSync()
+    this.flushDuckWritesSync({ throwOnError: true })
     this.db.close()
   }
 
@@ -374,7 +388,9 @@ export class MarketDataStore {
   }
 
   getStatus(): MarketDbStatus {
-    this.flushDuckWritesSync()
+    if (!isMarketSyncActive()) {
+      this.flushDuckWritesSync({ throwOnError: false })
+    }
     const duck = this.cachedDuckMarketStats()
     const stocksTableCount = duck.stocks || (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
     const cnEquityCount = duck.cn_equity || this.countEquityInstrumentsSqlite('CN')
@@ -915,22 +931,12 @@ export class MarketDataStore {
     if (!rows.length) return 0
     const batchSize = 2_000
     let written = 0
+    const gw = this.duckGw()
     for (let i = 0; i < rows.length; i += batchSize) {
       const batch = rows.slice(i, i + batchSize)
-      const tmp = path.join(os.tmpdir(), `opptrix-kline-upsert-${process.pid}-${Date.now()}-${i}.json`)
-      fs.writeFileSync(tmp, JSON.stringify(batch))
-      try {
-        execFileSync(process.execPath, [
-          DUCK_CLI, 'upsert',
-          '--duckdb', this.klineDuckDbPath,
-          '--sqlite', this.dbPath,
-          '--file', tmp,
-        ], { stdio: ['ignore', 'pipe', 'pipe'] })
-        written += batch.length
-        onBatch?.(written, rows.length)
-      } finally {
-        try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-      }
+      gw.upsertKlinesBatchSync(batch)
+      written += batch.length
+      onBatch?.(written, rows.length)
     }
     this.invalidateKlineStatsCache()
     return written
@@ -1086,6 +1092,8 @@ export class MarketDataStore {
    * 进程重启后修复 K 线导入中断遗留：补回索引、从 DuckDB 对齐 CN bars、清理卡住的 run。
    */
   repairKlineImportArtifacts(): { barsRepaired: number; runsClosed: number } {
+    if (isMarketSyncActive()) return { barsRepaired: 0, runsClosed: 0 }
+
     this.recreateKlineIndexes()
     this.recreateInstrumentBarsIndexes()
 
@@ -1096,10 +1104,7 @@ export class MarketDataStore {
     ).get() as { c: number }).c
     if (duckRows > 0 && barsRows < duckRows * 0.95) {
       try {
-        const out = execFileSync(process.execPath, [
-          DUCK_CLI, 'sync-bars', '--duckdb', this.klineDuckDbPath, '--sqlite', this.dbPath,
-        ], { encoding: 'utf8' })
-        barsRepaired = (JSON.parse(out) as { barsSynced?: number }).barsSynced ?? 0
+        barsRepaired = this.duckGw().syncBarsToSqliteSync()
       } catch {
         /* DuckDB 不可用时跳过 bars 修复 */
       }
@@ -1178,9 +1183,7 @@ export class MarketDataStore {
         'SELECT id FROM taxonomy_nodes WHERE market = ? AND kind = ? AND code = ?',
       ).get(row.market, row.kind, row.code) as { id: number } | undefined,
     )
-    const nextId = existing?.id ?? (duckQueryOneSync<{ id: number }>(
-      'SELECT COALESCE(MAX(id), 0) + 1 AS id FROM taxonomy_nodes', [], this.klineDuckDbPath,
-    )?.id ?? 1)
+    const nextId = existing?.id ?? this.allocateTaxonomyNodeId()
     this.queueDuck({
       op: 'upsertTaxonomyNode',
       row: {
@@ -1213,6 +1216,30 @@ export class MarketDataStore {
 
   /** 用 taxonomy 行业分类回填 stocks.industry（syncInitialTaxonomy 收尾） */
   backfillCnStockIndustryFromTaxonomy(): number {
+    this.flushDuckWritesSync()
+    if (hasMarketDuckData(this.klineDuckDbPath)) {
+      type Row = { code: string; industry: string }
+      const rows = duckQueryAllSync<Row>(`
+        SELECT code, industry FROM (
+          SELECT s.code, tn.name AS industry,
+            ROW_NUMBER() OVER (PARTITION BY s.code ORDER BY tn.level DESC NULLS LAST, tn.id DESC) AS rn
+          FROM stocks s
+          INNER JOIN instrument_taxonomy it ON it.market = 'CN' AND it.code = s.code
+          INNER JOIN taxonomy_nodes tn ON tn.id = it.taxonomy_id AND tn.kind = 'industry'
+          WHERE s.status = 'active'
+        ) t WHERE rn = 1
+      `, [], this.klineDuckDbPath)
+      const ts = nowIso()
+      for (const row of rows) {
+        this.queueDuck({
+          op: 'exec',
+          sql: 'UPDATE stocks SET industry = ?, updated_at = ? WHERE code = ?',
+          params: [row.industry, ts, row.code],
+        })
+      }
+      if (rows.length) this.flushDuckWritesSync()
+      return rows.length
+    }
     const ts = nowIso()
     return this.db.prepare(`
       UPDATE stocks
@@ -1820,6 +1847,18 @@ export class MarketDataStore {
     return this.db.prepare('DELETE FROM sync_job_progress').run().changes
   }
 
+  /** 任务已成功时清除历史逐股 error 行，避免 UI 长期显示 ×N 失败 */
+  clearJobProgressErrors(jobName?: string): number {
+    if (jobName) {
+      return this.db.prepare(
+        'DELETE FROM sync_job_progress WHERE job_name = ? AND status = ?',
+      ).run(jobName, 'error').changes
+    }
+    return this.db.prepare(
+      'DELETE FROM sync_job_progress WHERE status = ?',
+    ).run('error').changes
+  }
+
   /** Clear prior per-stock errors for 北交所 920xxx — retry after code mapping fix. */
   clearBseJobErrors(jobNames?: string[]): number {
     if (jobNames?.length) {
@@ -1836,10 +1875,7 @@ export class MarketDataStore {
 
   listCodesWithMinKlines(minBars: number): string[] {
     try {
-      const out = execFileSync(process.execPath, [
-        DUCK_CLI, 'codes-with-min', '--duckdb', this.klineDuckDbPath, '--min', String(minBars),
-      ], { encoding: 'utf8' })
-      const codes = JSON.parse(out) as string[]
+      const codes = this.duckGw().codesWithMinKlinesSync(minBars)
       if (codes.length) return codes
     } catch { /* fallback */ }
     return (this.db.prepare(`
@@ -1867,6 +1903,8 @@ export class MarketDataStore {
 
   /** Backfill per-stock job flags for bulk bootstrap tasks (fixes stale progress display). */
   repairBootstrapJobProgress(): { klines: number; industry: number } {
+    if (isMarketSyncActive()) return { klines: 0, industry: 0 }
+
     const klineCodes = this.listCodesWithMinKlines(60)
     if (klineCodes.length) this.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
 
@@ -1883,6 +1921,21 @@ export class MarketDataStore {
         industry = codes.length
       }
     }
+
+    const stockIndexJobs = [
+      'initial_cn_universe',
+      'initial_cn_etf',
+      'initial_hk_universe',
+      'initial_us_universe',
+      'initial_taxonomy',
+    ] as const
+    for (const job of stockIndexJobs) {
+      const row = this.db.prepare(
+        'SELECT last_success_at FROM sync_cursor WHERE job_name = ?',
+      ).get(job) as { last_success_at: string | null } | undefined
+      if (row?.last_success_at) this.clearJobProgressErrors(job)
+    }
+
     return { klines: klineCodes.length, industry }
   }
 
@@ -2229,22 +2282,29 @@ export class MarketDataStore {
     return rows.reverse().map(r => r.message)
   }
 
-  /** 会话时间窗口内 status=failed 的 sync_runs（用于 UI 展示失败详情） */
+  /** 会话时间窗口内「最后一次」仍为 failed 的任务（已成功重试的不展示） */
   getFailedRunsForSession(sessionId: number): Array<{ job: string; error: string }> {
     const session = this.getSession(sessionId)
     if (!session) return []
     const endAt = session.finished_at ?? nowIso()
     const rows = this.db.prepare(`
-      SELECT job_name, message FROM sync_runs
-      WHERE status = 'failed'
-        AND started_at >= ?
-        AND started_at <= ?
-      ORDER BY id ASC
-    `).all(session.started_at, endAt) as Array<{ job_name: string; message: string | null }>
-    return rows.map(r => ({
-      job: r.job_name,
-      error: r.message?.trim() || '未知错误',
-    }))
+      SELECT job_name, status, message FROM sync_runs
+      WHERE started_at >= ? AND started_at <= ?
+      ORDER BY id DESC
+    `).all(session.started_at, endAt) as Array<{ job_name: string; status: string; message: string | null }>
+    const seen = new Set<string>()
+    const out: Array<{ job: string; error: string }> = []
+    for (const row of rows) {
+      if (seen.has(row.job_name)) continue
+      seen.add(row.job_name)
+      if (row.status === 'failed') {
+        out.push({
+          job: row.job_name,
+          error: row.message?.trim() || '未知错误',
+        })
+      }
+    }
+    return out
   }
 
   upsertInstrument(row: {
@@ -2293,21 +2353,77 @@ export class MarketDataStore {
     })
   }
 
+  private allocateTaxonomyNodeId(): number {
+    if (this.taxonomyIdSeq == null) {
+      let max = duckQueryOneSync<{ id: number }>(
+        'SELECT COALESCE(MAX(id), 0)::INTEGER AS id FROM taxonomy_nodes', [], this.klineDuckDbPath,
+      )?.id ?? 0
+      for (const op of this.duckWriteQueue) {
+        if (op.op !== 'upsertTaxonomyNode') continue
+        const id = Number(op.row.id)
+        if (Number.isFinite(id) && id > max) max = id
+      }
+      this.taxonomyIdSeq = max
+    }
+    this.taxonomyIdSeq += 1
+    return this.taxonomyIdSeq
+  }
+
+  private pendingInstrumentNsConflict(
+    baseNs: string,
+    row: { market: string; exchange: string; code: string; assetClass: string },
+  ): { market: string; exchange: string; code: string; asset_class: string } | undefined {
+    for (const op of this.duckWriteQueue) {
+      if (op.op === 'upsertInstrument') {
+        const r = op.row
+        const ns = String(r.instrument_ns ?? '')
+        if (ns !== baseNs) continue
+        const market = String(r.market)
+        const exchange = normalizeInstrumentExchange(r.exchange as string | null | undefined)
+        const code = String(r.code)
+        const assetClass = String(r.asset_class)
+        if (market === row.market && exchange === row.exchange && code === row.code && assetClass === row.assetClass) {
+          continue
+        }
+        return { market, exchange, code, asset_class: assetClass }
+      }
+      if (op.op === 'exec' && op.sql.includes('UPDATE instruments SET instrument_ns')) {
+        const [patched, market, exchange, code, assetClass] = op.params ?? []
+        if (String(patched) !== baseNs) continue
+        if (market === row.market && normalizeInstrumentExchange(exchange as string) === row.exchange
+          && code === row.code && assetClass === row.assetClass) {
+          continue
+        }
+        return {
+          market: String(market),
+          exchange: normalizeInstrumentExchange(exchange as string),
+          code: String(code),
+          asset_class: String(assetClass),
+        }
+      }
+    }
+    return undefined
+  }
+
   private resolveInstrumentNsForUpsertDuck(
     row: { market: string; exchange: string; code: string; assetClass: string },
     baseNs: string,
   ): string {
-    const readConflict = () => this.duckRead<{ market: string; exchange: string; code: string; asset_class: string }>(
+    const readConflict = () => {
+      const pending = this.pendingInstrumentNsConflict(baseNs, row)
+      if (pending) return pending
+      return this.duckRead<{ market: string; exchange: string; code: string; asset_class: string }>(
       `SELECT market, exchange, code, asset_class FROM instruments
        WHERE instrument_ns = ? AND NOT (market = ? AND exchange = ? AND code = ? AND asset_class = ?) LIMIT 1`,
       [baseNs, row.market, row.exchange, row.code, row.assetClass],
       () => this.db.prepare(`
         SELECT market, exchange, code, asset_class FROM instruments
         WHERE instrument_ns = ? AND NOT (market = ? AND exchange = ? AND code = ? AND asset_class = ?) LIMIT 1
-      `).get(baseNs, row.market, row.exchange, row.code, row.assetClass) as {
+      `      ).get(baseNs, row.market, row.exchange, row.code, row.assetClass) as {
         market: string; exchange: string; code: string; asset_class: string
       } | undefined,
-    )
+      )
+    }
     const conflict = readConflict()
     if (!conflict) return baseNs
     const sameSymbol = conflict.market === row.market
