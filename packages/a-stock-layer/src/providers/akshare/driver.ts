@@ -25,9 +25,11 @@ applyManifestSpec(AkshareDriver, SPEC, {
   isRuntimeEnabled: () => true,
 })
 
+import { outboundFetch } from '@opptrix/shared'
+
 export async function testAkshareConnection(): Promise<{ ok: boolean; message: string }> {
   try {
-    const resp = await fetch('https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_VALUEANALYSIS_DET&columns=ALL&pageNumber=1&pageSize=1&source=WEB&client=WEB', {
+    const resp = await outboundFetch('https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_VALUEANALYSIS_DET&columns=ALL&pageNumber=1&pageSize=1&source=WEB&client=WEB', {
       signal: AbortSignal.timeout(5000),
     })
     if (resp.ok) return { ok: true, message: 'AKShare 数据 API 连接正常' }

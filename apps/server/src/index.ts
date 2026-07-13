@@ -1208,14 +1208,8 @@ async function listenWithStaleCleanup(): Promise<void> {
 }
 
 async function bootstrap() {
-  const outbound = await initOutboundNetwork()
-  if (outbound.ipv6Available) {
-    console.log('  Outbound network → IPv6')
-  } else if (outbound.ipv4Available) {
-    console.log('  Outbound network → IPv4 (IPv6 unavailable)')
-  } else {
-    console.log('  Outbound network → IPv6 preferred (connectivity probe inconclusive)')
-  }
+  await initOutboundNetwork()
+  console.log('  Outbound network → IPv4-first, v6 fallback on connect failure')
 
   await registerNewsRoutes(app)
   await registerEnrichmentRoutes(app)

@@ -17,6 +17,7 @@ import { hostnameLimiter, extractHostname } from './rate-limiter.js'
 import {
   FREE_PROVIDER_EMPTY_BODY_REASON,
   isEmptyHttpResponseBody,
+  outboundFetch,
 } from '@opptrix/shared'
 
 /** 需要重试的 HTTP 状态码 */
@@ -105,7 +106,7 @@ export class ProviderHttpClient {
       const controller = new AbortController()
       const timer = setTimeout(() => controller.abort(), timeoutMs)
       try {
-        const resp = await globalThis.fetch(url, { ...init, signal: controller.signal })
+        const resp = await outboundFetch(url, { ...init, signal: controller.signal })
 
         if (resp.status === 429) {
           retries += 1

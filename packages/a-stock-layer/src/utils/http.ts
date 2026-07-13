@@ -10,6 +10,7 @@
 
 import { ProviderHttpClient } from '../providers/common/http-client.js'
 import { HTTP_DEFAULT_HEADERS, sleep, sdkKeyHeaders } from './http-shared.js'
+import { outboundFetch } from '@opptrix/shared'
 export { HTTP_DEFAULT_HEADERS, sleep, sdkKeyHeaders }
 
 /** 全局默认 HTTP Client — 所有 httpGet/httpPost 等函数委托给它 */
@@ -66,7 +67,7 @@ export async function httpGetWithRetry(
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
     try {
-      const resp = await fetch(fullUrl, { headers, signal: controller.signal })
+      const resp = await outboundFetch(fullUrl, { headers, signal: controller.signal })
       if (resp.status === 429) {
         retries += 1
         if (retries > maxRetries) return wrapFetchResponse(resp)

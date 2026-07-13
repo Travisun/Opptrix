@@ -26,6 +26,23 @@ export * from './provider-settings.js'
 export * from './provider-priority-order.js'
 export * from './free-provider-throttle.js'
 export * from './onboarding.js'
+export {
+  initOutboundNetwork,
+  getOutboundNetworkStatus,
+  getOutboundConnectFamily,
+  ensureOutboundNetworkReady,
+  getConnectFamiliesForHost,
+  noteHostConnectSuccess,
+  noteHostConnectFailure,
+  noteOutboundConnectFailure,
+  isOutboundConnectError,
+  resetOutboundNetworkForTests,
+  setOutboundNetworkStatusForTests,
+  type OutboundConnectFamily,
+  type OutboundFamilyMode,
+  type OutboundNetworkStatus,
+} from './outbound-network.js'
+export { outboundFetch, formatOutboundFetchError } from './outbound-fetch.js'
 export { ok, fail, elapsedSince } from './result.js'
 export { resolveUserDataRoot, resolveProvidersDir, isDesktopRuntime, resolveProjectRoot } from './paths.js'
 export type { InstalledProviderRecord, InstalledProvidersIndex } from './installed-provider.js'

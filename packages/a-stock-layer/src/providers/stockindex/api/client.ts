@@ -3,6 +3,7 @@
  */
 
 import type { Market } from '@opptrix/shared'
+import { outboundFetch } from '@opptrix/shared'
 import { sleep } from '../../../utils/http-shared.js'
 import { stockIndexBaseUrl } from '../settings.js'
 
@@ -80,7 +81,7 @@ async function fetchJson<T>(
   let lastErr: unknown
   for (let attempt = 0; attempt < STOCKINDEX_FETCH_RETRIES; attempt++) {
     try {
-      const resp = await fetch(url, {
+      const resp = await outboundFetch(url, {
         headers: { Accept: 'application/json' },
         signal: AbortSignal.timeout(STOCKINDEX_FETCH_TIMEOUT_MS),
       })
