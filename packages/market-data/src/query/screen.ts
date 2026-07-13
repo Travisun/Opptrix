@@ -3,8 +3,18 @@ import type { MarketDataStore } from '../store.js'
 import { SCREEN_PACK_FACTORS } from '../sync/config.js'
 import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
 import { todayTradeDate } from '../utils.js'
+import { hasMarketDuckData } from '../duck/market-duck-sync.js'
+import {
+  queryIndustryStatsViaSubprocess,
+  queryIndustryStocksViaSubprocess,
+  queryUniverseScreenViaSubprocess,
+} from '../analytics/spawn-analytics.js'
 
-const OFFLINE_SCREEN_MSG = '本地因子筛选已停用。请使用 instrument_evaluation、instrument_search 等在线接口按需分析。'
+const OFFLINE_SCREEN_MSG = '本地因子筛选不可用：请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。'
+
+function useDuck(store: MarketDataStore): boolean {
+  return hasMarketDuckData(store.klineDuckDbPath)
+}
 
 function assertOfflineScreeningEnabled(): void {
   if (!LOCAL_OFFLINE_SCREENING_ENABLED) {
@@ -107,7 +117,7 @@ const LATEST_MARKET_CTES = `
   WITH market_ref AS (
     SELECT COALESCE(
       (SELECT MAX(trade_date) FROM stock_quotes_daily),
-      (SELECT MAX(trade_date) FROM stock_klines_daily)
+      (SELECT MAX(trade_date) FROM instrument_bars_daily WHERE market = 'CN')
     ) AS trade_date
   ),
   quotes_ref AS (
@@ -117,8 +127,8 @@ const LATEST_MARKET_CTES = `
   ),
   klines_ref AS (
     SELECT k.code, k.close, k.change_pct
-    FROM stock_klines_daily k
-    INNER JOIN market_ref mr ON k.trade_date = mr.trade_date
+    FROM instrument_bars_daily k
+    INNER JOIN market_ref mr ON k.trade_date = mr.trade_date AND k.market = 'CN'
   ),
   latest_quote AS (
     SELECT q.code, q.close, q.change_pct, q.pe, q.pb, q.market_cap
@@ -129,10 +139,11 @@ const LATEST_MARKET_CTES = `
   ),
   latest_kline AS (
     SELECT k.code, k.close, k.change_pct
-    FROM stock_klines_daily k
+    FROM instrument_bars_daily k
     INNER JOIN (
-      SELECT code, MAX(trade_date) AS trade_date FROM stock_klines_daily GROUP BY code
-    ) l ON k.code = l.code AND k.trade_date = l.trade_date
+      SELECT code, MAX(trade_date) AS trade_date
+      FROM instrument_bars_daily WHERE market = 'CN' GROUP BY code
+    ) l ON k.code = l.code AND k.trade_date = l.trade_date AND k.market = 'CN'
   ),
   quotes AS (
     SELECT * FROM quotes_ref
@@ -298,8 +309,14 @@ export function localUniverseScreen(
   query: LocalUniverseScreenQuery,
 ): LocalUniverseScreenResult {
   assertOfflineScreeningEnabled()
+  const date = query.trade_date ?? latestFactorDate(store.db) ?? todayTradeDate()
+
+  if (useDuck(store)) {
+    const duck = queryUniverseScreenViaSubprocess(query, date, store.klineDuckDbPath) as LocalUniverseScreenResult | null
+    if (duck?.items != null) return duck
+  }
+
   const db = store.db
-  const date = query.trade_date ?? latestFactorDate(db) ?? todayTradeDate()
   const conditions = normalizeConditions(query.factor_conditions)
   const scorecard = String(query.scorecard ?? '综合评估').trim() || '综合评估'
   const topN = Math.min(200, Math.max(1, Number(query.top_n ?? 40)))
@@ -488,8 +505,25 @@ export interface IndustryStockRow {
 }
 
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
+  const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
+  if (useDuck(store)) {
+    const duck = queryIndustryStatsViaSubprocess(factorDate, store.klineDuckDbPath) as {
+      trade_date: string
+      quote_date: string | null
+      items: Array<{
+        industry: string
+        stock_count: number
+        avg_score: number | null
+        avg_pe: number | null
+        avg_pb: number | null
+        up_count: number
+        down_count: number
+        flat_count: number
+      }>
+    } | null
+    if (duck?.items != null) return duck
+  }
   const db = store.db
-  const factorDate = tradeDate ?? latestFactorDate(db) ?? latestQuoteDate(db) ?? todayTradeDate()
   const quoteDate = latestQuoteDate(db)
   const rows = db.prepare(`
     ${LATEST_MARKET_CTES}
@@ -594,8 +628,25 @@ export function queryIndustryStocks(
 ): { trade_date: string; quote_date: string | null; industry: string; items: IndustryStockRow[] } {
   const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   const quoteDate = latestQuoteDate(store.db)
-  const db = store.db
   const key = industry.trim()
+  const cap = Math.min(Math.max(limit, 1), 200)
+
+  if (useDuck(store)) {
+    const duck = queryIndustryStocksViaSubprocess(key, factorDate, cap, store.klineDuckDbPath) as {
+      trade_date: string
+      items: IndustryStockRow[]
+    } | null
+    if (duck?.items != null) {
+      return {
+        trade_date: duck.trade_date,
+        quote_date: quoteDate,
+        industry: key,
+        items: duck.items,
+      }
+    }
+  }
+
+  const db = store.db
   let industryClause: string
   const industryParams: string[] = []
   if (key === '-' || key === '未分类' || key === '其他') {
@@ -604,7 +655,6 @@ export function queryIndustryStocks(
     industryClause = 's.industry = ?'
     industryParams.push(key)
   }
-  const cap = Math.min(Math.max(limit, 1), 200)
   const rows = db.prepare(`
     ${LATEST_MARKET_CTES}
     SELECT

@@ -1,5 +1,6 @@
 import type { StockKline } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
+import { marketReadOne } from './duck-read.js'
 import { normalizeStockCode } from '../utils.js'
 
 export interface LocalQuoteRow {
@@ -16,7 +17,9 @@ export interface LocalQuoteRow {
 /** Latest synced daily quote from local L0 store. */
 export function queryLocalLatestQuote(store: MarketDataStore, code: string): LocalQuoteRow | null {
   const normalized = normalizeStockCode(code)
-  const row = store.db.prepare(`
+  const row = marketReadOne<LocalQuoteRow & Record<string, unknown>>(
+    store,
+    `
     SELECT
       s.code,
       s.name,
@@ -30,17 +33,37 @@ export function queryLocalLatestQuote(store: MarketDataStore, code: string): Loc
     LEFT JOIN stock_quotes_daily q ON q.code = s.code
       AND q.trade_date = (SELECT MAX(trade_date) FROM stock_quotes_daily)
     WHERE s.code = ?
-  `).get(normalized) as LocalQuoteRow | undefined
+  `,
+    [normalized],
+    () => store.db.prepare(`
+      SELECT
+        s.code,
+        s.name,
+        q.trade_date,
+        q.close,
+        q.change_pct,
+        q.pe,
+        q.pb,
+        q.market_cap
+      FROM stocks s
+      LEFT JOIN stock_quotes_daily q ON q.code = s.code
+        AND q.trade_date = (SELECT MAX(trade_date) FROM stock_quotes_daily)
+      WHERE s.code = ?
+    `).get(normalized) as (LocalQuoteRow & Record<string, unknown>) | undefined,
+  )
   return row ?? null
 }
 
-/** Daily K-lines from local L0 store (newest-first query, returned ascending). */
+/** Daily K-lines from local L0 store (DuckDB 优先，SQLite 回退). */
 export function queryLocalDailyKlines(
   store: MarketDataStore,
   code: string,
   limit = 800,
   before?: string,
 ): StockKline[] {
+  const duckRows = store.queryDuckDailyKlines(code, limit, before)
+  if (duckRows.length) return duckRows
+
   const normalized = normalizeStockCode(code)
   const safeLimit = Math.max(1, Math.min(limit, 800))
   const params: unknown[] = [normalized]

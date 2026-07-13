@@ -553,8 +553,12 @@ export interface MarketDbStatusData {
   etf_count?: number
   us_count?: number
   crypto_count?: number
+  jp_count?: number
+  kr_count?: number
+  hk_count?: number
   latest_trade_date: string | null
   latest_factor_date: string | null
+  kline_dates?: Record<string, string | null>
   profile_count: number
   partner_count: number
   segment_count: number
@@ -582,6 +586,7 @@ export interface MarketDbStatusData {
     screen_factors: boolean
     quote_stock_ratio?: number
     kline_stock_ratio?: number
+    kline_recent_ratio?: number
     fin_stock_ratio?: number
     factor_stock_ratio?: number
   }
@@ -603,5 +608,6 @@ export interface MarketDataSyncState {
   overall_percent: number
   message: string | null
   logs: string[]
+  failed_jobs?: Array<{ job: string; error: string }>
   db_status: MarketDbStatusData
 }

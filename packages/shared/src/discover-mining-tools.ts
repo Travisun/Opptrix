@@ -26,7 +26,11 @@ export const UNIFIED_CN_ANALYTICS_TOOLS = [
 
 const CN_EQUITY_ONLINE_TOOLS = [
   'get_market_regime',
+  'get_local_universe_screen_schema',
   'screen_stocks',
+  'screen_local_universe',
+  'screen_local_industry_stocks',
+  'search_local_instruments',
   'search_instruments',
   'batch_instrument_snapshots',
   'institution_rating',

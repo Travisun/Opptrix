@@ -1,9 +1,13 @@
 /**
- * StockIndex HTTP 客户端 — https://stock-index.cuishushu.com/openapi/
+ * StockIndex HTTP 客户端 — https://open-stock.lirdb.com
  */
 
 import type { Market } from '@opptrix/shared'
+import { sleep } from '../../../utils/http-shared.js'
 import { stockIndexBaseUrl } from '../settings.js'
+
+const STOCKINDEX_FETCH_TIMEOUT_MS = 30_000
+const STOCKINDEX_FETCH_RETRIES = 3
 
 export interface StockIndexItem {
   instrumentId: string
@@ -73,12 +77,26 @@ async function fetchJson<T>(
     qs.set(k, String(v))
   }
   const url = `${stockIndexBaseUrl()}${path}?${qs}`
-  const resp = await fetch(url, {
-    headers: { Accept: 'application/json' },
-    signal: AbortSignal.timeout(12_000),
-  })
-  if (!resp.ok) throw new Error(`StockIndex HTTP ${resp.status}`)
-  return resp.json() as Promise<T>
+  let lastErr: unknown
+  for (let attempt = 0; attempt < STOCKINDEX_FETCH_RETRIES; attempt++) {
+    try {
+      const resp = await fetch(url, {
+        headers: { Accept: 'application/json' },
+        signal: AbortSignal.timeout(STOCKINDEX_FETCH_TIMEOUT_MS),
+      })
+      if (!resp.ok) {
+        throw new Error(`StockIndex HTTP ${resp.status} ${path}`)
+      }
+      return await resp.json() as T
+    } catch (e) {
+      lastErr = e
+      if (attempt < STOCKINDEX_FETCH_RETRIES - 1) {
+        await sleep(600 * (attempt + 1))
+      }
+    }
+  }
+  const detail = lastErr instanceof Error ? lastErr.message : String(lastErr)
+  throw new Error(`StockIndex ${path} 请求失败（已重试 ${STOCKINDEX_FETCH_RETRIES} 次）: ${detail}`)
 }
 
 export async function stockIndexSearch(

@@ -4,7 +4,7 @@
  */
 import { spawn } from 'node:child_process'
 import {
-  REPO_ROOT, spawnServer, waitForHealth, assertServerBuilt,
+  REPO_ROOT, spawnServer, stopManagedServer, waitForHealth, assertServerBuilt,
 } from './lib/paths.mjs'
 import { NPM_CMD, NPM_SHELL } from './lib/commands.mjs'
 
@@ -26,9 +26,7 @@ if (apiMode !== 'reuse') {
   console.log(`[api] 复用已在运行的 Opptrix API（:${apiPort}）`)
 }
 
-const cleanup = () => {
-  if (server && !server.killed) server.kill('SIGTERM')
-}
+const cleanup = () => { void stopManagedServer(server) }
 process.on('SIGINT', () => { cleanup(); process.exit(0) })
 process.on('SIGTERM', () => { cleanup(); process.exit(0) })
 

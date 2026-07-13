@@ -5,6 +5,7 @@ import {
   normalizeInstrumentRef,
 } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
+import { marketReadAll } from './duck-read.js'
 
 export interface LocalInstrumentHit {
   code: string
@@ -61,7 +62,20 @@ export function searchLocalInstruments(
     params.push(...markets)
   }
   params.push(limit)
-  const rows = store.db.prepare(`
+  const rows = marketReadAll(store, `
+    SELECT code, name, market, asset_class, exchange FROM v_instruments_unified
+    WHERE status = 'active'
+      AND (
+        UPPER(code) LIKE ?
+        OR name LIKE ?
+        OR UPPER(name) LIKE ?
+      )
+      ${marketSql}
+    ORDER BY
+      CASE market WHEN 'CN' THEN 0 WHEN 'US' THEN 1 WHEN 'CRYPTO' THEN 2 ELSE 3 END,
+      code
+    LIMIT ?
+  `, params, () => store.db.prepare(`
     SELECT code, name, market, asset_class, exchange FROM v_instruments_unified
     WHERE status = 'active'
       AND (
@@ -80,7 +94,7 @@ export function searchLocalInstruments(
     market: string
     asset_class: string
     exchange: string | null
-  }[]
+  }[])
   return rows.map(rowToHit)
 }
 

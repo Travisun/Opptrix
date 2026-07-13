@@ -7,13 +7,13 @@ import { buildInstrumentAnalysisPlaybook, buildInstrumentNamespacePlaybook, buil
 /** 策略解析 / 执行提示中的资产类型描述 */
 export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): string {
   const def = getDiscoverProfileDefinition(profile)
-  if (!def) return 'A 股股票（在线因子筛选）'
+  if (!def) return 'A 股股票（本地日 K 因子筛选）'
   if (profile === 'cn_etf') return 'A 股 ETF（折溢价%、规模亿元）'
   if (def.prescreenMode === 'list_filter') {
     const online = def.readinessCountKey == null
     return `${def.label}（${online ? 'StockIndex 在线列表' : '本地列表'} keyword / industry_contains）`
   }
-  return 'A 股股票（在线因子筛选）'
+  return 'A 股股票（本地日 K 衍生因子初选）'
 }
 
 const CN_EQUITY_FORBIDDEN = [
@@ -22,7 +22,6 @@ const CN_EQUITY_FORBIDDEN = [
   'evaluate_stock', 'get_strategy_signal', 'search_stocks',
   'get_us_stock_snapshot', 'get_us_stock_quote', 'get_us_stock_kline',
   'get_crypto_snapshot', 'get_crypto_quote', 'get_crypto_kline',
-  'screen_local_universe', 'local_screen_stocks', 'screen_local_industry_stocks',
   'get_market_db_status', 'trigger_market_db_sync',
 ].join('、')
 
@@ -89,13 +88,14 @@ export function buildDiscoverMiningSystemPrompt(input: {
 
   if (mode === 'factor_screen') {
     return [
-      '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成在线初选。',
+      '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成本地日 K 因子初选。',
       '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-      '1) get_market_regime（可选宏观背景）→ search_instruments / screen_stocks → batch_instrument_snapshots',
-      '2) 不足时对 shortlisted 单股：get_instrument_snapshot / evaluate_instrument / get_instrument_strategy_signal / institution_rating',
-      '3) 策略涉及用户持仓/关注：get_watchlist、get_watchlist_radar、get_portfolio_holdings、portfolio_trades',
-      '4) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
-      '5) 板块/宏观/情绪等非标准数据：list_provider_custom_methods → invoke_provider_custom_method',
+      '1) get_market_regime（可选宏观背景）→ get_local_universe_screen_schema 确认因子名 → screen_stocks / screen_local_universe / search_local_instruments',
+      '2) 初选后 batch_instrument_snapshots；行业主题用 list_local_industries → screen_local_industry_stocks',
+      '3) 不足时对 shortlisted 单股：get_instrument_snapshot / get_instrument_chart（A 股日 K 优先本地）/ evaluate_instrument / institution_rating',
+      '4) 策略涉及用户持仓/关注：get_watchlist、get_watchlist_radar、get_portfolio_holdings、portfolio_trades',
+      '5) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
+      '6) 板块/宏观/情绪等非标准数据：list_provider_custom_methods → invoke_provider_custom_method',
       buildInstrumentNamespacePlaybook(),
       buildInstrumentAnalysisPlaybook(),
       buildProviderCustomMethodPlaybook(),

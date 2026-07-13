@@ -50,8 +50,32 @@ export const TOOL_META: Record<string, ToolMeta> = {
   screen_stocks: {
     hubFeature: 'screening',
     miningEligible: true,
-    usageGuide: 'A 股在线因子条件筛选；扩大/收紧候选池的首选工具（本地因子筛选已停用）。',
-    compliance: 'conditions 必填；top_n 默认 20、挖掘建议 ≤ 80；勿编造 factor 名。',
+    usageGuide: 'A 股本地日 K 衍生因子条件筛选（momentum_1m/3m/6m、volume_ratio、volatility_20d、drawdown_60d）；扩大/收紧候选池首选；不确定因子名时先 get_local_universe_screen_schema。',
+    compliance: 'conditions 必填；factor 须为 schema 列出的 6 个因子之一；top_n 默认 20、挖掘建议 ≤ 80；本地因子未就绪时 get_local_data_status 确认后提示用户同步。',
+  },
+  get_local_universe_screen_schema: {
+    hubFeature: 'local_universe_screen_schema',
+    miningEligible: true,
+    usageGuide: '编写 screen_stocks / screen_local_universe 条件前，获取可用因子名、行业/板块过滤与示例。',
+    compliance: '只读；无参数；factor 名须原样用于 conditions / factor_conditions。',
+  },
+  screen_local_universe: {
+    hubFeature: 'local_universe_screen',
+    miningEligible: true,
+    usageGuide: '本地多维度初选：因子 + 行业/板块(SH/SZ/BJ) + 评分/PE/PB/市值；比 screen_stocks 更适合行业主题或板块限定。',
+    compliance: '至少一项 factor_conditions 或 filters；top_n ≤ 200；行业名可先 list_local_industries；勿编造 factor 名。',
+  },
+  screen_local_industry_stocks: {
+    hubFeature: 'local_industry_screen',
+    miningEligible: true,
+    usageGuide: '在指定行业内叠加本地因子/评分/估值初选；行业主题挖掘时优于全市场 screen_stocks。',
+    compliance: '须指定 industry / industries / industry_contains 之一；factor_conditions 因子须来自 schema；top_n ≤ 200。',
+  },
+  search_local_instruments: {
+    hubFeature: 'search_local_instruments',
+    miningEligible: true,
+    usageGuide: '搜索本地已同步名录（A 股/港美/Crypto）；离线或需快速定位已入库标的时使用；命中 code/ref_label 用于 get_instrument_*。',
+    compliance: 'keyword 必填；markets 可选过滤；无本地数据时改 search_instruments（在线）；同一 keyword 勿与 search 重复调用。',
   },
   screen_us_universe: {
     hubFeature: 'local_us_screen',
@@ -75,7 +99,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
     hubFeature: 'local_industry_list',
     miningEligible: true,
     usageGuide: '行业主题分析前获取可用行业名称；keyword 模糊查找（如「半导体」「银行」）。',
-    compliance: '只读；行业名须原样传入 get_local_industry_stocks / industry_mining；无数据时改 search_instruments + screen_stocks。',
+    compliance: '只读；行业名须原样传入 get_local_industry_stocks / screen_local_industry_stocks / industry_mining；无数据时 get_local_data_status 确认。',
   },
   get_local_industry_stocks: {
     hubFeature: 'market_industry_stocks',
@@ -110,8 +134,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_local_data_status: {
     hubFeature: 'market_db_status',
     miningEligible: false,
-    usageGuide: '需确认本地行业名录/截面是否就绪时使用；local_offline_screening_enabled 恒为 false。',
-    compliance: '只读；勿用于触发同步；选股请用 screen_stocks / search_instruments。',
+    usageGuide: '确认本地名录、行业、日 K、离线因子是否就绪（轻量查询，不扫全库）；local_factor_ready=false 时勿调用 screen_stocks。',
+    compliance: '只读；勿用于触发同步；引导用户前往 设置 → 基础数据。',
   },
   get_etf_list: {
     hubFeature: 'etf_list',
@@ -152,7 +176,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
-    usageGuide: '跨市场在线搜索标的（CN/US/HK/Crypto 等）；不熟悉代码或需多市场检索时的首选入口。',
+    usageGuide: '跨市场搜索标的（默认合并本地名录 + 在线 StockIndex）；不熟悉代码或需多市场检索时的首选入口。',
     compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤；命中 code/ref_label 为命名空间（CN:SZ.xxx），后续 get_instrument_* 须用返回的 instrument 或 code。',
   },
   get_instrument_capabilities: {
@@ -176,8 +200,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_chart: {
     hubFeature: 'instrument_chart',
     miningEligible: true,
-    usageGuide: `验证趋势、动量、技术形态；策略含动量/突破/均线逻辑时使用。${INSTRUMENT_REF_USAGE}`,
-    compliance: '单只 InstrumentRef；count ≤ 240；仅对 shortlisted 标的调用。',
+    usageGuide: `验证趋势、动量、技术形态；A 股日 K 优先读本地 DuckDB，在线 Provider 补充实时；策略含动量/突破/均线逻辑时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只 InstrumentRef；count ≤ 240；仅对 shortlisted 标的调用；本地无 K 线时会尝试在线拉取。',
   },
   evaluate_instrument: {
     hubFeature: 'instrument_evaluation',

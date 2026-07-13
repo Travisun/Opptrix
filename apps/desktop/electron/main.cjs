@@ -232,10 +232,22 @@ async function waitForAppUi(timeoutMs = 60_000) {
 }
 
 function stopSidecar() {
-  if (serverProcess && !serverProcess.killed) {
-    serverProcess.kill('SIGTERM')
-    serverProcess = null
+  if (!serverProcess || serverProcess.killed) return
+  const proc = serverProcess
+  serverProcess = null
+  try {
+    proc.kill('SIGTERM')
+  } catch {
+    /* ignore */
   }
+  setTimeout(() => {
+    if (proc.exitCode != null || proc.killed) return
+    try {
+      proc.kill('SIGKILL')
+    } catch {
+      /* ignore */
+    }
+  }, 3000)
 }
 
 function appUrl() {

@@ -1,5 +1,6 @@
 import type { MarketDbStatus } from '../store.js'
-import { BOOTSTRAP_SYNC_JOBS } from './config.js'
+import { CN_AUTO_SYNC_JOB_UNIVERSE } from './config.js'
+import { CN_WEEKLY_MAINTENANCE_DAYS } from './schedule.js'
 import { daysSince } from '../utils.js'
 
 function stockRatio(done: number, stockCount: number): number {
@@ -36,6 +37,15 @@ export function bootstrapJobRatio(
       return b?.quotes ? 1 : (ratioPct('quote_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'kline_bootstrap':
       return b?.klines ? 1 : (ratioPct('kline_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
+    case 'kline_daily': {
+      const bootLast = dbStatus.last_sync.kline_bootstrap
+      const dailyLast = dbStatus.last_sync.kline_daily
+      if (b?.klines && (
+        (bootLast && daysSince(bootLast) < CN_WEEKLY_MAINTENANCE_DAYS)
+        || (dailyLast && daysSince(dailyLast) < CN_WEEKLY_MAINTENANCE_DAYS)
+      )) return 1
+      return stockRatio(progress?.done ?? 0, stockCount)
+    }
     case 'financials':
       return b?.fundamentals ? 1 : (ratioPct('fin_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'screen_factors':
@@ -78,6 +88,6 @@ export function countBootstrapCompletedJobs(
 }
 
 export function isBootstrapJobList(jobs: readonly string[]): boolean {
-  return jobs.length > 0 && jobs.length <= BOOTSTRAP_SYNC_JOBS.length
-    && jobs.every(j => (BOOTSTRAP_SYNC_JOBS as readonly string[]).includes(j))
+  const allowed = new Set<string>([...CN_AUTO_SYNC_JOB_UNIVERSE])
+  return jobs.length > 0 && jobs.every(j => allowed.has(j))
 }

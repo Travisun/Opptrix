@@ -302,7 +302,7 @@ function prescreenProgressMessage(plan: DiscoverParsedPlan): string {
     const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
     return `${label}初选：${filters}，最多 ${plan.prescreen_top_n} 只…`
   }
-  return `AI 初选：${plan.conditions.length} 条解析因子条件，最多 ${plan.prescreen_top_n} 只…`
+  return `本地因子初选：${plan.conditions.length} 条日 K 衍生条件，最多 ${plan.prescreen_top_n} 只…`
 }
 
 type PrescreenCandidate = {
@@ -512,7 +512,7 @@ export class DiscoverRunner {
       top_n: plan.prescreen_top_n,
     })
     if (!screenResp.success || !screenResp.data) {
-      throw new Error(screenResp.message || '在线初选失败')
+      throw new Error(screenResp.message || '本地初选失败')
     }
     const screenData = screenResp.data as {
       total_scanned: number
@@ -743,7 +743,7 @@ export class DiscoverRunner {
     const assetLabel = discoverProfileAssetLabel(profile)
     const jsonHint = isFilterDiscoverProfile(profile)
       ? '{"strategy_title":"标题","screen_params":{"keyword":"AAPL"},"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
-      : '{"strategy_title":"标题","conditions":[{"factor":"pe","op":"<=","value":25}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
+      : '{"strategy_title":"标题","conditions":[{"factor":"momentum_3m","op":">=","value":10}],"prescreen_top_n":60,"final_top_n":15,"refinement_notes":"挖掘侧重点"}'
     const rules = isFilterDiscoverProfile(profile)
       ? `screen_params 至少 1 项；可用字段：${factorList}；不要输出 conditions。`
       : 'conditions 1-5 条；op 为 > >= < <= =；数值为合理量化近似；参考因子示例可调整但需符合策略意图。'

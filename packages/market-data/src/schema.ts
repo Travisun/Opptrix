@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 9
+export const SCHEMA_VERSION = 12
 
 /**
  * 版本迁移注册表见 `schema-migrate.ts`（MIGRATION_STEPS）。
@@ -765,4 +765,22 @@ CREATE INDEX IF NOT EXISTS idx_forecasts_instrument_ns ON stock_forecasts(instru
 CREATE INDEX IF NOT EXISTS idx_inst_holdings_ns ON stock_inst_holdings(instrument_ns);
 CREATE INDEX IF NOT EXISTS idx_insider_trades_ns ON stock_insider_trades(instrument_ns);
 CREATE INDEX IF NOT EXISTS idx_buybacks_instrument_ns ON stock_buybacks(instrument_ns);
+`
+
+/** v10 — 记录 A 股日 K 存储后端（DuckDB + SQLite 元数据协同） */
+export const MIGRATION_V10_SQL = `
+INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
+VALUES ('kline_storage', datetime('now'), '{"backend":"duckdb","cn_daily_table":"cn_daily_bars"}');
+`
+
+/** v11 — DuckDB 分析层（名录/行业/行情/因子）标记 */
+export const MIGRATION_V11_SQL = `
+INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
+VALUES ('analytics_storage', datetime('now'), '{"backend":"duckdb","dims":true,"quotes":true,"factors":true}');
+`
+
+/** v12 — 市场数据主存储迁至 DuckDB（SQLite 仅控制面） */
+export const MIGRATION_V12_SQL = `
+INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
+VALUES ('market_data_storage', datetime('now'), '{"backend":"duckdb","primary":true}');
 `

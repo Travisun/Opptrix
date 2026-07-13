@@ -2,6 +2,7 @@ export type SettingsSection =
   | 'general'
   | 'models'
   | 'data_providers'
+  | 'basic_data'
   | 'discover_strategies'
   | 'news_feed'
   | 'translation'
@@ -12,6 +13,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'general',
   'models',
   'data_providers',
+  'basic_data',
   'discover_strategies',
   'news_feed',
   'translation',

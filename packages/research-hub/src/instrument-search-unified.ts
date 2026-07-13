@@ -1,4 +1,4 @@
-/** 统一标的搜索 — 在线 StockIndex / 数据源主路径。 */
+/** 统一标的搜索 — 本地名录优先，在线 StockIndex / 数据源补充。 */
 
 import type { Market } from '@opptrix/shared'
 import {
@@ -8,23 +8,48 @@ import {
 } from '@opptrix/shared'
 import type { MarketDataEngine } from '@opptrix/a-stock-layer'
 import type { InstrumentSearchHit } from '@opptrix/a-stock-layer'
+import type { MarketDataService } from '@opptrix/market-data-store'
 
 export interface UnifiedSearchOptions {
   keyword: string
   limit?: number
   markets?: Market[]
-  /** @deprecated 本地库已停用，忽略此参数 */
+  /** 是否合并本地名录（DuckDB/SQLite 已同步标的），默认 true */
   includeLocal?: boolean
 }
 
 export async function searchInstrumentsUnified(
   de: MarketDataEngine,
-  _marketData: unknown,
+  marketData: MarketDataService,
   opts: UnifiedSearchOptions,
 ): Promise<{ items: UnifiedInstrumentSearchHit[]; sources: string[] }> {
   const keyword = opts.keyword.trim()
   const limit = Math.min(Math.max(opts.limit ?? 30, 1), 50)
   if (!keyword) return { items: [], sources: [] }
+
+  const seen = new Set<string>()
+  const items: UnifiedInstrumentSearchHit[] = []
+  const sources = new Set<string>()
+
+  if (opts.includeLocal !== false) {
+    const localHits = marketData.searchLocalInstruments(keyword, limit, opts.markets)
+    for (const hit of localHits) {
+      const key = instrumentRefKey(hit.instrument)
+      if (seen.has(key)) continue
+      seen.add(key)
+      items.push({
+        instrument: hit.instrument,
+        code: hit.code,
+        ref_label: hit.refLabel,
+        name: hit.name,
+        market: hit.market,
+        asset_class: hit.assetClass,
+        exchange: hit.exchange,
+        source: 'local',
+      })
+      sources.add('local')
+    }
+  }
 
   const { searchInstrumentsOnline } = await import('@opptrix/a-stock-layer')
   const markets = opts.markets?.length
@@ -37,10 +62,6 @@ export async function searchInstrumentsUnified(
     limit,
     markets,
   )
-
-  const seen = new Set<string>()
-  const items: UnifiedInstrumentSearchHit[] = []
-  const sources = new Set<string>()
 
   for (const hit of onlineHits) {
     const normalized = onlineHitToSearchHit(hit)

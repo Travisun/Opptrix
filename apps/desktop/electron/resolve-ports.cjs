@@ -123,7 +123,16 @@ function isOpptrixViteCommand(command) {
   return /vite|opptrix-client|client-ui/i.test(command)
 }
 
-async function tryCleanupStaleListeners(port, { forWeb = false } = {}) {
+async function waitForPortFree(port, timeoutMs = 5000) {
+  const started = Date.now()
+  while (Date.now() - started < timeoutMs) {
+    if (!(await isPortListening(port))) return true
+    await sleep(150)
+  }
+  return !(await isPortListening(port))
+}
+
+async function tryCleanupStaleListeners(port, { forWeb = false, aggressive = false } = {}) {
   const pids = getListenPids(port)
   let killed = false
 
@@ -131,7 +140,7 @@ async function tryCleanupStaleListeners(port, { forWeb = false } = {}) {
     if (pid === process.pid) continue
     const command = getProcessCommand(pid)
     const matches = forWeb ? isOpptrixViteCommand(command) : isOpptrixServerCommand(command)
-    if (!matches) continue
+    if (!matches && !aggressive) continue
     try {
       process.kill(pid, 'SIGTERM')
       killed = true
@@ -140,8 +149,30 @@ async function tryCleanupStaleListeners(port, { forWeb = false } = {}) {
     }
   }
 
-  if (killed) await sleep(600)
+  if (killed) {
+    const freed = await waitForPortFree(port, 4000)
+    if (!freed) {
+      for (const pid of getListenPids(port)) {
+        if (pid === process.pid) continue
+        const command = getProcessCommand(pid)
+        const matches = forWeb ? isOpptrixViteCommand(command) : isOpptrixServerCommand(command)
+        if (!matches && !aggressive) continue
+        try {
+          process.kill(pid, 'SIGKILL')
+          killed = true
+        } catch {
+          /* ignore */
+        }
+      }
+      await sleep(300)
+    }
+  }
   return killed
+}
+
+/** Force-clean Opptrix API listeners on a port (SIGTERM → SIGKILL). */
+async function cleanupStaleApiListeners(port, { aggressive = true } = {}) {
+  return tryCleanupStaleListeners(port, { aggressive })
 }
 
 /**
@@ -175,8 +206,10 @@ async function resolveApiPort(opts = {}) {
     return { port: base, mode: 'use' }
   }
 
+  // 端口占用但 health 不通 — 多为 K 线导入等卡死的事件循环，视为僵尸 sidecar
+  const staleSidecar = !health
   if (allowCleanup) {
-    await tryCleanupStaleListeners(base)
+    await tryCleanupStaleListeners(base, { aggressive: staleSidecar })
     if (!(await isPortListening(base))) {
       return { port: base, mode: 'use', cleaned: true }
     }
@@ -300,6 +333,7 @@ module.exports = {
   DEFAULT_API_PORT,
   DEFAULT_WEB_PORT,
   applyPortEnv,
+  cleanupStaleApiListeners,
   describePortPlan,
   isPortListening,
   logPortPlan,

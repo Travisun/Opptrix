@@ -25,6 +25,7 @@ import {
   mapZzshareRtKRows,
   mapZzshareStockBasicRows,
   mapZzshareStockInfoRow,
+  mapZzsharePlatesStocksRows,
   mapZzshareTopicKlineRows,
   mapZzshareTradeCalendarRows,
   opptrixPeriodToZzshareFreq,
@@ -253,13 +254,54 @@ export class ZzshareCnHandler extends MarketHandlerShell {
   }
 
   /**
-   * 上市股票列表 — 委托 {@link stockBasic} 拉取全市场 L 状态股票。
+   * 上市股票列表 — 全市场或按行业/板块代码过滤成分股。
    *
-   * @param _market 保留参数，与引擎接口一致
-   * @returns 股票列表；无数据时 `null`
+   * @param _marketOrKeyword 保留参数，与引擎接口一致
+   * @param _keyword 搜索关键词（未使用）
+   * @param _page 分页（板块成分暂不分页）
+   * @param _pageSize 分页大小
+   * @param boardKey 板块 key（stockindex 等）
+   * @param industryCode 行业/板块代码（zzshare plate_code，如 881101）
    */
-  async stockList(_market = 'all'): Promise<StockListItem[] | null> {
+  async stockList(
+    _marketOrKeyword = 'all',
+    _keyword = '',
+    _page = 1,
+    _pageSize = 100,
+    boardKey?: string,
+    industryCode?: string,
+  ): Promise<StockListItem[] | null> {
+    const plateCode = (industryCode ?? boardKey ?? '').trim()
+    if (plateCode && isPlateCode(plateCode)) {
+      return this.plateConstituentList(14, plateCode)
+    }
     return this.stockBasic('', 'L')
+  }
+
+  /** zzshare plates_stocks — 指定行业/概念板块成分股 */
+  private async plateConstituentList(plateType: number, plateCode: string): Promise<StockListItem[] | null> {
+    return this.withClient(async client => {
+      const queryDate = resolveQueryDate('')
+      const data = await invokeZzshare(client, 'plates_stocks', {
+        plate_type: plateType,
+        plate_code: plateCode,
+        date: ymdToApi(queryDate),
+      })
+      const rows = mapZzsharePlatesStocksRows(data, plateType, plateCode, queryDate)
+      const items: StockListItem[] = []
+      for (const row of rows) {
+        const code = normalizeCode(String(row.code ?? ''))
+        if (!code || code.length !== 6) continue
+        items.push({
+          code,
+          name: String(row.name ?? code),
+          industry: '',
+          market: 'CN',
+        })
+      }
+      for (const item of items) this.nameCache.set(item.code, item.name)
+      return items.length ? items : null
+    })
   }
 
   /**

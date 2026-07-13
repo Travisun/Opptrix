@@ -3,6 +3,8 @@ export interface JobSyncConfig {
   concurrency: number
   delayMs: number
   ttlDays?: number
+  /** 距上次成功同步的最短间隔（分钟）；手动重复同步时未到期则跳过 */
+  minIntervalMinutes?: number
   /** Extra pages for paginated APIs (announcements). */
   pages?: number
 }
@@ -20,42 +22,71 @@ export interface SyncProfileSettings {
 /** ~6 months of trading days for momentum / volume factors */
 export const KLINE_BOOTSTRAP_DAYS = 130
 
-/** Factors computed locally during bootstrap (no per-stock API analyze). */
+/** 离线初选因子 — 仅由本地日 K 推导，不依赖行情/财报/公告等额外数据源 */
 export const SCREEN_PACK_FACTORS = [
-  'pe',
-  'pb',
-  'roe',
-  'debt_ratio',
-  'gross_margin',
-  'net_profit_yoy',
-  'profit_cagr_3y',
-  'roe_trend',
-  'peg',
   'momentum_1m',
   'momentum_3m',
   'momentum_6m',
   'volume_ratio',
+  'volatility_20d',
+  'drawdown_60d',
 ] as const
 
-/** Initial 数据层 — 名录 + 行业/板块 + ETF */
-export const INITIAL_SYNC_JOBS = [
-  'initial_cn_universe',
+/** StockIndex 名录：A 股 ETF + 港股/美股（与 CN 名录同 API 源） */
+export const STOCKINDEX_LIST_SYNC_JOBS = [
+  'initial_cn_etf',
   'initial_hk_universe',
   'initial_us_universe',
-  'initial_cn_etf',
+] as const
+
+/** 首次/未完成：A 股名录 → ETF/港美名录 → 行业 → 历史 K 补全 */
+export const CN_BOOTSTRAP_SYNC_JOBS = [
+  'initial_cn_universe',
+  ...STOCKINDEX_LIST_SYNC_JOBS,
+  'initial_taxonomy',
+  'kline_bootstrap',
+] as const
+
+/** 就绪后按 TTL 自动维护 */
+export const CN_MAINTENANCE_SYNC_JOBS = [
+  'initial_cn_universe',
+  ...STOCKINDEX_LIST_SYNC_JOBS,
+  'kline_daily',
   'initial_taxonomy',
 ] as const
 
-/** L0 bootstrap = 仅 Initial 名录层（无本地 K 线 / 因子筛选） */
-export const BOOTSTRAP_SYNC_JOBS = [...INITIAL_SYNC_JOBS] as const
-
-/** 就绪后仅刷新名录（7–14 天 TTL） */
-export const DAILY_SYNC_JOBS = [
+/** @deprecated 使用 CN_BOOTSTRAP_SYNC_JOBS */
+export const CN_CORE_SYNC_JOBS = [
   'initial_cn_universe',
-  'initial_hk_universe',
-  'initial_us_universe',
-  'initial_cn_etf',
+  'initial_taxonomy',
 ] as const
+
+/** 设置页手动「全量刷新」— 与自动 pipeline 一致并含日 K */
+export const CN_MANUAL_SYNC_JOBS = [
+  ...CN_BOOTSTRAP_SYNC_JOBS,
+  'kline_daily',
+] as const
+
+/** 全部 A 股自动同步 job（UI / 进度） */
+export const CN_AUTO_SYNC_JOB_UNIVERSE = [
+  ...CN_BOOTSTRAP_SYNC_JOBS,
+  'kline_daily',
+] as const
+
+/** 同花顺 Parquet 批量 K 线任务（非逐股 Provider） */
+export const THS_KLINE_DUMP_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
+
+/** @deprecated 使用 STOCKINDEX_LIST_SYNC_JOBS */
+export const LEGACY_INITIAL_SYNC_JOBS = [...STOCKINDEX_LIST_SYNC_JOBS] as const
+
+/** L0 bootstrap = A 股首次 pipeline（含历史 K 补全） */
+export const INITIAL_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
+export const BOOTSTRAP_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
+export const DEFAULT_AUTO_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
+
+/** 就绪后维护任务（各 job 按 SYNC_JOB_CONFIG.ttlDays 独立判定） */
+export const DEFAULT_DAILY_SYNC_JOBS = [...CN_MAINTENANCE_SYNC_JOBS] as const
+export const DAILY_SYNC_JOBS = [...CN_MAINTENANCE_SYNC_JOBS] as const
 
 /** L2 deep sync — only on full rebuild or explicit force. */
 export const DEEP_SYNC_JOBS = [
@@ -92,6 +123,18 @@ export const HYDRATE_SYNC_JOBS = [
   'shareholders',
   'partners',
 ] as const
+
+/**
+ * 深度/跨市场 job — 不参与 A 股自动 boot / 维护 pipeline。
+ * kline_bootstrap / kline_daily 已纳入 CN_*_SYNC_JOBS，不在此排除。
+ */
+export const AUTO_BOOT_EXCLUDED_JOBS = new Set([
+  'etf_kline_bootstrap',
+  'screen_factors',
+  'quotes',
+  ...DEEP_SYNC_JOBS,
+  ...HYDRATE_SYNC_JOBS,
+])
 
 /** Full legacy pipeline = bootstrap + deep. */
 export const ALL_SYNC_JOBS = [
@@ -233,19 +276,23 @@ export function isTushareBackedSyncJob(job: string): boolean {
   return TUSHARE_PER_STOCK_JOBS.has(job)
 }
 
+/** StockIndex 名录/行业 — 手动重复同步最短间隔（分钟） */
+export const STOCKINDEX_MIN_RESYNC_MINUTES = 20
+
 export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
-  initial_cn_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 14 },
-  /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_cn_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  /** 行业 — 与名录每周交替（见 schedule.ts） */
+  initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 日频截面 — 每个交易日刷新 */
   quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },
-  /** 6 月日 K — 按标的经标准 kline 接口拉取 */
-  kline_bootstrap: { concurrency: 2, delayMs: 200, ttlDays: 7 },
-  /** 多市场静默窗口内的日 K 增量 */
-  kline_daily: { concurrency: 2, delayMs: 180, ttlDays: 1 },
+  /** 6 月日 K 首次补全 — 同花顺 10 年 Parquet 全量包 */
+  kline_bootstrap: { concurrency: 1, delayMs: 0, ttlDays: 30 },
+  /** A 股日 K 增量 — 同花顺 10 天 Parquet 增量包；周一下午收盘后 */
+  kline_daily: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   /** 本地初选因子 — 从 SQLite 计算 */
   screen_factors: { concurrency: 1, delayMs: 0, ttlDays: 1 },
   profiles: { concurrency: 2, delayMs: 320, ttlDays: 30 },
@@ -285,3 +332,26 @@ export const DEFAULT_API_MIN_GAP_MS = Number(
 
 export const QUOTES_BATCH_SIZE = getSyncProfileSettings().quotesBatchSize
 export const QUOTES_BATCH_DELAY_MS = getSyncProfileSettings().quotesBatchDelayMs
+
+/** Dump import — parse batches in worker; turbo SQLite path (staging + bulk sync) */
+export const DUMP_IMPORT_BATCH = {
+  parseRowsPerBatch: 25_000,
+} as const
+
+/** Dump import configuration for tonghuashun Parquet data */
+export const DUMP_IMPORT_CONFIG = {
+  /** Default: weekly (every Monday after market close) */
+  defaultFrequency: 'weekly' as 'daily' | 'weekly',
+  /** Daily update after this time (HH:MM, Asia/Shanghai) */
+  dailyAfterTime: '15:30',
+  /** Only update on trading days */
+  tradingDayOnly: true,
+  /** Full dump ID */
+  fullDumpId: 'a_share_daily_k_1d_none_10y',
+  /** Incremental dump ID */
+  incrementalDumpId: 'a_share_daily_k_1d_none_10d',
+  /** Adjustment factors dump ID */
+  adjustmentDumpId: 'a_share_adjustment_factors_event_none_all',
+  /** 本地 Parquet 缓存有效期（天）；未过期则跳过下载直接导入 */
+  parquetCacheMaxAgeDays: 7,
+}

@@ -3,7 +3,7 @@ import { EvaluationEngine } from '@opptrix/stock-eval'
 import { getMarketDataStore, MarketDataStore } from './store.js'
 import { MarketDataSyncEngine, ALL_SYNC_JOBS, type SyncOptions } from './sync/engine.js'
 import { getMarketSyncCoordinator, MarketSyncCoordinator, type SyncStateSnapshot } from './sync/coordinator.js'
-import { resolveSyncPlan, resolveMarketPackSyncPlan, type SyncPlan } from './sync/plan.js'
+import { resolveSyncPlan, resolveAutoBootPlan, resolveMarketPackSyncPlan, type SyncPlan } from './sync/plan.js'
 import {
   loadMarketPackConfig,
   patchMarketPackConfig as saveMarketPackPatch,
@@ -27,6 +27,7 @@ import {
   isSupplementPackage,
 } from './package-pack.js'
 import { registerMarketDataServiceReset, resetMarketDataRuntime } from './runtime.js'
+import { MarketDataLifecycle } from './sync/lifecycle.js'
 import {
   localScreen,
   localUniverseScreen,
@@ -69,6 +70,7 @@ export class MarketDataService {
   readonly ee: EvaluationEngine
   readonly syncEngine: MarketDataSyncEngine
   readonly coordinator: MarketSyncCoordinator
+  private readonly lifecycle = new MarketDataLifecycle()
 
   constructor(store = getMarketDataStore(), de = new MarketDataEngine(), ee?: EvaluationEngine) {
     this.store = store
@@ -79,7 +81,12 @@ export class MarketDataService {
   }
 
   status() {
-    return this.store.getStatus()
+    return this.coordinator.getCachedDbStatus()
+  }
+
+  /** Lightweight status for Agent / API — no DuckDB full-table stats */
+  statusLight() {
+    return this.store.getStatusLight()
   }
 
   isOfflineScreeningEnabled() {
@@ -140,7 +147,22 @@ export class MarketDataService {
   }
 
   autoSyncOnBoot() {
-    // 本地离线市场库已停用
+    this.coordinator.autoSyncOnBoot()
+  }
+
+  /** UI shell ready — trigger L0 boot sync once (via resolveAutoBootPlan). */
+  notifyUiReady() {
+    this.lifecycle.notifyUiReady(() => this.autoSyncOnBoot())
+  }
+
+  /** Headless / broken client fallback — same as notifyUiReady but idempotent. */
+  ensureBootSyncFallback() {
+    this.lifecycle.ensureBootSyncFallback(() => this.autoSyncOnBoot())
+  }
+
+  /** @deprecated Use notifyUiReady — kept for callers migrating off autoSyncWithFilter */
+  autoSyncWithFilter(_allowedJobs: readonly string[]) {
+    this.notifyUiReady()
   }
 
   /** @deprecated Use autoSyncOnBoot */
@@ -157,7 +179,7 @@ export class MarketDataService {
   }
 
   universeScreenSchema() {
-    return buildLocalUniverseScreenSchema(this.status().latest_factor_date)
+    return buildLocalUniverseScreenSchema(this.statusLight().latest_factor_date)
   }
 
   industryStats(tradeDate?: string) {
@@ -390,14 +412,42 @@ export { listScreenFactors, SCREEN_FACTOR_LABELS } from './query/factors.js'
 export { searchUniverseStocks } from './query/search-stocks.js'
 export {
   BOOTSTRAP_SYNC_JOBS,
+  CN_BOOTSTRAP_SYNC_JOBS,
+  CN_MAINTENANCE_SYNC_JOBS,
+  CN_AUTO_SYNC_JOB_UNIVERSE,
+  CN_CORE_SYNC_JOBS,
+  CN_MANUAL_SYNC_JOBS,
+  DEFAULT_AUTO_SYNC_JOBS,
+  DEFAULT_DAILY_SYNC_JOBS,
+  LEGACY_INITIAL_SYNC_JOBS,
+  STOCKINDEX_LIST_SYNC_JOBS,
   DAILY_SYNC_JOBS,
   ALL_SYNC_JOBS,
+  AUTO_BOOT_EXCLUDED_JOBS,
   SCREEN_PACK_FACTORS,
   KLINE_BOOTSTRAP_DAYS,
   type SyncSpeedProfile,
 } from './sync/config.js'
+export {
+  CN_WEEKLY_MAINTENANCE_DAYS,
+  CN_MARKET_CLOSE_HOUR,
+  beijingClock,
+  isCnMondayAfterMarketClose,
+  cnUniverseMaintenanceDue,
+  cnTaxonomyMaintenanceDue,
+  cnKlineDailyMaintenanceDue,
+  cnMaintenanceJobsDue,
+} from './sync/schedule.js'
+export {
+  filterJobsForAutoBoot,
+  resolveSyncPlan,
+  resolveAutoBootPlan,
+  resolveMarketPackSyncPlan,
+  shouldAutoSyncOnBoot,
+  dailyJobsNeedRefresh,
+  type SyncPlan,
+} from './sync/plan.js'
 export type { HydrateManifest } from './sync/hydrate.js'
-export { resolveSyncPlan, resolveAutoBootPlan, resolveMarketPackSyncPlan, shouldAutoSyncOnBoot, dailyJobsNeedRefresh, type SyncPlan } from './sync/plan.js'
 export { loadMarketPackConfig, patchMarketPackConfig, saveMarketPackConfig, markMarketPackPrepared, normalizeMarketPackConfig } from './market-pack-settings.js'
 export { PACK_JOBS, filterJobsByMarketPacks, jobsForMarketPack, allJobsForEnabledPacks } from './sync/market-packs.js'
 export type { MarketDataPackConfig, MarketDataPackId } from '@opptrix/shared'

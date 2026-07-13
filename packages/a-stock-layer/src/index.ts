@@ -71,6 +71,11 @@ export {
 export type { TushareRuntimeConfig, PublicTushareConfig, TushareRow } from './providers/tushare/index.js'
 
 export {
+  FuyaoClient, testTonghuashunConnection,
+  loadTonghuashunConfig, isTonghuashunEnabled,
+} from './providers/tonghuashun/index.js'
+
+export {
   testTickflowConnection,
   loadTickflowConfig,
   isTickflowEnabled,
@@ -148,9 +153,19 @@ export {
   STOCKINDEX_DEFAULT_BASE_URL as STOCK_INDEX_BASE_URL,
   stockIndexSearch,
   stockIndexListStocks,
+  stockIndexListEtfs,
+  stockIndexListBoards,
+  stockIndexListBoardStocks,
+  stockIndexListIndustries,
+  stockIndexListIndustryStocks,
+  stockIndexItemsToListRows,
+  stockIndexItemToListRow,
   stockIndexItemToInstrumentRef,
   refLabelFromInstrument,
+  type StockIndexItem,
   type StockIndexItem as StockIndexSearchItem,
+  type StockIndexBoard,
+  type StockIndexIndustry,
 } from './providers/stockindex/index.js'
 export {
   searchInstrumentsOnline,

@@ -128,7 +128,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'search_instruments',
       category: '跨市场标的',
-      description: '按代码或名称在线搜索标的（CN/US/HK/Crypto 等）',
+      description: '按代码或名称搜索标的（默认合并本地名录 + 在线）；不熟悉代码时优先 search_local_instruments',
       parameters: S({
         keyword: { type: 'string', description: '搜索关键词' },
         markets: { type: 'array', description: '可选市场过滤，如 CN、US、CRYPTO' },
@@ -203,7 +203,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'get_instrument_chart',
       category: '跨市场标的',
-      description: '获取单只标的 K 线/图表序列；A 股支持多周期，美股/港股/日股/韩股/Crypto 默认日 K',
+      description: '获取单只标的 K 线/图表序列；A 股日 K 优先读本地 DuckDB，在线 Provider 补充实时；美股/港股/日股/韩股/Crypto 默认日 K',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         period: { type: 'string', description: 'K 线周期，如 daily、weekly、monthly；默认 daily' },

@@ -5,7 +5,12 @@ import { normalizeInstrumentRef } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
-import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../utils.js'
+import { daysSince, detectSt, minutesSince, normalizeStockCode, todayTradeDate } from '../utils.js'
+import {
+  cnKlineDailyMaintenanceDue,
+  cnTaxonomyMaintenanceDue,
+  cnUniverseMaintenanceDue,
+} from './schedule.js'
 import { SyncCachingEngine } from './cache-engine.js'
 import {
   ALL_SYNC_JOBS,
@@ -20,20 +25,21 @@ import {
   type SyncSpeedProfile,
   SYNC_JOB_CONFIG,
 } from './config.js'
+import { importDailyKDump } from './dump-import.js'
+import { spawnComputeScreenFactorsAsync } from '../analytics/spawn-analytics.js'
+import { klineStatsViaSubprocess } from '../kline/spawn-import.js'
+import { FuyaoClient, isTonghuashunEnabled, loadTonghuashunConfig } from '@opptrix/a-stock-layer'
 import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
 import { StandardInstrumentGateway } from './instrument-gateway.js'
-import {
-  syncAllInitialTaxonomy,
-  syncInitialCnEtf,
-  syncInitialUniverse,
-  type InitialSyncCallbacks,
-} from './initial-sync.js'
+import type { InitialSyncCallbacks } from './initial-sync.js'
+import { syncInitialCnEtf } from './stockindex-etf.js'
+import { syncInitialStockIndexUniverse } from './stockindex-universe.js'
+import { syncAllInitialTaxonomy } from './stockindex-taxonomy.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
 import { cnEtfListRef, cnEtfRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
-import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -80,7 +86,7 @@ function deRealtimeQuery(de: AshareEngine, ref: InstrumentRef): Promise<QueryRes
   return de.queryInstrumentData(ref, 'realtime') as Promise<QueryResult<StockRealtime[]>>
 }
 
-export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
+export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS } from './config.js'
 
 import type { MarketDataPackId } from '@opptrix/shared'
 
@@ -158,7 +164,10 @@ export class MarketDataSyncEngine {
 
     const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
     if (options.force) {
-      for (const job of jobs) this.store.clearJobProgress(job)
+      for (const job of jobs) {
+        this.store.clearJobProgress(job)
+        this.store.clearCursor(job)
+      }
     } else {
       const cleared = this.store.clearBseJobErrors([...BOOTSTRAP_SYNC_JOBS])
       if (cleared > 0) {
@@ -168,7 +177,16 @@ export class MarketDataSyncEngine {
 
     const results: Record<string, string> = {}
     for (const [jobIndex, job] of jobs.entries()) {
-      if (mode === 'incremental' && !this.shouldRunJobInIncremental(job)) {
+      const minIntervalSkip = this.jobMinIntervalSkipReason(job, options)
+      if (minIntervalSkip) {
+        options.onJobStart?.(job, jobIndex, jobs.length)
+        options.onLog?.(`跳过 ${job}（${minIntervalSkip}）`)
+        results[job] = 'skipped'
+        options.onJobFinish?.(job, 'skipped', jobIndex)
+        continue
+      }
+
+      if (mode === 'incremental' && !this.shouldRunJobInIncremental(job, options)) {
         const ttl = SYNC_JOB_CONFIG[job]?.ttlDays
         options.onJobStart?.(job, jobIndex, jobs.length)
         options.onLog?.(`跳过 ${job}（${ttl ?? '?'} 天内已更新）`)
@@ -303,6 +321,10 @@ export class MarketDataSyncEngine {
         options.onJobFinish?.(job, results[job], jobIndex)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        options.onLog?.(`任务 ${job} 失败：${msg}`)
+        if (e instanceof Error && e.stack) {
+          options.onLog?.(e.stack)
+        }
         this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
         results[job] = `failed: ${msg}`
         options.onJobFinish?.(job, results[job], jobIndex)
@@ -429,9 +451,19 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private shouldRunJobInIncremental(job: string): boolean {
+  private shouldRunJobInIncremental(job: string, options: SyncOptions = {}): boolean {
+    if (this.jobMinIntervalSkipReason(job, options)) return false
+
     if (job === 'screen_factors' && this.store.screenFactorsStale()) return true
     if (job === 'industry_stats' && this.store.industryStatsStale()) return true
+
+    const { is_ready: ready, last_sync: lastSync } = this.store.getStatus()
+    if (ready) {
+      if (job === 'initial_cn_universe') return cnUniverseMaintenanceDue(lastSync)
+      if (job === 'initial_taxonomy') return cnTaxonomyMaintenanceDue(lastSync)
+      if (job === 'kline_daily') return cnKlineDailyMaintenanceDue(lastSync)
+    }
+
     const cfg = SYNC_JOB_CONFIG[job]
     if (!cfg?.ttlDays) return true
     const last = this.store.getCursorLastSuccess(job)
@@ -439,13 +471,78 @@ export class MarketDataSyncEngine {
     return daysSince(last) >= cfg.ttlDays
   }
 
-  /** 本地 K 线/因子层已停用 — 不再在同步后派生计算 */
-  private async finalizeDerivedData(
-    _options: SyncOptions,
-    _mode: SyncMode,
-    _results: Record<string, string>,
+  /** 名录/行业等 StockIndex 任务 — 距上次成功不足 minIntervalMinutes 则跳过（force 除外） */
+  private jobMinIntervalSkipReason(job: string, options: SyncOptions): string | null {
+    if (options.force) return null
+    const minMinutes = SYNC_JOB_CONFIG[job]?.minIntervalMinutes
+    if (!minMinutes || minMinutes <= 0) return null
+    const last = this.store.getCursorLastSuccess(job)
+    if (!last) return null
+    const elapsed = minutesSince(last)
+    if (elapsed >= minMinutes) return null
+    const waited = Math.max(0, Math.round(elapsed))
+    return `距上次同步 ${waited} 分钟，未满 ${minMinutes} 分钟，数据未过期`
+  }
+
+  /** K 线写入后于独立子进程批量重算离线筛选因子 */
+  private async runScreenFactorsAfterKline(
+    options: SyncOptions,
+    jobName: 'kline_bootstrap' | 'kline_daily',
   ): Promise<void> {
-    return
+    const stats = klineStatsViaSubprocess(this.store.klineDuckDbPath)
+    if (!stats.rows) return
+
+    const tradeDate = stats.maxDate ?? todayTradeDate()
+    options.onLog?.(`日 K 已更新，子进程批量计算离线筛选因子（${tradeDate}）…`)
+    options.onProgress?.({ job: jobName, current: 92, total: 100, message: '计算筛选因子…' })
+
+    this.store.flushDuckWritesSync()
+    try {
+      const result = await spawnComputeScreenFactorsAsync({
+        tradeDate,
+        duckDbPath: this.store.klineDuckDbPath,
+        sqliteDbPath: this.store.dbPath,
+        onProgress: (message, percent) => {
+          options.onProgress?.({
+            job: jobName,
+            current: 90 + Math.round(percent * 0.1),
+            total: 100,
+            message,
+          })
+        },
+      })
+      if (result.computed > 0) {
+        this.store.setCursor('screen_factors', {
+          trade_date: tradeDate,
+          success: result.computed,
+          skipped: 0,
+          source: jobName,
+        })
+        options.onLog?.(`离线筛选因子已更新：${result.computed.toLocaleString()} 只（${tradeDate}）`)
+      } else {
+        options.onLog?.('离线筛选因子：无可计算标的（跳过）')
+      }
+      this.store.flushDuckWritesSync()
+      this.store.invalidateKlineStatsCache()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      options.onLog?.(`离线筛选因子计算失败（不影响 K 线导入）：${msg}`)
+    }
+  }
+
+  private async finalizeDerivedData(
+    options: SyncOptions,
+    _mode: SyncMode,
+    results: Record<string, string>,
+  ): Promise<void> {
+    this.store.flushDuckWritesSync()
+    this.store.syncAnalyticsToDuck('all')
+
+    const klineOk = (results.kline_bootstrap === 'ok' || results.kline_daily === 'ok')
+    if (!klineOk && this.store.screenFactorsStale()) {
+      const jobName = results.kline_daily === 'ok' ? 'kline_daily' : 'kline_bootstrap'
+      await this.runScreenFactorsAfterKline(options, jobName)
+    }
   }
 
   private finishJobEmpty(
@@ -558,16 +655,13 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    const result = await syncInitialCnEtf(gateway, this.store, cfg, this.initialCallbacks(job, options))
-    for (const code of this.store.listEtfCodes(true).slice(0, result.success)) {
-      this.markDone(job, code, '')
-    }
+    const result = await syncInitialCnEtf(this.store, cfg, this.initialCallbacks(job, options))
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
+    this.store.flushDuckWritesSync()
   }
 
   private async syncInitialUniverseJob(
@@ -586,23 +680,24 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    const result = await syncInitialUniverse(
-      gateway,
+    const callbacks = this.initialCallbacks(job, options)
+    const result = await syncInitialStockIndexUniverse(
       this.store,
       market,
+      job,
       cfg,
-      this.initialCallbacks(job, options),
+      callbacks,
     )
-    const codes = listEquityCodesForMarket(this.store, market, true)
-    for (const code of codes.slice(0, result.success)) {
-      this.markDone(job, code, '')
+    if (result.total === 0 && result.success === 0 && (market === 'HK' || market === 'US')) {
+      this.finishJobEmpty(runId, job, options, `${market} 名录暂无数据，已跳过`)
+      return
     }
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
+    this.store.flushDuckWritesSync()
   }
 
   private async syncInitialTaxonomyJob(
@@ -620,9 +715,13 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    await syncAllInitialTaxonomy(gateway, this.store, cfg, this.initialCallbacks(job, options))
-    this.store.finishRun(runId, 'success', { total: 1, success: 1, error: 0 })
+    const result = await syncAllInitialTaxonomy(this.store, cfg, this.initialCallbacks(job, options))
+    this.store.finishRun(runId, 'success', {
+      total: result.nodes,
+      success: result.nodes,
+      error: 0,
+    })
+    this.store.flushDuckWritesSync()
   }
 
   private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
@@ -1080,6 +1179,7 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
+    this.store.flushDuckWritesSync()
   }
 
   private async syncProfiles(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -1512,68 +1612,94 @@ export class MarketDataSyncEngine {
     }
   }
 
-  private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
-    const cfg = this.cfg('kline_bootstrap', options)
-    const gateway = this.createGateway(options)
-    const pending = this.klinePendingFilter('kline_bootstrap', options, mode, '', cfg.ttlDays)
-
-    const result = await syncKlineBootstrapLayer(gateway, this.store, cfg, {
-      maxInstruments: options.maxStocks,
-      pendingFilter: mode === 'full' ? undefined : pending,
-      callbacks: {
-        onLog: options.onLog,
-        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
-      },
-    })
-
-    if (result.total === 0) {
-      this.finishJobEmpty(runId, 'kline_bootstrap', options, 'K 线均在 TTL 内，跳过')
-      return
+  private async importCnKlineDumpFromThs(
+    runId: number,
+    jobName: 'kline_bootstrap' | 'kline_daily',
+    dumpType: 'full' | 'incremental',
+    options: SyncOptions,
+  ): Promise<number> {
+    const cfg = loadTonghuashunConfig()
+    if (!isTonghuashunEnabled(cfg)) {
+      throw new Error('同花顺未启用或 API Key 未配置，无法导入 A 股 K 线数据包')
     }
 
-    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
-      const scoped = `${market}:${code}`
-      if (this.store.listCodesWithMinInstrumentBars(market, market === 'CN' ? 60 : 30).includes(code)) {
-        this.markDone('kline_bootstrap', market === 'CN' ? code : scoped, '')
+    const client = FuyaoClient.fromConfig()
+    if (!client) {
+      throw new Error('无法创建同花顺客户端')
+    }
+
+    const label = dumpType === 'full' ? '全量（10年）' : '增量（10天）'
+    options.onLog?.(`导入同花顺 A 股日 K ${label} Parquet 数据包…`)
+
+    const reportPhase = (message: string, current: number) => {
+      options.onProgress?.({ job: jobName, current, total: 100, message })
+    }
+
+    reportPhase('准备导入…', 0)
+
+    const klineResult = await importDailyKDump(this.store, dumpType, client.get.bind(client), {
+      onPhase: (phase, percent) => reportPhase(phase, percent),
+    })
+
+    if (!klineResult.success) {
+      throw new Error(klineResult.error ?? '同花顺 K 线数据包导入失败')
+    }
+
+    if (klineResult.rowsImported === 0) {
+      this.finishJobEmpty(runId, jobName, options, '数据包无新 K 线，跳过')
+      return 0
+    }
+
+    this.store.repairBootstrapJobProgress()
+    this.store.setCursor(jobName, { dumpType, rowsImported: klineResult.rowsImported })
+    this.store.setCursor('dump_import', { dumpType, rowsImported: klineResult.rowsImported })
+    if (dumpType === 'full') {
+      // 全量包已含近期日 K，同步标记日 K 维护位避免 UI 重复显示未完成
+      this.store.setCursor('kline_daily', {
+        dumpType: 'full',
+        rowsImported: klineResult.rowsImported,
+        source: 'kline_bootstrap',
+      })
+    }
+
+    options.onLog?.(`同花顺 K 线数据包导入完成：${klineResult.rowsImported.toLocaleString()} 条`)
+    reportPhase(`已导入 ${klineResult.rowsImported.toLocaleString()} 条`, 90)
+
+    await this.runScreenFactorsAfterKline(options, jobName)
+    reportPhase('因子计算完成', 100)
+
+    this.store.finishRun(runId, 'success', {
+      total: klineResult.rowsImported,
+      success: klineResult.rowsImported,
+      error: 0,
+    })
+    return klineResult.rowsImported
+  }
+
+  private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('kline_bootstrap', options)
+    if (mode === 'incremental' && cfg.ttlDays && !options.force) {
+      const last = this.store.getCursorLastSuccess('kline_bootstrap')
+      if (last && daysSince(last) < cfg.ttlDays && this.store.hasKlineData()) {
+        this.finishJobEmpty(runId, 'kline_bootstrap', options, '历史 K 线数据包在 TTL 内，跳过')
+        return
       }
     }
 
-    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
-      total: result.total,
-      success: result.success,
-      error: result.error,
-    })
+    await this.importCnKlineDumpFromThs(runId, 'kline_bootstrap', 'full', options)
   }
 
   private async syncKlineDaily(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
     const cfg = this.cfg('kline_daily', options)
-    const gateway = this.createGateway(options)
-    const pending = this.klinePendingFilter('kline_daily', options, mode, todayTradeDate(), cfg.ttlDays)
-
-    const result = await syncKlineDailyLayer(gateway, this.store, cfg, {
-      pendingFilter: mode === 'full' ? undefined : pending,
-      callbacks: {
-        onLog: options.onLog,
-        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
-      },
-    })
-
-    if (result.total === 0) {
-      this.finishJobEmpty(runId, 'kline_daily', options, '今日 K 线已齐，跳过')
-      return
+    if (mode === 'incremental' && cfg.ttlDays && !options.force) {
+      const last = this.store.getCursorLastSuccess('kline_daily')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'kline_daily', options, '日 K 数据包在 TTL 内，跳过')
+        return
+      }
     }
 
-    const scope = todayTradeDate()
-    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
-      const scoped = `${market}:${code}`
-      this.markDone('kline_daily', market === 'CN' ? code : scoped, scope)
-    }
-
-    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
-      total: result.total,
-      success: result.success,
-      error: result.error,
-    })
+    await this.importCnKlineDumpFromThs(runId, 'kline_daily', 'incremental', options)
   }
 
   private async syncBseKlineSupplement(
@@ -1615,6 +1741,7 @@ export class MarketDataSyncEngine {
       success,
       error: skipped,
     })
+    this.store.flushDuckWritesSync()
     return Promise.resolve()
   }
 
@@ -1687,5 +1814,26 @@ export class MarketDataSyncEngine {
     }
     this.store.setCursor('industry_stats', { trade_date: tradeDate, industries: n })
     this.store.finishRun(runId, 'success', { total: n, success: n, error: 0 })
+  }
+
+  /** @deprecated 请通过 sync job `kline_bootstrap` / `kline_daily` 导入同花顺 Parquet 数据包 */
+  async importDump(options: SyncOptions = {}): Promise<{
+    success: boolean
+    klineResult?: { type: string; rowsImported: number; error?: string }
+  }> {
+    const dumpType = this.store.hasKlineData() ? 'incremental' : 'full'
+    const runId = this.store.beginRun('dump_import', 'incremental')
+    try {
+      const rowsImported = await this.importCnKlineDumpFromThs(runId, 'kline_daily', dumpType, options)
+      return {
+        success: true,
+        klineResult: { type: dumpType, rowsImported },
+      }
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
+      options.onLog?.(msg)
+      return { success: false, klineResult: { type: dumpType, rowsImported: 0, error: msg } }
+    }
   }
 }

@@ -12,15 +12,18 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "test -f dist/index.d.ts || rm -f tsconfig.tsbuildinfo; tsc -b tsconfig.json",
     "sync": "npm run build && node dist/cli/sync.js"
   },
   "dependencies": {
+    "@dsnp/parquetjs": "^1.8.8",
     "@opptrix/a-stock-layer": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*",
     "@opptrix/stock-eval": "*",
-    "better-sqlite3": "^11.7.0"
+    "@opptrix/user-store": "*",
+    "better-sqlite3": "^11.7.0",
+    "duckdb": "^1.2.1",
+    "parquet-wasm": "^0.7.2"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"

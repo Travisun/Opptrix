@@ -1,6 +1,7 @@
 import { normalizeCode, resolveMarket } from '@opptrix/a-stock-layer'
 import type { StockListItem } from '@opptrix/shared'
 import type { MarketDataStore } from '../store.js'
+import { marketReadAll } from './duck-read.js'
 
 const SEARCHABLE_WHERE = `
   status IN ('active', 'st')
@@ -24,7 +25,7 @@ function mapRows(rows: StockRow[]): StockListItem[] {
   }))
 }
 
-/** Search synced universe in local market.db (code / name / industry). */
+/** Search synced universe — DuckDB 优先，SQLite 回退 */
 export function searchUniverseStocks(
   store: MarketDataStore,
   keyword: string,
@@ -39,40 +40,31 @@ export function searchUniverseStocks(
   if (/^\d+$/.test(raw)) {
     const codePrefix = `${raw}%`
     const codeExact = raw.length >= 6 ? normalizeCode(raw) : ''
-    const rows = db.prepare(`
+    const sql = `
       SELECT code, name, industry, market FROM stocks
-      WHERE ${SEARCHABLE_WHERE}
-        AND code LIKE ?
+      WHERE ${SEARCHABLE_WHERE} AND code LIKE ?
       ORDER BY
-        CASE
-          WHEN ? != '' AND code = ? THEN 0
-          WHEN code LIKE ? THEN 1
-          ELSE 2
-        END,
-        LENGTH(code),
-        code
+        CASE WHEN ? != '' AND code = ? THEN 0 WHEN code LIKE ? THEN 1 ELSE 2 END,
+        LENGTH(code), code
       LIMIT ?
-    `).all(codePrefix, codeExact, codeExact, codePrefix, cap) as StockRow[]
-    return mapRows(rows)
+    `
+    const params = [codePrefix, codeExact, codeExact, codePrefix, cap]
+    return mapRows(marketReadAll(store, sql, params, () => db.prepare(sql).all(...params) as StockRow[]))
   }
 
   const like = `%${raw}%`
   const prefix = `${raw}%`
-  const rows = db.prepare(`
+  const sql = `
     SELECT code, name, industry, market FROM stocks
     WHERE ${SEARCHABLE_WHERE}
       AND (name LIKE ? OR code LIKE ? OR industry LIKE ?)
     ORDER BY
       CASE
-        WHEN name = ? THEN 0
-        WHEN name LIKE ? THEN 1
-        WHEN code LIKE ? THEN 2
-        WHEN industry LIKE ? THEN 3
-        ELSE 4
-      END,
-      code
+        WHEN name = ? THEN 0 WHEN name LIKE ? THEN 1
+        WHEN code LIKE ? THEN 2 WHEN industry LIKE ? THEN 3 ELSE 4
+      END, code
     LIMIT ?
-  `).all(like, like, like, raw, prefix, like, like, cap) as StockRow[]
-
-  return mapRows(rows)
+  `
+  const params = [like, like, like, raw, prefix, like, like, cap]
+  return mapRows(marketReadAll(store, sql, params, () => db.prepare(sql).all(...params) as StockRow[]))
 }

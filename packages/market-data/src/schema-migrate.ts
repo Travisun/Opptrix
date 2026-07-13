@@ -9,6 +9,9 @@ import {
   MIGRATION_V7_SQL,
   MIGRATION_V8_SQL,
   MIGRATION_V8_PRESERVE_NS_SQL,
+  MIGRATION_V10_SQL,
+  MIGRATION_V11_SQL,
+  MIGRATION_V12_SQL,
   SCHEMA_VERSION,
 } from './schema.js'
 import {
@@ -103,6 +106,45 @@ function recordSchemaVersion(db: Database.Database, version: number): void {
   )
 }
 
+function klineStorageUsesDuckdb(db: Database.Database): boolean {
+  const row = db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'kline_storage'",
+  ).get() as { meta_json: string | null } | undefined
+  if (!row?.meta_json) return false
+  try {
+    const meta = JSON.parse(row.meta_json) as { backend?: string }
+    return meta.backend === 'duckdb'
+  } catch {
+    return false
+  }
+}
+
+function analyticsStorageReady(db: Database.Database): boolean {
+  const row = db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'analytics_storage'",
+  ).get() as { meta_json: string | null } | undefined
+  if (!row?.meta_json) return false
+  try {
+    const meta = JSON.parse(row.meta_json) as { backend?: string; dims?: boolean }
+    return meta.backend === 'duckdb' && meta.dims === true
+  } catch {
+    return false
+  }
+}
+
+function marketDataStorageReady(db: Database.Database): boolean {
+  const row = db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'market_data_storage'",
+  ).get() as { meta_json: string | null } | undefined
+  if (!row?.meta_json) return false
+  try {
+    const meta = JSON.parse(row.meta_json) as { backend?: string; primary?: boolean }
+    return meta.backend === 'duckdb' && meta.primary === true
+  } catch {
+    return false
+  }
+}
+
 export const MIGRATION_STEPS: SchemaMigrationStep[] = [
   {
     version: 1,
@@ -166,6 +208,24 @@ export const MIGRATION_STEPS: SchemaMigrationStep[] = [
       ensureInstrumentNsSchema(db)
       runInstrumentNsBackfill(db)
     },
+  },
+  {
+    version: 10,
+    description: 'kline storage backend marker (DuckDB + SQLite)',
+    isApplied: (db) => klineStorageUsesDuckdb(db),
+    up: (db) => { db.exec(MIGRATION_V10_SQL) },
+  },
+  {
+    version: 11,
+    description: 'DuckDB analytics layer marker (dims/quotes/factors)',
+    isApplied: (db) => analyticsStorageReady(db),
+    up: (db) => { db.exec(MIGRATION_V11_SQL) },
+  },
+  {
+    version: 12,
+    description: 'market data primary storage on DuckDB',
+    isApplied: (db) => marketDataStorageReady(db),
+    up: (db) => { db.exec(MIGRATION_V12_SQL) },
   },
 ]
 

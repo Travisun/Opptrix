@@ -20,7 +20,7 @@ test('ToolRegistry registers industry analysis tools', () => {
   for (const name of INDUSTRY_TOOLS) {
     assert.ok(names.includes(name), `missing tool: ${name}`)
   }
-  assert.equal(registry.get('screen_local_industry_stocks'), undefined)
+  assert.equal(registry.get('local_screen_stocks'), undefined)
 })
 
 test('industry tools are chat-visible via CHAT_MCP_TOOL_NAMES', async () => {
@@ -33,15 +33,17 @@ test('industry tools are chat-visible via CHAT_MCP_TOOL_NAMES', async () => {
   }
 })
 
-test('mining whitelist includes industry read tools but not deprecated screen_local_industry_stocks', () => {
+test('mining whitelist includes industry read tools and screen_local_industry_stocks', () => {
   assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes('list_local_industries'))
   assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes('get_industry_stats'))
-  assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('screen_local_industry_stocks'))
+  assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes('screen_local_industry_stocks'))
+  assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes('screen_local_universe'))
+  assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes('get_local_universe_screen_schema'))
 })
 
 test('agent prompt includes industry analysis playbook', () => {
   const text = buildIndustryAnalysisPlaybook()
   assert.match(text, /list_local_industries/)
-  assert.match(text, /screen_stocks/)
+  assert.match(text, /screen_local_universe/)
   assert.match(text, /get_local_data_status/)
 })
