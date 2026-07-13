@@ -41,9 +41,9 @@ export interface SyncStateSnapshot {
 }
 
 const MAX_MEMORY_LOGS = 500
-const DB_STATUS_CACHE_MS_IDLE = 5000
-const DB_STATUS_CACHE_MS_RUNNING = 5000
-const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 12_000
+const DB_STATUS_CACHE_MS_IDLE = 10_000
+const DB_STATUS_CACHE_MS_RUNNING = 12_000
+const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 18_000
 
 /** 名录/行业等 bootstrap 任务 — 运行中用内存进度覆盖 DB 聚合（避免 DuckDB 写入滞后） */
 const BOOTSTRAP_PROGRESS_JOBS = new Set([
@@ -188,8 +188,12 @@ export class MarketSyncCoordinator {
   getSnapshot(): SyncStateSnapshot {
     const now = Date.now()
     if (now - this.lastStaleReconcileAt >= MarketSyncCoordinator.RECONCILE_INTERVAL_MS) {
-      this.store.reconcileStaleSyncState()
       this.lastStaleReconcileAt = now
+      setImmediate(() => {
+        try {
+          this.store.reconcileStaleSyncState()
+        } catch { /* best-effort */ }
+      })
     }
     if (!this.bootstrapProgressRepaired) {
       this.bootstrapProgressRepaired = true
@@ -241,7 +245,7 @@ export class MarketSyncCoordinator {
       jobCurrent = rawJobCurrent
       jobTotal = rawJobTotal > 0 ? rawJobTotal : 100
     } else if (currentJob && stockCount > 0) {
-      if (this.running && (this.snapshot.job_current ?? 0) > 0) {
+      if (this.running) {
         jobCurrent = Math.min(stockCount, this.snapshot.job_current ?? 0)
       } else {
         jobCurrent = Math.min(stockCount, this.store.countJobDone(currentJob))
@@ -462,10 +466,10 @@ export class MarketSyncCoordinator {
         },
       })
       const failed = Object.values(result.jobs).filter(v => String(v).startsWith('failed')).length
-      const bootstrap = this.store.assessBootstrapReadiness()
+      const bootstrap = this.store.getStatusLight().bootstrap
       const overall = computeBootstrapOverallPercent(
         options.jobs,
-        this.store.getStatus(),
+        this.store.getStatusLight(),
       )
       this.lastJobResults = result.jobs
       this.lastJobResultsSessionId = sessionId
@@ -484,19 +488,20 @@ export class MarketSyncCoordinator {
         for (const f of this.failedJobsFromResults(result.jobs)) {
           this.log(sessionId, `失败详情 · ${f.job}: ${f.error}`)
         }
-      } else if (bootstrap.ready) {
+      } else if (bootstrap?.ready) {
         msg = '初选包已就绪，可开始本地挖掘'
       } else {
         msg = `同步结束，初选包构建中（${overall}%）`
       }
-      this.store.finishSession(sessionId, failed ? 'partial' : (bootstrap.ready ? 'completed' : 'partial'), msg)
+      this.store.finishSession(sessionId, failed ? 'partial' : (bootstrap?.ready ? 'completed' : 'partial'), msg)
       this.log(sessionId, msg)
-      if (bootstrap.ready) {
+      if (bootstrap?.ready) {
         this.incompleteBootstrapRetryAttempts = 0
-      } else if (failed === 0) {
+      } else if (failed === 0 && bootstrap) {
         this.scheduleIncompleteBootstrapRetry(sessionId, bootstrap)
       }
       this.triggerDerivedMaintenance()
+      this.store.maybeSyncAnalyticsToDuckBackground()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       this.store.finishSession(sessionId, 'interrupted', msg)
@@ -547,14 +552,6 @@ export class MarketSyncCoordinator {
       this.store.finishSession(stale.id, 'interrupted', '进程重启，等待接续')
     }
 
-    try {
-      this.store.repairKlineImportArtifacts()
-    } catch { /* background repair */ }
-
-    try {
-      await resumeKlineParquetFromCacheIfNeeded(this.store)
-    } catch { /* 缓存恢复失败时由后续同步计划重试 */ }
-
     this.store.invalidateStatusLightCache()
 
     const status = this.store.getStatusForBootPlan()
@@ -568,6 +565,18 @@ export class MarketSyncCoordinator {
       })
     }
     this.triggerDerivedMaintenance()
+
+    setImmediate(() => {
+      if (this.running || isDerivedMaintenanceActive()) return
+      try {
+        this.store.repairKlineImportArtifacts()
+      } catch { /* background repair */ }
+      void resumeKlineParquetFromCacheIfNeeded(this.store).then(result => {
+        if (result?.success && !this.running && !isDerivedMaintenanceActive()) {
+          void this.autoSyncOnBoot()
+        }
+      }).catch(() => { /* 缓存恢复失败时由后续同步计划重试 */ })
+    })
   }
 
   private triggerDerivedMaintenance(): void {

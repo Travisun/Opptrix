@@ -24,6 +24,19 @@ export function isDerivedMaintenanceActive(): boolean {
   return derivedMaintenanceActive
 }
 
+/** 主进程是否应暂停 DuckDB 写入（衍生维护子进程独占 Duck 文件） */
+export function isDuckWritePaused(): boolean {
+  return marketSyncActive || derivedMaintenanceActive
+}
+
+export function isDuckFileLockHeld(duckDbPath: string): boolean {
+  try {
+    return fs.existsSync(lockFilePath(duckDbPath))
+  } catch {
+    return false
+  }
+}
+
 function lockFilePath(duckDbPath: string): string {
   return `${duckDbPath}.oplock`
 }
@@ -40,6 +53,9 @@ export function withDuckFileLockSync<T>(
   fn: () => T,
   timeoutMs = 120_000,
 ): T {
+  if (isDerivedMaintenanceActive()) {
+    throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
+  }
   const lp = lockFilePath(duckDbPath)
   fs.mkdirSync(path.dirname(lp), { recursive: true })
   const deadline = Date.now() + timeoutMs
@@ -55,6 +71,9 @@ export function withDuckFileLockSync<T>(
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code
       if (code !== 'EEXIST') throw e
+      if (isDerivedMaintenanceActive()) {
+        throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
+      }
       sleepSync(50)
     }
   }

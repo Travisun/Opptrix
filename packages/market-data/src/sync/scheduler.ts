@@ -18,7 +18,7 @@ export function startMarketDataRefreshScheduler(
   const tick = () => {
     if (coordinator.isRunning()) return
 
-    const status = store.getStatus()
+    const status = store.getStatusLight()
     const session = store.getLatestSession()
     const plan = resolveAutoBootPlan(status, session)
     if (!plan) return

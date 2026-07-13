@@ -67,6 +67,7 @@ type IntroSlide =
     kicker: string
     title: string
     subtitle: string
+    note?: string
     versionLabel?: string | null
   }
   | {
@@ -89,6 +90,7 @@ function buildIntroSlides(
     subtitle: returning && release.updateLine
       ? release.updateLine
       : release.welcomeSubtitle,
+    note: returning ? release.welcomeSubtitle : undefined,
     versionLabel,
   }
   const features: IntroSlide[] = release.features.map((f, i) => ({
@@ -160,6 +162,9 @@ export function OnboardingIntroCarousel({
                 <Text className={display.versionLine} block>{slide.versionLabel}</Text>
               )}
               <Text className={display.displayLead} block>{slide.subtitle}</Text>
+              {slide.note && (
+                <Text className={display.displayNote} block>{slide.note}</Text>
+              )}
             </OnboardingHeroBlock>
           ) : (
             <OnboardingHeroBlock>

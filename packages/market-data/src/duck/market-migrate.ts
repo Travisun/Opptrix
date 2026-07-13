@@ -7,6 +7,62 @@ export async function ensureMarketDuckSchema(conn: DuckConnection): Promise<void
   await duckRun(conn, MARKET_DUCK_ENRICHMENT_ALIGN_SQL)
 }
 
+/** 因子/行业衍生任务所需的维表（轻量，不全量 migrate） */
+const DERIVED_DIM_TABLES = ['stocks', 'instruments', 'taxonomy_nodes', 'instrument_taxonomy'] as const
+
+export async function dimsMigrationNeeded(
+  conn: DuckConnection,
+  sqlitePath: string,
+): Promise<boolean> {
+  await ensureMarketDuckSchema(conn)
+  await attachSqlite(conn, sqlitePath, 'md', true)
+  try {
+    for (const table of DERIVED_DIM_TABLES) {
+      const srcCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM md.${table}
+      `).catch(() => ({ c: 0 }))
+      const src = srcCount?.c ?? 0
+      if (src === 0) continue
+      const dstCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM ${table}
+      `).catch(() => ({ c: 0 }))
+      if ((dstCount?.c ?? 0) < src) return true
+    }
+    return false
+  } finally {
+    await detachSqlite(conn)
+  }
+}
+
+/** 衍生维护前 — 仅同步名录/行业维表，避免全量 migrate 长时间占用 SQLite */
+export async function syncDuckDimsFromSqlite(
+  conn: DuckConnection,
+  sqlitePath: string,
+): Promise<{ stocks: number }> {
+  await ensureMarketDuckSchema(conn)
+  await attachSqlite(conn, sqlitePath, 'md', true)
+  try {
+    for (const table of DERIVED_DIM_TABLES) {
+      const srcCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM md.${table}
+      `).catch(() => ({ c: 0 }))
+      const src = srcCount?.c ?? 0
+      if (src === 0) continue
+      const dstCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM ${table}
+      `).catch(() => ({ c: 0 }))
+      const dst = dstCount?.c ?? 0
+      if (dst >= src) continue
+      await duckRun(conn, `DELETE FROM ${table}`)
+      await duckRun(conn, `INSERT INTO ${table} BY NAME SELECT * FROM md.${table}`)
+    }
+    const after = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM stocks')
+    return { stocks: after?.c ?? 0 }
+  } finally {
+    await detachSqlite(conn)
+  }
+}
+
 /** 从 SQLite 一次性迁移市场数据到 DuckDB（幂等：按表行数对比跳过已迁移表） */
 export async function migrateMarketDataFromSqlite(
   conn: DuckConnection,

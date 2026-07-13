@@ -45,26 +45,26 @@ export function hasAnalyticsDimsViaSubprocess(duckDbPath = klineDuckDbPath()): b
   return getMarketDuckGateway(duckDbPath).hasMarketData()
 }
 
-export function queryIndustryStatsViaSubprocess(
+export async function queryIndustryStatsViaSubprocess(
   tradeDate: string,
   duckDbPath = klineDuckDbPath(),
 ) {
-  return getMarketDuckGateway(duckDbPath).queryIndustryStatsSync(tradeDate)
+  return getMarketDuckGateway(duckDbPath).queryIndustryStatsAsync(tradeDate)
 }
 
-export function queryIndustryStocksViaSubprocess(
+export async function queryIndustryStocksViaSubprocess(
   industry: string,
   tradeDate: string,
   limit: number,
   duckDbPath = klineDuckDbPath(),
 ) {
-  return getMarketDuckGateway(duckDbPath).queryIndustryStocksSync(industry, tradeDate, limit)
+  return getMarketDuckGateway(duckDbPath).queryIndustryStocksAsync(industry, tradeDate, limit)
 }
 
-export function queryUniverseScreenViaSubprocess(
+export async function queryUniverseScreenViaSubprocess(
   query: LocalUniverseScreenQuery,
   tradeDate: string,
   duckDbPath = klineDuckDbPath(),
 ) {
-  return getMarketDuckGateway(duckDbPath).queryUniverseScreenSync(query, tradeDate)
+  return getMarketDuckGateway(duckDbPath).queryUniverseScreenAsync(query, tradeDate)
 }

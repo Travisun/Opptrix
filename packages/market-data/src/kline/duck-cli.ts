@@ -17,7 +17,8 @@ import {
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
 import { computeScreenFactors, analyticsStats } from '../analytics/duck-compute.js'
-import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats } from '../duck/market-migrate.js'
+import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats, dimsMigrationNeeded, syncDuckDimsFromSqlite } from '../duck/market-migrate.js'
+import { withDuckFileLockAsync } from '../duck/duck-subprocess-gate.js'
 import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
 import {
   latestFactorDateDuck,
@@ -429,58 +430,102 @@ async function cmdDerivedMaintenance(flags: Record<string, string>) {
   if (!duckPath || !sqlitePath) throw new Error('derived-maintenance 需要 --duckdb --sqlite')
   if (!jobs.length) throw new Error('derived-maintenance 需要 --jobs')
 
-  const fallbackDate = flags.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
-  const db = openDuckDatabase(duckPath)
-  const conn = connectDuck(db)
-  try {
-    await ensureAnalyticsSchema(conn)
-    const tradeDate = flags.date?.slice(0, 10) ?? await resolveTradeDate(conn, fallbackDate)
-    const payload: Record<string, unknown> = { trade_date: tradeDate }
+  await withDuckFileLockAsync(duckPath, async () => {
+    const fallbackDate = flags.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
+    const db = openDuckDatabase(duckPath)
+    const conn = connectDuck(db)
+    try {
+      await ensureAnalyticsSchema(conn)
+      const tradeDate = flags.date?.slice(0, 10) ?? await resolveTradeDate(conn, fallbackDate)
+      const payload: Record<string, unknown> = { trade_date: tradeDate }
 
-    for (const job of jobs) {
-      emit({ type: 'job_start', job, trade_date: tradeDate })
-      if (job === 'screen_factors') {
-        emit({ type: 'progress', job, message: '批量计算初选因子…', current: 10, total: 100 })
-        const result = await computeScreenFactors(conn, sqlitePath, tradeDate)
-        emit({
-          type: 'progress',
-          job,
-          message: result.computed > 0
-            ? `初选因子已计算 ${result.computed.toLocaleString()} 只`
-            : '无可计算标的（跳过）',
-          current: 100,
-          total: 100,
-        })
-        emit({ type: 'job_done', job, ...result })
-        payload.screen_factors = result
-      } else if (job === 'industry_stats') {
-        emit({ type: 'progress', job, message: '重建行业统计…', current: 20, total: 100 })
-        const syncedAt = new Date().toISOString()
-        await applyDuckWriteOps(conn, [{ op: 'rebuildIndustryStats', tradeDate, syncedAt }])
-        const row = await duckGet<{ c: number }>(
-          conn,
-          'SELECT COUNT(*)::INTEGER AS c FROM industry_stats WHERE trade_date = ?',
-          tradeDate,
-        )
-        const industries = row?.c ?? 0
-        emit({
-          type: 'progress',
-          job,
-          message: `行业统计已更新 ${industries} 个行业`,
-          current: 100,
-          total: 100,
-        })
-        emit({ type: 'job_done', job, industries, trade_date: tradeDate })
-        payload.industry_stats = { industries, trade_date: tradeDate }
-      } else {
-        throw new Error(`未知 job: ${job}`)
+      if (jobs.some(j => j === 'screen_factors' || j === 'industry_stats')) {
+        const prepJob = jobs[0]!
+        emit({ type: 'progress', job: prepJob, message: '检查名录维度…', current: 2, total: 100 })
+        const migrationNeeded = await dimsMigrationNeeded(conn, sqlitePath)
+        if (migrationNeeded) {
+          emit({ type: 'progress', job: prepJob, message: '同步 SQLite 名录到 DuckDB…', current: 5, total: 100 })
+          const migrated = await syncDuckDimsFromSqlite(conn, sqlitePath)
+          emit({
+            type: 'progress',
+            job: prepJob,
+            message: migrated.stocks > 0
+              ? `名录已同步（${migrated.stocks.toLocaleString()} 只）`
+              : '名录同步完成',
+            current: 8,
+            total: 100,
+          })
+        }
       }
-    }
 
-    emit({ type: 'done', ...payload })
-  } finally {
-    await closeDuck(db)
-  }
+      for (const job of jobs) {
+        emit({ type: 'job_start', job, trade_date: tradeDate })
+        if (job === 'screen_factors') {
+          emit({ type: 'progress', job, message: '批量计算初选因子…', current: 10, total: 100 })
+          const dimCount = (await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM dim_cn_stocks WHERE status = \'active\''))?.c ?? 0
+          if (dimCount < 100) {
+            emit({
+              type: 'progress',
+              job,
+              message: `名录不足（${dimCount} 只），跳过因子计算`,
+              current: 100,
+              total: 100,
+            })
+            emit({ type: 'job_done', job, computed: 0, written: 0 })
+            payload.screen_factors = { computed: 0, written: 0 }
+            continue
+          }
+          let tick = 12
+          const heartbeat = setInterval(() => {
+            tick = Math.min(tick + 3, 90)
+            emit({ type: 'progress', job, message: '因子 SQL 计算中…', current: tick, total: 100 })
+          }, 8000)
+          let result: { computed: number; written: number }
+          try {
+            result = await computeScreenFactors(conn, sqlitePath, tradeDate)
+          } finally {
+            clearInterval(heartbeat)
+          }
+          emit({
+            type: 'progress',
+            job,
+            message: result.computed > 0
+              ? `初选因子已计算 ${result.computed.toLocaleString()} 只`
+              : '无可计算标的（跳过）',
+            current: 100,
+            total: 100,
+          })
+          emit({ type: 'job_done', job, ...result })
+          payload.screen_factors = result
+        } else if (job === 'industry_stats') {
+          emit({ type: 'progress', job, message: '重建行业统计…', current: 20, total: 100 })
+          const syncedAt = new Date().toISOString()
+          await applyDuckWriteOps(conn, [{ op: 'rebuildIndustryStats', tradeDate, syncedAt }])
+          const row = await duckGet<{ c: number }>(
+            conn,
+            'SELECT COUNT(*)::INTEGER AS c FROM industry_stats WHERE trade_date = ?',
+            tradeDate,
+          )
+          const industries = row?.c ?? 0
+          emit({
+            type: 'progress',
+            job,
+            message: `行业统计已更新 ${industries} 个行业`,
+            current: 100,
+            total: 100,
+          })
+          emit({ type: 'job_done', job, industries, trade_date: tradeDate })
+          payload.industry_stats = { industries, trade_date: tradeDate }
+        } else {
+          throw new Error(`未知 job: ${job}`)
+        }
+      }
+
+      emit({ type: 'done', ...payload })
+    } finally {
+      await closeDuck(db)
+    }
+  }, 900_000)
 }
 
 async function cmdAnalyticsStats(flags: Record<string, string>) {

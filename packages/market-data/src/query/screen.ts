@@ -182,13 +182,13 @@ const LISTABLE_STOCK_WHERE = `
   AND TRIM(COALESCE(s.name, '')) != ''
 `
 
-export function localScreen(
+export async function localScreen(
   store: MarketDataStore,
   conditions: ScreenCondition[],
   tradeDate?: string,
   topN = 20,
   excludeSt = true,
-): { trade_date: string; passed: number; items: LocalScreenItem[] } {
+): Promise<{ trade_date: string; passed: number; items: LocalScreenItem[] }> {
   assertOfflineScreeningEnabled()
   const date = tradeDate ?? latestFactorDate(store) ?? todayTradeDate()
 
@@ -197,7 +197,7 @@ export function localScreen(
   }
 
   if (useDuck(store)) {
-    const duck = store.duckGateway().queryUniverseScreenSync({
+    const duck = await store.duckGateway().queryUniverseScreenAsync({
       factor_conditions: conditions,
       top_n: topN,
       trade_date: date,
@@ -336,15 +336,15 @@ function hasActiveFilters(query: LocalUniverseScreenQuery, conditions: ScreenCon
 }
 
 /** 多维度组合筛选本地初选股票池（因子 + 行业 + 评分 + 估值 + 市值 + 板块）。 */
-export function localUniverseScreen(
+export async function localUniverseScreen(
   store: MarketDataStore,
   query: LocalUniverseScreenQuery,
-): LocalUniverseScreenResult {
+): Promise<LocalUniverseScreenResult> {
   assertOfflineScreeningEnabled()
   const date = query.trade_date ?? latestFactorDate(store) ?? todayTradeDate()
 
   if (useDuck(store)) {
-    const duck = store.duckGateway().queryUniverseScreenSync(query, date) as LocalUniverseScreenResult | null
+    const duck = await store.duckGateway().queryUniverseScreenAsync(query, date) as LocalUniverseScreenResult | null
     if (duck?.items != null) return duck
   }
 
@@ -536,10 +536,10 @@ export interface IndustryStockRow {
   change_pct: number | null
 }
 
-export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
+export async function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
   const factorDate = tradeDate ?? latestFactorDate(store) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   if (useDuck(store)) {
-    const duck = store.duckGateway().queryIndustryStatsSync(factorDate) as {
+    const duck = await store.duckGateway().queryIndustryStatsAsync(factorDate) as {
       trade_date: string
       quote_date: string | null
       items: Array<{
@@ -590,11 +590,11 @@ export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
 }
 
 /** 本地行业名称列表（可选关键词过滤），便于 Agent 精确匹配行业后筛选。 */
-export function queryIndustryList(
+export async function queryIndustryList(
   store: MarketDataStore,
   opts?: { keyword?: string; trade_date?: string; limit?: number },
 ) {
-  const stats = queryIndustryStats(store, opts?.trade_date)
+  const stats = await queryIndustryStats(store, opts?.trade_date)
   const kw = opts?.keyword?.trim()
   let items: IndustryListItem[] = stats.items.map(row => ({
     industry: row.industry,
@@ -619,10 +619,10 @@ export function queryIndustryList(
 }
 
 /** 行业维度本地初选：在指定行业内叠加因子/评分/估值条件。 */
-export function localIndustryScreen(
+export async function localIndustryScreen(
   store: MarketDataStore,
   query: LocalIndustryScreenQuery,
-): LocalUniverseScreenResult {
+): Promise<LocalUniverseScreenResult> {
   assertOfflineScreeningEnabled()
   const exact = String(query.industry ?? '').trim()
   const list = (query.industries ?? []).map(i => i.trim()).filter(Boolean)
@@ -633,7 +633,7 @@ export function localIndustryScreen(
   const industries = exact
     ? [...new Set([exact, ...list])].slice(0, 20)
     : list.slice(0, 20)
-  return localUniverseScreen(store, {
+  return await localUniverseScreen(store, {
     industries: industries.length ? industries : undefined,
     industry_contains: contains,
     factor_conditions: query.factor_conditions,
@@ -652,19 +652,19 @@ export function localIndustryScreen(
   })
 }
 
-export function queryIndustryStocks(
+export async function queryIndustryStocks(
   store: MarketDataStore,
   industry: string,
   tradeDate?: string,
   limit = 120,
-): { trade_date: string; quote_date: string | null; industry: string; items: IndustryStockRow[] } {
+): Promise<{ trade_date: string; quote_date: string | null; industry: string; items: IndustryStockRow[] }> {
   const factorDate = tradeDate ?? latestFactorDate(store) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   const quoteDate = latestQuoteDate(store.db)
   const key = industry.trim()
   const cap = Math.min(Math.max(limit, 1), 200)
 
   if (useDuck(store)) {
-    const duck = store.duckGateway().queryIndustryStocksSync(key, factorDate, cap) as {
+    const duck = await store.duckGateway().queryIndustryStocksAsync(key, factorDate, cap) as {
       trade_date: string
       items: IndustryStockRow[]
     } | null

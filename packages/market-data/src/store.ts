@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import Database from 'better-sqlite3'
 import { parseStockMarket, type StockMarket, normalizeUsSymbol } from '@opptrix/a-stock-layer'
 import { klineDuckDbPath, marketDbPath } from './paths.js'
@@ -25,6 +26,7 @@ import {
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
 import { isMarketSyncActive, isDerivedMaintenanceActive } from './duck/duck-subprocess-gate.js'
+import { getDuckNeoReader } from './duck/duck-neo-reader.js'
 import {
   isDuckPrimaryMigrationComplete,
   markDuckPrimaryMigrationComplete,
@@ -133,6 +135,8 @@ export interface BootstrapReadiness {
 
 export class MarketDataStore {
   db: Database.Database
+  /** 只读连接 — 控制面读与写路径解耦（WAL 模式） */
+  private dbRead: Database.Database
   readonly dbPath: string
   readonly klineDuckDbPath: string
   private instrumentNsColumnCache = new Map<string, boolean>()
@@ -144,6 +148,8 @@ export class MarketDataStore {
   private taxonomyIdSeq: number | null = null
   private duckMarketStatsCache: { at: number; value: MarketDuckStats } | null = null
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
+  /** 衍生维护期间冻结的快照 — 避免 rebuild 触发 Duck 子进程读 */
+  private statusLightFrozen: MarketDbStatus | null = null
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
 
   /** 设置页 / Hub 轮询仅聚合这些 job 的 per-code 进度（走 job_name 索引，避免全表 GROUP BY） */
@@ -276,13 +282,15 @@ export class MarketDataStore {
     this.dbPath = dbPath
     this.klineDuckDbPath = duckPath
     this.db = new Database(dbPath)
+    this.dbRead = new Database(dbPath, { readonly: true })
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
     if (!isDuckPrimaryMigrationComplete(this.db)) {
-      if (!this.runDuckPrimaryMigrationSync()) {
-        this.scheduleDuckPrimaryMigration()
-      }
+      this.scheduleDuckPrimaryMigration()
+    }
+    if (fs.existsSync(this.klineDuckDbPath)) {
+      getDuckNeoReader(this.klineDuckDbPath).warmReadCaches()
     }
   }
 
@@ -295,14 +303,18 @@ export class MarketDataStore {
    * 旧版升级路径：按表行数对比补全 Duck，全部对齐后标记 v13 complete。
    */
   runDuckPrimaryMigrationSync(): boolean {
+    throw new Error('runDuckPrimaryMigrationSync 已移除，请使用 runDuckPrimaryMigrationAsync')
+  }
+
+  async runDuckPrimaryMigrationAsync(): Promise<boolean> {
     if (isDuckPrimaryMigrationComplete(this.db)) return true
-    if (isMarketSyncActive()) return false
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false
 
-    this.flushDuckWritesSync({ throwOnError: false })
-    this.duckGateway().migrateSqliteKlinesIfEmptySync()
-    this.duckGateway().migrateMarketDataSync(false)
+    await this.flushDuckWritesAsync({ throwOnError: false })
+    await this.duckGateway().migrateSqliteKlinesIfEmptyAsync()
+    await this.duckGateway().migrateMarketDataAsync(false)
 
-    if (this.duckGateway().checkMarketMigrationNeededSync()) {
+    if (await this.duckGateway().checkMarketMigrationNeededAsync()) {
       console.warn('[market-data] Duck 主存储迁移未完成：SQLite 仍有未迁入数据，稍后重试')
       return false
     }
@@ -317,10 +329,17 @@ export class MarketDataStore {
 
   private scheduleDuckPrimaryMigration(): void {
     if (this.duckPrimaryMigrationTimer) return
-    const attempt = () => {
+    const attempt = async () => {
       this.duckPrimaryMigrationTimer = null
+      if (isMarketSyncActive() || isDerivedMaintenanceActive()) {
+        this.duckPrimaryMigrationTimer = setTimeout(attempt, 5000)
+        if (typeof this.duckPrimaryMigrationTimer === 'object' && 'unref' in this.duckPrimaryMigrationTimer) {
+          this.duckPrimaryMigrationTimer.unref()
+        }
+        return
+      }
       try {
-        const done = this.runDuckPrimaryMigrationSync()
+        const done = await this.runDuckPrimaryMigrationAsync()
         if (!done && !isDuckPrimaryMigrationComplete(this.db)) {
           this.duckPrimaryMigrationTimer = setTimeout(attempt, isMarketSyncActive() ? 5000 : 2000)
         }
@@ -334,7 +353,9 @@ export class MarketDataStore {
 
   private queueDuck(op: DuckWriteOp): void {
     this.duckWriteQueue.push(op)
-    if (this.duckWriteQueue.length >= this.duckFlushThreshold) {
+    if (isDerivedMaintenanceActive()) return
+    const threshold = isMarketSyncActive() ? 800 : this.duckFlushThreshold
+    if (this.duckWriteQueue.length >= threshold) {
       this.flushDuckWritesSync({ throwOnError: false })
     }
   }
@@ -348,13 +369,33 @@ export class MarketDataStore {
     sqliteFallback?.()
   }
 
-  /** 同步 flush — sync 任务边界调用 */
+  /** 同步 flush — 仅 CLI/测试；热路径请 await flushDuckWritesAsync */
   flushDuckWritesSync(options?: { throwOnError?: boolean }): void {
+    if (isDerivedMaintenanceActive()) return
+    if (!this.duckWriteQueue.length) return
+    const throwOnError = options?.throwOnError ?? true
+    const batch = this.duckWriteQueue.splice(0)
+    void this.duckGateway().applyBatchAsync(batch)
+      .then(() => {
+        this.taxonomyIdSeq = null
+        this.invalidateDuckMarketStatsCache()
+        invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
+      })
+      .catch(err => {
+        this.duckWriteQueue.unshift(...batch)
+        if (throwOnError) throw err
+        console.warn('[market-data] duck batch flush failed (will retry at job boundary):', err)
+      })
+  }
+
+  /** 异步 flush — 同步引擎 / Hub 推荐路径（Worker 池写，不阻塞事件循环） */
+  async flushDuckWritesAsync(options?: { throwOnError?: boolean }): Promise<void> {
+    if (isDerivedMaintenanceActive()) return
     if (!this.duckWriteQueue.length) return
     const throwOnError = options?.throwOnError ?? true
     const batch = this.duckWriteQueue.splice(0)
     try {
-      this.duckGateway().applyBatchSync(batch)
+      await this.duckGateway().applyBatchAsync(batch)
       this.taxonomyIdSeq = null
       this.invalidateDuckMarketStatsCache()
       invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
@@ -411,6 +452,24 @@ export class MarketDataStore {
     return this.duckGateway().migrateMarketDataSync(false)
   }
 
+  /** 同步会话结束后后台增量迁移 — 不阻塞 HTTP / 同步主循环 */
+  maybeSyncAnalyticsToDuckBackground(): void {
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) return
+    setImmediate(() => {
+      if (isMarketSyncActive() || isDerivedMaintenanceActive()) return
+      void (async () => {
+        try {
+          const gw = this.duckGateway()
+          if (!(await gw.checkMarketMigrationNeededAsync())) return
+          await gw.migrateMarketDataAsync(false)
+          this.invalidateDuckMarketStatsCache()
+        } catch (err) {
+          console.warn('[market-data] background SQLite→Duck migrate skipped:', err)
+        }
+      })()
+    })
+  }
+
   hasAnalyticsDims(): boolean {
     if (this.isDuckPrimaryReady()) {
       const row = this.duckGateway().queryOneSync<{ c: number }>(
@@ -433,7 +492,13 @@ export class MarketDataStore {
       return this.klineStatsCache
     }
     const stats = this.duckGateway().klineStatsSync()
-    this.klineStatsCache = { at: now, ...stats }
+    if (stats.rows > 0 || stats.codes > 0) {
+      this.klineStatsCache = { at: now, ...stats }
+      return stats
+    }
+    void getDuckNeoReader(this.klineDuckDbPath).klineStats().then(s => {
+      this.klineStatsCache = { at: Date.now(), ...s }
+    }).catch(() => {})
     return stats
   }
 
@@ -486,20 +551,21 @@ export class MarketDataStore {
   }
 
   close(): void {
-    this.flushDuckWritesSync({ throwOnError: true })
+    void this.flushDuckWritesAsync({ throwOnError: true })
+    this.dbRead.close()
     this.db.close()
   }
 
   private reopenDb(): void {
     this.db = new Database(this.dbPath)
+    this.dbRead = new Database(this.dbPath, { readonly: true })
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
   }
 
   /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
   prepareForSqliteExport(): void {
-    this.runDuckPrimaryMigrationSync()
-    this.flushDuckWritesSync()
+    void this.runDuckPrimaryMigrationAsync().then(() => this.flushDuckWritesAsync())
     this.db.pragma('wal_checkpoint(TRUNCATE)')
     this.db.close()
     try {
@@ -564,6 +630,10 @@ export class MarketDataStore {
   }
 
   getStatus(): MarketDbStatus {
+    /** 同步/衍生维护期间 — 禁止 flush + Duck 全表统计，避免阻塞 API 与写锁争用 */
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) {
+      return this.getStatusLight()
+    }
     if (!isMarketSyncActive()) {
       this.flushDuckWritesSync({ throwOnError: false })
     }
@@ -684,69 +754,9 @@ export class MarketDataStore {
     }
   }
 
-  /**
-   * 启动/接续同步规划用 — 单次 DuckDB market-stats + SQLite 游标，避免阻塞 HTTP。
-   */
+  /** 启动/接续同步规划 — 与设置页相同的 SQLite + cursor 轻量判定，避免 Duck 统计与 TTL 不一致。 */
   getStatusForBootPlan(): MarketDbStatus {
-    const duck = this.cachedDuckMarketStats()
-    const stocksTableCount = duck.stocks || (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
-    const cnEquityCount = duck.cn_equity || this.countEquityInstrumentsSqlite('CN')
-    const stockCount = Math.max(stocksTableCount, cnEquityCount)
-    const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
-      job_name: string
-      last_success_at: string | null
-    }[]
-    const lastSync: Record<string, string | null> = {}
-    for (const c of cursors) lastSync[c.job_name] = c.last_success_at
-
-    const jobProgress: Record<string, JobProgressSummary> = {}
-    const progressRows = this.db.prepare(`
-      SELECT job_name,
-        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
-        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
-      FROM sync_job_progress
-      GROUP BY job_name
-    `).all() as { job_name: string; done: number; error: number }[]
-    for (const row of progressRows) {
-      const baseCount = Math.max(stockCount, row.done)
-      jobProgress[row.job_name] = {
-        done: row.done,
-        error: row.error,
-        pending: Math.max(0, baseCount - row.done),
-      }
-    }
-
-    const bootstrap = this.assessBootstrapReadiness(stockCount, null, null, duck)
-    const derived = this.assessDerivedReadiness(null, bootstrap, duck)
-    return {
-      ...this.statusStorageFields(),
-      schema_version: 0,
-      stock_count: stockCount,
-      etf_count: duck.etf,
-      us_count: duck.us_equity,
-      crypto_count: 0,
-      jp_count: 0,
-      kr_count: 0,
-      hk_count: duck.hk_equity,
-      latest_trade_date: null,
-      latest_factor_date: null,
-      kline_dates: { CN: null, HK: null, US: null },
-      profile_count: duck.profiles,
-      partner_count: 0,
-      segment_count: 0,
-      announcement_count: 0,
-      dividend_count: 0,
-      shareholder_count: 0,
-      forecast_count: 0,
-      inst_holding_count: 0,
-      insider_trade_count: 0,
-      buyback_count: 0,
-      last_sync: lastSync,
-      job_progress: jobProgress,
-      is_ready: bootstrap.ready,
-      bootstrap,
-      derived,
-    }
+    return this.getStatusLight()
   }
 
   private cachedDuckMarketStats(): MarketDuckStats {
@@ -777,13 +787,30 @@ export class MarketDataStore {
    * Never spawns DuckDB subprocess; settings polling and Hub readiness use this path.
    */
   getStatusLight(): MarketDbStatus {
+    if (isDerivedMaintenanceActive() && this.statusLightFrozen) {
+      return this.statusLightFrozen
+    }
     const now = Date.now()
-    if (this.statusLightCache && now - this.statusLightCache.at < MarketDataStore.STATUS_LIGHT_CACHE_MS) {
+    const cacheMs = (isMarketSyncActive() || isDerivedMaintenanceActive())
+      ? 60_000
+      : MarketDataStore.STATUS_LIGHT_CACHE_MS
+    if (this.statusLightCache && now - this.statusLightCache.at < cacheMs) {
       return this.statusLightCache.value
     }
     const value = this.buildStatusLight()
     this.statusLightCache = { at: now, value }
     return value
+  }
+
+  /** 衍生维护开始前冻结状态快照，避免期间 rebuild 阻塞 API */
+  freezeStatusLightForDerived(snapshot: MarketDbStatus): void {
+    this.statusLightFrozen = snapshot
+    this.statusLightCache = { at: Date.now(), value: snapshot }
+  }
+
+  unfreezeStatusLightCache(): void {
+    this.statusLightFrozen = null
+    this.invalidateStatusLightCache()
   }
 
   invalidateStatusLightCache(): void {
@@ -814,9 +841,11 @@ export class MarketDataStore {
     const cursors = this.loadSyncCursorBundle()
     const { lastSync, meta, lastTradeDate } = cursors
 
-    const latestQuote = this.db.prepare(
-      'SELECT MAX(trade_date) AS d FROM stock_quotes_daily',
-    ).get() as { d: string | null }
+    const latestQuote = (isMarketSyncActive() || isDerivedMaintenanceActive())
+      ? { d: lastTradeDate.kline_daily ?? lastTradeDate.kline_bootstrap ?? null }
+      : (this.db.prepare(
+        'SELECT MAX(trade_date) AS d FROM stock_quotes_daily',
+      ).get() as { d: string | null })
     const latestFactorDate = this.latestFactorTradeDateLight(meta.screen_factors)
 
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0

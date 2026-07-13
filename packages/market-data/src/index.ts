@@ -193,7 +193,7 @@ export class MarketDataService {
     return localScreen(this.store, conditions, tradeDate, topN)
   }
 
-  universeScreen(query: LocalUniverseScreenQuery): LocalUniverseScreenResult {
+  universeScreen(query: LocalUniverseScreenQuery) {
     return localUniverseScreen(this.store, query)
   }
 

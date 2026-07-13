@@ -202,8 +202,8 @@ export async function resumeKlineParquetFromCacheIfNeeded(
   store: MarketDataStore,
   hooks?: DumpImportHooks,
 ): Promise<DumpImportResult | null> {
-  const bootstrap = store.assessBootstrapReadiness()
-  if (bootstrap.klines) return null
+  const bootstrap = store.getStatusLight().bootstrap
+  if (bootstrap?.klines) return null
 
   const cachePath = parquetCachePath('full')
   if (!isParquetCacheFresh(cachePath)) return null

@@ -15,26 +15,34 @@ function gw(duckDbPath = klineDuckDbPath(), sqliteDbPath = marketDbPath()) {
   return getMarketDuckGateway(duckDbPath, sqliteDbPath)
 }
 
-export function migrateMarketDataViaSubprocess(
+export async function migrateMarketDataViaSubprocess(
   duckDbPath = klineDuckDbPath(),
   sqliteDbPath = marketDbPath(),
   force = false,
-): Record<string, number> {
-  return gw(duckDbPath, sqliteDbPath).migrateMarketDataSync(force)
+): Promise<Record<string, number>> {
+  return gw(duckDbPath, sqliteDbPath).migrateMarketDataAsync(force)
 }
 
-export function syncMarketDataToSqliteViaSubprocess(
+export async function syncMarketDataToSqliteViaSubprocess(
   duckDbPath = klineDuckDbPath(),
   sqliteDbPath = marketDbPath(),
-): Record<string, number> {
-  return gw(duckDbPath, sqliteDbPath).syncMarketDataToSqliteSync()
+): Promise<Record<string, number>> {
+  return gw(duckDbPath, sqliteDbPath).syncMarketDataToSqliteAsync()
 }
 
+export async function applyDuckBatchAsync(
+  ops: DuckWriteOp[],
+  duckDbPath = klineDuckDbPath(),
+): Promise<number> {
+  return gw(duckDbPath).applyBatchAsync(ops)
+}
+
+/** @deprecated */
 export function applyDuckBatchSync(
   ops: DuckWriteOp[],
   duckDbPath = klineDuckDbPath(),
 ): number {
-  return gw(duckDbPath).applyBatchSync(ops)
+  throw new Error('applyDuckBatchSync 已移除，请使用 applyDuckBatchAsync')
 }
 
 export function duckQueryAllSync<T extends Record<string, unknown>>(

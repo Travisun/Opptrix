@@ -1,10 +1,10 @@
 /**
- * Market DuckDB 统一访问层 — 单写者多读者、文件锁串行化、async 优先。
+ * Market DuckDB 统一访问层 — 单写者多读者、Worker 线程 + p-queue 调度。
  *
- * 所有 market.duckdb 读写必须经此 Gateway（禁止散落 execFileSync / 直连 duck-cli）。
- * SQLite market.db 仍为 sync 控制面，由 MarketDataStore 管理。
+ * 所有 market.duckdb 读写必须经此 Gateway（禁止主进程 execFileSync）。
+ * SQLite market.db 仍为 sync 控制面（WAL + 只读连接），由 MarketDataStore 管理。
  */
-import { execFileSync, spawn } from 'node:child_process'
+import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
@@ -15,7 +15,13 @@ import { klineDuckDbPath, marketDbPath } from '../paths.js'
 import { normalizeStockCode } from '../utils.js'
 import { isDuckPrimaryMigrationComplete } from './duck-primary-migration.js'
 import type { DuckWriteOp } from './market-writes.js'
-import { withDuckFileLockAsync, withDuckFileLockSync } from './duck-subprocess-gate.js'
+import {
+  DUCK_READ_PRIORITY_BACKGROUND,
+  DUCK_READ_PRIORITY_INTERACTIVE,
+  getDuckCliPool,
+} from './duck-cli-pool.js'
+import { isDerivedMaintenanceActive } from './duck-subprocess-gate.js'
+import { getDuckNeoReader, resetDuckNeoReaders } from './duck-neo-reader.js'
 import type { LocalUniverseScreenQuery } from '../query/screen.js'
 
 export type AnalyticsSyncScope = 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all'
@@ -103,84 +109,56 @@ export class MarketDuckGateway {
     return run
   }
 
-  private execWriteSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
-    return withDuckFileLockSync(this.duckDbPath, () =>
-      execFileSync(process.execPath, [CLI_PATH, ...args], {
-        encoding: 'utf8',
-        maxBuffer,
-        env: process.env,
-      }).trim(),
-    )
+  private cliPool() {
+    return getDuckCliPool(this.duckDbPath)
   }
 
-  /** 只读 duck-cli — 不等待写锁，允许与后台导入/维护并行（快照可能略旧） */
-  private execReadSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
-    return execFileSync(process.execPath, [CLI_PATH, ...args], {
-      encoding: 'utf8',
-      maxBuffer,
-      env: process.env,
-    }).trim()
+  private execCliRead(
+    args: string[],
+    maxBuffer = 128 * 1024 * 1024,
+    priority = DUCK_READ_PRIORITY_BACKGROUND,
+  ): Promise<string> {
+    return this.cliPool().exec(args, 'read', { maxBuffer, priority })
+  }
+
+  private execCliWrite(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
+    return this.cliPool().exec(args, 'write', { maxBuffer })
+  }
+
+  private neoReader() {
+    return getDuckNeoReader(this.duckDbPath)
+  }
+
+  /** 重型 duck-cli 读（初选/行业聚合）— worker 内 spawn，不阻塞主进程事件循环 */
+  private execHeavyReadAsync(
+    args: string[],
+    maxBuffer = 128 * 1024 * 1024,
+  ): Promise<string> {
+    return this.execCliRead(args, maxBuffer, DUCK_READ_PRIORITY_INTERACTIVE)
+  }
+
+  private async parseHeavyReadJson(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<unknown> {
+    try {
+      return JSON.parse(await this.execHeavyReadAsync(args, maxBuffer))
+    } catch {
+      return null
+    }
   }
 
   private execWriteAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
-    return this.schedule(() =>
-      withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
-        const child = spawn(process.execPath, [CLI_PATH, ...args], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: process.env,
-        })
-        let stdout = ''
-        let stderr = ''
-        child.stdout?.on('data', chunk => { stdout += String(chunk) })
-        child.stderr?.on('data', chunk => { stderr += String(chunk) })
-        child.on('error', reject)
-        child.on('exit', code => {
-          if (code !== 0) {
-            reject(new Error(stderr.trim() || `duck-cli exit ${code}`))
-            return
-          }
-          if (stdout.length > maxBuffer) {
-            reject(new Error('duck-cli stdout exceeded maxBuffer'))
-            return
-          }
-          resolve(stdout.trim())
-        })
-      }), 600_000),
-    )
+    return this.schedule(() => this.execCliWrite(args, maxBuffer))
   }
 
-  /** 只读 duck-cli（async）— 不排队等写锁 */
   private execReadAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const child = spawn(process.execPath, [CLI_PATH, ...args], {
-        stdio: ['ignore', 'pipe', 'pipe'],
-        env: process.env,
-      })
-      let stdout = ''
-      let stderr = ''
-      child.stdout?.on('data', chunk => { stdout += String(chunk) })
-      child.stderr?.on('data', chunk => { stderr += String(chunk) })
-      child.on('error', reject)
-      child.on('exit', code => {
-        if (code !== 0) {
-          reject(new Error(stderr.trim() || `duck-cli exit ${code}`))
-          return
-        }
-        if (stdout.length > maxBuffer) {
-          reject(new Error('duck-cli stdout exceeded maxBuffer'))
-          return
-        }
-        resolve(stdout.trim())
-      })
-    })
+    return this.execCliRead(args, maxBuffer, DUCK_READ_PRIORITY_INTERACTIVE)
   }
 
-  /** @deprecated 内部请用 execWriteSync / execReadSync */
+  /** @deprecated */
   private execSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
-    return this.execWriteSync(args, maxBuffer)
+    throw new Error('execSync 已移除，请使用 execCliWrite / execWriteAsync')
   }
 
-  /** @deprecated 内部请用 execWriteAsync / execReadAsync */
+  /** @deprecated */
   private execAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
     return this.execWriteAsync(args, maxBuffer)
   }
@@ -195,13 +173,13 @@ export class MarketDuckGateway {
 
   // ─── 写路径 ─────────────────────────────────────────────────────────────
 
-  applyBatchSync(ops: DuckWriteOp[]): number {
+  async applyBatchAsync(ops: DuckWriteOp[]): Promise<number> {
     if (!ops.length) return 0
     const tmp = path.join(os.tmpdir(), `opptrix-duck-batch-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify(ops))
     try {
       const out = JSON.parse(
-        this.execWriteSync(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
+        await this.execCliWrite(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
       ) as { applied?: number }
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out.applied ?? 0
@@ -210,12 +188,17 @@ export class MarketDuckGateway {
     }
   }
 
-  upsertKlinesBatchSync(rows: unknown[]): number {
+  /** @deprecated 请 await applyBatchAsync */
+  applyBatchSync(ops: DuckWriteOp[]): number {
+    throw new Error('applyBatchSync 已移除，请使用 await applyBatchAsync')
+  }
+
+  async upsertKlinesBatchAsync(rows: unknown[]): Promise<number> {
     if (!rows.length) return 0
     const tmp = path.join(os.tmpdir(), `opptrix-kline-upsert-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify(rows))
     try {
-      this.execWriteSync([
+      await this.execCliWrite([
         'upsert', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath, '--file', tmp,
       ], 256 * 1024 * 1024)
       return rows.length
@@ -224,12 +207,16 @@ export class MarketDuckGateway {
     }
   }
 
-  migrateMarketDataSync(force = false): Record<string, number> {
+  upsertKlinesBatchSync(rows: unknown[]): number {
+    throw new Error('upsertKlinesBatchSync 已移除，请使用 await upsertKlinesBatchAsync')
+  }
+
+  async migrateMarketDataAsync(force = false): Promise<Record<string, number>> {
     if (!this.sqliteExists()) return {}
     try {
       const args = ['migrate-market-data', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath]
       if (force) args.push('--force')
-      const out = JSON.parse(this.execWriteSync(args, 512 * 1024 * 1024)) as Record<string, number>
+      const out = JSON.parse(await this.execCliWrite(args, 512 * 1024 * 1024)) as Record<string, number>
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out
     } catch {
@@ -237,16 +224,24 @@ export class MarketDuckGateway {
     }
   }
 
-  checkMarketMigrationNeededSync(): boolean {
+  migrateMarketDataSync(force = false): Record<string, number> {
+    throw new Error('migrateMarketDataSync 已移除，请使用 await migrateMarketDataAsync')
+  }
+
+  async checkMarketMigrationNeededAsync(): Promise<boolean> {
     if (!this.sqliteExists()) return false
     try {
-      const out = JSON.parse(this.execWriteSync([
+      const out = JSON.parse(await this.execCliRead([
         'check-market-migration', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ], 512 * 1024 * 1024)) as { needed?: boolean }
       return out.needed === true
     } catch {
       return true
     }
+  }
+
+  checkMarketMigrationNeededSync(): boolean {
+    throw new Error('checkMarketMigrationNeededSync 已移除，请使用 await checkMarketMigrationNeededAsync')
   }
 
   /** DuckDB 主存储迁移已完成 — 此后读写以 Duck 为准，不再回退 SQLite 主数据 */
@@ -264,10 +259,10 @@ export class MarketDuckGateway {
     }
   }
 
-  syncMarketDataToSqliteSync(): Record<string, number> {
+  async syncMarketDataToSqliteAsync(): Promise<Record<string, number>> {
     if (!this.duckExists() || !this.sqliteExists()) return {}
     try {
-      return JSON.parse(this.execWriteSync([
+      return JSON.parse(await this.execCliWrite([
         'sync-market-data-to-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ], 512 * 1024 * 1024)) as Record<string, number>
     } catch {
@@ -275,13 +270,17 @@ export class MarketDuckGateway {
     }
   }
 
-  syncAnalyticsSync(_scope: AnalyticsSyncScope = 'all'): Record<string, number> {
-    return this.migrateMarketDataSync(false)
+  syncMarketDataToSqliteSync(): Record<string, number> {
+    throw new Error('syncMarketDataToSqliteSync 已移除，请使用 await syncMarketDataToSqliteAsync')
   }
 
-  syncBarsToSqliteSync(): number {
+  syncAnalyticsSync(_scope: AnalyticsSyncScope = 'all'): Record<string, number> {
+    throw new Error('syncAnalyticsSync 已移除，请使用 await migrateMarketDataAsync')
+  }
+
+  async syncBarsToSqliteAsync(): Promise<number> {
     try {
-      const out = JSON.parse(this.execWriteSync([
+      const out = JSON.parse(await this.execCliWrite([
         'sync-bars', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ])) as { barsSynced?: number }
       return out.barsSynced ?? 0
@@ -290,12 +289,16 @@ export class MarketDuckGateway {
     }
   }
 
-  migrateSqliteKlinesIfEmptySync(): number {
+  syncBarsToSqliteSync(): number {
+    throw new Error('syncBarsToSqliteSync 已移除，请使用 await syncBarsToSqliteAsync')
+  }
+
+  async migrateSqliteKlinesIfEmptyAsync(): Promise<number> {
     if (!this.sqliteExists()) return 0
     try {
-      const lines = this.execWriteSync([
+      const lines = (await this.execCliWrite([
         'migrate-from-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
-      ], 256 * 1024 * 1024).split('\n').filter(Boolean)
+      ], 256 * 1024 * 1024)).split('\n').filter(Boolean)
       const last = lines[lines.length - 1]
       if (!last) return 0
       const parsed = JSON.parse(last) as { rowsImported?: number; skipped?: boolean }
@@ -306,21 +309,15 @@ export class MarketDuckGateway {
     }
   }
 
-  // ─── 读路径（只读 duck-cli，不等待写锁） ─────────────────────────────────
+  migrateSqliteKlinesIfEmptySync(): number {
+    throw new Error('migrateSqliteKlinesIfEmptySync 已移除，请使用 await migrateSqliteKlinesIfEmptyAsync')
+  }
+
+  // ─── 读路径（@duckdb/node-api 短查询 + duck-cli 重型读） ─────────────────
 
   queryAllSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     if (!this.duckExists()) return []
-    const tmp = path.join(os.tmpdir(), `opptrix-duck-q-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
-    try {
-      return JSON.parse(
-        this.execReadSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp]),
-      ) as T[]
-    } catch {
-      return []
-    } finally {
-      try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-    }
+    return this.neoReader().queryAllSyncCached<T>(sql, params)
   }
 
   queryOneSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T | undefined {
@@ -330,30 +327,21 @@ export class MarketDuckGateway {
   /** 非阻塞读 — API / Hub 优先使用 */
   queryAllAsync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     if (!this.duckExists()) return Promise.resolve([])
-    const tmp = path.join(os.tmpdir(), `opptrix-duck-q-${process.pid}-${Date.now()}.json`)
-    fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
-    return this.execReadAsync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
-      .then(out => JSON.parse(out) as T[])
-      .catch(() => [] as T[])
-      .finally(() => {
-        try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-      })
+    return this.neoReader().queryAll<T>(sql, params).catch(() => [] as T[])
+  }
+
+  queryOneAsync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T | undefined> {
+    return this.queryAllAsync<T>(sql, params).then(rows => rows[0])
   }
 
   marketStatsSync(): MarketDuckStats {
     if (!this.duckExists()) return { ...EMPTY_MARKET_STATS }
-    try {
-      return JSON.parse(this.execReadSync(['market-stats', '--duckdb', this.duckDbPath])) as MarketDuckStats
-    } catch {
-      return { ...EMPTY_MARKET_STATS }
-    }
+    return this.neoReader().marketStatsSyncCached()
   }
 
   marketStatsAsync(): Promise<MarketDuckStats> {
     if (!this.duckExists()) return Promise.resolve({ ...EMPTY_MARKET_STATS })
-    return this.execReadAsync(['market-stats', '--duckdb', this.duckDbPath])
-      .then(out => JSON.parse(out) as MarketDuckStats)
-      .catch(() => ({ ...EMPTY_MARKET_STATS }))
+    return this.neoReader().marketStats().catch(() => ({ ...EMPTY_MARKET_STATS }))
   }
 
   hasMarketData(): boolean {
@@ -369,120 +357,101 @@ export class MarketDuckGateway {
 
   klineStatsSync(): KlineDuckStats {
     if (!this.duckExists()) return { rows: 0, codes: 0, maxDate: null }
-    try {
-      return JSON.parse(this.execReadSync(['stats', '--duckdb', this.duckDbPath])) as KlineDuckStats
-    } catch {
-      return { rows: 0, codes: 0, maxDate: null }
-    }
+    return this.neoReader().klineStatsSyncCached()
+  }
+
+  klineStatsAsync(): Promise<KlineDuckStats> {
+    if (!this.duckExists()) return Promise.resolve({ rows: 0, codes: 0, maxDate: null })
+    return this.neoReader().klineStats().catch(() => ({ rows: 0, codes: 0, maxDate: null }))
   }
 
   queryKlinesSync(code: string, limit = 800, before?: string): StockKline[] {
     if (!this.duckExists()) return []
-    const args = [
-      'query-klines', '--duckdb', this.duckDbPath,
-      '--code', normalizeStockCode(code), '--limit', String(limit),
-    ]
-    if (before) args.push('--before', before.slice(0, 10))
-    try {
-      return JSON.parse(this.execReadSync(args)) as StockKline[]
-    } catch {
-      return []
-    }
+    return this.neoReader().queryKlinesSyncCached(normalizeStockCode(code), limit, before) as unknown as StockKline[]
+  }
+
+  async queryKlinesAsync(code: string, limit = 800, before?: string): Promise<StockKline[]> {
+    if (!this.duckExists()) return []
+    return this.neoReader().queryKlines(normalizeStockCode(code), limit, before) as unknown as Promise<StockKline[]>
   }
 
   codesWithMinKlinesSync(minBars: number): string[] {
     if (!this.duckExists()) return []
-    try {
-      return JSON.parse(this.execReadSync([
-        'codes-with-min', '--duckdb', this.duckDbPath, '--min', String(minBars),
-      ])) as string[]
-    } catch {
-      return []
-    }
+    return this.neoReader().codesWithMinKlinesSyncCached(minBars)
+  }
+
+  async codesWithMinKlinesAsync(minBars: number): Promise<string[]> {
+    if (!this.duckExists()) return []
+    return this.neoReader().codesWithMinKlines(minBars)
   }
 
   latestBarsSync(tradeDate?: string | null): Array<{ code: string; close: number | null; change_pct: number | null }> {
     if (!this.duckExists()) return []
-    const args = ['latest-bars', '--duckdb', this.duckDbPath]
-    if (tradeDate) args.push('--date', tradeDate.slice(0, 10))
-    try {
-      return JSON.parse(this.execReadSync(args)) as Array<{
-        code: string; close: number | null; change_pct: number | null
-      }>
-    } catch {
-      return []
-    }
+    return this.neoReader().latestBarsSyncCached(tradeDate)
+  }
+
+  async latestBarsAsync(tradeDate?: string | null): Promise<Array<{ code: string; close: number | null; change_pct: number | null }>> {
+    if (!this.duckExists()) return []
+    return this.neoReader().latestBars(tradeDate)
   }
 
   analyticsStatsSync(): {
-    stocks: number; instruments: number; taxonomy: number
-    quotes: number; factors: number; klines: number
+    stocks: number
+    instruments: number
+    taxonomy: number
+    quotes: number
+    factors: number
+    klines: number
   } {
     if (!this.duckExists()) {
       return { stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0 }
     }
-    try {
-      return JSON.parse(this.execReadSync(['analytics-stats', '--duckdb', this.duckDbPath])) as ReturnType<
-        MarketDuckGateway['analyticsStatsSync']
-      >
-    } catch {
-      return { stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0 }
+    return this.neoReader().analyticsStatsSyncCached()
+  }
+
+  analyticsStatsAsync(): Promise<{
+    stocks: number
+    instruments: number
+    taxonomy: number
+    quotes: number
+    factors: number
+    klines: number
+  }> {
+    if (!this.duckExists()) {
+      return Promise.resolve({ stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0 })
     }
+    return this.neoReader().analyticsStats().catch(() => ({
+      stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0,
+    }))
   }
 
   computeFactorsSync(tradeDate: string, codes?: string[]): { computed: number; written: number } {
-    if (!this.duckExists()) return { computed: 0, written: 0 }
-    const args = [
-      'compute-factors', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath, '--date', tradeDate,
-    ]
-    let tmp: string | undefined
-    if (codes?.length) {
-      tmp = path.join(os.tmpdir(), `opptrix-factor-codes-${process.pid}-${Date.now()}.json`)
-      fs.writeFileSync(tmp, JSON.stringify(codes))
-      args.push('--file', tmp)
-    }
-    try {
-      return JSON.parse(this.execWriteSync(args)) as { computed: number; written: number }
-    } catch {
-      return { computed: 0, written: 0 }
-    } finally {
-      if (tmp) try { fs.unlinkSync(tmp) } catch { /* ignore */ }
-    }
+    throw new Error('computeFactorsSync 已移除，请使用 spawnComputeFactorsAsync')
   }
 
-  queryIndustryStatsSync(tradeDate: string): unknown {
+  async queryIndustryStatsAsync(tradeDate: string): Promise<unknown> {
     if (!this.hasMarketData()) return null
-    try {
-      return JSON.parse(this.execReadSync([
-        'query-industry-stats', '--duckdb', this.duckDbPath, '--date', tradeDate,
-      ]))
-    } catch {
-      return null
-    }
+    return this.parseHeavyReadJson([
+      'query-industry-stats', '--duckdb', this.duckDbPath, '--date', tradeDate,
+    ])
   }
 
-  queryIndustryStocksSync(industry: string, tradeDate: string, limit: number): unknown {
+  async queryIndustryStocksAsync(industry: string, tradeDate: string, limit: number): Promise<unknown> {
     if (!this.hasMarketData()) return null
-    try {
-      return JSON.parse(this.execReadSync([
-        'query-industry-stocks', '--duckdb', this.duckDbPath,
-        '--industry', industry, '--date', tradeDate, '--limit', String(limit),
-      ]))
-    } catch {
-      return null
-    }
+    return this.parseHeavyReadJson([
+      'query-industry-stocks', '--duckdb', this.duckDbPath,
+      '--industry', industry, '--date', tradeDate, '--limit', String(limit),
+    ])
   }
 
-  queryUniverseScreenSync(query: LocalUniverseScreenQuery, tradeDate: string): unknown {
+  async queryUniverseScreenAsync(query: LocalUniverseScreenQuery, tradeDate: string): Promise<unknown> {
     if (!this.hasMarketData()) return null
     const tmp = path.join(os.tmpdir(), `opptrix-screen-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify({ ...query, trade_date: tradeDate }))
     try {
-      return JSON.parse(this.execReadSync([
+      return await this.parseHeavyReadJson([
         'screen-universe', '--duckdb', this.duckDbPath, '--file', tmp,
-      ], 128 * 1024 * 1024))
-    } catch {
-      return null
+      ], 128 * 1024 * 1024)
     } finally {
       try { fs.unlinkSync(tmp) } catch { /* ignore */ }
     }
@@ -502,8 +471,7 @@ export class MarketDuckGateway {
       '--duckdb', this.duckDbPath,
     ]
 
-    return this.schedule(() =>
-      withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
+    return this.schedule(() => new Promise((resolve, reject) => {
         let settled = false
         const finish = (fn: () => void) => {
           if (settled) return
@@ -546,8 +514,7 @@ export class MarketDuckGateway {
             finish(() => reject(new Error(stderr.trim() || `DuckDB 导入子进程退出码 ${code}`)))
           }
         })
-      }), 600_000),
-    )
+    }))
   }
 
   spawnComputeFactorsAsync(opts: {
@@ -569,8 +536,7 @@ export class MarketDuckGateway {
 
     opts.onProgress?.('启动因子计算子进程…', 5)
 
-    return this.schedule(() =>
-      withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
+    return this.schedule(() => new Promise((resolve, reject) => {
         let settled = false
         const finish = (fn: () => void) => {
           if (settled) return
@@ -606,8 +572,7 @@ export class MarketDuckGateway {
             finish(() => reject(new Error('因子计算子进程输出解析失败')))
           }
         })
-      }), 600_000),
-    )
+    }))
   }
 
   spawnDerivedMaintenanceAsync(opts: {
@@ -616,7 +581,7 @@ export class MarketDuckGateway {
     onEvent?: (event: DerivedMaintenanceCliEvent) => void
   }): Promise<DerivedMaintenanceResult> {
     if (!this.duckExists()) {
-      return Promise.resolve({ tradeDate: opts.tradeDate ?? '', screen_factors: null, industry_stats: null })
+      return Promise.reject(new Error('DuckDB 数据文件不存在，无法计算本地指标'))
     }
 
     const args = [
@@ -627,52 +592,54 @@ export class MarketDuckGateway {
     ]
     if (opts.tradeDate) args.push('--date', opts.tradeDate)
 
-    return this.schedule(() =>
-      withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
-        let settled = false
-        const finish = (fn: () => void) => {
-          if (settled) return
-          settled = true
-          fn()
-        }
+    /** 子进程内持写锁；主进程不包 withDuckFileLockAsync，避免长时间阻塞 API 事件循环 */
+    return new Promise((resolve, reject) => {
+      let settled = false
+      const finish = (fn: () => void) => {
+        if (settled) return
+        settled = true
+        fn()
+      }
 
-        const child = spawn(process.execPath, [CLI_PATH, ...args], {
-          stdio: ['ignore', 'pipe', 'pipe'],
-          env: process.env,
-        })
+      const child = spawn(process.execPath, [CLI_PATH, ...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      })
 
-        let stderr = ''
-        child.stderr?.on('data', chunk => { stderr += String(chunk) })
-        child.stdout?.on('data', chunk => {
-          for (const line of String(chunk).split('\n')) {
-            if (!line.trim()) continue
-            try {
-              const msg = JSON.parse(line) as DerivedMaintenanceCliEvent
-              opts.onEvent?.(msg)
-              if (msg.type === 'done') {
-                invalidateHasMarketDuckDataCache(this.duckDbPath)
-                finish(() => resolve({
-                  tradeDate: String(msg.trade_date ?? opts.tradeDate ?? ''),
-                  screen_factors: msg.screen_factors as DerivedMaintenanceResult['screen_factors'],
-                  industry_stats: msg.industry_stats as DerivedMaintenanceResult['industry_stats'],
-                }))
-              } else if (msg.type === 'error') {
-                finish(() => reject(new Error(msg.message ?? '本地指标维护失败')))
-              }
-            } catch {
-              /* ignore non-json */
+      let stderr = ''
+      child.stderr?.on('data', chunk => { stderr += String(chunk) })
+      child.stdout?.on('data', chunk => {
+        for (const line of String(chunk).split('\n')) {
+          if (!line.trim()) continue
+          try {
+            const msg = JSON.parse(line) as DerivedMaintenanceCliEvent
+            opts.onEvent?.(msg)
+            if (msg.type === 'done') {
+              invalidateHasMarketDuckDataCache(this.duckDbPath)
+              finish(() => resolve({
+                tradeDate: String(msg.trade_date ?? opts.tradeDate ?? ''),
+                screen_factors: msg.screen_factors as DerivedMaintenanceResult['screen_factors'],
+                industry_stats: msg.industry_stats as DerivedMaintenanceResult['industry_stats'],
+              }))
+            } else if (msg.type === 'error') {
+              finish(() => reject(new Error(msg.message ?? '本地指标维护失败')))
             }
+          } catch {
+            /* ignore non-json */
           }
-        })
+        }
+      })
 
-        child.on('error', err => finish(() => reject(err)))
-        child.on('exit', code => {
-          if (code !== 0) {
-            finish(() => reject(new Error(stderr.trim() || `本地指标维护子进程退出码 ${code}`)))
-          }
-        })
-      }), 900_000),
-    )
+      child.on('error', err => finish(() => reject(err)))
+      child.on('exit', code => {
+        if (settled) return
+        if (code !== 0) {
+          finish(() => reject(new Error(stderr.trim() || `本地指标维护子进程退出码 ${code}`)))
+          return
+        }
+        finish(() => reject(new Error(stderr.trim() || '本地指标维护子进程未返回完成信号')))
+      })
+    })
   }
 
   /** 等待进程内 async 队列排空（测试 / 导出前） */
@@ -703,4 +670,5 @@ export function getMarketDuckGateway(
 export function resetMarketDuckGateways(): void {
   gateways.clear()
   duckDataCache = null
+  void resetDuckNeoReaders()
 }

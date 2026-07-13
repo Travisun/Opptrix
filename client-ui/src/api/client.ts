@@ -234,11 +234,11 @@ export const research = {
       'market_db_sync',
       { mode, background, force },
       undefined,
-      background ? 30_000 : 600000,
+      background ? 60_000 : 600_000,
     ),
 
   marketDbSyncState: () =>
-    apiCall<import('../types/market').MarketDataSyncState>('market_db_sync_state', {}, undefined, 30_000),
+    apiCall<import('../types/market').MarketDataSyncState>('market_db_sync_state', {}, undefined, 60_000),
 
   /** 手动启动本地指标维护（初选因子 + 行业统计） */
   marketDbDerivedMaintenance: (force = true) =>
@@ -246,7 +246,7 @@ export const research = {
       'market_db_derived_maintenance',
       { force },
       undefined,
-      30_000,
+      60_000,
     ),
 
   /** Signal UI shell ready — triggers L0 boot sync once (idempotent). */

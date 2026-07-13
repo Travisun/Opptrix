@@ -24,7 +24,7 @@ import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
 const POLL_IDLE_MS = 30_000
-const POLL_BURST_MS = 1500
+const POLL_BURST_MS = 2_000
 const THS_KLINE_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
 
 function runningBatchProgress(
@@ -567,8 +567,11 @@ export default function BasicDataSettingsSection() {
   const pollTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const logTextareaRef = useRef<HTMLTextAreaElement>(null)
   const mountedRef = useRef(true)
+  const fetchInFlight = useRef(false)
 
   const fetchAll = useCallback(async () => {
+    if (fetchInFlight.current) return
+    fetchInFlight.current = true
     try {
       const snapResp = await research.marketDbSyncState()
       if (!mountedRef.current) return
@@ -579,6 +582,8 @@ export default function BasicDataSettingsSection() {
       if (!mountedRef.current) return
       console.error('[settings/basic-data] load failed:', e)
       setLoading(false)
+    } finally {
+      fetchInFlight.current = false
     }
   }, [])
 
@@ -605,22 +610,22 @@ export default function BasicDataSettingsSection() {
   }, [fetchAll, isRunning])
 
   const handleSync = useCallback(async () => {
+    setSyncing(true)
     try {
-      setSyncing(true)
       const resp = await research.marketDbSync('auto', true, false)
       const result = resp.data
       if (result?.started) {
         toast.showSuccess('已开始同步基础数据')
-        void fetchAll()
-        window.setTimeout(() => { void fetchAll() }, 400)
       } else if (result?.running) {
         toast.showSuccess('同步已在运行中')
-        void fetchAll()
       } else {
         toast.showSuccess('无需同步，数据已是最新')
       }
+      void fetchAll()
+      window.setTimeout(() => { void fetchAll() }, 400)
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '同步失败')
+      void fetchAll()
     } finally {
       setSyncing(false)
     }

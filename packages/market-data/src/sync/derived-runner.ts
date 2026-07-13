@@ -50,7 +50,6 @@ export async function runDerivedScreenFactors(
   hooks?.onLog?.('启动因子计算子进程…')
   hooks?.onProgress?.('screen_factors', 10, 100, '启动因子计算子进程…')
 
-  store.flushDuckWritesSync()
   const result = await gw.spawnDerivedMaintenanceAsync({
     jobs: ['screen_factors'],
     tradeDate: stats.maxDate ?? undefined,
@@ -84,7 +83,6 @@ export async function runDerivedIndustryStats(
   hooks?.onLog?.('启动行业统计子进程…')
   hooks?.onProgress?.('industry_stats', 20, 100, '汇总行业指标…')
 
-  store.flushDuckWritesSync()
   const gw = getMarketDuckGateway(store.klineDuckDbPath, store.dbPath)
   const result = await gw.spawnDerivedMaintenanceAsync({
     jobs: ['industry_stats'],

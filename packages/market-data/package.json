@@ -17,12 +17,14 @@
   },
   "dependencies": {
     "@dsnp/parquetjs": "^1.8.8",
+    "@duckdb/node-api": "^1.5.4-r.1",
     "@opptrix/a-stock-layer": "*",
     "@opptrix/shared": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
     "better-sqlite3": "^11.7.0",
     "duckdb": "^1.2.1",
+    "p-queue": "^8.1.1",
     "parquet-wasm": "^0.7.2"
   },
   "devDependencies": {

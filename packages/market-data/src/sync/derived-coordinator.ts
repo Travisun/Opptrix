@@ -1,4 +1,4 @@
-import type { MarketDataStore, MarketDbStatus } from '../store.js'
+import type { MarketDataStore, MarketDbStatus, DerivedReadiness } from '../store.js'
 import {
   getMarketDuckGateway,
   type DerivedMaintenanceCliEvent,
@@ -141,58 +141,84 @@ export class MarketDerivedMaintenanceCoordinator {
   private async runMaintain(plan: DerivedMaintenancePlan): Promise<void> {
     if (this.running) return
     this.running = true
+    const status = this.store.getStatusLight()
+    this.store.freezeStatusLightForDerived(status)
     setDerivedMaintenanceActive(true)
     this.memoryLogs = []
-    const status = this.store.getStatusLight()
     this.snapshot = {
       jobs_completed: 0,
       jobs_total: plan.jobs.length,
       overall_percent: computeDerivedOverallPercent(status.derived),
+      current_job: plan.jobs[0] ?? null,
+      job_current: 2,
+      job_total: 100,
+      message: '准备本地指标子进程…',
     }
     this.log(`${plan.label} · ${plan.jobs.join(' → ')}（子进程）`)
 
     let failed = false
     try {
-      this.store.flushDuckWritesSync()
       const gw = getMarketDuckGateway(this.store.klineDuckDbPath, this.store.dbPath)
+      const tradeDate = status.derived?.kline_trade_date?.slice(0, 10)
+        || status.last_sync.kline_bootstrap?.slice(0, 10)
+        || status.last_sync.kline_daily?.slice(0, 10)
+        || undefined
       const result = await gw.spawnDerivedMaintenanceAsync({
         jobs: [...plan.jobs],
+        tradeDate,
         onEvent: event => this.handleSubprocessEvent(event, plan),
       })
+
+      if (plan.jobs.includes('screen_factors') && !result.screen_factors) {
+        throw new Error('因子计算子进程未返回结果（DuckDB 不可用）')
+      }
+      if (result.screen_factors?.computed === 0) {
+        this.log('初选因子：无可匹配标的（请确认 DuckDB 名录与 K 线均已导入）')
+      }
 
       applyDerivedMaintenanceResult(this.store, result, 'derived_maintenance')
       for (const job of plan.jobs) {
         this.log(`✓ 完成 · ${job}`)
       }
 
-      const derived = this.store.assessDerivedReadiness()
-      const overall = computeDerivedOverallPercent(derived)
-      if (derived.ready) {
+      const derived = this.store.getStatusLight().derived
+      const overall = computeDerivedOverallPercent(derived ?? {
+        ready: false,
+        klines_prerequisite: false,
+        screen_factors: false,
+        industry_stats: false,
+        factor_coverage_ratio: 0,
+        factor_trade_date: null,
+        kline_trade_date: null,
+        industry_trade_date: null,
+      })
+      if (derived?.ready) {
         this.log('本地指标已就绪')
         this.retryAttempts = 0
-      } else {
+      } else if (derived) {
         this.log(`本地指标维护结束（${overall}%）`)
         this.scheduleRetry(derived)
+      } else {
+        this.log(`本地指标维护结束（${overall}%）`)
       }
       this.snapshot = {
         ...this.snapshot,
         jobs_completed: plan.jobs.length,
         overall_percent: overall,
-        message: derived.ready ? '本地指标已就绪' : `本地指标构建中（${overall}%）`,
+        message: derived?.ready ? '本地指标已就绪' : `本地指标构建中（${overall}%）`,
       }
     } catch (e) {
       failed = true
       const msg = e instanceof Error ? e.message : String(e)
       this.log(`本地指标维护失败：${msg}`)
       if (e instanceof Error && e.stack) this.log(e.stack)
-      this.scheduleRetry(this.store.assessDerivedReadiness())
+      const derived = this.store.getStatusLight().derived
+      if (derived && !derived.ready) this.scheduleRetry(derived)
     } finally {
       this.running = false
       setDerivedMaintenanceActive(false)
-      if (!failed) {
-        const derived = this.store.assessDerivedReadiness()
-        if (!derived.ready) this.scheduleRetry(derived)
-      }
+      this.store.unfreezeStatusLightCache()
+      void this.store.flushDuckWritesAsync({ throwOnError: false })
     }
   }
 
@@ -242,7 +268,7 @@ export class MarketDerivedMaintenanceCoordinator {
     }
   }
 
-  private scheduleRetry(derived: ReturnType<MarketDataStore['assessDerivedReadiness']>): void {
+  private scheduleRetry(derived: DerivedReadiness): void {
     if (derived.ready) {
       this.retryAttempts = 0
       return

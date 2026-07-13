@@ -45,12 +45,23 @@ export function dailyJobsNeedRefresh(status: MarketDbStatus): boolean {
 }
 
 /** 初选包 readiness 门槛是否仍未满足（与 TTL 无关，避免 cursor 已写但覆盖率不足时不再自动同步） */
-function bootstrapReadinessIncomplete(status: MarketDbStatus): boolean {
+export function bootstrapReadinessIncomplete(status: MarketDbStatus): boolean {
   if (status.is_ready) return false
   const b = status.bootstrap
   if (!b) return status.stock_count > 0
   if (!b.initial_cn || !b.initial_taxonomy || !b.klines) return true
   return false
+}
+
+/** readiness 未达标时，仅挑选仍缺的 bootstrap job（尊重 TTL，不全量重跑） */
+function bootstrapJobsForIncompleteReadiness(status: MarketDbStatus): string[] {
+  const b = status.bootstrap
+  if (!b) return jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
+  const jobs: string[] = []
+  if (!b.initial_cn) jobs.push('initial_cn_universe')
+  if (!b.initial_taxonomy) jobs.push('initial_taxonomy')
+  if (!b.klines) jobs.push('kline_bootstrap')
+  return jobs
 }
 
 /** 首次 pipeline 是否仍有 job 未跑过或已过期 */
@@ -73,12 +84,15 @@ export function resolveSyncPlan(
   const interrupted = session?.status === 'interrupted' || session?.status === 'partial'
 
   if (interrupted || (!status.is_ready && status.stock_count > 0 && hasProgress)) {
-    const jobs = jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
-    return {
-      mode: 'resume',
-      jobs: jobs.length ? jobs : [...CN_BOOTSTRAP_SYNC_JOBS],
-      label: '接续同步',
+    if (status.is_ready) {
+      const jobs = cnMaintenanceJobsDue(status.last_sync)
+      return { mode: 'incremental', jobs, label: '增量更新' }
     }
+    let jobs = jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
+    if (jobs.length === 0 && bootstrapReadinessIncomplete(status)) {
+      jobs = bootstrapJobsForIncompleteReadiness(status)
+    }
+    return { mode: 'resume', jobs, label: '接续同步' }
   }
 
   if (status.is_ready) {
@@ -90,10 +104,16 @@ export function resolveSyncPlan(
     }
   }
 
-  const jobs = jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
+  let jobs = jobsNeedingRefresh([...CN_BOOTSTRAP_SYNC_JOBS], status.last_sync)
+  if (jobs.length === 0 && bootstrapReadinessIncomplete(status)) {
+    jobs = bootstrapJobsForIncompleteReadiness(status)
+  }
+  if (jobs.length === 0 && status.stock_count === 0) {
+    jobs = [...CN_BOOTSTRAP_SYNC_JOBS]
+  }
   return {
     mode: 'incremental',
-    jobs: jobs.length ? jobs : [...CN_BOOTSTRAP_SYNC_JOBS],
+    jobs,
     label: status.stock_count > 0 ? '增量同步' : '首次同步',
   }
 }
@@ -106,17 +126,9 @@ export function resolveResumeJobs(_session: SyncSessionHint): readonly string[] 
 /** Whether boot should auto-start sync without user action. */
 export function shouldAutoSyncOnBoot(
   status: MarketDbStatus,
-  session?: SyncSessionHint | null,
+  _session?: SyncSessionHint | null,
 ): boolean {
-  const hasProgress = Object.values(status.job_progress).some(p => p.done > 0)
-  const interrupted = session?.status === 'interrupted' || session?.status === 'partial'
-
-  if (interrupted || (!status.is_ready && status.stock_count > 0 && hasProgress)) {
-    return true
-  }
-
   if (!status.is_ready) return bootstrapJobsNeedRefresh(status)
-
   return dailyJobsNeedRefresh(status)
 }
 
@@ -132,16 +144,10 @@ export function resolveAutoBootPlan(
 ): SyncPlan | null {
   if (!shouldAutoSyncOnBoot(status, session)) return null
 
-  let plan = resolveSyncPlan(status, session)
-  if (plan.mode === 'resume' && session) {
-    const jobs = [...resolveResumeJobs(session)]
-    return jobs.length ? { ...plan, jobs } : null
-  }
-
+  const plan = resolveSyncPlan(status, session)
   const jobs = filterJobsForAutoBoot(plan.jobs)
   if (jobs.length === 0) return null
-  plan = { ...plan, jobs }
-  return plan
+  return { ...plan, jobs }
 }
 
 export function resolveMarketPackSyncPlan(pack: MarketDataPackId, force = false): SyncPlan {

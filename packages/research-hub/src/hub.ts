@@ -478,7 +478,7 @@ export class ResearchHub {
     const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
 
     try {
-      const data = this.marketData.screen(conditions, topN, tradeDate || undefined)
+      const data = await this.marketData.screen(conditions, topN, tradeDate || undefined)
       return ok({
         trade_date: data.trade_date,
         total_scanned: data.items.length,
@@ -592,25 +592,30 @@ export class ResearchHub {
     return this.failLocalOffline(t0)
   }
 
-  private async marketDbSync(params: Record<string, unknown>, t0: number) {
+  private marketDbSync(params: Record<string, unknown>, t0: number) {
     const force = params.force === true
     const modeRaw = String(params.mode ?? 'auto')
     if (modeRaw === 'auto') {
-      const result = await this.marketData.syncAdaptive(force)
+      const plan = this.marketData.planSync(force)
+      void this.marketData.syncAdaptive(force).catch(err => {
+        console.warn('[research-hub] syncAdaptive failed:', err)
+      })
       return ok({
-        started: result.started,
-        running: result.running,
-        mode: result.mode,
-        plan: result.plan.label,
+        started: true,
+        running: true,
+        mode: plan.mode,
+        plan: plan.label,
       }, '数据同步', t0)
     }
     const jobs = [...CN_MANUAL_SYNC_JOBS]
     const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
-    const result = await this.marketData.sync({ mode, jobs, force, background: true })
+    void this.marketData.sync({ mode, jobs, force, background: true }).catch(err => {
+      console.warn('[research-hub] market_db_sync failed:', err)
+    })
     return ok({
-      started: result.started,
-      running: result.running,
-      mode: result.mode,
+      started: true,
+      running: true,
+      mode,
       plan: 'A 股基础数据',
     }, '数据同步', t0)
   }
@@ -621,15 +626,15 @@ export class ResearchHub {
     return fail('本地行业库暂无数据，请使用 search_instruments、screen_stocks 等在线能力', t0)
   }
 
-  private marketIndustryStats(params: Record<string, unknown>, t0: number) {
+  private async marketIndustryStats(params: Record<string, unknown>, t0: number) {
     const unavailable = this.industrySnapshotUnavailable(t0)
     if (unavailable) return unavailable
     const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
-    const data = this.marketData.industryStats(tradeDate || undefined)
+    const data = await this.marketData.industryStats(tradeDate || undefined)
     return ok(data, `A 股 ${data.items.length} 个行业统计`, t0)
   }
 
-  private marketIndustryStocks(params: Record<string, unknown>, t0: number) {
+  private async marketIndustryStocks(params: Record<string, unknown>, t0: number) {
     const industry = String(params.industry ?? '').trim()
     if (!industry) return fail('industry 必填', t0)
     const unavailable = this.industrySnapshotUnavailable(t0)
@@ -637,7 +642,7 @@ export class ResearchHub {
     const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
     const limitRaw = params.limit != null ? Number(params.limit) : 120
     const limit = Number.isFinite(limitRaw) ? limitRaw : 120
-    const data = this.marketData.industryStocks(industry, tradeDate || undefined, limit)
+    const data = await this.marketData.industryStocks(industry, tradeDate || undefined, limit)
     const items = data.items.map(item => {
       const meta = this.marketData.store.stockMeta(item.code)
       const ref = normalizeInstrumentRef({
@@ -651,20 +656,20 @@ export class ResearchHub {
     return ok({ ...data, items }, `${industry} 成分股 ${items.length} 只`, t0)
   }
 
-  private localIndustryList(params: Record<string, unknown>, t0: number) {
+  private async localIndustryList(params: Record<string, unknown>, t0: number) {
     const unavailable = this.industrySnapshotUnavailable(t0)
     if (unavailable) return unavailable
     const keyword = params.keyword != null ? String(params.keyword).trim() : undefined
     const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
     const limitRaw = params.limit != null ? Number(params.limit) : undefined
     const limit = limitRaw != null && Number.isFinite(limitRaw) ? limitRaw : undefined
-    const data = this.marketData.industryList(keyword || undefined, tradeDate || undefined, limit)
+    const data = await this.marketData.industryList(keyword || undefined, tradeDate || undefined, limit)
     return ok(data, `行业列表 ${data.industries.length} 项`, t0)
   }
 
-  private localIndustryScreen(params: Record<string, unknown>, t0: number) {
+  private async localIndustryScreen(params: Record<string, unknown>, t0: number) {
     try {
-      const data = this.marketData.industryScreen({
+      const data = await this.marketData.industryScreen({
         industry: params.industry != null ? String(params.industry).trim() : undefined,
         industries: Array.isArray(params.industries) ? params.industries.map(String) : undefined,
         industry_contains: params.industry_contains != null ? String(params.industry_contains).trim() : undefined,
@@ -705,9 +710,9 @@ export class ResearchHub {
     return ok(schema, '本地初选 schema', t0)
   }
 
-  private localUniverseScreen(params: Record<string, unknown>, t0: number) {
+  private async localUniverseScreen(params: Record<string, unknown>, t0: number) {
     try {
-      const data = this.marketData.universeScreen({
+      const data = await this.marketData.universeScreen({
         factor_conditions: params.factor_conditions as Array<{ factor: string; op: '>' | '<' | '>=' | '<=' | '='; value: number }> | undefined,
         industry_contains: params.industry_contains != null ? String(params.industry_contains).trim() : undefined,
         industries: Array.isArray(params.industries) ? params.industries.map(String) : undefined,
