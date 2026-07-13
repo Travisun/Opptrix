@@ -150,12 +150,15 @@ export function assessDiscoverProfileReadiness(
   }
 
   if (profile === 'cn_equity') {
+    const hasUniverse = ctx.stock_count > 0
     return {
       profile,
-      ready: true,
-      mode: 'online',
-      message: '将使用在线因子扫描初选',
-      action: null,
+      ready: hasUniverse,
+      mode: 'local',
+      message: hasUniverse
+        ? '将使用本地日 K 衍生因子初选（momentum/volume_ratio/volatility/drawdown）'
+        : '请先完成 A 股名录同步',
+      action: hasUniverse ? null : '请前往 设置 → 基础数据，完成 A 股同步',
     }
   }
 

@@ -29,16 +29,22 @@ const REMOVED_LEGACY = [
   'strategy_verify',
   'strategy_verify_report',
   'get_latest_evaluation',
-  'screen_local_universe',
   'local_screen_stocks',
   'trigger_market_db_sync',
   'get_market_db_status',
 ]
 
+const LOCAL_SCREEN_TOOLS = [
+  'get_local_universe_screen_schema',
+  'screen_local_universe',
+  'screen_local_industry_stocks',
+  'search_local_instruments',
+]
+
 test('ToolRegistry registers P0/P1 market and screening tools', () => {
   const registry = new ToolRegistry(new ResearchHub())
   const names = new Set(registry.list().map(t => t.name))
-  for (const name of [...P0_TOOLS, ...P1_TOOLS]) {
+  for (const name of [...P0_TOOLS, ...P1_TOOLS, ...LOCAL_SCREEN_TOOLS]) {
     assert.ok(names.has(name), `missing tool: ${name}`)
   }
   for (const name of REMOVED_LEGACY) {
@@ -59,7 +65,7 @@ test('market_db_status hub returns real status not offline stub', async () => {
   assert.equal(resp.success, true)
   const data = resp.data
   assert.ok(data && typeof data === 'object')
-  assert.equal(data.local_offline_screening_enabled, false)
+  assert.equal(data.local_offline_screening_enabled, true)
   assert.ok('stock_count' in data)
   assert.ok('guidance' in data)
 })

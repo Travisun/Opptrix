@@ -40,7 +40,7 @@ export const DISCOVER_PROFILE_REGISTRY: DiscoverProfileDefinition[] = [
   {
     id: 'cn_equity',
     label: 'A 股股票',
-    description: '全 A 股票池 · 在线因子扫描与 AI 精选',
+    description: '全 A 股票池 · 本地日 K 因子扫描与 AI 精选',
     packId: null,
     prescreenMode: 'factor_screen',
     scorecardProfile: 'cn_equity',

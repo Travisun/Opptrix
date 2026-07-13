@@ -80,7 +80,12 @@ export const TOOL_ROUTING = `
 ### Tier 7 · 选股与策略
 | 工具 | 优先级 | 何时用 | 何时不用 |
 |------|--------|--------|----------|
-| screen_stocks | ★★★ | A 股因子筛选 | 已有目标代码 |
+| get_local_universe_screen_schema | ★★★ | 编写筛选条件前查可用因子/过滤器 | 已知全部因子名 |
+| screen_stocks | ★★★ | A 股本地因子筛选 | 已有目标代码 |
+| screen_local_universe | ★★☆ | 行业/板块+因子组合初选 | 只需简单因子条件 |
+| screen_local_industry_stocks | ★★☆ | 行业内因子初选 | 只需成分股列表 |
+| search_local_instruments | ★★★ | 本地名录搜索（离线） | 需最新未入库标的 |
+| search_instruments | ★★☆ | 本地+在线合并搜索 | 已知精确 code |
 | screen_us_universe | ★★☆ | 美股名录搜索 | 非美股场景 |
 | screen_hk_universe | ★★☆ | 港股名录搜索 | 非港股场景 |
 | screen_crypto_universe | ★★☆ | Crypto 交易对搜索 | 非 Crypto 场景 |

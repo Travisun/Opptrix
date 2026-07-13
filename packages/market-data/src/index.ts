@@ -84,6 +84,11 @@ export class MarketDataService {
     return this.coordinator.getCachedDbStatus()
   }
 
+  /** Lightweight status for Agent / API — no DuckDB full-table stats */
+  statusLight() {
+    return this.store.getStatusLight()
+  }
+
   isOfflineScreeningEnabled() {
     return LOCAL_OFFLINE_SCREENING_ENABLED
   }
@@ -174,7 +179,7 @@ export class MarketDataService {
   }
 
   universeScreenSchema() {
-    return buildLocalUniverseScreenSchema(this.status().latest_factor_date)
+    return buildLocalUniverseScreenSchema(this.statusLight().latest_factor_date)
   }
 
   industryStats(tradeDate?: string) {

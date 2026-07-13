@@ -130,6 +130,8 @@ export class MarketDataStore {
   private duckWriteQueue: DuckWriteOp[] = []
   private readonly duckFlushThreshold = 250
   private duckMarketStatsCache: { at: number; value: ReturnType<typeof duckMarketStatsSync> } | null = null
+  private statusLightCache: { at: number; value: MarketDbStatus } | null = null
+  private static readonly STATUS_LIGHT_CACHE_MS = 30_000
 
   constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
     this.dbPath = dbPath
@@ -325,6 +327,7 @@ export class MarketDataStore {
         last_trade_date = excluded.last_trade_date,
         meta_json = excluded.meta_json
     `).run(jobName, nowIso(), todayTradeDate(), meta ? JSON.stringify(meta) : null)
+    this.invalidateStatusLightCache()
   }
 
   getCursorLastSuccess(jobName: string): string | null {
@@ -540,6 +543,7 @@ export class MarketDataStore {
 
   invalidateDuckMarketStatsCache(): void {
     this.duckMarketStatsCache = null
+    this.invalidateStatusLightCache()
   }
 
   private countEquityInstrumentsSqlite(market: 'CN' | 'US' | 'HK'): number {
@@ -548,6 +552,210 @@ export class MarketDataStore {
     return (this.db.prepare(
       `SELECT COUNT(*) AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
     ).get() as { c: number }).c
+  }
+
+  /**
+   * Lightweight status — SQLite + sync_cursor only; never spawns DuckDB market-stats.
+   * For Agent `market_db_status`, settings polling, and Hub readiness checks.
+   */
+  getStatusLight(): MarketDbStatus {
+    const now = Date.now()
+    if (this.statusLightCache && now - this.statusLightCache.at < MarketDataStore.STATUS_LIGHT_CACHE_MS) {
+      return this.statusLightCache.value
+    }
+    const value = this.buildStatusLight()
+    this.statusLightCache = { at: now, value }
+    return value
+  }
+
+  invalidateStatusLightCache(): void {
+    this.statusLightCache = null
+  }
+
+  private buildStatusLight(): MarketDbStatus {
+    const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const cnEquityCount = this.countEquityInstrumentsSqlite('CN')
+    const stockCount = Math.max(stocksTableCount, cnEquityCount)
+    const etfCount = this.countEtfInstruments()
+    const usCount = this.countUsInstruments()
+    const cryptoCount = this.countCryptoInstruments()
+    const jpCount = this.countRegionalEquityInstruments('JP')
+    const krCount = this.countRegionalEquityInstruments('KR')
+    const hkCount = this.countRegionalEquityInstruments('HK')
+
+    const latestQuote = this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM stock_quotes_daily',
+    ).get() as { d: string | null }
+    const latestFactor = this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM stock_factors',
+    ).get() as { d: string | null }
+
+    const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
+    const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
+      job_name: string
+      last_success_at: string | null
+    }[]
+    const lastSync: Record<string, string | null> = {}
+    for (const c of cursors) lastSync[c.job_name] = c.last_success_at
+
+    const jobProgress: Record<string, JobProgressSummary> = {}
+    const progressRows = this.db.prepare(`
+      SELECT job_name,
+        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
+        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
+      FROM sync_job_progress
+      GROUP BY job_name
+    `).all() as { job_name: string; done: number; error: number }[]
+    for (const row of progressRows) {
+      const baseCount = Math.max(stockCount, row.done)
+      jobProgress[row.job_name] = {
+        done: row.done,
+        error: row.error,
+        pending: Math.max(0, baseCount - row.done),
+      }
+    }
+
+    const bootstrap = this.assessBootstrapReadinessLight(
+      stockCount,
+      etfCount,
+      hkCount,
+      usCount,
+      latestFactor.d,
+      lastSync,
+      jobProgress,
+    )
+    this.enrichKlineJobProgressLight(jobProgress, stockCount, bootstrap, lastSync)
+
+    return {
+      db_path: this.db.name,
+      schema_version: schemaVersion,
+      stock_count: stockCount,
+      etf_count: etfCount,
+      us_count: usCount,
+      crypto_count: cryptoCount,
+      jp_count: jpCount,
+      kr_count: krCount,
+      hk_count: hkCount,
+      latest_trade_date: latestQuote.d,
+      latest_factor_date: latestFactor.d,
+      kline_dates: {
+        CN: this.latestKlineDateLight('CN'),
+        HK: this.latestKlineDateLight('HK'),
+        US: this.latestKlineDateLight('US'),
+      },
+      profile_count: 0,
+      partner_count: 0,
+      segment_count: 0,
+      announcement_count: 0,
+      dividend_count: 0,
+      shareholder_count: 0,
+      forecast_count: 0,
+      inst_holding_count: 0,
+      insider_trade_count: 0,
+      buyback_count: 0,
+      last_sync: lastSync,
+      job_progress: jobProgress,
+      is_ready: bootstrap.ready,
+      bootstrap,
+    }
+  }
+
+  private assessBootstrapReadinessLight(
+    cnEquity: number,
+    etfCount: number,
+    hkEquity: number,
+    usEquity: number,
+    latestFactorDate: string | null,
+    lastSync: Record<string, string | null>,
+    jobProgress: Record<string, JobProgressSummary>,
+  ): BootstrapReadiness {
+    const initial_cn = cnEquity > 1000
+    const initial_hk = hkEquity > 100
+    const initial_us = usEquity > 500
+    const initial_cn_etf = etfCount > 50
+    const taxonomyCount = (this.db.prepare(
+      'SELECT COUNT(*) AS c FROM taxonomy_nodes WHERE market = ? AND kind = ?',
+    ).get('CN', 'industry') as { c: number }).c
+    const initial_taxonomy = taxonomyCount >= 5 || !!lastSync.initial_taxonomy
+
+    const klineBootDone = jobProgress.kline_bootstrap?.done ?? 0
+    const klineMeta = this.getCursorMeta('kline_bootstrap')
+    const rowsImported = Number(klineMeta?.rowsImported ?? 0)
+    const hasKlineCursor = !!lastSync.kline_bootstrap
+    const kline_stock_ratio = cnEquity > 0
+      ? Math.min(100, Math.round((klineBootDone / cnEquity) * 1000) / 10)
+      : 0
+    const kline_recent_ratio = kline_stock_ratio
+    const klines = hasKlineCursor && (
+      kline_stock_ratio >= 95
+      || rowsImported > 0
+      || (cnEquity > 0 && klineBootDone >= cnEquity * 0.95)
+    )
+    const screen_factors = !!latestFactorDate || !!lastSync.screen_factors
+    const ready = initial_cn && initial_taxonomy && klines
+
+    return {
+      ready,
+      initial_cn,
+      initial_hk,
+      initial_us,
+      initial_cn_etf,
+      initial_taxonomy,
+      universe: initial_cn,
+      quotes: false,
+      klines,
+      fundamentals: false,
+      screen_factors,
+      quote_stock_ratio: 0,
+      kline_stock_ratio,
+      kline_recent_ratio,
+      fin_stock_ratio: 0,
+      factor_stock_ratio: screen_factors ? 100 : 0,
+      kline_cross_market: false,
+    }
+  }
+
+  private enrichKlineJobProgressLight(
+    jobProgress: Record<string, JobProgressSummary>,
+    stockCount: number,
+    bootstrap: BootstrapReadiness,
+    lastSync: Record<string, string | null>,
+  ): void {
+    const bootDone = jobProgress.kline_bootstrap?.done ?? 0
+    const universe = Math.max(stockCount, bootDone, 1)
+
+    jobProgress.kline_bootstrap = {
+      done: bootstrap.klines ? universe : bootDone,
+      pending: bootstrap.klines ? 0 : Math.max(0, universe - bootDone),
+      error: jobProgress.kline_bootstrap?.error ?? 0,
+    }
+
+    const bootstrapFresh = !!lastSync.kline_bootstrap && daysSince(lastSync.kline_bootstrap) < 7
+    const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
+    const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
+    const dailyDone = jobProgress.kline_daily?.done ?? bootDone
+    jobProgress.kline_daily = {
+      done: klineMaintOk ? universe : dailyDone,
+      pending: klineMaintOk ? 0 : Math.max(0, universe - dailyDone),
+      error: jobProgress.kline_daily?.error ?? 0,
+    }
+  }
+
+  private latestKlineDateLight(market: string): string | null {
+    if (market === 'CN') {
+      const daily = this.db.prepare(
+        'SELECT last_trade_date FROM sync_cursor WHERE job_name = ?',
+      ).get('kline_daily') as { last_trade_date: string | null } | undefined
+      if (daily?.last_trade_date) return daily.last_trade_date
+      const boot = this.db.prepare(
+        'SELECT last_trade_date FROM sync_cursor WHERE job_name = ?',
+      ).get('kline_bootstrap') as { last_trade_date: string | null } | undefined
+      if (boot?.last_trade_date) return boot.last_trade_date
+    }
+    const row = this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM instrument_bars_daily WHERE market = ?',
+    ).get(market) as { d: string | null } | undefined
+    return row?.d ?? null
   }
 
   /**

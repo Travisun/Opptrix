@@ -103,7 +103,7 @@ export class MarketSyncCoordinator {
       }
       const value = this.dbStatusCache
         ? this.store.getStatusLite(this.dbStatusCache.value)
-        : this.store.getStatusForBootPlan()
+        : this.store.getStatusLight()
       this.dbStatusCache = { at: now, value }
       if (heavyImport) return this.overlayThsKlineProgress(value)
       if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
@@ -115,7 +115,7 @@ export class MarketSyncCoordinator {
     if (this.dbStatusCache && now - this.dbStatusCache.at < DB_STATUS_CACHE_MS_IDLE) {
       return this.dbStatusCache.value
     }
-    const value = this.store.getStatus()
+    const value = this.store.getStatusLight()
     this.dbStatusCache = { at: now, value }
     return value
   }
@@ -169,6 +169,7 @@ export class MarketSyncCoordinator {
 
   invalidateDbStatusCache(): void {
     this.dbStatusCache = null
+    this.store.invalidateStatusLightCache()
   }
 
   constructor(

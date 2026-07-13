@@ -10,7 +10,7 @@ import {
   queryUniverseScreenViaSubprocess,
 } from '../analytics/spawn-analytics.js'
 
-const OFFLINE_SCREEN_MSG = '本地因子筛选已停用。请使用 instrument_evaluation、instrument_search 等在线接口按需分析。'
+const OFFLINE_SCREEN_MSG = '本地因子筛选不可用：请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。'
 
 function useDuck(store: MarketDataStore): boolean {
   return hasMarketDuckData(store.klineDuckDbPath)
