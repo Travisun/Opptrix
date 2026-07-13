@@ -25,6 +25,10 @@ import {
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
 import { isMarketSyncActive } from './duck/duck-subprocess-gate.js'
+import {
+  isDuckPrimaryMigrationComplete,
+  markDuckPrimaryMigrationComplete,
+} from './duck/duck-primary-migration.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
 
 export interface KlineUpsertRow {
@@ -118,8 +122,7 @@ export class MarketDataStore {
   readonly klineDuckDbPath: string
   private instrumentNsColumnCache = new Map<string, boolean>()
   private klineStatsCache: { at: number; rows: number; codes: number; maxDate: string | null } | null = null
-  private klineMigrated = false
-  private marketDataMigrated = false
+  private duckPrimaryMigrationTimer: ReturnType<typeof setTimeout> | null = null
   private duckWriteQueue: DuckWriteOp[] = []
   private readonly duckFlushThreshold = 250
   /** 批量 taxonomy 写入时递增，避免每条 upsert 都 spawn Duck 子进程查 MAX(id) */
@@ -152,45 +155,57 @@ export class MarketDataStore {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
-    this.scheduleKlineBackendReady()
-  }
-
-  private scheduleKlineBackendReady(): void {
-    if (this.klineMigrated) return
-    this.klineMigrated = true
-    // 推迟重迁移，避免启动/点同步瞬间 execFileSync 长时间占满事件循环
-    setTimeout(() => {
-      try {
-        if (isMarketSyncActive()) {
-          this.klineMigrated = false
-          this.scheduleKlineBackendReady()
-          return
-        }
-        this.duckGateway().migrateSqliteKlinesIfEmptySync()
-        this.ensureMarketDataOnDuck()
-        this.invalidateKlineStatsCache()
-        this.duckMarketStatsCache = null
-      } catch {
-        /* 首次迁移失败不阻断启动 */
+    if (!isDuckPrimaryMigrationComplete(this.db)) {
+      if (!this.runDuckPrimaryMigrationSync()) {
+        this.scheduleDuckPrimaryMigration()
       }
-    }, 8000)
+    }
   }
 
-  /** SQLite 市场数据 → DuckDB 一次性迁移（幂等；Duck 已有数据则跳过，避免覆盖同步写入） */
-  private ensureMarketDataOnDuck(): void {
-    if (this.marketDataMigrated) return
-    if (isMarketSyncActive()) {
-      setTimeout(() => this.ensureMarketDataOnDuck(), 5000)
-      return
+  private isDuckPrimaryReady(): boolean {
+    return this.duckGateway().isDuckPrimaryReady()
+  }
+
+  /**
+   * 同步执行 SQLite → DuckDB 主存储一次性迁移（幂等）。
+   * 旧版升级路径：按表行数对比补全 Duck，全部对齐后标记 v13 complete。
+   */
+  runDuckPrimaryMigrationSync(): boolean {
+    if (isDuckPrimaryMigrationComplete(this.db)) return true
+    if (isMarketSyncActive()) return false
+
+    this.flushDuckWritesSync({ throwOnError: false })
+    this.duckGateway().migrateSqliteKlinesIfEmptySync()
+    this.duckGateway().migrateMarketDataSync(false)
+
+    if (this.duckGateway().checkMarketMigrationNeededSync()) {
+      console.warn('[market-data] Duck 主存储迁移未完成：SQLite 仍有未迁入数据，稍后重试')
+      return false
     }
-    this.marketDataMigrated = true
-    try {
-      if (this.duckGateway().hasMarketData()) return
-      this.duckGateway().migrateMarketDataSync(false)
-    } catch {
-      /* 迁移失败不阻断；后续读写回退 SQLite */
-      this.marketDataMigrated = false
+
+    markDuckPrimaryMigrationComplete(this.db)
+    invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
+    this.duckMarketStatsCache = null
+    this.invalidateKlineStatsCache()
+    this.invalidateStatusLightCache()
+    return true
+  }
+
+  private scheduleDuckPrimaryMigration(): void {
+    if (this.duckPrimaryMigrationTimer) return
+    const attempt = () => {
+      this.duckPrimaryMigrationTimer = null
+      try {
+        const done = this.runDuckPrimaryMigrationSync()
+        if (!done && !isDuckPrimaryMigrationComplete(this.db)) {
+          this.duckPrimaryMigrationTimer = setTimeout(attempt, isMarketSyncActive() ? 5000 : 2000)
+        }
+      } catch (err) {
+        console.warn('[market-data] Duck 主存储迁移失败，稍后重试:', err)
+        this.duckPrimaryMigrationTimer = setTimeout(attempt, 5000)
+      }
     }
+    this.duckPrimaryMigrationTimer = setTimeout(attempt, isMarketSyncActive() ? 5000 : 2000)
   }
 
   private queueDuck(op: DuckWriteOp): void {
@@ -198,6 +213,15 @@ export class MarketDataStore {
     if (this.duckWriteQueue.length >= this.duckFlushThreshold) {
       this.flushDuckWritesSync({ throwOnError: false })
     }
+  }
+
+  /** Duck 主存储就绪时经 queueDuck；迁移过渡期可回退 SQLite */
+  private queueMarketWrite(op: DuckWriteOp, sqliteFallback?: () => void): void {
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck(op)
+      return
+    }
+    sqliteFallback?.()
   }
 
   /** 同步 flush — sync 任务边界调用 */
@@ -227,7 +251,13 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T | undefined,
   ): T | undefined {
-    if (this.duckGateway().hasMarketData() && !this.shouldDeferDuckSubprocessRead()) {
+    if (this.shouldDeferDuckSubprocessRead()) {
+      return sqliteFallback()
+    }
+    if (this.isDuckPrimaryReady()) {
+      return this.duckGateway().queryOneSync<T>(sql, params)
+    }
+    if (this.duckGateway().hasMarketData()) {
       const row = this.duckGateway().queryOneSync<T>(sql, params)
       if (row) return row
     }
@@ -239,7 +269,13 @@ export class MarketDataStore {
     params: unknown[] = [],
     sqliteFallback: () => T[],
   ): T[] {
-    if (this.duckGateway().hasMarketData() && !this.shouldDeferDuckSubprocessRead()) {
+    if (this.shouldDeferDuckSubprocessRead()) {
+      return sqliteFallback()
+    }
+    if (this.isDuckPrimaryReady()) {
+      return this.duckGateway().queryAllSync<T>(sql, params)
+    }
+    if (this.duckGateway().hasMarketData()) {
       const rows = this.duckGateway().queryAllSync<T>(sql, params)
       if (rows.length) return rows
     }
@@ -252,6 +288,12 @@ export class MarketDataStore {
   }
 
   hasAnalyticsDims(): boolean {
+    if (this.isDuckPrimaryReady()) {
+      const row = this.duckGateway().queryOneSync<{ c: number }>(
+        'SELECT COUNT(*)::INTEGER AS c FROM stocks',
+      )
+      return (row?.c ?? 0) > 0
+    }
     if (this.duckGateway().hasMarketData()) return true
     const row = this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }
     return row.c > 0
@@ -331,7 +373,7 @@ export class MarketDataStore {
 
   /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
   prepareForSqliteExport(): void {
-    this.marketDataMigrated = true
+    this.runDuckPrimaryMigrationSync()
     this.flushDuckWritesSync()
     this.db.pragma('wal_checkpoint(TRUNCATE)')
     this.db.close()
@@ -1336,18 +1378,28 @@ export class MarketDataStore {
   }
 
   shareholderSyncedAt(code: string): string | null {
-    const row = this.db.prepare(
+    const row = this.duckRead<{ synced_at: string | null }>(
       'SELECT MAX(synced_at) AS synced_at FROM stock_shareholder_summary WHERE code = ?',
-    ).get(code) as { synced_at: string | null } | undefined
+      [code],
+      () => this.db.prepare(
+        'SELECT MAX(synced_at) AS synced_at FROM stock_shareholder_summary WHERE code = ?',
+      ).get(code) as { synced_at: string | null } | undefined,
+    )
     return row?.synced_at ?? null
   }
 
   listFinancials(code: string, limit = 4): Array<Record<string, unknown>> {
-    return this.db.prepare(`
-      SELECT * FROM stock_financials
-      WHERE code = ? AND (report_type IS NULL OR report_type = 'annual')
-      ORDER BY report_date DESC LIMIT ?
-    `).all(code, limit) as Array<Record<string, unknown>>
+    return this.duckReadAll<Record<string, unknown>>(
+      `SELECT * FROM stock_financials
+       WHERE code = ? AND (report_type IS NULL OR report_type = 'annual')
+       ORDER BY report_date DESC LIMIT ?`,
+      [code, limit],
+      () => this.db.prepare(`
+        SELECT * FROM stock_financials
+        WHERE code = ? AND (report_type IS NULL OR report_type = 'annual')
+        ORDER BY report_date DESC LIMIT ?
+      `).all(code, limit) as Array<Record<string, unknown>>,
+    )
   }
 
   upsertStock(row: {
@@ -1537,14 +1589,22 @@ export class MarketDataStore {
     const normalized = normalizeStockCode(code)
     const ns = this.resolveCnEquityInstrumentNs(code)
     if (stockProfilesUsesInstrumentNs(this.db)) {
-      const row = this.db.prepare(
-        'SELECT synced_at FROM stock_profiles WHERE instrument_ns = ? OR code = ?',
-      ).get(ns, normalized) as { synced_at: string } | undefined
+      const row = this.duckRead<{ synced_at: string }>(
+        'SELECT synced_at FROM stock_profiles WHERE instrument_ns = ? OR code = ? LIMIT 1',
+        [ns, normalized],
+        () => this.db.prepare(
+          'SELECT synced_at FROM stock_profiles WHERE instrument_ns = ? OR code = ?',
+        ).get(ns, normalized) as { synced_at: string } | undefined,
+      )
       return row?.synced_at ?? null
     }
-    const row = this.db.prepare('SELECT synced_at FROM stock_profiles WHERE code = ?').get(normalized) as
-      | { synced_at: string }
-      | undefined
+    const row = this.duckRead<{ synced_at: string }>(
+      'SELECT synced_at FROM stock_profiles WHERE code = ? LIMIT 1',
+      [normalized],
+      () => this.db.prepare('SELECT synced_at FROM stock_profiles WHERE code = ?').get(normalized) as
+        | { synced_at: string }
+        | undefined,
+    )
     return row?.synced_at ?? null
   }
 
@@ -1552,6 +1612,28 @@ export class MarketDataStore {
     const ts = nowIso()
     const normalized = normalizeStockCode(code)
     const instrumentNs = this.resolveCnEquityInstrumentNs(code)
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({
+        op: 'replaceProfile',
+        code: normalized,
+        instrumentNs,
+        syncedAt: ts,
+        profile: {
+          org_name: profile.orgName ?? null,
+          province: profile.province ?? null,
+          city: profile.city ?? null,
+          employees: profile.employees ?? null,
+          main_business: profile.mainBusiness ?? null,
+          org_profile: profile.orgProfile ?? null,
+          business_scope: profile.businessScope ?? null,
+          website: profile.website ?? null,
+          chairman: profile.chairman ?? null,
+          total_market_cap: profile.totalMarketCap ?? null,
+          circulating_market_cap: profile.circulatingMarketCap ?? null,
+        },
+      })
+      return
+    }
     if (stockProfilesUsesInstrumentNs(this.db)) {
       this.db.prepare(`
         INSERT INTO stock_profiles (
@@ -1635,6 +1717,28 @@ export class MarketDataStore {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_financials', normalized)
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({
+        op: 'replaceFinancial',
+        code: normalized,
+        instrumentNs,
+        syncedAt: ts,
+        fin: {
+          report_date: fin.reportDate ?? '',
+          report_type: fin.reportType ?? 'annual',
+          revenue: fin.revenue ?? null,
+          net_profit: fin.netProfit ?? null,
+          roe: fin.roe ?? null,
+          gross_margin: fin.grossMargin ?? null,
+          debt_ratio: fin.debtRatio ?? null,
+          eps: fin.eps ?? null,
+          bps: fin.bps ?? null,
+          revenue_yoy: fin.revenueYoy ?? null,
+          net_profit_yoy: fin.netProfitYoy ?? null,
+        },
+      })
+      return
+    }
     this.db.prepare(`
       INSERT INTO stock_financials (
         code, instrument_ns, report_date, report_type, revenue, net_profit, roe, gross_margin, debt_ratio,
@@ -1677,56 +1781,62 @@ export class MarketDataStore {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_business_segments', normalized)
-    const del = this.db.prepare('DELETE FROM stock_business_segments WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_business_segments (
-        code, instrument_ns, report_date, segment_name, segment_type, revenue, revenue_pct, gross_margin, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const seg of segments) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          reportDate,
-          String(seg.name ?? ''),
-          String(seg.type ?? ''),
-          seg.revenue ?? null,
-          seg.revenuePct ?? null,
-          seg.grossMargin ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceBusinessSegments',
+      code: normalized,
+      instrumentNs,
+      reportDate,
+      segments,
+      syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_business_segments WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_business_segments (
+          code, instrument_ns, report_date, segment_name, segment_type, revenue, revenue_pct, gross_margin, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const seg of segments) {
+          ins.run(
+            normalized, instrumentNs, reportDate,
+            String(seg.name ?? ''), String(seg.type ?? ''),
+            seg.revenue ?? null, seg.revenuePct ?? null, seg.grossMargin ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replacePartners(code: string, direction: string, partners: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_partners', normalized)
-    const del = this.db.prepare('DELETE FROM stock_partners WHERE code = ? AND direction = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_partners (code, instrument_ns, direction, partner_name, amount, ratio, report_date, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized, direction)
-      for (const p of partners.slice(0, 20)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          direction,
-          String(p.name ?? ''),
-          p.amount ?? null,
-          p.ratio ?? null,
-          p.reportDate ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replacePartners',
+      code: normalized,
+      instrumentNs,
+      direction,
+      partners,
+      syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_partners WHERE code = ? AND direction = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_partners (code, instrument_ns, direction, partner_name, amount, ratio, report_date, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized, direction)
+        for (const p of partners.slice(0, 20)) {
+          ins.run(
+            normalized, instrumentNs, direction, String(p.name ?? ''),
+            p.amount ?? null, p.ratio ?? null, p.reportDate ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   upsertQuoteDaily(tradeDate: string, code: string, quote: Record<string, unknown>): void {
@@ -1782,6 +1892,15 @@ export class MarketDataStore {
 
   rebuildIndustryStats(tradeDate: string): number {
     const ts = nowIso()
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({ op: 'rebuildIndustryStats', tradeDate, syncedAt: ts })
+      this.flushDuckWritesSync({ throwOnError: false })
+      const row = this.duckGateway().queryOneSync<{ c: number }>(
+        'SELECT COUNT(*)::INTEGER AS c FROM industry_stats WHERE trade_date = ?',
+        [tradeDate],
+      )
+      return row?.c ?? 0
+    }
     this.db.prepare('DELETE FROM industry_stats WHERE trade_date = ?').run(tradeDate)
     const r = this.db.prepare(`
       INSERT INTO industry_stats (trade_date, industry, stock_count, avg_score, avg_pe, avg_pb, synced_at)
@@ -1803,16 +1922,24 @@ export class MarketDataStore {
   }
 
   hasFactorsForDate(code: string, tradeDate: string): boolean {
-    const row = this.db.prepare(
-      'SELECT 1 FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
-    ).get(code, tradeDate)
+    const row = this.duckRead<{ n: number }>(
+      'SELECT 1::INTEGER AS n FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
+      [code, tradeDate],
+      () => this.db.prepare(
+        'SELECT 1 FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
+      ).get(code, tradeDate) as { n?: number } | undefined,
+    )
     return Boolean(row)
   }
 
   partnerSyncedAt(code: string): string | null {
-    const row = this.db.prepare(
+    const row = this.duckRead<{ synced_at: string | null }>(
       'SELECT MAX(synced_at) AS synced_at FROM stock_partners WHERE code = ?',
-    ).get(code) as { synced_at: string | null } | undefined
+      [code],
+      () => this.db.prepare(
+        'SELECT MAX(synced_at) AS synced_at FROM stock_partners WHERE code = ?',
+      ).get(code) as { synced_at: string | null } | undefined,
+    )
     return row?.synced_at ?? null
   }
 
@@ -1972,224 +2099,211 @@ export class MarketDataStore {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_announcements', normalized)
-    const del = this.db.prepare('DELETE FROM stock_announcements WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_announcements (code, instrument_ns, pub_date, title, url, source, category, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(code, pub_date, title) DO UPDATE SET
-        instrument_ns = COALESCE(excluded.instrument_ns, stock_announcements.instrument_ns),
-        url = excluded.url,
-        source = excluded.source,
-        category = excluded.category,
-        synced_at = excluded.synced_at
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 60)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          String(item.date ?? item.pub_date ?? ''),
-          String(item.title ?? ''),
-          item.url ?? null,
-          item.source ?? null,
-          item.type ?? item.category ?? 'announcement',
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceAnnouncements', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_announcements WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_announcements (code, instrument_ns, pub_date, title, url, source, category, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(code, pub_date, title) DO UPDATE SET
+          instrument_ns = COALESCE(excluded.instrument_ns, stock_announcements.instrument_ns),
+          url = excluded.url,
+          source = excluded.source,
+          category = excluded.category,
+          synced_at = excluded.synced_at
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 60)) {
+          ins.run(
+            normalized, instrumentNs, String(item.date ?? item.pub_date ?? ''), String(item.title ?? ''),
+            item.url ?? null, item.source ?? null, item.type ?? item.category ?? 'announcement', ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceDividends(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_dividends', normalized)
-    const del = this.db.prepare('DELETE FROM stock_dividends WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_dividends (
-        code, instrument_ns, year, ex_date, record_date, pay_date, cash_bonus, stock_bonus, plan, progress, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 30)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          item.year ?? null,
-          item.exDate ?? item.ex_date ?? null,
-          item.recordDate ?? item.record_date ?? null,
-          item.payDate ?? item.pay_date ?? null,
-          item.cashBonus ?? item.cash_bonus ?? null,
-          item.stockBonus ?? item.stock_bonus ?? null,
-          item.plan ?? null,
-          item.progress ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceDividends', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_dividends WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_dividends (
+          code, instrument_ns, year, ex_date, record_date, pay_date, cash_bonus, stock_bonus, plan, progress, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 30)) {
+          ins.run(
+            normalized, instrumentNs, item.year ?? null,
+            item.exDate ?? item.ex_date ?? null, item.recordDate ?? item.record_date ?? null,
+            item.payDate ?? item.pay_date ?? null, item.cashBonus ?? item.cash_bonus ?? null,
+            item.stockBonus ?? item.stock_bonus ?? null, item.plan ?? null, item.progress ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceShareholders(code: string, row: Record<string, unknown>): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_shareholder_summary', normalized)
-    const reportDate = String(row.reportDate ?? row.report_date ?? '')
-    const delSummary = this.db.prepare('DELETE FROM stock_shareholder_summary WHERE code = ?')
-    const delTop = this.db.prepare('DELETE FROM stock_shareholder_top10 WHERE code = ?')
-    const insSummary = this.db.prepare(`
-      INSERT INTO stock_shareholder_summary (
-        code, instrument_ns, report_date, shareholder_count, shareholder_count_change,
-        avg_holding_value, hold_focus, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const insTop = this.db.prepare(`
-      INSERT INTO stock_shareholder_top10 (
-        code, instrument_ns, report_date, rank, holder_name, shares_held, share_pct, share_change, share_type, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const top10 = (row.top10Shareholders as Record<string, unknown>[] | undefined) ?? []
-    const tx = this.db.transaction(() => {
-      delSummary.run(normalized)
-      delTop.run(normalized)
-      insSummary.run(
-        normalized,
-        instrumentNs,
-        reportDate,
-        row.shareholderCount ?? row.shareholder_count ?? null,
-        row.shareholderCountChange ?? row.shareholder_count_change ?? null,
-        row.avgHoldingValue ?? row.avg_holding_value ?? null,
-        row.holdFocus ?? row.hold_focus ?? null,
-        ts,
-      )
-      for (const h of top10.slice(0, 10)) {
-        insTop.run(
-          normalized,
-          instrumentNs,
-          reportDate,
-          h.rank ?? null,
-          String(h.name ?? ''),
-          h.sharesHeld ?? h.shares_held ?? null,
-          h.sharePct ?? h.share_pct ?? null,
-          h.change ?? h.share_change ?? null,
-          h.shareType ?? h.share_type ?? null,
-          ts,
+    this.queueMarketWrite({
+      op: 'replaceShareholders', code: normalized, instrumentNs, row, syncedAt: ts,
+    }, () => {
+      const reportDate = String(row.reportDate ?? row.report_date ?? '')
+      const delSummary = this.db.prepare('DELETE FROM stock_shareholder_summary WHERE code = ?')
+      const delTop = this.db.prepare('DELETE FROM stock_shareholder_top10 WHERE code = ?')
+      const insSummary = this.db.prepare(`
+        INSERT INTO stock_shareholder_summary (
+          code, instrument_ns, report_date, shareholder_count, shareholder_count_change,
+          avg_holding_value, hold_focus, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const insTop = this.db.prepare(`
+        INSERT INTO stock_shareholder_top10 (
+          code, instrument_ns, report_date, rank, holder_name, shares_held, share_pct, share_change, share_type, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const top10 = (row.top10Shareholders as Record<string, unknown>[] | undefined) ?? []
+      const tx = this.db.transaction(() => {
+        delSummary.run(normalized)
+        delTop.run(normalized)
+        insSummary.run(
+          normalized, instrumentNs, reportDate,
+          row.shareholderCount ?? row.shareholder_count ?? null,
+          row.shareholderCountChange ?? row.shareholder_count_change ?? null,
+          row.avgHoldingValue ?? row.avg_holding_value ?? null,
+          row.holdFocus ?? row.hold_focus ?? null, ts,
         )
-      }
+        for (const h of top10.slice(0, 10)) {
+          insTop.run(
+            normalized, instrumentNs, reportDate, h.rank ?? null, String(h.name ?? ''),
+            h.sharesHeld ?? h.shares_held ?? null, h.sharePct ?? h.share_pct ?? null,
+            h.change ?? h.share_change ?? null, h.shareType ?? h.share_type ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceForecasts(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_forecasts', normalized)
-    const del = this.db.prepare('DELETE FROM stock_forecasts WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_forecasts (
-        code, instrument_ns, report_date, ann_date, forecast_type, summary, profit_lower, profit_upper, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 20)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          String(item.reportDate ?? item.report_date ?? ''),
-          item.annDate ?? item.ann_date ?? null,
-          item.forecastType ?? item.forecast_type ?? null,
-          item.summary ?? null,
-          item.profitLower ?? item.profit_lower ?? null,
-          item.profitUpper ?? item.profit_upper ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceForecasts', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_forecasts WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_forecasts (
+          code, instrument_ns, report_date, ann_date, forecast_type, summary, profit_lower, profit_upper, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 20)) {
+          ins.run(
+            normalized, instrumentNs, String(item.reportDate ?? item.report_date ?? ''),
+            item.annDate ?? item.ann_date ?? null, item.forecastType ?? item.forecast_type ?? null,
+            item.summary ?? null, item.profitLower ?? item.profit_lower ?? null,
+            item.profitUpper ?? item.profit_upper ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceInstHoldings(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_inst_holdings', normalized)
-    const del = this.db.prepare('DELETE FROM stock_inst_holdings WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_inst_holdings (
-        code, instrument_ns, report_date, institution_type, shares_held, share_pct, market_value, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 30)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          String(item.reportDate ?? item.report_date ?? ''),
-          item.institutionType ?? item.institution_type ?? null,
-          item.sharesHeld ?? item.shares_held ?? null,
-          item.sharePct ?? item.share_pct ?? null,
-          item.marketValue ?? item.market_value ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceInstHoldings', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_inst_holdings WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_inst_holdings (
+          code, instrument_ns, report_date, institution_type, shares_held, share_pct, market_value, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 30)) {
+          ins.run(
+            normalized, instrumentNs, String(item.reportDate ?? item.report_date ?? ''),
+            item.institutionType ?? item.institution_type ?? null,
+            item.sharesHeld ?? item.shares_held ?? null, item.sharePct ?? item.share_pct ?? null,
+            item.marketValue ?? item.market_value ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceInsiderTrades(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_insider_trades', normalized)
-    const del = this.db.prepare('DELETE FROM stock_insider_trades WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_insider_trades (
-        code, instrument_ns, trade_date, person_name, position, change_type, shares_changed, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 30)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          String(item.date ?? item.trade_date ?? ''),
-          item.name ?? item.person_name ?? null,
-          item.position ?? null,
-          item.changeType ?? item.change_type ?? null,
-          item.sharesChanged ?? item.shares_changed ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceInsiderTrades', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_insider_trades WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_insider_trades (
+          code, instrument_ns, trade_date, person_name, position, change_type, shares_changed, synced_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 30)) {
+          ins.run(
+            normalized, instrumentNs, String(item.date ?? item.trade_date ?? ''),
+            item.name ?? item.person_name ?? null, item.position ?? null,
+            item.changeType ?? item.change_type ?? null, item.sharesChanged ?? item.shares_changed ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   replaceBuybacks(code: string, items: Record<string, unknown>[]): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_buybacks', normalized)
-    const del = this.db.prepare('DELETE FROM stock_buybacks WHERE code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_buybacks (code, instrument_ns, ann_date, amount, shares, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(normalized)
-      for (const item of items.slice(0, 20)) {
-        ins.run(
-          normalized,
-          instrumentNs,
-          String(item.date ?? item.ann_date ?? ''),
-          item.amount ?? null,
-          item.shares ?? null,
-          ts,
-        )
-      }
+    this.queueMarketWrite({
+      op: 'replaceBuybacks', code: normalized, instrumentNs, items, syncedAt: ts,
+    }, () => {
+      const del = this.db.prepare('DELETE FROM stock_buybacks WHERE code = ?')
+      const ins = this.db.prepare(`
+        INSERT INTO stock_buybacks (code, instrument_ns, ann_date, amount, shares, synced_at)
+        VALUES (?, ?, ?, ?, ?, ?)
+      `)
+      const tx = this.db.transaction(() => {
+        del.run(normalized)
+        for (const item of items.slice(0, 20)) {
+          ins.run(
+            normalized, instrumentNs, String(item.date ?? item.ann_date ?? ''),
+            item.amount ?? null, item.shares ?? null, ts,
+          )
+        }
+      })
+      tx()
     })
-    tx()
   }
 
   beginSession(mode: string, jobsTotal: number): number {
@@ -2553,40 +2667,64 @@ export class MarketDataStore {
   upsertEtfProfile(code: string, profile: Record<string, unknown>): void {
     const normalized = normalizeStockCode(code)
     const now = nowIso()
-    this.db.prepare(`
-      INSERT INTO etf_profiles (code, profile_json, updated_at)
-      VALUES (?, ?, ?)
-      ON CONFLICT(code) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at
-    `).run(normalized, JSON.stringify(profile), now)
+    this.queueMarketWrite({
+      op: 'upsertEtfProfile',
+      code: normalized,
+      profile,
+      syncedAt: now,
+    }, () => {
+      this.db.prepare(`
+        INSERT INTO etf_profiles (code, profile_json, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(code) DO UPDATE SET profile_json = excluded.profile_json, updated_at = excluded.updated_at
+      `).run(normalized, JSON.stringify(profile), now)
+    })
   }
 
   listEtfInstruments(limit = 5000): { code: string; name: string | null; market: string }[] {
-    return this.db.prepare(`
-      SELECT code, name, market FROM instruments
-      WHERE asset_class = 'ETF' AND market = 'CN'
-      ORDER BY code
-      LIMIT ?
-    `).all(limit) as { code: string; name: string | null; market: string }[]
+    return this.duckReadAll<{ code: string; name: string | null; market: string }>(
+      `SELECT code, name, market FROM instruments
+       WHERE asset_class = 'ETF' AND market = 'CN'
+       ORDER BY code LIMIT ?`,
+      [limit],
+      () => this.db.prepare(`
+        SELECT code, name, market FROM instruments
+        WHERE asset_class = 'ETF' AND market = 'CN'
+        ORDER BY code LIMIT ?
+      `).all(limit) as { code: string; name: string | null; market: string }[],
+    )
   }
 
   listEtfCodes(activeOnly = true): string[] {
     const sql = activeOnly
       ? `SELECT code FROM instruments WHERE asset_class = 'ETF' AND market = 'CN' AND status = 'active' ORDER BY code`
       : `SELECT code FROM instruments WHERE asset_class = 'ETF' AND market = 'CN' ORDER BY code`
-    return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+    return this.duckReadAll<{ code: string }>(sql, [], () =>
+      this.db.prepare(sql).all() as { code: string }[],
+    ).map(r => r.code)
   }
 
   etfNavSyncedAt(code: string): string | null {
-    const row = this.db.prepare(
+    const normalized = normalizeStockCode(code)
+    const row = this.duckRead<{ synced_at: string | null }>(
       'SELECT MAX(synced_at) AS synced_at FROM etf_nav_daily WHERE code = ?',
-    ).get(normalizeStockCode(code)) as { synced_at: string | null } | undefined
+      [normalized],
+      () => this.db.prepare(
+        'SELECT MAX(synced_at) AS synced_at FROM etf_nav_daily WHERE code = ?',
+      ).get(normalized) as { synced_at: string | null } | undefined,
+    )
     return row?.synced_at ?? null
   }
 
   etfHoldingsSyncedAt(code: string): string | null {
-    const row = this.db.prepare(
+    const normalized = normalizeStockCode(code)
+    const row = this.duckRead<{ synced_at: string | null }>(
       'SELECT MAX(synced_at) AS synced_at FROM etf_holdings WHERE code = ?',
-    ).get(normalizeStockCode(code)) as { synced_at: string | null } | undefined
+      [normalized],
+      () => this.db.prepare(
+        'SELECT MAX(synced_at) AS synced_at FROM etf_holdings WHERE code = ?',
+      ).get(normalized) as { synced_at: string | null } | undefined,
+    )
     return row?.synced_at ?? null
   }
 
@@ -2599,6 +2737,10 @@ export class MarketDataStore {
   }>): number {
     const normalized = normalizeStockCode(code)
     const ts = nowIso()
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({ op: 'replaceEtfNav', code: normalized, rows, syncedAt: ts })
+      return rows.length
+    }
     const del = this.db.prepare('DELETE FROM etf_nav_daily WHERE code = ?').run(normalized)
     const stmt = this.db.prepare(`
       INSERT INTO etf_nav_daily (code, trade_date, nav, acc_nav, change_pct, premium_rate, synced_at)
@@ -2608,15 +2750,7 @@ export class MarketDataStore {
       for (const r of batch) {
         const d = String(r.date ?? '').slice(0, 10)
         if (!d) continue
-        stmt.run(
-          normalized,
-          d,
-          r.nav ?? null,
-          r.accNav ?? null,
-          r.changePct ?? null,
-          r.premiumRate ?? null,
-          ts,
-        )
+        stmt.run(normalized, d, r.nav ?? null, r.accNav ?? null, r.changePct ?? null, r.premiumRate ?? null, ts)
       }
     })
     tx(rows)
@@ -2630,17 +2764,28 @@ export class MarketDataStore {
     changePct: number | null
     premiumRate: number | null
   }> {
-    const rows = this.db.prepare(`
-      SELECT trade_date, nav, acc_nav, change_pct, premium_rate
-      FROM etf_nav_daily WHERE code = ?
-      ORDER BY trade_date DESC LIMIT ?
-    `).all(normalizeStockCode(code), limit) as Array<{
+    const normalized = normalizeStockCode(code)
+    const rows = this.duckReadAll<{
       trade_date: string
       nav: number | null
       acc_nav: number | null
       change_pct: number | null
       premium_rate: number | null
-    }>
+    }>(
+      `SELECT trade_date, nav, acc_nav, change_pct, premium_rate
+       FROM etf_nav_daily WHERE code = ? ORDER BY trade_date DESC LIMIT ?`,
+      [normalized, limit],
+      () => this.db.prepare(`
+        SELECT trade_date, nav, acc_nav, change_pct, premium_rate
+        FROM etf_nav_daily WHERE code = ? ORDER BY trade_date DESC LIMIT ?
+      `).all(normalized, limit) as Array<{
+        trade_date: string
+        nav: number | null
+        acc_nav: number | null
+        change_pct: number | null
+        premium_rate: number | null
+      }>,
+    )
     return rows.map(r => ({
       date: r.trade_date,
       nav: r.nav,
@@ -2660,6 +2805,10 @@ export class MarketDataStore {
   }>): number {
     const normalized = normalizeStockCode(code)
     const ts = nowIso()
+    if (this.isDuckPrimaryReady()) {
+      this.queueDuck({ op: 'replaceEtfHoldings', code: normalized, rows, syncedAt: ts })
+      return rows.length
+    }
     this.db.prepare('DELETE FROM etf_holdings WHERE code = ?').run(normalized)
     const stmt = this.db.prepare(`
       INSERT INTO etf_holdings (code, report_date, holding_symbol, holding_name, weight, shares, market_value, synced_at)
@@ -2670,16 +2819,7 @@ export class MarketDataStore {
       const rd = String(r.reportDate ?? '').slice(0, 10)
       const sym = String(r.holdingSymbol ?? '').trim()
       if (!rd || !sym) continue
-      stmt.run(
-        normalized,
-        rd,
-        sym,
-        r.holdingName ?? null,
-        r.weight ?? null,
-        r.shares ?? null,
-        r.marketValue ?? null,
-        ts,
-      )
+      stmt.run(normalized, rd, sym, r.holdingName ?? null, r.weight ?? null, r.shares ?? null, r.marketValue ?? null, ts)
       n++
     }
     return n
@@ -2693,19 +2833,30 @@ export class MarketDataStore {
     shares: number | null
     marketValue: number | null
   }> {
-    const rows = this.db.prepare(`
-      SELECT report_date, holding_symbol, holding_name, weight, shares, market_value
-      FROM etf_holdings WHERE code = ?
-      ORDER BY report_date DESC, weight DESC
-      LIMIT ?
-    `).all(normalizeStockCode(code), limit) as Array<{
+    const normalized = normalizeStockCode(code)
+    const rows = this.duckReadAll<{
       report_date: string
       holding_symbol: string
       holding_name: string | null
       weight: number | null
       shares: number | null
       market_value: number | null
-    }>
+    }>(
+      `SELECT report_date, holding_symbol, holding_name, weight, shares, market_value
+       FROM etf_holdings WHERE code = ? ORDER BY report_date DESC, weight DESC LIMIT ?`,
+      [normalized, limit],
+      () => this.db.prepare(`
+        SELECT report_date, holding_symbol, holding_name, weight, shares, market_value
+        FROM etf_holdings WHERE code = ? ORDER BY report_date DESC, weight DESC LIMIT ?
+      `).all(normalized, limit) as Array<{
+        report_date: string
+        holding_symbol: string
+        holding_name: string | null
+        weight: number | null
+        shares: number | null
+        market_value: number | null
+      }>,
+    )
     return rows.map(r => ({
       reportDate: r.report_date,
       holdingSymbol: r.holding_symbol,
@@ -2720,20 +2871,29 @@ export class MarketDataStore {
     const kw = keyword.trim()
     if (kw.length < 1) return []
     const like = `%${kw}%`
-    return this.db.prepare(`
-      SELECT code, name FROM instruments
-      WHERE asset_class = 'ETF' AND market = 'CN'
-        AND (code LIKE ? OR name LIKE ?)
-      ORDER BY code
-      LIMIT ?
-    `).all(like, like, limit) as { code: string; name: string | null }[]
+    return this.duckReadAll<{ code: string; name: string | null }>(
+      `SELECT code, name FROM instruments
+       WHERE asset_class = 'ETF' AND market = 'CN' AND (code LIKE ? OR name LIKE ?)
+       ORDER BY code LIMIT ?`,
+      [like, like, limit],
+      () => this.db.prepare(`
+        SELECT code, name FROM instruments
+        WHERE asset_class = 'ETF' AND market = 'CN' AND (code LIKE ? OR name LIKE ?)
+        ORDER BY code LIMIT ?
+      `).all(like, like, limit) as { code: string; name: string | null }[],
+    )
   }
 
   getEtfProfile(code: string): Record<string, unknown> | null {
-    const row = this.db.prepare('SELECT profile_json FROM etf_profiles WHERE code = ?').get(
-      normalizeStockCode(code),
-    ) as { profile_json: string } | undefined
-    if (!row) return null
+    const normalized = normalizeStockCode(code)
+    const row = this.duckRead<{ profile_json: string }>(
+      'SELECT profile_json FROM etf_profiles WHERE code = ? LIMIT 1',
+      [normalized],
+      () => this.db.prepare('SELECT profile_json FROM etf_profiles WHERE code = ?').get(
+        normalized,
+      ) as { profile_json: string } | undefined,
+    )
+    if (!row?.profile_json) return null
     try {
       return JSON.parse(row.profile_json) as Record<string, unknown>
     } catch {

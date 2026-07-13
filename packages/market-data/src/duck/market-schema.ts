@@ -179,33 +179,39 @@ CREATE TABLE IF NOT EXISTS stock_dividends (
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
   year VARCHAR,
-  cash_bonus DOUBLE,
   ex_date VARCHAR,
   record_date VARCHAR,
   pay_date VARCHAR,
+  cash_bonus DOUBLE,
+  stock_bonus DOUBLE,
   plan VARCHAR,
   progress VARCHAR,
   synced_at VARCHAR NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS stock_shareholder_summary (
-  code VARCHAR PRIMARY KEY,
+  code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  report_date VARCHAR,
-  holder_count INTEGER,
-  avg_holdings DOUBLE,
-  synced_at VARCHAR NOT NULL
+  report_date VARCHAR NOT NULL,
+  shareholder_count DOUBLE,
+  shareholder_count_change DOUBLE,
+  avg_holding_value DOUBLE,
+  hold_focus VARCHAR,
+  synced_at VARCHAR NOT NULL,
+  PRIMARY KEY (code, report_date)
 );
 
 CREATE TABLE IF NOT EXISTS stock_shareholder_top10 (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  report_date VARCHAR,
+  report_date VARCHAR NOT NULL,
   rank INTEGER,
-  holder_name VARCHAR,
-  hold_amount DOUBLE,
-  hold_ratio DOUBLE,
+  holder_name VARCHAR NOT NULL,
+  shares_held DOUBLE,
+  share_pct DOUBLE,
+  share_change DOUBLE,
+  share_type VARCHAR,
   synced_at VARCHAR NOT NULL
 );
 
@@ -213,9 +219,12 @@ CREATE TABLE IF NOT EXISTS stock_forecasts (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  report_date VARCHAR,
+  report_date VARCHAR NOT NULL,
+  ann_date VARCHAR,
   forecast_type VARCHAR,
-  content VARCHAR,
+  summary VARCHAR,
+  profit_lower DOUBLE,
+  profit_upper DOUBLE,
   synced_at VARCHAR NOT NULL
 );
 
@@ -223,10 +232,11 @@ CREATE TABLE IF NOT EXISTS stock_inst_holdings (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  report_date VARCHAR,
-  inst_name VARCHAR,
-  hold_amount DOUBLE,
-  hold_ratio DOUBLE,
+  report_date VARCHAR NOT NULL,
+  institution_type VARCHAR,
+  shares_held DOUBLE,
+  share_pct DOUBLE,
+  market_value DOUBLE,
   synced_at VARCHAR NOT NULL
 );
 
@@ -234,11 +244,11 @@ CREATE TABLE IF NOT EXISTS stock_insider_trades (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  trade_date VARCHAR,
-  insider_name VARCHAR,
-  trade_type VARCHAR,
-  shares DOUBLE,
-  price DOUBLE,
+  trade_date VARCHAR NOT NULL,
+  person_name VARCHAR,
+  position VARCHAR,
+  change_type VARCHAR,
+  shares_changed DOUBLE,
   synced_at VARCHAR NOT NULL
 );
 
@@ -246,7 +256,7 @@ CREATE TABLE IF NOT EXISTS stock_buybacks (
   id INTEGER PRIMARY KEY,
   code VARCHAR NOT NULL,
   instrument_ns VARCHAR,
-  ann_date VARCHAR,
+  ann_date VARCHAR NOT NULL,
   amount DOUBLE,
   shares DOUBLE,
   synced_at VARCHAR NOT NULL
@@ -295,6 +305,39 @@ CREATE TABLE IF NOT EXISTS etf_holdings (
   market_value DOUBLE,
   synced_at VARCHAR NOT NULL
 );
+`
+
+/** 旧 Duck 表结构对齐 SQLite enrichment 列（幂等 ALTER） */
+export const MARKET_DUCK_ENRICHMENT_ALIGN_SQL = `
+ALTER TABLE stock_dividends ADD COLUMN IF NOT EXISTS stock_bonus DOUBLE;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS report_date VARCHAR;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS shareholder_count DOUBLE;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS shareholder_count_change DOUBLE;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS avg_holding_value DOUBLE;
+ALTER TABLE stock_shareholder_summary ADD COLUMN IF NOT EXISTS hold_focus VARCHAR;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN IF NOT EXISTS shares_held DOUBLE;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN IF NOT EXISTS share_pct DOUBLE;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN IF NOT EXISTS share_change DOUBLE;
+ALTER TABLE stock_shareholder_top10 ADD COLUMN IF NOT EXISTS share_type VARCHAR;
+ALTER TABLE stock_forecasts ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+ALTER TABLE stock_forecasts ADD COLUMN IF NOT EXISTS ann_date VARCHAR;
+ALTER TABLE stock_forecasts ADD COLUMN IF NOT EXISTS summary VARCHAR;
+ALTER TABLE stock_forecasts ADD COLUMN IF NOT EXISTS profit_lower DOUBLE;
+ALTER TABLE stock_forecasts ADD COLUMN IF NOT EXISTS profit_upper DOUBLE;
+ALTER TABLE stock_inst_holdings ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+ALTER TABLE stock_inst_holdings ADD COLUMN IF NOT EXISTS institution_type VARCHAR;
+ALTER TABLE stock_inst_holdings ADD COLUMN IF NOT EXISTS shares_held DOUBLE;
+ALTER TABLE stock_inst_holdings ADD COLUMN IF NOT EXISTS share_pct DOUBLE;
+ALTER TABLE stock_inst_holdings ADD COLUMN IF NOT EXISTS market_value DOUBLE;
+ALTER TABLE stock_insider_trades ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+ALTER TABLE stock_insider_trades ADD COLUMN IF NOT EXISTS person_name VARCHAR;
+ALTER TABLE stock_insider_trades ADD COLUMN IF NOT EXISTS position VARCHAR;
+ALTER TABLE stock_insider_trades ADD COLUMN IF NOT EXISTS change_type VARCHAR;
+ALTER TABLE stock_insider_trades ADD COLUMN IF NOT EXISTS shares_changed DOUBLE;
+ALTER TABLE stock_buybacks ADD COLUMN IF NOT EXISTS instrument_ns VARCHAR;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_duck_announcements_unique ON stock_announcements(code, pub_date, title);
 `
 
 /** 分析视图 — 与 analytics/duck-query 兼容；升级时先 DROP 旧 VIEW/物理表 */

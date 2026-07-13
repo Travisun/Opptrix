@@ -9,9 +9,11 @@ import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import Database from 'better-sqlite3'
 import type { StockKline } from '@opptrix/shared'
 import { klineDuckDbPath, marketDbPath } from '../paths.js'
 import { normalizeStockCode } from '../utils.js'
+import { isDuckPrimaryMigrationComplete } from './duck-primary-migration.js'
 import type { DuckWriteOp } from './market-writes.js'
 import { withDuckFileLockAsync, withDuckFileLockSync } from './duck-subprocess-gate.js'
 import type { LocalUniverseScreenQuery } from '../query/screen.js'
@@ -173,6 +175,33 @@ export class MarketDuckGateway {
     }
   }
 
+  checkMarketMigrationNeededSync(): boolean {
+    if (!this.sqliteExists()) return false
+    try {
+      const out = JSON.parse(this.execSync([
+        'check-market-migration', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
+      ], 512 * 1024 * 1024)) as { needed?: boolean }
+      return out.needed === true
+    } catch {
+      return true
+    }
+  }
+
+  /** DuckDB 主存储迁移已完成 — 此后读写以 Duck 为准，不再回退 SQLite 主数据 */
+  isDuckPrimaryReady(): boolean {
+    if (!this.duckExists() || !this.sqliteExists()) return false
+    try {
+      const db = new Database(this.sqliteDbPath, { readonly: true, fileMustExist: true })
+      try {
+        return isDuckPrimaryMigrationComplete(db)
+      } finally {
+        db.close()
+      }
+    } catch {
+      return false
+    }
+  }
+
   syncMarketDataToSqliteSync(): Record<string, number> {
     if (!this.duckExists() || !this.sqliteExists()) return {}
     try {
@@ -266,6 +295,7 @@ export class MarketDuckGateway {
   }
 
   hasMarketData(): boolean {
+    if (!this.isDuckPrimaryReady()) return false
     const now = Date.now()
     if (duckDataCache && duckDataCache.path === this.duckDbPath && now - duckDataCache.at < 15_000) {
       return duckDataCache.has

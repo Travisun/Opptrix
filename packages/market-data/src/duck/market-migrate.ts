@@ -1,9 +1,10 @@
 import type { DuckConnection } from '../kline/duck-connection.js'
 import { attachSqlite, detachSqlite, duckGet, duckRun } from '../kline/duck-connection.js'
-import { MARKET_DUCK_INIT_SQL, MARKET_MIGRATE_TABLES, CN_DAILY_TABLE } from './market-schema.js'
+import { MARKET_DUCK_INIT_SQL, MARKET_MIGRATE_TABLES, CN_DAILY_TABLE, MARKET_DUCK_ENRICHMENT_ALIGN_SQL } from './market-schema.js'
 
 export async function ensureMarketDuckSchema(conn: DuckConnection): Promise<void> {
   await duckRun(conn, MARKET_DUCK_INIT_SQL)
+  await duckRun(conn, MARKET_DUCK_ENRICHMENT_ALIGN_SQL)
 }
 
 /** 从 SQLite 一次性迁移市场数据到 DuckDB（幂等：按表行数对比跳过已迁移表） */
@@ -62,6 +63,39 @@ export async function migrateMarketDataFromSqlite(
     await detachSqlite(conn)
   }
   return out
+}
+
+/** 检测 SQLite 是否仍有未迁入 DuckDB 的市场数据（按表行数对比） */
+export async function marketDataMigrationNeeded(
+  conn: DuckConnection,
+  sqlitePath: string,
+): Promise<boolean> {
+  await ensureMarketDuckSchema(conn)
+  await attachSqlite(conn, sqlitePath, 'md', true)
+  try {
+    for (const table of MARKET_MIGRATE_TABLES) {
+      const srcCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM md.${table}
+      `).catch(() => ({ c: 0 }))
+      const src = srcCount?.c ?? 0
+      if (src === 0) continue
+      const dstCount = await duckGet<{ c: number }>(conn, `
+        SELECT COUNT(*)::INTEGER AS c FROM ${table}
+      `).catch(() => ({ c: 0 }))
+      const dst = dstCount?.c ?? 0
+      if (dst < src) return true
+    }
+    const legacyK = await duckGet<{ c: number }>(conn, `
+      SELECT COUNT(*)::INTEGER AS c FROM md.stock_klines_daily
+    `).catch(() => ({ c: 0 }))
+    const duckK = await duckGet<{ c: number }>(conn, `
+      SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars
+    `).catch(() => ({ c: 0 }))
+    if ((legacyK?.c ?? 0) > 0 && (duckK?.c ?? 0) < (legacyK?.c ?? 0)) return true
+    return false
+  } finally {
+    await detachSqlite(conn)
+  }
 }
 
 async function sqliteTableExists(conn: DuckConnection, table: string): Promise<boolean> {

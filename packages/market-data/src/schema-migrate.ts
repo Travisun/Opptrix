@@ -12,8 +12,12 @@ import {
   MIGRATION_V10_SQL,
   MIGRATION_V11_SQL,
   MIGRATION_V12_SQL,
+  MIGRATION_V13_SQL,
   SCHEMA_VERSION,
 } from './schema.js'
+import {
+  isDuckPrimaryMigrationMarked,
+} from './duck/duck-primary-migration.js'
 import {
   ensureInstrumentNsSchema,
   hasInstrumentNsColumn,
@@ -226,6 +230,12 @@ export const MIGRATION_STEPS: SchemaMigrationStep[] = [
     description: 'market data primary storage on DuckDB',
     isApplied: (db) => marketDataStorageReady(db),
     up: (db) => { db.exec(MIGRATION_V12_SQL) },
+  },
+  {
+    version: 13,
+    description: 'DuckDB primary storage one-shot migration gate',
+    isApplied: (db) => isDuckPrimaryMigrationMarked(db),
+    up: (db) => { db.exec(MIGRATION_V13_SQL) },
   },
 ]
 

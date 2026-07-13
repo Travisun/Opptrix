@@ -17,7 +17,7 @@ import {
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
 import { computeScreenFactors, analyticsStats } from '../analytics/duck-compute.js'
-import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDuckStats } from '../duck/market-migrate.js'
+import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats } from '../duck/market-migrate.js'
 import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
 import {
   latestFactorDateDuck,
@@ -519,6 +519,22 @@ async function cmdMigrateMarketData(flags: Record<string, string>) {
   }
 }
 
+async function cmdCheckMarketMigration(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  const sqlitePath = flags.sqlite
+  if (!duckPath || !sqlitePath) throw new Error('check-market-migration 需要 --duckdb --sqlite')
+  const dir = path.dirname(duckPath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const db = openDuckDatabase(duckPath)
+  const conn = connectDuck(db)
+  try {
+    const needed = await marketDataMigrationNeeded(conn, sqlitePath)
+    process.stdout.write(JSON.stringify({ needed }))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
 async function cmdSyncMarketDataToSqlite(flags: Record<string, string>) {
   const duckPath = flags.duckdb
   const sqlitePath = flags.sqlite
@@ -609,6 +625,7 @@ async function main() {
     else if (cmd === 'query-industry-stocks') await cmdQueryIndustryStocks(flags)
     else if (cmd === 'screen-universe') await cmdScreenUniverse(flags)
     else if (cmd === 'migrate-market-data') await cmdMigrateMarketData(flags)
+    else if (cmd === 'check-market-migration') await cmdCheckMarketMigration(flags)
     else if (cmd === 'sync-market-data-to-sqlite') await cmdSyncMarketDataToSqlite(flags)
     else if (cmd === 'apply-batch') await cmdApplyBatch(flags)
     else if (cmd === 'query-json') await cmdQueryJson(flags)

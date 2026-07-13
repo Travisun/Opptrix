@@ -6,6 +6,7 @@ import { isSupplementPackId } from '@opptrix/shared'
 import { marketDbPath, duckDbPathForMarketDb } from './paths.js'
 import { MarketDataStore } from './store.js'
 import { getMarketDuckGateway, invalidateHasMarketDuckDataCache } from './duck/market-duck-gateway.js'
+import { resetDuckPrimaryMigrationPending } from './duck/duck-primary-migration.js'
 import { PACK_JOBS } from './sync/market-packs.js'
 import {
   exportMarketDataPackage,
@@ -62,6 +63,8 @@ function buildScopedTempStore(source: MarketDataStore, pack: SupplementPackId): 
   const tmpPath = path.join(os.tmpdir(), `opmd-pack-${pack}-${process.pid}-${Date.now()}.sqlite`)
   const scoped = new MarketDataStore(tmpPath, duckDbPathForMarketDb(tmpPath))
   copyPackScopeFromSource(scoped, source.dbPath, pack)
+  resetDuckPrimaryMigrationPending(scoped.db)
+  scoped.runDuckPrimaryMigrationSync()
   return scoped
 }
 
@@ -189,7 +192,8 @@ function mergePackScopeIntoTarget(target: MarketDataStore, srcPath: string, pack
   } finally {
     db.exec('DETACH DATABASE src')
   }
-  getMarketDuckGateway(target.klineDuckDbPath, target.dbPath).migrateMarketDataSync(true)
+  resetDuckPrimaryMigrationPending(target.db)
+  target.runDuckPrimaryMigrationSync()
   invalidateHasMarketDuckDataCache(target.klineDuckDbPath)
 }
 

@@ -19,6 +19,7 @@ import {
   SCHEMA_VERSION,
 } from '../packages/market-data/dist/schema.js'
 import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion, hasInstrumentCompositeKey } from '../packages/market-data/dist/utils.js'
+import { isDuckPrimaryMigrationComplete } from '../packages/market-data/dist/duck/duck-primary-migration.js'
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
 import { getMarketDuckGateway } from '../packages/market-data/dist/duck/market-duck-gateway.js'
 import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
@@ -85,12 +86,12 @@ test('normalizeInstrumentExchange maps null to empty string', () => {
   assert.equal(normalizeInstrumentExchange('sz'), 'SZ')
 })
 
-test('fresh database uses schema v12 with instrument_ns and market_data_storage', () => {
+test('fresh database uses schema v13 with duck primary migration complete', () => {
   const dbPath = join(dataDir, 'fresh-v9.db')
   const store = new MarketDataStore(dbPath, join(dataDir, 'fresh-v9.duckdb'))
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
   assert.equal(ver.v, SCHEMA_VERSION)
-  assert.equal(SCHEMA_VERSION, 12)
+  assert.equal(SCHEMA_VERSION, 13)
 
   const ddl = store.db.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instruments'",
@@ -118,6 +119,11 @@ test('fresh database uses schema v12 with instrument_ns and market_data_storage'
     "SELECT meta_json FROM sync_cursor WHERE job_name = 'market_data_storage'",
   ).get()
   assert.match(marketDataStorage?.meta_json ?? '', /duckdb/)
+  const duckPrimary = store.db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'duck_primary_migration'",
+  ).get()
+  assert.match(duckPrimary?.meta_json ?? '', /complete/)
+  assert.ok(isDuckPrimaryMigrationComplete(store.db))
   store.close()
 })
 
@@ -606,11 +612,14 @@ test('backfill disambiguates duplicate instrument_ns before unique index', () =>
 test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () => {
   const dbPath = join(dataDir, 'etf-ns-disambig.db')
   const store = new MarketDataStore(dbPath, join(dataDir, 'etf-ns-disambig.duckdb'))
-  const ts = new Date().toISOString()
-  store.db.prepare(`
-    INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at, instrument_ns)
-    VALUES ('510300', 'CN', 'EQUITY', '沪深300ETF', 'SH', 'active', ?, 'CN:SH.510300')
-  `).run(ts)
+  store.upsertInstrument({
+    code: '510300',
+    market: 'CN',
+    assetClass: 'EQUITY',
+    name: '沪深300ETF',
+    exchange: 'SH',
+    status: 'active',
+  })
   store.upsertInstrument({
     code: '510300',
     market: 'CN',
@@ -619,10 +628,8 @@ test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () =>
     exchange: 'SH',
     status: 'active',
   })
-  store.prepareForSqliteExport()
-  const rows = store.db.prepare(`
-    SELECT asset_class, instrument_ns FROM instruments WHERE code = '510300' ORDER BY asset_class
-  `).all()
+  store.flushDuckWritesSync()
+  const rows = flushInstruments(store, "code = '510300'")
   assert.equal(rows.length, 2)
   assert.equal(rows.find(r => r.asset_class === 'EQUITY')?.instrument_ns, 'CN:SH.510300')
   assert.equal(rows.find(r => r.asset_class === 'ETF')?.instrument_ns, 'CN:SH.510300@ETF')
@@ -712,6 +719,67 @@ test('v8 re-run preserves instrument_ns column values', async () => {
   assert.equal(row?.instrument_ns, 'CUSTOM:CN:SH.600519')
   assert.equal(hasInstrumentCompositeKey(db), true)
   db.close()
+})
+
+test('v8 sqlite market data migrates fully to duck on open', () => {
+  const dbPath = join(dataDir, 'duck-primary-v8.db')
+  const duckPath = join(dataDir, 'duck-primary-v8.duckdb')
+  seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('600519', '贵州茅台', 'SH', 0, 'active', ?)
+    `).run(t)
+    db.prepare(`
+      INSERT INTO stock_klines_daily (trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at)
+      VALUES ('2026-01-02', '600519', 1700, 1710, 1690, 1705, 1000, 1705000, 0.5, ?)
+    `).run(t)
+    db.prepare(`
+      INSERT INTO stock_quotes_daily (trade_date, code, close, synced_at)
+      VALUES ('2026-01-02', '600519', 1705, ?)
+    `).run(t)
+  })
+
+  const store = new MarketDataStore(dbPath, duckPath)
+  assert.ok(isDuckPrimaryMigrationComplete(store.db))
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
+
+  const duckStocks = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')
+  const duckKlines = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars')
+  const duckQuotes = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stock_quotes_daily')
+  assert.equal(duckStocks?.c, 1)
+  assert.equal(duckKlines?.c, 1)
+  assert.equal(duckQuotes?.c, 1)
+  store.close()
+})
+
+test('partial duck with klines only backfills stocks from sqlite on primary migration', () => {
+  const dbPath = join(dataDir, 'partial-duck-v8.db')
+  const duckPath = join(dataDir, 'partial-duck-v8.duckdb')
+  seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('000001', '平安银行', 'SZ', 0, 'active', ?)
+    `).run(t)
+    db.prepare(`
+      INSERT INTO stock_klines_daily (trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at)
+      VALUES ('2026-01-02', '000001', 10, 10.5, 9.8, 10.2, 500, 5100, 0.2, ?)
+    `).run(t)
+  })
+
+  const store = new MarketDataStore(dbPath, duckPath)
+  assert.ok(isDuckPrimaryMigrationComplete(store.db))
+
+  store.db.prepare(`
+    UPDATE sync_cursor SET meta_json = '{"status":"pending","version":1}', last_success_at = NULL
+    WHERE job_name = 'duck_primary_migration'
+  `).run()
+  store.duckGateway().applyBatchSync([{ op: 'exec', sql: 'DELETE FROM stocks', params: [] }])
+  assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c ?? 0, 0)
+  assert.ok(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars')?.c > 0)
+
+  assert.ok(store.runDuckPrimaryMigrationSync())
+  assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c, 1)
+  store.close()
 })
 
 function buildMinimalOpmdPackage(sqlitePath, schemaVersion) {
