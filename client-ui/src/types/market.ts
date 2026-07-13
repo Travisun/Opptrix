@@ -586,6 +586,7 @@ export interface MarketDbStatusData {
     screen_factors: boolean
     quote_stock_ratio?: number
     kline_stock_ratio?: number
+    kline_recent_ratio?: number
     fin_stock_ratio?: number
     factor_stock_ratio?: number
   }

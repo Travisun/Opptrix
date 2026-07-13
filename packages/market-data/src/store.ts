@@ -69,7 +69,10 @@ export interface BootstrapReadiness {
   fundamentals: boolean
   screen_factors: boolean
   quote_stock_ratio: number
+  /** 至少 60 根日 K 的覆盖率（历史深度） */
   kline_stock_ratio: number
+  /** 有任何日 K 的覆盖率（增量/近期） */
+  kline_recent_ratio: number
   fin_stock_ratio: number
   factor_stock_ratio: number
   kline_cross_market: boolean
@@ -236,6 +239,7 @@ export class MarketDataStore {
       'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
     ).get() as { c: number }).c
     const bootstrap = this.assessBootstrapReadiness(activeCount, latestQuote.d, latestFactor.d)
+    this.enrichThsKlineDumpJobProgress(jobProgress, stockCount, bootstrap, lastSync)
 
     return {
       db_path: this.db.name,
@@ -288,8 +292,12 @@ export class MarketDataStore {
     const initial_taxonomy = this.countTaxonomyNodes('CN', 'industry') >= 5
 
     const klineWithMin = this.listCodesWithMinKlines(60).length
+    const klineRecent = this.countDistinctKlineCodes()
     const kline_stock_ratio = cnEquity > 0
       ? Math.round((klineWithMin / cnEquity) * 1000) / 10
+      : 0
+    const kline_recent_ratio = cnEquity > 0
+      ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
     const klines = kline_stock_ratio >= 95
 
@@ -309,6 +317,7 @@ export class MarketDataStore {
       screen_factors: false,
       quote_stock_ratio: 0,
       kline_stock_ratio,
+      kline_recent_ratio,
       fin_stock_ratio: 0,
       factor_stock_ratio: 0,
       kline_cross_market: false,
@@ -355,9 +364,11 @@ export class MarketDataStore {
       amount?: number | null
       changePct?: number | null
     }>,
+    onBatch?: (done: number, total: number) => void,
   ): number {
     if (!rows.length) return 0
     const ts = nowIso()
+    const total = rows.length
     const stmt = this.db.prepare(`
       INSERT INTO stock_klines_daily (
         trade_date, code, instrument_ns, open, high, low, close, volume, amount, change_pct, synced_at
@@ -392,7 +403,10 @@ export class MarketDataStore {
         )
       }
     })
-    for (let i = 0; i < rows.length; i += 800) tx(rows.slice(i, i + 800))
+    for (let i = 0; i < rows.length; i += 800) {
+      tx(rows.slice(i, i + 800))
+      onBatch?.(Math.min(i + 800, total), total)
+    }
     const cnRows = rows.map(r => ({ ...r, market: 'CN' as const }))
     if (cnRows.length) this.bulkUpsertInstrumentBars(cnRows)
     return rows.length
@@ -454,6 +468,68 @@ export class MarketDataStore {
   hasKlineData(): boolean {
     const row = this.db.prepare('SELECT COUNT(*) as c FROM stock_klines_daily').get() as { c: number }
     return row.c > 0
+  }
+
+  countDistinctKlineCodes(): number {
+    const row = this.db.prepare(
+      'SELECT COUNT(DISTINCT code) AS c FROM stock_klines_daily',
+    ).get() as { c: number }
+    return row.c
+  }
+
+  /** 同花顺 Parquet 导入任务 — 用 K 线库覆盖率展示进度，而非逐股 sync_job_progress */
+  private enrichThsKlineDumpJobProgress(
+    jobProgress: Record<string, JobProgressSummary>,
+    stockCount: number,
+    bootstrap: BootstrapReadiness,
+    lastSync: Record<string, string | null>,
+  ): void {
+    const klineCodes = this.countDistinctKlineCodes()
+    const universe = Math.max(stockCount, klineCodes, 1)
+    const done = klineCodes
+    const pending = Math.max(0, universe - done)
+
+    jobProgress.kline_bootstrap = {
+      done: bootstrap.klines ? universe : done,
+      pending: bootstrap.klines ? 0 : pending,
+      error: jobProgress.kline_bootstrap?.error ?? 0,
+    }
+
+    const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
+    jobProgress.kline_daily = {
+      done: dailyFresh && bootstrap.klines ? universe : done,
+      pending: dailyFresh && bootstrap.klines ? 0 : pending,
+      error: jobProgress.kline_daily?.error ?? 0,
+    }
+  }
+
+  /** 关闭长时间无响应的 running 会话/任务，避免 UI 永久卡在同步中 */
+  reconcileStaleSyncState(maxAgeMs = 30 * 60 * 1000): number {
+    const cutoff = new Date(Date.now() - maxAgeMs).toISOString()
+    const finished = nowIso()
+
+    const latestRunning = this.db.prepare(`
+      SELECT id FROM sync_sessions WHERE status = 'running' ORDER BY id DESC LIMIT 1
+    `).get() as { id: number } | undefined
+    const keepId = latestRunning?.id ?? -1
+
+    const dupSessions = this.db.prepare(`
+      UPDATE sync_sessions
+      SET status = 'interrupted', finished_at = ?, message = '重复会话，已自动关闭'
+      WHERE status = 'running' AND id != ?
+    `).run(finished, keepId).changes
+
+    const sessions = this.db.prepare(`
+      UPDATE sync_sessions
+      SET status = 'interrupted', finished_at = ?, message = '会话超时，已自动关闭'
+      WHERE status = 'running' AND started_at < ?
+    `).run(finished, cutoff).changes
+    const runs = this.db.prepare(`
+      UPDATE sync_runs
+      SET status = 'interrupted', finished_at = ?, message = '任务超时，已自动关闭'
+      WHERE status = 'running' AND started_at < ?
+    `).run(finished, cutoff).changes
+    return dupSessions + sessions + runs
   }
 
   countEquityInstruments(market: 'CN' | 'US' | 'HK'): number {
@@ -528,6 +604,30 @@ export class MarketDataStore {
       n++
     }
     return n
+  }
+
+  /** 用 taxonomy 行业分类回填 stocks.industry（syncInitialTaxonomy 收尾） */
+  backfillCnStockIndustryFromTaxonomy(): number {
+    const ts = nowIso()
+    return this.db.prepare(`
+      UPDATE stocks
+      SET industry = (
+        SELECT tn.name
+        FROM instrument_taxonomy it
+        INNER JOIN taxonomy_nodes tn ON tn.id = it.taxonomy_id
+        WHERE it.market = 'CN' AND it.code = stocks.code AND tn.kind = 'industry'
+        ORDER BY tn.level DESC, tn.id
+        LIMIT 1
+      ),
+      updated_at = ?
+      WHERE status = 'active'
+        AND EXISTS (
+          SELECT 1
+          FROM instrument_taxonomy it
+          INNER JOIN taxonomy_nodes tn ON tn.id = it.taxonomy_id
+          WHERE it.market = 'CN' AND it.code = stocks.code AND tn.kind = 'industry'
+        )
+    `).run(ts).changes
   }
 
   listCodesWithMinInstrumentBars(market: string, minBars: number): string[] {

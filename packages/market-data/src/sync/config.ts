@@ -69,6 +69,9 @@ export const CN_AUTO_SYNC_JOB_UNIVERSE = [
   'kline_daily',
 ] as const
 
+/** 同花顺 Parquet 批量 K 线任务（非逐股 Provider） */
+export const THS_KLINE_DUMP_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
+
 /** @deprecated 港股/美股/ETF 名录改由其他导入方式；保留 job 名供引擎 legacy 分支 */
 export const LEGACY_INITIAL_SYNC_JOBS = [
   'initial_hk_universe',

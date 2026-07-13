@@ -22,6 +22,8 @@ export {
   stockIndexGetIndustryDetail,
   stockIndexListIndustryStocks,
   type StockIndexItem,
+  type StockIndexBoard,
+  type StockIndexIndustry,
 } from './api/client.js'
 export {
   stockIndexItemToInstrumentRef,

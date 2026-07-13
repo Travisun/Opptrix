@@ -1,7 +1,8 @@
 import { markMarketPackPrepared } from '../market-pack-settings.js'
 import type { MarketDbStatus, MarketDataStore } from '../store.js'
 import { jobsForMarketPack } from './market-packs.js'
-import { MarketDataSyncEngine, ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type SyncMode, type SyncOptions } from './engine.js'
+import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type MarketDataSyncEngine, type SyncMode, type SyncOptions, type SyncProgress } from './engine.js'
+import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
 import {
@@ -60,7 +61,7 @@ function countCompletedJobs(
 export class MarketSyncCoordinator {
   private running = false
   private memoryLogs: string[] = []
-  private snapshot: Partial<SyncStateSnapshot> = {}
+  private snapshot: Partial<SyncStateSnapshot> & { message?: string | null } = {}
   private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
   private bootstrapProgressRepaired = false
 
@@ -90,12 +91,18 @@ export class MarketSyncCoordinator {
   ) {}
 
   getSnapshot(): SyncStateSnapshot {
+    this.store.reconcileStaleSyncState()
     if (!this.bootstrapProgressRepaired) {
       this.store.repairBootstrapJobProgress()
       this.bootstrapProgressRepaired = true
       this.dbStatusCache = null
     }
-    const session = this.store.getLatestSession()
+    let session = this.store.getLatestSession()
+    if (!this.running && session?.status === 'running') {
+      this.store.finishSession(session.id, 'interrupted', '同步已中断（无活动进程）')
+      this.dbStatusCache = null
+      session = this.store.getLatestSession()
+    }
     const dbStatus = this.dbStatus()
     const logs = this.running
       ? this.memoryLogs
@@ -108,15 +115,31 @@ export class MarketSyncCoordinator {
         ? [...CN_MANUAL_SYNC_JOBS]
         : [...BOOTSTRAP_SYNC_JOBS]
     const stockCount = dbStatus.stock_count
-    const currentJob = session?.current_job ?? this.snapshot.current_job ?? null
+    const currentJob = this.running
+      ? (this.snapshot.current_job ?? session?.current_job ?? null)
+      : (session?.current_job ?? this.snapshot.current_job ?? null)
     const sessionRunning = this.running || session?.status === 'running'
-    const rawJobCurrent = session?.job_current ?? this.snapshot.job_current ?? 0
-    const rawJobTotal = session?.job_total ?? this.snapshot.job_total ?? 0
-    const sessionJobsCompleted = session?.jobs_completed ?? this.snapshot.jobs_completed ?? 0
+    const rawJobCurrent = this.running
+      ? (this.snapshot.job_current ?? session?.job_current ?? 0)
+      : (session?.job_current ?? this.snapshot.job_current ?? 0)
+    const rawJobTotal = this.running
+      ? (this.snapshot.job_total ?? session?.job_total ?? 0)
+      : (session?.job_total ?? this.snapshot.job_total ?? 0)
+    const sessionJobsCompleted = this.running
+      ? (this.snapshot.jobs_completed ?? session?.jobs_completed ?? 0)
+      : (session?.jobs_completed ?? this.snapshot.jobs_completed ?? 0)
+    const sessionMessage = this.running
+      ? (this.snapshot.message ?? session?.message ?? null)
+      : (session?.message ?? this.snapshot.message ?? null)
+
+    const isThsKlineJob = currentJob != null && THS_KLINE_DUMP_JOBS.has(currentJob)
 
     let jobCurrent = 0
     let jobTotal = stockCount
-    if (currentJob && stockCount > 0) {
+    if (isThsKlineJob && sessionRunning) {
+      jobCurrent = rawJobCurrent
+      jobTotal = rawJobTotal > 0 ? rawJobTotal : 100
+    } else if (currentJob && stockCount > 0) {
       jobCurrent = Math.min(stockCount, this.store.countJobDone(currentJob))
       jobTotal = stockCount
     }
@@ -154,7 +177,7 @@ export class MarketSyncCoordinator {
       jobs_completed: jobsCompleted,
       jobs_total: jobsTotal,
       overall_percent: overall,
-      message: session?.message ?? null,
+      message: sessionMessage,
       logs,
       db_status: dbStatus,
     }
@@ -192,6 +215,12 @@ export class MarketSyncCoordinator {
       return { started: false, running: true, mode }
     }
 
+    this.store.reconcileStaleSyncState()
+    const staleRunning = this.store.getLatestSession()
+    if (staleRunning?.status === 'running') {
+      this.store.finishSession(staleRunning.id, 'interrupted', '上次同步未正常结束，已重置')
+    }
+
     this.running = true
     const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
     const latest = this.store.getLatestSession()
@@ -224,23 +253,30 @@ export class MarketSyncCoordinator {
     try {
       const result = await engine.sync({
         ...options,
-        onProgress: p => {
+        onProgress: (p: SyncProgress) => {
           this.snapshot = {
             current_job: p.job,
             job_current: p.current,
             job_total: p.total,
+            message: p.message ?? this.snapshot.message ?? null,
           }
           this.patchProgress(sessionId, {
             current_job: p.job,
             job_current: p.current,
             job_total: p.total,
+            message: p.message ?? undefined,
           })
-          if (p.message) this.log(sessionId, p.message)
-          else if (p.current === p.total || p.current % 100 === 0) {
+          if (p.message) {
+            const prev = this.snapshot.message
+            const phaseChanged = !prev || !p.message.startsWith(prev.split(' ')[0] ?? '')
+            if (phaseChanged || p.current % 5 === 0 || p.current >= p.total) {
+              this.log(sessionId, p.message)
+            }
+          } else if (p.current === p.total || p.current % 10 === 0) {
             this.log(sessionId, `${p.job}: ${p.current}/${p.total}`)
           }
         },
-        onJobStart: (job, index, total) => {
+        onJobStart: (job: string, index: number, total: number) => {
           this.snapshot = {
             current_job: job,
             jobs_completed: index,
@@ -257,7 +293,7 @@ export class MarketSyncCoordinator {
           })
           this.log(sessionId, `任务 ${index + 1}/${total}: ${job}`)
         },
-        onJobFinish: (job, status, index) => {
+        onJobFinish: (job: string, status: string, index: number) => {
           this.snapshot = {
             ...this.snapshot,
             jobs_completed: index + 1,
@@ -266,7 +302,7 @@ export class MarketSyncCoordinator {
           this.log(sessionId, `任务 ${job} 完成 (${status})`)
         },
       })
-      const failed = Object.values(result.jobs).filter(v => v.startsWith('failed')).length
+      const failed = Object.values(result.jobs).filter(v => String(v).startsWith('failed')).length
       const bootstrap = this.store.assessBootstrapReadiness()
       const overall = computeBootstrapOverallPercent(
         options.jobs,
@@ -298,6 +334,7 @@ export class MarketSyncCoordinator {
   /** Auto-start on app/server boot: resume interrupted sync or refresh stale daily data. */
   autoSyncOnBoot(): void {
     if (this.running) return
+    this.store.reconcileStaleSyncState()
     const stale = this.store.getLatestSession()
     if (stale?.status === 'running') {
       this.store.finishSession(stale.id, 'interrupted', '进程重启，等待接续')

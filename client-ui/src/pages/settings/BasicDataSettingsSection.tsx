@@ -28,6 +28,48 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
 const POLL_RUNNING_MS = 5000
 const POLL_IDLE_MS = 30_000
+const THS_KLINE_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
+
+function formatKlineJobStats(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+  syncState: MarketDataSyncState | null,
+  isRunning: boolean,
+): string {
+  const prog = dbStatus?.job_progress?.[jobName]
+  const done = prog?.done ?? 0
+  const latest = dbStatus?.kline_dates?.CN
+  const depthRatio = dbStatus?.bootstrap?.kline_stock_ratio
+  const recentRatio = dbStatus?.bootstrap?.kline_recent_ratio
+
+  if (isRunning && syncState?.current_job === jobName) {
+    if (syncState.message) return syncState.message
+    if (syncState.job_batch_total && syncState.job_batch_total > 0) {
+      return `${syncState.job_batch_current ?? 0}/${syncState.job_batch_total}`
+    }
+    return '导入中…'
+  }
+
+  if (THS_KLINE_JOBS.has(jobName)) {
+    const parts: string[] = []
+    if (done > 0) parts.push(`${done.toLocaleString()} 只日 K`)
+    else if (typeof recentRatio === 'number' && recentRatio > 0) {
+      parts.push(`日 K 覆盖 ${recentRatio.toFixed(1)}%`)
+    }
+    if (typeof depthRatio === 'number' && depthRatio > 0) {
+      parts.push(`历史深度 ${depthRatio.toFixed(1)}%`)
+    } else if ((done > 0 || (recentRatio ?? 0) > 0) && jobName === 'kline_bootstrap') {
+      parts.push('历史深度待补全')
+    }
+    if (latest) parts.push(`最新 ${formatDate(latest)}`)
+    return parts.length ? parts.join(' · ') : '—'
+  }
+
+  const pending = prog?.pending ?? 0
+  const total = done + pending
+  return total > 0 ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'
+}
+
 const SYNC_JOB_LABELS: Record<string, string> = {
   initial_cn_universe: 'A 股名录',
   initial_taxonomy: 'A 股行业/板块',
@@ -277,6 +319,8 @@ export default function BasicDataSettingsSection() {
 
   const overallPercent = syncState?.overall_percent ?? 0
   const bootstrapReady = dbStatus?.bootstrap?.ready ?? false
+  const klineRecentRatio = dbStatus?.bootstrap?.kline_recent_ratio ?? 0
+  const klineDepthRatio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
   const stockCount = dbStatus?.stock_count ?? 0
   const etfCount = dbStatus?.etf_count ?? 0
   const usCount = dbStatus?.us_count ?? 0
@@ -312,7 +356,11 @@ export default function BasicDataSettingsSection() {
           <Text className={s.statusBannerDesc} block>
             {bootstrapReady
               ? '本地数据完整，可开始选股与挖掘'
-              : '需先完成 A 股名录、行业板块与日 K 同步'}
+              : isRunning && syncState?.message
+                ? syncState.message
+                : klineRecentRatio >= 50 && klineDepthRatio < 95
+                  ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
+                  : '需先完成 A 股名录、行业板块与历史 K 线同步'}
           </Text>
         </div>
       </div>
@@ -388,7 +436,8 @@ export default function BasicDataSettingsSection() {
                 style={{ height: '4px' }}
               />
               <Text style={{ fontSize: '11px', color: opptrixCssVars.textTertiary }} block>
-                {syncState?.jobs_completed ?? 0}/{syncState?.jobs_total ?? 0} 个任务
+                {syncState?.message
+                  ?? `${syncState?.jobs_completed ?? 0}/${syncState?.jobs_total ?? 0} 个任务`}
               </Text>
             </div>
           )}
@@ -400,10 +449,35 @@ export default function BasicDataSettingsSection() {
             const pending = prog?.pending ?? 0
             const error = prog?.error ?? 0
             const total = done + pending
-            const pct = total > 0 ? Math.round((done / total) * 1000) / 10 : 0
+            const isKlineDump = THS_KLINE_JOBS.has(jobName)
             const isCurrent = syncState?.current_job === jobName
-            const hasData = total > 0
-            const isComplete = hasData && done >= total && error === 0
+            const isJobRunning = isRunning && isCurrent
+
+            let pct = 0
+            let hasData = false
+            let isComplete = false
+
+            if (isKlineDump) {
+              if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
+                pct = Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10
+                hasData = true
+              } else {
+                const ratio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
+                pct = Math.min(100, Math.round(ratio * 10) / 10)
+                hasData = ratio > 0 || done > 0
+                if (jobName === 'kline_bootstrap') {
+                  isComplete = dbStatus?.bootstrap?.klines ?? false
+                } else {
+                  isComplete = pending === 0 && done > 0 && error === 0
+                }
+              }
+            } else {
+              pct = total > 0 ? Math.round((done / total) * 1000) / 10 : 0
+              hasData = total > 0
+              isComplete = hasData && done >= total && error === 0
+            }
+
+            const statsText = formatKlineJobStats(jobName, dbStatus, syncState, isJobRunning)
 
             return (
               <div key={jobName} className={mergeClasses(s.jobRow, isCurrent && s.jobRowActive)}>
@@ -426,8 +500,8 @@ export default function BasicDataSettingsSection() {
                     className={mergeClasses(s.jobStats, error > 0 && s.jobStatsError)}
                     block
                   >
-                    {hasData ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'}
-                    {error > 0 && ` ×${error}`}
+                    {statsText}
+                    {!isKlineDump && error > 0 && ` ×${error}`}
                   </Text>
                 )}
               </div>

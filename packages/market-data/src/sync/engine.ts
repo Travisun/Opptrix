@@ -32,12 +32,10 @@ import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
 import { StandardInstrumentGateway } from './instrument-gateway.js'
-import {
-  syncAllInitialTaxonomy,
-  syncInitialCnEtf,
-  syncInitialUniverse,
-  type InitialSyncCallbacks,
-} from './initial-sync.js'
+import type { InitialSyncCallbacks } from './initial-sync.js'
+import { syncInitialCnEtf } from './stockindex-etf.js'
+import { syncInitialStockIndexUniverse } from './stockindex-universe.js'
+import { syncAllInitialTaxonomy } from './stockindex-taxonomy.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
 import { cnEtfListRef, cnEtfRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
 
@@ -575,8 +573,7 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    const result = await syncInitialCnEtf(gateway, this.store, cfg, this.initialCallbacks(job, options))
+    const result = await syncInitialCnEtf(this.store, cfg, this.initialCallbacks(job, options))
     for (const code of this.store.listEtfCodes(true).slice(0, result.success)) {
       this.markDone(job, code, '')
     }
@@ -603,15 +600,14 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    const result = await syncInitialUniverse(
-      gateway,
+    const callbacks = this.initialCallbacks(job, options)
+    const result = await syncInitialStockIndexUniverse(
       this.store,
       market,
+      job,
       cfg,
-      this.initialCallbacks(job, options),
+      callbacks,
     )
-    // Progress is already marked inside syncInitialUniverse
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,
@@ -634,9 +630,12 @@ export class MarketDataSyncEngine {
       }
     }
 
-    const gateway = this.createGateway(options)
-    await syncAllInitialTaxonomy(gateway, this.store, cfg, this.initialCallbacks(job, options))
-    this.store.finishRun(runId, 'success', { total: 1, success: 1, error: 0 })
+    const result = await syncAllInitialTaxonomy(this.store, cfg, this.initialCallbacks(job, options))
+    this.store.finishRun(runId, 'success', {
+      total: result.nodes,
+      success: result.nodes,
+      error: 0,
+    })
   }
 
   private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
@@ -1544,9 +1543,16 @@ export class MarketDataSyncEngine {
 
     const label = dumpType === 'full' ? '全量（10年）' : '增量（10天）'
     options.onLog?.(`导入同花顺 A 股日 K ${label} Parquet 数据包…`)
-    options.onProgress?.({ job: jobName, current: 0, total: 1, message: '下载数据包…' })
 
-    const klineResult = await importDailyKDump(this.store, dumpType, client.get.bind(client))
+    const reportPhase = (message: string, current: number) => {
+      options.onProgress?.({ job: jobName, current, total: 100, message })
+    }
+
+    reportPhase('准备导入…', 0)
+
+    const klineResult = await importDailyKDump(this.store, dumpType, client.get.bind(client), {
+      onPhase: (phase, percent) => reportPhase(phase, percent),
+    })
 
     if (!klineResult.success) {
       throw new Error(klineResult.error ?? '同花顺 K 线数据包导入失败')
@@ -1562,7 +1568,7 @@ export class MarketDataSyncEngine {
     this.store.setCursor('dump_import', { dumpType, rowsImported: klineResult.rowsImported })
 
     options.onLog?.(`同花顺 K 线数据包导入完成：${klineResult.rowsImported.toLocaleString()} 条`)
-    options.onProgress?.({ job: jobName, current: 1, total: 1, message: `已导入 ${klineResult.rowsImported.toLocaleString()} 条` })
+    reportPhase(`已导入 ${klineResult.rowsImported.toLocaleString()} 条`, 100)
 
     this.store.finishRun(runId, 'success', {
       total: klineResult.rowsImported,

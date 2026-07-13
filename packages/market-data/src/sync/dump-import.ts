@@ -20,6 +20,17 @@ export interface DumpImportResult {
 
 export type DumpHttpGet = <T = Record<string, unknown>>(path: string, params?: Record<string, string | number | boolean | null | undefined>) => Promise<T>
 
+export interface DumpImportHooks {
+  onPhase?: (label: string, percent: number) => void
+}
+
+const FULL_DUMP_TIMEOUT_MS = 25 * 60 * 1000
+const INCR_DUMP_TIMEOUT_MS = 5 * 60 * 1000
+
+function formatMb(bytes: number): string {
+  return `${(bytes / 1024 / 1024).toFixed(1)} MB`
+}
+
 function stripThsSuffix(thscode: string): string {
   return thscode.replace(/\.(SH|SZ|BJ)$/i, '').trim()
 }
@@ -43,10 +54,35 @@ async function fetchDownloadUrl(get: DumpHttpGet, dumpId: string): Promise<strin
   return url
 }
 
-async function downloadBuffer(url: string): Promise<Buffer> {
-  const resp = await fetch(url)
+async function downloadBuffer(
+  url: string,
+  timeoutMs: number,
+  onProgress?: (loaded: number, total: number | null) => void,
+): Promise<Buffer> {
+  const resp = await fetch(url, { signal: AbortSignal.timeout(timeoutMs) })
   if (!resp.ok) throw new Error(`Download failed: ${resp.status}`)
-  return Buffer.from(await resp.arrayBuffer())
+  const total = resp.headers.get('content-length')
+    ? Number(resp.headers.get('content-length'))
+    : null
+  const reader = resp.body?.getReader()
+  if (!reader) return Buffer.from(await resp.arrayBuffer())
+
+  const chunks: Buffer[] = []
+  let loaded = 0
+  let lastReport = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    const chunk = Buffer.from(value)
+    chunks.push(chunk)
+    loaded += chunk.length
+    if (loaded - lastReport >= 512 * 1024 || (total != null && loaded >= total)) {
+      onProgress?.(loaded, total)
+      lastReport = loaded
+    }
+  }
+  onProgress?.(loaded, total)
+  return Buffer.concat(chunks)
 }
 
 /** Parse daily K Parquet via parquet-wasm + Arrow IPC (supports ZSTD) */
@@ -114,14 +150,32 @@ export async function importDailyKDump(
   store: MarketDataStore,
   type: 'full' | 'incremental',
   get: DumpHttpGet,
+  hooks?: DumpImportHooks,
 ): Promise<DumpImportResult> {
   try {
     const dumpId = type === 'full' ? DUMP_IMPORT_CONFIG.fullDumpId : DUMP_IMPORT_CONFIG.incrementalDumpId
+    const timeoutMs = type === 'full' ? FULL_DUMP_TIMEOUT_MS : INCR_DUMP_TIMEOUT_MS
+    hooks?.onPhase?.('获取下载链接', 5)
     const url = await fetchDownloadUrl(get, dumpId)
-    const buffer = await downloadBuffer(url)
+    hooks?.onPhase?.(type === 'full' ? '下载全量包（约 170MB，需数分钟）' : '下载增量包', 15)
+    const buffer = await downloadBuffer(url, timeoutMs, (loaded, total) => {
+      if (total != null && total > 0) {
+        const frac = loaded / total
+        const pct = 15 + Math.round(frac * 28)
+        hooks?.onPhase?.(`下载中 ${formatMb(loaded)}/${formatMb(total)}`, pct)
+      } else {
+        hooks?.onPhase?.(`下载中 ${formatMb(loaded)}`, 20)
+      }
+    })
+    hooks?.onPhase?.('解析 Parquet', 45)
     const rows = await parseDailyK(buffer)
     if (!rows.length) return { type, rowsImported: 0, success: true }
-    const imported = store.bulkUpsertKlines(rows)
+    hooks?.onPhase?.(`写入 SQLite（${rows.length.toLocaleString()} 条）`, 70)
+    const imported = store.bulkUpsertKlines(rows, (done, total) => {
+      const pct = 70 + Math.round((done / total) * 28)
+      hooks?.onPhase?.(`写入中 ${done.toLocaleString()}/${total.toLocaleString()} 条`, Math.min(99, pct))
+    })
+    hooks?.onPhase?.('完成', 100)
     return { type, rowsImported: imported, success: true }
   } catch (e) {
     return { type, rowsImported: 0, success: false, error: e instanceof Error ? e.message : String(e) }
@@ -134,7 +188,7 @@ export async function importDailyKDump(
 export async function importAdjustmentFactors(store: MarketDataStore, get: DumpHttpGet): Promise<DumpImportResult> {
   try {
     const url = await fetchDownloadUrl(get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
-    const buffer = await downloadBuffer(url)
+    const buffer = await downloadBuffer(url, 5 * 60 * 1000)
     const rows = await parseAdjustmentFactors(buffer)
     return { type: 'adjustments', rowsImported: rows.length, success: true }
   } catch (e) {
