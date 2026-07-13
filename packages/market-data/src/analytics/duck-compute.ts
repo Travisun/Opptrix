@@ -1,6 +1,6 @@
 import { duckAll, duckGet, duckRun, type DuckConnection } from '../kline/duck-connection.js'
 import { CN_DAILY_TABLE } from './duck-schema.js'
-import { attachSqliteReadOnly } from './duck-query-utils.js'
+import { attachSqliteWrite } from './duck-query-utils.js'
 
 /** 从 K 线 + 行情 + 财报 SQL 批量计算筛选因子，写回 DuckDB fact_factors 与 SQLite stock_factors */
 export async function computeScreenFactors(
@@ -74,14 +74,14 @@ export async function computeScreenFactors(
     `, tradeDate, name)
   }
 
-  await attachSqliteReadOnly(conn, sqlitePath)
+  await attachSqliteWrite(conn, sqlitePath)
   await duckRun(conn, `
     DELETE FROM md.stock_factors
     WHERE trade_date = ? ${codeFilterDel}
       AND factor_name IN (${factorNames.map(n => `'${n}'`).join(',')})
   `, tradeDate)
   await duckRun(conn, `
-    INSERT OR REPLACE INTO md.stock_factors (trade_date, code, factor_name, factor_value)
+    INSERT INTO md.stock_factors (trade_date, code, factor_name, factor_value)
     SELECT trade_date, code, factor_name, factor_value
     FROM fact_factors
     WHERE trade_date = ?

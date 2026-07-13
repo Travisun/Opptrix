@@ -48,3 +48,23 @@ export function closeDuck(db: duckdb.Database): Promise<void> {
     })
   })
 }
+
+/** DuckDB ATTACH 不支持 ? 占位符，须内联转义路径 */
+export function sqlStringLiteral(value: string): string {
+  return `'${value.replace(/'/g, "''")}'`
+}
+
+export async function attachSqlite(
+  conn: DuckConnection,
+  sqlitePath: string,
+  alias = 'md',
+  readOnly = false,
+): Promise<void> {
+  await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
+  const ro = readOnly ? ', READ_ONLY true' : ''
+  await duckRun(conn, `ATTACH ${sqlStringLiteral(sqlitePath)} AS ${alias} (TYPE SQLITE${ro})`)
+}
+
+export async function detachSqlite(conn: DuckConnection, alias = 'md'): Promise<void> {
+  await duckRun(conn, `DETACH ${alias}`)
+}

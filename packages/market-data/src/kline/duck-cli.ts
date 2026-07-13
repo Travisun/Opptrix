@@ -11,6 +11,8 @@ import {
   duckGet,
   duckRun,
   openDuckDatabase,
+  attachSqlite,
+  detachSqlite,
 } from './duck-connection.js'
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
@@ -72,10 +74,9 @@ async function ensureSchema(conn: ReturnType<typeof connectDuck>) {
 async function cmdImport(flags: Record<string, string>) {
   const parquetPath = flags.parquet
   const duckPath = flags.duckdb
-  const sqlitePath = flags.sqlite
   const mode = flags.mode === 'incremental' ? 'incremental' : 'full'
-  if (!parquetPath || !duckPath || !sqlitePath) {
-    throw new Error('import 需要 --parquet --duckdb --sqlite')
+  if (!parquetPath || !duckPath) {
+    throw new Error('import 需要 --parquet --duckdb')
   }
   if (!fs.existsSync(parquetPath)) throw new Error(`Parquet 不存在: ${parquetPath}`)
 
@@ -100,38 +101,7 @@ async function cmdImport(flags: Record<string, string>) {
 
     const countRow = await duckGet<{ c: number }>(conn, `SELECT COUNT(*)::INTEGER AS c FROM ${CN_TABLE}`)
     const rows = countRow?.c ?? 0
-    emit({ type: 'progress', message: `DuckDB 已写入 ${rows.toLocaleString()} 条`, percent: 90 })
-
-    emit({ type: 'progress', message: '同步 SQLite instrument_bars', percent: 94 })
-    await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-    await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE)`, sqlitePath)
-
-    if (mode === 'full') {
-      await duckRun(conn, `DELETE FROM md.instrument_bars_daily WHERE market = 'CN'`)
-      await duckRun(conn, `
-        INSERT OR REPLACE INTO md.instrument_bars_daily (
-          market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
-        )
-        SELECT 'CN', code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
-        FROM ${CN_TABLE}
-      `)
-    } else {
-      const range = await duckGet<{ min_d: string; max_d: string }>(conn, `
-        SELECT MIN(trade_date) AS min_d, MAX(trade_date) AS max_d FROM ${CN_TABLE}
-      `)
-      const minDate = range?.min_d ?? '0000-01-01'
-      const maxDate = range?.max_d ?? '9999-12-31'
-      await duckRun(conn, `
-        INSERT OR REPLACE INTO md.instrument_bars_daily (
-          market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
-        )
-        SELECT 'CN', code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
-        FROM ${CN_TABLE}
-        WHERE trade_date >= ? AND trade_date <= ?
-      `, minDate, maxDate)
-    }
-
-    await duckRun(conn, `DETACH md`)
+    emit({ type: 'progress', message: `DuckDB 已写入 ${rows.toLocaleString()} 条`, percent: 95 })
     emit({ type: 'done', rowsImported: rows, klineRows: rows })
   } finally {
     await closeDuck(db)
@@ -229,8 +199,7 @@ async function cmdMigrateFromSqlite(flags: Record<string, string>) {
       return
     }
     emit({ type: 'progress', message: '从 SQLite 迁移历史 K 线到 DuckDB', percent: 10 })
-    await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-    await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE, READ_ONLY true)`, sqlitePath)
+    await attachSqlite(conn, sqlitePath, 'md', true)
     await duckRun(conn, `
       INSERT INTO ${CN_TABLE} (
         trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
@@ -238,7 +207,7 @@ async function cmdMigrateFromSqlite(flags: Record<string, string>) {
       SELECT trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at
       FROM md.stock_klines_daily
     `)
-    await duckRun(conn, `DETACH md`)
+    await detachSqlite(conn)
     const countRow = await duckGet<{ c: number }>(conn, `SELECT COUNT(*)::INTEGER AS c FROM ${CN_TABLE}`)
     emit({ type: 'done', rowsImported: countRow?.c ?? 0, migrated: true })
   } finally {
@@ -323,19 +292,22 @@ async function cmdUpsert(flags: Record<string, string>) {
       r.volume ?? null, r.amount ?? null, r.changePct ?? null, syncedAt)
     }
     await duckRun(conn, 'COMMIT')
-    await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-    await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE)`, sqlitePath)
+    await attachSqlite(conn, sqlitePath, 'md', false)
     const minDate = rows.reduce((m, r) => (r.tradeDate < m ? r.tradeDate : m), rows[0]!.tradeDate)
     const maxDate = rows.reduce((m, r) => (r.tradeDate > m ? r.tradeDate : m), rows[0]!.tradeDate)
     await duckRun(conn, `
-      INSERT OR REPLACE INTO md.instrument_bars_daily (
+      DELETE FROM md.instrument_bars_daily
+      WHERE market = 'CN' AND trade_date >= ? AND trade_date <= ?
+    `, minDate, maxDate)
+    await duckRun(conn, `
+      INSERT INTO md.instrument_bars_daily (
         market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
       )
       SELECT 'CN', code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
       FROM ${CN_TABLE}
       WHERE trade_date >= ? AND trade_date <= ?
     `, minDate, maxDate)
-    await duckRun(conn, `DETACH md`)
+    await detachSqlite(conn)
     emit({ type: 'done', rowsImported: rows.length })
   } catch (e) {
     await duckRun(conn, 'ROLLBACK').catch(() => {})
@@ -357,8 +329,7 @@ async function cmdSyncBars(flags: Record<string, string>) {
   const conn = connectDuck(db)
   try {
     await ensureSchema(conn)
-    await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-    await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE)`, sqlitePath)
+    await attachSqlite(conn, sqlitePath, 'md', false)
     const missing = await duckGet<{ c: number }>(conn, `
       SELECT COUNT(*)::INTEGER AS c FROM ${CN_TABLE} k
       WHERE NOT EXISTS (
@@ -369,7 +340,7 @@ async function cmdSyncBars(flags: Record<string, string>) {
     const toSync = missing?.c ?? 0
     if (toSync > 0) {
       await duckRun(conn, `
-        INSERT OR REPLACE INTO md.instrument_bars_daily (
+        INSERT INTO md.instrument_bars_daily (
           market, code, trade_date, open, high, low, close, volume, amount, change_pct, synced_at
         )
         SELECT 'CN', k.code, k.trade_date, k.open, k.high, k.low, k.close, k.volume, k.amount, k.change_pct, k.synced_at
@@ -380,7 +351,7 @@ async function cmdSyncBars(flags: Record<string, string>) {
         )
       `)
     }
-    await duckRun(conn, `DETACH md`)
+    await detachSqlite(conn)
     process.stdout.write(JSON.stringify({ barsSynced: toSync }))
   } finally {
     await closeDuck(db)

@@ -1,13 +1,11 @@
-import { duckRun, type DuckConnection } from '../kline/duck-connection.js'
+import { attachSqlite, detachSqlite, type DuckConnection } from '../kline/duck-connection.js'
 
 export async function attachSqliteReadOnly(conn: DuckConnection, sqlitePath: string): Promise<void> {
-  await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-  await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE, READ_ONLY true)`, sqlitePath)
+  await attachSqlite(conn, sqlitePath, 'md', true)
 }
 
 export async function attachSqliteWrite(conn: DuckConnection, sqlitePath: string): Promise<void> {
-  await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-  await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE)`, sqlitePath)
+  await attachSqlite(conn, sqlitePath, 'md', false)
 }
 
 /** 统一行情 CTE — quotes + klines 回退 */

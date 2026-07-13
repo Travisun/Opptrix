@@ -17,7 +17,6 @@ export interface SpawnKlineImportOptions {
   parquetPath: string
   mode: 'full' | 'incremental'
   duckDbPath?: string
-  sqliteDbPath?: string
   onProgress?: (message: string, percent: number) => void
 }
 
@@ -76,13 +75,11 @@ export function migrateSqliteKlinesToDuckIfEmpty(
 
 export async function spawnKlineParquetImport(opts: SpawnKlineImportOptions): Promise<{ rowsImported: number }> {
   const duckDbPath = opts.duckDbPath ?? klineDuckDbPath()
-  const sqliteDbPath = opts.sqliteDbPath ?? marketDbPath()
   const args = [
     'import',
     '--parquet', opts.parquetPath,
     '--mode', opts.mode,
     '--duckdb', duckDbPath,
-    '--sqlite', sqliteDbPath,
   ]
 
   return new Promise((resolve, reject) => {

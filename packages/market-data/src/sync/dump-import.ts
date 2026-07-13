@@ -1,5 +1,5 @@
 /**
- * Parquet dump import — 下载后写入临时文件，由 DuckDB 子进程导入 + 同步 SQLite bars。
+ * Parquet dump import — 下载后写入临时文件，由 DuckDB 子进程导入 cn_daily_bars。
  */
 import fs from 'node:fs'
 import os from 'node:os'
@@ -108,7 +108,6 @@ export async function importDailyKDump(
       parquetPath: tmpPath,
       mode: type,
       duckDbPath: store.klineDuckDbPath,
-      sqliteDbPath: store.dbPath,
       onProgress: (message, percent) => hooks?.onPhase?.(message, percent),
     })
 

@@ -1,5 +1,5 @@
 import type { DuckConnection } from '../kline/duck-connection.js'
-import { duckGet, duckRun } from '../kline/duck-connection.js'
+import { attachSqlite, detachSqlite, duckGet, duckRun } from '../kline/duck-connection.js'
 import { ANALYTICS_INIT_SQL } from './duck-schema.js'
 
 export type AnalyticsSyncScope = 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all'
@@ -8,13 +8,12 @@ export async function ensureAnalyticsSchema(conn: DuckConnection): Promise<void>
   await duckRun(conn, ANALYTICS_INIT_SQL)
 }
 
-async function attachSqlite(conn: DuckConnection, sqlitePath: string, readOnly = false): Promise<void> {
-  await duckRun(conn, `INSTALL sqlite; LOAD sqlite;`)
-  await duckRun(conn, `ATTACH ? AS md (TYPE SQLITE${readOnly ? ', READ_ONLY true' : ''})`, sqlitePath)
+async function attachSqliteMd(conn: DuckConnection, sqlitePath: string, readOnly = false): Promise<void> {
+  await attachSqlite(conn, sqlitePath, 'md', readOnly)
 }
 
 export async function syncDims(conn: DuckConnection, sqlitePath: string): Promise<number> {
-  await attachSqlite(conn, sqlitePath, true)
+  await attachSqliteMd(conn, sqlitePath, true)
   await duckRun(conn, 'DELETE FROM dim_cn_stocks')
   await duckRun(conn, `
     INSERT INTO dim_cn_stocks
@@ -43,12 +42,12 @@ export async function syncDims(conn: DuckConnection, sqlitePath: string): Promis
     INNER JOIN md.taxonomy_nodes tn ON tn.id = it.taxonomy_id
   `)
   const row = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM dim_cn_stocks')
-  await duckRun(conn, 'DETACH md')
+  await detachSqlite(conn)
   return row?.c ?? 0
 }
 
 export async function syncQuotes(conn: DuckConnection, sqlitePath: string): Promise<number> {
-  await attachSqlite(conn, sqlitePath, true)
+  await attachSqliteMd(conn, sqlitePath, true)
   await duckRun(conn, 'DELETE FROM fact_quotes_daily')
   await duckRun(conn, `
     INSERT INTO fact_quotes_daily
@@ -56,12 +55,12 @@ export async function syncQuotes(conn: DuckConnection, sqlitePath: string): Prom
     FROM md.stock_quotes_daily
   `)
   const row = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM fact_quotes_daily')
-  await duckRun(conn, 'DETACH md')
+  await detachSqlite(conn)
   return row?.c ?? 0
 }
 
 export async function syncFactors(conn: DuckConnection, sqlitePath: string): Promise<number> {
-  await attachSqlite(conn, sqlitePath, true)
+  await attachSqliteMd(conn, sqlitePath, true)
   await duckRun(conn, 'DELETE FROM fact_factors')
   await duckRun(conn, `
     INSERT INTO fact_factors
@@ -69,12 +68,12 @@ export async function syncFactors(conn: DuckConnection, sqlitePath: string): Pro
     FROM md.stock_factors
   `)
   const row = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM fact_factors')
-  await duckRun(conn, 'DETACH md')
+  await detachSqlite(conn)
   return row?.c ?? 0
 }
 
 export async function syncScores(conn: DuckConnection, sqlitePath: string): Promise<number> {
-  await attachSqlite(conn, sqlitePath, true)
+  await attachSqliteMd(conn, sqlitePath, true)
   await duckRun(conn, 'DELETE FROM fact_scores')
   await duckRun(conn, `
     INSERT INTO fact_scores
@@ -82,12 +81,12 @@ export async function syncScores(conn: DuckConnection, sqlitePath: string): Prom
     FROM md.stock_scores
   `)
   const row = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM fact_scores')
-  await duckRun(conn, 'DETACH md')
+  await detachSqlite(conn)
   return row?.c ?? 0
 }
 
 export async function syncFinancials(conn: DuckConnection, sqlitePath: string): Promise<number> {
-  await attachSqlite(conn, sqlitePath, true)
+  await attachSqliteMd(conn, sqlitePath, true)
   await duckRun(conn, 'DELETE FROM dim_financials_latest')
   await duckRun(conn, `
     INSERT INTO dim_financials_latest
@@ -100,7 +99,7 @@ export async function syncFinancials(conn: DuckConnection, sqlitePath: string): 
     ) t WHERE rn = 1
   `)
   const row = await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM dim_financials_latest')
-  await duckRun(conn, 'DETACH md')
+  await detachSqlite(conn)
   return row?.c ?? 0
 }
 
