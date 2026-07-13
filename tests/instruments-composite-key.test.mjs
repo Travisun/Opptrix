@@ -20,9 +20,33 @@ import {
 } from '../packages/market-data/dist/schema.js'
 import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion, hasInstrumentCompositeKey } from '../packages/market-data/dist/utils.js'
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
+import { duckQueryAllSync, duckQueryOneSync } from '../packages/market-data/dist/duck/market-duck-sync.js'
 import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
 
 let dataDir = ''
+
+function duckPathFor(store) {
+  return store.klineDuckDbPath
+}
+
+function flushInstruments(store, where = '', params = []) {
+  store.flushDuckWritesSync()
+  const clause = where ? ` WHERE ${where}` : ''
+  return duckQueryAllSync(
+    `SELECT code, market, asset_class, name, exchange, instrument_ns FROM instruments${clause} ORDER BY asset_class, exchange`,
+    params,
+    duckPathFor(store),
+  )
+}
+
+function flushQuoteRow(store, tradeDate, code) {
+  store.flushDuckWritesSync()
+  return duckQueryOneSync(
+    'SELECT instrument_ns, code FROM stock_quotes_daily WHERE trade_date = ? AND code = ?',
+    [tradeDate, code],
+    duckPathFor(store),
+  )
+}
 
 /** 构造指定声明版本的老库（仅写 schema_meta + 逐步 SQL） */
 function seedDatabaseThroughVersion(dbPath, targetVersion, seedRows) {
@@ -63,12 +87,12 @@ test('normalizeInstrumentExchange maps null to empty string', () => {
   assert.equal(normalizeInstrumentExchange('sz'), 'SZ')
 })
 
-test('fresh database uses schema v11 with instrument_ns and analytics_storage', () => {
+test('fresh database uses schema v12 with instrument_ns and market_data_storage', () => {
   const dbPath = join(dataDir, 'fresh-v9.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'fresh-v9.duckdb'))
   const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
   assert.equal(ver.v, SCHEMA_VERSION)
-  assert.equal(SCHEMA_VERSION, 11)
+  assert.equal(SCHEMA_VERSION, 12)
 
   const ddl = store.db.prepare(
     "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instruments'",
@@ -92,12 +116,16 @@ test('fresh database uses schema v11 with instrument_ns and analytics_storage', 
     "SELECT meta_json FROM sync_cursor WHERE job_name = 'analytics_storage'",
   ).get()
   assert.match(analyticsStorage?.meta_json ?? '', /dims/)
+  const marketDataStorage = store.db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'market_data_storage'",
+  ).get()
+  assert.match(marketDataStorage?.meta_json ?? '', /duckdb/)
   store.close()
 })
 
 test('same code with different exchange and asset_class can coexist', () => {
   const dbPath = join(dataDir, 'coexist.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'coexist.duckdb'))
 
   store.upsertInstrument({
     code: '000977',
@@ -116,9 +144,7 @@ test('same code with different exchange and asset_class can coexist', () => {
     status: 'active',
   })
 
-  const rows = store.db.prepare(`
-    SELECT code, asset_class, exchange, name FROM instruments WHERE code = '000977' ORDER BY asset_class
-  `).all()
+  const rows = flushInstruments(store, "code = '000977'")
   assert.equal(rows.length, 2)
   assert.deepEqual(
     rows.map(r => ({ asset_class: r.asset_class, exchange: r.exchange, name: r.name })),
@@ -128,6 +154,7 @@ test('same code with different exchange and asset_class can coexist', () => {
     ],
   )
 
+  store.flushDuckWritesSync()
   const equity = store.getInstrument({ market: 'CN', code: '000977', assetClass: 'EQUITY', exchange: 'SZ' })
   const index = store.getInstrument({ market: 'CN', code: '000977', assetClass: 'INDEX', exchange: 'SH' })
   assert.equal(equity?.name, '浪潮信息')
@@ -137,7 +164,7 @@ test('same code with different exchange and asset_class can coexist', () => {
 
 test('upsertInstrument updates only matching composite key', () => {
   const dbPath = join(dataDir, 'upsert-scope.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'upsert-scope.duckdb'))
 
   store.upsertInstrument({
     code: '000977',
@@ -161,6 +188,7 @@ test('upsertInstrument updates only matching composite key', () => {
     exchange: 'SZ',
   })
 
+  store.flushDuckWritesSync()
   assert.equal(
     store.getInstrument({ market: 'CN', code: '000977', assetClass: 'EQUITY', exchange: 'SZ' })?.name,
     '浪潮信息-更新',
@@ -214,7 +242,7 @@ test('v7 database migrates to v8 preserving instrument rows', () => {
 
 test('upsertStock writes CN equity with exchange in composite key', () => {
   const dbPath = join(dataDir, 'upsert-stock.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'upsert-stock.duckdb'))
   store.upsertStock({
     code: '000977',
     name: '浪潮信息',
@@ -223,6 +251,7 @@ test('upsertStock writes CN equity with exchange in composite key', () => {
     status: 'active',
   })
 
+  store.flushDuckWritesSync()
   const inst = store.getInstrument({ market: 'CN', code: '000977', assetClass: 'EQUITY', exchange: 'SZ' })
   assert.equal(inst?.name, '浪潮信息')
   assert.equal(store.stockMeta('000977', 'SZ')?.name, '浪潮信息')
@@ -288,7 +317,7 @@ test('v8 database migrates to v9 with instrument_ns backfill', () => {
 
 test('upsertStock dual-writes instrument_ns on child quote rows', () => {
   const dbPath = join(dataDir, 'dual-write-ns.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'dual-write-ns.duckdb'))
   store.upsertStock({
     code: '600519',
     name: '贵州茅台',
@@ -296,16 +325,14 @@ test('upsertStock dual-writes instrument_ns on child quote rows', () => {
     status: 'active',
   })
   store.upsertQuoteDaily('2026-07-10', '600519', { close: 1500, changePct: 1.2 })
-  const row = store.db.prepare(
-    'SELECT instrument_ns, code FROM stock_quotes_daily WHERE trade_date = ? AND code = ?',
-  ).get('2026-07-10', '600519')
-  assert.equal(row.instrument_ns, 'CN:SH.600519')
+  const row = flushQuoteRow(store, '2026-07-10', '600519')
+  assert.equal(row?.instrument_ns, 'CN:SH.600519')
   store.close()
 })
 
 test('migrate is idempotent on v9 database', () => {
   const dbPath = join(dataDir, 'idempotent.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'idempotent.duckdb'))
   store.upsertInstrument({
     code: '000001',
     market: 'CN',
@@ -313,17 +340,27 @@ test('migrate is idempotent on v9 database', () => {
     name: '平安银行',
     exchange: 'SZ',
   })
-  const before = store.db.prepare('SELECT COUNT(*) AS c FROM instruments').get().c
+  store.flushDuckWritesSync()
+  const before = duckQueryOneSync(
+    'SELECT COUNT(*)::INTEGER AS c FROM instruments',
+    [],
+    duckPathFor(store),
+  )?.c ?? 0
   migrate(store.db)
   migrate(store.db)
-  const after = store.db.prepare('SELECT COUNT(*) AS c FROM instruments').get().c
+  store.flushDuckWritesSync()
+  const after = duckQueryOneSync(
+    'SELECT COUNT(*)::INTEGER AS c FROM instruments',
+    [],
+    duckPathFor(store),
+  )?.c ?? 0
   assert.equal(before, after)
   store.close()
 })
 
 test('stockMarket — composite exchange disambiguates same code', () => {
   const dbPath = join(dataDir, 'stock-market-composite.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'stock-market-composite.duckdb'))
   store.upsertInstrument({
     code: '000977',
     market: 'CN',
@@ -341,6 +378,7 @@ test('stockMarket — composite exchange disambiguates same code', () => {
     status: 'active',
   })
 
+  store.flushDuckWritesSync()
   assert.equal(store.stockMarket('000977', 'SZ'), 'SZ')
   assert.equal(store.stockMarket('000977', 'SH'), null)
   assert.equal(store.stockMarketLookupKey('000977', 'SZ'), 'SZ:000977')
@@ -349,7 +387,7 @@ test('stockMarket — composite exchange disambiguates same code', () => {
 
 test('stockMarketBatch — exchangeByCode uses composite keys', () => {
   const dbPath = join(dataDir, 'stock-market-batch.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'stock-market-batch.duckdb'))
   store.upsertInstrument({
     code: '000977',
     market: 'CN',
@@ -365,6 +403,7 @@ test('stockMarketBatch — exchangeByCode uses composite keys', () => {
     status: 'active',
   })
 
+  store.flushDuckWritesSync()
   const exchangeByCode = new Map([['000977', 'SZ']])
   const batch = store.stockMarketBatch(['000977', '600519'], exchangeByCode)
   assert.equal(batch.get('SZ:000977'), 'SZ')
@@ -570,7 +609,7 @@ test('backfill disambiguates duplicate instrument_ns before unique index', () =>
 
 test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () => {
   const dbPath = join(dataDir, 'etf-ns-disambig.db')
-  const store = new MarketDataStore(dbPath)
+  const store = new MarketDataStore(dbPath, join(dataDir, 'etf-ns-disambig.duckdb'))
   const ts = new Date().toISOString()
   store.db.prepare(`
     INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at, instrument_ns)
@@ -584,6 +623,7 @@ test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () =>
     exchange: 'SH',
     status: 'active',
   })
+  store.prepareForSqliteExport()
   const rows = store.db.prepare(`
     SELECT asset_class, instrument_ns FROM instruments WHERE code = '510300' ORDER BY asset_class
   `).all()

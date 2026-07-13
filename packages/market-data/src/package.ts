@@ -226,6 +226,7 @@ function parsePackageBuffer(buffer: Buffer): ParsedPackage {
 }
 
 export async function exportMarketDataPackage(store: MarketDataStore): Promise<Buffer> {
+  store.prepareForSqliteExport()
   const sqlite = await sqliteBytesFromDb(store.db)
   const payloadGzip = gzipSync(sqlite, { level: 6 })
   const payloadSha256 = createHash('sha256').update(payloadGzip).digest()

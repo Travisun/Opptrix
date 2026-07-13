@@ -1,5 +1,6 @@
 import { resetSharedMarketSyncCoordinator } from './sync/coordinator.js'
 import { resetSharedMarketDataStore } from './store.js'
+import { stopMarketDataRefreshScheduler } from './sync/scheduler.js'
 
 let resetServiceHook: (() => void) | null = null
 
@@ -10,6 +11,7 @@ export function registerMarketDataServiceReset(fn: () => void): void {
 
 /** Close DB handles and drop in-memory singletons before replacing market.db on disk. */
 export function resetMarketDataRuntime(): void {
+  stopMarketDataRefreshScheduler()
   resetServiceHook?.()
   resetSharedMarketDataStore()
   resetSharedMarketSyncCoordinator()

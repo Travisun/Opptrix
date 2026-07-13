@@ -21,3 +21,19 @@ export function klineDuckDbPath(): string {
 export function analyticsDuckDbPath(): string {
   return klineDuckDbPath()
 }
+
+/** DuckDB 路径 — 与给定 market SQLite 库配对 */
+export function duckDbPathForMarketDb(sqlitePath = marketDbPath()): string {
+  if (
+    process.env.OPPTRIX_MARKET_DB_PATH
+    && process.env.OPPTRIX_KLINE_DUCKDB_PATH
+    && sqlitePath === process.env.OPPTRIX_MARKET_DB_PATH
+  ) {
+    return process.env.OPPTRIX_KLINE_DUCKDB_PATH
+  }
+  const defaultSqlite = path.join(marketDataDir(), 'market.db')
+  if (sqlitePath === defaultSqlite || (sqlitePath === marketDbPath() && !process.env.OPPTRIX_MARKET_DB_PATH)) {
+    return klineDuckDbPath()
+  }
+  return sqlitePath.replace(/\.(sqlite|db)$/i, '.duckdb')
+}

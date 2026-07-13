@@ -31,6 +31,19 @@ export function migrateMarketDataViaSubprocess(
   }
 }
 
+export function syncMarketDataToSqliteViaSubprocess(
+  duckDbPath = klineDuckDbPath(),
+  sqliteDbPath = marketDbPath(),
+): Record<string, number> {
+  if (!fs.existsSync(duckDbPath) || !fs.existsSync(sqliteDbPath)) return {}
+  try {
+    const args = ['sync-market-data-to-sqlite', '--duckdb', duckDbPath, '--sqlite', sqliteDbPath]
+    return JSON.parse(nodeExec(args, 512 * 1024 * 1024)) as Record<string, number>
+  } catch {
+    return {}
+  }
+}
+
 export function applyDuckBatchSync(
   ops: DuckWriteOp[],
   duckDbPath = klineDuckDbPath(),
@@ -111,6 +124,14 @@ export function duckMarketStatsSync(duckDbPath = klineDuckDbPath()): {
 }
 
 let duckDataCache: { at: number; path: string; has: boolean } | null = null
+
+export function invalidateHasMarketDuckDataCache(duckDbPath?: string): void {
+  if (!duckDbPath) {
+    duckDataCache = null
+    return
+  }
+  if (duckDataCache?.path === duckDbPath) duckDataCache = null
+}
 
 export function hasMarketDuckData(duckDbPath = klineDuckDbPath()): boolean {
   const now = Date.now()

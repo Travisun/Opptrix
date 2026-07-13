@@ -28,7 +28,8 @@ after(async () => {
 
 test('market data package round-trip preserves stock universe', async () => {
   const dbPath = join(dataDir, 'market-roundtrip.db')
-  const store = new MarketDataStore(dbPath)
+  const duckPath = join(dataDir, 'market-roundtrip.duckdb')
+  const store = new MarketDataStore(dbPath, duckPath)
   store.upsertStock({
     code: '600519',
     name: '贵州茅台',
@@ -56,10 +57,11 @@ test('market data package round-trip preserves stock universe', async () => {
   store.close()
 
   const importPath = join(dataDir, 'market-imported.db')
+  const importDuckPath = join(dataDir, 'market-imported.duckdb')
   const metadata = importMarketDataPackageToDisk(pack, { dbPath: importPath, backup: false })
   assert.equal(metadata.snapshot.stock_count, 1)
 
-  const reopened = new MarketDataStore(importPath)
+  const reopened = new MarketDataStore(importPath, importDuckPath)
   const row = reopened.db.prepare('SELECT name FROM stocks WHERE code = ?').get('600519')
   assert.equal(row?.name, '贵州茅台')
   reopened.close()
@@ -104,8 +106,10 @@ test('supplement jp pack export and merge preserves regional instruments', async
   } = await import('../packages/market-data/dist/package-pack.js')
 
   const sourcePath = join(dataDir, 'market-jp-source.db')
+  const sourceDuckPath = join(dataDir, 'market-jp-source.duckdb')
   const targetPath = join(dataDir, 'market-jp-target.db')
-  const source = new MarketDataStore(sourcePath)
+  const targetDuckPath = join(dataDir, 'market-jp-target.duckdb')
+  const source = new MarketDataStore(sourcePath, sourceDuckPath)
   source.upsertInstrument({
     code: '7203',
     market: 'JP',
@@ -131,7 +135,7 @@ test('supplement jp pack export and merge preserves regional instruments', async
   assert.equal(inspect.metadata?.snapshot.jp_count, 1)
   assert.equal(inspect.metadata?.snapshot.stock_count, 0)
 
-  const target = new MarketDataStore(targetPath)
+  const target = new MarketDataStore(targetPath, targetDuckPath)
   target.upsertStock({
     code: '600519',
     name: '贵州茅台',
@@ -145,7 +149,7 @@ test('supplement jp pack export and merge preserves regional instruments', async
   process.env.OPPTRIX_MARKET_DB_PATH = targetPath
   mergeMarketDataPackSupplement(pack, { dbPath: targetPath })
 
-  const reopened = new MarketDataStore(targetPath)
+  const reopened = new MarketDataStore(targetPath, targetDuckPath)
   const cn = reopened.db.prepare(`SELECT code FROM stocks WHERE code = ?`).get('600519')
   assert.ok(cn)
   const jp = reopened.db.prepare(`

@@ -356,15 +356,6 @@ CREATE OR REPLACE VIEW dim_financials_latest AS
     WHERE report_type IS NULL OR report_type = 'annual'
   ) t WHERE rn = 1;
 
-CREATE OR REPLACE VIEW v_cn_equity_stocks AS
-  SELECT s.code, s.name, s.market, s.industry, s.industry_csrc, s.listing_date,
-         s.is_st, s.status, s.updated_at,
-         i.instrument_ns, i.exchange
-  FROM stocks s
-  LEFT JOIN instruments i
-    ON i.market = 'CN' AND i.asset_class = 'EQUITY' AND i.code = s.code
-    AND (i.exchange = COALESCE(s.market, '') OR s.market IS NULL OR s.market = '');
-
 CREATE OR REPLACE VIEW v_instruments_unified AS
   SELECT i.market, i.exchange, i.code, i.asset_class, i.name, i.instrument_ns,
          i.list_date, i.status, i.updated_at
@@ -377,6 +368,25 @@ CREATE OR REPLACE VIEW v_instruments_unified AS
     SELECT 1 FROM instruments ix
     WHERE ix.market = 'CN' AND ix.asset_class = 'EQUITY' AND ix.code = s.code
   );
+
+CREATE OR REPLACE VIEW v_cn_equity_stocks AS
+  SELECT
+    u.code,
+    u.name,
+    u.exchange AS market,
+    s.industry,
+    s.industry_csrc,
+    COALESCE(s.listing_date, u.list_date) AS listing_date,
+    COALESCE(s.is_st, 0) AS is_st,
+    u.status,
+    u.updated_at,
+    u.instrument_ns,
+    u.exchange
+  FROM v_instruments_unified u
+  LEFT JOIN stocks s ON s.code = u.code
+    AND u.market = 'CN' AND u.asset_class = 'EQUITY'
+    AND COALESCE(s.market, '') = COALESCE(u.exchange, '')
+  WHERE u.market = 'CN' AND u.asset_class = 'EQUITY';
 
 CREATE OR REPLACE VIEW v_stock_latest AS
   SELECT

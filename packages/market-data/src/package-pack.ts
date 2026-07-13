@@ -3,8 +3,9 @@ import os from 'node:os'
 import path from 'node:path'
 import type { SupplementPackId } from '@opptrix/shared'
 import { isSupplementPackId } from '@opptrix/shared'
-import { marketDbPath } from './paths.js'
+import { marketDbPath, duckDbPathForMarketDb } from './paths.js'
 import { MarketDataStore } from './store.js'
+import { migrateMarketDataViaSubprocess, invalidateHasMarketDuckDataCache } from './duck/market-duck-sync.js'
 import { PACK_JOBS } from './sync/market-packs.js'
 import {
   exportMarketDataPackage,
@@ -57,8 +58,9 @@ function copyPackScopeFromSource(dest: MarketDataStore, srcPath: string, pack: S
 }
 
 function buildScopedTempStore(source: MarketDataStore, pack: SupplementPackId): MarketDataStore {
+  source.prepareForSqliteExport()
   const tmpPath = path.join(os.tmpdir(), `opmd-pack-${pack}-${process.pid}-${Date.now()}.sqlite`)
-  const scoped = new MarketDataStore(tmpPath)
+  const scoped = new MarketDataStore(tmpPath, duckDbPathForMarketDb(tmpPath))
   copyPackScopeFromSource(scoped, source.dbPath, pack)
   return scoped
 }
@@ -152,7 +154,7 @@ export function mergeMarketDataPackSupplement(
   const tmpImport = `${dbPath}.pack-import.${process.pid}.${Date.now()}.sqlite`
   const parsed = importMarketDataPackageToDisk(buffer, { dbPath: tmpImport, backup: false })
 
-  const target = new MarketDataStore(dbPath)
+  const target = new MarketDataStore(dbPath, duckDbPathForMarketDb(dbPath))
   try {
     mergePackScopeIntoTarget(target, tmpImport, pack)
   } finally {
@@ -167,6 +169,7 @@ export function mergeMarketDataPackSupplement(
 }
 
 function mergePackScopeIntoTarget(target: MarketDataStore, srcPath: string, pack: SupplementPackId): void {
+  target.prepareForSqliteExport()
   const where = packInstrumentFilter(pack)
   const jobs = packJobNames(pack).map(j => `'${j}'`).join(', ')
   const escaped = srcPath.replace(/'/g, "''")
@@ -180,12 +183,14 @@ function mergePackScopeIntoTarget(target: MarketDataStore, srcPath: string, pack
       db.exec(`DELETE FROM sync_job_progress WHERE job_name IN (${jobs})`)
       db.exec(`INSERT INTO instruments SELECT * FROM src.instruments`)
       db.exec(`INSERT INTO stock_quotes_daily SELECT * FROM src.stock_quotes_daily`)
-      db.exec(`INSERT INTO sync_cursor SELECT * FROM src.sync_cursor`)
-      db.exec(`INSERT INTO sync_job_progress SELECT * FROM src.sync_job_progress`)
+      db.exec(`INSERT INTO sync_cursor SELECT * FROM src.sync_cursor WHERE job_name IN (${jobs})`)
+      db.exec(`INSERT INTO sync_job_progress SELECT * FROM src.sync_job_progress WHERE job_name IN (${jobs})`)
     })()
   } finally {
     db.exec('DETACH DATABASE src')
   }
+  migrateMarketDataViaSubprocess(target.klineDuckDbPath, target.dbPath, true)
+  invalidateHasMarketDuckDataCache(target.klineDuckDbPath)
 }
 
 export function suggestPackFilename(pack: SupplementPackId, metadata?: MarketDataPackageMetadata): string {

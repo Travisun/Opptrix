@@ -29,7 +29,9 @@ import {
   duckQueryAllSync,
   duckQueryOneSync,
   hasMarketDuckData,
+  invalidateHasMarketDuckDataCache,
   migrateMarketDataViaSubprocess,
+  syncMarketDataToSqliteViaSubprocess,
 } from './duck/market-duck-sync.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
 import os from 'node:os'
@@ -120,7 +122,7 @@ export interface BootstrapReadiness {
 }
 
 export class MarketDataStore {
-  readonly db: Database.Database
+  db: Database.Database
   readonly dbPath: string
   readonly klineDuckDbPath: string
   private instrumentNsColumnCache = new Map<string, boolean>()
@@ -183,6 +185,7 @@ export class MarketDataStore {
     try {
       applyDuckBatchSync(batch, this.klineDuckDbPath)
       this.invalidateDuckMarketStatsCache()
+      invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
     } catch {
       this.duckWriteQueue.unshift(...batch)
     }
@@ -293,7 +296,29 @@ export class MarketDataStore {
   }
 
   close(): void {
+    this.flushDuckWritesSync()
     this.db.close()
+  }
+
+  private reopenDb(): void {
+    this.db = new Database(this.dbPath)
+    this.db.pragma('journal_mode = WAL')
+    this.db.pragma('busy_timeout = 5000')
+  }
+
+  /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
+  prepareForSqliteExport(): void {
+    this.marketDataMigrated = true
+    this.flushDuckWritesSync()
+    this.db.pragma('wal_checkpoint(TRUNCATE)')
+    this.db.close()
+    try {
+      syncMarketDataToSqliteViaSubprocess(this.klineDuckDbPath, this.dbPath)
+    } finally {
+      this.reopenDb()
+    }
+    this.duckMarketStatsCache = null
+    this.invalidateStatusLightCache()
   }
 
   beginRun(jobName: string, mode: string): number {
@@ -1358,15 +1383,24 @@ export class MarketDataStore {
   stockMarket(code: string, exchange?: string | null): StockMarket | null {
     const normalized = normalizeStockCode(code)
     const ex = exchange ? parseStockMarket(exchange) : null
+    type Row = { market: string | null }
     if (ex) {
-      const row = this.db.prepare(
+      const row = this.duckRead<Row>(
         'SELECT market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
-      ).get(normalized, ex) as { market: string | null } | undefined
+        [normalized, ex],
+        () => this.db.prepare(
+          'SELECT market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
+        ).get(normalized, ex) as Row | undefined,
+      )
       return parseStockMarket(row?.market)
     }
-    const row = this.db.prepare(
+    const row = this.duckRead<Row>(
       'SELECT market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
-    ).get(normalized) as { market: string | null } | undefined
+      [normalized],
+      () => this.db.prepare(
+        'SELECT market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
+      ).get(normalized) as Row | undefined,
+    )
     return parseStockMarket(row?.market)
   }
 
@@ -1388,9 +1422,13 @@ export class MarketDataStore {
 
     if (bareOnly.length) {
       const placeholders = bareOnly.map(() => '?').join(',')
-      const rows = this.db.prepare(
+      const rows = this.duckReadAll<{ code: string; market: string | null }>(
         `SELECT code, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
-      ).all(...bareOnly) as { code: string; market: string | null }[]
+        bareOnly,
+        () => this.db.prepare(
+          `SELECT code, market FROM v_cn_equity_stocks WHERE code IN (${placeholders})`,
+        ).all(...bareOnly) as { code: string; market: string | null }[],
+      )
       for (const row of rows) {
         const market = parseStockMarket(row.market)
         if (market) out.set(row.code, market)
@@ -2336,20 +2374,34 @@ export class MarketDataStore {
       updatedAt: r.updated_at,
     })
     if (row.exchange != null && String(row.exchange).trim()) {
-      const exact = this.db.prepare(`
-        SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
-        FROM instruments
-        WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?
-      `).get(row.market, normalizeInstrumentExchange(row.exchange), code, row.assetClass) as Raw | undefined
+      const exact = this.duckRead<Raw>(
+        `SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+         FROM instruments
+         WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        [row.market, normalizeInstrumentExchange(row.exchange), code, row.assetClass],
+        () => this.db.prepare(`
+          SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+          FROM instruments
+          WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?
+        `).get(row.market, normalizeInstrumentExchange(row.exchange), code, row.assetClass) as Raw | undefined,
+      )
       return exact ? mapRow(exact) : null
     }
-    const fallback = this.db.prepare(`
-      SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
-      FROM instruments
-      WHERE market = ? AND code = ? AND asset_class = ?
-      ORDER BY updated_at DESC
-      LIMIT 1
-    `).get(row.market, code, row.assetClass) as Raw | undefined
+    const fallback = this.duckRead<Raw>(
+      `SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+       FROM instruments
+       WHERE market = ? AND code = ? AND asset_class = ?
+       ORDER BY updated_at DESC
+       LIMIT 1`,
+      [row.market, code, row.assetClass],
+      () => this.db.prepare(`
+        SELECT code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at
+        FROM instruments
+        WHERE market = ? AND code = ? AND asset_class = ?
+        ORDER BY updated_at DESC
+        LIMIT 1
+      `).get(row.market, code, row.assetClass) as Raw | undefined,
+    )
     return fallback ? mapRow(fallback) : null
   }
 
@@ -2624,17 +2676,25 @@ export class MarketDataStore {
   }
 
   countCryptoInstruments(): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
-    `).get() as { c: number }
-    return row.c
+    const row = this.duckRead<{ c: number }>(
+      `SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'`,
+      [],
+      () => this.db.prepare(`
+        SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
+      `).get() as { c: number },
+    )
+    return row?.c ?? 0
   }
 
   countRegionalEquityInstruments(market: 'JP' | 'KR' | 'HK'): number {
-    const row = this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = ?
-    `).get(market) as { c: number }
-    return row.c
+    const row = this.duckRead<{ c: number }>(
+      `SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = ?`,
+      [market],
+      () => this.db.prepare(`
+        SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = ?
+      `).get(market) as { c: number },
+    )
+    return row?.c ?? 0
   }
 }
 

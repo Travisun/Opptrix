@@ -377,6 +377,7 @@ let sharedService: MarketDataService | null = null
 export function resetSharedMarketDataService(): void {
   if (sharedService) {
     try {
+      sharedService.de.stopProviderDirWatcher()
       sharedService.store.close()
     } catch {
       // ignore close races during import

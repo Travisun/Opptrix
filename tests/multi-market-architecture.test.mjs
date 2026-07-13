@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict'
-import test from 'node:test'
+import test, { after } from 'node:test'
 import {
   DISCOVER_PROFILE_REGISTRY,
   getDiscoverProfileDefinition,
@@ -37,6 +37,13 @@ import {
 } from '../packages/shared/dist/discover-profiles.js'
 import { getPackDefinition } from '../packages/shared/dist/pack-registry.js'
 
+after(async () => {
+  const { resetMarketDataRuntime } = await import('../packages/market-data/dist/runtime.js')
+  resetMarketDataRuntime()
+  const { getUserDataStore } = await import('../packages/user-store/dist/index.js')
+  getUserDataStore().close()
+})
+
 test('pack registry includes six markets with backward-compatible normalize', () => {
   assert.deepEqual(allPackIds(), ['cn', 'us', 'crypto', 'hk', 'jp', 'kr'])
   const defaults = buildDefaultMarketPackConfig()
@@ -70,8 +77,8 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
 test('discover mining tools for cn_equity start with market regime and online screening', () => {
   assert.deepEqual(discoverMiningToolNamesForProfile('cn_equity').slice(0, 3), [
     'get_market_regime',
+    'get_local_universe_screen_schema',
     'screen_stocks',
-    'search_instruments',
   ])
 })
 
@@ -173,13 +180,15 @@ test('CHAT_MCP_TOOL_NAMES exposes all registered tools', async () => {
   const { CHAT_MCP_TOOL_NAMES } = await import('../packages/agent/dist/unified-mcp-tools.js')
   const { ToolRegistry } = await import('../packages/agent/dist/tools.js')
   const { ResearchHub } = await import('../packages/research-hub/dist/hub.js')
-  const registry = new ToolRegistry(new ResearchHub())
+  const hub = new ResearchHub()
+  const registry = new ToolRegistry(hub)
   const chatTools = new Set(CHAT_MCP_TOOL_NAMES(registry))
   assert.ok(chatTools.has('get_instrument_snapshot'))
   assert.ok(chatTools.has('get_market_regime'))
   assert.ok(chatTools.has('get_watchlist_radar'))
   assert.ok(!chatTools.has('evaluate_stock'))
   assert.ok(!chatTools.has('search_stocks'))
+  hub.de.stopProviderDirWatcher()
 })
 
 test('discoverMiningToolNames in agent aligns with shared registry', async () => {
@@ -217,10 +226,14 @@ test('stock-index search maps CN/US instruments', { timeout: 30_000 }, async () 
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
   const de = new MarketDataEngine(false)
   registerAllDrivers(de.registry)
-  const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
-  assert.ok(cn.some(h => h.instrument.symbol === '600519'))
-  const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
-  assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
+  try {
+    const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
+    assert.ok(cn.some(h => h.instrument.symbol === '600519'))
+    const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
+    assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
+  } finally {
+    de.stopProviderDirWatcher()
+  }
 })
 
 test('cross-market list sync jobs are no-op', async () => {
@@ -236,12 +249,14 @@ test('cross-market list sync jobs are no-op', async () => {
   process.env.OPPTRIX_MARKET_DB_PATH = dbPath
 
   const store = new MarketDataStore(dbPath)
+  const mdEngine = new MarketDataEngine(false)
   try {
-    const engine = new MarketDataSyncEngine(store, new MarketDataEngine(false))
+    const engine = new MarketDataSyncEngine(store, mdEngine)
     const result = await engine.sync({ jobs: ['jp_list'], mode: 'full' })
     assert.equal(result.jobs.jp_list, 'skipped')
     assert.equal(store.countRegionalEquityInstruments('JP'), 0)
   } finally {
+    mdEngine.stopProviderDirWatcher()
     store.close()
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }

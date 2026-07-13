@@ -83,6 +83,7 @@ export class MarketDataEngine {
   private readonly speedRanker: ProviderSpeedRanker
   private readonly loadBalancer: LoadBalancer
   private providerDirWatcher?: ProviderDirWatcher
+  private providerWatcherStopped = false
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
 
@@ -989,11 +990,12 @@ export class MarketDataEngine {
     for (const id of touched) this.clearCacheForProvider(id)
   }
   private startProviderDirWatcher() {
-    if (this.providerDirWatcher) return
+    if (this.providerDirWatcher || this.providerWatcherStopped) return
     this.providerDirWatcher = new ProviderDirWatcher(() => this.onProvidersDirChanged())
     this.providerDirWatcher.start()
   }
   stopProviderDirWatcher() {
+    this.providerWatcherStopped = true
     this.providerDirWatcher?.stop()
     this.providerDirWatcher = undefined
   }

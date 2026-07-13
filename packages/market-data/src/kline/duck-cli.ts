@@ -17,7 +17,7 @@ import {
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
 import { computeScreenFactors, analyticsStats } from '../analytics/duck-compute.js'
-import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, marketDuckStats } from '../duck/market-migrate.js'
+import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDuckStats } from '../duck/market-migrate.js'
 import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
 import {
   latestFactorDateDuck,
@@ -505,6 +505,20 @@ async function cmdMigrateMarketData(flags: Record<string, string>) {
   }
 }
 
+async function cmdSyncMarketDataToSqlite(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  const sqlitePath = flags.sqlite
+  if (!duckPath || !sqlitePath) throw new Error('sync-market-data-to-sqlite 需要 --duckdb --sqlite')
+  const db = openDuckDatabase(duckPath)
+  const conn = connectDuck(db)
+  try {
+    const result = await migrateMarketDataToSqlite(conn, sqlitePath)
+    process.stdout.write(JSON.stringify(result))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
 async function cmdApplyBatch(flags: Record<string, string>) {
   const duckPath = flags.duckdb
   const filePath = flags.file
@@ -533,7 +547,6 @@ async function cmdQueryJson(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureMarketDuckSchema(conn)
     const rows = await duckAll(conn, sql, ...(params ?? []))
     process.stdout.write(JSON.stringify(rows))
   } finally {
@@ -557,7 +570,6 @@ async function cmdMarketStats(flags: Record<string, string>) {
   const db = openDuckDatabase(duckPath, true)
   const conn = connectDuck(db)
   try {
-    await ensureMarketDuckSchema(conn)
     process.stdout.write(JSON.stringify(await marketDuckStats(conn)))
   } finally {
     await closeDuck(db)
@@ -583,6 +595,7 @@ async function main() {
     else if (cmd === 'query-industry-stocks') await cmdQueryIndustryStocks(flags)
     else if (cmd === 'screen-universe') await cmdScreenUniverse(flags)
     else if (cmd === 'migrate-market-data') await cmdMigrateMarketData(flags)
+    else if (cmd === 'sync-market-data-to-sqlite') await cmdSyncMarketDataToSqlite(flags)
     else if (cmd === 'apply-batch') await cmdApplyBatch(flags)
     else if (cmd === 'query-json') await cmdQueryJson(flags)
     else if (cmd === 'market-stats') await cmdMarketStats(flags)
