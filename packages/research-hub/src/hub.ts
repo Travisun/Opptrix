@@ -247,6 +247,7 @@ export class ResearchHub {
         case 'market_db_status': return this.marketDbStatus(t0)
         case 'market_db_sync': return this.marketDbSync(params, t0)
         case 'market_db_sync_state': return this.marketDbSyncState(t0)
+        case 'market_db_derived_maintenance': return this.marketDbDerivedMaintenance(params, t0)
         case 'market_data_packs': return this.marketDataPacks(t0)
         case 'market_data_packs_save': return this.marketDataPacksSave(params, t0)
         case 'market_data_pack_prepare': return this.marketDataPackPrepare(params, t0)
@@ -507,8 +508,8 @@ export class ResearchHub {
   private marketDbStatus(t0: number) {
     const status = this.marketData.statusLight()
     const enabled = this.marketData.isOfflineScreeningEnabled()
-    const hasFactors = Boolean(status.latest_factor_date)
-    const hasKlines = status.bootstrap?.klines === true || status.bootstrap?.screen_factors === true
+    const hasFactors = Boolean(status.latest_factor_date) || status.derived?.screen_factors === true
+    const hasKlines = status.bootstrap?.klines === true || status.derived?.klines_prerequisite === true
     const guidance = enabled && hasFactors
       ? '本地因子筛选可用：screen_stocks / screen_local_universe；行业用 list_local_industries；A 股日 K 优先读本地 DuckDB（get_instrument_chart），实时行情走在线 Provider'
       : enabled
@@ -530,12 +531,18 @@ export class ResearchHub {
     return ok(snap, '同步状态', t0)
   }
 
+  private marketDbDerivedMaintenance(params: Record<string, unknown>, t0: number) {
+    const force = params.force !== false
+    const result = this.marketData.derivedMaintenance(force)
+    return ok(result, result.message ?? '本地指标维护', t0)
+  }
+
   private marketDataPacks(t0: number) {
     return this.failLocalOffline(t0)
   }
 
   private discoverReadinessContext(): DiscoverProfileReadinessContext {
-    const status = this.marketData.status()
+    const status = this.marketData.statusLight()
     return {
       packs: this.marketData.marketPackConfig(),
       stock_count: status.stock_count,
@@ -609,7 +616,7 @@ export class ResearchHub {
   }
 
   private industrySnapshotUnavailable(t0: number) {
-    const { stock_count: stockCount } = this.marketData.status()
+    const { stock_count: stockCount } = this.marketData.statusLight()
     if (stockCount > 0) return null
     return fail('本地行业库暂无数据，请使用 search_instruments、screen_stocks 等在线能力', t0)
   }

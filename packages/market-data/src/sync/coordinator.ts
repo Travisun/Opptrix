@@ -6,7 +6,8 @@ import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
-import { setMarketSyncActive, isMarketSyncActive } from '../duck/duck-subprocess-gate.js'
+import { getMarketDerivedMaintenanceCoordinator } from './derived-coordinator.js'
+import { setMarketSyncActive, isMarketSyncActive, isDerivedMaintenanceActive } from '../duck/duck-subprocess-gate.js'
 import {
   computeBootstrapOverallPercent,
   countBootstrapCompletedJobs,
@@ -78,12 +79,18 @@ function countCompletedJobs(
 
 export class MarketSyncCoordinator {
   private running = false
+  private lastStaleReconcileAt = 0
+  private static readonly RECONCILE_INTERVAL_MS = 60_000
   private memoryLogs: string[] = []
   private snapshot: Partial<SyncStateSnapshot> & { message?: string | null } = {}
   private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
   private bootstrapProgressRepaired = false
   private lastJobResults: Record<string, string> = {}
   private lastJobResultsSessionId: number | null = null
+  private incompleteBootstrapRetryTimer: ReturnType<typeof setTimeout> | null = null
+  private incompleteBootstrapRetryAttempts = 0
+  private static readonly INCOMPLETE_BOOTSTRAP_RETRY_MS = 45_000
+  private static readonly INCOMPLETE_BOOTSTRAP_RETRY_MAX = 12
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
@@ -179,7 +186,11 @@ export class MarketSyncCoordinator {
   ) {}
 
   getSnapshot(): SyncStateSnapshot {
-    this.store.reconcileStaleSyncState()
+    const now = Date.now()
+    if (now - this.lastStaleReconcileAt >= MarketSyncCoordinator.RECONCILE_INTERVAL_MS) {
+      this.store.reconcileStaleSyncState()
+      this.lastStaleReconcileAt = now
+    }
     if (!this.bootstrapProgressRepaired) {
       this.bootstrapProgressRepaired = true
       setImmediate(() => {
@@ -230,7 +241,11 @@ export class MarketSyncCoordinator {
       jobCurrent = rawJobCurrent
       jobTotal = rawJobTotal > 0 ? rawJobTotal : 100
     } else if (currentJob && stockCount > 0) {
-      jobCurrent = Math.min(stockCount, this.store.countJobDone(currentJob))
+      if (this.running && (this.snapshot.job_current ?? 0) > 0) {
+        jobCurrent = Math.min(stockCount, this.snapshot.job_current ?? 0)
+      } else {
+        jobCurrent = Math.min(stockCount, this.store.countJobDone(currentJob))
+      }
       jobTotal = stockCount
     }
 
@@ -340,6 +355,9 @@ export class MarketSyncCoordinator {
     const mode = options.mode ?? 'incremental'
     if (this.running) {
       return { started: false, running: true, mode }
+    }
+    if (isDerivedMaintenanceActive()) {
+      return { started: false, running: false, mode }
     }
 
     this.store.reconcileStaleSyncState()
@@ -473,6 +491,12 @@ export class MarketSyncCoordinator {
       }
       this.store.finishSession(sessionId, failed ? 'partial' : (bootstrap.ready ? 'completed' : 'partial'), msg)
       this.log(sessionId, msg)
+      if (bootstrap.ready) {
+        this.incompleteBootstrapRetryAttempts = 0
+      } else if (failed === 0) {
+        this.scheduleIncompleteBootstrapRetry(sessionId, bootstrap)
+      }
+      this.triggerDerivedMaintenance()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
       this.store.finishSession(sessionId, 'interrupted', msg)
@@ -489,39 +513,71 @@ export class MarketSyncCoordinator {
     setImmediate(() => void this.runAutoSyncOnBoot())
   }
 
+  /** 初选包未就绪时短间隔续跑，避免同步结束后长时间无后台动作 */
+  private scheduleIncompleteBootstrapRetry(
+    sessionId: number,
+    bootstrap: ReturnType<MarketDataStore['assessBootstrapReadiness']>,
+  ): void {
+    if (this.incompleteBootstrapRetryAttempts >= MarketSyncCoordinator.INCOMPLETE_BOOTSTRAP_RETRY_MAX) {
+      this.log(sessionId, '初选包仍未就绪，请稍后在设置中手动触发同步，或等待定时刷新')
+      return
+    }
+    if (this.incompleteBootstrapRetryTimer != null) clearTimeout(this.incompleteBootstrapRetryTimer)
+    this.incompleteBootstrapRetryAttempts += 1
+    const waitSec = Math.round(MarketSyncCoordinator.INCOMPLETE_BOOTSTRAP_RETRY_MS / 1000)
+    const hint = !bootstrap.klines
+      ? '历史 K 线 Parquet 包未完成'
+      : '名录/行业等待补全'
+    this.log(sessionId, `初选包构建中（${hint}），${waitSec} 秒后继续后台补全…`)
+    this.incompleteBootstrapRetryTimer = setTimeout(() => {
+      this.incompleteBootstrapRetryTimer = null
+      if (this.running) return
+      this.autoSyncOnBoot()
+    }, MarketSyncCoordinator.INCOMPLETE_BOOTSTRAP_RETRY_MS)
+    if (typeof this.incompleteBootstrapRetryTimer === 'object' && 'unref' in this.incompleteBootstrapRetryTimer) {
+      this.incompleteBootstrapRetryTimer.unref()
+    }
+  }
+
   private async runAutoSyncOnBoot(): Promise<void> {
-    if (this.running) return
+    if (this.running || isDerivedMaintenanceActive()) return
     this.store.reconcileStaleSyncState()
     const stale = this.store.getLatestSession()
     if (stale?.status === 'running') {
       this.store.finishSession(stale.id, 'interrupted', '进程重启，等待接续')
     }
 
-    setImmediate(() => {
-      try {
-        this.store.repairKlineImportArtifacts()
-      } catch { /* background repair */ }
-    })
+    try {
+      this.store.repairKlineImportArtifacts()
+    } catch { /* background repair */ }
 
     try {
       await resumeKlineParquetFromCacheIfNeeded(this.store)
     } catch { /* 缓存恢复失败时由后续同步计划重试 */ }
 
+    this.store.invalidateStatusLightCache()
+
     const status = this.store.getStatusForBootPlan()
     const session = this.store.getLatestSession()
     const plan = resolveAutoBootPlan(status, session)
-    if (!plan) return
+    if (plan) {
+      await this.start({
+        mode: plan.mode,
+        jobs: [...plan.jobs],
+        background: true,
+      })
+    }
+    this.triggerDerivedMaintenance()
+  }
 
-    await this.start({
-      mode: plan.mode,
-      jobs: [...plan.jobs],
-      background: true,
-    })
+  private triggerDerivedMaintenance(): void {
+    getMarketDerivedMaintenanceCoordinator(this.store, () => this.running).autoMaintainOnBoot()
   }
 
   /** Poll while app is open — refresh stale bootstrap data without restart. */
   startRefreshScheduler(): void {
     startMarketDataRefreshScheduler(this.store, this)
+    getMarketDerivedMaintenanceCoordinator(this.store, () => this.running).startRefreshScheduler()
   }
 
   /** @deprecated Use autoSyncOnBoot */

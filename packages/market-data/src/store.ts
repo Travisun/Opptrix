@@ -24,7 +24,7 @@ import {
   type MarketDuckGateway,
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
-import { isMarketSyncActive } from './duck/duck-subprocess-gate.js'
+import { isMarketSyncActive, isDerivedMaintenanceActive } from './duck/duck-subprocess-gate.js'
 import {
   isDuckPrimaryMigrationComplete,
   markDuckPrimaryMigrationComplete,
@@ -89,6 +89,21 @@ export interface MarketDbStatus {
   job_progress: Record<string, JobProgressSummary>
   is_ready: boolean
   bootstrap: BootstrapReadiness
+  /** 本地衍生指标（因子 / 行业统计）完整性 */
+  derived: DerivedReadiness
+}
+
+export interface DerivedReadiness {
+  ready: boolean
+  /** 需先完成 K 线 Parquet 导入 */
+  klines_prerequisite: boolean
+  screen_factors: boolean
+  industry_stats: boolean
+  /** 有因子标的数 / 有 K 线标的数（非名录占比） */
+  factor_coverage_ratio: number
+  factor_trade_date: string | null
+  kline_trade_date: string | null
+  industry_trade_date: string | null
 }
 
 export interface BootstrapReadiness {
@@ -107,9 +122,9 @@ export interface BootstrapReadiness {
   fundamentals: boolean
   screen_factors: boolean
   quote_stock_ratio: number
-  /** 至少 60 根日 K 的覆盖率（历史深度） */
+  /** 至少 60 根日 K 的覆盖率（仅供参考，不作为就绪门槛） */
   kline_stock_ratio: number
-  /** 有任何日 K 的覆盖率（增量/近期） */
+  /** 有任何日 K 的覆盖率（仅供参考） */
   kline_recent_ratio: number
   fin_stock_ratio: number
   factor_stock_ratio: number
@@ -130,6 +145,115 @@ export class MarketDataStore {
   private duckMarketStatsCache: { at: number; value: MarketDuckStats } | null = null
   private statusLightCache: { at: number; value: MarketDbStatus } | null = null
   private static readonly STATUS_LIGHT_CACHE_MS = 30_000
+
+  /** 设置页 / Hub 轮询仅聚合这些 job 的 per-code 进度（走 job_name 索引，避免全表 GROUP BY） */
+  private static readonly STATUS_LIGHT_TRACKED_JOBS = [
+    'initial_cn_universe',
+    'initial_cn_etf',
+    'initial_hk_universe',
+    'initial_us_universe',
+    'initial_taxonomy',
+    'kline_bootstrap',
+    'kline_daily',
+    'screen_factors',
+    'industry_stats',
+  ] as const
+
+  private loadSyncCursorBundle(): {
+    lastSync: Record<string, string | null>
+    meta: Record<string, Record<string, unknown>>
+    lastTradeDate: Record<string, string | null>
+  } {
+    const rows = this.db.prepare(`
+      SELECT job_name, last_success_at, last_trade_date, meta_json FROM sync_cursor
+    `).all() as {
+      job_name: string
+      last_success_at: string | null
+      last_trade_date: string | null
+      meta_json: string | null
+    }[]
+    const lastSync: Record<string, string | null> = {}
+    const meta: Record<string, Record<string, unknown>> = {}
+    const lastTradeDate: Record<string, string | null> = {}
+    for (const row of rows) {
+      lastSync[row.job_name] = row.last_success_at
+      lastTradeDate[row.job_name] = row.last_trade_date
+      if (row.meta_json) {
+        try {
+          meta[row.job_name] = JSON.parse(row.meta_json) as Record<string, unknown>
+        } catch { /* ignore */ }
+      }
+    }
+    return { lastSync, meta, lastTradeDate }
+  }
+
+  private loadInstrumentCountsLight(): {
+    stockCount: number
+    etfCount: number
+    usCount: number
+    hkCount: number
+    cryptoCount: number
+    jpCount: number
+    krCount: number
+  } {
+    const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const cnEquityCount = this.countEquityInstrumentsSqlite('CN')
+    const stockCount = Math.max(stocksTableCount, cnEquityCount)
+    const grouped = this.db.prepare(`
+      SELECT market, asset_class, COUNT(*) AS c
+      FROM instruments
+      GROUP BY market, asset_class
+    `).all() as { market: string; asset_class: string; c: number }[]
+    let etfCount = 0
+    let usCount = 0
+    let hkCount = 0
+    let cryptoCount = 0
+    let jpCount = 0
+    let krCount = 0
+    for (const row of grouped) {
+      if (row.market === 'CN' && row.asset_class === 'ETF') etfCount = row.c
+      else if (row.market === 'US' && row.asset_class === 'EQUITY') usCount = row.c
+      else if (row.market === 'HK' && row.asset_class === 'EQUITY') hkCount = row.c
+      else if (row.market === 'CRYPTO' && row.asset_class === 'CRYPTO_SPOT') cryptoCount = row.c
+      else if (row.market === 'JP' && row.asset_class === 'EQUITY') jpCount = row.c
+      else if (row.market === 'KR' && row.asset_class === 'EQUITY') krCount = row.c
+    }
+    if (!etfCount) etfCount = this.countEtfInstruments()
+    if (!usCount) usCount = this.countUsInstruments()
+    return { stockCount, etfCount, usCount, hkCount, cryptoCount, jpCount, krCount }
+  }
+
+  private loadJobProgressLight(stockCount: number): Record<string, JobProgressSummary> {
+    const jobProgress: Record<string, JobProgressSummary> = {}
+    const stmt = this.db.prepare(`
+      SELECT
+        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
+        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
+      FROM sync_job_progress
+      WHERE job_name = ?
+    `)
+    for (const job of MarketDataStore.STATUS_LIGHT_TRACKED_JOBS) {
+      const row = stmt.get(job) as { done: number; error: number } | undefined
+      const done = row?.done ?? 0
+      const baseCount = Math.max(stockCount, done)
+      jobProgress[job] = {
+        done,
+        error: row?.error ?? 0,
+        pending: Math.max(0, baseCount - done),
+      }
+    }
+    return jobProgress
+  }
+
+  private latestFactorTradeDateLight(factorMeta: Record<string, unknown> | undefined): string | null {
+    const cursorDate = factorMeta?.trade_date
+    if (typeof cursorDate === 'string' && cursorDate.trim()) {
+      return cursorDate.slice(0, 10)
+    }
+    return (this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM stock_factors',
+    ).get() as { d: string | null }).d
+  }
 
   /** 统一 DuckDB 访问入口 — 所有 market.duckdb 读写须经此 Gateway */
   duckGateway(): MarketDuckGateway {
@@ -241,9 +365,9 @@ export class MarketDataStore {
     }
   }
 
-  /** Duck 写入队列非空时跳过子进程读 — 未 flush 数据由 pendingInstrumentNsConflict 覆盖 */
+  /** Duck 写入队列非空或 Duck 子进程任务进行中时跳过子进程读 — 避免与 import/derived 争锁 */
   private shouldDeferDuckSubprocessRead(): boolean {
-    return this.duckWriteQueue.length > 0
+    return this.duckWriteQueue.length > 0 || isMarketSyncActive() || isDerivedMaintenanceActive()
   }
 
   private duckRead<T extends Record<string, unknown>>(
@@ -314,6 +438,7 @@ export class MarketDataStore {
   }
 
   queryDuckDailyKlines(code: string, limit = 800, before?: string) {
+    if (this.shouldDeferDuckSubprocessRead()) return []
     return this.duckGateway().queryKlinesSync(code, limit, before)
   }
 
@@ -522,6 +647,7 @@ export class MarketDataStore {
     ).get() as { c: number }).c
     const bootstrap = this.assessBootstrapReadiness(activeCount, latestQuote.d, latestFactor.d, duck)
     this.enrichThsKlineDumpJobProgress(jobProgress, stockCount, bootstrap, lastSync)
+    const derived = this.assessDerivedReadiness(latestFactor.d, bootstrap, duck)
 
     return {
       ...this.statusStorageFields(),
@@ -554,6 +680,7 @@ export class MarketDataStore {
       job_progress: jobProgress,
       is_ready: bootstrap.ready,
       bootstrap,
+      derived,
     }
   }
 
@@ -590,6 +717,7 @@ export class MarketDataStore {
     }
 
     const bootstrap = this.assessBootstrapReadiness(stockCount, null, null, duck)
+    const derived = this.assessDerivedReadiness(null, bootstrap, duck)
     return {
       ...this.statusStorageFields(),
       schema_version: 0,
@@ -617,6 +745,7 @@ export class MarketDataStore {
       job_progress: jobProgress,
       is_ready: bootstrap.ready,
       bootstrap,
+      derived,
     }
   }
 
@@ -644,8 +773,8 @@ export class MarketDataStore {
   }
 
   /**
-   * Lightweight status — SQLite + sync_cursor only; never spawns DuckDB market-stats.
-   * For Agent `market_db_status`, settings polling, and Hub readiness checks.
+   * Lightweight status — SQLite control plane only (sync_cursor / sessions / job progress).
+   * Never spawns DuckDB subprocess; settings polling and Hub readiness use this path.
    */
   getStatusLight(): MarketDbStatus {
     const now = Date.now()
@@ -680,64 +809,37 @@ export class MarketDataStore {
   }
 
   private buildStatusLight(): MarketDbStatus {
-    const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
-    const cnEquityCount = this.countEquityInstrumentsSqlite('CN')
-    const stockCount = Math.max(stocksTableCount, cnEquityCount)
-    const etfCount = this.countEtfInstruments()
-    const usCount = this.countUsInstruments()
-    const cryptoCount = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
-    `).get() as { c: number }).c
-    const jpCount = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'JP'
-    `).get() as { c: number }).c
-    const krCount = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'KR'
-    `).get() as { c: number }).c
-    const hkCount = (this.db.prepare(`
-      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'HK'
-    `).get() as { c: number }).c
+    const counts = this.loadInstrumentCountsLight()
+    const { stockCount, etfCount, usCount, hkCount, cryptoCount, jpCount, krCount } = counts
+    const cursors = this.loadSyncCursorBundle()
+    const { lastSync, meta, lastTradeDate } = cursors
 
     const latestQuote = this.db.prepare(
       'SELECT MAX(trade_date) AS d FROM stock_quotes_daily',
     ).get() as { d: string | null }
-    const latestFactor = { d: this.latestFactorTradeDate() }
+    const latestFactorDate = this.latestFactorTradeDateLight(meta.screen_factors)
 
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
-    const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
-      job_name: string
-      last_success_at: string | null
-    }[]
-    const lastSync: Record<string, string | null> = {}
-    for (const c of cursors) lastSync[c.job_name] = c.last_success_at
-
-    const jobProgress: Record<string, JobProgressSummary> = {}
-    const progressRows = this.db.prepare(`
-      SELECT job_name,
-        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
-        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
-      FROM sync_job_progress
-      GROUP BY job_name
-    `).all() as { job_name: string; done: number; error: number }[]
-    for (const row of progressRows) {
-      const baseCount = Math.max(stockCount, row.done)
-      jobProgress[row.job_name] = {
-        done: row.done,
-        error: row.error,
-        pending: Math.max(0, baseCount - row.done),
-      }
-    }
+    const jobProgress = this.loadJobProgressLight(stockCount)
 
     const bootstrap = this.assessBootstrapReadinessLight(
       stockCount,
       etfCount,
       hkCount,
       usCount,
-      latestFactor.d,
+      latestFactorDate,
       lastSync,
+      meta,
       jobProgress,
     )
     this.enrichKlineJobProgressLight(jobProgress, stockCount, bootstrap, lastSync)
+    const derived = this.assessDerivedReadinessLight(
+      bootstrap,
+      lastSync,
+      meta,
+      latestFactorDate,
+      lastTradeDate,
+    )
 
     return {
       ...this.statusStorageFields(),
@@ -750,11 +852,11 @@ export class MarketDataStore {
       kr_count: krCount,
       hk_count: hkCount,
       latest_trade_date: latestQuote.d,
-      latest_factor_date: latestFactor.d,
+      latest_factor_date: latestFactorDate,
       kline_dates: {
-        CN: this.latestKlineDateLight('CN'),
-        HK: this.latestKlineDateLight('HK'),
-        US: this.latestKlineDateLight('US'),
+        CN: this.latestKlineDateLight('CN', cursors),
+        HK: this.latestKlineDateLight('HK', cursors),
+        US: this.latestKlineDateLight('US', cursors),
       },
       profile_count: 0,
       partner_count: 0,
@@ -770,7 +872,52 @@ export class MarketDataStore {
       job_progress: jobProgress,
       is_ready: bootstrap.ready,
       bootstrap,
+      derived,
     }
+  }
+
+  /** K 线 Parquet 导入完成 — 以 sync_cursor 为准（Duck 主存无 SQLite K 线行） */
+  private isKlineParquetImportComplete(
+    lastSync?: Record<string, string | null>,
+    cursorMeta?: Record<string, Record<string, unknown>>,
+    allowDuckFallback = false,
+  ): boolean {
+    const bundle = lastSync != null
+      ? { lastSync, meta: cursorMeta ?? {} }
+      : this.loadSyncCursorBundle()
+    const cursorJobs = ['kline_bootstrap', 'kline_daily', 'dump_import'] as const
+    for (const job of cursorJobs) {
+      const last = bundle.lastSync[job]
+      if (!last) continue
+      const meta = bundle.meta[job]
+      if (Number(meta?.rowsImported ?? 0) > 0) return true
+      if (Number(meta?.codes ?? 0) > 100) return true
+      if (typeof meta?.maxDate === 'string' && meta.maxDate.trim()) return true
+      return true
+    }
+    return allowDuckFallback ? this.hasSubstantialCnKlineData() : false
+  }
+
+  /** DuckDB / SQLite 是否已有可计算因子的 A 股日 K 体量 */
+  hasSubstantialCnKlineData(): boolean {
+    const stats = this.klineStats()
+    if (stats.rows > 0 && stats.codes > 100) return true
+    const row = this.db.prepare('SELECT COUNT(*) AS c FROM stock_klines_daily').get() as { c: number }
+    return row.c > 10_000
+  }
+
+  /** v13 迁移 / 历史导入 — 补写 kline_bootstrap cursor，避免 UI 与衍生任务误判未导入 */
+  backfillKlineImportCursorsIfNeeded(): boolean {
+    if (this.getCursorLastSuccess('kline_bootstrap')) return false
+    const stats = this.klineStats()
+    if (stats.rows <= 0 || stats.codes <= 100) return false
+    this.setCursor('kline_bootstrap', {
+      source: 'backfill',
+      rowsImported: stats.rows,
+      codes: stats.codes,
+      maxDate: stats.maxDate,
+    })
+    return true
   }
 
   private assessBootstrapReadinessLight(
@@ -780,6 +927,7 @@ export class MarketDataStore {
     usEquity: number,
     latestFactorDate: string | null,
     lastSync: Record<string, string | null>,
+    cursorMeta: Record<string, Record<string, unknown>>,
     jobProgress: Record<string, JobProgressSummary>,
   ): BootstrapReadiness {
     const initial_cn = cnEquity > 1000
@@ -791,19 +939,19 @@ export class MarketDataStore {
     ).get('CN', 'industry') as { c: number }).c
     const initial_taxonomy = taxonomyCount >= 5 || !!lastSync.initial_taxonomy
 
-    const klineBootDone = jobProgress.kline_bootstrap?.done ?? 0
-    const klineMeta = this.getCursorMeta('kline_bootstrap')
-    const rowsImported = Number(klineMeta?.rowsImported ?? 0)
-    const hasKlineCursor = !!lastSync.kline_bootstrap
+    const klineMeta = cursorMeta.kline_bootstrap
+    const klineCodesFromCursor = Number(klineMeta?.codes ?? 0)
+    const klines = this.isKlineParquetImportComplete(lastSync, cursorMeta)
+    const klineRecent = klineCodesFromCursor > 0
+      ? klineCodesFromCursor
+      : (klines ? cnEquity : 0)
+    const klineWithMin = klines ? klineRecent : 0
     const kline_stock_ratio = cnEquity > 0
-      ? Math.min(100, Math.round((klineBootDone / cnEquity) * 1000) / 10)
+      ? Math.round((klineWithMin / cnEquity) * 1000) / 10
       : 0
-    const kline_recent_ratio = kline_stock_ratio
-    const klines = hasKlineCursor && (
-      kline_stock_ratio >= 95
-      || rowsImported > 0
-      || (cnEquity > 0 && klineBootDone >= cnEquity * 0.95)
-    )
+    const kline_recent_ratio = cnEquity > 0
+      ? Math.round((klineRecent / cnEquity) * 1000) / 10
+      : 0
     const screen_factors = !!latestFactorDate || !!lastSync.screen_factors
     const ready = initial_cn && initial_taxonomy && klines
 
@@ -830,40 +978,40 @@ export class MarketDataStore {
 
   private enrichKlineJobProgressLight(
     jobProgress: Record<string, JobProgressSummary>,
-    stockCount: number,
+    _stockCount: number,
     bootstrap: BootstrapReadiness,
     lastSync: Record<string, string | null>,
   ): void {
-    const bootDone = jobProgress.kline_bootstrap?.done ?? 0
-    const universe = Math.max(stockCount, bootDone, 1)
-
+    const importDone = bootstrap.klines
     jobProgress.kline_bootstrap = {
-      done: bootstrap.klines ? universe : bootDone,
-      pending: bootstrap.klines ? 0 : Math.max(0, universe - bootDone),
+      done: importDone ? 1 : 0,
+      pending: importDone ? 0 : 1,
       error: jobProgress.kline_bootstrap?.error ?? 0,
     }
 
     const bootstrapFresh = !!lastSync.kline_bootstrap && daysSince(lastSync.kline_bootstrap) < 7
     const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
     const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
-    const dailyDone = jobProgress.kline_daily?.done ?? bootDone
     jobProgress.kline_daily = {
-      done: klineMaintOk ? universe : dailyDone,
-      pending: klineMaintOk ? 0 : Math.max(0, universe - dailyDone),
+      done: klineMaintOk ? 1 : 0,
+      pending: klineMaintOk ? 0 : 1,
       error: jobProgress.kline_daily?.error ?? 0,
     }
   }
 
-  private latestKlineDateLight(market: string): string | null {
+  private latestKlineDateLight(
+    market: string,
+    cursors?: ReturnType<MarketDataStore['loadSyncCursorBundle']>,
+  ): string | null {
     if (market === 'CN') {
-      const daily = this.db.prepare(
-        'SELECT last_trade_date FROM sync_cursor WHERE job_name = ?',
-      ).get('kline_daily') as { last_trade_date: string | null } | undefined
-      if (daily?.last_trade_date) return daily.last_trade_date
-      const boot = this.db.prepare(
-        'SELECT last_trade_date FROM sync_cursor WHERE job_name = ?',
-      ).get('kline_bootstrap') as { last_trade_date: string | null } | undefined
-      if (boot?.last_trade_date) return boot.last_trade_date
+      const bootMeta = cursors?.meta.kline_bootstrap
+      if (typeof bootMeta?.maxDate === 'string' && bootMeta.maxDate.trim()) {
+        return bootMeta.maxDate.slice(0, 10)
+      }
+      const dailyTd = cursors?.lastTradeDate.kline_daily
+      if (dailyTd) return dailyTd.slice(0, 10)
+      const bootTd = cursors?.lastTradeDate.kline_bootstrap
+      if (bootTd) return bootTd.slice(0, 10)
     }
     const row = this.db.prepare(
       'SELECT MAX(trade_date) AS d FROM instrument_bars_daily WHERE market = ?',
@@ -912,7 +1060,7 @@ export class MarketDataStore {
     const kline_recent_ratio = cnEquity > 0
       ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
-    const klines = kline_stock_ratio >= 95
+    const klines = this.isKlineParquetImportComplete(undefined, undefined, true)
     const screen_factors = (duck.factors ?? 0) > 0 || Boolean(_latestFactorDate)
 
     const ready = initial_cn && initial_taxonomy && klines
@@ -938,6 +1086,28 @@ export class MarketDataStore {
     }
   }
 
+  /** statusLight 专用 — 仅用 cursor / 日期比较，不 spawn klineStats */
+  private screenFactorsStaleLight(
+    lastSync: Record<string, string | null>,
+    factorDate: string | null,
+    klineTradeDate: string | null,
+  ): boolean {
+    if (!lastSync.screen_factors) return true
+    if (!factorDate) return true
+    if (klineTradeDate && factorDate < klineTradeDate) return true
+    return false
+  }
+
+  /** statusLight 专用 — 行业统计是否落后于因子重算 */
+  private industryStatsStaleLight(lastSync: Record<string, string | null>): boolean {
+    if (!lastSync.industry_stats) return true
+    const factorCursor = lastSync.screen_factors
+    if (factorCursor && new Date(factorCursor).getTime() > new Date(lastSync.industry_stats).getTime()) {
+      return true
+    }
+    return false
+  }
+
   /** 因子截面是否落后于最新 K 线日期 */
   screenFactorsStale(tradeDate = todayTradeDate()): boolean {
     const stats = this.klineStats()
@@ -956,6 +1126,120 @@ export class MarketDataStore {
     const meta = this.getCursorMeta('industry_stats')
     const metaDate = meta?.trade_date != null ? String(meta.trade_date) : ''
     return metaDate !== tradeDate
+  }
+
+  countDistinctFactorCodes(tradeDate: string): number {
+    const row = this.duckRead<{ c: number }>(
+      'SELECT COUNT(DISTINCT code)::INTEGER AS c FROM stock_factors WHERE trade_date = ?',
+      [tradeDate],
+      () => {
+        const sqlite = this.db.prepare(
+          'SELECT COUNT(DISTINCT code) AS c FROM stock_factors WHERE trade_date = ?',
+        ).get(tradeDate) as { c: number } | undefined
+        return sqlite ? { c: sqlite.c } : undefined
+      },
+    )
+    return row?.c ?? 0
+  }
+
+  /** 本地衍生指标完整性 — 因子覆盖率相对有 K 线标的，非 A 股名录 */
+  assessDerivedReadiness(
+    latestFactorDate?: string | null,
+    bootstrap?: BootstrapReadiness,
+    _duckStats?: MarketDuckStats,
+  ): DerivedReadiness {
+    const bootstrapState = bootstrap ?? this.assessBootstrapReadiness()
+    const klinesReady = bootstrapState.klines || this.hasSubstantialCnKlineData()
+    if (!klinesReady) {
+      return this.emptyDerivedReadiness(latestFactorDate ?? this.latestFactorTradeDate())
+    }
+
+    const stats = this.klineStats()
+    const klineTradeDate = stats.maxDate
+    const factorTradeDate = latestFactorDate ?? this.latestFactorTradeDate()
+    const klineCodes = stats.codes || this.countDistinctKlineCodes()
+    const factorCodes = klineTradeDate ? this.countDistinctFactorCodes(klineTradeDate) : 0
+    const minFactorCodes = klineCodes > 0 ? Math.max(1, Math.floor(klineCodes * 0.98)) : 0
+    const factorCoverage = klineCodes > 0
+      ? Math.round((factorCodes / klineCodes) * 1000) / 10
+      : 0
+
+    const screen_factors = !this.screenFactorsStale()
+      && klineCodes > 0
+      && factorCodes >= minFactorCodes
+
+    const industryMeta = this.getCursorMeta('industry_stats')
+    const industryTradeDate = industryMeta?.trade_date != null
+      ? String(industryMeta.trade_date).slice(0, 10)
+      : null
+    const industry_stats = !this.industryStatsStale()
+
+    return {
+      ready: screen_factors && industry_stats,
+      klines_prerequisite: true,
+      screen_factors,
+      industry_stats,
+      factor_coverage_ratio: factorCoverage,
+      factor_trade_date: factorTradeDate,
+      kline_trade_date: klineTradeDate,
+      industry_trade_date: industryTradeDate,
+    }
+  }
+
+  /** statusLight 专用 — 避免额外 COUNT DISTINCT */
+  assessDerivedReadinessLight(
+    bootstrap: BootstrapReadiness,
+    lastSync: Record<string, string | null>,
+    cursorMeta: Record<string, Record<string, unknown>>,
+    latestFactorDate: string | null,
+    lastTradeDate: Record<string, string | null>,
+  ): DerivedReadiness {
+    const klinesReady = bootstrap.klines || this.isKlineParquetImportComplete(lastSync, cursorMeta)
+    if (!klinesReady) {
+      return this.emptyDerivedReadiness(latestFactorDate)
+    }
+
+    const factorMeta = cursorMeta.screen_factors
+    const factorDate = latestFactorDate
+      || (typeof factorMeta?.trade_date === 'string' ? factorMeta.trade_date.slice(0, 10) : null)
+    const industryMeta = cursorMeta.industry_stats
+    const industryTradeDate = industryMeta?.trade_date != null
+      ? String(industryMeta.trade_date).slice(0, 10)
+      : null
+    const bootMeta = cursorMeta.kline_bootstrap
+    const klineTradeDate = (typeof bootMeta?.maxDate === 'string' ? bootMeta.maxDate.slice(0, 10) : null)
+      || lastTradeDate.kline_daily?.slice(0, 10)
+      || lastTradeDate.kline_bootstrap?.slice(0, 10)
+      || null
+
+    const screen_factors = Boolean(lastSync.screen_factors)
+      && Boolean(factorDate)
+      && !this.screenFactorsStaleLight(lastSync, factorDate, klineTradeDate)
+    const industry_stats = Boolean(lastSync.industry_stats) && !this.industryStatsStaleLight(lastSync)
+
+    return {
+      ready: screen_factors && industry_stats,
+      klines_prerequisite: true,
+      screen_factors,
+      industry_stats,
+      factor_coverage_ratio: screen_factors ? 100 : 0,
+      factor_trade_date: factorDate,
+      kline_trade_date: klineTradeDate,
+      industry_trade_date: industryTradeDate,
+    }
+  }
+
+  private emptyDerivedReadiness(factorTradeDate: string | null): DerivedReadiness {
+    return {
+      ready: false,
+      klines_prerequisite: false,
+      screen_factors: false,
+      industry_stats: false,
+      factor_coverage_ratio: 0,
+      factor_trade_date: factorTradeDate,
+      kline_trade_date: null,
+      industry_trade_date: null,
+    }
   }
 
   getCursorMeta(jobName: string): Record<string, unknown> | null {
@@ -1102,21 +1386,17 @@ export class MarketDataStore {
     return row.c
   }
 
-  /** 同花顺 Parquet 导入任务 — 用 K 线库覆盖率展示进度，而非逐股 sync_job_progress */
+  /** 同花顺 Parquet 导入任务 — 以导入完成（cursor）为准，不用名录覆盖率 */
   private enrichThsKlineDumpJobProgress(
     jobProgress: Record<string, JobProgressSummary>,
-    stockCount: number,
+    _stockCount: number,
     bootstrap: BootstrapReadiness,
     lastSync: Record<string, string | null>,
   ): void {
-    const klineCodes = this.countDistinctKlineCodes()
-    const universe = Math.max(stockCount, klineCodes, 1)
-    const done = klineCodes
-    const pending = Math.max(0, universe - done)
-
+    const importDone = bootstrap.klines
     jobProgress.kline_bootstrap = {
-      done: bootstrap.klines ? universe : done,
-      pending: bootstrap.klines ? 0 : pending,
+      done: importDone ? 1 : 0,
+      pending: importDone ? 0 : 1,
       error: jobProgress.kline_bootstrap?.error ?? 0,
     }
 
@@ -1124,8 +1404,8 @@ export class MarketDataStore {
     const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
     const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
     jobProgress.kline_daily = {
-      done: klineMaintOk ? universe : done,
-      pending: klineMaintOk ? 0 : pending,
+      done: klineMaintOk ? 1 : 0,
+      pending: klineMaintOk ? 0 : 1,
       error: jobProgress.kline_daily?.error ?? 0,
     }
   }
@@ -1200,6 +1480,7 @@ export class MarketDataStore {
     }
     this.invalidateKlineStatsCache()
     this.flushDuckWritesSync()
+    this.backfillKlineImportCursorsIfNeeded()
 
     const runsClosed = this.db.prepare(`
       UPDATE sync_runs
@@ -1925,9 +2206,12 @@ export class MarketDataStore {
     const row = this.duckRead<{ n: number }>(
       'SELECT 1::INTEGER AS n FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
       [code, tradeDate],
-      () => this.db.prepare(
-        'SELECT 1 FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
-      ).get(code, tradeDate) as { n?: number } | undefined,
+      () => {
+        const sqlite = this.db.prepare(
+          'SELECT 1 FROM stock_factors WHERE code = ? AND trade_date = ? LIMIT 1',
+        ).get(code, tradeDate)
+        return sqlite ? { n: 1 } : undefined
+      },
     )
     return Boolean(row)
   }
@@ -2059,16 +2343,21 @@ export class MarketDataStore {
 
   /** Backfill per-stock job flags for bulk bootstrap tasks (fixes stale progress display). */
   repairBootstrapJobProgress(): { klines: number; industry: number } {
-    if (isMarketSyncActive()) return { klines: 0, industry: 0 }
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) return { klines: 0, industry: 0 }
 
-    const klineCodes = this.listCodesWithMinKlines(60)
-    if (klineCodes.length) this.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
+    let klineCodes: string[] = []
+    const klineCursor = this.getCursorLastSuccess('kline_bootstrap')
+    const klineMeta = this.getCursorMeta('kline_bootstrap')
+    if (!klineCursor || !klineMeta?.codes) {
+      klineCodes = this.listCodesWithMinKlines(60)
+      if (klineCodes.length) this.markBootstrapJobDoneForCodes('kline_bootstrap', klineCodes)
+    }
 
     const tradeDate = (this.db.prepare(
       'SELECT MAX(trade_date) AS d FROM industry_stats',
     ).get() as { d: string | null }).d
     let industry = 0
-    if (tradeDate) {
+    if (tradeDate && !this.getCursorLastSuccess('industry_stats')) {
       const codes = (this.db.prepare(
         'SELECT code FROM stocks WHERE status = \'active\'',
       ).all() as { code: string }[]).map(r => r.code)

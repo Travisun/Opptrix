@@ -240,6 +240,15 @@ export const research = {
   marketDbSyncState: () =>
     apiCall<import('../types/market').MarketDataSyncState>('market_db_sync_state', {}, undefined, 30_000),
 
+  /** 手动启动本地指标维护（初选因子 + 行业统计） */
+  marketDbDerivedMaintenance: (force = true) =>
+    apiCall<{ started: boolean; running: boolean; message?: string }>(
+      'market_db_derived_maintenance',
+      { force },
+      undefined,
+      30_000,
+    ),
+
   /** Signal UI shell ready — triggers L0 boot sync once (idempotent). */
   marketDataUiReady: () =>
     jsonFetch<{ ok: boolean }>('/market-data/ui-ready', { method: 'POST' }),

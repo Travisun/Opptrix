@@ -44,8 +44,18 @@ export function dailyJobsNeedRefresh(status: MarketDbStatus): boolean {
   return cnMaintenanceJobsDue(status.last_sync).length > 0
 }
 
+/** 初选包 readiness 门槛是否仍未满足（与 TTL 无关，避免 cursor 已写但覆盖率不足时不再自动同步） */
+function bootstrapReadinessIncomplete(status: MarketDbStatus): boolean {
+  if (status.is_ready) return false
+  const b = status.bootstrap
+  if (!b) return status.stock_count > 0
+  if (!b.initial_cn || !b.initial_taxonomy || !b.klines) return true
+  return false
+}
+
 /** 首次 pipeline 是否仍有 job 未跑过或已过期 */
 export function bootstrapJobsNeedRefresh(status: MarketDbStatus): boolean {
+  if (bootstrapReadinessIncomplete(status)) return true
   return jobsNeedingRefresh([...DEFAULT_AUTO_SYNC_JOBS], status.last_sync).length > 0
 }
 

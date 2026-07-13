@@ -3,6 +3,10 @@ import { EvaluationEngine } from '@opptrix/stock-eval'
 import { getMarketDataStore, MarketDataStore } from './store.js'
 import { MarketDataSyncEngine, ALL_SYNC_JOBS, type SyncOptions } from './sync/engine.js'
 import { getMarketSyncCoordinator, MarketSyncCoordinator, type SyncStateSnapshot } from './sync/coordinator.js'
+import {
+  getMarketDerivedMaintenanceCoordinator,
+  type DerivedMaintenanceSnapshot,
+} from './sync/derived-coordinator.js'
 import { resolveSyncPlan, resolveAutoBootPlan, resolveMarketPackSyncPlan, type SyncPlan } from './sync/plan.js'
 import {
   loadMarketPackConfig,
@@ -70,6 +74,7 @@ export class MarketDataService {
   readonly ee: EvaluationEngine
   readonly syncEngine: MarketDataSyncEngine
   readonly coordinator: MarketSyncCoordinator
+  readonly derivedCoordinator: ReturnType<typeof getMarketDerivedMaintenanceCoordinator>
   private readonly lifecycle = new MarketDataLifecycle()
 
   constructor(store = getMarketDataStore(), de = new MarketDataEngine(), ee?: EvaluationEngine) {
@@ -78,6 +83,7 @@ export class MarketDataService {
     this.ee = ee ?? new EvaluationEngine(de)
     this.syncEngine = new MarketDataSyncEngine(store, de)
     this.coordinator = getMarketSyncCoordinator(store, () => new MarketDataSyncEngine(store, de))
+    this.derivedCoordinator = getMarketDerivedMaintenanceCoordinator(store, () => this.coordinator.isRunning())
   }
 
   status() {
@@ -93,8 +99,20 @@ export class MarketDataService {
     return LOCAL_OFFLINE_SCREENING_ENABLED
   }
 
-  syncState(): SyncStateSnapshot {
-    return this.coordinator.getSnapshot()
+  syncState(): SyncStateSnapshot & { derived_maintenance: DerivedMaintenanceSnapshot } {
+    const snap = this.coordinator.getSnapshot()
+    return {
+      ...snap,
+      derived_maintenance: this.derivedCoordinator.getSnapshot(snap.db_status),
+    }
+  }
+
+  autoDerivedMaintenanceOnBoot() {
+    this.derivedCoordinator.autoMaintainOnBoot()
+  }
+
+  derivedMaintenance(force = true) {
+    return this.derivedCoordinator.start({ force })
   }
 
   sync(options?: SyncOptions) {
@@ -108,7 +126,7 @@ export class MarketDataService {
       return { mode: 'full', jobs: allJobsForEnabledPacks(packs), label: '全量重拉' }
     }
     const session = this.store.getLatestSession()
-    return resolveSyncPlan(this.status(), session)
+    return resolveSyncPlan(this.statusLight(), session)
   }
 
   marketPackConfig(): MarketDataPackConfig {
@@ -148,6 +166,7 @@ export class MarketDataService {
 
   autoSyncOnBoot() {
     this.coordinator.autoSyncOnBoot()
+    this.coordinator.startRefreshScheduler()
   }
 
   /** UI shell ready — trigger L0 boot sync once (via resolveAutoBootPlan). */
@@ -401,9 +420,10 @@ export {
   type MarketDuckGateway,
   type MarketDuckStats,
 } from './duck/market-duck-gateway.js'
-export type { MarketDbStatus, BootstrapReadiness } from './store.js'
+export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
+export type { DerivedMaintenanceSnapshot } from './sync/derived-coordinator.js'
 export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult, LocalIndustryScreenQuery, IndustryListItem } from './query/screen.js'
 export type { LocalEtfScreenQuery, LocalEtfScreenResult, LocalEtfScreenItem } from './query/etf-screen.js'
 export type { LocalInstrumentHit } from './query/search-instruments.js'
@@ -426,6 +446,7 @@ export {
   CN_CORE_SYNC_JOBS,
   CN_MANUAL_SYNC_JOBS,
   DEFAULT_AUTO_SYNC_JOBS,
+  CN_DERIVED_MAINTENANCE_JOBS,
   DEFAULT_DAILY_SYNC_JOBS,
   LEGACY_INITIAL_SYNC_JOBS,
   STOCKINDEX_LIST_SYNC_JOBS,

@@ -36,7 +36,7 @@ export function bootstrapJobRatio(
     case 'quotes':
       return b?.quotes ? 1 : (ratioPct('quote_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'kline_bootstrap':
-      return b?.klines ? 1 : (ratioPct('kline_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
+      return b?.klines || !!dbStatus.last_sync.kline_bootstrap ? 1 : 0
     case 'kline_daily': {
       const bootLast = dbStatus.last_sync.kline_bootstrap
       const dailyLast = dbStatus.last_sync.kline_daily
@@ -49,8 +49,9 @@ export function bootstrapJobRatio(
     case 'financials':
       return b?.fundamentals ? 1 : (ratioPct('fin_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'screen_factors':
-      return b?.screen_factors ? 1 : (ratioPct('factor_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
+      return dbStatus.derived?.screen_factors ? 1 : (ratioPct('factor_stock_ratio') ?? 0)
     case 'industry_stats': {
+      if (dbStatus.derived?.industry_stats) return 1
       const last = dbStatus.last_sync.industry_stats
       if (last && daysSince(last) < 1) return 1
       return stockRatio(progress?.done ?? 0, stockCount)

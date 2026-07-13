@@ -2,11 +2,13 @@ import type Database from 'better-sqlite3'
 import type { MarketDataStore } from '../store.js'
 import { SCREEN_PACK_FACTORS } from '../sync/config.js'
 import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
+import { isDerivedMaintenanceActive, isMarketSyncActive } from '../duck/duck-subprocess-gate.js'
 import { todayTradeDate } from '../utils.js'
 
 const OFFLINE_SCREEN_MSG = '本地因子筛选不可用：请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。'
 
 function useDuck(store: MarketDataStore): boolean {
+  if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false
   return store.duckGateway().hasMarketData()
 }
 

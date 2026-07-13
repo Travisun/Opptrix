@@ -594,6 +594,28 @@ export interface MarketDbStatusData {
     fin_stock_ratio?: number
     factor_stock_ratio?: number
   }
+  derived?: {
+    ready: boolean
+    klines_prerequisite: boolean
+    screen_factors: boolean
+    industry_stats: boolean
+    factor_coverage_ratio: number
+    factor_trade_date: string | null
+    kline_trade_date: string | null
+    industry_trade_date: string | null
+  }
+}
+
+export interface DerivedMaintenanceState {
+  running: boolean
+  current_job: string | null
+  job_current: number
+  job_total: number
+  jobs_completed: number
+  jobs_total: number
+  overall_percent: number
+  message: string | null
+  logs: string[]
 }
 
 export interface MarketDataSyncState {
@@ -614,4 +636,5 @@ export interface MarketDataSyncState {
   logs: string[]
   failed_jobs?: Array<{ job: string; error: string }>
   db_status: MarketDbStatusData
+  derived_maintenance?: DerivedMaintenanceState
 }

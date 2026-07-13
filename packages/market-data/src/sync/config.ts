@@ -55,6 +55,12 @@ export const CN_MAINTENANCE_SYNC_JOBS = [
   'initial_taxonomy',
 ] as const
 
+/** 本地衍生指标 — 跟随 K 线计算，独立异步维护（不参与外部同步 boot） */
+export const CN_DERIVED_MAINTENANCE_JOBS = [
+  'screen_factors',
+  'industry_stats',
+] as const
+
 /** @deprecated 使用 CN_BOOTSTRAP_SYNC_JOBS */
 export const CN_CORE_SYNC_JOBS = [
   'initial_cn_universe',

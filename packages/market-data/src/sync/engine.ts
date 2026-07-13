@@ -462,6 +462,11 @@ export class MarketDataSyncEngine {
     if (job === 'screen_factors' && this.store.screenFactorsStale()) return true
     if (job === 'industry_stats' && this.store.industryStatsStale()) return true
 
+    if (job === 'kline_bootstrap' || job === 'kline_daily') {
+      const bootstrap = this.store.assessBootstrapReadiness()
+      if (!bootstrap.klines) return true
+    }
+
     const { is_ready: ready, last_sync: lastSync } = this.store.getStatus()
     if (ready) {
       if (job === 'initial_cn_universe') return cnUniverseMaintenanceDue(lastSync)
@@ -1684,7 +1689,8 @@ export class MarketDataSyncEngine {
     const cfg = this.cfg('kline_bootstrap', options)
     if (mode === 'incremental' && cfg.ttlDays && !options.force) {
       const last = this.store.getCursorLastSuccess('kline_bootstrap')
-      if (last && daysSince(last) < cfg.ttlDays && this.store.hasKlineData()) {
+      const bootstrap = this.store.assessBootstrapReadiness()
+      if (last && daysSince(last) < cfg.ttlDays && bootstrap.klines) {
         this.finishJobEmpty(runId, 'kline_bootstrap', options, '历史 K 线数据包在 TTL 内，跳过')
         return
       }

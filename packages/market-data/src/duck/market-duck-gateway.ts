@@ -20,6 +20,23 @@ import type { LocalUniverseScreenQuery } from '../query/screen.js'
 
 export type AnalyticsSyncScope = 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all'
 
+export type DerivedMaintenanceCliEvent = {
+  type: string
+  job?: string
+  message?: string
+  current?: number
+  total?: number
+  trade_date?: string
+  screen_factors?: { computed: number; written: number }
+  industry_stats?: { industries: number; trade_date: string }
+}
+
+export type DerivedMaintenanceResult = {
+  tradeDate: string
+  screen_factors: { computed: number; written: number } | null
+  industry_stats: { industries: number; trade_date: string } | null
+}
+
 const CLI_PATH = fileURLToPath(new URL('../kline/duck-cli.js', import.meta.url))
 
 export type MarketDuckStats = {
@@ -86,7 +103,7 @@ export class MarketDuckGateway {
     return run
   }
 
-  private execSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
+  private execWriteSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
     return withDuckFileLockSync(this.duckDbPath, () =>
       execFileSync(process.execPath, [CLI_PATH, ...args], {
         encoding: 'utf8',
@@ -96,7 +113,16 @@ export class MarketDuckGateway {
     )
   }
 
-  private execAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
+  /** 只读 duck-cli — 不等待写锁，允许与后台导入/维护并行（快照可能略旧） */
+  private execReadSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
+    return execFileSync(process.execPath, [CLI_PATH, ...args], {
+      encoding: 'utf8',
+      maxBuffer,
+      env: process.env,
+    }).trim()
+  }
+
+  private execWriteAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
     return this.schedule(() =>
       withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
         const child = spawn(process.execPath, [CLI_PATH, ...args], {
@@ -123,6 +149,42 @@ export class MarketDuckGateway {
     )
   }
 
+  /** 只读 duck-cli（async）— 不排队等写锁 */
+  private execReadAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const child = spawn(process.execPath, [CLI_PATH, ...args], {
+        stdio: ['ignore', 'pipe', 'pipe'],
+        env: process.env,
+      })
+      let stdout = ''
+      let stderr = ''
+      child.stdout?.on('data', chunk => { stdout += String(chunk) })
+      child.stderr?.on('data', chunk => { stderr += String(chunk) })
+      child.on('error', reject)
+      child.on('exit', code => {
+        if (code !== 0) {
+          reject(new Error(stderr.trim() || `duck-cli exit ${code}`))
+          return
+        }
+        if (stdout.length > maxBuffer) {
+          reject(new Error('duck-cli stdout exceeded maxBuffer'))
+          return
+        }
+        resolve(stdout.trim())
+      })
+    })
+  }
+
+  /** @deprecated 内部请用 execWriteSync / execReadSync */
+  private execSync(args: string[], maxBuffer = 128 * 1024 * 1024): string {
+    return this.execWriteSync(args, maxBuffer)
+  }
+
+  /** @deprecated 内部请用 execWriteAsync / execReadAsync */
+  private execAsync(args: string[], maxBuffer = 128 * 1024 * 1024): Promise<string> {
+    return this.execWriteAsync(args, maxBuffer)
+  }
+
   duckExists(): boolean {
     return fs.existsSync(this.duckDbPath)
   }
@@ -139,7 +201,7 @@ export class MarketDuckGateway {
     fs.writeFileSync(tmp, JSON.stringify(ops))
     try {
       const out = JSON.parse(
-        this.execSync(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
+        this.execWriteSync(['apply-batch', '--duckdb', this.duckDbPath, '--file', tmp]),
       ) as { applied?: number }
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out.applied ?? 0
@@ -153,7 +215,7 @@ export class MarketDuckGateway {
     const tmp = path.join(os.tmpdir(), `opptrix-kline-upsert-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify(rows))
     try {
-      this.execSync([
+      this.execWriteSync([
         'upsert', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath, '--file', tmp,
       ], 256 * 1024 * 1024)
       return rows.length
@@ -167,7 +229,7 @@ export class MarketDuckGateway {
     try {
       const args = ['migrate-market-data', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath]
       if (force) args.push('--force')
-      const out = JSON.parse(this.execSync(args, 512 * 1024 * 1024)) as Record<string, number>
+      const out = JSON.parse(this.execWriteSync(args, 512 * 1024 * 1024)) as Record<string, number>
       invalidateHasMarketDuckDataCache(this.duckDbPath)
       return out
     } catch {
@@ -178,7 +240,7 @@ export class MarketDuckGateway {
   checkMarketMigrationNeededSync(): boolean {
     if (!this.sqliteExists()) return false
     try {
-      const out = JSON.parse(this.execSync([
+      const out = JSON.parse(this.execWriteSync([
         'check-market-migration', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ], 512 * 1024 * 1024)) as { needed?: boolean }
       return out.needed === true
@@ -205,7 +267,7 @@ export class MarketDuckGateway {
   syncMarketDataToSqliteSync(): Record<string, number> {
     if (!this.duckExists() || !this.sqliteExists()) return {}
     try {
-      return JSON.parse(this.execSync([
+      return JSON.parse(this.execWriteSync([
         'sync-market-data-to-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ], 512 * 1024 * 1024)) as Record<string, number>
     } catch {
@@ -219,7 +281,7 @@ export class MarketDuckGateway {
 
   syncBarsToSqliteSync(): number {
     try {
-      const out = JSON.parse(this.execSync([
+      const out = JSON.parse(this.execWriteSync([
         'sync-bars', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ])) as { barsSynced?: number }
       return out.barsSynced ?? 0
@@ -231,7 +293,7 @@ export class MarketDuckGateway {
   migrateSqliteKlinesIfEmptySync(): number {
     if (!this.sqliteExists()) return 0
     try {
-      const lines = this.execSync([
+      const lines = this.execWriteSync([
         'migrate-from-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
       ], 256 * 1024 * 1024).split('\n').filter(Boolean)
       const last = lines[lines.length - 1]
@@ -244,7 +306,7 @@ export class MarketDuckGateway {
     }
   }
 
-  // ─── 读路径（sync — 同步任务 / 批量写入边界） ───────────────────────────
+  // ─── 读路径（只读 duck-cli，不等待写锁） ─────────────────────────────────
 
   queryAllSync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     if (!this.duckExists()) return []
@@ -252,7 +314,7 @@ export class MarketDuckGateway {
     fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
     try {
       return JSON.parse(
-        this.execSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp]),
+        this.execReadSync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp]),
       ) as T[]
     } catch {
       return []
@@ -265,12 +327,12 @@ export class MarketDuckGateway {
     return this.queryAllSync<T>(sql, params)[0]
   }
 
-  /** 非阻塞读 — API / Hub 轮询优先使用 */
+  /** 非阻塞读 — API / Hub 优先使用 */
   queryAllAsync<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): Promise<T[]> {
     if (!this.duckExists()) return Promise.resolve([])
     const tmp = path.join(os.tmpdir(), `opptrix-duck-q-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify({ sql, params }))
-    return this.execAsync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
+    return this.execReadAsync(['query-json', '--duckdb', this.duckDbPath, '--file', tmp])
       .then(out => JSON.parse(out) as T[])
       .catch(() => [] as T[])
       .finally(() => {
@@ -281,7 +343,7 @@ export class MarketDuckGateway {
   marketStatsSync(): MarketDuckStats {
     if (!this.duckExists()) return { ...EMPTY_MARKET_STATS }
     try {
-      return JSON.parse(this.execSync(['market-stats', '--duckdb', this.duckDbPath])) as MarketDuckStats
+      return JSON.parse(this.execReadSync(['market-stats', '--duckdb', this.duckDbPath])) as MarketDuckStats
     } catch {
       return { ...EMPTY_MARKET_STATS }
     }
@@ -289,27 +351,26 @@ export class MarketDuckGateway {
 
   marketStatsAsync(): Promise<MarketDuckStats> {
     if (!this.duckExists()) return Promise.resolve({ ...EMPTY_MARKET_STATS })
-    return this.execAsync(['market-stats', '--duckdb', this.duckDbPath])
+    return this.execReadAsync(['market-stats', '--duckdb', this.duckDbPath])
       .then(out => JSON.parse(out) as MarketDuckStats)
       .catch(() => ({ ...EMPTY_MARKET_STATS }))
   }
 
   hasMarketData(): boolean {
     if (!this.isDuckPrimaryReady()) return false
+    if (!this.duckExists()) return false
     const now = Date.now()
-    if (duckDataCache && duckDataCache.path === this.duckDbPath && now - duckDataCache.at < 15_000) {
+    if (duckDataCache && duckDataCache.path === this.duckDbPath && now - duckDataCache.at < 60_000) {
       return duckDataCache.has
     }
-    const stats = this.marketStatsSync()
-    const has = stats.stocks > 0 || stats.instruments > 0 || stats.klines > 0
-    duckDataCache = { at: now, path: this.duckDbPath, has }
-    return has
+    duckDataCache = { at: now, path: this.duckDbPath, has: true }
+    return true
   }
 
   klineStatsSync(): KlineDuckStats {
     if (!this.duckExists()) return { rows: 0, codes: 0, maxDate: null }
     try {
-      return JSON.parse(this.execSync(['stats', '--duckdb', this.duckDbPath])) as KlineDuckStats
+      return JSON.parse(this.execReadSync(['stats', '--duckdb', this.duckDbPath])) as KlineDuckStats
     } catch {
       return { rows: 0, codes: 0, maxDate: null }
     }
@@ -323,7 +384,7 @@ export class MarketDuckGateway {
     ]
     if (before) args.push('--before', before.slice(0, 10))
     try {
-      return JSON.parse(this.execSync(args)) as StockKline[]
+      return JSON.parse(this.execReadSync(args)) as StockKline[]
     } catch {
       return []
     }
@@ -332,7 +393,7 @@ export class MarketDuckGateway {
   codesWithMinKlinesSync(minBars: number): string[] {
     if (!this.duckExists()) return []
     try {
-      return JSON.parse(this.execSync([
+      return JSON.parse(this.execReadSync([
         'codes-with-min', '--duckdb', this.duckDbPath, '--min', String(minBars),
       ])) as string[]
     } catch {
@@ -345,7 +406,7 @@ export class MarketDuckGateway {
     const args = ['latest-bars', '--duckdb', this.duckDbPath]
     if (tradeDate) args.push('--date', tradeDate.slice(0, 10))
     try {
-      return JSON.parse(this.execSync(args)) as Array<{
+      return JSON.parse(this.execReadSync(args)) as Array<{
         code: string; close: number | null; change_pct: number | null
       }>
     } catch {
@@ -361,7 +422,7 @@ export class MarketDuckGateway {
       return { stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0 }
     }
     try {
-      return JSON.parse(this.execSync(['analytics-stats', '--duckdb', this.duckDbPath])) as ReturnType<
+      return JSON.parse(this.execReadSync(['analytics-stats', '--duckdb', this.duckDbPath])) as ReturnType<
         MarketDuckGateway['analyticsStatsSync']
       >
     } catch {
@@ -381,7 +442,7 @@ export class MarketDuckGateway {
       args.push('--file', tmp)
     }
     try {
-      return JSON.parse(this.execSync(args)) as { computed: number; written: number }
+      return JSON.parse(this.execWriteSync(args)) as { computed: number; written: number }
     } catch {
       return { computed: 0, written: 0 }
     } finally {
@@ -392,7 +453,7 @@ export class MarketDuckGateway {
   queryIndustryStatsSync(tradeDate: string): unknown {
     if (!this.hasMarketData()) return null
     try {
-      return JSON.parse(this.execSync([
+      return JSON.parse(this.execReadSync([
         'query-industry-stats', '--duckdb', this.duckDbPath, '--date', tradeDate,
       ]))
     } catch {
@@ -403,7 +464,7 @@ export class MarketDuckGateway {
   queryIndustryStocksSync(industry: string, tradeDate: string, limit: number): unknown {
     if (!this.hasMarketData()) return null
     try {
-      return JSON.parse(this.execSync([
+      return JSON.parse(this.execReadSync([
         'query-industry-stocks', '--duckdb', this.duckDbPath,
         '--industry', industry, '--date', tradeDate, '--limit', String(limit),
       ]))
@@ -417,7 +478,7 @@ export class MarketDuckGateway {
     const tmp = path.join(os.tmpdir(), `opptrix-screen-${process.pid}-${Date.now()}.json`)
     fs.writeFileSync(tmp, JSON.stringify({ ...query, trade_date: tradeDate }))
     try {
-      return JSON.parse(this.execSync([
+      return JSON.parse(this.execReadSync([
         'screen-universe', '--duckdb', this.duckDbPath, '--file', tmp,
       ], 128 * 1024 * 1024))
     } catch {
@@ -546,6 +607,71 @@ export class MarketDuckGateway {
           }
         })
       }), 600_000),
+    )
+  }
+
+  spawnDerivedMaintenanceAsync(opts: {
+    jobs: string[]
+    tradeDate?: string
+    onEvent?: (event: DerivedMaintenanceCliEvent) => void
+  }): Promise<DerivedMaintenanceResult> {
+    if (!this.duckExists()) {
+      return Promise.resolve({ tradeDate: opts.tradeDate ?? '', screen_factors: null, industry_stats: null })
+    }
+
+    const args = [
+      'derived-maintenance',
+      '--duckdb', this.duckDbPath,
+      '--sqlite', this.sqliteDbPath,
+      '--jobs', opts.jobs.join(','),
+    ]
+    if (opts.tradeDate) args.push('--date', opts.tradeDate)
+
+    return this.schedule(() =>
+      withDuckFileLockAsync(this.duckDbPath, () => new Promise((resolve, reject) => {
+        let settled = false
+        const finish = (fn: () => void) => {
+          if (settled) return
+          settled = true
+          fn()
+        }
+
+        const child = spawn(process.execPath, [CLI_PATH, ...args], {
+          stdio: ['ignore', 'pipe', 'pipe'],
+          env: process.env,
+        })
+
+        let stderr = ''
+        child.stderr?.on('data', chunk => { stderr += String(chunk) })
+        child.stdout?.on('data', chunk => {
+          for (const line of String(chunk).split('\n')) {
+            if (!line.trim()) continue
+            try {
+              const msg = JSON.parse(line) as DerivedMaintenanceCliEvent
+              opts.onEvent?.(msg)
+              if (msg.type === 'done') {
+                invalidateHasMarketDuckDataCache(this.duckDbPath)
+                finish(() => resolve({
+                  tradeDate: String(msg.trade_date ?? opts.tradeDate ?? ''),
+                  screen_factors: msg.screen_factors as DerivedMaintenanceResult['screen_factors'],
+                  industry_stats: msg.industry_stats as DerivedMaintenanceResult['industry_stats'],
+                }))
+              } else if (msg.type === 'error') {
+                finish(() => reject(new Error(msg.message ?? '本地指标维护失败')))
+              }
+            } catch {
+              /* ignore non-json */
+            }
+          }
+        })
+
+        child.on('error', err => finish(() => reject(err)))
+        child.on('exit', code => {
+          if (code !== 0) {
+            finish(() => reject(new Error(stderr.trim() || `本地指标维护子进程退出码 ${code}`)))
+          }
+        })
+      }), 900_000),
     )
   }
 
