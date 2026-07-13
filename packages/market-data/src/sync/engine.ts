@@ -26,6 +26,8 @@ import {
   SYNC_JOB_CONFIG,
 } from './config.js'
 import { importDailyKDump } from './dump-import.js'
+import { spawnComputeScreenFactorsAsync } from '../analytics/spawn-analytics.js'
+import { klineStatsViaSubprocess } from '../kline/spawn-import.js'
 import { FuyaoClient, isTonghuashunEnabled, loadTonghuashunConfig } from '@opptrix/a-stock-layer'
 import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
@@ -454,13 +456,65 @@ export class MarketDataSyncEngine {
     return daysSince(last) >= cfg.ttlDays
   }
 
-  /** 本地 K 线/因子层已停用 — 不再在同步后派生计算 */
-  private async finalizeDerivedData(
-    _options: SyncOptions,
-    _mode: SyncMode,
-    _results: Record<string, string>,
+  /** K 线写入后于独立子进程批量重算离线筛选因子 */
+  private async runScreenFactorsAfterKline(
+    options: SyncOptions,
+    jobName: 'kline_bootstrap' | 'kline_daily',
   ): Promise<void> {
-    return
+    const stats = klineStatsViaSubprocess(this.store.klineDuckDbPath)
+    if (!stats.rows) return
+
+    const tradeDate = stats.maxDate ?? todayTradeDate()
+    options.onLog?.(`日 K 已更新，子进程批量计算离线筛选因子（${tradeDate}）…`)
+    options.onProgress?.({ job: jobName, current: 92, total: 100, message: '计算筛选因子…' })
+
+    this.store.flushDuckWritesSync()
+    try {
+      const result = await spawnComputeScreenFactorsAsync({
+        tradeDate,
+        duckDbPath: this.store.klineDuckDbPath,
+        sqliteDbPath: this.store.dbPath,
+        onProgress: (message, percent) => {
+          options.onProgress?.({
+            job: jobName,
+            current: 90 + Math.round(percent * 0.1),
+            total: 100,
+            message,
+          })
+        },
+      })
+      if (result.computed > 0) {
+        this.store.setCursor('screen_factors', {
+          trade_date: tradeDate,
+          success: result.computed,
+          skipped: 0,
+          source: jobName,
+        })
+        options.onLog?.(`离线筛选因子已更新：${result.computed.toLocaleString()} 只（${tradeDate}）`)
+      } else {
+        options.onLog?.('离线筛选因子：无可计算标的（跳过）')
+      }
+      this.store.flushDuckWritesSync()
+      this.store.invalidateKlineStatsCache()
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      options.onLog?.(`离线筛选因子计算失败（不影响 K 线导入）：${msg}`)
+    }
+  }
+
+  private async finalizeDerivedData(
+    options: SyncOptions,
+    _mode: SyncMode,
+    results: Record<string, string>,
+  ): Promise<void> {
+    this.store.flushDuckWritesSync()
+    this.store.syncAnalyticsToDuck('all')
+
+    const klineOk = (results.kline_bootstrap === 'ok' || results.kline_daily === 'ok')
+    if (!klineOk && this.store.screenFactorsStale()) {
+      const jobName = results.kline_daily === 'ok' ? 'kline_daily' : 'kline_bootstrap'
+      await this.runScreenFactorsAfterKline(options, jobName)
+    }
   }
 
   private finishJobEmpty(
@@ -582,7 +636,7 @@ export class MarketDataSyncEngine {
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
-    this.store.syncAnalyticsToDuck('dims')
+    this.store.flushDuckWritesSync()
   }
 
   private async syncInitialUniverseJob(
@@ -614,7 +668,7 @@ export class MarketDataSyncEngine {
       success: result.success,
       error: Math.max(0, result.total - result.success),
     })
-    this.store.syncAnalyticsToDuck('dims')
+    this.store.flushDuckWritesSync()
   }
 
   private async syncInitialTaxonomyJob(
@@ -638,7 +692,7 @@ export class MarketDataSyncEngine {
       success: result.nodes,
       error: 0,
     })
-    this.store.syncAnalyticsToDuck('dims')
+    this.store.flushDuckWritesSync()
   }
 
   private async syncUniverse(runId: number, options: SyncOptions, mode: SyncMode): Promise<void> {
@@ -1096,7 +1150,7 @@ export class MarketDataSyncEngine {
       success,
       error,
     })
-    this.store.syncAnalyticsToDuck('quotes')
+    this.store.flushDuckWritesSync()
   }
 
   private async syncProfiles(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
@@ -1572,7 +1626,10 @@ export class MarketDataSyncEngine {
     this.store.setCursor('dump_import', { dumpType, rowsImported: klineResult.rowsImported })
 
     options.onLog?.(`同花顺 K 线数据包导入完成：${klineResult.rowsImported.toLocaleString()} 条`)
-    reportPhase(`已导入 ${klineResult.rowsImported.toLocaleString()} 条`, 100)
+    reportPhase(`已导入 ${klineResult.rowsImported.toLocaleString()} 条`, 90)
+
+    await this.runScreenFactorsAfterKline(options, jobName)
+    reportPhase('因子计算完成', 100)
 
     this.store.finishRun(runId, 'success', {
       total: klineResult.rowsImported,
@@ -1647,7 +1704,7 @@ export class MarketDataSyncEngine {
       success,
       error: skipped,
     })
-    this.store.syncAnalyticsToDuck('factors')
+    this.store.flushDuckWritesSync()
     return Promise.resolve()
   }
 

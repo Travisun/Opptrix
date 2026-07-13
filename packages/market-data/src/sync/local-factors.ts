@@ -16,47 +16,39 @@ function momReturn(closes: number[], days: number): number | null {
   return ((cur - old) / old) * 100
 }
 
-function cagr(values: (number | null)[]): number | null {
-  const vals = values.filter((v): v is number => v != null && v > 0).slice(0, 4)
-  if (vals.length < 2) return null
-  const n = vals.length - 1
-  return (Math.pow(vals[0] / vals[vals.length - 1], 1 / n) - 1) * 100
+function returnVolatility(closes: number[], window = 20): number | null {
+  if (closes.length < window + 1) return null
+  const slice = closes.slice(-window - 1)
+  const rets: number[] = []
+  for (let i = 1; i < slice.length; i++) {
+    const prev = slice[i - 1]!
+    const cur = slice[i]!
+    if (prev > 0) rets.push((cur - prev) / prev * 100)
+  }
+  if (rets.length < 2) return null
+  const mean = rets.reduce((a, b) => a + b, 0) / rets.length
+  const variance = rets.reduce((a, r) => a + (r - mean) ** 2, 0) / (rets.length - 1)
+  return Math.sqrt(variance)
+}
+
+function drawdownFromHigh(closes: number[], highs: number[], days = 60): number | null {
+  if (!closes.length || highs.length < days) return null
+  const peak = Math.max(...highs.slice(-days))
+  const close = closes[closes.length - 1]!
+  if (!peak) return null
+  return ((close / peak) - 1) * 100
 }
 
 export interface LocalFactorInput {
   code: string
   closes: number[]
   volumes: number[]
-  pe: number | null
-  pb: number | null
-  roe: number | null
-  grossMargin: number | null
-  debtRatio: number | null
-  netProfitYoy: number | null
-  roeSeries: (number | null)[]
-  profitSeries: (number | null)[]
+  highs: number[]
 }
 
+/** 仅基于日 K 序列计算离线筛选因子 */
 export function computeScreenFactors(input: LocalFactorInput): Record<string, number | null> {
   const factors: Record<string, number | null> = {}
-
-  if (input.pe != null && input.pe > 0) factors.pe = round(input.pe)
-  if (input.pb != null && input.pb > 0) factors.pb = round(input.pb)
-
-  if (input.roe != null) factors.roe = round(input.roe)
-  if (input.grossMargin != null) factors.gross_margin = round(input.grossMargin)
-  if (input.debtRatio != null) factors.debt_ratio = round(input.debtRatio)
-  if (input.netProfitYoy != null) factors.net_profit_yoy = round(input.netProfitYoy)
-
-  const profitCagr = cagr(input.profitSeries)
-  if (profitCagr != null) factors.profit_cagr_3y = round(profitCagr)
-
-  const roes = input.roeSeries.filter((v): v is number => v != null)
-  if (roes.length >= 2) factors.roe_trend = round(roes[0] - roes[roes.length - 1])
-
-  if (input.pe != null && input.pe > 0 && profitCagr != null && profitCagr > 0) {
-    factors.peg = round(input.pe / profitCagr)
-  }
 
   for (const [name, days] of [
     ['momentum_1m', 20],
@@ -74,6 +66,12 @@ export function computeScreenFactors(input: LocalFactorInput): Record<string, nu
     if (long > 0) factors.volume_ratio = round(short / long, 2)
   }
 
+  const vol20 = returnVolatility(input.closes, 20)
+  if (vol20 != null) factors.volatility_20d = round(vol20)
+
+  const dd60 = drawdownFromHigh(input.closes, input.highs, 60)
+  if (dd60 != null) factors.drawdown_60d = round(dd60)
+
   const out: Record<string, number | null> = {}
   for (const key of SCREEN_PACK_FACTORS) {
     if (factors[key] != null && !Number.isNaN(factors[key])) out[key] = factors[key]!
@@ -82,69 +80,42 @@ export function computeScreenFactors(input: LocalFactorInput): Record<string, nu
 }
 
 export function computeSimpleScore(factors: Record<string, number | null>): number | null {
-  const roe = factors.roe ?? null
   const mom = factors.momentum_3m ?? null
-  const pe = factors.pe ?? null
-  if (roe == null && mom == null && pe == null) return null
+  const vol = factors.volume_ratio ?? null
+  const dd = factors.drawdown_60d ?? null
+  if (mom == null && vol == null && dd == null) return null
   let score = 50
-  if (roe != null) score += Math.min(20, Math.max(-10, (roe - 10) * 1.5))
-  if (mom != null) score += Math.min(15, Math.max(-15, mom * 0.8))
-  if (pe != null && pe > 0) score += Math.min(10, Math.max(-10, (25 - pe) * 0.4))
+  if (mom != null) score += Math.min(20, Math.max(-15, mom * 0.6))
+  if (vol != null) score += Math.min(10, Math.max(-5, (vol - 1) * 8))
+  if (dd != null) score += Math.min(10, Math.max(-10, dd * 0.3))
   return round(Math.min(100, Math.max(0, score)), 1)
 }
 
-function loadKlineSeries(store: MarketDataStore, code: string): { close: number | null; volume: number | null }[] {
+function loadKlineSeries(
+  store: MarketDataStore,
+  code: string,
+): { close: number | null; volume: number | null; high: number | null }[] {
   const duck = queryKlinesViaSubprocess(code, 800, undefined, store.klineDuckDbPath)
   if (duck.length) {
-    return duck.map(k => ({ close: k.close, volume: k.volume }))
+    return duck.map(k => ({ close: k.close, volume: k.volume, high: k.high }))
   }
   const rows = store.db.prepare(`
-    SELECT close, volume FROM stock_klines_daily
+    SELECT close, volume, high FROM stock_klines_daily
     WHERE code = ? ORDER BY trade_date ASC
-  `).all(code) as { close: number | null; volume: number | null }[]
+  `).all(code) as { close: number | null; volume: number | null; high: number | null }[]
   return rows
 }
 
 export function buildLocalFactorInputs(store: MarketDataStore, codes: string[]): LocalFactorInput[] {
-  const finStmt = store.db.prepare(`
-    SELECT roe, gross_margin, debt_ratio, net_profit_yoy, net_profit
-    FROM stock_financials
-    WHERE code = ? AND (report_type IS NULL OR report_type = 'annual')
-    ORDER BY report_date DESC LIMIT 4
-  `)
-  const quoteStmt = store.db.prepare(`
-    SELECT pe, pb FROM stock_quotes_daily
-    WHERE code = ? ORDER BY trade_date DESC LIMIT 1
-  `)
-
   const out: LocalFactorInput[] = []
   for (const code of codes) {
     const krows = loadKlineSeries(store, code)
-    const fins = finStmt.all(code) as {
-      roe: number | null
-      gross_margin: number | null
-      debt_ratio: number | null
-      net_profit_yoy: number | null
-      net_profit: number | null
-    }[]
-    const quote = quoteStmt.get(code) as { pe: number | null; pb: number | null } | undefined
     const closes = krows.map(r => r.close).filter((v): v is number => v != null && v > 0)
     const volumes = krows.map(r => r.volume ?? 0)
+    const highs = krows.map(r => r.high).filter((v): v is number => v != null && v > 0)
     if (!closes.length) continue
 
-    out.push({
-      code,
-      closes,
-      volumes,
-      pe: quote?.pe ?? null,
-      pb: quote?.pb ?? null,
-      roe: fins[0]?.roe ?? null,
-      grossMargin: fins[0]?.gross_margin ?? null,
-      debtRatio: fins[0]?.debt_ratio ?? null,
-      netProfitYoy: fins[0]?.net_profit_yoy ?? null,
-      roeSeries: fins.map(f => f.roe),
-      profitSeries: fins.map(f => f.net_profit),
-    })
+    out.push({ code, closes, volumes, highs })
   }
   return out
 }
@@ -155,11 +126,10 @@ export function runLocalScreenFactors(
   codes: string[],
 ): { success: number; skipped: number } {
   if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
-    store.syncAnalyticsToDuck('quotes')
-    store.syncAnalyticsToDuck('financials')
+    store.flushDuckWritesSync()
     const batch = computeScreenFactorsViaSubprocess(tradeDate, codes, store.klineDuckDbPath, store.dbPath)
     if (batch.computed > 0) {
-      store.syncAnalyticsToDuck('factors')
+      store.flushDuckWritesSync()
       let success = 0
       for (const code of codes) {
         store.markJobProgress('screen_factors', code, tradeDate, 'done')

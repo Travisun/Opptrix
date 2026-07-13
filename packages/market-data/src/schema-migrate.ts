@@ -11,6 +11,7 @@ import {
   MIGRATION_V8_PRESERVE_NS_SQL,
   MIGRATION_V10_SQL,
   MIGRATION_V11_SQL,
+  MIGRATION_V12_SQL,
   SCHEMA_VERSION,
 } from './schema.js'
 import {
@@ -131,6 +132,19 @@ function analyticsStorageReady(db: Database.Database): boolean {
   }
 }
 
+function marketDataStorageReady(db: Database.Database): boolean {
+  const row = db.prepare(
+    "SELECT meta_json FROM sync_cursor WHERE job_name = 'market_data_storage'",
+  ).get() as { meta_json: string | null } | undefined
+  if (!row?.meta_json) return false
+  try {
+    const meta = JSON.parse(row.meta_json) as { backend?: string; primary?: boolean }
+    return meta.backend === 'duckdb' && meta.primary === true
+  } catch {
+    return false
+  }
+}
+
 export const MIGRATION_STEPS: SchemaMigrationStep[] = [
   {
     version: 1,
@@ -206,6 +220,12 @@ export const MIGRATION_STEPS: SchemaMigrationStep[] = [
     description: 'DuckDB analytics layer marker (dims/quotes/factors)',
     isApplied: (db) => analyticsStorageReady(db),
     up: (db) => { db.exec(MIGRATION_V11_SQL) },
+  },
+  {
+    version: 12,
+    description: 'market data primary storage on DuckDB',
+    isApplied: (db) => marketDataStorageReady(db),
+    up: (db) => { db.exec(MIGRATION_V12_SQL) },
   },
 ]
 

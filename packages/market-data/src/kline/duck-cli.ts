@@ -17,6 +17,8 @@ import {
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
 import { computeScreenFactors, analyticsStats } from '../analytics/duck-compute.js'
+import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, marketDuckStats } from '../duck/market-migrate.js'
+import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
 import {
   latestFactorDateDuck,
   queryIndustryStatsDuck,
@@ -486,6 +488,78 @@ async function cmdScreenUniverse(flags: Record<string, string>) {
   }
 }
 
+async function cmdMigrateMarketData(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  const sqlitePath = flags.sqlite
+  const force = flags.force === 'true' || flags.force === '1'
+  if (!duckPath || !sqlitePath) throw new Error('migrate-market-data 需要 --duckdb --sqlite')
+  const dir = path.dirname(duckPath)
+  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
+  const db = openDuckDatabase(duckPath)
+  const conn = connectDuck(db)
+  try {
+    const result = await migrateMarketDataFromSqlite(conn, sqlitePath, force)
+    process.stdout.write(JSON.stringify(result))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
+async function cmdApplyBatch(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  const filePath = flags.file
+  if (!duckPath || !filePath) throw new Error('apply-batch 需要 --duckdb --file')
+  const ops = JSON.parse(fs.readFileSync(filePath, 'utf8')) as DuckWriteOp[]
+  const db = openDuckDatabase(duckPath)
+  const conn = connectDuck(db)
+  try {
+    await ensureMarketDuckSchema(conn)
+    const applied = await applyDuckWriteOps(conn, ops)
+    process.stdout.write(JSON.stringify({ applied }))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
+async function cmdQueryJson(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  const filePath = flags.file
+  if (!duckPath || !filePath) throw new Error('query-json 需要 --duckdb --file')
+  const { sql, params } = JSON.parse(fs.readFileSync(filePath, 'utf8')) as { sql: string; params?: unknown[] }
+  if (!fs.existsSync(duckPath)) {
+    process.stdout.write('[]')
+    return
+  }
+  const db = openDuckDatabase(duckPath, true)
+  const conn = connectDuck(db)
+  try {
+    await ensureMarketDuckSchema(conn)
+    const rows = await duckAll(conn, sql, ...(params ?? []))
+    process.stdout.write(JSON.stringify(rows))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
+async function cmdMarketStats(flags: Record<string, string>) {
+  const duckPath = flags.duckdb
+  if (!duckPath) throw new Error('market-stats 需要 --duckdb')
+  if (!fs.existsSync(duckPath)) {
+    process.stdout.write(JSON.stringify({
+      stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0, profiles: 0, etf: 0,
+    }))
+    return
+  }
+  const db = openDuckDatabase(duckPath, true)
+  const conn = connectDuck(db)
+  try {
+    await ensureMarketDuckSchema(conn)
+    process.stdout.write(JSON.stringify(await marketDuckStats(conn)))
+  } finally {
+    await closeDuck(db)
+  }
+}
+
 async function main() {
   const { cmd, flags } = parseArgs(process.argv.slice(2))
   try {
@@ -504,6 +578,10 @@ async function main() {
     else if (cmd === 'query-industry-stats') await cmdQueryIndustryStats(flags)
     else if (cmd === 'query-industry-stocks') await cmdQueryIndustryStocks(flags)
     else if (cmd === 'screen-universe') await cmdScreenUniverse(flags)
+    else if (cmd === 'migrate-market-data') await cmdMigrateMarketData(flags)
+    else if (cmd === 'apply-batch') await cmdApplyBatch(flags)
+    else if (cmd === 'query-json') await cmdQueryJson(flags)
+    else if (cmd === 'market-stats') await cmdMarketStats(flags)
     else throw new Error(`未知命令: ${cmd}`)
   } catch (e) {
     emit({ type: 'error', message: e instanceof Error ? e.message : String(e) })

@@ -12,7 +12,6 @@ import {
 import {
   cnEquityNs,
   instrumentRefToNs,
-  resolveInstrumentNsForUpsert,
   resolveCodeOrNsInput,
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
@@ -25,9 +24,14 @@ import {
   queryKlinesViaSubprocess,
 } from './kline/spawn-import.js'
 import {
-  syncAnalyticsViaSubprocess,
-  type AnalyticsSyncScope,
-} from './analytics/spawn-analytics.js'
+  applyDuckBatchSync,
+  duckMarketStatsSync,
+  duckQueryAllSync,
+  duckQueryOneSync,
+  hasMarketDuckData,
+  migrateMarketDataViaSubprocess,
+} from './duck/market-duck-sync.js'
+import type { DuckWriteOp } from './duck/market-writes.js'
 import os from 'node:os'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -122,7 +126,9 @@ export class MarketDataStore {
   private instrumentNsColumnCache = new Map<string, boolean>()
   private klineStatsCache: { at: number; rows: number; codes: number; maxDate: string | null } | null = null
   private klineMigrated = false
-  private analyticsSynced = false
+  private marketDataMigrated = false
+  private duckWriteQueue: DuckWriteOp[] = []
+  private readonly duckFlushThreshold = 250
 
   constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
     this.dbPath = dbPath
@@ -139,26 +145,73 @@ export class MarketDataStore {
     this.klineMigrated = true
     try {
       migrateSqliteKlinesToDuckIfEmpty(this.klineDuckDbPath, this.dbPath)
+      this.ensureMarketDataOnDuck()
       this.invalidateKlineStatsCache()
-      this.syncAnalyticsToDuck('all')
     } catch {
       /* 首次迁移失败不阻断启动 */
     }
   }
 
-  /** SQLite → DuckDB 分析层同步（名录/行业/行情/因子） */
-  syncAnalyticsToDuck(scope: AnalyticsSyncScope = 'all'): Record<string, number> {
+  /** SQLite 市场数据 → DuckDB 一次性迁移（幂等） */
+  private ensureMarketDataOnDuck(): void {
+    if (this.marketDataMigrated) return
+    this.marketDataMigrated = true
     try {
-      const result = syncAnalyticsViaSubprocess(scope, this.klineDuckDbPath, this.dbPath)
-      if (scope === 'all' || scope === 'dims') this.analyticsSynced = true
-      return result
+      migrateMarketDataViaSubprocess(this.klineDuckDbPath, this.dbPath, false)
     } catch {
-      return {}
+      /* 迁移失败不阻断；后续读写回退 SQLite */
     }
   }
 
+  private queueDuck(op: DuckWriteOp): void {
+    this.duckWriteQueue.push(op)
+    if (this.duckWriteQueue.length >= this.duckFlushThreshold) {
+      this.flushDuckWritesSync()
+    }
+  }
+
+  /** 同步 flush — sync 任务边界调用 */
+  flushDuckWritesSync(): void {
+    if (!this.duckWriteQueue.length) return
+    const batch = this.duckWriteQueue.splice(0)
+    try {
+      applyDuckBatchSync(batch, this.klineDuckDbPath)
+    } catch {
+      this.duckWriteQueue.unshift(...batch)
+    }
+  }
+
+  private duckRead<T extends Record<string, unknown>>(
+    sql: string,
+    params: unknown[] = [],
+    sqliteFallback: () => T | undefined,
+  ): T | undefined {
+    if (hasMarketDuckData(this.klineDuckDbPath)) {
+      const row = duckQueryOneSync<T>(sql, params, this.klineDuckDbPath)
+      if (row) return row
+    }
+    return sqliteFallback()
+  }
+
+  private duckReadAll<T extends Record<string, unknown>>(
+    sql: string,
+    params: unknown[] = [],
+    sqliteFallback: () => T[],
+  ): T[] {
+    if (hasMarketDuckData(this.klineDuckDbPath)) {
+      const rows = duckQueryAllSync<T>(sql, params, this.klineDuckDbPath)
+      if (rows.length) return rows
+    }
+    return sqliteFallback()
+  }
+
+  /** @deprecated 保留兼容；新数据直写 DuckDB */
+  syncAnalyticsToDuck(_scope: 'dims' | 'quotes' | 'factors' | 'scores' | 'financials' | 'all' = 'all'): Record<string, number> {
+    return migrateMarketDataViaSubprocess(this.klineDuckDbPath, this.dbPath, false)
+  }
+
   hasAnalyticsDims(): boolean {
-    if (this.analyticsSynced) return true
+    if (hasMarketDuckData(this.klineDuckDbPath)) return true
     const row = this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }
     return row.c > 0
   }
@@ -199,13 +252,17 @@ export class MarketDataStore {
     if (instrumentNs) return instrumentNs
     const normalized = normalizeStockCode(bare)
     const ex = normalizeInstrumentExchange(exchange ?? this.stockMarket(normalized) ?? undefined)
-    const row = this.db.prepare(`
-      SELECT instrument_ns FROM instruments
-      WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ?
-        AND (? = '' OR exchange = ?)
-        AND instrument_ns IS NOT NULL
-      LIMIT 1
-    `).get(normalized, ex, ex) as { instrument_ns: string } | undefined
+    const row = this.duckRead<{ instrument_ns: string }>(
+      `SELECT instrument_ns FROM instruments
+       WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ?
+         AND (? = '' OR exchange = ?) AND instrument_ns IS NOT NULL LIMIT 1`,
+      [normalized, ex, ex],
+      () => this.db.prepare(`
+        SELECT instrument_ns FROM instruments
+        WHERE market = 'CN' AND asset_class = 'EQUITY' AND code = ?
+          AND (? = '' OR exchange = ?) AND instrument_ns IS NOT NULL LIMIT 1
+      `).get(normalized, ex, ex) as { instrument_ns: string } | undefined,
+    )
     if (row?.instrument_ns) return row.instrument_ns
     return cnEquityNs(normalized, ex || (this.stockMarket(normalized) ?? undefined))
   }
@@ -284,9 +341,14 @@ export class MarketDataStore {
   }
 
   getStatus(): MarketDbStatus {
-    const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    this.flushDuckWritesSync()
+    const duck = duckMarketStatsSync(this.klineDuckDbPath)
+    const duckCount = (sql: string) => {
+      const row = duckQueryOneSync<{ c: number }>(sql, [], this.klineDuckDbPath)
+      return row?.c ?? 0
+    }
+    const stocksTableCount = duck.stocks || (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
     const cnEquityCount = this.countEquityInstruments('CN')
-    // 概览与 bootstrap 门控对齐 instruments；兼容仅 stocks 表有历史数据的库
     const stockCount = Math.max(stocksTableCount, cnEquityCount)
     const etfCount = this.countEtfInstruments()
     const usCount = this.countUsInstruments()
@@ -294,18 +356,22 @@ export class MarketDataStore {
     const jpCount = this.countRegionalEquityInstruments('JP')
     const krCount = this.countRegionalEquityInstruments('KR')
     const hkCount = this.countRegionalEquityInstruments('HK')
-    const profileCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_profiles').get() as { c: number }).c
-    const partnerCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_partners').get() as { c: number }).c
-    const segmentCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_business_segments').get() as { c: number }).c
-    const announcementCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_announcements').get() as { c: number }).c
-    const dividendCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_dividends').get() as { c: number }).c
-    const shareholderCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_shareholder_summary').get() as { c: number }).c
-    const forecastCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_forecasts').get() as { c: number }).c
-    const instHoldingCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_inst_holdings').get() as { c: number }).c
-    const insiderTradeCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_insider_trades').get() as { c: number }).c
-    const buybackCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stock_buybacks').get() as { c: number }).c
-    const latestQuote = this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }
-    const latestFactor = this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
+    const profileCount = duck.profiles || duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_profiles')
+    const partnerCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_partners')
+    const segmentCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_business_segments')
+    const announcementCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_announcements')
+    const dividendCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_dividends')
+    const shareholderCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_shareholder_summary')
+    const forecastCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_forecasts')
+    const instHoldingCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_inst_holdings')
+    const insiderTradeCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_insider_trades')
+    const buybackCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_buybacks')
+    const latestQuote = duckQueryOneSync<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_quotes_daily', [], this.klineDuckDbPath,
+    ) ?? this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }
+    const latestFactor = duckQueryOneSync<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_factors', [], this.klineDuckDbPath,
+    ) ?? this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
     const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
       job_name: string
@@ -324,24 +390,31 @@ export class MarketDataStore {
     `).all() as { job_name: string; done: number; error: number }[]
     for (const row of progressRows) {
       const etfJobs = new Set(['etf_list', 'etf_nav', 'etf_holdings', 'etf_kline_bootstrap', 'initial_cn_etf'])
+      const hkUniverseJobs = new Set(['initial_hk_universe'])
+      const usUniverseJobs = new Set(['initial_us_universe'])
       const usJobs = new Set(['us_list'])
       const cryptoJobs = new Set(['crypto_list'])
       const jpJobs = new Set(['jp_list', 'jp_quotes'])
       const krJobs = new Set(['kr_list', 'kr_quotes'])
       const hkJobs = new Set(['hk_list', 'hk_quotes'])
-      const baseCount = cryptoJobs.has(row.job_name)
+      const rawBase = cryptoJobs.has(row.job_name)
         ? cryptoCount
-        : usJobs.has(row.job_name)
+        : usUniverseJobs.has(row.job_name)
           ? usCount
-          : jpJobs.has(row.job_name)
-            ? jpCount
-            : krJobs.has(row.job_name)
-              ? krCount
-              : hkJobs.has(row.job_name)
-                ? hkCount
-                : etfJobs.has(row.job_name)
-                  ? etfCount
-                  : stockCount
+          : usJobs.has(row.job_name)
+            ? usCount
+            : hkUniverseJobs.has(row.job_name)
+              ? hkCount
+              : jpJobs.has(row.job_name)
+                ? jpCount
+                : krJobs.has(row.job_name)
+                  ? krCount
+                  : hkJobs.has(row.job_name)
+                    ? hkCount
+                    : etfJobs.has(row.job_name)
+                      ? etfCount
+                      : stockCount
+      const baseCount = Math.max(rawBase, row.done)
       jobProgress[row.job_name] = {
         done: row.done,
         error: row.error,
@@ -454,9 +527,15 @@ export class MarketDataStore {
     }
   }
 
-  /** @deprecated 本地因子层已停用 */
-  screenFactorsStale(_tradeDate = todayTradeDate()): boolean {
-    return false
+  /** 因子截面是否落后于最新 K 线日期 */
+  screenFactorsStale(tradeDate = todayTradeDate()): boolean {
+    const stats = this.klineStats()
+    if (!stats.rows || !stats.maxDate) return false
+    const latestFactor = duckQueryOneSync<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_factors', [], this.klineDuckDbPath,
+    )?.d ?? null
+    if (!latestFactor) return true
+    return latestFactor < stats.maxDate || latestFactor < tradeDate
   }
 
   industryStatsStale(tradeDate = todayTradeDate()): boolean {
@@ -720,7 +799,7 @@ export class MarketDataStore {
       }
     }
     this.invalidateKlineStatsCache()
-    this.syncAnalyticsToDuck('all')
+    this.flushDuckWritesSync()
 
     const runsClosed = this.db.prepare(`
       UPDATE sync_runs
@@ -733,6 +812,11 @@ export class MarketDataStore {
 
   countEquityInstruments(market: 'CN' | 'US' | 'HK'): number {
     if (market === 'CN') {
+      const row = duckQueryOneSync<{ c: number }>(
+        `SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
+        [], this.klineDuckDbPath,
+      )
+      if (row?.c) return row.c
       return (this.db.prepare(
         `SELECT COUNT(*) AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
       ).get() as { c: number }).c
@@ -742,6 +826,11 @@ export class MarketDataStore {
   }
 
   countTaxonomyNodes(market: string, kind: string): number {
+    const row = duckQueryOneSync<{ c: number }>(
+      'SELECT COUNT(*)::INTEGER AS c FROM taxonomy_nodes WHERE market = ? AND kind = ?',
+      [market, kind], this.klineDuckDbPath,
+    )
+    if (row?.c != null) return row.c
     return (this.db.prepare(
       'SELECT COUNT(*) AS c FROM taxonomy_nodes WHERE market = ? AND kind = ?',
     ).get(market, kind) as { c: number }).c
@@ -758,51 +847,44 @@ export class MarketDataStore {
     extra?: string | null
   }): number {
     const ts = nowIso()
-    const result = this.db.prepare(`
-      INSERT INTO taxonomy_nodes (market, kind, code, name, parent_code, level, stock_count, extra, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(market, kind, code) DO UPDATE SET
-        name = excluded.name,
-        parent_code = excluded.parent_code,
-        level = excluded.level,
-        stock_count = excluded.stock_count,
-        extra = excluded.extra,
-        synced_at = excluded.synced_at
-    `).run(
-      row.market,
-      row.kind,
-      row.code,
-      row.name,
-      row.parentCode ?? null,
-      row.level ?? null,
-      row.stockCount ?? null,
-      row.extra ?? null,
-      ts,
-    )
-    const id = Number(result.lastInsertRowid)
-    if (id > 0) return id
-    const existing = this.db.prepare(
+    const existing = this.duckRead<{ id: number }>(
       'SELECT id FROM taxonomy_nodes WHERE market = ? AND kind = ? AND code = ?',
-    ).get(row.market, row.kind, row.code) as { id: number } | undefined
-    return existing?.id ?? 0
+      [row.market, row.kind, row.code],
+      () => this.db.prepare(
+        'SELECT id FROM taxonomy_nodes WHERE market = ? AND kind = ? AND code = ?',
+      ).get(row.market, row.kind, row.code) as { id: number } | undefined,
+    )
+    const nextId = existing?.id ?? (duckQueryOneSync<{ id: number }>(
+      'SELECT COALESCE(MAX(id), 0) + 1 AS id FROM taxonomy_nodes', [], this.klineDuckDbPath,
+    )?.id ?? 1)
+    this.queueDuck({
+      op: 'upsertTaxonomyNode',
+      row: {
+        id: nextId,
+        market: row.market,
+        kind: row.kind,
+        code: row.code,
+        name: row.name,
+        parent_code: row.parentCode ?? null,
+        level: row.level ?? null,
+        stock_count: row.stockCount ?? null,
+        extra: row.extra ?? null,
+        synced_at: ts,
+      },
+    })
+    return nextId
   }
 
   replaceInstrumentTaxonomy(market: string, taxonomyId: number, codes: string[]): number {
     if (!taxonomyId || !codes.length) return 0
-    const ts = nowIso()
-    const del = this.db.prepare(
-      'DELETE FROM instrument_taxonomy WHERE taxonomy_id = ? AND market = ?',
-    ).run(taxonomyId, market)
-    const stmt = this.db.prepare(`
-      INSERT OR IGNORE INTO instrument_taxonomy (market, code, taxonomy_id, synced_at)
-      VALUES (?, ?, ?, ?)
-    `)
-    let n = 0
-    for (const code of codes) {
-      stmt.run(market, code, taxonomyId, ts)
-      n++
-    }
-    return n
+    this.queueDuck({
+      op: 'replaceInstrumentTaxonomy',
+      market,
+      taxonomyId,
+      codes,
+      syncedAt: nowIso(),
+    })
+    return codes.length
   }
 
   /** 用 taxonomy 行业分类回填 stocks.industry（syncInitialTaxonomy 收尾） */
@@ -899,28 +981,19 @@ export class MarketDataStore {
     status?: string
   }): void {
     const ts = nowIso()
-    this.db.prepare(`
-      INSERT INTO stocks (code, name, market, industry, industry_csrc, listing_date, is_st, status, updated_at)
-      VALUES (@code, @name, @market, @industry, @industry_csrc, @listing_date, @is_st, @status, @updated_at)
-      ON CONFLICT(code) DO UPDATE SET
-        name = excluded.name,
-        market = excluded.market,
-        industry = excluded.industry,
-        industry_csrc = excluded.industry_csrc,
-        listing_date = COALESCE(excluded.listing_date, stocks.listing_date),
-        is_st = excluded.is_st,
-        status = excluded.status,
-        updated_at = excluded.updated_at
-    `).run({
-      code: row.code,
-      name: row.name,
-      market: row.market ?? null,
-      industry: row.industry ?? null,
-      industry_csrc: row.industry_csrc ?? null,
-      listing_date: row.listing_date ?? null,
-      is_st: row.is_st ? 1 : 0,
-      status: row.status ?? 'active',
-      updated_at: ts,
+    this.queueDuck({
+      op: 'upsertStock',
+      row: {
+        code: row.code,
+        name: row.name,
+        market: row.market ?? null,
+        industry: row.industry ?? null,
+        industry_csrc: row.industry_csrc ?? null,
+        listing_date: row.listing_date ?? null,
+        is_st: row.is_st ? 1 : 0,
+        status: row.status ?? 'active',
+        updated_at: ts,
+      },
     })
     this.upsertInstrument({
       code: row.code,
@@ -942,7 +1015,10 @@ export class MarketDataStore {
     const sql = activeOnly
       ? `SELECT code FROM v_cn_equity_stocks WHERE status = 'active' ORDER BY code`
       : `SELECT code FROM v_cn_equity_stocks ORDER BY code`
-    return (this.db.prepare(sql).all() as { code: string }[]).map(r => r.code)
+    return this.duckReadAll<{ code: string }>(
+      sql, [],
+      () => this.db.prepare(sql).all() as { code: string }[],
+    ).map(r => r.code)
   }
 
   stockMeta(
@@ -953,16 +1029,22 @@ export class MarketDataStore {
     const ex = exchange ? parseStockMarket(exchange) : null
     type Row = { code: string; name: string; industry: string | null; market: string | null }
     if (ex) {
-      const row = this.db.prepare(
+      const row = this.duckRead<Row>(
         'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
-      ).get(normalized, ex) as Row | undefined
-      if (row) {
-        return { code: row.code, name: row.name, industry: row.industry, exchange: row.market }
-      }
+        [normalized, ex],
+        () => this.db.prepare(
+          'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? AND market = ?',
+        ).get(normalized, ex) as Row | undefined,
+      )
+      if (row) return { code: row.code, name: row.name, industry: row.industry, exchange: row.market }
     }
-    const row = this.db.prepare(
+    const row = this.duckRead<Row>(
       'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
-    ).get(normalized) as Row | undefined
+      [normalized],
+      () => this.db.prepare(
+        'SELECT code, name, industry, market FROM v_cn_equity_stocks WHERE code = ? LIMIT 1',
+      ).get(normalized) as Row | undefined,
+    )
     if (!row) return null
     return { code: row.code, name: row.name, industry: row.industry, exchange: row.market }
   }
@@ -1258,66 +1340,51 @@ export class MarketDataStore {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_quotes_daily', normalized)
-    this.db.prepare(`
-      INSERT INTO stock_quotes_daily (
-        trade_date, code, instrument_ns, close, pe, pb, market_cap, turnover_rate, volume_ratio, change_pct, synced_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(trade_date, code) DO UPDATE SET
-        instrument_ns = COALESCE(excluded.instrument_ns, stock_quotes_daily.instrument_ns),
-        close = excluded.close,
-        pe = excluded.pe,
-        pb = excluded.pb,
-        market_cap = excluded.market_cap,
-        turnover_rate = excluded.turnover_rate,
-        volume_ratio = excluded.volume_ratio,
-        change_pct = excluded.change_pct,
-        synced_at = excluded.synced_at
-    `).run(
+    this.queueDuck({
+      op: 'upsertQuoteDaily',
       tradeDate,
-      normalized,
+      code: normalized,
       instrumentNs,
-      quote.price ?? quote.close ?? null,
-      quote.pe ?? null,
-      quote.pb ?? null,
-      quote.marketCap ?? null,
-      quote.turnoverRate ?? null,
-      quote.volumeRatio ?? null,
-      quote.changePct ?? null,
-      ts,
-    )
+      syncedAt: ts,
+      quote: {
+        close: quote.price ?? quote.close ?? null,
+        pe: quote.pe ?? null,
+        pb: quote.pb ?? null,
+        market_cap: quote.marketCap ?? null,
+        turnover_rate: quote.turnoverRate ?? null,
+        volume_ratio: quote.volumeRatio ?? null,
+        change_pct: quote.changePct ?? null,
+      },
+    })
   }
 
   replaceFactors(tradeDate: string, code: string, factors: Record<string, number | null>): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_factors', normalized)
-    const del = this.db.prepare('DELETE FROM stock_factors WHERE trade_date = ? AND code = ?')
-    const ins = this.db.prepare(`
-      INSERT INTO stock_factors (trade_date, code, instrument_ns, factor_name, factor_value, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-    `)
-    const tx = this.db.transaction(() => {
-      del.run(tradeDate, normalized)
-      for (const [name, value] of Object.entries(factors)) {
-        if (value == null || Number.isNaN(value)) continue
-        ins.run(tradeDate, normalized, instrumentNs, name, value, ts)
-      }
+    this.queueDuck({
+      op: 'replaceFactors',
+      tradeDate,
+      code: normalized,
+      factors,
+      instrumentNs,
+      syncedAt: ts,
     })
-    tx()
   }
 
   upsertScore(tradeDate: string, code: string, scorecard: string, totalScore: number | null): void {
     const ts = nowIso()
     const normalized = normalizeStockCode(resolveCodeOrNsInput(code).code)
     const instrumentNs = this.writeInstrumentNs('stock_scores', normalized)
-    this.db.prepare(`
-      INSERT INTO stock_scores (trade_date, code, instrument_ns, scorecard, total_score, synced_at)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(trade_date, code, scorecard) DO UPDATE SET
-        instrument_ns = COALESCE(excluded.instrument_ns, stock_scores.instrument_ns),
-        total_score = excluded.total_score,
-        synced_at = excluded.synced_at
-    `).run(tradeDate, normalized, instrumentNs, scorecard, totalScore, ts)
+    this.queueDuck({
+      op: 'upsertScore',
+      tradeDate,
+      code: normalized,
+      scorecard,
+      totalScore,
+      instrumentNs,
+      syncedAt: ts,
+    })
   }
 
   rebuildIndustryStats(tradeDate: string): number {
@@ -1843,67 +1910,65 @@ export class MarketDataStore {
         : row.code.trim()
     const exchange = normalizeInstrumentExchange(row.exchange)
     const now = nowIso()
-    const instrumentNs = resolveInstrumentNsForUpsert(
-      this.db,
+    const baseNs = instrumentRefToNs(normalizeInstrumentRef({
+      market: row.market as InstrumentRef['market'],
+      assetClass: row.assetClass as InstrumentRef['assetClass'],
+      symbol: code,
+      exchange: exchange || undefined,
+    }))
+    const instrumentNs = this.resolveInstrumentNsForUpsertDuck(
       { market: row.market, exchange, code, assetClass: row.assetClass },
-      instrumentRefToNs(normalizeInstrumentRef({
-        market: row.market as InstrumentRef['market'],
-        assetClass: row.assetClass as InstrumentRef['assetClass'],
-        symbol: code,
-        exchange: exchange || undefined,
-      })),
+      baseNs,
     )
-    const hasNs = (this.db.prepare('PRAGMA table_info(instruments)').all() as { name: string }[])
-      .some(c => c.name === 'instrument_ns')
-    if (hasNs) {
-      this.db.prepare(`
-        INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at, instrument_ns)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ON CONFLICT(market, exchange, code, asset_class) DO UPDATE SET
-          name = COALESCE(excluded.name, instruments.name),
-          list_date = COALESCE(excluded.list_date, instruments.list_date),
-          delist_date = COALESCE(excluded.delist_date, instruments.delist_date),
-          status = COALESCE(excluded.status, instruments.status),
-          extra = COALESCE(excluded.extra, instruments.extra),
-          updated_at = excluded.updated_at,
-          instrument_ns = COALESCE(excluded.instrument_ns, instruments.instrument_ns)
-      `).run(
-        code,
-        row.market,
-        row.assetClass,
-        row.name ?? null,
+    this.queueDuck({
+      op: 'upsertInstrument',
+      row: {
+        market: row.market,
         exchange,
-        row.listDate ?? null,
-        row.delistDate ?? null,
-        row.status ?? 'active',
-        row.extra ?? null,
-        now,
-        instrumentNs,
-      )
-      return
-    }
-    this.db.prepare(`
-      INSERT INTO instruments (code, market, asset_class, name, exchange, list_date, delist_date, status, extra, updated_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      ON CONFLICT(market, exchange, code, asset_class) DO UPDATE SET
-        name = COALESCE(excluded.name, instruments.name),
-        list_date = COALESCE(excluded.list_date, instruments.list_date),
-        delist_date = COALESCE(excluded.delist_date, instruments.delist_date),
-        status = COALESCE(excluded.status, instruments.status),
-        extra = COALESCE(excluded.extra, instruments.extra),
-        updated_at = excluded.updated_at
-    `).run(
-      code,
-      row.market,
-      row.assetClass,
-      row.name ?? null,
-      exchange,
-      row.listDate ?? null,
-      row.delistDate ?? null,
-      row.status ?? 'active',
-      row.extra ?? null,
-      now,
+        code,
+        asset_class: row.assetClass,
+        name: row.name ?? null,
+        instrument_ns: instrumentNs,
+        list_date: row.listDate ?? null,
+        delist_date: row.delistDate ?? null,
+        status: row.status ?? 'active',
+        extra: row.extra ?? null,
+        updated_at: now,
+      },
+    })
+  }
+
+  private resolveInstrumentNsForUpsertDuck(
+    row: { market: string; exchange: string; code: string; assetClass: string },
+    baseNs: string,
+  ): string {
+    const readConflict = () => this.duckRead<{ market: string; exchange: string; code: string; asset_class: string }>(
+      `SELECT market, exchange, code, asset_class FROM instruments
+       WHERE instrument_ns = ? AND NOT (market = ? AND exchange = ? AND code = ? AND asset_class = ?) LIMIT 1`,
+      [baseNs, row.market, row.exchange, row.code, row.assetClass],
+      () => this.db.prepare(`
+        SELECT market, exchange, code, asset_class FROM instruments
+        WHERE instrument_ns = ? AND NOT (market = ? AND exchange = ? AND code = ? AND asset_class = ?) LIMIT 1
+      `).get(baseNs, row.market, row.exchange, row.code, row.assetClass) as {
+        market: string; exchange: string; code: string; asset_class: string
+      } | undefined,
     )
+    const conflict = readConflict()
+    if (!conflict) return baseNs
+    const sameSymbol = conflict.market === row.market
+      && normalizeInstrumentExchange(conflict.exchange) === row.exchange
+      && conflict.code === row.code
+    if (sameSymbol && row.assetClass !== 'EQUITY') return `${baseNs}@${row.assetClass}`
+    if (sameSymbol && row.assetClass === 'EQUITY' && conflict.asset_class !== 'EQUITY') {
+      const patched = `${baseNs}@${conflict.asset_class}`
+      this.queueDuck({
+        op: 'exec',
+        sql: `UPDATE instruments SET instrument_ns = ? WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?`,
+        params: [patched, conflict.market, normalizeInstrumentExchange(conflict.exchange), conflict.code, conflict.asset_class],
+      })
+      return baseNs
+    }
+    return `${baseNs}@${row.assetClass}`
   }
 
   /** Dual-read: prefer composite key; fall back to first match by code when exchange omitted */

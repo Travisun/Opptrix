@@ -21,9 +21,12 @@ function cnEtfItems(items: StockIndexItem[]): StockIndexItem[] {
   )
 }
 
-async function fetchAllStockIndexEtfs(): Promise<StockIndexItem[]> {
+async function fetchAllStockIndexEtfs(
+  onPage?: (fetched: number, total: number | null) => void,
+): Promise<StockIndexItem[]> {
   const all: StockIndexItem[] = []
   let page = 1
+  let knownTotal: number | null = null
   const pageSize = 100
   while (page <= 50) {
     const resp = await stockIndexListEtfs({ page, pageSize })
@@ -31,6 +34,8 @@ async function fetchAllStockIndexEtfs(): Promise<StockIndexItem[]> {
     if (!batch.length) break
     all.push(...batch)
     const total = resp.total ?? 0
+    if (total > 0) knownTotal = total
+    onPage?.(all.length, knownTotal)
     if (total > 0 && all.length >= total) break
     if (batch.length < pageSize) break
     page++
@@ -45,22 +50,31 @@ export async function syncStockIndexCnEtf(
   callbacks: InitialSyncCallbacks = {},
 ): Promise<{ total: number; success: number }> {
   callbacks.onLog?.('从 StockIndex API 拉取 A 股 ETF 名录（不经过其他 Provider）…')
+  callbacks.onProgress?.(0, 0, '拉取 A 股 ETF 名录…')
 
-  const items = await fetchAllStockIndexEtfs()
+  const items = await fetchAllStockIndexEtfs((fetched, total) => {
+    const denom = total && total > 0 ? total : Math.max(fetched, 1)
+    callbacks.onProgress?.(fetched, denom, '拉取 A 股 ETF 名录')
+  })
   if (!items.length) {
     throw new Error('StockIndex /api/v1/etfs 无数据')
   }
 
+  callbacks.onProgress?.(0, items.length, '写入 A 股 ETF 名录')
   let success = 0
   for (const [i, item] of items.entries()) {
     const row = stockIndexItemToListRow(item)
     if (!row) continue
     if (persistCnEtfRow(store, row, item.exchange)) success++
-    if (i % 100 === 0) callbacks.onProgress?.(i + 1, items.length, 'CN_ETF')
+    if (i % 25 === 0 || i === items.length - 1) {
+      callbacks.onProgress?.(i + 1, items.length, '写入 A 股 ETF 名录')
+    }
+    if (i > 0 && i % 200 === 0) store.flushDuckWritesSync()
     if (cfg.delayMs > 0 && i % 50 === 0) await sleep(cfg.delayMs)
   }
 
-  callbacks.onProgress?.(items.length, items.length, 'CN_ETF')
+  store.flushDuckWritesSync()
+  callbacks.onProgress?.(items.length, items.length, 'A 股 ETF 名录完成')
   callbacks.onLog?.(`StockIndex ETF 名录已写入 ${success} / ${items.length} 只`)
   return { total: items.length, success }
 }

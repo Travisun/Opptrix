@@ -22,9 +22,28 @@ import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
-const POLL_RUNNING_MS = 5000
+const POLL_RUNNING_MS = 2000
 const POLL_IDLE_MS = 30_000
 const THS_KLINE_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
+
+function runningBatchProgress(
+  syncState: MarketDataSyncState | null,
+): { current: number; total: number } | null {
+  if (!syncState) return null
+  if ((syncState.job_batch_total ?? 0) > 0) {
+    return {
+      current: syncState.job_batch_current ?? 0,
+      total: syncState.job_batch_total ?? 0,
+    }
+  }
+  if ((syncState.job_total ?? 0) > 0) {
+    return {
+      current: syncState.job_current ?? 0,
+      total: syncState.job_total ?? 0,
+    }
+  }
+  return null
+}
 
 type BootstrapGateKey = 'initial_cn' | 'initial_taxonomy' | 'initial_cn_etf' | 'initial_hk' | 'initial_us'
 
@@ -250,10 +269,9 @@ function runningJobDetail(
   dbStatus: MarketDbStatusData | null,
   syncState: MarketDataSyncState | null,
 ): string {
+  const batch = runningBatchProgress(syncState)
+  if (batch) return `${batch.current.toLocaleString()}/${batch.total.toLocaleString()}`
   if (syncState?.message) return syncState.message
-  if (syncState?.job_batch_total && syncState.job_batch_total > 0) {
-    return `${syncState.job_batch_current ?? 0}/${syncState.job_batch_total}`
-  }
 
   const prog = dbStatus?.job_progress?.[jobName]
   const done = prog?.done ?? 0
@@ -309,9 +327,10 @@ function resolveJobProgress(
   const isKlineDump = THS_KLINE_JOBS.has(jobName)
 
   if (isKlineDump) {
-    if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
+    const batch = isJobRunning ? runningBatchProgress(syncState) : null
+    if (batch && batch.total > 0) {
       return {
-        pct: Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10,
+        pct: Math.round((batch.current / batch.total) * 1000) / 10,
         hasData: true,
         isComplete: false,
       }
@@ -330,9 +349,10 @@ function resolveJobProgress(
   const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
   if (gateKey) {
     const gateOk = dbStatus?.bootstrap?.[gateKey] ?? false
-    if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
+    const batch = isJobRunning ? runningBatchProgress(syncState) : null
+    if (batch && batch.total > 0) {
       return {
-        pct: Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10,
+        pct: Math.round((batch.current / batch.total) * 1000) / 10,
         hasData: true,
         isComplete: false,
       }

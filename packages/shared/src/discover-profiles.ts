@@ -31,10 +31,10 @@ export const DISCOVER_PROFILE_REQUIRES_PACK: Record<DiscoverStrategyProfile, Mar
   DISCOVER_PROFILE_REGISTRY.map(row => [row.id, row.packId]),
 ) as Record<DiscoverStrategyProfile, MarketDataPackId | null>
 
-/** A 股股票挖掘 — 本地因子初选白名单 */
+/** A 股股票挖掘 — 本地因子初选白名单（仅日 K 衍生） */
 export const CN_EQUITY_DISCOVER_FACTORS = [
-  'pe', 'pb', 'roe', 'debt_ratio', 'gross_margin', 'net_profit_yoy', 'profit_cagr_3y',
-  'roe_trend', 'peg', 'momentum_1m', 'momentum_3m', 'momentum_6m', 'volume_ratio',
+  'momentum_1m', 'momentum_3m', 'momentum_6m',
+  'volume_ratio', 'volatility_20d', 'drawdown_60d',
 ] as const
 
 /** A 股 ETF 挖掘 — 本地 ETF 筛选维度 */

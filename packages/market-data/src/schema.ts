@@ -1,5 +1,5 @@
 /** SQLite schema — analytics-oriented star-ish layout with long factor table. */
-export const SCHEMA_VERSION = 11
+export const SCHEMA_VERSION = 12
 
 /**
  * 版本迁移注册表见 `schema-migrate.ts`（MIGRATION_STEPS）。
@@ -777,4 +777,10 @@ VALUES ('kline_storage', datetime('now'), '{"backend":"duckdb","cn_daily_table":
 export const MIGRATION_V11_SQL = `
 INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
 VALUES ('analytics_storage', datetime('now'), '{"backend":"duckdb","dims":true,"quotes":true,"factors":true}');
+`
+
+/** v12 — 市场数据主存储迁至 DuckDB（SQLite 仅控制面） */
+export const MIGRATION_V12_SQL = `
+INSERT OR REPLACE INTO sync_cursor (job_name, last_success_at, meta_json)
+VALUES ('market_data_storage', datetime('now'), '{"backend":"duckdb","primary":true}');
 `

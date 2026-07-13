@@ -112,7 +112,7 @@ export async function importDailyKDump(
     })
 
     store.invalidateKlineStatsCache()
-    store.syncAnalyticsToDuck('all')
+    store.flushDuckWritesSync()
     hooks?.onPhase?.('完成', 100)
     return { type, rowsImported: result.rowsImported, success: true }
   } catch (e) {

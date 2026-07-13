@@ -1,8 +1,9 @@
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { hasMarketDuckData } from '../duck/market-duck-sync.js'
 import { klineDuckDbPath, marketDbPath } from '../paths.js'
 import type { LocalUniverseScreenQuery } from '../query/screen.js'
 
@@ -30,8 +31,8 @@ export function syncAnalyticsViaSubprocess(
   if (!fs.existsSync(sqliteDbPath)) return {}
   try {
     return JSON.parse(nodeExec([
-      'sync-analytics', '--duckdb', duckDbPath, '--sqlite', sqliteDbPath, '--scope', scope,
-    ])) as Record<string, number>
+      'migrate-market-data', '--duckdb', duckDbPath, '--sqlite', sqliteDbPath,
+    ], 512 * 1024 * 1024)) as Record<string, number>
   } catch {
     return {}
   }
@@ -64,6 +65,73 @@ export function computeScreenFactorsViaSubprocess(
   }
 }
 
+export interface SpawnComputeFactorsOptions {
+  tradeDate: string
+  codes?: string[]
+  duckDbPath?: string
+  sqliteDbPath?: string
+  onProgress?: (message: string, percent: number) => void
+}
+
+/** 独立子进程批量计算筛选因子（不阻塞主进程事件循环外的 DuckDB 导入） */
+export async function spawnComputeScreenFactorsAsync(
+  opts: SpawnComputeFactorsOptions,
+): Promise<{ computed: number; written: number }> {
+  const duckDbPath = opts.duckDbPath ?? klineDuckDbPath()
+  const sqliteDbPath = opts.sqliteDbPath ?? marketDbPath()
+  if (!duckReady(duckDbPath)) return { computed: 0, written: 0 }
+
+  const args = [
+    'compute-factors', '--duckdb', duckDbPath, '--sqlite', sqliteDbPath, '--date', opts.tradeDate,
+  ]
+  let codesFile: string | undefined
+  if (opts.codes?.length) {
+    codesFile = path.join(os.tmpdir(), `opptrix-factor-codes-${process.pid}-${Date.now()}.json`)
+    fs.writeFileSync(codesFile, JSON.stringify(opts.codes))
+    args.push('--file', codesFile)
+  }
+
+  opts.onProgress?.('启动因子计算子进程…', 5)
+
+  return new Promise((resolve, reject) => {
+    let settled = false
+    const finish = (fn: () => void) => {
+      if (settled) return
+      settled = true
+      if (codesFile) {
+        try { fs.unlinkSync(codesFile) } catch { /* ignore */ }
+      }
+      fn()
+    }
+
+    const child = spawn(process.execPath, [CLI_PATH, ...args], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+      env: process.env,
+    })
+
+    let stdout = ''
+    let stderr = ''
+    child.stdout?.on('data', chunk => { stdout += String(chunk) })
+    child.stderr?.on('data', chunk => { stderr += String(chunk) })
+    opts.onProgress?.('批量计算筛选因子…', 40)
+
+    child.on('error', err => finish(() => reject(err)))
+    child.on('exit', code => {
+      if (code !== 0) {
+        finish(() => reject(new Error(stderr.trim() || `因子计算子进程退出码 ${code}`)))
+        return
+      }
+      try {
+        const result = JSON.parse(stdout.trim()) as { computed: number; written: number }
+        opts.onProgress?.('因子计算完成', 100)
+        finish(() => resolve(result))
+      } catch {
+        finish(() => reject(new Error('因子计算子进程输出解析失败')))
+      }
+    })
+  })
+}
+
 export function analyticsStatsViaSubprocess(duckDbPath = klineDuckDbPath()): {
   stocks: number
   instruments: number
@@ -83,8 +151,7 @@ export function analyticsStatsViaSubprocess(duckDbPath = klineDuckDbPath()): {
 }
 
 export function hasAnalyticsDimsViaSubprocess(duckDbPath = klineDuckDbPath()): boolean {
-  const stats = analyticsStatsViaSubprocess(duckDbPath)
-  return stats.stocks > 0
+  return hasMarketDuckData(duckDbPath)
 }
 
 export function queryIndustryStatsViaSubprocess(

@@ -1,11 +1,10 @@
 import { duckAll, duckGet, duckRun, type DuckConnection } from '../kline/duck-connection.js'
 import { CN_DAILY_TABLE } from './duck-schema.js'
-import { attachSqliteWrite } from './duck-query-utils.js'
 
-/** 从 K 线 + 行情 + 财报 SQL 批量计算筛选因子，写回 DuckDB fact_factors 与 SQLite stock_factors */
+/** 从日 K 批量计算筛选因子，写回 DuckDB stock_factors + stock_scores */
 export async function computeScreenFactors(
   conn: DuckConnection,
-  sqlitePath: string,
+  _sqlitePath: string,
   tradeDate: string,
   codes?: string[],
 ): Promise<{ computed: number; written: number }> {
@@ -16,9 +15,21 @@ export async function computeScreenFactors(
   await duckRun(conn, `
     CREATE OR REPLACE TEMP TABLE _factor_batch AS
     WITH bars AS (
-      SELECT code, trade_date, close, volume,
+      SELECT code, trade_date, close, high, volume,
         ROW_NUMBER() OVER (PARTITION BY code ORDER BY trade_date DESC) AS rn
       FROM ${CN_DAILY_TABLE}
+    ),
+    rets AS (
+      SELECT b1.code,
+        (b1.close / b2.close - 1) * 100 AS ret
+      FROM bars b1
+      INNER JOIN bars b2 ON b1.code = b2.code AND b1.rn + 1 = b2.rn
+      WHERE b1.rn <= 20 AND b1.close > 0 AND b2.close > 0
+    ),
+    vol AS (
+      SELECT code, ROUND(STDDEV_SAMP(ret), 2) AS volatility_20d
+      FROM rets
+      GROUP BY code
     ),
     pivoted AS (
       SELECT code,
@@ -26,31 +37,23 @@ export async function computeScreenFactors(
         MAX(CASE WHEN rn = 21 THEN close END) AS c20,
         MAX(CASE WHEN rn = 61 THEN close END) AS c60,
         MAX(CASE WHEN rn = 121 THEN close END) AS c120,
+        MAX(CASE WHEN rn <= 60 THEN high END) AS hi60,
         AVG(CASE WHEN rn BETWEEN 1 AND 5 THEN volume END) AS v5,
         AVG(CASE WHEN rn BETWEEN 6 AND 40 THEN volume END) AS v35
       FROM bars WHERE rn <= 121
       GROUP BY code
-    ),
-    q AS (
-      SELECT code, pe, pb FROM fact_quotes_daily
-      WHERE trade_date = (SELECT MAX(trade_date) FROM fact_quotes_daily)
     )
     SELECT
       p.code,
-      CASE WHEN q.pe > 0 THEN ROUND(q.pe, 2) END AS pe,
-      CASE WHEN q.pb > 0 THEN ROUND(q.pb, 2) END AS pb,
-      CASE WHEN f.roe IS NOT NULL THEN ROUND(f.roe, 2) END AS roe,
-      CASE WHEN f.gross_margin IS NOT NULL THEN ROUND(f.gross_margin, 2) END AS gross_margin,
-      CASE WHEN f.debt_ratio IS NOT NULL THEN ROUND(f.debt_ratio, 2) END AS debt_ratio,
-      CASE WHEN f.net_profit_yoy IS NOT NULL THEN ROUND(f.net_profit_yoy, 2) END AS net_profit_yoy,
       CASE WHEN p.c20 > 0 AND p.c0 IS NOT NULL THEN ROUND((p.c0 / p.c20 - 1) * 100, 2) END AS momentum_1m,
       CASE WHEN p.c60 > 0 AND p.c0 IS NOT NULL THEN ROUND((p.c0 / p.c60 - 1) * 100, 2) END AS momentum_3m,
       CASE WHEN p.c120 > 0 AND p.c0 IS NOT NULL THEN ROUND((p.c0 / p.c120 - 1) * 100, 2) END AS momentum_6m,
-      CASE WHEN p.v35 > 0 THEN ROUND(p.v5 / p.v35, 2) END AS volume_ratio
+      CASE WHEN p.v35 > 0 THEN ROUND(p.v5 / p.v35, 2) END AS volume_ratio,
+      v.volatility_20d,
+      CASE WHEN p.hi60 > 0 AND p.c0 IS NOT NULL THEN ROUND((p.c0 / p.hi60 - 1) * 100, 2) END AS drawdown_60d
     FROM pivoted p
     INNER JOIN dim_cn_stocks s ON s.code = p.code AND s.status = 'active'
-    LEFT JOIN q ON q.code = p.code
-    LEFT JOIN dim_financials_latest f ON f.code = p.code
+    LEFT JOIN vol v ON v.code = p.code
     WHERE p.c0 IS NOT NULL ${codeFilter}
   `)
 
@@ -59,39 +62,45 @@ export async function computeScreenFactors(
   if (!computed) return { computed: 0, written: 0 }
 
   const factorNames = [
-    'pe', 'pb', 'roe', 'gross_margin', 'debt_ratio', 'net_profit_yoy',
-    'momentum_1m', 'momentum_3m', 'momentum_6m', 'volume_ratio',
+    'momentum_1m', 'momentum_3m', 'momentum_6m',
+    'volume_ratio', 'volatility_20d', 'drawdown_60d',
   ]
   await duckRun(conn, `
-    DELETE FROM fact_factors WHERE trade_date = ? ${codeFilterDel}
+    DELETE FROM stock_factors WHERE trade_date = ? ${codeFilterDel}
   `, tradeDate)
 
+  const syncedAt = new Date().toISOString()
   for (const name of factorNames) {
     await duckRun(conn, `
-      INSERT INTO fact_factors (trade_date, code, factor_name, factor_value)
-      SELECT ?, code, ?, ${name}
+      INSERT INTO stock_factors (trade_date, code, factor_name, factor_value, synced_at)
+      SELECT ?, code, ?, ${name}, ?
       FROM _factor_batch WHERE ${name} IS NOT NULL
-    `, tradeDate, name)
+    `, tradeDate, name, syncedAt)
   }
 
-  await attachSqliteWrite(conn, sqlitePath)
   await duckRun(conn, `
-    DELETE FROM md.stock_factors
-    WHERE trade_date = ? ${codeFilterDel}
-      AND factor_name IN (${factorNames.map(n => `'${n}'`).join(',')})
+    DELETE FROM stock_scores
+    WHERE trade_date = ? AND scorecard = '综合评估' ${codeFilterDel}
   `, tradeDate)
   await duckRun(conn, `
-    INSERT INTO md.stock_factors (trade_date, code, factor_name, factor_value)
-    SELECT trade_date, code, factor_name, factor_value
-    FROM fact_factors
-    WHERE trade_date = ?
-      AND factor_name IN (${factorNames.map(n => `'${n}'`).join(',')})
-      ${codeFilterDel}
-  `, tradeDate)
-  await duckRun(conn, 'DETACH md')
+    INSERT INTO stock_scores (trade_date, code, scorecard, total_score, synced_at)
+    SELECT
+      ?,
+      code,
+      '综合评估',
+      ROUND(LEAST(100, GREATEST(0,
+        50
+        + LEAST(20, GREATEST(-15, COALESCE(momentum_3m, 0) * 0.6))
+        + LEAST(10, GREATEST(-5, (COALESCE(volume_ratio, 1) - 1) * 8))
+        + LEAST(10, GREATEST(-10, COALESCE(drawdown_60d, 0) * 0.3))
+      )), 1),
+      ?
+    FROM _factor_batch
+    WHERE momentum_3m IS NOT NULL OR volume_ratio IS NOT NULL OR drawdown_60d IS NOT NULL
+  `, tradeDate, syncedAt)
 
   const written = (await duckGet<{ c: number }>(conn, `
-    SELECT COUNT(*)::INTEGER AS c FROM fact_factors WHERE trade_date = ?
+    SELECT COUNT(*)::INTEGER AS c FROM stock_factors WHERE trade_date = ?
   `, tradeDate))?.c ?? 0
 
   return { computed, written }

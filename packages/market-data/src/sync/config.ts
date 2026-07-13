@@ -20,21 +20,14 @@ export interface SyncProfileSettings {
 /** ~6 months of trading days for momentum / volume factors */
 export const KLINE_BOOTSTRAP_DAYS = 130
 
-/** Factors computed locally during bootstrap (no per-stock API analyze). */
+/** 离线初选因子 — 仅由本地日 K 推导，不依赖行情/财报/公告等额外数据源 */
 export const SCREEN_PACK_FACTORS = [
-  'pe',
-  'pb',
-  'roe',
-  'debt_ratio',
-  'gross_margin',
-  'net_profit_yoy',
-  'profit_cagr_3y',
-  'roe_trend',
-  'peg',
   'momentum_1m',
   'momentum_3m',
   'momentum_6m',
   'volume_ratio',
+  'volatility_20d',
+  'drawdown_60d',
 ] as const
 
 /** StockIndex 名录：A 股 ETF + 港股/美股（与 CN 名录同 API 源） */

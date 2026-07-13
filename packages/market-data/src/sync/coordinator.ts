@@ -33,8 +33,18 @@ export interface SyncStateSnapshot {
 
 const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 5000
-const DB_STATUS_CACHE_MS_RUNNING = 5000
+const DB_STATUS_CACHE_MS_RUNNING = 2000
 const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 12_000
+const PROGRESS_CACHE_INVALIDATE_MS = 1500
+
+/** 名录/行业等 bootstrap 任务 — 运行中用内存进度覆盖 DB 聚合（避免 DuckDB 写入滞后） */
+const BOOTSTRAP_PROGRESS_JOBS = new Set([
+  'initial_cn_universe',
+  'initial_hk_universe',
+  'initial_us_universe',
+  'initial_cn_etf',
+  'initial_taxonomy',
+])
 
 function computeOverallPercent(
   jobs: readonly string[],
@@ -65,6 +75,7 @@ export class MarketSyncCoordinator {
   private snapshot: Partial<SyncStateSnapshot> & { message?: string | null } = {}
   private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
   private bootstrapProgressRepaired = false
+  private lastProgressCacheInvalidate = 0
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
@@ -84,7 +95,11 @@ export class MarketSyncCoordinator {
         ? this.store.getStatusLite(this.dbStatusCache.value)
         : this.store.getStatus()
       this.dbStatusCache = { at: now, value }
-      return heavyImport ? this.overlayThsKlineProgress(value) : value
+      if (heavyImport) return this.overlayThsKlineProgress(value)
+      if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
+        return this.overlayBootstrapJobProgress(value)
+      }
+      return value
     }
 
     if (this.dbStatusCache && now - this.dbStatusCache.at < DB_STATUS_CACHE_MS_IDLE) {
@@ -93,6 +108,26 @@ export class MarketSyncCoordinator {
     const value = this.store.getStatus()
     this.dbStatusCache = { at: now, value }
     return value
+  }
+
+  /** Overlay in-memory universe/taxonomy progress (avoids stale DuckDB counts during sync). */
+  private overlayBootstrapJobProgress(status: MarketDbStatus): MarketDbStatus {
+    const job = this.snapshot.current_job
+    if (!job || !BOOTSTRAP_PROGRESS_JOBS.has(job)) return status
+    const current = this.snapshot.job_current ?? 0
+    const total = this.snapshot.job_total ?? 0
+    if (total <= 0) return status
+    return {
+      ...status,
+      job_progress: {
+        ...status.job_progress,
+        [job]: {
+          done: current,
+          pending: Math.max(0, total - current),
+          error: status.job_progress[job]?.error ?? 0,
+        },
+      },
+    }
   }
 
   /** Overlay in-memory dump import percent onto kline job progress (avoids COUNT DISTINCT during import). */
@@ -307,6 +342,11 @@ export class MarketSyncCoordinator {
             job_total: p.total,
             message: p.message ?? undefined,
           })
+          const now = Date.now()
+          if (now - this.lastProgressCacheInvalidate >= PROGRESS_CACHE_INVALIDATE_MS) {
+            this.dbStatusCache = null
+            this.lastProgressCacheInvalidate = now
+          }
           if (p.message) {
             const prev = this.snapshot.message
             const phaseChanged = !prev || !p.message.startsWith(prev.split(' ')[0] ?? '')

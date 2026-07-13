@@ -3,14 +3,18 @@ import type { MarketDataStore } from '../store.js'
 import { SCREEN_PACK_FACTORS } from '../sync/config.js'
 import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
 import { todayTradeDate } from '../utils.js'
+import { hasMarketDuckData } from '../duck/market-duck-sync.js'
 import {
-  hasAnalyticsDimsViaSubprocess,
   queryIndustryStatsViaSubprocess,
   queryIndustryStocksViaSubprocess,
   queryUniverseScreenViaSubprocess,
 } from '../analytics/spawn-analytics.js'
 
 const OFFLINE_SCREEN_MSG = '本地因子筛选已停用。请使用 instrument_evaluation、instrument_search 等在线接口按需分析。'
+
+function useDuck(store: MarketDataStore): boolean {
+  return hasMarketDuckData(store.klineDuckDbPath)
+}
 
 function assertOfflineScreeningEnabled(): void {
   if (!LOCAL_OFFLINE_SCREENING_ENABLED) {
@@ -307,7 +311,7 @@ export function localUniverseScreen(
   assertOfflineScreeningEnabled()
   const date = query.trade_date ?? latestFactorDate(store.db) ?? todayTradeDate()
 
-  if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
+  if (useDuck(store)) {
     const duck = queryUniverseScreenViaSubprocess(query, date, store.klineDuckDbPath) as LocalUniverseScreenResult | null
     if (duck?.items != null) return duck
   }
@@ -502,7 +506,7 @@ export interface IndustryStockRow {
 
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
   const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
-  if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
+  if (useDuck(store)) {
     const duck = queryIndustryStatsViaSubprocess(factorDate, store.klineDuckDbPath) as {
       trade_date: string
       quote_date: string | null
@@ -627,7 +631,7 @@ export function queryIndustryStocks(
   const key = industry.trim()
   const cap = Math.min(Math.max(limit, 1), 200)
 
-  if (hasAnalyticsDimsViaSubprocess(store.klineDuckDbPath)) {
+  if (useDuck(store)) {
     const duck = queryIndustryStocksViaSubprocess(key, factorDate, cap, store.klineDuckDbPath) as {
       trade_date: string
       items: IndustryStockRow[]

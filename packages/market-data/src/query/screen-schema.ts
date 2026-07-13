@@ -61,108 +61,56 @@ export interface LocalUniverseScreenSchema {
 }
 
 const FACTOR_SPECS: Record<string, Omit<ScreenFactorSpec, 'name' | 'label'>> = {
-  pe: {
-    unit: '倍',
-    value_type: 'number',
-    description: '市盈率 TTM，越低通常代表估值越便宜（需结合盈利质量）。',
-    typical_range: '5–80，亏损或微利个股可能缺失',
-    example_conditions: [
-      { op: '<=', value: 20, meaning: '低估值' },
-      { op: '>=', value: 0, meaning: '盈利为正（有 PE）' },
-    ],
-  },
-  pb: {
-    unit: '倍',
-    value_type: 'number',
-    description: '市净率，适用于银行、周期、重资产行业。',
-    typical_range: '0.5–10',
-    example_conditions: [{ op: '<=', value: 2, meaning: '破净附近或低 PB' }],
-  },
-  roe: {
-    unit: '%',
-    value_type: 'number',
-    description: '净资产收益率（最近年报/财报），衡量盈利效率。',
-    typical_range: '5–30',
-    example_conditions: [{ op: '>=', value: 15, meaning: '高 ROE 质量' }],
-  },
-  debt_ratio: {
-    unit: '%',
-    value_type: 'number',
-    description: '资产负债率，越低财务杠杆越小。',
-    typical_range: '20–80',
-    example_conditions: [{ op: '<=', value: 50, meaning: '低负债' }],
-  },
-  gross_margin: {
-    unit: '%',
-    value_type: 'number',
-    description: '毛利率，反映产品竞争力与定价权。',
-    typical_range: '10–60',
-    example_conditions: [{ op: '>=', value: 30, meaning: '较高毛利' }],
-  },
-  net_profit_yoy: {
-    unit: '%',
-    value_type: 'number',
-    description: '净利润同比增速。',
-    typical_range: '-50–200',
-    example_conditions: [{ op: '>=', value: 20, meaning: '利润较快增长' }],
-  },
-  profit_cagr_3y: {
-    unit: '%',
-    value_type: 'number',
-    description: '近 3 年净利润复合增速（本地估算）。',
-    typical_range: '0–40',
-    example_conditions: [{ op: '>=', value: 15, meaning: '持续增长' }],
-  },
-  roe_trend: {
-    unit: '%',
-    value_type: 'number',
-    description: 'ROE 变化趋势（近年 ROE 差值，正数表示改善）。',
-    typical_range: '-10–10',
-    example_conditions: [{ op: '>=', value: 2, meaning: 'ROE 改善' }],
-  },
-  peg: {
-    unit: '倍',
-    value_type: 'number',
-    description: 'PE / 利润增速，成长估值指标；越低越便宜（需利润增速>0）。',
-    typical_range: '0.5–3',
-    example_conditions: [{ op: '<=', value: 1.2, meaning: 'PEG 合理偏低' }],
-  },
   momentum_1m: {
     unit: '%',
     value_type: 'number',
-    description: '近 1 个月价格涨跌幅（约 20 个交易日）。',
+    description: '近 1 个月价格涨跌幅（约 20 个交易日，仅日 K）。',
     typical_range: '-20–30',
     example_conditions: [{ op: '>=', value: 5, meaning: '短期强势' }],
   },
   momentum_3m: {
     unit: '%',
     value_type: 'number',
-    description: '近 3 个月价格涨跌幅。',
+    description: '近 3 个月价格涨跌幅（仅日 K）。',
     typical_range: '-30–50',
     example_conditions: [{ op: '>=', value: 10, meaning: '中期动量' }],
   },
   momentum_6m: {
     unit: '%',
     value_type: 'number',
-    description: '近 6 个月价格涨跌幅。',
+    description: '近 6 个月价格涨跌幅（仅日 K）。',
     typical_range: '-40–80',
     example_conditions: [{ op: '>=', value: 15, meaning: '中长期趋势向上' }],
   },
   volume_ratio: {
     unit: '倍',
     value_type: 'number',
-    description: '近 5 日均量 / 前 35 日均量，衡量放量程度。',
+    description: '近 5 日均量 / 前 35 日均量（仅日 K 成交量）。',
     typical_range: '0.5–3',
     example_conditions: [{ op: '>=', value: 1.5, meaning: '近期放量' }],
+  },
+  volatility_20d: {
+    unit: '%',
+    value_type: 'number',
+    description: '近 20 个交易日日收益率标准差，衡量价格波动（仅日 K）。',
+    typical_range: '1–8',
+    example_conditions: [{ op: '<=', value: 3, meaning: '低波动' }],
+  },
+  drawdown_60d: {
+    unit: '%',
+    value_type: 'number',
+    description: '现价相对近 60 日最高价的回撤幅度，负值表示低于阶段高点（仅日 K）。',
+    typical_range: '-40–0',
+    example_conditions: [{ op: '>=', value: -15, meaning: '距高点回撤不超过 15%' }],
   },
 }
 
 export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null): LocalUniverseScreenSchema {
   const sortFactors = [...SCREEN_PACK_FACTORS]
   return {
-    version: '1.0',
-    data_source: '本地 L0 初选库（SQLite stock_factors / stock_scores / stock_quotes_daily）',
-    prerequisite: '本地因子筛选已停用；请使用 screen_stocks 或 search_instruments 在线初选。',
+    version: '1.1',
+    data_source: '本地日 K 衍生因子（cn_daily_bars → stock_factors / stock_scores，无行情/财报依赖）',
+    prerequisite: '须先完成 A 股日 K 同步；因子由 K 线批量计算，不触发额外 Provider 请求。',
     trade_date: {
       format: 'YYYY-MM-DD',
       default: latestTradeDate ?? '最新因子交易日',
@@ -171,7 +119,7 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
     factor_conditions: {
       description: '因子条件为 AND 关系：须同时满足所有条件。factor 名须来自 factors 列表。',
       max_count: 8,
-      item_shape: { factor: 'pe', op: '<=', value: 25 },
+      item_shape: { factor: 'momentum_3m', op: '>=', value: 10 },
       operators: ['>', '<', '>=', '<=', '='],
       factors: SCREEN_PACK_FACTORS.map(name => ({
         name,
@@ -233,7 +181,7 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
     sort: {
       sort_by: {
         type: 'string',
-        enum: ['total_score', 'pe', 'pb', 'market_cap', ...sortFactors],
+        enum: ['total_score', 'market_cap', ...sortFactors],
         default: 'total_score',
         description: '结果排序字段；因子名排序时按对应 factor_value。',
       },
@@ -255,11 +203,11 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
     ],
     examples: [
       {
-        title: '高 ROE 低估值',
+        title: '中期动量 + 低波动',
         query: {
           factor_conditions: [
-            { factor: 'roe', op: '>=', value: 15 },
-            { factor: 'pe', op: '<=', value: 25 },
+            { factor: 'momentum_3m', op: '>=', value: 10 },
+            { factor: 'volatility_20d', op: '<=', value: 4 },
           ],
           top_n: 50,
         },
@@ -274,11 +222,13 @@ export function buildLocalUniverseScreenSchema(latestTradeDate?: string | null):
         },
       },
       {
-        title: '沪市动量 + 市值过滤',
+        title: '沪市动量 + 放量',
         query: {
-          factor_conditions: [{ factor: 'momentum_3m', op: '>=', value: 10 }],
+          factor_conditions: [
+            { factor: 'momentum_3m', op: '>=', value: 10 },
+            { factor: 'volume_ratio', op: '>=', value: 1.2 },
+          ],
           markets: ['SH'],
-          min_market_cap_yi: 100,
           top_n: 40,
         },
       },
