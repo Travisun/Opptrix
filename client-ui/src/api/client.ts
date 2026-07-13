@@ -234,7 +234,7 @@ export const research = {
       'market_db_sync',
       { mode, background, force },
       undefined,
-      background ? 15000 : 600000,
+      background ? 30_000 : 600000,
     ),
 
   marketDbSyncState: () =>

@@ -71,10 +71,25 @@ export async function marketDuckStats(conn: DuckConnection): Promise<{
   quotes: number
   factors: number
   klines: number
+  kline_codes: number
+  kline_codes_min60: number
   profiles: number
   etf: number
+  cn_equity: number
+  hk_equity: number
+  us_equity: number
+  announcements: number
+  dividends: number
+  partners: number
+  segments: number
+  shareholders: number
+  forecasts: number
+  inst_holdings: number
+  insider_trades: number
+  buybacks: number
 }> {
-  const q = async (sql: string) => (await duckGet<{ c: number }>(conn, sql))?.c ?? 0
+  const q = async (sql: string, ...params: unknown[]) =>
+    (await duckGet<{ c: number }>(conn, sql, ...params))?.c ?? 0
   return {
     stocks: await q('SELECT COUNT(*)::INTEGER AS c FROM stocks'),
     instruments: await q('SELECT COUNT(*)::INTEGER AS c FROM instruments'),
@@ -82,7 +97,25 @@ export async function marketDuckStats(conn: DuckConnection): Promise<{
     quotes: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_quotes_daily'),
     factors: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_factors'),
     klines: await q('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars'),
+    kline_codes: await q('SELECT COUNT(DISTINCT code)::INTEGER AS c FROM cn_daily_bars'),
+    kline_codes_min60: await q(`
+      SELECT COUNT(*)::INTEGER AS c FROM (
+        SELECT code FROM cn_daily_bars GROUP BY code HAVING COUNT(*) >= 60
+      ) t
+    `),
     profiles: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_profiles'),
     etf: await q('SELECT COUNT(*)::INTEGER AS c FROM etf_profiles'),
+    cn_equity: await q(`SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`),
+    hk_equity: await q(`SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE market = 'HK' AND asset_class = 'EQUITY'`),
+    us_equity: await q(`SELECT COUNT(*)::INTEGER AS c FROM instruments WHERE market = 'US' AND asset_class = 'EQUITY'`),
+    announcements: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_announcements'),
+    dividends: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_dividends'),
+    partners: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_partners'),
+    segments: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_business_segments'),
+    shareholders: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_shareholder_summary'),
+    forecasts: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_forecasts'),
+    inst_holdings: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_inst_holdings'),
+    insider_trades: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_insider_trades'),
+    buybacks: await q('SELECT COUNT(*)::INTEGER AS c FROM stock_buybacks'),
   }
 }

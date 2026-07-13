@@ -11,6 +11,7 @@ import {
   CheckmarkRegular,
   DismissCircleRegular,
   ArrowSyncRegular,
+  ArrowSyncCircleRegular,
 } from '@fluentui/react-icons'
 import { research } from '../../api/client'
 import type {
@@ -119,6 +120,9 @@ const useStyles = makeStyles({
   statusBannerText: {
     flex: 1,
     minWidth: 0,
+  },
+  statusBannerAction: {
+    flexShrink: 0,
   },
   statusBannerTitle: {
     fontSize: '13px',
@@ -239,9 +243,6 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.gray100,
     borderRadius: opptrixTokens.radiusMd,
   },
-  actionBtn: {
-    width: '100%',
-  },
 })
 
 function formatDate(dateStr: string | null): string {
@@ -313,6 +314,18 @@ function idleJobDetail(
   return total > 0 ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'
 }
 
+function gateJobComplete(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+  isJobRunning: boolean,
+): boolean {
+  const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
+  if (!gateKey) return false
+  const lastSync = dbStatus?.last_sync?.[jobName]
+  const gateOk = dbStatus?.bootstrap?.[gateKey] ?? false
+  return gateOk || (!isJobRunning && !!lastSync)
+}
+
 function resolveJobProgress(
   jobName: string,
   dbStatus: MarketDbStatusData | null,
@@ -325,6 +338,7 @@ function resolveJobProgress(
   const error = prog?.error ?? 0
   const total = done + pending
   const isKlineDump = THS_KLINE_JOBS.has(jobName)
+  const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
 
   if (isKlineDump) {
     const batch = isJobRunning ? runningBatchProgress(syncState) : null
@@ -346,9 +360,8 @@ function resolveJobProgress(
     }
   }
 
-  const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
   if (gateKey) {
-    const gateOk = dbStatus?.bootstrap?.[gateKey] ?? false
+    const isComplete = gateJobComplete(jobName, dbStatus, isJobRunning)
     const batch = isJobRunning ? runningBatchProgress(syncState) : null
     if (batch && batch.total > 0) {
       return {
@@ -357,7 +370,7 @@ function resolveJobProgress(
         isComplete: false,
       }
     }
-    if (gateOk) return { pct: 100, hasData: true, isComplete: true }
+    if (isComplete) return { pct: 100, hasData: true, isComplete: true }
     if (total > 0) {
       return {
         pct: Math.round((done / total) * 1000) / 10,
@@ -374,6 +387,27 @@ function resolveJobProgress(
     hasData: total > 0 || isJobRunning,
     isComplete,
   }
+}
+
+function jobTrailingText(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+  syncState: MarketDataSyncState | null,
+  isJobRunning: boolean,
+  isComplete: boolean,
+  lastSync: string | null,
+): string {
+  if (isJobRunning) {
+    return runningJobDetail(jobName, dbStatus, syncState)
+  }
+  if (lastSync) {
+    return formatDate(lastSync)
+  }
+  if (isComplete) {
+    return idleJobDetail(jobName, dbStatus)
+  }
+  const detail = idleJobDetail(jobName, dbStatus)
+  return detail !== '—' ? detail : '未同步'
 }
 
 export default function BasicDataSettingsSection() {
@@ -470,23 +504,38 @@ export default function BasicDataSettingsSection() {
         <div className={s.statusBannerIcon}>
           {bootstrapReady ? (
             <CheckmarkCircleFilled fontSize={24} style={{ color: opptrixCssVars.success }} />
+          ) : isRunning ? (
+            <ArrowSyncCircleRegular fontSize={24} style={{ color: opptrixCssVars.textSecondary }} />
           ) : (
             <DismissCircleRegular fontSize={24} style={{ color: opptrixCssVars.warning }} />
           )}
         </div>
         <div className={s.statusBannerText}>
           <Text className={s.statusBannerTitle} block>
-            {bootstrapReady ? '基础数据已就绪' : '基础数据未就绪'}
+            {bootstrapReady ? '基础数据已就绪' : isRunning ? '基础数据同步中' : '基础数据未就绪'}
           </Text>
           <Text className={s.statusBannerDesc} block>
             {bootstrapReady
               ? '本地数据完整，可开始选股与挖掘'
-              : isRunning && syncState?.message
-                ? syncState.message
+              : isRunning
+                ? (syncState?.message
+                  ?? (syncState?.current_job
+                    ? `正在同步：${jobDisplayName(syncState.current_job)}（${overallPercent.toFixed(1)}%）`
+                    : '正在同步名录、行业与 K 线数据…'))
                 : klineRecentRatio >= 50 && klineDepthRatio < 95
                   ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
                   : '需先完成名录、行业板块与历史 K 线同步'}
           </Text>
+        </div>
+        <div className={s.statusBannerAction}>
+          <OpptrixButton
+            variant="secondary"
+            icon={isRunning || syncing ? <Spinner size="tiny" /> : <ArrowSyncRegular fontSize={14} />}
+            disabled={syncing || isRunning}
+            onClick={handleSync}
+          >
+            {isRunning ? '同步中…' : syncing ? '提交中…' : '同步'}
+          </OpptrixButton>
         </div>
       </div>
 
@@ -573,20 +622,14 @@ export default function BasicDataSettingsSection() {
             )
             const prog = dbStatus?.job_progress?.[jobName]
             const error = prog?.error ?? 0
-
-            let trailingText: string
-            if (isJobRunning) {
-              trailingText = runningJobDetail(jobName, dbStatus, syncState)
-            } else if (isComplete && lastSync) {
-              trailingText = formatDate(lastSync)
-            } else if (isComplete) {
-              trailingText = idleJobDetail(jobName, dbStatus)
-            } else if (lastSync) {
-              trailingText = formatDate(lastSync)
-            } else {
-              const detail = idleJobDetail(jobName, dbStatus)
-              trailingText = detail !== '—' ? detail : '未同步'
-            }
+            const trailingText = jobTrailingText(
+              jobName,
+              dbStatus,
+              syncState,
+              isJobRunning,
+              isComplete,
+              lastSync,
+            )
 
             return (
               <div key={jobName} className={mergeClasses(s.jobRow, isCurrent && s.jobRowActive)}>
@@ -616,18 +659,6 @@ export default function BasicDataSettingsSection() {
             )
           })}
         </SettingsGroup>
-      </div>
-
-      <div className={s.sectionBlock}>
-        <OpptrixButton
-          variant="secondary"
-          className={s.actionBtn}
-          icon={isRunning ? <Spinner size="tiny" /> : <ArrowSyncRegular fontSize={14} />}
-          disabled={syncing || isRunning}
-          onClick={handleSync}
-        >
-          {isRunning ? '同步进行中…' : syncing ? '提交中…' : '同步基础数据'}
-        </OpptrixButton>
       </div>
 
       {syncState && syncState.logs.length > 0 && (

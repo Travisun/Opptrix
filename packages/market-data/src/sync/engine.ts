@@ -628,9 +628,6 @@ export class MarketDataSyncEngine {
     }
 
     const result = await syncInitialCnEtf(this.store, cfg, this.initialCallbacks(job, options))
-    for (const code of this.store.listEtfCodes(true).slice(0, result.success)) {
-      this.markDone(job, code, '')
-    }
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,

@@ -129,6 +129,7 @@ export class MarketDataStore {
   private marketDataMigrated = false
   private duckWriteQueue: DuckWriteOp[] = []
   private readonly duckFlushThreshold = 250
+  private duckMarketStatsCache: { at: number; value: ReturnType<typeof duckMarketStatsSync> } | null = null
 
   constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
     this.dbPath = dbPath
@@ -137,19 +138,22 @@ export class MarketDataStore {
     this.db.pragma('journal_mode = WAL')
     this.db.pragma('busy_timeout = 5000')
     migrate(this.db)
-    this.ensureKlineBackendReady()
+    this.scheduleKlineBackendReady()
   }
 
-  private ensureKlineBackendReady(): void {
+  private scheduleKlineBackendReady(): void {
     if (this.klineMigrated) return
     this.klineMigrated = true
-    try {
-      migrateSqliteKlinesToDuckIfEmpty(this.klineDuckDbPath, this.dbPath)
-      this.ensureMarketDataOnDuck()
-      this.invalidateKlineStatsCache()
-    } catch {
-      /* 首次迁移失败不阻断启动 */
-    }
+    setImmediate(() => {
+      try {
+        migrateSqliteKlinesToDuckIfEmpty(this.klineDuckDbPath, this.dbPath)
+        this.ensureMarketDataOnDuck()
+        this.invalidateKlineStatsCache()
+        this.duckMarketStatsCache = null
+      } catch {
+        /* 首次迁移失败不阻断启动 */
+      }
+    })
   }
 
   /** SQLite 市场数据 → DuckDB 一次性迁移（幂等） */
@@ -176,6 +180,7 @@ export class MarketDataStore {
     const batch = this.duckWriteQueue.splice(0)
     try {
       applyDuckBatchSync(batch, this.klineDuckDbPath)
+      this.invalidateDuckMarketStatsCache()
     } catch {
       this.duckWriteQueue.unshift(...batch)
     }
@@ -342,36 +347,34 @@ export class MarketDataStore {
 
   getStatus(): MarketDbStatus {
     this.flushDuckWritesSync()
-    const duck = duckMarketStatsSync(this.klineDuckDbPath)
-    const duckCount = (sql: string) => {
-      const row = duckQueryOneSync<{ c: number }>(sql, [], this.klineDuckDbPath)
-      return row?.c ?? 0
-    }
+    const duck = this.cachedDuckMarketStats()
     const stocksTableCount = duck.stocks || (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
-    const cnEquityCount = this.countEquityInstruments('CN')
+    const cnEquityCount = duck.cn_equity || this.countEquityInstrumentsSqlite('CN')
     const stockCount = Math.max(stocksTableCount, cnEquityCount)
-    const etfCount = this.countEtfInstruments()
-    const usCount = this.countUsInstruments()
+    const etfCount = duck.etf || this.countEtfInstruments()
+    const usCount = duck.us_equity || this.countUsInstruments()
     const cryptoCount = this.countCryptoInstruments()
     const jpCount = this.countRegionalEquityInstruments('JP')
     const krCount = this.countRegionalEquityInstruments('KR')
-    const hkCount = this.countRegionalEquityInstruments('HK')
-    const profileCount = duck.profiles || duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_profiles')
-    const partnerCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_partners')
-    const segmentCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_business_segments')
-    const announcementCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_announcements')
-    const dividendCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_dividends')
-    const shareholderCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_shareholder_summary')
-    const forecastCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_forecasts')
-    const instHoldingCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_inst_holdings')
-    const insiderTradeCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_insider_trades')
-    const buybackCount = duckCount('SELECT COUNT(*)::INTEGER AS c FROM stock_buybacks')
-    const latestQuote = duckQueryOneSync<{ d: string | null }>(
-      'SELECT MAX(trade_date) AS d FROM stock_quotes_daily', [], this.klineDuckDbPath,
-    ) ?? this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }
-    const latestFactor = duckQueryOneSync<{ d: string | null }>(
-      'SELECT MAX(trade_date) AS d FROM stock_factors', [], this.klineDuckDbPath,
-    ) ?? this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
+    const hkCount = duck.hk_equity || this.countRegionalEquityInstruments('HK')
+    const profileCount = duck.profiles
+    const partnerCount = duck.partners
+    const segmentCount = duck.segments
+    const announcementCount = duck.announcements
+    const dividendCount = duck.dividends
+    const shareholderCount = duck.shareholders
+    const forecastCount = duck.forecasts
+    const instHoldingCount = duck.inst_holdings
+    const insiderTradeCount = duck.insider_trades
+    const buybackCount = duck.buybacks
+    const latestQuote = this.duckRead<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_quotes_daily', [],
+      () => this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null },
+    ) ?? { d: null }
+    const latestFactor = this.duckRead<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_factors', [],
+      () => this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null },
+    ) ?? { d: null }
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
     const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
       job_name: string
@@ -425,7 +428,7 @@ export class MarketDataStore {
     const activeCount = (this.db.prepare(
       'SELECT COUNT(*) AS c FROM stocks WHERE status = \'active\'',
     ).get() as { c: number }).c
-    const bootstrap = this.assessBootstrapReadiness(activeCount, latestQuote.d, latestFactor.d)
+    const bootstrap = this.assessBootstrapReadiness(activeCount, latestQuote.d, latestFactor.d, duck)
     this.enrichThsKlineDumpJobProgress(jobProgress, stockCount, bootstrap, lastSync)
 
     return {
@@ -463,12 +466,96 @@ export class MarketDataStore {
   }
 
   /**
-   * Lightweight status while K-line Parquet import runs — avoids full-table kline scans on every poll.
-   * Pass the last full snapshot as `fallback`; only cheap counters are refreshed.
+   * 启动/接续同步规划用 — 单次 DuckDB market-stats + SQLite 游标，避免阻塞 HTTP。
+   */
+  getStatusForBootPlan(): MarketDbStatus {
+    const duck = this.cachedDuckMarketStats()
+    const stocksTableCount = duck.stocks || (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const cnEquityCount = duck.cn_equity || this.countEquityInstrumentsSqlite('CN')
+    const stockCount = Math.max(stocksTableCount, cnEquityCount)
+    const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
+      job_name: string
+      last_success_at: string | null
+    }[]
+    const lastSync: Record<string, string | null> = {}
+    for (const c of cursors) lastSync[c.job_name] = c.last_success_at
+
+    const jobProgress: Record<string, JobProgressSummary> = {}
+    const progressRows = this.db.prepare(`
+      SELECT job_name,
+        COUNT(DISTINCT CASE WHEN status = 'done' THEN code END) AS done,
+        COUNT(DISTINCT CASE WHEN status = 'error' THEN code END) AS error
+      FROM sync_job_progress
+      GROUP BY job_name
+    `).all() as { job_name: string; done: number; error: number }[]
+    for (const row of progressRows) {
+      const baseCount = Math.max(stockCount, row.done)
+      jobProgress[row.job_name] = {
+        done: row.done,
+        error: row.error,
+        pending: Math.max(0, baseCount - row.done),
+      }
+    }
+
+    const bootstrap = this.assessBootstrapReadiness(stockCount, null, null, duck)
+    return {
+      db_path: this.db.name,
+      schema_version: 0,
+      stock_count: stockCount,
+      etf_count: duck.etf,
+      us_count: duck.us_equity,
+      crypto_count: 0,
+      jp_count: 0,
+      kr_count: 0,
+      hk_count: duck.hk_equity,
+      latest_trade_date: null,
+      latest_factor_date: null,
+      kline_dates: { CN: null, HK: null, US: null },
+      profile_count: duck.profiles,
+      partner_count: 0,
+      segment_count: 0,
+      announcement_count: 0,
+      dividend_count: 0,
+      shareholder_count: 0,
+      forecast_count: 0,
+      inst_holding_count: 0,
+      insider_trade_count: 0,
+      buyback_count: 0,
+      last_sync: lastSync,
+      job_progress: jobProgress,
+      is_ready: bootstrap.ready,
+      bootstrap,
+    }
+  }
+
+  private cachedDuckMarketStats(): ReturnType<typeof duckMarketStatsSync> {
+    const now = Date.now()
+    if (this.duckMarketStatsCache && now - this.duckMarketStatsCache.at < 8_000) {
+      return this.duckMarketStatsCache.value
+    }
+    const value = duckMarketStatsSync(this.klineDuckDbPath)
+    this.duckMarketStatsCache = { at: now, value }
+    return value
+  }
+
+  invalidateDuckMarketStatsCache(): void {
+    this.duckMarketStatsCache = null
+  }
+
+  private countEquityInstrumentsSqlite(market: 'CN' | 'US' | 'HK'): number {
+    if (market === 'US') return this.countUsInstruments()
+    if (market === 'HK') return this.countRegionalEquityInstruments('HK')
+    return (this.db.prepare(
+      `SELECT COUNT(*) AS c FROM instruments WHERE market = 'CN' AND asset_class = 'EQUITY'`,
+    ).get() as { c: number }).c
+  }
+
+  /**
+   * Lightweight status while sync runs — avoids full DuckDB scans on every poll.
    */
   getStatusLite(fallback: MarketDbStatus): MarketDbStatus {
     const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
-    const cnEquityCount = this.countEquityInstruments('CN')
+    const cnEquityCount = this.countEquityInstrumentsSqlite('CN')
     const stockCount = Math.max(stocksTableCount, cnEquityCount)
     const latestQuote = this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null }
     return {
@@ -482,20 +569,22 @@ export class MarketDataStore {
     stockCount?: number,
     _latestQuoteDate?: string | null,
     _latestFactorDate?: string | null,
+    duckStats?: ReturnType<typeof duckMarketStatsSync>,
   ): BootstrapReadiness {
-    const cnEquity = stockCount ?? this.countEquityInstruments('CN')
-    const hkEquity = this.countEquityInstruments('HK')
-    const usEquity = this.countEquityInstruments('US')
-    const etfCount = this.listEtfCodes(true).length
+    const duck = duckStats ?? this.cachedDuckMarketStats()
+    const cnEquity = stockCount ?? (duck.cn_equity || this.countEquityInstruments('CN'))
+    const hkEquity = duck.hk_equity || this.countEquityInstruments('HK')
+    const usEquity = duck.us_equity || this.countEquityInstruments('US')
+    const etfCount = duck.etf || this.listEtfCodes(true).length
 
     const initial_cn = cnEquity > 1000
     const initial_hk = hkEquity > 100
     const initial_us = usEquity > 500
     const initial_cn_etf = etfCount > 50
-    const initial_taxonomy = this.countTaxonomyNodes('CN', 'industry') >= 5
+    const initial_taxonomy = (duck.taxonomy || this.countTaxonomyNodes('CN', 'industry')) >= 5
 
-    const klineWithMin = this.listCodesWithMinKlines(60).length
-    const klineRecent = this.countDistinctKlineCodes()
+    const klineWithMin = duck.kline_codes_min60 || this.listCodesWithMinKlines(60).length
+    const klineRecent = duck.kline_codes || this.countDistinctKlineCodes()
     const kline_stock_ratio = cnEquity > 0
       ? Math.round((klineWithMin / cnEquity) * 1000) / 10
       : 0

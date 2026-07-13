@@ -4,6 +4,7 @@ import { jobsForMarketPack } from './market-packs.js'
 import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type MarketDataSyncEngine, type SyncMode, type SyncOptions, type SyncProgress } from './engine.js'
 import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
+import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
 import {
   computeBootstrapOverallPercent,
@@ -33,9 +34,8 @@ export interface SyncStateSnapshot {
 
 const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 5000
-const DB_STATUS_CACHE_MS_RUNNING = 2000
+const DB_STATUS_CACHE_MS_RUNNING = 5000
 const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 12_000
-const PROGRESS_CACHE_INVALIDATE_MS = 1500
 
 /** 名录/行业等 bootstrap 任务 — 运行中用内存进度覆盖 DB 聚合（避免 DuckDB 写入滞后） */
 const BOOTSTRAP_PROGRESS_JOBS = new Set([
@@ -75,7 +75,6 @@ export class MarketSyncCoordinator {
   private snapshot: Partial<SyncStateSnapshot> & { message?: string | null } = {}
   private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
   private bootstrapProgressRepaired = false
-  private lastProgressCacheInvalidate = 0
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
@@ -87,13 +86,16 @@ export class MarketSyncCoordinator {
     if (this.running) {
       const cacheMs = heavyImport ? DB_STATUS_CACHE_MS_HEAVY_IMPORT : DB_STATUS_CACHE_MS_RUNNING
       if (this.dbStatusCache && now - this.dbStatusCache.at < cacheMs) {
-        return heavyImport
-          ? this.overlayThsKlineProgress(this.dbStatusCache.value)
-          : this.dbStatusCache.value
+        let value = this.dbStatusCache.value
+        if (heavyImport) value = this.overlayThsKlineProgress(value)
+        else if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
+          value = this.overlayBootstrapJobProgress(value)
+        }
+        return value
       }
-      const value = heavyImport && this.dbStatusCache
+      const value = this.dbStatusCache
         ? this.store.getStatusLite(this.dbStatusCache.value)
-        : this.store.getStatus()
+        : this.store.getStatusForBootPlan()
       this.dbStatusCache = { at: now, value }
       if (heavyImport) return this.overlayThsKlineProgress(value)
       if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
@@ -169,9 +171,12 @@ export class MarketSyncCoordinator {
   getSnapshot(): SyncStateSnapshot {
     this.store.reconcileStaleSyncState()
     if (!this.bootstrapProgressRepaired) {
-      this.store.repairBootstrapJobProgress()
       this.bootstrapProgressRepaired = true
-      this.dbStatusCache = null
+      setImmediate(() => {
+        try {
+          this.store.repairBootstrapJobProgress()
+        } catch { /* best-effort */ }
+      })
     }
     let session = this.store.getLatestSession()
     if (!this.running && session?.status === 'running') {
@@ -342,11 +347,6 @@ export class MarketSyncCoordinator {
             job_total: p.total,
             message: p.message ?? undefined,
           })
-          const now = Date.now()
-          if (now - this.lastProgressCacheInvalidate >= PROGRESS_CACHE_INVALIDATE_MS) {
-            this.dbStatusCache = null
-            this.lastProgressCacheInvalidate = now
-          }
           if (p.message) {
             const prev = this.snapshot.message
             const phaseChanged = !prev || !p.message.startsWith(prev.split(' ')[0] ?? '')
@@ -380,6 +380,7 @@ export class MarketSyncCoordinator {
             jobs_completed: index + 1,
           }
           this.patchProgress(sessionId, { jobs_completed: index + 1 })
+          this.store.invalidateDuckMarketStatsCache()
           this.invalidateDbStatusCache()
           this.log(sessionId, `任务 ${job} 完成 (${status})`)
         },
@@ -416,19 +417,33 @@ export class MarketSyncCoordinator {
   /** Auto-start on app/server boot: resume interrupted sync or refresh stale daily data. */
   autoSyncOnBoot(): void {
     if (this.running) return
-    this.store.repairKlineImportArtifacts()
+    setImmediate(() => void this.runAutoSyncOnBoot())
+  }
+
+  private async runAutoSyncOnBoot(): Promise<void> {
+    if (this.running) return
     this.store.reconcileStaleSyncState()
     const stale = this.store.getLatestSession()
     if (stale?.status === 'running') {
       this.store.finishSession(stale.id, 'interrupted', '进程重启，等待接续')
     }
 
-    const status = this.store.getStatus()
+    setImmediate(() => {
+      try {
+        this.store.repairKlineImportArtifacts()
+      } catch { /* background repair */ }
+    })
+
+    try {
+      await resumeKlineParquetFromCacheIfNeeded(this.store)
+    } catch { /* 缓存恢复失败时由后续同步计划重试 */ }
+
+    const status = this.store.getStatusForBootPlan()
     const session = this.store.getLatestSession()
     const plan = resolveAutoBootPlan(status, session)
     if (!plan) return
 
-    void this.start({
+    await this.start({
       mode: plan.mode,
       jobs: [...plan.jobs],
       background: true,

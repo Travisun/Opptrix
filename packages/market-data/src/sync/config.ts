@@ -347,4 +347,6 @@ export const DUMP_IMPORT_CONFIG = {
   incrementalDumpId: 'a_share_daily_k_1d_none_10d',
   /** Adjustment factors dump ID */
   adjustmentDumpId: 'a_share_adjustment_factors_event_none_all',
+  /** 本地 Parquet 缓存有效期（天）；未过期则跳过下载直接导入 */
+  parquetCacheMaxAgeDays: 7,
 }

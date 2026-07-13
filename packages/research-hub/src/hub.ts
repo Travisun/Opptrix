@@ -563,9 +563,19 @@ export class ResearchHub {
 
   private async marketDbSync(params: Record<string, unknown>, t0: number) {
     const force = params.force === true
+    const modeRaw = String(params.mode ?? 'auto')
+    if (modeRaw === 'auto') {
+      const result = await this.marketData.syncAdaptive(force)
+      return ok({
+        started: result.started,
+        running: result.running,
+        mode: result.mode,
+        plan: result.plan.label,
+      }, '数据同步', t0)
+    }
     const jobs = [...CN_MANUAL_SYNC_JOBS]
-    const mode = force ? 'full' : 'incremental'
-    const result = await this.marketData.sync({ mode, jobs, force: true, background: true })
+    const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
+    const result = await this.marketData.sync({ mode, jobs, force, background: true })
     return ok({
       started: result.started,
       running: result.running,

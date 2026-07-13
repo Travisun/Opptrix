@@ -297,8 +297,16 @@ CREATE TABLE IF NOT EXISTS etf_holdings (
 );
 `
 
-/** 分析视图 — 与 analytics/duck-query 兼容；升级时先 DROP 旧物理 dim/fact 表 */
+/** 分析视图 — 与 analytics/duck-query 兼容；升级时先 DROP 旧 VIEW/物理表 */
 export const MARKET_VIEWS_SQL = `
+DROP VIEW IF EXISTS dim_cn_stocks;
+DROP VIEW IF EXISTS dim_instruments;
+DROP VIEW IF EXISTS dim_taxonomy;
+DROP VIEW IF EXISTS bridge_instrument_taxonomy;
+DROP VIEW IF EXISTS fact_quotes_daily;
+DROP VIEW IF EXISTS fact_factors;
+DROP VIEW IF EXISTS fact_scores;
+DROP VIEW IF EXISTS dim_financials_latest;
 DROP TABLE IF EXISTS dim_cn_stocks;
 DROP TABLE IF EXISTS dim_instruments;
 DROP TABLE IF EXISTS dim_taxonomy;

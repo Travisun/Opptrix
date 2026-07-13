@@ -48,6 +48,7 @@ export async function syncStockIndexCnEtf(
   store: MarketDataStore,
   cfg: JobSyncConfig,
   callbacks: InitialSyncCallbacks = {},
+  job = 'initial_cn_etf',
 ): Promise<{ total: number; success: number }> {
   callbacks.onLog?.('从 StockIndex API 拉取 A 股 ETF 名录（不经过其他 Provider）…')
   callbacks.onProgress?.(0, 0, '拉取 A 股 ETF 名录…')
@@ -65,7 +66,11 @@ export async function syncStockIndexCnEtf(
   for (const [i, item] of items.entries()) {
     const row = stockIndexItemToListRow(item)
     if (!row) continue
-    if (persistCnEtfRow(store, row, item.exchange)) success++
+    const code = persistCnEtfRow(store, row, item.exchange)
+    if (code) {
+      success++
+      store.markJobProgress(job, code, '', 'done')
+    }
     if (i % 25 === 0 || i === items.length - 1) {
       callbacks.onProgress?.(i + 1, items.length, '写入 A 股 ETF 名录')
     }
@@ -85,7 +90,7 @@ export async function syncInitialCnEtf(
   cfg: JobSyncConfig,
   callbacks: InitialSyncCallbacks = {},
 ): Promise<{ total: number; success: number }> {
-  const result = await syncStockIndexCnEtf(store, cfg, callbacks)
+  const result = await syncStockIndexCnEtf(store, cfg, callbacks, 'initial_cn_etf')
   if (result.success === 0) {
     throw new Error('A 股 ETF 名录同步失败：StockIndex 未能写入任何 ETF')
   }

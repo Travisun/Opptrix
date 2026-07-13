@@ -546,7 +546,11 @@ async function cmdMarketStats(flags: Record<string, string>) {
   if (!duckPath) throw new Error('market-stats 需要 --duckdb')
   if (!fs.existsSync(duckPath)) {
     process.stdout.write(JSON.stringify({
-      stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0, profiles: 0, etf: 0,
+      stocks: 0, instruments: 0, taxonomy: 0, quotes: 0, factors: 0, klines: 0,
+      kline_codes: 0, kline_codes_min60: 0, profiles: 0, etf: 0,
+      cn_equity: 0, hk_equity: 0, us_equity: 0,
+      announcements: 0, dividends: 0, partners: 0, segments: 0,
+      shareholders: 0, forecasts: 0, inst_holdings: 0, insider_trades: 0, buybacks: 0,
     }))
     return
   }
