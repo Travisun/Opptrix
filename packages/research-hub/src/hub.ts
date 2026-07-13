@@ -519,6 +519,7 @@ export class ResearchHub {
       local_offline_screening_enabled: enabled,
       local_kline_ready: hasKlines,
       local_factor_ready: hasFactors,
+      storage_note: '主数据在 DuckDB（db_path / duck_db_path）；SQLite control_db_path 仅同步控制面',
       guidance,
       status_mode: 'light',
     }, '本地数据状态', t0)

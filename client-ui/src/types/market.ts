@@ -547,7 +547,11 @@ export interface EtfListItem {
 }
 
 export interface MarketDbStatusData {
+  /** 主数据 DuckDB 路径 */
   db_path: string
+  control_db_path?: string
+  duck_db_path?: string
+  primary_storage?: 'duckdb'
   schema_version: number
   stock_count: number
   etf_count?: number

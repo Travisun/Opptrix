@@ -53,7 +53,13 @@ export interface JobProgressSummary {
 }
 
 export interface MarketDbStatus {
+  /** 主数据存储路径（DuckDB） */
   db_path: string
+  /** 同步控制面 SQLite（sync_cursor / job_progress） */
+  control_db_path: string
+  /** @alias db_path */
+  duck_db_path: string
+  primary_storage: 'duckdb'
   schema_version: number
   stock_count: number
   etf_count: number
@@ -125,6 +131,18 @@ export class MarketDataStore {
   /** 统一 DuckDB 访问入口 — 所有 market.duckdb 读写须经此 Gateway */
   duckGateway(): MarketDuckGateway {
     return getMarketDuckGateway(this.klineDuckDbPath, this.dbPath)
+  }
+
+  private statusStorageFields(): Pick<
+    MarketDbStatus,
+    'db_path' | 'control_db_path' | 'duck_db_path' | 'primary_storage'
+  > {
+    return {
+      db_path: this.klineDuckDbPath,
+      control_db_path: this.dbPath,
+      duck_db_path: this.klineDuckDbPath,
+      primary_storage: 'duckdb',
+    }
   }
 
   constructor(dbPath = marketDbPath(), duckPath = klineDuckDbPath()) {
@@ -406,10 +424,7 @@ export class MarketDataStore {
       'SELECT MAX(trade_date) AS d FROM stock_quotes_daily', [],
       () => this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_quotes_daily').get() as { d: string | null },
     ) ?? { d: null }
-    const latestFactor = this.duckRead<{ d: string | null }>(
-      'SELECT MAX(trade_date) AS d FROM stock_factors', [],
-      () => this.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null },
-    ) ?? { d: null }
+    const latestFactor = { d: this.latestFactorTradeDate() }
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
     const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
       job_name: string
@@ -467,7 +482,7 @@ export class MarketDataStore {
     this.enrichThsKlineDumpJobProgress(jobProgress, stockCount, bootstrap, lastSync)
 
     return {
-      db_path: this.db.name,
+      ...this.statusStorageFields(),
       schema_version: schemaVersion,
       stock_count: stockCount,
       etf_count: etfCount,
@@ -534,7 +549,7 @@ export class MarketDataStore {
 
     const bootstrap = this.assessBootstrapReadiness(stockCount, null, null, duck)
     return {
-      db_path: this.db.name,
+      ...this.statusStorageFields(),
       schema_version: 0,
       stock_count: stockCount,
       etf_count: duck.etf,
@@ -604,23 +619,47 @@ export class MarketDataStore {
     this.statusLightCache = null
   }
 
+  /** Agent statusLight 专用 — 不触发 hasMarketData()/market-stats 全表扫描 */
+  private latestFactorTradeDate(): string | null {
+    const cursorMeta = this.getCursorMeta('screen_factors')
+    const cursorDate = cursorMeta?.trade_date
+    if (typeof cursorDate === 'string' && cursorDate.trim()) {
+      return cursorDate.slice(0, 10)
+    }
+    if (this.duckGateway().duckExists() && !this.shouldDeferDuckSubprocessRead()) {
+      const d = this.duckGateway().queryOneSync<{ d: string | null }>(
+        'SELECT MAX(trade_date) AS d FROM stock_factors', [],
+      )?.d
+      if (d) return d
+    }
+    return (this.db.prepare(
+      'SELECT MAX(trade_date) AS d FROM stock_factors',
+    ).get() as { d: string | null }).d
+  }
+
   private buildStatusLight(): MarketDbStatus {
     const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
     const cnEquityCount = this.countEquityInstrumentsSqlite('CN')
     const stockCount = Math.max(stocksTableCount, cnEquityCount)
     const etfCount = this.countEtfInstruments()
     const usCount = this.countUsInstruments()
-    const cryptoCount = this.countCryptoInstruments()
-    const jpCount = this.countRegionalEquityInstruments('JP')
-    const krCount = this.countRegionalEquityInstruments('KR')
-    const hkCount = this.countRegionalEquityInstruments('HK')
+    const cryptoCount = (this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'CRYPTO_SPOT' AND market = 'CRYPTO'
+    `).get() as { c: number }).c
+    const jpCount = (this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'JP'
+    `).get() as { c: number }).c
+    const krCount = (this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'KR'
+    `).get() as { c: number }).c
+    const hkCount = (this.db.prepare(`
+      SELECT COUNT(*) AS c FROM instruments WHERE asset_class = 'EQUITY' AND market = 'HK'
+    `).get() as { c: number }).c
 
     const latestQuote = this.db.prepare(
       'SELECT MAX(trade_date) AS d FROM stock_quotes_daily',
     ).get() as { d: string | null }
-    const latestFactor = this.db.prepare(
-      'SELECT MAX(trade_date) AS d FROM stock_factors',
-    ).get() as { d: string | null }
+    const latestFactor = { d: this.latestFactorTradeDate() }
 
     const schemaVersion = (this.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get() as { v: number }).v ?? 0
     const cursors = this.db.prepare('SELECT job_name, last_success_at FROM sync_cursor').all() as {
@@ -659,7 +698,7 @@ export class MarketDataStore {
     this.enrichKlineJobProgressLight(jobProgress, stockCount, bootstrap, lastSync)
 
     return {
-      db_path: this.db.name,
+      ...this.statusStorageFields(),
       schema_version: schemaVersion,
       stock_count: stockCount,
       etf_count: etfCount,
@@ -832,6 +871,7 @@ export class MarketDataStore {
       ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
     const klines = kline_stock_ratio >= 95
+    const screen_factors = (duck.factors ?? 0) > 0 || Boolean(_latestFactorDate)
 
     const ready = initial_cn && initial_taxonomy && klines
 
@@ -846,12 +886,12 @@ export class MarketDataStore {
       quotes: false,
       klines,
       fundamentals: false,
-      screen_factors: false,
+      screen_factors,
       quote_stock_ratio: 0,
       kline_stock_ratio,
       kline_recent_ratio,
       fin_stock_ratio: 0,
-      factor_stock_ratio: 0,
+      factor_stock_ratio: screen_factors && cnEquity > 0 ? 100 : 0,
       kline_cross_market: false,
     }
   }
@@ -860,9 +900,7 @@ export class MarketDataStore {
   screenFactorsStale(tradeDate = todayTradeDate()): boolean {
     const stats = this.klineStats()
     if (!stats.rows || !stats.maxDate) return false
-    const latestFactor = this.duckGateway().queryOneSync<{ d: string | null }>(
-      'SELECT MAX(trade_date) AS d FROM stock_factors', [],
-    )?.d ?? null
+    const latestFactor = this.latestFactorTradeDate()
     if (!latestFactor) return true
     return latestFactor < stats.maxDate || latestFactor < tradeDate
   }

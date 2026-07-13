@@ -96,8 +96,20 @@ export interface IndustryListItem {
   down_count?: number
 }
 
-export function latestFactorDate(db: Database.Database): string | null {
-  const row = db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
+export function latestFactorDate(store: MarketDataStore): string | null {
+  const cursorMeta = store.getCursorMeta('screen_factors')
+  const cursorDate = cursorMeta?.trade_date
+  if (typeof cursorDate === 'string' && cursorDate.trim()) {
+    return cursorDate.slice(0, 10)
+  }
+  const gw = store.duckGateway()
+  if (gw.duckExists()) {
+    const d = gw.queryOneSync<{ d: string | null }>(
+      'SELECT MAX(trade_date) AS d FROM stock_factors', [],
+    )?.d
+    if (d) return d
+  }
+  const row = store.db.prepare('SELECT MAX(trade_date) AS d FROM stock_factors').get() as { d: string | null }
   return row.d
 }
 
@@ -176,13 +188,37 @@ export function localScreen(
   excludeSt = true,
 ): { trade_date: string; passed: number; items: LocalScreenItem[] } {
   assertOfflineScreeningEnabled()
-  const db = store.db
-  const date = tradeDate ?? latestFactorDate(db) ?? todayTradeDate()
+  const date = tradeDate ?? latestFactorDate(store) ?? todayTradeDate()
 
   if (!conditions.length) {
     return { trade_date: date, passed: 0, items: [] }
   }
 
+  if (useDuck(store)) {
+    const duck = store.duckGateway().queryUniverseScreenSync({
+      factor_conditions: conditions,
+      top_n: topN,
+      trade_date: date,
+      exclude_st: excludeSt,
+    }, date) as LocalUniverseScreenResult | null
+    if (duck?.items != null) {
+      return {
+        trade_date: duck.trade_date,
+        passed: duck.passed,
+        items: duck.items.map(item => ({
+          code: item.code,
+          name: item.name,
+          total_score: item.total_score,
+          industry: item.industry,
+          pe: item.pe,
+          pb: item.pb,
+          key_factors: item.key_factors,
+        })),
+      }
+    }
+  }
+
+  const db = store.db
   const wheres = ["s.status = 'active'"]
   if (excludeSt) wheres.push('s.is_st = 0')
 
@@ -303,7 +339,7 @@ export function localUniverseScreen(
   query: LocalUniverseScreenQuery,
 ): LocalUniverseScreenResult {
   assertOfflineScreeningEnabled()
-  const date = query.trade_date ?? latestFactorDate(store.db) ?? todayTradeDate()
+  const date = query.trade_date ?? latestFactorDate(store) ?? todayTradeDate()
 
   if (useDuck(store)) {
     const duck = store.duckGateway().queryUniverseScreenSync(query, date) as LocalUniverseScreenResult | null
@@ -499,7 +535,7 @@ export interface IndustryStockRow {
 }
 
 export function queryIndustryStats(store: MarketDataStore, tradeDate?: string) {
-  const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
+  const factorDate = tradeDate ?? latestFactorDate(store) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   if (useDuck(store)) {
     const duck = store.duckGateway().queryIndustryStatsSync(factorDate) as {
       trade_date: string
@@ -620,7 +656,7 @@ export function queryIndustryStocks(
   tradeDate?: string,
   limit = 120,
 ): { trade_date: string; quote_date: string | null; industry: string; items: IndustryStockRow[] } {
-  const factorDate = tradeDate ?? latestFactorDate(store.db) ?? latestQuoteDate(store.db) ?? todayTradeDate()
+  const factorDate = tradeDate ?? latestFactorDate(store) ?? latestQuoteDate(store.db) ?? todayTradeDate()
   const quoteDate = latestQuoteDate(store.db)
   const key = industry.trim()
   const cap = Math.min(Math.max(limit, 1), 200)
@@ -690,7 +726,7 @@ export function queryIndustryStocks(
 }
 
 export function queryRadarBatch(store: MarketDataStore, codes: string[], tradeDate?: string) {
-  const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
+  const date = tradeDate ?? latestFactorDate(store) ?? todayTradeDate()
   if (!codes.length) return []
   const placeholders = codes.map(() => '?').join(',')
   return store.db.prepare(`
@@ -736,7 +772,7 @@ export function queryDiscoverCandidates(
 ): DiscoverCandidateRow[] {
   assertOfflineScreeningEnabled()
   if (!codes.length) return []
-  const date = tradeDate ?? latestFactorDate(store.db) ?? todayTradeDate()
+  const date = tradeDate ?? latestFactorDate(store) ?? todayTradeDate()
   const placeholders = codes.map(() => '?').join(',')
   const baseRows = store.db.prepare(`
     SELECT
