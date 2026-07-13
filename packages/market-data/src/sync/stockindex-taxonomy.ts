@@ -17,7 +17,7 @@ import type { MarketDataStore } from '../store.js'
 import type { JobSyncConfig } from './config.js'
 import type { InitialSyncCallbacks } from './initial-sync.js'
 import { persistCnEquityListRow } from './persist-universe.js'
-import { sleep } from './pool.js'
+import { sleep, withRetry } from './pool.js'
 
 type TaxonomyKind = 'industry' | 'board'
 
@@ -28,37 +28,41 @@ function equityListRows(items: StockIndexItem[]): StockListItem[] {
 }
 
 async function fetchAllIndustryStocks(industryCode: string): Promise<StockListItem[]> {
-  const rows: StockListItem[] = []
-  let page = 1
-  const pageSize = 100
-  while (page <= 200) {
-    const resp = await stockIndexListIndustryStocks(industryCode, { page, pageSize })
-    const batch = equityListRows(resp.items ?? [])
-    if (!batch.length) break
-    rows.push(...batch)
-    const total = resp.total ?? 0
-    if (total > 0 && rows.length >= total) break
-    if (batch.length < pageSize) break
-    page++
-  }
-  return rows
+  return withRetry(async () => {
+    const rows: StockListItem[] = []
+    let page = 1
+    const pageSize = 100
+    while (page <= 200) {
+      const resp = await stockIndexListIndustryStocks(industryCode, { page, pageSize })
+      const batch = equityListRows(resp.items ?? [])
+      if (!batch.length) break
+      rows.push(...batch)
+      const total = resp.total ?? 0
+      if (total > 0 && rows.length >= total) break
+      if (batch.length < pageSize) break
+      page++
+    }
+    return rows
+  }, 3, 800)
 }
 
 async function fetchAllBoardStocks(boardKey: string): Promise<StockListItem[]> {
-  const rows: StockListItem[] = []
-  let page = 1
-  const pageSize = 100
-  while (page <= 200) {
-    const resp = await stockIndexListBoardStocks(boardKey, { market: 'CN', page, pageSize })
-    const batch = equityListRows(resp.items ?? [])
-    if (!batch.length) break
-    rows.push(...batch)
-    const total = resp.total ?? 0
-    if (total > 0 && rows.length >= total) break
-    if (batch.length < pageSize) break
-    page++
-  }
-  return rows
+  return withRetry(async () => {
+    const rows: StockListItem[] = []
+    let page = 1
+    const pageSize = 100
+    while (page <= 200) {
+      const resp = await stockIndexListBoardStocks(boardKey, { market: 'CN', page, pageSize })
+      const batch = equityListRows(resp.items ?? [])
+      if (!batch.length) break
+      rows.push(...batch)
+      const total = resp.total ?? 0
+      if (total > 0 && rows.length >= total) break
+      if (batch.length < pageSize) break
+      page++
+    }
+    return rows
+  }, 3, 800)
 }
 
 async function syncTaxonomyNodes(
@@ -80,9 +84,20 @@ async function syncTaxonomyNodes(
 ): Promise<{ nodes: number; links: number }> {
   let nodes = 0
   let links = 0
+  let errors = 0
 
   for (const [i, entry] of entries.entries()) {
-    const members = await fetchMembers(entry.code)
+    let members: StockListItem[]
+    try {
+      members = await fetchMembers(entry.code)
+    } catch (e) {
+      errors++
+      const msg = e instanceof Error ? e.message : String(e)
+      callbacks.onLog?.(`StockIndex ${entry.name}（${entry.code}）拉取失败，跳过: ${msg}`)
+      callbacks.onProgress?.(i + 1, entries.length, label)
+      if (cfg.delayMs > 0) await sleep(cfg.delayMs)
+      continue
+    }
     if (!members.length) {
       callbacks.onLog?.(`StockIndex ${entry.name}（${entry.code}）：成分股为空，跳过`)
       callbacks.onProgress?.(i + 1, entries.length, label)
@@ -119,6 +134,10 @@ async function syncTaxonomyNodes(
 
     callbacks.onProgress?.(i + 1, entries.length, label)
     if (cfg.delayMs > 0) await sleep(cfg.delayMs)
+  }
+
+  if (errors > 0) {
+    callbacks.onLog?.(`${label}: ${errors} 个分类拉取失败，已写入 ${nodes} 个节点`)
   }
 
   return { nodes, links }
@@ -172,7 +191,11 @@ export async function syncStockIndexCnTaxonomy(
   let links = 0
 
   for (const level of [1, 2] as const) {
-    const resp = await stockIndexListIndustries({ market: 'CN', level, withCount: true })
+    const resp = await withRetry(
+      () => stockIndexListIndustries({ market: 'CN', level, withCount: true }),
+      3,
+      800,
+    )
     const entries = industryEntries(resp.items ?? [], level)
     callbacks.onLog?.(`StockIndex 申万 ${level} 级行业：${entries.length} 个`)
     const r = await syncTaxonomyNodes(
@@ -189,7 +212,11 @@ export async function syncStockIndexCnTaxonomy(
     links += r.links
   }
 
-  const boardsResp = await stockIndexListBoards({ market: 'CN', withCount: true })
+  const boardsResp = await withRetry(
+    () => stockIndexListBoards({ market: 'CN', withCount: true }),
+    3,
+    800,
+  )
   const boardRows = boardEntries(boardsResp.items ?? [])
   callbacks.onLog?.(`StockIndex A 股板块：${boardRows.length} 个`)
   const br = await syncTaxonomyNodes(
@@ -220,9 +247,21 @@ export async function syncAllInitialTaxonomy(
   cfg: JobSyncConfig,
   callbacks: InitialSyncCallbacks = {},
 ): Promise<{ nodes: number; links: number }> {
-  const result = await syncStockIndexCnTaxonomy(store, cfg, callbacks)
-  if (result.nodes === 0) {
-    throw new Error('A 股行业/板块分类同步失败：StockIndex 未能写入任何分类节点')
+  try {
+    const result = await syncStockIndexCnTaxonomy(store, cfg, callbacks)
+    if (result.nodes === 0) {
+      throw new Error('A 股行业/板块分类同步失败：StockIndex 未能写入任何分类节点')
+    }
+    return result
+  } catch (e) {
+    const existing = store.countTaxonomyNodes('CN', 'industry')
+    if (existing >= 5) {
+      const msg = e instanceof Error ? e.message : String(e)
+      callbacks.onLog?.(
+        `行业/板块在线同步失败（${msg}），保留本地已有 ${existing} 个行业节点`,
+      )
+      return { nodes: existing, links: 0 }
+    }
+    throw e
   }
-  return result
 }

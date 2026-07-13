@@ -76,6 +76,10 @@ export async function syncStockIndexUniverse(
     callbacks.onProgress?.(fetched, denom, `拉取${label}名录`)
   })
   if (!items.length) {
+    if (market === 'HK' || market === 'US') {
+      callbacks.onLog?.(`StockIndex 暂无${label}名录，跳过（不影响 A 股初选）`)
+      return { total: 0, success: 0 }
+    }
     throw new Error(`StockIndex /api/v1/stocks?market=${market} 无数据`)
   }
 
@@ -115,6 +119,10 @@ export async function syncInitialStockIndexUniverse(
 ): Promise<{ total: number; success: number }> {
   const result = await syncStockIndexUniverse(store, market, job, cfg, callbacks)
   if (result.success === 0) {
+    if (market === 'HK' || market === 'US') {
+      callbacks.onLog?.(`${MARKET_LABEL[market]}名录暂无数据，已跳过`)
+      return result
+    }
     throw new Error(`${MARKET_LABEL[market]}名录同步失败：StockIndex 未能写入任何标的`)
   }
   return result

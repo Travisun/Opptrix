@@ -608,5 +608,6 @@ export interface MarketDataSyncState {
   overall_percent: number
   message: string | null
   logs: string[]
+  failed_jobs?: Array<{ job: string; error: string }>
   db_status: MarketDbStatusData
 }

@@ -60,3 +60,8 @@ export function daysSince(iso: string | null): number {
   if (!iso) return Number.POSITIVE_INFINITY
   return (Date.now() - new Date(iso).getTime()) / 86400000
 }
+
+export function minutesSince(iso: string | null): number {
+  if (!iso) return Number.POSITIVE_INFINITY
+  return (Date.now() - new Date(iso).getTime()) / 60000
+}

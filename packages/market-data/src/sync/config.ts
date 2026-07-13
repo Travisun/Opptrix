@@ -3,6 +3,8 @@ export interface JobSyncConfig {
   concurrency: number
   delayMs: number
   ttlDays?: number
+  /** 距上次成功同步的最短间隔（分钟）；手动重复同步时未到期则跳过 */
+  minIntervalMinutes?: number
   /** Extra pages for paginated APIs (announcements). */
   pages?: number
 }
@@ -274,14 +276,17 @@ export function isTushareBackedSyncJob(job: string): boolean {
   return TUSHARE_PER_STOCK_JOBS.has(job)
 }
 
+/** StockIndex 名录/行业 — 手动重复同步最短间隔（分钟） */
+export const STOCKINDEX_MIN_RESYNC_MINUTES = 20
+
 export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
-  initial_cn_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_cn_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_hk_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_us_universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  initial_cn_etf: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 行业 — 与名录每周交替（见 schedule.ts） */
-  initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 7 },
-  /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7 },
+  initial_taxonomy: { concurrency: 1, delayMs: 120, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
+  /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 日频截面 — 每个交易日刷新 */
   quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },
   /** 6 月日 K 首次补全 — 同花顺 10 年 Parquet 全量包 */

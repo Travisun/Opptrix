@@ -12,6 +12,11 @@ import {
   isBootstrapJobList,
 } from './progress.js'
 
+export interface SyncFailedJob {
+  job: string
+  error: string
+}
+
 export interface SyncStateSnapshot {
   running: boolean
   mode: SyncMode | null
@@ -29,6 +34,7 @@ export interface SyncStateSnapshot {
   overall_percent: number
   message: string | null
   logs: string[]
+  failed_jobs: SyncFailedJob[]
   db_status: MarketDbStatus
 }
 
@@ -75,6 +81,8 @@ export class MarketSyncCoordinator {
   private snapshot: Partial<SyncStateSnapshot> & { message?: string | null } = {}
   private dbStatusCache: { at: number; value: MarketDbStatus } | null = null
   private bootstrapProgressRepaired = false
+  private lastJobResults: Record<string, string> = {}
+  private lastJobResultsSessionId: number | null = null
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
@@ -260,8 +268,33 @@ export class MarketSyncCoordinator {
       overall_percent: overall,
       message: sessionMessage,
       logs,
+      failed_jobs: this.resolveFailedJobs(session),
       db_status: dbStatus,
     }
+  }
+
+  private failedJobsFromResults(
+    results: Record<string, string>,
+  ): SyncFailedJob[] {
+    return Object.entries(results)
+      .filter(([, v]) => String(v).startsWith('failed'))
+      .map(([job, v]) => ({
+        job,
+        error: String(v).replace(/^failed:\s*/, '') || '未知错误',
+      }))
+  }
+
+  private resolveFailedJobs(
+    session: ReturnType<MarketDataStore['getLatestSession']>,
+  ): SyncFailedJob[] {
+    if (session?.id != null && this.lastJobResultsSessionId === session.id) {
+      const fromMemory = this.failedJobsFromResults(this.lastJobResults)
+      if (fromMemory.length) return fromMemory
+    }
+    if (session?.id != null && (session.status === 'partial' || session.status === 'interrupted')) {
+      return this.store.getFailedRunsForSession(session.id)
+    }
+    return []
   }
 
   isRunning(): boolean {
@@ -382,7 +415,14 @@ export class MarketSyncCoordinator {
           this.patchProgress(sessionId, { jobs_completed: index + 1 })
           this.store.invalidateDuckMarketStatsCache()
           this.invalidateDbStatusCache()
-          this.log(sessionId, `任务 ${job} 完成 (${status})`)
+          if (String(status).startsWith('failed')) {
+            const err = String(status).replace(/^failed:\s*/, '')
+            this.log(sessionId, `✗ 任务失败 · ${job}: ${err}`)
+          } else if (String(status) === 'skipped') {
+            this.log(sessionId, `○ 任务跳过 · ${job}`)
+          } else {
+            this.log(sessionId, `✓ 任务完成 · ${job} (${status})`)
+          }
         },
       })
       const failed = Object.values(result.jobs).filter(v => String(v).startsWith('failed')).length
@@ -391,6 +431,8 @@ export class MarketSyncCoordinator {
         options.jobs,
         this.store.getStatus(),
       )
+      this.lastJobResults = result.jobs
+      this.lastJobResultsSessionId = sessionId
       const pack = options.marketPack
       if (pack) {
         const packJobs = [...jobsForMarketPack(pack)]
@@ -399,7 +441,13 @@ export class MarketSyncCoordinator {
       }
       let msg: string
       if (failed > 0) {
-        msg = `同步结束，${failed} 个任务失败`
+        const details = this.failedJobsFromResults(result.jobs)
+          .map(f => `${f.job}: ${f.error}`)
+          .join('；')
+        msg = `同步结束，${failed} 个任务失败 — ${details}`
+        for (const f of this.failedJobsFromResults(result.jobs)) {
+          this.log(sessionId, `失败详情 · ${f.job}: ${f.error}`)
+        }
       } else if (bootstrap.ready) {
         msg = '初选包已就绪，可开始本地挖掘'
       } else {
@@ -411,6 +459,9 @@ export class MarketSyncCoordinator {
       const msg = e instanceof Error ? e.message : String(e)
       this.store.finishSession(sessionId, 'interrupted', msg)
       this.log(sessionId, `同步中断: ${msg}`)
+      if (e instanceof Error && e.stack) {
+        this.log(sessionId, e.stack)
+      }
     }
   }
 

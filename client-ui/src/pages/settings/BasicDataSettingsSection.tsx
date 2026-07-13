@@ -63,11 +63,10 @@ const SYNC_JOB_LABELS: Record<string, string> = {
   initial_hk_universe: '港股名录',
   initial_us_universe: '美股名录',
   initial_taxonomy: 'A 股行业/板块',
-  kline_bootstrap: 'A 股历史 K 线',
-  kline_daily: 'A 股日 K 线',
+  kline_bootstrap: 'A 股 K 线',
 }
 
-/** 同步任务展示顺序（与 pipeline 一致） */
+/** 设置页展示的任务（不含 kline_daily — 全量包已含近期日 K，增量维护在后台按 TTL 执行） */
 const SYNC_JOB_ITEMS = [
   'initial_cn_universe',
   'initial_cn_etf',
@@ -75,7 +74,6 @@ const SYNC_JOB_ITEMS = [
   'initial_us_universe',
   'initial_taxonomy',
   'kline_bootstrap',
-  'kline_daily',
 ] as const
 
 const useStyles = makeStyles({
@@ -233,17 +231,43 @@ const useStyles = makeStyles({
     color: opptrixCssVars.error,
   },
   logPanel: {
-    maxHeight: '140px',
-    overflowY: 'auto',
-    padding: '10px 16px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+  },
+  logTextarea: {
+    width: '100%',
+    minHeight: '160px',
+    maxHeight: '280px',
+    resize: 'vertical',
+    padding: '10px 12px',
     fontSize: '11px',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.6,
+    color: opptrixCssVars.textSecondary,
+    lineHeight: 1.55,
     backgroundColor: opptrixCssVars.gray100,
     borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid ${opptrixCssVars.border}`,
+    boxSizing: 'border-box',
+    userSelect: 'text',
+    WebkitUserSelect: 'text',
+  },
+  failedBanner: {
+    padding: '8px 12px',
+    fontSize: '12px',
+    lineHeight: 1.5,
+    color: opptrixCssVars.error,
+    backgroundColor: opptrixCssVars.errorSoft,
+    borderRadius: opptrixTokens.radiusMd,
+    border: `1px solid rgba(255, 59, 48, 0.2)`,
   },
 })
+
+function truncateError(msg: string, max = 72): string {
+  const oneLine = msg.replace(/\s+/g, ' ').trim()
+  if (oneLine.length <= max) return oneLine
+  return `${oneLine.slice(0, max - 1)}…`
+}
 
 function formatDate(dateStr: string | null): string {
   if (!dateStr) return '—'
@@ -296,16 +320,18 @@ function idleJobDetail(
 
   if (THS_KLINE_JOBS.has(jobName)) {
     const parts: string[] = []
-    if (done > 0) parts.push(`${done.toLocaleString()} 只日 K`)
+    if (done > 0) parts.push(`${done.toLocaleString()} 只`)
     else if (typeof recentRatio === 'number' && recentRatio > 0) {
-      parts.push(`日 K 覆盖 ${recentRatio.toFixed(1)}%`)
+      parts.push(`覆盖 ${recentRatio.toFixed(1)}%`)
     }
     if (typeof depthRatio === 'number' && depthRatio > 0) {
       parts.push(`历史深度 ${depthRatio.toFixed(1)}%`)
-    } else if ((done > 0 || (recentRatio ?? 0) > 0) && jobName === 'kline_bootstrap') {
-      parts.push('历史深度待补全')
     }
     if (latest) parts.push(`最新 ${formatDate(latest)}`)
+    const lastBoot = dbStatus?.last_sync?.kline_bootstrap
+    if (lastBoot && !dbStatus?.last_sync?.kline_daily) {
+      parts.push('全量已含近期日 K')
+    }
     return parts.length ? parts.join(' · ') : '—'
   }
 
@@ -340,7 +366,7 @@ function resolveJobProgress(
   const isKlineDump = THS_KLINE_JOBS.has(jobName)
   const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
 
-  if (isKlineDump) {
+  if (THS_KLINE_JOBS.has(jobName)) {
     const batch = isJobRunning ? runningBatchProgress(syncState) : null
     if (batch && batch.total > 0) {
       return {
@@ -349,13 +375,16 @@ function resolveJobProgress(
         isComplete: false,
       }
     }
-    const ratio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
-    const isComplete = jobName === 'kline_bootstrap'
-      ? (dbStatus?.bootstrap?.klines ?? false)
-      : pending === 0 && done > 0 && error === 0
+    const depthRatio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
+    const recentRatio = dbStatus?.bootstrap?.kline_recent_ratio ?? 0
+    const lastBootstrap = dbStatus?.last_sync?.kline_bootstrap
+    const lastDaily = dbStatus?.last_sync?.kline_daily
+    const importDone = !!(lastBootstrap || lastDaily)
+    const isComplete = (dbStatus?.bootstrap?.klines ?? false) || importDone
+    const ratio = Math.max(depthRatio, recentRatio)
     return {
-      pct: Math.min(100, Math.round(ratio * 10) / 10),
-      hasData: ratio > 0 || done > 0 || isJobRunning,
+      pct: isComplete ? 100 : Math.min(100, Math.round(ratio * 10) / 10),
+      hasData: ratio > 0 || done > 0 || isJobRunning || importDone,
       isComplete,
     }
   }
@@ -486,6 +515,30 @@ export default function BasicDataSettingsSection() {
   const etfCount = dbStatus?.etf_count ?? 0
   const usCount = dbStatus?.us_count ?? 0
   const hkCount = dbStatus?.hk_count ?? 0
+  const failedJobs = syncState?.failed_jobs ?? []
+  const failedJobMap = new Map(failedJobs.map(f => [f.job, f.error]))
+  const logLines = syncState?.logs ?? []
+  const logText = [
+    ...(failedJobs.length > 0
+      ? [
+        '--- 失败任务 ---',
+        ...failedJobs.map(f => `${jobDisplayName(f.job)} (${f.job}):\n${f.error}`),
+        '',
+      ]
+      : []),
+    ...logLines.slice(-80).reverse(),
+  ].join('\n')
+  const displayOverall = (() => {
+    if (!dbStatus) return overallPercent
+    let sum = 0
+    for (const jobName of SYNC_JOB_ITEMS) {
+      const isJobRunning = isRunning && syncState?.current_job === jobName
+      sum += resolveJobProgress(jobName, dbStatus, syncState, isJobRunning).pct
+    }
+    return Math.round((sum / SYNC_JOB_ITEMS.length) * 10) / 10
+  })()
+  const progressPercent = isRunning ? overallPercent : displayOverall
+  const showLogPanel = logText.trim().length > 0
 
   if (loading && !dbStatus && !syncState) {
     return (
@@ -598,10 +651,10 @@ export default function BasicDataSettingsSection() {
                   {syncState?.current_job ? jobDisplayName(syncState.current_job) : '同步中'}
                 </Text>
                 <Text className={s.progressPct} block>
-                  {overallPercent.toFixed(1)}%
+                  {progressPercent.toFixed(1)}%
                 </Text>
               </div>
-              <ProgressBar max={100} value={overallPercent} style={{ height: '4px' }} />
+              <ProgressBar max={100} value={progressPercent} style={{ height: '4px' }} />
               <Text style={{ fontSize: '11px', color: opptrixCssVars.textTertiary }} block>
                 {syncState?.message
                   ?? `${syncState?.jobs_completed ?? 0}/${syncState?.jobs_total ?? 0} 个任务`}
@@ -622,14 +675,17 @@ export default function BasicDataSettingsSection() {
             )
             const prog = dbStatus?.job_progress?.[jobName]
             const error = prog?.error ?? 0
-            const trailingText = jobTrailingText(
-              jobName,
-              dbStatus,
-              syncState,
-              isJobRunning,
-              isComplete,
-              lastSync,
-            )
+            const jobError = failedJobMap.get(jobName)
+            const trailingText = jobError
+              ? truncateError(jobError)
+              : jobTrailingText(
+                jobName,
+                dbStatus,
+                syncState,
+                isJobRunning,
+                isComplete,
+                lastSync,
+              )
 
             return (
               <div key={jobName} className={mergeClasses(s.jobRow, isCurrent && s.jobRowActive)}>
@@ -646,10 +702,11 @@ export default function BasicDataSettingsSection() {
                   <Text
                     className={mergeClasses(
                       s.jobStats,
-                      !isJobRunning && !isComplete && !lastSync && s.jobStatsMuted,
-                      error > 0 && s.jobStatsError,
+                      !isJobRunning && !isComplete && !lastSync && !failedJobMap.has(jobName) && s.jobStatsMuted,
+                      (error > 0 || failedJobMap.has(jobName)) && s.jobStatsError,
                     )}
                     block
+                    title={jobError ?? undefined}
                   >
                     {trailingText}
                     {!THS_KLINE_JOBS.has(jobName) && error > 0 ? ` ×${error}` : ''}
@@ -661,13 +718,24 @@ export default function BasicDataSettingsSection() {
         </SettingsGroup>
       </div>
 
-      {syncState && syncState.logs.length > 0 && (
+      {showLogPanel && (
         <div className={s.sectionBlock}>
           <Text className={s.sectionLabel} block>同步日志</Text>
+          {failedJobs.length > 0 && (
+            <Text className={s.failedBanner} block>
+              {failedJobs.length} 个任务失败：
+              {failedJobs.map(f => jobDisplayName(f.job)).join('、')}
+              。完整错误见下方日志（可选中复制）。
+            </Text>
+          )}
           <div className={s.logPanel}>
-            {syncState.logs.slice(-30).reverse().map((log: string, i: number) => (
-              <div key={i}>{log}</div>
-            ))}
+            <textarea
+              className={s.logTextarea}
+              readOnly
+              value={logText}
+              aria-label="同步日志"
+              spellCheck={false}
+            />
           </div>
         </div>
       )}

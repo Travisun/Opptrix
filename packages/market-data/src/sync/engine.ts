@@ -5,7 +5,7 @@ import { normalizeInstrumentRef } from '@opptrix/shared'
 import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
-import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../utils.js'
+import { daysSince, detectSt, minutesSince, normalizeStockCode, todayTradeDate } from '../utils.js'
 import {
   cnKlineDailyMaintenanceDue,
   cnTaxonomyMaintenanceDue,
@@ -177,7 +177,16 @@ export class MarketDataSyncEngine {
 
     const results: Record<string, string> = {}
     for (const [jobIndex, job] of jobs.entries()) {
-      if (mode === 'incremental' && !this.shouldRunJobInIncremental(job)) {
+      const minIntervalSkip = this.jobMinIntervalSkipReason(job, options)
+      if (minIntervalSkip) {
+        options.onJobStart?.(job, jobIndex, jobs.length)
+        options.onLog?.(`跳过 ${job}（${minIntervalSkip}）`)
+        results[job] = 'skipped'
+        options.onJobFinish?.(job, 'skipped', jobIndex)
+        continue
+      }
+
+      if (mode === 'incremental' && !this.shouldRunJobInIncremental(job, options)) {
         const ttl = SYNC_JOB_CONFIG[job]?.ttlDays
         options.onJobStart?.(job, jobIndex, jobs.length)
         options.onLog?.(`跳过 ${job}（${ttl ?? '?'} 天内已更新）`)
@@ -312,6 +321,10 @@ export class MarketDataSyncEngine {
         options.onJobFinish?.(job, results[job], jobIndex)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
+        options.onLog?.(`任务 ${job} 失败：${msg}`)
+        if (e instanceof Error && e.stack) {
+          options.onLog?.(e.stack)
+        }
         this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
         results[job] = `failed: ${msg}`
         options.onJobFinish?.(job, results[job], jobIndex)
@@ -438,7 +451,9 @@ export class MarketDataSyncEngine {
     })
   }
 
-  private shouldRunJobInIncremental(job: string): boolean {
+  private shouldRunJobInIncremental(job: string, options: SyncOptions = {}): boolean {
+    if (this.jobMinIntervalSkipReason(job, options)) return false
+
     if (job === 'screen_factors' && this.store.screenFactorsStale()) return true
     if (job === 'industry_stats' && this.store.industryStatsStale()) return true
 
@@ -454,6 +469,19 @@ export class MarketDataSyncEngine {
     const last = this.store.getCursorLastSuccess(job)
     if (!last) return true
     return daysSince(last) >= cfg.ttlDays
+  }
+
+  /** 名录/行业等 StockIndex 任务 — 距上次成功不足 minIntervalMinutes 则跳过（force 除外） */
+  private jobMinIntervalSkipReason(job: string, options: SyncOptions): string | null {
+    if (options.force) return null
+    const minMinutes = SYNC_JOB_CONFIG[job]?.minIntervalMinutes
+    if (!minMinutes || minMinutes <= 0) return null
+    const last = this.store.getCursorLastSuccess(job)
+    if (!last) return null
+    const elapsed = minutesSince(last)
+    if (elapsed >= minMinutes) return null
+    const waited = Math.max(0, Math.round(elapsed))
+    return `距上次同步 ${waited} 分钟，未满 ${minMinutes} 分钟，数据未过期`
   }
 
   /** K 线写入后于独立子进程批量重算离线筛选因子 */
@@ -660,6 +688,10 @@ export class MarketDataSyncEngine {
       cfg,
       callbacks,
     )
+    if (result.total === 0 && result.success === 0 && (market === 'HK' || market === 'US')) {
+      this.finishJobEmpty(runId, job, options, `${market} 名录暂无数据，已跳过`)
+      return
+    }
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,
@@ -1621,6 +1653,14 @@ export class MarketDataSyncEngine {
     this.store.repairBootstrapJobProgress()
     this.store.setCursor(jobName, { dumpType, rowsImported: klineResult.rowsImported })
     this.store.setCursor('dump_import', { dumpType, rowsImported: klineResult.rowsImported })
+    if (dumpType === 'full') {
+      // 全量包已含近期日 K，同步标记日 K 维护位避免 UI 重复显示未完成
+      this.store.setCursor('kline_daily', {
+        dumpType: 'full',
+        rowsImported: klineResult.rowsImported,
+        source: 'kline_bootstrap',
+      })
+    }
 
     options.onLog?.(`同花顺 K 线数据包导入完成：${klineResult.rowsImported.toLocaleString()} 条`)
     reportPhase(`已导入 ${klineResult.rowsImported.toLocaleString()} 条`, 90)

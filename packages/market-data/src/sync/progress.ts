@@ -38,8 +38,12 @@ export function bootstrapJobRatio(
     case 'kline_bootstrap':
       return b?.klines ? 1 : (ratioPct('kline_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'kline_daily': {
-      const last = dbStatus.last_sync.kline_daily
-      if (last && daysSince(last) < CN_WEEKLY_MAINTENANCE_DAYS) return 1
+      const bootLast = dbStatus.last_sync.kline_bootstrap
+      const dailyLast = dbStatus.last_sync.kline_daily
+      if (b?.klines && (
+        (bootLast && daysSince(bootLast) < CN_WEEKLY_MAINTENANCE_DAYS)
+        || (dailyLast && daysSince(dailyLast) < CN_WEEKLY_MAINTENANCE_DAYS)
+      )) return 1
       return stockRatio(progress?.done ?? 0, stockCount)
     }
     case 'financials':

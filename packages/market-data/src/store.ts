@@ -810,10 +810,12 @@ export class MarketDataStore {
       error: jobProgress.kline_bootstrap?.error ?? 0,
     }
 
+    const bootstrapFresh = !!lastSync.kline_bootstrap && daysSince(lastSync.kline_bootstrap) < 7
     const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
+    const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
     jobProgress.kline_daily = {
-      done: dailyFresh && bootstrap.klines ? universe : done,
-      pending: dailyFresh && bootstrap.klines ? 0 : pending,
+      done: klineMaintOk ? universe : done,
+      pending: klineMaintOk ? 0 : pending,
       error: jobProgress.kline_daily?.error ?? 0,
     }
   }
@@ -1979,6 +1981,24 @@ export class MarketDataStore {
       SELECT message FROM sync_logs ORDER BY id DESC LIMIT ?
     `).all(limit) as { message: string }[]
     return rows.reverse().map(r => r.message)
+  }
+
+  /** 会话时间窗口内 status=failed 的 sync_runs（用于 UI 展示失败详情） */
+  getFailedRunsForSession(sessionId: number): Array<{ job: string; error: string }> {
+    const session = this.getSession(sessionId)
+    if (!session) return []
+    const endAt = session.finished_at ?? nowIso()
+    const rows = this.db.prepare(`
+      SELECT job_name, message FROM sync_runs
+      WHERE status = 'failed'
+        AND started_at >= ?
+        AND started_at <= ?
+      ORDER BY id ASC
+    `).all(session.started_at, endAt) as Array<{ job_name: string; message: string | null }>
+    return rows.map(r => ({
+      job: r.job_name,
+      error: r.message?.trim() || '未知错误',
+    }))
   }
 
   upsertInstrument(row: {
