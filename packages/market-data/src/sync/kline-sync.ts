@@ -49,7 +49,7 @@ export function listEquityCodesForMarket(
 
 export function listKlineBootstrapInstruments(
   store: MarketDataStore,
-  markets: InitialEquityMarket[] = ['CN', 'HK', 'US'],
+  markets: InitialEquityMarket[] = ['CN'],
 ): Array<{ market: InitialEquityMarket; code: string }> {
   const out: Array<{ market: InitialEquityMarket; code: string }> = []
   for (const market of markets) {
@@ -101,7 +101,7 @@ export async function syncKlineBootstrapLayer(
     callbacks?: KlineSyncCallbacks
   } = {},
 ): Promise<{ total: number; success: number; error: number }> {
-  const markets = options.markets ?? ['CN', 'HK', 'US']
+  const markets = options.markets ?? ['CN']
   let instruments = listKlineBootstrapInstruments(store, markets)
   if (options.pendingFilter) {
     instruments = instruments.filter(i => options.pendingFilter!(i.market, i.code))
@@ -141,7 +141,7 @@ export async function syncKlineDailyLayer(
     incrementalBars?: number
   } = {},
 ): Promise<{ total: number; success: number; error: number }> {
-  const markets = options.markets ?? ['CN', 'HK', 'US']
+  const markets = options.markets ?? ['CN']
   const barCount = options.incrementalBars ?? 5
   let instruments = listKlineBootstrapInstruments(store, markets)
   if (options.pendingFilter) {

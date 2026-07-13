@@ -553,8 +553,12 @@ export interface MarketDbStatusData {
   etf_count?: number
   us_count?: number
   crypto_count?: number
+  jp_count?: number
+  kr_count?: number
+  hk_count?: number
   latest_trade_date: string | null
   latest_factor_date: string | null
+  kline_dates?: Record<string, string | null>
   profile_count: number
   partner_count: number
   segment_count: number

@@ -12,7 +12,7 @@
     }
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "test -f dist/index.d.ts || rm -f tsconfig.tsbuildinfo; tsc -b tsconfig.json",
     "sync": "npm run build && node dist/cli/sync.js"
   },
   "dependencies": {

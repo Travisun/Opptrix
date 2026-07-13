@@ -23,7 +23,7 @@ import {
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
-import { getMarketDataService } from '@opptrix/market-data-store'
+import { getMarketDataService, CN_MANUAL_SYNC_JOBS } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, momentumRegimeInputsFromKlines,
@@ -172,12 +172,22 @@ export class ResearchHub {
   private readonly stockNameCache = new Map<string, string>()
 
   initMarketDataAutoSync(): void {
-    // 本地离线市场库已停用，不再自动同步
+    this.notifyMarketDataUiReady()
   }
 
-  /** @deprecated Use initMarketDataAutoSync */
+  /** UI shell ready — start L0 automatic sync (single entry, no hardcoded job list). */
+  notifyMarketDataUiReady(): void {
+    this.marketData.notifyUiReady()
+  }
+
+  /** Fallback when desktop UI never signals ready within timeout. */
+  ensureMarketDataUiReadyFallback(): void {
+    this.marketData.ensureBootSyncFallback()
+  }
+
+  /** @deprecated Use notifyMarketDataUiReady */
   initMarketDataAutoResume(): void {
-    this.initMarketDataAutoSync()
+    this.notifyMarketDataUiReady()
   }
 
   async dispatch(feature: string, params: Record<string, unknown>): Promise<ResearchResult> {
@@ -492,7 +502,8 @@ export class ResearchHub {
   }
 
   private marketDbSyncState(t0: number) {
-    return this.failLocalOffline(t0)
+    const snap = this.marketData.syncState()
+    return ok(snap, '同步状态', t0)
   }
 
   private marketDataPacks(t0: number) {
@@ -551,8 +562,16 @@ export class ResearchHub {
   }
 
   private async marketDbSync(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
+    const force = params.force === true
+    const jobs = [...CN_MANUAL_SYNC_JOBS]
+    const mode = force ? 'full' : 'incremental'
+    const result = await this.marketData.sync({ mode, jobs, force: true, background: true })
+    return ok({
+      started: result.started,
+      running: result.running,
+      mode: result.mode,
+      plan: 'A 股基础数据',
+    }, '数据同步', t0)
   }
 
   private industrySnapshotUnavailable(t0: number) {

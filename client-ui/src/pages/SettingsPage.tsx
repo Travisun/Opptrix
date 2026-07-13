@@ -14,6 +14,7 @@ import { normalizeSettingsSection } from './settings/settingsTypes'
 import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
+import BasicDataSettingsSection from './settings/BasicDataSettingsSection'
 import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
@@ -616,6 +617,9 @@ function SettingsPageView({
 
       case 'data_providers':
         return <DataProvidersSettingsSection />
+
+      case 'basic_data':
+        return <BasicDataSettingsSection />
 
       case 'discover_strategies':
         return <DiscoverStrategiesSettingsSection />

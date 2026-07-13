@@ -19,6 +19,8 @@
     "@opptrix/article-enrichment": "*",
     "@opptrix/market-data-store": "*",
     "@opptrix/news-feed": "*",
+    "@opptrix/research-hub": "*",
+    "@opptrix/shared": "*",
     "@opptrix/user-store": "*"
   }
 }

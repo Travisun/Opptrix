@@ -1,7 +1,7 @@
 import { markMarketPackPrepared } from '../market-pack-settings.js'
 import type { MarketDbStatus, MarketDataStore } from '../store.js'
 import { jobsForMarketPack } from './market-packs.js'
-import { MarketDataSyncEngine, ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, type SyncMode, type SyncOptions } from './engine.js'
+import { MarketDataSyncEngine, ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type SyncMode, type SyncOptions } from './engine.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { startMarketDataRefreshScheduler } from './scheduler.js'
 import {
@@ -31,6 +31,8 @@ export interface SyncStateSnapshot {
 }
 
 const MAX_MEMORY_LOGS = 500
+const DB_STATUS_CACHE_MS_IDLE = 5000
+const DB_STATUS_CACHE_MS_RUNNING = 2000
 
 function computeOverallPercent(
   jobs: readonly string[],
@@ -64,12 +66,22 @@ export class MarketSyncCoordinator {
 
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
-    if (this.running && this.dbStatusCache && now - this.dbStatusCache.at < 2000) {
+    const ttl = this.running ? DB_STATUS_CACHE_MS_RUNNING : DB_STATUS_CACHE_MS_IDLE
+    if (this.dbStatusCache && now - this.dbStatusCache.at < ttl) {
       return this.dbStatusCache.value
     }
     const value = this.store.getStatus()
-    if (this.running) this.dbStatusCache = { at: now, value }
+    this.dbStatusCache = { at: now, value }
     return value
+  }
+
+  /** Shared read path for Hub / API — avoids duplicate heavy getStatus() calls. */
+  getCachedDbStatus(): MarketDbStatus {
+    return this.dbStatus()
+  }
+
+  invalidateDbStatusCache(): void {
+    this.dbStatusCache = null
   }
 
   constructor(
@@ -92,7 +104,9 @@ export class MarketSyncCoordinator {
     const jobsTotal = session?.jobs_total ?? this.snapshot.jobs_total ?? BOOTSTRAP_SYNC_JOBS.length
     const jobsList = jobsTotal >= ALL_SYNC_JOBS.length
       ? [...ALL_SYNC_JOBS]
-      : [...BOOTSTRAP_SYNC_JOBS]
+      : jobsTotal === CN_MANUAL_SYNC_JOBS.length
+        ? [...CN_MANUAL_SYNC_JOBS]
+        : [...BOOTSTRAP_SYNC_JOBS]
     const stockCount = dbStatus.stock_count
     const currentJob = session?.current_job ?? this.snapshot.current_job ?? null
     const sessionRunning = this.running || session?.status === 'running'
@@ -199,6 +213,7 @@ export class MarketSyncCoordinator {
 
     void this.runSession(sessionId, { ...options, mode, jobs }).finally(() => {
       this.running = false
+      this.dbStatusCache = null
     })
 
     return { started: true, running: true, mode }

@@ -6,12 +6,16 @@ import { createScorecard } from '@opptrix/stock-eval'
 import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
 import { daysSince, detectSt, normalizeStockCode, todayTradeDate } from '../utils.js'
+import {
+  cnKlineDailyMaintenanceDue,
+  cnTaxonomyMaintenanceDue,
+  cnUniverseMaintenanceDue,
+} from './schedule.js'
 import { SyncCachingEngine } from './cache-engine.js'
 import {
   ALL_SYNC_JOBS,
   BOOTSTRAP_SYNC_JOBS,
   DEFAULT_API_MIN_GAP_MS,
-  DUMP_IMPORT_CONFIG,
   EASTMONEY_HEAVY_JOBS,
   getSyncProfileSettings,
   getTushareSyncBoost,
@@ -36,7 +40,6 @@ import {
 } from './initial-sync.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
 import { cnEtfListRef, cnEtfRef, cnLegacyProviderCode, cnRefFromCode } from './instrument-gateway.js'
-import { syncKlineBootstrapLayer, syncKlineDailyLayer, listKlineBootstrapInstruments, listEquityCodesForMarket } from './kline-sync.js'
 
 function equityInstrumentRef(
   market: 'US' | 'JP' | 'KR' | 'HK',
@@ -83,7 +86,7 @@ function deRealtimeQuery(de: AshareEngine, ref: InstrumentRef): Promise<QueryRes
   return de.queryInstrumentData(ref, 'realtime') as Promise<QueryResult<StockRealtime[]>>
 }
 
-export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS } from './config.js'
+export { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS } from './config.js'
 
 import type { MarketDataPackId } from '@opptrix/shared'
 
@@ -161,7 +164,10 @@ export class MarketDataSyncEngine {
 
     const jobs = options.jobs?.length ? options.jobs : [...BOOTSTRAP_SYNC_JOBS]
     if (options.force) {
-      for (const job of jobs) this.store.clearJobProgress(job)
+      for (const job of jobs) {
+        this.store.clearJobProgress(job)
+        this.store.clearCursor(job)
+      }
     } else {
       const cleared = this.store.clearBseJobErrors([...BOOTSTRAP_SYNC_JOBS])
       if (cleared > 0) {
@@ -435,6 +441,14 @@ export class MarketDataSyncEngine {
   private shouldRunJobInIncremental(job: string): boolean {
     if (job === 'screen_factors' && this.store.screenFactorsStale()) return true
     if (job === 'industry_stats' && this.store.industryStatsStale()) return true
+
+    const { is_ready: ready, last_sync: lastSync } = this.store.getStatus()
+    if (ready) {
+      if (job === 'initial_cn_universe') return cnUniverseMaintenanceDue(lastSync)
+      if (job === 'initial_taxonomy') return cnTaxonomyMaintenanceDue(lastSync)
+      if (job === 'kline_daily') return cnKlineDailyMaintenanceDue(lastSync)
+    }
+
     const cfg = SYNC_JOB_CONFIG[job]
     if (!cfg?.ttlDays) return true
     const last = this.store.getCursorLastSuccess(job)
@@ -597,10 +611,7 @@ export class MarketDataSyncEngine {
       cfg,
       this.initialCallbacks(job, options),
     )
-    const codes = listEquityCodesForMarket(this.store, market, true)
-    for (const code of codes.slice(0, result.success)) {
-      this.markDone(job, code, '')
-    }
+    // Progress is already marked inside syncInitialUniverse
     this.store.finishRun(runId, 'success', {
       total: result.total,
       success: result.success,
@@ -1515,68 +1526,76 @@ export class MarketDataSyncEngine {
     }
   }
 
-  private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
-    const cfg = this.cfg('kline_bootstrap', options)
-    const gateway = this.createGateway(options)
-    const pending = this.klinePendingFilter('kline_bootstrap', options, mode, '', cfg.ttlDays)
-
-    const result = await syncKlineBootstrapLayer(gateway, this.store, cfg, {
-      maxInstruments: options.maxStocks,
-      pendingFilter: mode === 'full' ? undefined : pending,
-      callbacks: {
-        onLog: options.onLog,
-        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
-      },
-    })
-
-    if (result.total === 0) {
-      this.finishJobEmpty(runId, 'kline_bootstrap', options, 'K 线均在 TTL 内，跳过')
-      return
+  private async importCnKlineDumpFromThs(
+    runId: number,
+    jobName: 'kline_bootstrap' | 'kline_daily',
+    dumpType: 'full' | 'incremental',
+    options: SyncOptions,
+  ): Promise<number> {
+    const cfg = loadTonghuashunConfig()
+    if (!isTonghuashunEnabled(cfg)) {
+      throw new Error('同花顺未启用或 API Key 未配置，无法导入 A 股 K 线数据包')
     }
 
-    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
-      const scoped = `${market}:${code}`
-      if (this.store.listCodesWithMinInstrumentBars(market, market === 'CN' ? 60 : 30).includes(code)) {
-        this.markDone('kline_bootstrap', market === 'CN' ? code : scoped, '')
+    const client = FuyaoClient.fromConfig()
+    if (!client) {
+      throw new Error('无法创建同花顺客户端')
+    }
+
+    const label = dumpType === 'full' ? '全量（10年）' : '增量（10天）'
+    options.onLog?.(`导入同花顺 A 股日 K ${label} Parquet 数据包…`)
+    options.onProgress?.({ job: jobName, current: 0, total: 1, message: '下载数据包…' })
+
+    const klineResult = await importDailyKDump(this.store, dumpType, client.get.bind(client))
+
+    if (!klineResult.success) {
+      throw new Error(klineResult.error ?? '同花顺 K 线数据包导入失败')
+    }
+
+    if (klineResult.rowsImported === 0) {
+      this.finishJobEmpty(runId, jobName, options, '数据包无新 K 线，跳过')
+      return 0
+    }
+
+    this.store.repairBootstrapJobProgress()
+    this.store.setCursor(jobName, { dumpType, rowsImported: klineResult.rowsImported })
+    this.store.setCursor('dump_import', { dumpType, rowsImported: klineResult.rowsImported })
+
+    options.onLog?.(`同花顺 K 线数据包导入完成：${klineResult.rowsImported.toLocaleString()} 条`)
+    options.onProgress?.({ job: jobName, current: 1, total: 1, message: `已导入 ${klineResult.rowsImported.toLocaleString()} 条` })
+
+    this.store.finishRun(runId, 'success', {
+      total: klineResult.rowsImported,
+      success: klineResult.rowsImported,
+      error: 0,
+    })
+    return klineResult.rowsImported
+  }
+
+  private async syncKlineBootstrap(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
+    const cfg = this.cfg('kline_bootstrap', options)
+    if (mode === 'incremental' && cfg.ttlDays && !options.force) {
+      const last = this.store.getCursorLastSuccess('kline_bootstrap')
+      if (last && daysSince(last) < cfg.ttlDays && this.store.hasKlineData()) {
+        this.finishJobEmpty(runId, 'kline_bootstrap', options, '历史 K 线数据包在 TTL 内，跳过')
+        return
       }
     }
 
-    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
-      total: result.total,
-      success: result.success,
-      error: result.error,
-    })
+    await this.importCnKlineDumpFromThs(runId, 'kline_bootstrap', 'full', options)
   }
 
   private async syncKlineDaily(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
     const cfg = this.cfg('kline_daily', options)
-    const gateway = this.createGateway(options)
-    const pending = this.klinePendingFilter('kline_daily', options, mode, todayTradeDate(), cfg.ttlDays)
-
-    const result = await syncKlineDailyLayer(gateway, this.store, cfg, {
-      pendingFilter: mode === 'full' ? undefined : pending,
-      callbacks: {
-        onLog: options.onLog,
-        onProgress: (job, current, total) => options.onProgress?.({ job, current, total }),
-      },
-    })
-
-    if (result.total === 0) {
-      this.finishJobEmpty(runId, 'kline_daily', options, '今日 K 线已齐，跳过')
-      return
+    if (mode === 'incremental' && cfg.ttlDays && !options.force) {
+      const last = this.store.getCursorLastSuccess('kline_daily')
+      if (last && daysSince(last) < cfg.ttlDays) {
+        this.finishJobEmpty(runId, 'kline_daily', options, '日 K 数据包在 TTL 内，跳过')
+        return
+      }
     }
 
-    const scope = todayTradeDate()
-    for (const { market, code } of listKlineBootstrapInstruments(this.store)) {
-      const scoped = `${market}:${code}`
-      this.markDone('kline_daily', market === 'CN' ? code : scoped, scope)
-    }
-
-    this.store.finishRun(runId, result.error ? 'partial' : 'success', {
-      total: result.total,
-      success: result.success,
-      error: result.error,
-    })
+    await this.importCnKlineDumpFromThs(runId, 'kline_daily', 'incremental', options)
   }
 
   private async syncBseKlineSupplement(
@@ -1692,110 +1711,24 @@ export class MarketDataSyncEngine {
     this.store.finishRun(runId, 'success', { total: n, success: n, error: 0 })
   }
 
-  /**
-   * Import dump data from tonghuashun Parquet files.
-   *
-   * Checks if tonghuashun is enabled, validates trading day and schedule,
-   * then downloads and imports the appropriate dump (full or incremental).
-   *
-   * @param options - Sync options with optional callbacks
-   * @returns Import result summary
-   *
-   * @sourceUrl packages/market-data/src/sync/engine.ts
-   */
+  /** @deprecated 请通过 sync job `kline_bootstrap` / `kline_daily` 导入同花顺 Parquet 数据包 */
   async importDump(options: SyncOptions = {}): Promise<{
     success: boolean
     klineResult?: { type: string; rowsImported: number; error?: string }
-    adjustmentResult?: { type: string; rowsImported: number; error?: string }
   }> {
-    const cfg = loadTonghuashunConfig()
-    if (!isTonghuashunEnabled(cfg)) {
-      options.onLog?.('同花顺未启用或 API Key 未配置，跳过 dump 导入')
-      return { success: false }
-    }
-
-    // Check if it's a trading day (skip non-trading days)
-    if (DUMP_IMPORT_CONFIG.tradingDayOnly) {
-      const dayOfWeek = new Date().getDay()
-      if (dayOfWeek === 0 || dayOfWeek === 6) {
-        options.onLog?.('非交易日（周末），跳过 dump 导入')
-        return { success: true }
+    const dumpType = this.store.hasKlineData() ? 'incremental' : 'full'
+    const runId = this.store.beginRun('dump_import', 'incremental')
+    try {
+      const rowsImported = await this.importCnKlineDumpFromThs(runId, 'kline_daily', dumpType, options)
+      return {
+        success: true,
+        klineResult: { type: dumpType, rowsImported },
       }
-    }
-
-    // Check if update is due
-    const lastSuccess = this.store.getCursorLastSuccess('dump_import')
-    const now = new Date()
-    const hours = now.getHours()
-    const minutes = now.getMinutes()
-    const currentTimeMinutes = hours * 60 + minutes
-
-    // Parse dailyAfterTime (HH:MM)
-    const [afterHour, afterMinute] = DUMP_IMPORT_CONFIG.dailyAfterTime.split(':').map(Number)
-    const afterTimeMinutes = afterHour * 60 + afterMinute
-
-    if (DUMP_IMPORT_CONFIG.defaultFrequency === 'daily') {
-      if (currentTimeMinutes < afterTimeMinutes) {
-        options.onLog?.(`未到每日更新时间 ${DUMP_IMPORT_CONFIG.dailyAfterTime}，跳过`)
-        return { success: true }
-      }
-    } else {
-      const dayOfWeek = now.getDay()
-      if (dayOfWeek !== 1) {
-        options.onLog?.('非周一下午，跳过每周 dump 导入')
-        return { success: true }
-      }
-      if (currentTimeMinutes < afterTimeMinutes) {
-        options.onLog?.(`未到每周更新时间 ${DUMP_IMPORT_CONFIG.dailyAfterTime}，跳过`)
-        return { success: true }
-      }
-    }
-
-    // Check if already updated today
-    if (lastSuccess) {
-      const lastDate = new Date(lastSuccess)
-      const todayStr = todayTradeDate()
-      if (lastDate.toISOString().slice(0, 10) === todayStr) {
-        options.onLog?.('今日已导入 dump 数据，跳过')
-        return { success: true }
-      }
-    }
-
-    // Create tonghuashun client for API access
-    const client = FuyaoClient.fromConfig()
-    if (!client) {
-      options.onLog?.('无法创建同花顺客户端')
-      return { success: false }
-    }
-
-    options.onLog?.('开始导入同花顺 dump 数据...')
-
-    // Determine if full or incremental import
-    const hasData = this.store.hasKlineData()
-    const klineType = hasData ? 'incremental' : 'full'
-
-    options.onLog?.(`将导入 ${klineType === 'full' ? '全量（10年）' : '增量（10天）'} K 线数据`)
-
-    // Import K-line data — pass client.get as HTTP helper
-    const klineResult = await importDailyKDump(this.store, klineType, client.get.bind(client))
-
-    if (!klineResult.success) {
-      options.onLog?.(`K 线导入失败: ${klineResult.error}`)
-      return { success: false, klineResult }
-    }
-
-    options.onLog?.(`K 线导入完成: ${klineResult.rowsImported} 条`)
-
-    // Update cursor
-    this.store.setCursor('dump_import')
-
-    if (klineResult.rowsImported > 0) {
-      options.onLog?.('K 线数据已导入，因子计算将在下次同步时执行')
-    }
-
-    return {
-      success: true,
-      klineResult,
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e)
+      this.store.finishRun(runId, 'failed', { total: 0, success: 0, error: 1 }, msg)
+      options.onLog?.(msg)
+      return { success: false, klineResult: { type: dumpType, rowsImported: 0, error: msg } }
     }
   }
 }

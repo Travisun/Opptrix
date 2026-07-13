@@ -3,6 +3,7 @@ import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BotRegular,
   ChartMultipleRegular,
+  DatabaseRegular,
   ImageRegular,
   InfoRegular,
   NewsRegular,
@@ -34,6 +35,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'models', label: '模型', icon: BotRegular },
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
+  { id: 'basic_data', label: '基础数据', icon: DatabaseRegular },
   { id: 'discover_strategies', label: '选股策略', icon: ChartMultipleRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
@@ -374,6 +376,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '配置 LLM 提供商与可用模型'
     case 'data_providers':
       return '管理各市场行情与资讯数据提供商'
+    case 'basic_data':
+      return '查看本地基础数据加载状态与同步进度'
     case 'discover_strategies':
       return '查看内置策略、管理自编策略与复制编辑'
     case 'news_feed':

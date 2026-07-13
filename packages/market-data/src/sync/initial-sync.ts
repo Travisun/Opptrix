@@ -4,7 +4,7 @@ import type { MarketDataStore } from '../store.js'
 import { detectSt, normalizeStockCode } from '../utils.js'
 import type { InitialEquityMarket } from './instrument-gateway.js'
 import { cnEtfListRef, equityListRef, StandardInstrumentGateway } from './instrument-gateway.js'
-import { mapPool, sleep } from './pool.js'
+import { sleep } from './pool.js'
 import type { JobSyncConfig } from './config.js'
 
 export interface InitialSyncCallbacks {
@@ -112,7 +112,11 @@ export async function syncInitialUniverse(
   const rows = resp.data
   let success = 0
   for (const [i, item] of rows.entries()) {
-    if (persistListRow(store, market, item)) success++
+    const code = persistListRow(store, market, item)
+    if (code) {
+      success++
+      store.markJobProgress('initial_cn_universe', code, '', 'done')
+    }
     if (i % 200 === 0) callbacks.onProgress?.(i + 1, rows.length, market)
     if (cfg.delayMs > 0 && i % 50 === 0) await sleep(0)
   }
@@ -233,8 +237,6 @@ export async function syncAllInitialTaxonomy(
   cfg: JobSyncConfig,
   callbacks: InitialSyncCallbacks = {},
 ): Promise<void> {
+  // 仅 A 股行业分类；港股/美股行业暂无同步任务，后续由独立导入链路写入 taxonomy 表
   await syncInitialTaxonomy(gateway, store, 'CN', 'industry', cfg, callbacks)
-  await mapPool(['HK', 'US'] as const, 1, cfg.delayMs, async market => {
-    await syncInitialTaxonomy(gateway, store, market, 'board', cfg, callbacks)
-  })
 }

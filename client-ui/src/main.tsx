@@ -8,7 +8,21 @@ import { WatchlistProvider } from './market/WatchlistContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
+import { research } from './api/client'
 import './styles/global.css'
+
+function signalMarketDataUiReady() {
+  void (async () => {
+    for (let attempt = 0; attempt < 24; attempt++) {
+      try {
+        await research.marketDataUiReady()
+        return
+      } catch {
+        await new Promise(resolve => window.setTimeout(resolve, 500))
+      }
+    }
+  })()
+}
 
 if (isDesktopApp()) {
   document.documentElement.classList.add('opptrix-desktop')
@@ -19,7 +33,11 @@ if (isElectron()) {
   window.setTimeout(() => {
     document.documentElement.classList.remove('opptrix-electron-startup')
     window.electronAPI?.signalShellReady?.()
+    signalMarketDataUiReady()
   }, 6000)
+} else {
+  // Web dev: no Electron shell — notify server once UI bundle loads
+  signalMarketDataUiReady()
 }
 
 function ThemedApp() {

@@ -36,6 +36,7 @@ export interface MarketDbStatus {
   hk_count: number
   latest_trade_date: string | null
   latest_factor_date: string | null
+  kline_dates: Record<string, string | null>
   profile_count: number
   partner_count: number
   segment_count: number
@@ -157,6 +158,10 @@ export class MarketDataStore {
     return row?.last_success_at ?? null
   }
 
+  clearCursor(jobName: string): void {
+    this.db.prepare('DELETE FROM sync_cursor WHERE job_name = ?').run(jobName)
+  }
+
   logError(runId: number | null, jobName: string, code: string | null, error: string): void {
     this.db.prepare(`
       INSERT INTO sync_errors (run_id, job_name, code, error, created_at)
@@ -244,6 +249,11 @@ export class MarketDataStore {
       hk_count: hkCount,
       latest_trade_date: latestQuote.d,
       latest_factor_date: latestFactor.d,
+      kline_dates: {
+        CN: this.latestKlineDateByMarket('CN'),
+        HK: this.latestKlineDateByMarket('HK'),
+        US: this.latestKlineDateByMarket('US'),
+      },
       profile_count: profileCount,
       partner_count: partnerCount,
       segment_count: segmentCount,
@@ -277,7 +287,13 @@ export class MarketDataStore {
     const initial_cn_etf = etfCount > 50
     const initial_taxonomy = this.countTaxonomyNodes('CN', 'industry') >= 5
 
-    const ready = initial_cn && initial_hk && initial_us && initial_cn_etf && initial_taxonomy
+    const klineWithMin = this.listCodesWithMinKlines(60).length
+    const kline_stock_ratio = cnEquity > 0
+      ? Math.round((klineWithMin / cnEquity) * 1000) / 10
+      : 0
+    const klines = kline_stock_ratio >= 95
+
+    const ready = initial_cn && initial_taxonomy && klines
 
     return {
       ready,
@@ -288,11 +304,11 @@ export class MarketDataStore {
       initial_taxonomy,
       universe: initial_cn,
       quotes: false,
-      klines: false,
+      klines,
       fundamentals: false,
       screen_factors: false,
       quote_stock_ratio: 0,
-      kline_stock_ratio: 0,
+      kline_stock_ratio,
       fin_stock_ratio: 0,
       factor_stock_ratio: 0,
       kline_cross_market: false,
@@ -528,6 +544,13 @@ export class MarketDataStore {
     const row = this.db.prepare(`
       SELECT MAX(trade_date) AS d FROM instrument_bars_daily WHERE market = ? AND code = ?
     `).get(market, code) as { d: string | null } | undefined
+    return row?.d ?? null
+  }
+
+  latestKlineDateByMarket(market: string): string | null {
+    const row = this.db.prepare(`
+      SELECT MAX(trade_date) AS d FROM instrument_bars_daily WHERE market = ?
+    `).get(market) as { d: string | null } | undefined
     return row?.d ?? null
   }
 

@@ -683,6 +683,11 @@ app.get<{ Querystring: { q?: string; keyword?: string; limit?: string } }>('/api
 
 app.get('/api/config', async () => publicConfig(cfg))
 
+app.post('/api/market-data/ui-ready', async () => {
+  hub.notifyMarketDataUiReady()
+  return { ok: true }
+})
+
 app.patch<{ Body: { default_scorecard?: string; default_top_n?: number; default_model?: string } }>(
   '/api/config',
   async (req) => {
@@ -1194,6 +1199,16 @@ async function bootstrap() {
     console.log(`  Desktop UI → http://${HOST}:${PORT}\n`)
   } else {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
+  }
+
+  // UI 就绪后再启动 L0 自动同步；无 UI 时立即触发；桌面端 60s 兜底
+  const isDesktopUi = process.env.OPPTRIX_DESKTOP === '1' && serveUi
+  if (!isDesktopUi) {
+    hub.notifyMarketDataUiReady()
+  } else {
+    setTimeout(() => {
+      hub.ensureMarketDataUiReadyFallback()
+    }, 60_000)
   }
 }
 
