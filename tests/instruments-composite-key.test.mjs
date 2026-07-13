@@ -568,6 +568,31 @@ test('backfill disambiguates duplicate instrument_ns before unique index', () =>
   store.close()
 })
 
+test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () => {
+  const dbPath = join(dataDir, 'etf-ns-disambig.db')
+  const store = new MarketDataStore(dbPath)
+  const ts = new Date().toISOString()
+  store.db.prepare(`
+    INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at, instrument_ns)
+    VALUES ('510300', 'CN', 'EQUITY', '沪深300ETF', 'SH', 'active', ?, 'CN:SH.510300')
+  `).run(ts)
+  store.upsertInstrument({
+    code: '510300',
+    market: 'CN',
+    assetClass: 'ETF',
+    name: '华泰柏瑞沪深300ETF',
+    exchange: 'SH',
+    status: 'active',
+  })
+  const rows = store.db.prepare(`
+    SELECT asset_class, instrument_ns FROM instruments WHERE code = '510300' ORDER BY asset_class
+  `).all()
+  assert.equal(rows.length, 2)
+  assert.equal(rows.find(r => r.asset_class === 'EQUITY')?.instrument_ns, 'CN:SH.510300')
+  assert.equal(rows.find(r => r.asset_class === 'ETF')?.instrument_ns, 'CN:SH.510300@ETF')
+  store.close()
+})
+
 test('stock_profiles migration anchors FK via stocks-backed instrument row', () => {
   const dbPath = join(dataDir, 'profile-fk-anchor.db')
   const db = new Database(dbPath)

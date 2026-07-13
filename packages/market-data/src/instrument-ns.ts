@@ -136,6 +136,51 @@ function assignInstrumentNsValues(rows: InstrumentNsRow[]): Map<string, string> 
   return assigned
 }
 
+/** upsert 前解析 instrument_ns — 同码不同 asset_class 时非 EQUITY 加 @后缀，避免唯一索引冲突 */
+export function resolveInstrumentNsForUpsert(
+  db: Database.Database,
+  row: { market: string; exchange: string; code: string; assetClass: string },
+  baseNs: string,
+): string {
+  const conflict = db.prepare(`
+    SELECT market, exchange, code, asset_class
+    FROM instruments
+    WHERE instrument_ns = ?
+      AND NOT (market = ? AND exchange = ? AND code = ? AND asset_class = ?)
+    LIMIT 1
+  `).get(
+    baseNs,
+    row.market,
+    row.exchange,
+    row.code,
+    row.assetClass,
+  ) as { market: string; exchange: string; code: string; asset_class: string } | undefined
+
+  if (!conflict) return baseNs
+
+  const sameSymbol = conflict.market === row.market
+    && normalizeInstrumentExchange(conflict.exchange) === row.exchange
+    && conflict.code === row.code
+
+  if (sameSymbol && row.assetClass !== 'EQUITY') {
+    return `${baseNs}@${row.assetClass}`
+  }
+  if (sameSymbol && row.assetClass === 'EQUITY' && conflict.asset_class !== 'EQUITY') {
+    db.prepare(`
+      UPDATE instruments SET instrument_ns = ?
+      WHERE market = ? AND exchange = ? AND code = ? AND asset_class = ?
+    `).run(
+      `${baseNs}@${conflict.asset_class}`,
+      conflict.market,
+      normalizeInstrumentExchange(conflict.exchange),
+      conflict.code,
+      conflict.asset_class,
+    )
+    return baseNs
+  }
+  return `${baseNs}@${row.assetClass}`
+}
+
 /** stocks 行存在但 instruments 缺失时，补 CN EQUITY 行供 stock_profiles FK 锚定 */
 function ensureCnEquityInstrumentForProfile(db: Database.Database, code: string): string | null {
   const normalized = normalizeStockCode(code)

@@ -12,6 +12,7 @@ import {
 import {
   cnEquityNs,
   instrumentRefToNs,
+  resolveInstrumentNsForUpsert,
   resolveCodeOrNsInput,
   stockProfilesUsesInstrumentNs,
 } from './instrument-ns.js'
@@ -1842,12 +1843,16 @@ export class MarketDataStore {
         : row.code.trim()
     const exchange = normalizeInstrumentExchange(row.exchange)
     const now = nowIso()
-    const instrumentNs = instrumentRefToNs(normalizeInstrumentRef({
-      market: row.market as InstrumentRef['market'],
-      assetClass: row.assetClass as InstrumentRef['assetClass'],
-      symbol: code,
-      exchange: exchange || undefined,
-    }))
+    const instrumentNs = resolveInstrumentNsForUpsert(
+      this.db,
+      { market: row.market, exchange, code, assetClass: row.assetClass },
+      instrumentRefToNs(normalizeInstrumentRef({
+        market: row.market as InstrumentRef['market'],
+        assetClass: row.assetClass as InstrumentRef['assetClass'],
+        symbol: code,
+        exchange: exchange || undefined,
+      })),
+    )
     const hasNs = (this.db.prepare('PRAGMA table_info(instruments)').all() as { name: string }[])
       .some(c => c.name === 'instrument_ns')
     if (hasNs) {
