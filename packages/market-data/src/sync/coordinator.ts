@@ -33,7 +33,6 @@ export interface SyncStateSnapshot {
 
 const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 5000
-const DB_STATUS_CACHE_MS_RUNNING = 2000
 
 function computeOverallPercent(
   jobs: readonly string[],
@@ -66,9 +65,12 @@ export class MarketSyncCoordinator {
   private bootstrapProgressRepaired = false
 
   private dbStatus(): MarketDbStatus {
+    // 同步进行中始终读库，保证设置页「数据概览」计数随写入实时更新
+    if (this.running) {
+      return this.store.getStatus()
+    }
     const now = Date.now()
-    const ttl = this.running ? DB_STATUS_CACHE_MS_RUNNING : DB_STATUS_CACHE_MS_IDLE
-    if (this.dbStatusCache && now - this.dbStatusCache.at < ttl) {
+    if (this.dbStatusCache && now - this.dbStatusCache.at < DB_STATUS_CACHE_MS_IDLE) {
       return this.dbStatusCache.value
     }
     const value = this.store.getStatus()
@@ -299,6 +301,7 @@ export class MarketSyncCoordinator {
             jobs_completed: index + 1,
           }
           this.patchProgress(sessionId, { jobs_completed: index + 1 })
+          this.invalidateDbStatusCache()
           this.log(sessionId, `任务 ${job} 完成 (${status})`)
         },
       })

@@ -173,7 +173,10 @@ export class MarketDataStore {
   }
 
   getStatus(): MarketDbStatus {
-    const stockCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const stocksTableCount = (this.db.prepare('SELECT COUNT(*) AS c FROM stocks').get() as { c: number }).c
+    const cnEquityCount = this.countEquityInstruments('CN')
+    // 概览与 bootstrap 门控对齐 instruments；兼容仅 stocks 表有历史数据的库
+    const stockCount = Math.max(stocksTableCount, cnEquityCount)
     const etfCount = this.countEtfInstruments()
     const usCount = this.countUsInstruments()
     const cryptoCount = this.countCryptoInstruments()

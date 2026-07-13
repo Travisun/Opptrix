@@ -12,6 +12,7 @@ import {
   DEFAULT_AUTO_SYNC_JOBS,
   DEFAULT_DAILY_SYNC_JOBS,
   LEGACY_INITIAL_SYNC_JOBS,
+  STOCKINDEX_LIST_SYNC_JOBS,
   SYNC_JOB_CONFIG,
 } from '../packages/market-data/dist/sync/config.js'
 import {
@@ -25,14 +26,20 @@ import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../packages/market-data/dist/sy
 
 const daysAgo = n => new Date(Date.now() - n * 86400000).toISOString()
 
-test('CN auto sync: bootstrap includes kline; maintenance includes daily kline', () => {
+test('CN auto sync: bootstrap includes StockIndex lists and kline', () => {
   assert.deepEqual(CN_BOOTSTRAP_SYNC_JOBS, [
     'initial_cn_universe',
+    'initial_cn_etf',
+    'initial_hk_universe',
+    'initial_us_universe',
     'initial_taxonomy',
     'kline_bootstrap',
   ])
   assert.deepEqual(CN_MAINTENANCE_SYNC_JOBS, [
     'initial_cn_universe',
+    'initial_cn_etf',
+    'initial_hk_universe',
+    'initial_us_universe',
     'kline_daily',
     'initial_taxonomy',
   ])
@@ -48,17 +55,21 @@ test('CN auto sync: bootstrap includes kline; maintenance includes daily kline',
   assert.deepEqual(DAILY_SYNC_JOBS, [...CN_MAINTENANCE_SYNC_JOBS])
   assert.deepEqual(CN_MANUAL_SYNC_JOBS, [
     'initial_cn_universe',
+    'initial_cn_etf',
+    'initial_hk_universe',
+    'initial_us_universe',
     'initial_taxonomy',
     'kline_bootstrap',
     'kline_daily',
   ])
   assert.ok(BOOTSTRAP_SYNC_JOBS.includes('kline_bootstrap'))
-  assert.ok(!BOOTSTRAP_SYNC_JOBS.includes('initial_hk_universe'))
-  assert.deepEqual(LEGACY_INITIAL_SYNC_JOBS, [
+  assert.ok(BOOTSTRAP_SYNC_JOBS.includes('initial_hk_universe'))
+  assert.deepEqual(STOCKINDEX_LIST_SYNC_JOBS, [
+    'initial_cn_etf',
     'initial_hk_universe',
     'initial_us_universe',
-    'initial_cn_etf',
   ])
+  assert.deepEqual(LEGACY_INITIAL_SYNC_JOBS, [...STOCKINDEX_LIST_SYNC_JOBS])
 })
 
 test('CN sync TTL: universe weekly, taxonomy weekly staggered, kline weekly', () => {
@@ -83,8 +94,10 @@ test('maintenance schedule: universe and taxonomy alternate weekly', () => {
     kline_daily: daysAgo(8),
   }
   const jobs = cnMaintenanceJobsDue(taxDue)
-  assert.equal(jobs.length, 1)
-  assert.ok(jobs[0] === 'initial_cn_universe' || jobs[0] === 'initial_taxonomy')
+  assert.ok(jobs.includes('initial_cn_universe') || jobs.includes('initial_taxonomy'))
+  assert.ok(jobs.includes('initial_cn_etf'))
+  assert.ok(jobs.includes('initial_hk_universe'))
+  assert.ok(jobs.includes('initial_us_universe'))
 
   const firstTaxonomy = {
     initial_cn_universe: daysAgo(1),

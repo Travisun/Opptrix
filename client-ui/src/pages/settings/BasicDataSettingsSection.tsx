@@ -17,11 +17,7 @@ import type {
   MarketDataSyncState,
   MarketDbStatusData,
 } from '../../types/market'
-import {
-  SettingsGroup,
-  SettingsRow,
-  SettingsStaticBlock,
-} from './SettingsPrimitives'
+import { SettingsGroup } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
@@ -30,52 +26,37 @@ const POLL_RUNNING_MS = 5000
 const POLL_IDLE_MS = 30_000
 const THS_KLINE_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
 
-function formatKlineJobStats(
-  jobName: string,
-  dbStatus: MarketDbStatusData | null,
-  syncState: MarketDataSyncState | null,
-  isRunning: boolean,
-): string {
-  const prog = dbStatus?.job_progress?.[jobName]
-  const done = prog?.done ?? 0
-  const latest = dbStatus?.kline_dates?.CN
-  const depthRatio = dbStatus?.bootstrap?.kline_stock_ratio
-  const recentRatio = dbStatus?.bootstrap?.kline_recent_ratio
+type BootstrapGateKey = 'initial_cn' | 'initial_taxonomy' | 'initial_cn_etf' | 'initial_hk' | 'initial_us'
 
-  if (isRunning && syncState?.current_job === jobName) {
-    if (syncState.message) return syncState.message
-    if (syncState.job_batch_total && syncState.job_batch_total > 0) {
-      return `${syncState.job_batch_current ?? 0}/${syncState.job_batch_total}`
-    }
-    return '导入中…'
-  }
-
-  if (THS_KLINE_JOBS.has(jobName)) {
-    const parts: string[] = []
-    if (done > 0) parts.push(`${done.toLocaleString()} 只日 K`)
-    else if (typeof recentRatio === 'number' && recentRatio > 0) {
-      parts.push(`日 K 覆盖 ${recentRatio.toFixed(1)}%`)
-    }
-    if (typeof depthRatio === 'number' && depthRatio > 0) {
-      parts.push(`历史深度 ${depthRatio.toFixed(1)}%`)
-    } else if ((done > 0 || (recentRatio ?? 0) > 0) && jobName === 'kline_bootstrap') {
-      parts.push('历史深度待补全')
-    }
-    if (latest) parts.push(`最新 ${formatDate(latest)}`)
-    return parts.length ? parts.join(' · ') : '—'
-  }
-
-  const pending = prog?.pending ?? 0
-  const total = done + pending
-  return total > 0 ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'
+/** 完成态由 bootstrap 门控判定（StockIndex 名录 / taxonomy 等非逐股进度任务） */
+const BOOTSTRAP_GATE_JOBS: Record<string, BootstrapGateKey> = {
+  initial_cn_universe: 'initial_cn',
+  initial_cn_etf: 'initial_cn_etf',
+  initial_hk_universe: 'initial_hk',
+  initial_us_universe: 'initial_us',
+  initial_taxonomy: 'initial_taxonomy',
 }
 
 const SYNC_JOB_LABELS: Record<string, string> = {
   initial_cn_universe: 'A 股名录',
+  initial_cn_etf: 'A 股 ETF',
+  initial_hk_universe: '港股名录',
+  initial_us_universe: '美股名录',
   initial_taxonomy: 'A 股行业/板块',
-  kline_bootstrap: 'A 股历史 K 线（同花顺数据包）',
-  kline_daily: 'A 股日 K 线（同花顺增量包）',
+  kline_bootstrap: 'A 股历史 K 线',
+  kline_daily: 'A 股日 K 线',
 }
+
+/** 同步任务展示顺序（与 pipeline 一致） */
+const SYNC_JOB_ITEMS = [
+  'initial_cn_universe',
+  'initial_cn_etf',
+  'initial_hk_universe',
+  'initial_us_universe',
+  'initial_taxonomy',
+  'kline_bootstrap',
+  'kline_daily',
+] as const
 
 const useStyles = makeStyles({
   root: {
@@ -202,19 +183,28 @@ const useStyles = makeStyles({
     fontSize: '12px',
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
-    minWidth: '80px',
+    minWidth: '88px',
   },
   jobProgress: {
     flex: 1,
     minWidth: 0,
   },
+  jobTrailing: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    gap: '4px',
+    flexShrink: 0,
+    minWidth: '88px',
+  },
   jobStats: {
     fontSize: '11px',
     color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
-    minWidth: '70px',
+  },
+  jobStatsMuted: {
+    opacity: 0.65,
   },
   jobStatsError: {
     color: opptrixCssVars.error,
@@ -253,6 +243,117 @@ function formatDate(dateStr: string | null): string {
 
 function jobDisplayName(jobName: string): string {
   return SYNC_JOB_LABELS[jobName] ?? jobName
+}
+
+function runningJobDetail(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+  syncState: MarketDataSyncState | null,
+): string {
+  if (syncState?.message) return syncState.message
+  if (syncState?.job_batch_total && syncState.job_batch_total > 0) {
+    return `${syncState.job_batch_current ?? 0}/${syncState.job_batch_total}`
+  }
+
+  const prog = dbStatus?.job_progress?.[jobName]
+  const done = prog?.done ?? 0
+  const pending = prog?.pending ?? 0
+  const total = done + pending
+
+  if (THS_KLINE_JOBS.has(jobName)) return '导入中…'
+  if (total > 0) return `${done.toLocaleString()}/${total.toLocaleString()}`
+  return '同步中…'
+}
+
+function idleJobDetail(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+): string {
+  const prog = dbStatus?.job_progress?.[jobName]
+  const done = prog?.done ?? 0
+  const latest = dbStatus?.kline_dates?.CN
+  const depthRatio = dbStatus?.bootstrap?.kline_stock_ratio
+  const recentRatio = dbStatus?.bootstrap?.kline_recent_ratio
+
+  if (THS_KLINE_JOBS.has(jobName)) {
+    const parts: string[] = []
+    if (done > 0) parts.push(`${done.toLocaleString()} 只日 K`)
+    else if (typeof recentRatio === 'number' && recentRatio > 0) {
+      parts.push(`日 K 覆盖 ${recentRatio.toFixed(1)}%`)
+    }
+    if (typeof depthRatio === 'number' && depthRatio > 0) {
+      parts.push(`历史深度 ${depthRatio.toFixed(1)}%`)
+    } else if ((done > 0 || (recentRatio ?? 0) > 0) && jobName === 'kline_bootstrap') {
+      parts.push('历史深度待补全')
+    }
+    if (latest) parts.push(`最新 ${formatDate(latest)}`)
+    return parts.length ? parts.join(' · ') : '—'
+  }
+
+  const pending = prog?.pending ?? 0
+  const total = done + pending
+  return total > 0 ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'
+}
+
+function resolveJobProgress(
+  jobName: string,
+  dbStatus: MarketDbStatusData | null,
+  syncState: MarketDataSyncState | null,
+  isJobRunning: boolean,
+): { pct: number; hasData: boolean; isComplete: boolean } {
+  const prog = dbStatus?.job_progress?.[jobName]
+  const done = prog?.done ?? 0
+  const pending = prog?.pending ?? 0
+  const error = prog?.error ?? 0
+  const total = done + pending
+  const isKlineDump = THS_KLINE_JOBS.has(jobName)
+
+  if (isKlineDump) {
+    if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
+      return {
+        pct: Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10,
+        hasData: true,
+        isComplete: false,
+      }
+    }
+    const ratio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
+    const isComplete = jobName === 'kline_bootstrap'
+      ? (dbStatus?.bootstrap?.klines ?? false)
+      : pending === 0 && done > 0 && error === 0
+    return {
+      pct: Math.min(100, Math.round(ratio * 10) / 10),
+      hasData: ratio > 0 || done > 0 || isJobRunning,
+      isComplete,
+    }
+  }
+
+  const gateKey = BOOTSTRAP_GATE_JOBS[jobName]
+  if (gateKey) {
+    const gateOk = dbStatus?.bootstrap?.[gateKey] ?? false
+    if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
+      return {
+        pct: Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10,
+        hasData: true,
+        isComplete: false,
+      }
+    }
+    if (gateOk) return { pct: 100, hasData: true, isComplete: true }
+    if (total > 0) {
+      return {
+        pct: Math.round((done / total) * 1000) / 10,
+        hasData: true,
+        isComplete: false,
+      }
+    }
+    return { pct: 0, hasData: isJobRunning, isComplete: false }
+  }
+
+  const isComplete = total > 0 && done >= total && error === 0
+  return {
+    pct: total > 0 ? Math.round((done / total) * 1000) / 10 : 0,
+    hasData: total > 0 || isJobRunning,
+    isComplete,
+  }
 }
 
 export default function BasicDataSettingsSection() {
@@ -298,6 +399,10 @@ export default function BasicDataSettingsSection() {
     }
   }, [fetchAll, isRunning])
 
+  useEffect(() => {
+    if (isRunning) void fetchAll()
+  }, [isRunning, fetchAll])
+
   const handleSync = useCallback(async () => {
     try {
       setSyncing(true)
@@ -305,8 +410,10 @@ export default function BasicDataSettingsSection() {
       const result = resp.data
       if (result?.started) {
         toast.showSuccess('已开始同步基础数据')
+        void fetchAll()
       } else if (result?.running) {
         toast.showSuccess('同步已在运行中')
+        void fetchAll()
       } else {
         toast.showSuccess('无需同步，数据已是最新')
       }
@@ -315,7 +422,7 @@ export default function BasicDataSettingsSection() {
     } finally {
       setSyncing(false)
     }
-  }, [toast])
+  }, [toast, fetchAll])
 
   const overallPercent = syncState?.overall_percent ?? 0
   const bootstrapReady = dbStatus?.bootstrap?.ready ?? false
@@ -325,7 +432,6 @@ export default function BasicDataSettingsSection() {
   const etfCount = dbStatus?.etf_count ?? 0
   const usCount = dbStatus?.us_count ?? 0
   const hkCount = dbStatus?.hk_count ?? 0
-  const latestQuoteDate = dbStatus?.latest_trade_date
 
   if (loading && !dbStatus && !syncState) {
     return (
@@ -337,7 +443,6 @@ export default function BasicDataSettingsSection() {
 
   return (
     <div className={s.root}>
-      {/* Status banner */}
       <div
         className={mergeClasses(s.statusBanner, bootstrapReady && s.statusBannerReady)}
         style={bootstrapReady ? { borderColor: 'rgba(52, 199, 89, 0.3)' } : undefined}
@@ -360,12 +465,11 @@ export default function BasicDataSettingsSection() {
                 ? syncState.message
                 : klineRecentRatio >= 50 && klineDepthRatio < 95
                   ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
-                  : '需先完成 A 股名录、行业板块与历史 K 线同步'}
+                  : '需先完成名录、行业板块与历史 K 线同步'}
           </Text>
         </div>
       </div>
 
-      {/* Stats grid */}
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>数据概览</Text>
         <div className={s.statsRow}>
@@ -414,11 +518,9 @@ export default function BasicDataSettingsSection() {
         </div>
       </div>
 
-      {/* Sync progress */}
       <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>同步进度</Text>
+        <Text className={s.sectionLabel} block>同步状态</Text>
         <SettingsGroup>
-          {/* Overall progress when running */}
           {isRunning && (
             <div className={s.progressBarWrap}>
               <div className={s.progressInfoRow}>
@@ -430,11 +532,7 @@ export default function BasicDataSettingsSection() {
                   {overallPercent.toFixed(1)}%
                 </Text>
               </div>
-              <ProgressBar
-                max={100}
-                value={overallPercent}
-                style={{ height: '4px' }}
-              />
+              <ProgressBar max={100} value={overallPercent} style={{ height: '4px' }} />
               <Text style={{ fontSize: '11px', color: opptrixCssVars.textTertiary }} block>
                 {syncState?.message
                   ?? `${syncState?.jobs_completed ?? 0}/${syncState?.jobs_total ?? 0} 个任务`}
@@ -442,106 +540,64 @@ export default function BasicDataSettingsSection() {
             </div>
           )}
 
-          {/* Per-job progress rows */}
-          {Object.entries(SYNC_JOB_LABELS).map(([jobName, label]) => {
-            const prog = dbStatus?.job_progress?.[jobName]
-            const done = prog?.done ?? 0
-            const pending = prog?.pending ?? 0
-            const error = prog?.error ?? 0
-            const total = done + pending
-            const isKlineDump = THS_KLINE_JOBS.has(jobName)
+          {SYNC_JOB_ITEMS.map(jobName => {
+            const label = SYNC_JOB_LABELS[jobName] ?? jobName
             const isCurrent = syncState?.current_job === jobName
             const isJobRunning = isRunning && isCurrent
+            const lastSync = dbStatus?.last_sync?.[jobName] ?? null
+            const { pct, hasData, isComplete } = resolveJobProgress(
+              jobName,
+              dbStatus,
+              syncState,
+              isJobRunning,
+            )
+            const prog = dbStatus?.job_progress?.[jobName]
+            const error = prog?.error ?? 0
 
-            let pct = 0
-            let hasData = false
-            let isComplete = false
-
-            if (isKlineDump) {
-              if (isJobRunning && (syncState?.job_batch_total ?? 0) > 0) {
-                pct = Math.round(((syncState?.job_batch_current ?? 0) / (syncState?.job_batch_total ?? 100)) * 1000) / 10
-                hasData = true
-              } else {
-                const ratio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
-                pct = Math.min(100, Math.round(ratio * 10) / 10)
-                hasData = ratio > 0 || done > 0
-                if (jobName === 'kline_bootstrap') {
-                  isComplete = dbStatus?.bootstrap?.klines ?? false
-                } else {
-                  isComplete = pending === 0 && done > 0 && error === 0
-                }
-              }
+            let trailingText: string
+            if (isJobRunning) {
+              trailingText = runningJobDetail(jobName, dbStatus, syncState)
+            } else if (isComplete && lastSync) {
+              trailingText = formatDate(lastSync)
+            } else if (isComplete) {
+              trailingText = idleJobDetail(jobName, dbStatus)
+            } else if (lastSync) {
+              trailingText = formatDate(lastSync)
             } else {
-              pct = total > 0 ? Math.round((done / total) * 1000) / 10 : 0
-              hasData = total > 0
-              isComplete = hasData && done >= total && error === 0
+              const detail = idleJobDetail(jobName, dbStatus)
+              trailingText = detail !== '—' ? detail : '未同步'
             }
-
-            const statsText = formatKlineJobStats(jobName, dbStatus, syncState, isJobRunning)
 
             return (
               <div key={jobName} className={mergeClasses(s.jobRow, isCurrent && s.jobRowActive)}>
                 <Text className={s.jobName} block>{label}</Text>
                 <div className={s.jobProgress}>
                   {hasData && (
-                    <ProgressBar
-                      max={100}
-                      value={pct}
-                      style={{ height: '3px' }}
-                    />
+                    <ProgressBar max={100} value={pct} style={{ height: '3px' }} />
                   )}
                 </div>
-                {isComplete ? (
-                  <span style={{ color: opptrixCssVars.success, flexShrink: 0 }}>
-                    <CheckmarkRegular fontSize={14} />
-                  </span>
-                ) : (
+                <div className={s.jobTrailing}>
+                  {isComplete && !isJobRunning && (
+                    <CheckmarkRegular fontSize={14} style={{ color: opptrixCssVars.success }} />
+                  )}
                   <Text
-                    className={mergeClasses(s.jobStats, error > 0 && s.jobStatsError)}
+                    className={mergeClasses(
+                      s.jobStats,
+                      !isJobRunning && !isComplete && !lastSync && s.jobStatsMuted,
+                      error > 0 && s.jobStatsError,
+                    )}
                     block
                   >
-                    {statsText}
-                    {!isKlineDump && error > 0 && ` ×${error}`}
+                    {trailingText}
+                    {!THS_KLINE_JOBS.has(jobName) && error > 0 ? ` ×${error}` : ''}
                   </Text>
-                )}
+                </div>
               </div>
             )
           })}
         </SettingsGroup>
       </div>
 
-      {/* Sync times */}
-      <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>最后同步</Text>
-        <SettingsGroup>
-          {dbStatus?.last_sync?.initial_cn_universe && (
-            <SettingsRow
-              title="A 股名录"
-              desc={formatDate(dbStatus.last_sync.initial_cn_universe)}
-            />
-          )}
-          {dbStatus?.last_sync?.initial_taxonomy && (
-            <SettingsRow
-              title="行业/板块"
-              desc={formatDate(dbStatus.last_sync.initial_taxonomy)}
-            />
-          )}
-          {dbStatus?.last_sync?.kline_bootstrap && (
-            <SettingsRow
-              title="历史 K 线（补全）"
-              desc={formatDate(dbStatus.last_sync.kline_bootstrap)}
-            />
-          )}
-          {dbStatus?.last_sync?.kline_daily && (
-            <SettingsRow
-              title="日 K 线"
-              desc={formatDate(dbStatus.last_sync.kline_daily)}
-            />
-          )}
-        </SettingsGroup>
-      </div>
-
-      {/* Action */}
       <div className={s.sectionBlock}>
         <OpptrixButton
           variant="secondary"
@@ -550,11 +606,10 @@ export default function BasicDataSettingsSection() {
           disabled={syncing || isRunning}
           onClick={handleSync}
         >
-          {isRunning ? '同步进行中…' : syncing ? '提交中…' : '同步 A 股基础数据'}
+          {isRunning ? '同步进行中…' : syncing ? '提交中…' : '同步基础数据'}
         </OpptrixButton>
       </div>
 
-      {/* Logs */}
       {syncState && syncState.logs.length > 0 && (
         <div className={s.sectionBlock}>
           <Text className={s.sectionLabel} block>同步日志</Text>

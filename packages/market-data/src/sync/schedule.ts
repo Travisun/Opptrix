@@ -140,5 +140,10 @@ export function cnMaintenanceJobsDue(
   }
 
   if (cnKlineDailyMaintenanceDue(lastSync, now)) jobs.push('kline_daily')
+
+  for (const job of ['initial_cn_etf', 'initial_hk_universe', 'initial_us_universe'] as const) {
+    if (selfStale(job, lastSync)) jobs.push(job)
+  }
+
   return jobs
 }

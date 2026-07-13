@@ -37,9 +37,17 @@ export const SCREEN_PACK_FACTORS = [
   'volume_ratio',
 ] as const
 
-/** 首次/未完成：A 股名录 → 行业 → 历史 K 补全（约 130 根） */
+/** StockIndex 名录：A 股 ETF + 港股/美股（与 CN 名录同 API 源） */
+export const STOCKINDEX_LIST_SYNC_JOBS = [
+  'initial_cn_etf',
+  'initial_hk_universe',
+  'initial_us_universe',
+] as const
+
+/** 首次/未完成：A 股名录 → ETF/港美名录 → 行业 → 历史 K 补全 */
 export const CN_BOOTSTRAP_SYNC_JOBS = [
   'initial_cn_universe',
+  ...STOCKINDEX_LIST_SYNC_JOBS,
   'initial_taxonomy',
   'kline_bootstrap',
 ] as const
@@ -47,6 +55,7 @@ export const CN_BOOTSTRAP_SYNC_JOBS = [
 /** 就绪后按 TTL 自动维护 */
 export const CN_MAINTENANCE_SYNC_JOBS = [
   'initial_cn_universe',
+  ...STOCKINDEX_LIST_SYNC_JOBS,
   'kline_daily',
   'initial_taxonomy',
 ] as const
@@ -72,12 +81,8 @@ export const CN_AUTO_SYNC_JOB_UNIVERSE = [
 /** 同花顺 Parquet 批量 K 线任务（非逐股 Provider） */
 export const THS_KLINE_DUMP_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
 
-/** @deprecated 港股/美股/ETF 名录改由其他导入方式；保留 job 名供引擎 legacy 分支 */
-export const LEGACY_INITIAL_SYNC_JOBS = [
-  'initial_hk_universe',
-  'initial_us_universe',
-  'initial_cn_etf',
-] as const
+/** @deprecated 使用 STOCKINDEX_LIST_SYNC_JOBS */
+export const LEGACY_INITIAL_SYNC_JOBS = [...STOCKINDEX_LIST_SYNC_JOBS] as const
 
 /** L0 bootstrap = A 股首次 pipeline（含历史 K 补全） */
 export const INITIAL_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
