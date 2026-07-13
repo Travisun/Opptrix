@@ -122,6 +122,15 @@ const useStyles = makeStyles({
   statusBannerAction: {
     flexShrink: 0,
   },
+  statusBannerActionBtn: {
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.border}`,
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.04)',
+    ':hover': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+      border: `1px solid ${opptrixCssVars.separatorStrong}`,
+    },
+  },
   statusBannerTitle: {
     fontSize: '13px',
     fontWeight: 600,
@@ -160,6 +169,13 @@ const useStyles = makeStyles({
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  statCellSub: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.35,
+    marginTop: '2px',
     fontVariantNumeric: 'tabular-nums',
   },
   progressBarWrap: {
@@ -340,6 +356,17 @@ function idleJobDetail(
   return total > 0 ? `${done.toLocaleString()}/${total.toLocaleString()}` : '—'
 }
 
+/** A 股日 K 是否已具备（全量或近期导入完成即可用于本地 K 线/因子） */
+function hasCnDailyKline(dbStatus: MarketDbStatusData | null): boolean {
+  if (!dbStatus) return false
+  if (dbStatus.kline_dates?.CN) return true
+  if (dbStatus.last_sync?.kline_bootstrap || dbStatus.last_sync?.kline_daily) return true
+  if (dbStatus.bootstrap?.klines) return true
+  if ((dbStatus.bootstrap?.kline_recent_ratio ?? 0) > 0) return true
+  if ((dbStatus.bootstrap?.kline_stock_ratio ?? 0) > 0) return true
+  return false
+}
+
 function gateJobComplete(
   jobName: string,
   dbStatus: MarketDbStatusData | null,
@@ -509,6 +536,8 @@ export default function BasicDataSettingsSection() {
 
   const overallPercent = syncState?.overall_percent ?? 0
   const bootstrapReady = dbStatus?.bootstrap?.ready ?? false
+  const dailyKlineReady = !bootstrapReady && hasCnDailyKline(dbStatus)
+  const bannerPositive = bootstrapReady || dailyKlineReady
   const klineRecentRatio = dbStatus?.bootstrap?.kline_recent_ratio ?? 0
   const klineDepthRatio = dbStatus?.bootstrap?.kline_stock_ratio ?? 0
   const stockCount = dbStatus?.stock_count ?? 0
@@ -539,6 +568,13 @@ export default function BasicDataSettingsSection() {
   })()
   const progressPercent = isRunning ? overallPercent : displayOverall
   const showLogPanel = logText.trim().length > 0
+  const cnKlineDate = dbStatus?.kline_dates?.CN ?? null
+  const overviewItems = [
+    { key: 'cn', label: 'A 股', count: stockCount, klineDate: cnKlineDate },
+    { key: 'etf', label: 'ETF', count: etfCount, klineDate: cnKlineDate },
+    { key: 'hk', label: '港股', count: hkCount, klineDate: dbStatus?.kline_dates?.HK ?? null },
+    { key: 'us', label: '美股', count: usCount, klineDate: dbStatus?.kline_dates?.US ?? null },
+  ] as const
 
   if (loading && !dbStatus && !syncState) {
     return (
@@ -551,11 +587,11 @@ export default function BasicDataSettingsSection() {
   return (
     <div className={s.root}>
       <div
-        className={mergeClasses(s.statusBanner, bootstrapReady && s.statusBannerReady)}
-        style={bootstrapReady ? { borderColor: 'rgba(52, 199, 89, 0.3)' } : undefined}
+        className={mergeClasses(s.statusBanner, bannerPositive && s.statusBannerReady)}
+        style={bannerPositive ? { borderColor: 'rgba(52, 199, 89, 0.3)' } : undefined}
       >
         <div className={s.statusBannerIcon}>
-          {bootstrapReady ? (
+          {bootstrapReady || dailyKlineReady ? (
             <CheckmarkCircleFilled fontSize={24} style={{ color: opptrixCssVars.success }} />
           ) : isRunning ? (
             <ArrowSyncCircleRegular fontSize={24} style={{ color: opptrixCssVars.textSecondary }} />
@@ -565,24 +601,33 @@ export default function BasicDataSettingsSection() {
         </div>
         <div className={s.statusBannerText}>
           <Text className={s.statusBannerTitle} block>
-            {bootstrapReady ? '基础数据已就绪' : isRunning ? '基础数据同步中' : '基础数据未就绪'}
+            {bootstrapReady
+              ? '基础数据已就绪'
+              : dailyKlineReady
+                ? '基础数据已具备'
+                : isRunning
+                  ? '基础数据同步中'
+                  : '基础数据未就绪'}
           </Text>
           <Text className={s.statusBannerDesc} block>
             {bootstrapReady
               ? '本地数据完整，可开始选股与挖掘'
-              : isRunning
-                ? (syncState?.message
-                  ?? (syncState?.current_job
-                    ? `正在同步：${jobDisplayName(syncState.current_job)}（${overallPercent.toFixed(1)}%）`
-                    : '正在同步名录、行业与 K 线数据…'))
-                : klineRecentRatio >= 50 && klineDepthRatio < 95
-                  ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
-                  : '需先完成名录、行业板块与历史 K 线同步'}
+              : dailyKlineReady
+                ? '可查看 K 线、使用本地选股与行业数据；其余项目将自动更新'
+                : isRunning
+                  ? (syncState?.message
+                    ?? (syncState?.current_job
+                      ? `正在同步：${jobDisplayName(syncState.current_job)}（${overallPercent.toFixed(1)}%）`
+                      : '正在同步名录、行业与 K 线数据…'))
+                  : klineRecentRatio >= 50 && klineDepthRatio < 95
+                    ? '已有近期日 K，历史 K 线全量包首次导入约需 10–20 分钟，请保持网络畅通'
+                    : '需先完成名录、行业板块与历史 K 线同步'}
           </Text>
         </div>
         <div className={s.statusBannerAction}>
           <OpptrixButton
-            variant="secondary"
+            variant={bannerPositive ? 'pill' : 'secondary'}
+            className={bannerPositive ? s.statusBannerActionBtn : undefined}
             icon={isRunning || syncing ? <Spinner size="tiny" /> : <ArrowSyncRegular fontSize={14} />}
             disabled={syncing || isRunning}
             onClick={handleSync}
@@ -595,48 +640,15 @@ export default function BasicDataSettingsSection() {
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>数据概览</Text>
         <div className={s.statsRow}>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>A 股</Text>
-            <Text className={s.statCellValue} block>{stockCount.toLocaleString()}</Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>ETF</Text>
-            <Text className={s.statCellValue} block>{etfCount.toLocaleString()}</Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>港股</Text>
-            <Text className={s.statCellValue} block>{hkCount.toLocaleString()}</Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>美股</Text>
-            <Text className={s.statCellValue} block>{usCount.toLocaleString()}</Text>
-          </div>
-        </div>
-        <div className={s.statsRow}>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>A 股 K 线</Text>
-            <Text className={s.statCellValue} block style={{ fontSize: '12px' }}>
-              {dbStatus?.kline_dates?.CN ? formatDate(dbStatus.kline_dates.CN) : '—'}
-            </Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>ETF K 线</Text>
-            <Text className={s.statCellValue} block style={{ fontSize: '12px' }}>
-              {dbStatus?.kline_dates?.CN ? formatDate(dbStatus.kline_dates.CN) : '—'}
-            </Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>港股 K 线</Text>
-            <Text className={s.statCellValue} block style={{ fontSize: '12px' }}>
-              {dbStatus?.kline_dates?.HK ? formatDate(dbStatus.kline_dates.HK) : '—'}
-            </Text>
-          </div>
-          <div className={s.statCell}>
-            <Text className={s.statCellLabel} block>美股 K 线</Text>
-            <Text className={s.statCellValue} block style={{ fontSize: '12px' }}>
-              {dbStatus?.kline_dates?.US ? formatDate(dbStatus.kline_dates.US) : '—'}
-            </Text>
-          </div>
+          {overviewItems.map(item => (
+            <div key={item.key} className={s.statCell}>
+              <Text className={s.statCellLabel} block>{item.label}</Text>
+              <Text className={s.statCellValue} block>{item.count.toLocaleString()}</Text>
+              <Text className={s.statCellSub} block>
+                日 K {item.klineDate ? formatDate(item.klineDate) : '—'}
+              </Text>
+            </div>
+          ))}
         </div>
       </div>
 
