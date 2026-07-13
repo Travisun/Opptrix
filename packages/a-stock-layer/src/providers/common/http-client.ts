@@ -14,6 +14,10 @@
 
 import { HTTP_DEFAULT_HEADERS, sleep } from '../../utils/http-shared.js'
 import { hostnameLimiter, extractHostname } from './rate-limiter.js'
+import {
+  FREE_PROVIDER_EMPTY_BODY_REASON,
+  isEmptyHttpResponseBody,
+} from '@opptrix/shared'
 
 /** 需要重试的 HTTP 状态码 */
 const RETRY_STATUS = new Set([429, 500, 502, 503, 504])
@@ -155,8 +159,11 @@ export class ProviderHttpClient {
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
 
       const ct = resp.headers.get('content-type') ?? ''
-      if (ct.includes('json')) return resp.json() as Promise<T>
       const text = await resp.text()
+      if (isEmptyHttpResponseBody(text)) {
+        throw new Error(FREE_PROVIDER_EMPTY_BODY_REASON)
+      }
+      if (ct.includes('json')) return JSON.parse(text) as T
       if (text.trimStart().startsWith('<')) throw new Error('HTML response')
       return JSON.parse(text) as T
     })
@@ -174,7 +181,11 @@ export class ProviderHttpClient {
       const timeout = options?.timeoutMs ?? this.config.timeoutMs
       const resp = await this.fetchWithRetry(url, { headers }, timeout)
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      return resp.text()
+      const text = await resp.text()
+      if (isEmptyHttpResponseBody(text)) {
+        throw new Error(FREE_PROVIDER_EMPTY_BODY_REASON)
+      }
+      return text
     })
   }
 
@@ -198,7 +209,11 @@ export class ProviderHttpClient {
         timeout,
       )
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      return resp.json() as Promise<T>
+      const text = await resp.text()
+      if (isEmptyHttpResponseBody(text)) {
+        throw new Error(FREE_PROVIDER_EMPTY_BODY_REASON)
+      }
+      return JSON.parse(text) as T
     })
   }
 
@@ -222,7 +237,11 @@ export class ProviderHttpClient {
         timeout,
       )
       if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
-      return resp.json() as Promise<T>
+      const text = await resp.text()
+      if (isEmptyHttpResponseBody(text)) {
+        throw new Error(FREE_PROVIDER_EMPTY_BODY_REASON)
+      }
+      return JSON.parse(text) as T
     })
   }
 

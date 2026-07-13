@@ -181,6 +181,15 @@ export {
   type InstrumentQueryPlan,
 } from './core/instrument-query.js'
 export {
+  getFreeProviderThrottle,
+  shouldSkipProviderQuery,
+  recordProviderQuerySuccess,
+  recordProviderQueryEmpty,
+  recordProviderQueryError,
+  isFreeMarketDataProvider,
+} from './core/free-provider-throttle.js'
+export { invokeProviderDriverMethod } from './core/provider-driver-guard.js'
+export {
   wireProviderSymbolArg,
   wireRegistryMethodArgs,
   formatProviderMethodArgs,

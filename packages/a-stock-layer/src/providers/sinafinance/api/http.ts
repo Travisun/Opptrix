@@ -1,5 +1,6 @@
 import { ProviderHttpClient } from '../../common/http-client.js'
 import { HTTP_DEFAULT_HEADERS } from '../../../utils/http-shared.js'
+import { FREE_PROVIDER_EMPTY_BODY_REASON, isEmptyHttpResponseBody } from '@opptrix/shared'
 import { SinafinanceHttpError } from './errors.js'
 import { SINA_REFERER } from './types.js'
 
@@ -33,7 +34,11 @@ export async function fetchText(
     throw new SinafinanceHttpError(resp.status, detail || undefined)
   }
   const buf = await resp.arrayBuffer()
-  return new TextDecoder(encoding).decode(buf)
+  const text = new TextDecoder(encoding).decode(buf)
+  if (isEmptyHttpResponseBody(text)) {
+    throw new SinafinanceHttpError(resp.status, FREE_PROVIDER_EMPTY_BODY_REASON)
+  }
+  return text
 }
 
 export async function fetchJson<T>(url: string, referer: string = SINA_REFERER): Promise<T> {

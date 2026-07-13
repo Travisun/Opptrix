@@ -6,6 +6,7 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   wireRegistryMethodArgs,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
   type NewsItem, type MoneyFlow, type Dividend,
+  invokeProviderDriverMethod,
   crossMarketChartTimeZone,
   hkFdaysToIntradayItems,
   intradaySessionDateFromKlines,
@@ -1431,25 +1432,26 @@ export class ResearchHub {
     ])
   }
 
-  /** 绕过 queryScoped 测速，按优先级直连指定 provider（详情页避免 zzshare 代理抢先） */
+  /** 按优先级直连 provider；仍走免费源限流冷却与熔断守卫 */
   private async callDetailProviderMethod<T>(
     providerIds: string[],
     method: string,
     args: unknown[],
     ref?: InstrumentRef,
   ): Promise<T[] | null> {
+    const capKey = `detail:${method}`
     for (const pid of providerIds) {
       const driver = this.de.registry.get(pid) as Record<string, unknown> | undefined
       if (!driver) continue
       const fn = driver[method] as ((...a: unknown[]) => Promise<T[] | null>) | undefined
       if (typeof fn !== 'function') continue
-      try {
-        const wiredArgs = ref ? wireRegistryMethodArgs(pid, method, args, ref) : args
-        const data = await fn.apply(driver, wiredArgs)
-        if (data?.length) return data
-      } catch {
-        continue
-      }
+      const wiredArgs = ref ? wireRegistryMethodArgs(pid, method, args, ref) : args
+      const data = await invokeProviderDriverMethod<T>(
+        pid,
+        capKey,
+        () => fn.apply(driver, wiredArgs),
+      )
+      if (data?.length) return data
     }
     return null
   }

@@ -20,6 +20,14 @@ import {
 } from '../utils/quote-normalize.js'
 import type { StockRealtime } from '@opptrix/shared'
 import { getProviderHealthTracker } from './provider-health.js'
+import {
+  pickNextDriver,
+  recordProviderQueryEmpty,
+  recordProviderQueryError,
+  recordProviderQueryInvalid,
+  recordProviderQuerySuccess,
+  shouldSkipProviderQuery,
+} from './free-provider-throttle.js'
 import { validateResponse } from './data-validator.js'
 
 /**
@@ -199,19 +207,20 @@ export class QueryPlanExecutor {
     const attempted = new Set<string>()
     for (let attempt = 0; attempt < 3; attempt++) {
       const assetClass = ctx.assetClass ?? resolveAssetClassFromArgs(ctx.args, plan.assetClass)
-      const driver = this.registry.getLoadAwareProvider(plan.market, assetClass, plan.capability)
+      const allDrivers = this.registry.getProvidersWithFallback(plan.market, assetClass, plan.capability)
+      let driver = this.registry.getLoadAwareProvider(plan.market, assetClass, plan.capability)
       if (!driver) {
         const key = bindingKey(plan.market, assetClass, plan.capability)
         return { success: false, error: `没有可用的 provider 支持 [${key}]` }
       }
-      if (attempted.has(driver.name)) break
+      const nextDriver = pickNextDriver(driver, allDrivers, attempted)
+      if (!nextDriver) break
+      driver = nextDriver
       attempted.add(driver.name)
 
-      if (health.shouldSkip(driver.name, capStr)) {
-        const h = health.getHealth(driver.name, capStr)
-        if (h?.state === 'open') {
-          lastError = `${driver.name}: 熔断中 (连续失败${h.consecutiveFails}次)`
-        }
+      const skip = shouldSkipProviderQuery(driver.name, capStr, health)
+      if (skip.skip) {
+        lastError = skip.lastError
         continue
       }
 
@@ -228,7 +237,7 @@ export class QueryPlanExecutor {
           : await this.withTimeout(call, 15_000, driver.name)
         const elapsed = Date.now() - t0
         if (!data?.length) {
-          health.recordInvalidResponse(driver.name, capStr)
+          recordProviderQueryEmpty(driver.name, capStr, health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           lastError = `${driver.name}: 空数据`
@@ -237,21 +246,21 @@ export class QueryPlanExecutor {
 
         const validation = validateResponse(plan.capability, data)
         if (!validation.valid) {
-          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          recordProviderQueryInvalid(driver.name, capStr, validation.reason ?? 'invalid_response', health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           lastError = `${driver.name}: ${validation.reason}`
           continue
         }
 
-        health.recordSuccess(driver.name, capStr)
+        recordProviderQuerySuccess(driver.name, capStr, health)
         this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         return { success: true, data: data as T[], source: driver.name, cached: false }
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
-        health.recordFailure(driver.name, capStr, msg)
+        recordProviderQueryError(driver.name, capStr, e, health)
         this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker?.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {
@@ -297,7 +306,8 @@ export class QueryPlanExecutor {
     const capStr = String(plan.capability)
 
     for (const driver of drivers) {
-      if (health.shouldSkip(driver.name, capStr)) continue
+      const skip = shouldSkipProviderQuery(driver.name, capStr, health)
+      if (skip.skip) continue
 
       const batch = normalized.filter(c => !seen.has(c))
       if (!batch.length) break
@@ -316,7 +326,7 @@ export class QueryPlanExecutor {
           : await this.withTimeout(call, 15_000, driver.name)
         const elapsed = Date.now() - t0
         if (!result?.length) {
-          health.recordInvalidResponse(driver.name, capStr)
+          recordProviderQueryEmpty(driver.name, capStr, health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
@@ -324,19 +334,19 @@ export class QueryPlanExecutor {
 
         const validation = validateResponse(plan.capability, result)
         if (!validation.valid) {
-          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          recordProviderQueryInvalid(driver.name, capStr, validation.reason ?? 'invalid_response', health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker?.recordResult(driver.name, capStr, elapsed, false)
           continue
         }
 
-        health.recordSuccess(driver.name, capStr)
+        recordProviderQuerySuccess(driver.name, capStr, health)
         this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker?.recordResult(driver.name, capStr, elapsed, true)
         pushRows(result)
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
-        health.recordFailure(driver.name, capStr, msg)
+        recordProviderQueryError(driver.name, capStr, e, health)
         this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker?.recordResult(driver.name, capStr, 0, false)
         if (this.speedRanker?.shouldRebuild(driver.name, capStr)) {

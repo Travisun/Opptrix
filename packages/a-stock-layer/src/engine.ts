@@ -11,12 +11,21 @@ import { createProviderLoader, type ProviderLoader } from './providers/loader.js
 import { getProviderHealthTracker, type HealthSnapshot } from './core/provider-health.js'
 import {
   isPermissionDeniedError,
-  isProviderCapabilityDenied,
   recordProviderPermissionDenial,
   getProviderPermissionDenialSnapshot,
   clearProviderPermissionDenials,
   clearAllProviderPermissionDenials,
 } from './providers/common/permission-denial.js'
+import {
+  getFreeProviderThrottle,
+  isFreeMarketDataProvider,
+  pickNextDriver,
+  recordProviderQueryEmpty,
+  recordProviderQueryError,
+  recordProviderQueryInvalid,
+  recordProviderQuerySuccess,
+  shouldSkipProviderQuery,
+} from './core/free-provider-throttle.js'
 import { ProviderSpeedRanker } from './core/speed-ranker.js'
 import { LoadBalancer } from './core/load-balancer.js'
 import { validateResponse } from './core/data-validator.js'
@@ -171,32 +180,20 @@ export class MarketDataEngine {
     // 最多尝试 3 个 provider（负载均衡选择 + fallback）
     const attempted = new Set<string>()
     for (let attempt = 0; attempt < 3; attempt++) {
-      // 负载感知选择：从候选中选一个最优的
-      const driver = this.registry.getLoadAwareProvider(market, assetClass, cap)
+      const assetClassResolved = assetClass
+      const allDrivers = this.registry.getProvidersWithFallback(market, assetClassResolved, cap)
+      let driver = this.registry.getLoadAwareProvider(market, assetClassResolved, cap)
       if (!driver) {
         return { success: false, error: `没有可用的 provider 支持 [${market}/${assetClass}/${cap}]` }
       }
-      if (attempted.has(driver.name)) {
-        // 已经试过这个 provider，取下一个
-        const allDrivers = this.registry.getProvidersWithFallback(market, assetClass, cap)
-        const next = allDrivers.find(d => !attempted.has(d.name))
-        if (!next) break
-        // 用 next 替代
-      }
+      const nextDriver = pickNextDriver(driver, allDrivers, attempted)
+      if (!nextDriver) break
+      driver = nextDriver
       attempted.add(driver.name)
 
-      // Circuit breaker: skip unhealthy provider×capability
-      if (health.shouldSkip(driver.name, capStr)) {
-        const h = health.getHealth(driver.name, capStr)
-        if (h?.state === 'open') {
-          lastError = `${driver.name}: 熔断中 (连续失败${h.consecutiveFails}次, ${Math.max(0, Math.ceil((h.cooldownUntil - Date.now()) / 1000))}s后重试)`
-        }
-        continue
-      }
-
-      // 权限拒绝登记：永久跳过该 provider×capability（换 Key / 重启用后清除）
-      if (isProviderCapabilityDenied(driver.name, capStr)) {
-        lastError = `${driver.name}: 接口无权限（已登记屏蔽）`
+      const skip = shouldSkipProviderQuery(driver.name, capStr, health)
+      if (skip.skip) {
+        lastError = skip.lastError
         continue
       }
 
@@ -219,7 +216,7 @@ export class MarketDataEngine {
         const elapsed = Date.now() - t0
 
         if (!data?.length) {
-          health.recordInvalidResponse(driver.name, capStr)
+          recordProviderQueryEmpty(driver.name, capStr, health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
           lastError = `${driver.name}: 空数据`
@@ -228,14 +225,14 @@ export class MarketDataEngine {
 
         const validation = validateResponse(cap, data)
         if (!validation.valid) {
-          health.recordInvalidResponse(driver.name, capStr, validation.reason)
+          recordProviderQueryInvalid(driver.name, capStr, validation.reason ?? 'invalid_response', health)
           this.registry.notifyRelease(driver.name, elapsed, false)
           this.speedRanker.recordResult(driver.name, capStr, elapsed, false)
           lastError = `${driver.name}: ${validation.reason}`
           continue
         }
 
-        health.recordSuccess(driver.name, capStr)
+        recordProviderQuerySuccess(driver.name, capStr, health)
         this.registry.notifyRelease(driver.name, elapsed, true)
         this.speedRanker.recordResult(driver.name, capStr, elapsed, true)
         if (watchlistCache) {
@@ -246,11 +243,11 @@ export class MarketDataEngine {
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e)
         lastError = `${driver.name}: ${msg}`
-        if (isPermissionDeniedError(e)) {
+        if (!isFreeMarketDataProvider(driver.name) && isPermissionDeniedError(e)) {
           recordProviderPermissionDenial(driver.name, capStr, msg)
           this.registry.rebuildIndicesWithRanking()
         } else {
-          health.recordFailure(driver.name, capStr, msg)
+          recordProviderQueryError(driver.name, capStr, e, health)
         }
         this.registry.notifyRelease(driver.name, 0, false)
         this.speedRanker.recordResult(driver.name, capStr, 0, false)
@@ -1070,6 +1067,19 @@ export class MarketDataEngine {
     return getProviderHealthTracker().prune()
   }
 
+  /** 免费源限流冷却状态（持久化，跨进程生效） */
+  freeProviderThrottleStatus() {
+    return getFreeProviderThrottle().listAll()
+  }
+
+  freeProviderThrottleLogs(providerId?: string, limit = 100) {
+    return getFreeProviderThrottle().listLogs(providerId, limit)
+  }
+
+  resetFreeProviderThrottle(providerId?: string) {
+    getFreeProviderThrottle().reset(providerId)
+  }
+
   /** 已登记「权限不足」的 provider×接口（换 Key / 重启用后清除）。 */
   providerPermissionDenials() {
     return getProviderPermissionDenialSnapshot()
@@ -1124,12 +1134,9 @@ export class MarketDataEngine {
       const health = getProviderHealthTracker()
       const capStr = `custom:${methodName}`
 
-      if (health.shouldSkip(resolvedId, capStr)) {
-        return { success: false, error: `${resolvedId} 当前熔断中，请稍后重试` }
-      }
-
-      if (isProviderCapabilityDenied(resolvedId, capStr)) {
-        return { success: false, error: `${resolvedId}.${methodName} 无权限（已登记屏蔽）` }
+      const skip = shouldSkipProviderQuery(resolvedId, capStr, health)
+      if (skip.skip) {
+        return { success: false, error: skip.lastError }
       }
 
       const { args: normalizedArgs, transforms } = normalizeCustomMethodArgs(resolvedId, def, args)
@@ -1140,7 +1147,7 @@ export class MarketDataEngine {
         resolvedId,
       )
 
-      health.recordSuccess(resolvedId, capStr)
+      recordProviderQuerySuccess(resolvedId, capStr, health)
       return {
         success: true,
         data: result,
@@ -1150,11 +1157,11 @@ export class MarketDataEngine {
       const msg = e instanceof Error ? e.message : String(e)
       const health = getProviderHealthTracker()
       const capStr = `custom:${methodName}`
-      if (isPermissionDeniedError(e)) {
+      if (!isFreeMarketDataProvider(resolvedId) && isPermissionDeniedError(e)) {
         recordProviderPermissionDenial(resolvedId, capStr, msg)
         this.registry.rebuildIndicesWithRanking()
       } else {
-        health.recordFailure(resolvedId, capStr, msg)
+        recordProviderQueryError(resolvedId, capStr, e, health)
       }
       return { success: false, error: msg }
     }
@@ -1176,6 +1183,15 @@ export {
   BASE_COOLDOWN_MS,
   MAX_COOLDOWN_MS,
 } from './core/provider-health.js'
+export {
+  getFreeProviderThrottle,
+  shouldSkipProviderQuery,
+  recordProviderQuerySuccess,
+  recordProviderQueryEmpty,
+  recordProviderQueryError,
+  isFreeMarketDataProvider,
+} from './core/free-provider-throttle.js'
+export { invokeProviderDriverMethod } from './core/provider-driver-guard.js'
 export type { InterfaceHealth, HealthSnapshot } from './core/provider-health.js'
 export {
   listProviderCustomMethods,

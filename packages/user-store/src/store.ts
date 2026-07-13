@@ -12,6 +12,10 @@ import {
   SpeedRankingRepository,
 } from './speed-ranking.js'
 import {
+  initFreeProviderThrottleSchema,
+  FreeProviderThrottleRepository,
+} from './free-provider-throttle.js'
+import {
   clearFtsNews,
   clearFtsSessions,
   deleteFtsNews,
@@ -32,6 +36,7 @@ export class UserDataStore {
   private db: Database.Database
   readonly providerSettings: ProviderSettingsRepository
   readonly speedRanking: SpeedRankingRepository
+  readonly freeProviderThrottle: FreeProviderThrottleRepository
 
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -39,8 +44,10 @@ export class UserDataStore {
     this.db.pragma('journal_mode = WAL')
     initProviderSettingsSchema(this.db)
     initSpeedRankingSchema(this.db)
+    initFreeProviderThrottleSchema(this.db)
     this.providerSettings = new ProviderSettingsRepository(this.db)
     this.speedRanking = new SpeedRankingRepository(this.db)
+    this.freeProviderThrottle = new FreeProviderThrottleRepository(this.db)
     this.initSchema()
     this.migrateFromLegacyFiles()
     this.providerSettings.migrateFromLegacy(
