@@ -1,5 +1,5 @@
 /**
- * StockIndex HTTP 客户端 — https://stock-index.cuishushu.com/openapi/
+ * StockIndex HTTP 客户端 — https://open-stock.lirdb.com
  */
 
 import type { Market } from '@opptrix/shared'

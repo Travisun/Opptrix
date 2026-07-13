@@ -1,5 +1,5 @@
 /**
- * A 股行业 / 板块分类 — 仅走 StockIndex 公开 API（stock-index.cuishushu.com）。
+ * A 股行业 / 板块分类 — 仅走 StockIndex 公开 API（open-stock.lirdb.com）。
  * 不经过 StandardInstrumentGateway，避免触发 zzshare / 东财等其他 Provider。
  */
 import {

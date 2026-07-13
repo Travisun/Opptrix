@@ -1,7 +1,19 @@
 import type { ProviderSettingsDefinition } from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
 
-export const STOCKINDEX_DEFAULT_BASE_URL = 'https://stock-index.cuishushu.com'
+export const STOCKINDEX_DEFAULT_BASE_URL = 'https://open-stock.lirdb.com'
+
+/** 旧默认域名 — 用户库内若仍保存则自动映射到新地址 */
+const LEGACY_STOCKINDEX_BASE_URLS = new Set([
+  'https://stock-index.cuishushu.com',
+  'http://stock-index.cuishushu.com',
+])
+
+function normalizeStockIndexBaseUrl(raw: string): string {
+  const trimmed = raw.replace(/\/$/, '')
+  if (LEGACY_STOCKINDEX_BASE_URLS.has(trimmed)) return STOCKINDEX_DEFAULT_BASE_URL
+  return trimmed
+}
 
 export const STOCKINDEX_SETTINGS: ProviderSettingsDefinition = {
   providerId: 'stockindex',
@@ -37,5 +49,5 @@ export function stockIndexBaseUrl(): string {
   const fromSettings = String(row?.extra?.baseUrl ?? '').trim()
   const fromEnv = process.env.OPPTRIX_STOCKINDEX_BASE_URL?.trim()
   const raw = fromSettings || fromEnv || STOCKINDEX_DEFAULT_BASE_URL
-  return raw.replace(/\/$/, '')
+  return normalizeStockIndexBaseUrl(raw)
 }
