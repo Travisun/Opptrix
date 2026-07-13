@@ -20,7 +20,8 @@ alwaysApply: false
 1. **介绍** — `OnboardingIntroCarousel` 自动轮播欢迎 + `manifest.features`；用户点一次「开始配置」进入配置
 2. **模型** — `ProviderWizard`（`hideFooter` + 引导底栏统一导航）
 3. **行情** — `OnboardingDataList` 默认圆角卡片列表
-4. **协议** — `OnboardingLegalPanel` 经 `GET /api/legal/user-agreement` 拉取 HTML 展示；链接点击走 `openExternalUrl`（系统浏览器）；勾选后「进入 Opptrix」
+4. **历史K线** — `OnboardingFuyaoPanel` 同花顺（扶摇）API Key 填写与验证；可跳过；已配置则 `OnboardingFuyaoReadyPanel`
+5. **协议** — `OnboardingLegalPanel` 经 `GET /api/legal/user-agreement` 拉取 HTML 展示；链接点击走 `openExternalUrl`（系统浏览器）；勾选后「进入 Opptrix」
 
 视觉：沿用 `opptrixCssVars` 陶土橙与默认组件样式；全屏画布、内容区居中；无 shadow；Electron 顶栏支持拖拽。介绍步自动轮播（`ONBOARDING_INTRO_SLIDE_MS`）+ `OnboardingHeroBlock` 大标题排版。**配置步标题**统一用 `useOnboardingShellStyles().sectionTitle` / `sectionLead`（勿在单步组件内另写更小字号）。
 
@@ -118,7 +119,7 @@ curl -sS -X PUT 'http://127.0.0.1:8711/api/preferences/onboarding_state' \
 
 验证路径建议：
 
-1. 清空 `onboarding_state` → 应出现完整四步引导
+1. 清空 `onboarding_state` → 应出现完整五步引导
 2. 走完引导后刷新 → 不应再出现
 3. 仅 bump `ONBOARDING_FLOW_VERSION`（或改 `version`）→ 应再次出现，且介绍步文案符合 `ONBOARDING_RELEASE_BY_VERSION`
 4. 协议步内链接 → 系统浏览器打开，非 iframe 内跳转

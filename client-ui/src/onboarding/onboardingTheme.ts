@@ -2,6 +2,7 @@ export type OnboardingPhase =
   | 'intro'
   | 'llm'
   | 'data'
+  | 'fuyao'
   | 'legal'
 
 export interface OnboardingNavStep {
@@ -13,6 +14,7 @@ export function buildOnboardingSteps(): OnboardingNavStep[] {
     { phase: 'intro' },
     { phase: 'llm' },
     { phase: 'data' },
+    { phase: 'fuyao' },
     { phase: 'legal' },
   ]
 }
@@ -21,6 +23,7 @@ export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'intro') return '介绍'
   if (step.phase === 'llm') return '模型'
   if (step.phase === 'data') return '行情'
+  if (step.phase === 'fuyao') return '历史K线'
   return '协议'
 }
 

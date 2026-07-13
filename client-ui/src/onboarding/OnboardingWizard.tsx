@@ -3,11 +3,19 @@ import { Spinner, Text, mergeClasses } from '@fluentui/react-components'
 import type { OnboardingState } from './constants'
 import { shouldShowOnboarding } from './constants'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { getConfig } from '../api/client'
+import { getConfig, getProviderCatalog, saveProviderConfig } from '../api/client'
+import type { PublicProviderRuntime } from '../types/provider'
 import ProviderWizard, { type ProviderWizardNavState } from '../pages/ProviderWizard'
 import { SettingsToastProvider } from '../pages/settings/SettingsToast'
 import { isElectron } from '../platform/detect'
 import { OnboardingDataList } from './OnboardingDataList'
+import {
+  isTonghuashunConfigured,
+  OnboardingFuyaoPanel,
+  OnboardingFuyaoReadyPanel,
+  TONGHUASHUN_PROVIDER_ID,
+  type OnboardingFuyaoNavState,
+} from './OnboardingFuyaoPanel'
 import { OnboardingIntroCarousel } from './OnboardingIntroCarousel'
 import { OnboardingLegalPanel } from './OnboardingLegalPanel'
 import { OnboardingLlmReadyPanel } from './OnboardingLlmReadyPanel'
@@ -84,6 +92,10 @@ export default function OnboardingWizard({
   const [llmSummary, setLlmSummary] = useState<LlmActiveSummary | null>(null)
   const [llmNav, setLlmNav] = useState<ProviderWizardNavState | null>(null)
   const [llmReconfiguring, setLlmReconfiguring] = useState(false)
+  const [fuyaoReady, setFuyaoReady] = useState(false)
+  const [fuyaoProvider, setFuyaoProvider] = useState<PublicProviderRuntime | null>(null)
+  const [fuyaoNav, setFuyaoNav] = useState<OnboardingFuyaoNavState | null>(null)
+  const [fuyaoReconfiguring, setFuyaoReconfiguring] = useState(false)
   const [agreed, setAgreed] = useState(false)
   const [finishing, setFinishing] = useState(false)
   const [finishError, setFinishError] = useState('')
@@ -91,6 +103,18 @@ export default function OnboardingWizard({
   const current = steps[stepIndex]!
   const returning = isReturningUser(priorState)
   const isLast = stepIndex >= steps.length - 1
+
+  const refreshFuyaoStatus = useCallback(async () => {
+    try {
+      const catalog = await getProviderCatalog()
+      const provider = catalog.providers.find(p => p.providerId === TONGHUASHUN_PROVIDER_ID) ?? null
+      setFuyaoProvider(provider)
+      setFuyaoReady(isTonghuashunConfigured(provider))
+    } catch {
+      setFuyaoProvider(null)
+      setFuyaoReady(false)
+    }
+  }, [])
 
   const refreshLlmStatus = useCallback(async () => {
     try {
@@ -110,7 +134,12 @@ export default function OnboardingWizard({
       setLlmReconfiguring(false)
       setLlmSummary(null)
     }
-  }, [current.phase, refreshLlmStatus])
+    if (current.phase === 'fuyao') void refreshFuyaoStatus()
+    else {
+      setFuyaoNav(null)
+      setFuyaoReconfiguring(false)
+    }
+  }, [current.phase, refreshFuyaoStatus, refreshLlmStatus])
 
   useEffect(() => {
     if (llmReady) setLlmSkipped(false)
@@ -140,6 +169,23 @@ export default function OnboardingWizard({
   const skipLlm = () => {
     setLlmSkipped(true)
     setLlmReconfiguring(false)
+    goNext()
+  }
+
+  const skipFuyao = () => {
+    setFuyaoReconfiguring(false)
+    goNext()
+  }
+
+  const continueFuyaoReady = async () => {
+    if (fuyaoProvider && !fuyaoProvider.enabled) {
+      try {
+        await saveProviderConfig(TONGHUASHUN_PROVIDER_ID, { enabled: true })
+        await refreshFuyaoStatus()
+      } catch {
+        /* 已保存密钥时启用失败不阻断引导 */
+      }
+    }
     goNext()
   }
 
@@ -243,6 +289,46 @@ export default function OnboardingWizard({
         继续
       </OpptrixButton>
     )
+  } else if (current.phase === 'fuyao') {
+    bodyFlush = true
+    contentWide = true
+    contentAlignStart = true
+
+    if (fuyaoReady && !fuyaoReconfiguring) {
+      body = <OnboardingFuyaoReadyPanel provider={fuyaoProvider} />
+      footerSecondary = (
+        <OpptrixButton variant="ghost" onClick={() => setFuyaoReconfiguring(true)}>
+          更换 API Key
+        </OpptrixButton>
+      )
+      footerPrimary = (
+        <OpptrixButton variant="primary" onClick={() => { void continueFuyaoReady() }}>
+          继续
+        </OpptrixButton>
+      )
+    } else {
+      body = (
+        <OnboardingFuyaoPanel
+          onConfigured={() => { void refreshFuyaoStatus() }}
+          onComplete={goNext}
+          onNavChange={setFuyaoNav}
+        />
+      )
+      footerSecondary = (
+        <OpptrixButton variant="ghost" onClick={skipFuyao}>
+          稍后配置
+        </OpptrixButton>
+      )
+      footerPrimary = (
+        <OpptrixButton
+          variant="primary"
+          disabled={!fuyaoNav?.canAdvance}
+          onClick={() => { void fuyaoNav?.advance() }}
+        >
+          {fuyaoNav?.advanceLabel ?? '继续'}
+        </OpptrixButton>
+      )
+    }
   } else {
     bodyFlush = true
     contentWide = true
