@@ -30,7 +30,21 @@ exports.default = async function afterPack(context) {
 
   const runtimeStage = path.join(appPath, 'Contents/Resources/runtime-stage')
   for (const file of walkFiles(runtimeStage)) {
-    if (file.endsWith('.node') || path.basename(file) === 'ffmpeg') {
+    const base = path.basename(file)
+    if (
+      file.endsWith('.node')
+      || file.endsWith('.dylib')
+      || file.endsWith('.so')
+      || base === 'ffmpeg'
+    ) {
+      execFileSync('codesign', ['--force', '--sign', '-', file], { stdio: 'inherit' })
+    }
+  }
+
+  // Also sign native bindings unpacked beside the Electron app (node-llama-cpp).
+  const unpacked = path.join(appPath, 'Contents/Resources/app.asar.unpacked')
+  for (const file of walkFiles(unpacked)) {
+    if (file.endsWith('.node') || file.endsWith('.dylib') || file.endsWith('.so')) {
       execFileSync('codesign', ['--force', '--sign', '-', file], { stdio: 'inherit' })
     }
   }

@@ -47,7 +47,7 @@
     "appId": "com.cuishushu.app.opptrix.desktop",
     "productName": "Opptrix",
     "copyright": "Copyright © 2026 Opptrix contributors",
-    "electronVersion": "35.7.5",
+    "electronVersion": "42.6.1",
     "afterPack": "./scripts/after-pack-adhoc.cjs",
     "npmRebuild": false,
     "nodeGypRebuild": false,
@@ -76,10 +76,12 @@
       "build/icons/**/*",
       "build/updater-deps/**/*",
       "!node_modules/**/*",
-      "node_modules/node-llama-cpp/**/*"
+      "node_modules/node-llama-cpp/**/*",
+      "node_modules/@node-llama-cpp/**/*"
     ],
     "asarUnpack": [
       "**/node_modules/node-llama-cpp/**",
+      "**/node_modules/@node-llama-cpp/**",
       "**/build/updater-deps/**"
     ],
     "icon": "build/icons/logo-app.png",
@@ -193,7 +195,7 @@
   },
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
-    "electron": "^35.0.0",
+    "electron": "^42.6.1",
     "electron-builder": "^26.15.3",
     "png-to-ico": "^3.0.2"
   },
