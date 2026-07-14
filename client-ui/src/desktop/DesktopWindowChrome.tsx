@@ -7,8 +7,6 @@ import {
 import { makeStyles, mergeClasses, Text } from '@fluentui/react-components'
 import { isElectron } from '../platform/detect'
 import {
-  DESKTOP_CHROME_BAND_HEIGHT,
-  DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_SIDEBAR_LAYOUT_EASE,
   DESKTOP_SIDEBAR_LAYOUT_MS,
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -33,6 +31,9 @@ import {
 import { electronPlatform } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 import {
+  desktopChromeBandHeight,
+  desktopChromeTopOffset,
+  desktopTitleBarActionsRight,
   desktopTitleLeft,
   desktopTitleMaxWidth,
   desktopToolbarLeft,
@@ -62,8 +63,6 @@ const useStyles = makeStyles({
   },
   toolbar: {
     position: 'absolute',
-    top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
-    height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
     display: 'flex',
     alignItems: 'center',
     gap: `${DESKTOP_TOOL_GAP}px`,
@@ -76,8 +75,6 @@ const useStyles = makeStyles({
   },
   title: {
     position: 'absolute',
-    top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
-    height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
     display: 'flex',
     alignItems: 'center',
     minWidth: 0,
@@ -111,8 +108,6 @@ const useStyles = makeStyles({
   },
   titleBarActions: {
     position: 'fixed',
-    top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
-    height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
     display: 'flex',
     alignItems: 'center',
     gap: `${DESKTOP_TOOL_GAP}px`,
@@ -226,9 +221,11 @@ export default function DesktopWindowChrome({
   const isNews = viewMode === 'news'
   const isMarket = viewMode === 'market'
   const isStandalonePanel = isNews || isMarket
+  const chromeTop = desktopChromeTopOffset()
+  const chromeBand = desktopChromeBandHeight()
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
-  const titleBarActionsRight = electronPlatform() === 'darwin' ? 12 : 132
+  const titleBarActionsRight = desktopTitleBarActionsRight()
   const showTitleBarActions = !isSettings && !rightPanelOpen && Boolean(onToggleRightPanel || onToggleChatColumn)
   const titleMaxWidth = desktopTitleMaxWidth({
     titleLeft,
@@ -323,6 +320,8 @@ export default function DesktopWindowChrome({
           <div
             className={mergeClasses(s.title, titleSlot != null && titleSlot !== false && s.titleInteractive)}
             style={{
+              top: `${chromeTop}px`,
+              height: `${chromeBand}px`,
               left: `${titleLeft}px`,
               maxWidth: `${titleMaxWidth}px`,
             }}
@@ -337,7 +336,14 @@ export default function DesktopWindowChrome({
           </div>
         )}
 
-        <div className={s.toolbar} style={{ left: `${toolbarLeft}px` }}>
+        <div
+          className={s.toolbar}
+          style={{
+            top: `${chromeTop}px`,
+            height: `${chromeBand}px`,
+            left: `${toolbarLeft}px`,
+          }}
+        >
           {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (
             <ChromeToolButton
               label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
@@ -381,7 +387,11 @@ export default function DesktopWindowChrome({
       {!isSettings && !rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
         <div
           className={s.titleBarActions}
-          style={{ right: `${titleBarActionsRight}px` }}
+          style={{
+            top: `${chromeTop}px`,
+            height: `${chromeBand}px`,
+            right: `${titleBarActionsRight}px`,
+          }}
         >
           {onToggleChatColumn && (
             <ChromeToolButton

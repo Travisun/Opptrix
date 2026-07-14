@@ -337,7 +337,7 @@ export default function SettingsSidebar({
         width={opptrixTokens.settingsSidebarWidth}
         onClose={onClose}
       >
-        <div className={mergeClasses(s.sidebar, s.sidebarTopElectron)}>
+        <div className={mergeClasses(s.sidebar, s.sidebarTopElectron, 'opptrix-settings-sidebar')}>
           {body}
         </div>
       </OverlaySidebarShell>
@@ -354,6 +354,7 @@ export default function SettingsSidebar({
         sidebarSolidDark && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
         sidebarGlass && 'opptrix-glass-sidebar',
+        'opptrix-settings-sidebar',
         'opptrix-sidebar-edge',
       )}
     >

@@ -1,10 +1,21 @@
 export const DESKTOP_TITLEBAR_HEIGHT = 43
 
-/** Vertical nudge for custom toolbar + title to align with macOS traffic lights */
+/**
+ * Vertical nudge for custom toolbar + title.
+ * macOS aligns with traffic lights; Windows sits slightly higher so panel
+ * toggles share a line with min/max/close.
+ */
 export const DESKTOP_CHROME_TOP_OFFSET = 5
+export const DESKTOP_CHROME_TOP_OFFSET_WIN = 2
 
-/** Usable band below the top inset inside the title bar */
+/** Usable band below the top inset inside the title bar (mac default). */
 export const DESKTOP_CHROME_BAND_HEIGHT = DESKTOP_TITLEBAR_HEIGHT - DESKTOP_CHROME_TOP_OFFSET
+
+/**
+ * Windows: width of custom min/max/close cluster + tight gap before it.
+ * 3×26 tools + 2×2 gaps + 6px end pad ≈ 88; +8px breathing room.
+ */
+export const DESKTOP_WIN_WINDOW_CONTROLS_RESERVE = 96
 
 /** macOS native traffic-light zone before app toolbar (windowed) */
 export const DESKTOP_TRAFFIC_LIGHT_WIDTH = 80

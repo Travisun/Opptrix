@@ -17,6 +17,11 @@ if (isElectron()) {
   document.documentElement.classList.add('opptrix-electron')
   document.documentElement.classList.add('opptrix-electron-startup')
   const platform = window.electronAPI?.platform
+  if (platform === 'win32') {
+    document.documentElement.classList.add('opptrix-platform-win32')
+  } else if (platform === 'darwin') {
+    document.documentElement.classList.add('opptrix-platform-darwin')
+  }
   // mac vibrancy / win acrylic — 侧栏透明穿透到系统毛玻璃
   if (platform === 'darwin' || platform === 'win32') {
     document.documentElement.classList.add('opptrix-electron-vibrancy')

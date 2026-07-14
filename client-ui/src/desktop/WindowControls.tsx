@@ -1,15 +1,14 @@
 import { makeStyles } from '@fluentui/react-components'
 import { DismissRegular, SquareRegular, SubtractRegular } from '@fluentui/react-icons'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_CHROME_BAND_HEIGHT, DESKTOP_CHROME_TOP_OFFSET, DESKTOP_Z_CHROME_TOOLS } from './constants'
+import { DESKTOP_Z_CHROME_TOOLS } from './constants'
+import { desktopChromeBandHeight, desktopChromeTopOffset } from './layout'
 import ChromeToolButton from './ChromeToolButton'
 
 const useStyles = makeStyles({
   controls: {
     position: 'fixed',
-    top: `${DESKTOP_CHROME_TOP_OFFSET}px`,
     right: 0,
-    height: `${DESKTOP_CHROME_BAND_HEIGHT}px`,
     display: 'flex',
     alignItems: 'center',
     paddingRight: '6px',
@@ -32,7 +31,13 @@ export default function WindowControls() {
   if (!isElectron() || !api || api.platform === 'darwin') return null
 
   return (
-    <div className={s.controls}>
+    <div
+      className={s.controls}
+      style={{
+        top: `${desktopChromeTopOffset()}px`,
+        height: `${desktopChromeBandHeight()}px`,
+      }}
+    >
       <ChromeToolButton label="Minimize" onClick={() => api.windowMinimize?.()}>
         <SubtractRegular fontSize={14} />
       </ChromeToolButton>
