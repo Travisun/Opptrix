@@ -322,6 +322,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.36': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版修好了安装后本地服务无法启动的问题，打开即可使用。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可靠',
+        title: '安装后本地服务可正常连接',
+        desc:
+          '修复了安装包内依赖目录未正确就位导致接口无法启动的问题。',
+        note: '重新安装或更新到本版后即可正常使用。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

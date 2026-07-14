@@ -1,18 +1,17 @@
 #!/usr/bin/env node
 /**
- * Fail CI if electron-builder omitted sidecar deps under runtime-stage.
+ * Fail CI if electron-builder omitted sidecar deps under runtime-stage,
+ * or afterPack failed to restore deps → node_modules for ESM resolution.
  *
- * Root cause this guards: app-builder-lib createFilter skips a directory whose
- * relative path is exactly `node_modules`, so staged deps must ship as `deps/`.
+ * Staging: ship as `deps/` (createFilter skips exact relative `node_modules`).
+ * afterPack: rename to `node_modules` so packaged ESM can `import 'fastify'`.
+ * NODE_PATH alone is NOT enough for Node ESM bare specifiers.
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { createRequire } from 'node:module'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const require = createRequire(path.join(__dirname, '../package.json'))
-const { RUNTIME_DEPS_DIR } = require('./electron/runtime-deps.cjs')
 
 function fail(msg) {
   console.error(`verify-packaged-runtime: ${msg}`)
@@ -46,21 +45,21 @@ function findRuntimeStages(releaseDir) {
 }
 
 function assertStage(stageDir) {
-  const depsFastify = path.join(stageDir, RUNTIME_DEPS_DIR, 'fastify')
-  const legacyNm = path.join(stageDir, 'node_modules')
-  if (!fs.existsSync(depsFastify)) {
-    const hint = fs.existsSync(legacyNm)
-      ? `found legacy ${legacyNm} instead — electron-builder dropped top-level node_modules; stage must rename to ${RUNTIME_DEPS_DIR}/`
-      : `missing ${depsFastify}`
-    fail(hint)
-  }
-  if (fs.existsSync(legacyNm)) {
+  const nmFastify = path.join(stageDir, 'node_modules', 'fastify')
+  const depsFastify = path.join(stageDir, 'deps', 'fastify')
+  if (fs.existsSync(depsFastify) && !fs.existsSync(nmFastify)) {
     fail(
-      `${legacyNm} must not ship (electron-builder skips top-level node_modules). `
-        + `Expected only ${path.join(stageDir, RUNTIME_DEPS_DIR)}`,
+      `${path.join(stageDir, 'deps')} still present without node_modules — `
+        + 'afterPack must rename deps → node_modules for ESM imports',
     )
   }
-  console.log(`verify-packaged-runtime: OK ${depsFastify}`)
+  if (!fs.existsSync(nmFastify)) {
+    fail(`missing ${nmFastify} (sidecar cannot start without Fastify)`)
+  }
+  if (fs.existsSync(path.join(stageDir, 'deps'))) {
+    fail(`${path.join(stageDir, 'deps')} must be renamed to node_modules after pack`)
+  }
+  console.log(`verify-packaged-runtime: OK ${nmFastify}`)
 }
 
 const releaseDir = path.resolve(process.argv[2] || path.join(__dirname, '../release'))

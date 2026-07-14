@@ -125,6 +125,11 @@ console.log('audit-desktop-pack: start')
   if (!mainSrc.includes('RUNTIME_DEPS_DIR') || !mainSrc.includes('NODE_PATH')) {
     fail('main.cjs sidecarEnv must set NODE_PATH to RUNTIME_DEPS_DIR')
   } else ok('main.cjs NODE_PATH wired to RUNTIME_DEPS_DIR')
+
+  const afterPackSrc = read('scripts/after-pack-adhoc.cjs')
+  if (!afterPackSrc.includes('restoreSidecarNodeModules') || !afterPackSrc.includes('renameSync')) {
+    fail('afterPack must rename staged deps → node_modules for ESM resolution')
+  } else ok('afterPack restores deps → node_modules')
 }
 
 // ── 3. Update trust (embedded CA + custom verifier) ────────────────────────

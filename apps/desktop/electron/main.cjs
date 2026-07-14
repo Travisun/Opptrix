@@ -167,9 +167,11 @@ function sidecarEnv(root) {
     env.ELECTRON_RUN_AS_NODE = '1'
     const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
     const fs = require('node:fs')
+    // afterPack restores deps → node_modules so ESM bare imports resolve.
+    // Prefer node_modules; keep deps fallback for older partially-migrated installs.
+    const nmDir = path.join(root, 'node_modules')
     const depsDir = path.join(root, RUNTIME_DEPS_DIR)
-    const legacyNodeModules = path.join(root, 'node_modules')
-    const moduleRoot = fs.existsSync(depsDir) ? depsDir : legacyNodeModules
+    const moduleRoot = fs.existsSync(nmDir) ? nmDir : depsDir
     if (fs.existsSync(moduleRoot)) {
       env.NODE_PATH = moduleRoot
     }

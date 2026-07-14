@@ -75,6 +75,7 @@ node scripts/assemble-release-notes.mjs 0.6.1 | head -40
 | Updater 路径 **不得** 含名为 `node_modules` 的目录段 | 「更新组件不可用」 | `stage-updater-deps` → `build/updater-deps/packages/`；`verify-packaged-updater` |
 | 嵌套依赖（如 `fs-extra`）须从 **父包目录** 解析，且桌面包声明 `fs-extra` | CI：`electron-updater dependency missing: fs-extra` | `audit:desktop-pack` + `OPPTRIX_AUDIT_STAGE_UPDATER=1` |
 | Sidecar 依赖目录为 `runtime-stage/deps/`（非顶层 `node_modules`） | 安装后 sidecar 起不来 / 缺 Fastify | `stage-runtime` 改名；`verify-packaged-runtime` |
+| **打包后 afterPack 须 `deps` → `node_modules`**（ESM 不能靠 NODE_PATH） | `API sidecar not ready` / `Cannot find package 'fastify'` | `after-pack-adhoc.cjs` `restoreSidecarNodeModules`；CI verify 断言最终为 `node_modules` |
 | Windows 更新：自签 Authenticode + 内置 CA + `update-signature` 自定义验签 | 「not signed by the application owner」 | secrets `OPPTRIX_CODE_SIGNING_*`；release audit `REQUIRE_SIGN_SECRETS` |
 | 公证包内不得留 `.cache/prebuilds` 未签名 `.node` | macOS notarization 失败 | `extraResources` filter `!**/.cache` |
 | `prebuild` / `ci.yml` / `release-desktop.yml` 均跑 `audit-desktop-pack` | 静态回归漏到 90min 构建后才炸 | 本规则 A5 |
