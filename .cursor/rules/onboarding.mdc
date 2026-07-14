@@ -74,7 +74,7 @@ alwaysApply: false
 | `agreementsAcceptedAt` | 勾选协议时间 |
 | `llmSkipped` | 是否跳过模型配置 |
 
-`OnboardingGate` 在版本/状态刷新、Electron 更新就绪、页面重新可见时会重新判定并重置 `dismissed`。**禁止**仅 `setDismissed(true)` 而不落库。
+`OnboardingGate` 在版本/状态首次加载后按 `shouldShowOnboarding` 判定；完成引导须落库后再 `setDismissed(true)`。**禁止**仅 `setDismissed(true)` 而不落库。**禁止**在 `visibilitychange` / 更新就绪时整树 `reload`（会卸掉引导 Wizard，用户切窗复制 API Key 时进度丢失）。更新提示由 `AppUpdateProvider` 负责，与 Gate 解耦。
 
 ---
 

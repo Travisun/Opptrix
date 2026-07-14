@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react'
 import { Spinner, Text, mergeClasses } from '@fluentui/react-components'
 import type { OnboardingState } from './constants'
 import { shouldShowOnboarding } from './constants'
@@ -455,41 +455,14 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
     void reload()
   }, [reload])
 
-  const dismissedRef = useRef(false)
-
+  // 引导进行中禁止因失焦 / 后台更新就绪而整树 reload：用户常切到浏览器复制 API Key，
+  // 旧逻辑在 visibilitychange 时卸掉 OnboardingWizard，导致进度丢失。
   useEffect(() => {
     if (!version || loadError || loadingState) return
     if (shouldShowOnboarding(priorState, version)) {
       setDismissed(false)
-      dismissedRef.current = false
-    } else {
-      dismissedRef.current = true
     }
   }, [version, priorState, loadError, loadingState])
-
-  useEffect(() => {
-    if (!isElectron()) return
-    const api = window.electronAPI
-    if (!api?.onAppUpdateStatus) return
-    return api.onAppUpdateStatus(status => {
-      if (status.state === 'ready' || status.state === 'installing') {
-        dismissedRef.current = false
-        void reloadVersion()
-        void reload()
-      }
-    })
-  }, [reload, reloadVersion])
-
-  useEffect(() => {
-    const onVisible = () => {
-      if (document.visibilityState !== 'visible') return
-      if (dismissedRef.current) return
-      void reloadVersion()
-      void reload()
-    }
-    document.addEventListener('visibilitychange', onVisible)
-    return () => document.removeEventListener('visibilitychange', onVisible)
-  }, [reload, reloadVersion])
 
   if (versionLoading || loadingState) {
     return (
