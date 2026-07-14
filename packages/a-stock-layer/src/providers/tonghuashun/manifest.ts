@@ -11,6 +11,8 @@ export const TONGHUASHUN_CAPS = [
   Capability.STOCK_PROFILE,
   Capability.FINANCIAL_SUMMARY,
   Capability.INCOME_STMT,
+  Capability.BALANCE_SHEET,
+  Capability.CASH_FLOW,
   Capability.DIVIDEND,
   Capability.TRADE_CALENDAR,
   Capability.INDEX_REALTIME,
