@@ -83,6 +83,11 @@ export function hostMatchesTarget(target) {
   return target.platform === process.platform && target.arch === hostArch
 }
 
+/** CLI flags for npm install/pack to resolve optional deps for the packaging target (not host). */
+export function npmTargetCliArgs(target) {
+  return [`--os=${target.platform}`, `--cpu=${target.arch}`]
+}
+
 function spawn(cmd, args, { cwd, env, shell = false }) {
   return spawnSync(cmd, args, {
     cwd,
@@ -93,9 +98,9 @@ function spawn(cmd, args, { cwd, env, shell = false }) {
 }
 
 /** @param {string[]} args */
-export function runNpm(args, { cwd, target, extraEnv = {} }) {
+export function runNpm(args, { cwd, target, extraEnv = {}, useRosetta = true } = {}) {
   const env = npmEnv(target, extraEnv)
-  if (target.useRosettaX64) {
+  if (useRosetta && target.useRosettaX64) {
     return spawn('arch', ['-x86_64', 'npm', ...args], { cwd, env })
   }
   return spawn(NPM_CMD, args, { cwd, env, shell: NPM_SHELL })

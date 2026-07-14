@@ -15,6 +15,7 @@ import {
   electronRebuildEnv,
   hostMatchesTarget,
   nodeNativeEnv,
+  npmTargetCliArgs,
   resolveRuntimeTarget,
   runNodeScript,
   runNpm,
@@ -285,8 +286,8 @@ function ensureDuckdbPrebuild() {
 
 /**
  * @duckdb/node-api loads platform optionalDependencies (@duckdb/node-bindings-{platform}-{arch}).
- * AppImage + deb share this runtime-stage; missing bindings break neo Duck reads on Linux.
- * Explicitly ensure the glibc (non-musl) package for the packaging target.
+ * Cross-builds (arm64 host → darwin-x64) hit EBADPLATFORM on `npm install`, so fetch the
+ * registry tarball instead of relying on optional-dep install against the host CPU.
  */
 function duckdbNeoBindingsPackageName() {
   return `@duckdb/node-bindings-${target.platform}-${target.arch}`
@@ -295,6 +296,38 @@ function duckdbNeoBindingsPackageName() {
 function duckdbNeoBindingsNode() {
   const pkgName = duckdbNeoBindingsPackageName()
   return path.join(STAGE, 'node_modules', ...pkgName.split('/'), 'duckdb.node')
+}
+
+function npmRegistryBase() {
+  return (
+    process.env.npm_config_registry?.trim()
+    || process.env.NPM_CONFIG_REGISTRY?.trim()
+    || 'https://registry.npmjs.org'
+  ).replace(/\/$/, '')
+}
+
+function installScopedPackageFromRegistry(pkgName, version) {
+  const shortName = pkgName.includes('/') ? pkgName.split('/').pop() : pkgName
+  const url = `${npmRegistryBase()}/${pkgName}/-/${shortName}-${version}.tgz`
+  const cacheDir = path.join(STAGE, '.cache/prebuilds')
+  const archive = path.join(cacheDir, `${shortName}-${version}.tgz`)
+  const extractTmp = path.join(cacheDir, `${shortName}-${version}-extract`)
+  const destDir = path.join(STAGE, 'node_modules', ...pkgName.split('/'))
+
+  console.log(`Fetching ${pkgName}@${version} from registry (bypass host platform check)…`)
+  if (!fs.existsSync(archive)) downloadFile(url, archive)
+
+  rm(extractTmp)
+  extractTarGz(archive, extractTmp)
+  const pkgRoot = path.join(extractTmp, 'package')
+  if (!fs.existsSync(pkgRoot)) {
+    throw new Error(`npm pack layout unexpected for ${pkgName}: missing package/`)
+  }
+
+  fs.mkdirSync(path.dirname(destDir), { recursive: true })
+  rm(destDir)
+  fs.cpSync(pkgRoot, destDir, { recursive: true })
+  rm(extractTmp)
 }
 
 function ensureDuckdbNeoBindings() {
@@ -309,12 +342,29 @@ function ensureDuckdbNeoBindings() {
 
   const version = JSON.parse(fs.readFileSync(metaPath, 'utf8')).version
   const pkgName = duckdbNeoBindingsPackageName()
-  console.log(`Installing ${pkgName}@${version} for ${target.platform}-${target.arch}…`)
-  const install = runNpm(
-    ['install', `${pkgName}@${version}`, '--no-save', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts'],
-    { cwd: STAGE, target },
-  )
-  if (install.status !== 0) return false
+  try {
+    installScopedPackageFromRegistry(pkgName, version)
+  } catch (err) {
+    console.warn(`Registry fetch failed: ${err instanceof Error ? err.message : err}`)
+    console.log(`Trying npm install ${pkgName} with --os/--cpu --force…`)
+    const install = runNpm(
+      [
+        'install',
+        `${pkgName}@${version}`,
+        ...npmTargetCliArgs(target),
+        '--force',
+        '--no-save',
+        '--omit=dev',
+        '--no-audit',
+        '--no-fund',
+        '--ignore-scripts',
+      ],
+      // Rosetta does not change Node's reported cpu for npm's EBADPLATFORM check.
+      { cwd: STAGE, target, useRosetta: false },
+    )
+    if (install.status !== 0) return false
+  }
+
   if (!fs.existsSync(neoNode)) {
     console.error(`missing ${neoNode} after installing ${pkgName}`)
     return false
@@ -368,8 +418,16 @@ fs.writeFileSync(path.join(STAGE, 'package.json'), JSON.stringify({
 
 console.log(`Installing runtime deps (${target.platform}-${target.arch})…`)
 const install = runNpm(
-  ['install', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts'],
-  { cwd: STAGE, target },
+  [
+    'install',
+    '--omit=dev',
+    '--no-audit',
+    '--no-fund',
+    '--ignore-scripts',
+    ...npmTargetCliArgs(target),
+  ],
+  // Prefer CLI --os/--cpu over Rosetta: arch -x86_64 npm still reports host cpu to npm 10+.
+  { cwd: STAGE, target, useRosetta: false },
 )
 if (install.status !== 0) process.exit(install.status ?? 1)
 
