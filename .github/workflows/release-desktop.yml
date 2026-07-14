@@ -61,7 +61,8 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: windows-latest
+          # windows-latest is VS2026 / MSVC 14.51+; duckdb@1.4.x cannot compile there.
+          - os: windows-2022
             label: Windows x64
           - os: ubuntu-latest
             label: Linux x64

@@ -216,6 +216,18 @@ fs.mkdirSync(STAGE, { recursive: true })
 cpDir(path.join(REPO_ROOT, 'apps/server/dist'), path.join(STAGE, 'apps/server/dist'))
 cpDir(path.join(REPO_ROOT, 'client-ui/dist'), path.join(STAGE, 'client-ui/dist'))
 
+// Server dist requires apps/desktop/electron/resolve-ports.cjs via relative path
+// (../../desktop/electron/… from apps/server/dist). Pack that single file into stage.
+{
+  const resolvePortsSrc = path.join(DESKTOP_ROOT, 'electron/resolve-ports.cjs')
+  const resolvePortsDest = path.join(STAGE, 'apps/desktop/electron/resolve-ports.cjs')
+  if (!fs.existsSync(resolvePortsSrc)) {
+    throw new Error(`missing ${resolvePortsSrc}`)
+  }
+  fs.mkdirSync(path.dirname(resolvePortsDest), { recursive: true })
+  fs.copyFileSync(resolvePortsSrc, resolvePortsDest)
+}
+
 const workspacePackages = collectOpptrixPackages()
 for (const pkg of workspacePackages) {
   const folder = OPPTX_PACKAGE_INDEX.get(pkg)
@@ -264,8 +276,18 @@ if (!ensureBetterSqlite3Prebuild()) {
   process.exit(1)
 }
 
+const duckdbNode = path.join(STAGE, 'node_modules/duckdb/lib/binding/duckdb.node')
+if (!fs.existsSync(duckdbNode)) {
+  console.error(
+    `missing ${duckdbNode} — duckdb must rebuild for Electron ${ELECTRON_VERSION}`
+    + ` (${target.platform}-${target.arch}). Prebuild 404 + source compile failure`
+    + ' is usually an MSVC toolset mismatch; use windows-2022 (VS2022) for packaging.',
+  )
+  process.exit(rebuild.status ?? 1)
+}
+
 if (rebuildFailed) {
-  console.warn('npm rebuild reported errors but better-sqlite3 prebuild is ready — continuing')
+  console.warn('npm rebuild reported errors but required native bindings are ready — continuing')
 }
 
 console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)

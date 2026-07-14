@@ -234,6 +234,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.32': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版修好了 Windows 安装包构建，本地行情与同步体验继续沿用上一版。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可靠',
+        title: 'Windows 安装与更新更顺畅',
+        desc:
+          '修复了影响 Windows 打包的问题，后续安装与自动更新可以正常产出。',
+        note: '三端安装包重新可用。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

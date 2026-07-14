@@ -52,6 +52,11 @@ export function electronRebuildEnv(electronVersion, target) {
   if (process.env.OPPTRIX_FORCE_NATIVE_REBUILD === '1') {
     env.npm_config_build_from_source = 'true'
   }
+  // duckdb@1.4.x vendored fmt breaks on MSVC 14.51+ (VS2026). Prefer VS2022 toolset when present.
+  if (target.platform === 'win32') {
+    env.GYP_MSVS_VERSION = process.env.GYP_MSVS_VERSION?.trim() || '2022'
+    env.npm_config_msvs_version = process.env.npm_config_msvs_version?.trim() || '2022'
+  }
   return npmEnv(target, env)
 }
 
