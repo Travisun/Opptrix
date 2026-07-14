@@ -23,6 +23,7 @@ import {
 
 const require = createRequire(import.meta.url)
 const nodeAbi = require('node-abi')
+const { RUNTIME_DEPS_DIR } = require('../electron/runtime-deps.cjs')
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../../..')
@@ -32,6 +33,9 @@ const STAGE = path.join(DESKTOP_ROOT, 'runtime-stage')
 // archives and rejects unsigned .node binaries left in staged .cache/prebuilds.
 const PREBUILD_CACHE = path.join(DESKTOP_ROOT, '.cache/prebuilds')
 const SERVER_PKG_PATH = path.join(REPO_ROOT, 'apps/server/package.json')
+/** npm installs into node_modules; renamed to RUNTIME_DEPS_DIR before packaging. */
+const STAGE_NM = path.join(STAGE, 'node_modules')
+const STAGE_DEPS = path.join(STAGE, RUNTIME_DEPS_DIR)
 
 const DESKTOP_PKG = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
 const ELECTRON_VERSION = DESKTOP_PKG.build?.electronVersion
@@ -474,5 +478,17 @@ if (rebuildFailed) {
 
 // Belt-and-suspenders: never ship download caches (notarization scans nested archives).
 rm(path.join(STAGE, '.cache'))
+
+// electron-builder skips a top-level directory named exactly `node_modules` when
+// copying extraResources (createFilter). Rename so sidecar deps actually ship.
+if (!fs.existsSync(STAGE_NM)) {
+  throw new Error(`missing ${STAGE_NM} after install/rebuild`)
+}
+rm(STAGE_DEPS)
+fs.renameSync(STAGE_NM, STAGE_DEPS)
+if (!fs.existsSync(path.join(STAGE_DEPS, 'fastify'))) {
+  throw new Error(`missing ${path.join(STAGE_DEPS, 'fastify')} after rename — sidecar deps incomplete`)
+}
+console.log(`Sidecar deps renamed node_modules → ${RUNTIME_DEPS_DIR}/ (electron-builder safe)`)
 
 console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)

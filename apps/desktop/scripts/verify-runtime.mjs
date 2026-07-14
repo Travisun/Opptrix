@@ -14,6 +14,7 @@ const STAGE = path.join(DESKTOP_ROOT, 'runtime-stage')
 const PORT = process.env.STOCK_RESEARCH_PORT ?? '18711'
 
 const require = createRequire(path.join(DESKTOP_ROOT, 'package.json'))
+const { RUNTIME_DEPS_DIR } = require('./electron/runtime-deps.cjs')
 
 function fail(msg) {
   console.error(`verify-runtime: ${msg}`)
@@ -26,6 +27,16 @@ const entry = path.join(STAGE, 'apps/server/dist/index.js')
 if (!fs.existsSync(entry)) {
   fail(`missing server entry ${entry} — run prebuild first`)
 }
+
+function resolveDepsRoot() {
+  const deps = path.join(STAGE, RUNTIME_DEPS_DIR)
+  if (fs.existsSync(deps)) return deps
+  const legacy = path.join(STAGE, 'node_modules')
+  if (fs.existsSync(legacy)) return legacy
+  fail(`missing ${deps} (and legacy node_modules) — run stage-runtime.mjs`)
+}
+
+const depsRoot = resolveDepsRoot()
 
 function resolveElectronBinary() {
   if (process.env.OPPTRIX_ELECTRON_BINARY?.trim()) {
@@ -52,21 +63,25 @@ function resolveElectronBinary() {
 
 const electronBin = resolveElectronBinary()
 
-const sqliteNode = path.join(STAGE, 'node_modules/better-sqlite3/build/Release/better_sqlite3.node')
+const sqliteNode = path.join(depsRoot, 'better-sqlite3/build/Release/better_sqlite3.node')
 if (!fs.existsSync(sqliteNode)) {
   fail(`missing ${sqliteNode} — run stage-runtime.mjs`)
 }
 
-const duckdbNode = path.join(STAGE, 'node_modules/duckdb/lib/binding/duckdb.node')
+const duckdbNode = path.join(depsRoot, 'duckdb/lib/binding/duckdb.node')
 if (!fs.existsSync(duckdbNode)) {
   fail(`missing ${duckdbNode} — run stage-runtime.mjs`)
 }
 
 const duckdbNeoPkg = `@duckdb/node-bindings-${target.platform}-${target.arch}`
-const duckdbNeoNode = path.join(STAGE, 'node_modules', ...duckdbNeoPkg.split('/'), 'duckdb.node')
-const duckdbNeoMeta = path.join(STAGE, 'node_modules/@duckdb/node-bindings/package.json')
+const duckdbNeoNode = path.join(depsRoot, ...duckdbNeoPkg.split('/'), 'duckdb.node')
+const duckdbNeoMeta = path.join(depsRoot, '@duckdb/node-bindings/package.json')
 if (fs.existsSync(duckdbNeoMeta) && !fs.existsSync(duckdbNeoNode)) {
   fail(`missing ${duckdbNeoNode} — run stage-runtime.mjs (${duckdbNeoPkg})`)
+}
+
+if (!fs.existsSync(path.join(depsRoot, 'fastify'))) {
+  fail(`missing ${path.join(depsRoot, 'fastify')} — sidecar cannot start without Fastify`)
 }
 
 if (!hostMatchesTarget(target)) {
@@ -102,7 +117,7 @@ const child = spawn(electronBin, [entry], {
     STOCK_RESEARCH_PORT: PORT,
     UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
     ELECTRON_RUN_AS_NODE: '1',
-    NODE_PATH: path.join(STAGE, 'node_modules'),
+    NODE_PATH: depsRoot,
   },
   stdio: ['ignore', 'pipe', 'pipe'],
 })

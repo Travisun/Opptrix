@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "0.6.32",
+  "version": "0.6.33",
   "private": true,
   "description": "Opptrix 桌面端：Electron 壳 + 本地投研 API，支持自动更新与离线数据",
   "homepage": "https://www.opptrix.org",
@@ -40,6 +40,7 @@
     "build:publish:mac-x64": "node scripts/prebuild.mjs && node scripts/build-package.mjs --mac --x64 --publish always",
     "verify:release-metadata-policy": "node scripts/verify-release-metadata-policy.mjs",
     "verify:packaged-updater": "node scripts/verify-packaged-updater.mjs",
+    "verify:packaged-runtime": "node scripts/verify-packaged-runtime.mjs",
     "verify:r2-credentials": "node scripts/verify-r2-credentials.mjs",
     "verify:runtime": "node scripts/verify-runtime.mjs"
   },

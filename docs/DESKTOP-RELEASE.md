@@ -180,6 +180,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **安装包命名** | 仅字母、数字、连字符（如 `MacOS-arm64-M-CPU`） | 禁止空格/括号；须与 yml 中 `url` **逐字一致** |
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
+| **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
 | **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
 
 **版本升级语义（electron-updater）**

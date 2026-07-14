@@ -165,9 +165,13 @@ function sidecarEnv(root) {
 
   if (!isDev) {
     env.ELECTRON_RUN_AS_NODE = '1'
-    const nodeModules = path.join(root, 'node_modules')
-    if (require('node:fs').existsSync(nodeModules)) {
-      env.NODE_PATH = nodeModules
+    const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
+    const fs = require('node:fs')
+    const depsDir = path.join(root, RUNTIME_DEPS_DIR)
+    const legacyNodeModules = path.join(root, 'node_modules')
+    const moduleRoot = fs.existsSync(depsDir) ? depsDir : legacyNodeModules
+    if (fs.existsSync(moduleRoot)) {
+      env.NODE_PATH = moduleRoot
     }
   }
 
