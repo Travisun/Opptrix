@@ -151,6 +151,65 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('instrument_snapshot', resolveInstrumentParams(a)),
     },
     {
+      name: 'get_instrument_profile',
+      category: '基本面',
+      description: '公司/标的概况事实表（主业、行业、概念、上市信息等）；核实「做什么的」时优先于 snapshot 碎片',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('instrument_profile', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_instrument_financials',
+      category: '基本面',
+      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_type: {
+          type: 'string',
+          description: '报告类型：all（默认，多期）| annual | quarter',
+        },
+        report_date: {
+          type: 'string',
+          description: '可选，报告期 YYYY-MM-DD；空则返回可用最近若干期',
+        },
+      }),
+      handler: (a) => d('instrument_financials', {
+        ...resolveInstrumentParams(a),
+        report_type: a.report_type ?? 'all',
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_shareholders',
+      category: '基本面',
+      description: '股东结构事实表（十大股东/股本等）；核实股权集中度或机构持仓时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，报告期 YYYY-MM-DD',
+        },
+      }),
+      handler: (a) => d('instrument_shareholders', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date,
+      }),
+    },
+    {
+      name: 'get_instrument_dividend',
+      category: '基本面',
+      description: '分红派息历史事实表；核实分红政策与历史派息时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        page: { type: 'number', description: '可选，页码（港股等分页源）' },
+        page_size: { type: 'number', description: '可选，每页条数' },
+      }),
+      handler: (a) => d('instrument_dividend', {
+        ...resolveInstrumentParams(a),
+        page: a.page,
+        page_size: a.page_size,
+      }),
+    },
+    {
       name: 'get_instrument_quotes',
       category: '跨市场标的',
       description: '批量获取多只标的最新价、涨跌幅等实时/近收盘行情；instruments 为 InstrumentRef 数组',

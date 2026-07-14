@@ -104,8 +104,32 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_snapshot: {
     hubFeature: 'instrument_snapshot',
     miningEligible: true,
-    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；跨市场深度分析首选入口。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；跨市场深度分析首选入口。需要可核验财务/股东事实表时改用 get_instrument_financials / get_instrument_profile。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；capabilities 不含 snapshot 时勿调用；勿对 20+ 只批量 snapshot。',
+  },
+  get_instrument_profile: {
+    hubFeature: 'instrument_profile',
+    miningEligible: true,
+    usageGuide: `公司/标的概况事实表（主业、行业、概念、上市信息）；问「做什么的/所属概念」时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 profile capability；勿用 invoke_provider_custom_method 替代；无数据时声明缺口。',
+  },
+  get_instrument_financials: {
+    hubFeature: 'instrument_financials',
+    miningEligible: true,
+    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；勿用 evaluate 代替核实。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；report_type 默认 all；引用具体 reportDate；无数据时声明缺口，禁止编造。',
+  },
+  get_instrument_shareholders: {
+    hubFeature: 'instrument_shareholders',
+    miningEligible: true,
+    usageGuide: `股东结构事实表；问十大股东、股权集中度、机构持仓时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；部分市场可能无数据；勿编造股东名单。',
+  },
+  get_instrument_dividend: {
+    hubFeature: 'instrument_dividend',
+    miningEligible: true,
+    usageGuide: `分红派息历史事实表；问分红政策、历史派息时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；港股可带 page；无记录时声明，勿臆造股息率时间序列。',
   },
   get_instrument_quotes: {
     hubFeature: 'instrument_quotes',

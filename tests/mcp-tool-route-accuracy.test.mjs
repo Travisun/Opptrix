@@ -33,6 +33,10 @@ const PRIMARY_CASES = [
   { message: '600519 最新价和涨跌幅', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
   { message: '帮我深度分析一下 600519', expectPrimary: 'get_instrument_snapshot', intent: 'depth_analysis' },
   { message: '分析一下贵州茅台好不好', expectPrimary: 'get_instrument_snapshot', intent: 'depth_analysis' },
+  { message: '茅台最近几年营收和净利润同比', expectPrimary: 'get_instrument_financials', intent: 'financials' },
+  { message: '600519 的主营业务和所属概念', expectPrimary: 'get_instrument_profile', intent: 'profile' },
+  { message: '看下十大股东持股', expectPrimary: 'get_instrument_shareholders', intent: 'shareholders' },
+  { message: '历史分红派息记录', expectPrimary: 'get_instrument_dividend', intent: 'dividend' },
   { message: '这只 ETF 净值和溢价率', expectPrimary: 'get_etf_nav', intent: 'etf_nav' },
   { message: '看下 ETF 持仓权重成分', expectPrimary: 'get_etf_holdings', intent: 'etf_holdings' },
   { message: '我的持仓盈亏怎么样', expectPrimary: 'get_portfolio_holdings', intent: 'portfolio_holdings' },
@@ -149,12 +153,19 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
   assert.ok(!slim.includes('industry_mining') || slim.includes('工具包目录'), 'industry playbook body should be absent')
   assert.ok(!slim.includes('【资讯调阅'))
   assert.ok(!slim.includes('【数据源扩展'))
+  assert.ok(!slim.includes('【基本面事实表'))
 
   const withNews = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'news'],
     routePlaybook: '【本轮工具选型卡】\n- news',
   })
   assert.match(withNews, /【资讯调阅/)
+
+  const withFund = buildAgentSystemRules({
+    activePacks: ['core', 'meta', 'fundamentals'],
+    routePlaybook: '【本轮工具选型卡】\n- fund',
+  })
+  assert.match(withFund, /【基本面事实表/)
 })
 
 test('D6 over-seed suppression on greeting', () => {

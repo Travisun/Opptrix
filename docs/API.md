@@ -66,6 +66,10 @@
 | `backtest` | 见 hub 实现 | 因子回测 |
 | `latest_evaluation` | `code`, `scorecard?`, `force?` | 最近评估；默认 `G=B+M`，返回 `gbm` B/M 子分 |
 | `market_regime` | `profile_scope?` (`cn` / `us`) | 市况快照（发现页横幅）；`us` 基于 SPY 动量 stub |
+| `instrument_profile` | InstrumentRef | 公司/标的概况事实表 |
+| `instrument_financials` | InstrumentRef + `report_type?` / `report_date?` | 财务摘要多期 |
+| `instrument_shareholders` | InstrumentRef + `report_date?` | 股东结构 |
+| `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -123,6 +127,14 @@ POST /api/research
 { "feature": "instrument_quotes", "params": { "instruments": [{ "market": "US", "assetClass": "EQUITY", "symbol": "AAPL" }] } }
 ```
 
+基本面事实表（`queryInstrumentData`，与 MCP `get_instrument_*` 对应）：
+
+| feature | params | 说明 |
+|---------|--------|------|
+| `instrument_profile` | InstrumentRef | 公司/标的概况 |
+| `instrument_financials` | InstrumentRef + 可选 `report_type` / `report_date` | 财务摘要多期 |
+| `instrument_shareholders` | InstrumentRef + 可选 `report_date` | 股东结构 |
+| `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
 
 服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
 

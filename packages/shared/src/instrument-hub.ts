@@ -11,6 +11,10 @@ export type InstrumentHubCapability =
   | 'chart_intraday'
   | 'capabilities'
   | 'search'
+  | 'profile'
+  | 'financials'
+  | 'shareholders'
+  | 'dividend'
   | 'cyq'
   | 'institution_rating'
   | 'institution_report'
@@ -27,6 +31,10 @@ export const INSTRUMENT_HUB_FEATURE: Record<InstrumentHubCapability, string> = {
   chart_intraday: 'instrument_chart',
   capabilities: 'instrument_capabilities',
   search: 'instrument_search',
+  profile: 'instrument_profile',
+  financials: 'instrument_financials',
+  shareholders: 'instrument_shareholders',
+  dividend: 'instrument_dividend',
   cyq: 'instrument_cyq',
   institution_rating: 'instrument_institution_rating',
   institution_report: 'instrument_institution_report',
@@ -59,6 +67,8 @@ export const LEGACY_HUB_FEATURE_SHIM: Record<string, InstrumentHubCapability> = 
   institution_report: 'institution_report',
   search_stocks: 'search',
   etf_snapshot: 'snapshot',
+  us_profile: 'profile',
+  us_financials: 'financials',
 }
 
 export function resolveInstrumentHubFeature(legacyOrStandard: string): string {

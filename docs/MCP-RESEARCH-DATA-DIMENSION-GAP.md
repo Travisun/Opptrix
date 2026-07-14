@@ -14,6 +14,7 @@
 |------|------|----------|
 | **core** | `search_instruments`, `get_instrument_capabilities`, `get_instrument_snapshot`, `get_instrument_quotes`, `batch_instrument_snapshots`, `ask_user`, `get_current_time`, 系统信息类 | 发现、身份消歧、价量截面、会话时钟 |
 | **meta** | `list_tool_packs`, `activate_tool_pack` | 工具加载 |
+| **fundamentals** | `get_instrument_profile`, `get_instrument_financials`, `get_instrument_shareholders`, `get_instrument_dividend` | **基本面事实表**（经 `queryInstrumentData`） |
 | **instrument_analytics** | `get_instrument_chart`, `evaluate_instrument`, `get_instrument_strategy_signal`, `get_instrument_indicators`, `verify_instrument_strategy`, `get_instrument_latest_evaluation`, `get_instrument_cyq`, `get_instrument_institution_*` | K 线/技术、内部评分卡、策略信号、筹码、**内部**「机构风格」评估 |
 | **market** | `get_market_regime`, `get_market_dynamics`, `get_trend_brief`, `get_closing_report`, `get_morning_brief` | 宏观状态、市场全景、单股趋势快评、开闭市报告 |
 | **etf** | `get_etf_list`, `get_etf_nav`, `get_etf_holdings` | ETF 目录/净值/成分 |
@@ -23,9 +24,7 @@
 | **strategy_extra** | `run_backtest`, `strategy_report` | IC/评分卡回测、单股策略文报 |
 | **provider_ext** | list/invoke custom methods | 逃生舱，非标准能力 |
 
-约 **45+** 个聊天工具；标准 Hub 侧 `InstrumentHubCapability` 仍偏 **行情 + 内部评价**：
-
-`snapshot | quotes | chart | capabilities | search | cyq | institution_* | evaluation | strategy_signal | indicators | strategy_verify | batch_snapshots`
+约 **50+** 个聊天工具；Hub `InstrumentHubCapability` 已扩 `profile` / `financials` / `shareholders` / `dividend`（其余仍偏行情 + 内部评价）。
 
 ### 1.2 数据层已有、但 Agent MCP **未一等公民暴露**的能力
 
@@ -252,8 +251,8 @@ ETF 浅层    ██████░░░░
 宏观快照    █████░░░░░
 产业叙事    █████░░░░░
 组合持仓    █████░░░░░
-基本面财务  ██░░░░░░░░  ← 最大洞
-股东资金    █░░░░░░░░░
+基本面财务  ██████░░░░  ← Phase1 已接 profile/financials MCP
+股东资金    ████░░░░░░  ← 股东已接；资金流仍缺独立工具
 一致预期    ░░░░░░░░░░
 交易/财报日历 ██░░░░░░░░
 可比公司    ██░░░░░░░░
@@ -261,4 +260,59 @@ ETF 浅层    ██████░░░░
 另类 ESG    ░░░░░░░░░░
 ```
 
-*本文仅作规划基线，不修改运行时代码。接入时以 CodeGraph + `mcp-tool-pack-routing.mdc` 为准。*
+---
+
+## 11. 第一轮对照：标准 Capability × MCP × Provider Custom
+
+> 结论先说：**缺口常在「MCP 一等公民」而非「引擎完全没数据」**。CN `get_instrument_snapshot` 已走 `stockDetail`，可内嵌 profile/financials/分红/资金流/股东/公告；但仍缺可核验、可分页的独立事实表工具。Custom 适合补标准外维度，不该永久替代标准能力。
+
+### 11.1 标准 `InstrumentDataCapability` 对照表
+
+| 标准 Capability | Engine / 详情页 | 独立 MCP（本轮后） | 代表 Custom（重叠或补齐） | 判定 |
+|-----------------|-----------------|-------------------|---------------------------|------|
+| `realtime` | ✅ | ✅ quotes / snapshot | 盘口类（Tickflow depth） | 🟢 价量够用；L2 另议 |
+| `kline` | ✅ | ✅ `get_instrument_chart` | `tencent*Kline` | 🟢 |
+| `snapshot` | ✅ 富（CN） | ✅ | F10 碎片多被详情吸收 | 🟡 胖快照 ≠ 事实表 |
+| `profile` | ✅ | ✅ **`get_instrument_profile`** | `sinaCorpInfo`、HK/US Profile | 🟢 Phase1 |
+| `financials` | ✅ | ✅ **`get_instrument_financials`** | `sinaFinancialPivot`、HK/US 财报 | 🟢 Phase1 |
+| `dividend` | ✅ | ✅ **`get_instrument_dividend`** | `sinaDividends`、`tencentHkDividends` | 🟢 Phase1 |
+| `shareholders` | ✅ | ✅ **`get_instrument_shareholders`** | `sinaMajor/Circulate*` | 🟢 Phase1 |
+| `money_flow` | ✅ | ❌（仍可能在 snapshot.extras） | Provider `moneyFlow` | 🟠 Phase2 |
+| `news` / `notices` | ✅ | 🟡 RSS + URL 正文 | `sinaBulletins*`、`tencent*Notices` | 🟠 缺标的公告列表工具 |
+| `instrument_search` | ✅ | ✅ | `tencentStockSearch` | 🟢 |
+| `stock_list` | ✅ | 🟡 search / ETF list | `tencent*StockList`、stockindex | 🟠 |
+| `sector_list` | ✅ 规划 | ❌ | `tencentIndustry*`、`zzPlatesRank` | 🟠 |
+| `etf_*` | 部分 | ✅ list/nav/holdings | `tencentFund*` 更全 | 🟡 缺 etf_profile |
+| `technical_analysis` | 部分 | ✅ indicators/cyq/signal | `tencentHkTechnicalAnalysis` | 🟢 偏 A 股 |
+
+### 11.2 Custom 增量面（标准外，勿误当已 MCP 化）
+
+| 维度 | 代表方法 | MCP 现状 |
+|------|----------|----------|
+| 板块热度/成分/所属 | `tencentIndustry*`、`tencentStockPlates`、`zzPlatesRank` | 无结构化工具体 |
+| 宏观序列 CPI/PPI/PMI | `bsMacro*` | 无；regime 偏叙事 |
+| 龙虎榜/两融/解禁/内部人 | `sinaDragonTiger*`、`sinaMargin*`、`zzLhbDetail` | 无 |
+| Level-2 盘口 | `fetchDepth`、`tfDepthBatch` | 无 |
+| 港美投资评级/关联股 | `tencentHkInvestRating`、`*RelatedStocks` | 碎片 / ≠ 内部 institution_* |
+| AkShare 另类大杂烩 | ~216 方法 | 仅 `provider_ext` |
+
+### 11.3 仍缺清单（Phase1 落地后）
+
+| 优先级 | 缺口 | 说明 |
+|--------|------|------|
+| P0′ | 真·一致预期 / surprise | 与内部 `institution_*` 并存；依赖数据源 |
+| P1 | `money_flow`、标的 `notices` 列表、交易/财报日历 | 数据层部分已有 |
+| P1′ | `sector_list` + 成分 + peer compare | Custom 已很强 |
+| P2 | 宏观序列、ETF profile、组合风控深、L2 | — |
+| P3 | ESG / AkShare 另类 | 保持逃生舱 |
+
+### 11.4 Phase 1 实施状态
+
+| 项 | 状态 |
+|----|------|
+| Pack `fundamentals` | ✅ |
+| Hub `instrument_profile` / `instrument_financials` / `instrument_shareholders` / `instrument_dividend` | ✅（经 `queryInstrumentData`） |
+| MCP 四工具 + 意图精排 + AGENT-GUIDE | ✅ |
+| `money_flow` / notices list / valuation 专用 / consensus | ⬜ 后续 Phase |
+
+*接入以 CodeGraph + `mcp-tool-pack-routing.mdc` 为准；本节随实现同步更新。*

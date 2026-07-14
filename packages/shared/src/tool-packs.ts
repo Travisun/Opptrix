@@ -9,6 +9,7 @@ export const TOOL_PACK_IDS = [
   'core',
   'meta',
   'instrument_analytics',
+  'fundamentals',
   'market',
   'etf',
   'portfolio',
@@ -51,6 +52,12 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     title: '标的深度分析',
     description: '评估、策略信号、指标、筹码、机构评级等',
     whenToUse: '分析某只股票/标的优劣、信号、技术面',
+  },
+  {
+    id: 'fundamentals',
+    title: '基本面事实',
+    description: '公司概况、财务摘要、股东结构、分红历史',
+    whenToUse: '营收利润、ROE、主业概念、十大股东、分红派息；做深度研究时的事实表',
   },
   {
     id: 'market',
@@ -125,6 +132,12 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_instrument_cyq: 'instrument_analytics',
   get_instrument_institution_rating: 'instrument_analytics',
   get_instrument_institution_report: 'instrument_analytics',
+
+  // fundamentals
+  get_instrument_profile: 'fundamentals',
+  get_instrument_financials: 'fundamentals',
+  get_instrument_shareholders: 'fundamentals',
+  get_instrument_dividend: 'fundamentals',
 
   // market
   get_market_regime: 'market',

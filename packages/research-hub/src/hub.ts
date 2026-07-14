@@ -317,6 +317,10 @@ export class ResearchHub {
         case 'instrument_chart': return this.instrumentChart(params, t0)
         case 'instrument_search': return this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
+        case 'instrument_profile': return this.queryInstrumentStandardData(params, 'profile', t0)
+        case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
+        case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
+        case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2197,6 +2201,73 @@ export class ResearchHub {
     if (capability === 'etf_snapshot') return ok(data, labels[capability], t0)
     const rows = (data as unknown[]) ?? []
     return ok(rows, `${labels[capability]} ${rows.length} 条`, t0)
+  }
+
+  /**
+   * 标准基本面能力 — profile / financials / shareholders / dividend。
+   * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
+   */
+  private async queryInstrumentStandardData(
+    params: Record<string, unknown>,
+    capability: 'profile' | 'financials' | 'shareholders' | 'dividend',
+    t0: number,
+  ) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+
+    const labels = {
+      profile: '公司概况',
+      financials: '财务摘要',
+      shareholders: '股东结构',
+      dividend: '分红历史',
+    } as const
+
+    const opts: {
+      reportDate?: string
+      reportType?: string
+      page?: number
+      pageSize?: number
+    } = {}
+    if (capability === 'financials') {
+      opts.reportDate = params.report_date != null ? String(params.report_date) : ''
+      opts.reportType = params.report_type != null ? String(params.report_type) : 'all'
+    }
+    if (capability === 'shareholders' && params.report_date != null) {
+      opts.reportDate = String(params.report_date)
+    }
+    if (capability === 'dividend') {
+      if (params.page != null) opts.page = Number(params.page)
+      if (params.page_size != null) opts.pageSize = Number(params.page_size)
+    }
+
+    const r = await this.de.queryInstrumentData(ref, capability, opts)
+    if (!r.success) return fail(instrumentQueryError(r, `${labels[capability]}获取失败`), t0)
+    const data = instrumentQueryData(r)
+
+    if (capability === 'profile') {
+      const row = Array.isArray(data) ? (data[0] ?? null) : data ?? null
+      return ok(
+        {
+          instrument: ref,
+          profile: row,
+          source: 'queryInstrumentData',
+        },
+        labels.profile,
+        t0,
+      )
+    }
+
+    const rows = Array.isArray(data) ? data : data != null ? [data] : []
+    return ok(
+      {
+        instrument: ref,
+        items: rows,
+        count: rows.length,
+        source: 'queryInstrumentData',
+      },
+      `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
   }
 
   private async queryCnKline(

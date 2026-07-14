@@ -231,6 +231,42 @@ const INTENT_RULES: IntentRule[] = [
     hint: '回测/IC → run_backtest；单股策略报告用 strategy_report',
   },
   {
+    intent: 'financials',
+    priority: 72,
+    patterns: [/营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|\bEPS\b|利润表|资产负债/i],
+    preferredTools: ['get_instrument_financials', 'get_instrument_snapshot', 'get_instrument_profile'],
+    avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
+    confidence: 'high',
+    hint: '财务数字核实 → 首选 get_instrument_financials；勿用 evaluate 黑盒代替事实表',
+  },
+  {
+    intent: 'profile',
+    priority: 70,
+    patterns: [/公司简介|主营业务|所属概念|所属行业|做什么的|公司概况|F10|基本资料/],
+    preferredTools: ['get_instrument_profile', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
+    confidence: 'high',
+    hint: '公司概况/概念 → get_instrument_profile',
+  },
+  {
+    intent: 'shareholders',
+    priority: 68,
+    patterns: [/十大股东|股东结构|股东持股|股权结构|流通股东|谁持股/],
+    preferredTools: ['get_instrument_shareholders', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '股东结构 → get_instrument_shareholders',
+  },
+  {
+    intent: 'dividend',
+    priority: 66,
+    patterns: [/分红|派息|股息|股利|分红历史|分红方案/],
+    preferredTools: ['get_instrument_dividend', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '分红派息 → get_instrument_dividend',
+  },
+  {
     intent: 'price_only',
     priority: 64,
     patterns: [/现价|最新价|多少钱|涨跌幅|实时行情|报价|现报/],
@@ -282,12 +318,14 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: [
       'search_instruments',
       'get_instrument_snapshot',
+      'get_instrument_financials',
+      'get_instrument_profile',
       'evaluate_instrument',
       'get_instrument_strategy_signal',
     ],
     avoidTools: ['get_instrument_quotes'],
     confidence: 'medium',
-    hint: '深度分析：已知代码可跳过 search → snapshot → evaluate_instrument；仅报价不够',
+    hint: '深度分析：已知代码可跳过 search → snapshot → financials/profile 事实表 → evaluate；仅报价不够',
   },
   {
     intent: 'etf_general',
@@ -307,6 +345,9 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   when: string
 }> = [
   { prefer: 'get_instrument_quotes', avoid: 'evaluate_instrument', when: '只需现价/涨跌，不需要评分' },
+  { prefer: 'get_instrument_financials', avoid: 'evaluate_instrument', when: '核实营收/利润/ROE 等财务数字' },
+  { prefer: 'get_instrument_profile', avoid: 'evaluate_instrument', when: '只要公司概况/概念，不做评分' },
+  { prefer: 'get_instrument_financials', avoid: 'invoke_provider_custom_method', when: '标准 financials 已覆盖' },
   { prefer: 'get_instrument_snapshot', avoid: 'get_instrument_quotes', when: '需要综合快照（行情+概况），不止最新价' },
   { prefer: 'evaluate_instrument', avoid: 'get_trend_brief', when: '需要评分卡/系统评估，而非一句话趋势' },
   { prefer: 'get_trend_brief', avoid: 'evaluate_instrument', when: '只要 A 股趋势快评' },
@@ -334,6 +375,10 @@ const L1_INTENTS = new Set([
   'general',
   'watchlist',
   'portfolio_trades',
+  'financials',
+  'profile',
+  'shareholders',
+  'dividend',
 ])
 
 const L3_INTENTS = new Set([
@@ -443,18 +488,32 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
   // 深度分析且已有代码 → search 降为可选末位
   if (matched.intent === 'depth_analysis' && hasInstrumentCue(message)) {
     preferredTools = preferredTools.filter(t => t !== 'search_instruments')
-    preferredTools = ['get_instrument_snapshot', 'evaluate_instrument', ...preferredTools.filter(
-      t => t !== 'get_instrument_snapshot' && t !== 'evaluate_instrument',
-    )]
+    preferredTools = [
+      'get_instrument_snapshot',
+      'get_instrument_financials',
+      'get_instrument_profile',
+      'evaluate_instrument',
+      ...preferredTools.filter(
+        t =>
+          t !== 'get_instrument_snapshot'
+          && t !== 'get_instrument_financials'
+          && t !== 'get_instrument_profile'
+          && t !== 'evaluate_instrument',
+      ),
+    ]
   }
 
   let requiredPacks = packsForTools(preferredTools)
-  // L3 且用户要「全面」时：在预算内尽量塞入 market，便于环境维度
+  // L3 且用户要「全面」时：预算扩到 3，以同时容纳 analytics + fundamentals + market
   const tierPreview = resolveResearchTier(matched.intent, message)
+  const packBudget =
+    tierPreview === 'L3' && L3_UPGRADE_RE.test(message)
+      ? Math.max(MAX_SEEDED_BUSINESS_PACKS, 3)
+      : MAX_SEEDED_BUSINESS_PACKS
   if (tierPreview === 'L3' && L3_UPGRADE_RE.test(message) && !requiredPacks.includes('market')) {
-    requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded)
+    requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded, packBudget)
   }
-  const seedPacks = mergePackBudget(requiredPacks, seeded)
+  const seedPacks = mergePackBudget(requiredPacks, seeded, packBudget)
 
   return finish({
     preferredTools,
@@ -468,14 +527,18 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
 }
 
 /** required 优先占预算，再用播种补足 */
-function mergePackBudget(required: ToolPackId[], seeded: ToolPackId[]): ToolPackId[] {
+function mergePackBudget(
+  required: ToolPackId[],
+  seeded: ToolPackId[],
+  max = MAX_SEEDED_BUSINESS_PACKS,
+): ToolPackId[] {
   const out: ToolPackId[] = []
   const seen = new Set<ToolPackId>()
   for (const p of [...required, ...seeded]) {
     if (seen.has(p)) continue
     seen.add(p)
     out.push(p)
-    if (out.length >= MAX_SEEDED_BUSINESS_PACKS) break
+    if (out.length >= max) break
   }
   return out
 }
