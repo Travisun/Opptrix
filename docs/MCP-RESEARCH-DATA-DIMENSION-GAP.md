@@ -16,11 +16,11 @@
 | **meta** | `list_tool_packs`, `activate_tool_pack` | 工具加载 |
 | **fundamentals** | `get_instrument_profile`, `get_instrument_financials`, `get_instrument_shareholders`, `get_instrument_dividend` | **基本面事实表**（经 `queryInstrumentData`） |
 | **instrument_analytics** | `get_instrument_chart`, `evaluate_instrument`, `get_instrument_strategy_signal`, `get_instrument_indicators`, `verify_instrument_strategy`, `get_instrument_latest_evaluation`, `get_instrument_cyq`, `get_instrument_institution_*` | K 线/技术、内部评分卡、策略信号、筹码、**内部**「机构风格」评估 |
-| **market** | `get_market_regime`, `get_market_dynamics`, `get_trend_brief`, `get_closing_report`, `get_morning_brief` | 宏观状态、市场全景、单股趋势快评、开闭市报告 |
+| **market** | `get_market_regime`, `get_market_dynamics`, `get_trend_brief`, `get_closing_report`, `get_morning_brief`, `get_instrument_money_flow` | 宏观状态、市场全景、单股趋势快评、开闭市报告、**个股资金流** |
 | **etf** | `get_etf_list`, `get_etf_nav`, `get_etf_holdings` | ETF 目录/净值/成分 |
 | **portfolio** | `get_watchlist`, `get_portfolio_holdings`, `portfolio_*`, `analyze_portfolio` | 自选、实盘组合暴露 |
 | **industry** | `industry_mining`, `industry_mermaid` | 产业链叙事 + 图谱 |
-| **news** | 资讯中心 list/detail + `get_notice_content` | RSS/自建资讯 + URL 公告正文 |
+| **news** | 资讯中心 list/detail + `get_instrument_notices` + `get_notice_content` | RSS/自建资讯 + **标的公告列表** + URL 公告正文 |
 | **strategy_extra** | `run_backtest`, `strategy_report` | IC/评分卡回测、单股策略文报 |
 | **provider_ext** | list/invoke custom methods | 逃生舱，非标准能力 |
 
@@ -252,7 +252,7 @@ ETF 浅层    ██████░░░░
 产业叙事    █████░░░░░
 组合持仓    █████░░░░░
 基本面财务  ██████░░░░  ← Phase1 已接 profile/financials MCP
-股东资金    ████░░░░░░  ← 股东已接；资金流仍缺独立工具
+股东资金    ██████░░░░  ← 股东 + 个股资金流已接
 一致预期    ░░░░░░░░░░
 交易/财报日历 ██░░░░░░░░
 可比公司    ██░░░░░░░░
@@ -277,8 +277,8 @@ ETF 浅层    ██████░░░░
 | `financials` | ✅ | ✅ **`get_instrument_financials`** | `sinaFinancialPivot`、HK/US 财报 | 🟢 Phase1 |
 | `dividend` | ✅ | ✅ **`get_instrument_dividend`** | `sinaDividends`、`tencentHkDividends` | 🟢 Phase1 |
 | `shareholders` | ✅ | ✅ **`get_instrument_shareholders`** | `sinaMajor/Circulate*` | 🟢 Phase1 |
-| `money_flow` | ✅ | ❌（仍可能在 snapshot.extras） | Provider `moneyFlow` | 🟠 Phase2 |
-| `news` / `notices` | ✅ | 🟡 RSS + URL 正文 | `sinaBulletins*`、`tencent*Notices` | 🟠 缺标的公告列表工具 |
+| `money_flow` | ✅ | ✅ **`get_instrument_money_flow`** | Provider `moneyFlow` | 🟢 Phase2 |
+| `news` / `notices` | ✅ | ✅ **`get_instrument_notices`** + `get_notice_content` | `sinaBulletins*`、`tencent*Notices` | 🟢 Phase2 |
 | `instrument_search` | ✅ | ✅ | `tencentStockSearch` | 🟢 |
 | `stock_list` | ✅ | 🟡 search / ETF list | `tencent*StockList`、stockindex | 🟠 |
 | `sector_list` | ✅ 规划 | ❌ | `tencentIndustry*`、`zzPlatesRank` | 🟠 |
@@ -301,7 +301,7 @@ ETF 浅层    ██████░░░░
 | 优先级 | 缺口 | 说明 |
 |--------|------|------|
 | P0′ | 真·一致预期 / surprise | 与内部 `institution_*` 并存；依赖数据源 |
-| P1 | `money_flow`、标的 `notices` 列表、交易/财报日历 | 数据层部分已有 |
+| P1 | 交易/财报日历 | 尚无标准 MCP；会话时钟仅部分覆盖 |
 | P1′ | `sector_list` + 成分 + peer compare | Custom 已很强 |
 | P2 | 宏观序列、ETF profile、组合风控深、L2 | — |
 | P3 | ESG / AkShare 另类 | 保持逃生舱 |
@@ -313,6 +313,7 @@ ETF 浅层    ██████░░░░
 | Pack `fundamentals` | ✅ |
 | Hub `instrument_profile` / `instrument_financials` / `instrument_shareholders` / `instrument_dividend` | ✅（经 `queryInstrumentData`） |
 | MCP 四工具 + 意图精排 + AGENT-GUIDE | ✅ |
-| `money_flow` / notices list / valuation 专用 / consensus | ⬜ 后续 Phase |
+| Phase2：`get_instrument_money_flow` / `get_instrument_notices` | ✅ |
+| 交易日历 / valuation 专用 / consensus | ⬜ 后续 Phase |
 
 *接入以 CodeGraph + `mcp-tool-pack-routing.mdc` 为准；本节随实现同步更新。*

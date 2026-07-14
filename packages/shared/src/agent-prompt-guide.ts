@@ -107,6 +107,7 @@ export function buildNewsRetrievalPlaybook(): string {
     '【资讯调阅 — 与标的类型联动，优先最相关来源】',
     '0) 有明确标的时：先确定其 market（CN/US/HK/JP/KR/CRYPTO）与 assetClass，再选资讯；纯宏观/综合问题可跳过标的绑定',
     '1) get_news_center_status：stale=true 时告知用户数据可能不是最新，仍可读本地缓存',
+    '1b) 个股官方公告列表：get_instrument_notices（InstrumentRef）→ 对条目 url 调 get_notice_content；勿与 RSS list_news_articles 混淆',
     '2) list_news_groups：阅读各分组 title 与返回的 market_hints / match_score（若有）；优先选与标的 market 一致或 match_score 最高的分组',
     '   - 标题含「A股/沪深/上证」→ CN；「美股/Nasdaq/美联储」→ US；「港股/恒生」→ HK；「日股/日经」→ JP；「韩股/Kospi」→ KR；「Crypto/BTC/币圈」→ CRYPTO',
     '   - 「宏观/央行/利率/政策」→ MACRO 分组（交叉调阅）；「全球/要闻/综合」→ GLOBAL 兜底',
@@ -143,9 +144,10 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief】',
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow】',
     '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
+    '2b) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
     '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',

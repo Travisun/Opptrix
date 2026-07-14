@@ -70,6 +70,8 @@
 | `instrument_financials` | InstrumentRef + `report_type?` / `report_date?` | 财务摘要多期 |
 | `instrument_shareholders` | InstrumentRef + `report_date?` | 股东结构 |
 | `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
+| `instrument_money_flow` | InstrumentRef | 个股资金流向 |
+| `instrument_notices` | InstrumentRef + `page?` / `page_size?` | 标的公告列表 |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -135,6 +137,8 @@ POST /api/research
 | `instrument_financials` | InstrumentRef + 可选 `report_type` / `report_date` | 财务摘要多期 |
 | `instrument_shareholders` | InstrumentRef + 可选 `report_date` | 股东结构 |
 | `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
+| `instrument_money_flow` | InstrumentRef | 个股资金流向（主 CN） |
+| `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |
 
 服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
 

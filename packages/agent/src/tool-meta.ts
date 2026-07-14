@@ -131,6 +131,18 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: `分红派息历史事实表；问分红政策、历史派息时使用。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；港股可带 page；无记录时声明，勿臆造股息率时间序列。',
   },
+  get_instrument_money_flow: {
+    hubFeature: 'instrument_money_flow',
+    miningEligible: true,
+    usageGuide: `个股资金流向事实表；问主力/北向/资金进出时首选；勿用 get_market_dynamics 笼统代替。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；主要支持 CN；空数据时声明缺口，禁止编造净流入数字。',
+  },
+  get_instrument_notices: {
+    hubFeature: 'instrument_notices',
+    miningEligible: false,
+    usageGuide: `按标的拉官方公告/披露列表；用户问公告、年报披露列表时首选。正文用 get_notice_content(url)。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；page/page_size 可选；列表无正文；url 必须来自本工具返回再调 get_notice_content。',
+  },
   get_instrument_quotes: {
     hubFeature: 'instrument_quotes',
     miningEligible: true,
@@ -284,7 +296,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_notice_content: {
     hubFeature: 'notice_content',
     miningEligible: false,
-    usageGuide: '用户要读某条上市公司公告/年报全文时使用；url 来自 get_instrument_snapshot 公告列表或用户提供的链接。',
+    usageGuide: '用户要读某条上市公司公告/年报全文时使用；url 来自 get_instrument_notices、get_instrument_snapshot 公告列表或用户提供的链接。',
     compliance: 'url 必填；支持 HTML 与 PDF；正文已压缩；truncated=true 时可增大 max_chars；只读。',
   },
   get_current_time: {

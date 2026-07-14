@@ -38,7 +38,7 @@ const SEED_RULES: SeedRule[] = [
     pack: 'news',
     weight: 3,
     patterns: [
-      /资讯|新闻|公告|研报|订阅|RSS|新闻中心|notice|disclosure/i,
+      /资讯|新闻|公告|研报|订阅|RSS|新闻中心|notice|disclosure|公告列表|公司公告/i,
       /看好空|舆情|媒体报道/,
     ],
   },
@@ -54,7 +54,7 @@ const SEED_RULES: SeedRule[] = [
     pack: 'market',
     weight: 2,
     patterns: [
-      /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘/i,
+      /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘|资金流|资金净流入|主力.*净流入|北向/i,
       /沪深300|风险偏好|市场状态/,
     ],
   },

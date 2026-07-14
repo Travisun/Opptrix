@@ -153,6 +153,8 @@ const TOOL_LABELS: Record<string, string> = {
   get_instrument_financials: '读取财务摘要',
   get_instrument_shareholders: '读取股东结构',
   get_instrument_dividend: '读取分红历史',
+  get_instrument_money_flow: '读取资金流向',
+  get_instrument_notices: '读取标的公告列表',
   get_instrument_quotes: '获取标的行情',
   get_instrument_chart: '获取标的 K 线',
   get_instrument_indicators: '计算技术指标',

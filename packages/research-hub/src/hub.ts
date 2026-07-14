@@ -321,6 +321,8 @@ export class ResearchHub {
         case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
         case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
         case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
+        case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
+        case 'instrument_notices': return this.instrumentNotices(params, t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2204,12 +2206,12 @@ export class ResearchHub {
   }
 
   /**
-   * 标准基本面能力 — profile / financials / shareholders / dividend。
+   * 标准事实表能力 — profile / financials / shareholders / dividend / money_flow。
    * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
    */
   private async queryInstrumentStandardData(
     params: Record<string, unknown>,
-    capability: 'profile' | 'financials' | 'shareholders' | 'dividend',
+    capability: 'profile' | 'financials' | 'shareholders' | 'dividend' | 'money_flow',
     t0: number,
   ) {
     const ref = resolveInstrumentFromParams(params)
@@ -2220,6 +2222,7 @@ export class ResearchHub {
       financials: '财务摘要',
       shareholders: '股东结构',
       dividend: '分红历史',
+      money_flow: '资金流向',
     } as const
 
     const opts: {
@@ -2266,6 +2269,49 @@ export class ResearchHub {
         source: 'queryInstrumentData',
       },
       `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /** 标的绑定公告列表 — 标准 notices；CN 空结果时 zzshare 兜底 */
+  private async instrumentNotices(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    const page = params.page != null ? Math.max(1, Number(params.page)) : 1
+    const pageSize = params.page_size != null
+      ? Math.min(50, Math.max(1, Number(params.page_size)))
+      : 20
+
+    const r = await this.de.queryInstrumentData(ref, 'notices', { page, pageSize })
+    let rows = instrumentQueryData<NewsItem[]>(r) ?? []
+    let source = rows.length ? 'queryInstrumentData' : 'none'
+
+    if (!rows.length && ref.market === 'CN') {
+      const fallback = await this.callDetailProviderMethod<NewsItem>(
+        ['zzshare'],
+        'news',
+        [ref.symbol, page, pageSize, 'notice'],
+        resolveCnInstrumentRef(ref),
+      )
+      if (fallback?.length) {
+        rows = dedupeStockNewsItems(fallback).slice(0, pageSize)
+        source = 'zzshare'
+      }
+    } else if (rows.length) {
+      rows = dedupeStockNewsItems(rows).slice(0, pageSize)
+    }
+
+    return ok(
+      {
+        instrument: ref,
+        items: rows,
+        count: rows.length,
+        page,
+        page_size: pageSize,
+        source,
+        hint: '正文请用 get_notice_content 传入条目 url；勿编造未返回的公告',
+      },
+      `公告 ${rows.length} 条`,
       t0,
     )
   }

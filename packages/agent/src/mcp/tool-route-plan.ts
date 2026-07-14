@@ -258,6 +258,24 @@ const INTENT_RULES: IntentRule[] = [
     hint: '股东结构 → get_instrument_shareholders',
   },
   {
+    intent: 'money_flow',
+    priority: 69,
+    patterns: [/资金流|资金净流入|主力.*净流入|北向资金|资金进出|散户资金/],
+    preferredTools: ['get_instrument_money_flow', 'get_instrument_snapshot', 'get_market_dynamics'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '个股资金流向 → get_instrument_money_flow；全市场资金概况才用 get_market_dynamics',
+  },
+  {
+    intent: 'instrument_notices',
+    priority: 90,
+    patterns: [/公告列表|公司公告|披露公告|最新公告|年报.*公告|临时公告|查看公告|标的公告|个股公告/],
+    preferredTools: ['get_instrument_notices', 'get_notice_content', 'get_instrument_snapshot'],
+    avoidTools: ['list_news_articles', 'evaluate_instrument'],
+    confidence: 'high',
+    hint: '标的公告列表 → get_instrument_notices；读全文再用 get_notice_content(url)',
+  },
+  {
     intent: 'dividend',
     priority: 66,
     patterns: [/分红|派息|股息|股利|分红历史|分红方案/],
@@ -348,6 +366,8 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'get_instrument_financials', avoid: 'evaluate_instrument', when: '核实营收/利润/ROE 等财务数字' },
   { prefer: 'get_instrument_profile', avoid: 'evaluate_instrument', when: '只要公司概况/概念，不做评分' },
   { prefer: 'get_instrument_financials', avoid: 'invoke_provider_custom_method', when: '标准 financials 已覆盖' },
+  { prefer: 'get_instrument_money_flow', avoid: 'get_market_dynamics', when: '问单只资金流向而非大盘全景' },
+  { prefer: 'get_instrument_notices', avoid: 'list_news_articles', when: '问该标的官方公告列表而非 RSS 资讯' },
   { prefer: 'get_instrument_snapshot', avoid: 'get_instrument_quotes', when: '需要综合快照（行情+概况），不止最新价' },
   { prefer: 'evaluate_instrument', avoid: 'get_trend_brief', when: '需要评分卡/系统评估，而非一句话趋势' },
   { prefer: 'get_trend_brief', avoid: 'evaluate_instrument', when: '只要 A 股趋势快评' },
@@ -379,6 +399,8 @@ const L1_INTENTS = new Set([
   'profile',
   'shareholders',
   'dividend',
+  'money_flow',
+  'instrument_notices',
 ])
 
 const L3_INTENTS = new Set([

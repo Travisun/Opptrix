@@ -210,6 +210,28 @@ export function buildUnifiedInstrumentTools(
       }),
     },
     {
+      name: 'get_instrument_money_flow',
+      category: '市场资金',
+      description: '个股资金流向事实表（主力/散户等）；核实北向或主力进出时使用，勿用 market_dynamics 笼统代替',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('instrument_money_flow', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_instrument_notices',
+      category: '公告研报',
+      description: '按标的拉取上市公司公告/披露列表；读全文时再对条目 url 调用 get_notice_content',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        page: { type: 'number', description: '页码，默认 1' },
+        page_size: { type: 'number', description: '每页条数，默认 20，最大 50' },
+      }),
+      handler: (a) => d('instrument_notices', {
+        ...resolveInstrumentParams(a),
+        page: a.page ?? 1,
+        page_size: a.page_size ?? 20,
+      }),
+    },
+    {
       name: 'get_instrument_quotes',
       category: '跨市场标的',
       description: '批量获取多只标的最新价、涨跌幅等实时/近收盘行情；instruments 为 InstrumentRef 数组',

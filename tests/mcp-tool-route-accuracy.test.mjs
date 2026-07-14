@@ -37,6 +37,8 @@ const PRIMARY_CASES = [
   { message: '600519 的主营业务和所属概念', expectPrimary: 'get_instrument_profile', intent: 'profile' },
   { message: '看下十大股东持股', expectPrimary: 'get_instrument_shareholders', intent: 'shareholders' },
   { message: '历史分红派息记录', expectPrimary: 'get_instrument_dividend', intent: 'dividend' },
+  { message: '茅台主力资金净流入怎么样', expectPrimary: 'get_instrument_money_flow', intent: 'money_flow' },
+  { message: '查看 600519 最新公告列表', expectPrimary: 'get_instrument_notices', intent: 'instrument_notices' },
   { message: '这只 ETF 净值和溢价率', expectPrimary: 'get_etf_nav', intent: 'etf_nav' },
   { message: '看下 ETF 持仓权重成分', expectPrimary: 'get_etf_holdings', intent: 'etf_holdings' },
   { message: '我的持仓盈亏怎么样', expectPrimary: 'get_portfolio_holdings', intent: 'portfolio_holdings' },

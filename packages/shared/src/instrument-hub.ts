@@ -15,6 +15,8 @@ export type InstrumentHubCapability =
   | 'financials'
   | 'shareholders'
   | 'dividend'
+  | 'money_flow'
+  | 'notices'
   | 'cyq'
   | 'institution_rating'
   | 'institution_report'
@@ -35,6 +37,8 @@ export const INSTRUMENT_HUB_FEATURE: Record<InstrumentHubCapability, string> = {
   financials: 'instrument_financials',
   shareholders: 'instrument_shareholders',
   dividend: 'instrument_dividend',
+  money_flow: 'instrument_money_flow',
+  notices: 'instrument_notices',
   cyq: 'instrument_cyq',
   institution_rating: 'instrument_institution_rating',
   institution_report: 'instrument_institution_report',
@@ -84,6 +88,7 @@ export function hubCapabilityForApplication(cap: ApplicationCapability): Instrum
     case 'chart_daily': return 'chart'
     case 'chart_intraday': return 'chart_intraday'
     case 'cyq': return 'cyq'
+    case 'money_flow': return 'money_flow'
     case 'institution_rating': return 'institution_rating'
     case 'scorecard': return 'evaluation'
     case 'strategy_signal': return 'strategy_signal'

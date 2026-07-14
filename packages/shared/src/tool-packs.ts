@@ -62,8 +62,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'market',
     title: '宏观与市场',
-    description: '牛熊状态、市场动态、开盘/收盘报告、趋势快评',
-    whenToUse: '大盘、板块、早报复盘、宏观环境',
+    description: '牛熊状态、市场动态、开盘/收盘报告、趋势快评、个股资金流',
+    whenToUse: '大盘、板块、早报复盘、宏观环境、主力/资金流向',
   },
   {
     id: 'etf',
@@ -86,8 +86,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'news',
     title: '资讯公告',
-    description: '新闻中心列表/正文与公告内容',
-    whenToUse: '资讯、新闻、公告、研报订阅',
+    description: '新闻中心列表/正文、标的公告列表与公告内容',
+    whenToUse: '资讯、新闻、公告、研报订阅、上市公司披露',
   },
   {
     id: 'strategy_extra',
@@ -145,6 +145,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_trend_brief: 'market',
   get_closing_report: 'market',
   get_morning_brief: 'market',
+  get_instrument_money_flow: 'market',
 
   // etf
   get_etf_list: 'etf',
@@ -169,6 +170,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   list_news_articles: 'news',
   get_news_article: 'news',
   get_notice_content: 'news',
+  get_instrument_notices: 'news',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

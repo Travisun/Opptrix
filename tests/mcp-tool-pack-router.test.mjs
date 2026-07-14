@@ -54,6 +54,11 @@ test('resolver seeds fundamentals for financial queries', () => {
   assert.ok(packs.length <= MAX_SEEDED_BUSINESS_PACKS)
 })
 
+test('resolver seeds market for 资金流 queries', () => {
+  const packs = resolveSeedPacks({ message: '茅台主力资金净流入怎么样' })
+  assert.ok(packs.includes('market'))
+})
+
 test('resolver seeds portfolio for 持仓', () => {
   const packs = resolveSeedPacks({ message: '帮我看看我的持仓盈亏' })
   assert.ok(packs.includes('portfolio'))
