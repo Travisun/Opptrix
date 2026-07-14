@@ -51,7 +51,7 @@
 | `stock_diagnosis` | `code`, `scorecard?` | 个股因子诊断 |
 | `institution_rating` | `code`, `groups?` | 机构评级 JSON |
 | `institution_report` | `code`, `groups?` | 机构评级文本报告 |
-| `screening` | `conditions`, `scorecard?`, `top_n?` | 条件选股 |
+| `screening` | — | 已停用（本地因子选股已移除） |
 | `strategy_signal` | `code` | 单股策略信号 |
 | `strategy_verify` | `code`, `strategy`, `days?` | 策略历史验证 |
 | `strategy_verify_report` | 同 verify | 格式化验证报告 |
@@ -88,7 +88,7 @@
 | GET | `/api/templates` | 评分卡模板列表 |
 | POST | `/api/chat` | `{ "message": "..." }` Agent 对话 |
 | POST | `/api/evaluate` | `{ "code", "scorecard?" }` |
-| POST | `/api/screen` | 选股 |
+| POST | `/api/screen` | 410：本地筛选已移除 |
 | POST | `/api/portfolio` | 组合分析 |
 | POST | `/api/search` | `{ "keyword" }` |
 | POST | `/api/signal` | `{ "code" }` |

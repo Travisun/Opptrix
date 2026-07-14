@@ -7,23 +7,16 @@ import { buildInstrumentAnalysisPlaybook, buildInstrumentNamespacePlaybook, buil
 /** 策略解析 / 执行提示中的资产类型描述 */
 export function discoverProfileAssetLabel(profile: DiscoverStrategyProfile): string {
   const def = getDiscoverProfileDefinition(profile)
-  if (!def) return 'A 股股票（本地日 K 因子筛选）'
+  if (!def) return 'A 股股票'
   if (profile === 'cn_etf') return 'A 股 ETF（折溢价%、规模亿元）'
   if (def.prescreenMode === 'list_filter') {
     const online = def.readinessCountKey == null
     return `${def.label}（${online ? 'StockIndex 在线列表' : '本地列表'} keyword / industry_contains）`
   }
-  return 'A 股股票（本地日 K 衍生因子初选）'
+  return 'A 股股票'
 }
 
-const CN_EQUITY_FORBIDDEN = [
-  'batch_stock_snapshots',
-  'get_stock_cyq', 'get_stock_detail', 'get_stock_chart', 'get_stock_kline', 'get_stock_quotes',
-  'evaluate_stock', 'get_strategy_signal', 'search_stocks',
-  'get_us_stock_snapshot', 'get_us_stock_quote', 'get_us_stock_kline',
-  'get_crypto_snapshot', 'get_crypto_quote', 'get_crypto_kline',
-  'get_market_db_status', 'trigger_market_db_sync',
-].join('、')
+const CN_ONLY_ANALYTICS = 'institution_rating、get_instrument_cyq'
 
 /** Agent 挖掘阶段 system prompt — 由 registry + miningToolGroup 驱动 */
 export function buildDiscoverMiningSystemPrompt(input: {
@@ -47,7 +40,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
   if (def?.prescreenMode === 'blocked') {
     return [
       `你是 Opptrix ${def.label}挖掘 Agent。${def.label}标准行情与挖掘能力暂未接入。`,
-      '请勿调用 get_instrument_* 行情/快照/K 线工具；可向用户说明暂不支持，或仅结合资讯做背景解读。',
+      '请勿调用行情/快照/K 线类工具；可向用户说明暂不支持，或仅结合资讯做背景解读。',
       buildNewsRetrievalPlaybook(),
       footer,
     ].join('\n')
@@ -55,7 +48,7 @@ export function buildDiscoverMiningSystemPrompt(input: {
 
   if (mode === 'etf_screen') {
     return [
-      '你是 Opptrix ETF 挖掘 Agent。策略条件已完成本地 ETF 初选。',
+      '你是 Opptrix ETF 挖掘 Agent。策略条件已完成 ETF 初选。',
       toolLine,
       footer.replace('选股', '选 ETF'),
     ].join('\n')
@@ -75,10 +68,10 @@ export function buildDiscoverMiningSystemPrompt(input: {
       : group === 'us_equity'
         ? `禁止对全部候选逐只拉取 snapshot。优先对 shortlisted 少量标的用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 深入；${analyticsHint}。`
         : group === 'hk_equity'
-          ? `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
-          : `禁止调用 A 股专用工具（${CN_EQUITY_FORBIDDEN} 等）。`
+          ? `仅使用上方可调用列表；勿对港股调用 ${CN_ONLY_ANALYTICS}。shortlisted 候选可用 get_instrument_snapshot / get_instrument_quotes / get_instrument_chart 补全行情；${analyticsHint}。`
+          : `仅使用上方可调用列表；勿对非 A 股调用 ${CN_ONLY_ANALYTICS}。`
     return [
-      `你是 Opptrix ${packHint}挖掘 Agent。候选来自本地列表初选。`,
+      `你是 Opptrix ${packHint}挖掘 Agent。候选来自名录初选。`,
       buildInstrumentNamespacePlaybook(),
       toolLine,
       extra,
@@ -88,19 +81,12 @@ export function buildDiscoverMiningSystemPrompt(input: {
 
   if (mode === 'factor_screen') {
     return [
-      '你是 Opptrix 选股页 Agent。策略条件已由 AI 解析并完成本地日 K 因子初选。',
-      '你可调用数据层 MCP 工具（见各工具【何时使用】【调用规范】）由浅入深补全数据：',
-      '1) get_market_regime（可选宏观背景）→ get_local_universe_screen_schema 确认因子名 → screen_stocks / screen_local_universe / search_local_instruments',
-      '2) 初选后 batch_instrument_snapshots；行业主题用 list_local_industries → screen_local_industry_stocks',
-      '3) 不足时对 shortlisted 单股：get_instrument_snapshot / get_instrument_chart（A 股日 K 优先本地）/ evaluate_instrument / institution_rating',
-      '4) 策略涉及用户持仓/关注：get_watchlist、get_watchlist_radar、get_portfolio_holdings、portfolio_trades',
-      '5) 需要资讯背景：先确定候选为 A 股，再按【资讯调阅】规则 list_news_groups 选 CN/MACRO 相关分组',
-      '6) 板块/宏观/情绪等非标准数据：list_provider_custom_methods → invoke_provider_custom_method',
+      '你是 Opptrix 研究 Agent。仅分析候选列表内标的。',
+      toolLine,
       buildInstrumentNamespacePlaybook(),
       buildInstrumentAnalysisPlaybook(),
       buildProviderCustomMethodPlaybook(),
       buildNewsRetrievalPlaybook(),
-      toolLine,
       '禁止编造数字；禁止对全部候选逐只 get_instrument_snapshot。',
       footer.replace('必须输出严格 JSON', '必须输出严格 JSON（可用 ```json 包裹）'),
     ].join('\n')

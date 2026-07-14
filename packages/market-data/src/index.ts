@@ -164,17 +164,17 @@ export class MarketDataService {
     }).then(result => ({ ...result, plan }))
   }
 
+  /** 本地基础数据同步已停用 — boot 不再拉取名录/K 线/算因子 */
   autoSyncOnBoot() {
-    this.coordinator.autoSyncOnBoot()
-    this.coordinator.startRefreshScheduler()
+    /* no-op */
   }
 
-  /** UI shell ready — trigger L0 boot sync once (via resolveAutoBootPlan). */
+  /** UI shell ready — 本地同步已停用，生命周期可调用但无动作 */
   notifyUiReady() {
     this.lifecycle.notifyUiReady(() => this.autoSyncOnBoot())
   }
 
-  /** Headless / broken client fallback — same as notifyUiReady but idempotent. */
+  /** Headless fallback — 与 notifyUiReady 同为 no-op */
   ensureBootSyncFallback() {
     this.lifecycle.ensureBootSyncFallback(() => this.autoSyncOnBoot())
   }

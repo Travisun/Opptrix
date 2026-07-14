@@ -102,16 +102,12 @@ const TOOL_LABELS: Record<string, string> = {
   get_market_regime: '分析宏观市场状态',
   get_market_dynamics: '获取市场动态全景',
   get_trend_brief: '生成趋势研判',
-  screen_stocks: '按条件筛选股票',
   screen_us_universe: '筛选美股候选',
   screen_hk_universe: '筛选港股候选',
   screen_crypto_universe: '筛选 Crypto 交易对',
-  get_local_data_status: '查询本地数据状态',
   get_etf_list: '读取 ETF 列表',
   get_etf_scorecard: '评估 ETF 决策雷达',
   batch_instrument_snapshots: '批量获取候选标的快照',
-  list_local_industries: '读取本地行业列表',
-  get_local_industry_stocks: '读取行业成分股',
   get_watchlist: '读取关注列表',
   get_watchlist_radar: '生成关注股雷达摘要',
   institution_rating: '汇总机构评级',
@@ -123,7 +119,6 @@ const TOOL_LABELS: Record<string, string> = {
   strategy_report: '生成策略分析报告',
   industry_mining: '梳理产业链与代表公司',
   industry_mermaid: '生成产业链图谱',
-  get_industry_stats: '统计行业估值水平',
   get_portfolio_holdings: '读取实盘持仓',
   portfolio_trades: '查询交易流水',
   portfolio_summary: '汇总持仓盈亏',
@@ -246,34 +241,18 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const n = codesCount(args)
       return n != null ? `对 ${n} 只股票运行回测` : '运行因子回测'
     }
-    case 'screen_stocks':
     case 'screen_us_universe':
     case 'screen_hk_universe':
     case 'screen_crypto_universe': {
-      const conds = Array.isArray(args.conditions)
-        ? args.conditions.length
-        : Array.isArray(args.factor_conditions)
-          ? args.factor_conditions.length
-          : null
       const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
       if (kw) return `${base} · ${kw}`
-      return conds != null ? `${base}（${conds} 条条件）` : base
+      return base
     }
     case 'industry_mining':
     case 'industry_mermaid': {
       const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
       return industry ? `${industry} · ${base}` : base
     }
-    case 'list_local_industries': {
-      const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
-      return kw ? `${base} · ${kw}` : base
-    }
-    case 'get_local_industry_stocks': {
-      const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
-      return industry ? `${base} · ${industry}` : base
-    }
-    case 'get_industry_stats':
-      return base
     case 'ask_user': {
       const q = typeof args.prompt === 'string'
         ? args.prompt.trim()
@@ -509,29 +488,6 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
         : []
       if (labels.length) return `已选择：${labels.join('、')}`
       return '已收到你的确认'
-    }
-    case 'list_local_industries': {
-      const payload = envelope?.data ?? result
-      if (!payload || typeof payload !== 'object') return null
-      const p = payload as Record<string, unknown>
-      const n = Array.isArray(p.industries) ? p.industries.length : null
-      return n != null ? `共 ${n} 个行业` : null
-    }
-    case 'get_industry_stats': {
-      const payload = envelope?.data ?? result
-      if (!payload || typeof payload !== 'object') return null
-      const p = payload as Record<string, unknown>
-      const n = Array.isArray(p.items) ? p.items.length : null
-      return n != null ? `${n} 个行业统计` : null
-    }
-    case 'get_local_industry_stocks': {
-      const payload = envelope?.data ?? result
-      if (!payload || typeof payload !== 'object') return null
-      const p = payload as Record<string, unknown>
-      const industry = typeof p.industry === 'string' ? p.industry : ''
-      const n = Array.isArray(p.items) ? p.items.length : null
-      if (industry && n != null) return `${industry} · ${n} 只成分股`
-      return n != null ? `${n} 只成分股` : null
     }
     case 'industry_mining': {
       const payload = envelope?.data ?? result

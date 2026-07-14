@@ -26,21 +26,14 @@ export const UNIFIED_CN_ANALYTICS_TOOLS = [
 
 const CN_EQUITY_ONLINE_TOOLS = [
   'get_market_regime',
-  'get_local_universe_screen_schema',
-  'screen_stocks',
-  'screen_local_universe',
-  'screen_local_industry_stocks',
-  'search_local_instruments',
   'search_instruments',
   'batch_instrument_snapshots',
+  'industry_mining',
   'institution_rating',
   ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   'verify_instrument_strategy',
   'get_instrument_cyq',
   'get_instrument_latest_evaluation',
-  'list_local_industries',
-  'get_industry_stats',
-  'get_local_industry_stocks',
 ] as const
 
 const REGIONAL_MINING_TOOLS = [

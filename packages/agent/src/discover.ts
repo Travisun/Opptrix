@@ -302,7 +302,7 @@ function prescreenProgressMessage(plan: DiscoverParsedPlan): string {
     const filters = Object.entries(plan.screen_params ?? {}).map(([k, v]) => `${k}=${v}`).join('、') || '广谱列表'
     return `${label}初选：${filters}，最多 ${plan.prescreen_top_n} 只…`
   }
-  return `本地因子初选：${plan.conditions.length} 条日 K 衍生条件，最多 ${plan.prescreen_top_n} 只…`
+  return `初选：${plan.conditions.length} 条条件，最多 ${plan.prescreen_top_n} 只…`
 }
 
 type PrescreenCandidate = {
@@ -330,6 +330,9 @@ export class DiscoverRunner {
     if (!strategy) throw new Error(`未知策略: ${strategyId}`)
 
     const profile = primaryDiscoverProfile(strategy)
+    if (profile === 'cn_equity') {
+      throw new Error('A 股自动选股策略已移除（本地因子不可用），请改用 ETF 或跨市场策略')
+    }
     await this.assertProfileReady(profile)
 
     const llm = this.registry.createLlm(modelRef)
@@ -379,6 +382,9 @@ export class DiscoverRunner {
   ): Promise<DiscoverResult> {
     const text = prompt.trim()
     if (!text) throw new Error('请输入选股策略描述')
+    if (profile === 'cn_equity') {
+      throw new Error('A 股自动选股策略已移除（本地因子不可用），请改用 ETF 或跨市场策略')
+    }
 
     await this.assertProfileReady(profile)
 
@@ -505,23 +511,11 @@ export class DiscoverRunner {
     }
   }
 
-  private async prescreenEquity(plan: DiscoverParsedPlan, scorecard: string) {
-    const screenResp = await this.hub.dispatch('screening', {
-      conditions: plan.conditions,
-      scorecard,
-      top_n: plan.prescreen_top_n,
-    })
-    if (!screenResp.success || !screenResp.data) {
-      throw new Error(screenResp.message || '本地初选失败')
-    }
-    const screenData = screenResp.data as {
-      total_scanned: number
-      passed: number
-      source?: 'local' | 'live'
-      trade_date?: string | null
-      items: PrescreenCandidate[]
-    }
-    return { screenData, candidates: screenData.items ?? [] }
+  private async prescreenEquity(
+    _plan: DiscoverParsedPlan,
+    _scorecard: string,
+  ): Promise<{ screenData: { total_scanned: number; passed: number; source?: 'local' | 'live'; trade_date?: string | null }; candidates: PrescreenCandidate[] }> {
+    throw new Error('本地因子选股已移除，请使用在线研究工具或直接指定代码')
   }
 
   private async assertProfileReady(profile: DiscoverStrategyProfile) {

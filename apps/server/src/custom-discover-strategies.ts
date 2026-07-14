@@ -45,9 +45,12 @@ export function listCustomDiscoverStrategies(): CustomDiscoverStrategyRecord[] {
 
 export function replaceCustomDiscoverStrategies(items: CustomDiscoverStrategyRecord[]) {
   const store = getUserDataStore()
-  const keep = new Set(items.map(item => item.id))
-  for (const item of items) {
-    store.setDocument(NAMESPACE, item.id, normalize(item))
+  const allowed = items
+    .map(normalize)
+    .filter(item => item.profile !== 'cn_equity')
+  const keep = new Set(allowed.map(item => item.id))
+  for (const item of allowed) {
+    store.setDocument(NAMESPACE, item.id, item)
   }
   for (const id of store.listDocumentIds(NAMESPACE)) {
     if (!keep.has(id)) store.deleteDocument(NAMESPACE, id)
@@ -59,6 +62,10 @@ export function upsertCustomDiscoverStrategy(
 ): CustomDiscoverStrategyRecord | null {
   const prompt = input.prompt.trim()
   if (!prompt) return null
+  const profile = input.profile ?? existingProfileFallback(input) ?? defaultDiscoverProfile()
+  if (profile === 'cn_equity') {
+    throw new Error('A 股自动选股策略已移除，无法创建或保存 A 股股票自建策略')
+  }
   const now = new Date().toISOString()
   const id = input.id ?? `custom_${randomUUID()}`
   const existing = getUserDataStore().getDocument<CustomDiscoverStrategyRecord>(NAMESPACE, id)
@@ -71,13 +78,22 @@ export function upsertCustomDiscoverStrategy(
     description,
     methodology: input.methodology?.trim() ?? existing?.methodology ?? '',
     refinement_notes: input.refinement_notes?.trim() ?? existing?.refinement_notes ?? '',
-    profile: input.profile ?? existing?.profile ?? defaultDiscoverProfile(),
+    profile,
     copied_from: input.copied_from ?? existing?.copied_from ?? null,
     created_at: existing?.created_at ?? now,
     updated_at: now,
   })
   getUserDataStore().setDocument(NAMESPACE, id, saved)
   return saved
+}
+
+function existingProfileFallback(
+  input: Partial<CustomDiscoverStrategyRecord>,
+): DiscoverStrategyProfile | undefined {
+  if (input.id) {
+    return getUserDataStore().getDocument<CustomDiscoverStrategyRecord>(NAMESPACE, input.id)?.profile
+  }
+  return undefined
 }
 
 export function deleteCustomDiscoverStrategy(id: string): boolean {

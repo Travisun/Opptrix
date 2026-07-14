@@ -5,7 +5,6 @@ import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type MarketDat
 import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
-import { startMarketDataRefreshScheduler } from './scheduler.js'
 import { getMarketDerivedMaintenanceCoordinator } from './derived-coordinator.js'
 import { setMarketSyncActive, isMarketSyncActive, isDerivedMaintenanceActive } from '../duck/duck-subprocess-gate.js'
 import {
@@ -512,10 +511,9 @@ export class MarketSyncCoordinator {
     }
   }
 
-  /** Auto-start on app/server boot: resume interrupted sync or refresh stale daily data. */
+  /** 本地基础数据同步已停用 — boot 不再触发 bootstrap / derived maintenance */
   autoSyncOnBoot(): void {
-    if (this.running) return
-    setImmediate(() => void this.runAutoSyncOnBoot())
+    /* no-op */
   }
 
   /** 初选包未就绪时短间隔续跑，避免同步结束后长时间无后台动作 */
@@ -583,10 +581,9 @@ export class MarketSyncCoordinator {
     getMarketDerivedMaintenanceCoordinator(this.store, () => this.running).autoMaintainOnBoot()
   }
 
-  /** Poll while app is open — refresh stale bootstrap data without restart. */
+  /** 本地刷新调度已停用 */
   startRefreshScheduler(): void {
-    startMarketDataRefreshScheduler(this.store, this)
-    getMarketDerivedMaintenanceCoordinator(this.store, () => this.running).startRefreshScheduler()
+    /* no-op */
   }
 
   /** @deprecated Use autoSyncOnBoot */

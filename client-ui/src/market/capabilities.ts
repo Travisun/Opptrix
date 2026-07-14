@@ -5,8 +5,8 @@ import type { ApplicationCapability, InstrumentCapabilitySet } from '../types/in
 
 const CN_EQUITY: ApplicationCapability[] = [
   'quote', 'batch_quote', 'snapshot', 'chart_intraday', 'chart_daily',
-  'scorecard', 'factor_screen', 'strategy_signal', 'institution_rating',
-  'cyq', 'money_flow', 'industry_context', 'discover_mine', 'portfolio_pnl', 'prep_hydrate',
+  'scorecard', 'strategy_signal', 'institution_rating',
+  'cyq', 'money_flow', 'industry_context', 'portfolio_pnl', 'prep_hydrate',
 ]
 
 const CN_INDEX: ApplicationCapability[] = [

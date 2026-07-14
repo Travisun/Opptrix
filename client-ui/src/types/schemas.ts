@@ -36,17 +36,6 @@ export interface InstitutionRatingData {
   avg_data_quality: number; timestamp?: string
 }
 
-export interface ScreenedItem {
-  code: string; name: string
-  total_score: number; key_factors: Record<string, number>
-}
-export interface ScreeningData {
-  total_scanned: number; passed: number
-  scorecard: string; items: ScreenedItem[]
-  source?: 'local' | 'live'
-  trade_date?: string | null
-}
-
 export type DiscoverStrategyCategory = 'value' | 'growth' | 'quality' | 'momentum' | 'balanced' | 'contrarian'
 
 export type DiscoverStrategyProfile =

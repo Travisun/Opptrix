@@ -32,19 +32,21 @@ const REMOVED_LEGACY = [
   'local_screen_stocks',
   'trigger_market_db_sync',
   'get_market_db_status',
-]
-
-const LOCAL_SCREEN_TOOLS = [
   'get_local_universe_screen_schema',
   'screen_local_universe',
   'screen_local_industry_stocks',
   'search_local_instruments',
+  'screen_stocks',
+  'get_local_data_status',
+  'list_local_industries',
+  'get_industry_stats',
+  'get_local_industry_stocks',
 ]
 
 test('ToolRegistry registers P0/P1 market and screening tools', () => {
   const registry = new ToolRegistry(new ResearchHub())
   const names = new Set(registry.list().map(t => t.name))
-  for (const name of [...P0_TOOLS, ...P1_TOOLS, ...LOCAL_SCREEN_TOOLS]) {
+  for (const name of [...P0_TOOLS, ...P1_TOOLS]) {
     assert.ok(names.has(name), `missing tool: ${name}`)
   }
   for (const name of REMOVED_LEGACY) {
@@ -57,17 +59,19 @@ test('P0 tools are mining-eligible where appropriate', () => {
     assert.ok(DATA_LAYER_MINING_TOOL_NAMES.includes(name), `${name} should be mining eligible`)
   }
   assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('get_local_data_status'))
+  assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('screen_stocks'))
 })
 
-test('market_db_status hub returns real status not offline stub', async () => {
+test('market_db_status hub reports local screening disabled', async () => {
   const hub = new ResearchHub()
   const resp = await hub.dispatch('market_db_status', {})
   assert.equal(resp.success, true)
   const data = resp.data
   assert.ok(data && typeof data === 'object')
-  assert.equal(data.local_offline_screening_enabled, true)
-  assert.ok('stock_count' in data)
-  assert.ok('guidance' in data)
+  assert.equal(data.local_offline_screening_enabled, false)
+  assert.equal(data.local_factor_ready, false)
+  assert.ok(typeof data.guidance === 'string')
+  assert.match(String(data.guidance), /停用|已移除|在线/)
 })
 
 test('agent prompt includes market context playbook', () => {

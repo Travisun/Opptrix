@@ -28,10 +28,10 @@ export function buildStandardInstrumentApiPlaybook(): string {
   return [
     '【标准 Instrument API — 优先使用，对应 get_instrument_* / search_instruments】',
     `- 能力：${STANDARD_INSTRUMENT_API_CAPABILITIES.join('、')}`,
-    '- 搜索：search_local_instruments（本地名录，离线可用）/ search_instruments（本地+在线合并）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
+    '- 搜索：search_instruments（本地名录 + 在线合并）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（A 股日 K 优先本地 DuckDB，实时走在线）',
-    '- A 股批量截面：batch_instrument_snapshots；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
+    '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
     '- ETF：search_etfs / get_etf_list / get_etf_snapshot / get_etf_nav / get_etf_holdings / get_etf_scorecard（或 instrument ETF ref + evaluate_instrument）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
   ].join('\n')
@@ -56,12 +56,12 @@ export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具】',
     '0) 不确定时：search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
-    '1) CN 股票（EQUITY）：search_local_instruments / screen_stocks（本地因子）定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → get_instrument_chart（日 K 本地优先）→ evaluate_instrument（因子评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq',
-    '2) CN ETF：search_etfs → get_etf_snapshot → evaluate_instrument（决策雷达）→ get_instrument_strategy_signal；勿用 A 股股票因子筛选',
+    '1) CN 股票（EQUITY）：search_instruments 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq',
+    '2) CN ETF：search_etfs → get_etf_snapshot → evaluate_instrument（决策雷达）→ get_instrument_strategy_signal',
     '3) 美股/港股：get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
     '4) 日股/韩股（JP/KR）：暂未接入行情与快照；可读相关资讯，勿调用 get_instrument_* 行情类工具',
     '5) Crypto：get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
-    '6) 禁止对非 CN 股票调用 institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股因子筛选工具',
+    '6) 禁止对非 CN 股票调用 institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股专用工具',
   ].join('\n')
 }
 
@@ -131,21 +131,18 @@ export function buildMarketContextPlaybook(): string {
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
     '3) 关注池速览：get_watchlist → get_watchlist_radar（可省略 codes 用关注列表）→ 对重点标的 get_instrument_snapshot',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
-    '5) 跨市场名录初选：screen_us_universe / screen_hk_universe / screen_crypto_universe 或 search_instruments（markets 过滤）',
+    '5) 跨市场名录初选：screen_us_universe / screen_hk_universe / screen_crypto_universe 或 search_instruments（markets 过滤）；A 股主题扩池用 industry_mining + search_instruments',
   ].join('\n')
 }
 
-/** 聊天 Agent — 行业分析路径（列表 → 统计 → 成分股 → 产业链） */
+/** 聊天 Agent — 行业分析路径（产业链 → 代表公司核实） */
 export function buildIndustryAnalysisPlaybook(): string {
   return [
-    '【A 股行业分析 — list_local_industries / get_industry_stats / get_local_industry_stocks / screen_local_industry_stocks / industry_mining】',
-    '1) 不确定行业名：list_local_industries（keyword 模糊，如「半导体」）→ 用返回的精确 industry 名继续',
-    '2) 行业强弱/估值对比：get_industry_stats → 读涨跌家数、均 PE/PB、均评分',
-    '3) 行业成分与龙头：get_local_industry_stocks（industry 须与列表一致）→ 对重点标的 get_instrument_snapshot / evaluate_instrument',
-    '4) 行业内因子初选：screen_local_industry_stocks（行业 + momentum/volume_ratio 等本地因子）',
-    '5) 产业链与代表公司：industry_mining；需 mindmap 展示时用 industry_mermaid',
-    '6) 全市场条件选股：screen_stocks 或 screen_local_universe（本地日 K 衍生因子）；不确定因子名时 get_local_universe_screen_schema',
-    '7) 本地库无数据时：get_local_data_status 确认后引导用户同步基础数据',
+    '【A 股行业分析 — industry_mining / industry_mermaid（不依赖本地行业库）】',
+    '1) 产业链与代表公司：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
+    '2) 需 mindmap 展示：industry_mermaid',
+    '3) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument；多只可用 batch_instrument_snapshots',
+    '4) 宏观/板块背景：get_market_regime / get_market_dynamics；跨市场可用 screen_us/hk/crypto_universe',
   ].join('\n')
 }
 
@@ -155,6 +152,7 @@ export function buildAgentSystemRules(): string {
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
     '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
+    '- 仅使用当前会话已注册的 MCP 工具（见 tools 列表），勿虚构工具名',
     TOOL_ROUTING,
     buildInstrumentNamespacePlaybook(),
     buildStandardInstrumentApiPlaybook(),

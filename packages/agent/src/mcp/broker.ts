@@ -10,7 +10,6 @@ export const MCP_TOOL_CALL_TIMEOUT_MS = 300_000
 export const MCP_SLOW_TOOL_CALL_TIMEOUT_MS = 900_000
 
 const SLOW_TOOLS = new Set([
-  'screen_stocks',
   'screen_us_universe',
   'screen_hk_universe',
   'screen_crypto_universe',

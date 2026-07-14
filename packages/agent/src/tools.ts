@@ -179,7 +179,7 @@ export class ToolRegistry {
     const tools: Omit<ToolDef, 'meta'>[] = [
       {
         name: 'get_market_regime', category: '市场',
-        description: '获取宏观市场状态（牛熊/风险偏好、建议策略方向）；A 股默认沪深300，美股用 SPY',
+        description: '获取宏观市场状态（牛熊/风险偏好）；A 股默认沪深300，美股用 SPY',
         parameters: S({
           profile_scope: { type: 'string', description: 'cn（默认 A 股）| us（美股）' },
         }),
@@ -199,79 +199,6 @@ export class ToolRegistry {
           holding_cost: { type: 'number', description: '可选，持仓成本价（元）' },
         }, ['code']),
         handler: (a: Record<string, unknown>) => d('trend_brief', a),
-      },
-      {
-        name: 'screen_stocks', category: '选股',
-        description: '按本地日 K 衍生因子筛选 A 股（momentum/volume_ratio/volatility/drawdown）；须先完成基础数据同步',
-        parameters: S({
-          conditions: { type: 'array', description: '条件数组 [{factor, op, value}]；factor 见 get_local_universe_screen_schema；op 为 > >= < <= =' },
-          scorecard: { type: 'string', description: '评分卡（排序参考）' },
-          top_n: { type: 'number', description: '返回条数，默认20' },
-          trade_date: { type: 'string', description: '可选，因子截面日 YYYY-MM-DD' },
-        }, ['conditions']),
-        handler: (a: Record<string, unknown>) => d('screening', {
-          conditions: a.conditions,
-          scorecard: a.scorecard,
-          top_n: a.top_n ?? 20,
-          trade_date: a.trade_date,
-        }),
-      },
-      {
-        name: 'get_local_universe_screen_schema', category: '选股',
-        description: '获取本地初选 schema：可用因子名、行业/板块过滤、估值与评分字段说明',
-        parameters: S({}),
-        handler: () => d('local_universe_screen_schema', {}),
-      },
-      {
-        name: 'screen_local_universe', category: '选股',
-        description: '本地多维度初选：因子 + 行业/板块(SH/SZ/BJ) + 评分/估值/市值组合过滤',
-        parameters: S({
-          factor_conditions: { type: 'array', description: '因子条件 [{factor, op, value}]，须来自 schema' },
-          industry_contains: { type: 'string', description: '行业模糊匹配，如 半导体' },
-          industries: { type: 'array', description: '行业精确列表，须与 list_local_industries 一致' },
-          markets: { type: 'array', description: '板块：SH/SZ/BJ' },
-          min_total_score: { type: 'number', description: '综合评分下限' },
-          max_total_score: { type: 'number', description: '综合评分上限' },
-          min_pe: { type: 'number', description: 'PE 下限' },
-          max_pe: { type: 'number', description: 'PE 上限' },
-          min_pb: { type: 'number', description: 'PB 下限' },
-          max_pb: { type: 'number', description: 'PB 上限' },
-          min_market_cap_yi: { type: 'number', description: '总市值下限（亿元）' },
-          max_market_cap_yi: { type: 'number', description: '总市值上限（亿元）' },
-          exclude_st: { type: 'boolean', description: '是否排除 ST，默认 true' },
-          sort_by: { type: 'string', description: '排序字段，默认 total_score' },
-          sort_order: { type: 'string', description: 'asc 或 desc' },
-          trade_date: { type: 'string', description: '截面日 YYYY-MM-DD' },
-          top_n: { type: 'number', description: '返回条数，默认 40，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_universe_screen', a),
-      },
-      {
-        name: 'screen_local_industry_stocks', category: '选股',
-        description: '在指定行业内按本地因子/评分/估值初选成分股',
-        parameters: S({
-          industry: { type: 'string', description: '行业名称（精确）' },
-          industries: { type: 'array', description: '多个行业精确名' },
-          industry_contains: { type: 'string', description: '行业模糊匹配' },
-          factor_conditions: { type: 'array', description: '因子条件 [{factor, op, value}]' },
-          min_total_score: { type: 'number', description: '综合评分下限' },
-          max_total_score: { type: 'number', description: '综合评分上限' },
-          min_pe: { type: 'number', description: 'PE 下限' },
-          max_pe: { type: 'number', description: 'PE 上限' },
-          top_n: { type: 'number', description: '返回条数，默认 40' },
-          trade_date: { type: 'string', description: '截面日 YYYY-MM-DD' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_industry_screen', a),
-      },
-      {
-        name: 'search_local_instruments', category: '选股',
-        description: '搜索本地已同步名录（A 股/港美/Crypto 等），离线可用；不熟悉代码时优先于在线 search',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或名称关键词' },
-          markets: { type: 'array', description: '可选市场过滤：CN、US、HK、CRYPTO 等' },
-          limit: { type: 'number', description: '返回条数，默认 30' },
-        }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('search_local_instruments', a),
       },
       {
         name: 'screen_us_universe', category: '选股',
@@ -315,12 +242,6 @@ export class ToolRegistry {
           codes: { type: 'array', description: '可选，A 股 6 位代码数组；省略则读取关注列表' },
         }),
         handler: (a: Record<string, unknown>) => d('watchlist_radar', { codes: a.codes }),
-      },
-      {
-        name: 'get_local_data_status', category: '基础',
-        description: '查询本地 DuckDB/SQLite 数据规模、K 线/因子就绪与筛选能力',
-        parameters: S({}),
-        handler: () => d('market_db_status', {}),
       },
       {
         name: 'search_etfs', category: '通用',
@@ -397,7 +318,7 @@ export class ToolRegistry {
       },
       {
         name: 'run_backtest', category: '策略',
-        description: '对指定股票列表做因子/评分卡 IC 回测',
+        description: '对指定股票列表做评分卡 IC 回测',
         parameters: S({
           codes: { type: 'array', description: '股票代码列表' },
           scorecard: { type: 'string', description: '评分卡' },
@@ -434,34 +355,6 @@ export class ToolRegistry {
         description: '产业链 Mermaid mindmap 源码',
         parameters: S({ industry: { type: 'string', description: '行业名称' } }, ['industry']),
         handler: (a: Record<string, unknown>) => d('industry_mermaid', { industry: a.industry }),
-      },
-      {
-        name: 'list_local_industries', category: '行业',
-        description: '列出 A 股可用行业名称（可 keyword 模糊过滤），供查成分股或产业链分析',
-        parameters: S({
-          keyword: { type: 'string', description: '可选，模糊匹配行业名，如 半导体、银行' },
-          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
-          limit: { type: 'number', description: '返回条数，默认 200，最大 500' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_industry_list', a),
-      },
-      {
-        name: 'get_industry_stats', category: '行业',
-        description: 'A 股行业维度统计：成分数量、均评分、PE/PB、涨跌家数对比',
-        parameters: S({
-          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
-        }),
-        handler: (a: Record<string, unknown>) => d('market_industry_stats', a),
-      },
-      {
-        name: 'get_local_industry_stocks', category: '行业',
-        description: '列出指定行业的 A 股成分股（最新价、涨跌幅、综合评分）',
-        parameters: S({
-          industry: { type: 'string', description: '行业名称，须与 list_local_industries 返回一致' },
-          trade_date: { type: 'string', description: '可选，截面日 YYYY-MM-DD' },
-          limit: { type: 'number', description: '返回条数，默认 120，最大 200' },
-        }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('market_industry_stocks', a),
       },
       {
         name: 'get_news_center_status', category: '资讯中心',

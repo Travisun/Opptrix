@@ -7,11 +7,26 @@ import { spawnSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const DESKTOP_ROOT = path.resolve(__dirname, '..')
 const REPO_ROOT = path.resolve(__dirname, '../../..')
-const require = createRequire(path.join(REPO_ROOT, 'package.json'))
+/** Prefer workspace install (`apps/desktop/node_modules`); fall back to repo-root hoist. */
+const requireDesktop = createRequire(path.join(DESKTOP_ROOT, 'package.json'))
+const requireRoot = createRequire(path.join(REPO_ROOT, 'package.json'))
 
 function electronPkgDir() {
-  return path.dirname(require.resolve('electron/package.json'))
+  try {
+    return path.dirname(requireDesktop.resolve('electron/package.json'))
+  } catch {
+    return path.dirname(requireRoot.resolve('electron/package.json'))
+  }
+}
+
+function requireElectron() {
+  try {
+    return requireDesktop('electron')
+  } catch {
+    return requireRoot('electron')
+  }
 }
 
 export function isElectronInstalled() {
@@ -46,7 +61,7 @@ export function ensureElectronInstalled() {
 
 export function resolveElectronExecutable() {
   ensureElectronInstalled()
-  return require('electron')
+  return requireElectron()
 }
 
 if (process.argv[1] === fileURLToPath(import.meta.url)) {

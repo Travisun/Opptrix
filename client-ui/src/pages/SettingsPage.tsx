@@ -14,8 +14,6 @@ import { normalizeSettingsSection } from './settings/settingsTypes'
 import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
-import BasicDataSettingsSection from './settings/BasicDataSettingsSection'
-import DiscoverStrategiesSettingsSection from './settings/DiscoverStrategiesSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
@@ -26,7 +24,7 @@ import {
   SettingsTextField, SettingsProviderRow, SettingsActionRow,
 } from './settings/SettingsPrimitives'
 import {
-  getConfig, patchConfig, deleteProvider, getHealth, listDiscoverStrategies, news,
+  getConfig, patchConfig, deleteProvider, getHealth, news,
   type AppConfig, type PublicProvider,
 } from '../api/client'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
@@ -314,7 +312,6 @@ function SettingsPageView({
   const [wizardOpen, setWizardOpen] = useState(false)
   const [editingProvider, setEditingProvider] = useState<PublicProvider | null>(null)
   const [config, setConfig] = useState<AppConfig | null>(null)
-  const [strategyNames, setStrategyNames] = useState<string[]>([])
   const [newsSearchEntries, setNewsSearchEntries] = useState<SettingsSearchEntry[]>([])
   const [scorecard, setScorecard] = useState('综合评估')
   const [loading, setLoading] = useState(() => {
@@ -324,7 +321,6 @@ function SettingsPageView({
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const skipScorecardSave = useRef(true)
   const scorecardBaseline = useRef<string | null>(null)
-  const strategiesSearchLoaded = useRef(false)
   const newsSearchLoaded = useRef(false)
   const electronChrome = isElectron() && !isMobile
   const searchActive = Boolean(search.trim()) && !isMobile
@@ -363,15 +359,6 @@ function SettingsPageView({
       })
     return () => { active = false }
   }, [needsConfig, toast])
-
-  useEffect(() => {
-    if (section !== 'discover_strategies' && !searchActive) return
-    if (strategiesSearchLoaded.current) return
-    strategiesSearchLoaded.current = true
-    listDiscoverStrategies()
-      .then(res => setStrategyNames(res.strategies.map(item => item.name)))
-      .catch(() => setStrategyNames([]))
-  }, [section, searchActive])
 
   useEffect(() => {
     if (section !== 'news_feed' && !searchActive) return
@@ -480,16 +467,9 @@ function SettingsPageView({
         keywords: [p.base_url, ...p.models],
       })
     }
-    for (const name of strategyNames) {
-      entries.push({
-        section: 'discover_strategies',
-        title: name,
-        desc: '选股策略',
-      })
-    }
     entries.push(...newsSearchEntries)
     return entries
-  }, [providers, strategyNames, newsSearchEntries])
+  }, [providers, newsSearchEntries])
 
   const saveHintText = (() => {
     switch (saveState) {
@@ -618,12 +598,6 @@ function SettingsPageView({
       case 'data_providers':
         return <DataProvidersSettingsSection />
 
-      case 'basic_data':
-        return <BasicDataSettingsSection />
-
-      case 'discover_strategies':
-        return <DiscoverStrategiesSettingsSection />
-
       case 'news_feed':
         return <NewsFeedSettingsSection />
 
@@ -683,13 +657,11 @@ function SettingsPageView({
         <div className={mergeClasses(
           s.contentScroll,
           'opptrix-scroll',
-          section === 'discover_strategies' && s.contentScrollFill,
         )}>
           <div className={mergeClasses(
             s.contentColumn,
             contentFlush && s.contentColumnFlush,
             isMobile && s.contentColumnMobile,
-            section === 'discover_strategies' && s.contentColumnFill,
           )}>
             <header className={mergeClasses(s.contentHeader, contentFlush && s.contentHeaderFlush)}>
               {sidebarOverlayMode && !sidebarVisible && (
@@ -707,7 +679,6 @@ function SettingsPageView({
             <div className={mergeClasses(
               s.contentBody,
               section === 'data_providers' && s.contentBodyCompact,
-              section === 'discover_strategies' && s.contentBodyFill,
             )}>
               {renderSection()}
             </div>

@@ -57,7 +57,8 @@ test('pack registry includes six markets with backward-compatible normalize', ()
 })
 
 test('discover profile registry drives prescreen mode and mining tools', () => {
-  assert.equal(discoverPrescreenMode('cn_equity'), 'factor_screen')
+  assert.equal(discoverPrescreenMode('cn_equity'), 'blocked')
+  assert.equal(getDiscoverProfileDefinition('cn_equity')?.miningReady, false)
   assert.equal(discoverPrescreenMode('jp_equity'), 'blocked')
   assert.equal(discoverPrescreenMode('hk_equity'), 'list_filter')
   assert.equal(getDiscoverProfileDefinition('hk_equity')?.localScreenFeature, 'local_hk_screen')
@@ -74,12 +75,10 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
   assert.deepEqual(discoverFactorsForProfile('hk_equity'), ['keyword', 'industry_contains'])
 })
 
-test('discover mining tools for cn_equity start with market regime and online screening', () => {
-  assert.deepEqual(discoverMiningToolNamesForProfile('cn_equity').slice(0, 3), [
-    'get_market_regime',
-    'get_local_universe_screen_schema',
-    'screen_stocks',
-  ])
+test('discover mining tools for cn_equity are empty after strategy removal', () => {
+  const cnTools = discoverMiningToolNamesForProfile('cn_equity')
+  assert.deepEqual(cnTools, [])
+  assert.equal(getDiscoverProfileDefinition('cn_equity')?.miningToolGroup, 'none')
 })
 
 test('isLikelyCnEquityInput gates CN-only hub APIs', () => {
@@ -107,6 +106,11 @@ test('discover readiness uses online mode for StockIndex profiles', () => {
     hk_count: 0,
     cn_is_ready: true,
   }
+  const cn = assessDiscoverProfileReadiness('cn_equity', ctx)
+  assert.equal(cn.ready, false)
+  assert.equal(cn.mode, 'blocked')
+  assert.ok(cn.message.includes('A 股自动选股策略已移除'))
+
   const us = assessDiscoverProfileReadiness('us_equity', ctx)
   assert.equal(us.ready, true)
   assert.equal(us.mode, 'online')
@@ -168,12 +172,11 @@ test('UNIFIED_INSTRUMENT_MINING_TOOLS shared across active non-CN discover group
   assert.equal(discoverMiningToolNamesForProfile('kr_equity').length, 0)
 })
 
-test('cn_equity_full mining uses unified instrument batch and evaluation tools', () => {
+test('cn_equity mining tool group is disabled', () => {
   const cnTools = discoverMiningToolNamesForProfile('cn_equity')
-  assert.ok(cnTools.includes('batch_instrument_snapshots'))
-  assert.ok(!cnTools.includes('batch_stock_snapshots'))
-  assert.ok(cnTools.includes('evaluate_instrument'))
-  assert.ok(!cnTools.includes('evaluate_stock'))
+  assert.equal(cnTools.length, 0)
+  assert.ok(!cnTools.includes('batch_instrument_snapshots'))
+  assert.ok(!cnTools.includes('evaluate_instrument'))
 })
 
 test('CHAT_MCP_TOOL_NAMES exposes all registered tools', async () => {
@@ -343,6 +346,11 @@ test('agent system rules include analysis and news playbooks', async () => {
   assert.ok(rules.includes('【资讯调阅'))
   assert.ok(rules.includes('【标准 Instrument API'))
   assert.ok(rules.includes('【数据源扩展'))
+  assert.ok(rules.includes('仅使用当前会话已注册的 MCP 工具'))
+  assert.doesNotMatch(rules, /screen_stocks/)
+  assert.doesNotMatch(rules, /get_local_/)
+  assert.doesNotMatch(rules, /market_db_/)
+  assert.doesNotMatch(rules, /【已停用/)
   assert.ok(rules.includes('market_hints'))
   assert.ok(rules.includes('JP/KR'))
   const cnSteps = instrumentAnalysisStepsForRef({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' })
@@ -353,7 +361,7 @@ test('agent system rules include analysis and news playbooks', async () => {
   assert.ok(jpSteps.includes('暂未接入'))
 })
 
-test('discover factor_screen prompt includes news retrieval playbook', () => {
+test('discover blocked profile prompt includes news retrieval playbook', () => {
   const prompt = buildDiscoverMiningSystemPrompt({
     profile: 'cn_equity',
     finalTopN: 10,
@@ -361,4 +369,5 @@ test('discover factor_screen prompt includes news retrieval playbook', () => {
   })
   assert.ok(prompt.includes('【资讯调阅'))
   assert.ok(prompt.includes('list_news_groups'))
+  assert.ok(prompt.includes('暂未接入') || prompt.includes('暂不支持'))
 })

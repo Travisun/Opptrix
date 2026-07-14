@@ -75,7 +75,7 @@ export async function apiCall<T>(
 // ─── Typed convenience wrappers ───
 import type {
   StockDiagnosisData, InstitutionRatingData,
-  ScreeningData, StrategySignalData, StrategyVerifyData, TrendBriefData,
+  StrategySignalData, StrategyVerifyData, TrendBriefData,
   PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
@@ -222,36 +222,6 @@ export const research = {
       20000,
     )
   },
-
-  screen: (conditions: any[], scorecard = '综合评估', topN = 20, signal?: AbortSignal) =>
-    apiCall<ScreeningData>('screening', { conditions, scorecard, top_n: topN }, { signal }, 120000),
-
-  marketDbStatus: () =>
-    apiCall<import('../types/market').MarketDbStatusData>('market_db_status'),
-
-  marketDbSync: (mode: 'auto' | 'full' | 'incremental' | 'resume' = 'auto', background = true, force = false) =>
-    apiCall<{ started: boolean; running: boolean; mode: string }>(
-      'market_db_sync',
-      { mode, background, force },
-      undefined,
-      background ? 60_000 : 600_000,
-    ),
-
-  marketDbSyncState: () =>
-    apiCall<import('../types/market').MarketDataSyncState>('market_db_sync_state', {}, undefined, 60_000),
-
-  /** 手动启动本地指标维护（初选因子 + 行业统计） */
-  marketDbDerivedMaintenance: (force = true) =>
-    apiCall<{ started: boolean; running: boolean; message?: string }>(
-      'market_db_derived_maintenance',
-      { force },
-      undefined,
-      60_000,
-    ),
-
-  /** Signal UI shell ready — triggers L0 boot sync once (idempotent). */
-  marketDataUiReady: () =>
-    jsonFetch<{ ok: boolean }>('/market-data/ui-ready', { method: 'POST' }),
 
   strategySignals: (codeOrRef: string | InstrumentRef, signal?: AbortSignal) => {
     const instrument = cnEquityRef(codeOrRef)
@@ -705,26 +675,6 @@ export async function saveWatchlist(items: import('../types/market').WatchlistIt
     body: JSON.stringify({ items }),
   })
   return resp.data ?? { items, count: items.length }
-}
-
-export async function getMarketDataSyncState() {
-  const resp = await jsonFetch<{ success: boolean; data: import('../types/market').MarketDataSyncState }>(
-    '/market-data/sync-state',
-  )
-  if (!resp.data) throw new Error('无法获取同步状态')
-  return resp.data
-}
-
-export async function startMarketDataSync(options: { force?: boolean } = {}) {
-  return jsonFetch<{ success: boolean; message?: string }>('/market-data/sync', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      mode: 'auto',
-      background: true,
-      force: options.force ?? false,
-    }),
-  })
 }
 
 export interface MarketDataPackEntry {

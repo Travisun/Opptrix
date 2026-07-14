@@ -278,7 +278,7 @@ export default function DiscoverStrategyPicker({
           })}
           {!strategies.length && (
             <Text className={s.placeholder} style={{ padding: '8px 10px' }}>
-              暂无策略，请先在设置 → 选股策略中添加
+              暂无可用策略
             </Text>
           )}
         </OpptrixDropdownPanel>

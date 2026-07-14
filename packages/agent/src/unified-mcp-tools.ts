@@ -128,7 +128,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'search_instruments',
       category: '跨市场标的',
-      description: '按代码或名称搜索标的（默认合并本地名录 + 在线）；不熟悉代码时优先 search_local_instruments',
+      description: '按代码或名称搜索标的（默认合并本地名录 + 在线）；不熟悉代码时的首选入口',
       parameters: S({
         keyword: { type: 'string', description: '搜索关键词' },
         markets: { type: 'array', description: '可选市场过滤，如 CN、US、CRYPTO' },
@@ -170,7 +170,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'batch_instrument_snapshots',
       category: '跨市场标的',
-      description: '批量获取候选标的本地截面快照（行业、评分、估值、初选因子）；instruments 数组或 codes+market（A 股挖掘初选后首选）',
+      description: '批量获取已有候选标的的在线聚合快照；instruments 数组或 codes+market',
       parameters: S({
         instruments: {
           type: 'array',
@@ -218,11 +218,11 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'evaluate_instrument',
       category: '跨市场标的',
-      description: '对单只标的做评估打分：A 股为因子评分卡，美股/港股/日股/韩股/Crypto 为技术分析 bundle；使用 InstrumentRef',
+      description: '对单只标的做在线评估打分：A 股为评分卡，美股/港股/日股/韩股/Crypto 为技术分析 bundle；使用 InstrumentRef',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         code: { type: 'string', description: '兼容旧写法：A 股 6 位代码（推荐改用 instrument 或 market+symbol）' },
-        scorecard: { type: 'string', description: '评分卡名称，默认综合评估（A 股因子评估时有效）' },
+        scorecard: { type: 'string', description: '评分卡名称，默认综合评估（A 股单票评估时有效）' },
       }),
       handler: (a) => d('instrument_evaluation', {
         ...resolveInstrumentParams(a),

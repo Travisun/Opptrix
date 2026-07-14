@@ -81,7 +81,7 @@
 4. **回退可观测**：每次查询返回 `source`（已有），扩展 `attempts[]` 便于调试与 Agent 解释。
 5. **本地挖掘分层**：在线层拉数 → 归一化 → 按 Market 写入本地 Store；筛选/因子在 Store 层完成。
 6. **渐进迁移**：Phase 0 重构不破坏现有 API；A 股行为保持不变。
-7. **配置可发现**：Provider 自描述设置项；设置页「基础数据 → 数据源」Tab 自动分组渲染，无需为每个源改 UI。
+7. **配置可发现**：Provider 自描述设置项；设置页「数据源」自动分组渲染，无需为每个源改 UI。
 8. **上层 API 唯一**：Hub / REST / Agent 只经 Engine 与 Provider 注册表，不散落 `tushare_*` 类 feature。
 
 ---
@@ -571,7 +571,7 @@ sequenceDiagram
 1. **Provider 自描述设置项**：字段类型、标签、校验、测试连接 — 在 Provider module 内维护（`settings.ts`），不写死在 React。
 2. **设置页自动发现**：Engine 启动时收集所有 `ConfigurableProvider.settings()`，暴露给 UI。
 3. **Provider 可读项目设置**：通过 `ProviderContext.appSettings` 读取评分卡默认值、同步策略等（只读），避免 Provider 直接读文件。
-4. **分组展示**：设置 → **基础数据** → Tab **数据源**，按 **市场分组**（A 股 / 美股 / 加密货币 / 全球），组内按 Provider 卡片排列。
+4. **分组展示**：设置 → **数据源**，按 **市场分组**（A 股 / 美股 / 加密货币 / 全球），组内按 Provider 卡片排列。
 
 ### 7.2 类型定义
 

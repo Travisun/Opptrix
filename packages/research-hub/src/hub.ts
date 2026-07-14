@@ -24,8 +24,8 @@ import {
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
-import { getMarketDataService, CN_MANUAL_SYNC_JOBS } from '@opptrix/market-data-store'
-import type { IndustryStockRow, LocalInstrumentHit, LocalScreenItem } from '@opptrix/market-data-store'
+import { getMarketDataService } from '@opptrix/market-data-store'
+import type { LocalInstrumentHit } from '@opptrix/market-data-store'
 import {
   ok, fail, computeMarketRegime, computeMaPositionPct, computePricePercentile,
   computeTurnoverVs20d, computeHv20Pct, momentumRegimeInputsFromKlines,
@@ -473,69 +473,30 @@ export class ResearchHub {
       `${data.name} 机构评级报告`, t0)
   }
 
-  private async screening(params: Record<string, unknown>, t0: number) {
-    const conditions = (params.conditions ?? []) as Array<{ factor: string; op: '>' | '<' | '>=' | '<=' | '='; value: number }>
-    const topN = Number(params.top_n ?? 20)
-    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
-
-    try {
-      const data = await this.marketData.screen(conditions, topN, tradeDate || undefined)
-      return ok({
-        trade_date: data.trade_date,
-        total_scanned: data.items.length,
-        passed: data.passed,
-        scorecard: String(params.scorecard ?? '综合评估'),
-        source: 'local',
-        items: data.items.map((i: LocalScreenItem) => ({
-          code: i.code,
-          name: i.name,
-          total_score: i.total_score,
-          industry: i.industry,
-          pe: i.pe,
-          pb: i.pb,
-          key_factors: i.key_factors,
-        })),
-      }, `本地因子筛选 ${data.items.length} 只，通过 ${data.passed}`, t0)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return fail(`本地因子筛选不可用：${msg}。请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。`, t0)
-    }
+  private async screening(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地因子选股已移除，请使用 instrument_search、instrument_evaluation 等在线能力')
   }
 
   private failLocalOffline(t0: number, hint?: string) {
-    return fail(hint ?? '本地离线数据已停用，请使用 instrument_search、instrument_evaluation、instrument_chart 等在线能力', t0)
+    return fail(hint ?? '本地因子选股已移除，请使用 instrument_search、instrument_evaluation、instrument_chart 等在线能力', t0)
   }
 
   private marketDbStatus(t0: number) {
-    const status = this.marketData.statusLight()
-    const enabled = this.marketData.isOfflineScreeningEnabled()
-    const hasFactors = Boolean(status.latest_factor_date) || status.derived?.screen_factors === true
-    const hasKlines = status.bootstrap?.klines === true || status.derived?.klines_prerequisite === true
-    const guidance = enabled && hasFactors
-      ? '本地因子筛选可用：screen_stocks / screen_local_universe；行业用 list_local_industries；A 股日 K 优先读本地 DuckDB（get_instrument_chart），实时行情走在线 Provider'
-      : enabled
-        ? '名录/行业可读本地库；因子筛选需先完成日 K 同步与因子计算（设置 → 基础数据）'
-        : '本地离线筛选未启用；请用 search_instruments + evaluate_instrument'
     return ok({
-      ...status,
-      local_offline_screening_enabled: enabled,
-      local_kline_ready: hasKlines,
-      local_factor_ready: hasFactors,
-      storage_note: '主数据在 DuckDB（db_path / duck_db_path）；SQLite control_db_path 仅同步控制面',
-      guidance,
-      status_mode: 'light',
-    }, '本地数据状态', t0)
+      local_offline_screening_enabled: false,
+      local_kline_ready: false,
+      local_factor_ready: false,
+      guidance: '本地因子/基础数据同步已停用；请用 instrument_search、instrument_evaluation、instrument_chart 等在线能力',
+      status_mode: 'disabled',
+    }, '本地数据状态（已停用）', t0)
   }
 
-  private marketDbSyncState(t0: number) {
-    const snap = this.marketData.syncState()
-    return ok(snap, '同步状态', t0)
+  private marketDbSyncState(_t0: number) {
+    return this.failLocalOffline(_t0, '本地基础数据同步已停用')
   }
 
-  private marketDbDerivedMaintenance(params: Record<string, unknown>, t0: number) {
-    const force = params.force !== false
-    const result = this.marketData.derivedMaintenance(force)
-    return ok(result, result.message ?? '本地指标维护', t0)
+  private marketDbDerivedMaintenance(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地因子/行业计算已停用')
   }
 
   private marketDataPacks(t0: number) {
@@ -593,153 +554,36 @@ export class ResearchHub {
     return this.failLocalOffline(t0)
   }
 
-  private marketDbSync(params: Record<string, unknown>, t0: number) {
-    const force = params.force === true
-    const modeRaw = String(params.mode ?? 'auto')
-    if (modeRaw === 'auto') {
-      const plan = this.marketData.planSync(force)
-      void this.marketData.syncAdaptive(force).catch((err: unknown) => {
-        console.warn('[research-hub] syncAdaptive failed:', err)
-      })
-      return ok({
-        started: true,
-        running: true,
-        mode: plan.mode,
-        plan: plan.label,
-      }, '数据同步', t0)
-    }
-    const jobs = [...CN_MANUAL_SYNC_JOBS]
-    const mode = modeRaw === 'full' || modeRaw === 'resume' ? modeRaw : 'incremental'
-    void this.marketData.sync({ mode, jobs, force, background: true }).catch((err: unknown) => {
-      console.warn('[research-hub] market_db_sync failed:', err)
-    })
-    return ok({
-      started: true,
-      running: true,
-      mode,
-      plan: 'A 股基础数据',
-    }, '数据同步', t0)
+  private marketDbSync(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地基础数据同步已停用')
   }
 
-  private industrySnapshotUnavailable(t0: number) {
-    const { stock_count: stockCount } = this.marketData.statusLight()
-    if (stockCount > 0) return null
-    return fail('本地行业库暂无数据，请使用 search_instruments、screen_stocks 等在线能力', t0)
+  private async marketIndustryStats(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地行业统计已停用')
   }
 
-  private async marketIndustryStats(params: Record<string, unknown>, t0: number) {
-    const unavailable = this.industrySnapshotUnavailable(t0)
-    if (unavailable) return unavailable
-    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
-    const data = await this.marketData.industryStats(tradeDate || undefined)
-    return ok(data, `A 股 ${data.items.length} 个行业统计`, t0)
+  private async marketIndustryStocks(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地行业成分股查询已停用')
   }
 
-  private async marketIndustryStocks(params: Record<string, unknown>, t0: number) {
-    const industry = String(params.industry ?? '').trim()
-    if (!industry) return fail('industry 必填', t0)
-    const unavailable = this.industrySnapshotUnavailable(t0)
-    if (unavailable) return unavailable
-    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
-    const limitRaw = params.limit != null ? Number(params.limit) : 120
-    const limit = Number.isFinite(limitRaw) ? limitRaw : 120
-    const data = await this.marketData.industryStocks(industry, tradeDate || undefined, limit)
-    const items = data.items.map((item: IndustryStockRow) => {
-      const meta = this.marketData.store.stockMeta(item.code)
-      const ref = normalizeInstrumentRef({
-        market: 'CN',
-        assetClass: inferCnAssetClass(item.code),
-        symbol: item.code,
-        exchange: meta?.exchange ?? undefined,
-      })
-      return { ...item, code: buildInstrumentNamespace(ref) }
-    })
-    return ok({ ...data, items }, `${industry} 成分股 ${items.length} 只`, t0)
+  private async localIndustryList(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地行业列表已停用')
   }
 
-  private async localIndustryList(params: Record<string, unknown>, t0: number) {
-    const unavailable = this.industrySnapshotUnavailable(t0)
-    if (unavailable) return unavailable
-    const keyword = params.keyword != null ? String(params.keyword).trim() : undefined
-    const tradeDate = params.trade_date != null ? String(params.trade_date).trim() : undefined
-    const limitRaw = params.limit != null ? Number(params.limit) : undefined
-    const limit = limitRaw != null && Number.isFinite(limitRaw) ? limitRaw : undefined
-    const data = await this.marketData.industryList(keyword || undefined, tradeDate || undefined, limit)
-    return ok(data, `行业列表 ${data.industries.length} 项`, t0)
-  }
-
-  private async localIndustryScreen(params: Record<string, unknown>, t0: number) {
-    try {
-      const data = await this.marketData.industryScreen({
-        industry: params.industry != null ? String(params.industry).trim() : undefined,
-        industries: Array.isArray(params.industries) ? params.industries.map(String) : undefined,
-        industry_contains: params.industry_contains != null ? String(params.industry_contains).trim() : undefined,
-        factor_conditions: params.factor_conditions as Array<{ factor: string; op: '>' | '<' | '>=' | '<=' | '='; value: number }> | undefined,
-        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
-        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
-        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
-        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
-        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
-        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
-        exclude_st: params.exclude_st !== false,
-        scorecard: params.scorecard != null ? String(params.scorecard) : undefined,
-        sort_by: params.sort_by != null ? String(params.sort_by) : undefined,
-        sort_order: params.sort_order === 'asc' ? 'asc' : params.sort_order === 'desc' ? 'desc' : undefined,
-        trade_date: params.trade_date != null ? String(params.trade_date).trim() : undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      return ok({ ...data, source: 'local' }, `${data.items.length} 只行业初选命中`, t0)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return fail(`本地行业因子筛选失败：${msg}`, t0)
-    }
+  private async localIndustryScreen(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地行业因子筛选已停用')
   }
 
   private listScreenFactors(t0: number) {
-    if (!this.marketData.isOfflineScreeningEnabled()) {
-      return this.failLocalOffline(t0)
-    }
-    const factors = this.marketData.listScreenFactors()
-    return ok({ factors, count: factors.length }, `本地筛选因子 ${factors.length} 个`, t0)
+    return this.failLocalOffline(t0, '本地筛选因子已停用')
   }
 
   private localUniverseScreenSchema(t0: number) {
-    if (!this.marketData.isOfflineScreeningEnabled()) {
-      return this.failLocalOffline(t0)
-    }
-    const schema = this.marketData.universeScreenSchema()
-    return ok(schema, '本地初选 schema', t0)
+    return this.failLocalOffline(t0, '本地初选 schema 已停用')
   }
 
-  private async localUniverseScreen(params: Record<string, unknown>, t0: number) {
-    try {
-      const data = await this.marketData.universeScreen({
-        factor_conditions: params.factor_conditions as Array<{ factor: string; op: '>' | '<' | '>=' | '<=' | '='; value: number }> | undefined,
-        industry_contains: params.industry_contains != null ? String(params.industry_contains).trim() : undefined,
-        industries: Array.isArray(params.industries) ? params.industries.map(String) : undefined,
-        markets: Array.isArray(params.markets)
-          ? params.markets.map(m => String(m).toUpperCase() as 'SH' | 'SZ' | 'BJ')
-          : undefined,
-        min_total_score: params.min_total_score != null ? Number(params.min_total_score) : undefined,
-        max_total_score: params.max_total_score != null ? Number(params.max_total_score) : undefined,
-        min_market_cap_yi: params.min_market_cap_yi != null ? Number(params.min_market_cap_yi) : undefined,
-        max_market_cap_yi: params.max_market_cap_yi != null ? Number(params.max_market_cap_yi) : undefined,
-        min_pe: params.min_pe != null ? Number(params.min_pe) : undefined,
-        max_pe: params.max_pe != null ? Number(params.max_pe) : undefined,
-        min_pb: params.min_pb != null ? Number(params.min_pb) : undefined,
-        max_pb: params.max_pb != null ? Number(params.max_pb) : undefined,
-        exclude_st: params.exclude_st !== false,
-        scorecard: params.scorecard != null ? String(params.scorecard) : undefined,
-        sort_by: params.sort_by != null ? String(params.sort_by) : undefined,
-        sort_order: params.sort_order === 'asc' ? 'asc' : params.sort_order === 'desc' ? 'desc' : undefined,
-        trade_date: params.trade_date != null ? String(params.trade_date).trim() : undefined,
-        top_n: params.top_n != null ? Number(params.top_n) : undefined,
-      })
-      return ok({ ...data, source: 'local' }, `本地初选 ${data.passed} 只命中`, t0)
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e)
-      return fail(`本地初选失败：${msg}`, t0)
-    }
+  private async localUniverseScreen(_params: Record<string, unknown>, t0: number) {
+    return this.failLocalOffline(t0, '本地宇宙筛选已停用')
   }
 
   private async batchStockSnapshots(params: Record<string, unknown>, t0: number) {
