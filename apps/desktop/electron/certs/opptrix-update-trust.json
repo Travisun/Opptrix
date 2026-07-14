@@ -1,0 +1,8 @@
+{
+  "publisherCommonName": "Opptrix",
+  "codeSigningCertFile": "opptrix-code-signing.crt",
+  "rootCaFile": "opptrix-update-root.pem",
+  "codeSigningFingerprintSha256": "c5e7b692b727ca3668cbe4685ee6a9fad6ad713320b6fcf829f5860ed8519ba9",
+  "rootFingerprintSha256": "396a9033e0fe248eb6fffd3439d09509679268e92625ab40c253e3675435adad",
+  "note": "Self-issued Opptrix update trust. Private keys live in GitHub secrets / apps/desktop/.secrets (gitignored)."
+}

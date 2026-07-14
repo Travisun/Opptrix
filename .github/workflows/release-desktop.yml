@@ -108,6 +108,8 @@ jobs:
           CSC_LINK: ${{ secrets.CSC_LINK }}
           CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          OPPTRIX_CODE_SIGNING_P12: ${{ secrets.OPPTRIX_CODE_SIGNING_P12 }}
+          OPPTRIX_CODE_SIGNING_P12_PASSWORD: ${{ secrets.OPPTRIX_CODE_SIGNING_P12_PASSWORD }}
         run: |
           if [[ "${{ inputs.skip_signing }}" == "true" ]]; then
             echo "mode=unsigned" >> "$GITHUB_OUTPUT"
@@ -155,13 +157,30 @@ jobs:
               rm -f "$CERT"
               ;;
             Windows)
+              # Prefer commercial WIN_CSC_*; else Opptrix self-issued update cert (custom client verifier).
+              if [ -z "${WIN_CSC_LINK:-}" ] && [ -n "${OPPTRIX_CODE_SIGNING_P12:-}" ]; then
+                export WIN_CSC_LINK="$OPPTRIX_CODE_SIGNING_P12"
+                export WIN_CSC_KEY_PASSWORD="${OPPTRIX_CODE_SIGNING_P12_PASSWORD:-}"
+                echo "WIN_CSC_LINK=$WIN_CSC_LINK" >> "$GITHUB_ENV"
+                echo "WIN_CSC_KEY_PASSWORD=$WIN_CSC_KEY_PASSWORD" >> "$GITHUB_ENV"
+                echo "Using OPPTRIX_CODE_SIGNING_P12 as Windows Authenticode identity (self-issued)"
+              fi
               if [ -n "${WIN_CSC_LINK:-}" ]; then
                 echo "mode=win" >> "$GITHUB_OUTPUT"
                 echo "Windows code signing enabled"
               else
                 echo "mode=unsigned" >> "$GITHUB_OUTPUT"
                 echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
-                echo "::warning::WIN_CSC_LINK not configured — unsigned Windows build"
+                echo "::warning::WIN_CSC_LINK / OPPTRIX_CODE_SIGNING_P12 not configured — unsigned Windows build"
+              fi
+              ;;
+            Linux)
+              if [ -n "${OPPTRIX_CODE_SIGNING_P12:-}" ]; then
+                echo "mode=linux-cms" >> "$GITHUB_OUTPUT"
+                echo "Linux CMS update signing material available"
+              else
+                echo "mode=unsigned" >> "$GITHUB_OUTPUT"
+                echo "::warning::OPPTRIX_CODE_SIGNING_P12 not configured — Linux CMS update signatures will be skipped"
               fi
               ;;
             *)
@@ -178,6 +197,9 @@ jobs:
           CSC_KEY_PASSWORD_SECRET: ${{ secrets.CSC_KEY_PASSWORD }}
           WIN_CSC_LINK_SECRET: ${{ secrets.WIN_CSC_LINK }}
           WIN_CSC_KEY_PASSWORD_SECRET: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          OPPTRIX_CODE_SIGNING_P12_SECRET: ${{ secrets.OPPTRIX_CODE_SIGNING_P12 }}
+          OPPTRIX_CODE_SIGNING_P12_PASSWORD_SECRET: ${{ secrets.OPPTRIX_CODE_SIGNING_P12_PASSWORD }}
+          OPPTRIX_CODE_SIGNING_KEY_PEM_SECRET: ${{ secrets.OPPTRIX_CODE_SIGNING_KEY_PEM }}
           APPLE_ID_SECRET: ${{ secrets.APPLE_ID }}
           APPLE_APP_SPECIFIC_PASSWORD_SECRET: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
           APPLE_TEAM_ID_SECRET: ${{ secrets.APPLE_TEAM_ID }}
@@ -200,8 +222,28 @@ jobs:
               export APPLE_TEAM_ID="$APPLE_TEAM_ID_SECRET"
               ;;
             win)
-              export WIN_CSC_LINK="$WIN_CSC_LINK_SECRET"
-              export WIN_CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD_SECRET"
+              if [ -n "${WIN_CSC_LINK_SECRET:-}" ]; then
+                export WIN_CSC_LINK="$WIN_CSC_LINK_SECRET"
+                export WIN_CSC_KEY_PASSWORD="$WIN_CSC_KEY_PASSWORD_SECRET"
+              else
+                export WIN_CSC_LINK="$OPPTRIX_CODE_SIGNING_P12_SECRET"
+                export WIN_CSC_KEY_PASSWORD="$OPPTRIX_CODE_SIGNING_P12_PASSWORD_SECRET"
+              fi
+              ;;
+            linux-cms)
+              export CSC_IDENTITY_AUTO_DISCOVERY=false
+              unset CSC_LINK CSC_KEY_PASSWORD WIN_CSC_LINK WIN_CSC_KEY_PASSWORD
+              if [ -n "${OPPTRIX_CODE_SIGNING_KEY_PEM_SECRET:-}" ]; then
+                export OPPTRIX_CODE_SIGNING_KEY_PEM="$OPPTRIX_CODE_SIGNING_KEY_PEM_SECRET"
+              elif [ -n "${OPPTRIX_CODE_SIGNING_P12_SECRET:-}" ]; then
+                mkdir -p apps/desktop/.secrets
+                P12="$RUNNER_TEMP/opptrix-cms.p12"
+                echo "$OPPTRIX_CODE_SIGNING_P12_SECRET" | base64 --decode > "$P12"
+                openssl pkcs12 -in "$P12" -nocerts -nodes \
+                  -passin pass:"$OPPTRIX_CODE_SIGNING_P12_PASSWORD_SECRET" \
+                  -out apps/desktop/.secrets/opptrix-code-signing.key
+                rm -f "$P12"
+              fi
               ;;
             *)
               export CSC_IDENTITY_AUTO_DISCOVERY=false
@@ -237,6 +279,27 @@ jobs:
         shell: bash
         run: node apps/desktop/scripts/verify-packaged-runtime.mjs apps/desktop/release
 
+      - name: Sign Linux update artifacts (CMS)
+        if: runner.os == 'Linux' && steps.signcfg.outputs.mode == 'linux-cms'
+        shell: bash
+        env:
+          OPPTRIX_CODE_SIGNING_KEY_PEM: ${{ secrets.OPPTRIX_CODE_SIGNING_KEY_PEM }}
+          OPPTRIX_CODE_SIGNING_P12: ${{ secrets.OPPTRIX_CODE_SIGNING_P12 }}
+          OPPTRIX_CODE_SIGNING_P12_PASSWORD: ${{ secrets.OPPTRIX_CODE_SIGNING_P12_PASSWORD }}
+        run: |
+          mkdir -p apps/desktop/.secrets
+          if [ -n "${OPPTRIX_CODE_SIGNING_KEY_PEM:-}" ]; then
+            printf '%s\n' "$OPPTRIX_CODE_SIGNING_KEY_PEM" > apps/desktop/.secrets/opptrix-code-signing.key
+          elif [ -n "${OPPTRIX_CODE_SIGNING_P12:-}" ]; then
+            P12="$RUNNER_TEMP/opptrix-cms.p12"
+            echo "$OPPTRIX_CODE_SIGNING_P12" | base64 --decode > "$P12"
+            openssl pkcs12 -in "$P12" -nocerts -nodes \
+              -passin pass:"$OPPTRIX_CODE_SIGNING_P12_PASSWORD" \
+              -out apps/desktop/.secrets/opptrix-code-signing.key
+            rm -f "$P12"
+          fi
+          node apps/desktop/scripts/sign-update-artifact.mjs apps/desktop/release
+
       - name: Upload artifacts to GitHub Release
         shell: bash
         env:
@@ -257,7 +320,8 @@ jobs:
             [ -n "$file" ] && files+=("$file")
           done < <(find "$RELEASE_DIR" -maxdepth 1 -type f \( \
             -name '*.dmg' -o -name '*.zip' -o -name '*.exe' -o \
-            -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' \
+            -name '*.AppImage' -o -name '*.deb' -o -name 'latest*.yml' -o -name '*.blockmap' -o \
+            -name '*.opptrix-cms' \
           \) ! -name 'latest-mac.yml')
 
           if [ ${#files[@]} -eq 0 ]; then

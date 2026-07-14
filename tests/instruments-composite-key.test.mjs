@@ -19,7 +19,8 @@ import {
   SCHEMA_VERSION,
 } from '../packages/market-data/dist/schema.js'
 import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion, hasInstrumentCompositeKey } from '../packages/market-data/dist/utils.js'
-import { isDuckPrimaryMigrationComplete } from '../packages/market-data/dist/duck/duck-primary-migration.js'
+import { isDuckPrimaryMigrationComplete, resetDuckPrimaryMigrationPending } from '../packages/market-data/dist/duck/duck-primary-migration.js'
+
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
 import { getMarketDuckGateway } from '../packages/market-data/dist/duck/market-duck-gateway.js'
 import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
@@ -771,16 +772,17 @@ test('partial duck with klines only backfills stocks from sqlite on primary migr
   assert.ok(await store.runDuckPrimaryMigrationAsync())
   assert.ok(isDuckPrimaryMigrationComplete(store.db))
 
-  store.db.prepare(`
-    UPDATE sync_cursor SET meta_json = '{"status":"pending","version":1}', last_success_at = NULL
-    WHERE job_name = 'duck_primary_migration'
-  `).run()
+  resetDuckPrimaryMigrationPending(store.db)
   store.duckGateway().applyBatchSync([{ op: 'exec', sql: 'DELETE FROM stocks', params: [] }])
-  assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c ?? 0, 0)
-  assert.ok(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars')?.c > 0)
+  assert.equal(duckGw(store).marketStatsSync().stocks, 0)
+  assert.ok(duckGw(store).marketStatsSync().klines > 0)
 
   assert.ok(await store.runDuckPrimaryMigrationAsync())
-  assert.equal(duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')?.c, 1)
+  assert.equal(
+    duckGw(store).marketStatsSync().stocks,
+    1,
+    'pending remigration must force-backfill emptied Duck stocks from SQLite',
+  )
   store.close()
 })
 

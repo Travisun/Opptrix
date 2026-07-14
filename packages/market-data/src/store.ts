@@ -30,6 +30,7 @@ import { getDuckNeoReader } from './duck/duck-neo-reader.js'
 import {
   isDuckPrimaryMigrationComplete,
   markDuckPrimaryMigrationComplete,
+  readDuckPrimaryMigrationStatus,
 } from './duck/duck-primary-migration.js'
 import type { DuckWriteOp } from './duck/market-writes.js'
 
@@ -330,9 +331,12 @@ export class MarketDataStore {
     if (isDuckPrimaryMigrationComplete(this.db)) return true
     if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false
 
+    // Explicit pending re-run (e.g. after package import / data loss) must force
+    // rematerialize Duck dims even when row-count heuristics look green.
+    const force = readDuckPrimaryMigrationStatus(this.db) === 'pending'
     this.flushDuckWritesSync({ throwOnError: false })
     this.duckGateway().migrateSqliteKlinesIfEmptySync()
-    this.duckGateway().migrateMarketDataSync(false)
+    this.duckGateway().migrateMarketDataSync(force)
 
     if (this.duckGateway().checkMarketMigrationNeededSync()) {
       console.warn('[market-data] Duck 主存储迁移未完成：SQLite 仍有未迁入数据，稍后重试')
@@ -351,9 +355,10 @@ export class MarketDataStore {
     if (isDuckPrimaryMigrationComplete(this.db)) return true
     if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false
 
+    const force = readDuckPrimaryMigrationStatus(this.db) === 'pending'
     await this.flushDuckWritesAsync({ throwOnError: false })
     await this.duckGateway().migrateSqliteKlinesIfEmptyAsync()
-    await this.duckGateway().migrateMarketDataAsync(false)
+    await this.duckGateway().migrateMarketDataAsync(force)
 
     if (await this.duckGateway().checkMarketMigrationNeededAsync()) {
       console.warn('[market-data] Duck 主存储迁移未完成：SQLite 仍有未迁入数据，稍后重试')

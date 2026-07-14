@@ -32,6 +32,8 @@ Thumbs.db
 !.env.example
 *.key
 certs/
+!apps/desktop/electron/certs/
+!apps/desktop/electron/certs/**
 api_keys.txt
 apps/server/data/
 

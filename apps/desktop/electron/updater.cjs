@@ -142,6 +142,12 @@ function configureAutoUpdaterDefaults() {
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowDowngrade = false
   autoUpdater.logger = null
+  try {
+    const { installCustomUpdateSignatureVerification } = require('./update-signature.cjs')
+    installCustomUpdateSignatureVerification(autoUpdater)
+  } catch (err) {
+    console.error('[updater] failed to install custom signature verification:', err)
+  }
 }
 
 function attachNativeBeforeQuitHook() {
@@ -234,15 +240,44 @@ function bindAutoUpdaterEvents(currentVersion) {
   })
 
   autoUpdater.on('update-downloaded', (info) => {
-    updatePackageHydrated = true
-    setStatus({
-      state: 'ready',
-      currentVersion,
-      version: info.version,
-      percent: 100,
-      message: `新版本 ${info.version} 已就绪，重启后即可完成更新`,
-    })
-    notifyUpdateReady(info.version)
+    void (async () => {
+      if (process.platform === 'linux') {
+        try {
+          const {
+            tryDownloadCmsBeside,
+            verifyLinuxUpdateArtifact,
+          } = require('./update-signature.cjs')
+          const artifactPath = info?.downloadedFile || info?.path || null
+          if (artifactPath) {
+            const fileUrl = info?.files?.[0]?.url || info?.path || null
+            await tryDownloadCmsBeside(artifactPath, typeof fileUrl === 'string' && fileUrl.startsWith('http') ? fileUrl : null)
+            const cmsErr = await verifyLinuxUpdateArtifact(artifactPath)
+            if (cmsErr) {
+              updatePackageHydrated = false
+              setStatus({
+                state: 'error',
+                currentVersion,
+                version: info.version,
+                message: `更新包签名校验失败：${cmsErr}`,
+              })
+              return
+            }
+          }
+        } catch (err) {
+          console.error('[updater] linux signature check failed:', err)
+        }
+      }
+
+      updatePackageHydrated = true
+      setStatus({
+        state: 'ready',
+        currentVersion,
+        version: info.version,
+        percent: 100,
+        message: `新版本 ${info.version} 已就绪，重启后即可完成更新`,
+      })
+      notifyUpdateReady(info.version)
+    })()
   })
 
   autoUpdater.on('error', (err) => {

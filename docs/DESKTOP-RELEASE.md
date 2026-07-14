@@ -181,6 +181,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
+| **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
 | **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
 
 **版本升级语义（electron-updater）**
