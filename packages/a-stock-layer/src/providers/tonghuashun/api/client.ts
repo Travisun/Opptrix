@@ -176,10 +176,68 @@ export class FuyaoClient {
     )
   }
 
+  /**
+   * 资产负债表多期序列
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/financials/balance-sheets
+   */
+  financialsBalanceSheets(
+    thscode: string,
+    period: 'annual' | 'quarterly' = 'quarterly',
+    limit = 20,
+  ) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/financials/balance-sheets',
+      { thscode, period, limit },
+    )
+  }
+
+  /**
+   * 现金流量表多期序列
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/financials/cash-flow-statements
+   */
+  financialsCashFlowStatements(
+    thscode: string,
+    period: 'annual' | 'quarterly' = 'quarterly',
+    limit = 20,
+  ) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/financials/cash-flow-statements',
+      { thscode, period, limit },
+    )
+  }
+
+  /**
+   * 财务指标（成长/盈利/偿债/营运/现金流）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/financials/indicators
+   * @param report 报告期，如 2024Q3 / 2024
+   */
   financialsIndicators(thscode: string, report: string) {
-    return this.get<{ abilities?: Record<string, unknown> }>(
+    return this.get<{ abilities?: Record<string, unknown> } & Record<string, unknown>>(
       '/api/a-share/financials/indicators',
       { thscode, report },
+    )
+  }
+
+  /**
+   * 同花顺指数目录（按 tag）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share-index/catalog/ths-index-list
+   * @param tag cn_concept | region | tszs | industry
+   */
+  thsIndexList(tag: 'cn_concept' | 'region' | 'tszs' | 'industry' | string = 'cn_concept') {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share-index/catalog/ths-index-list',
+      { tag },
+    )
+  }
+
+  /**
+   * 指数/板块成分股
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share-index/constituents/ths-stock-list
+   */
+  thsIndexConstituents(thscode: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share-index/constituents/ths-stock-list',
+      { thscode },
     )
   }
 
@@ -211,10 +269,77 @@ export class FuyaoClient {
     )
   }
 
+  /**
+   * 连板天梯（近 30 交易日）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/limit-up-ladder
+   */
+  limitUpLadder() {
+    return this.get<{ item?: Record<string, unknown>[] } & Record<string, unknown>>(
+      '/api/a-share/special-data/limit-up-ladder',
+      {},
+    )
+  }
+
   hotStockList(period: 'day' | 'hour' = 'day') {
     return this.get<{ item?: Record<string, unknown>[] }>(
       '/api/a-share/special-data/hot-stock-list',
       { period },
+    )
+  }
+
+  /**
+   * 热度飙升榜 Top30
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/skyrocket-list
+   */
+  skyrocketList(period: 'day' | 'hour' = 'day') {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/special-data/skyrocket-list',
+      { period },
+    )
+  }
+
+  /**
+   * 历史热股排行（按自然日）
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/hot-stock-list-history
+   */
+  hotStockListHistory(date: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/special-data/hot-stock-list-history',
+      { date },
+    )
+  }
+
+  /**
+   * 个股热榜排名走势
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/hot-stock-rank-trend
+   */
+  hotStockRankTrend(thscode: string, start?: string, end?: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/special-data/hot-stock-rank-trend',
+      { thscode, start, end },
+    )
+  }
+
+  /**
+   * 当日个股异动原因列表
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/anomaly-analysis-list
+   */
+  anomalyAnalysisList(tag?: string) {
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/special-data/anomaly-analysis-list',
+      { tag },
+    )
+  }
+
+  /**
+   * 按股票批量查当日异动原因
+   * @sourceUrl https://fuyao.aicubes.cn/api/a-share/special-data/anomaly-analysis-stock
+   */
+  anomalyAnalysisStock(thscodes: string | string[]) {
+    const joined = Array.isArray(thscodes) ? thscodes.join(',') : thscodes
+    return this.get<{ item?: Record<string, unknown>[] }>(
+      '/api/a-share/special-data/anomaly-analysis-stock',
+      { thscodes: joined },
     )
   }
 }

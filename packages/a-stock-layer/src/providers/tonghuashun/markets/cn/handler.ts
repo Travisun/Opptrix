@@ -14,6 +14,8 @@ import {
   mapHistoricalBarToKline,
   mapHotStockSentiment,
   mapIncomeRow,
+  mapBalanceSheetRows,
+  mapCashFlowRows,
   mapLimitUpRow,
   mapSnapshotToIndexRealtime,
   mapSnapshotToStockRealtime,
@@ -211,6 +213,24 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
       }
       const out = [...dedup.values()].sort((a, b) => (b.reportDate ?? '').localeCompare(a.reportDate ?? ''))
       return out.length ? out : null
+    })
+  }
+
+  async balanceSheet(code: string, reportDate = ''): Promise<Record<string, unknown>[] | null> {
+    return this.withClient(async client => {
+      const thscode = toThsCode(code)
+      const data = await client.financialsBalanceSheets(thscode, 'quarterly', 20)
+      const mapped = mapBalanceSheetRows(code, data.item ?? [], reportDate)
+      return mapped.length ? mapped : null
+    })
+  }
+
+  async cashFlow(code: string, reportDate = ''): Promise<Record<string, unknown>[] | null> {
+    return this.withClient(async client => {
+      const thscode = toThsCode(code)
+      const data = await client.financialsCashFlowStatements(thscode, 'quarterly', 20)
+      const mapped = mapCashFlowRows(code, data.item ?? [], reportDate)
+      return mapped.length ? mapped : null
     })
   }
 

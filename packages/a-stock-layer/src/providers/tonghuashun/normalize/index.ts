@@ -138,6 +138,44 @@ export function mapIncomeRow(code: string, row: Record<string, unknown>): Financ
   }
 }
 
+function filterFinancialStatementRows(
+  rows: Record<string, unknown>[],
+  reportDate: string,
+): Record<string, unknown>[] {
+  const sorted = [...rows].sort((a, b) =>
+    msToYmd(b.period_end_ms).localeCompare(msToYmd(a.period_end_ms)),
+  )
+  if (!reportDate) return sorted
+  const hint = reportDate.slice(0, 10)
+  return sorted.filter(r => msToYmd(r.period_end_ms) >= hint)
+}
+
+function mapFinancialStatementRow(code: string, row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    ...row,
+    code: normalizeCode(code),
+    reportDate: msToYmd(row.period_end_ms),
+    reportType: fiscalPeriodLabel(row),
+    source: 'tonghuashun',
+  }
+}
+
+export function mapBalanceSheetRows(
+  code: string,
+  rows: Record<string, unknown>[],
+  reportDate = '',
+): Record<string, unknown>[] {
+  return filterFinancialStatementRows(rows, reportDate).map(r => mapFinancialStatementRow(code, r))
+}
+
+export function mapCashFlowRows(
+  code: string,
+  rows: Record<string, unknown>[],
+  reportDate = '',
+): Record<string, unknown>[] {
+  return filterFinancialStatementRows(rows, reportDate).map(r => mapFinancialStatementRow(code, r))
+}
+
 export function mapAdjustmentToDividend(code: string, row: Record<string, unknown>): Dividend | null {
   const cash = safeFloat(row.dividend_per_share)
   const bonus = safeFloat(row.per_share_bonus)

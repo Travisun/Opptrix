@@ -81,7 +81,7 @@ bindingsFor: () => []
 | **tencent** | ✅ | CN + **US/HK registry binding**；`mixTencent*Equity` 单 Driver 内路由 | ✅ CN ETF | ✅ 三市场标准方法 + US/HK 详情维度（news/notices/shareholders/dividend/technical） | HK/US 深度财报等 custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex | CN | 弱（无 ETF_LIST） | ✅ | 无 | **合规（CN）** |
 | **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |
-| **tonghuashun** | ✅ | CN；无 ETF cap | CN | ❌ | ✅ | 无 | **合规（CN 个股）** |
+| **tonghuashun** | ✅ | CN；无 ETF cap；含 BALANCE_SHEET / CASH_FLOW | CN | ❌ | ✅ | `ths*` 指数目录/成分、财务指标、连板天梯/飙升榜/热股历史与排名走势、异动分析（9）；**不含** market-dumps | **合规（CN 个股）** |
 | **binance / okx** | ✅ | cryptoSpotBindings | CRYPTO | N/A | ✅ | 无 | **合规** |
 | **akshare** | ⚠️ 须 register | `capabilities: []` | 另类数据 | N/A | 无（设计如此） | 216+ custom | **自定义专用**；须注册 Driver 否则 invoke 失败 |
 
