@@ -1,0 +1,229 @@
+---
+description: 性能规范 — 异步、缓存、并发、内存管理
+globs:
+  - packages/**/*
+  - apps/**/*
+alwaysApply: false
+---
+
+# 性能规范
+
+## 异步模式
+
+### 并行执行
+
+```typescript
+// ✅ 正确：独立操作并行
+const [realtime, kline, profile] = await Promise.all([
+  engine.queryInstrumentData(ref, 'realtime'),
+  engine.queryInstrumentData(ref, 'kline', { count: 60 }),
+  engine.queryInstrumentData(ref, 'profile'),
+])
+
+// ❌ 错误：串行执行独立操作
+const realtime = await engine.queryInstrumentData(ref, 'realtime')
+const kline = await engine.queryInstrumentData(ref, 'kline')
+const profile = await engine.queryInstrumentData(ref, 'profile')
+```
+
+### 超时控制
+
+```typescript
+// ✅ 正确：AbortController + setTimeout
+async function fetchWithTimeout(url: string, timeoutMs = 5000) {
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeoutMs)
+  try {
+    const resp = await fetch(url, { signal: controller.signal })
+    clearTimeout(timer)
+    return resp
+  } catch (err) {
+    clearTimeout(timer)
+    throw err
+  }
+}
+
+// ❌ 错误：无超时
+const resp = await fetch(url)  // 可能永久挂起
+```
+
+### 并发控制
+
+```typescript
+// ✅ 正确：限制并发数
+async function processItems<T>(items: T[], fn: (item: T) => Promise<void>, concurrency = 3) {
+  const queue = [...items]
+  const workers = Array.from({ length: concurrency }, async () => {
+    while (queue.length) {
+      const item = queue.shift()!
+      await fn(item)
+    }
+  })
+  await Promise.all(workers)
+}
+
+// ❌ 错误：无限制并发
+await Promise.all(items.map(item => fn(item)))  // 可能耗尽资源
+```
+
+## 缓存策略
+
+### Engine 内置缓存
+
+```typescript
+// ✅ 正确：利用 Engine 缓存
+const data = await engine.queryInstrumentData(ref, 'realtime')  // 自动缓存
+
+// ❌ 错误：重复调用
+const data1 = await engine.queryInstrumentData(ref, 'realtime')
+const data2 = await engine.queryInstrumentData(ref, 'realtime')  // 浪费
+```
+
+### 自定义缓存
+
+```typescript
+// ✅ 正确：LRU 缓存
+class LruCache<K, V> {
+  private cache = new Map<K, V>()
+  private maxSize: number
+  
+  constructor(maxSize: number) {
+    this.maxSize = maxSize
+  }
+  
+  get(key: K): V | undefined {
+    const value = this.cache.get(key)
+    if (value !== undefined) {
+      // 移到最近使用
+      this.cache.delete(key)
+      this.cache.set(key, value)
+    }
+    return value
+  }
+  
+  set(key: K, value: V): void {
+    if (this.cache.size >= this.maxSize) {
+      // 删除最久未使用
+      const firstKey = this.cache.keys().next().value
+      this.cache.delete(firstKey)
+    }
+    this.cache.set(key, value)
+  }
+}
+```
+
+### 缓存 TTL
+
+```typescript
+// ✅ 正确：按数据类型设置 TTL
+const CACHE_TTL: Record<string, number> = {
+  realtime: 30 * 1000,      // 30 秒（实时数据）
+  kline: 30 * 60 * 1000,    // 30 分钟（历史数据）
+  profile: 24 * 60 * 60 * 1000,  // 24 小时（基础信息）
+}
+```
+
+## 内存管理
+
+### 事件监听器
+
+```typescript
+// ✅ 正确：清理事件监听器
+useEffect(() => {
+  const handler = (data: unknown) => setData(data)
+  emitter.on('update', handler)
+  return () => emitter.off('update', handler)
+}, [])
+
+// ❌ 错误：不清理
+useEffect(() => {
+  emitter.on('update', (data) => setData(data))  // 内存泄漏
+}, [])
+```
+
+### 大对象
+
+```typescript
+// ✅ 正确：及时释放
+function processLargeData(data: LargeData) {
+  const result = transform(data)
+  data = null  // 释放引用
+  return result
+}
+
+// ❌ 错误：保持引用
+function processLargeData(data: LargeData) {
+  const result = transform(data)
+  // data 仍在作用域中，无法被 GC
+  return result
+}
+```
+
+### WeakMap/WeakRef
+
+```typescript
+// ✅ 正确：弱引用缓存
+const metadataCache = new WeakMap<object, Metadata>()
+
+function getMetadata(obj: object): Metadata {
+  let meta = metadataCache.get(obj)
+  if (!meta) {
+    meta = computeMetadata(obj)
+    metadataCache.set(obj, meta)
+  }
+  return meta
+}
+```
+
+## 数据库性能
+
+### 索引
+
+```sql
+-- ✅ 正确：为查询条件创建索引
+CREATE INDEX IF NOT EXISTS idx_documents_namespace_updated
+  ON documents(namespace, updated_at DESC);
+
+-- ❌ 错误：无索引查询
+SELECT * FROM documents WHERE namespace = ?  -- 全表扫描
+```
+
+### 批量操作
+
+```typescript
+// ✅ 正确：批量插入
+const insert = db.prepare('INSERT INTO stocks (code, name) VALUES (?, ?)')
+const insertMany = db.transaction((rows: Stock[]) => {
+  for (const row of rows) {
+    insert.run(row.code, row.name)
+  }
+})
+insertMany(stocks)  // 单个事务
+
+// ❌ 错误：逐条插入
+for (const stock of stocks) {
+  db.prepare('INSERT INTO stocks (code, name) VALUES (?, ?)').run(stock.code, stock.name)
+}
+```
+
+### WAL 模式
+
+```typescript
+// ✅ 正确：启用 WAL
+db.pragma('journal_mode = WAL')
+
+// WAL 优势：
+// - 读写可并发
+// - 写入性能提升
+// - 崩溃恢复更快
+```
+
+## 性能反模式
+
+- ❌ **N+1 查询**：循环内执行 SQL/网络请求
+- ❌ **无索引查询**：大表全表扫描
+- ❌ **内存泄漏**：未清理事件监听器
+- ❌ **过度缓存**：缓存无 TTL 或无大小限制
+- ❌ **同步阻塞**：热路径使用 `execSync`
+- ❌ **无超时**：网络请求无超时控制
+- ❌ **重复计算**：相同输入重复计算

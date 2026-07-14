@@ -1,0 +1,174 @@
+---
+description: 审查与审计 — 代码审查、质量门禁、发布前审计
+alwaysApply: true
+---
+
+# 审查与审计
+
+## 代码审查
+
+### 审查清单
+
+#### 功能正确性
+
+- [ ] 需求是否完整实现？
+- [ ] 边界条件是否处理？
+- [ ] 错误情况是否优雅处理？
+- [ ] 性能是否有明显问题？
+
+#### 架构合规
+
+- [ ] 是否遵循分层架构？（UI → Hub → Engine → Provider）
+- [ ] 是否使用标准 API？（`queryInstrumentData` 而非直连 Provider）
+- [ ] 是否正确使用 `InstrumentRef`？（而非裸字符串）
+- [ ] 新增能力是否通过注册？（而非修改核心循环）
+
+#### 类型安全
+
+- [ ] 无 `any` 类型
+- [ ] 无 `@ts-ignore`
+- [ ] 无非空断言 `!`
+- [ ] 输入经过类型守卫校验
+
+#### 错误处理
+
+- [ ] Provider 层返回 null 触发 failover
+- [ ] Hub 层格式化为用户友好消息
+- [ ] 无空 catch 块
+- [ ] 无吞掉错误
+
+#### 测试
+
+- [ ] 关键路径有测试覆盖
+- [ ] 边界条件有测试
+- [ ] 测试可独立运行
+- [ ] 无测试间依赖
+
+#### 文档
+
+- [ ] 复杂逻辑有注释说明 WHY
+- [ ] 公共 API 有 JSDoc
+- [ ] 更新日志已更新（如适用）
+
+### 审查流程
+
+```
+1. 自我审查
+   ├─ 运行 check:ui（如有 UI 改动）
+   ├─ 运行 build:packages（如有 packages 改动）
+   └─ 运行相关测试
+
+2. 分派审查
+   ├─ 创建 task 记录
+   ├─ 分派 general subagent 独立审查
+   └─ 收集审查意见
+
+3. 修复与合并
+   ├─ 修复审查发现的问题
+   ├─ 重新验证
+   └─ 合并到主分支
+```
+
+## 质量门禁
+
+### 提交前
+
+```bash
+# 1. 类型检查 + lint
+npm run check:ui           # 如有 client-ui 改动
+
+# 2. 构建
+npm run build:packages     # 如有 packages 改动
+
+# 3. 测试
+npm run test               # 或 npm run test:ci
+
+# 4. 验证
+git status                 # 确认无意外文件
+git diff --stat            # 确认改动范围
+```
+
+### 合并前
+
+- [ ] CI 通过（build + test）
+- [ ] 代码审查通过
+- [ ] 文档已更新
+- [ ] 更新日志已写（如适用）
+
+## 发布前审计
+
+### Phase A — 代码就绪
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| A1 | 待发布代码已在目标分支 | `git status` |
+| A2 | client-ui 改动已通过 `check:ui` | `npm run check:ui` 退出码 0 |
+| A3 | packages 改动已构建 | `npm run build:packages` 无错误 |
+| A4 | 前端构建冒烟 | `npm run build -w opptrix-client` 无错误 |
+| A5 | **桌面打包预检** | `OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack` 退出码 0 |
+
+### Phase B — 版本与文档
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| B1 | `apps/desktop/package.json` version 已更新 | 读文件确认 |
+| B2 | `docs/releases/{version}.md` 已撰写 | 读文件确认，含 `## 新功能` + `## 修复` |
+| B3 | `ONBOARDING_RELEASE_BY_VERSION` 已更新 | 读 `client-ui/src/onboarding/manifest.ts` |
+| B4 | 引导激活参数正确 | 对照 `onboarding.mdc` 决策表 |
+
+### Phase C — 兼容性
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| C1 | Schema 迁移已注册（如适用） | `SCHEMA_VERSION` 与步数一致 |
+| C2 | 旧数据可读 | 迁移测试通过 |
+| C3 | 旧客户端可升级 | Release Notes 说明最低兼容版本 |
+| C4 | 更新源不断链 | `app-update.yml` 旧版可达 |
+
+### Phase D — 发布
+
+| # | 检查项 | 验证方式 |
+|---|--------|----------|
+| D1 | Windows 签名 secrets 已配置 | `OPPTRIX_CODE_SIGNING_P12` 存在 |
+| D2 | Release Notes 预览通过 | `node scripts/assemble-release-notes.mjs {version}` |
+| D3 | 用户确认后打标签 | `git tag desktop-v{version}` + `git push` |
+
+## 审计报告模板
+
+```markdown
+## 审计报告 — {版本号}
+
+### 总体评估
+✅ 通过 | ⚠️ 有条件通过 | ❌ 不通过
+
+### 检查结果
+
+| 类别 | 状态 | 备注 |
+|------|------|------|
+| 代码就绪 | ✅ | |
+| 类型安全 | ✅ | |
+| 测试覆盖 | ✅ | |
+| 文档完整 | ⚠️ | API.md 待更新 |
+| 兼容性 | ✅ | |
+| 打包预检 | ✅ | |
+
+### 发现的问题
+1. {问题描述}
+   - 严重性：高/中/低
+   - 建议：{修复建议}
+
+### 建议
+- {建议 1}
+- {建议 2}
+
+### 结论
+可以发布。建议在发布前更新 API.md。
+```
+
+## 反模式
+
+- ❌ **跳过审查**：代码直接合并
+- ❌ **形式审查**：只看 diff 不运行测试
+- ❌ **忽略警告**：CI 警告不处理
+- ❌ **带红发布**：测试失败仍打标签
+- ❌ **无审计发布**：未完成 Checklist 就发布

@@ -1,0 +1,213 @@
+---
+description: 测试规范 — 单元测试、集成测试、端到端测试
+globs:
+  - packages/**/*
+  - apps/**/*
+  - tests/**/*
+alwaysApply: false
+---
+
+# 测试规范
+
+## 测试金字塔
+
+```
+         ┌─────────┐
+         │  E2E    │  少量关键路径
+         │ (5%)    │  端到端验证
+         ├─────────┤
+         │集成测试  │  模块间交互
+         │ (25%)   │  Provider/Hub/API
+         ├─────────┤
+         │单元测试  │  函数/类独立验证
+         │ (70%)   │  核心逻辑
+         └─────────┘
+```
+
+## 单元测试
+
+### 文件位置
+
+```
+packages/a-stock-layer/
+├── src/
+│   ├── core/
+│   │   ├── provider-health.ts
+│   │   └── provider-health.test.ts  ← 同目录
+│   └── ...
+tests/                                ← 或统一目录
+├── provider-health.test.mjs
+```
+
+### 测试模式
+
+```typescript
+// ✅ 正确：Arrange-Act-Assert
+describe('CircuitBreaker', () => {
+  it('should trip after 3 consecutive failures', () => {
+    // Arrange
+    const breaker = new CircuitBreaker({ threshold: 3 })
+    
+    // Act
+    breaker.recordFailure()
+    breaker.recordFailure()
+    breaker.recordFailure()
+    
+    // Assert
+    expect(breaker.state).toBe('OPEN')
+  })
+})
+
+// ✅ 正确：边界条件测试
+describe('normalizeCode', () => {
+  it('should handle empty string', () => {
+    expect(normalizeCode('')).toBe('')
+  })
+  
+  it('should pad 6-digit code', () => {
+    expect(normalizeCode('600519')).toBe('600519')
+  })
+  
+  it('should handle SH prefix', () => {
+    expect(normalizeCode('sh600519')).toBe('600519')
+  })
+})
+```
+
+### Mock 策略
+
+```typescript
+// ✅ 正确：Mock 外部依赖
+vi.mock('@opptrix/user-store', () => ({
+  getUserDataStore: () => ({
+    speedRanking: { get: vi.fn(), set: vi.fn() },
+  }),
+}))
+
+// ✅ 正确：Mock 网络请求
+vi.spyOn(global, 'fetch').mockResolvedValue({
+  ok: true,
+  json: () => Promise.resolve({ data: [] }),
+})
+```
+
+## 集成测试
+
+### 数据库测试
+
+```typescript
+// ✅ 正确：使用临时数据库
+describe('UserDataStore', () => {
+  let store: UserDataStore
+  
+  beforeEach(() => {
+    // 使用临时目录
+    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-test-'))
+    process.env.OPPTRIX_DATA_DIR = tmpDir
+    store = UserDataStore.getInstance()
+  })
+  
+  afterEach(() => {
+    store.close()
+    fs.rmSync(process.env.OPPTRIX_DATA_DIR!, { recursive: true })
+  })
+  
+  it('should persist and retrieve documents', () => {
+    store.setDocument('test', 'key1', { value: 'hello' })
+    const result = store.getDocument('test', 'key1')
+    expect(result).toEqual({ value: 'hello' })
+  })
+})
+```
+
+### Schema 迁移测试
+
+```typescript
+// ✅ 正确：测试跨版本迁移
+describe('Schema Migration', () => {
+  it('should migrate from v8 to v9', () => {
+    const db = createTestDatabase()
+    seedDatabaseToVersion(db, 8)  // 种子数据到 v8
+    
+    const store = new MarketDataStore(db)
+    store.migrate()
+    
+    expect(store.detectAppliedSchemaVersion()).toBe(9)
+    expect(db.prepare('SELECT * FROM stocks').all()).toHaveLength(10)
+  })
+  
+  it('should be idempotent', () => {
+    const db = createTestDatabase()
+    seedDatabaseToVersion(db, 9)
+    
+    const store = new MarketDataStore(db)
+    store.migrate()
+    store.migrate()  // 重复迁移
+    
+    expect(store.detectAppliedSchemaVersion()).toBe(9)
+  })
+})
+```
+
+## 端到端测试
+
+### API 测试
+
+```typescript
+// ✅ 正确：测试完整请求流
+describe('API /api/stock/:code', () => {
+  it('should return stock data', async () => {
+    const response = await fetch('http://127.0.0.1:8711/api/stock/600519')
+    const data = await response.json()
+    
+    expect(data.success).toBe(true)
+    expect(data.data).toHaveProperty('code', '600519')
+  })
+  
+  it('should return 400 for invalid code', async () => {
+    const response = await fetch('http://127.0.0.1:8711/api/stock/invalid')
+    expect(response.status).toBe(400)
+  })
+})
+```
+
+## 测试运行
+
+```bash
+# 单元测试
+npm run test
+
+# CI 等价
+npm run test:ci
+
+# 特定文件
+npx vitest run tests/provider-health.test.mjs
+
+# 监听模式
+npx vitest watch
+```
+
+## 测试覆盖率
+
+### 目标
+
+| 类型 | 覆盖率目标 |
+|------|------------|
+| 核心逻辑（Engine/Provider） | >80% |
+| Hub 调度 | >70% |
+| API 路由 | >60% |
+| UI 组件 | 关键路径 |
+
+### 覆盖率工具
+
+```bash
+npx vitest run --coverage
+```
+
+## 测试反模式
+
+- ❌ **测试实现而非行为**：测试内部函数而非公共 API
+- ❌ **过度 Mock**：Mock 了被测系统的核心依赖
+- ❌ **测试间依赖**：测试 A 的结果影响测试 B
+- ❌ **脆弱测试**：依赖特定执行顺序或时间
+- ❌ **无断言测试**：测试运行但不验证结果

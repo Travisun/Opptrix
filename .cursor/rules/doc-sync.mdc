@@ -1,0 +1,123 @@
+---
+description: 文档同步规则 — 架构/API/调用方式变更后必须同步更新对应文档
+alwaysApply: true
+---
+
+# 文档同步规则（硬性）
+
+## 核心原则
+
+**代码即文档的实现，文档即代码的设计。** 二者必须同步；任何一方过时都是技术债。
+
+## 触发条件
+
+以下改动**必须**同步更新对应文档：
+
+| 改动类型 | 必须更新的文档 | 检查方式 |
+|----------|----------------|----------|
+| **新增/修改 Hub feature** | `docs/API.md`、`AGENT-GUIDE.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` | grep feature 名 |
+| **新增/修改 Provider** | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` | grep provider 名 |
+| **修改 `queryInstrumentData` 调用方式** | `docs/ARCHITECTURE.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md`、`docs/DATA-LAYER.md` | grep 函数名 |
+| **修改 `InstrumentRef` / `Capability`** | `docs/ARCHITECTURE-COMPREHENSIVE.md`、`docs/INSTRUMENT-PROTOCOL.md` | grep 类型名 |
+| **修改 Provider binding** | `docs/PROVIDER-STANDARD-API.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` | grep binding |
+| **修改 Schema** | `docs/DATA-LAYER.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md`、迁移测试 | grep SCHEMA_VERSION |
+| **修改 UI 组件** | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` | grep 组件名 |
+| **修改 Electron 主进程** | `docs/DESKTOP.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` | grep IPC 方法名 |
+| **修改 API 路由** | `docs/API.md` | grep 路由路径 |
+| **修改 Agent tool** | `docs/AGENT-GUIDE.md`、`docs/API.md` | grep tool 名 |
+| **修改发布流程** | `docs/DESKTOP-RELEASE.md` | grep 流程步骤 |
+
+## 同步检查清单
+
+```markdown
+## 文档同步检查（提交前必做）
+
+- [ ] 本次改动是否涉及架构/API/调用方式变更？
+  - 否 → 跳过
+  - 是 → 继续
+
+- [ ] 已更新对应的架构文档？
+  - ARCHITECTURE.md / ARCHITECTURE-COMPREHENSIVE.md
+  - DATA-LAYER.md / PROVIDER-STANDARD-API.md
+  - UI-DESIGN-SYSTEM.md / DESKTOP.md
+
+- [ ] 已更新对应的 API 文档？
+  - API.md（REST 端点）
+  - AGENT-GUIDE.md（Agent tools）
+
+- [ ] 已更新对应的组件文档？
+  - 自定义方法文档（custom-method-docs.ts）
+  - JSDoc 注释
+
+- [ ] 文档中的示例代码是否仍然正确？
+  - 手动验证或 grep 关键符号
+
+- [ ] 更新日志是否需要更新？
+  - 新功能/修复 → docs/releases/{version}.md
+```
+
+## 文档分层
+
+```
+设计文档（WHY）
+  ├─ ARCHITECTURE.md           系统为什么这样设计
+  ├─ ARCHITECTURE-COMPREHENSIVE.md  全面设计决策
+  └─ DATA-LAYER.md             数据层为什么这样演进
+
+规范文档（WHAT）
+  ├─ PROVIDER-STANDARD-API.md  Provider 应该怎么做
+  ├─ UI-DESIGN-SYSTEM.md       UI 应该长什么样
+  └─ INSTRUMENT-PROTOCOL.md    标的应该怎么标识
+
+操作文档（HOW）
+  ├─ DEVELOPMENT.md            开发环境怎么搭
+  ├─ DESKTOP-RELEASE.md        发布流程怎么走
+  └─ CONTRIBUTING.md           贡献流程怎么做
+
+代码内文档
+  ├─ JSDoc/TSDoc               函数/类注释
+  ├─ custom-method-docs.ts     自定义方法文档
+  └─ README.md (per package)   包说明
+```
+
+## 自动化检查
+
+### CI 检查（建议）
+
+```yaml
+# .github/workflows/doc-sync.yml
+name: Doc Sync Check
+on: [pull_request]
+jobs:
+  check:
+    steps:
+      - name: Check doc updates
+        run: |
+          # 检查代码改动是否同步了文档
+          CHANGED_FILES=$(git diff --name-only origin/main)
+          if echo "$CHANGED_FILES" | grep -q "packages/a-stock-layer/"; then
+            if ! echo "$CHANGED_FILES" | grep -q "docs/"; then
+              echo "⚠️ a-stock-layer 改动未更新 docs/"
+              exit 1
+            fi
+          fi
+```
+
+### 手动检查
+
+```bash
+# 检查文档中的符号是否还存在
+grep -r "oldFunctionName" docs/
+grep -r "deprecatedApi" docs/
+
+# 检查示例代码是否能编译
+# 手动验证关键文档中的代码片段
+```
+
+## 反模式
+
+- ❌ **代码改了文档没改**：开发者阅读过时文档
+- ❌ **文档改了代码没改**：文档与实现不一致
+- ❌ **只改 README 不改架构文档**：核心设计决策未同步
+- ❌ **发布后才发现文档过时**：用户/协作者困惑
+- ❌ **"文档以后再补"**：技术债累积
