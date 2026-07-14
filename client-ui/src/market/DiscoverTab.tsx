@@ -578,22 +578,13 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
       if (!first) return detail
       return `${detail} 可优先考虑「${first.name}」。`
     }
-    if (profile !== 'cn_equity') return null
-    if (!selectedId) return regimeDetailForProfile(marketRegime, 'cn_equity')
-    const suggested = regimeSuggestedIds(marketRegime, 'cn_equity')
-    const detail = regimeDetailForProfile(marketRegime, 'cn_equity')
-    if (!suggested.length) return detail
-    if (suggested.includes(selectedId)) {
-      return `当前市况与所选策略较契合。${detail}`
-    }
-    const first = builtinList.find(st => st.id === suggested[0])
-    if (!first) return detail
-    return `${detail} 可优先考虑「${first.name}」。`
+    return null
   }, [marketRegime, selectedId, builtinList, profile])
 
   const handleLoadHistory = (histJob: DiscoverJobSnapshot) => {
     const histProfile = histJob.profile ?? histJob.result?.plan?.profile
-    if (histProfile) setProfile(histProfile)
+    if (histProfile && histProfile !== 'cn_equity') setProfile(histProfile)
+    else if (histProfile === 'cn_equity') setProfile(defaultDiscoverProfile())
     loadHistoryJob(histJob)
     setPanelTab('results')
   }
@@ -616,7 +607,7 @@ export default function DiscoverTab({ session, watchlistCodes, onSelect, onAdd }
         />
         <Text className={s.headHint} block>
           {profileMiningReady
-            ? '选好策略后点击「开始选股」；自编策略可在设置 → 选股策略中管理。'
+            ? '选好策略后点击「开始选股」。'
             : '该资产类型的选股策略筹备中，可先开启对应数据包或关注后续更新。'}
         </Text>
         {readiness && (

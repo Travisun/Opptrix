@@ -267,10 +267,10 @@ export function computeMarketRegime(input: MarketRegimeInputs): MarketRegimeSnap
       regime: 'panic',
       headline: '市场偏恐慌',
       detail: buildDetail(
-        '指数回撤与情绪指标偏冷，可优先「恐慌反弹」「低波价值」等防守与反转挖掘；追高动量需谨慎。',
+        '指数回撤与情绪指标偏冷，可优先折溢价接近净值的宽基 ETF；追高需谨慎。',
         indicators,
       ),
-      suggested_strategy_ids: ['fear_rebound', 'low_vol_value', 'graham_margin'],
+      suggested_strategy_ids: ['etf_low_premium', 'etf_broad_base'],
       indicators,
     }
   }
@@ -280,10 +280,10 @@ export function computeMarketRegime(input: MarketRegimeInputs): MarketRegimeSnap
       regime: 'euphoria',
       headline: '市场偏亢奋',
       detail: buildDetail(
-        '情绪与估值偏热，宜侧重质量与估值纪律；动量类策略需警惕回撤。',
+        '情绪与估值偏热，宜优先大盘高流动性 ETF，折溢价不宜过高。',
         indicators,
       ),
-      suggested_strategy_ids: ['buffett_moat', 'msci_quality', 'gbm_core'],
+      suggested_strategy_ids: ['etf_scale_core', 'etf_low_premium'],
       indicators,
     }
   }
@@ -297,10 +297,10 @@ export function computeMarketRegime(input: MarketRegimeInputs): MarketRegimeSnap
       regime: 'cautious',
       headline: '市场偏谨慎',
       detail: buildDetail(
-        '宏观背景偏弱或情绪偏冷，可多因子均衡挖掘，兼顾基本面与适度动量。',
+        '宏观背景偏弱或情绪偏冷，宜选规模适中、折溢价温和的宽基 ETF 做底仓观察。',
         indicators,
       ),
-      suggested_strategy_ids: ['gbm_core', 'all_weather', 'low_vol_value'],
+      suggested_strategy_ids: ['etf_broad_base', 'etf_low_premium'],
       indicators,
     }
   }
@@ -309,10 +309,10 @@ export function computeMarketRegime(input: MarketRegimeInputs): MarketRegimeSnap
     regime: 'neutral',
     headline: '市场中性',
     detail: buildDetail(
-      '多数指标处于常态区间，可按风格自由选择；「G=B+M 核心池」适合广谱初筛。',
+      '多数指标处于常态区间，可按均衡思路筛选宽基与大盘流动性 ETF。',
       indicators,
     ),
-    suggested_strategy_ids: ['gbm_core', 'all_weather'],
+    suggested_strategy_ids: ['etf_broad_base', 'etf_scale_core'],
     indicators,
   }
 }

@@ -155,10 +155,10 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
       {
         kicker: '替你掌控',
-        title: '基础资料进度，随时能看清',
+        title: '行情数据源，按需配置',
         desc:
-          '在设置里即可查看基础数据的准备情况，哪些已完成、哪些还在进行，一眼明了。',
-        note: '心里有数，再决定要不要深入筛股。',
+          '在设置 → 数据源中管理各市场行情提供商与回退顺序，密钥本地保存。',
+        note: '配好数据源后，即可查询实时行情与研究报告。',
       },
       {
         kicker: '替你查证',
@@ -191,10 +191,10 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
       {
         kicker: '替你掌控',
-        title: '基础资料进度，随时能看清',
+        title: '行情数据源，按需配置',
         desc:
-          '在设置里即可查看基础数据的准备情况，哪些已完成、哪些还在进行，一眼明了。',
-        note: '心里有数，再决定要不要深入筛股。',
+          '在设置 → 数据源中管理各市场行情提供商与回退顺序，密钥本地保存。',
+        note: '配好数据源后，即可查询实时行情与研究报告。',
       },
       {
         kicker: '替你查证',

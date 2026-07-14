@@ -87,7 +87,7 @@
 | `instrument_snapshot` | 按 InstrumentRef 聚合快照 | `stock_detail`, `us_snapshot`, `crypto_snapshot`, `etf_snapshot` |
 | `instrument_quotes` | 批量混合市场报价 | `stock_quotes`（仅 CN） |
 | `instrument_chart` | 按 Ref 拉 K 线/图表 | `stock_chart`, `us_kline`, `crypto_kline` |
-| `instrument_search` | 跨市场本地搜索 | `search_stocks`, `search_local_instruments`（统一入口） |
+| `instrument_search` | 跨市场搜索（在线优先） | `search_stocks`（统一入口） |
 | `instrument_capabilities` | 查询 UI 应展示哪些能力 | （新） |
 
 实现：`packages/research-hub/src/instrument-router.ts`  
@@ -100,7 +100,7 @@ REST：`POST /api/instruments/{snapshot,quotes,chart,capabilities}`
 ```typescript
 interface DiscoverProfileDefinition {
   id: DiscoverStrategyProfile
-  prescreenMode: 'factor_screen' | 'etf_screen' | 'list_filter' | 'blocked'
+  prescreenMode: 'etf_screen' | 'list_filter' | 'blocked' // factor_screen 已移除
   scorecardProfile: ScorecardProfile | null
   miningToolGroup: DiscoverMiningToolGroup
   packId: MarketDataPackId | null
@@ -178,12 +178,12 @@ interface DiscoverProfileDefinition {
 | chart_intraday | ✓ | — | — | — | — |
 | chart_daily | ✓ | ✓ | ✓ | ✓ | ✓ |
 | scorecard | ✓ | ✓ | — | — | — |
-| factor_screen | ✓ | — | — | — | — |
+| factor_screen | —（已移除） | — | — | — | — |
 | strategy_signal | ✓ | — | — | — | — |
 | institution_rating | ✓ | — | — | — | — |
 | cyq / money_flow | ✓ | — | — | — | — |
-| industry_context | ✓ | — | — | — | — |
-| discover_mine | ✓ | ✓ | ✓ | ✓ | ✓ |
+| industry_context | ✓（产业链 mining，非本地行业库） | — | — | — | — |
+| discover_mine | —（A 股自动初选已停用） | ✓ | ✓ | ✓ | ✓ |
 | portfolio_pnl | ✓ | — | 部分 | — | — |
 
 UI 规则：**先 `instrument_capabilities`，再决定渲染 StockDetailTab 还是 CrossMarketSnapshot，是否调用 `useStockAnalysis`。**

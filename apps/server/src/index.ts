@@ -205,9 +205,14 @@ app.put<{ Body: { strategies?: unknown[] } }>('/api/discover/custom-strategies',
 app.post<{ Body: Partial<ReturnType<typeof listCustomDiscoverStrategies>[number]> & { name: string; prompt: string } }>(
   '/api/discover/custom-strategies/item',
   async (req, reply) => {
-    const saved = upsertCustomDiscoverStrategy(req.body ?? { name: '', prompt: '' })
-    if (!saved) return reply.code(400).send({ error: 'name and prompt required' })
-    return { strategy: saved, strategies: listCustomDiscoverStrategies() }
+    try {
+      const saved = upsertCustomDiscoverStrategy(req.body ?? { name: '', prompt: '' })
+      if (!saved) return reply.code(400).send({ error: 'name and prompt required' })
+      return { strategy: saved, strategies: listCustomDiscoverStrategies() }
+    } catch (err) {
+      const message = err instanceof Error ? err.message : '无法保存自建策略'
+      return reply.code(400).send({ error: message })
+    }
   },
 )
 
@@ -1084,10 +1089,8 @@ app.post<{ Body: { code: string; scorecard?: string } }>('/api/evaluate', async 
   return r.data
 })
 
-app.post<{ Body: { conditions: unknown[]; scorecard?: string; top_n?: number } }>('/api/screen', async (req, reply) => {
-  const r = await hub.dispatch('screening', req.body)
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
+app.post<{ Body: { conditions: unknown[]; scorecard?: string; top_n?: number } }>('/api/screen', async (_req, reply) => {
+  return reply.code(410).send({ error: '本地筛选已移除，请使用 instrument_search、instrument_evaluation 等在线能力' })
 })
 
 app.post<{ Body: { holdings: [string, number][]; scorecard?: string } }>('/api/portfolio', async (req, reply) => {

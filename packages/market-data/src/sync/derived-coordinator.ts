@@ -12,8 +12,6 @@ import { CN_DERIVED_MAINTENANCE_JOBS } from './config.js'
 import {
   computeDerivedOverallPercent,
   resolveDerivedMaintenancePlan,
-  resolveDerivedMaintenanceManualPlan,
-  shouldAutoDerivedMaintenanceOnBoot,
   type DerivedMaintenancePlan,
 } from './derived-plan.js'
 import { applyDerivedMaintenanceResult } from './derived-runner.js'
@@ -74,48 +72,22 @@ export class MarketDerivedMaintenanceCoordinator {
     }
   }
 
+  /** 本地因子/行业衍生维护已停用 */
   autoMaintainOnBoot(): void {
-    if (this.running || this.isSyncRunning() || isMarketSyncActive() || isDerivedMaintenanceActive()) return
-    setImmediate(() => void this.runAutoMaintain())
+    /* no-op */
   }
 
-  /** 手动启动本地指标维护（默认全量重算 screen_factors + industry_stats） */
-  start(options: { force?: boolean } = {}): {
+  /** 本地指标维护已停用 */
+  start(_options: { force?: boolean } = {}): {
     started: boolean
     running: boolean
     message?: string
   } {
-    const force = options.force !== false
-    if (this.running) {
-      return { started: false, running: true, message: '本地指标维护已在运行' }
-    }
-    if (this.isSyncRunning() || isMarketSyncActive() || isDerivedMaintenanceActive()) {
-      return { started: false, running: false, message: '外部数据同步进行中，请稍后再试' }
-    }
-    const status = this.store.getStatusLight()
-    if (!status.derived?.klines_prerequisite) {
-      return { started: false, running: false, message: '需先完成 K 线 Parquet 导入' }
-    }
-    const plan = resolveDerivedMaintenanceManualPlan(status, force)
-    if (!plan) {
-      return { started: false, running: false, message: '本地指标已是最新' }
-    }
-    void this.runMaintain(plan)
-    return { started: true, running: true }
+    return { started: false, running: false, message: '本地因子/行业计算已停用' }
   }
 
-  startRefreshScheduler(intervalMs = Number(process.env.OPPTRIX_DERIVED_REFRESH_INTERVAL_MS ?? 15 * 60 * 1000)): void {
-    if (this.refreshTimer != null) return
-    const tick = () => {
-      if (this.running || this.isSyncRunning() || isMarketSyncActive() || isDerivedMaintenanceActive()) return
-      const status = this.store.getStatusLight()
-      if (!shouldAutoDerivedMaintenanceOnBoot(status)) return
-      void this.runAutoMaintain()
-    }
-    this.refreshTimer = setInterval(tick, intervalMs)
-    if (typeof this.refreshTimer === 'object' && 'unref' in this.refreshTimer) {
-      this.refreshTimer.unref()
-    }
+  startRefreshScheduler(_intervalMs = Number(process.env.OPPTRIX_DERIVED_REFRESH_INTERVAL_MS ?? 15 * 60 * 1000)): void {
+    /* no-op */
   }
 
   stopRefreshScheduler(): void {

@@ -36,7 +36,7 @@ export const TOOL_ROUTING = `
 | get_instrument_quotes | ★★☆ | 只需实时行情 | 需要完整快照时用 snapshot |
 | get_instrument_chart | ★★☆ | 需要 K 线图/趋势可视化 | 只需最新价 |
 | batch_instrument_snapshots | ★★★ | 批量多标的同时分析 | 单只标的用 snapshot |
-| evaluate_instrument | ★★★ | 因子评分/决策雷达/技术评估 | 只需行情快照 |
+| evaluate_instrument | ★★★ | 已知代码的在线评分/决策雷达/技术评估 | 只需行情快照 |
 | get_instrument_strategy_signal | ★★☆ | 交易信号/买卖建议 | 只需数据不需要信号 |
 | get_instrument_indicators | ★★☆ | 技术指标详情 | 只需综合评估时用 evaluate |
 | get_instrument_cyq | ★☆☆ | 筹码分布（仅 A 股） | 非 A 股或不需要筹码 |
@@ -66,30 +66,22 @@ export const TOOL_ROUTING = `
 | get_portfolio_holdings | ★★★ | 持仓明细（成本/市值/浮盈） | 只需关注列表 |
 | portfolio_summary | ★★☆ | 持仓汇总统计 | 需要明细用 holdings |
 | portfolio_trades | ★★☆ | 交易流水 | 只需持仓不需流水 |
-| analyze_portfolio | ★★☆ | 组合因子分析 | 只需持仓概览 |
+| analyze_portfolio | ★★☆ | 已知持仓的组合暴露分析 | 只需持仓概览 |
 
 ### Tier 6 · 行业分析
 | 工具 | 优先级 | 何时用 | 何时不用 |
 |------|--------|--------|----------|
-| list_local_industries | ★★★ | 查找可用行业名 | 已知精确行业名 |
-| get_industry_stats | ★★☆ | 行业强弱/估值对比 | 只需成分股 |
-| get_local_industry_stocks | ★★★ | 行业成分股+评分 | 只需行业统计 |
-| industry_mining | ★★☆ | 产业链透视 | 只需成分股列表 |
+| industry_mining | ★★★ | 产业链透视与代表公司；主题观察池入口 | 只需单股分析 |
 | industry_mermaid | ★☆☆ | 产业链 Mermaid 图 | 不需要可视化 |
 
-### Tier 7 · 选股与策略
+### Tier 7 · 名录初选与单票策略
 | 工具 | 优先级 | 何时用 | 何时不用 |
 |------|--------|--------|----------|
-| get_local_universe_screen_schema | ★★★ | 编写筛选条件前查可用因子/过滤器 | 已知全部因子名 |
-| screen_stocks | ★★★ | A 股本地因子筛选 | 已有目标代码 |
-| screen_local_universe | ★★☆ | 行业/板块+因子组合初选 | 只需简单因子条件 |
-| screen_local_industry_stocks | ★★☆ | 行业内因子初选 | 只需成分股列表 |
-| search_local_instruments | ★★★ | 本地名录搜索（离线） | 需最新未入库标的 |
-| search_instruments | ★★☆ | 本地+在线合并搜索 | 已知精确 code |
-| screen_us_universe | ★★☆ | 美股名录搜索 | 非美股场景 |
-| screen_hk_universe | ★★☆ | 港股名录搜索 | 非港股场景 |
+| search_instruments | ★★★ | 不确定代码/跨市场搜索 | 已知精确 code |
+| screen_us_universe | ★★☆ | 美股名录 keyword 搜索 | 非美股场景 |
+| screen_hk_universe | ★★☆ | 港股名录 keyword 搜索 | 非港股场景 |
 | screen_crypto_universe | ★★☆ | Crypto 交易对搜索 | 非 Crypto 场景 |
-| run_backtest | ★★☆ | 因子/评分卡回测 | 只需当前评分 |
+| run_backtest | ★★☆ | 已知小样本 codes 的评分卡回测 | 无代码列表时 |
 | strategy_report | ★☆☆ | 单股策略报告 | 只需评估不需报告 |
 
 ### Tier 8 · 资讯与公告
@@ -106,6 +98,7 @@ export const TOOL_ROUTING = `
 - 同一任务对同一工具最多调用 2 次（首次获取 + 必要时刷新）
 - 优先用 Tier 高优先级工具，低优先级仅在高优先级不满足时使用
 - 用户明确指定代码/标的时，跳过搜索直接分析
-- 禁止对非 A 股标的调用 A 股专用工具（如 institution_rating、screen_stocks）
+- 禁止对非 A 股标的调用 A 股专用工具（如 institution_rating、get_instrument_cyq）
 - 禁止在已有标准 API 时用自定义方法替代
+- 仅调用本会话 tools 列表中存在的工具名
 `

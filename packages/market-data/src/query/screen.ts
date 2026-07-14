@@ -5,7 +5,7 @@ import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../sync/instrument-gateway.js'
 import { isDerivedMaintenanceActive, isMarketSyncActive } from '../duck/duck-subprocess-gate.js'
 import { todayTradeDate } from '../utils.js'
 
-const OFFLINE_SCREEN_MSG = '本地因子筛选不可用：请先完成 A 股日 K 同步与因子计算（设置 → 基础数据）。'
+const OFFLINE_SCREEN_MSG = '本地因子选股已移除，请使用 instrument_search、instrument_evaluation 等在线能力'
 
 function useDuck(store: MarketDataStore): boolean {
   if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false

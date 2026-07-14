@@ -35,7 +35,7 @@ export const APPLICATION_HUB_FEATURES = {
   /** InstrumentRef 统一入口：读取缓存评估（latest_evaluation） */
   instrumentLatestEvaluation: 'latest_evaluation',
 
-  /** 本地 L0 初选因子筛选 — 与 instrument_search 互补，保留专用入口 */
+  /** @deprecated 本地 L0 因子筛选已停用；保留常量以免旧调用方引用名断裂 */
   localInstrumentScreen: 'local_universe_screen',
   localInstrumentScreenSchema: 'local_universe_screen_schema',
   listScreenFactors: 'list_screen_factors',

@@ -10,7 +10,7 @@ export interface QuickTaskSection {
 
 /**
  * 推荐任务目录（始终展示，无需用户手动添加）
- * 文案面向非技术投资者；Agent 可映射到 evaluate_instrument / screen_stocks 等工具
+ * 文案面向非技术投资者；Agent 可映射到 evaluate_instrument / search_instruments 等工具
  */
 export const QUICK_TASK_CATALOG: readonly QuickTaskSection[] = [
   {
@@ -65,14 +65,14 @@ export const QUICK_TASK_CATALOG: readonly QuickTaskSection[] = [
   },
   {
     id: 'screening',
-    title: '选股与行业',
-    hint: '本地因子筛选、行业内对比、产业链',
+    title: '主题与行业',
+    hint: '产业链代表公司 → 搜索定位 → 单票评估对比',
     tasks: [
-      '帮我筛选 ROE>15%、负债率<50% 的优质股票，列出前 10 只并说明理由',
-      '在半导体行业里，哪些股票评分高且估值不太贵？',
-      '银行业里综合评分靠前的有哪些？简要对比差异',
-      '按「低估值 + 高评分」组合，找出 10 只候选股',
-      '梳理新能源产业链上下游，各环节有哪些代表公司？',
+      '梳理半导体产业链上下游，列出各环节代表公司，并对 3–5 家做评估对比',
+      '新能源主题：给我几家龙头观察池，说明逻辑与风险',
+      '银行业里挑几家代表性公司，用评分卡对比差异',
+      '按「稳健分红」思路，从银行/白酒龙头中挑代表股做对比分析',
+      '用 industry_mining 梳理一个你感兴趣的主题，再定位 3–5 家公司研究',
     ],
   },
   {

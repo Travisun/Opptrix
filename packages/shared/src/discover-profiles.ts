@@ -31,23 +31,23 @@ export const DISCOVER_PROFILE_REQUIRES_PACK: Record<DiscoverStrategyProfile, Mar
   DISCOVER_PROFILE_REGISTRY.map(row => [row.id, row.packId]),
 ) as Record<DiscoverStrategyProfile, MarketDataPackId | null>
 
-/** A 股股票挖掘 — 本地因子初选白名单（仅日 K 衍生） */
+/** @deprecated A 股本地因子初选已移除；保留常量以免旧策略 JSON 解析报错 */
 export const CN_EQUITY_DISCOVER_FACTORS = [
   'momentum_1m', 'momentum_3m', 'momentum_6m',
   'volume_ratio', 'volatility_20d', 'drawdown_60d',
 ] as const
 
-/** A 股 ETF 挖掘 — 本地 ETF 筛选维度 */
+/** A 股 ETF 挖掘 — 在线筛选维度 */
 export const CN_ETF_DISCOVER_FACTORS = [
   'premium_rate', 'scale_yi', 'nav',
 ] as const
 
-/** 美股挖掘 — 本地列表筛选字段 */
+/** 美股挖掘 — 在线列表筛选字段 */
 export const US_DISCOVER_FILTERS = [
   'keyword', 'industry_contains',
 ] as const
 
-/** Crypto 挖掘 — 本地交易对筛选字段 */
+/** Crypto 挖掘 — 交易对筛选字段 */
 export const CRYPTO_DISCOVER_FILTERS = [
   'keyword', 'quote', 'base_contains',
 ] as const
@@ -77,7 +77,7 @@ export function discoverPrescreenMode(profile: DiscoverStrategyProfile): Discove
 }
 
 export function defaultDiscoverProfile(): DiscoverStrategyProfile {
-  return 'cn_equity'
+  return 'cn_etf'
 }
 
 export function listDiscoverProfileMeta() {
@@ -150,15 +150,12 @@ export function assessDiscoverProfileReadiness(
   }
 
   if (profile === 'cn_equity') {
-    const hasUniverse = ctx.stock_count > 0
     return {
       profile,
-      ready: hasUniverse,
-      mode: 'local',
-      message: hasUniverse
-        ? '将使用本地日 K 衍生因子初选（momentum/volume_ratio/volatility/drawdown）'
-        : '请先完成 A 股名录同步',
-      action: hasUniverse ? null : '请前往 设置 → 基础数据，完成 A 股同步',
+      ready: false,
+      mode: 'blocked',
+      message: 'A 股自动选股策略已移除（本地因子不可用）',
+      action: '请改用 A 股 ETF / 跨市场策略，或使用 search_instruments、evaluate_instrument 等在线能力直接研究个股',
     }
   }
 
@@ -255,13 +252,9 @@ export const US_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
 export function resolveRegimeStrategyIds(
   profile: DiscoverStrategyProfile,
   regime: MarketRegimeKind,
-  equitySuggestedIds: string[],
+  _equitySuggestedIds: string[],
 ): string[] {
   if (profile === 'cn_etf') return ETF_REGIME_STRATEGY_IDS[regime]
   if (profile === 'us_equity') return US_REGIME_STRATEGY_IDS[regime]
-  if (profile === 'cn_equity') {
-    const filtered = equitySuggestedIds.filter(id => inferBuiltinStrategyProfile(id) === 'cn_equity')
-    return filtered.length ? filtered : equitySuggestedIds
-  }
   return []
 }

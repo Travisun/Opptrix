@@ -13,8 +13,8 @@ export type DiscoverStrategyProfile =
 
 export type MarketRegimeKind = MarketRegimeData['regime']
 
+/** UI 可切换的挖掘 Profile（不含已停用的 A 股股票自动选股） */
 export const DISCOVER_PROFILE_ORDER: DiscoverStrategyProfile[] = [
-  'cn_equity',
   'cn_etf',
   'us_equity',
   'crypto_spot',
@@ -34,22 +34,21 @@ export const DISCOVER_PROFILE_LABELS: Record<DiscoverStrategyProfile, string> = 
 }
 
 export const DISCOVER_PROFILE_DESCRIPTIONS: Record<DiscoverStrategyProfile, string> = {
-  cn_equity: '全 A 股票池 · 本地初筛与 AI 精选',
-  cn_etf: 'ETF 折溢价、规模与同类对比 · 综合评分',
-  us_equity: '美股本地列表筛选（需开启美股数据包）',
-  crypto_spot: 'Crypto 交易对筛选（需开启 Crypto 数据包）',
-  jp_equity: '日股本地列表筛选（需开启日本数据包）',
-  kr_equity: '韩股本地列表筛选（需开启韩国数据包）',
-  hk_equity: '港股本地列表筛选（需开启港股数据包）',
+  cn_equity: 'A 股自动选股策略已移除（本地因子不可用）',
+  cn_etf: 'ETF 折溢价、规模与同类对比 · 在线评估',
+  us_equity: '美股名录在线筛选',
+  crypto_spot: 'Crypto 交易对在线筛选',
+  jp_equity: '日股名录在线筛选',
+  kr_equity: '韩股名录在线筛选',
+  hk_equity: '港股名录在线筛选',
 }
 
 export function defaultDiscoverProfile(): DiscoverStrategyProfile {
-  return 'cn_equity'
+  return 'cn_etf'
 }
 
 export function isDiscoverProfileMiningReady(profile: DiscoverStrategyProfile): boolean {
-  return profile === 'cn_equity'
-    || profile === 'cn_etf'
+  return profile === 'cn_etf'
     || profile === 'us_equity'
     || profile === 'crypto_spot'
     || profile === 'jp_equity'
@@ -98,14 +97,10 @@ export const US_REGIME_DETAIL: Record<MarketRegimeKind, string> = {
 export function resolveRegimeStrategyIds(
   profile: DiscoverStrategyProfile,
   regime: MarketRegimeKind,
-  equitySuggestedIds: string[],
+  _equitySuggestedIds: string[],
 ): string[] {
   if (profile === 'cn_etf') return ETF_REGIME_STRATEGY_IDS[regime]
   if (profile === 'us_equity') return US_REGIME_STRATEGY_IDS[regime]
-  if (profile === 'cn_equity') {
-    const filtered = equitySuggestedIds.filter(id => inferBuiltinStrategyProfile(id) === 'cn_equity')
-    return filtered.length ? filtered : equitySuggestedIds
-  }
   return []
 }
 
@@ -135,7 +130,7 @@ export function isProfileTabBlocked(
   profile: DiscoverStrategyProfile,
   readinessByProfile: Partial<Record<DiscoverStrategyProfile, DiscoverProfileReadiness>>,
 ): boolean {
-  if (!isDiscoverProfileMiningReady(profile)) return false
+  if (!isDiscoverProfileMiningReady(profile)) return true
   const row = readinessByProfile[profile]
   return row != null && !row.ready
 }

@@ -71,18 +71,17 @@ server · (desktop 仅壳层 + 打包)
 - **MarketDataEngine**（原 AshareEngine）：`queryInstrumentData(InstrumentRef, capability, opts?)` 为 **唯一标准入口**（见 [PROVIDER-STANDARD-API.md](./PROVIDER-STANDARD-API.md)）。
 - **Provider Registry**：`(market, assetClass, capability)` → 按优先级回退；各 Provider 以 `manifest.ts` + `bindingsFor` 注册。
 - **TDX**：纯 Node TCP 客户端；部分路径为性能保留 fast-path。
-- **多市场**：CN / US / HK / JP / KR / Crypto 等；`queryInstrumentData` 按市场路由 Provider；**A 股** 在本地因子库、行业、组合、深度评分卡上能力最全（见 [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)）。
+- **多市场**：CN / US / HK / JP / KR / Crypto 等；`queryInstrumentData` 按市场路由 Provider；**A 股** 在组合、深度评分卡与机构评级等在线能力上最完整（见 [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)）。
 
-### 本地层 `@opptrix/market-data-store`
+### 本地层 `@opptrix/market-data` / `market-data-store`
 
-- SQLite：A 股因子、K 线、行业、instruments 表等。
-- **SyncEngine**：从在线 Engine 拉取并入库；支持 pack / 增量计划。
-- 供 Hub、MCP 工具（`screen_local_universe` 等）与决策雷达使用。
+- SQLite / DuckDB：历史行情缓存与控制面（向后兼容保留）；**本地因子选股与基础数据自动同步已停用**。
+- 选股与研究请走在线 `queryInstrumentData` / Hub `instrument_*` / Agent MCP 工具。
 
 ## 应用层 `@opptrix/agent`
 
 - **AgentEngine**：OpenAI 兼容 Function Calling + 进程内 MCP Broker。
-- **ToolRegistry**：40+ 工具（市场、选股、ETF、组合、本地库、发现策略等），见 `packages/agent/src/tools.ts`。
+- **ToolRegistry**：投研 MCP 工具（市场、ETF、组合、跨市场搜索与评估等），见 `packages/agent/src/tools.ts`。
 - **多会话**：会话与消息持久化经 server → user-store。
 
 ## Hub 与 Search
@@ -122,7 +121,7 @@ Electron main
 |------|------|
 | `~/.opptrix/opptrix.db` | 配置、会话、关注、Provider 设置等（主存储） |
 | `~/.opptrix/portfolio.json` | A 股模拟组合账本 |
-| `~/.opptrix/market-data/` | 本地因子库 SQLite 与 pack |
+| `~/.opptrix/market-data/` | 历史行情缓存与控制面（本地因子选股已停用） |
 | `~/.opptrix/snapshots/` | 因子评估快照（stock-eval） |
 | `OPPTRIX_DATA_DIR` | 覆盖上述用户数据根目录 |
 

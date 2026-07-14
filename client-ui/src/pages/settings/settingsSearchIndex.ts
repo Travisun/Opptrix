@@ -26,8 +26,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', title: '常规', desc: '管理默认评分卡与后端连接状态' },
   { section: 'models', title: '模型', desc: '配置 LLM 提供商与可用模型' },
   { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商、拖拽回退顺序', keywords: ['priority', '回退', '拖拽', '排序'] },
-  { section: 'basic_data', title: '基础数据', desc: '查看本地基础数据加载状态与同步进度' },
-  { section: 'discover_strategies', title: '选股策略', desc: '查看内置策略、管理自编策略与复制编辑' },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
@@ -56,12 +54,6 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
   { section: 'data_providers', group: 'A 股', title: 'API Token', desc: '粘贴 Token', keywords: ['token', '密钥'] },
   { section: 'data_providers', title: '能力绑定', keywords: ['binding', 'override'] },
-
-  // 选股策略
-  { section: 'discover_strategies', title: '选股策略', desc: '内置策略与自编策略', keywords: ['挖掘', 'discover'] },
-  { section: 'discover_strategies', title: '内置策略', keywords: ['价值', '成长', '质量', '动量', '均衡', '逆向'] },
-  { section: 'discover_strategies', title: '自编策略', keywords: ['自定义', '新建', '复制'] },
-  { section: 'discover_strategies', title: '策略名称', keywords: ['prompt', '方法论', '执行说明'] },
 
   // 新闻订阅
   { section: 'news_feed', title: 'RSS 订阅', desc: '添加订阅源', keywords: ['订阅', 'RSSHub', 'Atom', '资讯', '新闻中心'] },
@@ -96,8 +88,6 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   general: '常规',
   models: '模型',
   data_providers: '数据源',
-  basic_data: '基础数据',
-  discover_strategies: '选股策略',
   news_feed: '新闻订阅',
   translation: '翻译',
   multimodal: '多模态',

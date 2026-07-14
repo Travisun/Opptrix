@@ -32,7 +32,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_market_regime: {
     hubFeature: 'market_regime',
     miningEligible: true,
-    usageGuide: '判断 A 股/美股宏观环境（牛熊、风险偏好、建议策略方向）；挖掘或组合分析前先了解大盘背景时使用。',
+    usageGuide: '判断 A 股/美股宏观环境（牛熊、风险偏好）；挖掘或组合分析前先了解大盘背景。',
     compliance: '只读；profile_scope 默认 cn；us 需 TickFlow/在线 K 线可用；勿重复调用。',
   },
   get_market_dynamics: {
@@ -46,36 +46,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: true,
     usageGuide: 'A 股单股趋势一句话研判（均线、相对沪深300、可选持仓盈亏）；用户问「走势怎么看」且已有代码时使用。',
     compliance: '仅 CN 股票；code 必填；holding_cost 可选；深度分析仍须 get_instrument_snapshot / evaluate_instrument。',
-  },
-  screen_stocks: {
-    hubFeature: 'screening',
-    miningEligible: true,
-    usageGuide: 'A 股本地日 K 衍生因子条件筛选（momentum_1m/3m/6m、volume_ratio、volatility_20d、drawdown_60d）；扩大/收紧候选池首选；不确定因子名时先 get_local_universe_screen_schema。',
-    compliance: 'conditions 必填；factor 须为 schema 列出的 6 个因子之一；top_n 默认 20、挖掘建议 ≤ 80；本地因子未就绪时 get_local_data_status 确认后提示用户同步。',
-  },
-  get_local_universe_screen_schema: {
-    hubFeature: 'local_universe_screen_schema',
-    miningEligible: true,
-    usageGuide: '编写 screen_stocks / screen_local_universe 条件前，获取可用因子名、行业/板块过滤与示例。',
-    compliance: '只读；无参数；factor 名须原样用于 conditions / factor_conditions。',
-  },
-  screen_local_universe: {
-    hubFeature: 'local_universe_screen',
-    miningEligible: true,
-    usageGuide: '本地多维度初选：因子 + 行业/板块(SH/SZ/BJ) + 评分/PE/PB/市值；比 screen_stocks 更适合行业主题或板块限定。',
-    compliance: '至少一项 factor_conditions 或 filters；top_n ≤ 200；行业名可先 list_local_industries；勿编造 factor 名。',
-  },
-  screen_local_industry_stocks: {
-    hubFeature: 'local_industry_screen',
-    miningEligible: true,
-    usageGuide: '在指定行业内叠加本地因子/评分/估值初选；行业主题挖掘时优于全市场 screen_stocks。',
-    compliance: '须指定 industry / industries / industry_contains 之一；factor_conditions 因子须来自 schema；top_n ≤ 200。',
-  },
-  search_local_instruments: {
-    hubFeature: 'search_local_instruments',
-    miningEligible: true,
-    usageGuide: '搜索本地已同步名录（A 股/港美/Crypto）；离线或需快速定位已入库标的时使用；命中 code/ref_label 用于 get_instrument_*。',
-    compliance: 'keyword 必填；markets 可选过滤；无本地数据时改 search_instruments（在线）；同一 keyword 勿与 search 重复调用。',
   },
   screen_us_universe: {
     hubFeature: 'local_us_screen',
@@ -95,28 +65,10 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'Crypto 交易对名录筛选（keyword/quote/base_contains）；7×24 市场初选时使用。',
     compliance: 'top_n ≤ 200；结果 pair 用于 get_instrument_snapshot（market=CRYPTO）。',
   },
-  list_local_industries: {
-    hubFeature: 'local_industry_list',
-    miningEligible: true,
-    usageGuide: '行业主题分析前获取可用行业名称；keyword 模糊查找（如「半导体」「银行」）。',
-    compliance: '只读；行业名须原样传入 get_local_industry_stocks / screen_local_industry_stocks / industry_mining；无数据时 get_local_data_status 确认。',
-  },
-  get_local_industry_stocks: {
-    hubFeature: 'market_industry_stocks',
-    miningEligible: true,
-    usageGuide: '列出某行业成分股（价量、综合评分）；行业对比后锁定龙头或扩散分析时使用。',
-    compliance: 'industry 必填且为精确名称；limit ≤200；深度分析再对单股 evaluate_instrument / get_instrument_snapshot。',
-  },
-  get_industry_stats: {
-    hubFeature: 'market_industry_stats',
-    miningEligible: true,
-    usageGuide: '行业涨跌对比、估值水平、均评分；解释候选股所处行业强弱或选强势/弱势行业时使用。',
-    compliance: '只读；可选 trade_date；行业级聚合，不替代单股 get_instrument_snapshot。',
-  },
   batch_instrument_snapshots: {
     hubFeature: 'instrument_batch_snapshots',
     miningEligible: true,
-    usageGuide: `初选后批量获取候选截面（行业、评分、PE/PB、关键因子）；A 股挖掘首选。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `对已有候选代码批量拉取在线聚合快照（行情/概况等）。${INSTRUMENT_REF_USAGE}`,
     compliance: 'instruments 或 codes 一次传入，建议 ≤ 80；禁止对同一列表重复调用。',
   },
   get_watchlist: {
@@ -130,12 +82,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: true,
     usageGuide: '快速获取关注股或多股雷达摘要（估值分位、主力净流入、评分卡）；codes 省略则自动使用用户关注列表。',
     compliance: 'codes 批量或省略；适合 5–30 只 A 股；深度分析仍须 get_instrument_snapshot。',
-  },
-  get_local_data_status: {
-    hubFeature: 'market_db_status',
-    miningEligible: false,
-    usageGuide: '确认本地名录、行业、日 K、离线因子是否就绪（轻量查询，不扫全库）；local_factor_ready=false 时勿调用 screen_stocks。',
-    compliance: '只读；勿用于触发同步；引导用户前往 设置 → 基础数据。',
   },
   get_etf_list: {
     hubFeature: 'etf_list',
@@ -206,7 +152,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   evaluate_instrument: {
     hubFeature: 'instrument_evaluation',
     miningEligible: true,
-    usageGuide: `单只标的评估打分：A 股为因子评分卡，其他市场为技术分析 bundle；需要量化 match_score 依据时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `单只标的在线评估：A 股为评分卡、其他市场为技术分析 bundle；已有代码且需要量化依据时使用。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；A 股可指定 scorecard；非 CN 市场先 get_instrument_capabilities 确认支持。',
   },
   get_instrument_strategy_signal: {
@@ -272,8 +218,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   run_backtest: {
     hubFeature: 'backtest',
     miningEligible: true,
-    usageGuide: '因子 IC 回测验证。',
-    compliance: '多股 codes；计算密集，非挖掘必经路径。',
+    usageGuide: '对已知代码列表做评分卡 IC 回测。',
+    compliance: 'codes 必填；小样本验证；计算密集，非挖掘必经路径。',
   },
   get_closing_report: {
     hubFeature: 'market_report',
@@ -290,14 +236,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
   industry_mining: {
     hubFeature: 'industry_mining',
     miningEligible: true,
-    usageGuide: '产业链透视、上下游代表公司；配合 list_local_industries / get_industry_stats 做行业主题深度分析。',
-    compliance: 'industry 名称需具体；不替代单股财务核实；可与 get_local_industry_stocks 交叉验证代表公司。',
+    usageGuide: '产业链透视、上下游代表公司；行业主题深度分析时使用，不依赖本地行业库。',
+    compliance: 'industry 名称需具体（如「半导体」「新能源车」）；不替代单股财务核实；代表公司可用 search_instruments → get_instrument_snapshot / evaluate_instrument 核实。',
   },
   industry_mermaid: {
     hubFeature: 'industry_mermaid',
     miningEligible: true,
     usageGuide: '输出产业链 Mermaid mindmap 源码；用户需要可视化产业链结构时使用。',
-    compliance: '展示用；分析逻辑仍须 industry_mining 或单股工具支撑。',
+    compliance: '展示用；不依赖本地行业库；分析逻辑仍须 industry_mining 或单股工具支撑。',
   },
   strategy_report: {
     hubFeature: 'strategy_report',

@@ -79,7 +79,7 @@ portfolio_* · industry_mining · market_report · backtest
 instrument_* · discover_* · market_regime · market_dynamics
 ```
 
-本地库能力多经 **MCP 工具**（`screen_local_universe`、`get_local_data_status` 等）暴露。  
+本地筛选类 MCP 工具（`screen_local_universe` 等）已移除；请使用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`。  
 参数见 [docs/API.md](../docs/API.md)。
 
 ## 单包构建

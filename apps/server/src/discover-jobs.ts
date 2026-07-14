@@ -138,12 +138,15 @@ export function startDiscoverJob(
 ): DiscoverJobSnapshot {
   const strategy = getDiscoverStrategy(strategyId)
   if (!strategy) throw new Error(`未知策略: ${strategyId}`)
+  const profile = primaryDiscoverProfile(strategy)
+  if (profile === 'cn_equity') {
+    throw new Error('A 股自动选股策略已移除（本地因子不可用），请改用 ETF 或跨市场策略')
+  }
 
   pruneOldJobs()
   const id = randomUUID()
   const now = new Date().toISOString()
   const prompt = `${strategy.name}：${strategy.description}`
-  const profile = primaryDiscoverProfile(strategy)
 
   const job: DiscoverJobSnapshot = {
     id,
@@ -215,6 +218,9 @@ export function startDiscoverCustomJob(
 ): DiscoverJobSnapshot {
   const text = prompt.trim()
   if (!text) throw new Error('请输入选股策略描述')
+  if (profile === 'cn_equity') {
+    throw new Error('A 股自动选股策略已移除（本地因子不可用），请改用 ETF 或跨市场策略')
+  }
 
   pruneOldJobs()
   const id = randomUUID()

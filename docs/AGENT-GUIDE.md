@@ -10,9 +10,9 @@
 
 **Opptrix** 是一款 **全球多市场投研数据查询与信息整理工具**（非券商、非投顾、非交易终端）：
 
-- 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取 **A 股、美股、港股、日股、韩股、加密货币** 等市场的行情、因子、新闻与结构化数据，再生成中文分析。
+- 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取 **A 股、美股、港股、日股、韩股、加密货币** 等市场的行情、评估、新闻与结构化数据，再生成中文分析。
 - 提供 **Web** 与 **Desktop**（Electron + 本地 API sidecar），**共用同一套 React UI 与 Fastify API**。
-- 核心能力：跨市场标的搜索与筛选、个股/ETF 诊断、本地 A 股因子库、新闻订阅、行情动态、机构评级（A 股）、策略回测、关注列表与组合账本等。
+- 核心能力：跨市场标的搜索、个股/ETF 诊断、行业透视、新闻订阅、行情动态、机构评级（A 股）、策略回测、关注列表与组合账本等（A 股全市场本地因子选股已停用）。
 
 **面向用户的完整说明与醒目风险提示**见根目录 [README.md](../README.md) 顶部「重要风险提示与用户须知」。
 
@@ -138,10 +138,11 @@ Opptrix/
 - 工具元数据（何时使用、调用规范）：`packages/agent/src/tool-meta.ts`
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（末项可自由输入），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
-- **行业分析**：`list_local_industries` → `get_industry_stats` / `get_local_industry_stocks` → `industry_mining`
+- **行业分析**：`industry_mining` / `industry_mermaid`（不依赖本地行业库）→ 代表公司用 `search_instruments` + `get_instrument_*`
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_watchlist_radar` / `get_trend_brief`
 - **跨市场初选**：`screen_us_universe` / `screen_hk_universe` / `screen_crypto_universe` 或 `search_instruments`
-- 本地因子筛选（`screen_local_universe` 等）与 legacy 单市场工具（`evaluate_stock` 等）已从 Agent 移除，统一用 `get_instrument_*` / `evaluate_instrument`
+- 本地因子/行业筛选与基础数据同步已停用；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
+- **A 股股票 Discover 自动选股策略已移除**（依赖本地因子）；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
 
 ### 4.3 数据层
 
@@ -152,13 +153,12 @@ Opptrix/
 - `AshareEngine`：按 capability 在多个 Provider（现名 driver）间自动回退
 - 内置 Provider：东财、efinance、TDX（mootdx/pytdx）、腾讯、新浪、同花顺、网易、雪球、股吧、巨潮、中证指数、统计局、Tushare 等（见 `drivers/register.ts`）
 - 组合账本：`~/.opptrix/portfolio.json`
-- **扩展方向**：A 股 ETF 行情/挖掘（Phase 1）→ 美股 → 虚拟货币；新增源 = 一个 Provider module（`providers/<id>/`）+ `bindings()` + 可选 `settings()` 自描述；配置在设置页 **基础数据 → 数据源** 按市场分组自动出现
+- **扩展方向**：A 股 ETF 行情/挖掘（Phase 1）→ 美股 → 虚拟货币；新增源 = 一个 Provider module（`providers/<id>/`）+ `bindings()` + 可选 `settings()` 自描述；配置在设置页 **数据源** 按市场分组自动出现
 
-**本地挖掘层** `@opptrix/market-data`：
+**本地层** `@opptrix/market-data`（缓存/兼容，非选股主路径）：
 
-- SQLite 存储 A 股行业映射、截面快照等（ETF / 多市场 schema 见 DATA-LAYER §8）
-- 本地因子筛选与全量同步已停用；`market_db_status` 返回名录/截面规模（`get_local_data_status` 工具）
-- 行业列表、决策雷达等只读能力仍可走本地库；选股用 `screen_stocks` 在线筛选
+- Schema / 历史数据可保留（向后兼容），但 boot 不再同步基础数据、不再计算本地因子
+- `market_db_status` / `market_db_sync` / 本地筛选 feature 统一返回已停用；请用在线 `search_instruments` / `evaluate_instrument` / `get_instrument_chart`
 
 ### 4.4 前端主界面
 
