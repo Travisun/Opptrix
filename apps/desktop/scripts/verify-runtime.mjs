@@ -57,6 +57,18 @@ if (!fs.existsSync(sqliteNode)) {
   fail(`missing ${sqliteNode} — run stage-runtime.mjs`)
 }
 
+const duckdbNode = path.join(STAGE, 'node_modules/duckdb/lib/binding/duckdb.node')
+if (!fs.existsSync(duckdbNode)) {
+  fail(`missing ${duckdbNode} — run stage-runtime.mjs`)
+}
+
+const duckdbNeoPkg = `@duckdb/node-bindings-${target.platform}-${target.arch}`
+const duckdbNeoNode = path.join(STAGE, 'node_modules', ...duckdbNeoPkg.split('/'), 'duckdb.node')
+const duckdbNeoMeta = path.join(STAGE, 'node_modules/@duckdb/node-bindings/package.json')
+if (fs.existsSync(duckdbNeoMeta) && !fs.existsSync(duckdbNeoNode)) {
+  fail(`missing ${duckdbNeoNode} — run stage-runtime.mjs (${duckdbNeoPkg})`)
+}
+
 if (!hostMatchesTarget(target)) {
   console.log(
     `verify-runtime: skip live sidecar (host ${process.platform}-${process.arch}`

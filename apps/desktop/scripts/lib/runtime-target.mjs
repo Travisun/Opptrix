@@ -39,25 +39,43 @@ export function npmEnv(target, extra = {}) {
 }
 
 export function electronRebuildEnv(electronVersion, target) {
+  // Headers for node-gyp must come from Electron's *headers* dist (node-*-headers.tar.gz
+  // in SHASUMS256.txt). Do NOT reuse ELECTRON_MIRROR (full release CDN / npmmirror electrons)
+  // — those SHASUMS omit headers and node-gyp fails with checksum mismatches.
   const disturl = (
-    process.env.npm_config_disturl
-    || process.env.ELECTRON_MIRROR
-    || 'https://electronjs.org/headers'
+    process.env.OPPTRIX_ELECTRON_HEADERS_URL?.trim()
+    || process.env.npm_config_disturl?.trim()
+    || 'https://artifacts.electronjs.org/headers/dist'
   ).replace(/\/$/, '')
   const env = {
     npm_config_runtime: 'electron',
     npm_config_target: electronVersion,
     npm_config_disturl: disturl,
+    // Clear inherited Electron binary mirrors so npm/node-gyp cannot pick them up.
+    ELECTRON_MIRROR: '',
+    electron_mirror: '',
   }
   if (process.env.OPPTRIX_FORCE_NATIVE_REBUILD === '1') {
     env.npm_config_build_from_source = 'true'
   }
-  // duckdb@1.4.x vendored fmt breaks on MSVC 14.51+ (VS2026). Prefer VS2022 toolset when present.
+  // Prefer VS2022 toolset when present (windows-latest may ship newer MSVC).
   if (target.platform === 'win32') {
     env.GYP_MSVS_VERSION = process.env.GYP_MSVS_VERSION?.trim() || '2022'
     env.npm_config_msvs_version = process.env.npm_config_msvs_version?.trim() || '2022'
   }
   return npmEnv(target, env)
+}
+
+/** Env for downloading official Node ABI binaries (N-API modules usable under ELECTRON_RUN_AS_NODE). */
+export function nodeNativeEnv(target) {
+  return npmEnv(target, {
+    npm_config_runtime: 'node',
+    npm_config_target: process.versions.node,
+    npm_config_disturl: '',
+    npm_config_build_from_source: '',
+    ELECTRON_MIRROR: '',
+    electron_mirror: '',
+  })
 }
 
 export function hostMatchesTarget(target) {

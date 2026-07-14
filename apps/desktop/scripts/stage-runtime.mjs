@@ -1,7 +1,10 @@
 #!/usr/bin/env node
 /**
  * Stage a self-contained Node runtime for the desktop sidecar (production bundle).
- * Native modules are rebuilt for Electron's embedded Node (ELECTRON_RUN_AS_NODE sidecar).
+ *
+ * Sidecar runs via Electron's process.execPath + ELECTRON_RUN_AS_NODE:
+ * - better-sqlite3: needs Electron ABI prebuild / rebuild
+ * - duckdb: N-API — use official Node prebuilds (no Electron binary; source compile is huge/flaky)
  */
 import fs from 'node:fs'
 import path from 'node:path'
@@ -11,6 +14,7 @@ import { fileURLToPath } from 'node:url'
 import {
   electronRebuildEnv,
   hostMatchesTarget,
+  nodeNativeEnv,
   resolveRuntimeTarget,
   runNodeScript,
   runNpm,
@@ -153,16 +157,27 @@ function ensureBetterSqlite3Prebuild() {
     process.env.OPPTRIX_PREBUILD_MIRROR?.trim()
     || 'https://cdn.npmmirror.com/binaries/better-sqlite3'
   ).replace(/\/$/, '')
-  const url = `${mirrorBase}/v${version}/${asset}`
   const cacheDir = path.join(STAGE, '.cache/prebuilds')
   const archive = path.join(cacheDir, asset)
 
   console.log(`Fetching better-sqlite3 prebuild (${target.platform}-${target.arch}, electron ${ELECTRON_VERSION})…`)
-  try {
-    if (!fs.existsSync(archive)) downloadFile(url, archive)
-    extractTarGz(archive, sqliteDir)
-  } catch (err) {
-    console.warn(`Prebuild mirror failed: ${err instanceof Error ? err.message : err}`)
+  const urls = [
+    `${mirrorBase}/v${version}/${asset}`,
+    `https://github.com/WiseLibs/better-sqlite3/releases/download/v${version}/${asset}`,
+  ]
+  let fetched = false
+  for (const url of urls) {
+    try {
+      if (!fs.existsSync(archive)) downloadFile(url, archive)
+      extractTarGz(archive, sqliteDir)
+      fetched = true
+      break
+    } catch (err) {
+      try { fs.unlinkSync(archive) } catch { /* ignore */ }
+      console.warn(`Prebuild fetch failed (${url}): ${err instanceof Error ? err.message : err}`)
+    }
+  }
+  if (!fetched) {
     console.log('Trying prebuild-install…')
     const install = runNpm(
       ['exec', '--', 'prebuild-install', '-r', 'electron', '-t', ELECTRON_VERSION],
@@ -208,6 +223,103 @@ function ensureFfmpegStatic() {
   if (dl.status !== 0) {
     console.error('ffmpeg-static install failed — sidecar audio/video features may be unavailable')
   }
+}
+
+function duckdbBindingNode() {
+  return path.join(STAGE, 'node_modules/duckdb/lib/binding/duckdb.node')
+}
+
+/**
+ * duckdb publishes Node ABI binaries only (not Electron). The addon is N-API, so a
+ * Node prebuild loads under ELECTRON_RUN_AS_NODE. Avoid rebuilding for Electron —
+ * that 404s the prebuild and falls back to a multi-hour MSVC/clang compile that often fails.
+ */
+function ensureDuckdbPrebuild() {
+  const duckdbNode = duckdbBindingNode()
+  if (fs.existsSync(duckdbNode)) return true
+
+  const duckdbDir = path.join(STAGE, 'node_modules/duckdb')
+  const pkgJsonPath = path.join(duckdbDir, 'package.json')
+  if (!fs.existsSync(pkgJsonPath)) {
+    console.warn('duckdb not installed in runtime-stage')
+    return false
+  }
+
+  const pkgJson = JSON.parse(fs.readFileSync(pkgJsonPath, 'utf8'))
+  const version = pkgJson.version
+  const abi = process.versions.modules
+  const asset = `duckdb-v${version}-node-v${abi}-${target.platform}-${target.arch}.tar.gz`
+  const host = String(pkgJson.binary?.host || 'https://npm.duckdb.org/duckdb').replace(/\/$/, '')
+  const url = `${host}/${asset}`
+  const cacheDir = path.join(STAGE, '.cache/prebuilds')
+  const archive = path.join(cacheDir, asset)
+  // Tarball contains binding/duckdb.node → extract into lib/ → lib/binding/duckdb.node
+  const extractRoot = path.join(duckdbDir, 'lib')
+
+  console.log(
+    `Fetching duckdb Node prebuild (${target.platform}-${target.arch}, node-v${abi}; N-API for ELECTRON_RUN_AS_NODE)…`,
+  )
+  try {
+    if (!fs.existsSync(archive)) downloadFile(url, archive)
+    extractTarGz(archive, extractRoot)
+  } catch (err) {
+    console.warn(`DuckDB prebuild download failed: ${err instanceof Error ? err.message : err}`)
+    console.log('Trying node-pre-gyp with Node runtime (not Electron)…')
+    const install = runNpm(
+      ['exec', '--', 'node-pre-gyp', 'install'],
+      {
+        cwd: duckdbDir,
+        target,
+        extraEnv: nodeNativeEnv(target),
+      },
+    )
+    if (install.status !== 0) return false
+  }
+
+  if (!fs.existsSync(duckdbNode)) {
+    console.error('duckdb prebuild install did not produce duckdb.node')
+    return false
+  }
+  return true
+}
+
+/**
+ * @duckdb/node-api loads platform optionalDependencies (@duckdb/node-bindings-{platform}-{arch}).
+ * AppImage + deb share this runtime-stage; missing bindings break neo Duck reads on Linux.
+ * Explicitly ensure the glibc (non-musl) package for the packaging target.
+ */
+function duckdbNeoBindingsPackageName() {
+  return `@duckdb/node-bindings-${target.platform}-${target.arch}`
+}
+
+function duckdbNeoBindingsNode() {
+  const pkgName = duckdbNeoBindingsPackageName()
+  return path.join(STAGE, 'node_modules', ...pkgName.split('/'), 'duckdb.node')
+}
+
+function ensureDuckdbNeoBindings() {
+  const neoNode = duckdbNeoBindingsNode()
+  if (fs.existsSync(neoNode)) return true
+
+  const metaPath = path.join(STAGE, 'node_modules/@duckdb/node-bindings/package.json')
+  if (!fs.existsSync(metaPath)) {
+    console.warn('@duckdb/node-bindings not installed in runtime-stage — skipping neo binding check')
+    return true
+  }
+
+  const version = JSON.parse(fs.readFileSync(metaPath, 'utf8')).version
+  const pkgName = duckdbNeoBindingsPackageName()
+  console.log(`Installing ${pkgName}@${version} for ${target.platform}-${target.arch}…`)
+  const install = runNpm(
+    ['install', `${pkgName}@${version}`, '--no-save', '--omit=dev', '--no-audit', '--no-fund', '--ignore-scripts'],
+    { cwd: STAGE, target },
+  )
+  if (install.status !== 0) return false
+  if (!fs.existsSync(neoNode)) {
+    console.error(`missing ${neoNode} after installing ${pkgName}`)
+    return false
+  }
+  return true
 }
 
 rm(STAGE)
@@ -263,8 +375,10 @@ if (install.status !== 0) process.exit(install.status ?? 1)
 
 ensureFfmpegStatic()
 
-console.log(`Rebuilding native modules for Electron ${ELECTRON_VERSION} (${target.platform}-${target.arch})…`)
-const rebuild = runNpm(['rebuild'], {
+// Only better-sqlite3 needs an Electron-matched ABI. Do not `npm rebuild` duckdb for
+// Electron — there is no prebuild and source compile is prohibitively slow / flaky on CI.
+console.log(`Rebuilding better-sqlite3 for Electron ${ELECTRON_VERSION} (${target.platform}-${target.arch})…`)
+const rebuild = runNpm(['rebuild', 'better-sqlite3'], {
   cwd: STAGE,
   target,
   extraEnv: electronRebuildEnv(ELECTRON_VERSION, target),
@@ -276,18 +390,25 @@ if (!ensureBetterSqlite3Prebuild()) {
   process.exit(1)
 }
 
-const duckdbNode = path.join(STAGE, 'node_modules/duckdb/lib/binding/duckdb.node')
-if (!fs.existsSync(duckdbNode)) {
+if (!ensureDuckdbPrebuild()) {
   console.error(
-    `missing ${duckdbNode} — duckdb must rebuild for Electron ${ELECTRON_VERSION}`
-    + ` (${target.platform}-${target.arch}). Prebuild 404 + source compile failure`
-    + ' is usually an MSVC toolset mismatch; use windows-2022 (VS2022) for packaging.',
+    `missing ${duckdbBindingNode()} — duckdb needs its official Node prebuild`
+    + ` (${target.platform}-${target.arch}, node-v${process.versions.modules}).`
+    + ' Electron-tagged binaries are not published; source compile is not used for packaging.',
   )
-  process.exit(rebuild.status ?? 1)
+  process.exit(1)
+}
+
+if (!ensureDuckdbNeoBindings()) {
+  console.error(
+    `missing ${duckdbNeoBindingsNode()} — required for @duckdb/node-api`
+    + ` (${duckdbNeoBindingsPackageName()}). AppImage/deb/Win/Mac packaged sidecars all need this.`,
+  )
+  process.exit(1)
 }
 
 if (rebuildFailed) {
-  console.warn('npm rebuild reported errors but required native bindings are ready — continuing')
+  console.warn('better-sqlite3 rebuild reported errors but required native bindings are ready — continuing')
 }
 
 console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)

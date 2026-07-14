@@ -174,12 +174,14 @@
       "artifactName": "${productName}-${version}-Linux.${ext}",
       "executableName": "opptrix",
       "desktop": {
-        "Name": "Opptrix",
-        "Comment": "面向个人投资者的多市场投研助手",
-        "GenericName": "投研助手",
-        "Keywords": "股票;投研;全球;美股;港股;加密货币;财经;",
-        "StartupWMClass": "Opptrix",
-        "MimeType": "x-scheme-handler/opptrix;"
+        "entry": {
+          "Name": "Opptrix",
+          "Comment": "面向个人投资者的多市场投研助手",
+          "GenericName": "投研助手",
+          "Keywords": "股票;投研;全球;美股;港股;加密货币;财经;",
+          "StartupWMClass": "Opptrix",
+          "MimeType": "x-scheme-handler/opptrix;"
+        }
       },
       "target": [
         "AppImage",
