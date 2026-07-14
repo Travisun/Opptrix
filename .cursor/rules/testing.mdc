@@ -29,66 +29,46 @@ alwaysApply: false
 ### 文件位置
 
 ```
-packages/a-stock-layer/
-├── src/
-│   ├── core/
-│   │   ├── provider-health.ts
-│   │   └── provider-health.test.ts  ← 同目录
-│   └── ...
-tests/                                ← 或统一目录
-├── provider-health.test.mjs
+tests/                          ← 正式 CI 套件（node:test，*.test.mjs）
+├── smoke.test.mjs
+├── helpers.mjs                 ← waitForUrl / liveNetworkTestsEnabled 等
+└── ...
+packages/*/src/**/*.ts          ← 实现；勿再遗留未接入的 vitest 目录
 ```
+
+手动 Provider 探针（需密钥/外网，不进 CI）：`packages/a-stock-layer` 的 `test:zzshare` / `test:tickflow` / `test:free-gaps`。
 
 ### 测试模式
 
-```typescript
-// ✅ 正确：Arrange-Act-Assert
-describe('CircuitBreaker', () => {
-  it('should trip after 3 consecutive failures', () => {
-    // Arrange
-    const breaker = new CircuitBreaker({ threshold: 3 })
-    
-    // Act
-    breaker.recordFailure()
-    breaker.recordFailure()
-    breaker.recordFailure()
-    
-    // Assert
-    expect(breaker.state).toBe('OPEN')
-  })
-})
+```javascript
+// ✅ Arrange-Act-Assert — node:test
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
 
-// ✅ 正确：边界条件测试
-describe('normalizeCode', () => {
-  it('should handle empty string', () => {
-    expect(normalizeCode('')).toBe('')
-  })
-  
-  it('should pad 6-digit code', () => {
-    expect(normalizeCode('600519')).toBe('600519')
-  })
-  
-  it('should handle SH prefix', () => {
-    expect(normalizeCode('sh600519')).toBe('600519')
+describe('CircuitBreaker', () => {
+  it('trips after 3 consecutive failures', () => {
+    const breaker = new CircuitBreaker({ threshold: 3 })
+    breaker.recordFailure()
+    breaker.recordFailure()
+    breaker.recordFailure()
+    assert.equal(breaker.state, 'OPEN')
   })
 })
 ```
 
 ### Mock 策略
 
-```typescript
-// ✅ 正确：Mock 外部依赖
-vi.mock('@opptrix/user-store', () => ({
-  getUserDataStore: () => ({
-    speedRanking: { get: vi.fn(), set: vi.fn() },
-  }),
-}))
+```javascript
+// ✅ Mock 网络：优先依赖注入 / 假 driver；必要时 stub fetch
+import assert from 'node:assert/strict'
+```
 
-// ✅ 正确：Mock 网络请求
-vi.spyOn(global, 'fetch').mockResolvedValue({
-  ok: true,
-  json: () => Promise.resolve({ data: [] }),
-})
+Live 上游默认关闭：
+
+```javascript
+import { liveNetworkTestsEnabled } from './helpers.mjs'
+const LIVE = liveNetworkTestsEnabled() // OPPTRIX_LIVE_NETWORK_TESTS=1
+test('…', { skip: !LIVE }, async () => { /* real upstream */ })
 ```
 
 ## 集成测试
@@ -177,14 +157,14 @@ describe('API /api/stock/:code', () => {
 # 单元测试
 npm run test
 
-# CI 等价
+# CI 等价（默认不上外网 live 探针）
 npm run test:ci
 
-# 特定文件
-npx vitest run tests/provider-health.test.mjs
+# 含真实上游探针（腾讯/新浪等）
+npm run test:live-network
 
-# 监听模式
-npx vitest watch
+# 特定文件
+node --test --test-force-exit tests/smoke.test.mjs
 ```
 
 ## 测试覆盖率
@@ -198,11 +178,9 @@ npx vitest watch
 | API 路由 | >60% |
 | UI 组件 | 关键路径 |
 
-### 覆盖率工具
+### Runner
 
-```bash
-npx vitest run --coverage
-```
+正式套件入口是 `scripts/run-tests.mjs`（`node:test`）。外网上游探针默认跳过，设 `OPPTRIX_LIVE_NETWORK_TESTS=1` 开启。
 
 ## 测试反模式
 
@@ -211,3 +189,4 @@ npx vitest run --coverage
 - ❌ **测试间依赖**：测试 A 的结果影响测试 B
 - ❌ **脆弱测试**：依赖特定执行顺序或时间
 - ❌ **无断言测试**：测试运行但不验证结果
+- ❌ **默认 CI 打真实上游**：live 探针应 opt-in，避免拖慢与抖失败

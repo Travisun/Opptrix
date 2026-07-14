@@ -1,7 +1,7 @@
 /**
  * 出站 IPv4-first × 提供商连接交叉测试
  *
- * 默认：强制 IPv4；该 host v4 失败后再试 v6；两者都失败则报错
+ * 默认只跑纯逻辑（CI）；设 OPPTRIX_LIVE_NETWORK_TESTS=1 才打真实上游。
  */
 import { describe, it, beforeEach, afterEach } from 'node:test'
 import assert from 'node:assert/strict'
@@ -16,9 +16,11 @@ import {
 import { testTencentConnection } from '../packages/a-stock-layer/dist/providers/tencent/api/probe.js'
 import { testSinafinanceConnection } from '../packages/a-stock-layer/dist/providers/sinafinance/api/probe.js'
 import { testAkshareConnection } from '../packages/a-stock-layer/dist/providers/akshare/driver.js'
+import { liveNetworkTestsEnabled } from './helpers.mjs'
 
 const TIMEOUT_MS = 12_000
 const ORIGINAL_FAMILY = process.env.OPPTRIX_OUTBOUND_FAMILY
+const LIVE = liveNetworkTestsEnabled()
 
 const DUAL_STACK = { family: 4 }
 const IPV4_ONLY = { family: 4 }
@@ -88,20 +90,15 @@ describe('outbound dual-stack cross matrix (logic)', () => {
   })
 
   for (const provider of FREE_PROVIDERS) {
-    it(`v4 failure on ${provider.id} can still connect via learned fallback`, async () => {
+    it(`v4 failure on ${provider.id} learns v6-first order`, () => {
       setupNetwork(NETWORK_PROFILES[0])
       noteHostConnectFailure(provider.host, 4)
       assert.deepEqual(getConnectFamiliesForHost(provider.host), [6, 4])
-      const result = await provider.testFn()
-      const learned = getConnectFamiliesForHost(provider.host)[0]
-      console.log(`  [v4-fail→fallback] ${provider.id}: ok=${result.ok} learned=${learned} ${result.message}`)
-      assert.equal(result.ok, true, result.message)
-      assert.ok(learned === 4 || learned === 6, `unexpected learned family ${learned}`)
     })
   }
 })
 
-describe('outbound dual-stack live — must-pass scenarios', () => {
+describe('outbound dual-stack live — must-pass scenarios', { skip: !LIVE }, () => {
   beforeEach(() => {
     resetOutboundNetworkForTests()
     delete process.env.OPPTRIX_OUTBOUND_FAMILY
@@ -140,6 +137,19 @@ describe('outbound dual-stack live — must-pass scenarios', () => {
     })
   }
 
+  for (const provider of FREE_PROVIDERS) {
+    it(`v4 failure on ${provider.id} can still connect via learned fallback`, async () => {
+      setupNetwork(NETWORK_PROFILES[0])
+      noteHostConnectFailure(provider.host, 4)
+      assert.deepEqual(getConnectFamiliesForHost(provider.host), [6, 4])
+      const result = await provider.testFn()
+      const learned = getConnectFamiliesForHost(provider.host)[0]
+      console.log(`  [v4-fail→fallback] ${provider.id}: ok=${result.ok} learned=${learned} ${result.message}`)
+      assert.equal(result.ok, true, result.message)
+      assert.ok(learned === 4 || learned === 6, `unexpected learned family ${learned}`)
+    })
+  }
+
   it('tencent raw outboundFetch under dual-stack auto', async () => {
     setupNetwork(NETWORK_PROFILES[0])
     const resp = await outboundFetch('https://qt.gtimg.cn/q=sh600519', {
@@ -150,7 +160,7 @@ describe('outbound dual-stack live — must-pass scenarios', () => {
   })
 })
 
-describe('outbound dual-stack live — known limitations', () => {
+describe('outbound dual-stack live — known limitations', { skip: !LIVE }, () => {
   beforeEach(() => {
     resetOutboundNetworkForTests()
     delete process.env.OPPTRIX_OUTBOUND_FAMILY
@@ -169,7 +179,6 @@ describe('outbound dual-stack live — known limitations', () => {
         applyFamilyEnv(combo.familyEnv)
         const result = await provider.testFn()
         console.log(`  [limitation] ${provider.id} ${combo.profileId}×${combo.familyId}: ok=${result.ok} ${result.message}`)
-        // 不强制失败也不强制成功：记录行为；若成功说明该环境 v6 亦可达
         assert.equal(typeof result.ok, 'boolean')
       })
     }

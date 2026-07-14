@@ -2,6 +2,10 @@
 /**
  * Cross-platform test runner — one file per subprocess for isolation,
  * per-file timeout, and --test-force-exit so stray watchers don't hang CI.
+ *
+ * Default suite stays offline-fast. Opt into real upstream probes with:
+ *   OPPTRIX_LIVE_NETWORK_TESTS=1 npm run test:ci
+ * or: npm run test:live-network
  */
 import { readdirSync } from 'node:fs'
 import path from 'node:path'
@@ -15,6 +19,10 @@ const testFiles = readdirSync(testsDir)
   .filter(name => name.endsWith('.test.mjs'))
   .sort()
   .map(name => path.join('tests', name))
+
+if (process.env.OPPTRIX_LIVE_NETWORK_TESTS === '1') {
+  console.log('[run-tests] OPPTRIX_LIVE_NETWORK_TESTS=1 — including live upstream probes')
+}
 
 const failures = []
 
@@ -30,6 +38,7 @@ for (const file of testFiles) {
       shell: false,
       timeout: PER_FILE_TIMEOUT_MS,
       killSignal: 'SIGKILL',
+      env: process.env,
     },
   )
   const elapsed = Date.now() - t0

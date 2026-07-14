@@ -2,6 +2,11 @@
  * Shared helpers for CI / local integration tests.
  */
 
+/** Opt-in live upstream probes — default off so CI stays offline-fast. */
+export function liveNetworkTestsEnabled() {
+  return process.env.OPPTRIX_LIVE_NETWORK_TESTS === '1'
+}
+
 /**
  * @param {string} url
  * @param {number} [timeoutMs]
