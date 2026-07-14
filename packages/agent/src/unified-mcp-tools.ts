@@ -160,7 +160,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'get_instrument_financials',
       category: '基本面',
-      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替',
+      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替。要资产负债/现金流明细请改用对应工具',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         report_type: {
@@ -175,6 +175,38 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('instrument_financials', {
         ...resolveInstrumentParams(a),
         report_type: a.report_type ?? 'all',
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_balance_sheet',
+      category: '基本面',
+      description: '资产负债表多期事实表（经 queryInstrumentData balance_sheet）；核实总资产/负债/权益时优先于摘要',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，过滤报告期 YYYY-MM-DD（返回该日及之后）',
+        },
+      }),
+      handler: (a) => d('instrument_balance_sheet', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_cash_flow',
+      category: '基本面',
+      description: '现金流量表多期事实表（经 queryInstrumentData cash_flow）；核实经营/筹资/投资现金流时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，过滤报告期 YYYY-MM-DD（返回该日及之后）',
+        },
+      }),
+      handler: (a) => d('instrument_cash_flow', {
+        ...resolveInstrumentParams(a),
         report_date: a.report_date ?? '',
       }),
     },
@@ -285,6 +317,28 @@ export function buildUnifiedInstrumentTools(
         market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
       }),
       handler: (a) => d('market_session', { market: a.market ?? 'CN' }),
+    },
+    {
+      name: 'get_cn_market_special',
+      category: '市场资金',
+      description:
+        'A 股专题：连板天梯、热度飙升榜、历史热股、个股热榜走势、异动原因、同花顺概念/行业指数目录与成分（须启用同花顺富耀）',
+      parameters: S({
+        kind: {
+          type: 'string',
+          description:
+            'limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list | ths_index_constituents',
+        },
+        code: { type: 'string', description: '个股或指数代码（hot_rank_trend / ths_index_constituents / anomaly_stock）' },
+        codes: { type: 'string', description: 'anomaly_stock 多码时可逗号分隔' },
+        date: { type: 'string', description: 'hot_history 必填 YYYY-MM-DD' },
+        period: { type: 'string', description: 'skyrocket：day|hour，默认 day' },
+        tag: { type: 'string', description: 'ths_index_list：cn_concept|region|tszs|industry；anomaly_list 可选' },
+        start: { type: 'string', description: 'hot_rank_trend 可选起始日' },
+        end: { type: 'string', description: 'hot_rank_trend 可选结束日' },
+        index_code: { type: 'string', description: 'ths_index_constituents 可选，同 code' },
+      }, ['kind']),
+      handler: (a) => d('cn_market_special', a),
     },
     {
       name: 'get_instrument_quotes',

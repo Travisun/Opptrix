@@ -324,10 +324,13 @@ export class ResearchHub {
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
         case 'instrument_profile': return this.queryInstrumentStandardData(params, 'profile', t0)
         case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
+        case 'instrument_balance_sheet': return this.queryInstrumentStandardData(params, 'balance_sheet', t0)
+        case 'instrument_cash_flow': return this.queryInstrumentStandardData(params, 'cash_flow', t0)
         case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
         case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
         case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
         case 'instrument_notices': return this.instrumentNotices(params, t0)
+        case 'cn_market_special': return this.cnMarketSpecial(params, t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2395,12 +2398,19 @@ export class ResearchHub {
   }
 
   /**
-   * 标准事实表能力 — profile / financials / shareholders / dividend / money_flow。
+   * 标准事实表能力 — profile / financials / balance_sheet / cash_flow / shareholders / dividend / money_flow。
    * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
    */
   private async queryInstrumentStandardData(
     params: Record<string, unknown>,
-    capability: 'profile' | 'financials' | 'shareholders' | 'dividend' | 'money_flow',
+    capability:
+      | 'profile'
+      | 'financials'
+      | 'balance_sheet'
+      | 'cash_flow'
+      | 'shareholders'
+      | 'dividend'
+      | 'money_flow',
     t0: number,
   ) {
     const ref = resolveInstrumentFromParams(params)
@@ -2409,6 +2419,8 @@ export class ResearchHub {
     const labels = {
       profile: '公司概况',
       financials: '财务摘要',
+      balance_sheet: '资产负债表',
+      cash_flow: '现金流量表',
       shareholders: '股东结构',
       dividend: '分红历史',
       money_flow: '资金流向',
@@ -2423,6 +2435,9 @@ export class ResearchHub {
     if (capability === 'financials') {
       opts.reportDate = params.report_date != null ? String(params.report_date) : ''
       opts.reportType = params.report_type != null ? String(params.report_type) : 'all'
+    }
+    if (capability === 'balance_sheet' || capability === 'cash_flow') {
+      opts.reportDate = params.report_date != null ? String(params.report_date) : ''
     }
     if (capability === 'shareholders' && params.report_date != null) {
       opts.reportDate = String(params.report_date)
@@ -2458,6 +2473,98 @@ export class ResearchHub {
         source: 'queryInstrumentData',
       },
       `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * A 股专题数据（同花顺富耀 custom，经 Engine.invokeCustomMethod）。
+   * 覆盖连板天梯/热股飙升/历史热榜/异动/同花顺指数目录与成分。
+   */
+  private async cnMarketSpecial(params: Record<string, unknown>, t0: number) {
+    const kind = String(params.kind ?? '').trim()
+    const kindMap: Record<string, { method: string; args: (p: Record<string, unknown>) => unknown[] | null }> = {
+      limit_up_ladder: {
+        method: 'thsLimitUpLadder',
+        args: () => [],
+      },
+      skyrocket: {
+        method: 'thsSkyrocketList',
+        args: p => [String(p.period ?? 'day')],
+      },
+      hot_history: {
+        method: 'thsHotStockListHistory',
+        args: p => {
+          const date = String(p.date ?? '').trim().slice(0, 10)
+          return date ? [date] : null
+        },
+      },
+      hot_rank_trend: {
+        method: 'thsHotStockRankTrend',
+        args: p => {
+          const code = String(p.code ?? p.symbol ?? '').trim()
+          if (!code) return null
+          const start = p.start != null ? String(p.start).trim() : undefined
+          const end = p.end != null ? String(p.end).trim() : undefined
+          return [code, start, end]
+        },
+      },
+      anomaly_list: {
+        method: 'thsAnomalyAnalysisList',
+        args: p => [p.tag != null ? String(p.tag) : undefined],
+      },
+      anomaly_stock: {
+        method: 'thsAnomalyAnalysisStock',
+        args: p => {
+          const codes = p.codes ?? p.code ?? p.symbol
+          if (codes == null || String(codes).trim() === '') return null
+          return [codes]
+        },
+      },
+      ths_index_list: {
+        method: 'thsIndexList',
+        args: p => [String(p.tag ?? 'cn_concept')],
+      },
+      ths_index_constituents: {
+        method: 'thsIndexConstituents',
+        args: p => {
+          const code = String(p.code ?? p.symbol ?? p.index_code ?? '').trim()
+          return code ? [code] : null
+        },
+      },
+    }
+
+    const spec = kindMap[kind]
+    if (!spec) {
+      return fail(
+        'kind 必填且须为：limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list | ths_index_constituents',
+        t0,
+      )
+    }
+    const args = spec.args(params)
+    if (!args) {
+      return fail(`kind=${kind} 缺少必填参数（code/date/codes 等）`, t0)
+    }
+
+    const r = await this.de.invokeCustomMethod('tonghuashun', spec.method, args)
+    if (!r.success) {
+      return fail(
+        r.error ?? '同花顺专题数据获取失败（请确认已配置富耀 API Key 并启用 tonghuashun）',
+        t0,
+      )
+    }
+    const raw = r.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        kind,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: spec.method,
+        hint: '须启用同花顺（富耀）Provider；标准板块目录仍优先 get_sector_list',
+      },
+      `${kind} ${rows.length} 条`,
       t0,
     )
   }

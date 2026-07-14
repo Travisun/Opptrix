@@ -113,6 +113,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '问是否开盘/交易时段时使用；非完整节假日日历。',
     compliance: '只读；market 默认 CN；精确交易日走 provider_ext，勿当作完整 calendar。',
   },
+  get_cn_market_special: {
+    hubFeature: 'cn_market_special',
+    miningEligible: true,
+    usageGuide:
+      'A 股专题：连板天梯 / 热股飙升 / 历史热榜 / 热榜走势 / 异动 / 同花顺概念指数目录与成分。须 kind；标准申万/板块目录仍用 get_sector_list。',
+    compliance: '依赖 tonghuashun（富耀）Key；勿用于美股港股；勿替代 get_market_dynamics 全景。',
+  },
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
@@ -140,8 +147,20 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_financials: {
     hubFeature: 'instrument_financials',
     miningEligible: true,
-    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；勿用 evaluate 代替核实。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；资产负债/现金流明细改用 get_instrument_balance_sheet / get_instrument_cash_flow。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；report_type 默认 all；引用具体 reportDate；无数据时声明缺口，禁止编造。',
+  },
+  get_instrument_balance_sheet: {
+    hubFeature: 'instrument_balance_sheet',
+    miningEligible: true,
+    usageGuide: `资产负债表多期事实表；问总资产/负债/权益、资产负债率明细时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 balance_sheet；勿用 evaluate 或自定义方法替代；无数据时声明缺口。',
+  },
+  get_instrument_cash_flow: {
+    hubFeature: 'instrument_cash_flow',
+    miningEligible: true,
+    usageGuide: `现金流量表多期事实表；问经营/投资/筹资现金流时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 cash_flow；勿用财务摘要的 operatingCashFlow 单字段敷衍完整表。',
   },
   get_instrument_shareholders: {
     hubFeature: 'instrument_shareholders',

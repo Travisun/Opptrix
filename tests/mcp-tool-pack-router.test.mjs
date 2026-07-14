@@ -74,6 +74,16 @@ test('resolver returns empty business packs when no match', () => {
   assert.deepEqual(packs, [])
 })
 
+test('resolver seeds fundamentals for balance sheet / cash flow', () => {
+  const packs = resolveSeedPacks({ message: '茅台最新资产负债表和经营现金流' })
+  assert.ok(packs.includes('fundamentals'))
+})
+
+test('resolver seeds market for 连板天梯', () => {
+  const packs = resolveSeedPacks({ message: '今天连板天梯看一下' })
+  assert.ok(packs.includes('market'))
+})
+
 test('activate expands active tool names across session', () => {
   const store = new ToolPackSessionStore()
   const sessionId = 'test-session'

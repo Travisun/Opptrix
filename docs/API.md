@@ -68,6 +68,8 @@
 | `market_regime` | `profile_scope?` (`cn` / `us`) | 市况快照（发现页横幅）；`us` 基于 SPY 动量 stub |
 | `instrument_profile` | InstrumentRef | 公司/标的概况事实表 |
 | `instrument_financials` | InstrumentRef + `report_type?` / `report_date?` | 财务摘要多期 |
+| `instrument_balance_sheet` | InstrumentRef + `report_date?` | 资产负债表多期 |
+| `instrument_cash_flow` | InstrumentRef + `report_date?` | 现金流量表多期 |
 | `instrument_shareholders` | InstrumentRef + `report_date?` | 股东结构 |
 | `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向 |
@@ -76,6 +78,7 @@
 | `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分 |
 | `etf_profile` | InstrumentRef / code | ETF 档案 |
 | `market_session` | `market?` | 轻量交易时段状态 |
+| `cn_market_special` | `kind` + 可选 code/date/tag… | A 股专题（连板天梯等） |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -139,10 +142,13 @@ POST /api/research
 |---------|--------|------|
 | `instrument_profile` | InstrumentRef | 公司/标的概况 |
 | `instrument_financials` | InstrumentRef + 可选 `report_type` / `report_date` | 财务摘要多期 |
+| `instrument_balance_sheet` | InstrumentRef + 可选 `report_date` | 资产负债表多期 |
+| `instrument_cash_flow` | InstrumentRef + 可选 `report_date` | 现金流量表多期 |
 | `instrument_shareholders` | InstrumentRef + 可选 `report_date` | 股东结构 |
 | `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向（主 CN） |
 | `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |
+| `cn_market_special` | `kind` + 按 kind 的 code/date/tag 等 | A 股专题（连板/热股/异动/同花顺指数；经 tonghuashun custom） |
 | `sector_list` | `market?` / `kind?` / `plate_type?` | 板块或行业目录 |
 | `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分股 |
 | `etf_profile` | InstrumentRef / code | ETF 档案 |

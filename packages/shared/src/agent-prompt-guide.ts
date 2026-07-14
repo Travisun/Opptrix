@@ -22,6 +22,7 @@ export function buildInstrumentNamespacePlaybook(): string {
 /** 标准 Instrument API 能力清单 — 与 data-layer InstrumentDataCapability 对齐 */
 export const STANDARD_INSTRUMENT_API_CAPABILITIES = [
   'realtime', 'kline', 'snapshot', 'profile', 'financials',
+  'balance_sheet', 'cash_flow',
   'stock_list', 'instrument_search', 'sector_list',
   'etf_list', 'etf_nav', 'etf_holdings', 'etf_snapshot',
 ] as const
@@ -34,7 +35,7 @@ export function buildStandardInstrumentApiPlaybook(): string {
     '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
-    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_shareholders / get_instrument_dividend；勿用 evaluate 或自定义方法替代',
+    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_balance_sheet / get_instrument_cash_flow / get_instrument_shareholders / get_instrument_dividend；勿用 evaluate 或自定义方法替代',
     '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
     '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
@@ -44,9 +45,10 @@ export function buildStandardInstrumentApiPlaybook(): string {
 /** 基本面事实表路径 — fundamentals pack 已加载时注入 */
 export function buildFundamentalsPlaybook(): string {
   return [
-    '【基本面事实表 — profile / financials / shareholders / dividend】',
+    '【基本面事实表 — profile / financials / balance_sheet / cash_flow / shareholders / dividend】',
     '1) 公司概况/概念/主业：get_instrument_profile（单只 InstrumentRef）',
     '2) 营收利润/ROE/同比：get_instrument_financials（report_type 默认 all）；引用具体 reportDate',
+    '2b) 资产负债表：get_instrument_balance_sheet；现金流量表：get_instrument_cash_flow',
     '3) 十大股东/股本：get_instrument_shareholders',
     '4) 分红派息史：get_instrument_dividend',
     '5) 禁止：用 evaluate_instrument 黑盒代替财务核实；禁止 invoke_provider_custom_method 调 sinaFinancialPivot 等重复标准能力',
@@ -144,9 +146,10 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
     '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
+    '2a) 连板天梯/热股飙升/异动/同花顺概念指数：get_cn_market_special(kind=…)；须启用同花顺；标准行业目录仍用 get_sector_list',
     '2b) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
     '2c) 是否开盘/交易时段：get_market_session；非完整节假日日历（精确交易日走 provider_ext）',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',

@@ -57,6 +57,7 @@ const SEED_RULES: SeedRule[] = [
     patterns: [
       /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘|资金流|资金净流入|主力.*净流入|北向/i,
       /沪深300|风险偏好|市场状态|交易时段|是否开盘|盘前|盘后/,
+      /连板天梯|连板梯队|热度飙升|飙升榜|历史热股|热榜|个股异动|异动原因|同花顺概念|同花顺指数/,
     ],
   },
   {
@@ -72,7 +73,7 @@ const SEED_RULES: SeedRule[] = [
     weight: 3,
     patterns: [
       /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|主营业务|所属概念|公司简介|基本面/i,
-      /financials|profile|dividend|shareholder/i,
+      /资产负债表|现金流量表|经营现金流|资产负债|financials|profile|dividend|shareholder|balance.?sheet|cash.?flow/i,
     ],
   },
   {
@@ -83,7 +84,7 @@ const SEED_RULES: SeedRule[] = [
   {
     pack: 'provider_ext',
     weight: 1,
-    patterns: [/自定义方法|provider|数据源扩展|akshare|baostock|zzshare/i],
+    patterns: [/自定义方法|provider|数据源扩展|akshare|baostock|zzshare|thsFinancialIndicators|财务指标明细/i],
   },
 ]
 

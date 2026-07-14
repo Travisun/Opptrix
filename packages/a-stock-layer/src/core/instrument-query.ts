@@ -21,7 +21,9 @@ import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regi
  * - kline:          K 线历史数据
  * - snapshot:       聚合快照（概况 + 行情 + 近期 K 线）
  * - profile:        公司/基金基本面资料
- * - financials:     财务报表数据
+ * - financials:     财务摘要（营收/利润/ROE 等）
+ * - balance_sheet:  资产负债表多期
+ * - cash_flow:      现金流量表多期
  * - stock_list:         股票列表（分页、板块过滤）
  * - instrument_search:  跨市场关键词搜索（相关性排序）
  * - sector_list:        板块/行业列表
@@ -43,6 +45,8 @@ export type InstrumentDataCapability =
   | 'snapshot'
   | 'profile'
   | 'financials'
+  | 'balance_sheet'
+  | 'cash_flow'
   | 'stock_list'
   | 'instrument_search'
   | 'sector_list'
@@ -66,9 +70,9 @@ export interface InstrumentQueryOpts {
   count?: number
   /** 搜索关键词（用于 stock_list / instrument_search） */
   keyword?: string
-  /** 财务报告截止日期 YYYY-MM-DD（用于 financials 能力） */
+  /** 财务报告截止日期 YYYY-MM-DD（用于 financials / balance_sheet / cash_flow） */
   reportDate?: string
-  /** 报告类型："annual"（年报）或 "quarter"（季报），默认 annual */
+  /** 报告类型："annual"（年报）或 "quarter"（季报），默认 annual；摘要能力用 */
   reportType?: string
   /** K 线周期："daily"、"weekly"、"monthly"、"1m" 等，默认 daily */
   period?: string
@@ -253,6 +257,14 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('CN', assetClass, Capability.FINANCIAL_SUMMARY, 'financials', true, [
           symbol, opts.reportDate ?? '', opts.reportType ?? 'annual',
         ], normalized)
+      case 'balance_sheet':
+        return registryPlan('CN', assetClass, Capability.BALANCE_SHEET, 'balanceSheet', true, [
+          symbol, opts.reportDate ?? '',
+        ], normalized)
+      case 'cash_flow':
+        return registryPlan('CN', assetClass, Capability.CASH_FLOW, 'cashFlow', true, [
+          symbol, opts.reportDate ?? '',
+        ], normalized)
       case 'stock_list': {
         const page = opts.page ?? 1
         const pageSize = opts.pageSize ?? 100
@@ -351,6 +363,14 @@ export function resolveInstrumentQueryPlan(
       case 'financials':
         return registryPlan('US', 'EQUITY', Capability.FINANCIAL_SUMMARY, 'financials', true, [
           sym, opts.reportDate ?? '', opts.reportType ?? 'annual',
+        ], normalized)
+      case 'balance_sheet':
+        return registryPlan('US', 'EQUITY', Capability.BALANCE_SHEET, 'balanceSheet', true, [
+          sym, opts.reportDate ?? '',
+        ], normalized)
+      case 'cash_flow':
+        return registryPlan('US', 'EQUITY', Capability.CASH_FLOW, 'cashFlow', true, [
+          sym, opts.reportDate ?? '',
         ], normalized)
       case 'stock_list': {
         const page = opts.page ?? 1
