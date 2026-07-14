@@ -76,7 +76,7 @@ export async function apiCall<T>(
 import type {
   StockDiagnosisData, InstitutionRatingData,
   StrategySignalData, StrategyVerifyData, TrendBriefData,
-  PortfolioAnalysisData, IndustryMiningData, IndustryStatItem, IndustryStockItem, MarketReportData,
+  PortfolioAnalysisData, IndustryMiningData, MarketReportData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
 import { cnEquityRef, instrumentKey } from '../market/instrument'
@@ -279,20 +279,8 @@ export const research = {
   industryMining: (industry: string) =>
     apiCall<IndustryMiningData>('industry_mining', { industry }),
 
-  marketIndustryStats: (tradeDate?: string) =>
-    apiCall<{ items: IndustryStatItem[]; trade_date: string | null; quote_date: string | null }>(
-      'market_industry_stats',
-      tradeDate ? { trade_date: tradeDate } : {},
-    ),
-
   marketRegime: (scope: 'cn' | 'us' = 'cn') =>
     apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
-
-  industryStocks: (industry: string, limit = 120) =>
-    apiCall<{ trade_date: string; quote_date: string | null; industry: string; items: IndustryStockItem[] }>(
-      'market_industry_stocks',
-      { industry, limit },
-    ),
 
   marketReport: (type: 'morning' | 'closing') =>
     apiCall<MarketReportData>('market_report', { type }),
@@ -690,47 +678,6 @@ export interface MarketDataPackConfig {
   jp: MarketDataPackEntry
   kr: MarketDataPackEntry
 }
-
-export interface MarketDataPacksState {
-  config: MarketDataPackConfig
-  counts: {
-    cn_stocks: number
-    cn_etfs: number
-    us: number
-    crypto: number
-    jp: number
-    kr: number
-    hk: number
-  }
-}
-
-export async function getMarketDataPacks() {
-  const resp = await jsonFetch<{ success: boolean; data: MarketDataPacksState }>('/market-data/packs')
-  if (!resp.data) throw new Error('无法读取市场数据包设置')
-  return resp.data
-}
-
-export async function patchMarketDataPacks(
-  patch: Partial<Record<'us' | 'crypto' | 'hk' | 'jp' | 'kr', { enabled?: boolean }>>,
-) {
-  return jsonFetch<{ success: boolean; data: { config: MarketDataPackConfig }; message?: string }>(
-    '/market-data/packs',
-    {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ patch }),
-    },
-  )
-}
-
-export async function prepareMarketDataPack(pack: 'us' | 'crypto' | 'cn' | 'hk' | 'jp' | 'kr', force = false) {
-  return jsonFetch<{ success: boolean; message?: string }>(`/market-data/packs/${pack}/prepare`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ force }),
-  })
-}
-
 
 export type SupplementPackId = 'us' | 'crypto' | 'hk' | 'jp' | 'kr'
 

@@ -5,9 +5,6 @@ import { spawnSync } from 'node:child_process'
 /** 同步进行中推迟 Duck 后台迁移，避免与 apply-batch 争用 DuckDB 文件锁 */
 let marketSyncActive = false
 
-/** 本地衍生指标维护子进程进行中 */
-let derivedMaintenanceActive = false
-
 export function setMarketSyncActive(active: boolean): void {
   marketSyncActive = active
 }
@@ -16,17 +13,19 @@ export function isMarketSyncActive(): boolean {
   return marketSyncActive
 }
 
-export function setDerivedMaintenanceActive(active: boolean): void {
-  derivedMaintenanceActive = active
+/** @deprecated 本地衍生维护已拆除；恒为 false，保留供 store flush 门闩兼容 */
+export function setDerivedMaintenanceActive(_active: boolean): void {
+  /* no-op */
 }
 
+/** @deprecated 本地衍生维护已拆除；恒为 false */
 export function isDerivedMaintenanceActive(): boolean {
-  return derivedMaintenanceActive
+  return false
 }
 
-/** 主进程是否应暂停 DuckDB 写入（衍生维护子进程独占 Duck 文件） */
+/** 主进程是否应暂停 DuckDB 写入 */
 export function isDuckWritePaused(): boolean {
-  return marketSyncActive || derivedMaintenanceActive
+  return marketSyncActive
 }
 
 export function isDuckFileLockHeld(duckDbPath: string): boolean {
@@ -46,16 +45,13 @@ function sleepSync(ms: number): void {
   spawnSync('sleep', [String(Math.max(0.001, ms / 1000))], { stdio: 'ignore' })
 }
 
-/** 串行化同一 DuckDB 文件上的**写**子进程（import / apply-batch / 因子重算）。
+/** 串行化同一 DuckDB 文件上的**写**子进程（import / apply-batch）。
  * 只读查询（query-json / stats / klines）**不持锁** — UI 允许略旧快照，避免与后台任务排队超时。 */
 export function withDuckFileLockSync<T>(
   duckDbPath: string,
   fn: () => T,
   timeoutMs = 120_000,
 ): T {
-  if (isDerivedMaintenanceActive()) {
-    throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
-  }
   const lp = lockFilePath(duckDbPath)
   fs.mkdirSync(path.dirname(lp), { recursive: true })
   const deadline = Date.now() + timeoutMs
@@ -71,9 +67,6 @@ export function withDuckFileLockSync<T>(
     } catch (e) {
       const code = (e as NodeJS.ErrnoException).code
       if (code !== 'EEXIST') throw e
-      if (isDerivedMaintenanceActive()) {
-        throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
-      }
       sleepSync(50)
     }
   }

@@ -36,7 +36,7 @@
 |------|------|------|
 | **API** | `instrument_*` Hub + REST + `API.md` 章节 | — |
 | **搜索** | 工作区 / 聊天 `@` → `searchInstruments` | `searchStocks` 保留兼容 |
-| **右栏** | capability gate + `CrossMarketDetailTab` | `IndustryTab` CN-only（已标注，符合产品） |
+| **右栏** | capability gate + `CrossMarketDetailTab` | 行业挖掘走 `IndustryMining`（在线） |
 | **图表** | 非 CN → `instrument_chart`；CN 分时仍 `stockChart` | — |
 | **格式化** | `formatPriceForMarket` — CrossMarket + 关注列表/备注抽屉 | `PortfolioTab` 仍 CN（组合仅 A 股） |
 
@@ -132,7 +132,7 @@ interface DiscoverProfileDefinition {
 - [x] `TradingViewChart` 非 CN 经 `instrument_chart`（CN 分时/分钟仍 `stockChart`）
 - [x] 工作区搜索 / 聊天 `@` 合并为 `searchInstruments`
 - [x] `useStockAnalysis` 经 `hasApplicationCapability` 门禁
-- [ ] `IndustryTab` 改 instrument 或保持 CN-only 并文档化（当前 CN-only + 标注）
+- [x] `IndustryTab` 已移除（本地行业统计停用；行业分析走 `IndustryMining`）
 - [x] `API.md` 补充 instrument_* 章节
 
 ### Phase B — 策略层参数化

@@ -35,11 +35,6 @@ export const APPLICATION_HUB_FEATURES = {
   /** InstrumentRef 统一入口：读取缓存评估（latest_evaluation） */
   instrumentLatestEvaluation: 'latest_evaluation',
 
-  /** @deprecated 本地 L0 因子筛选已停用；保留常量以免旧调用方引用名断裂 */
-  localInstrumentScreen: 'local_universe_screen',
-  localInstrumentScreenSchema: 'local_universe_screen_schema',
-  listScreenFactors: 'list_screen_factors',
-
   /** 发现策略列表 */
   discoverProfiles: 'discover_profiles',
   /** 发现策略就绪状态 */
@@ -49,8 +44,6 @@ export const APPLICATION_HUB_FEATURES = {
   /** 市场状态判断（牛/熊/震荡） */
   marketRegime: 'market_regime',
 
-  /** 本地数据库状态查询 */
-  marketDbStatus: 'market_db_status',
   /** 市场数据包管理 */
   marketDataPacks: 'market_data_packs',
   /** 跨市场本地标的搜索 */

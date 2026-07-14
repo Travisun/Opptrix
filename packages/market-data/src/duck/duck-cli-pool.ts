@@ -11,7 +11,6 @@ import { spawnSync } from 'node:child_process'
 import { Worker } from 'node:worker_threads'
 import { fileURLToPath } from 'node:url'
 import PQueue from 'p-queue'
-import { isDerivedMaintenanceActive } from './duck-subprocess-gate.js'
 import type { DuckCliWorkerRequest, DuckCliWorkerResponse } from './duck-cli-worker.js'
 
 const DEFAULT_MAX_BUFFER = 128 * 1024 * 1024
@@ -95,9 +94,6 @@ export class DuckCliPool {
     mode: 'read' | 'write',
     options: { maxBuffer?: number } = {},
   ): string {
-    if (mode === 'write' && isDerivedMaintenanceActive()) {
-      throw new Error('DuckDB 写入已暂停（本地指标维护进行中）')
-    }
     const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER
     if (mode === 'write') {
       while (this.syncWriteLock) {
@@ -119,9 +115,6 @@ export class DuckCliPool {
     mode: 'read' | 'write',
     options: { maxBuffer?: number; priority?: number } = {},
   ): Promise<string> {
-    if (mode === 'write' && isDerivedMaintenanceActive()) {
-      return Promise.reject(new Error('DuckDB 写入已暂停（本地指标维护进行中）'))
-    }
     const maxBuffer = options.maxBuffer ?? DEFAULT_MAX_BUFFER
     const priority = options.priority ?? (mode === 'read' ? DUCK_READ_PRIORITY_BACKGROUND : 0)
     const queue = mode === 'write' ? this.writeQueue : this.readQueue

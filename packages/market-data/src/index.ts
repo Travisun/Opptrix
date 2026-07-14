@@ -3,11 +3,7 @@ import { EvaluationEngine } from '@opptrix/stock-eval'
 import { getMarketDataStore, MarketDataStore } from './store.js'
 import { MarketDataSyncEngine, ALL_SYNC_JOBS, type SyncOptions } from './sync/engine.js'
 import { getMarketSyncCoordinator, MarketSyncCoordinator, type SyncStateSnapshot } from './sync/coordinator.js'
-import {
-  getMarketDerivedMaintenanceCoordinator,
-  type DerivedMaintenanceSnapshot,
-} from './sync/derived-coordinator.js'
-import { resolveSyncPlan, resolveAutoBootPlan, resolveMarketPackSyncPlan, type SyncPlan } from './sync/plan.js'
+import { resolveSyncPlan, resolveMarketPackSyncPlan, type SyncPlan } from './sync/plan.js'
 import {
   loadMarketPackConfig,
   patchMarketPackConfig as saveMarketPackPatch,
@@ -15,7 +11,6 @@ import {
 import { allJobsForEnabledPacks } from './sync/market-packs.js'
 import type { MarketDataPackConfig, MarketDataPackId, SupplementPackId } from '@opptrix/shared'
 import { hydrateStocks, type HydrateManifest } from './sync/hydrate.js'
-import { LOCAL_OFFLINE_SCREENING_ENABLED } from './sync/instrument-gateway.js'
 import {
   exportMarketDataPackage,
   importMarketDataPackageToDisk,
@@ -32,41 +27,10 @@ import {
 } from './package-pack.js'
 import { registerMarketDataServiceReset, resetMarketDataRuntime } from './runtime.js'
 import { MarketDataLifecycle } from './sync/lifecycle.js'
-import {
-  localScreen,
-  localUniverseScreen,
-  queryDiscoverCandidates,
-  queryIndustryList,
-  queryIndustryStats,
-  queryIndustryStocks,
-  localIndustryScreen,
-  queryRadarBatch,
-  queryStockSnapshot,
-  type LocalUniverseScreenQuery,
-  type LocalUniverseScreenResult,
-  type LocalIndustryScreenQuery,
-  type IndustryListItem,
-  type ScreenCondition,
-  type DiscoverCandidateRow,
-} from './query/screen.js'
 import { queryLocalDailyKlines, queryLocalLatestQuote } from './query/local-bars.js'
 import { searchUniverseStocks } from './query/search-stocks.js'
-import { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
-import { buildLocalEtfScreenSchema, localEtfScreen, type LocalEtfScreenQuery } from './query/etf-screen.js'
 import { buildEtfScorecardSchema, computeEtfScorecard } from './query/etf-scorecard.js'
 import { searchLocalInstruments, listLocalInstrumentsSummary } from './query/search-instruments.js'
-import { buildLocalUsScreenSchema, localUsScreen, type LocalUsScreenQuery } from './query/us-screen.js'
-import { buildLocalCryptoScreenSchema, localCryptoScreen, type LocalCryptoScreenQuery } from './query/crypto-screen.js'
-import {
-  buildLocalHkScreenSchema,
-  buildLocalJpScreenSchema,
-  buildLocalKrScreenSchema,
-  localHkScreen,
-  localJpScreen,
-  localKrScreen,
-  type LocalJpScreenQuery,
-} from './query/regional-equity-screen.js'
-import { listScreenFactors } from './query/factors.js'
 
 export class MarketDataService {
   readonly store: MarketDataStore
@@ -74,7 +38,6 @@ export class MarketDataService {
   readonly ee: EvaluationEngine
   readonly syncEngine: MarketDataSyncEngine
   readonly coordinator: MarketSyncCoordinator
-  readonly derivedCoordinator: ReturnType<typeof getMarketDerivedMaintenanceCoordinator>
   private readonly lifecycle = new MarketDataLifecycle()
 
   constructor(store = getMarketDataStore(), de = new MarketDataEngine(), ee?: EvaluationEngine) {
@@ -83,7 +46,6 @@ export class MarketDataService {
     this.ee = ee ?? new EvaluationEngine(de)
     this.syncEngine = new MarketDataSyncEngine(store, de)
     this.coordinator = getMarketSyncCoordinator(store, () => new MarketDataSyncEngine(store, de))
-    this.derivedCoordinator = getMarketDerivedMaintenanceCoordinator(store, () => this.coordinator.isRunning())
   }
 
   status() {
@@ -95,24 +57,8 @@ export class MarketDataService {
     return this.store.getStatusLight()
   }
 
-  isOfflineScreeningEnabled() {
-    return LOCAL_OFFLINE_SCREENING_ENABLED
-  }
-
-  syncState(): SyncStateSnapshot & { derived_maintenance: DerivedMaintenanceSnapshot } {
-    const snap = this.coordinator.getSnapshot()
-    return {
-      ...snap,
-      derived_maintenance: this.derivedCoordinator.getSnapshot(snap.db_status),
-    }
-  }
-
-  autoDerivedMaintenanceOnBoot() {
-    this.derivedCoordinator.autoMaintainOnBoot()
-  }
-
-  derivedMaintenance(force = true) {
-    return this.derivedCoordinator.start({ force })
+  syncState(): SyncStateSnapshot {
+    return this.coordinator.getSnapshot()
   }
 
   sync(options?: SyncOptions) {
@@ -164,22 +110,22 @@ export class MarketDataService {
     }).then(result => ({ ...result, plan }))
   }
 
-  /** 本地基础数据同步已停用 — boot 不再拉取名录/K 线/算因子 */
+  /** Boot sync disabled — no automatic local universe / factor jobs. */
   autoSyncOnBoot() {
     /* no-op */
   }
 
-  /** UI shell ready — 本地同步已停用，生命周期可调用但无动作 */
+  /** UI shell ready — boot sync disabled, lifecycle no-op. */
   notifyUiReady() {
     this.lifecycle.notifyUiReady(() => this.autoSyncOnBoot())
   }
 
-  /** Headless fallback — 与 notifyUiReady 同为 no-op */
+  /** Headless fallback — same no-op as notifyUiReady */
   ensureBootSyncFallback() {
     this.lifecycle.ensureBootSyncFallback(() => this.autoSyncOnBoot())
   }
 
-  /** @deprecated Use notifyUiReady — kept for callers migrating off autoSyncWithFilter */
+  /** @deprecated Use notifyUiReady */
   autoSyncWithFilter(_allowedJobs: readonly string[]) {
     this.notifyUiReady()
   }
@@ -187,38 +133,6 @@ export class MarketDataService {
   /** @deprecated Use autoSyncOnBoot */
   autoResumeOnBoot() {
     this.autoSyncOnBoot()
-  }
-
-  screen(conditions: ScreenCondition[], topN = 20, tradeDate?: string) {
-    return localScreen(this.store, conditions, tradeDate, topN)
-  }
-
-  universeScreen(query: LocalUniverseScreenQuery) {
-    return localUniverseScreen(this.store, query)
-  }
-
-  universeScreenSchema() {
-    return buildLocalUniverseScreenSchema(this.statusLight().latest_factor_date)
-  }
-
-  industryStats(tradeDate?: string) {
-    return queryIndustryStats(this.store, tradeDate)
-  }
-
-  industryList(keyword?: string, tradeDate?: string, limit?: number) {
-    return queryIndustryList(this.store, { keyword, trade_date: tradeDate, limit })
-  }
-
-  industryScreen(query: LocalIndustryScreenQuery) {
-    return localIndustryScreen(this.store, query)
-  }
-
-  etfScreen(query: LocalEtfScreenQuery) {
-    return localEtfScreen(this.store, query)
-  }
-
-  etfScreenSchema() {
-    return buildLocalEtfScreenSchema()
   }
 
   etfScorecard(code: string) {
@@ -235,54 +149,6 @@ export class MarketDataService {
 
   localInstrumentsSummary() {
     return listLocalInstrumentsSummary(this.store)
-  }
-
-  usScreen(query: LocalUsScreenQuery) {
-    return localUsScreen(this.store, query)
-  }
-
-  usScreenSchema() {
-    return buildLocalUsScreenSchema()
-  }
-
-  cryptoScreen(query: LocalCryptoScreenQuery) {
-    return localCryptoScreen(this.store, query)
-  }
-
-  cryptoScreenSchema() {
-    return buildLocalCryptoScreenSchema()
-  }
-
-  jpScreen(query: LocalJpScreenQuery) {
-    return localJpScreen(this.store, query)
-  }
-
-  jpScreenSchema() {
-    return buildLocalJpScreenSchema()
-  }
-
-  krScreen(query: LocalJpScreenQuery) {
-    return localKrScreen(this.store, query)
-  }
-
-  krScreenSchema() {
-    return buildLocalKrScreenSchema()
-  }
-
-  hkScreen(query: LocalJpScreenQuery) {
-    return localHkScreen(this.store, query)
-  }
-
-  hkScreenSchema() {
-    return buildLocalHkScreenSchema()
-  }
-
-  industryStocks(industry: string, tradeDate?: string, limit = 120) {
-    return queryIndustryStocks(this.store, industry, tradeDate, limit)
-  }
-
-  stockSnapshot(code: string) {
-    return queryStockSnapshot(this.store, code)
   }
 
   searchStocks(keyword: string, limit = 30) {
@@ -331,19 +197,6 @@ export class MarketDataService {
 
   localEtfHoldings(code: string, limit = 100) {
     return this.store.getEtfHoldings(code, limit)
-  }
-
-  radarBatch(codes: string[], tradeDate?: string) {
-    return queryRadarBatch(this.store, codes, tradeDate)
-  }
-
-  listScreenFactors() {
-    return listScreenFactors()
-  }
-
-  discoverCandidates(codes: string[], factorNames?: readonly string[], tradeDate?: string) {
-    const names = factorNames?.length ? factorNames : listScreenFactors().map(f => f.name)
-    return queryDiscoverCandidates(this.store, codes, names, tradeDate)
   }
 
   /** L1 on-demand: shareholders / partners with quarterly TTL. */
@@ -396,7 +249,6 @@ let sharedService: MarketDataService | null = null
 export function resetSharedMarketDataService(): void {
   if (sharedService) {
     try {
-      sharedService.de.stopProviderDirWatcher()
       sharedService.store.close()
     } catch {
       // ignore close races during import
@@ -423,20 +275,9 @@ export {
 export type { MarketDbStatus, BootstrapReadiness, DerivedReadiness } from './store.js'
 export type { SyncOptions, SyncProgress, SyncMode } from './sync/engine.js'
 export type { SyncStateSnapshot } from './sync/coordinator.js'
-export type { DerivedMaintenanceSnapshot } from './sync/derived-coordinator.js'
-export type { ScreenCondition, LocalScreenItem, DiscoverCandidateRow, LocalUniverseScreenQuery, LocalUniverseScreenResult, LocalIndustryScreenQuery, IndustryListItem, IndustryStockRow } from './query/screen.js'
-export type { LocalEtfScreenQuery, LocalEtfScreenResult, LocalEtfScreenItem } from './query/etf-screen.js'
 export type { LocalInstrumentHit } from './query/search-instruments.js'
-export type { LocalUsScreenQuery, LocalUsScreenResult, LocalUsScreenItem } from './query/us-screen.js'
-export type { LocalCryptoScreenQuery, LocalCryptoScreenResult, LocalCryptoScreenItem } from './query/crypto-screen.js'
-export { buildLocalEtfScreenSchema } from './query/etf-screen.js'
-export { buildLocalUsScreenSchema } from './query/us-screen.js'
-export { buildLocalCryptoScreenSchema } from './query/crypto-screen.js'
 export { buildEtfScorecardSchema, ETF_SCORECARD_NAME } from './query/etf-scorecard.js'
 export type { EtfScorecardResult, EtfScorecardDimension } from './query/etf-scorecard.js'
-export { buildLocalUniverseScreenSchema } from './query/screen-schema.js'
-export type { LocalUniverseScreenSchema } from './query/screen-schema.js'
-export { listScreenFactors, SCREEN_FACTOR_LABELS } from './query/factors.js'
 export { searchUniverseStocks } from './query/search-stocks.js'
 export {
   BOOTSTRAP_SYNC_JOBS,
@@ -446,14 +287,12 @@ export {
   CN_CORE_SYNC_JOBS,
   CN_MANUAL_SYNC_JOBS,
   DEFAULT_AUTO_SYNC_JOBS,
-  CN_DERIVED_MAINTENANCE_JOBS,
   DEFAULT_DAILY_SYNC_JOBS,
   LEGACY_INITIAL_SYNC_JOBS,
   STOCKINDEX_LIST_SYNC_JOBS,
   DAILY_SYNC_JOBS,
   ALL_SYNC_JOBS,
   AUTO_BOOT_EXCLUDED_JOBS,
-  SCREEN_PACK_FACTORS,
   KLINE_BOOTSTRAP_DAYS,
   type SyncSpeedProfile,
 } from './sync/config.js'

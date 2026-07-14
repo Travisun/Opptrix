@@ -33,7 +33,6 @@ import { listProviderCustomMethods, findCustomMethod, type ProviderCustomMethods
 import { listCustomMethodsForAgent } from './core/custom-methods-agent.js'
 import { normalizeCustomMethodArgs } from './core/custom-method-args.js'
 import { wireRegistryMethodArgs } from './core/provider-wire.js'
-import { ProviderDirWatcher } from './providers/provider-dir-watcher.js'
 import { getProviderConfigStore } from './providers/config-store.js'
 import { resolveProviderAlias } from './providers/common/provider-aliases.js'
 import { getUserDataStore } from '@opptrix/user-store'
@@ -82,8 +81,6 @@ export class MarketDataEngine {
   private readonly queryPlans: QueryPlanExecutor
   private readonly speedRanker: ProviderSpeedRanker
   private readonly loadBalancer: LoadBalancer
-  private providerDirWatcher?: ProviderDirWatcher
-  private providerWatcherStopped = false
   private _portfolio?: PortfolioManager
   private _watchlist?: WatchlistManager
 
@@ -105,10 +102,8 @@ export class MarketDataEngine {
     if (autoDiscover) {
       this.providerLoader.registerBuiltins()
       void this.providerLoader.loadInstalled()
-        .then(() => this.startProviderDirWatcher())
         .catch(err => {
           console.warn('[MarketDataEngine] loadInstalled failed:', err)
-          this.startProviderDirWatcher()
         })
     }
     this.registry.refreshPriorities(configStore)
@@ -119,9 +114,6 @@ export class MarketDataEngine {
     this.registry.attachLoadBalancer(this.loadBalancer)
     this.providerCatalog = createProviderCatalog(this.registry)
     this.queryPlans = new QueryPlanExecutor(this.registry, this.cache, this.speedRanker)
-    void this.speedRanker.warmUp(this.registry)
-      .then(() => this.registry.rebuildIndicesWithRanking())
-      .catch(err => console.warn('[MarketDataEngine] speed ranker warm-up failed:', err))
   }
 
   private isWatchlistTarget(market: Market, assetClass: AssetClass, args: unknown[]): boolean {
@@ -982,22 +974,6 @@ export class MarketDataEngine {
   }
   clearCacheForProvider(providerId: string) {
     return this.cache.clearBySource(providerId) + this.cache.clearBySource('mixed')
-  }
-  private async onProvidersDirChanged() {
-    const prev = new Set(this.providerLoader.listInstalled().map(r => r.providerId))
-    await this.providerLoader.rescan()
-    const touched = new Set([...prev, ...this.providerLoader.listInstalled().map(r => r.providerId)])
-    for (const id of touched) this.clearCacheForProvider(id)
-  }
-  private startProviderDirWatcher() {
-    if (this.providerDirWatcher || this.providerWatcherStopped) return
-    this.providerDirWatcher = new ProviderDirWatcher(() => this.onProvidersDirChanged())
-    this.providerDirWatcher.start()
-  }
-  stopProviderDirWatcher() {
-    this.providerWatcherStopped = true
-    this.providerDirWatcher?.stop()
-    this.providerDirWatcher = undefined
   }
   cacheStats() { return this.cache.stats() }
   listDrivers() { return this.registry.listDriverInfo() }

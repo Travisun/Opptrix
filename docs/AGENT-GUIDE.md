@@ -141,8 +141,8 @@ Opptrix/
 - **行业分析**：`industry_mining` / `industry_mermaid`（不依赖本地行业库）→ 代表公司用 `search_instruments` + `get_instrument_*`
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_watchlist_radar` / `get_trend_brief`
 - **跨市场初选**：`screen_us_universe` / `screen_hk_universe` / `screen_crypto_universe` 或 `search_instruments`
-- 本地因子/行业筛选与基础数据同步已停用；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
-- **A 股股票 Discover 自动选股策略已移除**（依赖本地因子）；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
+- 勿再调用已移除的本地因子/行业筛选或 `market_db_*`；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
+- **A 股股票 Discover 自动选股策略已移除**；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
 
 ### 4.3 数据层
 
@@ -157,8 +157,8 @@ Opptrix/
 
 **本地层** `@opptrix/market-data`（缓存/兼容，非选股主路径）：
 
-- Schema / 历史数据可保留（向后兼容），但 boot 不再同步基础数据、不再计算本地因子
-- `market_db_status` / `market_db_sync` / 本地筛选 feature 统一返回已停用；请用在线 `search_instruments` / `evaluate_instrument` / `get_instrument_chart`
+- Schema / 历史数据可保留（向后兼容）；本地因子选股管道已移除
+- 请用在线 `search_instruments` / `evaluate_instrument` / `get_instrument_chart`
 
 ### 4.4 前端主界面
 

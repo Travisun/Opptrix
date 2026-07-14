@@ -1,7 +1,7 @@
 /**
- * Provider 速度排序持久化层 — SQLite 存储测速结果与缓存的排名。
+ * Provider 速度排序持久化层 — SQLite 存储运行时测速结果与缓存的排名。
  *
- * 流程：启动时写 warm-up 快照，运行时通过 EMA 更新，TTL 到期重建。
+ * 流程：真实请求经 EMA 写入排名，TTL 到期后重建缓存。
  */
 
 import type Database from 'better-sqlite3'

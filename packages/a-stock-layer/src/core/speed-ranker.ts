@@ -1,15 +1,13 @@
 /**
- * Provider 速度排序器 — 启动时探测各 Provider 响应速度，运行时动态淘汰。
+ * Provider 速度排序器 — 运行时根据请求结果动态排序 / 淘汰。
  *
  * 策略：
- *   - 启动 warm-up：对每个 (provider × capability) 并行采样 3 次，取中位数
  *   - 运行时 EMA：每次请求结果按 α=0.3 更新 avgResponseTimeMs
  *   - 黑名单：连续失败 >=3 次 → 冷却 30s → 自动解除
  *   - 缓存 TTL：正常 30min，全部失败 60s
+ *   - 无启动探测：仅靠真实流量积累样本；无样本时 Registry 按优先级排序
  */
 
-import type { DriverRegistry } from './registry.js'
-import type { BaseDriver } from '../providers/common/base.js'
 import type { SpeedRankingRepository } from '@opptrix/user-store'
 
 export const PROVIDER_RANKING_TTL_MS = 30 * 60 * 1000      // 30 min
@@ -17,9 +15,6 @@ export const PROVIDER_RANKING_EMPTY_TTL_MS = 60 * 1000      // 60 s
 export const BLACKLIST_COOLDOWN_MS = 30_000                 // 30 s
 export const BLACKLIST_FAILURE_THRESHOLD = 3
 export const EMA_ALPHA = 0.3
-export const WARMUP_SAMPLE_COUNT = 3
-export const WARMUP_TIMEOUT_MS = 10_000
-export const WARMUP_GLOBAL_TIMEOUT_MS = 30_000
 
 interface RankingEntry {
   providerId: string
@@ -44,8 +39,6 @@ function isoNow(): string {
 export class ProviderSpeedRanker {
   private entries = new Map<string, RankingEntry>()  // key: `${providerId}::${capability}`
   private cache = new Map<string, { rankedIds: string[]; cachedAt: number; ttlMs: number; isEmpty: boolean }>()
-  private warmUpComplete = false
-  private warmUpPromise: Promise<void> | null = null
 
   constructor(private repo: SpeedRankingRepository) {
     this.loadFromDb()
@@ -53,20 +46,9 @@ export class ProviderSpeedRanker {
 
   // ── Public API ──
 
-  /** 启动异步探测，不阻塞调用方 */
-  async warmUp(registry: DriverRegistry): Promise<void> {
-    if (this.warmUpPromise) return this.warmUpPromise
-    this.warmUpPromise = this.doWarmUp(registry)
-    return this.warmUpPromise
-  }
-
-  isWarmUpComplete(): boolean {
-    return this.warmUpComplete
-  }
-
-  /** SpeedRankingBridge 兼容 */
+  /** Always ready — ranking uses runtime samples only (empty = priority-only sort). */
   isReady(): boolean {
-    return this.warmUpComplete
+    return true
   }
 
   /** 获取某 binding key 下的排序（按 avgResponseTimeMs 升序，剔除黑名单） */
@@ -139,96 +121,6 @@ export class ProviderSpeedRanker {
   }
 
   // ── Internal ──
-
-  private async doWarmUp(registry: DriverRegistry): Promise<void> {
-    const drivers = registry.listDriverInfo()
-    const tasks: Array<{ driver: string; capability: string; fn: () => Promise<unknown> }> = []
-
-    for (const info of drivers) {
-      if (info.priority <= 0) continue  // disabled
-      for (const binding of info.bindings) {
-        const capName = String(binding.capability)
-        const driver = registry.get(info.name)
-        if (!driver) continue
-        const fn = this.makeProbeFn(driver, capName)
-        if (fn) {
-          tasks.push({ driver: info.name, capability: capName, fn })
-        }
-      }
-    }
-
-    // 按 provider 分组，组内串行（避免触发限流），组间并行
-    const byProvider = new Map<string, typeof tasks>()
-    for (const t of tasks) {
-      const list = byProvider.get(t.driver) ?? []
-      list.push(t)
-      byProvider.set(t.driver, list)
-    }
-
-    const globalTimer = setTimeout(() => {
-      console.warn('[SpeedRanker] warm-up global timeout, using partial results')
-      this.finalizeWarmUp()
-    }, WARMUP_GLOBAL_TIMEOUT_MS)
-
-    await Promise.all(
-      [...byProvider.values()].map(async (providerTasks) => {
-        for (const t of providerTasks) {
-          const samples: number[] = []
-          for (let i = 0; i < WARMUP_SAMPLE_COUNT; i++) {
-            const start = now()
-            try {
-              await Promise.race([
-                t.fn(),
-                new Promise((_, reject) =>
-                  setTimeout(() => reject(new Error('timeout')), WARMUP_TIMEOUT_MS),
-                ),
-              ])
-              samples.push(now() - start)
-            } catch {
-              // 采样失败 → 不记录
-            }
-          }
-          if (samples.length > 0) {
-            samples.sort((a, b) => a - b)
-            const median = samples[Math.floor(samples.length / 2)]
-            this.recordResult(t.driver, t.capability, median, true)
-          }
-        }
-      }),
-    )
-
-    clearTimeout(globalTimer)
-    this.finalizeWarmUp()
-  }
-
-  private finalizeWarmUp(): void {
-    if (this.warmUpComplete) return
-    this.warmUpComplete = true
-    console.log('[SpeedRanker] warm-up complete')
-  }
-
-  /** 构造一个轻量探测函数（调用即完成一次采样，耗时由调用方测量） */
-  private makeProbeFn(driver: import('./registry.js').RegistryProvider, capability: string): (() => Promise<unknown>) | null {
-    const d = driver as unknown as Record<string, unknown>
-
-    if (typeof d.testConnection === 'function') {
-      return async () => {
-        await (d.testConnection as () => Promise<unknown>)()
-      }
-    }
-
-    // 按 capability 选择 cheap 查询
-    const cheapMap: Record<string, () => Promise<unknown>> = {
-      STOCK_REaltime: () => (d.realtime as (code: string) => Promise<unknown>)?.('000001'),
-      INDEX_REALTIME: () => (d.indexRealtime as (code: string) => Promise<unknown>)?.('000001'),
-      STOCK_KLINE: () => (d.kline as (code: string, period?: string) => Promise<unknown>)?.('000001', 'daily'),
-      STOCK_LIST: () => (d.stockList as () => Promise<unknown>)?.(),
-      STOCK_PROFILE: () => (d.profile as (code: string) => Promise<unknown>)?.('000001'),
-    }
-
-    const fn = cheapMap[capability]
-    return fn ?? null
-  }
 
   private computeRanking(bindingKey: string): string[] {
     // bindingKey 格式: "CN:EQUITY:STOCK_REALTIME"
@@ -311,6 +203,7 @@ export class ProviderSpeedRanker {
       // 从 SQLite 加载已有排名数据
       const allRankings = this.repo.getRankingsForCapability('')  // 空 capability 返回全部
       // 实际上需要遍历所有 capability，这里简化处理
+      void allRankings
     } catch {
       // 首次启动无数据，忽略
     }

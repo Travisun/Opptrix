@@ -2,8 +2,6 @@ import type { AshareEngine } from '@opptrix/a-stock-layer'
 import { isBseCode, isTushareEnabled, isRegionalTradingDay, normalizeRegionalSymbol, parseCryptoPair, regionalTodayString, resolveMarket, usTodayString, type StockProfile } from '@opptrix/a-stock-layer'
 import type { InstrumentRef, QueryResult, StockListItem, StockRealtime } from '@opptrix/shared'
 import { normalizeInstrumentRef } from '@opptrix/shared'
-import { createScorecard } from '@opptrix/stock-eval'
-import { EvaluationEngine } from '@opptrix/stock-eval'
 import type { MarketDataStore } from '../store.js'
 import { daysSince, detectSt, minutesSince, normalizeStockCode, todayTradeDate } from '../utils.js'
 import {
@@ -11,7 +9,6 @@ import {
   cnTaxonomyMaintenanceDue,
   cnUniverseMaintenanceDue,
 } from './schedule.js'
-import { SyncCachingEngine } from './cache-engine.js'
 import {
   ALL_SYNC_JOBS,
   BOOTSTRAP_SYNC_JOBS,
@@ -28,7 +25,6 @@ import {
 } from './config.js'
 import { importDailyKDump } from './dump-import.js'
 import { FuyaoClient, isTonghuashunEnabled, loadTonghuashunConfig } from '@opptrix/a-stock-layer'
-import { runLocalScreenFactors } from './local-factors.js'
 import { mapPool, sleep, withRetry } from './pool.js'
 import { ApiThrottler } from './throttle.js'
 import { isRegionalListJob, isRegionalQuotesJob, regionalListJobMarket, regionalQuotesJobMarket } from './regional-list-seeds.js'
@@ -231,9 +227,6 @@ export class MarketDataSyncEngine {
           case 'kline_daily':
             await this.syncKlineDaily(runId, mode, options)
             break
-          case 'screen_factors':
-            await this.syncScreenFactors(runId, mode, options)
-            break
           case 'profiles':
             await this.syncProfiles(runId, mode, options)
             break
@@ -303,12 +296,6 @@ export class MarketDataSyncEngine {
             break
           case 'buybacks':
             await this.syncBuybacks(runId, mode, options)
-            break
-          case 'factors':
-            await this.syncFactors(runId, mode, options)
-            break
-          case 'industry_stats':
-            this.syncIndustryStats(runId, mode, options)
             break
           default:
             results[job] = 'skipped'
@@ -459,15 +446,7 @@ export class MarketDataSyncEngine {
     if (this.jobMinIntervalSkipReason(job, options)) return false
 
     const status = this.store.getStatusLight()
-    const derived = status.derived
     const bootstrap = status.bootstrap
-
-    if (job === 'screen_factors') {
-      return Boolean(derived?.klines_prerequisite) && !derived?.screen_factors
-    }
-    if (job === 'industry_stats') {
-      return Boolean(derived?.klines_prerequisite) && !derived?.industry_stats
-    }
 
     if (job === 'kline_bootstrap' || job === 'kline_daily') {
       if (!bootstrap?.klines) return true
@@ -1672,110 +1651,6 @@ export class MarketDataSyncEngine {
     const bseCodes = this.store.listBseCodesNeedingKlines(60)
     if (!bseCodes.length) return
     options.onLog?.(`北交所 K 线补全跳过（${bseCodes.length} 只）— 需配置合规数据源`)
-  }
-
-  private async syncScreenFactors(
-    runId: number,
-    mode: SyncMode,
-    options: SyncOptions,
-    forceRecalc = false,
-  ): Promise<void> {
-    const tradeDate = todayTradeDate()
-    const all = this.codes(options)
-    const codes = forceRecalc
-      ? all
-      : (mode === 'resume'
-        ? all.filter(code => !this.store.isJobDone('screen_factors', code, tradeDate))
-        : all.filter(code =>
-          mode !== 'incremental' || !this.store.hasFactorsForDate(code, tradeDate),
-        ))
-
-    if (codes.length === 0) {
-      this.finishJobEmpty(runId, 'screen_factors', options, '今日初选因子已齐，跳过')
-      return Promise.resolve()
-    }
-
-    options.onLog?.(`本地计算初选因子 · ${codes.length} 只${forceRecalc ? '（全量重算）' : ''}`)
-    const { success, skipped } = runLocalScreenFactors(this.store, tradeDate, codes)
-    this.store.setCursor('screen_factors', { trade_date: tradeDate, success, skipped, force: forceRecalc })
-    this.store.finishRun(runId, skipped > 0 ? 'partial' : 'success', {
-      total: codes.length,
-      success,
-      error: skipped,
-    })
-    await this.store.flushDuckWritesAsync()
-    return Promise.resolve()
-  }
-
-  private async syncFactors(runId: number, mode: SyncMode, options: SyncOptions): Promise<void> {
-    const cfg = this.cfg('factors', options)
-    const tradeDate = todayTradeDate()
-    const codes = this.pendingCodes(
-      'factors',
-      options,
-      mode,
-      tradeDate,
-      undefined,
-      code => mode === 'incremental' && this.store.hasFactorsForDate(code, tradeDate),
-    )
-    if (codes.length === 0) {
-      this.finishJobEmpty(runId, 'factors', options, '今日因子已齐，跳过')
-      return
-    }
-    const card = createScorecard('综合评估')
-    let success = 0
-    let error = 0
-
-    await mapPool(codes, cfg.concurrency, cfg.delayMs, async (code, index) => {
-      options.onProgress?.({ job: 'factors', current: index + 1, total: codes.length })
-      try {
-        const cachingDe = new SyncCachingEngine(this.de)
-        const ee = new EvaluationEngine(cachingDe as unknown as AshareEngine)
-        const snap = await this.callApi(() => ee.analyze(code), 'default')
-        card.score([snap])
-        const factors = Object.fromEntries(
-          Object.entries(snap.factors).map(([k, v]) => [k, v?.value ?? null]),
-        )
-        this.store.replaceFactors(tradeDate, code, factors)
-        this.store.upsertScore(tradeDate, code, '综合评估', snap.totalScore ?? null)
-        this.markDone('factors', code, tradeDate)
-        success++
-      } catch (e) {
-        error++
-        this.markError('factors', code, tradeDate)
-        this.store.logError(runId, 'factors', code, e instanceof Error ? e.message : String(e))
-      }
-    })
-
-    this.store.finishRun(runId, error ? 'partial' : 'success', {
-      total: codes.length,
-      success,
-      error,
-    })
-  }
-
-  private syncIndustryStats(
-    runId: number,
-    mode: SyncMode,
-    options: SyncOptions,
-    force = false,
-  ): void {
-    const cfg = SYNC_JOB_CONFIG.industry_stats
-    if (!force && mode === 'incremental' && cfg.ttlDays) {
-      const last = this.store.getCursorLastSuccess('industry_stats')
-      if (last && daysSince(last) < cfg.ttlDays && this.store.getStatusLight().derived?.industry_stats) {
-        this.finishJobEmpty(runId, 'industry_stats', options, '行业统计今日已重建，跳过')
-        return
-      }
-    }
-    const tradeDate = todayTradeDate()
-    const n = this.store.rebuildIndustryStats(tradeDate)
-    const activeCodes = this.codes({})
-    if (activeCodes.length) {
-      this.store.markBootstrapJobDoneForCodes('industry_stats', activeCodes, tradeDate)
-    }
-    this.store.setCursor('industry_stats', { trade_date: tradeDate, industries: n })
-    this.store.finishRun(runId, 'success', { total: n, success: n, error: 0 })
   }
 
   /** @deprecated 请通过 sync job `kline_bootstrap` / `kline_daily` 导入同花顺 Parquet 数据包 */
