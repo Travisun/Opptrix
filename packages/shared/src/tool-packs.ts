@@ -9,6 +9,7 @@ export const TOOL_PACK_IDS = [
   'core',
   'meta',
   'instrument_analytics',
+  'fundamentals',
   'market',
   'etf',
   'portfolio',
@@ -53,10 +54,16 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     whenToUse: '分析某只股票/标的优劣、信号、技术面',
   },
   {
+    id: 'fundamentals',
+    title: '基本面事实',
+    description: '公司概况、财务摘要、股东结构、分红历史',
+    whenToUse: '营收利润、ROE、主业概念、十大股东、分红派息；做深度研究时的事实表',
+  },
+  {
     id: 'market',
     title: '宏观与市场',
-    description: '牛熊状态、市场动态、开盘/收盘报告、趋势快评',
-    whenToUse: '大盘、板块、早报复盘、宏观环境',
+    description: '牛熊状态、市场动态、开盘/收盘报告、趋势快评、个股资金流',
+    whenToUse: '大盘、板块、早报复盘、宏观环境、主力/资金流向',
   },
   {
     id: 'etf',
@@ -79,8 +86,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'news',
     title: '资讯公告',
-    description: '新闻中心列表/正文与公告内容',
-    whenToUse: '资讯、新闻、公告、研报订阅',
+    description: '新闻中心列表/正文、标的公告列表与公告内容',
+    whenToUse: '资讯、新闻、公告、研报订阅、上市公司披露',
   },
   {
     id: 'strategy_extra',
@@ -126,17 +133,26 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_instrument_institution_rating: 'instrument_analytics',
   get_instrument_institution_report: 'instrument_analytics',
 
+  // fundamentals
+  get_instrument_profile: 'fundamentals',
+  get_instrument_financials: 'fundamentals',
+  get_instrument_shareholders: 'fundamentals',
+  get_instrument_dividend: 'fundamentals',
+
   // market
   get_market_regime: 'market',
   get_market_dynamics: 'market',
   get_trend_brief: 'market',
   get_closing_report: 'market',
   get_morning_brief: 'market',
+  get_instrument_money_flow: 'market',
+  get_market_session: 'market',
 
   // etf
   get_etf_list: 'etf',
   get_etf_nav: 'etf',
   get_etf_holdings: 'etf',
+  get_etf_profile: 'etf',
 
   // portfolio
   get_watchlist: 'portfolio',
@@ -148,6 +164,8 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   // industry
   industry_mining: 'industry',
   industry_mermaid: 'industry',
+  get_sector_list: 'industry',
+  get_sector_constituents: 'industry',
 
   // news
   get_news_center_status: 'news',
@@ -156,6 +174,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   list_news_articles: 'news',
   get_news_article: 'news',
   get_notice_content: 'news',
+  get_instrument_notices: 'news',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

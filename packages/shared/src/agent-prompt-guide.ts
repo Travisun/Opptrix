@@ -34,9 +34,23 @@ export function buildStandardInstrumentApiPlaybook(): string {
     '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
+    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_shareholders / get_instrument_dividend；勿用 evaluate 或自定义方法替代',
     '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
     '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
+  ].join('\n')
+}
+
+/** 基本面事实表路径 — fundamentals pack 已加载时注入 */
+export function buildFundamentalsPlaybook(): string {
+  return [
+    '【基本面事实表 — profile / financials / shareholders / dividend】',
+    '1) 公司概况/概念/主业：get_instrument_profile（单只 InstrumentRef）',
+    '2) 营收利润/ROE/同比：get_instrument_financials（report_type 默认 all）；引用具体 reportDate',
+    '3) 十大股东/股本：get_instrument_shareholders',
+    '4) 分红派息史：get_instrument_dividend',
+    '5) 禁止：用 evaluate_instrument 黑盒代替财务核实；禁止 invoke_provider_custom_method 调 sinaFinancialPivot 等重复标准能力',
+    '6) 深度备忘录（L3）：至少覆盖「概况或财务」一维；不可用时声明缺口而非跳过',
   ].join('\n')
 }
 
@@ -49,7 +63,7 @@ export function buildProviderCustomMethodPlaybook(): string {
     '2) list_provider_custom_methods：必须带 provider_id 或 keyword；akshare 方法多，禁止无过滤全量拉取',
     '3) invoke_provider_custom_method：provider_id + method + args（JSON 数组，顺序与 params 一致）',
     '4) args 中的 code/symbol 可传命名空间（CN:SZ.000009）、InstrumentRef、600519.SH、sh600519 等；引擎自动转为 Provider 裸代码格式',
-    '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav，勿调 sinaEtfNav）',
+    '5) 禁止用自定义方法替代已有标准能力（如 ETF 净值用 get_etf_nav；财务用 get_instrument_financials；概况用 get_instrument_profile）',
     '6) 同一任务对同一 method 最多调用 1 次；失败时换 provider 或说明数据不可用，勿编造',
   ].join('\n')
 }
@@ -59,9 +73,9 @@ export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具】',
     '0) 不确定时：search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
-    '1) CN 股票（EQUITY）：search_instruments 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating → get_instrument_cyq',
+    '1) CN 股票（EQUITY）：search_instruments 定位 → get_instrument_snapshot → get_instrument_financials / get_instrument_profile（事实表）→ get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating → get_instrument_cyq',
     '2) CN ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings',
-    '3) 美股/港股：search_instruments → get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
+    '3) 美股/港股：search_instruments → get_instrument_snapshot / get_instrument_financials（若可用）/ get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
     '4) 日股/韩股（JP/KR）：暂未接入行情与快照；可读相关资讯，勿调用 get_instrument_* 行情类工具',
     '5) Crypto：search_instruments → get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
     '6) 禁止对非 CN 股票调用 get_instrument_institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股专用工具',
@@ -75,7 +89,7 @@ export function instrumentAnalysisStepsForRef(ref: InstrumentRef): string {
   }
   const profile = resolveInstrumentAnalyticsProfile(ref)
   if (profile.mode === 'cn_factor_scorecard') {
-    return '建议顺序：get_instrument_snapshot → evaluate_instrument → get_instrument_strategy_signal → get_instrument_institution_rating（可选）→ get_instrument_cyq（可选）'
+    return '建议顺序：get_instrument_snapshot → get_instrument_financials / get_instrument_profile → evaluate_instrument → get_instrument_strategy_signal → get_instrument_institution_rating（可选）→ get_instrument_cyq（可选）'
   }
   if (profile.mode === 'cn_etf_scorecard') {
     return '建议顺序：get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings'
@@ -93,6 +107,7 @@ export function buildNewsRetrievalPlaybook(): string {
     '【资讯调阅 — 与标的类型联动，优先最相关来源】',
     '0) 有明确标的时：先确定其 market（CN/US/HK/JP/KR/CRYPTO）与 assetClass，再选资讯；纯宏观/综合问题可跳过标的绑定',
     '1) get_news_center_status：stale=true 时告知用户数据可能不是最新，仍可读本地缓存',
+    '1b) 个股官方公告列表：get_instrument_notices（InstrumentRef）→ 对条目 url 调 get_notice_content；勿与 RSS list_news_articles 混淆',
     '2) list_news_groups：阅读各分组 title 与返回的 market_hints / match_score（若有）；优先选与标的 market 一致或 match_score 最高的分组',
     '   - 标题含「A股/沪深/上证」→ CN；「美股/Nasdaq/美联储」→ US；「港股/恒生」→ HK；「日股/日经」→ JP；「韩股/Kospi」→ KR；「Crypto/BTC/币圈」→ CRYPTO',
     '   - 「宏观/央行/利率/政策」→ MACRO 分组（交叉调阅）；「全球/要闻/综合」→ GLOBAL 兜底',
@@ -129,9 +144,11 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief】',
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
     '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
+    '2b) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
+    '2c) 是否开盘/交易时段：get_market_session；非完整节假日日历（精确交易日走 provider_ext）',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
     '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',
@@ -141,11 +158,12 @@ export function buildMarketContextPlaybook(): string {
 /** 聊天 Agent — 行业分析路径（产业链 → 代表公司核实） */
 export function buildIndustryAnalysisPlaybook(): string {
   return [
-    '【A 股行业分析 — industry_mining / industry_mermaid（不依赖本地行业库）】',
-    '1) 产业链与代表公司：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
-    '2) 需 mindmap 展示：industry_mermaid',
-    '3) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument；多只可用 batch_instrument_snapshots',
-    '4) 宏观/板块背景：get_market_regime / get_market_dynamics；跨市场用 search_instruments（markets 过滤）',
+    '【行业与板块 — industry_mining / get_sector_list / get_sector_constituents】',
+    '1) 产业链与代表公司叙事：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
+    '2) 板块/行业目录：get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
+    '3) 成分股列表：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
+    '4) 需 mindmap：industry_mermaid；核实代表公司：search_instruments → snapshot / evaluate',
+    '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
   ].join('\n')
 }
 
@@ -182,11 +200,11 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '按下列骨架组织（某一维无数据则写「本维未覆盖：原因」，禁止脑补）：',
       '1) 问题界定：标的（命名空间）/ 市场与资产类型 / 分析时间范围',
       '2) 关键事实：价量或核心截面（工具 + 截至）',
-      '3) 分维解读：模型或技术（评分/指标/信号）→ 市场环境（若已取）→ 事件/披露（若已取）→ 行业位置（若已取）',
+      '3) 分维解读：基本面事实（financials/profile，若已加载）→ 模型或技术（评分/指标/信号）→ 市场环境（若已取）→ 事件/披露（若已取）→ 行业位置（若已取）',
       '4) 综合判断：条件化结论 + 主要风险与否证条件',
       '5) 数据缺口：列出仍缺的维度或未加载工具包',
       '- 每一维最多一个主证据工具；「全面」不等于堆砌重复工具',
-      '- 声称全面分析前：缺 market/news 等能力时先 activate_tool_pack，或明示缺口',
+      '- 声称全面分析前：缺 fundamentals/market/news 等能力时先 activate_tool_pack，或明示缺口',
     ].join('\n')
   }
   return [
@@ -270,6 +288,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   // core 能力路径始终相关
   if (packLoaded(packs, 'core')) {
     sections.push(buildStandardInstrumentApiPlaybook())
+  }
+  if (packLoaded(packs, 'fundamentals')) {
+    sections.push(buildFundamentalsPlaybook())
   }
   if (packLoaded(packs, 'instrument_analytics') || packLoaded(packs, 'core')) {
     sections.push(buildInstrumentAnalysisPlaybook())

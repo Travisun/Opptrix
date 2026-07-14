@@ -60,6 +60,15 @@ interface IntentRule {
  */
 const INTENT_RULES: IntentRule[] = [
   {
+    intent: 'etf_profile',
+    priority: 99,
+    patterns: [/ETF.*(?:档案|概况|费率|跟踪指数|规模)|(?:档案|费率|跟踪指数).*ETF|基金档案|ETF.*(?:是什么|简介)/i],
+    preferredTools: ['get_etf_profile', 'get_etf_nav', 'get_instrument_snapshot'],
+    avoidTools: ['get_etf_holdings', 'get_instrument_profile'],
+    confidence: 'high',
+    hint: '问 ETF 档案/跟踪指数/费率 → get_etf_profile；净值用 get_etf_nav，成分用 get_etf_holdings',
+  },
+  {
     intent: 'etf_nav',
     priority: 100,
     patterns: [/净值|溢价率|折价率|IOPV/i],
@@ -177,6 +186,33 @@ const INTENT_RULES: IntentRule[] = [
     hint: 'A 股单股趋势快评 → get_trend_brief；深度评分再用 evaluate_instrument',
   },
   {
+    intent: 'sector_constituents',
+    priority: 82,
+    patterns: [/板块成分|行业成分|成分股列表|板块里有哪些|同板块股票|行业成分股/],
+    preferredTools: ['get_sector_constituents', 'get_sector_list', 'search_instruments'],
+    avoidTools: ['industry_mining', 'get_etf_holdings'],
+    confidence: 'high',
+    hint: '板块/行业成分 → get_sector_constituents（须 board_key/industry_code）；勿用 industry_mining 叙事代替',
+  },
+  {
+    intent: 'sector_list',
+    priority: 80,
+    patterns: [/板块列表|行业列表|有哪些板块|申万行业|板块目录|行业分类目录/],
+    preferredTools: ['get_sector_list', 'get_sector_constituents', 'industry_mining'],
+    avoidTools: ['get_market_dynamics'],
+    confidence: 'high',
+    hint: '板块/行业目录 → get_sector_list；产业链上下游叙事仍用 industry_mining',
+  },
+  {
+    intent: 'market_session',
+    priority: 78,
+    patterns: [/现在(开盘|休市|交易中)吗|是否开盘|交易时段|盘前还是盘后|市场开了吗|现在是盘中吗/],
+    preferredTools: ['get_market_session', 'get_current_time'],
+    avoidTools: ['get_market_dynamics', 'get_morning_brief'],
+    confidence: 'high',
+    hint: '问是否开盘/时段 → get_market_session；非完整节假日日历',
+  },
+  {
     intent: 'industry',
     priority: 76,
     patterns: [/产业链|上下游|行业透视|主题观察池|行业图谱|mermaid/i],
@@ -231,6 +267,60 @@ const INTENT_RULES: IntentRule[] = [
     hint: '回测/IC → run_backtest；单股策略报告用 strategy_report',
   },
   {
+    intent: 'financials',
+    priority: 72,
+    patterns: [/营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|\bEPS\b|利润表|资产负债/i],
+    preferredTools: ['get_instrument_financials', 'get_instrument_snapshot', 'get_instrument_profile'],
+    avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
+    confidence: 'high',
+    hint: '财务数字核实 → 首选 get_instrument_financials；勿用 evaluate 黑盒代替事实表',
+  },
+  {
+    intent: 'profile',
+    priority: 70,
+    patterns: [/公司简介|主营业务|所属概念|所属行业|做什么的|公司概况|F10|基本资料/],
+    preferredTools: ['get_instrument_profile', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument', 'invoke_provider_custom_method'],
+    confidence: 'high',
+    hint: '公司概况/概念 → get_instrument_profile',
+  },
+  {
+    intent: 'shareholders',
+    priority: 68,
+    patterns: [/十大股东|股东结构|股东持股|股权结构|流通股东|谁持股/],
+    preferredTools: ['get_instrument_shareholders', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '股东结构 → get_instrument_shareholders',
+  },
+  {
+    intent: 'money_flow',
+    priority: 69,
+    patterns: [/资金流|资金净流入|主力.*净流入|北向资金|资金进出|散户资金/],
+    preferredTools: ['get_instrument_money_flow', 'get_instrument_snapshot', 'get_market_dynamics'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '个股资金流向 → get_instrument_money_flow；全市场资金概况才用 get_market_dynamics',
+  },
+  {
+    intent: 'instrument_notices',
+    priority: 90,
+    patterns: [/公告列表|公司公告|披露公告|最新公告|年报.*公告|临时公告|查看公告|标的公告|个股公告/],
+    preferredTools: ['get_instrument_notices', 'get_notice_content', 'get_instrument_snapshot'],
+    avoidTools: ['list_news_articles', 'evaluate_instrument'],
+    confidence: 'high',
+    hint: '标的公告列表 → get_instrument_notices；读全文再用 get_notice_content(url)',
+  },
+  {
+    intent: 'dividend',
+    priority: 66,
+    patterns: [/分红|派息|股息|股利|分红历史|分红方案/],
+    preferredTools: ['get_instrument_dividend', 'get_instrument_snapshot'],
+    avoidTools: ['evaluate_instrument'],
+    confidence: 'high',
+    hint: '分红派息 → get_instrument_dividend',
+  },
+  {
     intent: 'price_only',
     priority: 64,
     patterns: [/现价|最新价|多少钱|涨跌幅|实时行情|报价|现报/],
@@ -282,21 +372,23 @@ const INTENT_RULES: IntentRule[] = [
     preferredTools: [
       'search_instruments',
       'get_instrument_snapshot',
+      'get_instrument_financials',
+      'get_instrument_profile',
       'evaluate_instrument',
       'get_instrument_strategy_signal',
     ],
     avoidTools: ['get_instrument_quotes'],
     confidence: 'medium',
-    hint: '深度分析：已知代码可跳过 search → snapshot → evaluate_instrument；仅报价不够',
+    hint: '深度分析：已知代码可跳过 search → snapshot → financials/profile 事实表 → evaluate；仅报价不够',
   },
   {
     intent: 'etf_general',
     priority: 38,
     patterns: [/\bETF\b|场内基金|联接基金/i],
-    preferredTools: ['search_instruments', 'get_instrument_snapshot', 'get_etf_nav', 'get_etf_holdings'],
+    preferredTools: ['search_instruments', 'get_instrument_snapshot', 'get_etf_profile', 'get_etf_nav', 'get_etf_holdings'],
     avoidTools: ['get_portfolio_holdings'],
     confidence: 'medium',
-    hint: 'ETF 综合：search/snapshot；明确净值用 get_etf_nav，成分用 get_etf_holdings',
+    hint: 'ETF 综合：search/snapshot/profile；明确净值用 get_etf_nav，成分用 get_etf_holdings',
   },
 ]
 
@@ -307,11 +399,20 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   when: string
 }> = [
   { prefer: 'get_instrument_quotes', avoid: 'evaluate_instrument', when: '只需现价/涨跌，不需要评分' },
+  { prefer: 'get_instrument_financials', avoid: 'evaluate_instrument', when: '核实营收/利润/ROE 等财务数字' },
+  { prefer: 'get_instrument_profile', avoid: 'evaluate_instrument', when: '只要公司概况/概念，不做评分' },
+  { prefer: 'get_instrument_financials', avoid: 'invoke_provider_custom_method', when: '标准 financials 已覆盖' },
+  { prefer: 'get_instrument_money_flow', avoid: 'get_market_dynamics', when: '问单只资金流向而非大盘全景' },
+  { prefer: 'get_instrument_notices', avoid: 'list_news_articles', when: '问该标的官方公告列表而非 RSS 资讯' },
   { prefer: 'get_instrument_snapshot', avoid: 'get_instrument_quotes', when: '需要综合快照（行情+概况），不止最新价' },
   { prefer: 'evaluate_instrument', avoid: 'get_trend_brief', when: '需要评分卡/系统评估，而非一句话趋势' },
   { prefer: 'get_trend_brief', avoid: 'evaluate_instrument', when: '只要 A 股趋势快评' },
   { prefer: 'get_etf_nav', avoid: 'get_instrument_quotes', when: '问 ETF 净值/溢价序列' },
   { prefer: 'get_etf_holdings', avoid: 'get_portfolio_holdings', when: '问 ETF 成分而非个人持仓' },
+  { prefer: 'get_etf_profile', avoid: 'get_instrument_profile', when: '问 ETF 档案而非股票公司概况' },
+  { prefer: 'get_sector_list', avoid: 'industry_mining', when: '只要板块/行业目录而非产业链叙事' },
+  { prefer: 'get_sector_constituents', avoid: 'get_etf_holdings', when: '问股票板块成分而非 ETF 持仓' },
+  { prefer: 'get_market_session', avoid: 'get_morning_brief', when: '只问是否开盘/时段' },
   { prefer: 'get_portfolio_holdings', avoid: 'get_watchlist', when: '问实盘持仓而非关注列表' },
   { prefer: 'get_market_regime', avoid: 'get_trend_brief', when: '问大盘牛熊而非单股' },
   { prefer: 'list_news_articles', avoid: 'get_instrument_snapshot', when: '主任务是读资讯而非个股快照' },
@@ -334,6 +435,18 @@ const L1_INTENTS = new Set([
   'general',
   'watchlist',
   'portfolio_trades',
+  'financials',
+  'profile',
+  'shareholders',
+  'dividend',
+  'money_flow',
+  'instrument_notices',
+  'market_session',
+  'sector_list',
+  'sector_constituents',
+  'etf_profile',
+  'etf_nav',
+  'etf_holdings',
 ])
 
 const L3_INTENTS = new Set([
@@ -443,18 +556,32 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
   // 深度分析且已有代码 → search 降为可选末位
   if (matched.intent === 'depth_analysis' && hasInstrumentCue(message)) {
     preferredTools = preferredTools.filter(t => t !== 'search_instruments')
-    preferredTools = ['get_instrument_snapshot', 'evaluate_instrument', ...preferredTools.filter(
-      t => t !== 'get_instrument_snapshot' && t !== 'evaluate_instrument',
-    )]
+    preferredTools = [
+      'get_instrument_snapshot',
+      'get_instrument_financials',
+      'get_instrument_profile',
+      'evaluate_instrument',
+      ...preferredTools.filter(
+        t =>
+          t !== 'get_instrument_snapshot'
+          && t !== 'get_instrument_financials'
+          && t !== 'get_instrument_profile'
+          && t !== 'evaluate_instrument',
+      ),
+    ]
   }
 
   let requiredPacks = packsForTools(preferredTools)
-  // L3 且用户要「全面」时：在预算内尽量塞入 market，便于环境维度
+  // L3 且用户要「全面」时：预算扩到 3，以同时容纳 analytics + fundamentals + market
   const tierPreview = resolveResearchTier(matched.intent, message)
+  const packBudget =
+    tierPreview === 'L3' && L3_UPGRADE_RE.test(message)
+      ? Math.max(MAX_SEEDED_BUSINESS_PACKS, 3)
+      : MAX_SEEDED_BUSINESS_PACKS
   if (tierPreview === 'L3' && L3_UPGRADE_RE.test(message) && !requiredPacks.includes('market')) {
-    requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded)
+    requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded, packBudget)
   }
-  const seedPacks = mergePackBudget(requiredPacks, seeded)
+  const seedPacks = mergePackBudget(requiredPacks, seeded, packBudget)
 
   return finish({
     preferredTools,
@@ -468,14 +595,18 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
 }
 
 /** required 优先占预算，再用播种补足 */
-function mergePackBudget(required: ToolPackId[], seeded: ToolPackId[]): ToolPackId[] {
+function mergePackBudget(
+  required: ToolPackId[],
+  seeded: ToolPackId[],
+  max = MAX_SEEDED_BUSINESS_PACKS,
+): ToolPackId[] {
   const out: ToolPackId[] = []
   const seen = new Set<ToolPackId>()
   for (const p of [...required, ...seeded]) {
     if (seen.has(p)) continue
     seen.add(p)
     out.push(p)
-    if (out.length >= MAX_SEEDED_BUSINESS_PACKS) break
+    if (out.length >= max) break
   }
   return out
 }

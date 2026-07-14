@@ -151,6 +151,142 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('instrument_snapshot', resolveInstrumentParams(a)),
     },
     {
+      name: 'get_instrument_profile',
+      category: '基本面',
+      description: '公司/标的概况事实表（主业、行业、概念、上市信息等）；核实「做什么的」时优先于 snapshot 碎片',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('instrument_profile', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_instrument_financials',
+      category: '基本面',
+      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_type: {
+          type: 'string',
+          description: '报告类型：all（默认，多期）| annual | quarter',
+        },
+        report_date: {
+          type: 'string',
+          description: '可选，报告期 YYYY-MM-DD；空则返回可用最近若干期',
+        },
+      }),
+      handler: (a) => d('instrument_financials', {
+        ...resolveInstrumentParams(a),
+        report_type: a.report_type ?? 'all',
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_shareholders',
+      category: '基本面',
+      description: '股东结构事实表（十大股东/股本等）；核实股权集中度或机构持仓时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，报告期 YYYY-MM-DD',
+        },
+      }),
+      handler: (a) => d('instrument_shareholders', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date,
+      }),
+    },
+    {
+      name: 'get_instrument_dividend',
+      category: '基本面',
+      description: '分红派息历史事实表；核实分红政策与历史派息时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        page: { type: 'number', description: '可选，页码（港股等分页源）' },
+        page_size: { type: 'number', description: '可选，每页条数' },
+      }),
+      handler: (a) => d('instrument_dividend', {
+        ...resolveInstrumentParams(a),
+        page: a.page,
+        page_size: a.page_size,
+      }),
+    },
+    {
+      name: 'get_instrument_money_flow',
+      category: '市场资金',
+      description: '个股资金流向事实表（主力/散户等）；核实北向或主力进出时使用，勿用 market_dynamics 笼统代替',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('instrument_money_flow', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_instrument_notices',
+      category: '公告研报',
+      description: '按标的拉取上市公司公告/披露列表；读全文时再对条目 url 调用 get_notice_content',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        page: { type: 'number', description: '页码，默认 1' },
+        page_size: { type: 'number', description: '每页条数，默认 20，最大 50' },
+      }),
+      handler: (a) => d('instrument_notices', {
+        ...resolveInstrumentParams(a),
+        page: a.page ?? 1,
+        page_size: a.page_size ?? 20,
+      }),
+    },
+    {
+      name: 'get_sector_list',
+      category: '行业板块',
+      description: '板块或行业目录（boards / industries）；拿 board_key / industry_code 后再调 get_sector_constituents',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+        kind: { type: 'string', description: 'industries（默认）或 boards' },
+        level: { type: 'string', description: '行业层级 1|2（仅 industries）' },
+        plate_type: {
+          type: 'string',
+          description: '可选，直接传 plateType 如 industries:CN、boards:HK、board:hsj:CN',
+        },
+      }),
+      handler: (a) => d('sector_list', {
+        market: a.market ?? 'CN',
+        kind: a.kind ?? 'industries',
+        level: a.level,
+        plate_type: a.plate_type,
+      }),
+    },
+    {
+      name: 'get_sector_constituents',
+      category: '行业板块',
+      description: '板块或行业成分股列表；须先有 board_key 或 industry_code（来自 get_sector_list）',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+        board_key: { type: 'string', description: '板块键，如 hsj、cyb' },
+        industry_code: { type: 'string', description: '行业代码（如申万）' },
+        page: { type: 'number', description: '页码，默认 1' },
+        page_size: { type: 'number', description: '每页条数，默认 50，最大 100' },
+      }),
+      handler: (a) => d('sector_constituents', {
+        market: a.market ?? 'CN',
+        board_key: a.board_key,
+        industry_code: a.industry_code,
+        page: a.page ?? 1,
+        page_size: a.page_size ?? 50,
+      }),
+    },
+    {
+      name: 'get_etf_profile',
+      category: 'ETF',
+      description: 'ETF 档案事实表（跟踪指数、费率、规模等）；净值用 get_etf_nav，成分用 get_etf_holdings',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('etf_profile', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_market_session',
+      category: '市场资金',
+      description: '轻量交易时段状态（是否盘中/盘前）；非完整节假日日历，精确交易日走 provider_ext',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+      }),
+      handler: (a) => d('market_session', { market: a.market ?? 'CN' }),
+    },
+    {
       name: 'get_instrument_quotes',
       category: '跨市场标的',
       description: '批量获取多只标的最新价、涨跌幅等实时/近收盘行情；instruments 为 InstrumentRef 数组',

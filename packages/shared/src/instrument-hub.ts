@@ -11,6 +11,15 @@ export type InstrumentHubCapability =
   | 'chart_intraday'
   | 'capabilities'
   | 'search'
+  | 'profile'
+  | 'financials'
+  | 'shareholders'
+  | 'dividend'
+  | 'money_flow'
+  | 'notices'
+  | 'sector_list'
+  | 'sector_constituents'
+  | 'etf_profile'
   | 'cyq'
   | 'institution_rating'
   | 'institution_report'
@@ -27,6 +36,15 @@ export const INSTRUMENT_HUB_FEATURE: Record<InstrumentHubCapability, string> = {
   chart_intraday: 'instrument_chart',
   capabilities: 'instrument_capabilities',
   search: 'instrument_search',
+  profile: 'instrument_profile',
+  financials: 'instrument_financials',
+  shareholders: 'instrument_shareholders',
+  dividend: 'instrument_dividend',
+  money_flow: 'instrument_money_flow',
+  notices: 'instrument_notices',
+  sector_list: 'sector_list',
+  sector_constituents: 'sector_constituents',
+  etf_profile: 'etf_profile',
   cyq: 'instrument_cyq',
   institution_rating: 'instrument_institution_rating',
   institution_report: 'instrument_institution_report',
@@ -59,6 +77,8 @@ export const LEGACY_HUB_FEATURE_SHIM: Record<string, InstrumentHubCapability> = 
   institution_report: 'institution_report',
   search_stocks: 'search',
   etf_snapshot: 'snapshot',
+  us_profile: 'profile',
+  us_financials: 'financials',
 }
 
 export function resolveInstrumentHubFeature(legacyOrStandard: string): string {
@@ -74,6 +94,7 @@ export function hubCapabilityForApplication(cap: ApplicationCapability): Instrum
     case 'chart_daily': return 'chart'
     case 'chart_intraday': return 'chart_intraday'
     case 'cyq': return 'cyq'
+    case 'money_flow': return 'money_flow'
     case 'institution_rating': return 'institution_rating'
     case 'scorecard': return 'evaluation'
     case 'strategy_signal': return 'strategy_signal'

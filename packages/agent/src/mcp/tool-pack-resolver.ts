@@ -31,14 +31,14 @@ const SEED_RULES: SeedRule[] = [
     weight: 3,
     patterns: [
       /\bETF\b|交易所交易基金|净值|溢价率|折价|联接基金|场内基金/i,
-      /持仓.*权重|成分股.*ETF/i,
+      /持仓.*权重|成分股.*ETF|ETF.*(?:档案|费率|跟踪指数)/i,
     ],
   },
   {
     pack: 'news',
     weight: 3,
     patterns: [
-      /资讯|新闻|公告|研报|订阅|RSS|新闻中心|notice|disclosure/i,
+      /资讯|新闻|公告|研报|订阅|RSS|新闻中心|notice|disclosure|公告列表|公司公告/i,
       /看好空|舆情|媒体报道/,
     ],
   },
@@ -48,14 +48,15 @@ const SEED_RULES: SeedRule[] = [
     patterns: [
       /产业[链路]|上下游|行业透视|板块龙头|主题观察|mermaid/i,
       /半导体|新能源车|光伏|锂电.*产业/,
+      /板块列表|行业列表|板块成分|行业成分|申万行业|成分股列表/,
     ],
   },
   {
     pack: 'market',
     weight: 2,
     patterns: [
-      /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘/i,
-      /沪深300|风险偏好|市场状态/,
+      /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘|资金流|资金净流入|主力.*净流入|北向/i,
+      /沪深300|风险偏好|市场状态|交易时段|是否开盘|盘前|盘后/,
     ],
   },
   {
@@ -64,6 +65,14 @@ const SEED_RULES: SeedRule[] = [
     patterns: [
       /分析|评估|评分|打分|技术面|策略信号|指标|筹码|机构评级|好不好|怎么看|值不值得/i,
       /evaluate|signal|indicator/i,
+    ],
+  },
+  {
+    pack: 'fundamentals',
+    weight: 3,
+    patterns: [
+      /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|主营业务|所属概念|公司简介|基本面/i,
+      /financials|profile|dividend|shareholder/i,
     ],
   },
   {

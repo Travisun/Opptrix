@@ -89,6 +89,30 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'ETF 最新披露持仓与权重；了解底层资产或行业暴露时使用。',
     compliance: '单只 code；持仓按季报更新，勿臆造成分股。',
   },
+  get_etf_profile: {
+    hubFeature: 'etf_profile',
+    miningEligible: true,
+    usageGuide: 'ETF 档案（跟踪指数、费率、规模等）；与净值/持仓区分。',
+    compliance: '单只 InstrumentRef/code；经标准 etf_profile；无数据时声明缺口。',
+  },
+  get_sector_list: {
+    hubFeature: 'sector_list',
+    miningEligible: true,
+    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事仍用 industry_mining。',
+    compliance: '只读；market/kind/plate_type 可选；勿与 industry_mining 混淆。',
+  },
+  get_sector_constituents: {
+    hubFeature: 'sector_constituents',
+    miningEligible: true,
+    usageGuide: '板块或行业成分股；须先有 board_key 或 industry_code（来自 get_sector_list）。',
+    compliance: 'board_key 与 industry_code 二选一；分页 page/page_size；勿编造成分。',
+  },
+  get_market_session: {
+    hubFeature: 'market_session',
+    miningEligible: true,
+    usageGuide: '问是否开盘/交易时段时使用；非完整节假日日历。',
+    compliance: '只读；market 默认 CN；精确交易日走 provider_ext，勿当作完整 calendar。',
+  },
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
@@ -104,8 +128,44 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_snapshot: {
     hubFeature: 'instrument_snapshot',
     miningEligible: true,
-    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；跨市场深度分析首选入口。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `单只标的聚合快照（概况、行情、关键序列）；跨市场深度分析首选入口。需要可核验财务/股东事实表时改用 get_instrument_financials / get_instrument_profile。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只 InstrumentRef；capabilities 不含 snapshot 时勿调用；勿对 20+ 只批量 snapshot。',
+  },
+  get_instrument_profile: {
+    hubFeature: 'instrument_profile',
+    miningEligible: true,
+    usageGuide: `公司/标的概况事实表（主业、行业、概念、上市信息）；问「做什么的/所属概念」时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 profile capability；勿用 invoke_provider_custom_method 替代；无数据时声明缺口。',
+  },
+  get_instrument_financials: {
+    hubFeature: 'instrument_financials',
+    miningEligible: true,
+    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；勿用 evaluate 代替核实。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；report_type 默认 all；引用具体 reportDate；无数据时声明缺口，禁止编造。',
+  },
+  get_instrument_shareholders: {
+    hubFeature: 'instrument_shareholders',
+    miningEligible: true,
+    usageGuide: `股东结构事实表；问十大股东、股权集中度、机构持仓时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；部分市场可能无数据；勿编造股东名单。',
+  },
+  get_instrument_dividend: {
+    hubFeature: 'instrument_dividend',
+    miningEligible: true,
+    usageGuide: `分红派息历史事实表；问分红政策、历史派息时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；港股可带 page；无记录时声明，勿臆造股息率时间序列。',
+  },
+  get_instrument_money_flow: {
+    hubFeature: 'instrument_money_flow',
+    miningEligible: true,
+    usageGuide: `个股资金流向事实表；问主力/北向/资金进出时首选；勿用 get_market_dynamics 笼统代替。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；主要支持 CN；空数据时声明缺口，禁止编造净流入数字。',
+  },
+  get_instrument_notices: {
+    hubFeature: 'instrument_notices',
+    miningEligible: false,
+    usageGuide: `按标的拉官方公告/披露列表；用户问公告、年报披露列表时首选。正文用 get_notice_content(url)。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；page/page_size 可选；列表无正文；url 必须来自本工具返回再调 get_notice_content。',
   },
   get_instrument_quotes: {
     hubFeature: 'instrument_quotes',
@@ -260,7 +320,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_notice_content: {
     hubFeature: 'notice_content',
     miningEligible: false,
-    usageGuide: '用户要读某条上市公司公告/年报全文时使用；url 来自 get_instrument_snapshot 公告列表或用户提供的链接。',
+    usageGuide: '用户要读某条上市公司公告/年报全文时使用；url 来自 get_instrument_notices、get_instrument_snapshot 公告列表或用户提供的链接。',
     compliance: 'url 必填；支持 HTML 与 PDF；正文已压缩；truncated=true 时可增大 max_chars；只读。',
   },
   get_current_time: {

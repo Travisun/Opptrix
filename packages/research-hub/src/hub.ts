@@ -5,6 +5,7 @@ import { MarketDataEngine, computeIndicators, computeLatestChipProfile, computeC
   formatProviderMethodArgs,
   wireRegistryMethodArgs,
   cnTodayString, shouldPreferTodayIntraday, type StockMarket,
+  cnMarketNow, isCnMarketOpen, isCnTradingWeekday, isCnBeforeMarketOpen, isCnAfterMarketClose,
   type NewsItem, type MoneyFlow, type Dividend,
   invokeProviderDriverMethod,
   crossMarketChartTimeZone,
@@ -300,6 +301,10 @@ export class ResearchHub {
         }
         case 'etf_nav': return this.queryEtfInstrumentData(params, 'etf_nav', t0)
         case 'etf_holdings': return this.queryEtfInstrumentData(params, 'etf_holdings', t0)
+        case 'etf_profile': return this.queryEtfInstrumentData(params, 'etf_profile', t0)
+        case 'sector_list': return this.sectorList(params, t0)
+        case 'sector_constituents': return this.sectorConstituents(params, t0)
+        case 'market_session': return this.marketSession(params, t0)
         case 'local_etf_list': return await this.localEtfList(params, t0)
         case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
         case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
@@ -317,6 +322,12 @@ export class ResearchHub {
         case 'instrument_chart': return this.instrumentChart(params, t0)
         case 'instrument_search': return this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
+        case 'instrument_profile': return this.queryInstrumentStandardData(params, 'profile', t0)
+        case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
+        case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
+        case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
+        case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
+        case 'instrument_notices': return this.instrumentNotices(params, t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2181,7 +2192,7 @@ export class ResearchHub {
 
   private async queryEtfInstrumentData(
     params: Record<string, unknown>,
-    capability: 'etf_nav' | 'etf_holdings' | 'etf_snapshot',
+    capability: 'etf_nav' | 'etf_holdings' | 'etf_snapshot' | 'etf_profile',
     t0: number,
   ) {
     const ref = resolveInstrumentFromParams(params)
@@ -2190,13 +2201,308 @@ export class ResearchHub {
       etf_nav: 'ETF 净值',
       etf_holdings: 'ETF 持仓',
       etf_snapshot: 'ETF 快照',
+      etf_profile: 'ETF 档案',
     } as const
     const r = await this.de.queryInstrumentData(ref, capability)
     if (!r.success) return fail(instrumentQueryError(r, `${labels[capability]}获取失败`), t0)
     const data = instrumentQueryData(r)
     if (capability === 'etf_snapshot') return ok(data, labels[capability], t0)
+    if (capability === 'etf_profile') {
+      const row = Array.isArray(data) ? (data[0] ?? null) : data ?? null
+      return ok(
+        { instrument: ref, profile: row, source: 'queryInstrumentData' },
+        labels.etf_profile,
+        t0,
+      )
+    }
     const rows = (data as unknown[]) ?? []
     return ok(rows, `${labels[capability]} ${rows.length} 条`, t0)
+  }
+
+  /** 板块/行业目录 — 标准 sector_list（plateType 如 industries:CN / boards:CN） */
+  private async sectorList(params: Record<string, unknown>, t0: number) {
+    const marketRaw = String(params.market ?? 'CN').toUpperCase()
+    const market = (['CN', 'US', 'HK'].includes(marketRaw) ? marketRaw : 'CN') as 'CN' | 'US' | 'HK'
+    const kind = String(params.kind ?? params.plate_kind ?? 'industries').toLowerCase()
+    const level = params.level != null ? String(params.level) : ''
+    let plateType = params.plate_type != null ? String(params.plate_type).trim() : ''
+    if (!plateType) {
+      if (kind === 'boards' || kind === 'board') {
+        plateType = `boards:${market}`
+      } else {
+        plateType = level === '1' || level === '2'
+          ? `industries:${market}:${level}`
+          : `industries:${market}`
+      }
+    }
+    const ref = { market, assetClass: 'EQUITY' as const, symbol: market === 'US' ? 'AAPL' : market === 'HK' ? '00700' : '000001' }
+    const r = await this.de.queryInstrumentData(ref, 'sector_list', { plateType })
+    if (!r.success) return fail(instrumentQueryError(r, '板块/行业列表获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(
+      {
+        market,
+        plate_type: plateType,
+        items,
+        count: items.length,
+        source: 'queryInstrumentData',
+        hint: '成分股用 get_sector_constituents（board_key 或 industry_code 来自本列表）',
+      },
+      `板块/行业 ${items.length} 条`,
+      t0,
+    )
+  }
+
+  /** 板块或行业成分股 — 标准 stock_list + boardKey / industryCode */
+  private async sectorConstituents(params: Record<string, unknown>, t0: number) {
+    const marketRaw = String(params.market ?? 'CN').toUpperCase()
+    const market = (['CN', 'US', 'HK'].includes(marketRaw) ? marketRaw : 'CN') as 'CN' | 'US' | 'HK'
+    const boardKey = params.board_key != null ? String(params.board_key).trim() : ''
+    const industryCode = params.industry_code != null ? String(params.industry_code).trim() : ''
+    if (!boardKey && !industryCode) {
+      return fail('board_key 或 industry_code 必填其一（可先 get_sector_list）', t0)
+    }
+    const page = params.page != null ? Math.max(1, Number(params.page)) : 1
+    const pageSize = params.page_size != null
+      ? Math.min(100, Math.max(1, Number(params.page_size)))
+      : 50
+    const ref = { market, assetClass: 'EQUITY' as const, symbol: market === 'US' ? 'AAPL' : market === 'HK' ? '00700' : '000001' }
+    const r = await this.de.queryInstrumentData(ref, 'stock_list', {
+      page,
+      pageSize,
+      boardKey: boardKey || undefined,
+      industryCode: industryCode || undefined,
+    })
+    if (!r.success) return fail(instrumentQueryError(r, '板块/行业成分获取失败'), t0)
+    const items = instrumentQueryData<unknown[]>(r) ?? []
+    return ok(
+      {
+        market,
+        board_key: boardKey || null,
+        industry_code: industryCode || null,
+        items,
+        count: items.length,
+        page,
+        page_size: pageSize,
+        source: 'queryInstrumentData',
+      },
+      `成分股 ${items.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * 轻量交易时段状态 — 常规时段 + 工作日判断，非完整节假日日历。
+   * 厚日历请走 provider_ext（如 baostock/同花顺 tradingDays）。
+   */
+  private marketSession(params: Record<string, unknown>, t0: number) {
+    const marketRaw = String(params.market ?? 'CN').toUpperCase()
+    const market = (['CN', 'US', 'HK'].includes(marketRaw) ? marketRaw : 'CN') as 'CN' | 'US' | 'HK'
+    const now = new Date()
+    const disclaimer =
+      '仅常规交易时段与工作日启发式判断，不含完整法定节假日/调休；精确日历请用 list_provider_custom_methods 查交易日接口'
+
+    if (market === 'CN') {
+      const local = cnMarketNow()
+      const weekday = isCnTradingWeekday(local)
+      const open = isCnMarketOpen(local)
+      let session_label = '休市'
+      if (!weekday) session_label = '周末休市'
+      else if (isCnBeforeMarketOpen(local)) session_label = '盘前'
+      else if (open) session_label = '盘中'
+      else if (isCnAfterMarketClose(local)) session_label = '盘后'
+      return ok(
+        {
+          market: 'CN',
+          timezone: 'Asia/Shanghai',
+          local_date: cnTodayString(local),
+          weekday,
+          in_regular_session: open,
+          session_label,
+          regular_hours: '09:15–11:30, 13:00–15:05（含集合竞价约计）',
+          disclaimer,
+        },
+        session_label,
+        t0,
+      )
+    }
+
+    if (market === 'US') {
+      const local = new Date(now.toLocaleString('en-US', { timeZone: 'America/New_York' }))
+      const day = local.getDay()
+      const weekday = day >= 1 && day <= 5
+      const mins = local.getHours() * 60 + local.getMinutes()
+      const y = local.getFullYear()
+      const m = String(local.getMonth() + 1).padStart(2, '0')
+      const d = String(local.getDate()).padStart(2, '0')
+      const localDate = `${y}-${m}-${d}`
+      const tradingDay = weekday && isCrossMarketTradingDay('US', localDate)
+      const open = tradingDay && mins >= 9 * 60 + 30 && mins < 16 * 60
+      let session_label = 'closed'
+      if (!tradingDay) session_label = 'closed'
+      else if (mins < 9 * 60 + 30) session_label = 'pre'
+      else if (open) session_label = 'regular'
+      else session_label = 'post'
+      return ok(
+        {
+          market: 'US',
+          timezone: 'America/New_York',
+          local_date: localDate,
+          weekday: tradingDay,
+          in_regular_session: open,
+          session_label,
+          regular_hours: '09:30–16:00 ET',
+          disclaimer,
+        },
+        session_label,
+        t0,
+      )
+    }
+
+    // HK
+    const local = new Date(now.toLocaleString('en-US', { timeZone: 'Asia/Hong_Kong' }))
+    const day = local.getDay()
+    const weekday = day >= 1 && day <= 5
+    const mins = local.getHours() * 60 + local.getMinutes()
+    const y = local.getFullYear()
+    const m = String(local.getMonth() + 1).padStart(2, '0')
+    const d = String(local.getDate()).padStart(2, '0')
+    const localDate = `${y}-${m}-${d}`
+    const tradingDay = weekday && isCrossMarketTradingDay('HK', localDate)
+    const morning = mins >= 9 * 60 + 30 && mins <= 12 * 60
+    const afternoon = mins >= 13 * 60 && mins <= 16 * 60
+    const open = tradingDay && (morning || afternoon)
+    let session_label = '休市'
+    if (!tradingDay) session_label = '休市'
+    else if (mins < 9 * 60 + 30) session_label = '盘前'
+    else if (open) session_label = '盘中'
+    else if (mins > 12 * 60 && mins < 13 * 60) session_label = '午休'
+    else session_label = '盘后'
+    return ok(
+      {
+        market: 'HK',
+        timezone: 'Asia/Hong_Kong',
+        local_date: localDate,
+        weekday: tradingDay,
+        in_regular_session: open,
+        session_label,
+        regular_hours: '09:30–12:00, 13:00–16:00 HKT',
+        disclaimer,
+      },
+      session_label,
+      t0,
+    )
+  }
+
+  /**
+   * 标准事实表能力 — profile / financials / shareholders / dividend / money_flow。
+   * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
+   */
+  private async queryInstrumentStandardData(
+    params: Record<string, unknown>,
+    capability: 'profile' | 'financials' | 'shareholders' | 'dividend' | 'money_flow',
+    t0: number,
+  ) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+
+    const labels = {
+      profile: '公司概况',
+      financials: '财务摘要',
+      shareholders: '股东结构',
+      dividend: '分红历史',
+      money_flow: '资金流向',
+    } as const
+
+    const opts: {
+      reportDate?: string
+      reportType?: string
+      page?: number
+      pageSize?: number
+    } = {}
+    if (capability === 'financials') {
+      opts.reportDate = params.report_date != null ? String(params.report_date) : ''
+      opts.reportType = params.report_type != null ? String(params.report_type) : 'all'
+    }
+    if (capability === 'shareholders' && params.report_date != null) {
+      opts.reportDate = String(params.report_date)
+    }
+    if (capability === 'dividend') {
+      if (params.page != null) opts.page = Number(params.page)
+      if (params.page_size != null) opts.pageSize = Number(params.page_size)
+    }
+
+    const r = await this.de.queryInstrumentData(ref, capability, opts)
+    if (!r.success) return fail(instrumentQueryError(r, `${labels[capability]}获取失败`), t0)
+    const data = instrumentQueryData(r)
+
+    if (capability === 'profile') {
+      const row = Array.isArray(data) ? (data[0] ?? null) : data ?? null
+      return ok(
+        {
+          instrument: ref,
+          profile: row,
+          source: 'queryInstrumentData',
+        },
+        labels.profile,
+        t0,
+      )
+    }
+
+    const rows = Array.isArray(data) ? data : data != null ? [data] : []
+    return ok(
+      {
+        instrument: ref,
+        items: rows,
+        count: rows.length,
+        source: 'queryInstrumentData',
+      },
+      `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /** 标的绑定公告列表 — 标准 notices；CN 空结果时 zzshare 兜底 */
+  private async instrumentNotices(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    const page = params.page != null ? Math.max(1, Number(params.page)) : 1
+    const pageSize = params.page_size != null
+      ? Math.min(50, Math.max(1, Number(params.page_size)))
+      : 20
+
+    const r = await this.de.queryInstrumentData(ref, 'notices', { page, pageSize })
+    let rows = instrumentQueryData<NewsItem[]>(r) ?? []
+    let source = rows.length ? 'queryInstrumentData' : 'none'
+
+    if (!rows.length && ref.market === 'CN') {
+      const fallback = await this.callDetailProviderMethod<NewsItem>(
+        ['zzshare'],
+        'news',
+        [ref.symbol, page, pageSize, 'notice'],
+        resolveCnInstrumentRef(ref),
+      )
+      if (fallback?.length) {
+        rows = dedupeStockNewsItems(fallback).slice(0, pageSize)
+        source = 'zzshare'
+      }
+    } else if (rows.length) {
+      rows = dedupeStockNewsItems(rows).slice(0, pageSize)
+    }
+
+    return ok(
+      {
+        instrument: ref,
+        items: rows,
+        count: rows.length,
+        page,
+        page_size: pageSize,
+        source,
+        hint: '正文请用 get_notice_content 传入条目 url；勿编造未返回的公告',
+      },
+      `公告 ${rows.length} 条`,
+      t0,
+    )
   }
 
   private async queryCnKline(
