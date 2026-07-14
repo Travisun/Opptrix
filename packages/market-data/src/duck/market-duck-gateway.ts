@@ -19,6 +19,7 @@ import {
   DUCK_READ_PRIORITY_BACKGROUND,
   DUCK_READ_PRIORITY_INTERACTIVE,
   getDuckCliPool,
+  resetDuckCliPools,
 } from './duck-cli-pool.js'
 import { isDerivedMaintenanceActive } from './duck-subprocess-gate.js'
 import { getDuckNeoReader, resetDuckNeoReaders } from './duck-neo-reader.js'
@@ -760,4 +761,6 @@ export function resetMarketDuckGateways(): void {
   gateways.clear()
   duckDataCache = null
   void resetDuckNeoReaders()
+  // Fire-and-forget: runtime callers are sync. Tests should await resetDuckCliPools().
+  void resetDuckCliPools()
 }

@@ -7,7 +7,7 @@
 
 1. **禁止断代**：schema、用户数据、Hub/API、更新源变更须 **兼容 + 幂等迁移**。细则 → skill `schema-migration` / `.cursor/rules/backward-compatibility.mdc`。
 2. **探索再改**：凡了解代码库 / 查实现 / 找符号 / 跟调用链 / 评估影响 — **必须先 CodeGraph**，禁止会话开始就 Glob/Grep/Read 全库扫。细则 → skill `codegraph`。
-3. **桌面发版**：用户要求发布 / 打 `desktop-v*` 前，**必须先**加载 skill `desktop-release`（或 Read `.cursor/rules/desktop-release.mdc`），撰写 `docs/releases/{version}.md`，Checklist Phase A–D 完成前不得 push 标签。
+3. **桌面发版**：用户要求发布 / 打 `desktop-v*` 前，**必须先**加载 skill `desktop-release`（或 Read `.cursor/rules/desktop-release.mdc`），撰写 `docs/releases/{version}.md`，跑通 **`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop`**，Checklist Phase A–D 完成前不得 push 标签。
 4. **增量改动**：按用户最新指示做最小 diff；不顺手重构；用户已确认的 UI 行为勿擅自改。
 5. **client-ui 收尾**：改动 `client-ui/**` 后跑 `npm run check:ui`，三项全 0 再宣告完成。
 
@@ -70,10 +70,10 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 ## 桌面发版（摘要）
 
 1. Read `desktop-release` skill + `onboarding` 细则 + `docs/DESKTOP-RELEASE.md`
-2. Phase A 代码就绪（`check:ui` / `build:packages`）
+2. Phase A 代码就绪（`check:ui` / `build:packages` / **`audit:desktop-pack`**）
 3. Phase B bump `apps/desktop/package.json` version；写 `docs/releases/{version}.md`（`## 新功能` + `## 修复`）；更新 `ONBOARDING_RELEASE_BY_VERSION`
-4. Phase C 兼容性；Phase D 用户确认后 `git tag desktop-v{version}` + push
-5. **禁止**未写更新日志 / 未对齐 version 就打标签
+4. Phase C 兼容性（含 Windows 签名 secrets、sidecar `deps/`）；Phase D 用户确认后 `git tag desktop-v{version}` + push
+5. **禁止**未写更新日志 / 未跑打包预检 / 未对齐 version 就打标签
 
 引导激活：只改文案不 bump `version` / `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION` → 老用户**不会**重走引导。`shared/onboarding.ts` 与 `client-ui/.../constants.ts` 必须双写同步。
 

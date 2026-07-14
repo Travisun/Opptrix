@@ -98,6 +98,17 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit desktop packaging preflight
+        shell: bash
+        env:
+          OPPTRIX_AUDIT_STAGE_UPDATER: '1'
+          # Tag releases always require Opptrix or commercial Win CSC;
+          # workflow_dispatch + skip_signing=true may ship unsigned.
+          OPPTRIX_AUDIT_REQUIRE_SIGN_SECRETS: ${{ github.event_name == 'workflow_dispatch' && inputs.skip_signing == true && '0' || '1' }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          OPPTRIX_CODE_SIGNING_P12: ${{ secrets.OPPTRIX_CODE_SIGNING_P12 }}
+        run: node apps/desktop/scripts/audit-desktop-pack.mjs
+
       - name: Verify release metadata policy
         run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
 

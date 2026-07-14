@@ -83,6 +83,7 @@
 > **Agent**：必须按 `.cursor/rules/desktop-release.mdc` Phase A–D **逐项执行并验证**后再打标签；下列与规则 Checklist 对齐。
 
 - [ ] 已在 `main`（或约定发布分支）合并待发布代码
+- [ ] **打包预检（硬性）**：`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop` 退出码 0（与 `ci.yml` / `release-desktop.yml` 同脚本；捕获 updater/`fs-extra`、sidecar `deps/`、证书与自定义验签、workflow 门禁等）
 - [ ] 已执行 `npm run build:packages` 与 `npm run build -w opptrix-client` 无错误（CI 会重新构建，本地可先冒烟）
 - [ ] 已更新 `apps/desktop/package.json` 的 `version`
 - [ ] 已按 `.cursor/rules/onboarding.mdc` 配置引导激活：`ONBOARDING_RELEASE_BY_VERSION` 新版本亮点；若改版引导或协议则 bump `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION`（`shared` 与 `client-ui/.../constants.ts` 同步）
@@ -90,7 +91,8 @@
 - [ ] 若升级 Electron，已同步修改 `build.electronVersion` 并做三端冒烟
 - [ ] **更新日志**已写入 `docs/releases/{version}.md`（复制 `TEMPLATE.md`；必填 `## 新功能` 与 `## 修复`；面向用户简要条目）
 - [ ] 本地预览 Release 正文：`OPPTRIX_RELEASE_STRICT=1 node scripts/assemble-release-notes.mjs {version}` 通过
-- [ ] （可选）macOS 代码签名 / Windows 签名证书已配置（未签名时更新可能触发系统安全提示）
+- [ ] **Windows 更新签名材料已配置**：`OPPTRIX_CODE_SIGNING_P12`（或 `WIN_CSC_LINK`）；正式 `desktop-v*` 标签 CI 会要求 secrets 存在（`workflow_dispatch` + `skip_signing` 可跳过）
+- [ ] （建议）macOS `CSC_LINK` / Apple 公证 secrets 已配置；未签名时 Gatekeeper 体验差
 
 ### 4.2 打标签触发 CI
 
@@ -181,21 +183,27 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **更新源 URL** | 构建时注入 `OPPTRIX_UPDATE_BASE_URL` → 写入 `app-update.yml` | 默认 CDN：`https://update.opptrix.org/desktop/` |
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
-| **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
+| **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
 | **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
+| **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` 与 `release-desktop.yml` 在构建前必跑；本地打标签前 `OPPTRIX_AUDIT_STAGE_UPDATER=1` |
 
 **版本升级语义（electron-updater）**
 
 - `0.6.0-dev.17` → `0.6.0-dev.18`：正常增量更新  
 - `0.6.0-dev.*` → `1.0.0`：正式版号更大，dev 用户可收到正式版（`allowDowngrade: false`）  
 - 旧 GitHub Releases 源安装的客户端：需先手动装一版带 R2 feed 的包，之后走 CDN 自动更新  
+- **仅系统验签、无自定义 CA 的旧 Windows 客户端**：无法信任自签更新包 → **须手动安装一次**带 `update-signature` 的新版，之后自动更新才恢复  
 
 **本地/CI 自检**
 
 ```bash
+# 发版 / 推 main 前：静态策略 + 实际 stage updater（含嵌套 fs-extra）
+OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop
+
 npm run verify:release-metadata-policy -w @opptrix/desktop   # 策略常量（改命名/通道后必跑）
 node apps/desktop/scripts/verify-release-artifacts.mjs apps/desktop/release  # 构建后 yml ↔ 本地文件
-node apps/desktop/scripts/verify-packaged-updater.mjs apps/desktop/release   # 构建后 .app 内须含 electron-updater
+node apps/desktop/scripts/verify-packaged-updater.mjs apps/desktop/release   # 构建后须含 electron-updater
+node apps/desktop/scripts/verify-packaged-runtime.mjs apps/desktop/release   # 构建后 sidecar 为 deps/ + Fastify
 node apps/desktop/scripts/verify-release-coherence.mjs desktop-vX.Y.Z /path/to/release-assets  # 与 tag 一致
 ```
 
@@ -472,6 +480,23 @@ open /Applications/Opptrix.app
 - 常见原因：Updater 被放在 `build/updater-deps/node_modules/` 下被打包工具跳过（dev.19 及更早 CI 产物）。
 - 修复版本须含 `build/updater-deps/packages/electron-updater/`；CI 会在打包后运行 `verify-packaged-updater.mjs`。
 - 已装旧包的用户需 **手动下载新版 DMG/EXE** 安装一次，之后才能恢复自动更新。
+
+### Q：CI 在 `stage-updater-deps` 报 `electron-updater dependency missing: fs-extra`
+
+- `fs-extra` 常嵌套在 `electron-updater/node_modules/`，从 desktop 根单独 `require.resolve` 会失败。
+- `stage-updater-deps.mjs` 必须从 **父 package 目录** 解析嵌套依赖；`@opptrix/desktop` 亦声明直接依赖 `fs-extra` 作兜底。
+- 本地复现：`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop`。
+
+### Q：安装后 sidecar 起不来 / 缺 Fastify
+
+- `electron-builder` 的 `createFilter` 会跳过相对路径恰为 `node_modules` 的目录。
+- Sidecar 必须以 `runtime-stage/deps/` 打进 `extraResources`（`stage-runtime` 改名 + `RUNTIME_DEPS_DIR`）；CI 用 `verify-packaged-runtime.mjs` 校验。
+
+### Q：Windows 自动更新报「not signed by the application owner」
+
+- 系统默认 Authenticode 要求 OS `Status === Valid`；自签证书达不到。
+- 正式链路：CI 用 `OPPTRIX_CODE_SIGNING_P12` 签名 + 客户端内置根 CA + `update-signature.cjs` 自定义验签。
+- **仍停留在旧版（无自定义验签）的客户端须手动升级一次。**
 
 ### Q：客户端提示「无法连接更新服务器」
 

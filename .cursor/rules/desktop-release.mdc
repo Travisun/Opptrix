@@ -62,6 +62,22 @@ node scripts/assemble-release-notes.mjs 0.6.1 | head -40
 | A2 | 若本次含 `client-ui` 改动 | `npm run check:ui` 退出码 0 |
 | A3 | 若本次含 `packages` / server 改动 | `npm run build:packages` 无错误 |
 | A4 | 发版前本地 UI 构建冒烟 | `npm run build -w opptrix-client` 无错误 |
+| **A5** | **桌面打包预检（硬性）** — Updater 依赖可解析、sidecar `deps/` 改名、内置更新根证书、workflow 校验脚本齐全 | **`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop` 退出码 0**（CI 的 `ci.yml` / `release-desktop.yml` 也跑） |
+
+打标签前若 A5 未跑通 → **禁止** `git tag desktop-v*`。
+
+---
+
+## 打包不变量（勿回归 · 历史 CI 踩坑）
+
+| 不变量 | 做错的症状 | 门禁 |
+|--------|------------|------|
+| Updater 路径 **不得** 含名为 `node_modules` 的目录段 | 「更新组件不可用」 | `stage-updater-deps` → `build/updater-deps/packages/`；`verify-packaged-updater` |
+| 嵌套依赖（如 `fs-extra`）须从 **父包目录** 解析，且桌面包声明 `fs-extra` | CI：`electron-updater dependency missing: fs-extra` | `audit:desktop-pack` + `OPPTRIX_AUDIT_STAGE_UPDATER=1` |
+| Sidecar 依赖目录为 `runtime-stage/deps/`（非顶层 `node_modules`） | 安装后 sidecar 起不来 / 缺 Fastify | `stage-runtime` 改名；`verify-packaged-runtime` |
+| Windows 更新：自签 Authenticode + 内置 CA + `update-signature` 自定义验签 | 「not signed by the application owner」 | secrets `OPPTRIX_CODE_SIGNING_*`；release audit `REQUIRE_SIGN_SECRETS` |
+| 公证包内不得留 `.cache/prebuilds` 未签名 `.node` | macOS notarization 失败 | `extraResources` filter `!**/.cache` |
+| `prebuild` / `ci.yml` / `release-desktop.yml` 均跑 `audit-desktop-pack` | 静态回归漏到 90min 构建后才炸 | 本规则 A5 |
 
 ---
 
@@ -90,6 +106,8 @@ node scripts/assemble-release-notes.mjs 0.6.1 | head -40
 | C3 | `app-update.yml` / R2 / CDN 变更不会使**已发布旧版**永久无法更新 | 动过更新源 |
 | C4 | 更新日志「修复」节已覆盖用户可见的回归修复；重大限制写在「新功能」后或修复节末 **一句**说明 | 有破坏性/手动步骤时 |
 | C5 | 若升级 Electron：`build.electronVersion` 已更新且三端冒烟计划已说明 | 升 Electron 时 |
+| **C6** | **Windows 更新签名**：`OPPTRIX_CODE_SIGNING_P12`（或 `WIN_CSC_LINK`）已配置；客户端内置根 CA + 自定义 `verifyUpdateCodeSignature`；`publisherName` 与叶证 CN（`Opptrix`）一致 | 自动更新 / Authenticode；未配置则 `audit:desktop-pack` 在 release 会失败 |
+| **C7** | **安装包依赖齐全**：sidecar `runtime-stage/deps`（非 `node_modules`）；updater 在 `build/updater-deps/packages`（含嵌套 `fs-extra` 等） | 已知 CI 踩坑：EB 跳过顶层 `node_modules`；`stage-updater-deps` 须从 parent 解析嵌套依赖 |
 
 ---
 
@@ -120,9 +138,10 @@ git push origin desktop-v0.6.1
 |---|--------|----------|
 | E1 | GitHub Actions `release-desktop` workflow 各 job 成功 | `gh run list` / Actions UI |
 | E2 | Release 附件含 Mac x64+arm64（dmg/zip）、Windows exe、Linux AppImage/deb 及对应 **`latest-*.yml`** | `gh release view desktop-v{version}` |
-| E3 | `verify-packaged-updater`（或同等校验）通过 | CI 日志 |
+| E3 | `verify-packaged-updater` **与** `verify-packaged-runtime` 通过；release 开头 `audit-desktop-pack` 通过 | CI 日志 |
 | E4 | **GitHub Release 正文**含「新功能」「修复」及安装说明 | `gh release view desktop-v{version}` 或网页核对 |
 | E5 | R2 同步 job 成功（若启用） | CI `sync-r2` |
+| E6 | Windows 安装包具备 Authenticode（自签或商业）；若用自签，应用内更新验签不依赖系统 Status=Valid | 产物 + 客户端日志 |
 
 若 Release 已存在但正文缺更新日志（罕见）：用 `node scripts/assemble-release-notes.mjs {version} > /tmp/notes.md` 后 `gh release edit desktop-v{version} --notes-file /tmp/notes.md` 修正，并排查为何打标签前未提交 `docs/releases/{version}.md`。
 
@@ -151,10 +170,11 @@ node -p "require('./apps/desktop/package.json').version"
 # 预览将发布的 Release 正文
 npm run release:notes
 
-# 发版前构建
+# 发版前构建 + 打包预检（硬性，同 CI）
 npm run build:packages
 npm run check:ui
 npm run build -w opptrix-client
+OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack -w @opptrix/desktop
 
 # 已有桌面标签
 git tag -l 'desktop-v*' --sort=-v:refname | head
@@ -171,6 +191,7 @@ gh release view desktop-vX.Y.Z
 - ❌ **未撰写** `docs/releases/{version}.md` 就打标签（CI 将失败或 Release 无变更说明）
 - ❌ 更新日志只有安装说明、缺少「新功能 / 修复」清单
 - ❌ Checklist 未逐项验证就宣称「可以发布」
+- ❌ **跳过 `audit:desktop-pack`** 或已知 EB/`fs-extra`/sidecar `deps` 坑未验收就打标签
 - ❌ 只改文案不 bump `version` / `ONBOARDING_*` / `LEGAL_*` 却期望老用户看到新引导
 - ❌ `desktop-v*` 与 `package.json` version 不一致
 - ❌ 修改已发布 Release 的 yml 糊弄版本；应新发正确版本并在更新日志说明

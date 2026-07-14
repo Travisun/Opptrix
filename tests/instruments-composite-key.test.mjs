@@ -22,7 +22,8 @@ import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detect
 import { isDuckPrimaryMigrationComplete, resetDuckPrimaryMigrationPending } from '../packages/market-data/dist/duck/duck-primary-migration.js'
 
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
-import { getMarketDuckGateway } from '../packages/market-data/dist/duck/market-duck-gateway.js'
+import { getMarketDuckGateway, resetMarketDuckGateways } from '../packages/market-data/dist/duck/market-duck-gateway.js'
+import { resetDuckCliPools } from '../packages/market-data/dist/duck/duck-cli-pool.js'
 import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
 
 let dataDir = ''
@@ -77,6 +78,10 @@ before(async () => {
 })
 
 after(async () => {
+  // runDuckPrimaryMigrationAsync starts DuckCliPool workers; terminate them so the
+  // Node process can exit (without --test-force-exit this file otherwise hangs).
+  resetMarketDuckGateways()
+  await resetDuckCliPools()
   if (dataDir) await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
 })
 

@@ -154,11 +154,11 @@ export function getDuckCliPool(label = 'market'): DuckCliPool {
   return pool
 }
 
-export function resetDuckCliPools(): void {
-  for (const pool of pools.values()) {
-    void pool.close()
-  }
+/** Terminate all duck-cli worker threads — required for Node to exit after tests / DB replace. */
+export async function resetDuckCliPools(): Promise<void> {
+  const closing = [...pools.values()].map(pool => pool.close())
   pools.clear()
+  await Promise.all(closing)
 }
 
 export function duckCliWorkerPath(): string {

@@ -1,6 +1,6 @@
 {
   "name": "opptrix-client",
-  "version": "0.6.33",
+  "version": "0.6.34",
   "private": true,
   "description": "Opptrix 客户端界面（React + Fluent UI，Web 与桌面共用）",
   "homepage": "https://www.opptrix.org",
