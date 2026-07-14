@@ -56,14 +56,14 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'fundamentals',
     title: '基本面事实',
-    description: '公司概况、财务摘要、资产负债、现金流量、股东结构、分红历史',
-    whenToUse: '营收利润、ROE、资产负债表、现金流、主业概念、十大股东、分红派息；做深度研究时的事实表',
+    description: '公司概况、财务摘要、三表明细、财务指标、股东结构、分红历史',
+    whenToUse: '营收利润、ROE、利润表/资产负债/现金流、财务指标、主业概念、十大股东、分红派息',
   },
   {
     id: 'market',
     title: '宏观与市场',
-    description: '牛熊状态、市场动态、开盘/收盘报告、趋势快评、个股资金流、A 股专题（连板天梯/热股/异动）',
-    whenToUse: '大盘、板块、早报复盘、宏观环境、主力/资金流向、连板天梯与热股异动',
+    description: '牛熊状态、市场动态、开闭市报告、资金流、交易日历、龙虎榜/涨跌停/情绪、A 股专题',
+    whenToUse: '大盘、板块、早报复盘、交易日、龙虎榜涨停、连板天梯与热股异动',
   },
   {
     id: 'etf',
@@ -80,8 +80,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'industry',
     title: '产业链',
-    description: '行业透视与 Mermaid 图谱',
-    whenToUse: '产业链、上下游、行业主题',
+    description: '行业透视、板块目录/成分、指数成分股',
+    whenToUse: '产业链、板块成分、指数成分（沪深300/同花顺概念等）',
   },
   {
     id: 'news',
@@ -138,8 +138,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_instrument_financials: 'fundamentals',
   get_instrument_balance_sheet: 'fundamentals',
   get_instrument_cash_flow: 'fundamentals',
+  get_instrument_income_statement: 'fundamentals',
   get_instrument_shareholders: 'fundamentals',
   get_instrument_dividend: 'fundamentals',
+  get_instrument_financial_indicators: 'fundamentals',
 
   // market
   get_market_regime: 'market',
@@ -150,6 +152,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_instrument_money_flow: 'market',
   get_market_session: 'market',
   get_cn_market_special: 'market',
+  get_trade_calendar: 'market',
+  get_dragon_tiger: 'market',
+  get_limit_updown: 'market',
+  get_market_sentiment: 'market',
 
   // etf
   get_etf_list: 'etf',
@@ -169,6 +175,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   industry_mermaid: 'industry',
   get_sector_list: 'industry',
   get_sector_constituents: 'industry',
+  get_index_constituents: 'industry',
 
   // news
   get_news_center_status: 'news',

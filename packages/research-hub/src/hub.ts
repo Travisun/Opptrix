@@ -326,11 +326,18 @@ export class ResearchHub {
         case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
         case 'instrument_balance_sheet': return this.queryInstrumentStandardData(params, 'balance_sheet', t0)
         case 'instrument_cash_flow': return this.queryInstrumentStandardData(params, 'cash_flow', t0)
+        case 'instrument_income_statement': return this.queryInstrumentStandardData(params, 'income_statement', t0)
         case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
         case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
         case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
         case 'instrument_notices': return this.instrumentNotices(params, t0)
+        case 'instrument_financial_indicators': return this.instrumentFinancialIndicators(params, t0)
         case 'cn_market_special': return this.cnMarketSpecial(params, t0)
+        case 'trade_calendar': return this.tradeCalendar(params, t0)
+        case 'index_constituents': return this.indexConstituents(params, t0)
+        case 'dragon_tiger': return this.dragonTigerList(params, t0)
+        case 'limit_updown': return this.limitUpdownList(params, t0)
+        case 'market_sentiment': return this.marketSentiment(params, t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2398,7 +2405,7 @@ export class ResearchHub {
   }
 
   /**
-   * 标准事实表能力 — profile / financials / balance_sheet / cash_flow / shareholders / dividend / money_flow。
+   * 标准事实表能力 — profile / financials / 三表 / shareholders / dividend / money_flow。
    * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
    */
   private async queryInstrumentStandardData(
@@ -2408,6 +2415,7 @@ export class ResearchHub {
       | 'financials'
       | 'balance_sheet'
       | 'cash_flow'
+      | 'income_statement'
       | 'shareholders'
       | 'dividend'
       | 'money_flow',
@@ -2421,6 +2429,7 @@ export class ResearchHub {
       financials: '财务摘要',
       balance_sheet: '资产负债表',
       cash_flow: '现金流量表',
+      income_statement: '利润表',
       shareholders: '股东结构',
       dividend: '分红历史',
       money_flow: '资金流向',
@@ -2436,7 +2445,11 @@ export class ResearchHub {
       opts.reportDate = params.report_date != null ? String(params.report_date) : ''
       opts.reportType = params.report_type != null ? String(params.report_type) : 'all'
     }
-    if (capability === 'balance_sheet' || capability === 'cash_flow') {
+    if (
+      capability === 'balance_sheet'
+      || capability === 'cash_flow'
+      || capability === 'income_statement'
+    ) {
       opts.reportDate = params.report_date != null ? String(params.report_date) : ''
     }
     if (capability === 'shareholders' && params.report_date != null) {
@@ -2473,6 +2486,138 @@ export class ResearchHub {
         source: 'queryInstrumentData',
       },
       `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /** 同花顺财务指标树（growth/profitability…）— Engine custom */
+  private async instrumentFinancialIndicators(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    const report = String(params.report ?? params.report_period ?? '').trim()
+    if (!report) return fail('report 必填（如 2024Q3 / 2024）', t0)
+    const r = await this.de.invokeCustomMethod('tonghuashun', 'thsFinancialIndicators', [
+      ref.symbol,
+      report,
+    ])
+    if (!r.success) {
+      return fail(
+        r.error ?? '财务指标获取失败（须启用同花顺富耀）',
+        t0,
+      )
+    }
+    const raw = r.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        instrument: ref,
+        report,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: 'thsFinancialIndicators',
+      },
+      `财务指标 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async tradeCalendar(params: Record<string, unknown>, t0: number) {
+    const year = params.year != null ? Number(params.year) : new Date().getFullYear()
+    if (!Number.isFinite(year) || year < 1990 || year > 2100) {
+      return fail('year 须为合理年份', t0)
+    }
+    const r = await this.de.tradeCalendar(year)
+    if (!r.success) return fail(r.error ?? '交易日历获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      {
+        year,
+        items: rows,
+        count: rows.length,
+        source: r.source ?? 'tradeCalendar',
+        hint: 'isTradeDay/isOpen 为 true 表示交易日；精确休市勿用 get_market_session 代替',
+      },
+      `${year} 年交易日 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async indexConstituents(params: Record<string, unknown>, t0: number) {
+    const indexCode = String(params.index_code ?? params.code ?? params.symbol ?? '').trim()
+    if (!indexCode) return fail('index_code 或 code 必填（如 000300、885338.TI）', t0)
+
+    const r = await this.de.indexConstituents(indexCode)
+    if (r.success && Array.isArray(r.data) && r.data.length) {
+      return ok(
+        {
+          index_code: indexCode,
+          items: r.data,
+          count: r.data.length,
+          source: r.source ?? 'indexConstituents',
+        },
+        `指数成分 ${r.data.length} 条`,
+        t0,
+      )
+    }
+
+    const fallback = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexConstituents', [indexCode])
+    if (!fallback.success) {
+      return fail(r.error ?? fallback.error ?? '指数成分获取失败', t0)
+    }
+    const raw = fallback.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        index_code: indexCode,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: 'thsIndexConstituents',
+      },
+      `指数成分 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async dragonTigerList(params: Record<string, unknown>, t0: number) {
+    const date = params.date != null ? String(params.date).trim().slice(0, 10) : ''
+    const r = await this.de.dragonTiger(date)
+    if (!r.success) return fail(r.error ?? '龙虎榜获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      { date: date || null, items: rows, count: rows.length, source: r.source ?? 'dragonTiger' },
+      `龙虎榜 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async limitUpdownList(params: Record<string, unknown>, t0: number) {
+    const date = params.date != null ? String(params.date).trim().slice(0, 10) : ''
+    const r = await this.de.limitUpdown(date)
+    if (!r.success) return fail(r.error ?? '涨跌停池获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      { date: date || null, items: rows, count: rows.length, source: r.source ?? 'limitUpdown' },
+      `涨跌停 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async marketSentiment(params: Record<string, unknown>, t0: number) {
+    const code = String(params.code ?? params.symbol ?? '').trim()
+    const r = await this.de.sentiment(code)
+    if (!r.success) return fail(r.error ?? '市场情绪/热度获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      {
+        code: code || 'market',
+        items: rows,
+        count: rows.length,
+        source: r.source ?? 'sentiment',
+        hint: '空 code 为全市场情绪；个股为热度摘要',
+      },
+      `情绪 ${rows.length} 条`,
       t0,
     )
   }
@@ -2525,25 +2670,19 @@ export class ResearchHub {
         method: 'thsIndexList',
         args: p => [String(p.tag ?? 'cn_concept')],
       },
-      ths_index_constituents: {
-        method: 'thsIndexConstituents',
-        args: p => {
-          const code = String(p.code ?? p.symbol ?? p.index_code ?? '').trim()
-          return code ? [code] : null
-        },
-      },
+      // 指数成分 / 财务指标已有专用 Hub feature，不再在此双开入口
     }
 
     const spec = kindMap[kind]
     if (!spec) {
       return fail(
-        'kind 必填且须为：limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list | ths_index_constituents',
+        'kind 必填且须为：limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list（成分股用 get_index_constituents；财务指标用 get_instrument_financial_indicators）',
         t0,
       )
     }
     const args = spec.args(params)
     if (!args) {
-      return fail(`kind=${kind} 缺少必填参数（code/date/codes 等）`, t0)
+      return fail(`kind=${kind} 缺少必填参数（code/date/codes/report 等）`, t0)
     }
 
     const r = await this.de.invokeCustomMethod('tonghuashun', spec.method, args)
@@ -2562,7 +2701,7 @@ export class ResearchHub {
         count: rows.length,
         source: 'tonghuashun',
         provider_method: spec.method,
-        hint: '须启用同花顺（富耀）Provider；标准板块目录仍优先 get_sector_list',
+        hint: '须启用同花顺（富耀）Provider；申万/板块目录用 get_sector_list；指数成分用 get_index_constituents；财务指标用 get_instrument_financial_indicators',
       },
       `${kind} ${rows.length} 条`,
       t0,

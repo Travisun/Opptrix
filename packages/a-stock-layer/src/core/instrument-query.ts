@@ -24,9 +24,12 @@ import { isRegionalEquityMarket, type RegionalEquityMarket } from '../utils/regi
  * - financials:     财务摘要（营收/利润/ROE 等）
  * - balance_sheet:  资产负债表多期
  * - cash_flow:      现金流量表多期
+ * - income_statement: 利润表多期
  * - stock_list:         股票列表（分页、板块过滤）
  * - instrument_search:  跨市场关键词搜索（相关性排序）
  * - sector_list:        板块/行业列表
+ * - index_constituents: 指数/板块成分股
+ * - trade_calendar:     交易日历（市场级；year 经 opts）
  * - etf_list:       ETF 列表（支持关键词）
  * - etf_profile:    ETF 基本面资料
  * - etf_nav:        ETF 净值序列
@@ -47,9 +50,12 @@ export type InstrumentDataCapability =
   | 'financials'
   | 'balance_sheet'
   | 'cash_flow'
+  | 'income_statement'
   | 'stock_list'
   | 'instrument_search'
   | 'sector_list'
+  | 'index_constituents'
+  | 'trade_calendar'
   | 'etf_list'
   | 'etf_profile'
   | 'etf_nav'
@@ -70,7 +76,7 @@ export interface InstrumentQueryOpts {
   count?: number
   /** 搜索关键词（用于 stock_list / instrument_search） */
   keyword?: string
-  /** 财务报告截止日期 YYYY-MM-DD（用于 financials / balance_sheet / cash_flow） */
+  /** 财务报告截止日期 YYYY-MM-DD（用于 financials / balance_sheet / cash_flow / income_statement） */
   reportDate?: string
   /** 报告类型："annual"（年报）或 "quarter"（季报），默认 annual；摘要能力用 */
   reportType?: string
@@ -85,6 +91,10 @@ export interface InstrumentQueryOpts {
   industryCode?: string
   /** sector_list 入参，如 industries:CN、boards:HK */
   plateType?: string
+  /** 指数/板块代码（index_constituents） */
+  indexCode?: string
+  /** 交易日历年份（trade_calendar） */
+  year?: number
   /** K 线起始日期 YYYY-MM-DD（CN cn_kline） */
   startDate?: string
   /** K 线结束日期 YYYY-MM-DD（CN cn_kline） */
@@ -265,6 +275,24 @@ export function resolveInstrumentQueryPlan(
         return registryPlan('CN', assetClass, Capability.CASH_FLOW, 'cashFlow', true, [
           symbol, opts.reportDate ?? '',
         ], normalized)
+      case 'income_statement':
+        return registryPlan('CN', assetClass, Capability.INCOME_STMT, 'incomeStatement', true, [
+          symbol, opts.reportDate ?? '',
+        ], normalized)
+      case 'index_constituents': {
+        const indexCode = (opts.indexCode ?? symbol).trim()
+        if (!indexCode) return null
+        return registryPlan('CN', 'INDEX', Capability.INDEX_CONST, 'indexConstituents', true, [indexCode])
+      }
+      case 'trade_calendar':
+        return registryPlan(
+          'CN',
+          'EQUITY',
+          Capability.TRADE_CALENDAR,
+          'tradeCalendar',
+          true,
+          [opts.year ?? new Date().getFullYear()],
+        )
       case 'stock_list': {
         const page = opts.page ?? 1
         const pageSize = opts.pageSize ?? 100
@@ -370,6 +398,10 @@ export function resolveInstrumentQueryPlan(
         ], normalized)
       case 'cash_flow':
         return registryPlan('US', 'EQUITY', Capability.CASH_FLOW, 'cashFlow', true, [
+          sym, opts.reportDate ?? '',
+        ], normalized)
+      case 'income_statement':
+        return registryPlan('US', 'EQUITY', Capability.INCOME_STMT, 'incomeStatement', true, [
           sym, opts.reportDate ?? '',
         ], normalized)
       case 'stock_list': {

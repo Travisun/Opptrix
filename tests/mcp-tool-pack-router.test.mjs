@@ -84,6 +84,16 @@ test('resolver seeds market for 连板天梯', () => {
   assert.ok(packs.includes('market'))
 })
 
+test('resolver seeds market for 交易日历', () => {
+  const packs = resolveSeedPacks({ message: '今年 A 股交易日历休市日' })
+  assert.ok(packs.includes('market'))
+})
+
+test('resolver seeds industry for 指数成分', () => {
+  const packs = resolveSeedPacks({ message: '沪深300成分股有哪些' })
+  assert.ok(packs.includes('industry'))
+})
+
 test('activate expands active tool names across session', () => {
   const store = new ToolPackSessionStore()
   const sessionId = 'test-session'

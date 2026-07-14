@@ -145,10 +145,10 @@ Opptrix/
   - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `McpToolBroker`；激活后同轮刷新 tools
   - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
-  - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_shareholders` / `get_instrument_dividend`（经 Hub → `queryInstrumentData`）；问营收利润/资产负债表/现金流/主业概念时优先于 `evaluate_instrument`
-  - **市场 / 资金 / A 股专题（`market` pack）**：`get_instrument_money_flow`；`get_cn_market_special`（连板天梯/热股/异动/同花顺概念指数，须启用富耀）；`get_market_session`
+  - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_income_statement` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_financial_indicators` / `get_instrument_shareholders` / `get_instrument_dividend`
+  - **市场（`market` pack）**：`get_market_dynamics`（全景：指数/涨跌榜/龙虎榜摘要）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`（不含成分/财务指标双入口）；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
   - **标的公告（`news` pack）**：`get_instrument_notices` → `get_notice_content`
-  - **板块成分 / ETF 档案**：`get_sector_list` / `get_sector_constituents`（`industry`）；`get_etf_profile`（`etf`）
+  - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
   - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
   - 准确率测试：`tests/mcp-tool-route-accuracy.test.mjs`（首推精确率 / 可见性召回 / 易混消歧 / 选型卡 / 过播种抑制）

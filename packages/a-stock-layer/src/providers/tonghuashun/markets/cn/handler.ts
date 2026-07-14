@@ -14,6 +14,7 @@ import {
   mapHistoricalBarToKline,
   mapHotStockSentiment,
   mapIncomeRow,
+  mapIncomeStatementRows,
   mapBalanceSheetRows,
   mapCashFlowRows,
   mapLimitUpRow,
@@ -225,12 +226,36 @@ export class TonghuashunMarketHandler extends MarketHandlerShell {
     })
   }
 
+  async incomeStatement(code: string, reportDate = ''): Promise<Record<string, unknown>[] | null> {
+    return this.withClient(async client => {
+      const thscode = toThsCode(code)
+      const data = await client.financialsIncome(thscode, 'quarterly', 20)
+      const mapped = mapIncomeStatementRows(code, data.item ?? [], reportDate)
+      return mapped.length ? mapped : null
+    })
+  }
+
   async cashFlow(code: string, reportDate = ''): Promise<Record<string, unknown>[] | null> {
     return this.withClient(async client => {
       const thscode = toThsCode(code)
       const data = await client.financialsCashFlowStatements(thscode, 'quarterly', 20)
       const mapped = mapCashFlowRows(code, data.item ?? [], reportDate)
       return mapped.length ? mapped : null
+    })
+  }
+
+  /** 同花顺指数/板块成分 — Capability INDEX_CONST */
+  async indexConstituents(indexCode: string): Promise<Record<string, unknown>[] | null> {
+    const thscode = toIndexThsCode(indexCode)
+    if (!thscode) return null
+    return this.withClient(async client => {
+      const data = await client.thsIndexConstituents(thscode)
+      const rows = (data.item ?? []).map(row => ({
+        ...row,
+        indexCode: normalizeCode(indexCode),
+        source: 'tonghuashun',
+      }))
+      return rows.length ? rows : null
     })
   }
 
