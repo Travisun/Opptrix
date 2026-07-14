@@ -393,6 +393,23 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('trade_calendar', { year: a.year }),
     },
     {
+      name: 'get_macro_series',
+      category: '市场资金',
+      description:
+        '中国宏观事实序列：CPI/PPI/PMI/GDP/LPR/SHIBOR 等；经 MACRO_INDICATOR（Baostock 优先，AkShare 东财回退）。市况叙事仍用 get_market_regime',
+      parameters: S({
+        kind: {
+          type: 'string',
+          description: 'cpi | ppi | pmi | gdp | lpr | shibor（必填其一；空则返回多指标最新摘要）',
+        },
+        limit: { type: 'number', description: '最多返回条数，默认 36，最大 120' },
+      }),
+      handler: (a) => d('macro_series', {
+        kind: a.kind ?? a.indicator ?? a.series ?? '',
+        limit: a.limit,
+      }),
+    },
+    {
       name: 'get_dragon_tiger',
       category: '市场资金',
       description:

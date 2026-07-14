@@ -120,6 +120,12 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'A 股交易日历（按年）；问休市日/下一交易日时首选；勿用 get_market_session 代替。',
     compliance: 'year 可选，默认当年；只读。',
   },
+  get_macro_series: {
+    hubFeature: 'macro_series',
+    miningEligible: true,
+    usageGuide: '中国宏观序列 CPI/PPI/PMI/GDP/LPR/SHIBOR；须 kind。市况叙事用 get_market_regime，勿混用。',
+    compliance: '依赖 Baostock 或 AkShare；无数据声明缺口；勿编造数值。',
+  },
   get_dragon_tiger: {
     hubFeature: 'dragon_tiger',
     miningEligible: true,

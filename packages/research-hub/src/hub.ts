@@ -334,6 +334,7 @@ export class ResearchHub {
         case 'instrument_financial_indicators': return this.instrumentFinancialIndicators(params, t0)
         case 'cn_market_special': return this.cnMarketSpecial(params, t0)
         case 'trade_calendar': return this.tradeCalendar(params, t0)
+        case 'macro_series': return this.macroSeries(params, t0)
         case 'index_constituents': return this.indexConstituents(params, t0)
         case 'dragon_tiger': return this.dragonTigerList(params, t0)
         case 'limit_updown': return this.limitUpdownList(params, t0)
@@ -2539,6 +2540,39 @@ export class ResearchHub {
         hint: 'isTradeDay/isOpen 为 true 表示交易日；精确休市勿用 get_market_session 代替',
       },
       `${year} 年交易日 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * 中国宏观序列 — Engine MACRO_INDICATOR（Baostock 优先，AkShare/东财 CPI·PPI·PMI·GDP·LPR 回退）
+   */
+  private async macroSeries(params: Record<string, unknown>, t0: number) {
+    const kind = String(params.kind ?? params.indicator ?? params.series ?? 'cpi').trim().toLowerCase()
+    const allowed = new Set(['cpi', 'ppi', 'pmi', 'gdp', 'lpr', 'shibor', 'm2', 'deposit', 'loan', 'rrr', ''])
+    // 允许空串走全量摘要；未知 kind 仍交给 provider 模糊匹配
+    if (kind && !allowed.has(kind) && !/^[a-z0-9_]+$/i.test(kind)) {
+      return fail('kind 非法', t0)
+    }
+    const r = await this.de.macroIndicator(kind)
+    if (!r.success || !Array.isArray(r.data) || !r.data.length) {
+      return fail(
+        r.error ?? '宏观数据暂不可用（请确认已启用 Baostock 或 AkShare；kind=cpi|ppi|pmi|gdp|lpr|shibor）',
+        t0,
+      )
+    }
+    const limitRaw = params.limit != null ? Number(params.limit) : 36
+    const limit = Number.isFinite(limitRaw) ? Math.min(120, Math.max(1, Math.floor(limitRaw))) : 36
+    const items = r.data.slice(0, limit)
+    return ok(
+      {
+        kind: kind || 'summary',
+        items,
+        count: items.length,
+        source: r.source ?? 'macroIndicator',
+        hint: '市况叙事仍用 get_market_regime；本工具为可引用宏观事实序列',
+      },
+      `宏观 ${kind || 'summary'} ${items.length} 条`,
       t0,
     )
   }

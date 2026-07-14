@@ -2849,6 +2849,210 @@ export class AkshareHandler extends MarketHandlerShell {
     }))
   }
 
+  // ── 中国宏观（东方财富数据中心；对齐 AkShare macro_china_* 常用指标；CPI/PPI/PMI 用 EM 替代常挂的 Jin10）──
+
+  /**
+   * 中国 CPI（居民消费价格指数）
+   * @sourceUrl https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMY_CPI
+   * @pageUrl https://data.eastmoney.com/cjsj/cpi.html
+   * 对应 Python 意图：ak.macro_china_cpi / 金十年率报告；本实现用东财官方表更稳
+   */
+  async macroChinaCpi(limit = 60): Promise<Record<string, unknown>[] | null> {
+    const items = await dcGet({
+      reportName: 'RPT_ECONOMY_CPI',
+      columns: 'ALL',
+      pageNumber: '1',
+      pageSize: String(Math.min(200, Math.max(1, Number(limit) || 60))),
+      sortTypes: '-1',
+      sortColumns: 'REPORT_DATE',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items?.length) return null
+    return items.map(it => ({
+      indicator: 'CPI',
+      indicatorKey: 'cpi',
+      date: String(it.REPORT_DATE ?? '').slice(0, 10),
+      period: String(it.TIME ?? ''),
+      nationalYoy: safeFloat(it.NATIONAL_SAME),
+      nationalIndex: safeFloat(it.NATIONAL_BASE),
+      nationalMom: safeFloat(it.NATIONAL_SEQUENTIAL),
+      nationalYtd: safeFloat(it.NATIONAL_ACCUMULATE),
+      cityYoy: safeFloat(it.CITY_SAME),
+      ruralYoy: safeFloat(it.RURAL_SAME),
+      source: 'eastmoney',
+    }))
+  }
+
+  /**
+   * 中国 PPI（工业生产者出厂价格指数）
+   * @sourceUrl https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMY_PPI
+   * @pageUrl https://data.eastmoney.com/cjsj/ppi.html
+   */
+  async macroChinaPpi(limit = 60): Promise<Record<string, unknown>[] | null> {
+    const items = await dcGet({
+      reportName: 'RPT_ECONOMY_PPI',
+      columns: 'ALL',
+      pageNumber: '1',
+      pageSize: String(Math.min(200, Math.max(1, Number(limit) || 60))),
+      sortTypes: '-1',
+      sortColumns: 'REPORT_DATE',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items?.length) return null
+    return items.map(it => ({
+      indicator: 'PPI',
+      indicatorKey: 'ppi',
+      date: String(it.REPORT_DATE ?? '').slice(0, 10),
+      period: String(it.TIME ?? ''),
+      index: safeFloat(it.BASE),
+      yoy: safeFloat(it.BASE_SAME),
+      ytd: safeFloat(it.BASE_ACCUMULATE),
+      source: 'eastmoney',
+    }))
+  }
+
+  /**
+   * 中国 PMI（制造业 / 非制造业）
+   * @sourceUrl https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMY_PMI
+   * @pageUrl https://data.eastmoney.com/cjsj/pmi.html
+   */
+  async macroChinaPmi(limit = 60): Promise<Record<string, unknown>[] | null> {
+    const items = await dcGet({
+      reportName: 'RPT_ECONOMY_PMI',
+      columns: 'ALL',
+      pageNumber: '1',
+      pageSize: String(Math.min(200, Math.max(1, Number(limit) || 60))),
+      sortTypes: '-1',
+      sortColumns: 'REPORT_DATE',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items?.length) return null
+    return items.map(it => ({
+      indicator: 'PMI',
+      indicatorKey: 'pmi',
+      date: String(it.REPORT_DATE ?? '').slice(0, 10),
+      period: String(it.TIME ?? ''),
+      manufacturing: safeFloat(it.MAKE_INDEX),
+      manufacturingYoy: safeFloat(it.MAKE_SAME),
+      nonManufacturing: safeFloat(it.NMAKE_INDEX),
+      nonManufacturingYoy: safeFloat(it.NMAKE_SAME),
+      source: 'eastmoney',
+    }))
+  }
+
+  /**
+   * 中国 GDP
+   * @sourceUrl https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMY_GDP
+   * @pageUrl https://data.eastmoney.com/cjsj/gnzcz.html
+   */
+  async macroChinaGdp(limit = 40): Promise<Record<string, unknown>[] | null> {
+    const items = await dcGet({
+      reportName: 'RPT_ECONOMY_GDP',
+      columns: 'ALL',
+      pageNumber: '1',
+      pageSize: String(Math.min(120, Math.max(1, Number(limit) || 40))),
+      sortTypes: '-1',
+      sortColumns: 'REPORT_DATE',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items?.length) return null
+    return items.map(it => ({
+      indicator: 'GDP',
+      indicatorKey: 'gdp',
+      date: String(it.REPORT_DATE ?? '').slice(0, 10),
+      period: String(it.TIME ?? ''),
+      gdp: safeFloat(it.DOMESTICL_PRODUCT_BASE),
+      primary: safeFloat(it.FIRST_PRODUCT_BASE),
+      secondary: safeFloat(it.SECOND_PRODUCT_BASE),
+      tertiary: safeFloat(it.THIRD_PRODUCT_BASE),
+      gdpYoy: safeFloat(it.SUM_SAME),
+      primaryYoy: safeFloat(it.FIRST_SAME),
+      secondaryYoy: safeFloat(it.SECOND_SAME),
+      tertiaryYoy: safeFloat(it.THIRD_SAME),
+      source: 'eastmoney',
+    }))
+  }
+
+  /**
+   * 中国 LPR（贷款市场报价利率）
+   * AKShare: macro_china_lpr → 东财 RPTA_WEB_RATE
+   * @sourceUrl https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPTA_WEB_RATE
+   * @pageUrl https://data.eastmoney.com/cjsj/globalRateLPR.html
+   */
+  async macroChinaLpr(limit = 60): Promise<Record<string, unknown>[] | null> {
+    const items = await dcGet({
+      reportName: 'RPTA_WEB_RATE',
+      columns: 'ALL',
+      pageNumber: '1',
+      pageSize: String(Math.min(200, Math.max(1, Number(limit) || 60))),
+      sortTypes: '-1',
+      sortColumns: 'TRADE_DATE',
+      token: '8944c01f984b480b601f8213e9a4a8ae',
+      source: 'WEB',
+      client: 'WEB',
+    })
+    if (!items?.length) return null
+    return items.map(it => ({
+      indicator: 'LPR',
+      indicatorKey: 'lpr',
+      date: String(it.TRADE_DATE ?? '').slice(0, 10),
+      lpr1y: safeFloat(it.LPR1Y),
+      lpr5y: safeFloat(it.LPR5Y),
+      loanShort: safeFloat(it.RATE_1),
+      loanLong: safeFloat(it.RATE_2),
+      source: 'eastmoney',
+    }))
+  }
+
+  /**
+   * 标准 Capability.MACRO_INDICATOR — 按指标名拉取中国宏观序列。
+   * @param indicator cpi|ppi|pmi|gdp|lpr|shibor（空则返回几项最新摘要）
+   */
+  async macroIndicator(indicator = ''): Promise<Record<string, unknown>[] | null> {
+    const want = indicator.trim().toLowerCase()
+    const limit = 36
+    type Task = { key: string; name: string; match: string[]; fn: () => Promise<Record<string, unknown>[] | null> }
+    const tasks: Task[] = [
+      { key: 'cpi', name: 'CPI', match: ['cpi', '通胀', '物价'], fn: () => this.macroChinaCpi(limit) },
+      { key: 'ppi', name: 'PPI', match: ['ppi', '出厂'], fn: () => this.macroChinaPpi(limit) },
+      { key: 'pmi', name: 'PMI', match: ['pmi', '景气'], fn: () => this.macroChinaPmi(limit) },
+      { key: 'gdp', name: 'GDP', match: ['gdp', '生产总值'], fn: () => this.macroChinaGdp(limit) },
+      { key: 'lpr', name: 'LPR', match: ['lpr', '贷款报价', '利率'], fn: () => this.macroChinaLpr(limit) },
+      {
+        key: 'shibor',
+        name: 'SHIBOR',
+        match: ['shibor', '拆借'],
+        fn: async () => {
+          const rows = await this.rateInterbank('上海银行同业拆借市场', 'Shibor人民币', '隔夜')
+          return rows?.map(r => ({ indicator: 'SHIBOR', indicatorKey: 'shibor', ...r, source: 'eastmoney' })) ?? null
+        },
+      },
+    ]
+
+    const selected = want
+      ? tasks.filter(t => t.key === want || t.match.some(m => want.includes(m) || m.includes(want)))
+      : tasks
+
+    if (!selected.length) return null
+
+    const out: Record<string, unknown>[] = []
+    for (const task of selected) {
+      const rows = await task.fn()
+      if (!rows?.length) continue
+      if (!want) {
+        // 无筛选时每项只取最新 3 条，避免巨量 token
+        out.push(...rows.slice(0, 3))
+      } else {
+        out.push(...rows)
+      }
+    }
+    return out.length ? out : null
+  }
+
   /**
    * AKShare 接口: repo_rate_hist
    * 对应 Python: 无直接对应（AKShare interest_rate 目录中未收录）

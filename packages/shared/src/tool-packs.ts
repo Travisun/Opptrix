@@ -153,6 +153,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_market_session: 'market',
   get_cn_market_special: 'market',
   get_trade_calendar: 'market',
+  get_macro_series: 'market',
   get_dragon_tiger: 'market',
   get_limit_updown: 'market',
   get_market_sentiment: 'market',

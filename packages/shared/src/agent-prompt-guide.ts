@@ -147,8 +147,9 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_trade_calendar / get_dragon_tiger / get_limit_updown / get_market_sentiment / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
-    '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
+    '【市场与关注 — get_market_regime / get_macro_series / get_market_dynamics / get_trade_calendar / get_dragon_tiger / get_limit_updown / get_market_sentiment / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
+    '1) 宏观背景叙事：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
+    '1b) 宏观事实序列：get_macro_series(kind=cpi|ppi|pmi|gdp|lpr|shibor) → 可引用数字；勿用 regime 代替、勿重复 invoke akshare custom',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜摘要；适合复盘或解释板块轮动；勿再同轮重复拉 get_dragon_tiger',
     '2a) 专项：交易日历 get_trade_calendar；仅龙虎榜明细/指定日 get_dragon_tiger；涨跌停池 get_limit_updown；情绪 get_market_sentiment',
     '2b) 同花顺独有专题（连板天梯/飙升/热股/异动/概念目录）：get_cn_market_special(kind=…)；成分股改 get_index_constituents；财务指标改 get_instrument_financial_indicators',

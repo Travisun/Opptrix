@@ -161,6 +161,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_instrument_money_flow: '读取资金流向',
   get_cn_market_special: '读取 A 股专题数据',
   get_trade_calendar: '读取交易日历',
+  get_macro_series: '读取宏观数据',
   get_dragon_tiger: '读取龙虎榜',
   get_limit_updown: '读取涨跌停池',
   get_market_sentiment: '读取市场情绪',

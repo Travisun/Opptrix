@@ -10,6 +10,7 @@ const AKSHARE_CATEGORY_HINTS = [
   '债券（bond*）',
   '期货（futures*）',
   '汇率（currency*）',
+  '宏观（macro* / macroChina*）',
   '能源/碳排放（energy*）',
   '期权波动率（indexOption*）',
   '上交所（sse*）',
