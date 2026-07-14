@@ -38,6 +38,31 @@ function resolveDepsRoot() {
 
 const depsRoot = resolveDepsRoot()
 
+/**
+ * Node resolves node_modules by walking parents of the entry script. After we
+ * rename STAGE/node_modules → deps/ (electron-builder safe), that walk skips
+ * sidecar natives and can hit the monorepo's better-sqlite3 (wrong ABI) when
+ * verifying inside the checkout. Symlink restores classic resolution only under
+ * STAGE; electron-builder still skips a top-level `node_modules` copy target.
+ */
+function ensureStageNodeModulesLink() {
+  const nm = path.join(STAGE, 'node_modules')
+  if (fs.existsSync(nm)) return
+  const target = path.join(STAGE, RUNTIME_DEPS_DIR)
+  if (!fs.existsSync(target)) fail(`missing ${target} for node_modules link`)
+  try {
+    if (process.platform === 'win32') {
+      fs.symlinkSync(target, nm, 'junction')
+    } else {
+      fs.symlinkSync(RUNTIME_DEPS_DIR, nm, 'dir')
+    }
+  } catch (err) {
+    fail(`cannot link ${nm} → ${RUNTIME_DEPS_DIR}: ${err instanceof Error ? err.message : err}`)
+  }
+}
+
+ensureStageNodeModulesLink()
+
 function resolveElectronBinary() {
   if (process.env.OPPTRIX_ELECTRON_BINARY?.trim()) {
     return process.env.OPPTRIX_ELECTRON_BINARY.trim()
@@ -107,20 +132,21 @@ async function waitForHealth(timeoutMs = 45_000) {
 
 console.log(`verify-runtime: starting sidecar on port ${PORT}…`)
 
-const child = spawn(electronBin, [entry], {
-  cwd: STAGE,
-  env: {
-    ...process.env,
-    SERVE_UI: '1',
-    OPPTRIX_DESKTOP: '1',
-    STOCK_RESEARCH_HOST: '127.0.0.1',
-    STOCK_RESEARCH_PORT: PORT,
-    UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
-    ELECTRON_RUN_AS_NODE: '1',
-    NODE_PATH: depsRoot,
-  },
-  stdio: ['ignore', 'pipe', 'pipe'],
-})
+  const child = spawn(electronBin, [entry], {
+    cwd: STAGE,
+    env: {
+      ...process.env,
+      SERVE_UI: '1',
+      OPPTRIX_DESKTOP: '1',
+      STOCK_RESEARCH_HOST: '127.0.0.1',
+      STOCK_RESEARCH_PORT: PORT,
+      UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
+      ELECTRON_RUN_AS_NODE: '1',
+      // Prefer staged deps; STAGE/node_modules symlink handles parent-walk resolution.
+      NODE_PATH: [depsRoot, path.join(STAGE, 'node_modules')].filter((p, i, a) => a.indexOf(p) === i).join(path.delimiter),
+    },
+    stdio: ['ignore', 'pipe', 'pipe'],
+  })
 
 let stderr = ''
 child.stderr?.on('data', (chunk) => {

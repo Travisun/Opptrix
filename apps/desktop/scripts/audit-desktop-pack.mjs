@@ -163,6 +163,11 @@ console.log('audit-desktop-pack: start')
   if (!updaterSrc.includes('update-signature') || !updaterSrc.includes('installCustomUpdateSignatureVerification')) {
     fail('updater.cjs must install custom update signature verification')
   } else ok('updater.cjs installs custom signature verification')
+
+  const verifySrc = read('scripts/verify-runtime.mjs')
+  if (!verifySrc.includes('ensureStageNodeModulesLink') && !verifySrc.includes("symlinkSync")) {
+    fail('verify-runtime must link STAGE/node_modules → deps (avoid monorepo ABI pollution)')
+  } else ok('verify-runtime links node_modules → deps for resolution')
 }
 
 // ── 4. Updater vendor staging resolve (fs-extra class of bugs) ─────────────

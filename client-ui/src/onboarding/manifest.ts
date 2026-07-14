@@ -300,6 +300,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.35': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版加固了桌面安装包与后台服务启动校验，三端发布更可靠。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可靠',
+        title: '安装包后台服务可正常启动',
+        desc:
+          '修复了打包校验阶段依赖解析冲突，确保应用内服务与本地行情组件按正确版本加载。',
+        note: '安装或更新后可直接使用。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

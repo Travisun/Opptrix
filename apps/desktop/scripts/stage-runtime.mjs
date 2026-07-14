@@ -135,8 +135,42 @@ function downloadFile(url, dest) {
 
 function extractTarGz(archive, dest) {
   fs.mkdirSync(dest, { recursive: true })
-  const tarArgs = ['-xzf', archive, '-C', dest]
-  const tar = spawnSync('tar', tarArgs, { stdio: 'inherit' })
+  const absArchive = path.resolve(archive)
+  const absDest = path.resolve(dest)
+
+  // Prefer Windows system bsdtar — Git/MSYS tar treats `D:\...` as `host:path`
+  // (`Cannot connect to D:`) and fails on Actions runners.
+  let tarBin = 'tar'
+  if (process.platform === 'win32') {
+    const systemTar = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'tar.exe')
+    if (fs.existsSync(systemTar)) tarBin = systemTar
+  }
+
+  if (process.platform === 'win32') {
+    const archiveDir = path.dirname(absArchive)
+    const archiveBase = path.basename(absArchive)
+    let destArg = path.relative(archiveDir, absDest)
+    if (!destArg) destArg = '.'
+    const tar = spawnSync(tarBin, ['-xzf', archiveBase, '-C', destArg], {
+      cwd: archiveDir,
+      stdio: 'inherit',
+      windowsHide: true,
+    })
+    if (tar.status === 0) return
+    // Fallback: absolute paths with forward slashes (some tar builds accept this)
+    const fwdArchive = absArchive.replace(/\\/g, '/')
+    const fwdDest = absDest.replace(/\\/g, '/')
+    const retry = spawnSync(tarBin, ['-xzf', fwdArchive, '-C', fwdDest], {
+      stdio: 'inherit',
+      windowsHide: true,
+    })
+    if (retry.status !== 0) {
+      throw new Error(`Extract failed (${retry.status ?? tar.status}): ${archive}`)
+    }
+    return
+  }
+
+  const tar = spawnSync(tarBin, ['-xzf', absArchive, '-C', absDest], { stdio: 'inherit' })
   if (tar.status !== 0) {
     throw new Error(`Extract failed (${tar.status}): ${archive}`)
   }
