@@ -160,7 +160,9 @@ html.opptrix-desktop {
   --opptrix-chrome-top-offset: 5px;
 }
 
-/* ── Electron: fully transparent shell, glass sidebars ── */
+/* ── Electron: 壳层透明以露出窗口材质（vibrancy/acrylic），主内容区自行实底 ──
+ * 注意：BrowserWindow 本身不应 transparent:true，否则缩放动画漏出桌面。
+ */
 html.opptrix-electron {
   --opptrix-app-bg: transparent;
   --opptrix-chrome-bg: transparent;
@@ -395,14 +397,30 @@ html.opptrix-electron .opptrix-right-panel {
   background: var(--opptrix-canvas) !important;
 }
 
+/* ── Electron shell glass ──
+ * 有原生毛玻璃（mac vibrancy / win acrylic）时侧栏透明穿透窗口层；
+ * 否则（Linux 等）保留 CSS backdrop-filter 毛玻璃。
+ */
 html.opptrix-electron .opptrix-glass-sidebar {
   background: var(--opptrix-sidebar-glass) !important;
   backdrop-filter: blur(40px) saturate(180%);
   -webkit-backdrop-filter: blur(40px) saturate(180%);
 }
 
-[data-theme="dark"] html.opptrix-electron .opptrix-glass-sidebar {
+html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
+  background: transparent !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar {
   background: var(--opptrix-canvas-alt) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
+  background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
@@ -414,6 +432,7 @@ html.opptrix-electron .opptrix-overlay-sidebar .opptrix-sidebar-menu {
   will-change: transform;
 }
 
+/* Overlay 浮在实色主内容上，仍用 CSS 毛玻璃（无法穿透到窗口 vibrancy） */
 html.opptrix-electron .opptrix-overlay-sidebar {
   background: var(--opptrix-sidebar-glass) !important;
   backdrop-filter: blur(40px) saturate(180%);

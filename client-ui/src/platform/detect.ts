@@ -204,3 +204,10 @@ export function isDesktopRuntime(): boolean {
 export function useElectronChrome(): boolean {
   return isElectron()
 }
+
+/** macOS vibrancy / Windows acrylic — sidebar can punch through to OS blur */
+export function supportsNativeWindowVibrancy(): boolean {
+  if (!isElectron()) return false
+  const platform = electronPlatform()
+  return platform === 'darwin' || platform === 'win32'
+}

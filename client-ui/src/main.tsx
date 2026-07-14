@@ -16,6 +16,11 @@ if (isDesktopApp()) {
 if (isElectron()) {
   document.documentElement.classList.add('opptrix-electron')
   document.documentElement.classList.add('opptrix-electron-startup')
+  const platform = window.electronAPI?.platform
+  // mac vibrancy / win acrylic — 侧栏透明穿透到系统毛玻璃
+  if (platform === 'darwin' || platform === 'win32') {
+    document.documentElement.classList.add('opptrix-electron-vibrancy')
+  }
   window.setTimeout(() => {
     document.documentElement.classList.remove('opptrix-electron-startup')
     window.electronAPI?.signalShellReady?.()
