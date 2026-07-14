@@ -1,0 +1,186 @@
+---
+description: 安全规范 — 敏感数据处理、输入校验、权限控制
+alwaysApply: true
+---
+
+# 安全规范（全仓硬性）
+
+## 核心原则
+
+1. **最小权限**：只访问必要的数据和资源
+2. **纵深防御**：不依赖单一安全措施
+3. **默认安全**：新代码默认安全；需显式标记不安全场景
+4. **不可信数据**：所有外部输入都是敌意的
+
+## 敏感数据
+
+### 禁止存储
+
+- ❌ API Key / Token / Secret 写入代码或提交到 Git
+- ❌ 用户持仓、盈亏等个人信息写入日志
+- ❌ 数据库密码、连接字符串硬编码
+
+### 存储规范
+
+```typescript
+// ✅ 正确：API Key 存储在用户 SQLite
+const configStore = getProviderConfigStore()
+configStore.save('tushare', { enabled: true, extra: { token: userToken } })
+
+// ✅ 正确：环境变量引用
+const token = process.env.TUSHARE_TOKEN ?? ''
+
+// ❌ 错误：硬编码
+const token = 'abc123def456'
+```
+
+### 日志脱敏
+
+```typescript
+// ✅ 正确：不记录敏感信息
+console.log('Provider tushare configured')
+
+// ❌ 错误：记录 API Key
+console.log('Provider tushare token:', token)
+```
+
+## 输入校验
+
+### API 层
+
+```typescript
+// ✅ 正确：校验输入
+app.post<{ Params: { code: string } }>('/api/stock/:code', async (req) => {
+  const code = req.params.code
+  if (!/^\d{6}$/.test(code)) {
+    return reply.status(400).send({ error: 'Invalid stock code' })
+  }
+  // ...
+})
+
+// ❌ 错误：直接使用未校验输入
+app.post<{ Params: { code: string } }>('/api/stock/:code', async (req) => {
+  const code = req.params.code  // 可能是 SQL 注入
+  // ...
+})
+```
+
+### Provider 层
+
+```typescript
+// ✅ 正确：校验上游响应
+function parseStockQuote(raw: unknown): StockRealtime | null {
+  if (!isRecord(raw)) return null
+  if (typeof raw.code !== 'string') return null
+  if (typeof raw.price !== 'number' || raw.price <= 0) return null
+  return raw as StockRealtime
+}
+
+// ❌ 错误：直接断言
+function parseStockQuote(raw: unknown): StockRealtime {
+  return raw as StockRealtime  // 可能是恶意数据
+}
+```
+
+## Electron 安全
+
+### WebPreferences
+
+```typescript
+// 必须的安全设置
+{
+  nodeIntegration: false,      // 禁止 Node.js 集成
+  contextIsolation: true,      // 启用上下文隔离
+  sandbox: true,               // 启用沙箱
+  webSecurity: true,           // 启用 web 安全
+  allowRunningInsecureContent: false,
+  enableWebSQL: false,
+}
+```
+
+### IPC 通信
+
+```typescript
+// ✅ 正确：通过 contextBridge 暴露安全 API
+contextBridge.exposeInMainWorld('electronAPI', {
+  windowMinimize: () => ipcRenderer.send('window-minimize'),
+  // 只暴露必要的、安全的操作
+})
+
+// ❌ 错误：直接暴露 ipcRenderer
+contextBridge.exposeInMainWorld('electron', {
+  ipcRenderer: ipcRenderer  // 危险！可执行任意 IPC 调用
+})
+```
+
+### 生产环境
+
+- 禁用 DevTools（F12、Ctrl+Shift+I 等快捷键被阻止）
+- 禁用 `nodeIntegration`
+- 启用 `contextIsolation` 和 `sandbox`
+
+## 网络安全
+
+### 出站请求
+
+```typescript
+// ✅ 正确：超时 + 错误处理
+const controller = new AbortController()
+const timer = setTimeout(() => controller.abort(), 5000)
+try {
+  const resp = await fetch(url, { signal: controller.signal })
+  clearTimeout(timer)
+  // ...
+} catch (err) {
+  // 处理超时或网络错误
+}
+
+// ❌ 错误：无超时
+const resp = await fetch(url)  // 可能永久挂起
+```
+
+### CORS
+
+```typescript
+// ✅ 正确：限制允许的来源
+app.register(cors, {
+  origin: ['http://127.0.0.1:5173', 'http://localhost:5173'],
+})
+
+// ❌ 错误：允许所有来源
+app.register(cors, { origin: true })  // 危险！
+```
+
+## 密钥管理
+
+### 环境变量
+
+```bash
+# .env.example（不提交实际值）
+TUSHARE_TOKEN=your_token_here
+TICKFLOW_API_KEY=your_api_key_here
+```
+
+### Git 提交
+
+```gitignore
+# .gitignore
+.env
+.env.local
+.env.*.local
+**/secrets/
+**/*.p12
+**/*.key
+```
+
+## 安全审计清单
+
+- [ ] 敏感数据未硬编码
+- [ ] API Key 存储在用户 SQLite 或环境变量
+- [ ] 日志不包含敏感信息
+- [ ] 所有输入经过校验
+- [ ] Electron 安全设置正确
+- [ ] IPC 通信通过 contextBridge
+- [ ] 网络请求有超时
+- [ ] CORS 配置正确
+- [ ] .gitignore 排除敏感文件

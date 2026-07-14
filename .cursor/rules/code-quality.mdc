@@ -1,0 +1,165 @@
+---
+description: 代码质量标准 — 类型安全、错误处理、性能、可维护性
+globs:
+  - packages/**/*
+  - apps/**/*
+  - client-ui/**/*
+alwaysApply: false
+---
+
+# 代码质量标准
+
+## 类型安全
+
+### TypeScript 规则
+
+```typescript
+// ✅ 正确：明确类型
+function processQuote(ref: InstrumentRef, data: StockRealtime): QueryResult {
+  return { success: true, data }
+}
+
+// ❌ 错误：any 泛滥
+function processQuote(ref: any, data: any): any {
+  return data
+}
+
+// ✅ 正确：使用 unknown + 类型守卫
+function parseResponse(raw: unknown): StockRealtime {
+  if (!isRecord(raw)) throw new Error('Invalid response')
+  return raw as StockRealtime
+}
+
+// ❌ 错误：不检查直接断言
+function parseResponse(raw: unknown): StockRealtime {
+  return raw as StockRealtime  // 危险！
+}
+```
+
+### 禁止
+
+- ❌ `any` 类型（除非绝对必要且有注释说明）
+- ❌ `@ts-ignore` / `@ts-expect-error`（除非附带 issue 链接）
+- ❌ 非空断言 `!`（除非有明确的不变量保证）
+
+## 错误处理
+
+### 分层策略
+
+| 层级 | 策略 | 示例 |
+|------|------|------|
+| Provider | 返回 null 触发 failover | `realtime(): Promise<StockRealtime[] \| null>` |
+| Engine | 捕获 → 记录 → 尝试下一个 Provider | try/catch + Health tracker |
+| Hub | 捕获 → 格式化为用户友好消息 | `{ success: false, error: "无法获取行情" }` |
+| API | 捕获 → HTTP 状态码 + 错误体 | `{ error: "Not found", code: 404 }` |
+| UI | 捕获 → Toast/错误边界 | `<ErrorBoundary>` + `useSettingsToast()` |
+
+### 错误类型
+
+```typescript
+// 领域错误（可恢复）
+class ProviderTimeoutError extends Error {
+  constructor(providerId: string, capability: string) {
+    super(`Provider ${providerId} timed out for ${capability}`)
+    this.name = 'ProviderTimeoutError'
+  }
+}
+
+// 不可恢复错误（应向上抛）
+class SchemaMigrationError extends Error {
+  constructor(version: number, reason: string) {
+    super(`Migration to v${version} failed: ${reason}`)
+    this.name = 'SchemaMigrationError'
+  }
+}
+```
+
+### 禁止
+
+- ❌ 空 catch 块（`catch {}`）
+- ❌ 吞掉错误（`catch { return null }` 无日志）
+- ❌ 用 string 而非 Error 对象（`throw "something wrong"`）
+- ❌ 在 Provider 层抛错（应返回 null）
+
+## 性能
+
+### 异步模式
+
+```typescript
+// ✅ 正确：并行执行独立操作
+const [realtime, kline, profile] = await Promise.all([
+  engine.queryInstrumentData(ref, 'realtime'),
+  engine.queryInstrumentData(ref, 'kline', { count: 60 }),
+  engine.queryInstrumentData(ref, 'profile'),
+])
+
+// ❌ 错误：串行执行独立操作
+const realtime = await engine.queryInstrumentData(ref, 'realtime')
+const kline = await engine.queryInstrumentData(ref, 'kline')  // 可并行
+const profile = await engine.queryInstrumentData(ref, 'profile')  // 可并行
+```
+
+### 缓存
+
+```typescript
+// ✅ 正确：利用 Engine 内置缓存
+const data = await engine.queryInstrumentData(ref, 'realtime')  // 自动缓存
+
+// ❌ 错误：重复调用相同查询
+const data1 = await engine.queryInstrumentData(ref, 'realtime')
+const data2 = await engine.queryInstrumentData(ref, 'realtime')  // 浪费
+```
+
+### 禁止
+
+- ❌ 同步阻塞（`execSync`、`readFileSync` 在热路径）
+- ❌ 无超时的网络请求
+- ❌ 无限制的内存缓存（LRU 或 TTL 必须有）
+- ❌ 在循环内 await（应 Promise.all）
+
+## 可维护性
+
+### 命名
+
+```typescript
+// ✅ 正确：意图清晰
+function resolveInstrumentQueryPlan(ref, capability, opts) { ... }
+const isProviderThrottled = shouldSkipProviderQuery(providerId)
+
+// ❌ 错误：缩写/模糊
+function rip(r, c, o) { ... }
+const x = sspq(pid)
+```
+
+### 函数长度
+
+- 目标：<50 行
+- 上限：100 行（超过必须拆分）
+- 特例：switch/case 映射表可例外
+
+### 文件长度
+
+- 目标：<300 行
+- 上限：500 行（超过考虑拆分模块）
+
+### 注释
+
+```typescript
+// ✅ 正确：解释 WHY
+// 熔断器冷却期用 2^consecutiveFails 指数退避，
+// 避免多个 Provider 同时恢复时的雷群效应
+cooldown = min(BASE_COOLDOWN_MS * 2 ** consecutiveFails, MAX_COOLDOWN_MS)
+
+// ❌ 错误：解释 WHAT
+// 计算冷却期
+cooldown = min(BASE * 2 ** fails, MAX)
+```
+
+## 代码审查清单
+
+- [ ] 类型安全：无 `any`、无非空断言
+- [ ] 错误处理：分层策略正确、无空 catch
+- [ ] 性能：独立操作并行、利用缓存
+- [ ] 可读性：命名清晰、函数长度合理
+- [ ] 测试：关键路径有测试覆盖
+- [ ] 文档：复杂逻辑有注释说明 WHY

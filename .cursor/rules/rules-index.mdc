@@ -5,20 +5,129 @@ alwaysApply: true
 
 # Opptrix 规则索引
 
-**探索代码**：必须先 `codegraph_explore`（全文见 `.cursor/rules/codegraph.mdc`）。
+## 硬性规则（全仓生效）
 
-| 场景 | 细则（glob 自动挂载；未命中时动手前 Read） |
-|------|------|
-| 改 `client-ui` | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc`、`onboarding.mdc`（引导流程与发版激活参数）；`docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
-| **桌面发版 / 打标签 / bump 版本** | **`desktop-release.mdc`（Checklist + 必写 `docs/releases/{version}.md` + 打标签前 `audit:desktop-pack`）**、`onboarding.mdc`、`docs/DESKTOP-RELEASE.md`、`docs/releases/README.md` |
-| SQLite / 本地用户数据 | `backward-compatibility.mdc`、`schema-migration.mdc` |
-| 行情 / Hub / 研究 API | `data-layer-standard-api.mdc`；`docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
-| Provider 实现 | `provider-standard-api.mdc`、`data-provider-docs.mdc` |
+| 规则 | 说明 | 文件 |
+|------|------|------|
+| **架构原则** | 分层架构、依赖倒置、注册模式、反模式 | `architecture-principles.mdc` |
+| **安全规范** | 敏感数据、输入校验、Electron 安全、网络安全 | `security.mdc` |
+| **审查与审计** | 代码审查、质量门禁、发布前审计 | `review-audit.mdc` |
+| **文档同步** | 架构/API/调用方式变更后必须同步更新文档 | `doc-sync.mdc` |
+| **需求澄清** | 重要修改前必须向用户提问确认需求 | `requirement-clarification.mdc` |
 
-## 硬性（全仓库）
+## 场景规则（按 glob 自动挂载）
 
-- **禁止断代**：schema、用户数据、Hub/API、更新源变更须兼容 + 幂等迁移（细则 `backward-compatibility.mdc`）。
-- **桌面发版**：用户要求发布 / 打 `desktop-v*` 标签前，Agent **必须先 Read `desktop-release.mdc`**，**撰写** `docs/releases/{version}.md`（新功能 + 修复），跑通 **`OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack`**，Checklist **逐项验证**（Phase A–D 完成前不得 push 标签）；引导参数见 `onboarding.mdc`。
-- **增量改动**：按用户最新指示做最小 diff；不顺手重构；用户已确认的 UI 行为勿擅自改。
-- **探索再改**：CodeGraph 定位符号与调用链后再 Read/编辑；返回源码视为已读，勿重复打开。
-- **client-ui 收尾**：改动 `client-ui/**` 后跑 `npm run check:ui`，通过再宣告完成。
+| 场景 | 规则文件 | 关键文档 |
+|------|----------|----------|
+| **改 `client-ui`** | `client-ui-guidelines.mdc`、`post-edit-verification.mdc`、`ui-overlay-components.mdc` | `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md` |
+| **桌面发版** | `desktop-release.mdc`、`onboarding.mdc` | `docs/DESKTOP-RELEASE.md`、`docs/releases/` |
+| **SQLite / 数据库** | `backward-compatibility.mdc`、`schema-migration.mdc` | `.cursor/rules/backward-compatibility.mdc` |
+| **行情 / 数据层** | `data-layer-standard-api.mdc` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
+| **Provider 实现** | `provider-standard-api.mdc`、`data-provider-docs.mdc` | `.cursor/rules/provider-standard-api.mdc` |
+| **代码质量** | `code-quality.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
+| **测试** | `testing.mdc` | `tests/` |
+| **性能** | `performance.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
+| **文档** | `documentation.mdc` | `docs/` |
+| **任务分派** | `task-delegation.mdc` | - |
+
+## 核心流程
+
+### 开发工作流（完整）
+
+```
+0. 需求澄清 → 向用户提问确认需求（requirement-clarification.mdc）
+1. 探索代码 → codegraph_explore → 定位符号与调用链
+2. 理解实现 → Read 具体文件
+3. 设计方案 → 选择方案、评估影响
+4. 用户确认 → 展示方案、确认影响
+5. 实现代码 → 最小 diff 改动
+6. 验证正确性 → 运行检查
+7. 文档同步 → 更新对应文档（doc-sync.mdc）
+8. 提交代码 → commit + PR
+```
+
+### 探索再改
+
+```
+1. codegraph_explore → 定位符号与调用链
+2. Read 具体文件 → 理解实现
+3. 确认方案 → 最小 diff 改动
+4. 运行检查 → 验证正确性
+```
+
+### 任务分派
+
+```
+1. 创建 task → 记录目标
+2. 拆分子任务 → 独立可验证
+3. 分派 subagent → 并行执行
+4. 收集结果 → 审查整合
+5. 验证完成 → 标记 done
+```
+
+### 发布流程
+
+```
+1. Read desktop-release.mdc + onboarding.mdc
+2. Phase A: 代码就绪（check:ui / build / audit）
+3. Phase B: 版本与文档（bump version / 写更新日志）
+4. Phase C: 兼容性（Schema / 旧客户端）
+5. Phase D: 发布（tag / push）
+```
+
+## 硬性检查清单
+
+### 提交前
+
+- [ ] 无 `any` 类型
+- [ ] 无 `@ts-ignore`
+- [ ] 错误处理完整
+- [ ] 测试通过
+- [ ] 文档已更新（如适用）
+- [ ] 架构/调用方式变更已同步文档（doc-sync.mdc）
+
+### client-ui 改动后
+
+- [ ] `npm run check:ui` 退出码 0
+
+### packages 改动后
+
+- [ ] `npm run build:packages` 无错误
+
+### Schema 变更后
+
+- [ ] `SCHEMA_VERSION` 已 bump
+- [ ] `MIGRATION_STEPS` 已注册
+- [ ] 迁移测试通过
+
+### 发布前
+
+- [ ] `OPPTRIX_AUDIT_STAGE_UPDATER=1 npm run audit:desktop-pack` 退出码 0
+- [ ] `docs/releases/{version}.md` 已撰写
+- [ ] 用户确认后打标签
+
+## 原文与扩展
+
+| Cursor 规则 | 路径 |
+|------------|------|
+| **架构原则** | `.cursor/rules/architecture-principles.mdc` |
+| **任务分派** | `.cursor/rules/task-delegation.mdc` |
+| **代码质量** | `.cursor/rules/code-quality.mdc` |
+| **安全规范** | `.cursor/rules/security.mdc` |
+| **测试规范** | `.cursor/rules/testing.mdc` |
+| **文档规范** | `.cursor/rules/documentation.mdc` |
+| **审查与审计** | `.cursor/rules/review-audit.mdc` |
+| **性能规范** | `.cursor/rules/performance.mdc` |
+| **文档同步** | `.cursor/rules/doc-sync.mdc` |
+| **需求澄清** | `.cursor/rules/requirement-clarification.mdc` |
+| CodeGraph | `.cursor/rules/codegraph.mdc` |
+| 兼容 | `.cursor/rules/backward-compatibility.mdc` |
+| Schema | `.cursor/rules/schema-migration.mdc` |
+| client-ui | `.cursor/rules/client-ui-guidelines.mdc` |
+| 收尾验证 | `.cursor/rules/post-edit-verification.mdc` |
+| 浮层组件 | `.cursor/rules/ui-overlay-components.mdc` |
+| 数据层 | `.cursor/rules/data-layer-standard-api.mdc` |
+| Provider | `.cursor/rules/provider-standard-api.mdc` |
+| Provider 文档 | `.cursor/rules/data-provider-docs.mdc` |
+| 桌面发版 | `.cursor/rules/desktop-release.mdc` |
+| Onboarding | `.cursor/rules/onboarding.mdc` |

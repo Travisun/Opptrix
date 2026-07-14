@@ -1,0 +1,217 @@
+---
+description: 文档规范 — API 文档、代码注释、更新日志
+alwaysApply: true
+---
+
+# 文档规范
+
+## 文档层次
+
+```
+用户文档（面向投资者）
+  └─ README.md、用户指南
+
+开发者文档（面向贡献者）
+  ├─ ARCHITECTURE.md          系统架构
+  ├─ ARCHITECTURE-COMPREHENSIVE.md  全面架构指南
+  ├─ DEVELOPMENT.md           开发环境
+  ├─ CONTRIBUTING.md          贡献流程
+  ├─ AGENT-GUIDE.md           AI 协作
+  └─ API.md                   REST API
+
+领域文档（面向特定角色）
+  ├─ DATA-LAYER.md            数据层架构
+  ├─ PROVIDER-STANDARD-API.md Provider 规范
+  ├─ UI-DESIGN-SYSTEM.md      UI 设计
+  ├─ DESKTOP-RELEASE.md       发布流程
+  └─ INSTRUMENT-PROTOCOL.md   标的协议
+
+代码内文档
+  ├─ JSDoc/TSDoc              函数/类注释
+  ├─ README.md (per package)  包说明
+  └─ CHANGELOG.md             变更日志
+```
+
+## 代码注释
+
+### JSDoc/TSDoc
+
+```typescript
+/**
+ * 标的查询计划路由 — 根据 InstrumentRef + 数据能力，解析为具体的 Engine 执行计划。
+ *
+ * 用途：Agent/Hub 层调用时，将"我要查 AAPL 的 K 线"转化为具体的 Provider 调用路径。
+ * 支持市场：CN（A股）、US（美股）、HK（港股）、CRYPTO（加密货币）
+ *
+ * @param ref - 标的引用（market + assetClass + symbol）
+ * @param capability - 数据能力（realtime/kline/profile 等）
+ * @param opts - 查询选项（count/period/keyword 等）
+ * @returns 执行计划或 null（不支持的能力）
+ *
+ * @example
+ * ```ts
+ * const plan = resolveInstrumentQueryPlan(
+ *   { market: 'US', assetClass: 'EQUITY', symbol: 'AAPL' },
+ *   'kline',
+ *   { count: 60, period: 'daily' }
+ * )
+ * ```
+ */
+export function resolveInstrumentQueryPlan(
+  ref: InstrumentRef,
+  capability: InstrumentDataCapability,
+  opts?: InstrumentQueryOpts,
+): InstrumentQueryPlan | null {
+  // ...
+}
+```
+
+### 行内注释
+
+```typescript
+// ✅ 正确：解释 WHY（非显而易见的原因）
+// 熔断器冷却期用指数退避，避免多个 Provider 同时恢复时的雷群效应
+cooldown = min(BASE * 2 ** fails, MAX)
+
+// ✅ 正确：标记技术债
+// TODO: 待标准 stock_list 覆盖 HK 后 deprecate
+// FIXME: 上游 API 偶尔返回 null，需容错
+
+// ❌ 错误：解释 WHAT（代码已说明）
+// 计算冷却期
+cooldown = min(BASE * 2 ** fails, MAX)
+```
+
+## API 文档
+
+### REST API
+
+```markdown
+## GET /api/stock/:code
+
+获取个股实时行情。
+
+### 路径参数
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| code | string | 6 位 A 股代码（如 600519） |
+
+### 响应
+
+```json
+{
+  "success": true,
+  "data": {
+    "code": "600519",
+    "name": "贵州茅台",
+    "price": 1800.00,
+    "change": 25.50,
+    "changePct": 1.43
+  },
+  "source": "tencent",
+  "cached": false
+}
+```
+
+### 错误
+
+| 状态码 | 说明 |
+|--------|------|
+| 400 | 无效的股票代码 |
+| 404 | 找不到该股票 |
+| 500 | 服务端错误 |
+```
+
+### Provider 自定义方法
+
+```typescript
+/**
+ * 查询股票所属概念板块
+ * @sourceUrl https://datacenter.eastmoney.com/securities/api/data/v1/get?reportName=RPT_F10_CORETHEME_BOARDTYPE
+ * @param code 6 位 A 股代码（必填）
+ * @returns 板块列表；无数据时 null
+ * @usage engine.invokeCustomMethod("tencent", "tencentFoo", ["600519"])
+ * @remarks 需要 Referer: https://data.eastmoney.com/
+ * @example {"provider":"tencent","method":"tencentFoo","args":["600519"]}
+ */
+```
+
+## 更新日志
+
+### 格式
+
+```markdown
+# 版本 0.7.0
+
+发布日期：2026-07-14
+
+## 新功能
+
+- 支持港股实时行情查询
+- 新增 ETF 持仓分析功能
+- Agent 支持多轮对话上下文
+
+## 修复
+
+- 修复 A 股 K 线数据偶发缺失
+- 修复桌面端更新后白屏问题
+- 修复新闻订阅迁移失败时数据丢失
+
+## 已知问题
+
+- 日股行情数据延迟约 15 分钟
+```
+
+### 规则
+
+- 面向用户：说清"能做什么 / 修好了什么"
+- 避免内部术语：不用 PR 号、文件名、技术栈
+- 每条一行：简洁明了
+- 必须包含：新功能、修复（即使为空写"无"）
+
+## 包文档
+
+### packages/README.md
+
+```markdown
+## @opptrix/a-stock-layer
+
+多市场数据引擎，提供统一的 `queryInstrumentData` API。
+
+### 安装
+
+```bash
+npm install @opptrix/a-stock-layer
+```
+
+### 使用
+
+```typescript
+import { MarketDataEngine } from '@opptrix/a-stock-layer'
+
+const engine = new MarketDataEngine()
+const data = await engine.queryInstrumentData(
+  { market: 'CN', assetClass: 'EQUITY', symbol: '600519' },
+  'realtime'
+)
+```
+
+### 开发
+
+```bash
+npm run build    # 编译
+npm run test     # 测试
+```
+```
+
+## 文档更新触发
+
+| 改动类型 | 必须更新的文档 |
+|----------|----------------|
+| 新增 Hub feature | `docs/API.md`、`AGENT-GUIDE.md` |
+| 新增/修改 Provider | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
+| 架构变更 | `docs/ARCHITECTURE.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` |
+| UI 组件 | `docs/UI-DESIGN-SYSTEM.md` |
+| 发版 | `docs/releases/{version}.md`、`DESKTOP-RELEASE.md` |
+| Schema 变更 | `docs/DATA-LAYER.md`、迁移测试 |

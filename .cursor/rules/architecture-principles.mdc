@@ -1,0 +1,93 @@
+---
+description: 架构设计原则 — 所有开发决策的根基；违反即驳回
+alwaysApply: true
+---
+
+# 架构设计原则（全仓硬性）
+
+## 核心信条
+
+1. **单一事实源（Single Source of Truth）**：每个概念只有一个权威定义位置；其他位置引用而非复制
+2. **关注点分离（Separation of Concerns）**：层级边界清晰；UI 不直连数据库，Provider 不含业务逻辑
+3. **依赖倒置（Dependency Inversion）**：高层模块不依赖低层模块；二者依赖抽象（如 `RegistryProvider`、`InstrumentRef`）
+4. **开闭原则（Open/Closed）**：扩展新能力通过注册（Provider/Feature/Tool），不修改核心调度循环
+5. **最小知识原则（Least Knowledge）**：模块只知道自己和直接协作者；禁止跨层调用
+
+## 分层架构
+
+```
+┌─────────────────────────────────────────────────────┐
+│  UI Layer (client-ui)                                │
+│  React + Fluent UI v9 + Hooks                        │
+│  职责：渲染、用户交互、状态展示                         │
+│  禁止：直连 Provider、硬编码 API URL、业务计算          │
+├─────────────────────────────────────────────────────┤
+│  API Layer (apps/server)                             │
+│  Fastify REST + WebSocket                            │
+│  职责：HTTP 路由、请求校验、响应格式化                   │
+│  禁止：复杂业务逻辑、Provider 直连                     │
+├─────────────────────────────────────────────────────┤
+│  Hub Layer (research-hub, search-hub)                │
+│  职责：feature 调度、多数据源聚合、结果格式化            │
+│  禁止：Provider 实现、UI 逻辑、持久化                  │
+├─────────────────────────────────────────────────────┤
+│  Engine Layer (a-stock-layer)                        │
+│  职责：查询计划、Provider 路由、缓存、熔断、负载均衡     │
+│  禁止：业务语义（什么是"好股票"）、UI 状态              │
+├─────────────────────────────────────────────────────┤
+│  Provider Layer (providers/*)                        │
+│  职责：单一数据源适配、API 调用、数据标准化               │
+│  禁止：跨 Provider 逻辑、缓存策略、业务判断             │
+├─────────────────────────────────────────────────────┤
+│  Storage Layer (user-store, market-data)             │
+│  职责：SQLite 持久化、Schema 迁移、FTS 索引            │
+│  禁止：业务逻辑、网络调用、UI 状态                     │
+└─────────────────────────────────────────────────────┘
+```
+
+## 调用规则
+
+| 调用方 | 允许调用 | 禁止调用 |
+|--------|----------|----------|
+| UI | Hub API、搜索 API、用户偏好 API | Provider、Engine、SQLite 直连 |
+| Hub | Engine.queryInstrumentData、评估/策略包 | Provider 直连、SQLite 直连 |
+| Engine | Provider Registry、Cache、Health | Hub、UI、用户存储 |
+| Provider | 上游 API、数据标准化 | 其他 Provider、Engine、Cache |
+| Agent | Hub、Engine（经 MCP 工具） | Provider 直连、SQLite 直连 |
+
+## 注册模式（Registry Pattern）
+
+新增能力通过**注册**而非**修改**：
+
+```typescript
+// ✅ 正确：注册新 Provider
+registry.register(new MyProvider())
+
+// ✅ 正确：注册新 Hub feature
+case 'my_feature': return handleMyFeature(params)
+
+// ✅ 正确：注册新 Agent tool
+tools.register('my_tool', { ... })
+
+// ❌ 错误：修改 Engine 核心循环
+// ❌ 错误：在 Hub 内硬编码 Provider 调用
+```
+
+## 抽象契约
+
+| 契约 | 位置 | 用途 |
+|------|------|------|
+| `InstrumentRef` | `shared` | 标的标识（market + assetClass + symbol） |
+| `Capability` | `market-data-core` | 数据维度枚举 |
+| `ProviderBinding` | `shared` | Provider 能力绑定 |
+| `RegistryProvider` | `market-data-core` | Provider 驱动接口 |
+| `QueryResult` | `shared` | 统一查询结果 |
+| `InstrumentDataCapability` | `a-stock-layer` | 标准 API 能力 |
+
+## 反模式（禁止）
+
+- ❌ **God Object**：单个文件/类承担过多职责（>3 个独立关注点）
+- ❌ **Shotgun Surgery**：一个需求改动 5+ 个不相关的文件
+- ❌ **Feature Envy**：模块 A 频繁访问模块 B 的内部数据
+- ❌ **Primitive Obsession**：用 string/number 代替值对象（应用 `InstrumentRef` 而非裸字符串）
+- ❌ **Reinventing the Wheel**：已有标准 API 却新建平行实现

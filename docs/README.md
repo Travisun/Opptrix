@@ -55,6 +55,7 @@ Opptrix 是面向 **全球多市场** 的 **数据查询与投研信息整理工
 
 | 文档 | 说明 |
 |------|------|
+| [ARCHITECTURE-COMPREHENSIVE.md](./ARCHITECTURE-COMPREHENSIVE.md) | **全面架构指南**（数据库层、数据层、Provider、模块化、UI、发布、测试、审计） |
 | [ARCHITECTURE.md](./ARCHITECTURE.md) | 系统分层、包依赖、Hub、持久化 |
 | [DEVELOPMENT.md](./DEVELOPMENT.md) | 开发环境、脚本、测试、排错 |
 | [API.md](./API.md) | REST、Hub features、instrument API |

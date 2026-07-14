@@ -324,8 +324,11 @@ A：在 `tools.ts` 注册即可；`McpToolBroker` 会自动暴露。记得补充
 **Q：健康检查里 `tools` 数量与代码不一致？**  
 A：以 `tools.ts` 中注册名为准；`/api/health` 计数可能滞后，可在改工具时同步 server 健康检查逻辑。
 
-**Q：stock-writer 包在哪？**  
+**Q：stock-writer 包在哪？**
 A：当前 monorepo **未包含** `packages/stock-writer`；`docs/API.md` 中部分 `writer_*` feature 可能为历史文档，实现前请在 `research-hub` 中确认。
+
+**Q：想全面了解项目架构怎么办？**
+A：阅读 [`docs/ARCHITECTURE-COMPREHENSIVE.md`](./ARCHITECTURE-COMPREHENSIVE.md)，涵盖数据库层、数据层、Provider 机制、模块化开发、UI 规范、发布打包、发布前测试、审计流程。
 
 ---
 
