@@ -57,7 +57,7 @@ mkdir -p "$OPPTRIX_DATA_DIR"
 # 可选：复制关注列表（首次启动前）
 cp example/watchlist/watchlist.example.json "$OPPTRIX_DATA_DIR/watchlist.json"
 
-# 可选：Tushare（在设置 → 基础数据 中配置更稳妥）
+# 可选：Tushare（在设置 → 数据源 中配置更稳妥）
 cp example/data-sources/tushare.example.json "$OPPTRIX_DATA_DIR/tushare-config.json"
 ```
 

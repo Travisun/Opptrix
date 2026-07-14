@@ -191,7 +191,6 @@ test('CHAT_MCP_TOOL_NAMES exposes all registered tools', async () => {
   assert.ok(chatTools.has('get_watchlist_radar'))
   assert.ok(!chatTools.has('evaluate_stock'))
   assert.ok(!chatTools.has('search_stocks'))
-  hub.de.stopProviderDirWatcher()
 })
 
 test('discoverMiningToolNames in agent aligns with shared registry', async () => {
@@ -229,14 +228,10 @@ test('stock-index search maps CN/US instruments', { timeout: 30_000 }, async () 
   const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')
   const de = new MarketDataEngine(false)
   registerAllDrivers(de.registry)
-  try {
-    const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
-    assert.ok(cn.some(h => h.instrument.symbol === '600519'))
-    const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
-    assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
-  } finally {
-    de.stopProviderDirWatcher()
-  }
+  const cn = await searchInstrumentsOnline(de, '600519', 5, ['CN'])
+  assert.ok(cn.some(h => h.instrument.symbol === '600519'))
+  const us = await searchInstrumentsOnline(de, 'AAPL', 5, ['US'])
+  assert.ok(us.some(h => h.instrument.symbol === 'AAPL'))
 })
 
 test('cross-market list sync jobs are no-op', async () => {
@@ -259,7 +254,6 @@ test('cross-market list sync jobs are no-op', async () => {
     assert.equal(result.jobs.jp_list, 'skipped')
     assert.equal(store.countRegionalEquityInstruments('JP'), 0)
   } finally {
-    mdEngine.stopProviderDirWatcher()
     store.close()
     rmSync(dir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
   }

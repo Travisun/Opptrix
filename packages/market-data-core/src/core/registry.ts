@@ -70,7 +70,7 @@ export class DriverRegistry {
     this.rebuildIndices()
   }
 
-  /** 结合 speed ranking 重建索引；若 speed ranker 未就绪则 fallback 到优先级排序 */
+  /** 结合 speed ranking 重建索引（无样本时等同于优先级排序） */
   rebuildIndicesWithRanking() {
     this.rebuildIndices()
   }
@@ -94,7 +94,7 @@ export class DriverRegistry {
         this.capIndex.set(cap, clist)
       }
     }
-    // 排序：若 speed ranker 就绪，按速度排序；否则 fallback 到 manifest 优先级
+    // 排序：有 speed ranker 时按速度破同优先级平局；否则仅按 manifest 优先级
     const useSpeed = this.speedRanker?.isReady() === true
     for (const [key, list] of this.bindingIndex) {
       this.sortBindingList(key, list, useSpeed)

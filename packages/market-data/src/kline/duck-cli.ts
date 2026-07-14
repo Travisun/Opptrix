@@ -16,17 +16,9 @@ import {
 } from './duck-connection.js'
 import { CN_DAILY_TABLE } from '../analytics/duck-schema.js'
 import { ensureAnalyticsSchema, syncAnalytics, type AnalyticsSyncScope } from '../analytics/duck-sync.js'
-import { computeScreenFactors, analyticsStats } from '../analytics/duck-compute.js'
-import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats, dimsMigrationNeeded, syncDuckDimsFromSqlite } from '../duck/market-migrate.js'
-import { withDuckFileLockAsync } from '../duck/duck-subprocess-gate.js'
+import { analyticsStats } from '../analytics/duck-compute.js'
+import { ensureMarketDuckSchema, migrateMarketDataFromSqlite, migrateMarketDataToSqlite, marketDataMigrationNeeded, marketDuckStats } from '../duck/market-migrate.js'
 import { applyDuckWriteOps, type DuckWriteOp } from '../duck/market-writes.js'
-import {
-  latestFactorDateDuck,
-  queryIndustryStatsDuck,
-  queryIndustryStocksDuck,
-  queryUniverseScreenDuck,
-  type DuckUniverseScreenQuery,
-} from '../analytics/duck-query.js'
 
 const CN_TABLE = CN_DAILY_TABLE
 
@@ -393,141 +385,6 @@ async function cmdSyncAnalytics(flags: Record<string, string>) {
   }
 }
 
-async function cmdComputeFactors(flags: Record<string, string>) {
-  const duckPath = flags.duckdb
-  const sqlitePath = flags.sqlite
-  const tradeDate = flags.date?.slice(0, 10)
-  const filePath = flags.file
-  if (!duckPath || !sqlitePath || !tradeDate) throw new Error('compute-factors 需要 --duckdb --sqlite --date')
-  let codes: string[] | undefined
-  if (filePath) {
-    codes = JSON.parse(fs.readFileSync(filePath, 'utf8')) as string[]
-  }
-  const db = openDuckDatabase(duckPath)
-  const conn = connectDuck(db)
-  try {
-    await ensureAnalyticsSchema(conn)
-    const result = await computeScreenFactors(conn, sqlitePath, tradeDate, codes)
-    process.stdout.write(JSON.stringify(result))
-  } finally {
-    await closeDuck(db)
-  }
-}
-
-async function resolveTradeDate(conn: ReturnType<typeof connectDuck>, fallback: string): Promise<string> {
-  const row = await duckGet<{ maxDate: string | null }>(conn, `
-    SELECT MAX(trade_date) AS maxDate FROM ${CN_TABLE}
-  `)
-  return row?.maxDate?.slice(0, 10) ?? fallback
-}
-
-/** 独立子进程：初选因子 + 行业统计（不阻塞 Electron 主进程） */
-async function cmdDerivedMaintenance(flags: Record<string, string>) {
-  const duckPath = flags.duckdb
-  const sqlitePath = flags.sqlite
-  const jobsRaw = flags.jobs ?? 'screen_factors,industry_stats'
-  const jobs = jobsRaw.split(',').map(s => s.trim()).filter(Boolean)
-  if (!duckPath || !sqlitePath) throw new Error('derived-maintenance 需要 --duckdb --sqlite')
-  if (!jobs.length) throw new Error('derived-maintenance 需要 --jobs')
-
-  await withDuckFileLockAsync(duckPath, async () => {
-    const fallbackDate = flags.date?.slice(0, 10) ?? new Date().toISOString().slice(0, 10)
-    const db = openDuckDatabase(duckPath)
-    const conn = connectDuck(db)
-    try {
-      await ensureAnalyticsSchema(conn)
-      const tradeDate = flags.date?.slice(0, 10) ?? await resolveTradeDate(conn, fallbackDate)
-      const payload: Record<string, unknown> = { trade_date: tradeDate }
-
-      if (jobs.some(j => j === 'screen_factors' || j === 'industry_stats')) {
-        const prepJob = jobs[0]!
-        emit({ type: 'progress', job: prepJob, message: '检查名录维度…', current: 2, total: 100 })
-        const migrationNeeded = await dimsMigrationNeeded(conn, sqlitePath)
-        if (migrationNeeded) {
-          emit({ type: 'progress', job: prepJob, message: '同步 SQLite 名录到 DuckDB…', current: 5, total: 100 })
-          const migrated = await syncDuckDimsFromSqlite(conn, sqlitePath)
-          emit({
-            type: 'progress',
-            job: prepJob,
-            message: migrated.stocks > 0
-              ? `名录已同步（${migrated.stocks.toLocaleString()} 只）`
-              : '名录同步完成',
-            current: 8,
-            total: 100,
-          })
-        }
-      }
-
-      for (const job of jobs) {
-        emit({ type: 'job_start', job, trade_date: tradeDate })
-        if (job === 'screen_factors') {
-          emit({ type: 'progress', job, message: '批量计算初选因子…', current: 10, total: 100 })
-          const dimCount = (await duckGet<{ c: number }>(conn, 'SELECT COUNT(*)::INTEGER AS c FROM dim_cn_stocks WHERE status = \'active\''))?.c ?? 0
-          if (dimCount < 100) {
-            emit({
-              type: 'progress',
-              job,
-              message: `名录不足（${dimCount} 只），跳过因子计算`,
-              current: 100,
-              total: 100,
-            })
-            emit({ type: 'job_done', job, computed: 0, written: 0 })
-            payload.screen_factors = { computed: 0, written: 0 }
-            continue
-          }
-          let tick = 12
-          const heartbeat = setInterval(() => {
-            tick = Math.min(tick + 3, 90)
-            emit({ type: 'progress', job, message: '因子 SQL 计算中…', current: tick, total: 100 })
-          }, 8000)
-          let result: { computed: number; written: number }
-          try {
-            result = await computeScreenFactors(conn, sqlitePath, tradeDate)
-          } finally {
-            clearInterval(heartbeat)
-          }
-          emit({
-            type: 'progress',
-            job,
-            message: result.computed > 0
-              ? `初选因子已计算 ${result.computed.toLocaleString()} 只`
-              : '无可计算标的（跳过）',
-            current: 100,
-            total: 100,
-          })
-          emit({ type: 'job_done', job, ...result })
-          payload.screen_factors = result
-        } else if (job === 'industry_stats') {
-          emit({ type: 'progress', job, message: '重建行业统计…', current: 20, total: 100 })
-          const syncedAt = new Date().toISOString()
-          await applyDuckWriteOps(conn, [{ op: 'rebuildIndustryStats', tradeDate, syncedAt }])
-          const row = await duckGet<{ c: number }>(
-            conn,
-            'SELECT COUNT(*)::INTEGER AS c FROM industry_stats WHERE trade_date = ?',
-            tradeDate,
-          )
-          const industries = row?.c ?? 0
-          emit({
-            type: 'progress',
-            job,
-            message: `行业统计已更新 ${industries} 个行业`,
-            current: 100,
-            total: 100,
-          })
-          emit({ type: 'job_done', job, industries, trade_date: tradeDate })
-          payload.industry_stats = { industries, trade_date: tradeDate }
-        } else {
-          throw new Error(`未知 job: ${job}`)
-        }
-      }
-
-      emit({ type: 'done', ...payload })
-    } finally {
-      await closeDuck(db)
-    }
-  }, 900_000)
-}
-
 async function cmdAnalyticsStats(flags: Record<string, string>) {
   const duckPath = flags.duckdb
   if (!duckPath) throw new Error('analytics-stats 需要 --duckdb')
@@ -542,76 +399,6 @@ async function cmdAnalyticsStats(flags: Record<string, string>) {
   try {
     await ensureAnalyticsSchema(conn)
     process.stdout.write(JSON.stringify(await analyticsStats(conn)))
-  } finally {
-    await closeDuck(db)
-  }
-}
-
-async function cmdQueryIndustryStats(flags: Record<string, string>) {
-  const duckPath = flags.duckdb
-  const tradeDate = flags.date?.slice(0, 10) ?? ''
-  if (!duckPath || !tradeDate) throw new Error('query-industry-stats 需要 --duckdb --date')
-  if (!fs.existsSync(duckPath)) {
-    process.stdout.write(JSON.stringify({ trade_date: tradeDate, quote_date: null, items: [] }))
-    return
-  }
-  const db = openDuckDatabase(duckPath, true)
-  const conn = connectDuck(db)
-  try {
-    await ensureAnalyticsSchema(conn)
-    const date = tradeDate || (await latestFactorDateDuck(conn)) || new Date().toISOString().slice(0, 10)
-    process.stdout.write(JSON.stringify(await queryIndustryStatsDuck(conn, date)))
-  } finally {
-    await closeDuck(db)
-  }
-}
-
-async function cmdQueryIndustryStocks(flags: Record<string, string>) {
-  const duckPath = flags.duckdb
-  const industry = flags.industry ?? ''
-  const tradeDate = flags.date?.slice(0, 10) ?? ''
-  const limit = Math.min(200, Math.max(1, Number(flags.limit ?? 120)))
-  if (!duckPath || !industry) throw new Error('query-industry-stocks 需要 --duckdb --industry')
-  if (!fs.existsSync(duckPath)) {
-    process.stdout.write(JSON.stringify({ items: [] }))
-    return
-  }
-  const db = openDuckDatabase(duckPath, true)
-  const conn = connectDuck(db)
-  try {
-    await ensureAnalyticsSchema(conn)
-    const date = tradeDate || (await latestFactorDateDuck(conn)) || new Date().toISOString().slice(0, 10)
-    const items = await queryIndustryStocksDuck(conn, industry, date, limit)
-    process.stdout.write(JSON.stringify({ trade_date: date, items }))
-  } finally {
-    await closeDuck(db)
-  }
-}
-
-async function cmdScreenUniverse(flags: Record<string, string>) {
-  const duckPath = flags.duckdb
-  const filePath = flags.file
-  if (!duckPath || !filePath) throw new Error('screen-universe 需要 --duckdb --file')
-  if (!fs.existsSync(duckPath)) {
-    process.stdout.write(JSON.stringify({ items: [], passed: 0, total_universe: 0 }))
-    return
-  }
-  const query = JSON.parse(fs.readFileSync(filePath, 'utf8')) as DuckUniverseScreenQuery & { trade_date?: string }
-  const db = openDuckDatabase(duckPath, true)
-  const conn = connectDuck(db)
-  try {
-    await ensureAnalyticsSchema(conn)
-    const tradeDate = query.trade_date?.slice(0, 10)
-      || (await latestFactorDateDuck(conn))
-      || new Date().toISOString().slice(0, 10)
-    const result = await queryUniverseScreenDuck(conn, query, tradeDate)
-    const items = result.items.map(row => ({
-      ...row,
-      market_cap_yi: row.market_cap != null
-        ? Math.round((row.market_cap / 100_000_000) * 100) / 100
-        : null,
-    }))
-    process.stdout.write(JSON.stringify({ ...result, items }))
   } finally {
     await closeDuck(db)
   }
@@ -734,12 +521,7 @@ async function main() {
     else if (cmd === 'sync-bars') await cmdSyncBars(flags)
     else if (cmd === 'sync-analytics') await cmdSyncAnalytics(flags)
     else if (cmd === 'sync-dims') await cmdSyncAnalytics({ ...flags, scope: 'dims' })
-    else if (cmd === 'compute-factors') await cmdComputeFactors(flags)
-    else if (cmd === 'derived-maintenance') await cmdDerivedMaintenance(flags)
     else if (cmd === 'analytics-stats') await cmdAnalyticsStats(flags)
-    else if (cmd === 'query-industry-stats') await cmdQueryIndustryStats(flags)
-    else if (cmd === 'query-industry-stocks') await cmdQueryIndustryStocks(flags)
-    else if (cmd === 'screen-universe') await cmdScreenUniverse(flags)
     else if (cmd === 'migrate-market-data') await cmdMigrateMarketData(flags)
     else if (cmd === 'check-market-migration') await cmdCheckMarketMigration(flags)
     else if (cmd === 'sync-market-data-to-sqlite') await cmdSyncMarketDataToSqlite(flags)

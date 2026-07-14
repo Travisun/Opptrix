@@ -9,7 +9,6 @@ export {
 } from './manifests.js'
 export { ProviderCatalogService, createProviderCatalog } from './catalog.js'
 export { getProviderConfigStore, ProviderConfigStore } from './config-store.js'
-export { ProviderDirWatcher } from './provider-dir-watcher.js'
 export {
   ProviderLoader,
   createProviderLoader,

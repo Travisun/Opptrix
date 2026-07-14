@@ -20,7 +20,7 @@ import type { StockListItem, FinancialSummary, StockKline } from '@opptrix/share
 import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
 import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@opptrix/skills'
 import {
-  EvaluationEngine, createScorecard, Screener, PortfolioAnalyzer,
+  EvaluationEngine, createScorecard, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
   computeGbmBreakdown,
 } from '@opptrix/stock-eval'
@@ -162,7 +162,6 @@ export class ResearchHub {
   readonly store = new SnapshotStore()
   readonly neutralizer = new IndustryNeutralizer(this.de)
   readonly institutions = new ConsolidatedEngine(this.de)
-  readonly screener = new Screener(this.ee, this.de)
   readonly portfolio = new PortfolioAnalyzer(this.ee, this.de)
   readonly backtest = new BacktestEngine(this.ee, this.de)
   readonly closingReport = new ClosingReport(this.de)
@@ -205,7 +204,6 @@ export class ResearchHub {
           return this.dispatchInstrumentCapability('institution_rating', normalizeInstrumentHubParams(params), t0)
         case 'institution_report':
           return this.dispatchInstrumentCapability('institution_report', normalizeInstrumentHubParams(params), t0)
-        case 'screening': return this.screening(params, t0)
         case 'strategy_signal': return this.instrumentStrategySignal(params, t0)
         case 'instrument_evaluation': return this.instrumentEvaluation(params, t0)
         case 'instrument_strategy_signal': return this.instrumentStrategySignal(params, t0)
@@ -245,23 +243,11 @@ export class ResearchHub {
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
         case 'watchlist_save': return this.watchlistSave(params, t0)
-        case 'market_db_status': return this.marketDbStatus(t0)
-        case 'market_db_sync': return this.marketDbSync(params, t0)
-        case 'market_db_sync_state': return this.marketDbSyncState(t0)
-        case 'market_db_derived_maintenance': return this.marketDbDerivedMaintenance(params, t0)
         case 'market_data_packs': return this.marketDataPacks(t0)
         case 'market_data_packs_save': return this.marketDataPacksSave(params, t0)
-        case 'market_data_pack_prepare': return this.marketDataPackPrepare(params, t0)
         case 'discover_profile_readiness': return this.discoverProfileReadiness(params, t0)
         case 'discover_scorecards': return this.discoverScorecards(params, t0)
-        case 'market_industry_stats': return this.marketIndustryStats(params, t0)
-        case 'market_industry_stocks': return this.marketIndustryStocks(params, t0)
         case 'market_regime': return this.marketRegime(params, t0)
-        case 'local_industry_list': return this.localIndustryList(params, t0)
-        case 'local_industry_screen': return this.localIndustryScreen(params, t0)
-        case 'list_screen_factors': return this.listScreenFactors(t0)
-        case 'local_universe_screen_schema': return this.localUniverseScreenSchema(t0)
-        case 'local_universe_screen': return this.localUniverseScreen(params, t0)
         case 'batch_stock_snapshots': return this.instrumentBatchSnapshots(params, t0)
         case 'instrument_batch_snapshots': return this.instrumentBatchSnapshots(params, t0)
         case 'instrument_cyq': return this.instrumentCyq(params, t0)
@@ -317,8 +303,6 @@ export class ResearchHub {
         case 'local_etf_list': return await this.localEtfList(params, t0)
         case 'local_etf_nav': return await this.localEtfNav(String(params.code ?? ''), params, t0)
         case 'local_etf_holdings': return await this.localEtfHoldings(String(params.code ?? ''), params, t0)
-        case 'local_etf_screen_schema': return this.localEtfScreenSchema(t0)
-        case 'local_etf_screen': return this.localEtfScreen(params, t0)
         case 'etf_scorecard': {
           const ref = resolveInstrumentFromParams(params)
           if (!ref) return fail('instrument 或 code 必填', t0)
@@ -333,15 +317,10 @@ export class ResearchHub {
         case 'instrument_chart': return this.instrumentChart(params, t0)
         case 'instrument_search': return this.instrumentSearch(params, t0)
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
-        case 'local_us_screen_schema': return this.localUsScreenSchema(t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
-        case 'local_crypto_screen_schema': return this.localCryptoScreenSchema(t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
-        case 'local_jp_screen_schema': return this.localJpScreenSchema(t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
-        case 'local_kr_screen_schema': return this.localKrScreenSchema(t0)
         case 'local_kr_screen': return this.localKrScreen(params, t0)
-        case 'local_hk_screen_schema': return this.localHkScreenSchema(t0)
         case 'local_hk_screen': return this.localHkScreen(params, t0)
         case 'search_etfs': return await this.searchEtfs(params, t0)
         case 'us_realtime': {
@@ -473,34 +452,27 @@ export class ResearchHub {
       `${data.name} 机构评级报告`, t0)
   }
 
-  private async screening(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地因子选股已移除，请使用 instrument_search、instrument_evaluation 等在线能力')
-  }
-
-  private failLocalOffline(t0: number, hint?: string) {
-    return fail(hint ?? '本地因子选股已移除，请使用 instrument_search、instrument_evaluation、instrument_chart 等在线能力', t0)
-  }
-
-  private marketDbStatus(t0: number) {
-    return ok({
-      local_offline_screening_enabled: false,
-      local_kline_ready: false,
-      local_factor_ready: false,
-      guidance: '本地因子/基础数据同步已停用；请用 instrument_search、instrument_evaluation、instrument_chart 等在线能力',
-      status_mode: 'disabled',
-    }, '本地数据状态（已停用）', t0)
-  }
-
-  private marketDbSyncState(_t0: number) {
-    return this.failLocalOffline(_t0, '本地基础数据同步已停用')
-  }
-
-  private marketDbDerivedMaintenance(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地因子/行业计算已停用')
-  }
-
   private marketDataPacks(t0: number) {
-    return this.failLocalOffline(t0)
+    const config = this.marketData.marketPackConfig()
+    const status = this.marketData.statusLight()
+    return ok({
+      config,
+      counts: {
+        cn_stocks: status.stock_count,
+        us: status.us_count,
+        crypto: status.crypto_count,
+        hk: status.hk_count ?? 0,
+        jp: status.jp_count ?? 0,
+        kr: status.kr_count ?? 0,
+      },
+    }, '市场数据包', t0)
+  }
+
+  private marketDataPacksSave(params: Record<string, unknown>, t0: number) {
+    const patch = params.patch as Record<string, { enabled?: boolean }> | undefined
+    if (!patch || typeof patch !== 'object') return fail('缺少 patch', t0)
+    const config = this.marketData.updateMarketPackConfig(patch)
+    return ok({ config }, '已保存', t0)
   }
 
   private discoverReadinessContext(): DiscoverProfileReadinessContext {
@@ -542,48 +514,6 @@ export class ResearchHub {
       return ok(assessDiscoverProfileReadiness(profileRaw, ctx), '挖掘就绪状态', t0)
     }
     return ok({ items: assessAllDiscoverProfileReadiness(ctx) }, '挖掘就绪状态', t0)
-  }
-
-  private marketDataPacksSave(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
-  }
-
-  private async marketDataPackPrepare(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
-  }
-
-  private marketDbSync(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地基础数据同步已停用')
-  }
-
-  private async marketIndustryStats(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地行业统计已停用')
-  }
-
-  private async marketIndustryStocks(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地行业成分股查询已停用')
-  }
-
-  private async localIndustryList(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地行业列表已停用')
-  }
-
-  private async localIndustryScreen(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地行业因子筛选已停用')
-  }
-
-  private listScreenFactors(t0: number) {
-    return this.failLocalOffline(t0, '本地筛选因子已停用')
-  }
-
-  private localUniverseScreenSchema(t0: number) {
-    return this.failLocalOffline(t0, '本地初选 schema 已停用')
-  }
-
-  private async localUniverseScreen(_params: Record<string, unknown>, t0: number) {
-    return this.failLocalOffline(t0, '本地宇宙筛选已停用')
   }
 
   private async batchStockSnapshots(params: Record<string, unknown>, t0: number) {
@@ -2317,15 +2247,6 @@ export class ResearchHub {
     return this.queryEtfInstrumentData({ ...params, code }, 'etf_holdings', t0)
   }
 
-  private localEtfScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
-
-  private localEtfScreen(params: Record<string, unknown>, t0: number) {
-    void params
-    return this.failLocalOffline(t0)
-  }
-
   private async etfScorecard(ref: InstrumentRef, t0: number) {
     const card = this.marketData.etfScorecard(ref.symbol)
     if (!card) return fail('暂时无法生成 ETF 决策雷达', t0)
@@ -2334,7 +2255,7 @@ export class ResearchHub {
   }
 
   private etfScorecardSchema(t0: number) {
-    return this.failLocalOffline(t0)
+    return ok(this.marketData.etfScorecardSchema(), 'ETF 决策雷达评分维度', t0)
   }
 
   private localInsightsForRef(_ref: InstrumentRef): LocalInstrumentInsights | null {
@@ -2442,17 +2363,11 @@ export class ResearchHub {
     return routeInstrumentCapabilities(params)
   }
 
-  private localUsScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
 
   private async localUsScreen(params: Record<string, unknown>, t0: number) {
     return this.onlineListScreen('US', params, t0)
   }
 
-  private localCryptoScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
 
   private async localCryptoScreen(params: Record<string, unknown>, t0: number) {
     const listResp = await this.cryptoList(params, t0)
@@ -2522,25 +2437,16 @@ export class ResearchHub {
     return fail(`${label}暂不支持在线名录筛选，请直接指定代码或使用 instrument_search`, t0)
   }
 
-  private localJpScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
 
   private async localJpScreen(params: Record<string, unknown>, t0: number) {
     return this.localRegionalScreen('JP', '日股', params, t0)
   }
 
-  private localKrScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
 
   private async localKrScreen(params: Record<string, unknown>, t0: number) {
     return this.localRegionalScreen('KR', '韩股', params, t0)
   }
 
-  private localHkScreenSchema(t0: number) {
-    return this.failLocalOffline(t0)
-  }
 
   private async localHkScreen(params: Record<string, unknown>, t0: number) {
     return this.localRegionalScreen('HK', '港股', params, t0)

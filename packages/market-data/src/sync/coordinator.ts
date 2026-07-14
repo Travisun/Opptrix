@@ -5,7 +5,6 @@ import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type MarketDat
 import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
 import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
-import { getMarketDerivedMaintenanceCoordinator } from './derived-coordinator.js'
 import { setMarketSyncActive, isMarketSyncActive, isDerivedMaintenanceActive } from '../duck/duck-subprocess-gate.js'
 import {
   computeBootstrapOverallPercent,
@@ -499,7 +498,6 @@ export class MarketSyncCoordinator {
       } else if (failed === 0 && bootstrap) {
         this.scheduleIncompleteBootstrapRetry(sessionId, bootstrap)
       }
-      this.triggerDerivedMaintenance()
       this.store.maybeSyncAnalyticsToDuckBackground()
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e)
@@ -562,7 +560,6 @@ export class MarketSyncCoordinator {
         background: true,
       })
     }
-    this.triggerDerivedMaintenance()
 
     setImmediate(() => {
       if (this.running || isDerivedMaintenanceActive()) return
@@ -575,10 +572,6 @@ export class MarketSyncCoordinator {
         }
       }).catch(() => { /* 缓存恢复失败时由后续同步计划重试 */ })
     })
-  }
-
-  private triggerDerivedMaintenance(): void {
-    getMarketDerivedMaintenanceCoordinator(this.store, () => this.running).autoMaintainOnBoot()
   }
 
   /** 本地刷新调度已停用 */

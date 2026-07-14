@@ -62,16 +62,11 @@ test('P0 tools are mining-eligible where appropriate', () => {
   assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('screen_stocks'))
 })
 
-test('market_db_status hub reports local screening disabled', async () => {
+test('ToolRegistry has no market_db hub tools', () => {
   const hub = new ResearchHub()
-  const resp = await hub.dispatch('market_db_status', {})
-  assert.equal(resp.success, true)
-  const data = resp.data
-  assert.ok(data && typeof data === 'object')
-  assert.equal(data.local_offline_screening_enabled, false)
-  assert.equal(data.local_factor_ready, false)
-  assert.ok(typeof data.guidance === 'string')
-  assert.match(String(data.guidance), /停用|已移除|在线/)
+  const names = new Set(new ToolRegistry(hub).list().map(t => t.name))
+  assert.ok(!names.has('get_market_db_status'))
+  assert.ok(!names.has('trigger_market_db_sync'))
 })
 
 test('agent prompt includes market context playbook', () => {

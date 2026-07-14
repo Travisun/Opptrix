@@ -22,7 +22,6 @@ import {
   cnMaintenanceJobsDue,
   isCnMondayAfterMarketClose,
 } from '../packages/market-data/dist/sync/schedule.js'
-import { LOCAL_OFFLINE_SCREENING_ENABLED } from '../packages/market-data/dist/sync/instrument-gateway.js'
 
 const daysAgo = n => new Date(Date.now() - n * 86400000).toISOString()
 
@@ -122,6 +121,3 @@ test('kline daily only runs Monday after CN market close', () => {
   assert.equal(cnKlineDailyMaintenanceDue(lastSync, tuesday), false)
 })
 
-test('local offline screening flag matches build', () => {
-  assert.equal(typeof LOCAL_OFFLINE_SCREENING_ENABLED, 'boolean')
-})

@@ -1,5 +1,4 @@
 import { resetSharedMarketSyncCoordinator } from './sync/coordinator.js'
-import { resetSharedMarketDerivedMaintenanceCoordinator } from './sync/derived-coordinator.js'
 import { resetSharedMarketDataStore } from './store.js'
 import { stopMarketDataRefreshScheduler } from './sync/scheduler.js'
 import { resetMarketDuckGateways } from './duck/market-duck-gateway.js'
@@ -14,7 +13,6 @@ export function registerMarketDataServiceReset(fn: () => void): void {
 /** Close DB handles and drop in-memory singletons before replacing market.db on disk. */
 export function resetMarketDataRuntime(): void {
   stopMarketDataRefreshScheduler()
-  resetSharedMarketDerivedMaintenanceCoordinator()
   resetServiceHook?.()
   resetSharedMarketDataStore()
   resetSharedMarketSyncCoordinator()

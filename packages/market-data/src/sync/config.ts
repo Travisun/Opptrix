@@ -19,18 +19,8 @@ export interface SyncProfileSettings {
   jobOverrides: Partial<Record<string, Partial<JobSyncConfig>>>
 }
 
-/** ~6 months of trading days for momentum / volume factors */
+/** ~6 months of trading days for bootstrap K 线 */
 export const KLINE_BOOTSTRAP_DAYS = 130
-
-/** 离线初选因子 — 仅由本地日 K 推导，不依赖行情/财报/公告等额外数据源 */
-export const SCREEN_PACK_FACTORS = [
-  'momentum_1m',
-  'momentum_3m',
-  'momentum_6m',
-  'volume_ratio',
-  'volatility_20d',
-  'drawdown_60d',
-] as const
 
 /** StockIndex 名录：A 股 ETF + 港股/美股（与 CN 名录同 API 源） */
 export const STOCKINDEX_LIST_SYNC_JOBS = [
@@ -53,12 +43,6 @@ export const CN_MAINTENANCE_SYNC_JOBS = [
   ...STOCKINDEX_LIST_SYNC_JOBS,
   'kline_daily',
   'initial_taxonomy',
-] as const
-
-/** 本地衍生指标 — 跟随 K 线计算，独立异步维护（不参与外部同步 boot） */
-export const CN_DERIVED_MAINTENANCE_JOBS = [
-  'screen_factors',
-  'industry_stats',
 ] as const
 
 /** @deprecated 使用 CN_BOOTSTRAP_SYNC_JOBS */
@@ -121,7 +105,6 @@ export const DEEP_SYNC_JOBS = [
   'inst_holdings',
   'insider_trades',
   'buybacks',
-  'factors',
 ] as const
 
 /** L1 on-demand hydration (quarterly TTL). */
@@ -136,7 +119,6 @@ export const HYDRATE_SYNC_JOBS = [
  */
 export const AUTO_BOOT_EXCLUDED_JOBS = new Set([
   'etf_kline_bootstrap',
-  'screen_factors',
   'quotes',
   ...DEEP_SYNC_JOBS,
   ...HYDRATE_SYNC_JOBS,
@@ -170,7 +152,6 @@ export const ALL_SYNC_JOBS = [
   'inst_holdings',
   'insider_trades',
   'buybacks',
-  'factors',
 ] as const
 
 export const SYNC_PROFILES: Record<SyncSpeedProfile, SyncProfileSettings> = {
@@ -198,7 +179,6 @@ export const SYNC_PROFILES: Record<SyncSpeedProfile, SyncProfileSettings> = {
       inst_holdings: { concurrency: 3, delayMs: 220 },
       insider_trades: { concurrency: 3, delayMs: 220 },
       buybacks: { concurrency: 3, delayMs: 220 },
-      factors: { concurrency: 3, delayMs: 180 },
     },
   },
   fast: {
@@ -220,7 +200,6 @@ export const SYNC_PROFILES: Record<SyncSpeedProfile, SyncProfileSettings> = {
       inst_holdings: { concurrency: 4, delayMs: 140 },
       insider_trades: { concurrency: 4, delayMs: 140 },
       buybacks: { concurrency: 4, delayMs: 140 },
-      factors: { concurrency: 5, delayMs: 80 },
     },
   },
 }
@@ -299,8 +278,6 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   kline_bootstrap: { concurrency: 1, delayMs: 0, ttlDays: 30 },
   /** A 股日 K 增量 — 同花顺 10 天 Parquet 增量包；周一下午收盘后 */
   kline_daily: { concurrency: 1, delayMs: 0, ttlDays: 7 },
-  /** 本地初选因子 — 从 SQLite 计算 */
-  screen_factors: { concurrency: 1, delayMs: 0, ttlDays: 1 },
   profiles: { concurrency: 2, delayMs: 320, ttlDays: 30 },
   etf_list: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   etf_nav: { concurrency: 2, delayMs: 280, ttlDays: 7 },
@@ -327,9 +304,6 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   inst_holdings: { concurrency: 2, delayMs: 420, ttlDays: 90 },
   insider_trades: { concurrency: 2, delayMs: 420, ttlDays: 30 },
   buybacks: { concurrency: 2, delayMs: 420, ttlDays: 30 },
-  /** 因子 — 每个交易日重算未覆盖标的 */
-  factors: { concurrency: 1, delayMs: 950, ttlDays: 1 },
-  industry_stats: { concurrency: 1, delayMs: 0, ttlDays: 1 },
 }
 
 export const DEFAULT_API_MIN_GAP_MS = Number(
