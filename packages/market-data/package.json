@@ -22,7 +22,7 @@
     "@opptrix/shared": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
-    "better-sqlite3": "^11.7.0",
+    "better-sqlite3": "^12.11.1",
     "duckdb": "^1.2.1",
     "p-queue": "^8.1.1",
     "parquet-wasm": "^0.7.2"

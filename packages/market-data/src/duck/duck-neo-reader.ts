@@ -3,7 +3,6 @@
  * 使用 startStreamThenReadAll 协作式多任务，不阻塞 Node 事件循环。
  */
 import fs from 'node:fs'
-import { MessageChannel, receiveMessageOnPort } from 'node:worker_threads'
 import { DuckDBInstance, type DuckDBConnection, type DuckDBValue } from '@duckdb/node-api'
 import PQueue from 'p-queue'
 import { CN_DAILY_TABLE } from './market-schema.js'
@@ -56,29 +55,9 @@ type ReaderHandle = {
   syncCache: Map<string, { at: number; value: unknown }>
 }
 
-/** 同步边界 — 阻塞等待 in-process async（neo 读 / worker 池写），供测试与 Store sync 路径 */
-export function runAsyncSync<T>(promise: Promise<T>): T {
-  const { port1, port2 } = new MessageChannel()
-  void promise.then(
-    value => {
-      try { port1.postMessage({ ok: true, value }) } finally { port1.close() }
-    },
-    error => {
-      try {
-        port1.postMessage({
-          ok: false,
-          error: error instanceof Error ? error.message : String(error),
-        })
-      } finally { port1.close() }
-    },
-  )
-  // receiveMessageOnPort 在无消息时返回 undefined（非阻塞单次调用），须循环驱动事件循环直至 promise 完成
-  let received: ReturnType<typeof receiveMessageOnPort>
-  while (!(received = receiveMessageOnPort(port2))) { /* spin */ }
-  port2.close()
-  const msg = received.message as { ok: boolean; value?: T; error?: string }
-  if (!msg.ok) throw new Error(msg.error ?? 'DuckDB sync read failed')
-  return msg.value as T
+/** @deprecated Node 无法用 receiveMessageOnPort 驱动事件循环；同步读请用 duck-cli spawnSync */
+export function runAsyncSync<T>(_promise: Promise<T>): T {
+  throw new Error('runAsyncSync 不可用：请使用 MarketDuckGateway 同步路径（spawnSync duck-cli）或 async API')
 }
 
 function runQueued<T>(queue: PQueue, fn: () => Promise<T>): Promise<T> {
@@ -206,24 +185,17 @@ export class DuckNeoReader {
     return rows[0]
   }
 
-  /** 同步 Store 边界 — 阻塞读，立即返回结果（测试 / flush 后查询） */
+  /** @deprecated 同步边界请走 MarketDuckGateway（spawnSync）；此处仅返回 TTL 缓存 */
   queryAllSyncBlocking<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     const key = cacheKey(sql, params)
-    const hit = this.peekCached<T[]>(key)
-    if (hit) return hit
-    if (!fs.existsSync(this.duckDbPath)) return []
-    try {
-      return runAsyncSync(this.queryAll<T>(sql, params))
-    } catch {
-      return []
-    }
+    return this.peekCached<T[]>(key) ?? []
   }
 
   queryOneSyncBlocking<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T | undefined {
     return this.queryAllSyncBlocking<T>(sql, params)[0]
   }
 
-  /** @deprecated 仅预热；同步路径请用 queryAllSyncBlocking */
+  /** @deprecated 仅预热；同步路径请用 gateway.queryAllSync */
   queryAllSyncCached<T extends Record<string, unknown>>(sql: string, params: unknown[] = []): T[] {
     const key = cacheKey(sql, params)
     const hit = this.peekCached<T[]>(key)
@@ -236,34 +208,20 @@ export class DuckNeoReader {
     return this.queryAllSyncCached<T>(sql, params)[0]
   }
 
+  /** @deprecated 同步统计请用 MarketDuckGateway.klineStatsSync */
   klineStatsSyncBlocking(): NeoKlineDuckStats {
-    if (!fs.existsSync(this.duckDbPath)) return { rows: 0, codes: 0, maxDate: null }
-    try {
-      return runAsyncSync(this.klineStats())
-    } catch {
-      return { rows: 0, codes: 0, maxDate: null }
-    }
+    return this.peekCached<NeoKlineDuckStats>('__kline_stats__', 30_000) ?? { rows: 0, codes: 0, maxDate: null }
   }
 
+  /** @deprecated 同步统计请用 MarketDuckGateway.marketStatsSync */
   marketStatsSyncBlocking(): NeoMarketDuckStats {
-    if (!fs.existsSync(this.duckDbPath)) return { ...EMPTY_MARKET_STATS }
-    try {
-      return runAsyncSync(this.marketStats())
-    } catch {
-      return { ...EMPTY_MARKET_STATS }
-    }
+    return this.peekCached<NeoMarketDuckStats>('__market_stats__', 60_000) ?? { ...EMPTY_MARKET_STATS }
   }
 
+  /** @deprecated 同步 K 线请用 MarketDuckGateway.queryKlinesSync */
   queryKlinesSyncBlocking(code: string, limit = 800, before?: string): Array<Record<string, unknown>> {
     const key = `__klines__:${code}:${limit}:${before ?? ''}`
-    const hit = this.peekCached<Array<Record<string, unknown>>>(key, 120_000)
-    if (hit) return hit
-    if (!fs.existsSync(this.duckDbPath)) return []
-    try {
-      return runAsyncSync(this.queryKlines(code, limit, before))
-    } catch {
-      return []
-    }
+    return this.peekCached<Array<Record<string, unknown>>>(key, 120_000) ?? []
   }
 
   queryKlinesSyncCached(code: string, limit = 800, before?: string): Array<Record<string, unknown>> {

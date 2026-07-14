@@ -4,7 +4,7 @@
 
 # Opptrix — 全球多市场投研助手
 
-[![Node.js](https://img.shields.io/badge/node-%3E%3D20-brightgreen)](https://nodejs.org/)
+[![Node.js](https://img.shields.io/badge/node-%3E%3D24-brightgreen)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
@@ -216,7 +216,7 @@ Opptrix/
 
 ### 环境要求
 
-- **Node.js** ≥ 20  
+- **Node.js** ≥ 24（Active LTS）  
 - **npm**（workspaces，仅在仓库根目录 `npm install`）  
 - 可选：macOS / Windows / Linux（桌面打包见 [DESKTOP.md](docs/DESKTOP.md)）
 

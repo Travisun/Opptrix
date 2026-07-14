@@ -324,10 +324,27 @@ export class MarketDataStore {
 
   /**
    * 同步执行 SQLite → DuckDB 主存储一次性迁移（幂等）。
-   * 旧版升级路径：按表行数对比补全 Duck，全部对齐后标记 v13 complete。
+   * 导出 / 打包补充包等同步边界；热路径请用 runDuckPrimaryMigrationAsync。
    */
   runDuckPrimaryMigrationSync(): boolean {
-    throw new Error('runDuckPrimaryMigrationSync 已移除，请使用 runDuckPrimaryMigrationAsync')
+    if (isDuckPrimaryMigrationComplete(this.db)) return true
+    if (isMarketSyncActive() || isDerivedMaintenanceActive()) return false
+
+    this.flushDuckWritesSync({ throwOnError: false })
+    this.duckGateway().migrateSqliteKlinesIfEmptySync()
+    this.duckGateway().migrateMarketDataSync(false)
+
+    if (this.duckGateway().checkMarketMigrationNeededSync()) {
+      console.warn('[market-data] Duck 主存储迁移未完成：SQLite 仍有未迁入数据，稍后重试')
+      return false
+    }
+
+    markDuckPrimaryMigrationComplete(this.db)
+    invalidateHasMarketDuckDataCache(this.klineDuckDbPath)
+    this.duckMarketStatsCache = null
+    this.invalidateKlineStatsCache()
+    this.invalidateStatusLightCache()
+    return true
   }
 
   async runDuckPrimaryMigrationAsync(): Promise<boolean> {
@@ -353,26 +370,32 @@ export class MarketDataStore {
 
   private scheduleDuckPrimaryMigration(): void {
     if (this.duckPrimaryMigrationTimer) return
+    const arm = (ms: number) => {
+      this.duckPrimaryMigrationTimer = setTimeout(attempt, ms)
+      if (typeof this.duckPrimaryMigrationTimer === 'object' && 'unref' in this.duckPrimaryMigrationTimer) {
+        this.duckPrimaryMigrationTimer.unref()
+      }
+    }
     const attempt = async () => {
       this.duckPrimaryMigrationTimer = null
+      if (!this.db.open) return
       if (isMarketSyncActive() || isDerivedMaintenanceActive()) {
-        this.duckPrimaryMigrationTimer = setTimeout(attempt, 5000)
-        if (typeof this.duckPrimaryMigrationTimer === 'object' && 'unref' in this.duckPrimaryMigrationTimer) {
-          this.duckPrimaryMigrationTimer.unref()
-        }
+        arm(5000)
         return
       }
       try {
         const done = await this.runDuckPrimaryMigrationAsync()
+        if (!this.db.open) return
         if (!done && !isDuckPrimaryMigrationComplete(this.db)) {
-          this.duckPrimaryMigrationTimer = setTimeout(attempt, isMarketSyncActive() ? 5000 : 2000)
+          arm(isMarketSyncActive() ? 5000 : 2000)
         }
       } catch (err) {
+        if (!this.db.open) return
         console.warn('[market-data] Duck 主存储迁移失败，稍后重试:', err)
-        this.duckPrimaryMigrationTimer = setTimeout(attempt, 5000)
+        arm(5000)
       }
     }
-    this.duckPrimaryMigrationTimer = setTimeout(attempt, isMarketSyncActive() ? 5000 : 2000)
+    arm(isMarketSyncActive() ? 5000 : 2000)
   }
 
   private queueDuck(op: DuckWriteOp): void {
@@ -574,6 +597,10 @@ export class MarketDataStore {
   }
 
   close(): void {
+    if (this.duckPrimaryMigrationTimer) {
+      clearTimeout(this.duckPrimaryMigrationTimer)
+      this.duckPrimaryMigrationTimer = null
+    }
     void this.flushDuckWritesAsync({ throwOnError: true })
     if (this.dbRead !== this.db) this.dbRead.close()
     this.db.close()
@@ -588,7 +615,7 @@ export class MarketDataStore {
 
   /** 导出 .opmd 前将 DuckDB 主存储回写 SQLite 快照 */
   prepareForSqliteExport(): void {
-    void this.runDuckPrimaryMigrationAsync().then(() => this.flushDuckWritesAsync())
+    this.flushDuckWritesSync({ throwOnError: false })
     this.db.pragma('wal_checkpoint(TRUNCATE)')
     this.db.close()
     try {

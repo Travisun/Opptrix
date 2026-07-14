@@ -17,7 +17,7 @@
 
 ## 2. 开发环境
 
-- **Node.js** ≥ 20
+- **Node.js** ≥ 24（Active LTS；Node 20 已于 2026-04-30 EOL）
 - **npm**（workspaces，仅根目录安装依赖）
 
 ```bash

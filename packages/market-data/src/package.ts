@@ -230,7 +230,8 @@ export async function exportMarketDataPackage(store: MarketDataStore): Promise<B
   const sqlite = await sqliteBytesFromDb(store.db)
   const payloadGzip = gzipSync(sqlite, { level: 6 })
   const payloadSha256 = createHash('sha256').update(payloadGzip).digest()
-  const metadata = buildMetadata(store.getStatus(), payloadSha256)
+  // 已回写 SQLite —— 用 getStatusLight，避免同步路径再 spawn Duck 全表统计
+  const metadata = buildMetadata(store.getStatusLight(), payloadSha256)
   const metadataJson = Buffer.from(JSON.stringify(metadata), 'utf8')
   const exportedAtMs = Date.parse(metadata.exported_at)
   const header = encodeHeader(

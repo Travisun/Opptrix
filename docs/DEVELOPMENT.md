@@ -4,7 +4,7 @@
 
 ## 环境
 
-- **Node.js** ≥ 20
+- **Node.js** ≥ 24（Active LTS）
 - **npm** workspaces（根目录单一 `package-lock.json`，**仅在根目录** `npm install` / `npm ci`）
 - 推荐 macOS / Linux；Windows 可用 WSL 或原生 Node
 

@@ -244,7 +244,16 @@ export class MarketDuckGateway {
   }
 
   migrateMarketDataSync(force = false): Record<string, number> {
-    throw new Error('migrateMarketDataSync 已移除，请使用 await migrateMarketDataAsync')
+    if (!this.sqliteExists()) return {}
+    try {
+      const args = ['migrate-market-data', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath]
+      if (force) args.push('--force')
+      const out = JSON.parse(this.execCliWriteSync(args, 512 * 1024 * 1024)) as Record<string, number>
+      invalidateHasMarketDuckDataCache(this.duckDbPath)
+      return out
+    } catch {
+      return {}
+    }
   }
 
   async checkMarketMigrationNeededAsync(): Promise<boolean> {
@@ -260,7 +269,15 @@ export class MarketDuckGateway {
   }
 
   checkMarketMigrationNeededSync(): boolean {
-    throw new Error('checkMarketMigrationNeededSync 已移除，请使用 await checkMarketMigrationNeededAsync')
+    if (!this.sqliteExists()) return false
+    try {
+      const out = JSON.parse(this.execCliReadSync([
+        'check-market-migration', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
+      ], 512 * 1024 * 1024)) as { needed?: boolean }
+      return out.needed === true
+    } catch {
+      return true
+    }
   }
 
   /** DuckDB 主存储迁移已完成 — 此后读写以 Duck 为准，不再回退 SQLite 主数据 */
@@ -289,8 +306,16 @@ export class MarketDuckGateway {
     }
   }
 
+  /** 同步边界（导出 .opmd）— spawnSync duck-cli，与 async 同 CLI */
   syncMarketDataToSqliteSync(): Record<string, number> {
-    throw new Error('syncMarketDataToSqliteSync 已移除，请使用 await syncMarketDataToSqliteAsync')
+    if (!this.duckExists() || !this.sqliteExists()) return {}
+    try {
+      return JSON.parse(this.execCliWriteSync([
+        'sync-market-data-to-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
+      ], 512 * 1024 * 1024)) as Record<string, number>
+    } catch {
+      return {}
+    }
   }
 
   syncAnalyticsSync(_scope: AnalyticsSyncScope = 'all'): Record<string, number> {
@@ -329,7 +354,19 @@ export class MarketDuckGateway {
   }
 
   migrateSqliteKlinesIfEmptySync(): number {
-    throw new Error('migrateSqliteKlinesIfEmptySync 已移除，请使用 await migrateSqliteKlinesIfEmptyAsync')
+    if (!this.sqliteExists()) return 0
+    try {
+      const lines = this.execCliWriteSync([
+        'migrate-from-sqlite', '--duckdb', this.duckDbPath, '--sqlite', this.sqliteDbPath,
+      ], 256 * 1024 * 1024).split('\n').filter(Boolean)
+      const last = lines[lines.length - 1]
+      if (!last) return 0
+      const parsed = JSON.parse(last) as { rowsImported?: number; skipped?: boolean }
+      invalidateHasMarketDuckDataCache(this.duckDbPath)
+      return parsed.skipped ? 0 : (parsed.rowsImported ?? 0)
+    } catch {
+      return 0
+    }
   }
 
   // ─── 读路径（@duckdb/node-api 短查询 + duck-cli 重型读） ─────────────────
@@ -365,7 +402,12 @@ export class MarketDuckGateway {
 
   marketStatsSync(): MarketDuckStats {
     if (!this.duckExists()) return { ...EMPTY_MARKET_STATS }
-    return this.neoReader().marketStatsSyncBlocking()
+    try {
+      const raw = this.execCliReadSync(['market-stats', '--duckdb', this.duckDbPath])
+      return { ...EMPTY_MARKET_STATS, ...(JSON.parse(raw || '{}') as Partial<MarketDuckStats>) }
+    } catch {
+      return { ...EMPTY_MARKET_STATS }
+    }
   }
 
   marketStatsAsync(): Promise<MarketDuckStats> {
@@ -386,7 +428,17 @@ export class MarketDuckGateway {
 
   klineStatsSync(): KlineDuckStats {
     if (!this.duckExists()) return { rows: 0, codes: 0, maxDate: null }
-    return this.neoReader().klineStatsSyncBlocking()
+    try {
+      const raw = this.execCliReadSync(['stats', '--duckdb', this.duckDbPath])
+      const parsed = JSON.parse(raw || '{}') as Partial<KlineDuckStats>
+      return {
+        rows: Number(parsed.rows ?? 0),
+        codes: Number(parsed.codes ?? 0),
+        maxDate: parsed.maxDate ?? null,
+      }
+    } catch {
+      return { rows: 0, codes: 0, maxDate: null }
+    }
   }
 
   klineStatsAsync(): Promise<KlineDuckStats> {
@@ -396,7 +448,15 @@ export class MarketDuckGateway {
 
   queryKlinesSync(code: string, limit = 800, before?: string): StockKline[] {
     if (!this.duckExists()) return []
-    return this.neoReader().queryKlinesSyncBlocking(normalizeStockCode(code), limit, before) as unknown as StockKline[]
+    const normalized = normalizeStockCode(code)
+    const args = ['query-klines', '--duckdb', this.duckDbPath, '--code', normalized, '--limit', String(limit)]
+    if (before) args.push('--before', before.slice(0, 10))
+    try {
+      const raw = this.execCliReadSync(args)
+      return JSON.parse(raw || '[]') as StockKline[]
+    } catch {
+      return []
+    }
   }
 
   async queryKlinesAsync(code: string, limit = 800, before?: string): Promise<StockKline[]> {

@@ -144,13 +144,15 @@ test('supplement jp pack export and merge preserves regional instruments', async
     is_st: false,
     status: 'active',
   })
+  target.flushDuckWritesSync()
   target.close()
 
   process.env.OPPTRIX_MARKET_DB_PATH = targetPath
   mergeMarketDataPackSupplement(pack, { dbPath: targetPath })
 
   const reopened = new MarketDataStore(targetPath, targetDuckPath)
-  const cn = reopened.db.prepare(`SELECT code FROM stocks WHERE code = ?`).get('600519')
+  // Duck 主存储：CN 股票在 Duck；补充包合并的 JP instruments 在 SQLite（迁移完成前）
+  const cn = reopened.duckGateway().queryOneSync('SELECT code FROM stocks WHERE code = ?', ['600519'])
   assert.ok(cn)
   const jp = reopened.db.prepare(`
     SELECT code FROM instruments WHERE market = 'JP' AND code = ?

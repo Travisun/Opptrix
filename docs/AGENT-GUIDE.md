@@ -55,7 +55,7 @@
 
 | 层级 | 技术 |
 |------|------|
-| 语言 | TypeScript（Node.js ≥ 20） |
+| 语言 | TypeScript（Node.js ≥ 24） |
 | 后端 | Fastify（`apps/server`） |
 | 前端 | React 18 + Fluent UI v9 + Vite（`client-ui`） |
 | 桌面 | Electron（`apps/desktop`），生产环境捆绑 Node sidecar |
