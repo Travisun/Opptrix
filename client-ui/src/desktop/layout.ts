@@ -1,6 +1,8 @@
 import { electronPlatform } from '../platform/detect'
 import { opptrixTokens } from '../theme/tokens'
 import {
+  DESKTOP_CHROME_TOP_OFFSET,
+  DESKTOP_CHROME_TOP_OFFSET_WIN,
   DESKTOP_SETTINGS_SIDEBAR_WIDTH,
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
   DESKTOP_TITLE_GAP,
@@ -10,8 +12,24 @@ import {
   DESKTOP_TOOLBAR_TOOL_COUNT,
   DESKTOP_TRAFFIC_LIGHT_WIDTH,
   DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN,
+  DESKTOP_WIN_WINDOW_CONTROLS_RESERVE,
   DESKTOP_Z_TITLE_INTERACTIVE,
 } from './constants'
+
+/** Platform chrome inset — Windows sits higher to share a line with window buttons */
+export function desktopChromeTopOffset(): number {
+  return electronPlatform() === 'win32' ? DESKTOP_CHROME_TOP_OFFSET_WIN : DESKTOP_CHROME_TOP_OFFSET
+}
+
+export function desktopChromeBandHeight(): number {
+  return DESKTOP_TITLEBAR_HEIGHT - desktopChromeTopOffset()
+}
+
+/** Right inset for chat/panel toggles — flush to Windows min/max/close cluster */
+export function desktopTitleBarActionsRight(): number {
+  if (electronPlatform() === 'darwin') return 12
+  return DESKTOP_WIN_WINDOW_CONTROLS_RESERVE
+}
 
 export function desktopToolbarLeft(fullscreen = false): number {
   if (electronPlatform() !== 'darwin') return 12

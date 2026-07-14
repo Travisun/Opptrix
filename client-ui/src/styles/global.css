@@ -413,16 +413,60 @@ html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
   -webkit-backdrop-filter: none !important;
 }
 
+/*
+ * Windows acrylic alone is too see-through through a fully clear sidebar.
+ * Keep material visible under a denser frosted tint (main chat sidebar only).
+ */
+html.opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar:not(.opptrix-settings-sidebar) {
+  background: rgba(255, 255, 255, 0.62) !important;
+}
+
 [data-theme="dark"] html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar {
   background: var(--opptrix-canvas-alt) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-[data-theme="dark"] html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
+[data-theme="dark"] html.opptrix-electron-vibrancy .opptrix-glass-sidebar:not(.opptrix-settings-sidebar) {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] html.opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar:not(.opptrix-settings-sidebar) {
+  background: rgba(44, 44, 46, 0.72) !important;
+}
+
+/* ── Settings sidebar: ~85% opaque vs main glass, all platforms ── */
+html .opptrix-settings-sidebar {
+  --opptrix-settings-sidebar-fill: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, var(--opptrix-canvas-muted) 15%);
+}
+
+html:not(.opptrix-electron) .opptrix-settings-sidebar {
+  background: var(--opptrix-settings-sidebar-fill) !important;
+}
+
+html.opptrix-electron .opptrix-glass-sidebar.opptrix-settings-sidebar,
+html.opptrix-electron .opptrix-settings-sidebar {
+  background: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, transparent) !important;
+  backdrop-filter: blur(28px) saturate(150%);
+  -webkit-backdrop-filter: blur(28px) saturate(150%);
+}
+
+html.opptrix-electron-vibrancy .opptrix-glass-sidebar.opptrix-settings-sidebar {
+  /* Still denser than main; leftover 15% transparency lets a hint of OS material through */
+  background: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, transparent) !important;
+  backdrop-filter: none !important;
+  -webkit-backdrop-filter: none !important;
+}
+
+[data-theme="dark"] html.opptrix-electron .opptrix-glass-sidebar.opptrix-settings-sidebar,
+[data-theme="dark"] html.opptrix-electron .opptrix-settings-sidebar {
+  background: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, transparent) !important;
+}
+
+[data-theme="dark"] html:not(.opptrix-electron) .opptrix-settings-sidebar {
+  background: var(--opptrix-settings-sidebar-fill) !important;
 }
 
 /* Isolate top menu icons from backdrop-filter repaints triggered by chat-area animations */
