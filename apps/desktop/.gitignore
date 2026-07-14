@@ -1,4 +1,5 @@
 runtime-stage/
+.cache/
 release/
 build/
 electron/splash-logo.png

@@ -28,6 +28,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../../..')
 const DESKTOP_ROOT = path.join(REPO_ROOT, 'apps/desktop')
 const STAGE = path.join(DESKTOP_ROOT, 'runtime-stage')
+// Keep download cache outside runtime-stage — Apple notarization unpacks nested
+// archives and rejects unsigned .node binaries left in staged .cache/prebuilds.
+const PREBUILD_CACHE = path.join(DESKTOP_ROOT, '.cache/prebuilds')
 const SERVER_PKG_PATH = path.join(REPO_ROOT, 'apps/server/package.json')
 
 const DESKTOP_PKG = JSON.parse(fs.readFileSync(path.join(DESKTOP_ROOT, 'package.json'), 'utf8'))
@@ -158,7 +161,7 @@ function ensureBetterSqlite3Prebuild() {
     process.env.OPPTRIX_PREBUILD_MIRROR?.trim()
     || 'https://cdn.npmmirror.com/binaries/better-sqlite3'
   ).replace(/\/$/, '')
-  const cacheDir = path.join(STAGE, '.cache/prebuilds')
+  const cacheDir = PREBUILD_CACHE
   const archive = path.join(cacheDir, asset)
 
   console.log(`Fetching better-sqlite3 prebuild (${target.platform}-${target.arch}, electron ${ELECTRON_VERSION})…`)
@@ -252,7 +255,7 @@ function ensureDuckdbPrebuild() {
   const asset = `duckdb-v${version}-node-v${abi}-${target.platform}-${target.arch}.tar.gz`
   const host = String(pkgJson.binary?.host || 'https://npm.duckdb.org/duckdb').replace(/\/$/, '')
   const url = `${host}/${asset}`
-  const cacheDir = path.join(STAGE, '.cache/prebuilds')
+  const cacheDir = PREBUILD_CACHE
   const archive = path.join(cacheDir, asset)
   // Tarball contains binding/duckdb.node → extract into lib/ → lib/binding/duckdb.node
   const extractRoot = path.join(duckdbDir, 'lib')
@@ -309,7 +312,7 @@ function npmRegistryBase() {
 function installScopedPackageFromRegistry(pkgName, version) {
   const shortName = pkgName.includes('/') ? pkgName.split('/').pop() : pkgName
   const url = `${npmRegistryBase()}/${pkgName}/-/${shortName}-${version}.tgz`
-  const cacheDir = path.join(STAGE, '.cache/prebuilds')
+  const cacheDir = PREBUILD_CACHE
   const archive = path.join(cacheDir, `${shortName}-${version}.tgz`)
   const extractTmp = path.join(cacheDir, `${shortName}-${version}-extract`)
   const destDir = path.join(STAGE, 'node_modules', ...pkgName.split('/'))
@@ -468,5 +471,8 @@ if (!ensureDuckdbNeoBindings()) {
 if (rebuildFailed) {
   console.warn('better-sqlite3 rebuild reported errors but required native bindings are ready — continuing')
 }
+
+// Belt-and-suspenders: never ship download caches (notarization scans nested archives).
+rm(path.join(STAGE, '.cache'))
 
 console.log(`Runtime staged at ${STAGE} [${target.platform}-${target.arch}]`)
