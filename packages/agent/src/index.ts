@@ -68,6 +68,7 @@ export {
   resolveToolRoutePlan,
   buildRoundRoutePlaybook,
   orderToolsByPreference,
+  resolveResearchTier,
   TOOL_CONFUSION_PAIRS,
   type ToolRoutePlan,
   type RouteConfidence,

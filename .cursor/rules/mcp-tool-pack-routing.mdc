@@ -85,9 +85,11 @@ my_new_tool: {
 
 1. **召回**：首选工具所属 pack 必须进入本轮 `activeNames`（route-plan `seedPacks`）
 2. **精排**：`preferredTools[0]` = 尽可能最正确的工具；`avoidTools` 抑制混淆
-3. **提示**：本轮注入 `buildRoundRoutePlaybook`；未加载 pack **不**灌对应长 playbook
-4. **扩展**：`list_tool_packs` / `activate_tool_pack` 处理「播种未覆盖」；勿自动合入幻觉工具名
+3. **档位**：`researchTier` L1/L2/L3 — 常驻证据纪律 + 档位输出骨架（`buildResearchEpistemicPlaybook` / `buildResearchOutputPlaybook`）
+4. **提示**：本轮注入 `buildRoundRoutePlaybook`；未加载 pack **不**灌对应长 playbook
+5. **扩展**：`list_tool_packs` / `activate_tool_pack` 处理「播种未覆盖」；勿自动合入幻觉工具名
 
+新增意图时同步考虑档位：事实查询 → L1；解读 → L2；「分析/全面/深度」→ L3。
 ## 反模式
 
 | ❌ 错误 | ✅ 正确 |

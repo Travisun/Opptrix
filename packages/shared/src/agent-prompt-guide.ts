@@ -3,6 +3,9 @@ import { resolveInstrumentAnalyticsProfile } from './instrument-analytics.js'
 import { crossMarketNewsHints } from './news-source-hints.js'
 import { buildToolPackCatalogPrompt } from './tool-packs.js'
 
+/** 投研答复档位：L1 事实快答 / L2 结构化解读 / L3 深度备忘录 */
+export type ResearchTier = 'L1' | 'L2' | 'L3'
+
 /** Stock-index 统一命名空间 — Agent/搜索/关注列表的全局标的 ID */
 export function buildInstrumentNamespacePlaybook(): string {
   return [
@@ -146,6 +149,74 @@ export function buildIndustryAnalysisPlaybook(): string {
   ].join('\n')
 }
 
+/**
+ * 投研认识论常驻薄层 — 准确性/科学性底线（与具体工具名解耦，始终注入）。
+ */
+export function buildResearchEpistemicPlaybook(): string {
+  return [
+    '【投研证据纪律 — 始终遵守】',
+    '1) 分层：工具返回 = 事实层；你的文字 = 推断层。禁止把推断写成「已证实」。',
+    '2) 禁编造：未调用工具或工具报错/空数据时，明确写「数据不可用/未拉取」，禁止用训练记忆补行情、评分、新闻正文或精确数字。',
+    '3) 引用来源：关键数字（价、涨跌幅、评分、净值、持仓权重等）尽量带单位，并暗示依据（如「据 snapshot」「据 evaluate」）；冲突时并列说明，勿 silently 取更好看的一侧。',
+    '4) 时效：本轮 system 含【会话时钟】时必须以其为「截至」基准（含时区），勿臆造日期；仅当用户明确追问「现在几点」或需二次核对时间时才调用 get_current_time。资讯用文章发布日相对会话时钟判断新旧；Crypto 注明高时效波动。',
+    '5) 证据类型标签（书写时区分）：价量事实 / 模型评分或技术指标 / 机构观点 / 新闻叙事 / 宏观背景。宏观是背景不是个股因果证明。',
+    '6) 不确定性：深度结论用条件句或概率口吻（「在…前提下更支持…」）；给出至少一条否证/风险条件。',
+    '7) 合规：不给出具体买卖点、仓位或「必涨/必跌」判断；可做情景对照（上/下/震荡）与数据解读。',
+  ].join('\n')
+}
+
+/**
+ * 按研究档位的输出骨架 — 全面性与可读性。
+ */
+export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
+  if (tier === 'L1') {
+    return [
+      '【答复档位 L1 — 事实快答】',
+      '- 结构：直接答案（1–3 句）→ 关键数字与截至时间 → 一句边界（未覆盖的不展开）',
+      '- 工具：沿选型卡最短路径，通常 1–2 次调用即停；勿主动评价「值不值得」',
+    ].join('\n')
+  }
+  if (tier === 'L3') {
+    return [
+      '【答复档位 L3 — 深度投研备忘录】',
+      '按下列骨架组织（某一维无数据则写「本维未覆盖：原因」，禁止脑补）：',
+      '1) 问题界定：标的（命名空间）/ 市场与资产类型 / 分析时间范围',
+      '2) 关键事实：价量或核心截面（工具 + 截至）',
+      '3) 分维解读：模型或技术（评分/指标/信号）→ 市场环境（若已取）→ 事件/披露（若已取）→ 行业位置（若已取）',
+      '4) 综合判断：条件化结论 + 主要风险与否证条件',
+      '5) 数据缺口：列出仍缺的维度或未加载工具包',
+      '- 每一维最多一个主证据工具；「全面」不等于堆砌重复工具',
+      '- 声称全面分析前：缺 market/news 等能力时先 activate_tool_pack，或明示缺口',
+    ].join('\n')
+  }
+  return [
+    '【答复档位 L2 — 结构化解读】',
+    '- 结构：结论摘要 → 事实依据（工具+时点）→ 简短解读 → 主要风险一句',
+    '- 工具：首选路径取证据后停止；用户未要求则不升维到 L3 全备忘录',
+  ].join('\n')
+}
+
+/**
+ * 会话时钟块 — 由 Engine 每轮注入权威本地时间，避免 LLM 猜日期或多余调 tool。
+ */
+export function buildSessionClockPlaybook(clock: {
+  iso: string
+  local: string
+  timezone: string
+  weekday?: string
+  unix_ms?: number
+}): string {
+  const weekday = clock.weekday ? `；${clock.weekday}` : ''
+  return [
+    '【会话时钟 — 本轮权威时间基准】',
+    `- 本地：${clock.local}（${clock.timezone}${weekday}）`,
+    `- ISO：${clock.iso}`,
+    clock.unix_ms != null ? `- unix_ms：${clock.unix_ms}` : '',
+    '- 做「截至」与数据时效判断时必须引用上述时间；勿用训练记忆中的「今天」',
+    '- 不必为此再调 get_current_time（除非用户明确问时刻，或本轮时钟明显过期需复核）',
+  ].filter(Boolean).join('\n')
+}
+
 /** 按已加载 pack 选择性注入 playbook，避免提示未暴露的工具 */
 export interface AgentSystemRulesOptions {
   /** 本轮已加载 pack；省略则注入全部 playbook（兼容旧行为） */
@@ -154,6 +225,10 @@ export interface AgentSystemRulesOptions {
   routePlaybook?: string
   /** 本轮已暴露工具名（用于提示「仅限列表」） */
   activeToolNames?: readonly string[]
+  /** 本轮投研答复档位 */
+  researchTier?: ResearchTier
+  /** 本轮权威时钟正文（buildSessionClockPlaybook） */
+  sessionClock?: string
 }
 
 function packSet(activePacks?: readonly string[]): Set<string> | null {
@@ -168,12 +243,22 @@ function packLoaded(set: Set<string> | null, id: string): boolean {
 /** 聊天 Agent 完整 system 规则正文（不含角色行） */
 export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   const packs = packSet(opts?.activePacks)
+  const tier = opts?.researchTier ?? 'L2'
   const sections: string[] = [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
     '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
     '- 仅使用当前会话已加载的 MCP 工具（见 tools 列表）；缺能力时 list_tool_packs → activate_tool_pack',
   ]
+
+  if (opts?.sessionClock) {
+    sections.push(opts.sessionClock)
+  }
+
+  sections.push(
+    buildResearchEpistemicPlaybook(),
+    buildResearchOutputPlaybook(tier),
+  )
 
   if (opts?.routePlaybook) {
     sections.push(opts.routePlaybook)
@@ -210,9 +295,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   }
 
   sections.push(
-    '- 每个已加载工具描述含【何时使用】【调用规范】，严格遵守；以本轮选型卡为首要决策依据',
+    '- 每个已加载工具描述含【何时使用】【调用规范】，严格遵守；以本轮选型卡与证据纪律为首要决策依据',
     '- 不推荐具体买卖，仅提供研究与数据解读',
-    '- 可组合多个工具由浅入深补全数据，但优先最短正确路径',
+    '- L1 走最短正确路径；L3 按备忘录骨架覆盖并声明缺口；禁止为堆砌而重复调用',
     '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
   )
 

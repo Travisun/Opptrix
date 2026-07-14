@@ -13,6 +13,7 @@ import {
   type ToolPackId,
   packIdForTool,
   alwaysOnPackIds,
+  type ResearchTier,
 } from '@opptrix/shared'
 import type { SessionContextRef } from '../sessions.js'
 import { resolveSeedPacks, MAX_SEEDED_BUSINESS_PACKS } from './tool-pack-resolver.js'
@@ -33,6 +34,8 @@ export interface ToolRoutePlan {
   intent: string
   /** 注入 system 的选型说明 */
   routeHint: string
+  /** 投研答复档位 */
+  researchTier: ResearchTier
 }
 
 export interface ToolRouteResolveInput {
@@ -324,6 +327,38 @@ function hasInstrumentCue(message: string): boolean {
   return CN_CODE_RE.test(message) || NS_REF_RE.test(message) || COMPANY_NAME_RE.test(message)
 }
 
+const L1_INTENTS = new Set([
+  'price_only',
+  'search',
+  'capabilities',
+  'general',
+  'watchlist',
+  'portfolio_trades',
+])
+
+const L3_INTENTS = new Set([
+  'depth_analysis',
+  'instrument_cue',
+  'industry',
+  'backtest',
+  'portfolio_analysis',
+  'etf_general',
+])
+
+/** 显式要求全面/深度 → 强制 L3 */
+const L3_UPGRADE_RE = /全面|深度分析|深度研究|系统分析|完整复盘|投研备忘|综合评估|怎么研究/
+
+/**
+ * 由意图 + 话术确定研究档位（可测、确定性）。
+ */
+export function resolveResearchTier(intent: string, message: string): ResearchTier {
+  const text = message.trim()
+  if (L3_UPGRADE_RE.test(text)) return 'L3'
+  if (L3_INTENTS.has(intent)) return 'L3'
+  if (L1_INTENTS.has(intent)) return 'L1'
+  return 'L2'
+}
+
 function packsForTools(tools: string[]): ToolPackId[] {
   const packs = new Set<ToolPackId>()
   const always = new Set(alwaysOnPackIds())
@@ -353,13 +388,20 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
   const matched = matchIntent(message)
   const seeded = resolveSeedPacks({ message, contextRef: input.contextRef })
 
+  const finish = (
+    partial: Omit<ToolRoutePlan, 'researchTier'>,
+  ): ToolRoutePlan => ({
+    ...partial,
+    researchTier: resolveResearchTier(partial.intent, message),
+  })
+
   if (!matched) {
     // 有标的线索但无明确意图 → 轻量深度路径
     if (hasInstrumentCue(message)) {
       const preferredTools = ['get_instrument_snapshot', 'evaluate_instrument', 'search_instruments']
       const requiredPacks = packsForTools(preferredTools)
       const seedPacks = mergePackBudget(requiredPacks, seeded)
-      return {
+      return finish({
         preferredTools,
         avoidTools: ['get_instrument_quotes'],
         requiredPacks,
@@ -367,12 +409,12 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
         confidence: 'medium',
         intent: 'instrument_cue',
         routeHint: '已识别标的线索：优先 get_instrument_snapshot，需要评分再 evaluate_instrument；代码不确定时先 search_instruments',
-      }
+      })
     }
     if (input.contextRef?.kind === 'article') {
       const preferredTools = ['get_news_article', 'list_news_articles']
       const requiredPacks = packsForTools(preferredTools)
-      return {
+      return finish({
         preferredTools,
         avoidTools: ['evaluate_instrument'],
         requiredPacks,
@@ -380,9 +422,9 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
         confidence: 'high',
         intent: 'article_context',
         routeHint: '引用资讯上下文：用资讯工具阅读/扩展，勿改走个股评估',
-      }
+      })
     }
-    return {
+    return finish({
       preferredTools: ['search_instruments', 'ask_user', 'list_tool_packs'],
       avoidTools: [],
       requiredPacks: [],
@@ -390,7 +432,7 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
       confidence: 'low',
       intent: 'general',
       routeHint: '意图不明确：可 search_instruments 澄清标的，或 list_tool_packs / ask_user；勿盲目 evaluate',
-    }
+    })
   }
 
   let preferredTools = [...matched.preferredTools]
@@ -406,10 +448,15 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
     )]
   }
 
-  const requiredPacks = packsForTools(preferredTools)
+  let requiredPacks = packsForTools(preferredTools)
+  // L3 且用户要「全面」时：在预算内尽量塞入 market，便于环境维度
+  const tierPreview = resolveResearchTier(matched.intent, message)
+  if (tierPreview === 'L3' && L3_UPGRADE_RE.test(message) && !requiredPacks.includes('market')) {
+    requiredPacks = mergePackBudget([...requiredPacks, 'market'], seeded)
+  }
   const seedPacks = mergePackBudget(requiredPacks, seeded)
 
-  return {
+  return finish({
     preferredTools,
     avoidTools: matched.avoidTools ?? [],
     requiredPacks,
@@ -417,7 +464,7 @@ export function resolveToolRoutePlan(input: ToolRouteResolveInput): ToolRoutePla
     confidence: matched.confidence,
     intent: matched.intent,
     routeHint: matched.hint,
-  }
+  })
 }
 
 /** required 优先占预算，再用播种补足 */
@@ -450,12 +497,17 @@ export function buildRoundRoutePlaybook(
   const lines = [
     '【本轮工具选型卡 — 必须优先遵守】',
     `- 意图标签：${plan.intent}（置信度 ${plan.confidence}）`,
+    `- 研究档位：${plan.researchTier}`,
     `- 选型说明：${plan.routeHint}`,
   ]
 
   if (preferred.length) {
     lines.push(`- 首选调用顺序：${preferred.join(' → ')}`)
-    lines.push('- 若首选结果已足够回答用户，停止继续堆工具；不足再沿顺序下调')
+    if (plan.researchTier === 'L1') {
+      lines.push('- L1：证据足够即停，禁止为「看起来专业」继续堆工具')
+    } else {
+      lines.push('- 若首选结果已足够回答用户，停止继续堆工具；不足再沿顺序下调')
+    }
   } else {
     lines.push('- 当前 tools 列表中尚无意图对应工具：先 list_tool_packs，再 activate_tool_pack 加载后重试')
   }
@@ -469,6 +521,15 @@ export function buildRoundRoutePlaybook(
     for (const c of confusions.slice(0, 6)) {
       lines.push(`  · ${c.when} → 用 ${c.prefer}，不用 ${c.avoid}`)
     }
+  }
+
+  if (plan.researchTier === 'L3') {
+    lines.push('- L3 覆盖检查（缺则 activate_tool_pack 或声明「本维未覆盖」）：')
+    lines.push('  · 身份：search / capabilities（已消歧可跳过）')
+    lines.push(`  · 价量事实：${loaded.has('get_instrument_snapshot') ? 'snapshot' : loaded.has('get_instrument_quotes') ? 'quotes' : '需加载 core 工具'}`)
+    lines.push(`  · 模型/技术：${loaded.has('evaluate_instrument') || loaded.has('get_instrument_indicators') ? 'evaluate/indicators 可用' : '需 activate instrument_analytics'}`)
+    lines.push(`  · 市场环境：${loaded.has('get_market_regime') ? 'regime 可用' : '未加载则声明未拉宏观，或 activate market'}`)
+    lines.push(`  · 事件披露：${loaded.has('list_news_articles') || loaded.has('get_notice_content') ? 'news/notice 可用' : '用户问事件时再 activate news；勿臆造催化'}`)
   }
 
   lines.push('- 禁止调用未出现在本轮 tools 参数中的工具名；缺能力时 activate_tool_pack')

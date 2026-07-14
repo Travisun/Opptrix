@@ -75,6 +75,8 @@ export type ChatProgressEvent =
     preferred_tools?: string[]
     /** 本轮意图标签 */
     route_intent?: string
+    /** 本轮投研答复档位 L1/L2/L3 */
+    research_tier?: string
   }
   | { type: 'tool_start'; step: ChatToolStep }
   | { type: 'tool_done'; step: ChatToolStep }

@@ -1,5 +1,6 @@
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
+import { getCurrentTime } from './app-context.js'
 import { type ChatMessage } from './llm/provider.js'
 import { tailMessagesForLlm } from './llm/messages.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
@@ -19,6 +20,7 @@ import {
   orderToolsByPreference,
   type ToolRoutePlan,
 } from './mcp/tool-route-plan.js'
+import { buildSessionClockPlaybook } from '@opptrix/shared'
 import {
   type ChatProgressEvent,
   type ChatProgressOptions,
@@ -115,10 +117,13 @@ export class AgentEngine {
       message: this.lastChatSeedMessage,
       contextRef: null,
     })
+    const clock = getCurrentTime()
     return this.tools.systemPrompt({
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
+      researchTier: plan.researchTier,
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
+      sessionClock: buildSessionClockPlaybook(clock),
     })
   }
 
@@ -293,7 +298,13 @@ export class AgentEngine {
         : text
 
     const messages: ChatMessage[] = [
-      { role: 'system', content: this.tools.systemPrompt() },
+      {
+        role: 'system',
+        content: this.tools.systemPrompt({
+          sessionClock: buildSessionClockPlaybook(getCurrentTime()),
+          researchTier: 'L2',
+        }),
+      },
       ...contextMessages,
       ...history,
       ...ephemeralHistory,
@@ -400,11 +411,12 @@ export class AgentEngine {
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
     let { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
-    let systemPrompt = this.buildRoundSystemPrompt(activeNames)
 
     try {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
+      // 每轮刷新会话时钟，保证长工具链下「截至」仍准确
+      const systemPrompt = this.buildRoundSystemPrompt(activeNames)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },
@@ -420,6 +432,7 @@ export class AgentEngine {
         tools_exposed_count: activeNames.length,
         preferred_tools: this.lastRoutePlan?.preferredTools,
         route_intent: this.lastRoutePlan?.intent,
+        research_tier: this.lastRoutePlan?.researchTier,
       })
 
       const turn = await llm.chat(messages, openAiTools, signal)
@@ -544,7 +557,6 @@ export class AgentEngine {
           this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
           activeNames = toolNamesForPacks(this.lastRoundPackIds)
           ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames))
-          systemPrompt = this.buildRoundSystemPrompt(activeNames)
         }
         continue
       }

@@ -143,7 +143,9 @@ Opptrix/
   - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
   - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
   - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `McpToolBroker`；激活后同轮刷新 tools
-  - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序，注入「本轮工具选型卡」，并把首选工具排到 tools schema 前列；未加载 pack 的 playbook 不注入 system，降低看错/选错
+  - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
+  - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
+  - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
   - 准确率测试：`tests/mcp-tool-route-accuracy.test.mjs`（首推精确率 / 可见性召回 / 易混消歧 / 选型卡 / 过播种抑制）
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`

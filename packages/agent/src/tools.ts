@@ -176,11 +176,14 @@ export class ToolRegistry {
     activePacks?: readonly string[]
     routePlaybook?: string
     activeToolNames?: readonly string[]
+    researchTier?: import('@opptrix/shared').ResearchTier
+    sessionClock?: string
   }) {
     return [
-      '你是 Opptrix 专业多市场投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
+      '你是 Opptrix 多市场投研研究员（非荐股机器人）。仅依据已注册 MCP 投研工具返回的数据作答：区分事实与推断，标注时效与不确定性，按研究档位组织结论；不编造、不荐具体买卖点。',
       '需要用户确认分析方向或偏好时，使用 ask_user 工具在界面展示选择题（含自行输入项），勿让用户在聊天里自行罗列选项。',
-      '工具选择必须以「本轮工具选型卡」与 tools 列表为准：先调首选工具，再按需补数；勿调用未加载工具。',
+      '工具选择必须以「本轮工具选型卡」与 tools 列表为准：先调首选工具取证据，再按档位补维；勿调用未加载工具。',
+      '时效判断优先使用 system 中的【会话时钟】，无需每轮调用 get_current_time。',
       buildAgentSystemRules(opts),
     ].join('\n')
   }

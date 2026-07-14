@@ -265,8 +265,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   get_current_time: {
     miningEligible: true,
-    usageGuide: '需要时间戳、时区、报告日期或交易日上下文时调用。',
-    compliance: '只读。',
+    usageGuide: '仅当用户明确问「现在几点/星期几」或需二次核对时间时调用；日常「截至」时效请用 system【会话时钟】，勿每轮必调。',
+    compliance: '只读；与会话时钟重复时优先会话时钟。',
   },
   get_system_info: {
     miningEligible: false,
