@@ -125,24 +125,35 @@ Opptrix/
 ### 4.2 Agent 与 MCP
 
 ```
-用户消息 → AgentEngine → LLM (function calling)
+用户消息 → AgentEngine → ToolPackResolver（播种 packs）
                 ↓
-         McpToolBroker (进程内 MCP 客户端)
+         activeNames = core+meta+播种+会话激活
                 ↓
-         ToolRegistry (packages/agent/src/tools.ts)
+         McpToolBroker（本轮子集）→ LLM tools
                 ↓
-    ResearchHub / MarketDataService / AshareEngine
+         activate_tool_pack → 同会话累积 → 同轮刷新 Broker
+                ↓
+         ToolRegistry → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认）
-- 工具元数据（何时使用、调用规范）：`packages/agent/src/tool-meta.ts`
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认 + 工具包元工具）
+- 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
+- **工具包路由（Tool Pack Router）**：
+  - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
+  - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
+  - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
+  - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `McpToolBroker`；激活后同轮刷新 tools
+  - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序，注入「本轮工具选型卡」，并把首选工具排到 tools schema 前列；未加载 pack 的 playbook 不注入 system，降低看错/选错
+  - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
+  - 准确率测试：`tests/mcp-tool-route-accuracy.test.mjs`（首推精确率 / 可见性召回 / 易混消歧 / 选型卡 / 过播种抑制）
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（末项可自由输入），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
-- **行业分析**：`industry_mining` / `industry_mermaid`（不依赖本地行业库）→ 代表公司用 `search_instruments` + `get_instrument_*`
-- **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_watchlist_radar` / `get_trend_brief`
-- **跨市场初选**：`screen_us_universe` / `screen_hk_universe` / `screen_crypto_universe` 或 `search_instruments`
-- 勿再调用已移除的本地因子/行业筛选或 `market_db_*`；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
+- **行业分析**：`industry_mining` / `industry_mermaid`（属 `industry` pack，需播种或 activate）→ 代表公司用 `search_instruments` + `get_instrument_*`
+- **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack
+- **跨市场搜索**：唯一入口 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO）
+- 勿再调用已移除工具：`search_etfs` / `screen_*_universe` / `get_etf_scorecard` / `get_etf_snapshot` / `get_watchlist_radar` / `institution_rating` 等；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
 - **A 股股票 Discover 自动选股策略已移除**；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
+- Discover 挖掘仍按 profile 固定工具子集（`discoverMiningToolNamesForProfile`）；与聊天 Tool Pack 共享 `TOOL_PACK_*` 常量，一期不强改 Discover 主路径
 
 ### 4.3 数据层
 
@@ -208,7 +219,8 @@ npm run serve               # 生产预览
 |------|----------|
 | 新增 Hub feature | `packages/research-hub/src/hub.ts` |
 | 新增 REST 端点 | `apps/server/src/index.ts` |
-| 新增 Agent/MCP 工具 | `packages/agent/src/tools.ts` + `tool-meta.ts` |
+| 新增 Agent/MCP 工具 | `packages/agent/src/tools.ts` + `tool-meta.ts` + `packages/shared/src/tool-packs.ts`（挂 pack）+ `tool-route-plan.ts`（意图精排）；遵循 `.cursor/rules/mcp-tool-pack-routing.mdc` |
+| 调整聊天工具包播种 | `packages/agent/src/mcp/tool-pack-resolver.ts` |
 | 新增数据源 | `packages/a-stock-layer/src/drivers/` + `register.ts`（规范见 [DATA-LAYER.md §12](./DATA-LAYER.md#12-新增-provider-检查清单)） |
 | 新增因子 | `packages/stock-eval/src/factors/` |
 | 本地库查询/同步 | `packages/market-data/src/` |

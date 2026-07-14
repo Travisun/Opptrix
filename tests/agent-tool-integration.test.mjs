@@ -6,18 +6,19 @@ import { DATA_LAYER_MINING_TOOL_NAMES } from '../packages/agent/dist/tool-meta.j
 import { buildMarketContextPlaybook } from '../packages/shared/dist/agent-prompt-guide.js'
 
 const P0_TOOLS = [
-  'get_watchlist_radar',
+  'get_watchlist',
   'get_market_regime',
   'get_market_dynamics',
   'get_trend_brief',
+  'search_instruments',
 ]
 
 const P1_TOOLS = [
   'get_etf_list',
-  'get_etf_scorecard',
-  'screen_us_universe',
-  'screen_hk_universe',
-  'screen_crypto_universe',
+  'get_etf_nav',
+  'get_etf_holdings',
+  'evaluate_instrument',
+  'get_instrument_snapshot',
 ]
 
 const REMOVED_LEGACY = [
@@ -41,6 +42,15 @@ const REMOVED_LEGACY = [
   'list_local_industries',
   'get_industry_stats',
   'get_local_industry_stocks',
+  'search_etfs',
+  'get_etf_scorecard',
+  'get_etf_snapshot',
+  'screen_us_universe',
+  'screen_hk_universe',
+  'screen_crypto_universe',
+  'get_watchlist_radar',
+  'institution_rating',
+  'institution_report',
 ]
 
 test('ToolRegistry registers P0/P1 market and screening tools', () => {
@@ -60,6 +70,8 @@ test('P0 tools are mining-eligible where appropriate', () => {
   }
   assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('get_local_data_status'))
   assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('screen_stocks'))
+  assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('get_watchlist_radar'))
+  assert.ok(!DATA_LAYER_MINING_TOOL_NAMES.includes('get_etf_scorecard'))
 })
 
 test('ToolRegistry has no market_db hub tools', () => {
@@ -72,6 +84,8 @@ test('ToolRegistry has no market_db hub tools', () => {
 test('agent prompt includes market context playbook', () => {
   const text = buildMarketContextPlaybook()
   assert.match(text, /get_market_regime/)
-  assert.match(text, /get_watchlist_radar/)
-  assert.match(text, /screen_us_universe/)
+  assert.match(text, /get_watchlist/)
+  assert.match(text, /search_instruments/)
+  assert.doesNotMatch(text, /get_watchlist_radar/)
+  assert.doesNotMatch(text, /screen_us_universe/)
 })

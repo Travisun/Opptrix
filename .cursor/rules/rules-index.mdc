@@ -24,6 +24,7 @@ alwaysApply: true
 | **SQLite / 数据库** | `backward-compatibility.mdc`、`schema-migration.mdc` | `.cursor/rules/backward-compatibility.mdc` |
 | **行情 / 数据层** | `data-layer-standard-api.mdc` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
 | **Provider 实现** | `provider-standard-api.mdc`、`data-provider-docs.mdc` | `.cursor/rules/provider-standard-api.mdc` |
+| **Agent / MCP 工具** | `mcp-tool-pack-routing.mdc` | `docs/AGENT-GUIDE.md` |
 | **代码质量** | `code-quality.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | **测试** | `testing.mdc` | `tests/` |
 | **性能** | `performance.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
@@ -129,5 +130,6 @@ alwaysApply: true
 | 数据层 | `.cursor/rules/data-layer-standard-api.mdc` |
 | Provider | `.cursor/rules/provider-standard-api.mdc` |
 | Provider 文档 | `.cursor/rules/data-provider-docs.mdc` |
+| Agent / MCP 路由 | `.cursor/rules/mcp-tool-pack-routing.mdc` |
 | 桌面发版 | `.cursor/rules/desktop-release.mdc` |
 | Onboarding | `.cursor/rules/onboarding.mdc` |

@@ -14,7 +14,7 @@ export interface UnifiedSearchOptions {
   keyword: string
   limit?: number
   markets?: Market[]
-  /** 是否合并本地名录（DuckDB/SQLite 已同步标的），默认 true */
+  /** 是否合并本地名录；默认 false（本地基础库已停用） */
   includeLocal?: boolean
 }
 
@@ -31,7 +31,7 @@ export async function searchInstrumentsUnified(
   const items: UnifiedInstrumentSearchHit[] = []
   const sources = new Set<string>()
 
-  if (opts.includeLocal !== false) {
+  if (opts.includeLocal === true) {
     const localHits = marketData.searchLocalInstruments(keyword, limit, opts.markets)
     for (const hit of localHits) {
       const key = instrumentRefKey(hit.instrument)

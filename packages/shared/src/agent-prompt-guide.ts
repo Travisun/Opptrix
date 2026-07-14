@@ -1,7 +1,7 @@
 import type { InstrumentRef } from './market-data.js'
 import { resolveInstrumentAnalyticsProfile } from './instrument-analytics.js'
 import { crossMarketNewsHints } from './news-source-hints.js'
-import { TOOL_ROUTING } from './tool-routing.js'
+import { buildToolPackCatalogPrompt } from './tool-packs.js'
 
 /** Stock-index 统一命名空间 — Agent/搜索/关注列表的全局标的 ID */
 export function buildInstrumentNamespacePlaybook(): string {
@@ -28,11 +28,11 @@ export function buildStandardInstrumentApiPlaybook(): string {
   return [
     '【标准 Instrument API — 优先使用，对应 get_instrument_* / search_instruments】',
     `- 能力：${STANDARD_INSTRUMENT_API_CAPABILITIES.join('、')}`,
-    '- 搜索：search_instruments（本地名录 + 在线合并）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
+    '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
-    '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（A 股日 K 优先本地 DuckDB，实时走在线）',
+    '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
     '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
-    '- ETF：search_etfs / get_etf_list / get_etf_snapshot / get_etf_nav / get_etf_holdings / get_etf_scorecard（或 instrument ETF ref + evaluate_instrument）',
+    '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
   ].join('\n')
 }
@@ -56,12 +56,12 @@ export function buildInstrumentAnalysisPlaybook(): string {
   return [
     '【标的分析路径 — 先识别 market + assetClass，再选工具】',
     '0) 不确定时：search_instruments → 用返回 instrument 或 code（CN:SZ.xxx）→ get_instrument_capabilities',
-    '1) CN 股票（EQUITY）：search_instruments 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → institution_rating → get_instrument_cyq',
-    '2) CN ETF：search_etfs → get_etf_snapshot → evaluate_instrument（决策雷达）→ get_instrument_strategy_signal',
-    '3) 美股/港股：get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
+    '1) CN 股票（EQUITY）：search_instruments 定位 → batch_instrument_snapshots（批量）→ get_instrument_snapshot → get_instrument_chart → evaluate_instrument（评分卡）→ get_instrument_strategy_signal → get_instrument_institution_rating → get_instrument_cyq',
+    '2) CN ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings',
+    '3) 美股/港股：search_instruments → get_instrument_snapshot / get_instrument_chart → get_instrument_indicators → evaluate_instrument（技术面）→ get_instrument_strategy_signal；verify_instrument_strategy 仅对核心标的',
     '4) 日股/韩股（JP/KR）：暂未接入行情与快照；可读相关资讯，勿调用 get_instrument_* 行情类工具',
-    '5) Crypto：get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
-    '6) 禁止对非 CN 股票调用 institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股专用工具',
+    '5) Crypto：search_instruments → get_instrument_quotes / get_instrument_chart → get_instrument_indicators → evaluate_instrument / get_instrument_strategy_signal；7×24 波动大，结论注明时效',
+    '6) 禁止对非 CN 股票调用 get_instrument_institution_rating、get_instrument_cyq；禁止对 Crypto 用 A 股专用工具',
   ].join('\n')
 }
 
@@ -72,10 +72,10 @@ export function instrumentAnalysisStepsForRef(ref: InstrumentRef): string {
   }
   const profile = resolveInstrumentAnalyticsProfile(ref)
   if (profile.mode === 'cn_factor_scorecard') {
-    return '建议顺序：get_instrument_snapshot → evaluate_instrument → get_instrument_strategy_signal → institution_rating（可选）→ get_instrument_cyq（可选）'
+    return '建议顺序：get_instrument_snapshot → evaluate_instrument → get_instrument_strategy_signal → get_instrument_institution_rating（可选）→ get_instrument_cyq（可选）'
   }
   if (profile.mode === 'cn_etf_scorecard') {
-    return '建议顺序：get_instrument_snapshot → evaluate_instrument（ETF雷达）→ get_instrument_strategy_signal'
+    return '建议顺序：get_instrument_snapshot → evaluate_instrument（技术分析）→ get_instrument_strategy_signal；净值/持仓用 get_etf_nav / get_etf_holdings'
   }
   if (profile.mode === 'technical_bundle') {
     const limit = profile.limitation ? `（${profile.limitation}）` : ''
@@ -126,12 +126,12 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist_radar / get_trend_brief】',
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief】',
     '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
-    '3) 关注池速览：get_watchlist → get_watchlist_radar（可省略 codes 用关注列表）→ 对重点标的 get_instrument_snapshot',
+    '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
-    '5) 跨市场名录初选：screen_us_universe / screen_hk_universe / screen_crypto_universe 或 search_instruments（markets 过滤）；A 股主题扩池用 industry_mining + search_instruments',
+    '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',
   ].join('\n')
 }
 
@@ -142,29 +142,79 @@ export function buildIndustryAnalysisPlaybook(): string {
     '1) 产业链与代表公司：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
     '2) 需 mindmap 展示：industry_mermaid',
     '3) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument；多只可用 batch_instrument_snapshots',
-    '4) 宏观/板块背景：get_market_regime / get_market_dynamics；跨市场可用 screen_us/hk/crypto_universe',
+    '4) 宏观/板块背景：get_market_regime / get_market_dynamics；跨市场用 search_instruments（markets 过滤）',
   ].join('\n')
 }
 
+/** 按已加载 pack 选择性注入 playbook，避免提示未暴露的工具 */
+export interface AgentSystemRulesOptions {
+  /** 本轮已加载 pack；省略则注入全部 playbook（兼容旧行为） */
+  activePacks?: readonly string[]
+  /** 本轮选型卡正文（由 agent buildRoundRoutePlaybook 生成） */
+  routePlaybook?: string
+  /** 本轮已暴露工具名（用于提示「仅限列表」） */
+  activeToolNames?: readonly string[]
+}
+
+function packSet(activePacks?: readonly string[]): Set<string> | null {
+  if (!activePacks?.length) return null
+  return new Set(activePacks)
+}
+
+function packLoaded(set: Set<string> | null, id: string): boolean {
+  return set == null || set.has(id)
+}
+
 /** 聊天 Agent 完整 system 规则正文（不含角色行） */
-export function buildAgentSystemRules(): string {
-  return [
+export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
+  const packs = packSet(opts?.activePacks)
+  const sections: string[] = [
     '规则：',
     '- 需要数据时必须先调用工具，禁止编造数字或臆测行情',
     '- 跨市场标的统一用 Stock-index 命名空间（CN:SZ.000009）或 search 返回的 instrument 对象',
-    '- 仅使用当前会话已注册的 MCP 工具（见 tools 列表），勿虚构工具名',
-    TOOL_ROUTING,
-    buildInstrumentNamespacePlaybook(),
-    buildStandardInstrumentApiPlaybook(),
-    buildInstrumentAnalysisPlaybook(),
-    buildIndustryAnalysisPlaybook(),
-    buildMarketContextPlaybook(),
-    buildProviderCustomMethodPlaybook(),
-    buildUserInteractionPlaybook(),
-    buildNewsRetrievalPlaybook(),
-    '- 每个工具描述含【何时使用】【何时不用】双面约束，严格遵守',
+    '- 仅使用当前会话已加载的 MCP 工具（见 tools 列表）；缺能力时 list_tool_packs → activate_tool_pack',
+  ]
+
+  if (opts?.routePlaybook) {
+    sections.push(opts.routePlaybook)
+  }
+
+  sections.push(buildToolPackCatalogPrompt())
+  sections.push(buildInstrumentNamespacePlaybook())
+
+  // core 能力路径始终相关
+  if (packLoaded(packs, 'core')) {
+    sections.push(buildStandardInstrumentApiPlaybook())
+  }
+  if (packLoaded(packs, 'instrument_analytics') || packLoaded(packs, 'core')) {
+    sections.push(buildInstrumentAnalysisPlaybook())
+  }
+  if (packLoaded(packs, 'industry')) {
+    sections.push(buildIndustryAnalysisPlaybook())
+  }
+  if (packLoaded(packs, 'market') || packLoaded(packs, 'portfolio')) {
+    sections.push(buildMarketContextPlaybook())
+  }
+  if (packLoaded(packs, 'provider_ext')) {
+    sections.push(buildProviderCustomMethodPlaybook())
+  }
+  sections.push(buildUserInteractionPlaybook())
+  if (packLoaded(packs, 'news')) {
+    sections.push(buildNewsRetrievalPlaybook())
+  }
+
+  if (opts?.activeToolNames?.length) {
+    sections.push(
+      `- 本轮可用工具（共 ${opts.activeToolNames.length} 个）：${opts.activeToolNames.slice(0, 40).join(', ')}${opts.activeToolNames.length > 40 ? '…' : ''}`,
+    )
+  }
+
+  sections.push(
+    '- 每个已加载工具描述含【何时使用】【调用规范】，严格遵守；以本轮选型卡为首要决策依据',
     '- 不推荐具体买卖，仅提供研究与数据解读',
-    '- 可组合多个工具由浅入深补全数据',
+    '- 可组合多个工具由浅入深补全数据，但优先最短正确路径',
     '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
-  ].join('\n')
+  )
+
+  return sections.join('\n')
 }

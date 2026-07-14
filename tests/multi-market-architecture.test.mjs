@@ -69,7 +69,7 @@ test('discover profile registry drives prescreen mode and mining tools', () => {
 
   const hkTools = discoverMiningToolNamesForProfile('hk_equity')
   assert.ok(hkTools.includes('search_instruments'))
-  assert.ok(hkTools.includes('screen_hk_universe'))
+  assert.ok(!hkTools.includes('screen_hk_universe'))
   assert.ok(!hkTools.includes('get_local_hk_screen_schema'))
 
   assert.deepEqual(discoverFactorsForProfile('hk_equity'), ['keyword', 'industry_contains'])
@@ -188,7 +188,10 @@ test('CHAT_MCP_TOOL_NAMES exposes all registered tools', async () => {
   const chatTools = new Set(CHAT_MCP_TOOL_NAMES(registry))
   assert.ok(chatTools.has('get_instrument_snapshot'))
   assert.ok(chatTools.has('get_market_regime'))
-  assert.ok(chatTools.has('get_watchlist_radar'))
+  assert.ok(chatTools.has('search_instruments'))
+  assert.ok(!chatTools.has('get_watchlist_radar'))
+  assert.ok(!chatTools.has('search_etfs'))
+  assert.ok(!chatTools.has('get_etf_scorecard'))
   assert.ok(!chatTools.has('evaluate_stock'))
   assert.ok(!chatTools.has('search_stocks'))
 })

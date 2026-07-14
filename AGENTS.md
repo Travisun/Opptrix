@@ -75,7 +75,7 @@ codegraph explore "<问题或符号>"
 | 修改 Schema | `docs/DATA-LAYER.md`、迁移测试 |
 | 修改 Electron | `docs/DESKTOP.md`、`docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 修改 API 路由 | `docs/API.md` |
-| 修改 Agent tool | `docs/AGENT-GUIDE.md` |
+| 修改 Agent tool | `docs/AGENT-GUIDE.md`；并遵循 `mcp-tool-pack-routing.mdc` |
 
 ### R4. 向后兼容
 
@@ -180,6 +180,12 @@ Storage Layer (user-store, market-data)
 - **禁止** Hub / client-ui / Agent 主路径新增 `de.realtime()` / 直连第三方行情 URL
 - 腾讯 ETF 基金自定义方法（`invokeCustomMethod("tencent", ...)`）：`tencentFundProfile`、`tencentFundAsset`、`tencentFundRankInfo`、`tencentFundNavHistory`、`tencentEtfKline`、`tencentFundNotice`、`tencentSameTypeFunds`、`tencentSameSeriesFunds`。
 
+## Agent / MCP 工具（摘要）
+
+- 聊天路径经 **Tool Pack Router**：pack 召回 + `resolveToolRoutePlan` 精排 + 本轮选型卡；禁止全量固定 Broker
+- **新增工具强制顺序**：`tools.ts` handler → `TOOL_META` → `TOOL_PACK_MEMBERSHIP` → `INTENT_RULES`（有用户说法时）→ 测试黄金用例 → `docs/AGENT-GUIDE.md`
+- 细则：`.cursor/rules/mcp-tool-pack-routing.mdc`；测试：`tests/mcp-tool-route-accuracy.test.mjs`
+
 ## client-ui（摘要）
 
 - 设计前读 `docs/UI-DESIGN-SYSTEM.md`、`docs/UI-LAYOUT.md`；沿用 Fluent UI v9 + 项目 tokens / `Opptrix*` 封装
@@ -222,6 +228,7 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | 桌面发版 / 打标签 | `desktop-release` | `docs/DESKTOP-RELEASE.md` |
 | SQLite / 数据库 | `schema-migration` | `.cursor/rules/backward-compatibility.mdc` |
 | 行情 / Hub / 研究 API | `data-layer` | `docs/PROVIDER-STANDARD-API.md`、`docs/DATA-LAYER.md` |
+| Agent / MCP 工具接入 | —（读规则） | `.cursor/rules/mcp-tool-pack-routing.mdc`、`docs/AGENT-GUIDE.md` |
 | Provider 实现 | `provider-docs` | `docs/PROVIDER-STANDARD-API.md` |
 | 架构设计 | `architecture` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |

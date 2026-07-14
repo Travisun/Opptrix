@@ -10,14 +10,12 @@ export const MCP_TOOL_CALL_TIMEOUT_MS = 300_000
 export const MCP_SLOW_TOOL_CALL_TIMEOUT_MS = 900_000
 
 const SLOW_TOOLS = new Set([
-  'screen_us_universe',
-  'screen_hk_universe',
-  'screen_crypto_universe',
-  'get_watchlist_radar',
   'get_market_dynamics',
   'run_backtest',
   'industry_mining',
   'verify_instrument_strategy',
+  'batch_instrument_snapshots',
+  'evaluate_instrument',
 ])
 
 export interface McpToolCallOptions {

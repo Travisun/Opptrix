@@ -593,10 +593,9 @@ export class ResearchHub {
     return {
       cnFactorEvaluation: async ref => this.stockDiagnosis(ref, '综合评估', t0),
       cnEtfEvaluation: async ref => {
-        const card = this.marketData.etfScorecard(ref.symbol)
-        if (!card) return fail('暂时无法生成 ETF 决策雷达', t0)
-        const scoreHint = card.total_score != null ? ` ${card.total_score} 分` : ''
-        return ok(card, `${card.name} ETF决策雷达${scoreHint}`, t0)
+        const data = await gatherStrategyData(this.de, ref)
+        const evaluation = buildTechnicalEvaluation(data, ref)
+        return ok(evaluation, `${evaluation.name} 技术分析 ${evaluation.total_score} 分`, t0)
       },
       technicalEvaluation: async ref => {
         const data = await gatherStrategyData(this.de, ref)
@@ -605,19 +604,12 @@ export class ResearchHub {
       },
       strategyAssess: async ref => {
         const normalized = ref.market === 'CN' ? normalizeCode(ref.symbol) : ref.symbol
-        if (ref.market === 'CN' && isCnEtfCode(normalized)) {
-          const technical = await quickAssess(this.de, normalized, ref)
-          const card = this.marketData.etfScorecard(normalized)
-          const radarHint = card?.total_score != null ? ` · 决策雷达 ${card.total_score} 分` : ''
-          return ok({
-            ...technical,
-            asset_class: 'ETF' as const,
-            scorecard_name: 'ETF决策雷达',
-            etf_scorecard: card,
-          }, `${normalized} ${technical.summary}${radarHint}`, t0)
-        }
         const data = await quickAssess(this.de, normalized, ref)
-        const scorecardName = ref.market === 'CN' ? '综合评估' : '技术分析'
+        const scorecardName = ref.market === 'CN' && ref.assetClass === 'ETF'
+          ? '技术分析'
+          : ref.market === 'CN'
+            ? '综合评估'
+            : '技术分析'
         const assetClass = ref.assetClass === 'ETF'
           ? 'ETF'
           : ref.assetClass === 'CRYPTO_SPOT'
@@ -2266,7 +2258,7 @@ export class ResearchHub {
     keyword: string,
     limit: number,
     markets?: string[],
-    includeLocal = true,
+    includeLocal = false,
     t0 = Date.now(),
   ) {
     const m = markets as import('@opptrix/shared').Market[] | undefined
@@ -2338,7 +2330,7 @@ export class ResearchHub {
       institutionRating: (ref, groups) => this.institutionRating(ref, groups, t0),
       institutionReport: (params, groups) => this.institutionReport(params, groups, t0),
       searchInstruments: (keyword, limit, markets, includeLocal) =>
-        this.searchInstrumentsUnifiedHandler(keyword, limit, markets, includeLocal !== false, t0),
+        this.searchInstrumentsUnifiedHandler(keyword, limit, markets, includeLocal === true, t0),
       localInsights: ref => this.localInsightsForRef(ref),
     }
   }

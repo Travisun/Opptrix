@@ -1,0 +1,108 @@
+---
+description: Agent MCP 工具包路由接入规范 — 新增/修改 MCP 工具时必须挂 pack、精排意图与测试
+globs: packages/agent/**/*,packages/shared/src/tool-packs.ts,packages/shared/src/tool-routing.ts,packages/shared/src/agent-prompt-guide.ts,tests/mcp-tool*
+alwaysApply: false
+---
+
+# MCP Tool Pack 路由接入规范
+
+> 完整说明见 `docs/AGENT-GUIDE.md` §4.2。实现源：`tool-packs.ts`、`tool-pack-resolver.ts`、`tool-route-plan.ts`、`engine.ts`。
+
+## 架构（禁止绕过）
+
+```
+用户消息 → resolveToolRoutePlan（意图→首选工具）
+         → resolveActivePackIds（core+meta+种子+会话激活）
+         → McpToolBroker(子集) + 选型卡 system + preferred 前置
+         → LLM → activate_tool_pack（同轮刷新）/ 业务 tool
+```
+
+- **禁止**聊天路径恢复「全量 chatToolNames 固定 Broker」
+- **禁止**只注册 handler 不挂 `TOOL_PACK_MEMBERSHIP` / 意图规则（工具永远不可见或无法被首选）
+- **禁止**改 `AgentEngine` 主循环来硬编码某个新工具；只通过注册扩展
+
+## 新增 MCP 工具 — 强制清单（按序）
+
+### 1. Hub / handler
+
+- Hub feature（如有）→ `packages/agent/src/tools.ts`（或 `unified-mcp-tools.ts`）注册 `name` + `parameters` + `handler`
+- **不得**在 handler 内直连 Provider；经 `hub.dispatch` / 标准 API
+
+### 2. 元数据 `tool-meta.ts`
+
+```typescript
+my_new_tool: {
+  usageGuide: '何时用（面向选型，一句）',
+  compliance: '参数约束、何时不用、调用次数',
+  miningEligible?: true, // 仅挖掘需要时
+  hubFeature?: 'my_feature',
+}
+```
+
+### 3. 单一 pack 归属 `packages/shared/src/tool-packs.ts`
+
+| 动作 | 要求 |
+|------|------|
+| 已有业务域 | 写入 `TOOL_PACK_MEMBERSHIP['my_new_tool'] = '<pack_id>'` |
+| 新业务域 | 先扩 `TOOL_PACK_IDS` + `TOOL_PACK_DEFS`（title/description/whenToUse），再挂 membership |
+| 始终可用 | 仅当确属入口级（搜索/快照/时间/ask_user）才放 `core`；元工具放 `meta` |
+
+每个工具**恰好一个**主 pack。`core`/`meta` = alwaysOn。
+
+### 4. 意图精排 `tool-route-plan.ts`（准确率关键）
+
+在 `INTENT_RULES` 增加或调整规则（**具体意图优先于宽泛**，提高 `priority`）：
+
+```typescript
+{
+  intent: 'my_intent',
+  priority: 85, // 高于 depth_analysis(40)，低于更具体意图
+  patterns: [/中文触发词|EnglishTrigger/i],
+  preferredTools: ['my_new_tool', /* 次选 */],
+  avoidTools: ['易混工具名'],
+  confidence: 'high',
+  hint: '用户问 X → 首选 my_new_tool；勿用 Y',
+}
+```
+
+易混对写入 `TOOL_CONFUSION_PAIRS`（`prefer` / `avoid` / `when`）。
+
+### 5. 播种召回（可选增强）
+
+若关键词需稳定加载该 pack，在 `tool-pack-resolver.ts` 的 `SEED_RULES` 补 pattern；**不必**与 INTENT_RULES 重复到双写失控——以 route-plan 的 `requiredPacks` 为主。
+
+### 6. UI 标签（可选）
+
+`chat-progress.ts` 的 `TOOL_LABELS` 增加中文标签。
+
+### 7. 文档与测试
+
+- `docs/AGENT-GUIDE.md`：新工具/新 pack 一句说明
+- 黄金用例：`tests/mcp-tool-route-accuracy.test.mjs` 的 `PRIMARY_CASES` 至少 +1
+- 回归：`node --test tests/mcp-tool-route-accuracy.test.mjs tests/mcp-tool-pack-router.test.mjs`
+
+## 选型与提示词原则
+
+1. **召回**：首选工具所属 pack 必须进入本轮 `activeNames`（route-plan `seedPacks`）
+2. **精排**：`preferredTools[0]` = 尽可能最正确的工具；`avoidTools` 抑制混淆
+3. **提示**：本轮注入 `buildRoundRoutePlaybook`；未加载 pack **不**灌对应长 playbook
+4. **扩展**：`list_tool_packs` / `activate_tool_pack` 处理「播种未覆盖」；勿自动合入幻觉工具名
+
+## 反模式
+
+| ❌ 错误 | ✅ 正确 |
+|---------|---------|
+| 新工具不写 membership | 必挂单一 pack |
+| 只改 TOOL_META 不改 INTENT_RULES | 有明确用户说法就必须精排 |
+| 全部塞进 `core` | core 只保留真正 always-on |
+| system 里写未加载工具名当默认路径 | 依赖选型卡 + 已加载 tools |
+| 改 Engine 特判某工具 | 注册 + pack + 意图规则 |
+
+## 提交前自检
+
+- [ ] `tools.ts` + `TOOL_META` + `TOOL_PACK_MEMBERSHIP` 三处一致
+- [ ] 新意图有 `INTENT_RULES`（或确认归属已有意图的 preferred 列表）
+- [ ] `packIdForTool(name)` 非 null；membership 测试绿
+- [ ] D1 首推 / D2 召回：相关黄金用例通过
+- [ ] `npm run build -w @opptrix/shared && npm run build -w @opptrix/agent`
+- [ ] `docs/AGENT-GUIDE.md` 已同步（若对外可见行为变化）

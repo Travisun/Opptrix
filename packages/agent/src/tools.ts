@@ -17,7 +17,7 @@ import {
   buildUnifiedInstrumentTools,
   CHAT_MCP_TOOL_NAMES,
 } from './unified-mcp-tools.js'
-import { buildAgentSystemRules, instrumentRefsFromList, normalizeInstrumentHubParams, resolveInstrumentFromParams } from '@opptrix/shared'
+import { buildAgentSystemRules, resolveInstrumentFromParams } from '@opptrix/shared'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
 export const DISCOVER_MINING_TOOL_NAMES = DATA_LAYER_MINING_TOOL_NAMES
@@ -102,10 +102,24 @@ export interface OpenAiTool {
 export class ToolRegistry {
   readonly tools: ToolDef[]
   private appContext: AgentAppContext
+  /** 聊天会话的 tool-pack 桥接（list/activate）；由 AgentEngine 在 chat 前绑定 */
+  private packBridge: {
+    sessionId: string
+    listPacks: () => unknown
+    activatePacks: (packIds: string[]) => unknown
+  } | null = null
 
   constructor(private hub: ResearchHub, appContext?: AgentAppContext) {
     this.appContext = appContext ?? createDefaultAppContext()
-    this.tools = [...this.buildDataTools(), ...this.buildBasicTools()]
+    this.tools = [...this.buildDataTools(), ...this.buildBasicTools(), ...this.buildMetaTools()]
+  }
+
+  bindPackSession(bridge: NonNullable<ToolRegistry['packBridge']>) {
+    this.packBridge = bridge
+  }
+
+  clearPackSession() {
+    this.packBridge = null
   }
 
   list() { return this.tools }
@@ -158,11 +172,16 @@ export class ToolRegistry {
     }
   }
 
-  systemPrompt() {
+  systemPrompt(opts?: {
+    activePacks?: readonly string[]
+    routePlaybook?: string
+    activeToolNames?: readonly string[]
+  }) {
     return [
       '你是 Opptrix 专业多市场投研助手。仅通过已注册的 MCP 投研工具获取真实数据，再基于结果用中文给出简洁、专业的分析。',
       '需要用户确认分析方向或偏好时，使用 ask_user 工具在界面展示选择题（含自行输入项），勿让用户在聊天里自行罗列选项。',
-      buildAgentSystemRules(),
+      '工具选择必须以「本轮工具选型卡」与 tools 列表为准：先调首选工具，再按需补数；勿调用未加载工具。',
+      buildAgentSystemRules(opts),
     ].join('\n')
   }
 
@@ -201,55 +220,10 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('trend_brief', a),
       },
       {
-        name: 'screen_us_universe', category: '选股',
-        description: '按关键词在线筛选美股名录（StockIndex）',
-        parameters: S({
-          keyword: { type: 'string', description: 'ticker 或公司名关键词' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_us_screen', a),
-      },
-      {
-        name: 'screen_hk_universe', category: '选股',
-        description: '按关键词在线筛选港股名录（StockIndex）',
-        parameters: S({
-          keyword: { type: 'string', description: '代码或公司名关键词' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_hk_screen', a),
-      },
-      {
-        name: 'screen_crypto_universe', category: '选股',
-        description: '按关键词/计价币筛选 Crypto 交易对名录',
-        parameters: S({
-          keyword: { type: 'string', description: '可选，匹配 pair 或 base' },
-          quote: { type: 'string', description: '可选，计价币如 USDT' },
-          base_contains: { type: 'string', description: '可选，base 币种包含' },
-          top_n: { type: 'number', description: '返回条数，默认 50，最大 200' },
-        }),
-        handler: (a: Record<string, unknown>) => d('local_crypto_screen', a),
-      },
-      {
         name: 'get_watchlist', category: '组合管理',
         description: '读取用户关注列表（代码、名称、行业、备注、加入价）',
         parameters: S({}),
         handler: () => d('watchlist_list', {}),
-      },
-      {
-        name: 'get_watchlist_radar', category: '组合管理',
-        description: '关注股或多股雷达摘要（估值分位、主力净流入、评分）；省略 codes 则用用户关注列表',
-        parameters: S({
-          codes: { type: 'array', description: '可选，A 股 6 位代码数组；省略则读取关注列表' },
-        }),
-        handler: (a: Record<string, unknown>) => d('watchlist_radar', { codes: a.codes }),
-      },
-      {
-        name: 'search_etfs', category: '通用',
-        description: '按代码或名称搜索 A 股 ETF',
-        parameters: S({
-          keyword: { type: 'string', description: '搜索关键词' },
-        }, ['keyword']),
-        handler: (a: Record<string, unknown>) => d('search_etfs', { keyword: a.keyword }),
       },
       {
         name: 'get_etf_list', category: '通用',
@@ -258,18 +232,6 @@ export class ToolRegistry {
           code: { type: 'string', description: '可选，6 位 ETF 代码过滤' },
         }),
         handler: (a: Record<string, unknown>) => d('etf_list', a),
-      },
-      {
-        name: 'get_etf_scorecard', category: '通用',
-        description: '单只 A 股 ETF 决策雷达（折溢价、规模流动性、费率、波动与同类对比）',
-        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('etf_scorecard', { code: a.code }),
-      },
-      {
-        name: 'get_etf_snapshot', category: '通用',
-        description: '单只 ETF 快照：概况、净值、实时行情',
-        parameters: S({ code: { type: 'string', description: '6 位 ETF 代码' } }, ['code']),
-        handler: (a: Record<string, unknown>) => d('etf_snapshot', { code: a.code }),
       },
       {
         name: 'get_etf_nav', category: '通用',
@@ -291,18 +253,6 @@ export class ToolRegistry {
           scorecard: { type: 'string', description: '评分卡' },
         }, ['holdings']),
         handler: (a: Record<string, unknown>) => d('portfolio_analysis', { holdings: a.holdings, scorecard: a.scorecard }),
-      },
-      {
-        name: 'institution_rating', category: '个股分析',
-        description: '28 家机构风格综合评级与共识',
-        parameters: S({
-          code: { type: 'string', description: '股票代码' },
-          groups: { type: 'array', description: '可选机构分组过滤' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_institution_rating', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          groups: a.groups,
-        }),
       },
       {
         name: 'get_closing_report', category: '报告',
@@ -331,18 +281,6 @@ export class ToolRegistry {
         description: '单股 T 策略综合分析文本报告',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
         handler: (a: Record<string, unknown>) => d('strategy_report', { code: a.code }),
-      },
-      {
-        name: 'institution_report', category: '个股分析',
-        description: '机构评级完整文本报告',
-        parameters: S({
-          code: { type: 'string', description: '股票代码' },
-          groups: { type: 'array', description: '机构分组' },
-        }, ['code']),
-        handler: (a: Record<string, unknown>) => d('instrument_institution_report', {
-          ...normalizeInstrumentHubParams({ code: a.code, market: 'CN' }),
-          groups: a.groups,
-        }),
       },
       {
         name: 'industry_mining', category: '报告',
@@ -521,6 +459,50 @@ export class ToolRegistry {
           allow_multiple: { type: 'boolean', description: '是否允许多选，默认 false' },
         }, ['prompt', 'options']),
         handler: async () => ({ error: 'ask_user 由 Agent 引擎直接处理' }),
+      },
+    ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
+  }
+
+  private buildMetaTools(): ToolDef[] {
+    const S = (properties: JsonSchema['properties'], required?: string[]): JsonSchema =>
+      ({ type: 'object', properties, required })
+
+    return [
+      {
+        name: 'list_tool_packs',
+        category: '工具包',
+        description: '列出可用 MCP 工具包（id/标题/说明/工具数/是否已加载），不含完整 schema',
+        parameters: S({}),
+        handler: async () => {
+          if (!this.packBridge) {
+            return { error: 'list_tool_packs 需在聊天会话中调用' }
+          }
+          return this.packBridge.listPacks()
+        },
+      },
+      {
+        name: 'activate_tool_pack',
+        category: '工具包',
+        description: '激活一个或多个业务工具包，使同会话后续（含本轮刷新后）可调用其中工具',
+        parameters: S({
+          pack_ids: {
+            type: 'array',
+            description: '工具包 id 列表，如 ["news","etf","instrument_analytics"]',
+            items: { type: 'string' },
+          },
+        }, ['pack_ids']),
+        handler: async (a: Record<string, unknown>) => {
+          if (!this.packBridge) {
+            return { error: 'activate_tool_pack 需在聊天会话中调用' }
+          }
+          const raw = a.pack_ids ?? a.packIds
+          const packIds = Array.isArray(raw)
+            ? raw.map(x => String(x))
+            : typeof raw === 'string'
+              ? [raw]
+              : []
+          return this.packBridge.activatePacks(packIds)
+        },
       },
     ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }

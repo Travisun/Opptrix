@@ -1,5 +1,11 @@
 /** 数据层 / 分析工具元数据：用途说明与调用规范（OpenAI tools + MCP 共用） */
-import { discoverMiningToolNamesForProfile, INSTRUMENT_HUB_FEATURE, isDiscoverStrategyProfile } from '@opptrix/shared'
+import {
+  discoverMiningToolNamesForProfile,
+  INSTRUMENT_HUB_FEATURE,
+  isDiscoverStrategyProfile,
+  packIdForTool,
+  type ToolPackId,
+} from '@opptrix/shared'
 
 /**
  * 工具元数据 — 每个 Agent 工具的使用指南和调用规范。
@@ -8,6 +14,7 @@ import { discoverMiningToolNamesForProfile, INSTRUMENT_HUB_FEATURE, isDiscoverSt
  *   1. 注入 LLM 工具描述（formatToolDescription 拼接 usageGuide + compliance）
  *   2. 控制工具在挖掘/聊天场景下的可见性
  *   3. 映射到 ResearchHub.dispatch feature 名称
+ *   4. packId：聊天 Tool Pack 路由归属（见 @opptrix/shared TOOL_PACK_MEMBERSHIP）
  */
 export interface ToolMeta {
   /** 何时使用此工具的指导说明（如"初选后批量获取候选截面"） */
@@ -18,6 +25,11 @@ export interface ToolMeta {
   miningEligible?: boolean
   /** 对应 ResearchHub.dispatch feature 名称，用于 hub 层路由 */
   hubFeature?: string
+  /**
+   * 所属工具包（单一主 pack）。
+   * 未显式填写时由 TOOL_PACK_MEMBERSHIP 补全。
+   */
+  packId?: ToolPackId
 }
 
 const INSTRUMENT_REF_USAGE = [
@@ -47,24 +59,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'A 股单股趋势一句话研判（均线、相对沪深300、可选持仓盈亏）；用户问「走势怎么看」且已有代码时使用。',
     compliance: '仅 CN 股票；code 必填；holding_cost 可选；深度分析仍须 get_instrument_snapshot / evaluate_instrument。',
   },
-  screen_us_universe: {
-    hubFeature: 'local_us_screen',
-    miningEligible: true,
-    usageGuide: '美股名录在线 keyword 筛选；挖掘或主题研究扩大美股候选时使用。',
-    compliance: 'top_n ≤ 200；结果 symbol 用于 get_instrument_snapshot；勿与 search_instruments 重复相同 keyword。',
-  },
-  screen_hk_universe: {
-    hubFeature: 'local_hk_screen',
-    miningEligible: true,
-    usageGuide: '港股名录在线 keyword 筛选；挖掘或主题研究扩大港股候选时使用。',
-    compliance: 'top_n ≤ 200；结果 code 用于 get_instrument_snapshot（market=HK）；勿调用 A 股专用工具。',
-  },
-  screen_crypto_universe: {
-    hubFeature: 'local_crypto_screen',
-    miningEligible: true,
-    usageGuide: 'Crypto 交易对名录筛选（keyword/quote/base_contains）；7×24 市场初选时使用。',
-    compliance: 'top_n ≤ 200；结果 pair 用于 get_instrument_snapshot（market=CRYPTO）。',
-  },
   batch_instrument_snapshots: {
     hubFeature: 'instrument_batch_snapshots',
     miningEligible: true,
@@ -74,32 +68,14 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_watchlist: {
     hubFeature: 'watchlist_list',
     miningEligible: true,
-    usageGuide: '需要知道用户已关注哪些股票时调用；可与 get_watchlist_radar 组合做关注池分析。',
+    usageGuide: '需要知道用户已关注哪些股票时调用；再对重点标的用 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument 深入分析。',
     compliance: '只读；无参数；关注列表由客户端同步至服务端。',
-  },
-  get_watchlist_radar: {
-    hubFeature: 'watchlist_radar',
-    miningEligible: true,
-    usageGuide: '快速获取关注股或多股雷达摘要（估值分位、主力净流入、评分卡）；codes 省略则自动使用用户关注列表。',
-    compliance: 'codes 批量或省略；适合 5–30 只 A 股；深度分析仍须 get_instrument_snapshot。',
   },
   get_etf_list: {
     hubFeature: 'etf_list',
     miningEligible: true,
-    usageGuide: '获取 A 股 ETF 全量列表或按 code 验证；ETF 主题挖掘前定位标的。',
-    compliance: '只读；可选 code 过滤；列表结果用 code 调用 get_etf_snapshot / get_etf_scorecard。',
-  },
-  search_etfs: {
-    hubFeature: 'search_etfs',
-    miningEligible: true,
-    usageGuide: '按代码或名称搜索 ETF；用户提到宽基/行业/红利 ETF 时定位标的。',
-    compliance: 'keyword 必填 ≥1 字符；结果须用 code 调用 get_etf_snapshot。',
-  },
-  get_etf_snapshot: {
-    hubFeature: 'etf_snapshot',
-    miningEligible: true,
-    usageGuide: '单只 ETF 聚合：概况、最新净值、实时行情；分析 ETF 首选入口。',
-    compliance: '单只 code；深度持仓/历史净值用 get_etf_holdings / get_etf_nav。',
+    usageGuide: '获取 A 股 ETF 全量列表或按 code 验证；定位标的后优先 search_instruments（markets=["CN"]）或直接用代码。',
+    compliance: '只读；可选 code 过滤；列表结果用 code 调用 get_instrument_snapshot / get_etf_nav / get_etf_holdings。',
   },
   get_etf_nav: {
     hubFeature: 'etf_nav',
@@ -113,17 +89,11 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'ETF 最新披露持仓与权重；了解底层资产或行业暴露时使用。',
     compliance: '单只 code；持仓按季报更新，勿臆造成分股。',
   },
-  get_etf_scorecard: {
-    hubFeature: 'etf_scorecard',
-    miningEligible: true,
-    usageGuide: '单只 ETF 决策雷达：折溢价、规模流动性、费率、净值波动与同类对比（0–100 分）；与 evaluate_instrument(ETF) 等价。',
-    compliance: '单只 code；缺数据时部分维度为空。',
-  },
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,
-    usageGuide: '跨市场搜索标的（默认合并本地名录 + 在线 StockIndex）；不熟悉代码或需多市场检索时的首选入口。',
-    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤；命中 code/ref_label 为命名空间（CN:SZ.xxx），后续 get_instrument_* 须用返回的 instrument 或 code。',
+    usageGuide: '跨市场按代码或名称搜索标的（在线名录）；不熟悉代码或需美股/港股/Crypto/A 股检索时的首选且唯一搜索入口。',
+    compliance: 'keyword 必填 ≥1 字符；可用 markets 数组过滤（CN/US/HK/CRYPTO）；命中后用返回的 instrument 或 code 调用 get_instrument_*。',
   },
   get_instrument_capabilities: {
     hubFeature: 'instrument_capabilities',
@@ -152,8 +122,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   evaluate_instrument: {
     hubFeature: 'instrument_evaluation',
     miningEligible: true,
-    usageGuide: `单只标的在线评估：A 股为评分卡、其他市场为技术分析 bundle；已有代码且需要量化依据时使用。${INSTRUMENT_REF_USAGE}`,
-    compliance: '单只；A 股可指定 scorecard；非 CN 市场先 get_instrument_capabilities 确认支持。',
+    usageGuide: `单只标的在线评估：A 股股票为评分卡，CN ETF 与外盘为技术分析 bundle；已有代码且需要量化依据时使用。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；A 股股票可指定 scorecard；非 CN 股票市场先 get_instrument_capabilities 确认支持。',
   },
   get_instrument_strategy_signal: {
     hubFeature: 'instrument_strategy_signal',
@@ -196,18 +166,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     miningEligible: false,
     usageGuide: `机构评级完整文本报告；仅 A 股。${INSTRUMENT_REF_USAGE}`,
     compliance: '长文本；仅用户明确要求深度报告时调用；market 须为 CN。',
-  },
-  institution_rating: {
-    hubFeature: INSTRUMENT_HUB_FEATURE.institution_rating,
-    miningEligible: true,
-    usageGuide: 'A 股 28 家机构风格共识（CN 六位 code 快捷写法）；跨市场请用 get_instrument_institution_rating。',
-    compliance: '单股 CN code；可选 groups 过滤；勿编造机构观点。',
-  },
-  institution_report: {
-    hubFeature: INSTRUMENT_HUB_FEATURE.institution_report,
-    miningEligible: true,
-    usageGuide: 'A 股机构评级完整文本报告（CN 六位 code 快捷写法）。',
-    compliance: '长文本；仅用户明确要求深度报告时调用。',
   },
   analyze_portfolio: {
     hubFeature: 'portfolio_analysis',
@@ -353,6 +311,21 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '执行 list_provider_custom_methods 查到的自定义方法；标准 get_instrument_* 能覆盖的需求勿调用。',
     compliance: 'provider_id + method 必填；args 为 JSON 数组；code/symbol 可传命名空间 CN:SZ.000009 或 InstrumentRef；同一 method 每任务最多 1 次。',
   },
+  list_tool_packs: {
+    packId: 'meta',
+    usageGuide: '查看可用工具包目录与当前已加载状态；需要未暴露的能力时先 list 再 activate。',
+    compliance: '只读；无参数；返回 id/title/description/tool_count/loaded，不含完整 schema。',
+  },
+  activate_tool_pack: {
+    packId: 'meta',
+    usageGuide: '按需激活业务工具包，使本轮及后续轮次可调用该包内工具；当前 tools 不足时使用。',
+    compliance: 'pack_ids 为字符串数组（如 ["news","instrument_analytics"]）；同会话累积激活；无效 id 会出现在 skipped。',
+  },
+}
+
+/** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */
+export function resolveToolPackId(toolName: string, meta?: ToolMeta): ToolPackId | null {
+  return meta?.packId ?? packIdForTool(toolName)
 }
 
 export const DATA_LAYER_MINING_TOOL_NAMES = Object.entries(TOOL_META)
@@ -386,6 +359,7 @@ export function mcpToolCatalog(registry: { list: () => Array<{ name: string; des
     return {
       name: t.name,
       category: t.category,
+      pack_id: resolveToolPackId(t.name, meta),
       hub_feature: meta?.hubFeature ?? null,
       mining_eligible: Boolean(meta?.miningEligible),
       description: t.description,

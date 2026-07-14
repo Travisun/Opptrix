@@ -128,10 +128,10 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'search_instruments',
       category: '跨市场标的',
-      description: '按代码或名称搜索标的（默认合并本地名录 + 在线）；不熟悉代码时的首选入口',
+      description: '按代码或名称在线搜索标的（唯一搜索入口）；可用 markets 过滤 CN/US/HK/CRYPTO',
       parameters: S({
         keyword: { type: 'string', description: '搜索关键词' },
-        markets: { type: 'array', description: '可选市场过滤，如 CN、US、CRYPTO' },
+        markets: { type: 'array', description: '可选市场过滤，如 CN、US、HK、CRYPTO' },
         limit: { type: 'number', description: '返回条数，默认 30，最大 50' },
       }, ['keyword']),
       handler: (a) => d('instrument_search', a),
@@ -218,7 +218,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'evaluate_instrument',
       category: '跨市场标的',
-      description: '对单只标的做在线评估打分：A 股为评分卡，美股/港股/日股/韩股/Crypto 为技术分析 bundle；使用 InstrumentRef',
+      description: '对单只标的做在线评估打分：A 股股票为评分卡，CN ETF 与美股/港股/Crypto 为技术分析 bundle；使用 InstrumentRef',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         code: { type: 'string', description: '兼容旧写法：A 股 6 位代码（推荐改用 instrument 或 market+symbol）' },

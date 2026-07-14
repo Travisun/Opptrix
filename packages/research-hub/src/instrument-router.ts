@@ -239,7 +239,7 @@ export async function routeInstrumentSearch(
   if (keyword.length < 1) return fail('keyword 必填')
   const limit = params.limit != null ? Number(params.limit) : 30
   const markets = Array.isArray(params.markets) ? params.markets.map(String) : undefined
-  const includeLocal = params.include_local !== false
+  const includeLocal = params.include_local === true
   return handlers.searchInstruments(keyword, limit, markets, includeLocal)
 }
 

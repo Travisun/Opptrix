@@ -62,7 +62,20 @@ export interface ChatUserPromptPayload {
 }
 
 export type ChatProgressEvent =
-  | { type: 'thinking'; round: number; label: string; snippet?: string }
+  | {
+    type: 'thinking'
+    round: number
+    label: string
+    snippet?: string
+    /** 本轮加载的工具包 id */
+    active_packs?: string[]
+    /** 本轮暴露给 LLM 的工具数量 */
+    tools_exposed_count?: number
+    /** 本轮意图路由首推工具 */
+    preferred_tools?: string[]
+    /** 本轮意图标签 */
+    route_intent?: string
+  }
   | { type: 'tool_start'; step: ChatToolStep }
   | { type: 'tool_done'; step: ChatToolStep }
   | { type: 'user_prompt'; prompt: ChatUserPromptPayload }
@@ -102,16 +115,12 @@ const TOOL_LABELS: Record<string, string> = {
   get_market_regime: '分析宏观市场状态',
   get_market_dynamics: '获取市场动态全景',
   get_trend_brief: '生成趋势研判',
-  screen_us_universe: '筛选美股候选',
-  screen_hk_universe: '筛选港股候选',
-  screen_crypto_universe: '筛选 Crypto 交易对',
   get_etf_list: '读取 ETF 列表',
-  get_etf_scorecard: '评估 ETF 决策雷达',
+  get_etf_nav: '读取 ETF 净值',
+  get_etf_holdings: '读取 ETF 持仓',
   batch_instrument_snapshots: '批量获取候选标的快照',
   get_watchlist: '读取关注列表',
-  get_watchlist_radar: '生成关注股雷达摘要',
-  institution_rating: '汇总机构评级',
-  institution_report: '生成机构评级报告',
+  search_instruments: '搜索标的',
   analyze_portfolio: '分析组合因子暴露',
   get_closing_report: '生成收盘市场报告',
   get_morning_brief: '生成开盘早报',
@@ -128,6 +137,8 @@ const TOOL_LABELS: Record<string, string> = {
   list_news_articles: '浏览资讯列表',
   get_news_article: '读取资讯正文',
   get_notice_content: '读取公告正文',
+  list_tool_packs: '列出可用工具包',
+  activate_tool_pack: '激活工具包',
   get_current_time: '获取当前时间',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',
@@ -215,8 +226,6 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const n = instrumentsCount(args) ?? codesCount(args)
       return n != null ? `批量获取 ${n} 只候选标的快照` : '批量获取候选标的快照'
     }
-    case 'institution_rating':
-    case 'institution_report':
     case 'get_instrument_institution_rating':
     case 'get_instrument_institution_report':
       return ref ? `汇总 ${ref} 机构观点` : base
@@ -233,20 +242,14 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const iref = instrumentRefFromArgs(args) ?? ref
       return iref ? `${base} · ${iref}` : base
     }
-    case 'get_watchlist_radar': {
-      const n = codesCount(args)
-      return n != null ? `生成 ${n} 只股票雷达摘要` : '生成关注股雷达摘要'
+    case 'search_instruments': {
+      const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
+      if (kw) return `${base} · ${kw}`
+      return base
     }
     case 'run_backtest': {
       const n = codesCount(args)
       return n != null ? `对 ${n} 只股票运行回测` : '运行因子回测'
-    }
-    case 'screen_us_universe':
-    case 'screen_hk_universe':
-    case 'screen_crypto_universe': {
-      const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''
-      if (kw) return `${base} · ${kw}`
-      return base
     }
     case 'industry_mining':
     case 'industry_mermaid': {

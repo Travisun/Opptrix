@@ -7,6 +7,19 @@ import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
 import {
+  ToolPackSessionStore,
+  listToolPacksPayload,
+  resolveActivePackIds,
+  toolNamesForPacks,
+  unloadedToolHint,
+} from './mcp/tool-pack-session.js'
+import {
+  resolveToolRoutePlan,
+  buildRoundRoutePlaybook,
+  orderToolsByPreference,
+  type ToolRoutePlan,
+} from './mcp/tool-route-plan.js'
+import {
   type ChatProgressEvent,
   type ChatProgressOptions,
   type ChatToolStep,
@@ -62,7 +75,13 @@ export class AgentEngine {
   readonly sessions = new SessionStore()
   private registry = new ProviderRegistry()
   private settings: AgentSettings
-  private mcpBrokerPromise: Promise<McpToolBroker> | null = null
+  private readonly toolPackSessions = new ToolPackSessionStore()
+  /** 当前 chat 回合解析出的 active pack ids（供 list_tool_packs / 可观测性） */
+  private lastRoundPackIds: import('@opptrix/shared').ToolPackId[] = []
+  /** 当前 chat 用户消息（播种用） */
+  private lastChatSeedMessage = ''
+  /** 本轮路由计划（首选工具 + 选型卡） */
+  private lastRoutePlan: ToolRoutePlan | null = null
   readonly userPromptBridge = new UserPromptBridge()
 
   constructor(
@@ -79,12 +98,57 @@ export class AgentEngine {
 
   get llmConfigured() { return this.registry.configured }
 
-  /** 投研 MCP 工具经进程内 broker 暴露 */
-  private mcpBroker() {
-    if (!this.mcpBrokerPromise) {
-      this.mcpBrokerPromise = McpToolBroker.create(this.tools, this.tools.chatToolNames())
-    }
-    return this.mcpBrokerPromise
+  /** 按本轮 active tool names 创建进程内 MCP broker（每轮可重建） */
+  private async createRoundBroker(activeNames: readonly string[]) {
+    return McpToolBroker.create(this.tools, activeNames)
+  }
+
+  private resolveRoundPackIds(sessionId: string) {
+    return resolveActivePackIds(this.toolPackSessions, sessionId, {
+      message: this.lastChatSeedMessage,
+      contextRef: this.sessions.get(sessionId)?.contextRef,
+    })
+  }
+
+  private buildRoundSystemPrompt(activeNames: readonly string[]) {
+    const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
+      message: this.lastChatSeedMessage,
+      contextRef: null,
+    })
+    return this.tools.systemPrompt({
+      activePacks: this.lastRoundPackIds,
+      activeToolNames: activeNames,
+      routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
+    })
+  }
+
+  private async rebuildRoundTools(activeNames: readonly string[]) {
+    const broker = await this.createRoundBroker(activeNames)
+    const rawTools = await broker.openAiTools()
+    const preferred = this.lastRoutePlan?.preferredTools ?? []
+    const openAiTools = orderToolsByPreference(rawTools, preferred)
+    return { broker, openAiTools }
+  }
+
+  private bindPackBridge(sessionId: string) {
+    this.tools.bindPackSession({
+      sessionId,
+      listPacks: () => listToolPacksPayload(this.lastRoundPackIds),
+      activatePacks: (packIds: string[]) => {
+        const { activated, skipped } = this.toolPackSessions.activate(sessionId, packIds)
+        this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
+        return {
+          ok: true,
+          activated,
+          skipped,
+          active_packs: this.lastRoundPackIds,
+          tools_available: toolNamesForPacks(this.lastRoundPackIds).length,
+          hint: skipped.length
+            ? `部分 id 无效：${skipped.join(', ')}`
+            : '已激活；本轮工具列表将立即刷新',
+        }
+      },
+    })
   }
 
   setProviders(providers: ProviderProfile[], defaultModel?: string) {
@@ -327,10 +391,18 @@ export class AgentEngine {
       return { reply, toolsUsed: [], sessionId, title: record.title }
     }
 
-    const broker = await this.mcpBroker()
-    const openAiTools = await broker.openAiTools()
-    const systemPrompt = this.tools.systemPrompt()
+    this.lastChatSeedMessage = text
+    this.lastRoutePlan = resolveToolRoutePlan({
+      message: text,
+      contextRef: record.contextRef,
+    })
+    this.bindPackBridge(sessionId)
+    this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
+    let activeNames = toolNamesForPacks(this.lastRoundPackIds)
+    let { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
+    let systemPrompt = this.buildRoundSystemPrompt(activeNames)
 
+    try {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
       const contextMessages = contextRefToChatMessages(record.contextRef)
@@ -344,6 +416,10 @@ export class AgentEngine {
         type: 'thinking',
         round: round + 1,
         label: round === 0 ? '模型正在思考…' : '模型正在整理结果…',
+        active_packs: this.lastRoundPackIds,
+        tools_exposed_count: activeNames.length,
+        preferred_tools: this.lastRoutePlan?.preferredTools,
+        route_intent: this.lastRoutePlan?.intent,
       })
 
       const turn = await llm.chat(messages, openAiTools, signal)
@@ -378,6 +454,8 @@ export class AgentEngine {
             round: round + 1,
             label: '模型分析思路',
             snippet: thinkingSnippet,
+            active_packs: this.lastRoundPackIds,
+            tools_exposed_count: activeNames.length,
           })
         }
 
@@ -387,6 +465,9 @@ export class AgentEngine {
           tool_calls: turn.message.tool_calls,
         })
         this.sessions.save(record)
+
+        let refreshTools = false
+        const activeSet = new Set(activeNames)
 
         for (const tc of turn.message.tool_calls) {
           throwIfAborted(signal)
@@ -425,8 +506,13 @@ export class AgentEngine {
                 const answer = await answerPromise
                 result = { ok: true, ...answer }
               }
+            } else if (!activeSet.has(fn)) {
+              result = { error: unloadedToolHint(fn) }
             } else {
               result = await broker.call(fn, args, { signal })
+              if (fn === 'activate_tool_pack') {
+                refreshTools = true
+              }
             }
           } catch (e) {
             if (
@@ -452,6 +538,14 @@ export class AgentEngine {
           })
         }
         this.sessions.save(record)
+
+        if (refreshTools) {
+          await broker.close()
+          this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
+          activeNames = toolNamesForPacks(this.lastRoundPackIds)
+          ;({ broker, openAiTools } = await this.rebuildRoundTools(activeNames))
+          systemPrompt = this.buildRoundSystemPrompt(activeNames)
+        }
         continue
       }
 
@@ -480,6 +574,10 @@ export class AgentEngine {
       tool_steps: toolSteps,
     })
     return { reply, toolsUsed, sessionId, title: record.title }
+    } finally {
+      await broker.close().catch(() => {})
+      this.tools.clearPackSession()
+    }
     } catch (e) {
       if (
         e instanceof ChatCancelledError
