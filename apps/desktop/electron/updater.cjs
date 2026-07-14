@@ -304,14 +304,13 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
       percent: 100,
       message: reason ?? '自动安装已暂停，请手动点击「重启更新」。',
     })
-    return false
+    return Promise.resolve(false)
   }
 
   if (cacheKey && targetVersion) {
     recordInstallAttempt({ cacheKey, targetVersion })
   }
 
-  prepareForUpdateInstall?.()
   setStatus({
     state: 'installing',
     currentVersion: status.currentVersion,
@@ -321,9 +320,30 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
       : '正在安装更新并重启应用…',
   })
 
-  // macOS: zip 已下载后，quitAndInstall 会交给 Squirrel.Mac 替换 /Applications 内的 .app 并重启。
-  autoUpdater.quitAndInstall(false, true)
-  return true
+  return Promise.resolve(prepareForUpdateInstall?.())
+    .catch((err) => {
+      console.error('[updater] prepareForUpdateInstall failed:', err)
+    })
+    .then(() => {
+      // 等关闭窗口 / sidecar 落盘后再安装：
+      // - macOS：Squirrel 替换 .app 并重新拉起本应用
+      // - Windows / Linux：唤起已下载的安装包（exe / AppImage），isForceRunAfter 安装后启动 App
+      setImmediate(() => {
+        if (!autoUpdater) {
+          app.quit()
+          return
+        }
+        try {
+          // 兜底：若 quitAndInstall 仅触发退出，仍尝试在 quit 时安装
+          autoUpdater.autoInstallOnAppQuit = true
+          autoUpdater.quitAndInstall(false, true)
+        } catch (err) {
+          console.error('[updater] quitAndInstall failed:', err)
+          app.quit()
+        }
+      })
+      return true
+    })
 }
 
 function waitForHydratedUpdate(currentVersion, timeoutMs = 20_000) {

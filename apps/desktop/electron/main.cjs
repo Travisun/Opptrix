@@ -52,6 +52,10 @@ const APP_ID = require('../package.json').build?.appId
 app.setName(APP_NAME)
 /** @type {boolean} */
 app.isQuitting = false
+/** @type {boolean} 正在走 quitAndInstall，禁止 window-all-closed 抢先 app.quit */
+app.isUpdating = false
+/** @type {Promise<void> | null} */
+let prepareForUpdateInstallPromise = null
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let serverProcess = null
@@ -256,6 +260,43 @@ function stopSidecar() {
   }, 3000)
 }
 
+/**
+ * 更新安装前等待 sidecar 退出，避免 Windows/Linux 安装程序或 macOS 替换 .app 时文件仍被占用。
+ * @param {number} [timeoutMs]
+ * @returns {Promise<void>}
+ */
+function stopSidecarAndWait(timeoutMs = 2500) {
+  return new Promise((resolve) => {
+    if (!serverProcess || serverProcess.killed) {
+      resolve()
+      return
+    }
+    const proc = serverProcess
+    serverProcess = null
+    let settled = false
+    const finish = () => {
+      if (settled) return
+      settled = true
+      clearTimeout(timer)
+      resolve()
+    }
+    const timer = setTimeout(() => {
+      try {
+        if (proc.exitCode == null && !proc.killed) proc.kill('SIGKILL')
+      } catch {
+        /* ignore */
+      }
+      finish()
+    }, timeoutMs)
+    proc.once('exit', finish)
+    try {
+      proc.kill('SIGTERM')
+    } catch {
+      finish()
+    }
+  })
+}
+
 function appUrl() {
   if (isDev) return `http://127.0.0.1:${WEB_DEV_PORT}`
   return `http://${API_HOST}:${API_PORT}`
@@ -361,17 +402,28 @@ function deliverProtocolPayload(payload) {
 }
 
 function prepareForUpdateInstall() {
+  if (app.isUpdating) return prepareForUpdateInstallPromise
+  app.isUpdating = true
   app.isQuitting = true
-  stopSidecar()
-  destroyTray()
-  for (const win of BrowserWindow.getAllWindows()) {
-    if (!win.isDestroyed()) win.close()
-  }
+  prepareForUpdateInstallPromise = (async () => {
+    destroyTray()
+    await stopSidecarAndWait()
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed()) continue
+      try {
+        // 卸掉 close→托盘隐藏等监听，强制销毁，确保进程可真正退出走安装
+        win.removeAllListeners('close')
+        win.destroy()
+      } catch {
+        /* ignore */
+      }
+    }
+  })()
+  return prepareForUpdateInstallPromise
 }
 
 function quitApp() {
   if (isUpdateReady()) {
-    prepareForUpdateInstall()
     void installPendingUpdate()
     return
   }
@@ -797,6 +849,8 @@ if (!gotTheLock) {
   })
 
   app.on('window-all-closed', () => {
+    // 更新安装中由 quitAndInstall 接管退出；勿抢先 app.quit()
+    if (app.isUpdating) return
     if (app.isPackaged && hasTray()) return
     stopSidecar()
     app.quit()

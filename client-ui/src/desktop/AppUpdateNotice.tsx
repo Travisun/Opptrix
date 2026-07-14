@@ -7,13 +7,13 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   wrap: {
-    padding: '0 8px 6px',
+    padding: '0 8px 8px',
   },
   card: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '6px',
-    padding: '8px 10px',
+    gap: '8px',
+    padding: '10px 10px 9px',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: opptrixCssVars.canvasAlt,
     border: `1px solid ${opptrixCssVars.separator}`,
@@ -21,19 +21,43 @@ const useStyles = makeStyles({
   title: {
     fontSize: '12px',
     fontWeight: 600,
+    letterSpacing: '-0.01em',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   meta: {
     fontSize: '11px',
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.4,
+    lineHeight: 1.45,
   },
   actions: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'flex-end',
+    alignItems: 'stretch',
+    width: '100%',
+    paddingTop: '1px',
+  },
+  restartBtn: {
+    width: '100%',
+    minHeight: '28px',
+    height: '28px',
+    padding: '0 10px',
+    borderRadius: opptrixTokens.radiusSm,
+    fontSize: '12px',
+    fontWeight: 600,
+    letterSpacing: '-0.01em',
     gap: '6px',
+    lineHeight: 1,
+    // Fluent 默认 icon 槽偏大，把两侧图标压到 13px，避免撑坏 small 按钮
+    '& .fui-Button__icon': {
+      fontSize: '13px',
+      width: '13px',
+      height: '13px',
+      marginInlineEnd: '0',
+    },
+    '& .fui-Button__icon svg': {
+      width: '13px',
+      height: '13px',
+    },
   },
 })
 
@@ -80,10 +104,10 @@ export default function AppUpdateNotice() {
           {status.state === 'ready' && (
             <div className={s.actions}>
               <OpptrixButton
-                className={mergeClasses('opptrix-focusable')}
+                className={mergeClasses(s.restartBtn, 'opptrix-focusable')}
                 variant="primary"
                 size="small"
-                icon={<ArrowSyncRegular />}
+                icon={<ArrowSyncRegular fontSize={13} />}
                 onClick={() => { void installUpdate() }}
               >
                 重启更新

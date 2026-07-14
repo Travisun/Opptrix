@@ -116,6 +116,24 @@ const useStyles = makeStyles({
     paddingTop: '2px',
     width: '100%',
   },
+  restartBtn: {
+    minHeight: '32px',
+    height: '32px',
+    padding: '0 14px',
+    fontSize: '13px',
+    fontWeight: 600,
+    gap: '6px',
+    '& .fui-Button__icon': {
+      fontSize: '14px',
+      width: '14px',
+      height: '14px',
+      marginInlineEnd: '0',
+    },
+    '& .fui-Button__icon svg': {
+      width: '14px',
+      height: '14px',
+    },
+  },
 })
 
 type AboutSettingsSectionProps = {
@@ -220,8 +238,10 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                   {updatePanel.showInstall && (
                     <div className={s.updateActions}>
                       <OpptrixButton
+                        className={s.restartBtn}
                         variant="primary"
-                        icon={<ArrowSyncRegular />}
+                        size="small"
+                        icon={<ArrowSyncRegular fontSize={14} />}
                         onClick={() => { void installUpdate() }}
                       >
                         重启更新

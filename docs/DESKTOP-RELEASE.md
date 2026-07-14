@@ -391,7 +391,7 @@ npm run build:desktop -- --publish always
 2. 读取嵌入在安装包内的 `app-update.yml`（构建时由 `generic` publish + `OPPTRIX_UPDATE_BASE_URL` 生成）；
 3. 对比 `latest-*.yml` 中的 `version` 与本地 `apps/desktop/package.json` 版本；
 4. 若有新版本：`autoDownload` 后台下载 **当前平台** 整包；
-5. 侧栏「设置」上方提示 → 用户点 **重启更新** → `quitAndInstall` 完成替换。
+5. 侧栏「设置」上方提示 → 用户点 **重启更新** → 主进程先停 sidecar / 销毁托盘与窗口，再 `quitAndInstall(false, true)`：macOS 由 Squirrel 替换 `.app` 并直接重启应用；Windows / Linux 则唤起已下载的安装包，安装后自动启动。
 
 | 平台 | 实际下载的文件 |
 |------|----------------|
