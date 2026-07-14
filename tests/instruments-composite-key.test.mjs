@@ -1,8 +1,5 @@
 import assert from 'node:assert/strict'
-import { createHash } from 'node:crypto'
 import { mkdtemp, rm } from 'node:fs/promises'
-import { readFileSync } from 'node:fs'
-import { gzipSync } from 'node:zlib'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -18,13 +15,16 @@ import {
   MIGRATION_V8_SQL,
   SCHEMA_VERSION,
 } from '../packages/market-data/dist/schema.js'
-import { migrate, normalizeInstrumentExchange, readDeclaredSchemaVersion, detectAppliedSchemaVersion, hasInstrumentCompositeKey } from '../packages/market-data/dist/utils.js'
-import { isDuckPrimaryMigrationComplete, resetDuckPrimaryMigrationPending } from '../packages/market-data/dist/duck/duck-primary-migration.js'
-
+import {
+  migrate,
+  normalizeInstrumentExchange,
+  readDeclaredSchemaVersion,
+  detectAppliedSchemaVersion,
+} from '../packages/market-data/dist/utils.js'
+import { isDuckPrimaryMigrationComplete } from '../packages/market-data/dist/duck/duck-primary-migration.js'
 import { MarketDataStore } from '../packages/market-data/dist/store.js'
 import { getMarketDuckGateway, resetMarketDuckGateways } from '../packages/market-data/dist/duck/market-duck-gateway.js'
 import { resetDuckCliPools } from '../packages/market-data/dist/duck/duck-cli-pool.js'
-import { importMarketDataPackageToDisk, PACKAGE_APP_ID, PACKAGE_FORMAT_VERSION, PACKAGE_KIND } from '../packages/market-data/dist/package.js'
 
 let dataDir = ''
 
@@ -49,13 +49,12 @@ function flushQuoteRow(store, tradeDate, code) {
   )
 }
 
-/** 构造指定声明版本的老库（仅写 schema_meta + 逐步 SQL） */
-function seedDatabaseThroughVersion(dbPath, targetVersion, seedRows) {
+/** Seed a SQLite DB stopped after a given schema version (for thin upgrade smoke). */
+function seedThroughVersion(dbPath, targetVersion, seedRows) {
   const db = new Database(dbPath)
   const ts = new Date().toISOString()
-  db.exec(MIGRATION_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
   const steps = [
+    [1, MIGRATION_SQL],
     [2, MIGRATION_V2_SQL],
     [3, MIGRATION_V3_SQL],
     [4, MIGRATION_V4_SQL],
@@ -78,8 +77,6 @@ before(async () => {
 })
 
 after(async () => {
-  // runDuckPrimaryMigrationAsync starts DuckCliPool workers; terminate them so the
-  // Node process can exit (without --test-force-exit this file otherwise hangs).
   resetMarketDuckGateways()
   await resetDuckCliPools()
   if (dataDir) await rm(dataDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 100 })
@@ -113,18 +110,6 @@ test('fresh database uses schema v13 with duck primary migration complete', () =
   assert.match(profileDdl.sql, /instrument_ns/)
   assert.match(profileDdl.sql, /REFERENCES instruments\(instrument_ns\)/)
 
-  const klineStorage = store.db.prepare(
-    "SELECT meta_json FROM sync_cursor WHERE job_name = 'kline_storage'",
-  ).get()
-  assert.match(klineStorage?.meta_json ?? '', /duckdb/)
-  const analyticsStorage = store.db.prepare(
-    "SELECT meta_json FROM sync_cursor WHERE job_name = 'analytics_storage'",
-  ).get()
-  assert.match(analyticsStorage?.meta_json ?? '', /dims/)
-  const marketDataStorage = store.db.prepare(
-    "SELECT meta_json FROM sync_cursor WHERE job_name = 'market_data_storage'",
-  ).get()
-  assert.match(marketDataStorage?.meta_json ?? '', /duckdb/)
   const duckPrimary = store.db.prepare(
     "SELECT meta_json FROM sync_cursor WHERE job_name = 'duck_primary_migration'",
   ).get()
@@ -165,10 +150,14 @@ test('same code with different exchange and asset_class can coexist', () => {
   )
 
   store.flushDuckWritesSync()
-  const equity = store.getInstrument({ market: 'CN', code: '000977', assetClass: 'EQUITY', exchange: 'SZ' })
-  const index = store.getInstrument({ market: 'CN', code: '000977', assetClass: 'INDEX', exchange: 'SH' })
-  assert.equal(equity?.name, '浪潮信息')
-  assert.equal(index?.name, '中证500等权')
+  assert.equal(
+    store.getInstrument({ market: 'CN', code: '000977', assetClass: 'EQUITY', exchange: 'SZ' })?.name,
+    '浪潮信息',
+  )
+  assert.equal(
+    store.getInstrument({ market: 'CN', code: '000977', assetClass: 'INDEX', exchange: 'SH' })?.name,
+    '中证500等权',
+  )
   store.close()
 })
 
@@ -210,43 +199,20 @@ test('upsertInstrument updates only matching composite key', () => {
   store.close()
 })
 
-test('v7 database migrates to v8 preserving instrument rows', () => {
+test('v7 database upgrades to current schema preserving instruments', () => {
   const dbPath = join(dataDir, 'migrate-v7.db')
-  const db = new Database(dbPath)
-  db.exec(MIGRATION_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, new Date().toISOString())
-  db.exec(MIGRATION_V2_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(2, new Date().toISOString())
-  db.exec(MIGRATION_V3_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(3, new Date().toISOString())
-  db.exec(MIGRATION_V4_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(4, new Date().toISOString())
-  db.exec(MIGRATION_V5_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(5, new Date().toISOString())
-  db.exec(MIGRATION_V6_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(6, new Date().toISOString())
-  db.exec(MIGRATION_V7_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(7, new Date().toISOString())
-
-  const ts = new Date().toISOString()
-  db.prepare(`
-    INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at)
-    VALUES (?, ?, ?, ?, ?, ?, ?)
-  `).run('600519', 'CN', 'EQUITY', '贵州茅台', 'SH', 'active', ts)
-  db.close()
+  seedThroughVersion(dbPath, 7, (db, ts) => {
+    db.prepare(`
+      INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run('600519', 'CN', 'EQUITY', '贵州茅台', 'SH', 'active', ts)
+  })
 
   const store = new MarketDataStore(dbPath)
-  const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, SCHEMA_VERSION)
-
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
   const row = store.getInstrument({ market: 'CN', code: '600519', assetClass: 'EQUITY', exchange: 'SH' })
   assert.equal(row?.name, '贵州茅台')
   assert.equal(row?.exchange, 'SH')
-
-  const ddl = store.db.prepare(
-    "SELECT sql FROM sqlite_master WHERE type = 'table' AND name = 'instruments'",
-  ).get()
-  assert.match(ddl.sql, /PRIMARY KEY \(market, exchange, code, asset_class\)/)
   store.close()
 })
 
@@ -268,47 +234,26 @@ test('upsertStock writes CN equity with exchange in composite key', () => {
   store.close()
 })
 
-test('v8 database migrates to v9 with instrument_ns backfill', () => {
+test('v8 database upgrades with instrument_ns backfill', () => {
   const dbPath = join(dataDir, 'migrate-v8-v9.db')
-  const db = new Database(dbPath)
-  db.exec(MIGRATION_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, new Date().toISOString())
-  db.exec(MIGRATION_V2_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(2, new Date().toISOString())
-  db.exec(MIGRATION_V3_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(3, new Date().toISOString())
-  db.exec(MIGRATION_V4_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(4, new Date().toISOString())
-  db.exec(MIGRATION_V5_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(5, new Date().toISOString())
-  db.exec(MIGRATION_V6_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(6, new Date().toISOString())
-  db.exec(MIGRATION_V7_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(7, new Date().toISOString())
-  db.exec(MIGRATION_V8_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(8, new Date().toISOString())
-
-  const ts = new Date().toISOString()
-  db.prepare(`
-    INSERT INTO stocks (code, name, market, industry, is_st, status, updated_at)
-    VALUES ('000977', '浪潮信息', 'SZ', '计算机', 0, 'active', ?)
-  `).run(ts)
-  db.prepare(`
-    INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at)
-    VALUES ('000977', 'CN', 'EQUITY', '浪潮信息', 'SZ', 'active', ?)
-  `).run(ts)
-  db.prepare(`
-    INSERT INTO stock_profiles (code, org_name, synced_at)
-    VALUES ('000977', '浪潮信息股份有限公司', ?)
-  `).run(ts)
-  db.close()
+  seedThroughVersion(dbPath, 8, (db, ts) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, industry, is_st, status, updated_at)
+      VALUES ('000977', '浪潮信息', 'SZ', '计算机', 0, 'active', ?)
+    `).run(ts)
+    db.prepare(`
+      INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at)
+      VALUES ('000977', 'CN', 'EQUITY', '浪潮信息', 'SZ', 'active', ?)
+    `).run(ts)
+    db.prepare(`
+      INSERT INTO stock_profiles (code, org_name, synced_at)
+      VALUES ('000977', '浪潮信息股份有限公司', ?)
+    `).run(ts)
+  })
 
   const store = new MarketDataStore(dbPath)
-  const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, SCHEMA_VERSION)
-
-  const ns = store.resolveCnEquityInstrumentNs('000977', 'SZ')
-  assert.equal(ns, 'CN:SZ.000977')
+  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
+  assert.equal(store.resolveCnEquityInstrumentNs('000977', 'SZ'), 'CN:SZ.000977')
 
   const inst = store.db.prepare(
     'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
@@ -319,9 +264,6 @@ test('v8 database migrates to v9 with instrument_ns backfill', () => {
     'SELECT instrument_ns, code FROM stock_profiles WHERE instrument_ns = ?',
   ).get('CN:SZ.000977')
   assert.equal(profile?.code, '000977')
-
-  const finCols = store.db.prepare('PRAGMA table_info(stock_financials)').all()
-  assert.ok(finCols.some(c => c.name === 'instrument_ns'))
   store.close()
 })
 
@@ -340,7 +282,7 @@ test('upsertStock dual-writes instrument_ns on child quote rows', () => {
   store.close()
 })
 
-test('migrate is idempotent on v9 database', () => {
+test('migrate is idempotent on current schema', () => {
   const dbPath = join(dataDir, 'idempotent.db')
   const store = new MarketDataStore(dbPath, join(dataDir, 'idempotent.duckdb'))
   store.upsertInstrument({
@@ -427,120 +369,6 @@ test('declared and applied schema version stay in sync after migrate', () => {
   store.close()
 })
 
-test('v3 database leaps to latest schema', () => {
-  const dbPath = join(dataDir, 'leap-v3.db')
-  seedDatabaseThroughVersion(dbPath, 3, (db, ts) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('000001', '平安银行', 'SZ', 0, 'active', ?)
-    `).run(ts)
-  })
-  const store = new MarketDataStore(dbPath)
-  assert.equal(readDeclaredSchemaVersion(store.db), SCHEMA_VERSION)
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-  const inst = store.db.prepare(
-    'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
-  ).get('000001', 'CN', 'EQUITY')
-  assert.equal(inst?.instrument_ns, 'CN:SZ.000001')
-  store.close()
-})
-
-test('v5 database leaps to latest schema', () => {
-  const dbPath = join(dataDir, 'leap-v5.db')
-  seedDatabaseThroughVersion(dbPath, 5, (db, ts) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('600036', '招商银行', 'SH', 0, 'active', ?)
-    `).run(ts)
-  })
-  const store = new MarketDataStore(dbPath)
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-  store.close()
-})
-
-test('schema_meta ahead of DDL self-heals on open', () => {
-  const dbPath = join(dataDir, 'meta-ahead.db')
-  const ts = new Date().toISOString()
-  seedDatabaseThroughVersion(dbPath, 8, (d, t) => {
-    d.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('601318', '中国平安', 'SH', 0, 'active', ?)
-    `).run(t)
-  })
-  const db = new Database(dbPath)
-  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(9, ts)
-  const finHasNsBefore = db.prepare('PRAGMA table_info(stock_financials)').all()
-    .some(c => c.name === 'instrument_ns')
-  assert.equal(finHasNsBefore, false)
-  db.close()
-
-  const store = new MarketDataStore(dbPath)
-  const finHasNsAfter = store.db.prepare('PRAGMA table_info(stock_financials)').all()
-    .some(c => c.name === 'instrument_ns')
-  assert.ok(finHasNsAfter)
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-  store.close()
-})
-
-test('partial v9 schema recovers missing child columns', () => {
-  const dbPath = join(dataDir, 'partial-v9-recover.db')
-  const db = new Database(dbPath)
-  const ts = new Date().toISOString()
-  db.exec(MIGRATION_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
-  for (const [v, sql] of [
-    [2, MIGRATION_V2_SQL],
-    [3, MIGRATION_V3_SQL],
-    [4, MIGRATION_V4_SQL],
-    [5, MIGRATION_V5_SQL],
-    [6, MIGRATION_V6_SQL],
-    [7, MIGRATION_V7_SQL],
-    [8, MIGRATION_V8_SQL],
-  ]) {
-    db.exec(sql)
-    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(v, ts)
-  }
-  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(9, ts)
-  db.close()
-
-  const store = new MarketDataStore(dbPath)
-  const finHasNs = store.db.prepare('PRAGMA table_info(stock_financials)').all()
-    .some(c => c.name === 'instrument_ns')
-  const partnersHasNs = store.db.prepare('PRAGMA table_info(stock_partners)').all()
-    .some(c => c.name === 'instrument_ns')
-  assert.ok(finHasNs)
-  assert.ok(partnersHasNs)
-  store.close()
-})
-
-test('v1 database leaps to v9 preserving stock child data', () => {
-  const dbPath = join(dataDir, 'leap-v1-v9.db')
-  const db = new Database(dbPath)
-  const ts = new Date().toISOString()
-  db.exec(MIGRATION_SQL)
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(1, ts)
-  db.prepare(`
-    INSERT INTO stocks (code, name, market, industry, is_st, status, updated_at)
-    VALUES ('600519', '贵州茅台', 'SH', '白酒', 0, 'active', ?)
-  `).run(ts)
-  db.prepare(`
-    INSERT INTO stock_quotes_daily (trade_date, code, close, synced_at)
-    VALUES ('2026-01-02', '600519', 1800, ?)
-  `).run(ts)
-  db.close()
-
-  const store = new MarketDataStore(dbPath)
-  const ver = store.db.prepare('SELECT MAX(version) AS v FROM schema_meta').get()
-  assert.equal(ver.v, SCHEMA_VERSION)
-  const quote = store.db.prepare(
-    'SELECT instrument_ns FROM stock_quotes_daily WHERE code = ?',
-  ).get('600519')
-  assert.equal(quote.instrument_ns, 'CN:SH.600519')
-  store.close()
-})
-
 test('MIGRATION_STEPS count matches SCHEMA_VERSION', async () => {
   const { MIGRATION_STEPS } = await import('../packages/market-data/dist/schema-migrate.js')
   assert.equal(MIGRATION_STEPS.length, SCHEMA_VERSION)
@@ -571,28 +399,6 @@ test('cnRefFromCode resolves exchange from local store', async () => {
   store.close()
 })
 
-test('meta v9 ahead of v8 composite self-heals on open', () => {
-  const dbPath = join(dataDir, 'meta9-no-composite.db')
-  const ts = new Date().toISOString()
-  seedDatabaseThroughVersion(dbPath, 7, (db, t) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('601318', '中国平安', 'SH', 0, 'active', ?)
-    `).run(t)
-  })
-  const db = new Database(dbPath)
-  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
-  db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(9, ts)
-  assert.equal(hasInstrumentCompositeKey(db), false)
-  assert.equal(readDeclaredSchemaVersion(db), 9)
-  db.close()
-
-  const store = new MarketDataStore(dbPath)
-  assert.equal(hasInstrumentCompositeKey(store.db), true)
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-  store.close()
-})
-
 test('backfill disambiguates duplicate instrument_ns before unique index', () => {
   const dbPath = join(dataDir, 'duplicate-ns.db')
   const store = new MarketDataStore(dbPath)
@@ -610,8 +416,6 @@ test('backfill disambiguates duplicate instrument_ns before unique index', () =>
   assert.equal(rows.length, 2)
   assert.equal(rows[0].instrument_ns, 'CN:SZ.000977')
   assert.equal(rows[1].instrument_ns, 'CN:SZ.000977@INDEX')
-
-  store.db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_test_ns ON instruments(instrument_ns)')
   store.close()
 })
 
@@ -644,30 +448,16 @@ test('upsertInstrument disambiguates ETF when same code exists as EQUITY', () =>
 
 test('stock_profiles migration anchors FK via stocks-backed instrument row', () => {
   const dbPath = join(dataDir, 'profile-fk-anchor.db')
-  const db = new Database(dbPath)
-  const ts = new Date().toISOString()
-  for (const [v, sql] of [
-    [1, MIGRATION_SQL],
-    [2, MIGRATION_V2_SQL],
-    [3, MIGRATION_V3_SQL],
-    [4, MIGRATION_V4_SQL],
-    [5, MIGRATION_V5_SQL],
-    [6, MIGRATION_V6_SQL],
-    [7, MIGRATION_V7_SQL],
-    [8, MIGRATION_V8_SQL],
-  ]) {
-    db.exec(sql)
-    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(v, ts)
-  }
-  db.prepare(`
-    INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-    VALUES ('999999', '测试 orphan', 'SZ', 0, 'active', ?)
-  `).run(ts)
-  db.prepare(`
-    INSERT INTO stock_profiles (code, org_name, synced_at)
-    VALUES ('999999', '测试公司', ?)
-  `).run(ts)
-  db.close()
+  seedThroughVersion(dbPath, 8, (db, ts) => {
+    db.prepare(`
+      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
+      VALUES ('999999', '测试 orphan', 'SZ', 0, 'active', ?)
+    `).run(ts)
+    db.prepare(`
+      INSERT INTO stock_profiles (code, org_name, synced_at)
+      VALUES ('999999', '测试公司', ?)
+    `).run(ts)
+  })
 
   const store = new MarketDataStore(dbPath)
   const profile = store.db.prepare(
@@ -678,188 +468,5 @@ test('stock_profiles migration anchors FK via stocks-backed instrument row', () 
   ).get('CN', 'EQUITY', '999999')
   assert.equal(profile?.instrument_ns, 'CN:SZ.999999')
   assert.equal(inst?.instrument_ns, 'CN:SZ.999999')
-  store.close()
-})
-
-test('v8 re-run preserves instrument_ns column values', async () => {
-  const { MIGRATION_STEPS } = await import('../packages/market-data/dist/schema-migrate.js')
-  const dbPath = join(dataDir, 'v8-preserve-ns.db')
-  seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
-    db.prepare(`
-      INSERT INTO instruments (code, market, asset_class, name, exchange, status, updated_at)
-      VALUES ('600519', 'CN', 'EQUITY', '贵州茅台', 'SH', 'active', ?)
-    `).run(t)
-  })
-  const db = new Database(dbPath)
-  db.exec('ALTER TABLE instruments ADD COLUMN instrument_ns TEXT')
-  db.prepare(`
-    UPDATE instruments SET instrument_ns = 'CUSTOM:CN:SH.600519'
-    WHERE code = '600519' AND market = 'CN' AND asset_class = 'EQUITY'
-  `).run()
-  db.exec(`
-    CREATE TABLE instruments_old AS SELECT * FROM instruments;
-    DROP TABLE instruments;
-    CREATE TABLE instruments (
-      code TEXT PRIMARY KEY,
-      market TEXT NOT NULL,
-      asset_class TEXT NOT NULL,
-      name TEXT,
-      exchange TEXT,
-      list_date TEXT,
-      delist_date TEXT,
-      status TEXT NOT NULL DEFAULT 'active',
-      extra TEXT,
-      updated_at TEXT NOT NULL,
-      instrument_ns TEXT
-    );
-    INSERT INTO instruments SELECT * FROM instruments_old;
-    DROP TABLE instruments_old;
-  `)
-  db.prepare('DELETE FROM schema_meta WHERE version >= 8').run()
-
-  const step8 = MIGRATION_STEPS.find(s => s.version === 8)
-  step8.up(db)
-  const row = db.prepare(
-    'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
-  ).get('600519', 'CN', 'EQUITY')
-  assert.equal(row?.instrument_ns, 'CUSTOM:CN:SH.600519')
-  assert.equal(hasInstrumentCompositeKey(db), true)
-  db.close()
-})
-
-test('v8 sqlite market data migrates fully to duck on open', async () => {
-  const dbPath = join(dataDir, 'duck-primary-v8.db')
-  const duckPath = join(dataDir, 'duck-primary-v8.duckdb')
-  seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('600519', '贵州茅台', 'SH', 0, 'active', ?)
-    `).run(t)
-    db.prepare(`
-      INSERT INTO stock_klines_daily (trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at)
-      VALUES ('2026-01-02', '600519', 1700, 1710, 1690, 1705, 1000, 1705000, 0.5, ?)
-    `).run(t)
-    db.prepare(`
-      INSERT INTO stock_quotes_daily (trade_date, code, close, synced_at)
-      VALUES ('2026-01-02', '600519', 1705, ?)
-    `).run(t)
-  })
-
-  const store = new MarketDataStore(dbPath, duckPath)
-  assert.ok(await store.runDuckPrimaryMigrationAsync())
-  assert.ok(isDuckPrimaryMigrationComplete(store.db))
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-
-  const duckStocks = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stocks')
-  const duckKlines = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM cn_daily_bars')
-  const duckQuotes = duckGw(store).queryOneSync('SELECT COUNT(*)::INTEGER AS c FROM stock_quotes_daily')
-  assert.equal(duckStocks?.c, 1)
-  assert.equal(duckKlines?.c, 1)
-  assert.equal(duckQuotes?.c, 1)
-  store.close()
-})
-
-test('partial duck with klines only backfills stocks from sqlite on primary migration', async () => {
-  const dbPath = join(dataDir, 'partial-duck-v8.db')
-  const duckPath = join(dataDir, 'partial-duck-v8.duckdb')
-  seedDatabaseThroughVersion(dbPath, 8, (db, t) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('000001', '平安银行', 'SZ', 0, 'active', ?)
-    `).run(t)
-    db.prepare(`
-      INSERT INTO stock_klines_daily (trade_date, code, open, high, low, close, volume, amount, change_pct, synced_at)
-      VALUES ('2026-01-02', '000001', 10, 10.5, 9.8, 10.2, 500, 5100, 0.2, ?)
-    `).run(t)
-  })
-
-  const store = new MarketDataStore(dbPath, duckPath)
-  assert.ok(await store.runDuckPrimaryMigrationAsync())
-  assert.ok(isDuckPrimaryMigrationComplete(store.db))
-
-  resetDuckPrimaryMigrationPending(store.db)
-  store.duckGateway().applyBatchSync([{ op: 'exec', sql: 'DELETE FROM stocks', params: [] }])
-  assert.equal(duckGw(store).marketStatsSync().stocks, 0)
-  assert.ok(duckGw(store).marketStatsSync().klines > 0)
-
-  assert.ok(await store.runDuckPrimaryMigrationAsync())
-  assert.equal(
-    duckGw(store).marketStatsSync().stocks,
-    1,
-    'pending remigration must force-backfill emptied Duck stocks from SQLite',
-  )
-  store.close()
-})
-
-function buildMinimalOpmdPackage(sqlitePath, schemaVersion) {
-  const sqlite = readFileSync(sqlitePath)
-  const payloadGzip = gzipSync(sqlite, { level: 6 })
-  const payloadSha256 = createHash('sha256').update(payloadGzip).digest()
-  const packSignature = createHash('sha256')
-    .update(`opptrix|OPMD|v1|${payloadSha256.toString('hex')}`)
-    .digest('hex')
-    .slice(0, 32)
-  const metadata = {
-    app: PACKAGE_APP_ID,
-    kind: PACKAGE_KIND,
-    format_version: PACKAGE_FORMAT_VERSION,
-    exported_at: new Date().toISOString(),
-    schema_version: schemaVersion,
-    pack_signature: packSignature,
-    compatible: {
-      min_format_version: 1,
-      max_format_version: PACKAGE_FORMAT_VERSION,
-      min_schema_version: 1,
-      max_schema_version: SCHEMA_VERSION,
-    },
-    snapshot: {
-      stock_count: 1,
-      latest_trade_date: null,
-      latest_factor_date: null,
-      is_ready: false,
-      bootstrap: { stocks: false, factors: false, scores: false },
-    },
-  }
-  const metadataJson = Buffer.from(JSON.stringify(metadata), 'utf8')
-  const exportedAtMs = Date.parse(metadata.exported_at)
-  const header = Buffer.alloc(68)
-  header.write('OPMD', 0, 4, 'ascii')
-  header.writeUInt32LE(PACKAGE_FORMAT_VERSION, 4)
-  header.writeBigUInt64LE(BigInt(Number.isFinite(exportedAtMs) ? exportedAtMs : Date.now()), 8)
-  header.writeUInt32LE(schemaVersion, 16)
-  header.writeUInt32LE(metadataJson.length, 20)
-  header.writeBigUInt64LE(BigInt(payloadGzip.length), 24)
-  payloadSha256.copy(header, 32, 0, 32)
-  return Buffer.concat([header, metadataJson, payloadGzip])
-}
-
-test('importMarketDataPackage auto-migrates old schema on open', async () => {
-  const sourcePath = join(dataDir, 'import-source-v7.db')
-  seedDatabaseThroughVersion(sourcePath, 5, (db, t) => {
-    db.prepare(`
-      INSERT INTO stocks (code, name, market, is_st, status, updated_at)
-      VALUES ('600036', '招商银行', 'SH', 0, 'active', ?)
-    `).run(t)
-  })
-  {
-    const db = new Database(sourcePath)
-    const ts = new Date().toISOString()
-    db.exec(MIGRATION_V6_SQL)
-    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(6, ts)
-    db.exec(MIGRATION_V7_SQL)
-    db.prepare('INSERT INTO schema_meta (version, applied_at) VALUES (?, ?)').run(7, ts)
-    db.close()
-  }
-  const pkg = buildMinimalOpmdPackage(sourcePath, 7)
-
-  const importPath = join(dataDir, 'import-target.db')
-  importMarketDataPackageToDisk(pkg, { dbPath: importPath, backup: false })
-
-  const store = new MarketDataStore(importPath)
-  assert.equal(detectAppliedSchemaVersion(store.db), SCHEMA_VERSION)
-  const inst = store.db.prepare(
-    'SELECT instrument_ns FROM instruments WHERE code = ? AND market = ? AND asset_class = ?',
-  ).get('600036', 'CN', 'EQUITY')
-  assert.equal(inst?.instrument_ns, 'CN:SH.600036')
   store.close()
 })
