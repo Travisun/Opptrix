@@ -205,6 +205,35 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.31': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版让本地行情资料更稳：同步与导出更可靠，更新安装也更干净。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可靠',
+        title: '本地资料同步，少卡死、真落盘',
+        desc:
+          '整理或导出 A 股基础资料时，进度更不容易卡住，完成状态也会真正写入本地。',
+        note: '资料准备好，心里才有底。',
+      },
+      {
+        kicker: '更顺手',
+        title: '按条件找股、看行业，沿用上一版体验',
+        desc:
+          '行业、评分等筛选与行业涨跌一览继续保持更快响应；整理资料时仍可同时使用其他功能。',
+        note: '研究节奏不被打断。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
