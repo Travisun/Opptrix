@@ -121,6 +121,7 @@
 - Tokens：`glass`、`glassBlur`、`surfaceGlass`（`theme/tokens.ts`）
 
 **原则**：浮层与二次确认 Dialog **默认毛玻璃**；实体卡片（SurfaceCard、列表行）仍用 `surface` 实底 + 轻描边，不用毛玻璃。  
+Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏透明穿透）；Linux 与窄窗浮层侧栏仍用 CSS `.opptrix-glass-sidebar` / `.opptrix-overlay-sidebar`。  
 **Agent 规则**：`.cursor/rules/ui-overlay-components.mdc`（组件选型表与禁止项）。
 
 ## 6. Layout Constants

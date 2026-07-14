@@ -89,6 +89,16 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 In Electron, the client forces **desktop layout** (sidebar visible, no mobile drawer) via `client-ui/src/platform/detect.ts`.
 
+### Window blur + sidebar
+
+| 平台 | 窗口层 | 固定左侧栏 |
+|------|--------|------------|
+| macOS | `vibrancy: 'sidebar'`（**不开** `transparent`） | CSS 透明，露的是系统毛玻璃材质；缩放时不会漏裸桌面 |
+| Windows | `backgroundMaterial: 'acrylic'`（**不开** `transparent`） | 同上 |
+| Linux | 实色窗口底 | 保留 CSS `.opptrix-glass-sidebar` 毛玻璃（无原生 acrylic） |
+
+窄窗浮层侧栏仍盖在实色主内容上，继续用 CSS 毛玻璃。文档标记类：`html.opptrix-electron-vibrancy`。
+
 ### Title bar z-index
 
 Stacking order (low → high), defined in `client-ui/src/desktop/constants.ts` as `DESKTOP_Z_*`:

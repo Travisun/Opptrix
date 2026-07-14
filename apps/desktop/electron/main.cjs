@@ -83,9 +83,34 @@ function setOpaqueWindowBackground(win) {
   win.setBackgroundColor(SPLASH_CANVAS)
 }
 
+/** macOS vibrancy / Windows acrylic — 勿开 BrowserWindow.transparent，否则缩放动画会漏出桌面空透明。 */
+function enableWindowBlurBackground(win) {
+  if (win.isDestroyed()) return
+  if (process.platform === 'darwin') {
+    try {
+      win.setVibrancy('sidebar')
+    } catch {
+      /* older Electron */
+    }
+    // 透明网页区域露的是 vibrancy 材质层，不是裸桌面；背景色用 0 alpha 才能看见材质
+    win.setBackgroundColor('#00000000')
+    return
+  }
+  if (process.platform === 'win32') {
+    try {
+      if (typeof win.setBackgroundMaterial === 'function') {
+        win.setBackgroundMaterial('acrylic')
+      }
+    } catch {
+      /* unsupported on older Windows */
+    }
+    win.setBackgroundColor('#00000000')
+  }
+}
+
+/** @deprecated use enableWindowBlurBackground */
 function enableMacWindowTransparency(win) {
-  if (process.platform !== 'darwin' || win.isDestroyed()) return
-  win.setBackgroundColor('#00000000')
+  enableWindowBlurBackground(win)
 }
 
 async function fadeSplashOut(win) {
@@ -467,7 +492,8 @@ function buildMainWindowOptions() {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: APP_TITLE,
-    backgroundColor: '#F5F5F7',
+    // Splash / Linux 默认实色；mac/win 有原生毛玻璃时启动阶段仍先用不透明底防闪
+    backgroundColor: SPLASH_CANVAS,
     show: false,
     center,
     webPreferences: mainWindowWebPreferences({
@@ -480,9 +506,13 @@ function buildMainWindowOptions() {
   if (process.platform === 'darwin') {
     options.titleBarStyle = 'hiddenInset'
     options.trafficLightPosition = { x: 16, y: 16 }
+    // 系统侧栏毛玻璃。不要设 transparent:true —— 缩放时新区域会短暂变成「空透明」漏桌面。
     options.vibrancy = 'sidebar'
     options.visualEffectState = 'active'
-    options.transparent = true
+  } else if (process.platform === 'win32') {
+    options.frame = false
+    // 同 mac：用系统材料，避免整窗 transparent 导致缩放漏底
+    options.backgroundMaterial = 'acrylic'
   } else {
     options.frame = false
   }
@@ -598,7 +628,7 @@ async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
   })
 
   await shellReady
-  enableMacWindowTransparency(win)
+  enableWindowBlurBackground(win)
 
   if (!win.isVisible()) {
     await new Promise((resolve) => {

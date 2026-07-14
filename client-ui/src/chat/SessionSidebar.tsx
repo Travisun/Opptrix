@@ -10,7 +10,7 @@ import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected, s
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import OpptrixSegmentedControl from '../components/opptrix/OpptrixSegmentedControl'
 import ThinkingDots from '../components/ThinkingDots'
-import { isElectron } from '../platform/detect'
+import { isElectron, supportsNativeWindowVibrancy } from '../platform/detect'
 import { useTheme } from '../theme/ThemeContext'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
@@ -312,7 +312,10 @@ function SessionSidebar({
   const isDrawer = mode === 'drawer'
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isDrawer
-  const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
+  const nativeVibrancy = supportsNativeWindowVibrancy()
+  // 原生毛玻璃时深浅色都透明穿透；无原生时仅浅色用 CSS glass，深色实底
+  const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
+  const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
   const [listTabState, setListTabState] = useState<SidebarListTab>('chat')
   const listTab = listTabProp ?? listTabState
   const setListTab = useCallback((tab: SidebarListTab) => {
@@ -532,7 +535,7 @@ function SessionSidebar({
         isDrawer && drawerOpen && s.sidebarDrawerOpen,
         !electronChrome && !isDrawer && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
-        electronChrome && resolvedScheme === 'dark' && s.sidebarElectronSolid,
+        sidebarSolidDark && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
         sidebarGlass && 'opptrix-glass-sidebar',
         !isDrawer && 'opptrix-sidebar-edge',

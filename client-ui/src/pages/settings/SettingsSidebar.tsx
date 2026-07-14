@@ -12,7 +12,7 @@ import {
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
-import { isElectron } from '../../platform/detect'
+import { isElectron, supportsNativeWindowVibrancy } from '../../platform/detect'
 import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
@@ -218,7 +218,9 @@ export default function SettingsSidebar({
   const { resolvedScheme } = useTheme()
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isMobile && !isOverlay
-  const sidebarGlass = electronChrome && resolvedScheme !== 'dark'
+  const nativeVibrancy = supportsNativeWindowVibrancy()
+  const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
+  const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
 
   const searchActive = Boolean(search.trim()) && !isMobile
 
@@ -349,7 +351,7 @@ export default function SettingsSidebar({
         isMobile && s.sidebarMobile,
         !electronChrome && !isMobile && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
-        electronChrome && resolvedScheme === 'dark' && s.sidebarElectronSolid,
+        sidebarSolidDark && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
         sidebarGlass && 'opptrix-glass-sidebar',
         'opptrix-sidebar-edge',
