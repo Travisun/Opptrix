@@ -16,7 +16,6 @@
     "sync": "npm run build && node dist/cli/sync.js"
   },
   "dependencies": {
-    "@dsnp/parquetjs": "^1.8.8",
     "@duckdb/node-api": "^1.5.4-r.1",
     "@opptrix/a-stock-layer": "*",
     "@opptrix/shared": "*",

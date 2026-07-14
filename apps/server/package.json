@@ -22,7 +22,7 @@
     "mcp": "npm run build -w @opptrix/agent && node ../../packages/agent/dist/mcp/stdio-entry.js"
   },
   "dependencies": {
-    "@fastify/static": "^8.3.0",
+    "@fastify/static": "^10.1.0",
     "@opptrix/agent": "*",
     "@opptrix/article-enrichment": "*",
     "@opptrix/local-inference": "*",

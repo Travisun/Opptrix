@@ -190,11 +190,11 @@
   "devDependencies": {
     "@aws-sdk/client-s3": "^3.888.0",
     "electron": "^35.0.0",
-    "electron-builder": "^25.1.8",
-    "to-ico": "^1.1.5"
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2"
   },
   "dependencies": {
-    "electron-updater": "^6.6.2",
+    "electron-updater": "^6.8.9",
     "node-llama-cpp": "^3.19.0"
   }
 }

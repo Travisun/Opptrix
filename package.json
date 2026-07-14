@@ -61,5 +61,19 @@
   },
   "dependencies": {
     "apache-arrow": "^21.1.0"
+  },
+  "overrides": {
+    "tar": "^7.5.20",
+    "node-gyp": "^12.4.0"
+  },
+  "allowScripts": {
+    "better-sqlite3": true,
+    "duckdb": true,
+    "electron": true,
+    "electron-winstaller": true,
+    "esbuild": true,
+    "ffmpeg-static": true,
+    "node-llama-cpp": true,
+    "fsevents": true
   }
 }
