@@ -72,6 +72,10 @@
 | `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向 |
 | `instrument_notices` | InstrumentRef + `page?` / `page_size?` | 标的公告列表 |
+| `sector_list` | `market?` / `kind?` / `plate_type?` | 板块或行业目录 |
+| `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分 |
+| `etf_profile` | InstrumentRef / code | ETF 档案 |
+| `market_session` | `market?` | 轻量交易时段状态 |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -139,6 +143,10 @@ POST /api/research
 | `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向（主 CN） |
 | `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |
+| `sector_list` | `market?` / `kind?` / `plate_type?` | 板块或行业目录 |
+| `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分股 |
+| `etf_profile` | InstrumentRef / code | ETF 档案 |
+| `market_session` | `market?` | 轻量交易时段（非完整日历） |
 
 服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
 

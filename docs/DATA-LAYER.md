@@ -995,11 +995,11 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 | Provider | manifest 默认 | 用户可调 | 说明 |
 |----------|---------------|----------|------|
-| tushare | 110 | ✅ | 高优先级 bulk；disabled 或无 token → 0 |
-| eastmoney | 100 | ✅ | 通用主力 |
-| tdx | 95 | ✅ | 低延迟；可让用户手动调高 |
-| tencent / sina | 50 | ✅ | 回退源 |
-| stats-gov | 30 | ✅ | 宏观 |
+| tonghuashun | 120 | ✅ | 需 Key 层置顶；无 Key → 0 |
+| tushare | 110 | ✅ | 需 Token；bulk/基本面 |
+| tickflow | 100 | ✅ | 需 Key；多市场行情 |
+| zzshare / baostock 等免费 | 105–110 | ✅ | 免费层（effective 低于需 Key 层） |
+| tencent / sina | ~50–56 | ✅ | 回退源 |
 
 默认值在 **`manifest.ts` 的 `bindings()`** 里声明；用户未改时 `priority_mode = 'manifest'`，**不在 DB 重复存一份默认表**。
 

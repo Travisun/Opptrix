@@ -11,20 +11,27 @@ import {
 } from '@opptrix/shared'
 
 describe('provider-priority-order', () => {
-  it('puts TickFlow first, then other API-key providers, then free', () => {
+  it('puts Tonghuashun first, then other API-key providers, then free', () => {
+    const tonghuashun = {
+      providerId: 'tonghuashun',
+      title: '同花顺',
+      sortOrder: null,
+      requiresApiKey: true,
+      manifestDefaultPriority: 120,
+    }
     const tickflow = {
       providerId: 'tickflow',
       title: 'TickFlow',
       sortOrder: null,
       requiresApiKey: true,
-      manifestDefaultPriority: 80,
+      manifestDefaultPriority: 100,
     }
     const tushare = {
       providerId: 'tushare',
       title: 'Tushare',
       sortOrder: null,
       requiresApiKey: true,
-      manifestDefaultPriority: 90,
+      manifestDefaultPriority: 110,
     }
     const free = {
       providerId: 'zzshare',
@@ -33,8 +40,8 @@ describe('provider-priority-order', () => {
       requiresApiKey: false,
       manifestDefaultPriority: 110,
     }
-    const sorted = sortProvidersForCatalog([free, tushare, tickflow])
-    assert.deepEqual(sorted.map(p => p.providerId), ['tickflow', 'tushare', 'zzshare'])
+    const sorted = sortProvidersForCatalog([free, tushare, tickflow, tonghuashun])
+    assert.deepEqual(sorted.map(p => p.providerId), ['tonghuashun', 'tushare', 'tickflow', 'zzshare'])
   })
 
   it('puts API-key providers before free providers by default', () => {
@@ -43,7 +50,7 @@ describe('provider-priority-order', () => {
       title: 'Tushare',
       sortOrder: null,
       requiresApiKey: true,
-      manifestDefaultPriority: 90,
+      manifestDefaultPriority: 110,
     }
     const free = {
       providerId: 'zzshare',
@@ -108,10 +115,14 @@ describe('provider-priority-order', () => {
     ]), false)
   })
 
-  it('tiers default manifest priority with TickFlow on top', () => {
-    assert.ok(defaultManifestTierPriority('tickflow', true, 80)
-      > defaultManifestTierPriority('tushare', true, 90))
-    assert.ok(defaultManifestTierPriority('tushare', true, 90)
+  it('tiers default manifest priority with Tonghuashun on top of paid layer', () => {
+    assert.ok(defaultManifestTierPriority('tonghuashun', true, 120)
+      > defaultManifestTierPriority('tushare', true, 110))
+    assert.ok(defaultManifestTierPriority('tushare', true, 110)
+      > defaultManifestTierPriority('tickflow', true, 100))
+    assert.ok(defaultManifestTierPriority('tickflow', true, 100)
       > defaultManifestTierPriority('zzshare', false, 110))
+    assert.ok(defaultManifestTierPriority('baostock', false, 105)
+      < defaultManifestTierPriority('tushare', true, 110))
   })
 })

@@ -254,10 +254,22 @@ export function resolveInstrumentQueryPlan(
           symbol, opts.reportDate ?? '', opts.reportType ?? 'annual',
         ], normalized)
       case 'stock_list': {
+        const page = opts.page ?? 1
+        const pageSize = opts.pageSize ?? 100
+        // StockIndex: stockList(marketOrKeyword, keyword, page, pageSize, board?, industry?)
+        // 板块/行业成分须走空 keyword + 第 5/6 参；或 keyword=`board:key:CN`
+        if (opts.boardKey || opts.industryCode) {
+          if (opts.boardKey && !opts.industryCode && !(opts.keyword ?? '').trim()) {
+            return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [
+              `board:${opts.boardKey}:CN`, '', page, pageSize,
+            ])
+          }
+          return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [
+            '', '', page, pageSize, opts.boardKey, opts.industryCode,
+          ])
+        }
         const args: unknown[] = [opts.keyword ?? '']
-        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
-        if (opts.boardKey) args.push(opts.boardKey)
-        if (opts.industryCode) args.push(opts.industryCode)
+        if (opts.page != null) args.push(page, pageSize)
         return registryPlan('CN', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
       case 'instrument_search':
@@ -341,9 +353,15 @@ export function resolveInstrumentQueryPlan(
           sym, opts.reportDate ?? '', opts.reportType ?? 'annual',
         ], normalized)
       case 'stock_list': {
+        const page = opts.page ?? 1
+        const pageSize = opts.pageSize ?? 100
+        if (opts.boardKey) {
+          return registryPlan('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [
+            `board:${opts.boardKey}:US`, '', page, pageSize,
+          ])
+        }
         const args: unknown[] = ['US', opts.keyword ?? '']
-        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
-        if (opts.boardKey) args.push(opts.boardKey)
+        if (opts.page != null) args.push(page, pageSize)
         return registryPlan('US', 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
       case 'instrument_search':
@@ -394,9 +412,15 @@ export function resolveInstrumentQueryPlan(
       case 'profile':
         return registryPlan(market, 'EQUITY', Capability.STOCK_PROFILE, 'profile', true, [sym], normalized)
       case 'stock_list': {
+        const page = opts.page ?? 1
+        const pageSize = opts.pageSize ?? 100
+        if (opts.boardKey) {
+          return registryPlan(market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, [
+            `board:${opts.boardKey}:${market}`, '', page, pageSize,
+          ])
+        }
         const args: unknown[] = [market, opts.keyword ?? '']
-        if (opts.page != null) args.push(opts.page, opts.pageSize ?? 100)
-        if (opts.boardKey) args.push(opts.boardKey)
+        if (opts.page != null) args.push(page, pageSize)
         return registryPlan(market, 'EQUITY', Capability.STOCK_LIST, 'stockList', true, args)
       }
       case 'instrument_search':

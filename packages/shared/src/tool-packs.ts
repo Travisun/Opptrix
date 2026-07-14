@@ -146,11 +146,13 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_closing_report: 'market',
   get_morning_brief: 'market',
   get_instrument_money_flow: 'market',
+  get_market_session: 'market',
 
   // etf
   get_etf_list: 'etf',
   get_etf_nav: 'etf',
   get_etf_holdings: 'etf',
+  get_etf_profile: 'etf',
 
   // portfolio
   get_watchlist: 'portfolio',
@@ -162,6 +164,8 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   // industry
   industry_mining: 'industry',
   industry_mermaid: 'industry',
+  get_sector_list: 'industry',
+  get_sector_constituents: 'industry',
 
   // news
   get_news_center_status: 'news',

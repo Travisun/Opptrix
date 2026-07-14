@@ -89,6 +89,30 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: 'ETF 最新披露持仓与权重；了解底层资产或行业暴露时使用。',
     compliance: '单只 code；持仓按季报更新，勿臆造成分股。',
   },
+  get_etf_profile: {
+    hubFeature: 'etf_profile',
+    miningEligible: true,
+    usageGuide: 'ETF 档案（跟踪指数、费率、规模等）；与净值/持仓区分。',
+    compliance: '单只 InstrumentRef/code；经标准 etf_profile；无数据时声明缺口。',
+  },
+  get_sector_list: {
+    hubFeature: 'sector_list',
+    miningEligible: true,
+    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事仍用 industry_mining。',
+    compliance: '只读；market/kind/plate_type 可选；勿与 industry_mining 混淆。',
+  },
+  get_sector_constituents: {
+    hubFeature: 'sector_constituents',
+    miningEligible: true,
+    usageGuide: '板块或行业成分股；须先有 board_key 或 industry_code（来自 get_sector_list）。',
+    compliance: 'board_key 与 industry_code 二选一；分页 page/page_size；勿编造成分。',
+  },
+  get_market_session: {
+    hubFeature: 'market_session',
+    miningEligible: true,
+    usageGuide: '问是否开盘/交易时段时使用；非完整节假日日历。',
+    compliance: '只读；market 默认 CN；精确交易日走 provider_ext，勿当作完整 calendar。',
+  },
   search_instruments: {
     hubFeature: 'instrument_search',
     miningEligible: true,

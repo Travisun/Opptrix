@@ -10,7 +10,7 @@
 | 传输 | **非 REST**；TCP Socket `public-api.baostock.com:10030` |
 | 协议 | 报文分隔 `\x01`；头 21 字节；响应 type `96` 为 zlib 压缩 |
 | 会话 | `login()` → 各 `query_*()` → `logout()`；匿名账号即可 |
-| Provider ID | `baostock`；`defaultPriority: 105`（免费 CN 第 2 顺位；特色板块/宏观数据已接入 provider 层） |
+| Provider ID | `baostock`；`defaultPriority: 105`（免费 CN 层） |
 | 配置 | 仅需 `enabled`，**无 API Key** |
 
 **实现路径（已实现）：**

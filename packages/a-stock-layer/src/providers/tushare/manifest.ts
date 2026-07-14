@@ -30,7 +30,7 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
   title: 'Tushare Pro',
   subtitle: '批量行情与基本面，需 Token',
   marketGroup: 'CN',
-  defaultPriority: 90,
+  defaultPriority: 110,
   maxConcurrent: 5,
   capabilities: TUSHARE_CAPS,
   bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(
@@ -50,5 +50,5 @@ export const TUSHARE_SPEC: ProviderManifestSpec = {
 }
 
 export const TUSHARE_MANIFEST = providerManifestEntry(
-  'tushare', 'Tushare Pro', '批量行情与基本面，需 Token', 'CN', 90, TUSHARE_SETTINGS,
+  'tushare', 'Tushare Pro', '批量行情与基本面，需 Token', 'CN', 110, TUSHARE_SETTINGS,
 )

@@ -10,7 +10,7 @@
 | 传输 | HTTPS REST，`https://api.zizizaizai.com`（固定，不可覆盖） |
 | 鉴权 | 请求头 `sdk-key: {token}`；未配置时使用 `anonymous` |
 | 环境变量 | `ZZSHARE_TOKEN`、`OPPTRIX_ZZSHARE_API_KEY` |
-| Provider ID | `zzshare`；`defaultPriority: 110`（免费 CN 第 1 顺位） |
+| Provider ID | `zzshare`；`defaultPriority: 110`（免费 CN 层；需 Key 源默认在其上） |
 | 配置 | `enabled` + 可选 `apiKey`（`required: false`，留空即匿名） |
 
 **鉴权层级说明：**

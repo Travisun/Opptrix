@@ -9,7 +9,7 @@
 | 数据源 | [TickFlow](https://api.tickflow.org) — A 股 / 港股 / 美股行情与 A 股财务 |
 | 传输 | HTTPS REST，`https://api.tickflow.org` |
 | 鉴权 | 请求头 `x-api-key: {apiKey}` |
-| Provider ID | `tickflow`；`defaultPriority: 80` |
+| Provider ID | `tickflow`；`defaultPriority: 100`（需 API Key 层；同花顺置顶其后） |
 | 配置 | `enabled` + 必填 `apiKey` + `permissionMode` + `planTier` |
 
 **实现路径：**

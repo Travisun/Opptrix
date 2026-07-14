@@ -53,7 +53,7 @@ export const TICKFLOW_SPEC: ProviderManifestSpec = {
   title: 'TickFlow',
   subtitle: 'A股/港股/美股行情与 A 股分时，需 API Key（api.tickflow.org）',
   marketGroup: 'GLOBAL',
-  defaultPriority: 80,
+  defaultPriority: 100,
   maxConcurrent: 5,
   capabilities: TICKFLOW_CAPS,
   bindingsFor: (p, maxConcurrent) => [
@@ -76,6 +76,6 @@ export const TICKFLOW_MANIFEST = providerManifestEntry(
   'TickFlow',
   'A股/港股/美股行情与 A 股分时，需 API Key（api.tickflow.org）',
   'GLOBAL',
-  80,
+  100,
   TICKFLOW_SETTINGS,
 )

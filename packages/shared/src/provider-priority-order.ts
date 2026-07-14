@@ -2,7 +2,7 @@
  * 数据源提供商统一排序与优先级换算。
  *
  * 展示顺序（设置页）与数据层 effectivePriority 共用同一套规则：
- * - 默认：TickFlow 最前；其余需 API Key 的靠上；免费源靠后
+ * - 默认：需 API Key 的靠前；同花顺最高；免费源靠后
  * - 用户拖拽后：sortOrder 成为权威顺序
  * - 仅 enabled + 密钥就绪 的源享有位置对应的优先级数值
  */
@@ -13,10 +13,15 @@ export const PROVIDER_SORT_ORDER_STEP = 10
 export const PROVIDER_SORT_ORDER_BASE = 10_000
 export const PROVIDER_TIER_API_KEY_BASE = 20_000
 export const PROVIDER_TIER_FREE_BASE = 10_000
-/** TickFlow 在无用户排序时的默认置顶加成 */
-export const TICKFLOW_DEFAULT_PRIORITY_BOOST = 1_000
+/** 同花顺在无用户排序时的默认置顶加成（需 Key 层内最高） */
+export const TONGHUASHUN_DEFAULT_PRIORITY_BOOST = 1_000
 
+export const TONGHUASHUN_PROVIDER_ID = 'tonghuashun'
+
+/** @deprecated 已改为同花顺置顶；保留常量以免外部引用断裂 */
 export const TICKFLOW_PROVIDER_ID = 'tickflow'
+/** @deprecated 使用 TONGHUASHUN_DEFAULT_PRIORITY_BOOST */
+export const TICKFLOW_DEFAULT_PRIORITY_BOOST = TONGHUASHUN_DEFAULT_PRIORITY_BOOST
 
 export function providerRequiresApiKey(fields: ProviderSettingsField[]): boolean {
   return fields.some(f => f.type === 'secret' && f.required !== false)
@@ -40,8 +45,8 @@ export function defaultManifestTierPriority(
   if (!requiresApiKey) {
     return PROVIDER_TIER_FREE_BASE + manifestDefault
   }
-  if (providerId === TICKFLOW_PROVIDER_ID) {
-    return PROVIDER_TIER_API_KEY_BASE + TICKFLOW_DEFAULT_PRIORITY_BOOST
+  if (providerId === TONGHUASHUN_PROVIDER_ID) {
+    return PROVIDER_TIER_API_KEY_BASE + TONGHUASHUN_DEFAULT_PRIORITY_BOOST + manifestDefault
   }
   return PROVIDER_TIER_API_KEY_BASE + manifestDefault
 }
@@ -61,8 +66,8 @@ export function compareDefaultProviderOrder(a: ProviderOrderSortable, b: Provide
   if (a.sortOrder != null && b.sortOrder == null) return -1
   if (a.sortOrder == null && b.sortOrder != null) return 1
 
-  if (a.providerId === TICKFLOW_PROVIDER_ID && b.providerId !== TICKFLOW_PROVIDER_ID) return -1
-  if (b.providerId === TICKFLOW_PROVIDER_ID && a.providerId !== TICKFLOW_PROVIDER_ID) return 1
+  if (a.providerId === TONGHUASHUN_PROVIDER_ID && b.providerId !== TONGHUASHUN_PROVIDER_ID) return -1
+  if (b.providerId === TONGHUASHUN_PROVIDER_ID && a.providerId !== TONGHUASHUN_PROVIDER_ID) return 1
 
   if (a.requiresApiKey !== b.requiresApiKey) {
     return a.requiresApiKey ? -1 : 1

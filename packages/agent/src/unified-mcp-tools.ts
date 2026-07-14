@@ -232,6 +232,61 @@ export function buildUnifiedInstrumentTools(
       }),
     },
     {
+      name: 'get_sector_list',
+      category: '行业板块',
+      description: '板块或行业目录（boards / industries）；拿 board_key / industry_code 后再调 get_sector_constituents',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+        kind: { type: 'string', description: 'industries（默认）或 boards' },
+        level: { type: 'string', description: '行业层级 1|2（仅 industries）' },
+        plate_type: {
+          type: 'string',
+          description: '可选，直接传 plateType 如 industries:CN、boards:HK、board:hsj:CN',
+        },
+      }),
+      handler: (a) => d('sector_list', {
+        market: a.market ?? 'CN',
+        kind: a.kind ?? 'industries',
+        level: a.level,
+        plate_type: a.plate_type,
+      }),
+    },
+    {
+      name: 'get_sector_constituents',
+      category: '行业板块',
+      description: '板块或行业成分股列表；须先有 board_key 或 industry_code（来自 get_sector_list）',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+        board_key: { type: 'string', description: '板块键，如 hsj、cyb' },
+        industry_code: { type: 'string', description: '行业代码（如申万）' },
+        page: { type: 'number', description: '页码，默认 1' },
+        page_size: { type: 'number', description: '每页条数，默认 50，最大 100' },
+      }),
+      handler: (a) => d('sector_constituents', {
+        market: a.market ?? 'CN',
+        board_key: a.board_key,
+        industry_code: a.industry_code,
+        page: a.page ?? 1,
+        page_size: a.page_size ?? 50,
+      }),
+    },
+    {
+      name: 'get_etf_profile',
+      category: 'ETF',
+      description: 'ETF 档案事实表（跟踪指数、费率、规模等）；净值用 get_etf_nav，成分用 get_etf_holdings',
+      parameters: S({ ...INSTRUMENT_REF_SCHEMA }),
+      handler: (a) => d('etf_profile', resolveInstrumentParams(a)),
+    },
+    {
+      name: 'get_market_session',
+      category: '市场资金',
+      description: '轻量交易时段状态（是否盘中/盘前）；非完整节假日日历，精确交易日走 provider_ext',
+      parameters: S({
+        market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
+      }),
+      handler: (a) => d('market_session', { market: a.market ?? 'CN' }),
+    },
+    {
       name: 'get_instrument_quotes',
       category: '跨市场标的',
       description: '批量获取多只标的最新价、涨跌幅等实时/近收盘行情；instruments 为 InstrumentRef 数组',

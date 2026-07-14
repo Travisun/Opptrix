@@ -32,7 +32,7 @@ export const TONGHUASHUN_SPEC: ProviderManifestSpec = {
   title: '同花顺',
   subtitle: '同花顺金融数据 API（fuyao.aicubes.cn），需 API Key',
   marketGroup: 'CN',
-  defaultPriority: 88,
+  defaultPriority: 120,
   maxConcurrent: 5,
   capabilities: TONGHUASHUN_CAPS,
   bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(EQUITY_CAPS, INDEX_CAPS, p, [], maxConcurrent),
@@ -45,6 +45,6 @@ export const TONGHUASHUN_MANIFEST = providerManifestEntry(
   '同花顺',
   '同花顺金融数据 API（fuyao.aicubes.cn），需 API Key',
   'CN',
-  88,
+  120,
   TONGHUASHUN_SETTINGS,
 )

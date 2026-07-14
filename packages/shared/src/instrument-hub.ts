@@ -17,6 +17,9 @@ export type InstrumentHubCapability =
   | 'dividend'
   | 'money_flow'
   | 'notices'
+  | 'sector_list'
+  | 'sector_constituents'
+  | 'etf_profile'
   | 'cyq'
   | 'institution_rating'
   | 'institution_report'
@@ -39,6 +42,9 @@ export const INSTRUMENT_HUB_FEATURE: Record<InstrumentHubCapability, string> = {
   dividend: 'instrument_dividend',
   money_flow: 'instrument_money_flow',
   notices: 'instrument_notices',
+  sector_list: 'sector_list',
+  sector_constituents: 'sector_constituents',
+  etf_profile: 'etf_profile',
   cyq: 'instrument_cyq',
   institution_rating: 'instrument_institution_rating',
   institution_report: 'instrument_institution_report',

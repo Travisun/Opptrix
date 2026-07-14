@@ -144,10 +144,11 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow】',
+    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
     '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
     '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
     '2b) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
+    '2c) 是否开盘/交易时段：get_market_session；非完整节假日日历（精确交易日走 provider_ext）',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
     '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',
@@ -157,11 +158,12 @@ export function buildMarketContextPlaybook(): string {
 /** 聊天 Agent — 行业分析路径（产业链 → 代表公司核实） */
 export function buildIndustryAnalysisPlaybook(): string {
   return [
-    '【A 股行业分析 — industry_mining / industry_mermaid（不依赖本地行业库）】',
-    '1) 产业链与代表公司：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
-    '2) 需 mindmap 展示：industry_mermaid',
-    '3) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument；多只可用 batch_instrument_snapshots',
-    '4) 宏观/板块背景：get_market_regime / get_market_dynamics；跨市场用 search_instruments（markets 过滤）',
+    '【行业与板块 — industry_mining / get_sector_list / get_sector_constituents】',
+    '1) 产业链与代表公司叙事：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
+    '2) 板块/行业目录：get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
+    '3) 成分股列表：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
+    '4) 需 mindmap：industry_mermaid；核实代表公司：search_instruments → snapshot / evaluate',
+    '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
   ].join('\n')
 }
 

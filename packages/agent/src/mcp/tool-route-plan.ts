@@ -60,6 +60,15 @@ interface IntentRule {
  */
 const INTENT_RULES: IntentRule[] = [
   {
+    intent: 'etf_profile',
+    priority: 99,
+    patterns: [/ETF.*(?:档案|概况|费率|跟踪指数|规模)|(?:档案|费率|跟踪指数).*ETF|基金档案|ETF.*(?:是什么|简介)/i],
+    preferredTools: ['get_etf_profile', 'get_etf_nav', 'get_instrument_snapshot'],
+    avoidTools: ['get_etf_holdings', 'get_instrument_profile'],
+    confidence: 'high',
+    hint: '问 ETF 档案/跟踪指数/费率 → get_etf_profile；净值用 get_etf_nav，成分用 get_etf_holdings',
+  },
+  {
     intent: 'etf_nav',
     priority: 100,
     patterns: [/净值|溢价率|折价率|IOPV/i],
@@ -175,6 +184,33 @@ const INTENT_RULES: IntentRule[] = [
     avoidTools: ['get_market_regime'],
     confidence: 'high',
     hint: 'A 股单股趋势快评 → get_trend_brief；深度评分再用 evaluate_instrument',
+  },
+  {
+    intent: 'sector_constituents',
+    priority: 82,
+    patterns: [/板块成分|行业成分|成分股列表|板块里有哪些|同板块股票|行业成分股/],
+    preferredTools: ['get_sector_constituents', 'get_sector_list', 'search_instruments'],
+    avoidTools: ['industry_mining', 'get_etf_holdings'],
+    confidence: 'high',
+    hint: '板块/行业成分 → get_sector_constituents（须 board_key/industry_code）；勿用 industry_mining 叙事代替',
+  },
+  {
+    intent: 'sector_list',
+    priority: 80,
+    patterns: [/板块列表|行业列表|有哪些板块|申万行业|板块目录|行业分类目录/],
+    preferredTools: ['get_sector_list', 'get_sector_constituents', 'industry_mining'],
+    avoidTools: ['get_market_dynamics'],
+    confidence: 'high',
+    hint: '板块/行业目录 → get_sector_list；产业链上下游叙事仍用 industry_mining',
+  },
+  {
+    intent: 'market_session',
+    priority: 78,
+    patterns: [/现在(开盘|休市|交易中)吗|是否开盘|交易时段|盘前还是盘后|市场开了吗|现在是盘中吗/],
+    preferredTools: ['get_market_session', 'get_current_time'],
+    avoidTools: ['get_market_dynamics', 'get_morning_brief'],
+    confidence: 'high',
+    hint: '问是否开盘/时段 → get_market_session；非完整节假日日历',
   },
   {
     intent: 'industry',
@@ -349,10 +385,10 @@ const INTENT_RULES: IntentRule[] = [
     intent: 'etf_general',
     priority: 38,
     patterns: [/\bETF\b|场内基金|联接基金/i],
-    preferredTools: ['search_instruments', 'get_instrument_snapshot', 'get_etf_nav', 'get_etf_holdings'],
+    preferredTools: ['search_instruments', 'get_instrument_snapshot', 'get_etf_profile', 'get_etf_nav', 'get_etf_holdings'],
     avoidTools: ['get_portfolio_holdings'],
     confidence: 'medium',
-    hint: 'ETF 综合：search/snapshot；明确净值用 get_etf_nav，成分用 get_etf_holdings',
+    hint: 'ETF 综合：search/snapshot/profile；明确净值用 get_etf_nav，成分用 get_etf_holdings',
   },
 ]
 
@@ -373,6 +409,10 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'get_trend_brief', avoid: 'evaluate_instrument', when: '只要 A 股趋势快评' },
   { prefer: 'get_etf_nav', avoid: 'get_instrument_quotes', when: '问 ETF 净值/溢价序列' },
   { prefer: 'get_etf_holdings', avoid: 'get_portfolio_holdings', when: '问 ETF 成分而非个人持仓' },
+  { prefer: 'get_etf_profile', avoid: 'get_instrument_profile', when: '问 ETF 档案而非股票公司概况' },
+  { prefer: 'get_sector_list', avoid: 'industry_mining', when: '只要板块/行业目录而非产业链叙事' },
+  { prefer: 'get_sector_constituents', avoid: 'get_etf_holdings', when: '问股票板块成分而非 ETF 持仓' },
+  { prefer: 'get_market_session', avoid: 'get_morning_brief', when: '只问是否开盘/时段' },
   { prefer: 'get_portfolio_holdings', avoid: 'get_watchlist', when: '问实盘持仓而非关注列表' },
   { prefer: 'get_market_regime', avoid: 'get_trend_brief', when: '问大盘牛熊而非单股' },
   { prefer: 'list_news_articles', avoid: 'get_instrument_snapshot', when: '主任务是读资讯而非个股快照' },
@@ -401,6 +441,12 @@ const L1_INTENTS = new Set([
   'dividend',
   'money_flow',
   'instrument_notices',
+  'market_session',
+  'sector_list',
+  'sector_constituents',
+  'etf_profile',
+  'etf_nav',
+  'etf_holdings',
 ])
 
 const L3_INTENTS = new Set([
