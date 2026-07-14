@@ -89,7 +89,7 @@
 - [ ] 已按 `.cursor/rules/onboarding.mdc` 配置引导激活：`ONBOARDING_RELEASE_BY_VERSION` 新版本亮点；若改版引导或协议则 bump `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION`（`shared` 与 `client-ui/.../constants.ts` 同步）
 - [ ] 若同步发布 Web UI，已 bump `client-ui/package.json` 的 `version`（供 `__OPPTRIX_CLIENT_VERSION__` 触发自托管用户引导）
 - [ ] 若升级 Electron，已同步修改 `build.electronVersion` 并做三端冒烟
-- [ ] **更新日志**已写入 `docs/releases/{version}.md`（复制 `TEMPLATE.md`；必填 `## 新功能` 与 `## 修复`；面向用户简要条目）
+- [ ] **更新日志**已写入 `docs/releases/{version}.md`（复制 `TEMPLATE.md`；必填 `## 新功能` 与 `## 修复`；**仅**面向用户的高级功能/使用结果，禁止技术实现与纯 UI 打磨；见 `desktop-release.mdc` §文案禁写）
 - [ ] 本地预览 Release 正文：`OPPTRIX_RELEASE_STRICT=1 node scripts/assemble-release-notes.mjs {version}` 通过
 - [ ] **Windows 更新签名材料已配置**：`OPPTRIX_CODE_SIGNING_P12`（或 `WIN_CSC_LINK`）；正式 `desktop-v*` 标签 CI 会要求 secrets 存在（`workflow_dispatch` + `skip_signing` 可跳过）
 - [ ] （建议）macOS `CSC_LINK` / Apple 公证 secrets 已配置；未签名时 Gatekeeper 体验差

@@ -198,9 +198,10 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 
 1. Read `desktop-release` skill + `docs/DESKTOP-RELEASE.md`
 2. Phase A 代码就绪（`check:ui` / `build:packages` / **`audit:desktop-pack`**）
-3. Phase B bump `apps/desktop/package.json` version；写 `docs/releases/{version}.md`；更新 `ONBOARDING_RELEASE_BY_VERSION`
+3. Phase B bump `apps/desktop/package.json` version；写 `docs/releases/{version}.md`；更新 `ONBOARDING_RELEASE_BY_VERSION`（文案**仅**功能/使用结果，禁止技术与纯 UI 打磨）
 4. Phase C 兼容性；Phase D 用户确认后 `git tag desktop-v{version}` + push
 5. **禁止**未写更新日志 / 未跑打包预检 / 未对齐 version 就打标签
+6. **禁止**更新日志或引导开场写毛玻璃/按钮样式/依赖进程等技术或 UI 细节
 
 引导激活：只改文案不 bump 版本 → 老用户**不会**重走引导。`shared/onboarding.ts` 与 `client-ui/.../constants.ts` 必须双写同步。
 

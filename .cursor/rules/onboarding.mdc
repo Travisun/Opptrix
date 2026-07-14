@@ -78,6 +78,18 @@ alwaysApply: false
 
 ---
 
+## 发版文案（Onboarding 开场 / 亮点）— 硬性
+
+`ONBOARDING_RELEASE_BY_VERSION` 的 `welcomeTitle` / `welcomeSubtitle` / `updateLine` / `features` **只写面向投资者的高级功能与结果**，与 `docs/releases/{version}.md` 同一标准。
+
+| ✅ 写 | ❌ 不写 |
+|-------|--------|
+| 用户能完成什么（配置、投研、报告、行情） | 技术词：API Key 实现细节、本地服务、依赖、进程、打包、签名 |
+| 使用结果（进度保留、更新成功、打开即用） | UI/视觉：毛玻璃、透明侧栏、按钮样式、配色、布局微调 |
+| 价值句（替你查证、少打断） | 工程 changelog、PR、文件名、组件名 |
+
+细则与反例见 **`desktop-release.mdc` §文案禁写**。开场副标题不得以「窗口外观更贴近系统」之类视觉卖点为主。
+
 ## 发版 Checklist（维护者）
 
 发布前按目标勾选：
@@ -85,6 +97,7 @@ alwaysApply: false
 - [ ] 已确定激活原因：**版本** / **流程改版** / **协议**（至少一项）
 - [ ] **常规发版**：已 bump `apps/desktop/package.json` `version`；Web 同步 bump `client-ui/package.json` `version`（若发 UI）
 - [ ] **常规发版**：已在 `ONBOARDING_RELEASE_BY_VERSION` 添加新版本键与亮点文案（`updateLine` 给回归用户）
+- [ ] **常规发版**：亮点与 `docs/releases/{version}.md` 均为**功能/结果**文案（无技术实现、无纯 UI 打磨）
 - [ ] **常规发版**：已撰写 `docs/releases/{version}.md` 更新日志（`## 新功能` / `## 修复`）
 - [ ] **流程改版**：已两处同步 bump `ONBOARDING_FLOW_VERSION`
 - [ ] **协议变更**：已两处同步 bump `LEGAL_AGREEMENTS_VERSION` 并核对 `aboutLinks.ts`
@@ -146,6 +159,7 @@ curl -sS -X PUT 'http://127.0.0.1:8711/api/preferences/onboarding_state' \
 ## 禁止
 
 - ❌ 硬编码引导文案在组件内而不进 `manifest.ts`
+- ❌ 发版亮点 / 开场写技术实现或纯 UI/视觉改进（须功能级结果文案，见上节）
 - ❌ 发版只改亮点文案却不 bump `version` / `ONBOARDING_FLOW_VERSION` / `LEGAL_AGREEMENTS_VERSION` 却期望老用户重走引导
 - ❌ 只改 `shared/onboarding.ts` 不同步 `client-ui/.../constants.ts`
 - ❌ 跳过 preference 持久化

@@ -344,6 +344,35 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.6.37': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版让首次配置与版本更新更稳妥，打开即可继续投研。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更省心',
+        title: '配置中途离开，进度还在',
+        desc:
+          '首次使用配置模型或行情时，临时切到其他应用再回来，不必从头再走一遍。',
+        note: '少打断，更快用上 Opptrix。',
+      },
+      {
+        kicker: '更可靠',
+        title: '版本更新更稳妥',
+        desc:
+          '应用内检查到新版本后，安装过程更完整，减少更新失败或功能异常。',
+        note: '更新后打开即可继续使用。',
+      },
+      {
+        kicker: '替你查证',
+        title: '问一句，得来一份完整报告',
+        desc:
+          '按你的问题调取行情、财务、新闻与观点摘要，整理成中文可读结论。执行过程清晰可见，有据可查。',
+        note: '不必亲手在十几个页面之间拼资料。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

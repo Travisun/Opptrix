@@ -40,11 +40,24 @@ alwaysApply: false
 | **文件路径** | `docs/releases/{version}.md`，`{version}` = `apps/desktop/package.json` 的 `version`（含 `-dev.N`） |
 | **模板** | 复制 `docs/releases/TEMPLATE.md` |
 | **必需章节** | `## 新功能`、`## 修复`（两节均须存在；无内容写 `- 无`） |
-| **文风** | 面向**投资者/用户**：一条一行，说清「能做什么 / 修好了什么」；避免内部文件名、PR 号、技术栈 |
-| **与引导关系** | `ONBOARDING_RELEASE_BY_VERSION` 写价值导向亮点；更新日志写**变更清单**（可重叠但引导更短、更营销向） |
+| **文风（硬性）** | 仅写**面向投资者的高级功能/结果**：用户能做什么、修好了什么业务结果。与引导文案同一标准（见下节「文案禁写」） |
+| **与引导关系** | `ONBOARDING_RELEASE_BY_VERSION` 与 `docs/releases/{version}.md` **均不得**写技术/UI 打磨；引导更短、更价值向，日志可多 1～2 条结果向修复，但禁止实现细节 |
 | **组装脚本** | `node scripts/assemble-release-notes.mjs {version}` 或 `npm run release:notes` |
 | **CI** | `prepare-release` 设 `OPPTRIX_RELEASE_STRICT=1`；缺文件或缺章节 → **workflow 失败** |
 | **提交时机** | 更新日志须 **与 version bump 一并 commit 并 push**，再打标签 |
+
+### 文案禁写（更新日志 + Onboarding 开场/亮点）— 硬性
+
+`docs/releases/{version}.md` 与 `ONBOARDING_RELEASE_BY_VERSION`（含 `welcomeSubtitle`、`features[].title/desc/note`）**只写功能能力与使用结果**。
+
+| ✅ 允许（高级、面向用户） | ❌ 禁止 |
+|--------------------------|--------|
+| 能查某市场行情 / 能生成完整报告 / 配置中途离开进度仍在 | 技术实现：依赖目录、sidecar、ESM、NODE_PATH、API、Provider、路径、签名、打包、进程退出顺序 |
+| 版本更新更稳妥、少出现更新失败 | 纯 UI/视觉：毛玻璃、透明、按钮尺寸、配色、布局、侧栏样式、动画 |
+| 用业务结果描述可靠性（「打开即可投研」「不必从头配置」） | 面向开发者的 changelog、文件名、PR 号、组件名、内部代号 |
+
+- 本版若**仅有**技术/UI 改动、无用户可感知能力变化 → `## 新功能` 写 `- 无`；`## 修复` 用**结果句**概括，或亦写 `- 无`；**禁止**把实现细节改写成「伪功能」。
+- Onboarding 开场**禁止**以窗口外观、控件样式、工程稳定性术语为主卖点。
 
 **预览示例**：
 
@@ -191,6 +204,7 @@ gh release view desktop-vX.Y.Z
 - ❌ 未 Read 本规则与用户确认就 `git push` 标签
 - ❌ **未撰写** `docs/releases/{version}.md` 就打标签（CI 将失败或 Release 无变更说明）
 - ❌ 更新日志只有安装说明、缺少「新功能 / 修复」清单
+- ❌ 更新日志 / Onboarding 开场写技术实现或纯 UI/视觉改进（毛玻璃、按钮样式、依赖/进程细节等）
 - ❌ Checklist 未逐项验证就宣称「可以发布」
 - ❌ **跳过 `audit:desktop-pack`** 或已知 EB/`fs-extra`/sidecar `deps` 坑未验收就打标签
 - ❌ 只改文案不 bump `version` / `ONBOARDING_*` / `LEGAL_*` 却期望老用户看到新引导

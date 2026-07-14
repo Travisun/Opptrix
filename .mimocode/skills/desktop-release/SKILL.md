@@ -28,7 +28,7 @@ description: >-
 | 路径 | `docs/releases/{version}.md`（= `apps/desktop/package.json` version） |
 | 模板 | `docs/releases/TEMPLATE.md` |
 | 必需 | `## 新功能`、`## 修复`（无内容写 `- 无`） |
-| 文风 | 面向投资者；避免内部文件名/PR 号 |
+| 文风 | **仅**面向投资者的高级功能/使用结果；**禁止**技术实现与纯 UI/视觉打磨（见 `desktop-release.mdc` §文案禁写） |
 | 组装 | `node scripts/assemble-release-notes.mjs {version}` / `npm run release:notes` |
 | CI | `OPPTRIX_RELEASE_STRICT=1`；缺文件或缺章节 → 失败 |
 | 提交 | 日志须与 version bump **一并 commit push**，再打标签 |
