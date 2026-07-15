@@ -560,15 +560,18 @@ export class ToolRegistry {
       {
         name: 'install_mcp_server',
         category: 'MCP服务器',
-        description: '安装（登记）外部 MCP Server。首次调用勿传 confirmed；向用户 ask_user 确认后再以 confirmed=true 重试。禁止仅由 Agent 改已有服务器的 command/url/密钥。',
+        description: '安装（登记）外部 MCP Server。首次调用勿传 confirmed；向用户 ask_user 确认后再以 confirmed=true 重试。支持 stdio / http / streamable-http / sse 四种传输。',
         parameters: S({
           title: { type: 'string', description: '显示名称' },
-          transport: { type: 'string', description: 'stdio | http' },
-          command: { type: 'string', description: 'stdio：可执行文件' },
-          args: { type: 'array', description: 'stdio 参数', items: { type: 'string' } },
+          transport: { type: 'string', description: 'stdio | http | streamable-http | sse' },
+          command: { type: 'string', description: 'stdio：可执行文件路径' },
+          args: { type: 'array', description: 'stdio 参数列表', items: { type: 'string' } },
           cwd: { type: 'string', description: 'stdio 工作目录' },
-          url: { type: 'string', description: 'http：MCP endpoint URL' },
-          server_id: { type: 'string', description: '可选自定义 id' },
+          env: { type: 'object', description: 'stdio 非密钥环境变量，如 {"NODE_PATH": "/usr/lib"}' },
+          url: { type: 'string', description: 'http/streamable-http/sse：MCP endpoint URL' },
+          headers: { type: 'object', description: 'http/sse 非密钥 Header，如 {"Accept": "text/event-stream"}' },
+          secrets: { type: 'object', description: '鉴权密钥（http 自动注入为 Header / stdio 注入为环境变量），如 {"api_key": "xxx"}' },
+          server_id: { type: 'string', description: '可选自定义 id（小写字母开头）' },
           capability_bindings: {
             type: 'object',
             description: '本地工具名→外部工具名，如 {"get_instrument_quotes":"get_quotes"}',
@@ -580,47 +583,82 @@ export class ToolRegistry {
           const transport = String(a.transport ?? '').trim().toLowerCase()
           const title = String(a.title ?? '').trim()
           if (!title) return { error: 'title 必填' }
-          if (transport !== 'stdio' && transport !== 'http') {
-            return { error: 'transport 须为 stdio 或 http' }
+          const validTransports = ['stdio', 'http', 'streamable-http', 'sse']
+          if (!validTransports.includes(transport)) {
+            return { error: `transport 须为 ${validTransports.join(' / ')}` }
           }
-          const transportConfig = transport === 'stdio'
-            ? {
-                transport: 'stdio' as const,
-                command: String(a.command ?? '').trim(),
-                args: Array.isArray(a.args) ? a.args.map(String) : [],
-                cwd: a.cwd != null ? String(a.cwd) : undefined,
-              }
-            : {
-                transport: 'http' as const,
-                url: String(a.url ?? '').trim(),
-              }
-          if (transport === 'stdio' && !transportConfig.command) {
-            return { error: 'stdio 须提供 command' }
-          }
-          if (transport === 'http' && !('url' in transportConfig && transportConfig.url)) {
-            return { error: 'http 须提供 url' }
-          }
+
+          // 解析通用参数
+          const headersRaw = a.headers && typeof a.headers === 'object' && !Array.isArray(a.headers)
+            ? Object.fromEntries(Object.entries(a.headers as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+            : {}
+          const secretsRaw = a.secrets && typeof a.secrets === 'object' && !Array.isArray(a.secrets)
+            ? Object.fromEntries(Object.entries(a.secrets as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+            : {}
           const bindingsRaw = a.capability_bindings ?? a.capabilityBindings
           const capabilityBindings = bindingsRaw && typeof bindingsRaw === 'object' && !Array.isArray(bindingsRaw)
-            ? Object.fromEntries(
-              Object.entries(bindingsRaw as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
-            )
+            ? Object.fromEntries(Object.entries(bindingsRaw as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
             : {}
+
+          // 按传输类型构造 transportConfig
+          let transportConfig: import('@opptrix/shared').McpTransportConfig
+          if (transport === 'stdio') {
+            const cmd = String(a.command ?? '').trim()
+            if (!cmd) return { error: 'stdio 须提供 command' }
+            const envRaw = a.env && typeof a.env === 'object' && !Array.isArray(a.env)
+              ? Object.fromEntries(Object.entries(a.env as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+              : {}
+            const stdioConfig: import('@opptrix/shared').McpStdioTransportConfig = {
+              transport: 'stdio',
+              command: cmd,
+              args: Array.isArray(a.args) ? a.args.map(String) : [],
+              cwd: a.cwd != null ? String(a.cwd) : undefined,
+              env: Object.keys(envRaw).length > 0 ? envRaw : undefined,
+            }
+            transportConfig = stdioConfig
+          } else if (transport === 'sse') {
+            const url = String(a.url ?? '').trim()
+            if (!url) return { error: 'sse 须提供 url' }
+            const sseConfig: import('@opptrix/shared').McpSseTransportConfig = {
+              transport: 'sse',
+              url,
+              headers: Object.keys(headersRaw).length > 0 ? headersRaw : undefined,
+            }
+            transportConfig = sseConfig
+          } else {
+            // http / streamable-http
+            const url = String(a.url ?? '').trim()
+            if (!url) return { error: `${transport} 须提供 url` }
+            const httpConfig: import('@opptrix/shared').McpHttpTransportConfig = {
+              transport: transport === 'streamable-http' ? 'streamable-http' : 'http',
+              url,
+              headers: Object.keys(headersRaw).length > 0 ? headersRaw : undefined,
+            }
+            transportConfig = httpConfig
+          }
+
           const draft = {
             id: a.server_id != null ? String(a.server_id).trim() : undefined,
             title,
             transportConfig,
-            capabilityBindings,
+            secrets: Object.keys(secretsRaw).length > 0 ? secretsRaw : undefined,
+            capabilityBindings: Object.keys(capabilityBindings).length > 0 ? capabilityBindings : undefined,
             installSource: 'manual' as const,
             enabled: true,
             paused: false,
           }
+
           if (a.confirmed !== true) {
+            const summary = transport === 'stdio'
+              ? `安装 MCP「${title}」：${(transportConfig as { command: string }).command} ${((transportConfig as { args?: string[] }).args ?? []).join(' ')}`
+              : `安装 MCP「${title}」：${(transportConfig as { url: string }).url}`
+            const secretKeys = Object.keys(secretsRaw)
             return {
               needs_confirmation: true,
-              summary: transport === 'stdio'
-                ? `安装 MCP「${title}」：${transportConfig.command} ${(transportConfig.args ?? []).join(' ')}`
-                : `安装 MCP「${title}」：${(transportConfig as { url: string }).url}`,
+              summary,
+              secrets_note: secretKeys.length > 0
+                ? `含 ${secretKeys.length} 个密钥（${secretKeys.join(', ')}），将写入用户配置`
+                : undefined,
               hint: '请先用 ask_user 向用户确认安全与来源；用户同意后以相同参数 + confirmed=true 再调用 install_mcp_server',
               draft,
             }

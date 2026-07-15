@@ -476,8 +476,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   install_mcp_server: {
     packId: 'meta',
-    usageGuide: '登记新的外部 MCP。必须先 ask_user 确认，再 confirmed=true 安装。',
-    compliance: 'transport=stdio|http；stdio 需 command；http 需 url；密钥走设置页；勿在未确认时重复安装。',
+    usageGuide: '登记新的外部 MCP。必须先 ask_user 确认，再 confirmed=true 安装。支持 stdio / http / streamable-http / sse 四种传输，可在安装时一并传入 headers/secrets/env。',
+    compliance: 'transport=stdio|http|streamable-http|sse；stdio 需 command；http/sse 需 url；密钥通过 secrets 参数在安装时写入；勿在未确认时重复安装。',
   },
   uninstall_mcp_server: {
     packId: 'meta',
