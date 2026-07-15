@@ -1,24 +1,33 @@
 /**
- * 设置页 — 外部 MCP Server 统一 JSON 编辑器。
+ * 设置页 — 外部 MCP Server 设置。
  *
- * 基于 CodeMirror 6：语法高亮、实时 JSON 校验、自动格式化。
- * 保存按钮仅在 JSON 合法时启用。
+ * 双模式：
+ * 1. 预设模式（默认）：内置 MCP 服务，填写 API Key，Switch 开关即用
+ * 2. JSON 模式：CodeMirror 6 编辑器，支持完整自定义配置
  */
 
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import CodeMirror from '@uiw/react-codemirror'
 import { json as jsonLanguage } from '@codemirror/lang-json'
 import { linter, type Diagnostic } from '@codemirror/lint'
 import { EditorView } from '@codemirror/view'
-import { Spinner, Text, makeStyles } from '@fluentui/react-components'
+import { Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { CloudRegular, CodeRegular } from '@fluentui/react-icons'
 import {
   exportMcpServers,
   importMcpServers,
+  getMcpPresets,
+  applyMcpPreset,
+  removeMcpPreset,
+  testMcpServer,
+  type McpPresetDef,
 } from '../../api/client'
 import type { McpServerFlatConfig } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
+import McpApiKeyField from '../../components/opptrix/McpApiKeyField'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
+import { ghostInteractive, motion } from '../../theme/mixins'
 
 const useStyles = makeStyles({
   root: {
@@ -32,6 +41,120 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     padding: '0 2px 4px',
   },
+
+  // ── 胶囊模式切换 ──
+  modeRow: {
+    display: 'flex',
+    gap: '4px',
+    padding: '3px',
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderRadius: opptrixTokens.radiusFull,
+    width: 'fit-content',
+  },
+  modeTab: {
+    ...ghostInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '5px 14px',
+    borderRadius: opptrixTokens.radiusFull,
+    fontSize: '12px',
+    fontWeight: 500,
+    border: 'none',
+    cursor: 'pointer',
+    color: opptrixCssVars.textTertiary,
+    transitionProperty: 'background-color, color',
+    transitionDuration: motion.fast,
+  },
+  modeTabActive: {
+    backgroundColor: opptrixCssVars.surface,
+    color: opptrixCssVars.textPrimary,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+  },
+
+  // ── 预设卡片 ──
+  presetCard: {
+    border: opptrixCssVars.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusMd,
+    padding: '14px 16px 12px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    backgroundColor: opptrixCssVars.canvasAlt,
+  },
+  presetCardActive: {
+    backgroundColor: opptrixCssVars.surface,
+  },
+  presetHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+  },
+  presetTitleWrap: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  presetTitle: {
+    fontSize: '14px',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.35,
+  },
+  presetDesc: {
+    fontSize: '12px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+  },
+  presetSwitchRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    flexShrink: 0,
+  },
+  presetServiceList: {
+    fontSize: '11px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    padding: 0,
+    margin: 0,
+    listStyle: 'none',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  presetInput: {
+    flex: 1,
+    minWidth: 0,
+    fontSize: '12px',
+  },
+  presetActions: {
+    display: 'flex',
+    gap: '8px',
+    alignItems: 'center',
+  },
+
+  // ── 高级入口 ──
+  advancedLink: {
+    ...ghostInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: '8px 12px',
+    borderRadius: opptrixTokens.radiusMd,
+    fontSize: '12px',
+    fontWeight: 500,
+    border: 'none',
+    cursor: 'pointer',
+    color: opptrixCssVars.textSecondary,
+    textAlign: 'left',
+    width: '100%',
+    transitionProperty: 'background-color',
+    transitionDuration: motion.fast,
+  },
+
+  // ── JSON 编辑器 ──
   editorWrap: {
     border: opptrixCssVars.settingsPanelBorder,
     borderRadius: opptrixTokens.radiusMd,
@@ -69,9 +192,10 @@ const useStyles = makeStyles({
   },
 })
 
+type Mode = 'preset' | 'json'
+
 const EMPTY_CONFIG = JSON.stringify({ mcpServers: {} }, null, 2)
 
-/** CodeMirror JSON linter —— 实时语法校验 */
 const jsonLinter = linter((view): Diagnostic[] => {
   const text = view.state.doc.toString()
   try {
@@ -90,7 +214,6 @@ const jsonLinter = linter((view): Diagnostic[] => {
   }
 })
 
-/** 校验 JSON 结构 —— 返回错误消息或 null（通过） */
 function validateConfig(raw: string): string | null {
   const trimmed = raw.trim()
   if (!trimmed) return '配置不能为空'
@@ -127,7 +250,6 @@ function validateConfig(raw: string): string | null {
   return null
 }
 
-/** 格式化 JSON 字符串；失败返回 null */
 function formatJson(raw: string): string | null {
   try {
     return JSON.stringify(JSON.parse(raw), null, 2)
@@ -141,12 +263,43 @@ const cmExtensions = [jsonLanguage(), jsonLinter, EditorView.lineWrapping]
 export default function McpServersSettingsSection() {
   const s = useStyles()
   const { showToast } = useSettingsToast()
+  const [mode, setMode] = useState<Mode>('preset')
+
+  // ── 预设模式状态 ──
+  const [presets, setPresets] = useState<McpPresetDef[]>([])
+  const [presetsLoading, setPresetsLoading] = useState(true)
+  const [apiKeys, setApiKeys] = useState<Record<string, string>>({})
+  const [testing, setTesting] = useState<Record<string, boolean>>({})
+  const [applying, setApplying] = useState<Record<string, boolean>>({})
+
+  // ── JSON 模式状态 ──
   const [raw, setRaw] = useState('')
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [dirty, setDirty] = useState(false)
 
-  const load = useCallback(async () => {
+  // ── 加载预设 ──
+  const loadPresets = useCallback(async () => {
+    setPresetsLoading(true)
+    try {
+      const { presets: data } = await getMcpPresets()
+      setPresets(data.sort((a, b) => a.sortOrder - b.sortOrder))
+      // 预设 API key 回填：只合并后端返回的有效 key，不覆盖本地已有 key
+      const keys: Record<string, string> = {}
+      for (const p of data) {
+        const svc = p.services.find(s => s.apiKeyPreview)
+        if (svc?.apiKeyPreview) keys[p.id] = svc.apiKeyPreview
+      }
+      if (Object.keys(keys).length) setApiKeys(prev => ({ ...prev, ...keys }))
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '加载预设失败', 'error')
+    } finally {
+      setPresetsLoading(false)
+    }
+  }, [showToast])
+
+  // ── 加载 JSON ──
+  const loadJson = useCallback(async () => {
     setLoading(true)
     try {
       const data = await exportMcpServers()
@@ -160,14 +313,105 @@ export default function McpServersSettingsSection() {
     }
   }, [showToast])
 
-  useEffect(() => { void load() }, [load])
+  useEffect(() => {
+    if (mode === 'preset') {
+      void loadPresets()
+    } else {
+      void loadJson()
+    }
+  }, [mode, loadPresets, loadJson])
 
+  // ── 预设操作 ──
+
+  /** Switch 切换：开→启用，关→停用 */
+  const handleTogglePreset = async (presetId: string, enabled: boolean) => {
+    if (enabled) {
+      const apiKey = (apiKeys[presetId] ?? '').trim()
+      if (!apiKey || apiKey.length < 4) {
+        showToast('请先填写有效的 API Key', 'warning')
+        return
+      }
+      setApplying(prev => ({ ...prev, [presetId]: true }))
+      try {
+        await applyMcpPreset(presetId, apiKey)
+        showToast(`${presets.find(p => p.id === presetId)?.title ?? presetId} 已启用`, 'success')
+        await loadPresets()
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : '启用失败', 'error')
+      } finally {
+        setApplying(prev => ({ ...prev, [presetId]: false }))
+      }
+    } else {
+      setApplying(prev => ({ ...prev, [presetId]: true }))
+      try {
+        await removeMcpPreset(presetId)
+        showToast('已停用', 'success')
+        await loadPresets()
+      } catch (e) {
+        showToast(e instanceof Error ? e.message : '停用失败', 'error')
+      } finally {
+        setApplying(prev => ({ ...prev, [presetId]: false }))
+      }
+    }
+  }
+
+  /** 测试连接：对预设的第一个子服务测试 */
+  const handleTestPreset = async (preset: McpPresetDef) => {
+    const svc = preset.services[0]
+    if (!svc || !svc.configured) {
+      showToast('请先启用后再测试', 'warning')
+      return
+    }
+    setTesting(prev => ({ ...prev, [preset.id]: true }))
+    try {
+      const result = await testMcpServer(svc.serverId)
+      if (result.ok) {
+        showToast(`✅ ${svc.title} 连接成功${result.tools?.length ? `（${result.tools.length} 个工具）` : ''}`, 'success')
+      } else {
+        showToast(result.message || '连接失败', 'error')
+      }
+    } catch (e) {
+      showToast(e instanceof Error ? e.message : '测试请求失败', 'error')
+    } finally {
+      setTesting(prev => ({ ...prev, [preset.id]: false }))
+    }
+  }
+
+  /** 自动保存：API Key 变化 1.5s 后自动保存到后端（无论启用与否） */
+  const autoSaveTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  useEffect(() => {
+    if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    const targets: Array<{ id: string; key: string }> = []
+    for (const p of presets) {
+      const k = (apiKeys[p.id] ?? '').trim()
+      if (k.length >= 4) targets.push({ id: p.id, key: k })
+    }
+    if (!targets.length) return
+    autoSaveTimer.current = setTimeout(() => {
+      for (const t of targets) {
+        void applyMcpPreset(t.id, t.key)
+      }
+    }, 300)
+    return () => {
+      if (autoSaveTimer.current) clearTimeout(autoSaveTimer.current)
+    }
+  }, [apiKeys, presets])
+
+  /** 失焦立即保存 */
+  const handleSavePresetKey = useCallback(async (presetId: string) => {
+    const k = (apiKeys[presetId] ?? '').trim()
+    if (k.length >= 4) {
+      try { await applyMcpPreset(presetId, k) } catch {}
+    }
+  }, [apiKeys])
+
+  // ── JSON 操作 ──
   const validationError = useMemo(() => {
     if (!dirty) return null
     return validateConfig(raw)
   }, [raw, dirty])
 
-  const handleSave = async () => {
+  const handleSaveJson = async () => {
     const err = validateConfig(raw)
     if (err) { showToast(err, 'error'); return }
     setSaving(true)
@@ -193,68 +437,190 @@ export default function McpServersSettingsSection() {
     }
   }, [raw, showToast])
 
-  if (loading) {
-    return <Spinner size="tiny" label="加载配置…" />
-  }
+  // ── 判断预设状态 ──
+  const isPresetConfigured = (preset: McpPresetDef) =>
+    preset.services.some(s => s.configured)
 
+  // ── 渲染 ──
   return (
     <div className={s.root}>
-      <Text className={s.tabHint} block>
-        编辑标准 MCP 服务器配置（mcpServers 映射格式）。保存后全量替换现有配置。
-        支持 stdio（command + args + env）、http / sse（url + headers）。
-      </Text>
-
-      <div className={s.editorWrap}>
-        <CodeMirror
-          value={raw}
-          height="360px"
-          extensions={cmExtensions}
-          onChange={(value) => { setRaw(value); setDirty(true) }}
-          basicSetup={{
-            lineNumbers: true,
-            foldGutter: true,
-            highlightActiveLine: true,
-            highlightSelectionMatches: true,
-            autocompletion: true,
-            bracketMatching: true,
-            closeBrackets: true,
-            indentOnInput: true,
-          }}
-        />
+      {/* 胶囊模式切换 */}
+      <div className={s.modeRow}>
+        <button
+          type="button"
+          className={mergeClasses(s.modeTab, mode === 'preset' && s.modeTabActive)}
+          onClick={() => setMode('preset')}
+        >
+          <CloudRegular fontSize={14} />
+          预设
+        </button>
+        <button
+          type="button"
+          className={mergeClasses(s.modeTab, mode === 'json' && s.modeTabActive)}
+          onClick={() => setMode('json')}
+        >
+          <CodeRegular fontSize={14} />
+          JSON
+        </button>
       </div>
 
-      {validationError && (
-        <Text className={s.error} block>{validationError}</Text>
+      {mode === 'preset' && (
+        <>
+          <Text className={s.tabHint} block>
+            开箱即用的 MCP 服务，填写 API Key 后打开开关即可启用。
+            同花顺（扶摇）一个配置实际覆盖三个后端服务。
+          </Text>
+
+          {presetsLoading ? (
+            <Spinner size="tiny" label="加载预设…" />
+          ) : (
+            presets.map(preset => {
+              const configured = isPresetConfigured(preset)
+              return (
+                <div key={preset.id} className={mergeClasses(s.presetCard, configured && s.presetCardActive)}>
+                  {/* 头部：标题 + Switch */}
+                  <div className={s.presetHeader}>
+                    <div className={s.presetTitleWrap}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        <span className={s.presetTitle}>{preset.title}</span>
+                        {preset.homepage && (
+                          <a
+                            href={preset.homepage}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            style={{
+                              fontSize: '11px',
+                              color: opptrixCssVars.accent,
+                              textDecoration: 'none',
+                              fontWeight: 500,
+                            }}
+                          >
+                            官网 ↗
+                          </a>
+                        )}
+                      </div>
+                      <div className={s.presetDesc}>{preset.description}</div>
+                    </div>
+                    <div className={s.presetSwitchRow}>
+                      <Switch
+                        checked={configured}
+                        disabled={applying[preset.id]}
+                        onChange={(_, d) => { void handleTogglePreset(preset.id, !!d.checked) }}
+                      />
+                    </div>
+                  </div>
+
+                  {/* 底层服务列表 */}
+                  <ul className={s.presetServiceList}>
+                    {preset.services.map(svc => (
+                      <li key={svc.serverId}>
+                        • {svc.title}（{svc.serverId}）
+                      </li>
+                    ))}
+                  </ul>
+
+                  {/* API Key 输入 + 测试按钮 */}
+                  <McpApiKeyField
+                    value={apiKeys[preset.id] ?? ''}
+                    configured={configured}
+                    testing={testing[preset.id]}
+                    onValueChange={v => setApiKeys(prev => ({ ...prev, [preset.id]: v }))}
+                    onBlur={() => { void handleSavePresetKey(preset.id) }}
+                    onTest={() => { void handleTestPreset(preset) }}
+                    placeholder={`输入 API Key${preset.services.length > 1 ? `（共用 ${preset.services[0].apiKeyHeader}）` : ''}`}
+                  />
+                </div>
+              )
+            })
+          )}
+
+          {/* 切换到 JSON */}
+          <button
+            type="button"
+            className={s.advancedLink}
+            onClick={() => setMode('json')}
+          >
+            <CodeRegular fontSize={14} />
+            高级：编辑完整 JSON 配置
+          </button>
+        </>
       )}
 
-      <div className={s.toolbar}>
-        <Text className={s.tabHint} block style={{ padding: 0 }}>
-          {dirty ? '已修改' : '已同步'}
-        </Text>
-        <div className={s.toolbarRight}>
-          <OpptrixButton
-            variant="secondary"
-            disabled={saving}
-            onClick={handleFormat}
+      {mode === 'json' && (
+        <>
+          <Text className={s.tabHint} block>
+            编辑标准 MCP 服务器配置（mcpServers 映射格式）。保存后全量替换现有配置。
+            支持 stdio（command + args + env）、http（url + headers）。
+          </Text>
+
+          {loading ? (
+            <Spinner size="tiny" label="加载配置…" />
+          ) : (
+            <>
+              <div className={s.editorWrap}>
+                <CodeMirror
+                  value={raw}
+                  height="360px"
+                  extensions={cmExtensions}
+                  onChange={(value) => { setRaw(value); setDirty(true) }}
+                  basicSetup={{
+                    lineNumbers: true,
+                    foldGutter: true,
+                    highlightActiveLine: true,
+                    highlightSelectionMatches: true,
+                    autocompletion: true,
+                    bracketMatching: true,
+                    closeBrackets: true,
+                    indentOnInput: true,
+                  }}
+                />
+              </div>
+
+              {validationError && (
+                <Text className={s.error} block>{validationError}</Text>
+              )}
+
+              <div className={s.toolbar}>
+                <Text className={s.tabHint} block style={{ padding: 0 }}>
+                  {dirty ? '已修改' : '已同步'}
+                </Text>
+                <div className={s.toolbarRight}>
+                  <OpptrixButton
+                    variant="secondary"
+                    disabled={saving}
+                    onClick={handleFormat}
+                  >
+                    格式化
+                  </OpptrixButton>
+                  <OpptrixButton
+                    variant="secondary"
+                    disabled={saving}
+                    onClick={() => { void loadJson() }}
+                  >
+                    重置
+                  </OpptrixButton>
+                  <OpptrixButton
+                    variant="primary"
+                    disabled={saving || !!validationError}
+                    onClick={() => { void handleSaveJson() }}
+                  >
+                    {saving ? '保存中…' : '保存'}
+                  </OpptrixButton>
+                </div>
+              </div>
+            </>
+          )}
+
+          <button
+            type="button"
+            className={s.advancedLink}
+            onClick={() => setMode('preset')}
           >
-            格式化
-          </OpptrixButton>
-          <OpptrixButton
-            variant="secondary"
-            disabled={saving}
-            onClick={() => { void load() }}
-          >
-            重置
-          </OpptrixButton>
-          <OpptrixButton
-            variant="primary"
-            disabled={saving || !!validationError}
-            onClick={() => { void handleSave() }}
-          >
-            {saving ? '保存中…' : '保存'}
-          </OpptrixButton>
-        </div>
-      </div>
+            <CloudRegular fontSize={14} />
+            切换回预设模式
+          </button>
+        </>
+      )}
     </div>
   )
 }

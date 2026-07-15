@@ -177,3 +177,81 @@ export function isMcpServerFailoverError(error: unknown): boolean {
   }
   return false
 }
+
+// ────────────────────────────────────────────
+// 内置 MCP 预设 — 开箱即用，只需 API Key
+// ────────────────────────────────────────────
+
+/** 预设中单个底层 MCP 服务的定义 */
+export interface McpPresetServiceDef {
+  /** 创建后 MCP Server 的 id */
+  serverId: string
+  /** UI 显示名称 */
+  title: string
+  /** Streamable HTTP URL */
+  url: string
+  /** 该服务需要放在哪个 header 传递 API Key */
+  apiKeyHeader: string
+}
+
+/** 一个预设的定义（UI 展示为一个卡片，可能对应多个底层服务） */
+export interface McpPresetDef {
+  /** 预设 id（用于 API 调用，如 'fuyao' / 'eastmoney'） */
+  id: string
+  /** UI 标题 */
+  title: string
+  /** UI 描述 */
+  description: string
+  /** 底层服务列表 */
+  services: McpPresetServiceDef[]
+  /** 推荐优先顺序（越小越前） */
+  sortOrder: number
+  /** 官网链接 */
+  homepage?: string
+}
+
+/** 内置 MCP 预设 */
+export const MCP_BUILTIN_PRESETS: McpPresetDef[] = [
+  {
+    id: 'fuyao',
+    title: '同花顺（扶摇）',
+    description: 'A 股行情、指数与元数据。一个配置覆盖三个后端服务。',
+    sortOrder: 0,
+    homepage: 'https://fuyao.aicubes.cn/?ref=opptrix',
+    services: [
+      {
+        serverId: 'fuyao-a-share',
+        title: 'A 股行情',
+        url: 'https://fuyao.aicubes.cn/mcp/a-share',
+        apiKeyHeader: 'X-api-key',
+      },
+      {
+        serverId: 'fuyao-a-share-index',
+        title: 'A 股指数',
+        url: 'https://fuyao.aicubes.cn/mcp/a-share-index',
+        apiKeyHeader: 'X-api-key',
+      },
+      {
+        serverId: 'fuyao-meta',
+        title: '元数据',
+        url: 'https://fuyao.aicubes.cn/mcp/meta',
+        apiKeyHeader: 'X-api-key',
+      },
+    ],
+  },
+  {
+    id: 'eastmoney',
+    title: '东方财富（妙想）',
+    description: '行情数据与资讯，通过东方财富妙想 MCP 接入。',
+    sortOrder: 1,
+    homepage: 'https://choice.eastmoney.com/mcp/?ref=opptrix',
+    services: [
+      {
+        serverId: 'mx-ds-mcp',
+        title: '东方财富 MCP',
+        url: 'https://mxapi.eastmoney.com/mxds/mcp',
+        apiKeyHeader: 'em_api_key',
+      },
+    ],
+  },
+]

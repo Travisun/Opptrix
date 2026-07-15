@@ -15,7 +15,11 @@ import type {
   McpServerRecord,
   McpTransportConfig,
 } from '@opptrix/shared'
-import { isValidMcpServerId } from '@opptrix/shared'
+import {
+  isValidMcpServerId,
+  maskSecretPreview,
+  MCP_BUILTIN_PRESETS,
+} from '@opptrix/shared'
 
 interface McpServerFlatConfig {
   type?: string
@@ -438,4 +442,78 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
       return publicList(reg)
     },
   )
+
+  // ── 内置 MCP 预设 ──
+
+  app.get('/api/mcp-servers/presets', async (_req, reply) => {
+    const reg = getExternalMcpRegistry()
+    await reg.hydrate()
+    const records = reg.listRecords()
+    const recordsById = new Map(records.map(r => [r.id, r]))
+    const presets = MCP_BUILTIN_PRESETS.map(p => ({
+      ...p,
+      services: p.services.map(s => {
+        const rec = recordsById.get(s.serverId)
+        const apiKey = rec?.secrets?.[s.apiKeyHeader]
+        return {
+          serverId: s.serverId,
+          title: s.title,
+          url: s.url,
+          apiKeyHeader: s.apiKeyHeader,
+          configured: rec != null && rec.enabled,
+          apiKeyPreview: apiKey ?? undefined,
+        }
+      }),
+    }))
+    return reply.send({ presets })
+  })
+
+  app.post<{
+    Body: { presetId?: string; apiKey?: string }
+  }>('/api/mcp-servers/apply-preset', async (req, reply) => {
+    const presetId = String(req.body?.presetId ?? '').trim()
+    const apiKey = String(req.body?.apiKey ?? '').trim()
+    if (!presetId) return reply.status(400).send({ error: 'presetId 必填' })
+    if (!apiKey) return reply.status(400).send({ error: 'apiKey 必填' })
+    const preset = MCP_BUILTIN_PRESETS.find(p => p.id === presetId)
+    if (!preset) return reply.status(400).send({ error: `未知预设: ${presetId}` })
+    const reg = getExternalMcpRegistry()
+    await reg.hydrate()
+    for (const svc of preset.services) {
+      const existing = reg.getRecord(svc.serverId)
+      const tc: McpTransportConfig = { transport: 'streamable-http', url: svc.url }
+      const sc: Record<string, string> = { [svc.apiKeyHeader]: apiKey }
+      if (existing) {
+        reg.save(svc.serverId, { transportConfig: tc, secrets: sc, enabled: true, paused: false })
+      } else {
+        reg.create({
+          id: svc.serverId,
+          title: svc.title,
+          enabled: true,
+          transportConfig: tc,
+          secrets: sc,
+          installSource: 'registry',
+        })
+      }
+    }
+    await reg.hydrate()
+    return reply.send({ ok: true })
+  })
+
+  app.post<{
+    Body: { presetId?: string }
+  }>('/api/mcp-servers/remove-preset', async (req, reply) => {
+    const presetId = String(req.body?.presetId ?? '').trim()
+    if (!presetId) return reply.status(400).send({ error: 'presetId 必填' })
+    const preset = MCP_BUILTIN_PRESETS.find(p => p.id === presetId)
+    if (!preset) return reply.status(400).send({ error: `未知预设: ${presetId}` })
+    const reg = getExternalMcpRegistry()
+    for (const svc of preset.services) {
+      const existing = reg.getRecord(svc.serverId)
+      if (existing) {
+        reg.save(svc.serverId, { enabled: false, paused: true })
+      }
+    }
+    return reply.send({ ok: true })
+  })
 }

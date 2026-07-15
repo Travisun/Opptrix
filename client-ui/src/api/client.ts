@@ -1736,6 +1736,45 @@ export async function importMcpServers(mcpServers: Record<string, McpServerFlatC
   })
 }
 
+/** 内置 MCP 预设 — service 定义（不含 API Key） */
+export interface McpPresetServiceDef {
+  serverId: string
+  title: string
+  url: string
+  apiKeyHeader: string
+  configured: boolean
+  apiKeyPreview?: string
+}
+
+export interface McpPresetDef {
+  id: string
+  title: string
+  description: string
+  sortOrder: number
+  homepage?: string
+  services: McpPresetServiceDef[]
+}
+
+export async function getMcpPresets() {
+  return jsonFetch<{ presets: McpPresetDef[] }>('/mcp-servers/presets')
+}
+
+export async function applyMcpPreset(presetId: string, apiKey: string) {
+  return jsonFetch<{ ok: boolean }>('/mcp-servers/apply-preset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presetId, apiKey }),
+  })
+}
+
+export async function removeMcpPreset(presetId: string) {
+  return jsonFetch<{ ok: boolean }>('/mcp-servers/remove-preset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ presetId }),
+  })
+}
+
 export async function getMcpServerInfo(id: string) {
   return jsonFetch<{
     version: { name: string; version: string } | null
