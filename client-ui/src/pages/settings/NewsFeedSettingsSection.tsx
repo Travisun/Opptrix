@@ -142,6 +142,11 @@ const useStyles = makeStyles({
   sectionBlock: {
     marginTop: '20px',
   },
+  tabPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '4px',
+  },
   sectionLabel: {
     fontSize: '11px',
     fontWeight: 600,
@@ -716,6 +721,7 @@ export default function NewsFeedSettingsSection() {
         </div>
 
       {viewMode === 'subscriptions' && (
+      <div className={s.tabPanel}>
       <div className={s.listPanel}>
         <div className={s.listHeader}>
           <Text className={s.listHeaderMeta} block>
@@ -811,10 +817,12 @@ export default function NewsFeedSettingsSection() {
             ))}
           </div>
         )}
+        </div>
       </div>
       )}
 
       {viewMode === 'groups' && (
+      <div className={s.tabPanel}>
       <div className={s.sectionBlock}>
         <div className={s.listPanel}>
           <div className={s.listHeader}>
@@ -867,10 +875,12 @@ export default function NewsFeedSettingsSection() {
             </div>
           )}
         </div>
+        </div>
       </div>
       )}
 
       {viewMode === 'storage' && (
+      <div className={s.tabPanel}>
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>本地存储</Text>
         <SettingsGroup>
@@ -924,10 +934,12 @@ export default function NewsFeedSettingsSection() {
         <Text className={mergeClasses(s.saveHint, saveState !== 'idle' && s.saveHintActive)} block>
           {saveHintText}
         </Text>
+        </div>
       </div>
       )}
 
       {viewMode === 'update' && (
+      <div className={s.tabPanel}>
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>更新</Text>
         <SettingsGroup>
@@ -976,6 +988,7 @@ export default function NewsFeedSettingsSection() {
             last
           />
         </SettingsGroup>
+        </div>
       </div>
       )}
       </>)}
