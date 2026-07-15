@@ -113,3 +113,48 @@
 | NavItem | `client-ui/src/components/NavItem.tsx` |
 | NewsCenter | `client-ui/src/pages/news/NewsCenterPage.tsx` |
 | SessionSidebar | `client-ui/src/chat/SessionSidebar.tsx` |
+| Settings Page | `client-ui/src/pages/SettingsPage.tsx` |
+| Settings Sidebar | `client-ui/src/pages/settings/SettingsSidebar.tsx` |
+| Settings Primitives | `client-ui/src/pages/settings/SettingsPrimitives.tsx` |
+
+## 7. 设置页布局规范
+
+设置页 (`SettingsPage.tsx`) 采用**左侧栏 + 右侧内容区**双栏布局：
+
+```
+┌───────────────────┬──────────────────────────────────────┐
+│ SettingsSidebar   │  contentShell (flex:1)               │
+│ 210px             │  ┌─ contentScroll ─────────────────┐ │
+│                   │  │  ┌─ contentColumn ─────────────┐│ │
+│ 常规              │  │  │  maxWidth: 720px            ││ │
+│ 模型              │  │  │  padding: clamp(12,3.5vw,32)││ │
+│ 数据源            │  │  │  margin: 0 auto             ││ │
+│ MCP 服务器        │  │  │                             ││ │
+│ 新闻订阅          │  │  │  [SettingsGroup]            ││ │
+│ 翻译              │  │  │  ├─ SettingsRow ────────────┤│ │
+│ 多模态            │  │  │  ├─ SettingsDivider ────────┤│ │
+│ 关于              │  │  │  └─ SettingsRow ────────────┤│ │
+│                   │  │  │                             ││ │
+│                   │  │  │  [SettingsCard]             ││ │
+│                   │  │  │  └─ 独立卡片内容 ───────────┘││ │
+│                   │  │  └─────────────────────────────┘│ │
+│                   │  └─────────────────────────────────┘ │
+└───────────────────┴──────────────────────────────────────┘
+```
+
+### 7.1 内容区宽度控制
+
+- **正常模式**：`maxWidth: 720px` + `margin: 0 auto` + 响应式内边距 `clamp(12px, 3.5vw, 32px)`
+- **浮层/窄屏模式** (sidebar overlay)：`width: 100%` + `maxWidth: none` + 更小边距 `clamp(10px, 3vw, 20px)`
+- 确保大屏时内容宽度恒定，两侧空白随窗口自动调整
+
+### 7.2 组件层级
+
+| 层级 | 组件 | 说明 |
+|------|------|------|
+| 容器 | `SettingsGroup` | 带边框圆角的白色卡片组，多行设置项 |
+| 容器 | `SettingsCard` | 独立卡片，适合 MCP 预设卡等单张内容 |
+| 行 | `SettingsRow` | 标题 (14px 600) + 描述 (13px) + 控件 |
+| 行 | `SettingsActionRow` | 可点击整行 |
+| 输入 | `SettingsTextField` | 行内文本输入 |
+| 输入 | `SettingsCredentialRow` | 密钥编辑行（密码+眼睛+测试+保存） |

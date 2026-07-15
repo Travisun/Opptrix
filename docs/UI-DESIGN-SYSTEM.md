@@ -190,6 +190,32 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 | 侧栏内联确认 | 列表行内 `inlineEditRow` + 按钮 | 与行同高，不用 Dialog |
 | 分段 Tab（胶囊） | `OpptrixSegmentedControl` | `.opptrix-segmented-control`；侧栏用 `variant="embedded"` |
 
+### 7.9 设置页组件体系
+
+设置页 (`SettingsPage.tsx`) 使用 `settings/SettingsPrimitives.tsx` 提供的基础组件：
+
+| 组件 | 用途 | 说明 |
+|------|------|------|
+| `SettingsGroup` | 白色圆角卡片组 | 1px border + `radiusLg`，overflow hidden，多行设置项的容器 |
+| `SettingsCard` | 独立卡片 | 与 Group 同风格，带 padding，适合单张独立的卡片（如 MCP 预设卡） |
+| `SettingsRow` | 设置行 | 标题 + 描述 + 控件，flex 布局，窄屏自动竖向堆叠 |
+| `SettingsPanelHeader` | 面板标题行 | `SettingsGroup` 内标题 + action 区域 |
+| `SettingsInlineInput` | 行内输入框容器 | `inputShellInteractive` 外壳，最大宽 240px |
+| `SettingsTextField` | 文本输入 | 封装 `SettingsInlineInput` + Fluent `Input` |
+| `SettingsCredentialRow` | 密钥编辑行 | 密码框 + 眼睛切换 + 测试/保存按钮，连续编组 |
+| `SettingsActionRow` | 可点击行 | 整行可点击的导航/操作入口 |
+| `SettingsDivider` | 分割线 | 可选 fullWidth |
+| `SettingsStaticBlock` | 静态文本块 | 只读信息展示 |
+| `SettingsProviderRow` | 模型提供商行 | 头像 + 名称 + 模型查看 |
+
+**Apple 风格规范**（对齐 §16.6 Simplicity & §7 Craft）：
+- 行内边距：`12px 20px`（窄屏 `10px 16px`）
+- 分割线用 `separator` 而非 `gray200`
+- 圆角：Group/Card 统一 `radiusLg(14px)`
+- hover：`surfaceHover` 半透明底，不用实体灰块
+- 响应式断点：`660px` 竖向堆叠（非 720px）
+- 过渡：`motion.fast` + `cubic-bezier(0.4, 0, 0.2, 1)`（Apple 默认曲线）
+
 **禁止**：`window.confirm` / `alert` / `prompt`；无类名的裸 `DialogSurface`。  
 细则：`.cursor/rules/ui-overlay-components.mdc`。
 

@@ -16,46 +16,47 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusLg,
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
+    transitionProperty: 'border-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
   },
   row: {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '20px',
-    padding: '10px 18px',
+    padding: '12px 20px',
     minHeight: '44px',
-    '@media (max-width: 720px)': {
+    '@media (max-width: 660px)': {
       flexDirection: 'column',
       alignItems: 'stretch',
-      gap: '12px',
+      gap: '10px',
+      padding: '10px 16px',
     },
   },
   rowStack: {
     alignItems: 'flex-start',
     flexDirection: 'column',
     gap: '10px',
-    '@media (max-width: 640px)': {
-      flexDirection: 'column',
-    },
   },
   rowMain: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '3px',
   },
   rowTitle: {
     fontSize: '14px',
     fontWeight: 600,
     letterSpacing: '-0.01em',
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
+    lineHeight: 1.4,
   },
   rowDesc: {
     fontSize: '13px',
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.55,
+    lineHeight: 1.5,
   },
   rowControl: {
     flexShrink: 0,
@@ -63,24 +64,24 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'flex-end',
     width: '100%',
-    '@media (min-width: 721px)': {
+    '@media (min-width: 661px)': {
       width: 'auto',
     },
   },
   rowControlStack: {
     width: '100%',
     justifyContent: 'stretch',
-    '@media (min-width: 721px)': {
+    '@media (min-width: 661px)': {
       width: '100%',
     },
   },
   rowTopBorder: {
-    borderTop: `1px solid ${opptrixCssVars.gray200}`,
+    borderTop: `1px solid ${opptrixCssVars.separator}`,
   },
   rowDivider: {
     height: '1px',
     backgroundColor: opptrixCssVars.separator,
-    margin: '0 18px',
+    margin: '0 20px',
   },
   rowDividerFull: {
     margin: '0',
@@ -264,11 +265,28 @@ width: '100%',
     display: 'inline-flex',
     alignItems: 'center',
   },
+  card: {
+    border: opptrixCssVars.settingsPanelBorder,
+    borderRadius: opptrixTokens.radiusLg,
+    backgroundColor: opptrixCssVars.canvas,
+    padding: '14px 18px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+    transitionProperty: 'border-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
+  },
 })
 
 export function SettingsGroup({ children, className }: { children: ReactNode; className?: string }) {
   const s = useStyles()
   return <div className={mergeClasses(s.group, className)}>{children}</div>
+}
+
+export function SettingsCard({ children, className }: { children: ReactNode; className?: string }) {
+  const s = useStyles()
+  return <div className={mergeClasses(s.card, className)}>{children}</div>
 }
 
 export function SettingsRow({

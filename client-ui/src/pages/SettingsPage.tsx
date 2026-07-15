@@ -82,8 +82,8 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     boxSizing: 'border-box',
-    paddingLeft: '28px',
-    paddingRight: '28px',
+    paddingLeft: 'clamp(12px, 3.5vw, 32px)',
+    paddingRight: 'clamp(12px, 3.5vw, 32px)',
   },
   /** 侧栏浮层 / 小窗口 — 内容区占满可用宽度，仅保留最小边距 */
   contentColumnFlush: {
@@ -91,8 +91,8 @@ const useStyles = makeStyles({
     maxWidth: 'none',
     marginLeft: 0,
     marginRight: 0,
-    paddingLeft: '12px',
-    paddingRight: '12px',
+    paddingLeft: 'clamp(10px, 3vw, 20px)',
+    paddingRight: 'clamp(10px, 3vw, 20px)',
   },
   contentColumnMobile: {
     width: '100%',
