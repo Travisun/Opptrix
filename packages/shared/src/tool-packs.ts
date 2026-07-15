@@ -43,8 +43,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'meta',
     title: '工具包管理',
-    description: '列出与按需激活其它工具包',
-    whenToUse: '当前工具不足、需深挖专题时',
+    description: '列出与按需激活其它工具包；管理外部 MCP Server（列表/启用/暂停/安装确认）',
+    whenToUse: '当前工具不足、需深挖专题，或管理用户外部 MCP 数据源时',
     alwaysOn: true,
   },
   {
@@ -121,6 +121,12 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   // meta
   list_tool_packs: 'meta',
   activate_tool_pack: 'meta',
+  list_mcp_servers: 'meta',
+  enable_mcp_server: 'meta',
+  pause_mcp_server: 'meta',
+  install_mcp_server: 'meta',
+  uninstall_mcp_server: 'meta',
+  reorder_mcp_servers: 'meta',
 
   // instrument_analytics
   get_instrument_chart: 'instrument_analytics',
@@ -237,5 +243,6 @@ export function buildToolPackCatalogPrompt(): string {
   lines.push('- 用户已明确代码时跳过搜索直接分析；跨市场先 search_instruments')
   lines.push('- A 股专用工具（机构评级、筹码等）勿用于非 A 股')
   lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代')
+  lines.push('- 外部 MCP：已绑定工具由引擎优先外部再本地兜底；独有工具名形如 serverId__tool；安装/卸载须用户确认')
   return lines.join('\n')
 }

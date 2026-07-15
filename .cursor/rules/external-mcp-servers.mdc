@@ -1,0 +1,28 @@
+---
+description: 外部 MCP Server 接入约束（优先级链、密钥、Agent 权限）
+globs:
+  - packages/agent/src/mcp/external/**
+  - packages/shared/src/mcp-servers.ts
+  - packages/user-store/src/mcp-servers.ts
+  - apps/server/src/mcp-server-routes.ts
+  - client-ui/src/pages/settings/McpServersSettingsSection.tsx
+---
+
+# 外部 MCP Server
+
+## 路由
+
+- LLM 见**稳定本地工具名**；执行层按 `sortOrder` 试已启用且未 pause 的外部源，再回落本地 `ToolRegistry`
+- 外部独有工具：`serverId__toolName`；业务错误不 failover；429/超时/网络错误才 failover + 熔断
+- 本地健康时不抢主路径（仅外部全部失败/暂停时成为结果来源）
+
+## 安全与权限
+
+- API / Agent 列表**永不回传** secrets 明文
+- Agent 可 `list` / `enable` / `pause` / `reorder`；`install` / `uninstall` 须 `ask_user` + `confirmed=true`
+- **禁止**经 Agent 修改已有服务器的 `command` / `url` / env 明文（设置页或 install 确认载荷一次写入）
+- stdio 子进程勿在渲染进程 spawn；HTTP 须超时
+
+## 持久化
+
+- user-store documents 命名空间 `mcp_servers`；类型在 `@opptrix/shared` 的 `mcp-servers.ts`

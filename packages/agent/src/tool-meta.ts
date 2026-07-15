@@ -459,6 +459,36 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '按需激活业务工具包，使本轮及后续轮次可调用该包内工具；当前 tools 不足时使用。',
     compliance: 'pack_ids 为字符串数组（如 ["news","instrument_analytics"]）；同会话累积激活；无效 id 会出现在 skipped。',
   },
+  list_mcp_servers: {
+    packId: 'meta',
+    usageGuide: '查看用户已配置的外部 MCP Server 状态（健康、优先级、工具数）；需要外部数据源或排查不可用时使用。',
+    compliance: '只读；无密钥；返回 servers 列表。',
+  },
+  enable_mcp_server: {
+    packId: 'meta',
+    usageGuide: '启用并取消暂停某外部 MCP；启用后本轮工具目录会刷新，绑定工具优先走外部源。',
+    compliance: 'server_id 必填；不可改 command/url/env。',
+  },
+  pause_mcp_server: {
+    packId: 'meta',
+    usageGuide: '暂时停用外部 MCP（配额耗尽或异常时）；配置保留，本地工具仍兜底。',
+    compliance: 'server_id 必填。',
+  },
+  install_mcp_server: {
+    packId: 'meta',
+    usageGuide: '登记新的外部 MCP。必须先 ask_user 确认，再 confirmed=true 安装。',
+    compliance: 'transport=stdio|http；stdio 需 command；http 需 url；密钥走设置页；勿在未确认时重复安装。',
+  },
+  uninstall_mcp_server: {
+    packId: 'meta',
+    usageGuide: '卸载外部 MCP；须 ask_user 后 confirmed=true。',
+    compliance: 'server_id 必填；确认后删除配置并断开。',
+  },
+  reorder_mcp_servers: {
+    packId: 'meta',
+    usageGuide: '调整外部 MCP 故障转移优先级（列表越前越优先；本地始终最后兜底）。',
+    compliance: 'server_ids 为完整顺序列表。',
+  },
 }
 
 /** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */

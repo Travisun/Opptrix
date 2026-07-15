@@ -27,6 +27,7 @@ import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrate
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
+import { registerMcpServerRoutes } from './mcp-server-routes.js'
 import {
   startNewsFeedScheduler,
   getNewsSettings,
@@ -1216,6 +1217,7 @@ async function bootstrap() {
 
   await registerNewsRoutes(app)
   await registerEnrichmentRoutes(app)
+  await registerMcpServerRoutes(app)
   registerSearchRoutes(app, hub, agent)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())

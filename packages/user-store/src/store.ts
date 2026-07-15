@@ -15,6 +15,7 @@ import {
   initFreeProviderThrottleSchema,
   FreeProviderThrottleRepository,
 } from './free-provider-throttle.js'
+import { McpServersRepository } from './mcp-servers.js'
 import {
   clearFtsNews,
   clearFtsSessions,
@@ -37,6 +38,7 @@ export class UserDataStore {
   readonly providerSettings: ProviderSettingsRepository
   readonly speedRanking: SpeedRankingRepository
   readonly freeProviderThrottle: FreeProviderThrottleRepository
+  readonly mcpServers: McpServersRepository
 
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -48,6 +50,7 @@ export class UserDataStore {
     this.providerSettings = new ProviderSettingsRepository(this.db)
     this.speedRanking = new SpeedRankingRepository(this.db)
     this.freeProviderThrottle = new FreeProviderThrottleRepository(this.db)
+    this.mcpServers = new McpServersRepository(this)
     this.initSchema()
     this.migrateFromLegacyFiles()
     this.providerSettings.migrateFromLegacy(

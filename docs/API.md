@@ -193,6 +193,22 @@ POST /api/research
 | GET | `/api/news/articles/:id` | 单篇文章 |
 | POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
 
+### 外部 MCP Server
+
+用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429 后 failover；本地 ToolRegistry 始终最终兜底。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/mcp-servers` | `{ servers: PublicMcpServer[] }` |
+| GET | `/api/mcp-servers/:id` | 单条公开视图 |
+| POST | `/api/mcp-servers` | 创建（`title` + `transportConfig`；可选 `secrets` / `capabilityBindings`） |
+| PATCH | `/api/mcp-servers/:id` | 更新启用/暂停/传输/绑定/密钥合入 |
+| DELETE | `/api/mcp-servers/:id` | 删除配置并断开 |
+| POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
+| POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
+
+`PublicMcpServer` 含：`id`/`title`/`enabled`/`paused`/`sortOrder`/`transport`/`endpointPreview`/`secretsConfigured`/`capabilityBindings`/`health`/`toolCount` 等。
+
 订阅地址须为完整 `http(s)://` 链接。文章持久化在本地 SQLite，默认保留 **3 年内**按 `pub_date` 排序的文章；可在设置中调整保留年限与数量上限（不限上限时仅按年限清理）。写入超出策略时自动删除最旧文章。
 
 ### Writer 端点

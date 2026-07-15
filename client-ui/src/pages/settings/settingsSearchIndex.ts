@@ -26,6 +26,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', title: '常规', desc: '管理默认评分卡与后端连接状态' },
   { section: 'models', title: '模型', desc: '配置 LLM 提供商与可用模型' },
   { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商、拖拽回退顺序', keywords: ['priority', '回退', '拖拽', '排序'] },
+  { section: 'mcp_servers', title: 'MCP 服务器', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具'] },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
@@ -54,6 +55,12 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
   { section: 'data_providers', group: 'A 股', title: 'API Token', desc: '粘贴 Token', keywords: ['token', '密钥'] },
   { section: 'data_providers', title: '能力绑定', keywords: ['binding', 'override'] },
+
+  // MCP 服务器
+  { section: 'mcp_servers', title: '外部 MCP', desc: 'stdio / Streamable HTTP', keywords: ['model context protocol', '故障转移', '熔断'] },
+  { section: 'mcp_servers', title: '测试连接', keywords: ['探活', 'tools/list'] },
+  { section: 'mcp_servers', title: '优先级排序', keywords: ['sortOrder', '回退', 'failover'] },
+  { section: 'mcp_servers', title: '能力绑定', desc: '本地工具名映射到远程工具', keywords: ['capabilityBindings'] },
 
   // 新闻订阅
   { section: 'news_feed', title: 'RSS 订阅', desc: '添加订阅源', keywords: ['订阅', 'RSSHub', 'Atom', '资讯', '新闻中心'] },
@@ -88,6 +95,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   general: '常规',
   models: '模型',
   data_providers: '数据源',
+  mcp_servers: 'MCP 服务器',
   news_feed: '新闻订阅',
   translation: '翻译',
   multimodal: '多模态',

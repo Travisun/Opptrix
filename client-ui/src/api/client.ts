@@ -1659,3 +1659,58 @@ export const news = {
       total: number
     }>('/news/refresh', { method: 'POST' }),
 }
+
+// ─── External MCP Servers ───
+
+import type {
+  McpServerCreatePayload,
+  McpServerPatchPayload,
+  PublicMcpServer,
+} from '../types/mcpServer'
+
+export async function listMcpServers() {
+  const resp = await jsonFetch<{ servers: PublicMcpServer[] }>('/mcp-servers')
+  return resp.servers
+}
+
+export async function createMcpServer(payload: McpServerCreatePayload) {
+  return jsonFetch<{ server: PublicMcpServer }>('/mcp-servers', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function updateMcpServer(id: string, payload: McpServerPatchPayload) {
+  return jsonFetch<{ server: PublicMcpServer }>(`/mcp-servers/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function deleteMcpServer(id: string) {
+  return jsonFetch<{ ok: boolean; deleted: string }>(`/mcp-servers/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function testMcpServer(id: string) {
+  return jsonFetch<{
+    ok: boolean
+    message: string
+    tools?: string[]
+    server?: PublicMcpServer
+  }>(`/mcp-servers/${encodeURIComponent(id)}/test`, {
+    method: 'POST',
+  }, 60_000)
+}
+
+export async function reorderMcpServers(serverIds: string[]) {
+  const resp = await jsonFetch<{ servers: PublicMcpServer[] }>('/mcp-servers/reorder', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ server_ids: serverIds }),
+  })
+  return resp.servers
+}
