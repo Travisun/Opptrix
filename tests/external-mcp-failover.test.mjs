@@ -67,7 +67,7 @@ test('quota error opens circuit immediately', () => {
 
 test('annotateMcpResult marks source and degraded', () => {
   const a = annotateMcpResult({ price: 1 }, 'ext-a')
-  assert.deepEqual(a, { price: 1, _mcp: { source: 'ext-a', degraded: false } })
+  assert.deepEqual(a, { price: 1, _mcp: { source: 'ext-a' } })
   const b = annotateMcpResult('raw', 'local', { degraded: true })
   assert.deepEqual(b, { data: 'raw', _mcp: { source: 'local', degraded: true } })
 })
@@ -98,6 +98,7 @@ test('AggregatingToolBroker failover: skip failed external then local', async ()
         { serverId: 'b', remoteTool: 'quotes' },
       ]
     },
+    resolveAutoBindChain() { return [] },
     async callExternal(serverId, toolName) {
       calls.push(`${serverId}:${toolName}`)
       if (serverId === 'a') throw new Error('ETIMEDOUT')
@@ -134,6 +135,7 @@ test('AggregatingToolBroker business error does not failover', async () => {
     resolveBindingChain() {
       return [{ serverId: 'a', remoteTool: 't' }]
     },
+    resolveAutoBindChain() { return [] },
     async callExternal(serverId) {
       calls.push(serverId)
       throw new Error('invalid argument')
@@ -151,6 +153,7 @@ test('AggregatingToolBroker business error does not failover', async () => {
 test('AggregatingToolBroker namespaced tool calls external only', async () => {
   const local = {
     async openAiTools() { return [] },
+    async openAiFilteredTools() { return [] },
     async call() { throw new Error('local should not run') },
     async close() {},
   }

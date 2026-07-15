@@ -172,6 +172,7 @@ export function buildIndustryAnalysisPlaybook(): string {
     '3b) 指数成分（沪深300/同花顺概念等）：get_index_constituents(index_code)',
     '4) 需 mindmap：industry_mermaid；核实代表公司：search_instruments → snapshot / evaluate',
     '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
+    '6) 不依赖本地行业库：本 playbook 仅用 industry_mining / get_sector_* / get_index_*，不调用任何已废弃的本地行业工具',
   ].join('\n')
 }
 

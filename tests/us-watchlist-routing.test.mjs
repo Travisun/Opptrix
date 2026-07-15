@@ -12,8 +12,12 @@ for (const manifest of BUILTIN_PROVIDER_MANIFESTS) {
 }
 
 const store = getProviderConfigStore()
-store.save('tencent', { enabled: true })
-store.save('tickflow', { enabled: false })
+try {
+  store.save('tencent', { enabled: true })
+  store.save('tickflow', { enabled: false })
+} catch (e) {
+  // DB may be read-only in some local environments; engine uses defaults
+}
 
 const engine = new MarketDataEngine(false)
 const { registerAllDrivers } = await import('../packages/a-stock-layer/dist/providers/register.js')

@@ -343,7 +343,7 @@ test('agent system rules include analysis and news playbooks', async () => {
   assert.ok(rules.includes('【资讯调阅'))
   assert.ok(rules.includes('【标准 Instrument API'))
   assert.ok(rules.includes('【数据源扩展'))
-  assert.ok(rules.includes('仅使用当前会话已注册的 MCP 工具'))
+  assert.ok(rules.includes('仅使用当前会话已加载的 MCP 工具'))
   assert.doesNotMatch(rules, /screen_stocks/)
   assert.doesNotMatch(rules, /get_local_/)
   assert.doesNotMatch(rules, /market_db_/)
