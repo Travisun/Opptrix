@@ -78,6 +78,7 @@ bindingsFor: () => []
 | **tickflow** | ✅ | US + CN(ETF) + HK | ✅ | ✅ FREE_CN_ETF | ✅ | 少量 custom | **标杆** |
 | **baostock** | ✅ | cnEquityEtfIndex 全 ETF | CN | ✅ | ✅ | custom | **合规** |
 | **sinafinance** | ✅ | cnEquityEtfIndex + SINA_ETF | CN | ✅ | ✅ | F10 深度 custom | **合规**；部分 `sinaEtf*` custom 与标准重复，宜标注 deprecated |
+| **eastmoney** | ✅ | CN EQUITY：STOCK/SECTOR/MARKET_MONEY_FLOW + MARGIN_TRADE + MACRO_INDICATOR | CN | N/A | ✅ 资金流/两融/宏观 | `em*` 排名/历史/宏观目录 | **合规**；data.eastmoney.com 公开接口 |
 | **tencent** | ✅ | CN + **US/HK registry binding**；`mixTencent*Equity` 单 Driver 内路由 | ✅ CN ETF | ✅ 三市场标准方法 + US/HK 详情维度（news/notices/shareholders/dividend/technical） | HK/US 深度财报等 custom | **合规** |
 | **tushare** | ✅ | CN cnEquityEtfIndex | CN | 弱（无 ETF_LIST） | ✅ | 无 | **合规（CN）** |
 | **zzshare** | ✅ | CN；ETF 绑定 FREE_CN_ETF | CN | ✅ ETF_LIST/NAV/PROFILE | ✅ | custom | **合规** |

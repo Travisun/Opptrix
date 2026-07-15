@@ -1,0 +1,176 @@
+import type { CustomMethodApiDoc } from '../common/custom-method-doc-types.js'
+import { toCustomMethodDef } from '../common/custom-method-doc-types.js'
+
+const INVOKE = (method: string, args: string) =>
+  `engine.invokeCustomMethod("eastmoney", "${method}", ${args})`
+
+export const EASTMONEY_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
+  emStockMoneyFlowRank: {
+    method: 'emStockMoneyFlowRank',
+    description: '个股主力净流入排名（可按沪深A/创业板等市场过滤）',
+    sourceUrl: 'https://push2.eastmoney.com/api/qt/clist/get',
+    pageUrl: 'https://data.eastmoney.com/zjlx/list.html',
+    params: [
+      { name: 'market', type: 'string', description: 'all/hsa/sha/sza/cyb/zxb/bja', default: 'hsa' },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 50 },
+      { name: 'stat', type: 'string', description: '1=今日 / 5=五日 / 10=十日', default: '1' },
+    ],
+    returns: '[{ code, name, mainNet, mainNetPct, largeNet, ... }]',
+    usage: INVOKE('emStockMoneyFlowRank', '["hsa",1,50,"5"]'),
+    example: '{"provider":"eastmoney","method":"emStockMoneyFlowRank","args":["cyb",1,20,"1"]}',
+    notes: '默认 fid=f62 今日主力；盘后可改用 stat=5（f164）',
+  },
+  emSectorMoneyFlowMonitor: {
+    method: 'emSectorMoneyFlowMonitor',
+    description: '板块资金流监控（按今日/5日/10日净流入排序）',
+    sourceUrl: 'https://push2.eastmoney.com/api/qt/clist/get',
+    pageUrl: 'https://data.eastmoney.com/bkzj/jlr.html',
+    params: [
+      { name: 'sectorType', type: 'string', description: 'industry|concept|region', default: 'industry' },
+      { name: 'stat', type: 'string', description: '1=今日 / 5=五日 / 10=十日', default: '1' },
+      { name: 'pageSize', type: 'number', description: '返回条数', default: 50 },
+    ],
+    returns: '[{ sectorCode, sectorName, mainNet, mainNet5d, mainNet10d, changePct, ... }]',
+    usage: INVOKE('emSectorMoneyFlowMonitor', '["concept","5",30]'),
+    example: '{"provider":"eastmoney","method":"emSectorMoneyFlowMonitor","args":["industry","1",30]}',
+  },
+  emBoardMoneyFlow: {
+    method: 'emBoardMoneyFlow',
+    description: '板块资金流（行业 / 概念 / 地域）',
+    sourceUrl: 'https://push2.eastmoney.com/api/qt/clist/get',
+    pageUrl: 'https://data.eastmoney.com/bkzj/gn.html',
+    params: [
+      { name: 'boardType', type: 'string', description: 'industry|concept|region 或 hy|gn|dy', default: 'concept' },
+      { name: 'pageSize', type: 'number', description: '返回条数', default: 50 },
+    ],
+    returns: '[{ sectorCode, sectorName, mainNet, changePct, ... }]',
+    usage: INVOKE('emBoardMoneyFlow', '["gn",50]'),
+    example: '{"provider":"eastmoney","method":"emBoardMoneyFlow","args":["region",20]}',
+  },
+  emMarketMoneyFlowHistory: {
+    method: 'emMarketMoneyFlowHistory',
+    description: '大盘（指数）资金流日历史',
+    sourceUrl: 'https://push2his.eastmoney.com/api/qt/stock/fflow/daykline/get',
+    pageUrl: 'https://data.eastmoney.com/zjlx/dpzjlx.html',
+    params: [
+      { name: 'indexCode', type: 'string', description: '指数代码，如 000001 / 399001', default: '000001' },
+      { name: 'limit', type: 'number', description: '返回天数', default: 30 },
+    ],
+    returns: 'MoneyFlow[]（mainNet/分档净流入）',
+    usage: INVOKE('emMarketMoneyFlowHistory', '["000001",30]'),
+    example: '{"provider":"eastmoney","method":"emMarketMoneyFlowHistory","args":["399001",60]}',
+  },
+  emMarginMarketTotal: {
+    method: 'emMarginMarketTotal',
+    description: '沪深京融资融券合计历史',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPTA_RZRQ_LSHJ',
+    pageUrl: 'https://data.eastmoney.com/rzrq/total.html',
+    params: [
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 50 },
+    ],
+    returns: '[{ date, financingBalance, financingNetBuy, securitiesBalance, ... }]',
+    usage: INVOKE('emMarginMarketTotal', '[1,30]'),
+    example: '{"provider":"eastmoney","method":"emMarginMarketTotal","args":[1,20]}',
+  },
+  emMarginMarketExchange: {
+    method: 'emMarginMarketExchange',
+    description: '分市场融资融券历史（沪/深/京）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPTA_WEB_RZRQ_LSSH',
+    pageUrl: 'https://data.eastmoney.com/rzrq/total.html',
+    params: [
+      { name: 'market', type: 'string', description: 'sh|sz|bj', default: 'sh', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 50 },
+    ],
+    returns: '[{ date, marketCode, financingBalance, financingNetBuy, ... }]',
+    usage: INVOKE('emMarginMarketExchange', '["sz",1,30]'),
+    example: '{"provider":"eastmoney","method":"emMarginMarketExchange","args":["bj",1,20]}',
+  },
+  emMarginStockHistory: {
+    method: 'emMarginStockHistory',
+    description: '个股融资融券明细历史（分页）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPTA_WEB_RZRQ_GGMX',
+    pageUrl: 'https://data.eastmoney.com/rzrq/',
+    params: [
+      { name: 'code', type: 'string', description: '6 位 A 股代码', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 50 },
+    ],
+    returns: '[{ code, date, financingBalance, financingNetBuy, securitiesBalance, ... }]',
+    usage: INVOKE('emMarginStockHistory', '["300502",1,30]'),
+    example: '{"provider":"eastmoney","method":"emMarginStockHistory","args":["600519",1,50]}',
+  },
+  emMacroList: {
+    method: 'emMacroList',
+    description: '宏观数据中心目录（中国 / 国外 / 行业指数）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get',
+    pageUrl: 'https://data.eastmoney.com/cjsj/ppi.html',
+    params: [
+      { name: 'scope', type: 'string', description: 'all|cn|foreign|industry', default: 'all' },
+    ],
+    returns: '[{ scope, key, name, reportName|indicatorId, pageUrl?, country? }]',
+    usage: INVOKE('emMacroList', '["cn"]'),
+    example: '{"provider":"eastmoney","method":"emMacroList","args":["foreign"]}',
+    notes: '先列目录再调 emMacro / emMacroForeign / emMacroIndustryIndex',
+  },
+  emMacro: {
+    method: 'emMacro',
+    description: '中国宏观单指标序列（CPI/PPI/GDP/社零/货币供应等）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMY_*',
+    pageUrl: 'https://data.eastmoney.com/cjsj/cpi.html',
+    params: [
+      { name: 'indicator', type: 'string', description: '目录 key 或别名，如 ppi / 社零 / m2', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 60 },
+    ],
+    returns: '[{ indicator, indicatorKey, date, period, ...字段按指标 }]',
+    usage: INVOKE('emMacro', '["ppi",1,36]'),
+    example: '{"provider":"eastmoney","method":"emMacro","args":["gdp",1,40]}',
+  },
+  emMacroForeign: {
+    method: 'emMacroForeign',
+    description: '国外宏观指标序列（美/德/日/英/澳/欧/加/港等）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_ECONOMICVALUE_*',
+    pageUrl: 'https://data.eastmoney.com/cjsj/foreign_0_0.html',
+    params: [
+      { name: 'keyOrIdOrName', type: 'string', description: 'foreign_0_0 / EMG… / 指标中文名', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 60 },
+    ],
+    returns: '[{ indicator, indicatorKey, indicatorId, country, date, value, preValue, unit }]',
+    usage: INVOKE('emMacroForeign', '["foreign_0_0",1,30]'),
+    example: '{"provider":"eastmoney","method":"emMacroForeign","args":["ISM制造业指数",1,20]}',
+  },
+  emMacroIndustryIndex: {
+    method: 'emMacroIndustryIndex',
+    description: '行业指数序列（hyzs_list）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_INDUSTRY_INDEX',
+    pageUrl: 'https://data.eastmoney.com/cjsj/hyzs_list.html',
+    params: [
+      { name: 'keyOrIdOrName', type: 'string', description: 'hyzs_list_EMI… / EMI 码 / 指数名', required: true },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 60 },
+    ],
+    returns: '[{ indicator, indicatorKey, indicatorId, date, value, changePct, changePct1y }]',
+    usage: INVOKE('emMacroIndustryIndex', '["EMI00662543",1,30]'),
+    example: '{"provider":"eastmoney","method":"emMacroIndustryIndex","args":["EMI00662543",1,20]}',
+  },
+  emMacroOil: {
+    method: 'emMacroOil',
+    description: '油价：成品油调价 / 各省油价 / 原油行情',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPTA_WEB_YJ_*',
+    pageUrl: 'https://data.eastmoney.com/cjsj/oil_world.html',
+    params: [
+      { name: 'kind', type: 'string', description: 'adjust|province|quote', default: 'adjust' },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数', default: 60 },
+    ],
+    returns: '[{ indicator, indicatorKey, date, gasoline?, diesel?, city?, close? }]',
+    usage: INVOKE('emMacroOil', '["adjust",1,20]'),
+    example: '{"provider":"eastmoney","method":"emMacroOil","args":["province",1,100]}',
+  },
+}
+
+export const EASTMONEY_CUSTOM = Object.values(EASTMONEY_METHOD_DOCS).map(toCustomMethodDef)
