@@ -153,13 +153,13 @@ const INTENT_RULES: IntentRule[] = [
     intent: 'macro_series',
     priority: 87,
     patterns: [
-      /\bCPI\b|\bPPI\b|\bPMI\b|\bGDP\b|\bLPR\b|\bSHIBOR\b|居民消费价格|生产者物价|采购经理人|贷款市场报价|社融|货币供应|存款准备金/i,
-      /宏观数据|宏观经济指标|通胀率|降准|降息/,
+      /\bCPI\b|\bPPI\b|\bPMI\b|\bGDP\b|\bLPR\b|\bSHIBOR\b|居民消费价格|生产者物价|采购经理人|贷款市场报价|社融|货币供应|存款准备金|社零|进出口|固投|外储|油价|成品油/i,
+      /宏观数据|宏观经济指标|通胀率|降准|降息|国外宏观|行业指数|ISM制造业/,
     ],
     preferredTools: ['get_macro_series', 'get_market_regime'],
     avoidTools: ['get_market_dynamics', 'evaluate_instrument', 'invoke_provider_custom_method'],
     confidence: 'high',
-    hint: '宏观数字序列 → get_macro_series(kind=cpi|ppi|pmi|gdp|lpr|shibor)；勿用 regime 代替事实表',
+    hint: '宏观数字序列 → get_macro_series(scope/kind；中国翻页带 page)；勿用 regime 代替事实表；勿直接 invoke eastmoney emMacro*',
   },
   {
     intent: 'market_dynamics',

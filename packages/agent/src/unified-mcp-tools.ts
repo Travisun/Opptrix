@@ -396,16 +396,29 @@ export function buildUnifiedInstrumentTools(
       name: 'get_macro_series',
       category: '市场资金',
       description:
-        '中国宏观事实序列：CPI/PPI/PMI/GDP/LPR/SHIBOR 等；经 MACRO_INDICATOR（Baostock 优先，AkShare 东财回退）。市况叙事仍用 get_market_regime',
+        '宏观事实序列（东财 cjsj）：中国 CPI/PPI/GDP/社零/货币供应等；国外宏观；行业指数；油价。'
+        + '标准路由 MACRO_INDICATOR（Baostock→eastmoney→AkShare）；翻页/国外/行业/油价走 eastmoney。'
+        + '市况叙事仍用 get_market_regime',
       parameters: S({
+        scope: {
+          type: 'string',
+          description:
+            'cn（默认）| foreign | industry | oil | catalog；catalog 时 kind=cn|foreign|industry|all',
+        },
         kind: {
           type: 'string',
-          description: 'cpi | ppi | pmi | gdp | lpr | shibor（必填其一；空则返回多指标最新摘要）',
+          description:
+            '指标：cpi/ppi/gdp/社零/m2…；国外 foreign_0_0 或指标名；行业 EMI…；油价 adjust|province|quote；空+scope=cn 返回核心摘要',
         },
-        limit: { type: 'number', description: '最多返回条数，默认 36，最大 120' },
+        page: { type: 'number', description: '页码，默认 1（中国第 2 页起走 eastmoney 翻页）' },
+        page_size: { type: 'number', description: '每页条数，默认 36，最大 200' },
+        limit: { type: 'number', description: '同 page_size（兼容旧参数）' },
       }),
       handler: (a) => d('macro_series', {
+        scope: a.scope ?? 'cn',
         kind: a.kind ?? a.indicator ?? a.series ?? '',
+        page: a.page ?? 1,
+        page_size: a.page_size ?? a.limit,
         limit: a.limit,
       }),
     },

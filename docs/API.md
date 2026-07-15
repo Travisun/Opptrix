@@ -82,7 +82,7 @@
 | `market_session` | `market?` | 轻量交易时段状态 |
 | `cn_market_special` | `kind` + 可选 code/date/tag… | A 股专题（连板天梯/飙升/热股/异动/同花顺概念目录；成分/财务指标用专用 feature） |
 | `trade_calendar` | `year?` | A 股交易日历 |
-| `macro_series` | `kind` / `limit?` | 中国宏观序列（CPI/PPI/PMI/GDP/LPR/SHIBOR；Baostock→AkShare） |
+| `macro_series` | `scope?` / `kind` / `page?` / `page_size?` | 宏观序列（中国 MACRO_INDICATOR；国外/行业/油价/翻页→eastmoney cjsj） |
 | `index_constituents` | `index_code` / `code` | 指数/同花顺板块成分 |
 | `dragon_tiger` | `date?` | 龙虎榜 |
 | `limit_updown` | `date?` | 涨跌停池 |
@@ -160,7 +160,7 @@ POST /api/research
 | `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |
 | `cn_market_special` | `kind` + 按 kind 的 code/date/tag 等 | A 股专题（连板/热股/异动/同花顺概念目录；经 tonghuashun custom。指数成分→`index_constituents`，财务指标→`instrument_financial_indicators`） |
 | `trade_calendar` | `year?` | A 股交易日历 |
-| `macro_series` | `kind` + 可选 `limit` | 中国宏观事实序列（经 `MACRO_INDICATOR`；AkShare 东财 CPI 等为回退源） |
+| `macro_series` | `scope?` + `kind` + 可选 `page` / `page_size` / `limit` | 宏观事实序列（`MACRO_INDICATOR` + eastmoney cjsj：国外/行业/油价/翻页） |
 | `index_constituents` | `index_code` | 指数成分（标准 INDEX_CONST + 同花顺回退） |
 | `dragon_tiger` | `date?` | 龙虎榜 |
 | `limit_updown` | `date?` | 涨跌停池 |

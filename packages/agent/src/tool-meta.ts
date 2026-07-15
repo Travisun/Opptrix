@@ -123,8 +123,11 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_macro_series: {
     hubFeature: 'macro_series',
     miningEligible: true,
-    usageGuide: '中国宏观序列 CPI/PPI/PMI/GDP/LPR/SHIBOR；须 kind。市况叙事用 get_market_regime，勿混用。',
-    compliance: '依赖 Baostock 或 AkShare；无数据声明缺口；勿编造数值。',
+    usageGuide:
+      '宏观序列：scope=cn|foreign|industry|oil|catalog；中国常用 kind=cpi/ppi/gdp/社零；'
+      + '先 catalog 再取数。市况叙事用 get_market_regime，勿混用。',
+    compliance:
+      '中国首页优先 MACRO_INDICATOR；翻页/国外/行业/油价依赖 eastmoney；无数据声明缺口；勿编造数值。',
   },
   get_dragon_tiger: {
     hubFeature: 'dragon_tiger',

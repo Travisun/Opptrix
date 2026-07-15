@@ -2545,34 +2545,105 @@ export class ResearchHub {
   }
 
   /**
-   * 中国宏观序列 — Engine MACRO_INDICATOR（Baostock 优先，AkShare/东财 CPI·PPI·PMI·GDP·LPR 回退）
+   * 宏观序列 — 中国走 MACRO_INDICATOR；国外/行业/油价/翻页走 eastmoney cjsj。
+   * scope: cn（默认）| foreign | industry | oil | catalog
    */
   private async macroSeries(params: Record<string, unknown>, t0: number) {
-    const kind = String(params.kind ?? params.indicator ?? params.series ?? 'cpi').trim().toLowerCase()
-    const allowed = new Set(['cpi', 'ppi', 'pmi', 'gdp', 'lpr', 'shibor', 'm2', 'deposit', 'loan', 'rrr', ''])
-    // 允许空串走全量摘要；未知 kind 仍交给 provider 模糊匹配
-    if (kind && !allowed.has(kind) && !/^[a-z0-9_]+$/i.test(kind)) {
-      return fail('kind 非法', t0)
+    const scope = String(params.scope ?? 'cn').trim().toLowerCase() || 'cn'
+    const kind = String(params.kind ?? params.indicator ?? params.series ?? '').trim()
+    const pageRaw = params.page != null ? Number(params.page) : 1
+    const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1
+    const sizeRaw = params.page_size != null ? Number(params.page_size)
+      : params.limit != null ? Number(params.limit)
+        : 36
+    const pageSize = Number.isFinite(sizeRaw)
+      ? Math.min(200, Math.max(1, Math.floor(sizeRaw)))
+      : 36
+
+    if (!['cn', 'china', 'foreign', 'industry', 'hyzs', 'oil', 'catalog', 'list'].includes(scope)) {
+      return fail('scope 须为 cn | foreign | industry | oil | catalog', t0)
     }
-    const r = await this.de.macroIndicator(kind)
-    if (!r.success || !Array.isArray(r.data) || !r.data.length) {
-      return fail(
-        r.error ?? '宏观数据暂不可用（请确认已启用 Baostock 或 AkShare；kind=cpi|ppi|pmi|gdp|lpr|shibor）',
-        t0,
-      )
-    }
-    const limitRaw = params.limit != null ? Number(params.limit) : 36
-    const limit = Number.isFinite(limitRaw) ? Math.min(120, Math.max(1, Math.floor(limitRaw))) : 36
-    const items = r.data.slice(0, limit)
-    return ok(
+
+    const okRows = (
+      items: unknown[],
+      source: string,
+      providerMethod?: string,
+      hint?: string,
+    ) => ok(
       {
-        kind: kind || 'summary',
+        scope: scope === 'china' ? 'cn' : scope === 'hyzs' ? 'industry' : scope === 'list' ? 'catalog' : scope,
+        kind: kind || (scope === 'oil' ? 'adjust' : scope === 'catalog' || scope === 'list' ? 'catalog' : 'summary'),
+        page,
+        page_size: pageSize,
         items,
         count: items.length,
-        source: r.source ?? 'macroIndicator',
-        hint: '市况叙事仍用 get_market_regime；本工具为可引用宏观事实序列',
+        source,
+        ...(providerMethod ? { provider_method: providerMethod } : {}),
+        hint: hint ?? '市况叙事仍用 get_market_regime；本工具为可引用宏观事实序列',
       },
-      `宏观 ${kind || 'summary'} ${items.length} 条`,
+      `宏观 ${scope} ${kind || 'summary'} ${items.length} 条`,
+      t0,
+    )
+
+    const fromCustom = async (method: string, args: unknown[], label: string) => {
+      const r = await this.de.invokeCustomMethod('eastmoney', method, args)
+      if (!r.success) {
+        return fail(r.error ?? `${label}暂不可用（请启用 eastmoney Provider）`, t0)
+      }
+      const raw = r.data
+      const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+      if (!rows.length) return fail(`${label}无数据`, t0)
+      return okRows(rows, 'eastmoney', method)
+    }
+
+    if (scope === 'catalog' || scope === 'list') {
+      const listScope = kind || String(params.catalog_scope ?? 'cn')
+      return fromCustom('emMacroList', [listScope], '宏观目录')
+    }
+
+    if (scope === 'foreign') {
+      if (!kind) return fail('国外宏观须传 kind（如 foreign_0_0 / EMG… / ISM制造业指数）', t0)
+      return fromCustom('emMacroForeign', [kind, page, pageSize], '国外宏观')
+    }
+
+    if (scope === 'industry' || scope === 'hyzs') {
+      if (!kind) return fail('行业指数须传 kind（如 EMI00662543 / 农副指数）', t0)
+      return fromCustom('emMacroIndustryIndex', [kind, page, pageSize], '行业指数')
+    }
+
+    if (scope === 'oil') {
+      const oilKind = kind || 'adjust'
+      return fromCustom('emMacroOil', [oilKind, page, pageSize], '油价')
+    }
+
+    // —— 中国宏观 ——
+    // 翻页或非首页：直接走 eastmoney emMacro（标准 MACRO_INDICATOR 无 page）
+    if (page > 1) {
+      if (!kind) return fail('中国宏观翻页须传 kind', t0)
+      return fromCustom('emMacro', [kind, page, pageSize], '中国宏观')
+    }
+
+    // 首页：标准 Capability 路由（Baostock → eastmoney → AkShare）
+    const r = await this.de.macroIndicator(kind)
+    if (r.success && Array.isArray(r.data) && r.data.length) {
+      const items = r.data.slice(0, pageSize)
+      return okRows(items, r.source ?? 'macroIndicator')
+    }
+
+    // 标准路由无结果时，回退 eastmoney 全量中国目录（社零/固投等）
+    if (kind) {
+      const fallback = await this.de.invokeCustomMethod('eastmoney', 'emMacro', [kind, 1, pageSize])
+      if (fallback.success) {
+        const raw = fallback.data
+        const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+        if (rows.length) return okRows(rows, 'eastmoney', 'emMacro')
+      }
+    }
+
+    return fail(
+      r.error
+        ?? '宏观数据暂不可用（请确认已启用 eastmoney / Baostock / AkShare；'
+        + 'kind=cpi|ppi|pmi|gdp|lpr|社零…；国外/行业/油价请传 scope）',
       t0,
     )
   }
