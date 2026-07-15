@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   ChevronDownRegular,
@@ -10,6 +10,7 @@ import type { ChatToolStep } from '../types/chatProgress'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import ThinkingDots from '../components/ThinkingDots'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   root: {
@@ -36,22 +37,22 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '4px',
   },
+  scrollWrapper: {
+    maxHeight: '320px',
+    overflowY: 'auto',
+    borderRadius: opptrixTokens.radiusMd,
+  },
   stepRow: {
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: opptrixCssVars.canvasAlt,
     overflow: 'hidden',
   },
   stepHead: {
-    display: 'flex',
-    alignItems: 'center',
     gap: '6px',
-    width: '100%',
-    padding: '7px 10px',
-    border: 'none',
-    backgroundColor: 'transparent',
     cursor: 'pointer',
     textAlign: 'left',
-    boxSizing: 'border-box',
+    justifyContent: 'flex-start',
+    padding: '7px 10px',
     ':disabled': {
       cursor: 'default',
     },
@@ -189,14 +190,14 @@ function StepRow({ step, live = false, defaultExpanded = false }: StepRowProps) 
   return (
     <div className={s.stepRow}>
       {expandable ? (
-        <button
-          type="button"
+        <OpptrixButton
+          variant="ghost"
           className={s.stepHead}
           onClick={() => setExpanded(v => !v)}
           aria-expanded={expanded}
         >
           {head}
-        </button>
+        </OpptrixButton>
       ) : (
         <div className={s.stepHead} aria-disabled>
           {head}
@@ -237,8 +238,8 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
 
   return (
     <div className={s.stepRow}>
-      <button
-        type="button"
+      <OpptrixButton
+        variant="ghost"
         className={s.stepHead}
         onClick={() => !active && setExpanded(v => !v)}
         aria-expanded={expanded}
@@ -257,7 +258,7 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
           模型分析思路
           {active ? '…' : ''}
         </Text>
-      </button>
+      </OpptrixButton>
       {!active && expanded && (
         <div className={s.stepBody}>
           <Text className={s.thinkingSnippet} block>
@@ -283,6 +284,8 @@ export default function ChatProcessTrace({
   live = false,
 }: Props) {
   const s = useStyles()
+  const scrollRef = useRef<HTMLDivElement>(null)
+  const prevStepLenRef = useRef(steps.length)
   const runningStep = live ? steps.find(st => st.status === 'running') : null
   const modelThinking = live && !runningStep
   const snippetActive = modelThinking && Boolean(thinkingLabel?.includes('思路'))
@@ -290,6 +293,17 @@ export default function ChatProcessTrace({
   const showStatusHead = Boolean(thinkingLabel && (live || thinkingSnippet)) && !hideStatusForSnippet
   const showLiveSnippet = live && Boolean(thinkingSnippet)
   const showHistorySnippet = Boolean(thinkingSnippet && !live)
+
+  // 实时对话中步骤增长时自动滚动到底部
+  useEffect(() => {
+    if (!live) return
+    const el = scrollRef.current
+    if (!el) return
+    if (steps.length > prevStepLenRef.current) {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' })
+    }
+    prevStepLenRef.current = steps.length
+  }, [live, steps.length])
 
   if (!showStatusHead && !showLiveSnippet && !showHistorySnippet && steps.length === 0) {
     return null
@@ -336,10 +350,15 @@ export default function ChatProcessTrace({
       )}
 
       {steps.length > 0 && (
-        <div className={s.stepList}>
-          {steps.map(step => (
-            <StepRow key={step.id} step={step} live={live} />
-          ))}
+        <div
+          ref={scrollRef}
+          className={mergeClasses(s.scrollWrapper, 'opptrix-scroll')}
+        >
+          <div className={s.stepList}>
+            {steps.map(step => (
+              <StepRow key={step.id} step={step} live={live} />
+            ))}
+          </div>
         </div>
       )}
     </div>

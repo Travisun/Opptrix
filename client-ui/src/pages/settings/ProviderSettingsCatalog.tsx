@@ -677,8 +677,9 @@ function ProviderListRow({
             {statusMeta}
           </Text>
           {hasSettings && (
-            <button
-              type="button"
+            <OpptrixButton
+              variant="ghost"
+              size="small"
               className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
               aria-expanded={expanded}
               onClick={() => setExpanded(v => !v)}
@@ -687,30 +688,30 @@ function ProviderListRow({
                 ? <ChevronDownRegular fontSize={11} />
                 : <ChevronRightRegular fontSize={11} />}
               <span>{expanded ? '收起设置' : '配置连接'}</span>
-            </button>
+            </OpptrixButton>
           )}
         </div>
         <div className={s.listRowControls}>
           {sortable && (
             <div className={priorityS.moveControls}>
-              <button
-                type="button"
+              <OpptrixButton
+                variant="icon"
+                size="small"
                 className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
                 disabled={moveUpDisabled || saving}
                 aria-label={`上移 ${provider.title}`}
+                icon={<ChevronUpRegular fontSize={12} />}
                 onClick={onMoveUp}
-              >
-                <ChevronUpRegular fontSize={12} />
-              </button>
-              <button
-                type="button"
+              />
+              <OpptrixButton
+                variant="icon"
+                size="small"
                 className={mergeClasses(priorityS.moveBtn, 'opptrix-focusable')}
                 disabled={moveDownDisabled || saving}
                 aria-label={`下移 ${provider.title}`}
+                icon={<ChevronDownRegular fontSize={12} />}
                 onClick={onMoveDown}
-              >
-                <ChevronDownRegular fontSize={12} />
-              </button>
+              />
             </div>
           )}
           <Switch

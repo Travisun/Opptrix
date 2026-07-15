@@ -701,14 +701,15 @@ export default function TranslationSettingsSection() {
             </Text>
             <div className={s.panelFooterDirRow}>
               {downloadDir ? (
-                <button
-                  type="button"
+                <OpptrixButton
+                  variant="ghost"
+                  size="small"
                   className={s.panelFooterDir}
                   title="点击打开文件夹"
                   onClick={() => { void handleOpenDownloadDir() }}
                 >
                   {downloadDir}
-                </button>
+                </OpptrixButton>
               ) : (
                 <span className={s.panelFooterDirMuted}>加载中…</span>
               )}

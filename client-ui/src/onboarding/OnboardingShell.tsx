@@ -527,12 +527,12 @@ export function OnboardingTextLink({
 }) {
   const s = useOnboardingShellStyles()
   return (
-    <button
-      type="button"
-      className={mergeClasses(s.link, 'opptrix-focusable', className)}
+    <OpptrixButton
+      variant="ghost"
+      className={mergeClasses(s.link, className)}
       onClick={onClick}
     >
       {children}
-    </button>
+    </OpptrixButton>
   )
 }

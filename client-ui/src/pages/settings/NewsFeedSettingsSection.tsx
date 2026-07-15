@@ -693,34 +693,34 @@ export default function NewsFeedSettingsSection() {
         />
       ) : (<>
         <div className={s.modeRow}>
-          <button
-            type="button"
+          <OpptrixButton
+            variant="ghost"
             className={mergeClasses(s.modeTab, viewMode === 'subscriptions' && s.modeTabActive)}
             onClick={() => setViewMode('subscriptions')}
           >
             订阅源
-          </button>
-          <button
-            type="button"
+          </OpptrixButton>
+          <OpptrixButton
+            variant="ghost"
             className={mergeClasses(s.modeTab, viewMode === 'groups' && s.modeTabActive)}
             onClick={() => setViewMode('groups')}
           >
             分组管理
-          </button>
-          <button
-            type="button"
+          </OpptrixButton>
+          <OpptrixButton
+            variant="ghost"
             className={mergeClasses(s.modeTab, viewMode === 'storage' && s.modeTabActive)}
             onClick={() => setViewMode('storage')}
           >
             本地存储
-          </button>
-          <button
-            type="button"
+          </OpptrixButton>
+          <OpptrixButton
+            variant="ghost"
             className={mergeClasses(s.modeTab, viewMode === 'update' && s.modeTabActive)}
             onClick={() => setViewMode('update')}
           >
             更新
-          </button>
+          </OpptrixButton>
         </div>
 
       {viewMode === 'subscriptions' && (
@@ -772,8 +772,9 @@ export default function NewsFeedSettingsSection() {
                     {sub.last_error && (
                       <Text className={s.subError} block>拉取失败：{sub.last_error}</Text>
                     )}
-                    <button
-                      type="button"
+                    <OpptrixButton
+                      variant="ghost"
+                      size="small"
                       className={s.urlToggle}
                       aria-expanded={!!expandedSubIds[sub.id]}
                       onClick={() => toggleSubUrl(sub.id)}
@@ -784,7 +785,7 @@ export default function NewsFeedSettingsSection() {
                       <span className={s.urlToggleLabel}>
                         {expandedSubIds[sub.id] ? '收起订阅地址' : formatSubscriptionUrlShort(sub.url)}
                       </span>
-                    </button>
+                    </OpptrixButton>
                     {expandedSubIds[sub.id] && (
                       <Text className={s.urlFull} block>
                         {sub.url}

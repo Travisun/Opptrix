@@ -12,6 +12,7 @@ import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, inputShellInteractive } from '../theme/mixins'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const ICON = 15
 
@@ -251,10 +252,10 @@ export default function WorkspaceSearchDialog({ open, onClose, onAction }: Props
   const renderHit = (hit: SearchHit) => {
     const meta = hitMeta(hit)
     return (
-      <button
+      <OpptrixButton
         key={`${hit.kind}-${hit.kind === 'session' ? hit.id : hit.kind === 'stock' ? hit.code : hit.id}`}
-        type="button"
-        className={mergeClasses(s.resultItem, 'opptrix-focusable')}
+        variant="ghost"
+        className={mergeClasses(s.resultItem)}
         onClick={() => handleHit(hit)}
       >
         <span className={s.resultIcon}><HitIcon hit={hit} /></span>
@@ -262,7 +263,7 @@ export default function WorkspaceSearchDialog({ open, onClose, onAction }: Props
           <span className={s.resultTitle}>{hitTitle(hit)}</span>
           {meta && <span className={s.resultMeta}>{meta}</span>}
         </span>
-      </button>
+      </OpptrixButton>
     )
   }
 
@@ -321,17 +322,17 @@ export default function WorkspaceSearchDialog({ open, onClose, onAction }: Props
                   <div className={s.status}>暂无最近对话</div>
                 )}
                 {recent.map(sess => (
-                  <button
+                  <OpptrixButton
                     key={sess.id}
-                    type="button"
-                    className={mergeClasses(s.resultItem, 'opptrix-focusable')}
+                    variant="ghost"
+                    className={mergeClasses(s.resultItem)}
                     onClick={() => openSession(sess.id)}
                   >
                     <span className={s.resultIcon}><ChatRegular fontSize={ICON} /></span>
                     <span className={s.resultMain}>
                       <span className={s.resultTitle}>{sess.title}</span>
                     </span>
-                  </button>
+                  </OpptrixButton>
                 ))}
 
                 {archived.length > 0 && (
@@ -341,9 +342,9 @@ export default function WorkspaceSearchDialog({ open, onClose, onAction }: Props
                       const expanded = expandedFolders.has(group.folderId)
                       return (
                         <div key={group.folderId}>
-                          <button
-                            type="button"
-                            className={mergeClasses(s.folderHead, 'opptrix-focusable')}
+                          <OpptrixButton
+                            variant="ghost"
+                            className={mergeClasses(s.folderHead)}
                             onClick={() => toggleFolder(group.folderId)}
                           >
                             {expanded
@@ -352,20 +353,20 @@ export default function WorkspaceSearchDialog({ open, onClose, onAction }: Props
                             <ArchiveRegular fontSize={12} />
                             <span>{group.title}</span>
                             <span className={s.folderCount}>{group.sessions.length}</span>
-                          </button>
+                          </OpptrixButton>
                           {expanded && (
                             <div className={s.folderSessions}>
                               {group.sessions.map(sess => (
-                                <button
+                                <OpptrixButton
                                   key={sess.id}
-                                  type="button"
-                                  className={mergeClasses(s.resultItem, 'opptrix-focusable')}
+                                  variant="ghost"
+                                  className={mergeClasses(s.resultItem)}
                                   onClick={() => openSession(sess.id)}
                                 >
                                   <span className={s.resultMain}>
                                     <span className={s.resultTitle}>{sess.title}</span>
                                   </span>
-                                </button>
+                                </OpptrixButton>
                               ))}
                             </div>
                           )}

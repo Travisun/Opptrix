@@ -1,36 +1,22 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { ghostInteractive } from '../theme/mixins'
-import { DESKTOP_TOOL_ICON_PADDING, DESKTOP_TOOL_SIZE } from './constants'
+import { opptrixCssVars } from '../theme/tokens'
+import { iconBtnMixin } from '../theme/mixins'
+
+type IconBtnSize = 'sm' | 'md' | 'lg' | 'xl'
+
+interface ChromeToolButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+  children: ReactNode
+  label: string
+  /** Button size — overrides default dimension */
+  size?: IconBtnSize
+  /** Inner padding — smaller values leave room for a larger glyph in the same hit target */
+  iconPadding?: number
+  active?: boolean
+}
 
 const useStyles = makeStyles({
-  btn: {...ghostInteractive,
-
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    width: `${DESKTOP_TOOL_SIZE}px`,
-    height: `${DESKTOP_TOOL_SIZE}px`,
-    minWidth: `${DESKTOP_TOOL_SIZE}px`,
-    boxSizing: 'border-box',
-borderRadius: opptrixTokens.radiusSm,
-    color: opptrixCssVars.textSecondary,
-    flexShrink: 0,
-    WebkitAppRegion: 'no-drag',
-    ':hover': {
-      backgroundColor: opptrixCssVars.accentSoft,
-      color: opptrixCssVars.textPrimary,
-    },
-    ':disabled': {
-      opacity: 0.28,
-      cursor: 'default',
-      ':hover': {
-        backgroundColor: 'transparent',
-        color: opptrixCssVars.textSecondary,
-      },
-    },
-  },
+  btn: iconBtnMixin('md'),
   btnActive: {
     backgroundColor: opptrixCssVars.accentSoft,
     color: opptrixCssVars.accent,
@@ -39,34 +25,36 @@ borderRadius: opptrixTokens.radiusSm,
       color: opptrixCssVars.accent,
     },
   },
+  btnSm: iconBtnMixin('sm'),
+  btnMd: iconBtnMixin('md'),
+  btnLg: iconBtnMixin('lg'),
+  btnXl: iconBtnMixin('xl'),
 })
-
-interface ChromeToolButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
-  children: ReactNode
-  label: string
-  /** Inner padding — smaller values leave room for a larger glyph in the same hit target */
-  iconPadding?: number
-  active?: boolean
-}
 
 export default function ChromeToolButton({
   children,
   label,
   className,
-  iconPadding = DESKTOP_TOOL_ICON_PADDING,
+  size = 'md',
+  iconPadding,
   active = false,
   style,
   ...rest
 }: ChromeToolButtonProps) {
   const s = useStyles()
+  const sizeClass = size === 'sm' ? s.btnSm
+    : size === 'lg' ? s.btnLg
+      : size === 'xl' ? s.btnXl
+        : s.btnMd
+
   return (
     <button
       type="button"
-      className={mergeClasses(s.btn, active && s.btnActive, 'opptrix-focusable', className)}
+      className={mergeClasses(sizeClass, active && s.btnActive, 'opptrix-focusable', className)}
       aria-pressed={active || undefined}
       aria-label={label}
       title={label}
-      style={{ padding: `${iconPadding}px`, ...style }}
+      style={iconPadding !== undefined ? { padding: `${iconPadding}px`, ...style } : style}
       {...rest}
     >
       {children}

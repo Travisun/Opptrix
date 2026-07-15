@@ -12,6 +12,7 @@ import {
   type TableHTMLAttributes,
 } from 'react'
 import { CheckmarkCircleFilled, ClipboardPasteRegular } from '@fluentui/react-icons'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const COPY_COL_CLASS = 'opptrix-md-table-copy-col'
 const COPY_COL_KEY = 'opptrix-md-table-copy-col'
@@ -65,8 +66,8 @@ function TableCopyButton({
   onCopy: () => void
 }) {
   return (
-    <button
-      type="button"
+    <OpptrixButton
+      variant="icon"
       className="opptrix-md-table-copy"
       onClick={onCopy}
       title={label}
@@ -77,7 +78,7 @@ function TableCopyButton({
       ) : (
         <ClipboardPasteRegular fontSize={18} />
       )}
-    </button>
+    </OpptrixButton>
   )
 }
 

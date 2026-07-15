@@ -7,7 +7,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
-import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { Text, mergeClasses, makeStyles } from '@fluentui/react-components'
 import {
   CheckmarkCircleRegular,
   DismissRegular,
@@ -19,6 +19,7 @@ import { isElectron } from '../../platform/detect'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { glassPanel, motion } from '../../theme/mixins'
+import OpptrixButton from '../../components/opptrix/OpptrixButton'
 
 export type SettingsToastTone = 'success' | 'error' | 'info' | 'warning'
 
@@ -104,20 +105,6 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     color: opptrixCssVars.textPrimary,
   },
-  dismissBtn: {
-    flexShrink: 0,
-    border: 'none',
-    background: 'transparent',
-    color: opptrixCssVars.textTertiary,
-    cursor: 'pointer',
-    padding: '2px',
-    lineHeight: 0,
-    borderRadius: opptrixTokens.radiusSm,
-    ':hover': {
-      color: opptrixCssVars.textPrimary,
-      backgroundColor: 'rgba(29, 29, 31, 0.06)',
-    },
-  },
   toneSuccess: {
     borderLeft: `3px solid ${opptrixCssVars.success}`,
   },
@@ -175,14 +162,13 @@ function SettingsToastViewport({
         >
           {toneIcon(s, item.tone)}
           <Text className={s.message} block>{item.message}</Text>
-          <button
-            type="button"
-            className={s.dismissBtn}
+          <OpptrixButton
+            variant="icon"
+            size="small"
             aria-label="关闭提示"
+            icon={<DismissRegular fontSize={14} />}
             onClick={() => onDismiss(item.id)}
-          >
-            <DismissRegular fontSize={14} />
-          </button>
+          />
         </div>
       ))}
     </div>

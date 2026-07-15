@@ -331,15 +331,15 @@ export default function MultimodalSettingsSection() {
       <Text className={s.hint} block>{engineHint}</Text>
 
       <div className={s.modeRow}>
-        <button
-          type="button"
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, viewMode === 'enrichment' && s.modeTabActive)}
           onClick={() => setViewMode('enrichment')}
         >
           媒体处理
-        </button>
-        <button
-          type="button"
+        </OpptrixButton>
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, viewMode === 'translation' && s.modeTabActive)}
           onClick={() => setViewMode('translation')}
         >
@@ -350,9 +350,9 @@ export default function MultimodalSettingsSection() {
           )}>
             {translationBadge}
           </span>
-        </button>
-        <button
-          type="button"
+        </OpptrixButton>
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, viewMode === 'vision' && s.modeTabActive)}
           onClick={() => setViewMode('vision')}
         >
@@ -360,9 +360,9 @@ export default function MultimodalSettingsSection() {
           <span className={mergeClasses(s.statusBadge, mmStatus?.canEnrichImages && s.statusReady)}>
             {visionBadge}
           </span>
-        </button>
-        <button
-          type="button"
+        </OpptrixButton>
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, viewMode === 'speech' && s.modeTabActive)}
           onClick={() => setViewMode('speech')}
         >
@@ -370,7 +370,7 @@ export default function MultimodalSettingsSection() {
           <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg.ready && s.statusReady)}>
             {runtime?.ffmpeg.ready ? 'ffmpeg 就绪' : '待配置'}
           </span>
-        </button>
+        </OpptrixButton>
       </div>
 
       {viewMode === 'enrichment' && (

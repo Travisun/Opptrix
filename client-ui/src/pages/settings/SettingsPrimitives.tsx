@@ -570,8 +570,9 @@ export function SettingsActionRow({
   const s = useStyles()
   return (
     <>
-      <button
-        type="button"
+      <OpptrixButton
+        variant="ghost"
+        block
         className={mergeClasses(s.actionRow, 'opptrix-focusable')}
         onClick={onClick}
       >
@@ -583,7 +584,7 @@ export function SettingsActionRow({
             last
           />
         </div>
-      </button>
+      </OpptrixButton>
       {!last && <SettingsDivider fullWidth={dividerFullWidth} />}
     </>
   )

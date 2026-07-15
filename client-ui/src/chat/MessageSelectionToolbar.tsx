@@ -258,8 +258,8 @@ function TurnCopyButton({ content }: { content: string }) {
   }
 
   return (
-    <button
-      type="button"
+    <OpptrixButton
+      variant="icon"
       className={s.copyBtn}
       onClick={() => void handleCopy()}
       aria-label={copied ? '已复制' : '复制回复'}
@@ -268,7 +268,7 @@ function TurnCopyButton({ content }: { content: string }) {
       {copied
         ? <CheckmarkCircleFilled fontSize={14} />
         : <ClipboardPasteRegular fontSize={14} />}
-    </button>
+    </OpptrixButton>
   )
 }
 
@@ -389,24 +389,24 @@ export default function MessageSelectionToolbar({
       {!inConversation && (
         <div className={s.row}>
           {mode !== 'compact' && (
-            <button
-              type="button"
+            <OpptrixButton
+              variant="icon"
               className={mergeClasses(s.btn, s.iconBtn)}
               onClick={() => setMode(mode === 'custom' ? 'ask' : 'compact')}
               aria-label="返回"
             >
               <ArrowLeftRegular className={s.btnIcon} />
-            </button>
+            </OpptrixButton>
           )}
-          <button type="button" className={s.btn} onClick={onQuote} disabled={loading}>
+          <OpptrixButton variant="ghost" className={s.btn} onClick={onQuote} disabled={loading}>
             <TextQuoteRegular className={s.btnIcon} />
             引用
-          </button>
+          </OpptrixButton>
           {mode === 'compact' && (
-            <button type="button" className={s.btn} onClick={() => setMode('ask')}>
+            <OpptrixButton variant="ghost" className={s.btn} onClick={() => setMode('ask')}>
               <ChatRegular className={s.btnIcon} />
               提问
-            </button>
+            </OpptrixButton>
           )}
         </div>
       )}
@@ -414,24 +414,24 @@ export default function MessageSelectionToolbar({
       {mode === 'ask' && (
         <div className={s.askGrid}>
           {QUICK_ASKS.map((item, index) => (
-            <button
+            <OpptrixButton
               key={listRowKey(index, item.label)}
-              type="button"
+              variant="secondary"
               className={mergeClasses(s.btn, s.askBtn)}
               disabled={loading}
               onClick={() => void sendMessage(item.message)}
             >
               {item.label}
-            </button>
+            </OpptrixButton>
           ))}
-          <button
-            type="button"
+          <OpptrixButton
+            variant="secondary"
             className={mergeClasses(s.btn, s.askBtn)}
             disabled={loading}
             onClick={() => setMode('custom')}
           >
             自定义
-          </button>
+          </OpptrixButton>
         </div>
       )}
 
@@ -465,14 +465,14 @@ export default function MessageSelectionToolbar({
               <ChatRegular className={s.btnIcon} />
               临时追问
             </span>
-            <button
-              type="button"
+            <OpptrixButton
+              variant="icon"
               className={mergeClasses(s.btn, s.iconBtn)}
               onClick={onDismiss}
               aria-label="关闭"
             >
               <DismissRegular className={s.btnIcon} />
-            </button>
+            </OpptrixButton>
           </div>
 
           <div ref={threadRef} className={mergeClasses(s.thread, 'opptrix-scroll')}>

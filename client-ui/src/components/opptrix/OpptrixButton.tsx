@@ -1,46 +1,59 @@
 import { Button, mergeClasses, makeStyles } from '@fluentui/react-components'
 import type { ComponentProps } from 'react'
 import {
-  ghostInteractive, primaryInteractive, secondaryInteractive, focusVisibleRing, motion,
+  ghostInteractive,
+  primaryInteractive,
+  secondaryInteractive,
+  dangerInteractive,
+  focusVisibleRing,
+  motion,
+  buttonSizes,
 } from '../../theme/mixins'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+
+type Variant = 'primary' | 'secondary' | 'ghost' | 'danger' | 'icon'
+/** @deprecated Use 'primary' or 'ghost' instead */
+type DeprecatedVariant = 'pill'
+type Size = 'small' | 'medium' | 'large'
+
+type Props = ComponentProps<typeof Button> & {
+  variant?: Variant | DeprecatedVariant
+  size?: Size
+  block?: boolean
+}
 
 const useStyles = makeStyles({
   primary: {
     ...primaryInteractive,
     borderRadius: opptrixTokens.radiusMd,
     fontWeight: 600,
-    fontSize: 'var(--opptrix-font-base)',
-    paddingLeft: '14px',
-    paddingRight: '14px',
-    minHeight: '28px',
-    transitionProperty: 'background-color, color, opacity, transform, box-shadow',
+    transitionProperty: 'background-color, color, opacity, transform',
     transitionDuration: `${motion.fast}, ${motion.press}`,
     ':active': {
       transform: 'scale(0.97)',
+      opacity: 0.88,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      ':active': { transform: 'none' },
     },
   },
   secondary: {
     ...secondaryInteractive,
     fontWeight: 500,
-    fontSize: 'var(--opptrix-font-base)',
-    paddingLeft: '14px',
-    paddingRight: '14px',
-    minHeight: '28px',
-    transitionProperty: 'background-color, color, opacity, transform, box-shadow',
+    transitionProperty: 'background-color, color, opacity, transform',
     transitionDuration: `${motion.fast}, ${motion.press}`,
     ':active': {
       transform: 'scale(0.97)',
+      opacity: opptrixTokens.activeOpacity,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      ':active': { transform: 'none' },
     },
   },
   ghost: {
     ...ghostInteractive,
     color: opptrixCssVars.textSecondary,
     fontWeight: 500,
-    fontSize: 'var(--opptrix-font-base)',
-    paddingLeft: '10px',
-    paddingRight: '10px',
-    minHeight: '28px',
     transitionProperty: 'background-color, color, opacity, transform',
     transitionDuration: `${motion.fast}, ${motion.press}`,
     ':hover': {
@@ -49,8 +62,40 @@ const useStyles = makeStyles({
     },
     ':active': {
       transform: 'scale(0.97)',
+      opacity: opptrixTokens.activeOpacity,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      ':active': { transform: 'none' },
     },
   },
+  danger: {
+    ...dangerInteractive,
+    fontWeight: 500,
+    transitionProperty: 'background-color, color, opacity, transform',
+    transitionDuration: `${motion.fast}, ${motion.press}`,
+    ':active': {
+      transform: 'scale(0.97)',
+      opacity: 0.88,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      ':active': { transform: 'none' },
+    },
+  },
+  icon: {
+    ...ghostInteractive,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    ':active': {
+      transform: 'scale(0.97)',
+      opacity: opptrixTokens.activeOpacity,
+    },
+    '@media (prefers-reduced-motion: reduce)': {
+      ':active': { transform: 'none' },
+    },
+  },
+  /** @deprecated Backward compat only — rounded pill variant */
   pill: {
     borderRadius: opptrixTokens.radiusFull,
     fontWeight: 500,
@@ -70,51 +115,78 @@ const useStyles = makeStyles({
     },
     ...focusVisibleRing,
   },
-  iconBtn: {
-    ...ghostInteractive,
-    minWidth: '28px',
-    width: '28px',
-    height: '28px',
-    borderRadius: opptrixTokens.radiusSm,
-    fontSize: 'var(--opptrix-font-lg)',
-    color: opptrixCssVars.textTertiary,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 0,
-    ':hover': {
-      color: opptrixCssVars.textPrimary,
-      backgroundColor: opptrixCssVars.accentSoft,
-    },
-    '& svg': {
-      width: '14px',
-      height: '14px',
-    },
+  // Size variants
+  sizeSmall: {
+    fontSize: buttonSizes.small.fontSize,
+    paddingLeft: buttonSizes.small.paddingX,
+    paddingRight: buttonSizes.small.paddingX,
+    minHeight: buttonSizes.small.minHeight,
+  },
+  sizeMedium: {
+    fontSize: buttonSizes.medium.fontSize,
+    paddingLeft: buttonSizes.medium.paddingX,
+    paddingRight: buttonSizes.medium.paddingX,
+    minHeight: buttonSizes.medium.minHeight,
+  },
+  sizeLarge: {
+    fontSize: buttonSizes.large.fontSize,
+    paddingLeft: buttonSizes.large.paddingX,
+    paddingRight: buttonSizes.large.paddingX,
+    minHeight: buttonSizes.large.minHeight,
+  },
+  block: {
+    width: '100%',
   },
 })
 
-type Variant = 'primary' | 'secondary' | 'ghost' | 'pill' | 'icon'
-
-type Props = ComponentProps<typeof Button> & {
-  variant?: Variant
+function getVariantClass(variant: Variant | DeprecatedVariant, s: ReturnType<typeof useStyles>) {
+  switch (variant) {
+    case 'primary': return s.primary
+    case 'secondary': return s.secondary
+    case 'ghost': return s.ghost
+    case 'danger': return s.danger
+    case 'icon': return s.icon
+    case 'pill': return s.pill
+    default: return s.ghost
+  }
 }
 
-export default function OpptrixButton({ variant = 'primary', className, ...props }: Props) {
+function getSizeClass(size: Size, s: ReturnType<typeof useStyles>) {
+  switch (size) {
+    case 'small': return s.sizeSmall
+    case 'medium': return s.sizeMedium
+    case 'large': return s.sizeLarge
+    default: return s.sizeMedium
+  }
+}
+
+export default function OpptrixButton({
+  variant = 'primary',
+  size = 'medium',
+  block = false,
+  className,
+  ...props
+}: Props) {
   const s = useStyles()
-  const variantClass = variant === 'primary' ? s.primary
-    : variant === 'secondary' ? s.secondary
-      : variant === 'pill' ? s.pill
-        : variant === 'icon' ? s.iconBtn
-          : s.ghost
+  const variantClass = getVariantClass(variant, s)
+  const sizeClass = variant === 'icon' ? undefined : getSizeClass(size, s)
 
   const appearance = variant === 'primary' ? 'primary'
     : variant === 'secondary' ? 'secondary'
-      : 'subtle'
+      : variant === 'danger' ? 'outline'
+        : 'subtle'
 
   return (
     <Button
       appearance={appearance}
-      className={mergeClasses('opptrix-btn', 'opptrix-focusable', variantClass, className)}
+      className={mergeClasses(
+        'opptrix-btn',
+        'opptrix-focusable',
+        variantClass,
+        sizeClass,
+        block && s.block,
+        className,
+      )}
       {...props}
     />
   )

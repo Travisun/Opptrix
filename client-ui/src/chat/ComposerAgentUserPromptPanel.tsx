@@ -87,12 +87,11 @@ export default function ComposerAgentUserPromptPanel({
 
       <div className="opptrix-composer-user-prompt-panel__options">
         {prompt.options.map(opt => (
-          <button
+          <OpptrixButton
             key={opt.id}
-            type="button"
+            variant="secondary"
             className={mergeClasses(
               'opptrix-composer-user-prompt-panel__option',
-              'opptrix-focusable',
               prompt.allowMultiple && selectedIds.includes(opt.id)
                 && 'opptrix-composer-user-prompt-panel__option--selected',
             )}
@@ -106,7 +105,7 @@ export default function ComposerAgentUserPromptPanel({
             }}
           >
             {opt.label}
-          </button>
+          </OpptrixButton>
         ))}
 
         <div className="opptrix-composer-user-prompt-panel__custom">

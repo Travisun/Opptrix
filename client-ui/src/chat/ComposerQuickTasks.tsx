@@ -20,7 +20,7 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [manageMode, setManageMode] = useState(false)
-  const anchorRef = useRef<HTMLButtonElement>(null)
+  const anchorRef = useRef<HTMLDivElement>(null)
 
   const handleAddPinned = useCallback(() => {
     const text = draft.trim()
@@ -50,20 +50,21 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
 
   return (
     <>
-      <button
-        ref={anchorRef}
-        type="button"
-        className={mergeClasses(
-          'opptrix-composer-quick-add opptrix-focusable',
-          open && 'opptrix-composer-quick-add--open',
-        )}
-        disabled={disabled}
-        aria-label="快捷任务"
-        aria-expanded={open}
-        onClick={() => setOpen(v => !v)}
-      >
-        <AddRegular fontSize={16} />
-      </button>
+      <div ref={anchorRef} className="opptrix-composer-quick-add-wrap">
+        <OpptrixButton
+          variant="icon"
+          className={mergeClasses(
+            'opptrix-composer-quick-add',
+            open && 'opptrix-composer-quick-add--open',
+          )}
+          disabled={disabled}
+          aria-label="快捷任务"
+          aria-expanded={open}
+          onClick={() => setOpen(v => !v)}
+        >
+          <AddRegular fontSize={16} />
+        </OpptrixButton>
+      </div>
 
       <ComposerTooltipMenu
         open={open}
@@ -101,45 +102,45 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
                     添加
                   </OpptrixButton>
                 </div>
-                <button
-                  type="button"
-                  className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
+                <OpptrixButton
+                  variant="ghost"
+                  className="opptrix-composer-quick-menu__manage-btn"
                   onClick={() => {
                     setManageMode(false)
                     setDraft('')
                   }}
                 >
                   返回推荐任务
-                </button>
+                </OpptrixButton>
               </>
             ) : (
-              <button
-                type="button"
-                className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
+              <OpptrixButton
+                variant="ghost"
+                className="opptrix-composer-quick-menu__manage-btn"
                 onClick={() => setManageMode(true)}
               >
                 管理我的常用
-              </button>
+              </OpptrixButton>
             )}
           </div>
         )}
       >
-        {manageMode ? (
-          pinnedTasks.length ? pinnedTasks.map((task, index) => (
-            <div key={listRowKey(index, task)} className="opptrix-composer-quick-menu__manage-row">
-              <span className="opptrix-composer-quick-menu__manage-text" title={task}>
-                {task}
-              </span>
-              <button
-                type="button"
-                className={mergeClasses('opptrix-composer-quick-menu__delete opptrix-focusable')}
-                aria-label={`删除 ${task}`}
-                onClick={() => handleRemovePinned(task)}
-              >
-                <DeleteRegular fontSize={14} />
-              </button>
-            </div>
-          )) : (
+            {manageMode ? (
+              pinnedTasks.length ? pinnedTasks.map((task, index) => (
+                <div key={listRowKey(index, task)} className="opptrix-composer-quick-menu__manage-row">
+                  <span className="opptrix-composer-quick-menu__manage-text" title={task}>
+                    {task}
+                  </span>
+                  <OpptrixButton
+                    variant="icon"
+                    className="opptrix-composer-quick-menu__delete"
+                    aria-label={`删除 ${task}`}
+                    onClick={() => handleRemovePinned(task)}
+                  >
+                    <DeleteRegular fontSize={14} />
+                  </OpptrixButton>
+                </div>
+              )) : (
             <div className="opptrix-composer-tooltip-menu__empty">
               还没有收藏。可在下方添加自定义问题，或返回推荐任务列表选用。
             </div>

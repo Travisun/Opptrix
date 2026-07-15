@@ -235,3 +235,56 @@ export const sidebarTopMenuIcon = {
   color: opptrixCssVars.textSecondary,
   flexShrink: 0,
 } as const
+
+/** Button size tokens — injected onto root for size prop */
+export const buttonSizes = {
+  small: { minHeight: '24px', paddingX: '8px', fontSize: 'var(--opptrix-font-sm)' },
+  medium: { minHeight: '32px', paddingX: '14px', fontSize: 'var(--opptrix-font-base)' },
+  large: { minHeight: '40px', paddingX: '18px', fontSize: 'var(--opptrix-font-lg)' },
+} as const
+
+/** Danger variant — destructive actions (delete, stop, quit) */
+export const dangerInteractive = {
+  ...interactiveTransition,
+  border: 'none',
+  borderRadius: opptrixTokens.radiusMd,
+  backgroundColor: opptrixCssVars.errorSoft,
+  color: opptrixCssVars.error,
+  ':hover': {
+    backgroundColor: opptrixCssVars.error,
+    color: '#FFFFFF',
+  },
+  ':active': { opacity: 0.88 },
+  ':disabled': { opacity: 0.34, backgroundColor: opptrixCssVars.errorSoft, color: opptrixCssVars.error },
+  ...focusVisibleRing,
+} as const
+
+/** Press state mixin — scale transform only, no bounce */
+export const buttonPress = {
+  ':active': { transform: 'scale(0.97)' },
+  transition: `transform ${motion.press} ease-out`,
+} as const
+
+/** Icon-only button mixin — shared between OpptrixButton and ChromeToolButton */
+export const iconBtnMixin = (size: 'sm' | 'md' | 'lg' | 'xl' = 'md') => {
+  const sizes = {
+    sm: { dimension: '24px', iconSize: '12px', radius: opptrixTokens.radiusSm },
+    md: { dimension: '28px', iconSize: '14px', radius: opptrixTokens.radiusMd },
+    lg: { dimension: '36px', iconSize: '18px', radius: opptrixTokens.radiusMd },
+    xl: { dimension: '44px', iconSize: '20px', radius: opptrixTokens.radiusLg },
+  }
+  const s = sizes[size]
+  return {
+    ...ghostInteractive,
+    width: s.dimension,
+    height: s.dimension,
+    minWidth: s.dimension,
+    minHeight: s.dimension,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    borderRadius: s.radius,
+    '& svg': { width: s.iconSize, height: s.iconSize },
+  } as const
+}

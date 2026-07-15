@@ -3,6 +3,7 @@ import { Input, Spinner, Switch, Text, makeStyles } from '@fluentui/react-compon
 import { ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { getProviderBindingOverrides, saveProviderBindingOverride } from '../../api/client'
+
 import type { PublicProviderBindingOverride } from '../../types/provider'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixCssVars } from '../../theme/tokens'
@@ -121,10 +122,14 @@ export default function ProviderBindingOverridesSection({ providerId, enabled }:
 
   return (
     <div className={s.root}>
-      <button type="button" className={s.toggle} onClick={() => setOpen(v => !v)}>
+      <OpptrixButton
+        variant="ghost"
+        className={s.toggle}
+        onClick={() => setOpen(v => !v)}
+      >
         {open ? <ChevronDownRegular fontSize={12} /> : <ChevronRightRegular fontSize={12} />}
         能力级优先级（高级）
-      </button>
+      </OpptrixButton>
       {open && (
         <>
           <Text className={s.hint} block>

@@ -1,4 +1,5 @@
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
+import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { isElectron } from '../platform/detect'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -10,16 +11,13 @@ import {
 const useStyles = makeStyles({
   hint: {
     fontSize: 'var(--opptrix-font-sm)',
+    padding: '2px 8px',
     fontWeight: 500,
     lineHeight: 1,
     color: opptrixCssVars.accent,
-    padding: '4px 8px',
-    borderRadius: opptrixTokens.radiusSm,
     backgroundColor: opptrixCssVars.accentSoft,
     whiteSpace: 'nowrap',
-    cursor: 'pointer',
     WebkitAppRegion: 'no-drag',
-    border: 'none',
     flexShrink: 0,
     ':hover': {
       opacity: 0.88,
@@ -62,15 +60,16 @@ export default function AppUpdateChromeHint({
   const canClick = Boolean(onRevealSidebar || onToggleSidebar)
 
   return (
-    <button
-      type="button"
-      className={mergeClasses(s.hint, status.state === 'error' && s.hintError, 'opptrix-focusable')}
+    <OpptrixButton
+      className={mergeClasses(s.hint, status.state === 'error' && s.hintError)}
+      variant="ghost"
+      size="small"
       aria-label={label}
       title={status.message ?? label}
       onClick={canClick ? handleClick : undefined}
       disabled={!canClick}
     >
       {label}
-    </button>
+    </OpptrixButton>
   )
 }

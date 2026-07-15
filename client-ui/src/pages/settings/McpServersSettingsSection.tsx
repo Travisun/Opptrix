@@ -446,22 +446,22 @@ export default function McpServersSettingsSection() {
     <div className={s.root}>
       {/* 胶囊模式切换 */}
       <div className={s.modeRow}>
-        <button
-          type="button"
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, mode === 'preset' && s.modeTabActive)}
           onClick={() => setMode('preset')}
         >
           <CloudRegular fontSize={14} />
           预设
-        </button>
-        <button
-          type="button"
+        </OpptrixButton>
+        <OpptrixButton
+          variant="ghost"
           className={mergeClasses(s.modeTab, mode === 'json' && s.modeTabActive)}
           onClick={() => setMode('json')}
         >
           <CodeRegular fontSize={14} />
           JSON
-        </button>
+        </OpptrixButton>
       </div>
 
       {mode === 'preset' && (
@@ -535,14 +535,15 @@ export default function McpServersSettingsSection() {
           )}
 
           {/* 切换到 JSON */}
-          <button
-            type="button"
+          <OpptrixButton
+            variant="ghost"
+            block
             className={s.advancedLink}
             onClick={() => setMode('json')}
           >
             <CodeRegular fontSize={14} />
             高级：编辑完整 JSON 配置
-          </button>
+          </OpptrixButton>
         </>
       )}
 
@@ -611,14 +612,15 @@ export default function McpServersSettingsSection() {
             </>
           )}
 
-          <button
-            type="button"
+          <OpptrixButton
+            variant="ghost"
+            block
             className={s.advancedLink}
             onClick={() => setMode('preset')}
           >
             <CloudRegular fontSize={14} />
             切换回预设模式
-          </button>
+          </OpptrixButton>
         </>
       )}
     </div>
