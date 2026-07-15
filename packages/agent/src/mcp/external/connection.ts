@@ -26,6 +26,28 @@ export class ExternalMcpConnection {
     return this.toolsCache
   }
 
+  /** 合并非密钥 headers + secrets（含回退 Bearer 注入），用于所有 HTTP 请求 */
+  private get allHeaders(): Record<string, string> {
+    const cfg = this.record.transportConfig
+    const baseHeaders: Record<string, string> =
+      cfg.transport !== 'stdio' ? { ...(cfg.headers ?? {}) } : {}
+    for (const [k, v] of Object.entries(this.record.secrets)) {
+      if (v && !baseHeaders[k]) baseHeaders[k] = v
+    }
+    const hasAuth =
+      baseHeaders.Authorization || baseHeaders.authorization
+    if (!hasAuth) {
+      const bearer = this.record.secrets.authorization
+        ?? this.record.secrets.bearer
+        ?? this.record.secrets.api_key
+        ?? ''
+      if (bearer) {
+        baseHeaders.Authorization = bearer.startsWith('Bearer ') ? bearer : `Bearer ${bearer}`
+      }
+    }
+    return baseHeaders
+  }
+
   async connect(): Promise<void> {
     if (this.connected) return
     const client = new Client({ name: 'opptrix-host', version: '0.7.0' })
@@ -48,29 +70,14 @@ export class ExternalMcpConnection {
       })
       await client.connect(transport)
     } else if (cfg.transport === 'sse') {
-      const headers: Record<string, string> = { ...(cfg.headers ?? {}) }
-      const bearer = this.record.secrets.authorization
-        ?? this.record.secrets.bearer
-        ?? this.record.secrets.api_key
-        ?? ''
-      if (bearer && !headers.Authorization) {
-        headers.Authorization = bearer.startsWith('Bearer ') ? bearer : `Bearer ${bearer}`
-      }
       const transport = new SSEClientTransport(new URL(cfg.url), {
-        requestInit: { headers },
+        requestInit: { headers: this.allHeaders },
+        // SSE 长连接建立后无法再注入 header，必须在 requestInit 阶段完成
       })
       await client.connect(transport)
     } else {
-      const headers: Record<string, string> = { ...(cfg.headers ?? {}) }
-      const bearer = this.record.secrets.authorization
-        ?? this.record.secrets.bearer
-        ?? this.record.secrets.api_key
-        ?? ''
-      if (bearer && !headers.Authorization) {
-        headers.Authorization = bearer.startsWith('Bearer ') ? bearer : `Bearer ${bearer}`
-      }
       const transport = new StreamableHTTPClientTransport(new URL(cfg.url), {
-        requestInit: { headers },
+        requestInit: { headers: this.allHeaders },
       })
       await client.connect(transport)
     }
