@@ -50,7 +50,7 @@ export const useOnboardingShellStyles = makeStyles({
     left: '50%',
     transform: 'translateX(-50%)',
     zIndex: 1,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     letterSpacing: '0.08em',
     textTransform: 'uppercase',
@@ -61,7 +61,7 @@ export const useOnboardingShellStyles = makeStyles({
   titleBarMeta: {
     position: 'relative',
     zIndex: 2,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
     whiteSpace: 'nowrap',
@@ -180,7 +180,7 @@ export const useOnboardingShellStyles = makeStyles({
   },
   displayKicker: {
     marginBottom: 'clamp(12px, 2vh, 18px)',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     letterSpacing: '0.1em',
     textTransform: 'uppercase',
@@ -210,7 +210,7 @@ export const useOnboardingShellStyles = makeStyles({
   },
   versionLine: {
     marginTop: 'clamp(14px, 2vh, 20px)',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     letterSpacing: '0.03em',
     color: opptrixCssVars.accent,

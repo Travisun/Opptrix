@@ -1,4 +1,4 @@
-import React from 'react'
+import React, { useEffect } from 'react'
 import ReactDOM from 'react-dom/client'
 import { FluentProvider } from '@fluentui/react-components'
 import App from './App'
@@ -8,6 +8,7 @@ import { WatchlistProvider } from './market/WatchlistContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
+import { applyFontScale, readFontScalePreference } from './theme/fontScale'
 import './styles/global.css'
 
 if (isDesktopApp()) {
@@ -34,6 +35,9 @@ if (isElectron()) {
 
 function ThemedApp() {
   const { resolvedScheme } = useTheme()
+  useEffect(() => {
+    applyFontScale(readFontScalePreference())
+  }, [])
   return (
     <FluentProvider theme={getOpptrixFluentTheme(resolvedScheme)}>
       <OpptrixDialogAlertProvider>

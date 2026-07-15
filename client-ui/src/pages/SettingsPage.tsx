@@ -28,6 +28,10 @@ import {
   getConfig, patchConfig, deleteProvider, getHealth, news,
   type AppConfig, type PublicProvider,
 } from '../api/client'
+import {
+  applyFontScale, readFontScalePreference, writeFontScalePreference,
+  FONT_SCALE_LABELS, FONT_SCALE_OPTIONS, type FontScaleName,
+} from '../theme/fontScale'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
@@ -306,6 +310,12 @@ function SettingsPageView({
   const toast = useSettingsToast()
   const { confirm } = useOpptrixDialogAlert()
   const { preference: themePreference, setPreference: setThemePreference } = useTheme()
+  const [fontScale, setFontScaleState] = useState<FontScaleName>(() => readFontScalePreference())
+  const setFontScale = useCallback((name: FontScaleName) => {
+    writeFontScalePreference(name)
+    applyFontScale(name)
+    setFontScaleState(name)
+  }, [])
   const s = useStyles()
   const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
   const [section, setSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection))
@@ -501,6 +511,24 @@ function SettingsPageView({
                       value={themePreference}
                       onChange={setThemePreference}
                     />
+                  )}
+                />
+                <SettingsRow
+                  title="字体大小"
+                  desc="调整全局文字尺寸，切换后立即生效"
+                  control={(
+                    <div style={{ display: 'flex', gap: '4px' }}>
+                      {FONT_SCALE_OPTIONS.map(name => (
+                        <OpptrixButton
+                          key={name}
+                          variant={fontScale === name ? 'primary' : 'secondary'}
+                          onClick={() => setFontScale(name)}
+                          style={{ minWidth: '48px', fontSize: 'var(--opptrix-font-sm)' }}
+                        >
+                          {FONT_SCALE_LABELS[name]}
+                        </OpptrixButton>
+                      ))}
+                    </div>
                   )}
                   last
                 />

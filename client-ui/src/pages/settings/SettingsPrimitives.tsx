@@ -50,14 +50,14 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   rowTitle: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     letterSpacing: '-0.01em',
   },
   rowDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -98,7 +98,7 @@ const useStyles = makeStyles({
     minHeight: '44px',
   },
   panelHeaderTitle: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     letterSpacing: '0.04em',
@@ -164,7 +164,7 @@ const useStyles = makeStyles({
     paddingTop: '2px',
   },
   modelPopoverTitle: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
@@ -178,7 +178,7 @@ const useStyles = makeStyles({
     overflowY: 'auto',
   },
   modelPopoverItem: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
@@ -205,7 +205,7 @@ const useStyles = makeStyles({
     width: '100%',
   },
   credentialHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     paddingLeft: '2px',
@@ -288,7 +288,7 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   sectionKicker: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     textTransform: 'uppercase',
@@ -296,14 +296,14 @@ const useStyles = makeStyles({
     lineHeight: 1.3,
   },
   sectionTitle: {
-    fontSize: '20px',
+    fontSize: 'var(--opptrix-font-3xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     letterSpacing: '-0.02em',
     lineHeight: 1.25,
   },
   sectionSubtitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     marginTop: '2px',
@@ -323,13 +323,13 @@ const useStyles = makeStyles({
     marginBottom: '4px',
   },
   emptyStateTitle: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
   },
   emptyStateDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     maxWidth: '240px',

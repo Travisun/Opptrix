@@ -43,6 +43,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
   // 常规
   { section: 'general', group: '外观', title: '主题', desc: '浅色深色跟随系统', keywords: ['theme', 'dark', 'light', '暗黑', '深色', '浅色', '外观'] },
+  { section: 'general', group: '外观', title: '字体大小', desc: '调整全局文字尺寸', keywords: ['font', '字号', '文字大小', '字体', '大小'] },
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
   { section: 'general', group: '连接', title: '后端连接', desc: '检查 API 服务与 LLM 提供商配置', keywords: ['测试', 'health', '连接'] },
 

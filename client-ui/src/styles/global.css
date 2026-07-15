@@ -21,7 +21,7 @@ body {
   color: var(--opptrix-text, #1D1D1F);
   overscroll-behavior: none;
   touch-action: manipulation;
-  font-size: 14px;
+  font-size: var(--opptrix-font-base);
   line-height: 1.5;
 }
 
@@ -52,6 +52,16 @@ body {
   --opptrix-separator-strong: rgba(60, 60, 67, 0.11);
   --opptrix-border: rgba(60, 60, 67, 0.08);
   --opptrix-border-strong: rgba(60, 60, 67, 0.14);
+  --opptrix-font-xs: 10px;
+  --opptrix-font-sm: 11px;
+  --opptrix-font-md: 12px;
+  --opptrix-font-base: 13px;
+  --opptrix-font-lg: 14px;
+  --opptrix-font-xl: 15px;
+  --opptrix-font-2xl: 16px;
+  --opptrix-font-3xl: 20px;
+  --opptrix-font-4xl: 24px;
+  --opptrix-font-display: 36px;
   --opptrix-text: #1D1D1F;
   --opptrix-text-primary: #1D1D1F;
   --opptrix-text-secondary: #6E6E73;
@@ -120,6 +130,16 @@ body {
   --opptrix-separator-strong: rgba(255, 255, 255, 0.11);
   --opptrix-border: rgba(255, 255, 255, 0.08);
   --opptrix-border-strong: rgba(255, 255, 255, 0.14);
+  --opptrix-font-xs: 10px;
+  --opptrix-font-sm: 11px;
+  --opptrix-font-md: 12px;
+  --opptrix-font-base: 13px;
+  --opptrix-font-lg: 14px;
+  --opptrix-font-xl: 15px;
+  --opptrix-font-2xl: 16px;
+  --opptrix-font-3xl: 20px;
+  --opptrix-font-4xl: 24px;
+  --opptrix-font-display: 36px;
   --opptrix-text: #F5F5F7;
   --opptrix-text-primary: #F5F5F7;
   --opptrix-text-secondary: #AEAEB2;

@@ -46,6 +46,37 @@ const layoutTokens = {
   shadowSelected: 'none',
 } as const
 
+/**
+ * Font size scale — indexed by level.
+ * Compact: -1 | Default: 0 | Large: +1 | ExtraLarge: +2
+ * Variables are injected at runtime based on user preference.
+ * Components should use `var(--opptrix-font-*)` instead of hardcoded px.
+ */
+export const FONT_SCALES = {
+  compact: {
+    xs: '9px', sm: '10px', md: '11px', base: '12px',
+    lg: '13px', xl: '14px', xxl: '15px', '3xl': '18px',
+    '4xl': '22px', display: '32px',
+  },
+  default: {
+    xs: '10px', sm: '11px', md: '12px', base: '13px',
+    lg: '14px', xl: '15px', xxl: '16px', '3xl': '20px',
+    '4xl': '24px', display: '36px',
+  },
+  large: {
+    xs: '11px', sm: '12px', md: '13px', base: '14px',
+    lg: '15px', xl: '16px', xxl: '17px', '3xl': '22px',
+    '4xl': '26px', display: '38px',
+  },
+  xlarge: {
+    xs: '12px', sm: '13px', md: '14px', base: '15px',
+    lg: '16px', xl: '17px', xxl: '18px', '3xl': '24px',
+    '4xl': '28px', display: '40px',
+  },
+} as const
+
+export type FontScaleName = keyof typeof FONT_SCALES
+
 export const opptrixTokensLight = {
   accent: '#1D1D1F',
   accentHover: '#000000',

@@ -67,14 +67,35 @@
 
 字体栈：`"Segoe UI Variable", "Segoe UI", -apple-system, BlinkMacSystemFont, sans-serif`
 
-| Level | Size | Weight | 用途 |
+### 3.1 字体大小变量
+
+所有组件必须使用 CSS 变量（`var(--opptrix-font-*)`），禁止硬编码 px 值。变量定义在 `theme/tokens.ts` 的 `FONT_SCALES` 中，运行时通过 `fontScale.ts` 注入到 `<html>`。
+
+| Level | 变量 | 默认值 | 用途 |
 |-------|------|--------|------|
-| Kicker | 11px | 600 | 英文/拼音分组标签，letter-spacing 0.06em，大写 |
-| H1 | 22px | 600 | 页面主标题 |
-| H2 | 16px | 600 | 卡片标题 |
-| Body | 13px | 400 | 正文 |
-| Caption | 12px | 400 | 辅助说明 |
-| Stat | 24px | 600 | 统计数字 |
+| xs | `--opptrix-font-xs` | 10px | Kicker、极小标签 |
+| sm | `--opptrix-font-sm` | 11px | 辅助说明、提示、面板标题 |
+| md | `--opptrix-font-md` | 12px | 正文小字、搜索元信息 |
+| base | `--opptrix-font-base` | 13px | 正文、导航项、行标题 |
+| lg | `--opptrix-font-lg` | 14px | 行标题、空状态标题 |
+| xl | `--opptrix-font-xl` | 15px | 区段标题 |
+| 2xl | `--opptrix-font-2xl` | 16px | 页面标题 |
+| 3xl | `--opptrix-font-3xl` | 20px | 大标题、SectionHeader |
+| 4xl | `--opptrix-font-4xl` | 24px | 统计数字 |
+| display | `--opptrix-font-display` | 36px | 展示型大标题 |
+
+### 3.2 字体预设切换
+
+用户可在「设置 → 常规 → 外观 → 字体大小」切换 4 套预设：
+
+| 预设 | 偏移 | 适用场景 |
+|------|------|----------|
+| 紧凑 | -1px | 信息密度优先 |
+| 默认 | 基准 | 标准阅读 |
+| 较大 | +1px | 舒适阅读 |
+| 超大 | +2px | 无障碍/大字号 |
+
+实现：`theme/fontScale.ts` 提供 `applyFontScale(name)` / `readFontScalePreference()` / `writeFontScalePreference()`，持久化到 `localStorage` key `opptrix-font-scale`。
 
 行高：Body 1.5，标题 1.3。
 
