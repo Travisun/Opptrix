@@ -335,7 +335,7 @@ export default function NewsFeedSettingsSection() {
   })
   const [subs, setSubs] = useState<FeedSubscription[]>([])
   const [groups, setGroups] = useState<FeedGroup[]>([])
-  const [viewMode, setViewMode] = useState<'subscriptions' | 'groups'>('subscriptions')
+  const [viewMode, setViewMode] = useState<'subscriptions' | 'groups' | 'storage' | 'update'>('subscriptions')
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<FeedGroup | null>(null)
   const [groupTitle, setGroupTitle] = useState('')
@@ -699,6 +699,20 @@ export default function NewsFeedSettingsSection() {
           >
             分组管理
           </button>
+          <button
+            type="button"
+            className={mergeClasses(s.modeTab, viewMode === 'storage' && s.modeTabActive)}
+            onClick={() => setViewMode('storage')}
+          >
+            本地存储
+          </button>
+          <button
+            type="button"
+            className={mergeClasses(s.modeTab, viewMode === 'update' && s.modeTabActive)}
+            onClick={() => setViewMode('update')}
+          >
+            更新
+          </button>
         </div>
 
       {viewMode === 'subscriptions' && (
@@ -856,6 +870,7 @@ export default function NewsFeedSettingsSection() {
       </div>
       )}
 
+      {viewMode === 'storage' && (
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>本地存储</Text>
         <SettingsGroup>
@@ -910,7 +925,9 @@ export default function NewsFeedSettingsSection() {
           {saveHintText}
         </Text>
       </div>
+      )}
 
+      {viewMode === 'update' && (
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>更新</Text>
         <SettingsGroup>
@@ -960,6 +977,7 @@ export default function NewsFeedSettingsSection() {
           />
         </SettingsGroup>
       </div>
+      )}
       </>)}
 
       <Dialog open={importDialogOpen} onOpenChange={(_, d) => { if (!d.open) resetImportDialog() }}>
