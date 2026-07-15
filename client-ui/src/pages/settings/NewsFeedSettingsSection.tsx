@@ -145,7 +145,10 @@ const useStyles = makeStyles({
   tabPanel: {
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '12px',
+  },
+  tabSectionBlock: {
+    marginTop: 0,
   },
   sectionLabel: {
     fontSize: '11px',
@@ -722,6 +725,7 @@ export default function NewsFeedSettingsSection() {
 
       {viewMode === 'subscriptions' && (
       <div className={s.tabPanel}>
+      <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
       <div className={s.listPanel}>
         <div className={s.listHeader}>
           <Text className={s.listHeaderMeta} block>
@@ -819,11 +823,12 @@ export default function NewsFeedSettingsSection() {
         )}
         </div>
       </div>
+    </div>
       )}
 
       {viewMode === 'groups' && (
       <div className={s.tabPanel}>
-      <div className={s.sectionBlock}>
+      <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
         <div className={s.listPanel}>
           <div className={s.listHeader}>
             <Text className={s.listHeaderMeta} block>
@@ -875,14 +880,13 @@ export default function NewsFeedSettingsSection() {
             </div>
           )}
         </div>
-        </div>
+      </div>
       </div>
       )}
 
       {viewMode === 'storage' && (
       <div className={s.tabPanel}>
-      <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>本地存储</Text>
+      <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
         <SettingsGroup>
           <SettingsRow
             title="保留年限"
@@ -940,8 +944,7 @@ export default function NewsFeedSettingsSection() {
 
       {viewMode === 'update' && (
       <div className={s.tabPanel}>
-      <div className={s.sectionBlock}>
-        <Text className={s.sectionLabel} block>更新</Text>
+      <div className={mergeClasses(s.sectionBlock, s.tabSectionBlock)}>
         <SettingsGroup>
           <SettingsRow
             title="自动刷新间隔"
