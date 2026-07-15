@@ -80,15 +80,15 @@ alwaysApply: false
 
 ## 发版文案（Onboarding 开场 / 亮点）— 硬性
 
-`ONBOARDING_RELEASE_BY_VERSION` 的 `welcomeTitle` / `welcomeSubtitle` / `updateLine` / `features` **只写面向投资者的高级功能与结果**，与 `docs/releases/{version}.md` 同一标准。
+`ONBOARDING_RELEASE_BY_VERSION` 的 `welcomeTitle` / `welcomeSubtitle` / `updateLine` / `features` 必须遵循 `ui-copy-standard.mdc`。
 
-| ✅ 写 | ❌ 不写 |
-|-------|--------|
-| 用户能完成什么（配置、投研、报告、行情） | 技术词：API Key 实现细节、本地服务、依赖、进程、打包、签名 |
-| 使用结果（进度保留、更新成功、打开即用） | UI/视觉：毛玻璃、透明侧栏、按钮样式、配色、布局微调 |
-| 价值句（替你查证、少打断） | 工程 changelog、PR、文件名、组件名 |
+- 只写面向投资者的高级功能与结果：用户能做什么、使用结果、价值句
+- 禁止技术词（API Key、本地服务、依赖、进程、打包、签名）
+- 禁止纯 UI/视觉描述（毛玻璃、按钮样式、配色、布局微调）
+- 禁止工程 changelog、PR、文件名、组件名、内部代号
+- 开场副标题不得以「窗口外观更贴近系统」之类视觉卖点为主
 
-细则与反例见 **`desktop-release.mdc` §文案禁写**。开场副标题不得以「窗口外观更贴近系统」之类视觉卖点为主。
+细则与反例见 `ui-copy-standard.mdc` 和 **`desktop-release.mdc` §文案禁写**。
 
 ## 发版 Checklist（维护者）
 

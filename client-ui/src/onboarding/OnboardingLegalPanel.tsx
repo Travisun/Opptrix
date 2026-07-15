@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState, type MouseEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from 'react'
 import { Checkbox, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { getLegalUserAgreement } from '../api/client'
 import { OPPTRIX_PRIVACY_POLICY } from '../pages/settings/aboutLinks'
@@ -27,12 +27,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  agreeCheck: {
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    height: '20px',
-  },
+
 })
 
 export function OnboardingLegalPanel({
@@ -46,10 +41,51 @@ export function OnboardingLegalPanel({
 }) {
   const s = useStyles()
   const shell = useOnboardingShellStyles()
+  const agreeRowRef = useRef<HTMLLabelElement>(null)
   const [html, setHtml] = useState('')
   const [sourceUrl, setSourceUrl] = useState('')
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState('')
+
+  useEffect(() => {
+    const el = agreeRowRef.current
+    if (!el) return
+    const important = (node: HTMLElement) => {
+      node.style.setProperty('outline', 'none', 'important')
+      node.style.setProperty('box-shadow', 'none', 'important')
+      node.style.setProperty('outline-offset', '0', 'important')
+    }
+    important(el)
+    el.querySelectorAll('*').forEach((node) => important(node as HTMLElement))
+    const styleId = 'opptrix-agree-outline-none'
+    if (!document.getElementById(styleId)) {
+      const style = document.createElement('style')
+      style.id = styleId
+      style.textContent = `
+        .opptrix-onboarding-agree-checkbox,
+        .opptrix-onboarding-agree-checkbox *,
+        .opptrix-onboarding-agree-checkbox::before,
+        .opptrix-onboarding-agree-checkbox::after,
+        .opptrix-onboarding-agree-checkbox *::before,
+        .opptrix-onboarding-agree-checkbox *::after {
+          outline: none !important;
+          outline-offset: 0 !important;
+          box-shadow: none !important;
+        }
+      `
+      document.head.appendChild(style)
+    }
+    const observer = new MutationObserver(() => {
+      important(el)
+      el.querySelectorAll('*').forEach((node) => important(node as HTMLElement))
+    })
+    observer.observe(el, { attributes: true, childList: true, subtree: true })
+    return () => {
+      observer.disconnect()
+      const s = document.getElementById(styleId)
+      s?.remove()
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -110,14 +146,14 @@ export function OnboardingLegalPanel({
           <div dangerouslySetInnerHTML={{ __html: html }} />
         )}
       </div>
-      <label className={shell.agreeRow}>
-        <span className={mergeClasses(s.agreeCheck, 'opptrix-onboarding-agree-checkbox')}>
-          <Checkbox
-            checked={agreed}
-            onChange={(_, d) => onAgreedChange(!!d.checked)}
-            aria-label="同意用户协议与隐私政策"
-          />
-        </span>
+      <label ref={agreeRowRef} className={shell.agreeRow}>
+        <Checkbox
+          className="opptrix-onboarding-agree-checkbox"
+          style={{ margin: 0 }}
+          checked={agreed}
+          onChange={(_, d) => onAgreedChange(!!d.checked)}
+          aria-label="同意用户协议与隐私政策"
+        />
         <span className={shell.agreeText}>
           我已阅读并同意用户协议与
           {' '}

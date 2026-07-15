@@ -1,6 +1,7 @@
 export type OnboardingPhase =
   | 'intro'
   | 'llm'
+  | 'mcp'
   | 'data'
   | 'fuyao'
   | 'legal'
@@ -13,6 +14,7 @@ export function buildOnboardingSteps(): OnboardingNavStep[] {
   return [
     { phase: 'intro' },
     { phase: 'llm' },
+    { phase: 'mcp' },
     { phase: 'data' },
     { phase: 'fuyao' },
     { phase: 'legal' },
@@ -22,8 +24,9 @@ export function buildOnboardingSteps(): OnboardingNavStep[] {
 export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'intro') return '介绍'
   if (step.phase === 'llm') return '模型'
+  if (step.phase === 'mcp') return 'MCP 服务'
   if (step.phase === 'data') return '行情'
-  if (step.phase === 'fuyao') return '历史K线'
+  if (step.phase === 'fuyao') return '同花顺数据源'
   return '协议'
 }
 

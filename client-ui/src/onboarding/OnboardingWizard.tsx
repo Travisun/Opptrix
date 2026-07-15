@@ -19,6 +19,7 @@ import {
 import { OnboardingIntroCarousel } from './OnboardingIntroCarousel'
 import { OnboardingLegalPanel } from './OnboardingLegalPanel'
 import { OnboardingLlmReadyPanel } from './OnboardingLlmReadyPanel'
+import { OnboardingMcpPanel } from './OnboardingMcpPanel'
 import { resolveActiveLlmFromConfig, type LlmActiveSummary } from './llmSummary'
 import {
   OnboardingHeroBlock,
@@ -273,6 +274,25 @@ export default function OnboardingWizard({
         </OpptrixButton>
       )
     }
+  } else if (current.phase === 'mcp') {
+    bodyFlush = true
+    contentWide = true
+    contentAlignStart = true
+    body = (
+      <SettingsToastProvider>
+        <OnboardingMcpPanel />
+      </SettingsToastProvider>
+    )
+    footerSecondary = (
+      <OpptrixButton variant="ghost" onClick={goNext}>
+        稍后配置
+      </OpptrixButton>
+    )
+    footerPrimary = (
+      <OpptrixButton variant="primary" onClick={goNext}>
+        继续
+      </OpptrixButton>
+    )
   } else if (current.phase === 'data') {
     bodyFlush = true
     contentWide = true

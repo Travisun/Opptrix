@@ -241,12 +241,29 @@ html.opptrix-electron .opptrix-onboarding-progress-dock {
   background: var(--opptrix-canvas) !important;
 }
 
-/** 引导协议勾选 — 去掉 Checkbox focus outline */
-.opptrix-onboarding-agree-checkbox .fui-Checkbox:focus-within .fui-Checkbox__indicator,
-.opptrix-onboarding-agree-checkbox .fui-Checkbox input:focus-visible + .fui-Checkbox__indicator,
-.opptrix-onboarding-agree-checkbox .fui-Checkbox__input:focus-visible + .fui-Checkbox__indicator {
+/* 引导协议勾选 — 彻底去除 Checkbox 所有状态下的 outline / ring / box-shadow */
+.opptrix-onboarding-agree-checkbox,
+.opptrix-onboarding-agree-checkbox *,
+.opptrix-onboarding-agree-checkbox::before,
+.opptrix-onboarding-agree-checkbox::after,
+.opptrix-onboarding-agree-checkbox *::before,
+.opptrix-onboarding-agree-checkbox *::after {
   outline: none !important;
   outline-offset: 0 !important;
+  box-shadow: none !important;
+  ring: none !important;
+}
+
+.opptrix-onboarding-agree-checkbox:focus,
+.opptrix-onboarding-agree-checkbox:focus-within,
+.opptrix-onboarding-agree-checkbox:focus-visible,
+.opptrix-onboarding-agree-checkbox *:focus,
+.opptrix-onboarding-agree-checkbox *:focus-within,
+.opptrix-onboarding-agree-checkbox *:focus-visible,
+.opptrix-onboarding-agree-checkbox *:active,
+.opptrix-onboarding-agree-checkbox[aria-checked="true"],
+.opptrix-onboarding-agree-checkbox input:checked {
+  outline: none !important;
   box-shadow: none !important;
 }
 

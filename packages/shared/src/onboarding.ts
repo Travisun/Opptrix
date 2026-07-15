@@ -7,7 +7,7 @@ export const LEGAL_AGREEMENTS_VERSION = '2026-03'
 /**
  * 引导流程版本；仅改版引导 UI/步骤（应用版本未变）时 bump，已走完用户须重走引导。
  */
-export const ONBOARDING_FLOW_VERSION = '2'
+export const ONBOARDING_FLOW_VERSION = '3'
 
 export interface OnboardingState {
   /** ISO 8601 — 最近一次完整走完引导 */

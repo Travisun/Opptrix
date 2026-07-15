@@ -107,14 +107,16 @@ codegraph explore "<问题或符号>"
 - ✅ 网络请求必须有超时（`AbortController`）
 - ✅ 函数 <50 行，文件 <300 行
 
-### R7. 任务分派
+### R7. 多 Agent 编排与审计
 
-**复杂任务拆解为子任务，分派 subagent 并行执行。**
+**任何非 trivial 任务强制 4-6 agent 协作；Main Agent 纯调度审计不动手；最多 3 轮返工。**
 
-- 拆到可验证：每个子任务有明确完成标准
-- 隔离上下文：Subagent prompt 必须自包含
-- 并行优先：独立子任务同时执行
-- 结果可审计：返回 Status + Summary + Files + Findings
+- **Main Agent = 调度员 + 审计员**：拆解任务 → 写 briefing（含 AC）→ 派发 → 逐条验 AC → 冲突仲裁 → 交付。禁止直接改代码、跑命令
+- **基础阵容 4 agents**：Main + Explorer（探索）+ Implementer（实现）+ Verifier（验证）
+- **按需扩展至 6**：+ Architect（架构设计）+ Documenter（文档同步）
+- **独立制衡**：Implementer 与 Verifier 不合并，避免自我确认偏差
+- **返工循环**：AC 不通过最多返工 3 轮；每次返工反馈必须含具体文件:行号 + 改进方向；3 轮仍不达标上报用户
+- **豁免**：纯问答、单行 typo、读文件回答问题 → Main Agent 直接处理
 
 ### R8. 审查与审计
 
@@ -132,6 +134,19 @@ client-ui 改动后：
 
 packages 改动后：
 - [ ] `npm run build:packages` 无错误
+
+### R9. UI 文案规范
+
+**所有用户可见文案必须为产品级高端风格，禁止任何技术描述。**
+
+- 写给使用者，非开发者；用户不关心实现，只关心「我能做什么」
+- 禁止裸用 API、MCP、F10、Provider、hydrate、SQLite 等技术术语
+- 禁止暴露组件名、文件名、路径、错误码等实现细节
+- 空状态必须说明「为什么没有」和「下一步是什么」
+- 错误提示必须说明「发生了什么」和「可做什么」
+- 按钮用动词开头，明确用户将触发的动作
+- 耗时操作给用户预期；失败说明可采取的动作
+- 像一位专业顾问在对话，不像说明书在朗读
 
 ---
 
@@ -232,4 +247,5 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | Provider 实现 | `provider-docs` | `docs/PROVIDER-STANDARD-API.md` |
 | 架构设计 | `architecture` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| 任务分派 | `task-management` | - |
+| 多 Agent 编排（非 trivial 任务） | `multi-agent-orchestration.mdc` | `task-management` |
+| UI 文案规范 | `ui-copy-standard.mdc` | `docs/UI-DESIGN-SYSTEM.md` |

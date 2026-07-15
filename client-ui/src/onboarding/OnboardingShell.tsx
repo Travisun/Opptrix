@@ -32,9 +32,12 @@ export const useOnboardingShellStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
   },
   electronTitleBarMac: {
+    justifyContent: 'flex-end',
     paddingRight: '12px',
   },
   electronTitleBarWin: {
+    justifyContent: 'flex-start',
+    paddingLeft: '12px',
     paddingRight: '132px',
   },
   titleBarDragOverlay: {
@@ -233,10 +236,24 @@ export const useOnboardingShellStyles = makeStyles({
   },
   agreeRow: {
     display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
+    alignItems: 'center',
+    gap: '6px',
     marginTop: 'clamp(24px, 4vh, 32px)',
     textAlign: 'left',
+    '& .fui-Checkbox, & .fui-Checkbox *, & [class*="Checkbox"]:not(span), & [class*="Checkbox"] *': {
+      outline: 'none !important',
+      boxShadow: 'none !important',
+    },
+    '& [type="checkbox"]': {
+      appearance: 'none',
+      WebkitAppearance: 'none',
+      outline: 'none !important',
+      boxShadow: 'none !important',
+    },
+    '& [type="checkbox"]:focus, & [type="checkbox"]:focus-visible, & [type="checkbox"]:active': {
+      outline: 'none !important',
+      boxShadow: 'none !important',
+    },
   },
   agreeText: {
     fontSize: '14px',

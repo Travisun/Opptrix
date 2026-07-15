@@ -1,0 +1,230 @@
+---
+description: 多 Agent 编排与审计 — 任何非 trivial 任务强制 4-6 agent 协作；Main Agent 纯调度审计不动手；最多 3 轮返工
+alwaysApply: true
+---
+
+# 多 Agent 编排与审计（硬性规则，替代 task-delegation.mdc）
+
+## 核心信条
+
+1. **Main Agent 是调度员 + 审计员，不是搬砖工** — 禁止直接改代码、跑命令、替 subagent 执行工作
+2. **拆到可验证** — 每个 subagent 的 briefing 必须含自含上下文 + 明确完成标准（AC）
+3. **独立制衡** — Implementer 与 Verifier 不合并，避免自我确认偏差
+4. **快速迭代，有限返工** — AC 不通过最多返工 3 轮，仍不达标上报用户
+5. **并行优先** — 独立 subagent 同时派发，有依赖时串联
+
+## 触发条件
+
+### 强制触发（满足任一）
+
+- 改动 ≥2 个文件
+- 跨 ≥2 个架构层级
+- 新增 feature / Provider / Hub feature / Agent tool
+- 需要同时 check:ui + build:packages
+- 用户明确说「设计/实现/重构/接入」
+- 任务涉及行情 / 数据层 / Provider / 架构变更
+
+### 豁免（Main Agent 直接处理）
+
+- 纯问答/解释（不涉及代码改动）
+- 单行 typo / 文案修正（仅注释或文档）
+- 读文件回答问题
+- 非代码的 `.md` 内容编辑
+
+## Agent 角色定义
+
+### 基础阵容（4 agents）
+
+| Agent | 类型 | 职责 | Main Agent 派发动作 |
+|-------|------|------|---------------------|
+| **Main Agent** | — | 需求确认(如需) → 拆解 → 写 briefing → 派发 → 审计 → 冲突仲裁 → 交付 | 调度 + 审计，**不直接执行** |
+| **Explorer** | `explore` | CodeGraph 探索、调用链分析、影响范围评估、已有模式识别 | 任务前期派发 |
+| **Implementer** | `general` | 代码实现、bug 修复、测试编写、遵循项目约定 | 收到探索结果后派发 |
+| **Verifier** | `explore` | check:ui / build:packages / 类型检查 / 逻辑审查 / AC 逐项验证 | 收到实现结果后派发 |
+
+### 扩展角色（按需 +2 → 最多 6）
+
+| Agent | 类型 | 何时启用 | 职责 |
+|-------|------|----------|------|
+| **Architect** | `explore` | 涉及新模块设计、跨层接口定义、多方案权衡 | 方案设计、接口契约定义、分层合规审查 |
+| **Documenter** | `general` | 新/改 Hub feature、Provider、Agent tool、UI 组件 | docs/ 同步、JSDoc、custom-method-docs |
+
+### 扩展决策表
+
+| 任务特征 | 是否加 Architect | 是否加 Documenter |
+|----------|-----------------|-------------------|
+| 新增 Provider / Hub feature | ✅ | ✅ |
+| 修改 API 路由 | 视复杂度 | ✅ |
+| 新增 UI 组件 | 否 | ✅ (更新 UI-DESIGN-SYSTEM.md) |
+| 修改 Schema / 存储 | ✅ | ✅ |
+| 纯 bug 修复 | 否 | 否 |
+| 文案/内容调整 | 否 | 仅当改 docs/ |
+
+## 四阶段工作流
+
+### Phase 1 — DECOMPOSE（拆解）
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. 是否需要需求澄清？                                   │
+│    是 → 按 requirement-clarification.mdc 向用户提问    │
+│    否 → 继续                                           │
+│ 2. 任务拆解为 3-5 个独立子任务（DAG 分析依赖关系）        │
+│ 3. 每个子任务定义明确 AC（可验证的完成标准）              │
+│ 4. 确定角色阵容（基础 4 或扩展 5-6）                     │
+│ 5. 创建 task 列表追踪                                   │
+└─────────────────────────────────────────────────────┘
+```
+
+**拆解原则：**
+- 每个子任务必须可独立验证（有明确 AC）
+- 有上下游依赖的任务串行，否则并行
+- 涉及行情 / 数据层的子任务，briefing 必须引用 `data-layer-standard-api.mdc`
+
+### Phase 2 — DISPATCH（派发）
+
+每个 subagent 的 briefing 模板：
+
+```
+## 任务
+{一句话目标}
+
+## 背景
+- 整体目标：{项目标}
+- 本子任务定位：{在整体中的角色}
+- 上游输入：{来自哪个前置子任务的输出，无则省略}
+
+## 约束
+- 范围：{只改哪些文件/目录}
+- 分层规则：{禁止跨层调用、使用标准 API}
+- 代码风格：{async/await、函数组件、错误处理策略}
+- 禁止：{不要做的事，如"不要重构无关代码"}
+
+## 完成标准（AC）
+- [ ] {可验证条件 1，如"npm run check:ui 退出码 0"}
+- [ ] {可验证条件 2，如"无 any 类型"}
+- [ ] {可验证条件 3，如"不改其他文件"}
+
+## 输出格式
+**Status**: success | partial | failed | blocked
+**Summary**: 一句话总结
+{交付物正文}
+**Files touched**: 文件列表
+**Findings**: 发现的问题或建议
+```
+
+**并行规则：**
+- Explorer 始终第一个派发
+- Implementer 依赖 Explorer 输出 → 串行
+- Verifier 依赖 Implementer 输出 → 串行
+- Architect 可与 Explorer 并行（如需要设计输入）
+- Documenter 在所有实现完成后派发
+
+### Phase 3 — AUDIT（审计）
+
+Main Agent 收到 subagent 返回后，**逐条验 AC**：
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. 逐条对照 AC 检查                                   │
+│ 2. 跨 subagent 冲突检查（接口签名、文件重叠、语义矛盾）  │
+│ 3. 全通过 → Phase 4 DELIVER                          │
+│ 4. 不通过 → 判断返工対象                               │
+│    - 单 subagent 问题 → 返工该 subagent                │
+│    - 多 subagent 冲突 → 返工相关 subagent + 仲裁       │
+│    - AC 定义不清 → 更新 AC 后重新派发                   │
+└─────────────────────────────────────────────────────┘
+```
+
+### Phase 4 — DELIVER（交付）
+
+```
+┌─────────────────────────────────────────────────────┐
+│ 1. 集成冲突仲裁（如有）                                 │
+│ 2. 整体 AC 最终验证                                    │
+│ 3. 整理交付物 + 汇报用户                               │
+│ 4. 更新 task 状态为 done                              │
+└─────────────────────────────────────────────────────┘
+```
+
+## 返工循环机制
+
+```
+Round 1: 分派 → 执行 → 审计
+  └─ 不通过 →
+Round 2: 带具体反馈重新分派（相同角色，更新 briefing）
+  └─ 不通过 →
+Round 3: 带详细 remediation 信息的最后机会
+  └─ 仍不通过 → 上报用户 + 阻塞分析报告
+```
+
+### 返工反馈格式（硬性）
+
+每次返工的 briefing 必须在顶部附加：
+
+```
+## ⚠️ 返工指示（第 N 次，共 3 次机会）
+
+### 上次未通过的 AC
+- [ ] {具体哪条 AC 未通过}
+  - 问题：{文件:行号 + 问题描述}
+  - 期望：{具体目标状态 + 对比}
+
+### 改进方向
+{具体建议 + 反例/正例}
+```
+
+### 3 轮失败后的上报格式
+
+```
+## 任务阻塞报告
+
+**子任务**: {任务名}
+**已尝试**: 3 次
+**阻塞原因**: {为什么持续失败}
+**已完成部分**: {哪些 AC 已通过}
+**未通过 AC**: {列出 + 具体问题}
+**建议**:
+- 方案 A: {如降低 AC 标准}
+- 方案 B: {如手动介入}
+- 方案 C: {如更换实现方案}
+
+请确认如何处理。
+```
+
+## 与其他规则的协同
+
+| 现有规则 | 协同方式 |
+|----------|----------|
+| `requirement-clarification.mdc` | Phase 1 由 Main Agent 执行 |
+| `codegraph.mdc` | Explorer 代为执行，Main Agent 不直接 CodeGraph |
+| `review-audit.mdc` | Phase 3 审计直接引用其审查清单 |
+| `doc-sync.mdc` | Documenter 代为执行 |
+| `post-edit-verification.mdc` | Verifier 代为执行 check:ui / build:packages |
+| `data-layer-standard-api.mdc` | 涉及行情时 briefing 必须引用 |
+| `backward-compatibility.mdc` | 涉及 Schema 时 briefing 必须引用 |
+
+## 反模式（禁止）
+
+- ❌ Main Agent 亲自 Edit/Write 代码替代 subagent
+- ❌ Main Agent 亲自跑 check:ui / build 替代 Verifier
+- ❌ briefing 不含 AC（subagent 不知道完成标准）
+- ❌ AC 模糊（如"代码质量好"→ 必须可量化/可验证）
+- ❌ 返工反馈只写"不对，重做"
+- ❌ Implementer 和 Verifier 合并（自我确认偏差）
+- ❌ 豁免任务也分派（浪费资源）
+- ❌ 超过 3 轮仍不上线，无限循环
+
+## 快速决策树
+
+```
+用户请求 → 是否 trivial（问答/单行/纯阅读）？
+  ├─ 是 → Main Agent 直接处理
+  └─ 否 → 是否需需求澄清？
+            ├─ 是 → 向用户提问 → 确认后继续
+            └─ 否 → 拆解任务 → 角色阵容（4-6）
+                      → Phase 1 DECOMPOSE
+                      → Phase 2 DISPATCH
+                      → Phase 3 AUDIT
+                      → Phase 4 DELIVER
+```
