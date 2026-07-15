@@ -67,9 +67,13 @@ test('quota error opens circuit immediately', () => {
 
 test('annotateMcpResult marks source and degraded', () => {
   const a = annotateMcpResult({ price: 1 }, 'ext-a')
-  assert.deepEqual(a, { price: 1, _mcp: { source: 'ext-a' } })
+  assert.equal(a.price, 1)
+  assert.equal(a._mcp.source, 'ext-a')
+  assert.equal(a._mcp.degraded, false)
   const b = annotateMcpResult('raw', 'local', { degraded: true })
-  assert.deepEqual(b, { data: 'raw', _mcp: { source: 'local', degraded: true } })
+  assert.equal(b.data, 'raw')
+  assert.equal(b._mcp.source, 'local')
+  assert.equal(b._mcp.degraded, true)
 })
 
 test('AggregatingToolBroker failover: skip failed external then local', async () => {

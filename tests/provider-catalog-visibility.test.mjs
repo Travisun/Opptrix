@@ -9,7 +9,8 @@ describe('provider catalog visibility', () => {
     engine.providerLoader.registerBuiltins()
     const catalog = engine.listProviders()
     const ids = catalog.providers.map(p => p.providerId)
-    assert.ok(!ids.includes('akshare'), `akshare should be hidden, got: ${ids.join(', ')}`)
+    // akshare now has MACRO_INDICATOR capability, so it appears in catalog
+    assert.ok(ids.includes('akshare'))
     assert.ok(ids.includes('tickflow'))
     assert.ok(ids.includes('zzshare'))
   })
@@ -19,6 +20,7 @@ describe('provider catalog visibility', () => {
     registerAllDrivers(engine.registry)
     const driver = engine.registry.get('akshare')
     assert.ok(driver)
-    assert.equal(driver.bindings().length, 0)
+    // akshare now has MACRO_INDICATOR capability bindings
+    assert.ok(driver.bindings().length > 0)
   })
 })
