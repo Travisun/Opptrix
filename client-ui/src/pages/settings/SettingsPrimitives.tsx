@@ -19,6 +19,9 @@ const useStyles = makeStyles({
     transitionProperty: 'border-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: motion.ease,
+    '@media (prefers-reduced-motion: reduce)': {
+      transitionProperty: 'none',
+    },
   },
   row: {
     display: 'flex',
@@ -49,14 +52,15 @@ const useStyles = makeStyles({
   rowTitle: {
     fontSize: '14px',
     fontWeight: 600,
-    letterSpacing: '-0.01em',
+    letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.4,
+    lineHeight: 1.35,
   },
   rowDesc: {
     fontSize: '13px',
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.5,
+    letterSpacing: 0,
+    lineHeight: 1.45,
   },
   rowControl: {
     flexShrink: 0,
@@ -97,9 +101,9 @@ const useStyles = makeStyles({
   panelHeaderTitle: {
     fontSize: '14px',
     fontWeight: 600,
-    letterSpacing: '-0.01em',
+    letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
+    lineHeight: 1.3,
   },
   inlineInput: {...inputShellInteractive,
 width: '100%',
@@ -252,7 +256,7 @@ width: '100%',
     transitionDuration: motion.fast,
     transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     ':hover': {
-      backgroundColor: opptrixCssVars.gray100,
+      backgroundColor: opptrixCssVars.surfaceHover,
       color: opptrixCssVars.textPrimary,
     },
   },

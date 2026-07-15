@@ -307,6 +307,7 @@ export default function NewsFeedSettingsSection() {
   })
   const [subs, setSubs] = useState<FeedSubscription[]>([])
   const [groups, setGroups] = useState<FeedGroup[]>([])
+  const [viewMode, setViewMode] = useState<'subscriptions' | 'groups'>('subscriptions')
   const [groupDialogOpen, setGroupDialogOpen] = useState(false)
   const [editingGroup, setEditingGroup] = useState<FeedGroup | null>(null)
   const [groupTitle, setGroupTitle] = useState('')
@@ -753,6 +754,7 @@ export default function NewsFeedSettingsSection() {
       </div>
       )}
 
+      {viewMode === 'groups' && (
       <div className={s.sectionBlock}>
         <div className={s.listPanel}>
           <div className={s.listHeader}>
@@ -806,6 +808,7 @@ export default function NewsFeedSettingsSection() {
           )}
         </div>
       </div>
+      )}
 
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>本地存储</Text>

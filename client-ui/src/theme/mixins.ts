@@ -4,8 +4,15 @@ export const motion = {
   fast: '140ms',
   normal: '220ms',
   slow: '360ms',
+  /** Apple default curve: 0.4, 0, 0.2, 1 */
   ease: 'cubic-bezier(0.4, 0, 0.2, 1)',
   easeOut: 'cubic-bezier(0, 0, 0.2, 1)',
+  /** Emil Kowalski strong ease-out — for UI interactions */
+  easeOutStrong: 'cubic-bezier(0.23, 1, 0.32, 1)',
+  /** Button press — fastest tier */
+  press: '100ms',
+  /** Dropdowns, popovers */
+  popover: '180ms',
 } as const
 
 /** Keyboard focus ring — buttons, links, icon controls */
