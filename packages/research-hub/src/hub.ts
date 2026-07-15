@@ -330,6 +330,7 @@ export class ResearchHub {
         case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
         case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
         case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
+        case 'instrument_institution_holdings': return this.instrumentInstitutionHoldings(params, t0)
         case 'instrument_notices': return this.instrumentNotices(params, t0)
         case 'instrument_financial_indicators': return this.instrumentFinancialIndicators(params, t0)
         case 'cn_market_special': return this.cnMarketSpecial(params, t0)
@@ -2401,6 +2402,117 @@ export class ResearchHub {
         disclaimer,
       },
       session_label,
+      t0,
+    )
+  }
+
+  /**
+   * 个股机构持仓（东财 zlsj）— 季报一览 / 分类型明细 Tab / 报告期列表。
+   * scope: overview（默认）| detail | dates
+   */
+  private async instrumentInstitutionHoldings(params: Record<string, unknown>, t0: number) {
+    const scope = String(params.scope ?? 'overview').trim().toLowerCase() || 'overview'
+    const orgType = String(params.org_type ?? params.orgType ?? params.kind ?? 'fund').trim()
+    const reportDate = String(params.report_date ?? params.reportDate ?? '').trim()
+    const page = params.page != null ? Number(params.page) : 1
+    const pageSize = params.page_size != null ? Number(params.page_size) : 30
+
+    if (scope === 'dates' || scope === 'report_dates') {
+      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldReportDates', [
+        params.limit != null ? Number(params.limit) : 25,
+      ])
+      if (!r.success) return fail(r.error ?? '机构持仓报告期暂不可用（请启用 eastmoney）', t0)
+      const rows = Array.isArray(r.data) ? r.data : []
+      return ok(
+        { scope: 'dates', items: rows, count: rows.length, source: 'eastmoney', provider_method: 'emInstHoldReportDates' },
+        `机构持仓报告期 ${rows.length} 条`,
+        t0,
+      )
+    }
+
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    if (ref.market !== 'CN') return fail('机构持仓目前仅支持 A 股（CN）', t0)
+    const code = ref.symbol
+
+    if (scope === 'detail' || scope === 'tab') {
+      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldDetail', [
+        code,
+        orgType || 'fund',
+        reportDate,
+        Number.isFinite(page) ? page : 1,
+        Number.isFinite(pageSize) ? pageSize : 30,
+      ])
+      if (!r.success) return fail(r.error ?? '机构持仓明细暂不可用', t0)
+      const rowsRaw = Array.isArray(r.data) ? r.data : []
+      const rows = rowsRaw.filter(row => !(row && typeof row === 'object' && (row as { empty?: boolean }).empty === true))
+      if (!rows.length) {
+        return ok(
+          {
+            instrument: ref,
+            scope: 'detail',
+            org_type: orgType,
+            report_date: reportDate || null,
+            items: [],
+            count: 0,
+            source: 'eastmoney',
+            provider_method: 'emInstHoldDetail',
+            hint: '该报告期该类型可能无披露（尤其一季报/三季报）；可换 scope=overview 或报告期',
+          },
+          '机构持仓明细 0 条',
+          t0,
+        )
+      }
+      return ok(
+        {
+          instrument: ref,
+          scope: 'detail',
+          org_type: orgType,
+          report_date: (rows[0]?.reportDate as string | undefined) ?? (reportDate || null),
+          items: rows,
+          count: rows.length,
+          pages: rows[0]?.pages ?? null,
+          source: 'eastmoney',
+          provider_method: 'emInstHoldDetail',
+        },
+        `机构持仓明细 ${rows.length} 条`,
+        t0,
+      )
+    }
+
+    // overview：优先自定义一览；失败回退标准 INST_HOLDING
+    const overview = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldOverview', [code, reportDate])
+    if (overview.success && Array.isArray(overview.data) && overview.data.length) {
+      return ok(
+        {
+          instrument: ref,
+          scope: 'overview',
+          report_date: (overview.data[0]?.reportDate as string | undefined) ?? (reportDate || null),
+          items: overview.data,
+          count: overview.data.length,
+          source: 'eastmoney',
+          provider_method: 'emInstHoldOverview',
+          hint: '明细 Tab 用 scope=detail + org_type=fund|qfii|social|broker|insurance|trust',
+        },
+        `机构持仓一览 ${overview.data.length} 条`,
+        t0,
+      )
+    }
+
+    const r = await this.de.instHolding(code)
+    if (!r.success || !Array.isArray(r.data) || !r.data.length) {
+      return fail(r.error ?? overview.error ?? '机构持仓暂不可用', t0)
+    }
+    return ok(
+      {
+        instrument: ref,
+        scope: 'overview',
+        items: r.data,
+        count: r.data.length,
+        source: r.source ?? 'instHolding',
+        hint: '明细 Tab 用 scope=detail + org_type=…',
+      },
+      `机构持仓一览 ${r.data.length} 条`,
       t0,
     )
   }

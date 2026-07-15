@@ -56,8 +56,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'fundamentals',
     title: '基本面事实',
-    description: '公司概况、财务摘要、三表明细、财务指标、股东结构、分红历史',
-    whenToUse: '营收利润、ROE、利润表/资产负债/现金流、财务指标、主业概念、十大股东、分红派息',
+    description: '公司概况、财务摘要、三表明细、财务指标、股东结构、季报机构持仓、分红历史',
+    whenToUse: '营收利润、ROE、利润表/资产负债/现金流、财务指标、主业概念、十大股东、机构持仓、分红派息',
   },
   {
     id: 'market',
@@ -140,6 +140,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_instrument_cash_flow: 'fundamentals',
   get_instrument_income_statement: 'fundamentals',
   get_instrument_shareholders: 'fundamentals',
+  get_instrument_institution_holdings: 'fundamentals',
   get_instrument_dividend: 'fundamentals',
   get_instrument_financial_indicators: 'fundamentals',
 

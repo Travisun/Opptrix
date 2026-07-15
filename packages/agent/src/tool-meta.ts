@@ -216,8 +216,16 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_shareholders: {
     hubFeature: 'instrument_shareholders',
     miningEligible: true,
-    usageGuide: `股东结构事实表；问十大股东、股权集中度、机构持仓时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `股东结构事实表；问十大股东、股权集中度时使用。季报机构持仓（基金/QFII Tab）用 get_instrument_institution_holdings。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；部分市场可能无数据；勿编造股东名单。',
+  },
+  get_instrument_institution_holdings: {
+    hubFeature: 'instrument_institution_holdings',
+    miningEligible: true,
+    usageGuide:
+      'A 股季报机构持仓：scope=overview 一览；scope=detail+org_type 明细 Tab；scope=dates 报告期。'
+      + `勿与十大股东混淆。${INSTRUMENT_REF_USAGE}`,
+    compliance: '仅 CN；依赖 eastmoney；空类型声明缺口（一/三季报可能无 QFII 等）；勿编造持仓。',
   },
   get_instrument_dividend: {
     hubFeature: 'instrument_dividend',

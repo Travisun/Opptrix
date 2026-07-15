@@ -73,6 +73,7 @@
 | `instrument_income_statement` | InstrumentRef + `report_date?` | 利润表多期 |
 | `instrument_financial_indicators` | InstrumentRef + `report` | 财务指标树（同花顺） |
 | `instrument_shareholders` | InstrumentRef + `report_date?` | 股东结构 |
+| `instrument_institution_holdings` | InstrumentRef + `scope?` / `org_type?` / `report_date?` / 分页 | A 股季报机构持仓一览/明细（eastmoney zlsj） |
 | `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向 |
 | `instrument_notices` | InstrumentRef + `page?` / `page_size?` | 标的公告列表 |
@@ -155,6 +156,7 @@ POST /api/research
 | `instrument_income_statement` | InstrumentRef + 可选 `report_date` | 利润表多期 |
 | `instrument_financial_indicators` | InstrumentRef + `report` | 财务指标树（同花顺） |
 | `instrument_shareholders` | InstrumentRef + 可选 `report_date` | 股东结构 |
+| `instrument_institution_holdings` | InstrumentRef + `scope`/`org_type`/`report_date`/分页 | A 股季报机构持仓（一览/明细 Tab/报告期；eastmoney zlsj） |
 | `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向（主 CN） |
 | `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |

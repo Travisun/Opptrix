@@ -171,6 +171,48 @@ export const EASTMONEY_METHOD_DOCS: Record<string, CustomMethodApiDoc> = {
     usage: INVOKE('emMacroOil', '["adjust",1,20]'),
     example: '{"provider":"eastmoney","method":"emMacroOil","args":["province",1,100]}',
   },
+  emInstHoldReportDates: {
+    method: 'emInstHoldReportDates',
+    description: '机构持仓可用季报日期列表',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_MAIN_REPORTDATE',
+    pageUrl: 'https://data.eastmoney.com/zlsj/',
+    params: [
+      { name: 'limit', type: 'number', description: '返回条数', default: 25 },
+    ],
+    returns: '[{ date, name, isFundShow, isComplete }]',
+    usage: INVOKE('emInstHoldReportDates', '[25]'),
+    example: '{"provider":"eastmoney","method":"emInstHoldReportDates","args":[20]}',
+  },
+  emInstHoldOverview: {
+    method: 'emInstHoldOverview',
+    description: '个股季报机构持仓一览（按基金/QFII/社保/保险/券商/信托/其他汇总）',
+    sourceUrl: 'https://datacenter-web.eastmoney.com/api/data/v1/get?reportName=RPT_MAIN_ORGHOLD',
+    pageUrl: 'https://data.eastmoney.com/zlsj/detail/002851.html',
+    params: [
+      { name: 'code', type: 'string', description: '6 位 A 股代码', required: true },
+      { name: 'reportDate', type: 'string', description: '报告期 YYYY-MM-DD，空=最新', default: '' },
+    ],
+    returns: '[{ code, reportDate, orgType, holderCount, totalShares, holdValue, totalSharesRatio, freeSharesRatio }]',
+    usage: INVOKE('emInstHoldOverview', '["002851","2025-09-30"]'),
+    example: '{"provider":"eastmoney","method":"emInstHoldOverview","args":["600519",""]}',
+  },
+  emInstHoldDetail: {
+    method: 'emInstHoldDetail',
+    description: '个股分类型机构持仓明细（基金/QFII/社保/券商/保险/信托 Tab）',
+    sourceUrl: 'https://data.eastmoney.com/dataapi/zlsj/detail',
+    pageUrl: 'https://data.eastmoney.com/zlsj/detail/002851.html',
+    params: [
+      { name: 'code', type: 'string', description: '6 位 A 股代码', required: true },
+      { name: 'orgType', type: 'string', description: 'fund|qfii|social|broker|insurance|trust|all', default: 'fund' },
+      { name: 'reportDate', type: 'string', description: '报告期 YYYY-MM-DD，空=最新', default: '' },
+      { name: 'page', type: 'number', description: '页码', default: 1 },
+      { name: 'pageSize', type: 'number', description: '每页条数，最大 100', default: 30 },
+    ],
+    returns: '[{ holderName, orgType, totalShares, holdMarketCap, totalSharesRatio, freeSharesRatio, pages, ... }]',
+    usage: INVOKE('emInstHoldDetail', '["002851","fund","2025-09-30",1,30]'),
+    example: '{"provider":"eastmoney","method":"emInstHoldDetail","args":["000001","insurance","",1,20]}',
+    notes: '三季报/一季报部分类型可能为空（上游基金持仓不全量披露）',
+  },
 }
 
 export const EASTMONEY_CUSTOM = Object.values(EASTMONEY_METHOD_DOCS).map(toCustomMethodDef)

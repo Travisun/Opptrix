@@ -73,8 +73,8 @@ const SEED_RULES: SeedRule[] = [
     pack: 'fundamentals',
     weight: 3,
     patterns: [
-      /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|主营业务|所属概念|公司简介|基本面/i,
-      /资产负债表|现金流量表|利润表|损益表|经营现金流|财务指标|financials|profile|dividend|shareholder|balance.?sheet|cash.?flow|income.?statement/i,
+      /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|机构持仓|基金持仓|主营业务|所属概念|公司简介|基本面/i,
+      /资产负债表|现金流量表|利润表|损益表|经营现金流|财务指标|financials|profile|dividend|shareholder|institution.?hold|balance.?sheet|cash.?flow|income.?statement/i,
     ],
   },
   {

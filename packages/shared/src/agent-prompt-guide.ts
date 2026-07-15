@@ -35,7 +35,7 @@ export function buildStandardInstrumentApiPlaybook(): string {
     '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
-    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_income_statement / get_instrument_balance_sheet / get_instrument_cash_flow / get_instrument_financial_indicators / get_instrument_shareholders / get_instrument_dividend',
+    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_income_statement / get_instrument_balance_sheet / get_instrument_cash_flow / get_instrument_financial_indicators / get_instrument_shareholders / get_instrument_institution_holdings / get_instrument_dividend',
     '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
     '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
@@ -45,12 +45,13 @@ export function buildStandardInstrumentApiPlaybook(): string {
 /** 基本面事实表路径 — fundamentals pack 已加载时注入 */
 export function buildFundamentalsPlaybook(): string {
   return [
-    '【基本面事实表 — profile / financials / 三表 / financial_indicators / shareholders / dividend】',
+    '【基本面事实表 — profile / financials / 三表 / financial_indicators / shareholders / institution_holdings / dividend】',
     '1) 公司概况/概念/主业：get_instrument_profile（单只 InstrumentRef）',
     '2) 营收利润/ROE/同比：get_instrument_financials（report_type 默认 all）；引用具体 reportDate',
     '2b) 利润表：get_instrument_income_statement；资产负债表：get_instrument_balance_sheet；现金流量表：get_instrument_cash_flow',
     '2c) 财务指标树：get_instrument_financial_indicators（须 report，如 2024Q3；依赖同花顺）',
     '3) 十大股东/股本：get_instrument_shareholders',
+    '3b) 季报机构持仓（基金/QFII/社保/券商等）：get_instrument_institution_holdings(scope=overview|detail)；勿与十大股东混淆',
     '4) 分红派息史：get_instrument_dividend',
     '5) 禁止：用 evaluate_instrument 黑盒代替财务核实；禁止 invoke_provider_custom_method 调 sinaFinancialPivot 等重复标准能力',
     '6) 深度备忘录（L3）：至少覆盖「概况或财务」一维；不可用时声明缺口而非跳过',

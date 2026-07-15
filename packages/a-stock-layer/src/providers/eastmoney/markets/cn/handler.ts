@@ -25,6 +25,12 @@ import {
   type EmOilKind,
 } from '../../api/macro.js'
 import {
+  EM_INST_ORG_TYPES,
+  emFetchInstHoldDetail,
+  emFetchInstHoldOverview,
+  emFetchInstHoldReportDates,
+} from '../../api/zlsj.js'
+import {
   mapMarginMarketExchangeRows,
   mapMarginMarketTotalRows,
   mapMarginStockRows,
@@ -36,6 +42,12 @@ import {
   mapMacroOilRows,
 } from '../../normalize/macro.js'
 import {
+  mapInstHoldDetailRows,
+  mapInstHoldOverviewRows,
+  mapInstHoldReportDates,
+  mapInstHoldingCapability,
+} from '../../normalize/zlsj.js'
+import {
   mapClistSectorRows,
   mapClistStockMoneyFlowRows,
   mapFflowKlines,
@@ -45,13 +57,14 @@ import {
 } from '../../normalize/money-flow.js'
 
 /**
- * 东方财富 — 资金流 / 两融 / 宏观数据中心（cjsj）。
+ * 东方财富 — 资金流 / 两融 / 宏观 / 机构持仓（zlsj）。
  *
  * 页面入口：
  * - https://data.eastmoney.com/zjlx/dpzjlx.html
  * - https://data.eastmoney.com/bkzj/
  * - https://data.eastmoney.com/rzrq/total.html
  * - https://data.eastmoney.com/cjsj/ppi.html
+ * - https://data.eastmoney.com/zlsj/detail/{code}.html
  */
 export class EastmoneyCnHandler extends MarketHandlerShell {
   /** 个股资金流日序列 — Capability `STOCK_MONEY_FLOW` */
@@ -141,6 +154,27 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
     try {
       const rows = mapMarginStockRows(await fetchEmMarginStockHistory(bare, 1, 30))
       return rows.length ? rows : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 个股机构持仓一览 — Capability `INST_HOLDING`
+   * @pageUrl https://data.eastmoney.com/zlsj/detail/002851.html
+   */
+  async instHolding(code: string): Promise<Record<string, unknown>[] | null> {
+    const bare = bareCnSymbol(code)
+    if (!bare) return null
+    try {
+      const { reportDate, rows } = await emFetchInstHoldOverview(bare)
+      if (!rows.length) return null
+      const mapped = mapInstHoldingCapability(
+        bare,
+        reportDate,
+        mapInstHoldOverviewRows(bare, reportDate, rows),
+      )
+      return mapped.length ? mapped : null
     } catch {
       return null
     }
@@ -429,6 +463,80 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       const rows = await emFetchMacroOil(oilKind, Number(page) || 1, Number(pageSize) || 60)
       const mapped = mapMacroOilRows(oilKind, rows)
       return mapped.length ? mapped : null
+    } catch {
+      return null
+    }
+  }
+
+  // ── 主力数据 · 机构持仓（zlsj/detail）──
+
+  /** 机构持仓可用季报日期 */
+  async emInstHoldReportDates(limit = 25): Promise<Record<string, unknown>[] | null> {
+    try {
+      const mapped = mapInstHoldReportDates(await emFetchInstHoldReportDates(Number(limit) || 25))
+      return mapped.length ? mapped : null
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 季报机构持仓一览（基金/QFII/社保/保险/券商/信托/其他/汇总）
+   * @pageUrl https://data.eastmoney.com/zlsj/detail/002851.html
+   */
+  async emInstHoldOverview(
+    code: string,
+    reportDate = '',
+  ): Promise<Record<string, unknown>[] | null> {
+    const bare = bareCnSymbol(code)
+    if (!bare) return null
+    try {
+      const { reportDate: date, rows } = await emFetchInstHoldOverview(bare, reportDate || undefined)
+      if (!rows.length) return null
+      return mapInstHoldOverviewRows(bare, date, rows)
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * 分类型机构持仓明细（Tab：fund/qfii/social/broker/insurance/trust/all）
+   * @pageUrl https://data.eastmoney.com/zlsj/detail/002851.html
+   */
+  async emInstHoldDetail(
+    code: string,
+    orgType: string = 'fund',
+    reportDate = '',
+    page = 1,
+    pageSize = 30,
+  ): Promise<Record<string, unknown>[] | null> {
+    const bare = bareCnSymbol(code)
+    if (!bare) return null
+    try {
+      const got = await emFetchInstHoldDetail(
+        bare,
+        orgType,
+        reportDate || undefined,
+        Number(page) || 1,
+        Number(pageSize) || 30,
+      )
+      const mapped = mapInstHoldDetailRows(bare, got.reportDate, got.orgKey, got.orgName, got.rows)
+      const meta = {
+        pages: got.pages,
+        pageUrl: got.pageUrl,
+        orgTypes: EM_INST_ORG_TYPES.map(t => ({ key: t.key, shType: t.shType, name: t.name })),
+      }
+      if (!mapped.length) {
+        return [{
+          code: bare,
+          reportDate: got.reportDate,
+          orgKey: got.orgKey,
+          orgType: got.orgName,
+          empty: true,
+          ...meta,
+        }]
+      }
+      return mapped.map(row => ({ ...row, ...meta }))
     } catch {
       return null
     }

@@ -245,7 +245,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'get_instrument_shareholders',
       category: '基本面',
-      description: '股东结构事实表（十大股东/股本等）；核实股权集中度或机构持仓时使用',
+      description: '股东结构事实表（十大股东/股本等）；核实股权集中度时使用。季报机构持仓（基金/QFII 等）改用 get_instrument_institution_holdings',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         report_date: {
@@ -256,6 +256,40 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('instrument_shareholders', {
         ...resolveInstrumentParams(a),
         report_date: a.report_date,
+      }),
+    },
+    {
+      name: 'get_instrument_institution_holdings',
+      category: '基本面',
+      description:
+        'A 股季报机构持仓（东财 zlsj）：一览汇总 / 分类型明细（基金·QFII·社保·券商·保险·信托）/ 报告期列表。'
+        + '与十大股东 get_instrument_shareholders 不同',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        scope: {
+          type: 'string',
+          description: 'overview（默认一览）| detail（Tab 明细）| dates（报告期）',
+        },
+        org_type: {
+          type: 'string',
+          description: 'detail 时：fund|qfii|social|broker|insurance|trust|all；也可用中文「基金」等',
+        },
+        report_date: {
+          type: 'string',
+          description: '报告期 YYYY-MM-DD，空则最新；可用 scope=dates 先查',
+        },
+        page: { type: 'number', description: 'detail 页码，默认 1' },
+        page_size: { type: 'number', description: 'detail 每页条数，默认 30' },
+        limit: { type: 'number', description: 'dates 时返回条数' },
+      }),
+      handler: (a) => d('instrument_institution_holdings', {
+        ...resolveInstrumentParams(a),
+        scope: a.scope ?? 'overview',
+        org_type: a.org_type ?? a.orgType ?? a.kind,
+        report_date: a.report_date ?? a.reportDate,
+        page: a.page,
+        page_size: a.page_size,
+        limit: a.limit,
       }),
     },
     {

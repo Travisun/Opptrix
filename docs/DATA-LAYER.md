@@ -1029,7 +1029,7 @@ Hub / Agent 管理工具（`provider_config_save`）同样接受上述 patch —
 
 | Provider | EQUITY | ETF | INDEX | 说明 |
 |----------|--------|-----|-------|------|
-| eastmoney | ○ 资金流/两融/宏观已接入 | ○ | ○ 大盘资金流 | `STOCK/SECTOR/MARKET_MONEY_FLOW` + `MARGIN_TRADE` + `MACRO_INDICATOR`；cjsj 中国/国外/行业；行情主路径仍靠其他源 |
+| eastmoney | ○ 资金流/两融/宏观/机构持仓已接入 | ○ | ○ 大盘资金流 | `STOCK/SECTOR/MARKET_MONEY_FLOW` + `MARGIN_TRADE` + `MACRO_INDICATOR` + `INST_HOLDING`；cjsj + zlsj；行情主路径仍靠其他源 |
 | tushare | ● 需 token | ○ Phase 1 | ● | 批量/sync 优先 |
 | tdx | ● 行情/K线 | ● 行情/K线 | ● | 低延迟；TCP |
 | tencent / sina | ● 行情备选 | ○ | ○ | 回退；个股资金流/两融备选 |

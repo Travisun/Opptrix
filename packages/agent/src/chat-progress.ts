@@ -157,6 +157,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_instrument_income_statement: '读取利润表',
   get_instrument_financial_indicators: '读取财务指标',
   get_instrument_shareholders: '读取股东结构',
+  get_instrument_institution_holdings: '读取机构持仓',
   get_instrument_dividend: '读取分红历史',
   get_instrument_money_flow: '读取资金流向',
   get_cn_market_special: '读取 A 股专题数据',
