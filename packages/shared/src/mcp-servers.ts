@@ -3,9 +3,15 @@
  *
  * 路由约定：已启用且未 pause 的外部源按 sortOrder 优先；
  * 不可用 / 额度过 / 熔断后换下一源；最后回落进程内本地 ToolRegistry。
+ *
+ * 支持的传输类型：
+ * - stdio：本地子进程 stdio 通信
+ * - http：Streamable HTTP（单 URL，POST 传输）
+ * - streamable-http：同 http，显式名称
+ * - sse：旧版 SSE 传输（GET 建流 + POST 发送）
  */
 
-export type McpServerTransport = 'stdio' | 'http'
+export type McpServerTransport = 'stdio' | 'http' | 'streamable-http' | 'sse'
 
 export type McpServerInstallSource = 'manual' | 'registry'
 
@@ -24,13 +30,20 @@ export interface McpStdioTransportConfig {
 }
 
 export interface McpHttpTransportConfig {
-  transport: 'http'
+  transport: 'http' | 'streamable-http'
   url: string
   /** 非密钥 Header（如 Accept） */
   headers?: Record<string, string>
 }
 
-export type McpTransportConfig = McpStdioTransportConfig | McpHttpTransportConfig
+export interface McpSseTransportConfig {
+  transport: 'sse'
+  url: string
+  /** 非密钥 Header（如 Accept） */
+  headers?: Record<string, string>
+}
+
+export type McpTransportConfig = McpStdioTransportConfig | McpHttpTransportConfig | McpSseTransportConfig
 
 /**
  * 持久化行（含密钥明文，仅存用户库；API 对外须掩码）。
@@ -137,6 +150,15 @@ export function endpointPreviewFromTransport(cfg: McpTransportConfig): string {
   } catch {
     return cfg.url.slice(0, 80)
   }
+}
+
+/** 传输类型互转：旧版 'http' 视为 streamable-http；'sse' 保持 */
+export function normalizeTransport(transport: string): McpServerTransport {
+  if (transport === 'stdio') return 'stdio'
+  if (transport === 'sse') return 'sse'
+  if (transport === 'streamable-http') return 'streamable-http'
+  // 'http' 或未知值默认走 streamable-http（向后兼容）
+  return 'streamable-http'
 }
 
 /** 判定外部调用失败是否应 failover / 熔断（业务参数错误不在此列） */

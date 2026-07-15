@@ -1,10 +1,11 @@
 /**
- * 单个外部 MCP Server 的 Client 封装（stdio / Streamable HTTP）。
+ * 单个外部 MCP Server 的 Client 封装（stdio / Streamable HTTP / SSE）。
  */
 
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { StdioClientTransport } from '@modelcontextprotocol/sdk/client/stdio.js'
 import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/streamableHttp.js'
+import { SSEClientTransport } from '@modelcontextprotocol/sdk/client/sse.js'
 import type { McpServerRecord } from '@opptrix/shared'
 import type { OpenAiTool, JsonSchema } from '../../tools.js'
 
@@ -44,6 +45,19 @@ export class ExternalMcpConnection {
         cwd: cfg.cwd,
         env,
         stderr: 'pipe',
+      })
+      await client.connect(transport)
+    } else if (cfg.transport === 'sse') {
+      const headers: Record<string, string> = { ...(cfg.headers ?? {}) }
+      const bearer = this.record.secrets.authorization
+        ?? this.record.secrets.bearer
+        ?? this.record.secrets.api_key
+        ?? ''
+      if (bearer && !headers.Authorization) {
+        headers.Authorization = bearer.startsWith('Bearer ') ? bearer : `Bearer ${bearer}`
+      }
+      const transport = new SSEClientTransport(new URL(cfg.url), {
+        requestInit: { headers },
       })
       await client.connect(transport)
     } else {

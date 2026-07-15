@@ -22,8 +22,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@codemirror/lang-json": "^6.0.2",
+    "@codemirror/lint": "^6.9.7",
     "@fluentui/react-components": "^9.59.0",
     "@fluentui/react-icons": "^2.0.274",
+    "@uiw/react-codemirror": "^4.25.11",
     "katex": "^0.17.0",
     "lightweight-charts": "^5.0.7",
     "mermaid": "^11.16.0",

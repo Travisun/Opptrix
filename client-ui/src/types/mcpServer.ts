@@ -1,6 +1,6 @@
 /** 外部 MCP Server 公开视图（API 永不回传明文密钥） */
 
-export type McpServerTransport = 'stdio' | 'http'
+export type McpServerTransport = 'stdio' | 'http' | 'streamable-http' | 'sse'
 export type McpServerHealthState = 'unknown' | 'healthy' | 'degraded' | 'open' | 'paused'
 
 export interface PublicMcpServer {
@@ -29,6 +29,8 @@ export interface McpServerCreatePayload {
   transportConfig:
     | { transport: 'stdio'; command: string; args?: string[]; cwd?: string; env?: Record<string, string> }
     | { transport: 'http'; url: string; headers?: Record<string, string> }
+    | { transport: 'streamable-http'; url: string; headers?: Record<string, string> }
+    | { transport: 'sse'; url: string; headers?: Record<string, string> }
   secrets?: Record<string, string>
   capabilityBindings?: Record<string, string>
 }

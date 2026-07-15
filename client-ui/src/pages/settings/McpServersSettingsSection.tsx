@@ -1,41 +1,23 @@
 /**
- * 设置页 — 外部 MCP Server 列表（启用/暂停/排序/测试/增删改；密钥掩码）。
+ * 设置页 — 外部 MCP Server 统一 JSON 编辑器。
+ *
+ * 基于 CodeMirror 6：语法高亮、实时 JSON 校验、自动格式化。
+ * 保存按钮仅在 JSON 合法时启用。
  */
 
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
+import CodeMirror from '@uiw/react-codemirror'
+import { json as jsonLanguage } from '@codemirror/lang-json'
+import { linter, type Diagnostic } from '@codemirror/lint'
+import { EditorView } from '@codemirror/view'
+import { Spinner, Text, makeStyles } from '@fluentui/react-components'
 import {
-  Dialog,
-  DialogBody,
-  DialogContent,
-  DialogSurface,
-  DialogTitle,
-  Input,
-  Switch,
-  Text,
-  makeStyles,
-  mergeClasses,
-} from '@fluentui/react-components'
-import {
-  AddRegular,
-  ArrowDownRegular,
-  ArrowUpRegular,
-  DeleteRegular,
-  PlugConnectedRegular,
-} from '@fluentui/react-icons'
-import {
-  createMcpServer,
-  deleteMcpServer,
-  listMcpServers,
-  reorderMcpServers,
-  testMcpServer,
-  updateMcpServer,
+  exportMcpServers,
+  importMcpServers,
 } from '../../api/client'
-import type { PublicMcpServer } from '../../types/mcpServer'
+import type { McpServerFlatConfig } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
-import { SettingsGroup, SettingsRow } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
-import { SettingsListPanelSkeleton } from './SettingsListPanelSkeleton'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 
 const useStyles = makeStyles({
@@ -50,235 +32,150 @@ const useStyles = makeStyles({
     lineHeight: 1.45,
     padding: '0 2px 4px',
   },
-  listPanel: {
+  editorWrap: {
     border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
-    backgroundColor: opptrixCssVars.canvas,
+    borderRadius: opptrixTokens.radiusMd,
     overflow: 'hidden',
+    backgroundColor: opptrixCssVars.canvasAlt,
+    minHeight: '360px',
+    '& .cm-editor': {
+      height: '100%',
+      minHeight: '360px',
+      fontSize: '12px',
+    },
+    '& .cm-scroller': {
+      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
+    },
+    '& .cm-gutters': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+      borderRight: `1px solid ${opptrixCssVars.separator}`,
+    },
   },
-  row: {
+  toolbar: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    padding: '12px 14px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  rowTop: {
-    display: 'flex',
-    alignItems: 'flex-start',
     justifyContent: 'space-between',
-    gap: '12px',
-  },
-  rowMain: {
-    flex: 1,
-    minWidth: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  title: {
-    fontSize: '14px',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-  },
-  meta: {
-    fontSize: '12px',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.45,
-    wordBreak: 'break-all',
-  },
-  actions: {
-    display: 'flex',
-    flexWrap: 'wrap',
     alignItems: 'center',
-    gap: '6px',
-    justifyContent: 'flex-end',
-  },
-  healthOk: { color: opptrixCssVars.success },
-  healthBad: { color: opptrixCssVars.error },
-  healthMuted: { color: opptrixCssVars.textTertiary },
-  dialogBody: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
-    minWidth: '320px',
-  },
-  fieldLabel: {
-    fontSize: '12px',
-    color: opptrixCssVars.textSecondary,
-  },
-  dialogActions: {
-    display: 'flex',
-    justifyContent: 'flex-end',
     gap: '8px',
-    marginTop: '8px',
   },
-  empty: {
-    padding: '24px 14px',
-    textAlign: 'center',
-    color: opptrixCssVars.textTertiary,
-    fontSize: '13px',
+  toolbarRight: {
+    display: 'flex',
+    gap: '8px',
+  },
+  error: {
+    fontSize: '12px',
+    color: opptrixCssVars.error,
+    lineHeight: 1.4,
+    whiteSpace: 'pre-wrap',
   },
 })
 
-function healthLabel(s: PublicMcpServer): { text: string; className: 'ok' | 'bad' | 'muted' } {
-  if (s.paused) return { text: '已暂停', className: 'muted' }
-  if (!s.enabled) return { text: '未启用', className: 'muted' }
-  switch (s.health) {
-    case 'healthy':
-      return { text: '健康', className: 'ok' }
-    case 'degraded':
-      return { text: '降级', className: 'bad' }
-    case 'open':
-      return { text: '熔断中', className: 'bad' }
-    default:
-      return { text: '未知', className: 'muted' }
-  }
-}
+const EMPTY_CONFIG = JSON.stringify({ mcpServers: {} }, null, 2)
 
-type FormState = {
-  title: string
-  transport: 'stdio' | 'http'
-  command: string
-  args: string
-  url: string
-  bearer: string
-  bindings: string
-}
-
-const emptyForm = (): FormState => ({
-  title: '',
-  transport: 'stdio',
-  command: '',
-  args: '',
-  url: '',
-  bearer: '',
-  bindings: '',
-})
-
-function parseBindingsJson(raw: string): Record<string, string> | undefined {
-  const t = raw.trim()
-  if (!t) return undefined
+/** CodeMirror JSON linter —— 实时语法校验 */
+const jsonLinter = linter((view): Diagnostic[] => {
+  const text = view.state.doc.toString()
   try {
-    const parsed = JSON.parse(t) as unknown
-    if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return undefined
-    return Object.fromEntries(
-      Object.entries(parsed as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
-    )
+    JSON.parse(text)
+    return []
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e)
+    const match = /position (\d+)/.exec(msg)
+    const pos = match ? Math.min(Number(match[1]), text.length) : 0
+    return [{
+      from: pos,
+      to: Math.min(pos + 1, text.length),
+      severity: 'error' as const,
+      message: msg,
+    }]
+  }
+})
+
+/** 校验 JSON 结构 —— 返回错误消息或 null（通过） */
+function validateConfig(raw: string): string | null {
+  const trimmed = raw.trim()
+  if (!trimmed) return '配置不能为空'
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(trimmed)
+  } catch (e) {
+    return `JSON 语法错误：${e instanceof Error ? e.message : String(e)}`
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return '顶层须为 JSON 对象'
+  }
+  const obj = parsed as Record<string, unknown>
+  const servers = obj.mcpServers
+  if (servers === undefined) return '缺少 mcpServers 字段'
+  if (typeof servers !== 'object' || servers === null || Array.isArray(servers)) {
+    return 'mcpServers 须为对象'
+  }
+  for (const [id, cfg] of Object.entries(servers as Record<string, unknown>)) {
+    if (!/^[a-z][a-z0-9_-]{1,63}$/.test(id)) {
+      return `服务器 id "${id}" 无效（须小写字母开头，仅 a-z0-9_-）`
+    }
+    if (!cfg || typeof cfg !== 'object' || Array.isArray(cfg)) {
+      return `服务器 "${id}" 的配置须为对象`
+    }
+    const c = cfg as Record<string, unknown>
+    if (!c.command && !c.url) {
+      return `服务器 "${id}" 缺少 url（http/sse）或 command（stdio）`
+    }
+    if (c.type && !['stdio', 'http', 'sse'].includes(String(c.type))) {
+      return `服务器 "${id}" 的 type 无效（支持 stdio / http / sse）`
+    }
+  }
+  return null
+}
+
+/** 格式化 JSON 字符串；失败返回 null */
+function formatJson(raw: string): string | null {
+  try {
+    return JSON.stringify(JSON.parse(raw), null, 2)
   } catch {
-    return undefined
+    return null
   }
 }
+
+const cmExtensions = [jsonLanguage(), jsonLinter, EditorView.lineWrapping]
 
 export default function McpServersSettingsSection() {
   const s = useStyles()
   const { showToast } = useSettingsToast()
-  const { confirm } = useOpptrixDialogAlert()
-  const [servers, setServers] = useState<PublicMcpServer[] | null>(null)
+  const [raw, setRaw] = useState('')
   const [loading, setLoading] = useState(true)
-  const [busyId, setBusyId] = useState<string | null>(null)
-  const [dialogOpen, setDialogOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [form, setForm] = useState<FormState>(emptyForm)
   const [saving, setSaving] = useState(false)
+  const [dirty, setDirty] = useState(false)
 
-  const refresh = useCallback(async () => {
+  const load = useCallback(async () => {
     setLoading(true)
     try {
-      setServers(await listMcpServers())
+      const data = await exportMcpServers()
+      setRaw(JSON.stringify({ mcpServers: data.mcpServers }, null, 2))
+      setDirty(false)
     } catch (e) {
       showToast(e instanceof Error ? e.message : '加载失败', 'error')
-      setServers([])
+      setRaw(EMPTY_CONFIG)
     } finally {
       setLoading(false)
     }
   }, [showToast])
 
-  useEffect(() => {
-    void refresh()
-  }, [refresh])
+  useEffect(() => { void load() }, [load])
 
-  const openCreate = () => {
-    setEditingId(null)
-    setForm(emptyForm())
-    setDialogOpen(true)
-  }
-
-  const openEdit = (row: PublicMcpServer) => {
-    setEditingId(row.id)
-    setForm({
-      title: row.title,
-      transport: row.transport,
-      command: row.transport === 'stdio' ? row.endpointPreview.split(' ')[0] ?? '' : '',
-      args: row.transport === 'stdio'
-        ? row.endpointPreview.split(' ').slice(1).join(' ')
-        : '',
-      url: row.transport === 'http' ? row.endpointPreview : '',
-      bearer: '',
-      bindings: Object.keys(row.capabilityBindings).length
-        ? JSON.stringify(row.capabilityBindings, null, 2)
-        : '',
-    })
-    setDialogOpen(true)
-  }
+  const validationError = useMemo(() => {
+    if (!dirty) return null
+    return validateConfig(raw)
+  }, [raw, dirty])
 
   const handleSave = async () => {
-    const title = form.title.trim()
-    if (!title) {
-      showToast('请填写名称', 'error')
-      return
-    }
-    const bindings = parseBindingsJson(form.bindings)
-    if (form.bindings.trim() && !bindings) {
-      showToast('能力绑定须为合法 JSON 对象', 'error')
-      return
-    }
+    const err = validateConfig(raw)
+    if (err) { showToast(err, 'error'); return }
     setSaving(true)
     try {
-      if (editingId) {
-        const secrets: Record<string, string> = {}
-        if (form.bearer.trim()) secrets.authorization = form.bearer.trim()
-        await updateMcpServer(editingId, {
-          title,
-          secrets: Object.keys(secrets).length ? secrets : undefined,
-          capabilityBindings: bindings,
-          transportConfig: form.transport === 'stdio'
-            ? {
-                transport: 'stdio',
-                command: form.command.trim(),
-                args: form.args.trim() ? form.args.trim().split(/\s+/) : [],
-              }
-            : { transport: 'http', url: form.url.trim() },
-        })
-        showToast('已保存', 'success')
-      } else {
-        if (form.transport === 'stdio' && !form.command.trim()) {
-          showToast('stdio 须填写 command', 'error')
-          return
-        }
-        if (form.transport === 'http' && !form.url.trim()) {
-          showToast('http 须填写 URL', 'error')
-          return
-        }
-        const secrets: Record<string, string> = {}
-        if (form.bearer.trim()) secrets.authorization = form.bearer.trim()
-        await createMcpServer({
-          title,
-          transportConfig: form.transport === 'stdio'
-            ? {
-                transport: 'stdio',
-                command: form.command.trim(),
-                args: form.args.trim() ? form.args.trim().split(/\s+/) : [],
-              }
-            : { transport: 'http', url: form.url.trim() },
-          secrets: Object.keys(secrets).length ? secrets : undefined,
-          capabilityBindings: bindings,
-        })
-        showToast('已添加 MCP 服务器', 'success')
-      }
-      setDialogOpen(false)
-      await refresh()
+      const parsed = JSON.parse(raw) as { mcpServers: Record<string, McpServerFlatConfig> }
+      await importMcpServers(parsed.mcpServers)
+      showToast('已保存', 'success')
+      setDirty(false)
     } catch (e) {
       showToast(e instanceof Error ? e.message : '保存失败', 'error')
     } finally {
@@ -286,265 +183,78 @@ export default function McpServersSettingsSection() {
     }
   }
 
-  const move = async (id: string, dir: -1 | 1) => {
-    if (!servers) return
-    const ids = servers.map(x => x.id)
-    const i = ids.indexOf(id)
-    const j = i + dir
-    if (i < 0 || j < 0 || j >= ids.length) return
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
-    setBusyId(id)
-    try {
-      setServers(await reorderMcpServers(ids))
-      showToast('优先级已更新', 'success')
-    } catch (e) {
-      showToast(e instanceof Error ? e.message : '排序失败', 'error')
-    } finally {
-      setBusyId(null)
+  const handleFormat = useCallback(() => {
+    const formatted = formatJson(raw)
+    if (formatted) {
+      setRaw(formatted)
+      showToast('已格式化', 'success')
+    } else {
+      showToast('JSON 语法错误，无法格式化', 'error')
     }
-  }
+  }, [raw, showToast])
 
-  if (loading && !servers) {
-    return (
-      <div className={s.root}>
-        <Text className={s.tabHint} block>
-          接入外部 MCP 作为更高优先级数据源；不可用时自动回退下一外部源，最后使用本地工具。
-        </Text>
-        <SettingsListPanelSkeleton />
-      </div>
-    )
+  if (loading) {
+    return <Spinner size="tiny" label="加载配置…" />
   }
 
   return (
     <div className={s.root}>
       <Text className={s.tabHint} block>
-        接入外部 MCP 作为更高优先级数据源；不可用时自动回退下一外部源，最后使用本地工具。
-        密钥仅保存在本地用户库，列表不展示明文。
+        编辑标准 MCP 服务器配置（mcpServers 映射格式）。保存后全量替换现有配置。
+        支持 stdio（command + args + env）、http / sse（url + headers）。
       </Text>
 
-      <div className={s.listPanel}>
-        {!servers?.length ? (
-          <div className={s.empty}>尚未配置外部 MCP 服务器</div>
-        ) : (
-          servers.map((row, index) => {
-            const h = healthLabel(row)
-            const healthClass = h.className === 'ok'
-              ? s.healthOk
-              : h.className === 'bad'
-                ? s.healthBad
-                : s.healthMuted
-            return (
-              <div key={row.id} className={s.row}>
-                <div className={s.rowTop}>
-                  <div className={s.rowMain}>
-                    <Text className={s.title}>{row.title}</Text>
-                    <Text className={s.meta} block>
-                      {row.id} · {row.transport} · {row.endpointPreview}
-                    </Text>
-                    <Text className={mergeClasses(s.meta, healthClass)} block>
-                      {h.text}
-                      {row.toolCount > 0 ? ` · ${row.toolCount} 工具` : ''}
-                      {row.lastError ? ` · ${row.lastError}` : ''}
-                    </Text>
-                  </div>
-                  <div className={s.actions}>
-                    <Switch
-                      checked={row.enabled && !row.paused}
-                      disabled={busyId === row.id}
-                      onChange={(_, d) => {
-                        void (async () => {
-                          setBusyId(row.id)
-                          try {
-                            await updateMcpServer(row.id, {
-                              enabled: d.checked,
-                              paused: !d.checked,
-                            })
-                            await refresh()
-                          } catch (e) {
-                            showToast(e instanceof Error ? e.message : '更新失败', 'error')
-                          } finally {
-                            setBusyId(null)
-                          }
-                        })()
-                      }}
-                    />
-                  </div>
-                </div>
-                <div className={s.actions}>
-                  <OpptrixButton
-                    variant="ghost"
-                    size="small"
-                    icon={<ArrowUpRegular />}
-                    disabled={index === 0 || busyId === row.id}
-                    onClick={() => { void move(row.id, -1) }}
-                    aria-label="提高优先级"
-                  />
-                  <OpptrixButton
-                    variant="ghost"
-                    size="small"
-                    icon={<ArrowDownRegular />}
-                    disabled={index === servers.length - 1 || busyId === row.id}
-                    onClick={() => { void move(row.id, 1) }}
-                    aria-label="降低优先级"
-                  />
-                  <OpptrixButton
-                    variant="secondary"
-                    size="small"
-                    icon={<PlugConnectedRegular />}
-                    disabled={busyId === row.id}
-                    onClick={() => {
-                      void (async () => {
-                        setBusyId(row.id)
-                        try {
-                          const r = await testMcpServer(row.id)
-                          showToast(r.message, r.ok ? 'success' : 'error')
-                          await refresh()
-                        } catch (e) {
-                          showToast(e instanceof Error ? e.message : '测试失败', 'error')
-                        } finally {
-                          setBusyId(null)
-                        }
-                      })()
-                    }}
-                  >
-                    测试
-                  </OpptrixButton>
-                  <OpptrixButton
-                    variant="secondary"
-                    size="small"
-                    onClick={() => openEdit(row)}
-                  >
-                    编辑
-                  </OpptrixButton>
-                  <OpptrixButton
-                    variant="ghost"
-                    size="small"
-                    icon={<DeleteRegular />}
-                    disabled={busyId === row.id}
-                    onClick={() => {
-                      void (async () => {
-                        const ok = await confirm({
-                          title: '卸载 MCP 服务器',
-                          message: `确定删除「${row.title}」？将断开连接并移除配置。`,
-                          confirmLabel: '删除',
-                          confirmTone: 'danger',
-                        })
-                        if (!ok) return
-                        setBusyId(row.id)
-                        try {
-                          await deleteMcpServer(row.id)
-                          showToast('已删除', 'success')
-                          await refresh()
-                        } catch (e) {
-                          showToast(e instanceof Error ? e.message : '删除失败', 'error')
-                        } finally {
-                          setBusyId(null)
-                        }
-                      })()
-                    }}
-                    aria-label={`删除 ${row.title}`}
-                  />
-                </div>
-              </div>
-            )
-          })
-        )}
+      <div className={s.editorWrap}>
+        <CodeMirror
+          value={raw}
+          height="360px"
+          extensions={cmExtensions}
+          onChange={(value) => { setRaw(value); setDirty(true) }}
+          basicSetup={{
+            lineNumbers: true,
+            foldGutter: true,
+            highlightActiveLine: true,
+            highlightSelectionMatches: true,
+            autocompletion: true,
+            bracketMatching: true,
+            closeBrackets: true,
+            indentOnInput: true,
+          }}
+        />
       </div>
 
-      <SettingsGroup>
-        <SettingsRow
-          title="添加 MCP 服务器"
-          desc="配置 stdio 命令或 Streamable HTTP URL；可设置本地工具名到远程工具的绑定"
-          control={(
-            <OpptrixButton variant="primary" size="small" icon={<AddRegular />} onClick={openCreate}>
-              添加
-            </OpptrixButton>
-          )}
-          last
-        />
-      </SettingsGroup>
+      {validationError && (
+        <Text className={s.error} block>{validationError}</Text>
+      )}
 
-      <Dialog open={dialogOpen} onOpenChange={(_, d) => { if (!d.open) setDialogOpen(false) }}>
-        <DialogSurface>
-          <DialogBody>
-            <DialogTitle>{editingId ? '编辑 MCP 服务器' : '添加 MCP 服务器'}</DialogTitle>
-            <DialogContent className={s.dialogBody}>
-              <Text className={s.fieldLabel} block>名称</Text>
-              <Input
-                value={form.title}
-                onChange={(_, d) => setForm(f => ({ ...f, title: d.value }))}
-                placeholder="显示名称"
-              />
-              <Text className={s.fieldLabel} block>传输</Text>
-              <div className={s.actions}>
-                <OpptrixButton
-                  variant={form.transport === 'stdio' ? 'primary' : 'secondary'}
-                  size="small"
-                  onClick={() => setForm(f => ({ ...f, transport: 'stdio' }))}
-                >
-                  stdio
-                </OpptrixButton>
-                <OpptrixButton
-                  variant={form.transport === 'http' ? 'primary' : 'secondary'}
-                  size="small"
-                  onClick={() => setForm(f => ({ ...f, transport: 'http' }))}
-                >
-                  HTTP
-                </OpptrixButton>
-              </div>
-              {form.transport === 'stdio' ? (
-                <>
-                  <Text className={s.fieldLabel} block>Command</Text>
-                  <Input
-                    value={form.command}
-                    onChange={(_, d) => setForm(f => ({ ...f, command: d.value }))}
-                    placeholder="npx"
-                  />
-                  <Text className={s.fieldLabel} block>Args（空格分隔）</Text>
-                  <Input
-                    value={form.args}
-                    onChange={(_, d) => setForm(f => ({ ...f, args: d.value }))}
-                    placeholder="-y @example/mcp-server"
-                  />
-                </>
-              ) : (
-                <>
-                  <Text className={s.fieldLabel} block>URL</Text>
-                  <Input
-                    value={form.url}
-                    onChange={(_, d) => setForm(f => ({ ...f, url: d.value }))}
-                    placeholder="https://…"
-                  />
-                  <Text className={s.fieldLabel} block>
-                    Bearer Token（可选；已配置不显示明文，留空表示不改）
-                  </Text>
-                  <Input
-                    type="password"
-                    value={form.bearer}
-                    onChange={(_, d) => setForm(f => ({ ...f, bearer: d.value }))}
-                    placeholder="••••"
-                    autoComplete="off"
-                  />
-                </>
-              )}
-              <Text className={s.fieldLabel} block>能力绑定 JSON（可选）</Text>
-              <Input
-                value={form.bindings}
-                onChange={(_, d) => setForm(f => ({ ...f, bindings: d.value }))}
-                placeholder='{"get_instrument_quotes":"get_quotes"}'
-              />
-              <div className={s.dialogActions}>
-                <OpptrixButton variant="ghost" disabled={saving} onClick={() => setDialogOpen(false)}>
-                  取消
-                </OpptrixButton>
-                <OpptrixButton variant="primary" disabled={saving} onClick={() => { void handleSave() }}>
-                  {saving ? '保存中…' : '保存'}
-                </OpptrixButton>
-              </div>
-            </DialogContent>
-          </DialogBody>
-        </DialogSurface>
-      </Dialog>
+      <div className={s.toolbar}>
+        <Text className={s.tabHint} block style={{ padding: 0 }}>
+          {dirty ? '已修改' : '已同步'}
+        </Text>
+        <div className={s.toolbarRight}>
+          <OpptrixButton
+            variant="secondary"
+            disabled={saving}
+            onClick={handleFormat}
+          >
+            格式化
+          </OpptrixButton>
+          <OpptrixButton
+            variant="secondary"
+            disabled={saving}
+            onClick={() => { void load() }}
+          >
+            重置
+          </OpptrixButton>
+          <OpptrixButton
+            variant="primary"
+            disabled={saving || !!validationError}
+            onClick={() => { void handleSave() }}
+          >
+            {saving ? '保存中…' : '保存'}
+          </OpptrixButton>
+        </div>
+      </div>
     </div>
   )
 }

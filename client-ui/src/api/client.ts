@@ -1714,3 +1714,24 @@ export async function reorderMcpServers(serverIds: string[]) {
   })
   return resp.servers
 }
+
+export interface McpServerFlatConfig {
+  type?: string
+  command?: string
+  args?: string[]
+  env?: Record<string, string>
+  url?: string
+  headers?: Record<string, string>
+}
+
+export async function exportMcpServers() {
+  return jsonFetch<{ mcpServers: Record<string, McpServerFlatConfig> }>('/mcp-servers/export')
+}
+
+export async function importMcpServers(mcpServers: Record<string, McpServerFlatConfig>) {
+  return jsonFetch<{ servers: PublicMcpServer[] }>('/mcp-servers/import', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ mcpServers }),
+  })
+}
