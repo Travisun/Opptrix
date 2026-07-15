@@ -16,6 +16,8 @@ const CATEGORY_HINTS: Array<{ prefix: string; label: string }> = [
   { prefix: 'indexOption', label: '期权波动率' },
   { prefix: 'sse', label: '上交所' },
   { prefix: 'szse', label: '深交所' },
+  { prefix: 'macro', label: '宏观指标' },
+  { prefix: 'fx', label: '外汇' },
   { prefix: 'repo', label: '回购利率' },
   { prefix: 'qdii', label: 'QDII' },
   { prefix: 'stock', label: 'A 股市场指标' },

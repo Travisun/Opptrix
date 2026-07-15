@@ -168,6 +168,14 @@ export function mapBalanceSheetRows(
   return filterFinancialStatementRows(rows, reportDate).map(r => mapFinancialStatementRow(code, r))
 }
 
+export function mapIncomeStatementRows(
+  code: string,
+  rows: Record<string, unknown>[],
+  reportDate = '',
+): Record<string, unknown>[] {
+  return filterFinancialStatementRows(rows, reportDate).map(r => mapFinancialStatementRow(code, r))
+}
+
 export function mapCashFlowRows(
   code: string,
   rows: Record<string, unknown>[],

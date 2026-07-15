@@ -107,11 +107,57 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '板块或行业成分股；须先有 board_key 或 industry_code（来自 get_sector_list）。',
     compliance: 'board_key 与 industry_code 二选一；分页 page/page_size；勿编造成分。',
   },
+  get_cn_market_special: {
+    hubFeature: 'cn_market_special',
+    miningEligible: true,
+    usageGuide:
+      '同花顺独有专题：连板天梯 / 飙升榜 / 历史热股 / 热榜走势 / 异动 / 概念指数目录(ths_index_list)。须 kind。指数成分→get_index_constituents；财务指标→get_instrument_financial_indicators；全景复盘→get_market_dynamics。',
+    compliance: '依赖 tonghuashun（富耀）Key；勿用于美股港股；勿替代 dynamics 全景；勿用本工具拉成分/财务指标。',
+  },
+  get_trade_calendar: {
+    hubFeature: 'trade_calendar',
+    miningEligible: true,
+    usageGuide: 'A 股交易日历（按年）；问休市日/下一交易日时首选；勿用 get_market_session 代替。',
+    compliance: 'year 可选，默认当年；只读。',
+  },
+  get_macro_series: {
+    hubFeature: 'macro_series',
+    miningEligible: true,
+    usageGuide:
+      '宏观序列：scope=cn|foreign|industry|oil|catalog；中国常用 kind=cpi/ppi/gdp/社零；'
+      + '先 catalog 再取数。市况叙事用 get_market_regime，勿混用。',
+    compliance:
+      '中国首页优先 MACRO_INDICATOR；翻页/国外/行业/油价依赖 eastmoney；无数据声明缺口；勿编造数值。',
+  },
+  get_dragon_tiger: {
+    hubFeature: 'dragon_tiger',
+    miningEligible: true,
+    usageGuide: '龙虎榜明细/指定日上榜列表。与涨跌榜一起的全景复盘用 get_market_dynamics（已含龙虎榜摘要）。',
+    compliance: '主要 CN；可带 date；空数据声明缺口；勿与 dynamics 同轮各调一遍做同一件事。',
+  },
+  get_limit_updown: {
+    hubFeature: 'limit_updown',
+    miningEligible: true,
+    usageGuide: '涨跌停池列表；连板天梯用 get_cn_market_special(kind=limit_up_ladder)。dynamics 不含涨跌停池。',
+    compliance: '主要 CN；date 可选。',
+  },
+  get_market_sentiment: {
+    hubFeature: 'market_sentiment',
+    miningEligible: true,
+    usageGuide: '全市场情绪或个股热度；飙升/热股榜用 get_cn_market_special。dynamics 不含情绪分。',
+    compliance: '主要 CN；勿编造分数。',
+  },
+  get_index_constituents: {
+    hubFeature: 'index_constituents',
+    miningEligible: true,
+    usageGuide: '指数成分（如沪深300）或同花顺概念/板块成分；index_code 必填。目录用 get_cn_market_special(kind=ths_index_list) 或 get_sector_list。',
+    compliance: '主要 CN；无数据时声明；勿与 get_sector_constituents / get_cn_market_special 混用拉成分。',
+  },
   get_market_session: {
     hubFeature: 'market_session',
     miningEligible: true,
-    usageGuide: '问是否开盘/交易时段时使用；非完整节假日日历。',
-    compliance: '只读；market 默认 CN；精确交易日走 provider_ext，勿当作完整 calendar。',
+    usageGuide: '问是否开盘/交易时段时使用；精确交易日/休市用 get_trade_calendar。',
+    compliance: '只读；market 默认 CN；勿当作完整 calendar。',
   },
   search_instruments: {
     hubFeature: 'instrument_search',
@@ -140,14 +186,46 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_instrument_financials: {
     hubFeature: 'instrument_financials',
     miningEligible: true,
-    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；勿用 evaluate 代替核实。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `财务摘要多期事实表（营收/利润/ROE/同比）；问增速、盈利质量、财报数字时首选；资产负债/现金流明细改用 get_instrument_balance_sheet / get_instrument_cash_flow。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；report_type 默认 all；引用具体 reportDate；无数据时声明缺口，禁止编造。',
+  },
+  get_instrument_balance_sheet: {
+    hubFeature: 'instrument_balance_sheet',
+    miningEligible: true,
+    usageGuide: `资产负债表多期事实表；问总资产/负债/权益、资产负债率明细时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 balance_sheet；勿用 evaluate 或自定义方法替代；无数据时声明缺口。',
+  },
+  get_instrument_cash_flow: {
+    hubFeature: 'instrument_cash_flow',
+    miningEligible: true,
+    usageGuide: `现金流量表多期事实表；问经营/投资/筹资现金流时首选。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 cash_flow；勿用财务摘要的 operatingCashFlow 单字段敷衍完整表。',
+  },
+  get_instrument_income_statement: {
+    hubFeature: 'instrument_income_statement',
+    miningEligible: true,
+    usageGuide: `利润表多期事实表；问营收/成本/费用明细时首选，勿仅用财务摘要代替。${INSTRUMENT_REF_USAGE}`,
+    compliance: '单只；经标准 income_statement；勿用 evaluate 替代。',
+  },
+  get_instrument_financial_indicators: {
+    hubFeature: 'instrument_financial_indicators',
+    miningEligible: true,
+    usageGuide: `同花顺财务指标树；须 report=2024Q3 等。三表明细用 income/balance/cash 专用工具。${INSTRUMENT_REF_USAGE}`,
+    compliance: '须启用 tonghuashun；report 必填；无 Key 时声明缺口。',
   },
   get_instrument_shareholders: {
     hubFeature: 'instrument_shareholders',
     miningEligible: true,
-    usageGuide: `股东结构事实表；问十大股东、股权集中度、机构持仓时使用。${INSTRUMENT_REF_USAGE}`,
+    usageGuide: `股东结构事实表；问十大股东、股权集中度时使用。季报机构持仓（基金/QFII Tab）用 get_instrument_institution_holdings。${INSTRUMENT_REF_USAGE}`,
     compliance: '单只；部分市场可能无数据；勿编造股东名单。',
+  },
+  get_instrument_institution_holdings: {
+    hubFeature: 'instrument_institution_holdings',
+    miningEligible: true,
+    usageGuide:
+      'A 股季报机构持仓：scope=overview 一览；scope=detail+org_type 明细 Tab；scope=dates 报告期。'
+      + `勿与十大股东混淆。${INSTRUMENT_REF_USAGE}`,
+    compliance: '仅 CN；依赖 eastmoney；空类型声明缺口（一/三季报可能无 QFII 等）；勿编造持仓。',
   },
   get_instrument_dividend: {
     hubFeature: 'instrument_dividend',
@@ -362,8 +440,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_provider_custom_methods: {
     hubFeature: 'provider_custom_methods',
     miningEligible: false,
-    usageGuide: '查找非标准 API（板块、宏观、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
-    compliance: '只读；provider_id 如 baostock、zzshare、stockindex、akshare；keyword 匹配方法名/描述；limit 默认 40。',
+    usageGuide: '查找非标准 API（板块、宏观扩展、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
+    compliance: '只读；provider_id 如 eastmoney、baostock、zzshare、stockindex、akshare；keyword 如 emMacro、macro；limit 默认 40。',
   },
   invoke_provider_custom_method: {
     hubFeature: 'provider_invoke_custom',

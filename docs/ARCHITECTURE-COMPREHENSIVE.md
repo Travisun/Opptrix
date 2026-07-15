@@ -458,6 +458,7 @@ packages/a-stock-layer/src/providers/
 │   ├── markets/
 │   └── api/
 ├── sinafinance/             # 新浪 Provider
+├── eastmoney/               # 东方财富 Provider（资金流 / 两融 / 宏观 cjsj）
 ├── binance/                 # Binance Provider
 ├── okx/                     # OKX Provider
 ├── baostock/                # BaoStock Provider
@@ -528,6 +529,7 @@ bindingsFor: () => []
 | tickflow | ✅ | ✅ | ✅ | 少量 custom | 标杆 |
 | baostock | CN | ✅ | ✅ | custom | 合规 |
 | sinafinance | CN | ✅ | ✅ | F10 深度 custom | 合规 |
+| eastmoney | CN | N/A | ✅ 资金流/两融/宏观/机构持仓 | `em*` 排名/历史/宏观/zlsj | 合规 |
 | tencent | ✅ | ✅ | ✅ | HK/US 深度 custom | 合规 |
 | tushare | CN | 弱 | ✅ | 无 | 合规 |
 | zzshare | CN | ✅ | ✅ | custom | 合规 |

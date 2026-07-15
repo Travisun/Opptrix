@@ -22,7 +22,8 @@ export function buildInstrumentNamespacePlaybook(): string {
 /** 标准 Instrument API 能力清单 — 与 data-layer InstrumentDataCapability 对齐 */
 export const STANDARD_INSTRUMENT_API_CAPABILITIES = [
   'realtime', 'kline', 'snapshot', 'profile', 'financials',
-  'stock_list', 'instrument_search', 'sector_list',
+  'balance_sheet', 'cash_flow', 'income_statement',
+  'stock_list', 'instrument_search', 'sector_list', 'index_constituents', 'trade_calendar',
   'etf_list', 'etf_nav', 'etf_holdings', 'etf_snapshot',
 ] as const
 
@@ -34,7 +35,7 @@ export function buildStandardInstrumentApiPlaybook(): string {
     '- 搜索：search_instruments（在线名录，唯一搜索入口）；命中 code/ref_label 为命名空间，instrument 含完整 ref',
     '- 能力探测：get_instrument_capabilities → 仅调用返回 capabilities 中的工具',
     '- 行情：get_instrument_quotes；快照：get_instrument_snapshot；K 线：get_instrument_chart（优先在线 Provider）',
-    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_shareholders / get_instrument_dividend；勿用 evaluate 或自定义方法替代',
+    '- 基本面事实表（属 fundamentals pack）：get_instrument_profile / get_instrument_financials / get_instrument_income_statement / get_instrument_balance_sheet / get_instrument_cash_flow / get_instrument_financial_indicators / get_instrument_shareholders / get_instrument_institution_holdings / get_instrument_dividend',
     '- A 股批量截面：batch_instrument_snapshots（须已有代码列表）；评估/信号：evaluate_instrument、get_instrument_strategy_signal',
     '- ETF：search_instruments（markets=["CN"]）→ get_instrument_snapshot / get_etf_list / get_etf_nav / get_etf_holdings；评估用 evaluate_instrument（技术分析）',
     '- 日股/韩股（JP/KR）暂未接入标准 API，勿调用行情/快照/K 线类工具',
@@ -44,10 +45,13 @@ export function buildStandardInstrumentApiPlaybook(): string {
 /** 基本面事实表路径 — fundamentals pack 已加载时注入 */
 export function buildFundamentalsPlaybook(): string {
   return [
-    '【基本面事实表 — profile / financials / shareholders / dividend】',
+    '【基本面事实表 — profile / financials / 三表 / financial_indicators / shareholders / institution_holdings / dividend】',
     '1) 公司概况/概念/主业：get_instrument_profile（单只 InstrumentRef）',
     '2) 营收利润/ROE/同比：get_instrument_financials（report_type 默认 all）；引用具体 reportDate',
+    '2b) 利润表：get_instrument_income_statement；资产负债表：get_instrument_balance_sheet；现金流量表：get_instrument_cash_flow',
+    '2c) 财务指标树：get_instrument_financial_indicators（须 report，如 2024Q3；依赖同花顺）',
     '3) 十大股东/股本：get_instrument_shareholders',
+    '3b) 季报机构持仓（基金/QFII/社保/券商等）：get_instrument_institution_holdings(scope=overview|detail)；勿与十大股东混淆',
     '4) 分红派息史：get_instrument_dividend',
     '5) 禁止：用 evaluate_instrument 黑盒代替财务核实；禁止 invoke_provider_custom_method 调 sinaFinancialPivot 等重复标准能力',
     '6) 深度备忘录（L3）：至少覆盖「概况或财务」一维；不可用时声明缺口而非跳过',
@@ -144,11 +148,14 @@ export function buildUserInteractionPlaybook(): string {
 /** 聊天 Agent — 市场宏观与关注池 */
 export function buildMarketContextPlaybook(): string {
   return [
-    '【市场与关注 — get_market_regime / get_market_dynamics / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
-    '1) 宏观背景：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
-    '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜；适合复盘或解释板块轮动',
-    '2b) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
-    '2c) 是否开盘/交易时段：get_market_session；非完整节假日日历（精确交易日走 provider_ext）',
+    '【市场与关注 — get_market_regime / get_macro_series / get_market_dynamics / get_trade_calendar / get_dragon_tiger / get_limit_updown / get_market_sentiment / get_cn_market_special / get_watchlist / get_trend_brief / get_instrument_money_flow / get_market_session】',
+    '1) 宏观背景叙事：get_market_regime（A 股默认 cn，美股 profile_scope=us）→ 解读牛熊/风险偏好后再谈个股',
+    '1b) 宏观事实序列：get_macro_series(scope=cn|foreign|industry|oil|catalog, kind=…, page?/page_size?) → 可引用数字；中国首页经 MACRO_INDICATOR；翻页/国外/行业/油价经 eastmoney；勿用 regime 代替、勿直接 invoke emMacro*',
+    '2) 市场全景：get_market_dynamics → 指数、全球市场、涨跌榜、龙虎榜摘要；适合复盘或解释板块轮动；勿再同轮重复拉 get_dragon_tiger',
+    '2a) 专项：交易日历 get_trade_calendar；仅龙虎榜明细/指定日 get_dragon_tiger；涨跌停池 get_limit_updown；情绪 get_market_sentiment',
+    '2b) 同花顺独有专题（连板天梯/飙升/热股/异动/概念目录）：get_cn_market_special(kind=…)；成分股改 get_index_constituents；财务指标改 get_instrument_financial_indicators',
+    '2c) 个股资金流向：get_instrument_money_flow（CN）；勿用 dynamics 代替单只净流入',
+    '2d) 是否开盘/交易时段：get_market_session；精确休市用 get_trade_calendar',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
     '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',
@@ -158,10 +165,11 @@ export function buildMarketContextPlaybook(): string {
 /** 聊天 Agent — 行业分析路径（产业链 → 代表公司核实） */
 export function buildIndustryAnalysisPlaybook(): string {
   return [
-    '【行业与板块 — industry_mining / get_sector_list / get_sector_constituents】',
+    '【行业与板块 — industry_mining / get_sector_list / get_sector_constituents / get_index_constituents】',
     '1) 产业链与代表公司叙事：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
     '2) 板块/行业目录：get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
-    '3) 成分股列表：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
+    '3) 板块成分：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
+    '3b) 指数成分（沪深300/同花顺概念等）：get_index_constituents(index_code)',
     '4) 需 mindmap：industry_mermaid；核实代表公司：search_instruments → snapshot / evaluate',
     '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
   ].join('\n')

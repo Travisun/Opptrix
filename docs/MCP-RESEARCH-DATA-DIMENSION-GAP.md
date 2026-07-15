@@ -304,7 +304,7 @@ ETF 浅层    ██████░░░░
 | P0′ | 真·一致预期 / surprise | 与内部 `institution_*` 并存；依赖数据源 |
 | P1 | 完整交易/财报日历 | 仅有 `get_market_session` 轻量时段；厚日历仍走 provider_ext |
 | P1′ | peer compare | 成分已有；缺结构化对比工具 |
-| P2 | 宏观序列、组合风控深、L2 | — |
+| P2 | 宏观序列、组合风控深、L2 | 宏观：`get_macro_series` 已接；风控/L2 仍缺 |
 | P3 | ESG / AkShare 另类 | 保持逃生舱 |
 
 ### 11.4 Phase 实施状态
@@ -316,6 +316,6 @@ ETF 浅层    ██████░░░░
 | MCP 四工具 + 意图精排 + AGENT-GUIDE | ✅ |
 | Phase2：`get_instrument_money_flow` / `get_instrument_notices` | ✅ |
 | Phase3：`get_sector_list` / `get_sector_constituents` / `get_etf_profile` / `get_market_session` | ✅ |
-| 完整交易日历 / valuation 专用 / comparison | ⬜ 后续 |
+| 完整交易日历 / valuation 专用 / comparison | ⬜ 后续（交易日历已接 `get_trade_calendar`；宏观已接 `get_macro_series`） |
 
 *接入以 CodeGraph + `mcp-tool-pack-routing.mdc` 为准；本节随实现同步更新。*

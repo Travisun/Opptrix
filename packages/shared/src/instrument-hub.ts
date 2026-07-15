@@ -13,6 +13,9 @@ export type InstrumentHubCapability =
   | 'search'
   | 'profile'
   | 'financials'
+  | 'balance_sheet'
+  | 'cash_flow'
+  | 'income_statement'
   | 'shareholders'
   | 'dividend'
   | 'money_flow'
@@ -38,6 +41,9 @@ export const INSTRUMENT_HUB_FEATURE: Record<InstrumentHubCapability, string> = {
   search: 'instrument_search',
   profile: 'instrument_profile',
   financials: 'instrument_financials',
+  balance_sheet: 'instrument_balance_sheet',
+  cash_flow: 'instrument_cash_flow',
+  income_statement: 'instrument_income_statement',
   shareholders: 'instrument_shareholders',
   dividend: 'instrument_dividend',
   money_flow: 'instrument_money_flow',

@@ -324,10 +324,22 @@ export class ResearchHub {
         case 'instrument_capabilities': return this.instrumentCapabilities(params, t0)
         case 'instrument_profile': return this.queryInstrumentStandardData(params, 'profile', t0)
         case 'instrument_financials': return this.queryInstrumentStandardData(params, 'financials', t0)
+        case 'instrument_balance_sheet': return this.queryInstrumentStandardData(params, 'balance_sheet', t0)
+        case 'instrument_cash_flow': return this.queryInstrumentStandardData(params, 'cash_flow', t0)
+        case 'instrument_income_statement': return this.queryInstrumentStandardData(params, 'income_statement', t0)
         case 'instrument_shareholders': return this.queryInstrumentStandardData(params, 'shareholders', t0)
         case 'instrument_dividend': return this.queryInstrumentStandardData(params, 'dividend', t0)
         case 'instrument_money_flow': return this.queryInstrumentStandardData(params, 'money_flow', t0)
+        case 'instrument_institution_holdings': return this.instrumentInstitutionHoldings(params, t0)
         case 'instrument_notices': return this.instrumentNotices(params, t0)
+        case 'instrument_financial_indicators': return this.instrumentFinancialIndicators(params, t0)
+        case 'cn_market_special': return this.cnMarketSpecial(params, t0)
+        case 'trade_calendar': return this.tradeCalendar(params, t0)
+        case 'macro_series': return this.macroSeries(params, t0)
+        case 'index_constituents': return this.indexConstituents(params, t0)
+        case 'dragon_tiger': return this.dragonTigerList(params, t0)
+        case 'limit_updown': return this.limitUpdownList(params, t0)
+        case 'market_sentiment': return this.marketSentiment(params, t0)
         case 'local_us_screen': return this.localUsScreen(params, t0)
         case 'local_crypto_screen': return this.localCryptoScreen(params, t0)
         case 'local_jp_screen': return this.localJpScreen(params, t0)
@@ -2395,12 +2407,131 @@ export class ResearchHub {
   }
 
   /**
-   * 标准事实表能力 — profile / financials / shareholders / dividend / money_flow。
+   * 个股机构持仓（东财 zlsj）— 季报一览 / 分类型明细 Tab / 报告期列表。
+   * scope: overview（默认）| detail | dates
+   */
+  private async instrumentInstitutionHoldings(params: Record<string, unknown>, t0: number) {
+    const scope = String(params.scope ?? 'overview').trim().toLowerCase() || 'overview'
+    const orgType = String(params.org_type ?? params.orgType ?? params.kind ?? 'fund').trim()
+    const reportDate = String(params.report_date ?? params.reportDate ?? '').trim()
+    const page = params.page != null ? Number(params.page) : 1
+    const pageSize = params.page_size != null ? Number(params.page_size) : 30
+
+    if (scope === 'dates' || scope === 'report_dates') {
+      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldReportDates', [
+        params.limit != null ? Number(params.limit) : 25,
+      ])
+      if (!r.success) return fail(r.error ?? '机构持仓报告期暂不可用（请启用 eastmoney）', t0)
+      const rows = Array.isArray(r.data) ? r.data : []
+      return ok(
+        { scope: 'dates', items: rows, count: rows.length, source: 'eastmoney', provider_method: 'emInstHoldReportDates' },
+        `机构持仓报告期 ${rows.length} 条`,
+        t0,
+      )
+    }
+
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    if (ref.market !== 'CN') return fail('机构持仓目前仅支持 A 股（CN）', t0)
+    const code = ref.symbol
+
+    if (scope === 'detail' || scope === 'tab') {
+      const r = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldDetail', [
+        code,
+        orgType || 'fund',
+        reportDate,
+        Number.isFinite(page) ? page : 1,
+        Number.isFinite(pageSize) ? pageSize : 30,
+      ])
+      if (!r.success) return fail(r.error ?? '机构持仓明细暂不可用', t0)
+      const rowsRaw = Array.isArray(r.data) ? r.data : []
+      const rows = rowsRaw.filter(row => !(row && typeof row === 'object' && (row as { empty?: boolean }).empty === true))
+      if (!rows.length) {
+        return ok(
+          {
+            instrument: ref,
+            scope: 'detail',
+            org_type: orgType,
+            report_date: reportDate || null,
+            items: [],
+            count: 0,
+            source: 'eastmoney',
+            provider_method: 'emInstHoldDetail',
+            hint: '该报告期该类型可能无披露（尤其一季报/三季报）；可换 scope=overview 或报告期',
+          },
+          '机构持仓明细 0 条',
+          t0,
+        )
+      }
+      return ok(
+        {
+          instrument: ref,
+          scope: 'detail',
+          org_type: orgType,
+          report_date: (rows[0]?.reportDate as string | undefined) ?? (reportDate || null),
+          items: rows,
+          count: rows.length,
+          pages: rows[0]?.pages ?? null,
+          source: 'eastmoney',
+          provider_method: 'emInstHoldDetail',
+        },
+        `机构持仓明细 ${rows.length} 条`,
+        t0,
+      )
+    }
+
+    // overview：优先自定义一览；失败回退标准 INST_HOLDING
+    const overview = await this.de.invokeCustomMethod('eastmoney', 'emInstHoldOverview', [code, reportDate])
+    if (overview.success && Array.isArray(overview.data) && overview.data.length) {
+      return ok(
+        {
+          instrument: ref,
+          scope: 'overview',
+          report_date: (overview.data[0]?.reportDate as string | undefined) ?? (reportDate || null),
+          items: overview.data,
+          count: overview.data.length,
+          source: 'eastmoney',
+          provider_method: 'emInstHoldOverview',
+          hint: '明细 Tab 用 scope=detail + org_type=fund|qfii|social|broker|insurance|trust',
+        },
+        `机构持仓一览 ${overview.data.length} 条`,
+        t0,
+      )
+    }
+
+    const r = await this.de.instHolding(code)
+    if (!r.success || !Array.isArray(r.data) || !r.data.length) {
+      return fail(r.error ?? overview.error ?? '机构持仓暂不可用', t0)
+    }
+    return ok(
+      {
+        instrument: ref,
+        scope: 'overview',
+        items: r.data,
+        count: r.data.length,
+        source: r.source ?? 'instHolding',
+        hint: '明细 Tab 用 scope=detail + org_type=…',
+      },
+      `机构持仓一览 ${r.data.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * 标准事实表能力 — profile / financials / 三表 / shareholders / dividend / money_flow。
    * 一律经 queryInstrumentData，禁止 Hub 直连 Provider。
    */
   private async queryInstrumentStandardData(
     params: Record<string, unknown>,
-    capability: 'profile' | 'financials' | 'shareholders' | 'dividend' | 'money_flow',
+    capability:
+      | 'profile'
+      | 'financials'
+      | 'balance_sheet'
+      | 'cash_flow'
+      | 'income_statement'
+      | 'shareholders'
+      | 'dividend'
+      | 'money_flow',
     t0: number,
   ) {
     const ref = resolveInstrumentFromParams(params)
@@ -2409,6 +2540,9 @@ export class ResearchHub {
     const labels = {
       profile: '公司概况',
       financials: '财务摘要',
+      balance_sheet: '资产负债表',
+      cash_flow: '现金流量表',
+      income_statement: '利润表',
       shareholders: '股东结构',
       dividend: '分红历史',
       money_flow: '资金流向',
@@ -2423,6 +2557,13 @@ export class ResearchHub {
     if (capability === 'financials') {
       opts.reportDate = params.report_date != null ? String(params.report_date) : ''
       opts.reportType = params.report_type != null ? String(params.report_type) : 'all'
+    }
+    if (
+      capability === 'balance_sheet'
+      || capability === 'cash_flow'
+      || capability === 'income_statement'
+    ) {
+      opts.reportDate = params.report_date != null ? String(params.report_date) : ''
     }
     if (capability === 'shareholders' && params.report_date != null) {
       opts.reportDate = String(params.report_date)
@@ -2458,6 +2599,328 @@ export class ResearchHub {
         source: 'queryInstrumentData',
       },
       `${labels[capability]} ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /** 同花顺财务指标树（growth/profitability…）— Engine custom */
+  private async instrumentFinancialIndicators(params: Record<string, unknown>, t0: number) {
+    const ref = resolveInstrumentFromParams(params)
+    if (!ref) return fail('instrument 或 market+symbol 必填', t0)
+    const report = String(params.report ?? params.report_period ?? '').trim()
+    if (!report) return fail('report 必填（如 2024Q3 / 2024）', t0)
+    const r = await this.de.invokeCustomMethod('tonghuashun', 'thsFinancialIndicators', [
+      ref.symbol,
+      report,
+    ])
+    if (!r.success) {
+      return fail(
+        r.error ?? '财务指标获取失败（须启用同花顺富耀）',
+        t0,
+      )
+    }
+    const raw = r.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        instrument: ref,
+        report,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: 'thsFinancialIndicators',
+      },
+      `财务指标 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async tradeCalendar(params: Record<string, unknown>, t0: number) {
+    const year = params.year != null ? Number(params.year) : new Date().getFullYear()
+    if (!Number.isFinite(year) || year < 1990 || year > 2100) {
+      return fail('year 须为合理年份', t0)
+    }
+    const r = await this.de.tradeCalendar(year)
+    if (!r.success) return fail(r.error ?? '交易日历获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      {
+        year,
+        items: rows,
+        count: rows.length,
+        source: r.source ?? 'tradeCalendar',
+        hint: 'isTradeDay/isOpen 为 true 表示交易日；精确休市勿用 get_market_session 代替',
+      },
+      `${year} 年交易日 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * 宏观序列 — 中国走 MACRO_INDICATOR；国外/行业/油价/翻页走 eastmoney cjsj。
+   * scope: cn（默认）| foreign | industry | oil | catalog
+   */
+  private async macroSeries(params: Record<string, unknown>, t0: number) {
+    const scope = String(params.scope ?? 'cn').trim().toLowerCase() || 'cn'
+    const kind = String(params.kind ?? params.indicator ?? params.series ?? '').trim()
+    const pageRaw = params.page != null ? Number(params.page) : 1
+    const page = Number.isFinite(pageRaw) ? Math.max(1, Math.floor(pageRaw)) : 1
+    const sizeRaw = params.page_size != null ? Number(params.page_size)
+      : params.limit != null ? Number(params.limit)
+        : 36
+    const pageSize = Number.isFinite(sizeRaw)
+      ? Math.min(200, Math.max(1, Math.floor(sizeRaw)))
+      : 36
+
+    if (!['cn', 'china', 'foreign', 'industry', 'hyzs', 'oil', 'catalog', 'list'].includes(scope)) {
+      return fail('scope 须为 cn | foreign | industry | oil | catalog', t0)
+    }
+
+    const okRows = (
+      items: unknown[],
+      source: string,
+      providerMethod?: string,
+      hint?: string,
+    ) => ok(
+      {
+        scope: scope === 'china' ? 'cn' : scope === 'hyzs' ? 'industry' : scope === 'list' ? 'catalog' : scope,
+        kind: kind || (scope === 'oil' ? 'adjust' : scope === 'catalog' || scope === 'list' ? 'catalog' : 'summary'),
+        page,
+        page_size: pageSize,
+        items,
+        count: items.length,
+        source,
+        ...(providerMethod ? { provider_method: providerMethod } : {}),
+        hint: hint ?? '市况叙事仍用 get_market_regime；本工具为可引用宏观事实序列',
+      },
+      `宏观 ${scope} ${kind || 'summary'} ${items.length} 条`,
+      t0,
+    )
+
+    const fromCustom = async (method: string, args: unknown[], label: string) => {
+      const r = await this.de.invokeCustomMethod('eastmoney', method, args)
+      if (!r.success) {
+        return fail(r.error ?? `${label}暂不可用（请启用 eastmoney Provider）`, t0)
+      }
+      const raw = r.data
+      const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+      if (!rows.length) return fail(`${label}无数据`, t0)
+      return okRows(rows, 'eastmoney', method)
+    }
+
+    if (scope === 'catalog' || scope === 'list') {
+      const listScope = kind || String(params.catalog_scope ?? 'cn')
+      return fromCustom('emMacroList', [listScope], '宏观目录')
+    }
+
+    if (scope === 'foreign') {
+      if (!kind) return fail('国外宏观须传 kind（如 foreign_0_0 / EMG… / ISM制造业指数）', t0)
+      return fromCustom('emMacroForeign', [kind, page, pageSize], '国外宏观')
+    }
+
+    if (scope === 'industry' || scope === 'hyzs') {
+      if (!kind) return fail('行业指数须传 kind（如 EMI00662543 / 农副指数）', t0)
+      return fromCustom('emMacroIndustryIndex', [kind, page, pageSize], '行业指数')
+    }
+
+    if (scope === 'oil') {
+      const oilKind = kind || 'adjust'
+      return fromCustom('emMacroOil', [oilKind, page, pageSize], '油价')
+    }
+
+    // —— 中国宏观 ——
+    // 翻页或非首页：直接走 eastmoney emMacro（标准 MACRO_INDICATOR 无 page）
+    if (page > 1) {
+      if (!kind) return fail('中国宏观翻页须传 kind', t0)
+      return fromCustom('emMacro', [kind, page, pageSize], '中国宏观')
+    }
+
+    // 首页：标准 Capability 路由（Baostock → eastmoney → AkShare）
+    const r = await this.de.macroIndicator(kind)
+    if (r.success && Array.isArray(r.data) && r.data.length) {
+      const items = r.data.slice(0, pageSize)
+      return okRows(items, r.source ?? 'macroIndicator')
+    }
+
+    // 标准路由无结果时，回退 eastmoney 全量中国目录（社零/固投等）
+    if (kind) {
+      const fallback = await this.de.invokeCustomMethod('eastmoney', 'emMacro', [kind, 1, pageSize])
+      if (fallback.success) {
+        const raw = fallback.data
+        const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+        if (rows.length) return okRows(rows, 'eastmoney', 'emMacro')
+      }
+    }
+
+    return fail(
+      r.error
+        ?? '宏观数据暂不可用（请确认已启用 eastmoney / Baostock / AkShare；'
+        + 'kind=cpi|ppi|pmi|gdp|lpr|社零…；国外/行业/油价请传 scope）',
+      t0,
+    )
+  }
+
+  private async indexConstituents(params: Record<string, unknown>, t0: number) {
+    const indexCode = String(params.index_code ?? params.code ?? params.symbol ?? '').trim()
+    if (!indexCode) return fail('index_code 或 code 必填（如 000300、885338.TI）', t0)
+
+    const r = await this.de.indexConstituents(indexCode)
+    if (r.success && Array.isArray(r.data) && r.data.length) {
+      return ok(
+        {
+          index_code: indexCode,
+          items: r.data,
+          count: r.data.length,
+          source: r.source ?? 'indexConstituents',
+        },
+        `指数成分 ${r.data.length} 条`,
+        t0,
+      )
+    }
+
+    const fallback = await this.de.invokeCustomMethod('tonghuashun', 'thsIndexConstituents', [indexCode])
+    if (!fallback.success) {
+      return fail(r.error ?? fallback.error ?? '指数成分获取失败', t0)
+    }
+    const raw = fallback.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        index_code: indexCode,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: 'thsIndexConstituents',
+      },
+      `指数成分 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async dragonTigerList(params: Record<string, unknown>, t0: number) {
+    const date = params.date != null ? String(params.date).trim().slice(0, 10) : ''
+    const r = await this.de.dragonTiger(date)
+    if (!r.success) return fail(r.error ?? '龙虎榜获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      { date: date || null, items: rows, count: rows.length, source: r.source ?? 'dragonTiger' },
+      `龙虎榜 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async limitUpdownList(params: Record<string, unknown>, t0: number) {
+    const date = params.date != null ? String(params.date).trim().slice(0, 10) : ''
+    const r = await this.de.limitUpdown(date)
+    if (!r.success) return fail(r.error ?? '涨跌停池获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      { date: date || null, items: rows, count: rows.length, source: r.source ?? 'limitUpdown' },
+      `涨跌停 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  private async marketSentiment(params: Record<string, unknown>, t0: number) {
+    const code = String(params.code ?? params.symbol ?? '').trim()
+    const r = await this.de.sentiment(code)
+    if (!r.success) return fail(r.error ?? '市场情绪/热度获取失败', t0)
+    const rows = Array.isArray(r.data) ? r.data : []
+    return ok(
+      {
+        code: code || 'market',
+        items: rows,
+        count: rows.length,
+        source: r.source ?? 'sentiment',
+        hint: '空 code 为全市场情绪；个股为热度摘要',
+      },
+      `情绪 ${rows.length} 条`,
+      t0,
+    )
+  }
+
+  /**
+   * A 股专题数据（同花顺富耀 custom，经 Engine.invokeCustomMethod）。
+   * 覆盖连板天梯/热股飙升/历史热榜/异动/同花顺指数目录与成分。
+   */
+  private async cnMarketSpecial(params: Record<string, unknown>, t0: number) {
+    const kind = String(params.kind ?? '').trim()
+    const kindMap: Record<string, { method: string; args: (p: Record<string, unknown>) => unknown[] | null }> = {
+      limit_up_ladder: {
+        method: 'thsLimitUpLadder',
+        args: () => [],
+      },
+      skyrocket: {
+        method: 'thsSkyrocketList',
+        args: p => [String(p.period ?? 'day')],
+      },
+      hot_history: {
+        method: 'thsHotStockListHistory',
+        args: p => {
+          const date = String(p.date ?? '').trim().slice(0, 10)
+          return date ? [date] : null
+        },
+      },
+      hot_rank_trend: {
+        method: 'thsHotStockRankTrend',
+        args: p => {
+          const code = String(p.code ?? p.symbol ?? '').trim()
+          if (!code) return null
+          const start = p.start != null ? String(p.start).trim() : undefined
+          const end = p.end != null ? String(p.end).trim() : undefined
+          return [code, start, end]
+        },
+      },
+      anomaly_list: {
+        method: 'thsAnomalyAnalysisList',
+        args: p => [p.tag != null ? String(p.tag) : undefined],
+      },
+      anomaly_stock: {
+        method: 'thsAnomalyAnalysisStock',
+        args: p => {
+          const codes = p.codes ?? p.code ?? p.symbol
+          if (codes == null || String(codes).trim() === '') return null
+          return [codes]
+        },
+      },
+      ths_index_list: {
+        method: 'thsIndexList',
+        args: p => [String(p.tag ?? 'cn_concept')],
+      },
+      // 指数成分 / 财务指标已有专用 Hub feature，不再在此双开入口
+    }
+
+    const spec = kindMap[kind]
+    if (!spec) {
+      return fail(
+        'kind 必填且须为：limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list（成分股用 get_index_constituents；财务指标用 get_instrument_financial_indicators）',
+        t0,
+      )
+    }
+    const args = spec.args(params)
+    if (!args) {
+      return fail(`kind=${kind} 缺少必填参数（code/date/codes/report 等）`, t0)
+    }
+
+    const r = await this.de.invokeCustomMethod('tonghuashun', spec.method, args)
+    if (!r.success) {
+      return fail(
+        r.error ?? '同花顺专题数据获取失败（请确认已配置富耀 API Key 并启用 tonghuashun）',
+        t0,
+      )
+    }
+    const raw = r.data
+    const rows = Array.isArray(raw) ? raw : raw != null ? [raw] : []
+    return ok(
+      {
+        kind,
+        items: rows,
+        count: rows.length,
+        source: 'tonghuashun',
+        provider_method: spec.method,
+        hint: '须启用同花顺（富耀）Provider；申万/板块目录用 get_sector_list；指数成分用 get_index_constituents；财务指标用 get_instrument_financial_indicators',
+      },
+      `${kind} ${rows.length} 条`,
       t0,
     )
   }

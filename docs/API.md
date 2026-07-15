@@ -68,7 +68,12 @@
 | `market_regime` | `profile_scope?` (`cn` / `us`) | 市况快照（发现页横幅）；`us` 基于 SPY 动量 stub |
 | `instrument_profile` | InstrumentRef | 公司/标的概况事实表 |
 | `instrument_financials` | InstrumentRef + `report_type?` / `report_date?` | 财务摘要多期 |
+| `instrument_balance_sheet` | InstrumentRef + `report_date?` | 资产负债表多期 |
+| `instrument_cash_flow` | InstrumentRef + `report_date?` | 现金流量表多期 |
+| `instrument_income_statement` | InstrumentRef + `report_date?` | 利润表多期 |
+| `instrument_financial_indicators` | InstrumentRef + `report` | 财务指标树（同花顺） |
 | `instrument_shareholders` | InstrumentRef + `report_date?` | 股东结构 |
+| `instrument_institution_holdings` | InstrumentRef + `scope?` / `org_type?` / `report_date?` / 分页 | A 股季报机构持仓一览/明细（eastmoney zlsj） |
 | `instrument_dividend` | InstrumentRef + `page?` / `page_size?` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向 |
 | `instrument_notices` | InstrumentRef + `page?` / `page_size?` | 标的公告列表 |
@@ -76,6 +81,13 @@
 | `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分 |
 | `etf_profile` | InstrumentRef / code | ETF 档案 |
 | `market_session` | `market?` | 轻量交易时段状态 |
+| `cn_market_special` | `kind` + 可选 code/date/tag… | A 股专题（连板天梯/飙升/热股/异动/同花顺概念目录；成分/财务指标用专用 feature） |
+| `trade_calendar` | `year?` | A 股交易日历 |
+| `macro_series` | `scope?` / `kind` / `page?` / `page_size?` | 宏观序列（中国 MACRO_INDICATOR；国外/行业/油价/翻页→eastmoney cjsj） |
+| `index_constituents` | `index_code` / `code` | 指数/同花顺板块成分 |
+| `dragon_tiger` | `date?` | 龙虎榜 |
+| `limit_updown` | `date?` | 涨跌停池 |
+| `market_sentiment` | `code?` | 市场情绪/个股热度 |
 | `writer_fetch` | `code`, `type?` | 写作数据采集 |
 | `writer_types` | — | 文章类型 |
 | `writer_prompt` | `code`, `type?`, `persona?` | 生成 Prompt |
@@ -139,10 +151,22 @@ POST /api/research
 |---------|--------|------|
 | `instrument_profile` | InstrumentRef | 公司/标的概况 |
 | `instrument_financials` | InstrumentRef + 可选 `report_type` / `report_date` | 财务摘要多期 |
+| `instrument_balance_sheet` | InstrumentRef + 可选 `report_date` | 资产负债表多期 |
+| `instrument_cash_flow` | InstrumentRef + 可选 `report_date` | 现金流量表多期 |
+| `instrument_income_statement` | InstrumentRef + 可选 `report_date` | 利润表多期 |
+| `instrument_financial_indicators` | InstrumentRef + `report` | 财务指标树（同花顺） |
 | `instrument_shareholders` | InstrumentRef + 可选 `report_date` | 股东结构 |
+| `instrument_institution_holdings` | InstrumentRef + `scope`/`org_type`/`report_date`/分页 | A 股季报机构持仓（一览/明细 Tab/报告期；eastmoney zlsj） |
 | `instrument_dividend` | InstrumentRef + 可选 `page` / `page_size` | 分红历史 |
 | `instrument_money_flow` | InstrumentRef | 个股资金流向（主 CN） |
 | `instrument_notices` | InstrumentRef + 可选 `page` / `page_size` | 标的公告列表（正文用 `notice_content`） |
+| `cn_market_special` | `kind` + 按 kind 的 code/date/tag 等 | A 股专题（连板/热股/异动/同花顺概念目录；经 tonghuashun custom。指数成分→`index_constituents`，财务指标→`instrument_financial_indicators`） |
+| `trade_calendar` | `year?` | A 股交易日历 |
+| `macro_series` | `scope?` + `kind` + 可选 `page` / `page_size` / `limit` | 宏观事实序列（`MACRO_INDICATOR` + eastmoney cjsj：国外/行业/油价/翻页） |
+| `index_constituents` | `index_code` | 指数成分（标准 INDEX_CONST + 同花顺回退） |
+| `dragon_tiger` | `date?` | 龙虎榜 |
+| `limit_updown` | `date?` | 涨跌停池 |
+| `market_sentiment` | `code?` | 情绪/热度 |
 | `sector_list` | `market?` / `kind?` / `plate_type?` | 板块或行业目录 |
 | `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分股 |
 | `etf_profile` | InstrumentRef / code | ETF 档案 |

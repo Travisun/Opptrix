@@ -17,7 +17,7 @@ const AKSHARE_SETTINGS: ProviderSettingsDefinition = {
 export const AKSHARE_MANIFEST: ProviderManifest = {
   providerId: 'akshare',
   title: 'AKShare',
-  subtitle: '债券、期货、汇率、碳排放、另类数据等 AKShare 接口',
+  subtitle: '债券、期货、汇率、碳排放、中国宏观（CPI/PPI/PMI/GDP/LPR）等 AKShare 接口',
   marketGroup: 'CN',
   defaultPriority: 30,
   settings: AKSHARE_SETTINGS,

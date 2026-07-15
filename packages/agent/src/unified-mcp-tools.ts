@@ -160,7 +160,7 @@ export function buildUnifiedInstrumentTools(
     {
       name: 'get_instrument_financials',
       category: '基本面',
-      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替',
+      description: '财务摘要多期事实表（营收/利润/ROE/同比等）；核实增速与质量时使用，勿用 evaluate 黑盒代替。要资产负债/现金流明细请改用对应工具',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         report_type: {
@@ -179,9 +179,73 @@ export function buildUnifiedInstrumentTools(
       }),
     },
     {
+      name: 'get_instrument_balance_sheet',
+      category: '基本面',
+      description: '资产负债表多期事实表（经 queryInstrumentData balance_sheet）；核实总资产/负债/权益时优先于摘要',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，过滤报告期 YYYY-MM-DD（返回该日及之后）',
+        },
+      }),
+      handler: (a) => d('instrument_balance_sheet', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_cash_flow',
+      category: '基本面',
+      description: '现金流量表多期事实表（经 queryInstrumentData cash_flow）；核实经营/筹资/投资现金流时使用',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，过滤报告期 YYYY-MM-DD（返回该日及之后）',
+        },
+      }),
+      handler: (a) => d('instrument_cash_flow', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_income_statement',
+      category: '基本面',
+      description: '利润表多期事实表（经 queryInstrumentData income_statement）；核实营收/成本/费用明细时优先于财务摘要',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report_date: {
+          type: 'string',
+          description: '可选，过滤报告期 YYYY-MM-DD（返回该日及之后）',
+        },
+      }),
+      handler: (a) => d('instrument_income_statement', {
+        ...resolveInstrumentParams(a),
+        report_date: a.report_date ?? '',
+      }),
+    },
+    {
+      name: 'get_instrument_financial_indicators',
+      category: '基本面',
+      description: '财务指标树（成长/盈利/偿债/营运等，同花顺富耀）；须 report 如 2024Q3；标准三表明细请用专用工具',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        report: {
+          type: 'string',
+          description: '报告期，如 2024Q3 或 2024（必填）',
+        },
+      }, ['report']),
+      handler: (a) => d('instrument_financial_indicators', {
+        ...resolveInstrumentParams(a),
+        report: a.report ?? a.report_period,
+      }),
+    },
+    {
       name: 'get_instrument_shareholders',
       category: '基本面',
-      description: '股东结构事实表（十大股东/股本等）；核实股权集中度或机构持仓时使用',
+      description: '股东结构事实表（十大股东/股本等）；核实股权集中度时使用。季报机构持仓（基金/QFII 等）改用 get_instrument_institution_holdings',
       parameters: S({
         ...INSTRUMENT_REF_SCHEMA,
         report_date: {
@@ -192,6 +256,40 @@ export function buildUnifiedInstrumentTools(
       handler: (a) => d('instrument_shareholders', {
         ...resolveInstrumentParams(a),
         report_date: a.report_date,
+      }),
+    },
+    {
+      name: 'get_instrument_institution_holdings',
+      category: '基本面',
+      description:
+        'A 股季报机构持仓（东财 zlsj）：一览汇总 / 分类型明细（基金·QFII·社保·券商·保险·信托）/ 报告期列表。'
+        + '与十大股东 get_instrument_shareholders 不同',
+      parameters: S({
+        ...INSTRUMENT_REF_SCHEMA,
+        scope: {
+          type: 'string',
+          description: 'overview（默认一览）| detail（Tab 明细）| dates（报告期）',
+        },
+        org_type: {
+          type: 'string',
+          description: 'detail 时：fund|qfii|social|broker|insurance|trust|all；也可用中文「基金」等',
+        },
+        report_date: {
+          type: 'string',
+          description: '报告期 YYYY-MM-DD，空则最新；可用 scope=dates 先查',
+        },
+        page: { type: 'number', description: 'detail 页码，默认 1' },
+        page_size: { type: 'number', description: 'detail 每页条数，默认 30' },
+        limit: { type: 'number', description: 'dates 时返回条数' },
+      }),
+      handler: (a) => d('instrument_institution_holdings', {
+        ...resolveInstrumentParams(a),
+        scope: a.scope ?? 'overview',
+        org_type: a.org_type ?? a.orgType ?? a.kind,
+        report_date: a.report_date ?? a.reportDate,
+        page: a.page,
+        page_size: a.page_size,
+        limit: a.limit,
       }),
     },
     {
@@ -271,6 +369,18 @@ export function buildUnifiedInstrumentTools(
       }),
     },
     {
+      name: 'get_index_constituents',
+      category: '行业板块',
+      description: '指数/同花顺板块成分股；沪深300 等与同花顺概念指数；优先标准 INDEX_CONST，回退同花顺',
+      parameters: S({
+        index_code: { type: 'string', description: '指数或板块代码，如 000300、885338.TI' },
+        code: { type: 'string', description: '同 index_code' },
+      }),
+      handler: (a) => d('index_constituents', {
+        index_code: a.index_code ?? a.code ?? a.symbol,
+      }),
+    },
+    {
       name: 'get_etf_profile',
       category: 'ETF',
       description: 'ETF 档案事实表（跟踪指数、费率、规模等）；净值用 get_etf_nav，成分用 get_etf_holdings',
@@ -285,6 +395,96 @@ export function buildUnifiedInstrumentTools(
         market: { type: 'string', description: '市场 CN|US|HK，默认 CN' },
       }),
       handler: (a) => d('market_session', { market: a.market ?? 'CN' }),
+    },
+    {
+      name: 'get_cn_market_special',
+      category: '市场资金',
+      description:
+        'A 股专题（同花顺独有）：连板天梯、飙升榜、历史热股、热榜走势、异动、概念指数目录。指数成分用 get_index_constituents，财务指标用 get_instrument_financial_indicators，全景复盘用 get_market_dynamics',
+      parameters: S({
+        kind: {
+          type: 'string',
+          description:
+            'limit_up_ladder | skyrocket | hot_history | hot_rank_trend | anomaly_list | anomaly_stock | ths_index_list',
+        },
+        code: { type: 'string', description: '个股代码（hot_rank_trend / anomaly_stock）' },
+        codes: { type: 'string', description: 'anomaly_stock 多码时可逗号分隔' },
+        date: { type: 'string', description: 'hot_history 必填 YYYY-MM-DD' },
+        period: { type: 'string', description: 'skyrocket：day|hour，默认 day' },
+        tag: { type: 'string', description: 'ths_index_list：cn_concept|region|tszs|industry；anomaly_list 可选' },
+        start: { type: 'string', description: 'hot_rank_trend 可选起始日' },
+        end: { type: 'string', description: 'hot_rank_trend 可选结束日' },
+      }, ['kind']),
+      handler: (a) => d('cn_market_special', a),
+    },
+    {
+      name: 'get_trade_calendar',
+      category: '市场资金',
+      description: 'A 股交易日历（按年交易日列表）；精确休市日查询用本工具，勿用 get_market_session 代替',
+      parameters: S({
+        year: { type: 'number', description: '年份，默认当年' },
+      }),
+      handler: (a) => d('trade_calendar', { year: a.year }),
+    },
+    {
+      name: 'get_macro_series',
+      category: '市场资金',
+      description:
+        '宏观事实序列（东财 cjsj）：中国 CPI/PPI/GDP/社零/货币供应等；国外宏观；行业指数；油价。'
+        + '标准路由 MACRO_INDICATOR（Baostock→eastmoney→AkShare）；翻页/国外/行业/油价走 eastmoney。'
+        + '市况叙事仍用 get_market_regime',
+      parameters: S({
+        scope: {
+          type: 'string',
+          description:
+            'cn（默认）| foreign | industry | oil | catalog；catalog 时 kind=cn|foreign|industry|all',
+        },
+        kind: {
+          type: 'string',
+          description:
+            '指标：cpi/ppi/gdp/社零/m2…；国外 foreign_0_0 或指标名；行业 EMI…；油价 adjust|province|quote；空+scope=cn 返回核心摘要',
+        },
+        page: { type: 'number', description: '页码，默认 1（中国第 2 页起走 eastmoney 翻页）' },
+        page_size: { type: 'number', description: '每页条数，默认 36，最大 200' },
+        limit: { type: 'number', description: '同 page_size（兼容旧参数）' },
+      }),
+      handler: (a) => d('macro_series', {
+        scope: a.scope ?? 'cn',
+        kind: a.kind ?? a.indicator ?? a.series ?? '',
+        page: a.page ?? 1,
+        page_size: a.page_size ?? a.limit,
+        limit: a.limit,
+      }),
+    },
+    {
+      name: 'get_dragon_tiger',
+      category: '市场资金',
+      description:
+        '龙虎榜明细（可带 date）；仅问上榜列表/席位时用本工具。与涨跌榜一起的全景复盘用 get_market_dynamics（内含摘要，勿重复各调一遍）',
+      parameters: S({
+        date: { type: 'string', description: '可选 YYYY-MM-DD，默认最近可用日' },
+      }),
+      handler: (a) => d('dragon_tiger', { date: a.date }),
+    },
+    {
+      name: 'get_limit_updown',
+      category: '市场资金',
+      description:
+        '涨跌停池列表（可带 date）；连板天梯/晋级之路用 get_cn_market_special(kind=limit_up_ladder)，勿与涨跌榜全景混用',
+      parameters: S({
+        date: { type: 'string', description: '可选 YYYY-MM-DD' },
+      }),
+      handler: (a) => d('limit_updown', { date: a.date }),
+    },
+    {
+      name: 'get_market_sentiment',
+      category: '市场资金',
+      description:
+        '市场情绪或个股热度摘要（多 Provider）；飙升榜/热股榜用 get_cn_market_special(kind=skyrocket|hot_history)，勿重复',
+      parameters: S({
+        code: { type: 'string', description: '可选，6 位 A 股代码' },
+      }),
+      handler: (a) => d('market_sentiment', { code: a.code ?? a.symbol }),
     },
     {
       name: 'get_instrument_quotes',

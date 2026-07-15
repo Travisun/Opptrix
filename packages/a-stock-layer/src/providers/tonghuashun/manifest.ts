@@ -17,6 +17,7 @@ export const TONGHUASHUN_CAPS = [
   Capability.TRADE_CALENDAR,
   Capability.INDEX_REALTIME,
   Capability.INDEX_KLINE,
+  Capability.INDEX_CONST,
   Capability.DRAGON_TIGER,
   Capability.LIMIT_UPDOWN,
   Capability.SENTIMENT,
@@ -25,6 +26,7 @@ export const TONGHUASHUN_CAPS = [
 const INDEX_CAPS = [
   Capability.INDEX_REALTIME,
   Capability.INDEX_KLINE,
+  Capability.INDEX_CONST,
 ]
 
 const EQUITY_CAPS = TONGHUASHUN_CAPS.filter(c => !INDEX_CAPS.includes(c))

@@ -9,6 +9,7 @@ import { TONGHUASHUN_MANIFEST } from './tonghuashun/manifest.js'
 import { SINAFINANCE_MANIFEST } from './sinafinance/manifest.js'
 import { TENCENT_MANIFEST } from './tencent/manifest.js'
 import { STOCKINDEX_MANIFEST } from './stockindex/manifest.js'
+import { EASTMONEY_MANIFEST } from './eastmoney/manifest.js'
 import { getManifestRegistry } from './manifest-registry.js'
 
 export { TUSHARE_SETTINGS } from './tushare/settings.js'
@@ -21,6 +22,7 @@ export { TONGHUASHUN_SETTINGS } from './tonghuashun/settings.js'
 export { SINAFINANCE_SETTINGS } from './sinafinance/settings.js'
 export { TENCENT_SETTINGS } from './tencent/settings.js'
 export { STOCKINDEX_SETTINGS } from './stockindex/settings.js'
+export { EASTMONEY_SETTINGS } from './eastmoney/settings.js'
 
 /** Static built-in manifests — registered into ManifestRegistry by ProviderLoader.registerBuiltins() */
 export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
@@ -34,6 +36,7 @@ export const BUILTIN_PROVIDER_MANIFESTS: ProviderManifest[] = [
   TENCENT_MANIFEST,
   SINAFINANCE_MANIFEST,
   STOCKINDEX_MANIFEST,
+  EASTMONEY_MANIFEST,
 ]
 
 /** Live manifest list (built-in + installed). Prefer listProviderManifests(). */

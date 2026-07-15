@@ -48,7 +48,7 @@ const SEED_RULES: SeedRule[] = [
     patterns: [
       /产业[链路]|上下游|行业透视|板块龙头|主题观察|mermaid/i,
       /半导体|新能源车|光伏|锂电.*产业/,
-      /板块列表|行业列表|板块成分|行业成分|申万行业|成分股列表/,
+      /板块列表|行业列表|板块成分|行业成分|申万行业|成分股列表|指数成分|沪深300成分|上证50成分/,
     ],
   },
   {
@@ -56,7 +56,9 @@ const SEED_RULES: SeedRule[] = [
     weight: 2,
     patterns: [
       /大盘|宏观|牛熊|市场[状动情]|板块轮动|涨跌榜|龙虎榜|开盘|收盘|早报|复盘|资金流|资金净流入|主力.*净流入|北向/i,
-      /沪深300|风险偏好|市场状态|交易时段|是否开盘|盘前|盘后/,
+      /沪深300|风险偏好|市场状态|交易时段|是否开盘|盘前|盘后|交易日历|休市日|涨停池|跌停池|市场情绪/,
+      /连板天梯|连板梯队|热度飙升|飙升榜|历史热股|热榜|个股异动|异动原因|同花顺概念|同花顺指数/,
+      /\bCPI\b|\bPPI\b|\bPMI\b|\bGDP\b|\bLPR\b|通胀|宏观数据|降准|降息|社零|货币供应|外储|固投|油价|成品油|国外宏观|行业指数|ISM/i,
     ],
   },
   {
@@ -71,8 +73,8 @@ const SEED_RULES: SeedRule[] = [
     pack: 'fundamentals',
     weight: 3,
     patterns: [
-      /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|主营业务|所属概念|公司简介|基本面/i,
-      /financials|profile|dividend|shareholder/i,
+      /营收|净利润|ROE|财报|财务|同比|毛利率|每股收益|分红|派息|十大股东|股东结构|机构持仓|基金持仓|主营业务|所属概念|公司简介|基本面/i,
+      /资产负债表|现金流量表|利润表|损益表|经营现金流|财务指标|financials|profile|dividend|shareholder|institution.?hold|balance.?sheet|cash.?flow|income.?statement/i,
     ],
   },
   {
@@ -83,7 +85,7 @@ const SEED_RULES: SeedRule[] = [
   {
     pack: 'provider_ext',
     weight: 1,
-    patterns: [/自定义方法|provider|数据源扩展|akshare|baostock|zzshare/i],
+    patterns: [/自定义方法|provider|数据源扩展|akshare|baostock|zzshare|eastmoney|东方财富/i],
   },
 ]
 
