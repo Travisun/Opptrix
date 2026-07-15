@@ -13,7 +13,7 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 const useStyles = makeStyles({
   group: {
     border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
+    borderRadius: opptrixTokens.radiusXl,
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
     transitionProperty: 'border-color',
@@ -27,40 +27,39 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'space-between',
-    gap: '20px',
-    padding: '12px 20px',
-    minHeight: '44px',
+    gap: '16px',
+    padding: '11px 20px',
+    minHeight: '42px',
     '@media (max-width: 660px)': {
       flexDirection: 'column',
       alignItems: 'stretch',
-      gap: '10px',
+      gap: '8px',
       padding: '10px 16px',
     },
   },
   rowStack: {
     alignItems: 'flex-start',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
   },
   rowMain: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '3px',
+    gap: '2px',
   },
   rowTitle: {
     fontSize: '14px',
-    fontWeight: 600,
-    letterSpacing: '-0.02em',
+    fontWeight: 500,
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.35,
+    lineHeight: 1.4,
+    letterSpacing: '-0.01em',
   },
   rowDesc: {
-    fontSize: '13px',
+    fontSize: '12px',
     color: opptrixCssVars.textTertiary,
-    letterSpacing: 0,
-    lineHeight: 1.45,
+    lineHeight: 1.4,
   },
   rowControl: {
     flexShrink: 0,
@@ -95,22 +94,23 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '12px',
-    padding: '10px 18px',
+    padding: '12px 20px',
     minHeight: '44px',
   },
   panelHeaderTitle: {
-    fontSize: '14px',
+    fontSize: '11px',
     fontWeight: 600,
-    letterSpacing: '-0.02em',
-    color: opptrixCssVars.textPrimary,
+    color: opptrixCssVars.textSecondary,
+    letterSpacing: '0.04em',
+    textTransform: 'uppercase',
     lineHeight: 1.3,
   },
   inlineInput: {...inputShellInteractive,
-width: '100%',
+    width: '100%',
     minWidth: '160px',
     maxWidth: '240px',
-    minHeight: '32px',
-    padding: '0 11px',
+    minHeight: '30px',
+    padding: '0 10px',
     display: 'flex',
     alignItems: 'center',
     boxSizing: 'border-box',
@@ -123,27 +123,27 @@ width: '100%',
     width: '100%',
   },
   staticBlock: {
-    padding: '12px 18px',
+    padding: '12px 20px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
+    gap: '6px',
   },
   providerRow: {
     display: 'flex',
     alignItems: 'flex-start',
-    gap: '12px',
+    gap: '10px',
     width: '100%',
   },
   providerAvatar: {
-    width: '36px',
-    height: '36px',
+    width: '32px',
+    height: '32px',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: opptrixCssVars.gray200,
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    fontSize: '14px',
-    fontWeight: 650,
+    fontSize: '13px',
+    fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
   },
@@ -153,7 +153,7 @@ width: '100%',
   },
   modelsDialogTitle: {
     fontSize: '16px',
-    fontWeight: 650,
+    fontWeight: 600,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
   },
@@ -189,9 +189,9 @@ width: '100%',
     gap: '2px',
   },
   credentialCombo: {...inputShellInteractive,
-width: '100%',
+    width: '100%',
     minWidth: 0,
-    minHeight: '32px',
+    minHeight: '30px',
     display: 'flex',
     alignItems: 'stretch',
     padding: 0,
@@ -215,7 +215,7 @@ width: '100%',
     minWidth: 0,
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     fontSize: '12px',
-    paddingLeft: '11px',
+    paddingLeft: '10px',
   },
   credentialSegment: {
     display: 'flex',
@@ -224,22 +224,22 @@ width: '100%',
     borderLeft: `1px solid ${opptrixCssVars.separator}`,
   },
   credentialActionBtn: {
-    minHeight: '30px',
+    minHeight: '28px',
     height: '100%',
     borderRadius: 0,
     fontSize: '12px',
     fontWeight: 500,
-    paddingLeft: '12px',
-    paddingRight: '12px',
+    paddingLeft: '10px',
+    paddingRight: '10px',
   },
   credentialSaveBtn: {
-    minHeight: '30px',
+    minHeight: '28px',
     height: '100%',
     borderRadius: 0,
     fontSize: '12px',
     fontWeight: 600,
-    paddingLeft: '12px',
-    paddingRight: '12px',
+    paddingLeft: '10px',
+    paddingRight: '10px',
   },
   actionRow: {
     display: 'block',
@@ -254,7 +254,7 @@ width: '100%',
     cursor: 'pointer',
     transitionProperty: 'background-color, color',
     transitionDuration: motion.fast,
-    transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
+    transitionTimingFunction: motion.ease,
     ':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
       color: opptrixCssVars.textPrimary,
@@ -271,15 +271,68 @@ width: '100%',
   },
   card: {
     border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusLg,
+    borderRadius: opptrixTokens.radiusXl,
     backgroundColor: opptrixCssVars.canvas,
-    padding: '14px 18px',
+    padding: '14px 20px',
     display: 'flex',
     flexDirection: 'column',
-    gap: '10px',
+    gap: '8px',
     transitionProperty: 'border-color',
     transitionDuration: motion.fast,
     transitionTimingFunction: motion.ease,
+  },
+  sectionHeader: {
+    padding: '16px 20px 8px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  sectionKicker: {
+    fontSize: '11px',
+    fontWeight: 600,
+    color: opptrixCssVars.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    lineHeight: 1.3,
+  },
+  sectionTitle: {
+    fontSize: '20px',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    letterSpacing: '-0.02em',
+    lineHeight: 1.25,
+  },
+  sectionSubtitle: {
+    fontSize: '13px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    marginTop: '2px',
+  },
+  emptyState: {
+    padding: '24px 20px',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '6px',
+    textAlign: 'center',
+  },
+  emptyStateIcon: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
+    marginBottom: '4px',
+  },
+  emptyStateTitle: {
+    fontSize: '14px',
+    fontWeight: 500,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.4,
+  },
+  emptyStateDesc: {
+    fontSize: '12px',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    maxWidth: '240px',
   },
 })
 
@@ -291,6 +344,44 @@ export function SettingsGroup({ children, className }: { children: ReactNode; cl
 export function SettingsCard({ children, className }: { children: ReactNode; className?: string }) {
   const s = useStyles()
   return <div className={mergeClasses(s.card, className)}>{children}</div>
+}
+
+export function SettingsSectionHeader({
+  kicker,
+  title,
+  subtitle,
+}: {
+  kicker?: string
+  title: string
+  subtitle?: string
+}) {
+  const s = useStyles()
+  return (
+    <div className={s.sectionHeader}>
+      {kicker && <span className={s.sectionKicker}>{kicker}</span>}
+      <h2 className={s.sectionTitle}>{title}</h2>
+      {subtitle && <span className={s.sectionSubtitle}>{subtitle}</span>}
+    </div>
+  )
+}
+
+export function SettingsEmptyState({
+  icon,
+  title,
+  desc,
+}: {
+  icon?: ReactNode
+  title: string
+  desc?: string
+}) {
+  const s = useStyles()
+  return (
+    <div className={s.emptyState}>
+      {icon && <span className={s.emptyStateIcon}>{icon}</span>}
+      <span className={s.emptyStateTitle}>{title}</span>
+      {desc && <span className={s.emptyStateDesc}>{desc}</span>}
+    </div>
+  )
 }
 
 export function SettingsRow({
@@ -361,7 +452,7 @@ export function SettingsTextField({
       <Input
         className="opptrix-settings-field-input"
         appearance="filled-darker"
-        size="medium"
+        size="small"
         value={value}
         placeholder={placeholder}
         onChange={(_, d) => onChange(d.value ?? '')}
@@ -373,7 +464,7 @@ export function SettingsTextField({
 export function SettingsCredentialRow({
   value,
   onChange,
-  placeholder = '粘贴 Token',
+  placeholder = '粘贴密钥',
   onTest,
   onSave,
   testing = false,
@@ -393,7 +484,6 @@ export function SettingsCredentialRow({
   saving?: boolean
   saveDisabled?: boolean
   testDisabled?: boolean
-  /** 为 true 时，加载已有密钥后自动明文展示 */
   revealWhenFilled?: boolean
   configured?: boolean
   preview?: string
@@ -415,7 +505,7 @@ export function SettingsCredentialRow({
         <Input
           className={mergeClasses(s.credentialInput, 'opptrix-settings-field-input')}
           appearance="filled-darker"
-          size="medium"
+          size="small"
           type={visible ? 'text' : 'password'}
           value={value}
           placeholder={placeholder}
@@ -425,7 +515,7 @@ export function SettingsCredentialRow({
           <OpptrixButton
             variant="icon"
             aria-label={visible ? '隐藏密钥' : '显示密钥'}
-            icon={visible ? <EyeOffRegular fontSize={16} /> : <EyeRegular fontSize={16} />}
+            icon={visible ? <EyeOffRegular fontSize={14} /> : <EyeRegular fontSize={14} />}
             onClick={() => {
               userToggledVisibility.current = true
               setVisible(v => !v)
@@ -455,7 +545,7 @@ export function SettingsCredentialRow({
       </div>
       {showConfiguredHint && (
         <Text className={s.credentialHint} block>
-          {preview ? `当前密钥：${preview}。如需更换，输入新 Key 后点保存。` : '密钥已保存在本机，如需更换请输入新 Key 后点保存。'}
+          {preview ? `当前密钥：${preview}。如需更换，输入新密钥后保存。` : '密钥已保存在本机，如需更换请输入新密钥后保存。'}
         </Text>
       )}
     </div>
@@ -531,7 +621,7 @@ function ProviderModelsViewer({ name, models }: { name: string; models: string[]
     <>
       <OpptrixButton
         variant="icon"
-        icon={<EyeRegular fontSize={16} />}
+        icon={<EyeRegular fontSize={14} />}
         aria-label={`查看 ${name} 的模型`}
         onClick={() => setOpen(true)}
       />

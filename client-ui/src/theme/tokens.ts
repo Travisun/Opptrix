@@ -74,10 +74,10 @@ export const opptrixTokensLight = {
   gray200: '#E5E5EA',
   gray300: '#D1D1D6',
 
-  separator: 'rgba(60, 60, 67, 0.06)',
-  separatorStrong: 'rgba(60, 60, 67, 0.11)',
-  border: 'rgba(60, 60, 67, 0.08)',
-  borderStrong: 'rgba(60, 60, 67, 0.14)',
+  separator: 'rgba(60, 60, 67, 0.14)',
+  separatorStrong: 'rgba(60, 60, 67, 0.22)',
+  border: 'rgba(60, 60, 67, 0.10)',
+  borderStrong: 'rgba(60, 60, 67, 0.18)',
 
   textPrimary: '#1D1D1F',
   textSecondary: '#6E6E73',
@@ -152,10 +152,10 @@ export const opptrixTokensDark = {
   gray200: '#3A3A3C',
   gray300: '#48484A',
 
-  separator: 'rgba(255, 255, 255, 0.06)',
-  separatorStrong: 'rgba(255, 255, 255, 0.11)',
-  border: 'rgba(255, 255, 255, 0.08)',
-  borderStrong: 'rgba(255, 255, 255, 0.14)',
+  separator: 'rgba(255, 255, 255, 0.15)',
+  separatorStrong: 'rgba(255, 255, 255, 0.25)',
+  border: 'rgba(255, 255, 255, 0.10)',
+  borderStrong: 'rgba(255, 255, 255, 0.20)',
 
   textPrimary: '#F5F5F7',
   textSecondary: '#AEAEB2',

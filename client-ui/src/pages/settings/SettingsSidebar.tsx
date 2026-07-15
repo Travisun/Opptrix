@@ -107,19 +107,20 @@ padding: '0 8px',
 
     display: 'flex',
     alignItems: 'center',
-    gap: '9px',
-    padding: '5px 8px',
+    gap: '8px',
+    padding: '6px 10px',
     borderRadius: opptrixTokens.radiusMd,
     cursor: 'pointer',
     border: 'none',
     backgroundColor: 'transparent',
-    color: opptrixCssVars.textPrimary,
+    color: opptrixCssVars.textSecondary,
     fontSize: '13px',
-    fontWeight: 500,
+    fontWeight: 400,
     width: '100%',
     textAlign: 'left',
-    transitionProperty: 'background-color',
+    transitionProperty: 'background-color, color',
     transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
   },
   navItemOverlay: {
     ...sidebarTopMenuRow,
@@ -132,8 +133,10 @@ padding: '0 8px',
     flexShrink: 0,
     whiteSpace: 'nowrap',
   },
-  navItemActive: {...sidebarItemSelected,
-
+  navItemActive: {
+    backgroundColor: opptrixCssVars.sidebarSelected,
+    color: opptrixCssVars.textPrimary,
+    fontWeight: 500,
   },
   navIcon: {
     color: opptrixCssVars.textTertiary,
@@ -372,21 +375,21 @@ export function settingsSectionTitle(section: SettingsSection): string {
 export function settingsSectionSubtitle(section: SettingsSection): string {
   switch (section) {
     case 'general':
-      return '管理默认评分卡与后端连接状态'
+      return '评分偏好与连接设置'
     case 'models':
-      return '配置 LLM 提供商与可用模型'
+      return '添加和管理 AI 模型服务'
     case 'data_providers':
-      return '管理各市场行情与资讯数据提供商'
+      return '管理行情与资讯数据来源'
     case 'mcp_servers':
-      return '接入外部 MCP，按优先级故障转移，本地工具兜底'
+      return '接入外部智能服务'
     case 'news_feed':
-      return '管理 RSS 订阅与资讯更新频率'
+      return '订阅源与更新频率'
     case 'translation':
-      return '配置新闻阅读的离线翻译与远程大模型回退'
+      return '离线翻译与远程回退'
     case 'multimodal':
-      return '配置图片 OCR、语音转写与文章媒体自动提取策略'
+      return '图片、语音与媒体处理'
     case 'about':
-      return '了解产品、查看版本更新、法律说明与帮助反馈'
+      return '版本信息与法律说明'
     default:
       return ''
   }

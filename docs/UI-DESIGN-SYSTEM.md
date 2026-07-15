@@ -196,10 +196,11 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 
 | 组件 | 用途 | 说明 |
 |------|------|------|
-| `SettingsGroup` | 白色圆角卡片组 | 1px border + `radiusLg`，overflow hidden，多行设置项的容器 |
-| `SettingsCard` | 独立卡片 | 与 Group 同风格，带 padding，适合单张独立的卡片（如 MCP 预设卡） |
+| `SettingsGroup` | 圆角卡片组 | 1px border + `radiusXl`，overflow hidden，多行设置项的容器 |
+| `SettingsCard` | 独立卡片 | 与 Group 同风格，带 padding，适合单张独立的卡片 |
+| `SettingsSectionHeader` | 页面标题区 | Kicker（大写标签）+ 主标题 + 副标题，Apple 风格页面头部 |
 | `SettingsRow` | 设置行 | 标题 + 描述 + 控件，flex 布局，窄屏自动竖向堆叠 |
-| `SettingsPanelHeader` | 面板标题行 | `SettingsGroup` 内标题 + action 区域 |
+| `SettingsPanelHeader` | 面板标题行 | Group 内小写大写分组标签 + action 区域 |
 | `SettingsInlineInput` | 行内输入框容器 | `inputShellInteractive` 外壳，最大宽 240px |
 | `SettingsTextField` | 文本输入 | 封装 `SettingsInlineInput` + Fluent `Input` |
 | `SettingsCredentialRow` | 密钥编辑行 | 密码框 + 眼睛切换 + 测试/保存按钮，连续编组 |
@@ -207,14 +208,18 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 | `SettingsDivider` | 分割线 | 可选 fullWidth |
 | `SettingsStaticBlock` | 静态文本块 | 只读信息展示 |
 | `SettingsProviderRow` | 模型提供商行 | 头像 + 名称 + 模型查看 |
+| `SettingsEmptyState` | 空状态 | 居中图标 + 标题 + 描述，无内容时的占位展示 |
 
-**Apple 风格规范**（对齐 §16.6 Simplicity & §7 Craft）：
-- 行内边距：`12px 20px`（窄屏 `10px 16px`）
-- 分割线用 `separator` 而非 `gray200`
-- 圆角：Group/Card 统一 `radiusLg(14px)`
+**Apple 风格规范**（对齐 Apple HIG: Clarity / Simplicity / Craft）：
+- 行内边距：`11px 20px`（窄屏 `10px 16px`）
+- 分割线用 `separator`（已加粗至 0.14 alpha）
+- 圆角：Group/Card 统一 `radiusXl(18px)`
+- 侧栏导航：默认 `textSecondary` + `fontWeight: 400`，选中态加深加粗
 - hover：`surfaceHover` 半透明底，不用实体灰块
-- 响应式断点：`660px` 竖向堆叠（非 720px）
-- 过渡：`motion.fast` + `cubic-bezier(0.4, 0, 0.2, 1)`（Apple 默认曲线）
+- 响应式断点：`660px` 竖向堆叠
+- 过渡：`motion.fast(140ms)` + `cubic-bezier(0.4, 0, 0.2, 1)`（Apple 默认曲线）
+- 输入框：`size="small"` + `minHeight: 30px`，更紧凑
+- 文案：面向最终用户，禁止技术术语（细则：`ui-copy-standard.mdc`）
 
 **禁止**：`window.confirm` / `alert` / `prompt`；无类名的裸 `DialogSurface`。  
 细则：`.cursor/rules/ui-overlay-components.mdc`。
