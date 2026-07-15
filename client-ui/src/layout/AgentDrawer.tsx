@@ -33,7 +33,7 @@ const useStyles = makeStyles({
   context: {
     padding: '8px 16px',
     backgroundColor: opptrixCssVars.surfaceMuted,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     borderBottom: `1px solid ${opptrixCssVars.border}`,
   },
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     textAlign: 'center' as const,
     padding: '24px',
   },
@@ -61,7 +61,7 @@ const useStyles = makeStyles({
     borderRadius: opptrixTokens.radiusLg,
     whiteSpace: 'pre-wrap' as const,
     wordBreak: 'break-word' as const,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     lineHeight: 1.5,
   },
   userBubble: {

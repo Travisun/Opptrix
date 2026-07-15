@@ -122,14 +122,14 @@ const useStyles = makeStyles({
     marginLeft: '-2px',
   },
   pageTitle: {
-    fontSize: '20px',
+    fontSize: 'var(--opptrix-font-3xl)',
     fontWeight: 600,
     letterSpacing: '-0.02em',
     lineHeight: 1.3,
     color: opptrixCssVars.textPrimary,
   },
   pageSubtitle: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 400,
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
@@ -171,14 +171,14 @@ const useStyles = makeStyles({
     gap: '10px',
   },
   sectionLabel: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     letterSpacing: '-0.01em',
     paddingLeft: '2px',
   },
   saveHint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     minHeight: '18px',
     paddingLeft: '2px',
@@ -187,7 +187,7 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
   },
   aboutMeta: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.65,
   },
@@ -196,7 +196,7 @@ const useStyles = makeStyles({
     width: 'calc(100vw - 40px)',
   },
   dialogTitle: {
-    fontSize: '17px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,

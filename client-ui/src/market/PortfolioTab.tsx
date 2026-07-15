@@ -44,13 +44,13 @@ const useStyles = makeStyles({
     maxWidth: 'calc(50% - 3px)',
   },
   metricLabel: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     fontWeight: 600,
     lineHeight: 1.3,
   },
   metricValue: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textPrimary,
@@ -106,7 +106,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   rowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -114,7 +114,7 @@ const useStyles = makeStyles({
     textAlign: 'left',
   },
   rowNote: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -130,14 +130,14 @@ const useStyles = makeStyles({
     minWidth: '72px',
   },
   quotePrimary: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
     lineHeight: 1.2,
   },
   quoteSecondary: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
@@ -150,7 +150,7 @@ const useStyles = makeStyles({
     padding: '32px',
     gap: '8px',
     color: opptrixCssVars.textTertiary,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
   },
 })
 

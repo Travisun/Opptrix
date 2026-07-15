@@ -36,18 +36,18 @@ const useStyles = makeStyles({
     flexShrink: 0,
     marginBottom: '2px',
     '& svg': {
-      fontSize: '24px',
+      fontSize: 'var(--opptrix-font-4xl)',
     },
   },
   title: {
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
     letterSpacing: '-0.01em',
   },
   hint: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },

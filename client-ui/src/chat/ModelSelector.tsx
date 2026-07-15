@@ -56,10 +56,10 @@ display: 'inline-flex',
     ...focusVisibleRing,
   },
   triggerCompact: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
   },
   triggerDefault: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
   },
   triggerLabel: {
     overflow: 'hidden',
@@ -69,12 +69,12 @@ display: 'inline-flex',
   },
   triggerIcon: {
     flexShrink: 0,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
   },
   groupHeader: {
     display: 'block',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
@@ -88,7 +88,7 @@ display: 'inline-flex',
   },
   modelName: {
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
   },
 })
 

@@ -49,7 +49,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   titleBarPageTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     letterSpacing: '-0.01em',
     color: opptrixCssVars.textPrimary,
@@ -57,7 +57,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   titleBarMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
     whiteSpace: 'nowrap',
@@ -69,7 +69,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   toolbarMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
@@ -88,7 +88,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
   webTitle: {
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     flex: 1,

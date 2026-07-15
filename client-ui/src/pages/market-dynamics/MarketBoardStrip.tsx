@@ -27,13 +27,13 @@ const useStyles = makeStyles({
     borderRight: `1px solid ${opptrixCssVars.separator}`,
   },
   moodLabel: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.2,
   },
   moodMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
     whiteSpace: 'nowrap',
@@ -72,7 +72,7 @@ const useStyles = makeStyles({
   },
   indexName: {
     display: 'block',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
@@ -82,7 +82,7 @@ const useStyles = makeStyles({
   },
   indexPct: {
     display: 'block',
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.2,
@@ -100,7 +100,7 @@ const useStyles = makeStyles({
     padding: '6px 12px',
   },
   briefKicker: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
@@ -108,7 +108,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   briefText: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.4,
     display: '-webkit-box',

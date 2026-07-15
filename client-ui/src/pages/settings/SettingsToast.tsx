@@ -100,7 +100,7 @@ const useStyles = makeStyles({
   message: {
     flex: 1,
     minWidth: 0,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     lineHeight: 1.45,
     color: opptrixCssVars.textPrimary,
   },

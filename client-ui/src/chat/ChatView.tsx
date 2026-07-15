@@ -147,7 +147,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
   },
   title: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 500,
     letterSpacing: '-0.01em',
     color: opptrixCssVars.textPrimary,
@@ -176,7 +176,7 @@ const useStyles = makeStyles({
   welcomeBrand: {
     display: 'inline-flex',
     alignItems: 'baseline',
-    fontSize: '36px',
+    fontSize: 'var(--opptrix-font-display)',
     fontWeight: 600,
     letterSpacing: '0.08em',
     lineHeight: 1,
@@ -204,14 +204,14 @@ const useStyles = makeStyles({
     animationIterationCount: 'infinite',
   },
   welcomeTitle: {
-    fontSize: '17px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
     animationDelay: '0.55s',
   },
   welcomeSub: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.6,
     maxWidth: '36ch',

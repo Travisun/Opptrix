@@ -256,7 +256,7 @@ export const useOnboardingShellStyles = makeStyles({
     },
   },
   agreeText: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.65,
   },
@@ -275,7 +275,7 @@ export const useOnboardingShellStyles = makeStyles({
   },
   error: {
     marginTop: '12px',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.error,
     lineHeight: 1.45,
     textAlign: 'left',

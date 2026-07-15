@@ -20,7 +20,7 @@ const useStyles = makeStyles({
     minHeight: '32px',
   },
   hint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },

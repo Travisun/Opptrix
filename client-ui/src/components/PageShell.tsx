@@ -18,7 +18,7 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
   },
   kicker: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
@@ -26,13 +26,13 @@ const useStyles = makeStyles({
     marginBottom: '4px',
   },
   title: {
-    fontSize: '22px',
+    fontSize: 'var(--opptrix-font-3xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.3,
   },
   subtitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     marginTop: '4px',
   },

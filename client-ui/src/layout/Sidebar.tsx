@@ -32,7 +32,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
   },
   brandName: {
-    fontSize: '16px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
   },
@@ -45,7 +45,7 @@ const useStyles = makeStyles({
     gap: '16px',
   },
   groupLabel: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     letterSpacing: '0.06em',
     textTransform: 'uppercase' as const,
@@ -62,7 +62,7 @@ const useStyles = makeStyles({
   },
   status: {
     padding: '8px 10px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     display: 'flex',
     alignItems: 'center',

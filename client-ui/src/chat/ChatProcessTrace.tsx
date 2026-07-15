@@ -62,7 +62,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
     width: '16px',
     height: '16px',
   },
@@ -72,7 +72,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     width: '16px',
     height: '16px',
   },
@@ -84,7 +84,7 @@ const useStyles = makeStyles({
   stepLabel: {
     flex: 1,
     minWidth: 0,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
   },
@@ -113,7 +113,7 @@ const useStyles = makeStyles({
     gap: '6px',
   },
   detailBlock: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.5,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
@@ -123,7 +123,7 @@ const useStyles = makeStyles({
     overflow: 'auto',
   },
   thinkingSnippet: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     lineHeight: 1.55,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'pre-wrap',
@@ -326,7 +326,7 @@ export default function ChatProcessTrace({
 
       {showHistorySnippet && (
         <details>
-          <summary style={{ fontSize: 12, color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
+          <summary style={{ fontSize: 'var(--opptrix-font-md)', color: opptrixCssVars.textTertiary, cursor: 'pointer' }}>
             查看分析思路
           </summary>
           <Text className={s.thinkingSnippet} block>

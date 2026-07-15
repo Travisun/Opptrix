@@ -54,7 +54,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   triggerName: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -62,7 +62,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   triggerMeta: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -74,7 +74,7 @@ const useStyles = makeStyles({
   },
   sourceTag: {
     flexShrink: 0,
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     borderRadius: opptrixTokens.radiusFull,
     padding: '1px 6px',
@@ -131,7 +131,7 @@ const useStyles = makeStyles({
     gap: '6px',
   },
   menuName: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -141,7 +141,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   menuTagline: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
     overflow: 'hidden',
@@ -149,11 +149,11 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   menuMeta: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
   },
   placeholder: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
   },
 })

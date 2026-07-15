@@ -23,7 +23,7 @@ const useStyles = makeStyles({
     border: 'none',
     background: 'transparent',
     color: opptrixCssVars.textSecondary,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 650,
   },
   row: {
@@ -36,19 +36,19 @@ const useStyles = makeStyles({
     ':last-child': { borderBottom: 'none' },
   },
   label: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
   },
   meta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
   },
   priorityInput: {
     width: '56px',
   },
   hint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     padding: '0 2px 4px',

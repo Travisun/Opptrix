@@ -42,7 +42,7 @@ const useStyles = makeStyles({
   },
   chromeMeta: {
     flex: '0 0 auto',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     padding: '4px 6px',
     borderRadius: '6px',
@@ -150,7 +150,7 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
   },
   sectionHeadTitle: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
@@ -171,7 +171,7 @@ const useStyles = makeStyles({
       gap: '2px',
     },
     '& .fui-Tab': {
-      fontSize: '10px',
+      fontSize: 'var(--opptrix-font-xs)',
       fontWeight: 600,
       color: opptrixCssVars.textTertiary,
       letterSpacing: '0.03em',
@@ -187,7 +187,7 @@ const useStyles = makeStyles({
     },
   },
   sectionHeadHint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 400,
     color: opptrixCssVars.textTertiary,
     letterSpacing: 'normal',
@@ -203,19 +203,19 @@ const useStyles = makeStyles({
     padding: `6px ${CONTENT_PAD} 8px`,
   },
   briefTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     marginBottom: '2px',
   },
   briefText: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
   briefSectionLine: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     marginTop: '4px',
@@ -243,7 +243,7 @@ const useStyles = makeStyles({
 ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   newsTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
@@ -253,7 +253,7 @@ const useStyles = makeStyles({
     overflow: 'hidden',
   },
   newsMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     display: 'flex',
     alignItems: 'center',
@@ -270,7 +270,7 @@ const useStyles = makeStyles({
   },
   empty: {
     padding: '12px 8px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: 1.5,
@@ -365,7 +365,7 @@ export default function MarketDynamicsDetail({
                 <Text
                   block
                   style={{
-                    fontSize: 10,
+                    fontSize: 'var(--opptrix-font-xs)',
                     color: opptrixCssVars.textTertiary,
                     padding: '0 10px 6px',
                   }}

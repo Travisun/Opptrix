@@ -25,7 +25,7 @@ const useStyles = makeStyles({
   input: {
     flex: 1,
     minWidth: 0,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     border: 'none !important',
     boxShadow: 'none !important',
     backgroundColor: 'transparent !important',
@@ -68,7 +68,7 @@ const useStyles = makeStyles({
     padding: '4px 10px',
     cursor: 'pointer',
     color: opptrixCssVars.textPrimary,
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     flexShrink: 0,
     minHeight: '28px',
     minWidth: '32px',

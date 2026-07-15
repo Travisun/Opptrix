@@ -32,12 +32,12 @@ const useStyles = makeStyles({
   icon: {
     display: 'flex',
     alignItems: 'center',
-    fontSize: '20px',
+    fontSize: 'var(--opptrix-font-3xl)',
     color: opptrixCssVars.textSecondary,
   },
   iconActive: { color: opptrixCssVars.accent },
   label: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     fontWeight: 500,
   },

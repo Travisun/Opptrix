@@ -80,7 +80,7 @@ const useStyles = makeStyles({
     },
   },
   resultMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
   },
   list: {
@@ -137,7 +137,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   rowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -148,14 +148,14 @@ const useStyles = makeStyles({
     gap: '4px',
   },
   rowNote: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowRadar: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -193,7 +193,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
     lineHeight: 1.1,
@@ -202,7 +202,7 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '5px',
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontVariantNumeric: 'tabular-nums',
     whiteSpace: 'nowrap',
     lineHeight: 1.1,
@@ -257,7 +257,7 @@ const useStyles = makeStyles({
   empty: {
     padding: `12px ${CONTENT_PAD}`,
     textAlign: 'center',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     display: 'flex',
     alignItems: 'center',
@@ -266,7 +266,7 @@ const useStyles = makeStyles({
   },
   footer: {
     padding: `6px ${CONTENT_PAD}`,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     borderTop: `1px solid ${opptrixCssVars.separator}`,
     display: 'flex',
@@ -541,7 +541,7 @@ export default function WatchlistTab({
               }}
             >
               <div>
-                <Text block style={{ fontSize: '13px', fontWeight: 500 }}>{hit.name}</Text>
+                <Text block style={{ fontSize: 'var(--opptrix-font-base)', fontWeight: 500 }}>{hit.name}</Text>
                 <span className={s.resultMeta}>{hit.code}{hit.industry ? ` · ${hit.industry}` : ''}</span>
               </div>
               <span className={s.resultMeta}>添加</span>

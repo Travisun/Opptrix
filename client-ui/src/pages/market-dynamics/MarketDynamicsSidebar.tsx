@@ -42,7 +42,7 @@ const useStyles = makeStyles({
   },
   chromeMeta: {
     flex: '0 0 auto',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
@@ -74,14 +74,14 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   sectionTitle: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
     whiteSpace: 'nowrap',
   },
   sectionHint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -126,7 +126,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   rowTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -134,14 +134,14 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowNum: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textPrimary,
@@ -149,7 +149,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowPct: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
@@ -167,7 +167,7 @@ const useStyles = makeStyles({
   },
   empty: {
     padding: '16px 12px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: 1.5,

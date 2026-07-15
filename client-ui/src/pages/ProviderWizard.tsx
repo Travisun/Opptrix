@@ -56,14 +56,14 @@ const useStyles = makeStyles({
     gap: '6px',
   },
   stepTitle: {
-    fontSize: '16px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.25,
   },
   stepDesc: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
@@ -119,7 +119,7 @@ const useStyles = makeStyles({
     marginRight: 'auto',
   },
   statusLine: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     display: 'flex',
     alignItems: 'center',
@@ -127,7 +127,7 @@ const useStyles = makeStyles({
     lineHeight: 1.5,
   },
   emptyModels: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 0',
@@ -488,7 +488,7 @@ export default function ProviderWizard({
 
               {discoverHint && (
                 <div className={s.statusLine}>
-                  <Text style={{ fontSize: 13, color: opptrixCssVars.textSecondary }}>
+                  <Text style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary }}>
                     {discoverHint}
                   </Text>
                 </div>
@@ -504,7 +504,7 @@ export default function ProviderWizard({
                         checked={selected.has(model)}
                         onChange={() => toggleModel(model)}
                       />
-                      <Text style={{ fontSize: 13, fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: 1.4 }}>
+                      <Text style={{ fontSize: 'var(--opptrix-font-base)', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', lineHeight: 1.4 }}>
                         {model}
                       </Text>
                     </label>

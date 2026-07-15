@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     gap: '12px',
   },
   title: {
-    fontSize: '16px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
   },

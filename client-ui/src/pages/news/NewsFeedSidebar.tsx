@@ -60,7 +60,7 @@ const useStyles = makeStyles({
   errorHint: {
     flexShrink: 0,
     padding: '8px 10px 6px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     lineHeight: 1.5,
     color: opptrixCssVars.error,
     borderBottom: `1px solid ${opptrixCssVars.separator}`,

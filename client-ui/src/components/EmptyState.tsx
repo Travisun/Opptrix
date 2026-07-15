@@ -6,7 +6,7 @@ const useStyles = makeStyles({
     padding: '48px 24px',
     textAlign: 'center',
     color: opptrixCssVars.textTertiary,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     backgroundColor: opptrixCssVars.surfaceMuted,
     borderRadius: opptrixTokens.radiusLg,
     border: `1px dashed ${opptrixCssVars.border}`,

@@ -13,17 +13,17 @@ const useStyles = makeStyles({
     minWidth: '110px',
   },
   label: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
   },
   value: {
-    fontSize: '24px',
+    fontSize: 'var(--opptrix-font-4xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.2,
   },
   unit: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 400,
     color: opptrixCssVars.textSecondary,
     marginLeft: '4px',

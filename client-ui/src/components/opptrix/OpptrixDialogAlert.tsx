@@ -50,7 +50,7 @@ const OpptrixDialogAlertContext = createContext<OpptrixDialogAlertContextValue |
 
 const useStyles = makeStyles({
   message: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     whiteSpace: 'pre-wrap',

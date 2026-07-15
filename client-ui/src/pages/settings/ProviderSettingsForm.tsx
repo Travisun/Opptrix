@@ -31,13 +31,13 @@ const useStyles = makeStyles({
     gap: '4px',
   },
   fieldLabel: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   fieldDesc: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
@@ -258,7 +258,7 @@ export function ProviderSettingsForm({
 
   if (!provider.settingsFields.length) {
     return (
-      <Text block style={{ fontSize: '12px', color: opptrixCssVars.textTertiary }}>
+      <Text block style={{ fontSize: 'var(--opptrix-font-md)', color: opptrixCssVars.textTertiary }}>
         此数据源暂无可配置项。
       </Text>
     )
@@ -324,7 +324,7 @@ export function ProviderSettingsForm({
       )}
 
       {missingHint && (
-        <Text block style={{ fontSize: '11px', color: opptrixCssVars.textTertiary }}>
+        <Text block style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary }}>
           {missingHint}
         </Text>
       )}

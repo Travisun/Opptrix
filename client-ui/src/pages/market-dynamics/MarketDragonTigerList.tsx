@@ -33,7 +33,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   rowTitle: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -41,14 +41,14 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowNet: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
@@ -56,7 +56,7 @@ const useStyles = makeStyles({
     minWidth: '44px',
   },
   rowPct: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
@@ -71,7 +71,7 @@ const useStyles = makeStyles({
   netFlat: { color: opptrixCssVars.textSecondary },
   empty: {
     padding: '12px 8px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: 1.5,

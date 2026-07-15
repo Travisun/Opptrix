@@ -113,7 +113,7 @@ const useStyles = makeStyles({
   },
   menuIcon: sidebarTopMenuIcon,
   sectionLabel: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
@@ -157,7 +157,7 @@ const useStyles = makeStyles({
   },
   itemTitle: {
     flex: 1,
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
@@ -174,7 +174,7 @@ const useStyles = makeStyles({
     justifyContent: 'flex-end',
   },
   itemDate: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1,
     whiteSpace: 'nowrap',
@@ -221,7 +221,7 @@ const useStyles = makeStyles({
   empty: {
     padding: '32px 16px',
     textAlign: 'center',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.6,
   },

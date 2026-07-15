@@ -13,7 +13,7 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   tabHint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
     padding: '0 2px 4px',

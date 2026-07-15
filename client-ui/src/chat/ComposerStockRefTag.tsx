@@ -29,7 +29,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     height: '100%',
     padding: '0 6px 0 8px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     lineHeight: 1,
   },
@@ -41,7 +41,7 @@ const useStyles = makeStyles({
   },
   chipCode: {
     marginLeft: '4px',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 500,
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
     opacity: 0.82,

@@ -32,12 +32,12 @@ const useStyles = makeStyles({
   },
   bubble: {
     wordBreak: 'break-word',
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     lineHeight: 1.65,
     userSelect: 'text',
   },
   bubbleMobile: {
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
   },
   userBubble: {
     maxWidth: '100%',
@@ -66,7 +66,7 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusFull,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontFamily: 'ui-monospace, monospace',
   },
   footer: {
@@ -85,7 +85,7 @@ const useStyles = makeStyles({
     marginTop: '4px',
   },
   time: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1,
     color: opptrixCssVars.textTertiary,
     fontVariantNumeric: 'tabular-nums',
@@ -240,8 +240,8 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
           : <MarkdownMessage content={message.content} />}
         {message.toolSteps && message.toolSteps.length > 0 && (
           <details style={{ marginTop: 12 }}>
-            <summary style={{
-              fontSize: 12,
+             <summary style={{
+              fontSize: 'var(--opptrix-font-md)',
               color: opptrixCssVars.textTertiary,
               cursor: 'pointer',
               userSelect: 'none',

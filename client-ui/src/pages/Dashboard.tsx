@@ -36,13 +36,13 @@ const useStyles = makeStyles({
     color: opptrixCssVars.accent,
   },
   moduleTitle: {
-    fontSize: '16px',
+    fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     marginBottom: '4px',
   },
   moduleDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
   },
 })
@@ -75,7 +75,7 @@ export default function Dashboard({ navigate }: Props) {
       </div>
 
       {globalStock && (
-        <Text style={{ fontSize: 13, color: opptrixCssVars.textSecondary }}>
+        <Text style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary }}>
           当前标的：<strong>{globalStock.name}({globalStock.code})</strong> — 建议进入「个股研究」
         </Text>
       )}

@@ -36,7 +36,7 @@ const useStyles = makeStyles({
     gap: '12px',
   },
   tabHint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
     padding: '0 2px 4px',
@@ -58,7 +58,7 @@ const useStyles = makeStyles({
     gap: '6px',
     padding: '5px 14px',
     borderRadius: opptrixTokens.radiusFull,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 500,
     border: 'none',
     cursor: 'pointer',
@@ -97,13 +97,13 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   presetTitle: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   presetDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
@@ -114,7 +114,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   presetServiceList: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     padding: 0,
@@ -127,7 +127,7 @@ const useStyles = makeStyles({
   presetInput: {
     flex: 1,
     minWidth: 0,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
   },
   presetActions: {
     display: 'flex',
@@ -143,7 +143,7 @@ const useStyles = makeStyles({
     gap: '6px',
     padding: '8px 12px',
     borderRadius: opptrixTokens.radiusMd,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 500,
     border: 'none',
     cursor: 'pointer',
@@ -164,7 +164,7 @@ const useStyles = makeStyles({
     '& .cm-editor': {
       height: '100%',
       minHeight: '360px',
-      fontSize: '12px',
+      fontSize: 'var(--opptrix-font-md)',
     },
     '& .cm-scroller': {
       fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
@@ -185,7 +185,7 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   error: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.error,
     lineHeight: 1.4,
     whiteSpace: 'pre-wrap',
@@ -489,7 +489,7 @@ export default function McpServersSettingsSection() {
                             target="_blank"
                             rel="noopener noreferrer"
                             style={{
-                              fontSize: '11px',
+                              fontSize: 'var(--opptrix-font-sm)',
                               color: opptrixCssVars.accent,
                               textDecoration: 'none',
                               fontWeight: 500,

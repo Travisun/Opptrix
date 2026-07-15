@@ -18,7 +18,7 @@ const useStyles = makeStyles({
   head: {
     padding: '10px 14px',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
@@ -42,7 +42,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   rowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
@@ -51,7 +51,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     marginTop: '2px',
@@ -138,7 +138,7 @@ export function OnboardingDataList() {
 
   if (!catalog) {
     return (
-      <Text block style={{ fontSize: 13, color: opptrixCssVars.textSecondary }}>
+      <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary }}>
         暂时无法加载行情列表，可稍后在设置中查看。
       </Text>
     )

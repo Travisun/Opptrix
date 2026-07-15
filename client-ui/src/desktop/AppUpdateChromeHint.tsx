@@ -9,7 +9,7 @@ import {
 
 const useStyles = makeStyles({
   hint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 500,
     lineHeight: 1,
     color: opptrixCssVars.accent,

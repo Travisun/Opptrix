@@ -30,32 +30,32 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
     '& svg': {
-      fontSize: '20px',
+      fontSize: 'var(--opptrix-font-3xl)',
     },
   },
   iconWrapCompact: {
     width: '32px',
     height: '32px',
     '& svg': {
-      fontSize: '16px',
+      fontSize: 'var(--opptrix-font-2xl)',
     },
   },
   title: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.45,
   },
   titleCompact: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
   },
   hint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
   hintCompact: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   action: {
     marginTop: '4px',

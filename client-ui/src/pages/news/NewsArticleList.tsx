@@ -21,7 +21,7 @@ const useStyles = makeStyles({
     padding: `2px ${CONTENT_PAD} 12px`,
   },
   sectionHead: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
@@ -44,7 +44,7 @@ const useStyles = makeStyles({
   sectionHeadLabel: {
     flex: 1,
     minWidth: 0,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.03em',
@@ -52,7 +52,7 @@ const useStyles = makeStyles({
   },
   sectionHeadCount: {
     flexShrink: 0,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 500,
     color: opptrixCssVars.textTertiary,
     opacity: 0.75,
@@ -79,7 +79,7 @@ const useStyles = makeStyles({
     },
   },
   title: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
@@ -89,12 +89,12 @@ const useStyles = makeStyles({
     overflow: 'hidden',
   },
   meta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   summary: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
     display: '-webkit-box',
@@ -107,7 +107,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     alignItems: 'center',
     padding: '12px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
   },
   loadMoreIcon: {

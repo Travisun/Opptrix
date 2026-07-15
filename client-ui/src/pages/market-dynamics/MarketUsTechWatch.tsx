@@ -90,7 +90,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   rowTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -98,24 +98,24 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowTitleQuad: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   rowMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowNum: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
     whiteSpace: 'nowrap',
   },
   rowPct: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
@@ -123,7 +123,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowPctQuad: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     minWidth: '40px',
   },
   pctUp: {...ghostInteractive,
@@ -138,7 +138,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '3px',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     padding: '2px 4px',
     borderRadius: '6px',
@@ -191,7 +191,7 @@ const useStyles = makeStyles({
   },
   empty: {
     padding: '8px 10px 12px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
   },
@@ -328,8 +328,8 @@ export function MarketUsTechWatchProvider({ children }: { children: ReactNode })
                       setHits([])
                     }}
                   >
-                    <Text block style={{ fontSize: 13, fontWeight: 500 }}>{hit.name}</Text>
-                    <Text block style={{ fontSize: 11, color: opptrixCssVars.textTertiary }}>{hit.symbol}</Text>
+                    <Text block style={{ fontSize: 'var(--opptrix-font-base)', fontWeight: 500 }}>{hit.name}</Text>
+                    <Text block style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary }}>{hit.symbol}</Text>
                   </button>
                 ))}
               </div>
@@ -337,8 +337,8 @@ export function MarketUsTechWatchProvider({ children }: { children: ReactNode })
                 {draft.map(row => (
                   <div key={row.symbol} className={s.dialogRow}>
                     <div className={s.dialogRowBody}>
-                      <Text block style={{ fontSize: 13, fontWeight: 600 }}>{row.symbol}</Text>
-                      <Text block style={{ fontSize: 11, color: opptrixCssVars.textTertiary }}>{row.name}</Text>
+                      <Text block style={{ fontSize: 'var(--opptrix-font-base)', fontWeight: 600 }}>{row.symbol}</Text>
+                      <Text block style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary }}>{row.name}</Text>
                     </div>
                     <button
                       type="button"

@@ -47,13 +47,13 @@ const useStyles = makeStyles({
   electronTitleBarWin: { paddingRight: '132px' },
   titleBarSpacer: { flex: 1, minWidth: 0 },
   titleBarPageTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     flexShrink: 0,
   },
   titleBarMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
@@ -72,13 +72,13 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
   webTitle: {
-    fontSize: '15px',
+    fontSize: 'var(--opptrix-font-xl)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     flex: 1,
   },
   toolbarMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
   },
   body: {
@@ -116,14 +116,14 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
   },
   briefInlineTitle: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     marginBottom: '2px',
   },
   briefInlineText: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
     display: '-webkit-box',
@@ -152,7 +152,7 @@ const useStyles = makeStyles({
     borderRadius: '8px',
     backgroundColor: opptrixCssVars.errorSoft,
     color: opptrixCssVars.error,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     lineHeight: 1.45,
   },
 })

@@ -48,7 +48,7 @@ const useListStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   listHeaderMeta: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     flex: 1,
@@ -92,7 +92,7 @@ const useListStyles = makeStyles({
     gap: '1px',
   },
   listRowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
@@ -101,7 +101,7 @@ const useListStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   listRowMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -123,7 +123,7 @@ const useListStyles = makeStyles({
     border: 'none',
     background: 'transparent',
     cursor: 'pointer',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     ':hover': {
       color: opptrixCssVars.textSecondary,
@@ -146,13 +146,13 @@ const useListStyles = makeStyles({
     textAlign: 'center',
   },
   emptyTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     marginBottom: '6px',
   },
   emptyDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
@@ -192,13 +192,13 @@ const useListStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   groupTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   groupMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     flexShrink: 0,
@@ -294,7 +294,7 @@ const usePriorityStyles = makeStyles({
     gap: '1px',
   },
   dragTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
@@ -303,13 +303,13 @@ const usePriorityStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   dragMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
   rankBadge: {
     flexShrink: 0,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 650,
     color: opptrixCssVars.textSecondary,
     minWidth: '20px',
@@ -366,7 +366,7 @@ const usePriorityStyles = makeStyles({
     transform: 'scale(1.02)',
   },
   saveHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },

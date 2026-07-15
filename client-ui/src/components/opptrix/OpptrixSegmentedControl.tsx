@@ -45,7 +45,7 @@ const useStyles = makeStyles({
     border: 'none',
     backgroundColor: 'transparent',
     color: opptrixCssVars.textSecondary,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     lineHeight: 1,
     height: `${SEGMENT_HEIGHT}px`,
@@ -65,7 +65,7 @@ const useStyles = makeStyles({
     },
   },
   segmentEmbedded: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     borderRadius: opptrixTokens.radiusMd,
   },

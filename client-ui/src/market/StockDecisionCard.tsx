@@ -40,7 +40,7 @@ const useStyles = makeStyles({
     gap: '5px',
   },
   sectionTitle: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 650,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.06em',
@@ -62,12 +62,12 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   metricLabel: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
@@ -90,7 +90,7 @@ const useStyles = makeStyles({
     gap: '4px',
   },
   bullet: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.55,
     color: opptrixCssVars.textSecondary,
     paddingLeft: '10px',
@@ -121,20 +121,20 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixCssVars.separator}`,
   },
   signalName: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   signalDir: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     flexShrink: 0,
   },
   signalConf: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
     fontVariantNumeric: 'tabular-nums',
     flexShrink: 0,
@@ -148,7 +148,7 @@ const useStyles = makeStyles({
   actionBtn: {
     flex: '1 1 auto',
     minWidth: '0',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     minHeight: '30px',
     paddingTop: '5px',
     paddingBottom: '5px',
@@ -163,7 +163,7 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixCssVars.separator}`,
   },
   guideText: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     lineHeight: 1.55,
     color: opptrixCssVars.textSecondary,
   },
@@ -175,12 +175,12 @@ const useStyles = makeStyles({
     fontWeight: 600,
   },
   emptyHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     padding: '2px',
   },
   error: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.error,
     padding: '2px',
   },
@@ -200,12 +200,12 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixCssVars.separator}`,
   },
   idleTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
   },
   idleDesc: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     lineHeight: 1.55,
     color: opptrixCssVars.textSecondary,
   },
@@ -231,7 +231,7 @@ const useStyles = makeStyles({
   },
   stepHeadText: {
     flex: 1,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     overflow: 'hidden',
@@ -251,7 +251,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
   },
   stepDone: { color: '#248A3D' },

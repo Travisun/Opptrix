@@ -31,7 +31,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   name: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -39,7 +39,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   badge: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     padding: '2px 8px',
     borderRadius: opptrixTokens.radiusFull,
@@ -62,7 +62,7 @@ const useStyles = makeStyles({
     border: `1px solid ${opptrixCssVars.separator}`,
   },
   muted: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },

@@ -97,7 +97,7 @@ const useStyles = makeStyles({
     WebkitAppRegion: 'no-drag',
   },
   titleText: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     letterSpacing: '-0.01em',

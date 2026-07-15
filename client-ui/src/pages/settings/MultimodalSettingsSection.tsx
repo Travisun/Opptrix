@@ -47,7 +47,7 @@ type ViewMode = 'enrichment' | 'translation' | 'vision' | 'speech'
 
 const useStyles = makeStyles({
   hint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     padding: '0 2px',
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     background: 'transparent',
     borderRadius: opptrixTokens.radiusFull,
     padding: '5px 14px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 500,
     cursor: 'pointer',
     color: opptrixCssVars.textTertiary,
@@ -91,7 +91,7 @@ const useStyles = makeStyles({
   },
   sectionBlock: { marginTop: '20px' },
   sectionLabel: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
@@ -100,7 +100,7 @@ const useStyles = makeStyles({
   },
   sectionLabelSpaced: { padding: '0 2px 8px' },
   saveHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     padding: '4px 2px 0',
     minHeight: '16px',
@@ -131,13 +131,13 @@ const useStyles = makeStyles({
   },
   listRowMain: { flex: 1, minWidth: 0 },
   listRowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   listRowMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     marginTop: '2px',
@@ -146,7 +146,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
@@ -156,7 +156,7 @@ const useStyles = makeStyles({
   intervalSelect: { minWidth: '160px' },
   remoteModelSelect: { minWidth: '220px' },
   panelFooter: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 2px 0',
@@ -164,7 +164,7 @@ const useStyles = makeStyles({
   panelFooterDir: {...ghostInteractive,
     display: 'block',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.accent,
     wordBreak: 'break-all',
     marginTop: '4px',
@@ -508,7 +508,7 @@ export default function MultimodalSettingsSection() {
           <SettingsGroup>
             {providers.length === 0 ? (
               <SettingsStaticBlock>
-                <Text block style={{ fontSize: '13px', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
+                <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
                   图片仅支持远程多模态大模型。请先在「模型」页添加 OpenAI 兼容接口，再选择支持图片的模型（如 GPT-4o、Qwen-VL、GLM-4V）。
                 </Text>
               </SettingsStaticBlock>

@@ -33,7 +33,7 @@ const useStyles = makeStyles({
   meta: {
     flexShrink: 0,
     maxWidth: '46%',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
     textAlign: 'right',

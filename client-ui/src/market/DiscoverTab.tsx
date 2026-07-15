@@ -56,7 +56,7 @@ const useStyles = makeStyles({
     gap: '8px',
   },
   headHint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
@@ -81,11 +81,11 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
   },
   runBtn: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     minHeight: '28px',
   },
   runHint: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -100,7 +100,7 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'space-between',
     gap: '8px',
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
   },
   progressPct: {
@@ -112,7 +112,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD}`,
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
   },
@@ -120,7 +120,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     padding: `6px ${CONTENT_PAD}`,
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
     backgroundColor: opptrixCssVars.accentSoft,
@@ -131,7 +131,7 @@ const useStyles = makeStyles({
     marginBottom: '2px',
   },
   regimeIndicators: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     marginBottom: '3px',
@@ -145,17 +145,17 @@ const useStyles = makeStyles({
     gap: '4px',
   },
   summaryTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
   },
   summaryText: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
   },
   stats: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
   },
   list: {
@@ -191,7 +191,7 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   rowName: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -199,29 +199,29 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowCode: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   rankBadge: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 650,
     color: opptrixCssVars.textSecondary,
     fontVariantNumeric: 'tabular-nums',
   },
   matchScore: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: '#248A3D',
     fontVariantNumeric: 'tabular-nums',
   },
   thesis: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
   },
   highlights: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -250,7 +250,7 @@ const useStyles = makeStyles({
   empty: {
     padding: `24px ${CONTENT_PAD}`,
     textAlign: 'center',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
   },
@@ -285,7 +285,7 @@ const useStyles = makeStyles({
     gap: '3px',
   },
   historyTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -293,7 +293,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   historyMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -320,7 +320,7 @@ const useStyles = makeStyles({
   },
   error: {
     padding: `8px ${CONTENT_PAD}`,
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.error,
   },
 })

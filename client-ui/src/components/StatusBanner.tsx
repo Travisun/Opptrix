@@ -5,7 +5,7 @@ import { motion } from '../theme/mixins'
 const useStyles = makeStyles({
   root: {
     padding: '10px 12px',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     lineHeight: 1.45,
     borderRadius: opptrixTokens.radiusMd,
     border: 'none',

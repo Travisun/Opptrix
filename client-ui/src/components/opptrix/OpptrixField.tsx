@@ -11,7 +11,7 @@ const useStyles = makeStyles({
     width: '100%',
   },
   label: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 600,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
@@ -31,7 +31,7 @@ minHeight: '44px',
     padding: '8px 12px',
   },
   hint: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     marginTop: '-2px',

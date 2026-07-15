@@ -67,7 +67,7 @@ const useStyles = makeStyles({
     overflow: 'hidden',
   },
   name: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
@@ -76,7 +76,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   code: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
@@ -92,7 +92,7 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvasAlt,
     color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusSm,
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     padding: '3px 7px',
     cursor: 'pointer',
@@ -102,19 +102,19 @@ const useStyles = makeStyles({
     lineHeight: 1.2,
   },
   price: {
-    fontSize: '20px',
+    fontSize: 'var(--opptrix-font-3xl)',
     fontWeight: 700,
     letterSpacing: '-0.03em',
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.1,
   },
   change: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
   },
   pct: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
   },
@@ -134,12 +134,12 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   heroLabel: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     flexShrink: 0,
   },
   heroValue: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
@@ -172,7 +172,7 @@ const useStyles = makeStyles({
     gap: '6px',
   },
   prepHeadText: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.35,
@@ -190,13 +190,13 @@ const useStyles = makeStyles({
     padding: `0 ${CONTENT_PAD} 6px`,
   },
   prepTitle: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   prepHint: {
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
   },
@@ -216,7 +216,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: '8px',
-    fontSize: '9px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textSecondary,
   },
   prepStepDone: {
@@ -278,7 +278,7 @@ const useStyles = makeStyles({
     gap: '5px',
   },
   sectionTitle: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 650,
     color: opptrixCssVars.textTertiary,
     letterSpacing: '0.06em',
@@ -304,12 +304,12 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   metricLabel: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.2,
   },
   metricValue: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
@@ -319,7 +319,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   prose: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     lineHeight: 1.55,
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'pre-wrap',
@@ -330,7 +330,7 @@ const useStyles = makeStyles({
     gap: '4px',
   },
   tag: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     padding: '1px 6px',
     borderRadius: opptrixTokens.radiusFull,
     backgroundColor: opptrixCssVars.accentSoft,
@@ -363,13 +363,13 @@ const useStyles = makeStyles({
     ':last-child': { borderBottom: 'none' },
   },
   listDate: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     fontVariantNumeric: 'tabular-nums',
     lineHeight: 1.4,
   },
   listTitle: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
     textDecoration: 'none',
@@ -383,7 +383,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tableHeadCell: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
   },
   tableRow: {
@@ -410,7 +410,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   tableCell: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textPrimary,
     fontVariantNumeric: 'tabular-nums',
     overflow: 'hidden',
@@ -418,14 +418,14 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   tableCellName: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   emptyHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     padding: '8px 2px',
   },
@@ -436,7 +436,7 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     padding: '24px',
     color: opptrixCssVars.textTertiary,
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
   },
 })
 

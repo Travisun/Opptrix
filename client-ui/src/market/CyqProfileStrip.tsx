@@ -18,7 +18,7 @@ const useStyles = makeStyles({
   head: {
     flexShrink: 0,
     padding: '2px 4px',
-    fontSize: '7px',
+    fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 650,
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',

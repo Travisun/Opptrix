@@ -11,14 +11,14 @@ const useStyles = makeStyles({
     padding: '12px 16px 8px',
   },
   title: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textSecondary,
     textTransform: 'uppercase',
     letterSpacing: '0.02em',
   },
   subtitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     marginTop: '2px',
     textTransform: 'none',

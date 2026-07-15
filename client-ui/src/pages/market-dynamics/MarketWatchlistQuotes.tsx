@@ -53,7 +53,7 @@ const useStyles = makeStyles({
     flexDirection: 'column',
   },
   rowTitle: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     overflow: 'hidden',
@@ -61,24 +61,24 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowTitleCompact: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   rowMeta: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     color: opptrixCssVars.textTertiary,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
   rowNum: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
     whiteSpace: 'nowrap',
   },
   rowPct: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     textAlign: 'right',
@@ -86,7 +86,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   rowPctCompact: {
-    fontSize: '10px',
+    fontSize: 'var(--opptrix-font-xs)',
     minWidth: '40px',
   },
   pctUp: { color: MARKET_UP },
@@ -94,7 +94,7 @@ const useStyles = makeStyles({
   pctFlat: { color: opptrixCssVars.textSecondary },
   empty: {
     padding: '8px 10px 12px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     textAlign: 'center',
     lineHeight: 1.45,

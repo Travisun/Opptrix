@@ -51,13 +51,13 @@ const useStyles = makeStyles({
     minWidth: 0,
   },
   presetTitle: {
-    fontSize: '14px',
+    fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
   },
   presetDesc: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
   },
@@ -70,7 +70,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '5px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 500,
     color: opptrixCssVars.accent,
     lineHeight: 1.4,
@@ -80,7 +80,7 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '10px',
     padding: '18px',
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textSecondary,
   },
 })

@@ -53,7 +53,7 @@ const useStyles = makeStyles({
     flex: 1,
   },
   sectionLabel: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     textTransform: 'uppercase',
@@ -64,7 +64,7 @@ const useStyles = makeStyles({
     padding: '0 2px 8px',
   },
   saveHint: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     padding: '4px 2px 0',
     minHeight: '16px',
@@ -98,7 +98,7 @@ const useStyles = makeStyles({
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   listHeaderMeta: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
     flex: 1,
@@ -131,7 +131,7 @@ const useStyles = makeStyles({
     gap: '1px',
   },
   listRowTitle: {
-    fontSize: '13px',
+    fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
@@ -140,7 +140,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   listRowMeta: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     overflow: 'hidden',
@@ -162,7 +162,7 @@ const useStyles = makeStyles({
     display: 'inline-flex',
     alignItems: 'center',
     gap: '4px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
     flexShrink: 0,
@@ -200,13 +200,13 @@ const useStyles = makeStyles({
     gap: '2px',
   },
   progressLabel: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     fontWeight: 600,
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.35,
   },
   progressFilename: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 500,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.4,
@@ -215,7 +215,7 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   progressSub: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
     overflow: 'hidden',
@@ -229,7 +229,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
   },
   progressPct: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     fontVariantNumeric: 'tabular-nums',
     color: opptrixCssVars.textPrimary,
@@ -245,14 +245,14 @@ const useStyles = makeStyles({
     minWidth: 'auto',
     height: '24px',
     padding: '0 6px',
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textTertiary,
     ':hover': {
       color: opptrixCssVars.textPrimary,
     },
   },
   hint: {
-    fontSize: '12px',
+    fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
     padding: '0 2px',
@@ -261,13 +261,13 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '6px',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
     padding: '8px 2px 0',
   },
   panelFooterText: {
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.5,
   },
@@ -277,7 +277,7 @@ const useStyles = makeStyles({
   panelFooterDirMuted: {
     display: 'block',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
   },
@@ -286,7 +286,7 @@ const useStyles = makeStyles({
     display: 'block',
     width: '100%',
     fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
-    fontSize: '11px',
+    fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.accent,
     wordBreak: 'break-all',
     textAlign: 'left',
@@ -722,7 +722,7 @@ export default function TranslationSettingsSection() {
         <SettingsGroup>
           {providers.length === 0 ? (
             <SettingsStaticBlock>
-              <Text block style={{ fontSize: '13px', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
+              <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary, lineHeight: 1.55 }}>
                 尚未配置模型提供商。请先在「模型」页添加 OpenAI 兼容接口，再回来选择远程翻译用的提供商与模型。
               </Text>
             </SettingsStaticBlock>
