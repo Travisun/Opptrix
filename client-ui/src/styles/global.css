@@ -2207,3 +2207,24 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 .opptrix-thinking-dots__dot:nth-child(7) { top: 9px; left: 1px;  animation-delay: 0.31s; }
 .opptrix-thinking-dots__dot:nth-child(8) { top: 9px; left: 5px;  animation-delay: 1.09s; }
 .opptrix-thinking-dots__dot:nth-child(9) { top: 9px; left: 9px;  animation-delay: 1.52s; }
+
+/* ── Button icon sizing (按按钮 size 分级) ──
+   small: 12px, medium: 16px, large: 20px */
+.fui-Button[data-size="small"] svg,
+.fui-Button.size-small svg {
+  width: 12px;
+  height: 12px;
+}
+
+.fui-Button[data-size="medium"] svg,
+.fui-Button.size-medium svg,
+.fui-Button:not([data-size]):not(.size-small):not(.size-large) svg {
+  width: 16px;
+  height: 16px;
+}
+
+.fui-Button[data-size="large"] svg,
+.fui-Button.size-large svg {
+  width: 20px;
+  height: 20px;
+}
