@@ -4,7 +4,6 @@
 
 import {
   isMcpServerFailoverError,
-  namespacedMcpTool,
   parseNamespacedMcpTool,
   type McpServerCreateInput,
   type McpServerPatch,
@@ -12,8 +11,13 @@ import {
   type PublicMcpServer,
 } from '@opptrix/shared'
 import { getUserDataStore } from '@opptrix/user-store'
-import type { OpenAiTool } from '../../tools.js'
-import { ExternalMcpConnection } from './connection.js'
+import type { JsonSchema, OpenAiTool } from '../../tools.js'
+import {
+  createSdkConnection,
+  parseToolResult,
+  toOpenAiTool,
+  type SdkConnection,
+} from './connection.js'
 import { ExternalMcpHealth } from './health.js'
 
 export interface BindingCandidate {
@@ -22,7 +26,8 @@ export interface BindingCandidate {
 }
 
 export class ExternalMcpRegistry {
-  private connections = new Map<string, ExternalMcpConnection>()
+  private connections = new Map<string, SdkConnection>()
+  private toolCounts = new Map<string, number>()
   readonly health = new ExternalMcpHealth()
   private hydratePromise: Promise<void> | null = null
 
@@ -53,29 +58,33 @@ export class ExternalMcpRegistry {
     const want = new Set(rows.map(r => r.id))
     for (const id of [...this.connections.keys()]) {
       if (!want.has(id)) {
-        await this.connections.get(id)?.close()
+        await this.connections.get(id)?.client.close().catch(() => {})
         this.connections.delete(id)
+        this.toolCounts.delete(id)
       }
     }
     await Promise.all(rows.map(row => this.ensureConnected(row)))
   }
 
-  private async ensureConnected(row: McpServerRecord): Promise<ExternalMcpConnection | null> {
-    let conn = this.connections.get(row.id)
-    if (conn) {
-      // 配置可能已更新：若 endpoint 变化则重建
-      const prev = conn.record
-      const same = JSON.stringify(prev.transportConfig) === JSON.stringify(row.transportConfig)
+  private async ensureConnected(row: McpServerRecord): Promise<SdkConnection | null> {
+    let entry = this.connections.get(row.id)
+    if (entry) {
+      const prev = this.repo.get(row.id)
+      const same = prev
+        && JSON.stringify(prev.transportConfig) === JSON.stringify(row.transportConfig)
         && JSON.stringify(prev.secrets) === JSON.stringify(row.secrets)
-      if (same) return conn
-      await conn.close()
+      if (same) return entry
+      await entry.client.close().catch(() => {})
       this.connections.delete(row.id)
+      this.toolCounts.delete(row.id)
     }
-    conn = new ExternalMcpConnection(row)
+    const conn = createSdkConnection(row)
     try {
-      await conn.connect()
+      await conn.client.connect(conn.transport)
       this.connections.set(row.id, conn)
       this.health.recordSuccess(row.id)
+      const { tools } = await conn.client.listTools()
+      this.toolCounts.set(row.id, tools.length)
       const cur = this.repo.get(row.id)
       if (cur) {
         getUserDataStore().setDocument('mcp_servers', row.id, {
@@ -97,19 +106,16 @@ export class ExternalMcpRegistry {
           updatedAt: new Date().toISOString(),
         })
       }
-      await conn.close().catch(() => {})
+      await conn.client.close().catch(() => {})
       return null
     }
   }
 
   listPublic(): PublicMcpServer[] {
-    return this.repo.listAll().map(row => {
-      const conn = this.connections.get(row.id)
-      return this.repo.toPublic(row, {
-        health: this.health.getState(row.id, row.paused),
-        toolCount: conn?.tools.length ?? 0,
-      })
-    })
+    return this.repo.listAll().map(row => this.repo.toPublic(row, {
+      health: this.health.getState(row.id, row.paused),
+      toolCount: this.toolCounts.get(row.id) ?? 0,
+    }))
   }
 
   create(input: McpServerCreateInput): McpServerRecord {
@@ -118,17 +124,20 @@ export class ExternalMcpRegistry {
 
   save(id: string, patch: McpServerPatch): McpServerRecord {
     const row = this.repo.save(id, patch)
-    // 热更新：下轮 hydrate 会重建；若 pause/disable 立即断开
     if (!row.enabled || row.paused) {
-      void this.connections.get(id)?.close().then(() => this.connections.delete(id))
+      void this.connections.get(id)?.client.close().then(() => {
+        this.connections.delete(id)
+        this.toolCounts.delete(id)
+      })
       this.health.reset(id)
     }
     return row
   }
 
   delete(id: string): boolean {
-    void this.connections.get(id)?.close()
+    void this.connections.get(id)?.client.close()
     this.connections.delete(id)
+    this.toolCounts.delete(id)
     this.health.reset(id)
     return this.repo.delete(id)
   }
@@ -138,7 +147,7 @@ export class ExternalMcpRegistry {
   }
 
   /** 已启用且健康的服务器上的 namespaced 独有工具（未出现在 bindings 值中的） */
-  listNamespacedOpenAiTools(): OpenAiTool[] {
+  async listNamespacedOpenAiTools(): Promise<OpenAiTool[]> {
     const out: OpenAiTool[] = []
     const rows = this.repo.listAll()
       .filter(r => r.enabled && !r.paused)
@@ -149,16 +158,16 @@ export class ExternalMcpRegistry {
       const conn = this.connections.get(row.id)
       if (!conn) continue
       const boundRemotes = new Set(Object.values(row.capabilityBindings))
-      for (const t of conn.tools) {
+      const { tools } = await conn.client.listTools()
+      for (const t of tools) {
         if (boundRemotes.has(t.name)) continue
-        out.push({
-          type: 'function',
-          function: {
-            name: namespacedMcpTool(row.id, t.name),
-            description: `[MCP:${row.id}] ${t.description}`,
-            parameters: t.inputSchema,
-          },
-        })
+        out.push(toOpenAiTool(
+          row.id,
+          t.name,
+          t.description ?? '',
+          (t.inputSchema ?? { type: 'object', properties: {} }) as JsonSchema,
+          true,
+        ))
       }
     }
     return out
@@ -192,19 +201,19 @@ export class ExternalMcpRegistry {
     if (this.health.shouldSkip(serverId, row.paused)) {
       throw new Error(`MCP Server ${serverId} 熔断冷却中: ${this.health.lastError(serverId)}`)
     }
-    let conn = this.connections.get(serverId) ?? null
-    if (!conn) {
-      conn = await this.ensureConnected(row)
-      if (!conn) throw new Error(`无法连接 MCP Server ${serverId}`)
+    let entry = this.connections.get(serverId) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) throw new Error(`无法连接 MCP Server ${serverId}`)
     }
-    try {
-      const result = await conn.callTool(toolName, args, opts)
-      this.health.recordSuccess(serverId)
-      return result
-    } catch (e) {
-      this.health.recordFailure(serverId, e)
-      throw e
-    }
+    const timeout = opts?.timeoutMs ?? 120_000
+    const result = await entry.client.callTool(
+      { name: toolName, arguments: args },
+      undefined,
+      { timeout, maxTotalTimeout: timeout * 2, signal: opts?.signal },
+    )
+    this.health.recordSuccess(serverId)
+    return parseToolResult(serverId, toolName, result)
   }
 
   async callNamespaced(
@@ -220,24 +229,28 @@ export class ExternalMcpRegistry {
   async testConnection(id: string): Promise<{ ok: boolean; message: string; tools?: string[] }> {
     const row = this.repo.get(id)
     if (!row) return { ok: false, message: `未知服务器: ${id}` }
-    const conn = new ExternalMcpConnection(row)
+    const { client, transport } = createSdkConnection(row)
     try {
-      await conn.connect()
-      const tools = conn.tools.map(t => t.name)
+      await client.connect(transport)
+      const { tools } = await client.listTools()
       this.health.recordSuccess(id)
-      await conn.close()
-      return { ok: true, message: `连接成功，发现 ${tools.length} 个工具`, tools }
+      await client.close().catch(() => {})
+      const names = tools.map(t => t.name)
+      return { ok: true, message: `连接成功，发现 ${names.length} 个工具`, tools: names }
     } catch (e) {
       this.health.recordFailure(id, e)
       const msg = e instanceof Error ? e.message : String(e)
-      await conn.close().catch(() => {})
+      await client.close().catch(() => {})
       return { ok: false, message: msg }
     }
   }
 
   async closeAll(): Promise<void> {
-    await Promise.all([...this.connections.values()].map(c => c.close().catch(() => {})))
+    await Promise.all(
+      [...this.connections.values()].map(c => c.client.close().catch(() => {})),
+    )
     this.connections.clear()
+    this.toolCounts.clear()
   }
 }
 

@@ -31,7 +31,7 @@ export class AggregatingToolBroker {
 
   async openAiTools(): Promise<OpenAiTool[]> {
     const localTools = await this.local.openAiTools()
-    const ext = this.external.listNamespacedOpenAiTools()
+    const ext = await this.external.listNamespacedOpenAiTools()
     return [...localTools, ...ext]
   }
 
@@ -85,4 +85,4 @@ export {
   ExternalMcpRegistry,
 } from './registry.js'
 export { ExternalMcpHealth } from './health.js'
-export { ExternalMcpConnection } from './connection.js'
+export { createSdkConnection, parseToolResult, toOpenAiTool, type SdkConnection } from './connection.js'
