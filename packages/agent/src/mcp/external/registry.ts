@@ -226,22 +226,227 @@ export class ExternalMcpRegistry {
     return this.callExternal(parsed.serverId, parsed.toolName, args, opts)
   }
 
-  async testConnection(id: string): Promise<{ ok: boolean; message: string; tools?: string[] }> {
+  async testConnection(id: string): Promise<{
+    ok: boolean
+    message: string
+    tools?: string[]
+    toolsCount?: number
+    serverVersion?: { name: string; version: string } | null
+    capabilities?: { [key: string]: unknown } | null
+  }> {
     const row = this.repo.get(id)
     if (!row) return { ok: false, message: `未知服务器: ${id}` }
     const { client, transport } = createSdkConnection(row)
     try {
       await client.connect(transport)
-      const { tools } = await client.listTools()
+      const caps = client.getServerCapabilities()
+      const [version, tools] = await Promise.all([
+        Promise.resolve(client.getServerVersion() ?? null),
+        client.listTools(),
+      ])
       this.health.recordSuccess(id)
       await client.close().catch(() => {})
-      const names = tools.map(t => t.name)
-      return { ok: true, message: `连接成功，发现 ${names.length} 个工具`, tools: names }
+      const names = tools.tools.map(t => t.name)
+      return {
+        ok: true,
+        message: `连接成功，发现 ${names.length} 个工具`,
+        tools: names,
+        toolsCount: names.length,
+        serverVersion: version ? { name: version.name, version: version.version } : null,
+        capabilities: caps ? { ...caps } : null,
+      }
     } catch (e) {
       this.health.recordFailure(id, e)
       const msg = e instanceof Error ? e.message : String(e)
       await client.close().catch(() => {})
       return { ok: false, message: msg }
+    }
+  }
+
+  async getServerInfo(id: string): Promise<{
+    version: { name: string; version: string } | null
+    capabilities: { [key: string]: unknown } | null
+    instructions: string | null
+  }> {
+    const row = this.repo.get(id)
+    if (!row) return { version: null, capabilities: null, instructions: null }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { version: null, capabilities: null, instructions: null }
+    }
+    const client = entry.client
+    const caps = client.getServerCapabilities()
+    return {
+      version: client.getServerVersion() ?? null,
+      capabilities: caps ? { ...caps } : null,
+      instructions: client.getInstructions() ?? null,
+    }
+  }
+
+  async ping(id: string): Promise<{ ok: boolean; message: string }> {
+    const row = this.repo.get(id)
+    if (!row) return { ok: false, message: `未知服务器: ${id}` }
+    const { client, transport } = createSdkConnection(row)
+    const start = Date.now()
+    try {
+      await client.connect(transport)
+      await client.ping()
+      const ms = Date.now() - start
+      this.health.recordSuccess(id)
+      await client.close().catch(() => {})
+      return { ok: true, message: `pong (${ms}ms)` }
+    } catch (e) {
+      this.health.recordFailure(id, e)
+      const msg = e instanceof Error ? e.message : String(e)
+      await client.close().catch(() => {})
+      return { ok: false, message: msg }
+    }
+  }
+
+  async listPrompts(id: string): Promise<{ prompts: Array<{ name: string; description?: string; arguments?: unknown[] }> }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { prompts: [] }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { prompts: [] }
+    }
+    try {
+      const { prompts } = await entry.client.listPrompts()
+      return { prompts: prompts.map(p => ({ name: p.name, description: p.description })) }
+    } catch {
+      return { prompts: [] }
+    }
+  }
+
+  async getPrompt(id: string, name: string, args?: Record<string, string>): Promise<{ messages?: unknown[] }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return {}
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return {}
+    }
+    try {
+      const params: { name: string; arguments?: Record<string, string> } = { name }
+      if (args) params.arguments = args
+      const result = await entry.client.getPrompt(params)
+      return { messages: result.messages }
+    } catch {
+      return {}
+    }
+  }
+
+  async listResources(id: string): Promise<{ resources: Array<{ uri: string; name: string; description?: string; mimeType?: string }> }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { resources: [] }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { resources: [] }
+    }
+    try {
+      const { resources } = await entry.client.listResources()
+      return { resources: resources.map(r => ({ uri: r.uri, name: r.name, description: r.description, mimeType: r.mimeType })) }
+    } catch {
+      return { resources: [] }
+    }
+  }
+
+  async readResource(id: string, uri: string): Promise<{ contents?: unknown[] }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return {}
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return {}
+    }
+    try {
+      const result = await entry.client.readResource({ uri })
+      return { contents: result.contents }
+    } catch {
+      return {}
+    }
+  }
+
+  async listResourceTemplates(id: string): Promise<{ templates: Array<{ uriTemplate: string; name: string; description?: string }> }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { templates: [] }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { templates: [] }
+    }
+    try {
+      const { resourceTemplates } = await entry.client.listResourceTemplates()
+      return { templates: resourceTemplates.map(t => ({ uriTemplate: t.uriTemplate, name: t.name, description: t.description })) }
+    } catch {
+      return { templates: [] }
+    }
+  }
+
+  async complete(id: string, ref: unknown, argument: { name: string; value: string }): Promise<{ completion?: { values: string[] } }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return {}
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return {}
+    }
+    try {
+      const result = await entry.client.complete({ ref, argument } as never)
+      return { completion: result.completion }
+    } catch {
+      return {}
+    }
+  }
+
+  async setLoggingLevel(id: string, level: string): Promise<{ ok: boolean; message?: string }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { ok: false, message: '未启用或已暂停' }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { ok: false, message: '无法连接' }
+    }
+    try {
+      await entry.client.setLoggingLevel(level as never)
+      return { ok: true, message: `日志级别已设为 ${level}` }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async subscribeResource(id: string, uri: string): Promise<{ ok: boolean; message?: string }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { ok: false, message: '未启用或已暂停' }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { ok: false, message: '无法连接' }
+    }
+    try {
+      await entry.client.subscribeResource({ uri })
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
+    }
+  }
+
+  async unsubscribeResource(id: string, uri: string): Promise<{ ok: boolean; message?: string }> {
+    const row = this.repo.get(id)
+    if (!row || !row.enabled || row.paused) return { ok: false, message: '未启用或已暂停' }
+    let entry = this.connections.get(id) ?? null
+    if (!entry) {
+      entry = await this.ensureConnected(row)
+      if (!entry) return { ok: false, message: '无法连接' }
+    }
+    try {
+      await entry.client.unsubscribeResource({ uri })
+      return { ok: true }
+    } catch (e) {
+      return { ok: false, message: e instanceof Error ? e.message : String(e) }
     }
   }
 

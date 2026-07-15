@@ -294,6 +294,105 @@ export async function registerMcpServerRoutes(app: FastifyInstance) {
     },
   )
 
+  app.get<{ Params: { id: string } }>('/api/mcp-servers/:id/info', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    if (!reg.getRecord(req.params.id)) {
+      return reply.status(404).send({ error: 'MCP Server 不存在' })
+    }
+    return await reg.getServerInfo(req.params.id)
+  })
+
+  app.post<{ Params: { id: string } }>('/api/mcp-servers/:id/ping', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    if (!reg.getRecord(req.params.id)) {
+      return reply.status(404).send({ error: 'MCP Server 不存在' })
+    }
+    return await reg.ping(req.params.id)
+  })
+
+  app.get<{ Params: { id: string } }>('/api/mcp-servers/:id/prompts', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    return await reg.listPrompts(req.params.id)
+  })
+
+  app.post<{
+    Params: { id: string; name: string }
+    Body?: { arguments?: Record<string, string> }
+  }>('/api/mcp-servers/:id/prompts/:name', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    return await reg.getPrompt(req.params.id, req.params.name, req.body?.arguments)
+  })
+
+  app.get<{ Params: { id: string } }>('/api/mcp-servers/:id/resources', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    return await reg.listResources(req.params.id)
+  })
+
+  app.post<{
+    Params: { id: string }
+    Body: { uri: string }
+  }>('/api/mcp-servers/:id/resources/read', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    const uri = req.body?.uri
+    if (!uri || typeof uri !== 'string') {
+      return reply.status(400).send({ error: 'uri 必填' })
+    }
+    return await reg.readResource(req.params.id, uri)
+  })
+
+  app.get<{ Params: { id: string } }>('/api/mcp-servers/:id/resource-templates', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    return await reg.listResourceTemplates(req.params.id)
+  })
+
+  app.post<{
+    Params: { id: string }
+    Body: { ref: unknown; argument: { name: string; value: string } }
+  }>('/api/mcp-servers/:id/complete', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    const { ref, argument } = req.body ?? {}
+    if (!argument?.name || !argument?.value) {
+      return reply.status(400).send({ error: 'argument.name 与 argument.value 必填' })
+    }
+    return await reg.complete(req.params.id, ref, argument)
+  })
+
+  app.post<{
+    Params: { id: string }
+    Body: { level: string }
+  }>('/api/mcp-servers/:id/logging-level', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    const level = req.body?.level
+    if (!level || typeof level !== 'string') {
+      return reply.status(400).send({ error: 'level 必填' })
+    }
+    return await reg.setLoggingLevel(req.params.id, level)
+  })
+
+  app.post<{
+    Params: { id: string }
+    Body: { uri: string }
+  }>('/api/mcp-servers/:id/subscribe', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    const uri = req.body?.uri
+    if (!uri || typeof uri !== 'string') {
+      return reply.status(400).send({ error: 'uri 必填' })
+    }
+    return await reg.subscribeResource(req.params.id, uri)
+  })
+
+  app.post<{
+    Params: { id: string }
+    Body: { uri: string }
+  }>('/api/mcp-servers/:id/unsubscribe', async (req, reply) => {
+    const reg = getExternalMcpRegistry()
+    const uri = req.body?.uri
+    if (!uri || typeof uri !== 'string') {
+      return reply.status(400).send({ error: 'uri 必填' })
+    }
+    return await reg.unsubscribeResource(req.params.id, uri)
+  })
+
   /**
    * 导出完整 mcpServers 扁平格式（标准客户端配置结构 + secrets 内联）。
    * 格式：{ mcpServers: { [id]: { type, command?, args?, env?, url?, headers? } } }

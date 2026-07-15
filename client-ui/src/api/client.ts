@@ -1735,3 +1735,103 @@ export async function importMcpServers(mcpServers: Record<string, McpServerFlatC
     body: JSON.stringify({ mcpServers }),
   })
 }
+
+export async function getMcpServerInfo(id: string) {
+  return jsonFetch<{
+    version: { name: string; version: string } | null
+    capabilities: { [key: string]: unknown } | null
+    instructions: string | null
+  }>(`/mcp-servers/${encodeURIComponent(id)}/info`)
+}
+
+export async function pingMcpServer(id: string) {
+  return jsonFetch<{ ok: boolean; message: string }>(
+    `/mcp-servers/${encodeURIComponent(id)}/ping`,
+    { method: 'POST' },
+    15_000,
+  )
+}
+
+export async function listMcpPrompts(id: string) {
+  return jsonFetch<{ prompts: Array<{ name: string; description?: string }> }>(
+    `/mcp-servers/${encodeURIComponent(id)}/prompts`,
+  )
+}
+
+export async function getMcpPrompt(id: string, name: string, args?: Record<string, string>) {
+  return jsonFetch<{ messages?: unknown[] }>(
+    `/mcp-servers/${encodeURIComponent(id)}/prompts/${encodeURIComponent(name)}`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ arguments: args }),
+    },
+  )
+}
+
+export async function listMcpResources(id: string) {
+  return jsonFetch<{ resources: Array<{ uri: string; name: string; description?: string; mimeType?: string }> }>(
+    `/mcp-servers/${encodeURIComponent(id)}/resources`,
+  )
+}
+
+export async function readMcpResource(id: string, uri: string) {
+  return jsonFetch<{ contents?: unknown[] }>(
+    `/mcp-servers/${encodeURIComponent(id)}/resources/read`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri }),
+    },
+  )
+}
+
+export async function listMcpResourceTemplates(id: string) {
+  return jsonFetch<{ templates: Array<{ uriTemplate: string; name: string; description?: string }> }>(
+    `/mcp-servers/${encodeURIComponent(id)}/resource-templates`,
+  )
+}
+
+export async function completeMcp(id: string, ref: unknown, argument: { name: string; value: string }) {
+  return jsonFetch<{ completion?: { values: string[] } }>(
+    `/mcp-servers/${encodeURIComponent(id)}/complete`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ref, argument }),
+    },
+  )
+}
+
+export async function setMcpLoggingLevel(id: string, level: string) {
+  return jsonFetch<{ ok: boolean; message?: string }>(
+    `/mcp-servers/${encodeURIComponent(id)}/logging-level`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ level }),
+    },
+  )
+}
+
+export async function subscribeMcpResource(id: string, uri: string) {
+  return jsonFetch<{ ok: boolean; message?: string }>(
+    `/mcp-servers/${encodeURIComponent(id)}/subscribe`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri }),
+    },
+  )
+}
+
+export async function unsubscribeMcpResource(id: string, uri: string) {
+  return jsonFetch<{ ok: boolean; message?: string }>(
+    `/mcp-servers/${encodeURIComponent(id)}/unsubscribe`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ uri }),
+    },
+  )
+}
