@@ -16,12 +16,14 @@ import {
   mapTencentUsProfileRow,
   mapTencentUsQuoteRow,
 } from '../../normalize/us-equity.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 
 async function tencentUsRealtime(symbol: string): Promise<StockRealtime[] | null> {
   try {
     const quote = await fetchTencentUsStockQuote(symbol)
     return [mapTencentUsQuoteRow(quote)]
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -53,7 +55,8 @@ async function tencentUsKline(
       endDate: end || undefined,
     })
     return result.items.length ? result.items : null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -62,7 +65,8 @@ async function tencentUsProfile(code: string): Promise<StockProfile[] | null> {
   try {
     const profile = await fetchTencentUsStockProfile(code)
     return [mapTencentUsProfileRow(profile)]
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -90,7 +94,8 @@ async function tencentUsStockList(keyword = ''): Promise<StockListItem[] | null>
       })
     }
     return items.length ? items : null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }

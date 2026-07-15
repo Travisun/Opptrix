@@ -4,6 +4,7 @@ import type { StockListItem } from '../../../core/schema.js'
 import { fetchTencentBoardRankList } from './proxy.js'
 import { mapTencentBoardRankRows } from '../normalize/content.js'
 import { fetchText } from './http.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js';
 
 /** 沪深京 A 股板块排行全量拉取（用于筛 ETF） */
 export async function fetchTencentAStockListAll(maxItems = 6000): Promise<StockListItem[]> {
@@ -66,7 +67,8 @@ function parseJsonp<T>(text: string): T | null {
     const last = text.lastIndexOf(')')
     if (first < 0 || last <= first) return null
     return JSON.parse(text.slice(first + 1, last)) as T
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -82,7 +84,8 @@ function parseJsVar<T>(text: string): T | null {
     const eq = text.indexOf('=')
     if (eq < 0) return null
     return JSON.parse(text.slice(eq + 1)) as T
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -110,7 +113,8 @@ export async function fetchTencentFundProfile(code: string): Promise<Record<stri
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -138,7 +142,8 @@ export async function fetchTencentFundAsset(code: string): Promise<Record<string
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -166,7 +171,8 @@ export async function fetchTencentFundRankInfo(code: string): Promise<Record<str
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -194,7 +200,8 @@ export async function fetchTencentFundNavHistory(code: string): Promise<Record<s
     const json = parseJsVar<Record<string, unknown>>(text)
     if (!json) return null
     return { code: bare, data: json.data ?? json }
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -233,7 +240,8 @@ export async function fetchTencentEtfKline(
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return (json?.data ?? json ?? null) as Record<string, unknown> | null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -267,7 +275,8 @@ export async function fetchTencentFundNotice(
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -295,7 +304,8 @@ export async function fetchTencentSameTypeFunds(code: string): Promise<Record<st
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -323,7 +333,8 @@ export async function fetchTencentSameSeriesFunds(code: string): Promise<Record<
     const text = await fetchText(url)
     const json = parseJsonp<Record<string, unknown>>(text)
     return json ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }

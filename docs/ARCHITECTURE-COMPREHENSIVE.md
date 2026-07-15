@@ -1073,12 +1073,12 @@ HALF_OPEN（探测）：
 
 ### 9.4 免费源限流（Free Provider Throttle）
 
-**位置**：`packages/a-stock-layer/src/core/free-provider-throttle.ts`
+**位置**：`packages/a-stock-layer/src/core/free-provider-throttle.ts`；判定纯函数 `packages/shared/src/free-provider-throttle.ts`；Handler 守卫 `providers/common/free-provider-call.ts`
 
-- 持久化冷却状态到 SQLite
-- 按 provider 独立限流
-- 支持分级冷却（level 0/1/2/...）
-- 查询守卫：引擎和 QueryPlan 共用
+- 持久化冷却状态到 SQLite；按 provider 独立阶梯冷却（5min → 10min → 30min → 1h → 2h → 3h → …）
+- 触发：HTTP 400/403/429/5xx、空响应体、封禁/限流文案（`isFreeProviderThrottleTrigger`）
+- 查询守卫：`shouldSkipProviderQuery`（引擎 `queryScoped` / `invokeCustomMethod` / QueryPlan 共用）
+- **Provider 义务**：免费源不得 `bypassRateLimit: true`；不得把封禁错误吞成 `null`（须 `rethrowIfFreeProviderThrottleTrigger`）。详见 `docs/PROVIDER-STANDARD-API.md` §2.3 与 `.cursor/rules/provider-standard-api.mdc`
 
 ### 9.5 数据校验器（Data Validator）
 

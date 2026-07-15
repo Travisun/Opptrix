@@ -1,6 +1,7 @@
 import type { MarketMoneyFlow, MoneyFlow, SectorMoneyFlow } from '../../../../core/schema.js'
 import { bareCnSymbol, resolveSecId } from '../../../../utils/helpers.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import {
   emClist,
   emMarginMarketByExchange,
@@ -75,14 +76,20 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
     const histP = Promise.race([
       emStockMoneyFlowHistory(bare, limit)
         .then(r => mapFflowKlines(bare, r.klines))
-        .catch(() => [] as MoneyFlow[]),
+        .catch((e) => {
+          rethrowIfFreeProviderThrottleTrigger(e)
+          return [] as MoneyFlow[]
+        }),
       new Promise<MoneyFlow[]>(resolve => {
         setTimeout(() => resolve([]), 2800)
       }),
     ])
     const snapP = emUlistMoneyFlow([resolveSecId(bare)])
       .then(rows => mapUlistToMoneyFlow(bare, rows[0]))
-      .catch(() => null)
+      .catch((e) => {
+        rethrowIfFreeProviderThrottleTrigger(e)
+        return null
+      })
     const [rows, snap] = await Promise.all([histP, snapP])
     if (rows.length) return rows
     return snap ? [snap] : null
@@ -102,7 +109,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         if (mapped.length && fid === 'f164') return mapped
       }
       return null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -142,7 +150,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         shNet,
         szNet,
       }]
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -154,7 +163,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
     try {
       const rows = mapMarginStockRows(await fetchEmMarginStockHistory(bare, 1, 30))
       return rows.length ? rows : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -175,7 +185,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         mapInstHoldOverviewRows(bare, reportDate, rows),
       )
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -203,7 +214,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       })
       const mapped = mapClistStockMoneyFlowRows(rows, fid)
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -229,7 +241,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         sortFid: fid,
       }))
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -254,7 +267,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       const { klines } = await emMarketFflowHistory(String(indexCode || '000001'), Number(limit) || 30)
       const rows = mapFflowKlines(String(indexCode || '000001'), klines)
       return rows.length ? rows : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -266,7 +280,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         await emMarginMarketTotal(Number(page) || 1, Number(pageSize) || 50),
       )
       return rows.length ? rows : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -282,7 +297,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         await emMarginMarketByExchange(market, Number(page) || 1, Number(pageSize) || 50),
       )
       return rows.length ? rows : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -300,7 +316,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         await fetchEmMarginStockHistory(bare, Number(page) || 1, Number(pageSize) || 50),
       )
       return rows.length ? rows : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -330,7 +347,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         out.push(...mapMacroCnFriendly(got.def, got.rows).slice(0, 3))
       }
       return out.length ? out : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -400,7 +418,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       if (!got?.rows.length) return null
       const mapped = mapMacroCnFriendly(got.def, got.rows)
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -420,7 +439,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       if (!got?.rows.length) return null
       const mapped = mapMacroForeignRows(got.item, got.rows)
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -440,7 +460,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       if (!got?.rows.length) return null
       const mapped = mapMacroIndustryRows(got.item, got.rows)
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -463,7 +484,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       const rows = await emFetchMacroOil(oilKind, Number(page) || 1, Number(pageSize) || 60)
       const mapped = mapMacroOilRows(oilKind, rows)
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -475,7 +497,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
     try {
       const mapped = mapInstHoldReportDates(await emFetchInstHoldReportDates(Number(limit) || 25))
       return mapped.length ? mapped : null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -494,7 +517,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
       const { reportDate: date, rows } = await emFetchInstHoldOverview(bare, reportDate || undefined)
       if (!rows.length) return null
       return mapInstHoldOverviewRows(bare, date, rows)
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -537,7 +561,8 @@ export class EastmoneyCnHandler extends MarketHandlerShell {
         }]
       }
       return mapped.map(row => ({ ...row, ...meta }))
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }

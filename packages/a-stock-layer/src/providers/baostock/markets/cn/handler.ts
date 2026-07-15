@@ -11,6 +11,7 @@ import {
   resolveEtfIndexProxy,
 } from '../../../common/free-proxies.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import { BaostockClient, zipBaostockRows, type BaostockResult } from '../../api/client.js'
 import { toBaostockCode } from '../../api/symbols.js'
 import { isBaostockEnabled } from '../../config.js'
@@ -70,7 +71,8 @@ export class BaostockCnHandler extends MarketHandlerShell {
     try {
       await client.ensureSession()
       return await fn(client)
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }

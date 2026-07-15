@@ -1125,6 +1125,17 @@ export class MarketDataEngine {
         resolvedId,
       )
 
+      const isEmpty = result == null
+        || (Array.isArray(result) && result.length === 0)
+      if (isEmpty) {
+        recordProviderQueryEmpty(resolvedId, capStr, health)
+        return {
+          success: true,
+          data: result ?? null,
+          ...(transforms.length ? { argTransforms: transforms } : {}),
+        }
+      }
+
       recordProviderQuerySuccess(resolvedId, capStr, health)
       return {
         success: true,

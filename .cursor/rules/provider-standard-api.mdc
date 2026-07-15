@@ -37,8 +37,42 @@ bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(equityCaps, indexCaps, p, et
 ## 标准方法约定
 
 - 方法名与 Engine `queryScoped(..., method, ...)` 一致：`realtime`、`kline`、`stockList`、`instrumentSearch`、`etfNav`…
-- 返回 `T[] | null`；失败或空数据返回 `null` 以触发 Registry failover
+- 返回 `T[] | null`；**业务空数据**返回 `null` 以触发 Registry failover
+- **禁止**把封禁/限流 HTTP 错误吞成 `null`（见下文免费源退避）
 - 跨市场 `stockList` / `instrumentSearch`：首参或 opts 中带 `market`，在 handler 内分支
+
+## 免费源退避保护（硬性）
+
+适用：manifest 无必填 `secret` 的免费源（tencent / sinafinance / eastmoney / akshare / baostock 等）。
+引擎层：`FreeProviderThrottle`（阶梯冷却）+ `hostnameLimiter`（同主机间隔）。
+
+### 必须
+
+1. **HTTP 出口**用 `ProviderHttpClient`，且 **`bypassRateLimit: false`**（禁止与付费源一样跳过主机名间隔）
+2. 上游封禁/限流特征（`HTTP 400/403/429/5xx`、空响应体、`访问被拒绝` / `请求过于频繁` 等）须 **抛出** 到引擎，由 `recordProviderQueryError` → `recordTrigger` 写入阶梯冷却
+3. handler / `*OrNull` / `.catch` 吞错时，先调用 `rethrowIfFreeProviderThrottleTrigger(e)`（`providers/common/free-provider-call.ts`），再 `return null`
+4. 多源聚合（`run*Partial`）同样不得吞掉封禁类错误；全部源失败后应上抛最后一个 HTTP 错误
+
+### 禁止
+
+- `catch { return null }` / `.catch(() => null)` 无差别吞掉所有错误
+- 免费源设置 `bypassRateLimit: true`
+- 自定义方法成功但 `data` 为空时调用 `recordProviderQuerySuccess`（空结果走 `recordProviderQueryEmpty`，避免误清冷却）
+
+### 自检
+
+```typescript
+// ✅
+} catch (e) {
+  rethrowIfFreeProviderThrottleTrigger(e)
+  return null
+}
+
+// ❌
+} catch {
+  return null
+}
+```
 
 ## 自定义方法
 
@@ -51,4 +85,5 @@ bindingsFor: (p, maxConcurrent) => cnEquityEtfIndex(equityCaps, indexCaps, p, et
 - [ ] `bindingsFor` 覆盖所有声明 capability × 目标市场 × 正确 assetClass
 - [ ] 新 Provider 已加入 `providers/register.ts`；设置页可见则加入 `loader.ts` `BUILTIN_MANIFESTS`
 - [ ] 未在 Hub/Agent 主路径绕过 `queryInstrumentData`
+- [ ] 免费源：`bypassRateLimit: false`；吞错路径含 `rethrowIfFreeProviderThrottleTrigger`
 - [ ] `npm run build` 通过

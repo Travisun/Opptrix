@@ -68,6 +68,31 @@ bindingsFor: () => []
 - 底层 URL / 鉴权 / 分页差异放在 `api/` + `normalize/`，Handler 只做编排
 - ETF 方法：`etfList` / `etfProfile` / `etfNav` / `etfHoldings` 须校验 `isCnEtfCode`（CN）
 
+### 2.3 免费源退避保护（硬性）
+
+适用：manifest **无**必填 `secret` 字段的免费行情源（tencent / sinafinance / eastmoney / akshare / baostock 等）。
+
+引擎已有两层保护：
+
+| 层 | 机制 | 职责 |
+|----|------|------|
+| **预防** | `hostnameLimiter`（`ProviderHttpClient`，同主机约 1s 间隔） | 降低触发反爬/封禁概率 |
+| **封禁后** | `FreeProviderThrottle` 阶梯冷却（5min → … → 24h+） | 冷却期内跳过该 Provider，换源 / 等待 |
+
+实现要求：
+
+1. HTTP 统一走 `ProviderHttpClient`，免费源 **`bypassRateLimit: false`**（仅 tushare / tickflow / tonghuashun / binance / okx 等付费源可为 `true`）
+2. 上游 `403/429/5xx`、空响应体、`访问被拒绝` 等须 **抛到引擎**；`queryScoped` / `invokeCustomMethod` 的 `catch` 会 `recordProviderQueryError` → 阶梯冷却
+3. Handler 业务空结果可 `return null`；若 `catch` 吞错，必须先 `rethrowIfFreeProviderThrottleTrigger(e)`（`providers/common/free-provider-call.ts`）
+4. `invokeCustomMethod` 空结果走 `recordProviderQueryEmpty`，勿用成功路径误清冷却
+
+```typescript
+} catch (e) {
+  rethrowIfFreeProviderThrottleTrigger(e)
+  return null
+}
+```
+
 ---
 
 ## 3. 内置 Provider 审计（2026-07-08）

@@ -3,6 +3,7 @@ import { fetchTencentBoardRankList } from './proxy.js'
 import { fetchText } from './http.js'
 import { parseTencentLine, tencentChangePct } from '../normalize/quote.js'
 import { mapTencentIndustryConstituentRows } from '../normalize/market.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js'
 
 const QT_INDEX_URL = 'https://qt.gtimg.cn/q='
 
@@ -192,14 +193,20 @@ export async function fetchTencentCnIndexSnapshot(opts: {
         direct: 'down',
         offset: 0,
         count: pageSize,
-      }).catch(() => ({ rank_list: [], total: 0 })),
+      }).catch((e) => {
+        rethrowIfFreeProviderThrottleTrigger(e)
+        return { rank_list: [], total: 0 }
+      }),
       fetchTencentBoardRankList({
         boardCode: 'bkqtRank_A_sz',
         sortType: 'priceRatio',
         direct: 'down',
         offset: 0,
         count: pageSize,
-      }).catch(() => ({ rank_list: [], total: 0 })),
+      }).catch((e) => {
+        rethrowIfFreeProviderThrottleTrigger(e)
+        return { rank_list: [], total: 0 }
+      }),
     ])
     result.boardRanks = {
       shanghai: {

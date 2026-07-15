@@ -1,8 +1,10 @@
 import { isSinafinanceHttpError, SinafinanceHttpError } from './errors.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js'
 
 /**
  * 多源回退：依次尝试，空结果继续下一源；HTTP 错误记录后尝试下一源。
- * 全部失败时抛出最后一个上游错误（供引擎熔断），无 HTTP 错误则返回 null（空数据）。
+ * 全部失败时抛出最后一个上游错误（供引擎熔断 / 免费源阶梯冷却）。
+ * 封禁类错误（403/429/空响应体等）在单源失败时也会保留并最终上抛。
  */
 export async function trySinafinanceSources<T>(
   attempts: Array<() => Promise<T | null>>,
@@ -26,13 +28,16 @@ export async function trySinafinanceSources<T>(
   return null
 }
 
-/** 批量聚合：单源失败不中断，最终无结果且无 HTTP 错误返回 null */
+/**
+ * 批量聚合用：非封禁类 HTTP 软失败吞为 null；封禁/限流必须上抛。
+ */
 export async function runSinafinancePartial<T>(
   fn: () => Promise<T>,
 ): Promise<T | null> {
   try {
     return await fn()
   } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     if (isSinafinanceHttpError(e)) return null
     throw e
   }

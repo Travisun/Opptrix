@@ -13,6 +13,7 @@ import {
 } from '../../api/fund-service.js'
 import { fetchSinaFundNavPage } from '../../api/fund.js'
 import { fetchSinaFundHoldings } from '../../api/corp-service.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import type { SinafinanceCnHandler } from './handler.js'
 
 type Handler = SinafinanceCnHandler & Record<string, unknown>
@@ -71,7 +72,10 @@ export function mixSinafinanceEtf(Driver: { prototype: SinafinanceCnHandler }) {
     if (!allRows.length) return null
 
     // 取最新溢价率
-    const quote = await fetchSinaFundQuote(bare).catch(() => null)
+    const quote = await fetchSinaFundQuote(bare).catch((e) => {
+      rethrowIfFreeProviderThrottleTrigger(e)
+      return null
+    })
     const premium = safeFloat((quote as Record<string, unknown> | null)?.premiumPct)
     const rows = mapSinaFundNavRows(bare, allRows, premium)
     return rows.length ? rows : null

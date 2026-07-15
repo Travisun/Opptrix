@@ -30,6 +30,10 @@ describe('free-provider-throttle', () => {
     assert.equal(isFreeProviderThrottleTrigger('访问被拒绝').trigger, true)
     assert.equal(isFreeProviderThrottleTrigger(null, { emptyBody: true }).trigger, true)
     assert.equal(isFreeProviderThrottleTrigger(new Error(FREE_PROVIDER_EMPTY_BODY_REASON)).trigger, true)
+    assert.equal(
+      isFreeProviderThrottleTrigger(new Error(`请求失败 (200)：${FREE_PROVIDER_EMPTY_BODY_REASON}`)).trigger,
+      true,
+    )
     assert.equal(isFreeProviderThrottleTrigger('empty_data').trigger, false)
     assert.equal(isFreeProviderThrottleTrigger('provider timeout 15000ms').trigger, false)
   })

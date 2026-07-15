@@ -7,6 +7,7 @@ import { mapTencentMinuteKlines, mapTencentMinuteTicks } from '../normalize/mark
 import { crossMarketSessionDate } from '../../../utils/cross-market-intraday.js'
 import type { StockKline } from '../../../core/schema.js'
 import { TENCENT_PROXY_BASE } from './types.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js';
 
 const IFZQ_WEB = 'https://web.ifzq.gtimg.cn'
 const IFZQ_PROXY = TENCENT_PROXY_BASE
@@ -583,7 +584,8 @@ async function fetchHkTradingVol(numeric: string): Promise<TencentHkTechnicalAna
       data?: { stockInfo?: Array<[number, number]>; percent?: number }
     }>(text, 'v_list')
     return mapTradingLevels(parsed.data?.stockInfo, parsed.data?.percent)
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return { priceLevels: [], largeOrderPct: null }
   }
 }

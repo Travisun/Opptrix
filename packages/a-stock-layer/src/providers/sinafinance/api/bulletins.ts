@@ -3,6 +3,7 @@ import { stripHtmlTags } from './html.js'
 import { extractPdfPlainText } from './pdf-text.js'
 import { fetchBinary, fetchText } from './http.js'
 import { buildSinaCorpReferer } from './types.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js';
 
 export const SINA_BULLETIN_VIEW_BASE =
   'https://vip.stock.finance.sina.com.cn/corp/view'
@@ -144,7 +145,8 @@ export async function fetchSinaBulletinDetailContent(
           link,
         }
       }
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       // PDF 下载/解析失败时回退 HTML
     }
   }

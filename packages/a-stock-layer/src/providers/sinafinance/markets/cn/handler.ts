@@ -10,6 +10,7 @@ import type { StockMarket } from '../../../../utils/helpers.js'
 import { cnTodayString } from '../../../../utils/market-session.js'
 import type { IntradayTrendFetchResult } from '../../../../utils/intraday-trends.js'
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import { isSinafinanceHttpError, type SinafinanceHttpError } from '../../api/errors.js'
 import { trySinafinanceSources } from '../../api/fallback.js'
 import { fetchSinaNoticeList, fetchSinaStockNews } from '../../api/content.js'
@@ -225,7 +226,10 @@ export class SinafinanceCnHandler extends MarketHandlerShell {
     const [corpProfile, extLine, jsvar] = await Promise.all([
       fetchSinaCorpProfile(bare),
       fetchSinaExtendedQuoteLine(bare),
-      fetchSinaJsVar(bare).catch(() => ''),
+      fetchSinaJsVar(bare).catch((e) => {
+        rethrowIfFreeProviderThrottleTrigger(e)
+        return ''
+      }),
     ])
     const extProfile = mapSinaExtendedProfile(
       bare,

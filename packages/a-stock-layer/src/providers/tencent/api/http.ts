@@ -11,12 +11,12 @@ const defaultHeaders: Record<string, string> = {
   ...(runtimeUa ? { 'User-Agent': runtimeUa } : {}),
 }
 
-/** 腾讯行情中心统一 HTTP 出口 */
+/** 腾讯行情中心统一 HTTP 出口（免费源：主机名间隔限流开启） */
 export const tencentHttp = new ProviderHttpClient({
   providerId: 'tencent',
   timeoutMs: 15000,
   maxRetries: 2,
-  bypassRateLimit: true,
+  bypassRateLimit: false,
   defaultHeaders,
 })
 

@@ -4,6 +4,7 @@
  */
 
 import { MarketHandlerShell } from '../../../common/driver-factory.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 import { safeFloat } from '../../../../utils/helpers.js'
 import { akshareClient } from '../../api/client.js'
 
@@ -22,7 +23,8 @@ async function dcGet(params: Record<string, string>): Promise<Record<string, unk
   try {
     const json = await akshareClient.get<{ result?: { data?: Record<string, unknown>[] } }>(DATACENTER_URL, params)
     return json?.result?.data ?? null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }

@@ -12,12 +12,12 @@ const defaultHeaders: Record<string, string> = {
   ...(runtimeUa ? { 'User-Agent': runtimeUa } : {}),
 }
 
-/** 东方财富数据中心 / push2 统一 HTTP 出口 */
+/** 东方财富数据中心 / push2 统一 HTTP 出口（免费源：主机名间隔限流开启） */
 export const eastmoneyHttp = new ProviderHttpClient({
   providerId: 'eastmoney',
   timeoutMs: 12_000,
   maxRetries: 1,
-  bypassRateLimit: true,
+  bypassRateLimit: false,
   defaultHeaders,
 })
 
@@ -33,7 +33,7 @@ export class EastmoneyHttpError extends Error {
 export async function fetchEmJson<T>(url: string, referer: string = EM_REFERER): Promise<T> {
   const raw = await eastmoneyHttp.getText(url, { extraHeaders: { Referer: referer } })
   if (isEmptyHttpResponseBody(raw)) {
-    throw new EastmoneyHttpError(0, FREE_PROVIDER_EMPTY_BODY_REASON)
+    throw new Error(FREE_PROVIDER_EMPTY_BODY_REASON)
   }
   const text = stripJsonp(raw)
   try {

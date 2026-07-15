@@ -28,7 +28,11 @@ export interface ProviderHttpClientConfig {
   defaultHeaders?: Record<string, string>
   timeoutMs?: number
   maxRetries?: number
-  /** 跳过主机名限流 — 付费 API（如 tushare/tickflow）无需等待间隔 */
+  /**
+   * 跳过主机名限流。
+   * 仅付费 / 自带配额的 API（tushare / tickflow / tonghuashun / binance / okx）可为 true。
+   * 免费爬虫源（tencent / sina / eastmoney / akshare）必须为 false，走 hostnameLimiter。
+   */
   bypassRateLimit?: boolean
   auth?: {
     type: 'header' | 'query'

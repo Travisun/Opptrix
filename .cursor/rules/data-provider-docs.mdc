@@ -7,6 +7,7 @@ alwaysApply: false
 # Data Provider 开发规范
 
 **标准 API 与 binding 规则**见 `docs/PROVIDER-STANDARD-API.md` 与 `.cursor/rules/provider-standard-api.mdc`。
+**免费源退避保护**（`bypassRateLimit: false`、`rethrowIfFreeProviderThrottleTrigger`）见同文件「免费源退避保护」节，必须遵守。
 
 - 产品级查询 → `queryInstrumentData` + `InstrumentDataCapability`
 - 无标准 capability 的接口 → `invokeCustomMethod` + 下文自定义方法文档

@@ -8,6 +8,7 @@ import { parseTencentLine } from '../normalize/quote.js'
 import type { StockKline } from '../../../core/schema.js'
 import { TENCENT_PROXY_BASE } from './types.js'
 import { bareUsTicker } from './us-stock-service.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js';
 
 const IFZQ_WEB = 'https://web.ifzq.gtimg.cn'
 const IFZQ_PROXY = TENCENT_PROXY_BASE
@@ -636,7 +637,8 @@ export async function fetchTencentUsStockQuote(code: string): Promise<TencentUsQ
     if (mobile.code === 0 && mobile.data) {
       quote = enrichUsQuoteFromMobile(quote, mobile.data)
     }
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     // mobile qt 为可选增强
   }
 

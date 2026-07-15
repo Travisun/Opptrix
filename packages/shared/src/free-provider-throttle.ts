@@ -100,7 +100,11 @@ export function isFreeProviderThrottleTrigger(
     return { trigger: false, reason: '' }
   }
 
-  if (msg === FREE_PROVIDER_EMPTY_BODY_REASON || /^empty_response_body$/i.test(msg)) {
+  // 含 ProviderHttpError 包装成「请求失败 (200)：empty_response_body」等
+  if (
+    msg === FREE_PROVIDER_EMPTY_BODY_REASON
+    || /empty_response_body/i.test(msg)
+  ) {
     return { trigger: true, reason: FREE_PROVIDER_EMPTY_BODY_REASON }
   }
 

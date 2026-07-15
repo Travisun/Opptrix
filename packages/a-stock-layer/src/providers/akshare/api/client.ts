@@ -6,6 +6,7 @@
  */
 
 import { ProviderHttpClient } from '../../common/http-client.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js'
 
 /** AKShare 默认请求头 */
 const AKSHARE_HEADERS = {
@@ -24,6 +25,7 @@ export class AkshareHttpClient extends ProviderHttpClient {
     super({
       providerId: 'akshare',
       defaultHeaders: AKSHARE_HEADERS,
+      bypassRateLimit: false,
     })
   }
 
@@ -32,7 +34,7 @@ export class AkshareHttpClient extends ProviderHttpClient {
    *
    * @param url - 请求 URL
    * @param params - 查询参数
-   * @returns JSON 响应，失败返回 null
+   * @returns JSON 响应，失败返回 null；封禁/限流错误上抛
    */
   async getOrNull<T = Record<string, unknown>>(
     url: string,
@@ -41,7 +43,8 @@ export class AkshareHttpClient extends ProviderHttpClient {
   ): Promise<T | null> {
     try {
       return await this.get<T>(url, params, options)
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -51,7 +54,7 @@ export class AkshareHttpClient extends ProviderHttpClient {
    *
    * @param url - 请求 URL
    * @param extraHeaders - 额外请求头
-   * @returns HTML 文本，失败返回 null
+   * @returns HTML 文本，失败返回 null；封禁/限流错误上抛
    */
   async getHtmlOrNull(
     url: string,
@@ -59,7 +62,8 @@ export class AkshareHttpClient extends ProviderHttpClient {
   ): Promise<string | null> {
     try {
       return await this.getText(url, { extraHeaders })
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }
@@ -69,7 +73,7 @@ export class AkshareHttpClient extends ProviderHttpClient {
    *
    * @param url - 请求 URL
    * @param body - 请求体
-   * @returns 数据数组，失败返回 null
+   * @returns 数据数组，失败返回 null；封禁/限流错误上抛
    */
   async postArrayOrNull<T = Record<string, unknown>>(
     url: string,
@@ -82,7 +86,8 @@ export class AkshareHttpClient extends ProviderHttpClient {
         ...options,
       })
       return json?.datas ?? null
-    } catch {
+    } catch (e) {
+      rethrowIfFreeProviderThrottleTrigger(e)
       return null
     }
   }

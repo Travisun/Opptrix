@@ -3,6 +3,7 @@ import { fetchJson, fetchText } from './http.js'
 import { parseTencentJsonp } from './jsonp.js'
 import { TENCENT_PROXY_BASE } from './types.js'
 import type { TencentBoardRankRow } from './types.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider-call.js';
 
 const HK_RANK_URL = 'https://stock.gtimg.cn/data/hk_rank.php'
 const HK_PROXY_LIST_URL = `${TENCENT_PROXY_BASE}/cgi/cgi-bin/rank/hk/getList`
@@ -326,7 +327,8 @@ async function fetchHkRankJsonp(opts: {
     } else {
       payload = JSON.parse(trimmed) as HkRankJsonpPayload
     }
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 
@@ -397,7 +399,10 @@ export async function fetchTencentHkStockList(opts: {
   const orderRaw = opts.order ?? 'desc'
   const order: 'asc' | 'desc' = orderRaw === 'asc' || orderRaw === 'up' ? 'asc' : 'desc'
 
-  const jsonp = await fetchHkRankJsonp({ board, metric, page, pageSize, order }).catch(() => null)
+  const jsonp = await fetchHkRankJsonp({ board, metric, page, pageSize, order }).catch((e) => {
+    rethrowIfFreeProviderThrottleTrigger(e)
+    return null
+  })
   if (jsonp?.rows.length) {
     return {
       board,

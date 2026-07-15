@@ -17,12 +17,14 @@ import {
   mapTencentHkProfileRow,
   mapTencentHkQuoteRow,
 } from '../../normalize/hk-equity.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 
 async function tencentHkRealtime(code: string): Promise<StockRealtime[] | null> {
   try {
     const quote = await fetchTencentHkStockQuote(code)
     return [mapTencentHkQuoteRow(quote.code, quote.parts)]
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -55,7 +57,8 @@ async function tencentHkKline(
     })
     const items = result.items
     return items.length ? (items as StockKline[]) : null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -64,7 +67,8 @@ async function tencentHkProfile(code: string): Promise<StockProfile[] | null> {
   try {
     const profile = await fetchTencentHkStockProfile(code)
     return [mapTencentHkProfileRow(profile)]
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }
@@ -98,7 +102,8 @@ async function tencentHkStockList(
       })
     }
     return items.length ? items : null
-  } catch {
+  } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     return null
   }
 }

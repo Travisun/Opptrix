@@ -12,12 +12,12 @@ const sinafinanceDefaultHeaders: Record<string, string> = {
   ...(runtimeUa ? { 'User-Agent': runtimeUa } : {}),
 }
 
-/** 网络补充源统一 HTTP 出口 — 429/5xx 重试 + 超时；不限主机名间隔（由引擎负载/熔断调度） */
+/** 新浪财经统一 HTTP 出口（免费源：主机名间隔限流 + 429/5xx 重试） */
 export const sinafinanceHttp = new ProviderHttpClient({
   providerId: 'sinafinance',
   timeoutMs: 15000,
   maxRetries: 2,
-  bypassRateLimit: true,
+  bypassRateLimit: false,
   defaultHeaders: sinafinanceDefaultHeaders,
 })
 

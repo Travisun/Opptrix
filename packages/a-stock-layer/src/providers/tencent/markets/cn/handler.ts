@@ -58,6 +58,7 @@ import {
   mapTencentRealtime,
   tencentChangePct,
 } from '../../normalize/quote.js'
+import { rethrowIfFreeProviderThrottleTrigger } from '../../../common/free-provider-call.js'
 
 async function tryTencentSources<T>(attempts: Array<() => Promise<T | null>>): Promise<T | null> {
   let lastError: TencentHttpError | undefined
@@ -74,10 +75,12 @@ async function tryTencentSources<T>(attempts: Array<() => Promise<T | null>>): P
   return null
 }
 
+/** 聚合用软失败：非封禁类腾讯 HTTP 可吞为 null；封禁/限流上抛 */
 async function runTencentPartial<T>(fn: () => Promise<T>): Promise<T | null> {
   try {
     return await fn()
   } catch (e) {
+    rethrowIfFreeProviderThrottleTrigger(e)
     if (isTencentHttpError(e)) return null
     throw e
   }
