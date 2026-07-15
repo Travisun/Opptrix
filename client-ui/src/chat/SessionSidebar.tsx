@@ -107,10 +107,6 @@ const useStyles = makeStyles({
   menuRow: {
     ...sidebarTopMenuRow,
     marginBottom: '6px',
-    '& svg': {
-      width: `${SIDEBAR_TOP_MENU_ICON_SIZE}px`,
-      height: `${SIDEBAR_TOP_MENU_ICON_SIZE}px`,
-    },
   },
   menuRowActive: {
     backgroundColor: opptrixCssVars.accentSoft,

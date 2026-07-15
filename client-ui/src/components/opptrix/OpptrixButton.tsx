@@ -121,30 +121,18 @@ const useStyles = makeStyles({
     paddingLeft: buttonSizes.small.paddingX,
     paddingRight: buttonSizes.small.paddingX,
     minHeight: buttonSizes.small.minHeight,
-    '& svg': {
-      width: '12px',
-      height: '12px',
-    },
   },
   sizeMedium: {
     fontSize: buttonSizes.medium.fontSize,
     paddingLeft: buttonSizes.medium.paddingX,
     paddingRight: buttonSizes.medium.paddingX,
     minHeight: buttonSizes.medium.minHeight,
-    '& svg': {
-      width: '16px',
-      height: '16px',
-    },
   },
   sizeLarge: {
     fontSize: buttonSizes.large.fontSize,
     paddingLeft: buttonSizes.large.paddingX,
     paddingRight: buttonSizes.large.paddingX,
     minHeight: buttonSizes.large.minHeight,
-    '& svg': {
-      width: '20px',
-      height: '20px',
-    },
   },
   block: {
     width: '100%',
