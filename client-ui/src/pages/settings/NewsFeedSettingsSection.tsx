@@ -269,6 +269,34 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.5,
   },
+  modeRow: {
+    display: 'flex',
+    gap: '4px',
+    padding: '3px',
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderRadius: opptrixTokens.radiusFull,
+    width: 'fit-content',
+    marginBottom: '12px',
+  },
+  modeTab: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '6px',
+    border: 'none',
+    background: 'transparent',
+    borderRadius: opptrixTokens.radiusFull,
+    padding: '5px 14px',
+    fontSize: '12px',
+    fontWeight: 500,
+    cursor: 'pointer',
+    color: opptrixCssVars.textTertiary,
+    transition: 'background-color 140ms ease, color 140ms ease',
+  },
+  modeTabActive: {
+    backgroundColor: opptrixCssVars.surface,
+    color: opptrixCssVars.textPrimary,
+    boxShadow: '0 1px 3px rgba(0,0,0,0.06), 0 1px 2px rgba(0,0,0,0.04)',
+  },
 })
 
 type SaveState = 'idle' | 'pending' | 'saved' | 'error'
@@ -655,7 +683,25 @@ export default function NewsFeedSettingsSection() {
           headerActionCount={3}
           aria-label="加载订阅…"
         />
-      ) : (
+      ) : (<>
+        <div className={s.modeRow}>
+          <button
+            type="button"
+            className={mergeClasses(s.modeTab, viewMode === 'subscriptions' && s.modeTabActive)}
+            onClick={() => setViewMode('subscriptions')}
+          >
+            订阅源
+          </button>
+          <button
+            type="button"
+            className={mergeClasses(s.modeTab, viewMode === 'groups' && s.modeTabActive)}
+            onClick={() => setViewMode('groups')}
+          >
+            分组管理
+          </button>
+        </div>
+
+      {viewMode === 'subscriptions' && (
       <div className={s.listPanel}>
         <div className={s.listHeader}>
           <Text className={s.listHeaderMeta} block>
@@ -914,6 +960,7 @@ export default function NewsFeedSettingsSection() {
           />
         </SettingsGroup>
       </div>
+      </>)}
 
       <Dialog open={importDialogOpen} onOpenChange={(_, d) => { if (!d.open) resetImportDialog() }}>
         <DialogSurface>
