@@ -469,10 +469,15 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '启用并取消暂停某外部 MCP；启用后本轮工具目录会刷新，绑定工具优先走外部源。',
     compliance: 'server_id 必填；不可改 command/url/env。',
   },
-  pause_mcp_server: {
+  disable_mcp_server: {
     packId: 'meta',
-    usageGuide: '暂时停用外部 MCP（配额耗尽或异常时）；配置保留，本地工具仍兜底。',
+    usageGuide: '禁用外部 MCP（配额耗尽或异常时）；配置保留，本地工具仍兜底。',
     compliance: 'server_id 必填。',
+  },
+  edit_mcp_server: {
+    packId: 'meta',
+    usageGuide: '编辑已安装 MCP 的配置。可改 title/transport/url/command/args/cwd/env/headers/secrets/capability_bindings，未传字段保持不变。',
+    compliance: 'server_id 必填（不可改）；transport 变更需附带 url 或 command；secrets 和 capability_bindings 为合并写入，空字符串可清除单条。',
   },
   install_mcp_server: {
     packId: 'meta',
