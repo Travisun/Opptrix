@@ -552,7 +552,8 @@ export class AgentEngine {
               if (
                 fn === 'activate_tool_pack'
                 || fn === 'enable_mcp_server'
-                || fn === 'pause_mcp_server'
+                || fn === 'disable_mcp_server'
+                || fn === 'edit_mcp_server'
                 || fn === 'install_mcp_server'
                 || fn === 'uninstall_mcp_server'
                 || fn === 'reorder_mcp_servers'

@@ -540,9 +540,9 @@ export class ToolRegistry {
         },
       },
       {
-        name: 'pause_mcp_server',
+        name: 'disable_mcp_server',
         category: 'MCP服务器',
-        description: '暂停外部 MCP Server（保留配置，不参与路由/目录）',
+        description: '禁用外部 MCP Server（保留配置，不参与路由/目录，本地工具兜底）',
         parameters: S({
           server_id: { type: 'string', description: 'MCP Server id' },
         }, ['server_id']),
@@ -555,6 +555,159 @@ export class ToolRegistry {
           reg.save(id, { paused: true })
           await reg.hydrate()
           return { ok: true, server: reg.listPublic().find(s => s.id === id) }
+        },
+      },
+      {
+        name: 'edit_mcp_server',
+        category: 'MCP服务器',
+        description: '编辑已安装 MCP Server 的配置。仅传需要修改的字段，未传字段保持不变。支持修改 title/transport/url/command/args/cwd/env/headers/secrets/capability_bindings。',
+        parameters: S({
+          server_id: { type: 'string', description: 'MCP Server id（不可改）' },
+          title: { type: 'string', description: '新显示名称' },
+          transport: { type: 'string', description: 'stdio | http | streamable-http | sse（改传输会重置 transportConfig）' },
+          command: { type: 'string', description: 'stdio：新的可执行文件路径' },
+          args: { type: 'array', description: 'stdio 新参数列表', items: { type: 'string' } },
+          cwd: { type: 'string', description: 'stdio 新工作目录' },
+          env: { type: 'object', description: 'stdio 非密钥环境变量（全量替换）' },
+          url: { type: 'string', description: 'http/streamable-http/sse：新 endpoint URL' },
+          headers: { type: 'object', description: 'http/sse 非密钥 Header（全量替换）' },
+          secrets: { type: 'object', description: '鉴权密钥（合并写入：仅更新指定 key，不传不清除，传空字符串清除某 key）' },
+          capability_bindings: {
+            type: 'object',
+            description: '本地工具名→外部工具名（合并写入：仅更新指定绑定）',
+          },
+        }, ['server_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const id = String(a.server_id ?? a.serverId ?? '').trim()
+          if (!id) return { error: 'server_id 必填' }
+          const reg = getExternalMcpRegistry()
+          const row = reg.getRecord(id)
+          if (!row) return { error: `未知服务器: ${id}` }
+
+          const patch: Record<string, unknown> = {}
+
+          // title
+          if (a.title != null) {
+            const t = String(a.title).trim()
+            if (!t) return { error: 'title 不可为空' }
+            patch.title = t
+          }
+
+          // transport / transportConfig
+          const newTransport = a.transport != null ? String(a.transport).trim().toLowerCase() : null
+          const validTransports = ['stdio', 'http', 'streamable-http', 'sse']
+          if (newTransport && !validTransports.includes(newTransport)) {
+            return { error: `transport 须为 ${validTransports.join(' / ')}` }
+          }
+          if (newTransport) {
+            if (newTransport === 'stdio') {
+              const cmd = String(a.command ?? '').trim()
+              if (!cmd) return { error: '切换为 stdio 须提供 command' }
+              const envRaw = a.env && typeof a.env === 'object' && !Array.isArray(a.env)
+                ? Object.fromEntries(Object.entries(a.env as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+                : undefined
+              patch.transportConfig = {
+                transport: 'stdio',
+                command: cmd,
+                args: Array.isArray(a.args) ? a.args.map(String) : [],
+                cwd: a.cwd != null ? String(a.cwd) : undefined,
+                env: envRaw,
+              } as import('@opptrix/shared').McpStdioTransportConfig
+            } else if (newTransport === 'sse') {
+              const url = String(a.url ?? '').trim()
+              if (!url) return { error: '切换为 sse 须提供 url' }
+              const headersRaw = a.headers && typeof a.headers === 'object' && !Array.isArray(a.headers)
+                ? Object.fromEntries(Object.entries(a.headers as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+                : undefined
+              patch.transportConfig = {
+                transport: 'sse',
+                url,
+                headers: headersRaw,
+              } as import('@opptrix/shared').McpSseTransportConfig
+            } else {
+              const url = String(a.url ?? '').trim()
+              if (!url) return { error: `切换为 ${newTransport} 须提供 url` }
+              const headersRaw = a.headers && typeof a.headers === 'object' && !Array.isArray(a.headers)
+                ? Object.fromEntries(Object.entries(a.headers as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+                : undefined
+              patch.transportConfig = {
+                transport: newTransport,
+                url,
+                headers: headersRaw,
+              } as import('@opptrix/shared').McpHttpTransportConfig
+            }
+          } else {
+            // transport 未改但可能改子字段
+            const currentT = row.transportConfig.transport
+            if (currentT === 'stdio') {
+              const cmd = a.command != null ? String(a.command).trim() : undefined
+              const args = a.args != null ? (Array.isArray(a.args) ? a.args.map(String) : undefined) : undefined
+              const cwd = a.cwd != null ? String(a.cwd) : undefined
+              const envRaw = a.env && typeof a.env === 'object' && !Array.isArray(a.env)
+                ? Object.fromEntries(Object.entries(a.env as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+                : undefined
+              if (cmd !== undefined || args !== undefined || cwd !== undefined || envRaw !== undefined) {
+                patch.transportConfig = {
+                  ...row.transportConfig,
+                  command: cmd ?? (row.transportConfig as { command: string }).command,
+                  args: args ?? (row.transportConfig as { args?: string[] }).args,
+                  cwd: cwd ?? (row.transportConfig as { cwd?: string }).cwd,
+                  env: envRaw ?? (row.transportConfig as { env?: Record<string, string> }).env,
+                }
+              }
+            } else if (currentT === 'sse' || currentT === 'http' || currentT === 'streamable-http') {
+              const url = a.url != null ? String(a.url).trim() : undefined
+              const headersRaw = a.headers && typeof a.headers === 'object' && !Array.isArray(a.headers)
+                ? Object.fromEntries(Object.entries(a.headers as Record<string, unknown>).map(([k, v]) => [k, String(v)]))
+                : undefined
+              if (url !== undefined || headersRaw !== undefined) {
+                patch.transportConfig = {
+                  ...row.transportConfig,
+                  url: url ?? (row.transportConfig as { url: string }).url,
+                  headers: headersRaw ?? (row.transportConfig as { headers?: Record<string, string> }).headers,
+                }
+              }
+            }
+          }
+
+          // secrets（合并写入：空字符串清除）
+          if (a.secrets != null && typeof a.secrets === 'object' && !Array.isArray(a.secrets)) {
+            const secretsRaw = Object.fromEntries(
+              Object.entries(a.secrets as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+            )
+            patch.secrets = { ...(row.secrets ?? {}), ...secretsRaw }
+            // 显式传空字符串 = 清除
+            for (const [k, v] of Object.entries(secretsRaw)) {
+              if (v === '') delete (patch.secrets as Record<string, string>)[k]
+            }
+          }
+
+          // capability_bindings（合并写入）
+          const bindingsRaw = a.capability_bindings ?? a.capabilityBindings
+          if (bindingsRaw != null && typeof bindingsRaw === 'object' && !Array.isArray(bindingsRaw)) {
+            const newBindings = Object.fromEntries(
+              Object.entries(bindingsRaw as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+            )
+            patch.capabilityBindings = { ...(row.capabilityBindings ?? {}), ...newBindings }
+            // 显式传空字符串 = 清除
+            for (const [k, v] of Object.entries(newBindings)) {
+              if (v === '') delete (patch.capabilityBindings as Record<string, string>)[k]
+            }
+          }
+
+          if (Object.keys(patch).length === 0) {
+            return { error: '无可识别的修改字段（需传 title/transport/url/command/args/cwd/env/headers/secrets/capability_bindings 之一）' }
+          }
+
+          reg.save(id, patch as import('@opptrix/shared').McpServerPatch)
+          await reg.hydrate()
+          const test = await reg.testConnection(id)
+          return {
+            ok: test.ok,
+            server: reg.listPublic().find(s => s.id === id),
+            test,
+          }
         },
       },
       {
