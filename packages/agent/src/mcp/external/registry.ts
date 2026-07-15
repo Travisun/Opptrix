@@ -28,6 +28,7 @@ export interface BindingCandidate {
 export class ExternalMcpRegistry {
   private connections = new Map<string, SdkConnection>()
   private toolCounts = new Map<string, number>()
+  private toolNames = new Map<string, Set<string>>()
   readonly health = new ExternalMcpHealth()
   private hydratePromise: Promise<void> | null = null
 
@@ -61,6 +62,7 @@ export class ExternalMcpRegistry {
         await this.connections.get(id)?.client.close().catch(() => {})
         this.connections.delete(id)
         this.toolCounts.delete(id)
+        this.toolNames.delete(id)
       }
     }
     await Promise.all(rows.map(row => this.ensureConnected(row)))
@@ -77,6 +79,7 @@ export class ExternalMcpRegistry {
       await entry.client.close().catch(() => {})
       this.connections.delete(row.id)
       this.toolCounts.delete(row.id)
+      this.toolNames.delete(row.id)
     }
     const conn = createSdkConnection(row)
     try {
@@ -85,6 +88,7 @@ export class ExternalMcpRegistry {
       this.health.recordSuccess(row.id)
       const { tools } = await conn.client.listTools()
       this.toolCounts.set(row.id, tools.length)
+      this.toolNames.set(row.id, new Set(tools.map(t => t.name)))
       const cur = this.repo.get(row.id)
       if (cur) {
         getUserDataStore().setDocument('mcp_servers', row.id, {
@@ -128,6 +132,7 @@ export class ExternalMcpRegistry {
       void this.connections.get(id)?.client.close().then(() => {
         this.connections.delete(id)
         this.toolCounts.delete(id)
+        this.toolNames.delete(id)
       })
       this.health.reset(id)
     }
@@ -138,6 +143,7 @@ export class ExternalMcpRegistry {
     void this.connections.get(id)?.client.close()
     this.connections.delete(id)
     this.toolCounts.delete(id)
+    this.toolNames.delete(id)
     this.health.reset(id)
     return this.repo.delete(id)
   }
@@ -185,6 +191,31 @@ export class ExternalMcpRegistry {
       if (!remote) continue
       if (!this.connections.has(row.id)) continue
       out.push({ serverId: row.id, remoteTool: remote })
+    }
+    return out
+  }
+
+  /**
+   * 自动绑定链：查找外部服务器提供的、与本地工具同名但未在 capabilityBindings 中显式绑定的工具。
+   * 优先级低于显式绑定链（在 tryExternalChain 之后尝试）。
+   * 返回远程工具名与 localToolName 相同的候选，按 sortOrder 排序。
+   */
+  resolveAutoBindChain(localToolName: string): BindingCandidate[] {
+    const rows = this.repo.listAll()
+      .filter(r => r.enabled && !r.paused)
+      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const out: BindingCandidate[] = []
+    for (const row of rows) {
+      if (this.health.shouldSkip(row.id, row.paused)) continue
+      // 仅处理未在 capabilityBindings 中显式绑定的
+      if (row.capabilityBindings[localToolName]) continue
+      const conn = this.connections.get(row.id)
+      if (!conn) continue
+      // 使用缓存的工具名集合做精确匹配
+      const names = this.toolNames.get(row.id)
+      if (names && names.has(localToolName)) {
+        out.push({ serverId: row.id, remoteTool: localToolName })
+      }
     }
     return out
   }
@@ -456,6 +487,7 @@ export class ExternalMcpRegistry {
     )
     this.connections.clear()
     this.toolCounts.clear()
+    this.toolNames.clear()
   }
 }
 
@@ -474,7 +506,15 @@ export function resetExternalMcpRegistry(): void {
 export function annotateMcpResult(
   data: unknown,
   source: string,
-  opts?: { degraded?: boolean },
+  opts?: {
+    degraded?: boolean
+    sufficient?: boolean
+    supplemented?: boolean
+    supplementReason?: string
+    externalSource?: string
+    missingFields?: string[]
+    supplementError?: string
+  },
 ): unknown {
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     return {
@@ -482,12 +522,27 @@ export function annotateMcpResult(
       _mcp: {
         source,
         degraded: Boolean(opts?.degraded),
+        sufficient: opts?.sufficient,
+        supplemented: opts?.supplemented,
+        supplementReason: opts?.supplementReason,
+        externalSource: opts?.externalSource,
+        missingFields: opts?.missingFields,
+        supplementError: opts?.supplementError,
       },
     }
   }
   return {
     data,
-    _mcp: { source, degraded: Boolean(opts?.degraded) },
+    _mcp: {
+      source,
+      degraded: Boolean(opts?.degraded),
+      sufficient: opts?.sufficient,
+      supplemented: opts?.supplemented,
+      supplementReason: opts?.supplementReason,
+      externalSource: opts?.externalSource,
+      missingFields: opts?.missingFields,
+      supplementError: opts?.supplementError,
+    },
   }
 }
 

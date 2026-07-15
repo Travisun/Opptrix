@@ -75,6 +75,28 @@ export class McpToolBroker {
     }))
   }
 
+  /**
+   * 返回已过滤的本地工具目录：排除已在外部 MCP 中绑定的同名工具。
+   * 这样 LLM 看到的工具列表中，外部工具不会与本地重复，
+   * 降低 LLM 选本地工具的几率（排序由调用方控制）。
+   */
+  async openAiFilteredTools(
+    externalNames: ReadonlySet<string> = new Set(),
+  ): Promise<OpenAiTool[]> {
+    if (!this.connected) throw new Error('MCP broker not connected')
+    const { tools } = await this.client.listTools()
+    return tools
+      .filter(t => !externalNames.has(t.name))
+      .map(t => ({
+        type: 'function' as const,
+        function: {
+          name: t.name,
+          description: t.description ?? '',
+          parameters: (t.inputSchema ?? { type: 'object', properties: {} }) as JsonSchema,
+        },
+      }))
+  }
+
   async call(
     name: string,
     args: Record<string, unknown> = {},
@@ -102,28 +124,7 @@ export class McpToolBroker {
       }
       throw e
     }
-    const content = Array.isArray(result.content) ? result.content : []
-    const text = content
-      .filter((c): c is { type: 'text'; text: string } =>
-        typeof c === 'object' && c !== null && (c as { type?: string }).type === 'text'
-        && typeof (c as { text?: unknown }).text === 'string',
-      )
-      .map(c => c.text)
-      .join('\n')
-    if (result.isError) {
-      if (!text) return { error: 'tool call failed' }
-      try {
-        return JSON.parse(text) as unknown
-      } catch {
-        return { error: text }
-      }
-    }
-    if (!text) return result
-    try {
-      return JSON.parse(text) as unknown
-    } catch {
-      return text
-    }
+    return parsePlainToolResult(result)
   }
 
   async close() {
@@ -131,5 +132,32 @@ export class McpToolBroker {
       await this.client.close()
       this.connected = false
     }
+  }
+}
+
+/** 解析 SDK CallToolResult → 业务返回值（供本地 + 外部统一使用） */
+export function parsePlainToolResult(result: unknown): unknown {
+  const r = result as { content?: unknown[]; isError?: boolean }
+  const content = Array.isArray(r.content) ? r.content : []
+  const text = content
+    .filter((c): c is { type: 'text'; text: string } =>
+      typeof c === 'object' && c !== null && (c as { type?: string }).type === 'text'
+      && typeof (c as { text?: unknown }).text === 'string',
+    )
+    .map(c => c.text)
+    .join('\n')
+  if (r.isError) {
+    if (!text) return { error: 'tool call failed' }
+    try {
+      return JSON.parse(text) as unknown
+    } catch {
+      return { error: text }
+    }
+  }
+  if (!text) return result
+  try {
+    return JSON.parse(text) as unknown
+  } catch {
+    return text
   }
 }

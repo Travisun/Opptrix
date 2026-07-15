@@ -117,6 +117,26 @@ export class AgentEngine {
     })
   }
 
+  /** 构建数据源优先级策略说明（注入 system prompt） */
+  private buildDataSourcingPolicy(plan: ToolRoutePlan | null): string {
+    const tier = plan?.researchTier ?? 'standard'
+    const lines = [
+      '【数据源优先级策略 — 必须严格遵守】',
+      '1. 所有数据获取类工具，外部 MCP 优先：先调外部数据源获取最新/最全数据。',
+      '2. 充分性自检：若外部返回缺字段、缺记录或数据陈旧，自动补充本地数据后合并返回。',
+      '3. 结果已标注 _mcp.source 和 _mcp.sufficient：',
+      '   - source="external" + sufficient=true → 外部数据已完备，无需重复调用',
+      '   - source="external+local" + supplemented=true → 外部不足已补本地，合并后完备',
+      '   - source="local" + degraded=true → 外部不可用，仅为降级，结果可能不完整',
+      '4. 投研答复引用数据时，应体现数据源（外部权威源优于本地缓存）。',
+    ]
+    // 高研究档位强调交叉验证
+    if (tier === 'L3') {
+      lines.push(`5. 当前为 ${tier} 档位：对重要标的/事件，即使外部已返回结果，也可主动补充本地交叉验证 — 但须在结果中注明。`)
+    }
+    return lines.join('\n')
+  }
+
   private buildRoundSystemPrompt(activeNames: readonly string[]) {
     const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
       message: this.lastChatSeedMessage,
@@ -129,6 +149,7 @@ export class AgentEngine {
       researchTier: plan.researchTier,
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
       sessionClock: buildSessionClockPlaybook(clock),
+      dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
     })
   }
 
