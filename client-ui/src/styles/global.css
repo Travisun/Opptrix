@@ -525,7 +525,7 @@ html.opptrix-electron .opptrix-overlay-sidebar {
 }
 
 .opptrix-sidebar-edge {
-  border-right: 0.5px solid rgba(60, 60, 67, 0.11);
+  border-right: 1px solid var(--opptrix-separator-strong);
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.032);
 }
 
