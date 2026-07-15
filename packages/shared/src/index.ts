@@ -26,6 +26,7 @@ export * from './provider-binding.js'
 export * from './provider-settings.js'
 export * from './provider-priority-order.js'
 export * from './free-provider-throttle.js'
+export * from './mcp-servers.js'
 export * from './onboarding.js'
 export {
   initOutboundNetwork,

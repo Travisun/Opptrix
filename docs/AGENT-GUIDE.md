@@ -129,20 +129,27 @@ Opptrix/
                 ↓
          activeNames = core+meta+播种+会话激活
                 ↓
-         McpToolBroker（本轮子集）→ LLM tools
+         AggregatingToolBroker（外部 MCP 优先级链 → 本地 McpToolBroker）→ LLM tools
                 ↓
          activate_tool_pack → 同会话累积 → 同轮刷新 Broker
                 ↓
-         ToolRegistry → ResearchHub / MarketDataService
+         ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认 + 工具包元工具）
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认 + 工具包元工具 + 外部 MCP 运维工具）
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
 - **工具包路由（Tool Pack Router）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
   - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
   - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
-  - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `McpToolBroker`；激活后同轮刷新 tools
+  - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `AggregatingToolBroker`（内含本地 `McpToolBroker` + 外部 MCP 注册表）；激活后同轮刷新 tools
+  - **外部 MCP（优先级故障转移）**：
+    - 配置：`packages/shared/src/mcp-servers.ts`；持久化 user-store `mcp_servers`；设置页 **MCP 服务器** / REST `/api/mcp-servers*`
+    - 运行时：`packages/agent/src/mcp/external/`（`ExternalMcpRegistry` / Health / AggregatingToolBroker）
+    - 传输：stdio + Streamable HTTP；LLM 仍见稳定本地工具名；有 `capabilityBindings` 时按 `sortOrder` 试外部再本地兜底
+    - 外部独有工具：`serverId__toolName` 命名空间注入 catalog
+    - meta 运维：`list_mcp_servers` / `enable_mcp_server` / `pause_mcp_server` / `reorder_mcp_servers`；`install_mcp_server` / `uninstall_mcp_server` **须 ask_user 后 `confirmed=true`**；禁止经 Agent 改已有 server 的 command/url/env
+    - 单测：`tests/external-mcp-failover.test.mjs`
   - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
   - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_income_statement` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_financial_indicators` / `get_instrument_shareholders` / `get_instrument_institution_holdings` / `get_instrument_dividend`

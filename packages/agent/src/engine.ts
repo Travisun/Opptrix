@@ -7,6 +7,8 @@ import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './l
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
+import { AggregatingToolBroker } from './mcp/external/index.js'
+import { getExternalMcpRegistry } from './mcp/external/registry.js'
 import {
   ToolPackSessionStore,
   listToolPacksPayload,
@@ -20,7 +22,7 @@ import {
   orderToolsByPreference,
   type ToolRoutePlan,
 } from './mcp/tool-route-plan.js'
-import { buildSessionClockPlaybook } from '@opptrix/shared'
+import { buildSessionClockPlaybook, parseNamespacedMcpTool } from '@opptrix/shared'
 import {
   type ChatProgressEvent,
   type ChatProgressOptions,
@@ -100,9 +102,12 @@ export class AgentEngine {
 
   get llmConfigured() { return this.registry.configured }
 
-  /** 按本轮 active tool names 创建进程内 MCP broker（每轮可重建） */
+  /** 按本轮 active tool names 创建聚合 MCP broker（本地 + 外部优先级链） */
   private async createRoundBroker(activeNames: readonly string[]) {
-    return McpToolBroker.create(this.tools, activeNames)
+    return AggregatingToolBroker.create(
+      () => McpToolBroker.create(this.tools, activeNames),
+      getExternalMcpRegistry(),
+    )
   }
 
   private resolveRoundPackIds(sessionId: string) {
@@ -519,11 +524,18 @@ export class AgentEngine {
                 const answer = await answerPromise
                 result = { ok: true, ...answer }
               }
-            } else if (!activeSet.has(fn)) {
+            } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
             } else {
               result = await broker.call(fn, args, { signal })
-              if (fn === 'activate_tool_pack') {
+              if (
+                fn === 'activate_tool_pack'
+                || fn === 'enable_mcp_server'
+                || fn === 'pause_mcp_server'
+                || fn === 'install_mcp_server'
+                || fn === 'uninstall_mcp_server'
+                || fn === 'reorder_mcp_servers'
+              ) {
                 refreshTools = true
               }
             }

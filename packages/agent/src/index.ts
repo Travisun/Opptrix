@@ -53,6 +53,13 @@ export {
 export { createMcpServer, runMcpStdio } from './mcp/server.js'
 export { McpToolBroker } from './mcp/broker.js'
 export {
+  AggregatingToolBroker,
+  getExternalMcpRegistry,
+  resetExternalMcpRegistry,
+  ExternalMcpRegistry,
+  ExternalMcpHealth,
+} from './mcp/external/index.js'
+export {
   ToolPackSessionStore,
   resolveActivePackIds,
   toolNamesForPacks,

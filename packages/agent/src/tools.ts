@@ -507,6 +507,185 @@ export class ToolRegistry {
           return this.packBridge.activatePacks(packIds)
         },
       },
+      {
+        name: 'list_mcp_servers',
+        category: 'MCP服务器',
+        description: '列出用户配置的外部 MCP Server（启用/暂停/健康/工具数/优先级），无密钥',
+        parameters: S({}),
+        handler: async () => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const reg = getExternalMcpRegistry()
+          await reg.hydrate()
+          return { servers: reg.listPublic() }
+        },
+      },
+      {
+        name: 'enable_mcp_server',
+        category: 'MCP服务器',
+        description: '启用外部 MCP Server 并热加载到本轮工具目录（不改 command/url/env）',
+        parameters: S({
+          server_id: { type: 'string', description: 'MCP Server id' },
+        }, ['server_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const id = String(a.server_id ?? a.serverId ?? '').trim()
+          if (!id) return { error: 'server_id 必填' }
+          const reg = getExternalMcpRegistry()
+          if (!reg.getRecord(id)) return { error: `未知服务器: ${id}` }
+          reg.save(id, { enabled: true, paused: false })
+          await reg.hydrate()
+          return { ok: true, server: reg.listPublic().find(s => s.id === id) }
+        },
+      },
+      {
+        name: 'pause_mcp_server',
+        category: 'MCP服务器',
+        description: '暂停外部 MCP Server（保留配置，不参与路由/目录）',
+        parameters: S({
+          server_id: { type: 'string', description: 'MCP Server id' },
+        }, ['server_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const id = String(a.server_id ?? a.serverId ?? '').trim()
+          if (!id) return { error: 'server_id 必填' }
+          const reg = getExternalMcpRegistry()
+          if (!reg.getRecord(id)) return { error: `未知服务器: ${id}` }
+          reg.save(id, { paused: true })
+          await reg.hydrate()
+          return { ok: true, server: reg.listPublic().find(s => s.id === id) }
+        },
+      },
+      {
+        name: 'install_mcp_server',
+        category: 'MCP服务器',
+        description: '安装（登记）外部 MCP Server。首次调用勿传 confirmed；向用户 ask_user 确认后再以 confirmed=true 重试。禁止仅由 Agent 改已有服务器的 command/url/密钥。',
+        parameters: S({
+          title: { type: 'string', description: '显示名称' },
+          transport: { type: 'string', description: 'stdio | http' },
+          command: { type: 'string', description: 'stdio：可执行文件' },
+          args: { type: 'array', description: 'stdio 参数', items: { type: 'string' } },
+          cwd: { type: 'string', description: 'stdio 工作目录' },
+          url: { type: 'string', description: 'http：MCP endpoint URL' },
+          server_id: { type: 'string', description: '可选自定义 id' },
+          capability_bindings: {
+            type: 'object',
+            description: '本地工具名→外部工具名，如 {"get_instrument_quotes":"get_quotes"}',
+          },
+          confirmed: { type: 'boolean', description: '用户已确认安装；缺省或 false 时仅返回确认摘要' },
+        }, ['title', 'transport']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const transport = String(a.transport ?? '').trim().toLowerCase()
+          const title = String(a.title ?? '').trim()
+          if (!title) return { error: 'title 必填' }
+          if (transport !== 'stdio' && transport !== 'http') {
+            return { error: 'transport 须为 stdio 或 http' }
+          }
+          const transportConfig = transport === 'stdio'
+            ? {
+                transport: 'stdio' as const,
+                command: String(a.command ?? '').trim(),
+                args: Array.isArray(a.args) ? a.args.map(String) : [],
+                cwd: a.cwd != null ? String(a.cwd) : undefined,
+              }
+            : {
+                transport: 'http' as const,
+                url: String(a.url ?? '').trim(),
+              }
+          if (transport === 'stdio' && !transportConfig.command) {
+            return { error: 'stdio 须提供 command' }
+          }
+          if (transport === 'http' && !('url' in transportConfig && transportConfig.url)) {
+            return { error: 'http 须提供 url' }
+          }
+          const bindingsRaw = a.capability_bindings ?? a.capabilityBindings
+          const capabilityBindings = bindingsRaw && typeof bindingsRaw === 'object' && !Array.isArray(bindingsRaw)
+            ? Object.fromEntries(
+              Object.entries(bindingsRaw as Record<string, unknown>).map(([k, v]) => [k, String(v)]),
+            )
+            : {}
+          const draft = {
+            id: a.server_id != null ? String(a.server_id).trim() : undefined,
+            title,
+            transportConfig,
+            capabilityBindings,
+            installSource: 'manual' as const,
+            enabled: true,
+            paused: false,
+          }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: transport === 'stdio'
+                ? `安装 MCP「${title}」：${transportConfig.command} ${(transportConfig.args ?? []).join(' ')}`
+                : `安装 MCP「${title}」：${(transportConfig as { url: string }).url}`,
+              hint: '请先用 ask_user 向用户确认安全与来源；用户同意后以相同参数 + confirmed=true 再调用 install_mcp_server',
+              draft,
+            }
+          }
+          try {
+            const reg = getExternalMcpRegistry()
+            const row = reg.create(draft)
+            await reg.hydrate()
+            const test = await reg.testConnection(row.id)
+            return {
+              ok: test.ok,
+              server: reg.listPublic().find(s => s.id === row.id),
+              test,
+            }
+          } catch (e) {
+            return { error: e instanceof Error ? e.message : String(e) }
+          }
+        },
+      },
+      {
+        name: 'uninstall_mcp_server',
+        category: 'MCP服务器',
+        description: '卸载外部 MCP Server。须 confirmed=true；建议先 ask_user 确认。',
+        parameters: S({
+          server_id: { type: 'string', description: 'MCP Server id' },
+          confirmed: { type: 'boolean', description: '用户已确认卸载' },
+        }, ['server_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const id = String(a.server_id ?? a.serverId ?? '').trim()
+          if (!id) return { error: 'server_id 必填' }
+          const reg = getExternalMcpRegistry()
+          const row = reg.getRecord(id)
+          if (!row) return { error: `未知服务器: ${id}` }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: `卸载 MCP「${row.title}」(${id})，将断开连接并删除配置`,
+              hint: '请先 ask_user 确认，再以 confirmed=true 调用',
+            }
+          }
+          reg.delete(id)
+          return { ok: true, uninstalled: id }
+        },
+      },
+      {
+        name: 'reorder_mcp_servers',
+        category: 'MCP服务器',
+        description: '按给定 id 列表重排外部 MCP 优先级（越靠前越优先，本地始终最终兜底）',
+        parameters: S({
+          server_ids: {
+            type: 'array',
+            description: '服务器 id 新顺序',
+            items: { type: 'string' },
+          },
+        }, ['server_ids']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getExternalMcpRegistry } = await import('./mcp/external/registry.js')
+          const raw = a.server_ids ?? a.serverIds
+          const ids = Array.isArray(raw) ? raw.map(String) : []
+          if (!ids.length) return { error: 'server_ids 必填' }
+          const reg = getExternalMcpRegistry()
+          reg.reorder(ids)
+          await reg.hydrate()
+          return { ok: true, servers: reg.listPublic() }
+        },
+      },
     ].map(t => ({ ...t, meta: TOOL_META[t.name] }))
   }
 }

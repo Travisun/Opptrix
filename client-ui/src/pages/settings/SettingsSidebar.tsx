@@ -9,6 +9,7 @@ import {
   SettingsRegular,
   TranslateRegular,
   ServerRegular,
+  PlugConnectedRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -33,6 +34,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'general', label: '常规', icon: SettingsRegular },
   { id: 'models', label: '模型', icon: BotRegular },
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
+  { id: 'mcp_servers', label: 'MCP 服务器', icon: PlugConnectedRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
@@ -375,6 +377,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '配置 LLM 提供商与可用模型'
     case 'data_providers':
       return '管理各市场行情与资讯数据提供商'
+    case 'mcp_servers':
+      return '接入外部 MCP，按优先级故障转移，本地工具兜底'
     case 'news_feed':
       return '管理 RSS 订阅与资讯更新频率'
     case 'translation':
