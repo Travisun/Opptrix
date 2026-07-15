@@ -213,6 +213,10 @@ borderRadius: opptrixTokens.radiusFull,
     height: '28px',
     padding: 0,
     flexShrink: 0,
+    '& svg': {
+      width: '14px',
+      height: '14px',
+    },
   },
   error: {
     fontSize: 'var(--opptrix-font-base)',
