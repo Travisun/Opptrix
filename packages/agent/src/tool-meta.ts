@@ -432,8 +432,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_provider_custom_methods: {
     hubFeature: 'provider_custom_methods',
     miningEligible: false,
-    usageGuide: '查找非标准 API（板块、宏观、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
-    compliance: '只读；provider_id 如 baostock、zzshare、stockindex、akshare；keyword 匹配方法名/描述；limit 默认 40。',
+    usageGuide: '查找非标准 API（板块、宏观扩展、情绪、龙虎榜等）；须带 provider_id 或 keyword，akshare 禁止无过滤全量拉取。',
+    compliance: '只读；provider_id 如 eastmoney、baostock、zzshare、stockindex、akshare；keyword 如 emMacro、macro；limit 默认 40。',
   },
   invoke_provider_custom_method: {
     hubFeature: 'provider_invoke_custom',

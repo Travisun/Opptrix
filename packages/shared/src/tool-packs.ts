@@ -62,8 +62,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'market',
     title: '宏观与市场',
-    description: '牛熊状态、市场动态、开闭市报告、资金流、交易日历、龙虎榜/涨跌停/情绪、A 股专题',
-    whenToUse: '大盘、板块、早报复盘、交易日、龙虎榜涨停、连板天梯与热股异动',
+    description: '宏观序列（CPI/国外/行业/油价）、牛熊状态、市场动态、开闭市报告、资金流、交易日历、龙虎榜/涨跌停/情绪、A 股专题',
+    whenToUse: '宏观数据、大盘、板块、早报复盘、交易日、龙虎榜涨停、连板天梯与热股异动',
   },
   {
     id: 'etf',
