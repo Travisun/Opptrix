@@ -12,6 +12,7 @@ const {
   findProtocolUrl,
   flushPendingProtocolUrl,
   installProtocolHandlers,
+  handleSecondInstanceArgv,
   registerProtocolIpc,
   setProtocolDeliverHandler,
 } = require('./protocol.cjs')
@@ -246,7 +247,9 @@ async function waitForHealth(timeoutMs = 30_000) {
     } catch {
       /* retry */
     }
-    await wait(250)
+    // 前 3s 快轮询（80ms），让更新 relaunch / 冷启动尽快探到 sidecar 就绪；
+    // 之后退回 250ms，避免长时间等待时空转过密。
+    await wait(Date.now() - started < 3000 ? 80 : 250)
   }
   throw new Error(`API sidecar not ready: ${url}`)
 }
@@ -292,7 +295,7 @@ function stopSidecar() {
  */
 function stopSidecarAndWait(timeoutMs = 2500) {
   return new Promise((resolve) => {
-    if (!serverProcess || serverProcess.killed) {
+    if (!serverProcess || serverProcess.killed || serverProcess.exitCode != null) {
       resolve()
       return
     }
@@ -302,18 +305,22 @@ function stopSidecarAndWait(timeoutMs = 2500) {
     const finish = () => {
       if (settled) return
       settled = true
-      clearTimeout(timer)
+      clearTimeout(softTimer)
+      clearTimeout(hardTimer)
       resolve()
     }
-    const timer = setTimeout(() => {
+    // exit 才是端口真正释放的信号；SIGTERM / SIGKILL 后都等到 exit 再 resolve。
+    proc.once('exit', finish)
+    // 软超时：SIGTERM 未退则升级 SIGKILL，但不立即 resolve，继续等 exit。
+    const softTimer = setTimeout(() => {
       try {
         if (proc.exitCode == null && !proc.killed) proc.kill('SIGKILL')
       } catch {
         /* ignore */
       }
-      finish()
     }, timeoutMs)
-    proc.once('exit', finish)
+    // 硬超时：SIGKILL 后仍拿不到 exit（极端情况），兜底放行，避免卡死退出流程。
+    const hardTimer = setTimeout(finish, timeoutMs + 2000)
     try {
       proc.kill('SIGTERM')
     } catch {
@@ -811,7 +818,8 @@ const gotTheLock = app.requestSingleInstanceLock()
 if (!gotTheLock) {
   app.quit()
 } else {
-  app.on('second-instance', () => {
+  app.on('second-instance', (_event, argv) => {
+    handleSecondInstanceArgv(argv)
     focusMainWindow()
   })
 

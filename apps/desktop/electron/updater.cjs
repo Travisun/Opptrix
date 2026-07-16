@@ -334,8 +334,12 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
           return
         }
         try {
-          // 兜底：若 quitAndInstall 仅触发退出，仍尝试在 quit 时安装
-          autoUpdater.autoInstallOnAppQuit = true
+          // macOS：Squirrel.Mac 的 quitAndInstall 自行替换 .app 并 relaunch；
+          // 不再翻 autoInstallOnAppQuit=true，避免与 ShipIt 流程叠加产生二次安装/relaunch 竞态。
+          // Windows / Linux：保留 quit 时安装兜底，防 quitAndInstall 只退不装。
+          if (process.platform !== 'darwin') {
+            autoUpdater.autoInstallOnAppQuit = true
+          }
           autoUpdater.quitAndInstall(false, true)
         } catch (err) {
           console.error('[updater] quitAndInstall failed:', err)

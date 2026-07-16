@@ -89,21 +89,15 @@ function installProtocolHandlers(app, { focusMainWindow }) {
     })
   }
 
-  if (!app.isPackaged) return true
+  // 单实例锁由 main.cjs 统一持有；这里不再二次 requestSingleInstanceLock，
+  // 避免自动更新 relaunch 时因锁竞态直接 process.exit(0) 导致新版起不来。
+  // second-instance 的协议 URL 派发由 main.cjs 的统一处理器调用 handleSecondInstanceArgv。
+}
 
-  const gotLock = app.requestSingleInstanceLock()
-  if (!gotLock) {
-    app.quit()
-    process.exit(0)
-  }
-
-  app.on('second-instance', (_event, argv) => {
-    const launchUrl = findProtocolUrl(argv)
-    if (launchUrl) deliverProtocolUrl(launchUrl)
-    focusMainWindow()
-  })
-
-  return gotLock
+/** 从 second-instance 的 argv 中提取并派发协议 URL（由 main.cjs 统一处理器调用）。 */
+function handleSecondInstanceArgv(argv) {
+  const launchUrl = findProtocolUrl(argv)
+  if (launchUrl) deliverProtocolUrl(launchUrl)
 }
 
 function registerProtocolIpc(ipcMain) {
@@ -119,5 +113,6 @@ module.exports = {
   deliverProtocolUrl,
   flushPendingProtocolUrl,
   installProtocolHandlers,
+  handleSecondInstanceArgv,
   registerProtocolIpc,
 }
