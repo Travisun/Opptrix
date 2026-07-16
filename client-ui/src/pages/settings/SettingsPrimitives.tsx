@@ -4,7 +4,10 @@ import {
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { EyeRegular, EyeOffRegular } from '@fluentui/react-icons'
+import {
+  EyeRegular, EyeOffRegular,
+  Wifi1Regular, CheckmarkRegular,
+} from '@fluentui/react-icons'
 import type { ReactNode } from 'react'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive, motion, nativeIconInteractive } from '../../theme/mixins'
@@ -527,23 +530,21 @@ export function SettingsCredentialRow({
         </div>
         <div className={s.credentialSegment}>
           <OpptrixButton
-            variant="ghost"
-            className={s.credentialActionBtn}
-            disabled={testing || testDisabled}
+            variant="icon"
+            aria-label="测试连接"
+            icon={<Wifi1Regular fontSize={14} />}
+            disabled={testing || testDisabled || saving}
             onClick={onTest}
-          >
-            {testing ? '测试中…' : '测试'}
-          </OpptrixButton>
+          />
         </div>
         <div className={s.credentialSegment}>
           <OpptrixButton
-            variant="primary"
-            className={s.credentialSaveBtn}
+            variant="icon"
+            aria-label="保存"
+            icon={<CheckmarkRegular fontSize={14} />}
             disabled={saving || saveDisabled}
             onClick={onSave}
-          >
-            {saving ? '保存中…' : '保存'}
-          </OpptrixButton>
+          />
         </div>
       </div>
       {showConfiguredHint && (

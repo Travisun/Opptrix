@@ -5,13 +5,19 @@ import {
   Text,
   makeStyles,
 } from '@fluentui/react-components'
+import {
+  Wifi1Regular,
+  CheckmarkRegular,
+  EyeRegular,
+  EyeOffRegular,
+} from '@fluentui/react-icons'
 import type { ProviderSettingsField, PublicProviderRuntime } from '../../types/provider'
 import { saveProviderConfig, testProviderConfig } from '../../api/client'
-import { SettingsCredentialRow } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import OpptrixSelect, { OpptrixOption } from '../../components/opptrix/OpptrixSelect'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import { opptrixCssVars } from '../../theme/tokens'
+import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import { inputShellInteractive } from '../../theme/mixins'
 
 /** Row header already has the enable Switch — skip duplicate schema field. */
 export function isExpandableSettingsField(field: ProviderSettingsField): boolean {
@@ -28,37 +34,56 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     overflow: 'hidden',
   },
-  fieldBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '4px',
-  },
   fieldLabel: {
     fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
     lineHeight: 1.35,
+    paddingLeft: '2px',
   },
   fieldDesc: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.45,
+    paddingLeft: '2px',
   },
-  inlineControl: {
+  combo: {
+    ...inputShellInteractive,
     width: '100%',
-    maxWidth: '100%',
+    minWidth: 0,
+    minHeight: '32px',
+    display: 'flex',
+    alignItems: 'stretch',
+    padding: 0,
+    overflow: 'hidden',
     boxSizing: 'border-box',
+    borderRadius: opptrixTokens.radiusMd,
   },
-  secretBlock: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
+  comboInput: {
+    flex: '1 1 0',
+    minWidth: 0,
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+    fontSize: 'var(--opptrix-font-md)',
+    paddingLeft: '10px',
+    paddingRight: '4px',
   },
-  actions: {
+  comboSelectWrap: {
+    flex: '1 1 0',
+    minWidth: 0,
     display: 'flex',
-    justifyContent: 'flex-end',
-    gap: '8px',
-    paddingTop: '2px',
+    alignItems: 'center',
+  },
+  comboSegment: {
+    display: 'flex',
+    alignItems: 'center',
+    flexShrink: 0,
+    borderLeft: `1px solid ${opptrixCssVars.separator}`,
+  },
+  credHint: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
+    paddingLeft: '2px',
   },
 })
 
@@ -214,53 +239,6 @@ export function ProviderSettingsForm({
     }
   }
 
-  const renderPlainField = (field: ProviderSettingsField) => {
-    const value = draft[field.key]
-    if (field.type === 'boolean') {
-      return (
-        <Switch
-          checked={Boolean(value)}
-          onChange={(_, d) => setDraft(prev => ({ ...prev, [field.key]: !!d.checked }))}
-          aria-label={field.label}
-        />
-      )
-    }
-    if (field.type === 'select') {
-      return (
-        <OpptrixSelect
-          className={s.inlineControl}
-          value={String(value ?? field.default ?? '')}
-          onOptionSelect={(_, d) => {
-            if (d.optionValue != null) {
-              setDraft(prev => ({ ...prev, [field.key]: String(d.optionValue) }))
-            }
-          }}
-        >
-          {(field.options ?? []).map(opt => (
-            <OpptrixOption key={opt.value} value={opt.value}>{opt.label}</OpptrixOption>
-          ))}
-        </OpptrixSelect>
-      )
-    }
-    return (
-      <Input
-        className={s.inlineControl}
-        appearance="filled-darker"
-        size="medium"
-        type={field.type === 'number' ? 'number' : 'text'}
-        value={value == null ? '' : String(value)}
-        placeholder={field.placeholder}
-        onChange={(_, d) => {
-          const next = d.value ?? ''
-          setDraft(prev => ({
-            ...prev,
-            [field.key]: field.type === 'number' ? (next === '' ? '' : next) : next,
-          }))
-        }}
-      />
-    )
-  }
-
   if (!provider.settingsFields.length) {
     return (
       <Text block style={{ fontSize: 'var(--opptrix-font-md)', color: opptrixCssVars.textTertiary }}>
@@ -274,63 +252,168 @@ export function ProviderSettingsForm({
   return (
     <div className={s.root}>
       {plainFields.map(field => (
-        <div key={field.key} className={s.fieldBlock}>
-          <Text className={s.fieldLabel} block>{field.label}</Text>
-          {field.description && (
-            <Text className={s.fieldDesc} block>{field.description}</Text>
-          )}
-          {renderPlainField(field)}
-        </div>
+        <ProviderFieldRow
+          key={field.key}
+          field={field}
+          value={draft[field.key]}
+          onChange={v => setDraft(prev => ({ ...prev, [field.key]: v }))}
+          onTest={provider.supportsTest ? () => { void handleTest() } : undefined}
+          onSave={() => { void handleSave() }}
+          testing={testing}
+          saving={saving}
+          testDisabled={false}
+          saveDisabled={!hasPendingChanges && !fieldConfigured(provider, field)}
+        />
       ))}
 
       {secretFields.length > 0 && (
-        <div className={s.secretBlock}>
-          {secretFields.map(field => (
-            <div key={field.key} className={s.fieldBlock}>
-              <Text className={s.fieldLabel} block>{field.label}</Text>
-              {field.description && (
-                <Text className={s.fieldDesc} block>{field.description}</Text>
-              )}
-              <SettingsCredentialRow
-                value={secrets[field.key] ?? ''}
-                onChange={v => setSecrets(prev => ({ ...prev, [field.key]: v }))}
-                placeholder={field.placeholder ?? '粘贴 API Key 或 Token'}
-                testing={testing}
-                saving={saving}
-                testDisabled={!provider.supportsTest}
-                saveDisabled={!canSave && !provider.secretsConfigured[field.key]}
-                onTest={() => { void handleTest() }}
-                onSave={() => { void handleSave() }}
-              />
-            </div>
-          ))}
-        </div>
-      )}
-
-      {secretFields.length === 0 && (
-        <div className={s.actions}>
-          {provider.supportsTest && (
-            <OpptrixButton
-              variant="ghost"
-              disabled={testing}
-              onClick={() => { void handleTest() }}
-            >
-              {testing ? '测试中…' : '测试连接'}
-            </OpptrixButton>
-          )}
-          <OpptrixButton
-            variant="primary"
-            disabled={saving || !canSave}
-            onClick={() => { void handleSave() }}
-          >
-            {saving ? '保存中…' : '保存'}
-          </OpptrixButton>
-        </div>
+        secretFields.map(field => (
+          <ProviderFieldRow
+            key={field.key}
+            field={field}
+            value={secrets[field.key] ?? ''}
+            onChange={v => setSecrets(prev => ({ ...prev, [field.key]: String(v) }))}
+            secret
+            onTest={provider.supportsTest ? () => { void handleTest() } : undefined}
+            onSave={() => { void handleSave() }}
+            testing={testing}
+            saving={saving}
+            testDisabled={false}
+            saveDisabled={!canSave && !provider.secretsConfigured[field.key]}
+            configured={provider.secretsConfigured[field.key]}
+            preview={provider.secretPreviews?.[field.key]}
+          />
+        ))
       )}
 
       {missingHint && (
         <Text block style={{ fontSize: 'var(--opptrix-font-sm)', color: opptrixCssVars.textTertiary }}>
           {missingHint}
+        </Text>
+      )}
+    </div>
+  )
+}
+
+function ProviderFieldRow({
+  field,
+  value,
+  onChange,
+  secret = false,
+  onTest,
+  onSave,
+  testing = false,
+  saving = false,
+  testDisabled = false,
+  saveDisabled = false,
+  configured = false,
+  preview,
+}: {
+  field: ProviderSettingsField
+  value: unknown
+  onChange: (value: unknown) => void
+  secret?: boolean
+  onTest?: () => void
+  onSave: () => void
+  testing?: boolean
+  saving?: boolean
+  testDisabled?: boolean
+  saveDisabled?: boolean
+  configured?: boolean
+  preview?: string
+}) {
+  const s = useStyles()
+  const [visible, setVisible] = useState(false)
+  const showConfiguredHint = configured && !String(value ?? '').trim()
+
+  const renderInput = (withCombo = true) => {
+    if (field.type === 'boolean') {
+      return (
+        <div className={withCombo ? s.comboSelectWrap : undefined} style={!withCombo ? { width: '100%' } : undefined}>
+          <Switch
+            checked={Boolean(value)}
+            onChange={(_, d) => onChange(!!d.checked)}
+            aria-label={field.label}
+          />
+        </div>
+      )
+    }
+    if (field.type === 'select') {
+      return (
+        <div className={withCombo ? s.comboSelectWrap : undefined} style={!withCombo ? { width: '100%' } : undefined}>
+          <OpptrixSelect
+            style={{ width: '100%' }}
+            value={String(value ?? field.default ?? '')}
+            onOptionSelect={(_, d) => {
+              if (d.optionValue != null) onChange(String(d.optionValue))
+            }}
+          >
+            {(field.options ?? []).map(opt => (
+              <OpptrixOption key={opt.value} value={opt.value}>{opt.label}</OpptrixOption>
+            ))}
+          </OpptrixSelect>
+        </div>
+      )
+    }
+    return (
+      <Input
+        className={withCombo ? s.comboInput : undefined}
+        style={!withCombo ? { width: '100%' } : undefined}
+        appearance="filled-darker"
+        size="small"
+        type={secret && !visible ? 'password' : field.type === 'number' ? 'number' : 'text'}
+        value={value == null ? '' : String(value)}
+        placeholder={field.placeholder}
+        onChange={(_, d) => {
+          const next = d.value ?? ''
+          onChange(field.type === 'number' ? (next === '' ? '' : next) : next)
+        }}
+      />
+    )
+  }
+
+  return (
+    <div>
+      <Text className={s.fieldLabel} block>{field.label}</Text>
+      <div className={s.combo}>
+        {renderInput()}
+        {secret && (
+          <div className={s.comboSegment}>
+            <OpptrixButton
+              variant="icon"
+              aria-label={visible ? '隐藏' : '显示'}
+              icon={visible ? <EyeOffRegular fontSize={14} /> : <EyeRegular fontSize={14} />}
+              onClick={() => setVisible(v => !v)}
+            />
+          </div>
+        )}
+        {onTest && (
+          <div className={s.comboSegment}>
+            <OpptrixButton
+              variant="icon"
+              aria-label="测试连接"
+              icon={<Wifi1Regular fontSize={14} />}
+              disabled={testing || testDisabled || saving}
+              onClick={onTest}
+            />
+          </div>
+        )}
+        <div className={s.comboSegment}>
+          <OpptrixButton
+            variant="icon"
+            aria-label="保存"
+            icon={<CheckmarkRegular fontSize={14} />}
+            disabled={saving || saveDisabled}
+            onClick={onSave}
+          />
+        </div>
+      </div>
+      {field.description && (
+        <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
+      )}
+      {showConfiguredHint && (
+        <Text className={s.credHint} block>
+          {preview ? `当前密钥：${preview}。如需更换，输入新密钥后保存。` : '密钥已保存在本机，如需更换请输入新密钥后保存。'}
         </Text>
       )}
     </div>
