@@ -358,41 +358,41 @@ function SessionSidebar({
       )}
 
       <div className={mergeClasses(s.menuSection, 'opptrix-sidebar-menu')}>
-      <OpptrixButton variant="ghost" className={mergeClasses(s.menuRow, 'opptrix-sidebar-menu__item')} onClick={handleTopMenuClick(onNew)}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onNew)}>
         <ChatAddRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新对话</span>
-      </OpptrixButton>
+      </button>
 
-      <OpptrixButton variant="ghost" className={mergeClasses(s.menuRow, 'opptrix-sidebar-menu__item')} onClick={handleTopMenuClick(onOpenSearch)}>
+      <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onOpenSearch)}>
         <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>搜索</span>
-      </OpptrixButton>
+      </button>
 
-      <OpptrixButton
-        variant="ghost"
+      <button
+        type="button"
         className={mergeClasses(
           s.menuRow,
-          'opptrix-sidebar-menu__item',
+          'opptrix-focusable',
           activeRoute === 'news' && s.menuRowActive,
         )}
         onClick={handleTopMenuClick(onOpenNewsCenter)}
       >
         <NewsRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>新闻中心</span>
-      </OpptrixButton>
+      </button>
 
-      <OpptrixButton
-        variant="ghost"
+      <button
+        type="button"
         className={mergeClasses(
           s.menuRow,
-          'opptrix-sidebar-menu__item',
+          'opptrix-focusable',
           activeRoute === 'market' && s.menuRowActive,
         )}
         onClick={handleTopMenuClick(onOpenMarketDynamics)}
       >
         <GlobeRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>市场动态</span>
-      </OpptrixButton>
+      </button>
       </div>
 
       <div className={s.listTabWrap}>
@@ -442,25 +442,25 @@ function SessionSidebar({
               </span>
               <span className={s.itemTrailing}>
                 <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
-                <OpptrixButton
-                  variant="icon"
-                  className={mergeClasses(s.itemArchive, 'opptrix-session-archive')}
+                <button
+                  type="button"
+                  className={mergeClasses(s.itemArchive, 'opptrix-session-archive', 'opptrix-focusable')}
                   onClick={e => {
                     e.stopPropagation()
-                    setArchiveMenu({ sessionId: sess.id, anchor: e.currentTarget as HTMLElement })
+                    setArchiveMenu({ sessionId: sess.id, anchor: e.currentTarget })
                   }}
                   aria-label="归档对话"
                 >
                   <ArchiveRegular fontSize={14} />
-                </OpptrixButton>
-                <OpptrixButton
-                  variant="icon"
-                  className={mergeClasses(s.itemDelete, 'opptrix-session-delete')}
+                </button>
+                <button
+                  type="button"
+                  className={mergeClasses(s.itemDelete, 'opptrix-session-delete', 'opptrix-focusable')}
                   onClick={e => { e.stopPropagation(); onDelete(sess.id) }}
                   aria-label="删除对话"
                 >
                   <DeleteRegular fontSize={14} />
-                </OpptrixButton>
+                </button>
               </span>
             </div>
           )

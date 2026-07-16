@@ -502,22 +502,22 @@ export default function SessionSidebarArchivePanel({
               onKeyDown={handleCreateKeyDown}
             />
             <span className={s.inlineActions}>
-              <OpptrixButton
-                variant="icon"
-                className={s.inlineBtn}
+              <button
+                type="button"
+                className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                 aria-label="创建文件夹"
                 onClick={submitCreate}
               >
                 <CheckmarkRegular fontSize={14} />
-              </OpptrixButton>
-              <OpptrixButton
-                variant="icon"
-                className={s.inlineBtn}
+              </button>
+              <button
+                type="button"
+                className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                 aria-label="取消"
                 onClick={cancelCreate}
               >
                 <DismissRegular fontSize={14} />
-              </OpptrixButton>
+              </button>
             </span>
           </div>
         ) : (
@@ -593,22 +593,22 @@ export default function SessionSidebarArchivePanel({
                       onKeyDown={e => handleRenameKeyDown(e, folder)}
                     />
                     <span className={s.inlineActions}>
-                      <OpptrixButton
-                        variant="icon"
-                        className={s.inlineBtn}
+                      <button
+                        type="button"
+                        className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                         aria-label="保存名称"
                         onClick={() => submitRename(folder)}
                       >
                         <CheckmarkRegular fontSize={14} />
-                      </OpptrixButton>
-                      <OpptrixButton
-                        variant="icon"
-                        className={s.inlineBtn}
+                      </button>
+                      <button
+                        type="button"
+                        className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                         aria-label="取消"
                         onClick={cancelRename}
                       >
                         <DismissRegular fontSize={14} />
-                      </OpptrixButton>
+                      </button>
                     </span>
                   </>
                 ) : isDeleting ? (
@@ -617,22 +617,22 @@ export default function SessionSidebarArchivePanel({
                       删除「{folder.title}」？对话将移到「其他」
                     </span>
                     <span className={s.inlineActions}>
-                      <OpptrixButton
-                        variant="danger"
-                        className={s.inlineBtn}
+                      <button
+                        type="button"
+                        className={mergeClasses(s.inlineBtn, s.inlineBtnDanger, 'opptrix-focusable')}
                         aria-label="确认删除文件夹"
                         onClick={() => confirmDeleteFolder(folder.id)}
                       >
                         <CheckmarkRegular fontSize={14} />
-                      </OpptrixButton>
-                      <OpptrixButton
-                        variant="icon"
-                        className={s.inlineBtn}
+                      </button>
+                      <button
+                        type="button"
+                        className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                         aria-label="取消"
                         onClick={cancelDeleteFolder}
                       >
                         <DismissRegular fontSize={14} />
-                      </OpptrixButton>
+                      </button>
                     </span>
                   </>
                 ) : (
@@ -649,36 +649,39 @@ export default function SessionSidebarArchivePanel({
                       </span>
                       {hasUserFolderActions && (
                         <>
-                          <OpptrixButton
-                            variant="icon"
+                          <button
+                            type="button"
                             className={mergeClasses(
                               s.folderActionRename,
                               'opptrix-archive-folder-rename',
+                              'opptrix-focusable',
                             )}
                             aria-label="重命名文件夹"
                             onClick={e => { e.stopPropagation(); startRename(folder) }}
                           >
                             <EditRegular fontSize={14} />
-                          </OpptrixButton>
-                          <OpptrixButton
-                            variant="icon"
+                          </button>
+                          <button
+                            type="button"
                             className={mergeClasses(
                               s.folderActionDelete,
                               'opptrix-archive-folder-delete',
+                              'opptrix-focusable',
                             )}
                             aria-label="删除文件夹"
                             onClick={e => { e.stopPropagation(); startDeleteFolder(folder) }}
                           >
                             <DeleteRegular fontSize={14} />
-                          </OpptrixButton>
+                          </button>
                         </>
                       )}
                       {hasFolderClear && (
-                        <OpptrixButton
-                          variant="icon"
+                        <button
+                          type="button"
                           className={mergeClasses(
                             s.folderActionClear,
                             'opptrix-archive-folder-clear',
+                            'opptrix-focusable',
                           )}
                           aria-label="清空文件夹"
                           onClick={e => {
@@ -690,7 +693,7 @@ export default function SessionSidebarArchivePanel({
                           }}
                         >
                           <BroomRegular fontSize={14} />
-                        </OpptrixButton>
+                        </button>
                       )}
                     </span>
                   </>
@@ -712,22 +715,22 @@ export default function SessionSidebarArchivePanel({
                           >
                             <Text className={s.inlineHint}>删除此对话？</Text>
                             <span className={s.inlineActions}>
-                              <OpptrixButton
-                                variant="danger"
-                                className={s.inlineBtn}
+                              <button
+                                type="button"
+                                className={mergeClasses(s.inlineBtn, s.inlineBtnDanger, 'opptrix-focusable')}
                                 aria-label="确认删除对话"
                                 onClick={() => confirmDeleteSession(sess.id)}
                               >
                                 <CheckmarkRegular fontSize={14} />
-                              </OpptrixButton>
-                              <OpptrixButton
-                                variant="icon"
-                                className={s.inlineBtn}
+                              </button>
+                              <button
+                                type="button"
+                                className={mergeClasses(s.inlineBtn, 'opptrix-focusable')}
                                 aria-label="取消"
                                 onClick={cancelDeleteSession}
                               >
                                 <DismissRegular fontSize={14} />
-                              </OpptrixButton>
+                              </button>
                             </span>
                           </div>
                         ) : (
@@ -749,9 +752,9 @@ export default function SessionSidebarArchivePanel({
                               {sess.title}
                             </span>
                             <span className={s.folderCount}>{formatDate(sess.updatedAt)}</span>
-                            <OpptrixButton
-                              variant="icon"
-                              className={mergeClasses(s.sessionDelete, 'opptrix-archive-session-delete')}
+                            <button
+                              type="button"
+                              className={mergeClasses(s.sessionDelete, 'opptrix-archive-session-delete', 'opptrix-focusable')}
                               aria-label="删除对话"
                               onClick={e => {
                                 e.stopPropagation()
@@ -759,7 +762,7 @@ export default function SessionSidebarArchivePanel({
                               }}
                             >
                               <DeleteRegular fontSize={14} />
-                            </OpptrixButton>
+                            </button>
                           </div>
                         )
                       })}
