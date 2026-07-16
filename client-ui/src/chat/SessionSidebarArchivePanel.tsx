@@ -286,23 +286,42 @@ const useStyles = makeStyles({
   },
   sessionTitle: {
     flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
+    WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
+  },
+  sessionTrailing: {
+    position: 'relative',
+    flexShrink: 0,
+    height: '18px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
+    transitionProperty: 'min-width',
+    transitionDuration: motion.fast,
+  },
+  sessionSpinner: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: opptrixCssVars.textTertiary,
   },
   sessionDelete: {
     ...nativeIconInteractive,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    width: '24px',
-    height: '24px',
     lineHeight: 0,
+    position: 'absolute',
+    right: 0,
+    top: '50%',
+    transform: 'translateY(-50%)',
     opacity: 0,
     pointerEvents: 'none',
-    flexShrink: 0,
     '@media (hover: none)': {
       opacity: 1,
       pointerEvents: 'auto',
@@ -561,8 +580,14 @@ export default function SessionSidebarArchivePanel({
                 role={!isRenaming && !isDeleting ? 'button' : undefined}
                 tabIndex={!isRenaming && !isDeleting ? 0 : undefined}
                 aria-expanded={!isRenaming && !isDeleting ? !isCollapsed : undefined}
-                onClick={() => {
-                  if (!isRenaming && !isDeleting) toggleFolder(folder.id)
+                onClick={e => {
+                  if (!isRenaming && !isDeleting) {
+                    toggleFolder(folder.id)
+                    // Drop focus after a mouse click so :focus-within styles
+                    // (chevron / folder-icon swap) don't linger once the
+                    // pointer leaves, matching the chat list selection.
+                    if (e.detail > 0) e.currentTarget.blur()
+                  }
                 }}
                 onKeyDown={e => {
                   if (e.key === 'Enter' && !isRenaming && !isDeleting) {
@@ -741,6 +766,7 @@ export default function SessionSidebarArchivePanel({
                               'opptrix-archive-session-item',
                               'opptrix-focusable',
                               active && s.sessionActive,
+                              busy && 'opptrix-archive-session-item-busy',
                             )}
                             role="button"
                             tabIndex={0}
@@ -748,21 +774,23 @@ export default function SessionSidebarArchivePanel({
                             onKeyDown={e => e.key === 'Enter' && onSelect(sess.id)}
                           >
                             <span className={s.sessionTitle}>
-                              {busy && <ThinkingDots />}
                               {sess.title}
                             </span>
-                            <span className={s.folderCount}>{formatDate(sess.updatedAt)}</span>
-                            <button
-                              type="button"
-                              className={mergeClasses(s.sessionDelete, 'opptrix-archive-session-delete', 'opptrix-focusable')}
-                              aria-label="删除对话"
-                              onClick={e => {
-                                e.stopPropagation()
-                                startDeleteSession(sess.id)
-                              }}
-                            >
-                              <DeleteRegular fontSize={14} />
-                            </button>
+                            <span className={mergeClasses(s.sessionTrailing, 'opptrix-archive-session-trailing')}>
+                              {busy && <ThinkingDots className={s.sessionSpinner} label="" />}
+                              <span className={mergeClasses(s.folderCount, 'opptrix-archive-session-date')}>{formatDate(sess.updatedAt)}</span>
+                              <button
+                                type="button"
+                                className={mergeClasses(s.sessionDelete, 'opptrix-archive-session-delete', 'opptrix-focusable')}
+                                aria-label="删除对话"
+                                onClick={e => {
+                                  e.stopPropagation()
+                                  startDeleteSession(sess.id)
+                                }}
+                              >
+                                <DeleteRegular fontSize={14} />
+                              </button>
+                            </span>
                           </div>
                         )
                       })}

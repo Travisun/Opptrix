@@ -20,7 +20,7 @@ import { listRowKey } from '../utils/listRowKey'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
-const ROWS = 3
+const ROWS = 1
 const ROW_PX = Math.round(FONT_SIZE * LINE_HEIGHT)
 const MIN_TEXT_HEIGHT = ROW_PX * ROWS
 const MAX_TEXT_HEIGHT = ROW_PX * 8
@@ -209,7 +209,10 @@ position: 'relative',
   sendBtn: {...primaryInteractive,
 borderRadius: opptrixTokens.radiusFull,
     minWidth: '28px',
+    maxWidth: '28px',
     width: '28px',
+    minHeight: '28px',
+    maxHeight: '28px',
     height: '28px',
     padding: 0,
     flexShrink: 0,
@@ -405,7 +408,26 @@ export default function ChatComposer({
       return
     }
 
-    if (e.key === 'Enter' && !e.shiftKey) {
+    if (e.key === 'Enter') {
+      // Shift+Enter: let the browser insert a newline (default behaviour).
+      if (e.shiftKey) return
+      // Ctrl/Cmd+Enter: insert a newline manually (not inserted by default).
+      if (e.ctrlKey || e.metaKey) {
+        e.preventDefault()
+        const el = textareaRef.current
+        if (!el) return
+        const start = el.selectionStart ?? input.length
+        const end = el.selectionEnd ?? input.length
+        const nextText = `${input.slice(0, start)}\n${input.slice(end)}`
+        const nextCursor = start + 1
+        setInput(nextText)
+        window.requestAnimationFrame(() => {
+          el.focus()
+          el.setSelectionRange(nextCursor, nextCursor)
+        })
+        return
+      }
+      // Plain Enter: send.
       e.preventDefault()
       if (canSend) handleSubmitMessage()
     }

@@ -48,6 +48,7 @@ export default function DataProvidersSettingsSection() {
         catalog={catalog}
         onSaved={() => { void refresh() }}
         onOrderSaved={setCatalog}
+        showInstalled={false}
       />
     </div>
   )

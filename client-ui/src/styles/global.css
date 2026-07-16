@@ -2025,17 +2025,28 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
   background: rgba(60, 60, 67, 0.12);
 }
 
+/* Busy session: spinner takes over the date slot; hide date and suppress
+   hover-only actions so the title area stays maximally wide. */
+.opptrix-session-item-busy .opptrix-session-date,
+.opptrix-archive-session-item-busy .opptrix-archive-session-date {
+  display: none;
+}
+
 @media (hover: hover) {
-  .opptrix-session-item:hover .opptrix-session-date {
+  .opptrix-session-item:not(.opptrix-session-item-busy):hover .opptrix-session-date {
     opacity: 0;
   }
 
-  .opptrix-session-item:hover .opptrix-session-delete {
+  .opptrix-session-item:not(.opptrix-session-item-busy):hover .opptrix-session-trailing {
+    min-width: 44px;
+  }
+
+  .opptrix-session-item:not(.opptrix-session-item-busy):hover .opptrix-session-delete {
     opacity: 1;
     pointer-events: auto;
   }
 
-  .opptrix-session-item:hover .opptrix-session-archive {
+  .opptrix-session-item:not(.opptrix-session-item-busy):hover .opptrix-session-archive {
     opacity: 1;
     pointer-events: auto;
   }
@@ -2044,7 +2055,8 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     opacity: 0;
   }
 
-  .opptrix-archive-folder-head:hover .opptrix-archive-folder-icon {
+  .opptrix-archive-folder-head:hover .opptrix-archive-folder-icon,
+  .opptrix-archive-folder-head:focus-within .opptrix-archive-folder-icon {
     opacity: 0;
   }
 
@@ -2086,7 +2098,15 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
     display: none !important;
   }
 
-  .opptrix-archive-session-item:hover .opptrix-archive-session-delete {
+  .opptrix-archive-session-item:not(.opptrix-archive-session-item-busy):hover .opptrix-archive-session-date {
+    opacity: 0;
+  }
+
+  .opptrix-archive-session-item:not(.opptrix-archive-session-item-busy):hover .opptrix-archive-session-trailing {
+    min-width: 22px;
+  }
+
+  .opptrix-archive-session-item:not(.opptrix-archive-session-item-busy):hover .opptrix-archive-session-delete {
     opacity: 1;
     pointer-events: auto;
   }

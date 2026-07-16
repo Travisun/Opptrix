@@ -20,7 +20,7 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
   const [open, setOpen] = useState(false)
   const [draft, setDraft] = useState('')
   const [manageMode, setManageMode] = useState(false)
-  const anchorRef = useRef<HTMLDivElement>(null)
+  const anchorRef = useRef<HTMLButtonElement>(null)
 
   const handleAddPinned = useCallback(() => {
     const text = draft.trim()
@@ -50,21 +50,20 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
 
   return (
     <>
-      <div ref={anchorRef} className="opptrix-composer-quick-add-wrap">
-        <OpptrixButton
-          variant="icon"
-          className={mergeClasses(
-            'opptrix-composer-quick-add',
-            open && 'opptrix-composer-quick-add--open',
-          )}
-          disabled={disabled}
-          aria-label="快捷任务"
-          aria-expanded={open}
-          onClick={() => setOpen(v => !v)}
-        >
-          <AddRegular fontSize={16} />
-        </OpptrixButton>
-      </div>
+      <button
+        ref={anchorRef}
+        type="button"
+        className={mergeClasses(
+          'opptrix-composer-quick-add opptrix-focusable',
+          open && 'opptrix-composer-quick-add--open',
+        )}
+        disabled={disabled}
+        aria-label="快捷任务"
+        aria-expanded={open}
+        onClick={() => setOpen(v => !v)}
+      >
+        <AddRegular fontSize={16} />
+      </button>
 
       <ComposerTooltipMenu
         open={open}
@@ -102,25 +101,25 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
                     添加
                   </OpptrixButton>
                 </div>
-                <OpptrixButton
-                  variant="ghost"
-                  className="opptrix-composer-quick-menu__manage-btn"
+                <button
+                  type="button"
+                  className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
                   onClick={() => {
                     setManageMode(false)
                     setDraft('')
                   }}
                 >
                   返回推荐任务
-                </OpptrixButton>
+                </button>
               </>
             ) : (
-              <OpptrixButton
-                variant="ghost"
-                className="opptrix-composer-quick-menu__manage-btn"
+              <button
+                type="button"
+                className="opptrix-composer-quick-menu__manage-btn opptrix-focusable"
                 onClick={() => setManageMode(true)}
               >
                 管理我的常用
-              </OpptrixButton>
+              </button>
             )}
           </div>
         )}
@@ -131,14 +130,14 @@ export default function ComposerQuickTasks({ disabled, onApply }: Props) {
                   <span className="opptrix-composer-quick-menu__manage-text" title={task}>
                     {task}
                   </span>
-                  <OpptrixButton
-                    variant="icon"
-                    className="opptrix-composer-quick-menu__delete"
+                  <button
+                    type="button"
+                    className={mergeClasses('opptrix-composer-quick-menu__delete opptrix-focusable')}
                     aria-label={`删除 ${task}`}
                     onClick={() => handleRemovePinned(task)}
                   >
                     <DeleteRegular fontSize={14} />
-                  </OpptrixButton>
+                  </button>
                 </div>
               )) : (
             <div className="opptrix-composer-tooltip-menu__empty">

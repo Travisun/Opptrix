@@ -11,7 +11,6 @@ import ChatProcessTrace from './ChatProcessTrace'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   entry: {
@@ -93,16 +92,32 @@ const useStyles = makeStyles({
     userSelect: 'none',
   },
   actionBtn: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    margin: 0,
+    border: 'none',
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    cursor: 'pointer',
     opacity: 0,
     pointerEvents: 'none',
     transitionProperty: 'opacity, color',
     transitionDuration: '0.15s',
     transitionTimingFunction: 'ease',
+    ':hover': {
+      color: opptrixCssVars.textSecondary,
+    },
     ':focus-visible': {
       opacity: 1,
       pointerEvents: 'auto',
+      outline: `2px solid rgba(0, 122, 255, 0.35)`,
       outlineOffset: '2px',
       borderRadius: '3px',
+    },
+    ':active': {
+      opacity: 0.72,
     },
   },
   entryInteractive: {
@@ -149,21 +164,21 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
   const forkLabel = '基于此回复分叉新对话'
 
   const forkButton = onFork ? (
-    <OpptrixButton
-      variant="icon"
-      className="opptrix-msg-action"
+    <button
+      type="button"
+      className={mergeClasses(s.actionBtn, 'opptrix-msg-action')}
       onClick={onFork}
       title={forkLabel}
       aria-label={forkLabel}
     >
       <BranchForkRegular fontSize={16} />
-    </OpptrixButton>
+    </button>
   ) : null
 
   const copyButton = (
-    <OpptrixButton
-      variant="icon"
-      className="opptrix-msg-action"
+    <button
+      type="button"
+      className={mergeClasses(s.actionBtn, 'opptrix-msg-action')}
       onClick={handleCopy}
       title={copyLabel}
       aria-label={copyLabel}
@@ -171,7 +186,7 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
       {copied
         ? <CheckmarkCircleFilled fontSize={16} />
         : <ClipboardPasteRegular fontSize={16} />}
-    </OpptrixButton>
+    </button>
   )
 
   const timeNode = timeLabel ? (

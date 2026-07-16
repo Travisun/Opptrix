@@ -4,7 +4,6 @@ import { DismissRegular } from '@fluentui/react-icons'
 import type { SessionContextRef } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { formatContextRefLabel, formatContextRefPreview } from '../utils/formatContextRefPreview'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   chipRow: {
@@ -49,11 +48,15 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     flexShrink: 0,
     width: '20px',
-    height: '22px',
+    height: '100%',
     padding: 0,
+    margin: 0,
+    border: 'none',
     borderLeft: '1px solid rgba(0, 122, 255, 0.14)',
+    backgroundColor: 'transparent',
     color: 'inherit',
     opacity: 0.78,
+    cursor: 'pointer',
     ':hover': {
       opacity: 1,
       backgroundColor: 'rgba(0, 122, 255, 0.12)',
@@ -111,15 +114,15 @@ export default function ComposerContextRefTag({ contextRef, onClear }: Props) {
         </button>
       </Tooltip>
       {onClear && (
-        <OpptrixButton
-          variant="icon"
+        <button
+          type="button"
           className={s.chipDismiss}
           onClick={onClear}
           title="移除引用"
           aria-label="移除引用上下文"
         >
           <DismissRegular fontSize={11} />
-        </OpptrixButton>
+        </button>
       )}
     </span>
   )

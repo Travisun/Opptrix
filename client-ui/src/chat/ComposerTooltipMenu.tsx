@@ -11,7 +11,6 @@ import { createPortal } from 'react-dom'
 import { mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import { OPPTRIX_GLASS_PANEL_CLASS } from '../theme/mixins'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 export type ComposerTooltipAlign = 'start' | 'end'
 
@@ -154,14 +153,14 @@ export default function ComposerTooltipMenu({
             <span className="opptrix-composer-tooltip-menu__title">{title}</span>
           ) : <span />}
           {showClose ? (
-            <OpptrixButton
-              variant="icon"
-              className="opptrix-composer-tooltip-menu__close"
+            <button
+              type="button"
+              className="opptrix-composer-tooltip-menu__close opptrix-focusable"
               aria-label="关闭"
               onClick={onClose}
             >
               <DismissRegular fontSize={14} />
-            </OpptrixButton>
+            </button>
           ) : null}
         </div>
       )}
@@ -196,8 +195,8 @@ export function ComposerTooltipMenuItem({
   className?: string
 }) {
   return (
-    <OpptrixButton
-      variant="ghost"
+    <button
+      type="button"
       className={mergeClasses(
         'opptrix-composer-tooltip-menu__item',
         active && 'opptrix-composer-tooltip-menu__item--active',
@@ -208,6 +207,6 @@ export function ComposerTooltipMenuItem({
       onClick={onClick}
     >
       {children}
-    </OpptrixButton>
+    </button>
   )
 }

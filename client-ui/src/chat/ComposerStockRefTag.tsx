@@ -8,7 +8,6 @@ import {
   resolveWatchlistInstrument,
 } from '../market/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   chipRow: {
@@ -53,11 +52,15 @@ const useStyles = makeStyles({
     justifyContent: 'center',
     flexShrink: 0,
     width: '20px',
-    height: '22px',
+    height: '100%',
     padding: 0,
+    margin: 0,
+    border: 'none',
     borderLeft: `1px solid ${opptrixCssVars.accentMuted}`,
+    backgroundColor: 'transparent',
     color: 'inherit',
     opacity: 0.78,
+    cursor: 'pointer',
     ':hover': {
       opacity: 1,
       backgroundColor: 'rgba(209, 122, 93, 0.12)',
@@ -86,15 +89,15 @@ export default function ComposerStockRefTag({ item, onRemove }: Props) {
         ) : null}
         <span className={s.chipCode}>{codeLabel}</span>
       </span>
-      <OpptrixButton
-        variant="icon"
+      <button
+        type="button"
         className={s.chipDismiss}
         onClick={onRemove}
         title="移除股票引用"
         aria-label={`移除 ${item.name}`}
       >
         <DismissRegular fontSize={11} />
-      </OpptrixButton>
+      </button>
     </span>
   )
 }

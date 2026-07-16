@@ -143,7 +143,7 @@ const useStyles = makeStyles({
 
     display: 'flex',
     alignItems: 'center',
-    gap: '8px',
+    gap: '6px',
     padding: '5px 10px',
     minHeight: '30px',
     borderRadius: opptrixTokens.radiusMd,
@@ -157,21 +157,30 @@ const useStyles = makeStyles({
   },
   itemTitle: {
     flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
     color: 'inherit',
+    maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
+    WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
   },
   itemTrailing: {
     position: 'relative',
     flexShrink: 0,
-    width: '52px',
     height: '18px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
+    transitionProperty: 'min-width',
+    transitionDuration: motion.fast,
+  },
+  itemSpinner: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    color: opptrixCssVars.textTertiary,
   },
   itemDate: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -333,10 +342,11 @@ function SessionSidebar({
   }, [])
 
   const handleSelect = (id: string) => {
-    // When picking a session (especially from archive panel), switch back
-    // to the chat tab and clear any :focus / :hover-visible lingering in the
-    // sidebar list so the user lands cleanly in the chat area.
-    if (listTab !== 'chat') setListTab('chat')
+    // Clear any lingering :focus / :hover-visible in the sidebar so the user
+    // lands cleanly in the chat area. We intentionally do NOT force the tab
+    // back to 'chat': when a session is picked from the archive panel it stays
+    // visible inside its folder (with the busy spinner) while the user keeps
+    // chatting, instead of jumping away to the chat tab.
     releaseSidebarFocus()
     onSelect(id)
     if (isDrawer || isOverlay) onClose?.()
@@ -430,6 +440,7 @@ function SessionSidebar({
                 s.item,
                 active && s.itemActive,
                 active && 'opptrix-session-item-active',
+                busy && 'opptrix-session-item-busy',
               )}
               onClick={() => handleSelect(sess.id)}
               role="button"
@@ -437,10 +448,10 @@ function SessionSidebar({
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
               <span className={s.itemTitle}>
-                {busy && <ThinkingDots />}
                 {sess.title}
               </span>
-              <span className={s.itemTrailing}>
+              <span className={mergeClasses(s.itemTrailing, 'opptrix-session-trailing')}>
+                {busy && <ThinkingDots className={s.itemSpinner} label="" />}
                 <span className={mergeClasses(s.itemDate, 'opptrix-session-date')}>{formatDate(sess.updatedAt)}</span>
                 <button
                   type="button"

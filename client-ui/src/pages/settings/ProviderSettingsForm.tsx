@@ -6,7 +6,7 @@ import {
   makeStyles,
 } from '@fluentui/react-components'
 import {
-  Wifi1Regular,
+  FlashRegular,
   CheckmarkRegular,
   EyeRegular,
   EyeOffRegular,
@@ -66,12 +66,26 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-md)',
     paddingLeft: '10px',
     paddingRight: '4px',
+    // Let the combo shell own the rounded background — flatten the inner Input.
+    backgroundColor: 'transparent',
+    borderRadius: 0,
+    border: 'none',
+    ':hover': {
+      backgroundColor: 'transparent',
+    },
+    ':focus-within': {
+      backgroundColor: 'transparent',
+    },
+    '::after': {
+      display: 'none',
+    },
   },
-  comboSelectWrap: {
-    flex: '1 1 0',
-    minWidth: 0,
+  standaloneControl: {
     display: 'flex',
     alignItems: 'center',
+    width: '100%',
+    minWidth: 0,
+    marginTop: '4px',
   },
   comboSegment: {
     display: 'flex',
@@ -108,6 +122,17 @@ function isExtraStorageField(field: ProviderSettingsField): boolean {
   return field.key !== 'enabled'
 }
 
+/** Seed schema defaults so select/boolean fields render with their default选项. */
+function seedDraftDefaults(provider: PublicProviderRuntime): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...provider.values }
+  for (const field of provider.settingsFields) {
+    if (field.type === 'secret') continue
+    if (out[field.key] != null && out[field.key] !== '') continue
+    if (field.default !== undefined) out[field.key] = field.default
+  }
+  return out
+}
+
 function readSecretValues(provider: PublicProviderRuntime): Record<string, string> {
   const out: Record<string, string> = {}
   for (const field of provider.settingsFields) {
@@ -127,13 +152,13 @@ export function ProviderSettingsForm({
 }) {
   const s = useStyles()
   const toast = useSettingsToast()
-  const [draft, setDraft] = useState<Record<string, unknown>>(() => ({ ...provider.values }))
+  const [draft, setDraft] = useState<Record<string, unknown>>(() => seedDraftDefaults(provider))
   const [secrets, setSecrets] = useState<Record<string, string>>(() => readSecretValues(provider))
   const [saving, setSaving] = useState(false)
   const [testing, setTesting] = useState(false)
 
   useEffect(() => {
-    setDraft({ ...provider.values })
+    setDraft(seedDraftDefaults(provider))
     setSecrets(readSecretValues(provider))
   }, [provider])
 
@@ -151,7 +176,8 @@ export function ProviderSettingsForm({
     [extraStorageFields],
   )
 
-  const buildExtra = () => {
+  const buildExtra = (draftOverride?: Record<string, unknown>) => {
+    const source = draftOverride ?? draft
     const extra: Record<string, unknown> = {}
     for (const field of extraStorageFields) {
       if (field.type === 'secret') {
@@ -159,8 +185,8 @@ export function ProviderSettingsForm({
         if (trimmed) extra[field.key] = trimmed
         continue
       }
-      if (!(field.key in draft)) continue
-      const value = draft[field.key]
+      if (!(field.key in source)) continue
+      const value = source[field.key]
       if (field.type === 'number') {
         if (value === '' || value == null) continue
         extra[field.key] = Number(value)
@@ -224,6 +250,22 @@ export function ProviderSettingsForm({
     }
   }
 
+  const handlePlainFieldChange = async (field: ProviderSettingsField, value: unknown) => {
+    const nextDraft = { ...draft, [field.key]: value }
+    setDraft(nextDraft)
+    const extra = buildExtra(nextDraft)
+    if (!extra) return
+    setSaving(true)
+    try {
+      await saveProviderConfig(provider.providerId, { extra })
+      onSaved()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '保存失败')
+    } finally {
+      setSaving(false)
+    }
+  }
+
   const handleTest = async () => {
     if (!provider.supportsTest) return
     setTesting(true)
@@ -256,13 +298,9 @@ export function ProviderSettingsForm({
           key={field.key}
           field={field}
           value={draft[field.key]}
-          onChange={v => setDraft(prev => ({ ...prev, [field.key]: v }))}
-          onTest={provider.supportsTest ? () => { void handleTest() } : undefined}
+          onChange={v => { void handlePlainFieldChange(field, v) }}
           onSave={() => { void handleSave() }}
-          testing={testing}
           saving={saving}
-          testDisabled={false}
-          saveDisabled={!hasPendingChanges && !fieldConfigured(provider, field)}
         />
       ))}
 
@@ -314,7 +352,7 @@ function ProviderFieldRow({
   onChange: (value: unknown) => void
   secret?: boolean
   onTest?: () => void
-  onSave: () => void
+  onSave?: () => void
   testing?: boolean
   saving?: boolean
   testDisabled?: boolean
@@ -326,24 +364,36 @@ function ProviderFieldRow({
   const [visible, setVisible] = useState(false)
   const showConfiguredHint = configured && !String(value ?? '').trim()
 
-  const renderInput = (withCombo = true) => {
-    if (field.type === 'boolean') {
-      return (
-        <div className={withCombo ? s.comboSelectWrap : undefined} style={!withCombo ? { width: '100%' } : undefined}>
+  if (field.type === 'boolean') {
+    return (
+      <div>
+        <Text className={s.fieldLabel} block>{field.label}</Text>
+        <div className={s.standaloneControl}>
           <Switch
             checked={Boolean(value)}
             onChange={(_, d) => onChange(!!d.checked)}
             aria-label={field.label}
+            disabled={saving}
           />
         </div>
-      )
-    }
-    if (field.type === 'select') {
-      return (
-        <div className={withCombo ? s.comboSelectWrap : undefined} style={!withCombo ? { width: '100%' } : undefined}>
+        {field.description && (
+          <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
+        )}
+      </div>
+    )
+  }
+
+  if (field.type === 'select') {
+    const selected = String(value ?? field.default ?? '')
+    return (
+      <div>
+        <Text className={s.fieldLabel} block>{field.label}</Text>
+        <div className={s.standaloneControl}>
           <OpptrixSelect
             style={{ width: '100%' }}
-            value={String(value ?? field.default ?? '')}
+            selectedOptions={[selected]}
+            value={selected}
+            disabled={saving}
             onOptionSelect={(_, d) => {
               if (d.optionValue != null) onChange(String(d.optionValue))
             }}
@@ -353,22 +403,10 @@ function ProviderFieldRow({
             ))}
           </OpptrixSelect>
         </div>
-      )
-    }
-    return (
-      <Input
-        className={withCombo ? s.comboInput : undefined}
-        style={!withCombo ? { width: '100%' } : undefined}
-        appearance="filled-darker"
-        size="small"
-        type={secret && !visible ? 'password' : field.type === 'number' ? 'number' : 'text'}
-        value={value == null ? '' : String(value)}
-        placeholder={field.placeholder}
-        onChange={(_, d) => {
-          const next = d.value ?? ''
-          onChange(field.type === 'number' ? (next === '' ? '' : next) : next)
-        }}
-      />
+        {field.description && (
+          <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
+        )}
+      </div>
     )
   }
 
@@ -376,7 +414,18 @@ function ProviderFieldRow({
     <div>
       <Text className={s.fieldLabel} block>{field.label}</Text>
       <div className={s.combo}>
-        {renderInput()}
+        <Input
+          className={s.comboInput}
+          appearance="filled-darker"
+          size="small"
+          type={secret && !visible ? 'password' : field.type === 'number' ? 'number' : 'text'}
+          value={value == null ? '' : String(value)}
+          placeholder={field.placeholder}
+          onChange={(_, d) => {
+            const next = d.value ?? ''
+            onChange(field.type === 'number' ? (next === '' ? '' : next) : next)
+          }}
+        />
         {secret && (
           <div className={s.comboSegment}>
             <OpptrixButton
@@ -392,21 +441,23 @@ function ProviderFieldRow({
             <OpptrixButton
               variant="icon"
               aria-label="测试连接"
-              icon={<Wifi1Regular fontSize={14} />}
+              icon={<FlashRegular fontSize={14} />}
               disabled={testing || testDisabled || saving}
               onClick={onTest}
             />
           </div>
         )}
-        <div className={s.comboSegment}>
-          <OpptrixButton
-            variant="icon"
-            aria-label="保存"
-            icon={<CheckmarkRegular fontSize={14} />}
-            disabled={saving || saveDisabled}
-            onClick={onSave}
-          />
-        </div>
+        {onSave && (
+          <div className={s.comboSegment}>
+            <OpptrixButton
+              variant="icon"
+              aria-label="保存"
+              icon={<CheckmarkRegular fontSize={14} />}
+              disabled={saving || saveDisabled}
+              onClick={onSave}
+            />
+          </div>
+        )}
       </div>
       {field.description && (
         <Text className={s.fieldDesc} block style={{ marginTop: '4px' }}>{field.description}</Text>
