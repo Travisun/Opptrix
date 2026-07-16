@@ -6,7 +6,6 @@ import type { SessionArchiveFolder } from '../types/chat'
 import { listSessionArchiveFolders } from '../api/client'
 import { opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 
 const useStyles = makeStyles({
   folderList: {
@@ -78,10 +77,10 @@ export default function SessionArchiveFolderMenu({ open, anchorRef, onClose, onS
       <div className={s.folderList}>
         {loading && <Text className={s.loading} block>加载文件夹…</Text>}
         {!loading && folders.map(folder => (
-          <OpptrixButton
+          <button
             key={folder.id}
-            variant="ghost"
-            className={mergeClasses(s.folderItem)}
+            type="button"
+            className={mergeClasses(s.folderItem, 'opptrix-focusable')}
             onClick={() => {
               onSelect(folder.id)
               onClose()
@@ -89,7 +88,7 @@ export default function SessionArchiveFolderMenu({ open, anchorRef, onClose, onS
           >
             <FolderRegular className={s.folderIcon} fontSize={16} />
             <span>{folder.title}</span>
-          </OpptrixButton>
+          </button>
         ))}
       </div>
     </ComposerTooltipMenu>

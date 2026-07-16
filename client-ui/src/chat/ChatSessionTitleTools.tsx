@@ -422,15 +422,15 @@ export default function ChatSessionTitleTools({
           <div className="opptrix-session-tools-archive__empty">加载文件夹…</div>
         )}
         {!foldersLoading && folders.map(folder => (
-          <OpptrixButton
+          <button
             key={folder.id}
-            variant="ghost"
-            className="opptrix-session-tools-archive__folder"
+            type="button"
+            className={mergeClasses('opptrix-session-tools-archive__folder', 'opptrix-focusable')}
             onClick={() => { void handleArchiveSelect(folder.id) }}
           >
             <FolderRegular fontSize={16} />
             <span>{folder.title}</span>
-          </OpptrixButton>
+          </button>
         ))}
       </div>
       <div className="opptrix-session-tools-archive__foot">
@@ -444,17 +444,17 @@ export default function ChatSessionTitleTools({
               onChange={(_, data) => setNewFolderDraft(data.value)}
               onKeyDown={handleCreateFolderKeyDown}
             />
-            <OpptrixButton
-              variant="icon"
-              className="opptrix-session-tools-archive__inline-btn"
+            <button
+              type="button"
+              className={mergeClasses('opptrix-session-tools-archive__inline-btn', 'opptrix-focusable')}
               aria-label="创建并归档"
               onClick={() => { void handleCreateFolderConfirm() }}
             >
               <CheckmarkRegular fontSize={14} />
-            </OpptrixButton>
-            <OpptrixButton
-              variant="icon"
-              className="opptrix-session-tools-archive__inline-btn"
+            </button>
+            <button
+              type="button"
+              className={mergeClasses('opptrix-session-tools-archive__inline-btn', 'opptrix-focusable')}
               aria-label="取消"
               onClick={() => {
                 setCreatingFolder(false)
@@ -462,12 +462,12 @@ export default function ChatSessionTitleTools({
               }}
             >
               <DismissRegular fontSize={14} />
-            </OpptrixButton>
+            </button>
           </div>
         ) : (
-          <OpptrixButton
-            variant="ghost"
-            className="opptrix-session-tools-archive__new"
+          <button
+            type="button"
+            className={mergeClasses('opptrix-session-tools-archive__new', 'opptrix-focusable')}
             onClick={() => {
               setCreatingFolder(true)
               setNewFolderDraft('')
@@ -475,7 +475,7 @@ export default function ChatSessionTitleTools({
           >
             <AddRegular fontSize={16} />
             <span>新建文件夹</span>
-          </OpptrixButton>
+          </button>
         )}
       </div>
     </div>,

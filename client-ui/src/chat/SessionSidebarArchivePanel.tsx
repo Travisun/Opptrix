@@ -14,7 +14,6 @@ import {
 import type { SessionArchiveFolder, SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
-import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ThinkingDots from '../components/ThinkingDots'
 
@@ -30,14 +29,21 @@ const useStyles = makeStyles({
     flexShrink: 0,
     padding: '4px 8px 6px',
   },
-  newFolderBtn: {
+  newFolderBtn: {...ghostInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
     width: '100%',
     justifyContent: 'flex-start',
     minHeight: '30px',
+    padding: '4px 8px',
+    border: 'none',
+    backgroundColor: 'transparent',
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     color: opptrixCssVars.textSecondary,
     borderRadius: opptrixTokens.radiusMd,
+    cursor: 'pointer',
   },
   inlineRow: {
     display: 'flex',
@@ -540,18 +546,17 @@ export default function SessionSidebarArchivePanel({
             </span>
           </div>
         ) : (
-          <OpptrixButton
-            className={s.newFolderBtn}
-            variant="ghost"
-            size="small"
-            icon={<AddRegular fontSize={16} />}
+          <button
+            type="button"
+            className={mergeClasses(s.newFolderBtn, 'opptrix-focusable')}
             onClick={() => {
               setCreatingFolder(true)
               setNewFolderTitle('')
             }}
           >
-            新建文件夹
-          </OpptrixButton>
+            <AddRegular fontSize={16} />
+            <span>新建文件夹</span>
+          </button>
         )}
       </div>
 
