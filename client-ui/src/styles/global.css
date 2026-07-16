@@ -2207,3 +2207,12 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 .opptrix-thinking-dots__dot:nth-child(7) { top: 9px; left: 1px;  animation-delay: 0.31s; }
 .opptrix-thinking-dots__dot:nth-child(8) { top: 9px; left: 5px;  animation-delay: 1.09s; }
 .opptrix-thinking-dots__dot:nth-child(9) { top: 9px; left: 9px;  animation-delay: 1.52s; }
+
+/* ── Button icon 分级（按按钮 size）──
+   small=12px, medium=16px, large=20px
+   仅作用于设置页右侧内容区 + Onboarding；聊天窗口/侧边栏不纳入 */
+.opptrix-settings-content .opptrix-btn svg,
+.opptrix-onboarding-shell .opptrix-btn svg {
+  width: var(--opptrix-btn-icon-size);
+  height: var(--opptrix-btn-icon-size);
+}
