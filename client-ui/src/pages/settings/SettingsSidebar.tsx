@@ -18,7 +18,6 @@ import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
-import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import AppUpdateNotice from '../../desktop/AppUpdateNotice'
 import {
   searchSettingsEntries,
@@ -283,10 +282,9 @@ export default function SettingsSidebar({
         )}
 
         {searchActive && searchHits.map((hit, index) => (
-          <OpptrixButton
+          <button
             key={listRowKey(index, hit.section, hit.group, hit.title)}
-            variant="ghost"
-            block
+            type="button"
             className={mergeClasses(s.searchHit, 'opptrix-focusable')}
             onClick={() => pickSearchHit(hit)}
           >
@@ -295,17 +293,16 @@ export default function SettingsSidebar({
               {[settingsSectionLabel(hit.section), hit.group].filter(Boolean).join(' · ')}
               {hit.desc ? ` · ${hit.desc}` : ''}
             </span>
-          </OpptrixButton>
+          </button>
         ))}
 
         {!searchActive && filtered.map(item => {
           const Icon = item.icon
           const isActive = active === item.id
           return (
-            <OpptrixButton
+            <button
               key={item.id}
-              variant="ghost"
-              block
+              type="button"
               className={mergeClasses(
                 s.navItem,
                 isOverlay && s.navItemOverlay,
@@ -325,7 +322,7 @@ export default function SettingsSidebar({
                 fontSize={isOverlay ? SIDEBAR_TOP_MENU_ICON_SIZE : 17}
               />
               <span>{item.label}</span>
-            </OpptrixButton>
+            </button>
           )
         })}
       </nav>
