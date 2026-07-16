@@ -21,6 +21,7 @@ export interface ChatToolStep {
   label: string
   status: ChatToolStepStatus
   argsPreview?: string
+  argsDetail?: string
   thinking?: string
   resultPreview?: string
   resultDetail?: string

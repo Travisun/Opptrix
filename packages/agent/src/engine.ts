@@ -29,6 +29,7 @@ import {
   type ChatToolStep,
   enrichStepFromResult,
   formatArgsPreview,
+  formatArgsDetail,
   formatToolLabel,
 } from './chat-progress.js'
 import {
@@ -523,6 +524,7 @@ export class AgentEngine {
             label: formatToolLabel(fn, args),
             status: 'running',
             argsPreview: formatArgsPreview(args),
+            argsDetail: formatArgsDetail(args),
             thinking: thinkingSnippet || undefined,
             startedAt: new Date().toISOString(),
           }

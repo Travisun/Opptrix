@@ -28,8 +28,10 @@ export interface ChatToolStep {
   label: string
   /** 当前状态 */
   status: ChatToolStepStatus
-  /** 参数预览文本（JSON 序列化，截断至 240 字符） */
+  /** 参数预览文本（JSON 序列化，截断至 240 字符），行内简要展示 */
   argsPreview?: string
+  /** 参数完整详情（pretty-print，截断至 4000 字符），点击查看详情时显示 */
+  argsDetail?: string
   /** Agent 思考过程片段（如有） */
   thinking?: string
   /** 结果摘要文本（截断至 180 字符） */
@@ -302,6 +304,19 @@ export function formatArgsPreview(args: Record<string, unknown>): string {
   try {
     const s = JSON.stringify(args, null, 0)
     return s.length <= 240 ? s : `${s.slice(0, 240)}…`
+  } catch {
+    return ''
+  }
+}
+
+/**
+ * 格式化工具参数完整详情 — pretty-print JSON，截断至 4000 字符。
+ * 供详情弹窗展示，避免行内 240 字符预览带来的信息丢失。
+ */
+export function formatArgsDetail(args: Record<string, unknown>): string {
+  try {
+    const s = JSON.stringify(args, null, 2)
+    return s.length <= 4000 ? s : `${s.slice(0, 4000)}…`
   } catch {
     return ''
   }

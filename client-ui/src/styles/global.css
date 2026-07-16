@@ -545,7 +545,9 @@ html.opptrix-electron .opptrix-overlay-sidebar {
 }
 
 .opptrix-sidebar-edge {
-  border-right: 1px solid var(--opptrix-separator-strong);
+  /* Soften the shared sidebar edge to 80% strength (20% lighter / grayer)
+     without touching the separatorStrong token used elsewhere. */
+  border-right: 1px solid color-mix(in srgb, var(--opptrix-separator-strong) 80%, transparent);
   box-shadow: -2px 0 10px rgba(0, 0, 0, 0.032);
 }
 
