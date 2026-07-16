@@ -123,17 +123,18 @@ export class AgentEngine {
     const tier = plan?.researchTier ?? 'standard'
     const lines = [
       '【数据源优先级策略 — 必须严格遵守】',
-      '1. 所有数据获取类工具，外部 MCP 优先：先调外部数据源获取最新/最全数据。',
-      '2. 充分性自检：若外部返回缺字段、缺记录或数据陈旧，自动补充本地数据后合并返回。',
-      '3. 结果已标注 _mcp.source 和 _mcp.sufficient：',
-      '   - source="external" + sufficient=true → 外部数据已完备，无需重复调用',
-      '   - source="external+local" + supplemented=true → 外部不足已补本地，合并后完备',
-      '   - source="local" + degraded=true → 外部不可用，仅为降级，结果可能不完整',
-      '4. 投研答复引用数据时，应体现数据源（外部权威源优于本地缓存）。',
+      '0. 三级优先，不可倒置：远程 MCP 工具（命名空间 server__tool）= 最高优先，永远先用；本地工具 = 最低优先，仅作兜底。工具列表中远程工具已排在最前，同名能力优先取远程。',
+      '1. 数据获取一律先调远程 MCP：同一能力若远程可用，禁止绕过远程直接调本地工具。',
+      '2. 充分性自检：若远程返回缺字段、缺记录或数据陈旧，系统会自动补充本地数据后合并返回，无需你手动重复调用。',
+      '3. 结果已标注 _mcp.source 和 _mcp.sufficient，据此判断可信度：',
+      '   - source="external" + sufficient=true → 远程数据已完备，直接采用，勿重复调用',
+      '   - source="external+local" + supplemented=true → 远程不足已补本地，合并后完备，可采用',
+      '   - source="local" + degraded=true → 远程不可用，本地兜底降级，结果可能不完整：须在答复中提示该维度为降级数据、可信度受限，并在其它远程工具可用时尝试交叉补全',
+      '4. 投研答复引用数据时体现数据源：远程权威源优于本地缓存；降级数据须显式标注不确定性。',
     ]
     // 高研究档位强调交叉验证
     if (tier === 'L3') {
-      lines.push(`5. 当前为 ${tier} 档位：对重要标的/事件，即使外部已返回结果，也可主动补充本地交叉验证 — 但须在结果中注明。`)
+      lines.push(`5. 当前为 ${tier} 档位：对重要标的/事件，即使远程已返回结果，也可主动补充本地交叉验证 — 但须在结果中注明来源与差异。`)
     }
     return lines.join('\n')
   }
@@ -158,7 +159,8 @@ export class AgentEngine {
     const broker = await this.createRoundBroker(activeNames)
     const rawTools = await broker.openAiTools()
     const preferred = this.lastRoutePlan?.preferredTools ?? []
-    const openAiTools = orderToolsByPreference(rawTools, preferred)
+    // 远程 MCP 工具整体优先于本地兜底工具；preferred 排序仅在各自分组内生效。
+    const openAiTools = orderToolsByPreference(rawTools, preferred, { remoteFirst: true })
     return { broker, openAiTools }
   }
 

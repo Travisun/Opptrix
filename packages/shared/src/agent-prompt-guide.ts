@@ -224,6 +224,31 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
 }
 
 /**
+ * 投研完备性闭环 — 仅 L2/L3 报告类输出注入。
+ *
+ * 强制「先自检缺口 → 用可用工具补齐 → 重新纳入分析 → 才输出报告」的闭环，
+ * 避免带着已知数据缺口直接下结论。L1 事实快答不注入（避免过度拉数、变慢）。
+ */
+export function buildResearchCompletenessLoop(tier: ResearchTier = 'L2'): string {
+  const deep = tier === 'L3'
+  const lines = [
+    '【投研完备性闭环 — 出报告前必须执行，不可跳过】',
+    '1) 缺口自检：整理本轮已获数据，对照本档位输出骨架逐维核对，列出「缺失维度 / 空数据 / 陈旧数据 / 结果标注 degraded 的降级项」。',
+    '2) 针对性补齐：对每个缺口，判断是否有可用工具可补——',
+    '   - 首选工具报错/空 → 换数据源或换等价工具重试一次；',
+    '   - 缺整类能力（如基本面/行情/资讯/行业）→ 先 list_tool_packs → activate_tool_pack 再取；',
+    '   - 结果为 local 降级 → 尽量重试远程 MCP 补权威数据。',
+    '3) 重新纳入：补齐后的数据必须回到分析中重新研判，不得把补充数据仅附在末尾。',
+    '4) 收敛：仅当「缺口已补齐」或「确认无工具可补（须在报告『数据缺口』中说明原因）」时，才输出最终报告。',
+    '5) 边界：同一缺口最多补齐 1 轮，避免无限拉数；确实取不到就如实标注缺口，禁止用训练记忆填补。',
+  ]
+  if (deep) {
+    lines.push('6) L3 深度档：对核心标的/关键事件，即使外部已返回也应做一次本地交叉验证并注明；关键结论至少覆盖基本面或财务一维，不可用时声明缺口而非跳过。')
+  }
+  return lines.join('\n')
+}
+
+/**
  * 会话时钟块 — 由 Engine 每轮注入权威本地时间，避免 LLM 猜日期或多余调 tool。
  */
 export function buildSessionClockPlaybook(clock: {
@@ -286,6 +311,11 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     buildResearchEpistemicPlaybook(),
     buildResearchOutputPlaybook(tier),
   )
+
+  // 完备性闭环仅作用于 L2/L3 报告类输出；L1 事实快答保持轻量。
+  if (tier !== 'L1') {
+    sections.push(buildResearchCompletenessLoop(tier))
+  }
 
   if (opts?.routePlaybook) {
     sections.push(opts.routePlaybook)

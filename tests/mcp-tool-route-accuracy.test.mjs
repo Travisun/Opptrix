@@ -209,6 +209,27 @@ test('D7 orderToolsByPreference puts primary first', () => {
   assert.equal(ordered[1].function.name, 'search_instruments')
 })
 
+test('D7b orderToolsByPreference remoteFirst puts namespaced remote tools ahead of local', () => {
+  const tools = [
+    { function: { name: 'get_instrument_quotes' } }, // local
+    { function: { name: 'srv__search_instruments' } }, // remote, not preferred
+    { function: { name: 'srv__get_instrument_quotes' } }, // remote, preferred base name
+    { function: { name: 'evaluate_instrument' } }, // local
+  ]
+  const ordered = orderToolsByPreference(
+    tools,
+    ['get_instrument_quotes', 'search_instruments'],
+    { remoteFirst: true },
+  )
+  const names = ordered.map(t => t.function.name)
+  // 远程工具整体在前，且组内 preferred 基础名优先
+  assert.equal(names[0], 'srv__get_instrument_quotes')
+  assert.equal(names[1], 'srv__search_instruments')
+  // 本地工具在后
+  assert.ok(names.indexOf('get_instrument_quotes') > 1)
+  assert.ok(names.indexOf('evaluate_instrument') > 1)
+})
+
 test('D8 activate backfill makes preferred tool visible', () => {
   const store = new ToolPackSessionStore()
   const before = toolNamesForPacks(resolveActivePackIds(store, 'd8', { message: '你好' }))

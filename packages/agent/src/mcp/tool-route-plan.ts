@@ -14,6 +14,7 @@ import {
   packIdForTool,
   alwaysOnPackIds,
   type ResearchTier,
+  parseNamespacedMcpTool,
 } from '@opptrix/shared'
 import type { SessionContextRef } from '../sessions.js'
 import { resolveSeedPacks, MAX_SEEDED_BUSINESS_PACKS } from './tool-pack-resolver.js'
@@ -840,18 +841,36 @@ export function buildRoundRoutePlaybook(
 
 /**
  * 将首选工具排到 OpenAI tools 列表前面（部分模型对靠前 schema 更敏感）。
+ *
+ * @param opts.remoteFirst 远程 MCP（命名空间 `server__tool`）工具整体排在本地工具之前，
+ *   仅在组内应用 preferred 排序；命名空间工具用其基础工具名匹配 preferred。
+ *   本地工具是兜底，故永远排在远程之后。
  */
 export function orderToolsByPreference<T extends { function?: { name?: string }; name?: string }>(
   tools: T[],
   preferredTools: readonly string[],
+  opts?: { remoteFirst?: boolean },
 ): T[] {
-  if (!preferredTools.length) return tools
+  const remoteFirst = opts?.remoteFirst ?? false
+  if (!preferredTools.length && !remoteFirst) return tools
   const rank = new Map(preferredTools.map((n, i) => [n, i]))
+  const nameOf = (t: T) => t.function?.name ?? t.name ?? ''
+  // 命名空间工具（server__tool）视为远程；用基础工具名匹配 preferred。
+  const baseName = (full: string) => parseNamespacedMcpTool(full)?.toolName ?? full
+  const isRemote = (full: string) => parseNamespacedMcpTool(full) != null
+  const rankOf = (full: string) => {
+    if (rank.has(full)) return rank.get(full)!
+    const base = baseName(full)
+    return rank.has(base) ? rank.get(base)! : 1000
+  }
   return [...tools].sort((a, b) => {
-    const na = a.function?.name ?? a.name ?? ''
-    const nb = b.function?.name ?? b.name ?? ''
-    const ra = rank.has(na) ? rank.get(na)! : 1000
-    const rb = rank.has(nb) ? rank.get(nb)! : 1000
-    return ra - rb || na.localeCompare(nb)
+    const na = nameOf(a)
+    const nb = nameOf(b)
+    if (remoteFirst) {
+      const ga = isRemote(na) ? 0 : 1
+      const gb = isRemote(nb) ? 0 : 1
+      if (ga !== gb) return ga - gb
+    }
+    return rankOf(na) - rankOf(nb) || na.localeCompare(nb)
   })
 }

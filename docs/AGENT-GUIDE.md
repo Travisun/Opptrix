@@ -148,9 +148,11 @@ Opptrix/
     - 运行时：`packages/agent/src/mcp/external/`（`ExternalMcpRegistry` / Health / AggregatingToolBroker）
     - 传输：stdio + Streamable HTTP；LLM 仍见稳定本地工具名；有 `capabilityBindings` 时按 `sortOrder` 试外部再本地兜底
     - 外部独有工具：`serverId__toolName` 命名空间注入 catalog
+    - **远程优先排序（三级优先，不可倒置）**：`AggregatingToolBroker.openAiTools()` 远程工具排前 + 同名本地不重复暴露；`orderToolsByPreference(..., { remoteFirst: true })` 进一步保证远程（命名空间）工具整体先于本地，preferred 排序仅在各自分组内生效。本地工具是最低优先级兜底。system 注入 `buildDataSourcingPolicy`：远程 MCP=最高优先、`_mcp.source=local` 视为降级须提示可信度受限
     - meta 运维：`list_mcp_servers` / `enable_mcp_server` / `pause_mcp_server` / `reorder_mcp_servers`；`install_mcp_server` / `uninstall_mcp_server` **须 ask_user 后 `confirmed=true`**；禁止经 Agent 改已有 server 的 command/url/env
     - 单测：`tests/external-mcp-failover.test.mjs`
   - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
+  - **投研完备性闭环（`buildResearchCompletenessLoop`，仅 L2/L3 注入）**：出报告前强制「缺口自检 → 针对性补齐（换源重试 / activate_tool_pack / 远程重试降级项）→ 重新纳入分析 → 收敛输出」；同一缺口最多补 1 轮，取不到则如实标注缺口。L1 事实快答不注入，避免过度拉数
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
   - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_income_statement` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_financial_indicators` / `get_instrument_shareholders` / `get_instrument_institution_holdings` / `get_instrument_dividend`
   - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
