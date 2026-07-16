@@ -528,6 +528,7 @@ function SessionSidebar({
   const sidebarEl = (
     <aside
       className={mergeClasses(
+        'opptrix-no-icon-sizing',
         s.sidebar,
         isDrawer && s.sidebarDrawer,
         !isDrawer && s.sidebarPanel,

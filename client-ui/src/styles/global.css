@@ -2207,3 +2207,11 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
 .opptrix-thinking-dots__dot:nth-child(7) { top: 9px; left: 1px;  animation-delay: 0.31s; }
 .opptrix-thinking-dots__dot:nth-child(8) { top: 9px; left: 5px;  animation-delay: 1.09s; }
 .opptrix-thinking-dots__dot:nth-child(9) { top: 9px; left: 9px;  animation-delay: 1.52s; }
+
+/* ── Button icon sizing (按按钮 size 分级) ──
+   OpptrixButton: 通过 --opptrix-btn-icon-size CSS 变量注入(small=12/medium=16/large=20)
+   聊天/侧边栏区域(.opptrix-no-icon-sizing)内设为 revert, 恢复图标原始大小 */
+.opptrix-no-icon-sizing .opptrix-btn,
+.opptrix-no-icon-sizing.opptrix-btn {
+  --opptrix-btn-icon-size: revert;
+}

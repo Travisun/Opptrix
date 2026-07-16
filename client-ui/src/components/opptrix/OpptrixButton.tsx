@@ -121,18 +121,33 @@ const useStyles = makeStyles({
     paddingLeft: buttonSizes.small.paddingX,
     paddingRight: buttonSizes.small.paddingX,
     minHeight: buttonSizes.small.minHeight,
+    '--opptrix-btn-icon-size': '12px',
+    '& svg': {
+      width: 'var(--opptrix-btn-icon-size)',
+      height: 'var(--opptrix-btn-icon-size)',
+    },
   },
   sizeMedium: {
     fontSize: buttonSizes.medium.fontSize,
     paddingLeft: buttonSizes.medium.paddingX,
     paddingRight: buttonSizes.medium.paddingX,
     minHeight: buttonSizes.medium.minHeight,
+    '--opptrix-btn-icon-size': '16px',
+    '& svg': {
+      width: 'var(--opptrix-btn-icon-size)',
+      height: 'var(--opptrix-btn-icon-size)',
+    },
   },
   sizeLarge: {
     fontSize: buttonSizes.large.fontSize,
     paddingLeft: buttonSizes.large.paddingX,
     paddingRight: buttonSizes.large.paddingX,
     minHeight: buttonSizes.large.minHeight,
+    '--opptrix-btn-icon-size': '20px',
+    '& svg': {
+      width: 'var(--opptrix-btn-icon-size)',
+      height: 'var(--opptrix-btn-icon-size)',
+    },
   },
   block: {
     width: '100%',

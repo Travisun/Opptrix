@@ -1200,7 +1200,7 @@ export default function ChatApp() {
               {electronChrome && (
                 <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
               )}
-              <div className={mergeClasses(s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
+              <div className={mergeClasses('opptrix-no-icon-sizing', s.chatPanel, electronChrome && 'opptrix-chat-panel')}>
                 <ChatView
                   title={activeSession?.title ?? '新对话'}
                   titleSlot={electronChrome ? undefined : chatTitleSlot}
