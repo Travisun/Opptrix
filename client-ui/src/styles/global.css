@@ -725,6 +725,46 @@ html.opptrix-electron .opptrix-news-reader-selectable .opptrix-news-video-extern
   outline: none !important;
 }
 
+/* ── ContentEditable composer editor ── */
+.opptrix-composer-editor:focus,
+.opptrix-composer-editor:focus-visible {
+  outline: none !important;
+}
+
+/* Placeholder when the editor is empty. */
+.opptrix-composer-editor[data-empty='true']::before {
+  content: attr(data-placeholder);
+  color: var(--opptrix-text-tertiary);
+  pointer-events: none;
+}
+
+/* Inline reference chip — behaves like a single atomic character in the text flow. */
+.opptrix-composer-inline-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  height: 20px;
+  margin: 0 1px;
+  padding: 0 7px;
+  border-radius: 999px;
+  background-color: var(--opptrix-accent-soft);
+  color: var(--opptrix-accent);
+  font-size: var(--opptrix-font-md);
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+  vertical-align: baseline;
+  user-select: none;
+  cursor: default;
+}
+
+.opptrix-composer-inline-chip__code {
+  font-size: var(--opptrix-font-xs);
+  font-weight: 500;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  opacity: 0.82;
+}
+
 .opptrix-focusable:active:not(:disabled) {
   opacity: var(--opptrix-active-opacity);
 }

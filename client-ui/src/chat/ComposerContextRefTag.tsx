@@ -9,6 +9,7 @@ const useStyles = makeStyles({
   chipRow: {
     display: 'inline-flex',
     alignItems: 'center',
+    alignSelf: 'flex-start',
     flexShrink: 0,
     maxWidth: 'min(100%, 240px)',
     height: '22px',

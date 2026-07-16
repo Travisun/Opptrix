@@ -3,7 +3,6 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ComposerContextRefTag from './ComposerContextRefTag'
-import ComposerStockRefTag from './ComposerStockRefTag'
 import ComposerQuickTasks from './ComposerQuickTasks'
 import ComposerStockMentionList from './ComposerStockMentionList'
 import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
@@ -13,16 +12,35 @@ import { useStockMention } from './useStockMention'
 import type { AvailableModel, SessionContextRef } from '../types/chat'
 import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { WatchlistItem } from '../types/market'
-import { composeComposerMessage, mergeStockRef, stockRefKey } from './composerMessage'
+import {
+  displayCodeFromInstrument,
+  marketDisplayName,
+  normalizeWatchlistItem,
+  resolveWatchlistInstrument,
+  watchlistItemKey,
+} from '../market/instrument'
+import {
+  captureCaretRange,
+  clearEditor,
+  collectChipKeys,
+  createChipElement,
+  editorHasContent,
+  focusEditorEnd,
+  getCaretTextContext,
+  getSendText,
+  insertLineBreakAtCaret,
+  insertMentionChip,
+  setEditorText,
+  type InlineChipData,
+} from './composerEditor'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 import { listRowKey } from '../utils/listRowKey'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
-const ROWS = 1
 const ROW_PX = Math.round(FONT_SIZE * LINE_HEIGHT)
-const MIN_TEXT_HEIGHT = ROW_PX * ROWS
+const MIN_TEXT_HEIGHT = ROW_PX
 const MAX_TEXT_HEIGHT = ROW_PX * 8
 
 const useStyles = makeStyles({
@@ -131,13 +149,13 @@ position: 'relative',
   },
   inputRow: {
     display: 'flex',
-    flexWrap: 'wrap',
-    alignItems: 'flex-start',
-    alignContent: 'flex-start',
+    flexDirection: 'column',
     gap: '6px',
     width: '100%',
-    minHeight: `${MIN_TEXT_HEIGHT}px`,
+  },
+  editorRow: {
     position: 'relative',
+    width: '100%',
   },
   mentionAnchor: {
     position: 'absolute',
@@ -147,13 +165,14 @@ position: 'relative',
     height: '20px',
     pointerEvents: 'none',
   },
-  textarea: {
-    flex: '1 1 120px',
-    width: 'auto',
-    minWidth: '48px',
+  editor: {
+    width: '100%',
+    minWidth: 0,
+    minHeight: `${MIN_TEXT_HEIGHT}px`,
+    maxHeight: `${MAX_TEXT_HEIGHT}px`,
+    overflowY: 'auto',
     border: 'none',
     background: 'transparent',
-    resize: 'none',
     outline: 'none',
     fontSize: `${FONT_SIZE}px`,
     lineHeight: LINE_HEIGHT,
@@ -161,23 +180,11 @@ position: 'relative',
     color: opptrixCssVars.textPrimary,
     padding: 0,
     margin: 0,
-    '::placeholder': {
-      color: opptrixCssVars.textTertiary,
-    },
+    whiteSpace: 'pre-wrap',
+    wordBreak: 'break-word',
+    cursor: 'text',
   },
-  textareaWithRef: {
-    minHeight: `${ROW_PX * Math.max(ROWS - 1, 1)}px`,
-    maxHeight: `${MAX_TEXT_HEIGHT}px`,
-  },
-  textareaSolo: {
-    minHeight: `${MIN_TEXT_HEIGHT}px`,
-    maxHeight: `${MAX_TEXT_HEIGHT}px`,
-  },
-  textareaFull: {
-    flex: '1 1 100%',
-    width: '100%',
-  },
-  textareaMobile: {
+  editorMobile: {
     fontSize: 'var(--opptrix-font-2xl)',
   },
   toolbar: {
@@ -284,26 +291,22 @@ export default function ChatComposer({
   onUserPromptSubmit,
 }: ChatComposerProps) {
   const s = useStyles()
-  const textareaRef = useRef<HTMLTextAreaElement>(null)
+  const editorRef = useRef<HTMLDivElement>(null)
   const mentionAnchorRef = useRef<HTMLSpanElement>(null)
-  const [input, setInput] = useState('')
-  const [stockRefs, setStockRefs] = useState<WatchlistItem[]>([])
-  const hasInlineRefs = Boolean(contextRef) || stockRefs.length > 0
+  // composingRef: 中文/IME 输入合成期间，跳过 @ 提及检测，避免误触发与卡顿。
+  const composingRef = useRef(false)
+  // 最近一次编辑器内的光标快照：点菜单项插入 chip 时实时 selection 已被扰动，须用快照定位。
+  const caretRangeRef = useRef<Range | null>(null)
+  // 有无可发送内容（文字或 chip）；驱动发送按钮与 placeholder。
+  const [hasContent, setHasContent] = useState(false)
   const { items: watchlistItems } = useWatchlist()
 
-  useEffect(() => {
-    if (!draftSync) return
-    setInput(draftSync.text)
-    setStockRefs([])
-  }, [draftSync])
   const {
     state: mentionState,
     matches: mentionMatches,
     syncFromInput: syncMentionFromInput,
     close: closeMention,
     moveActive: moveMentionActive,
-    selectActive: selectMentionActive,
-    applySelection: applyMentionSelection,
     clampActiveIndex,
     setMentionActiveIndex,
   } = useStockMention(watchlistItems)
@@ -312,67 +315,130 @@ export default function ChatComposer({
     clampActiveIndex()
   }, [clampActiveIndex, mentionMatches.length])
 
-  const syncHeight = useCallback(() => {
-    const el = textareaRef.current
-    if (!el) return
-    el.style.height = 'auto'
-    const lineMin = hasInlineRefs ? ROW_PX * Math.max(ROWS - 1, 1) : MIN_TEXT_HEIGHT
-    const next = Math.min(Math.max(el.scrollHeight, lineMin), MAX_TEXT_HEIGHT)
-    el.style.height = `${next}px`
-  }, [hasInlineRefs])
+  // 从编辑器 DOM 刷新可发送状态。
+  const refreshContentState = useCallback(() => {
+    const root = editorRef.current
+    setHasContent(root ? editorHasContent(root) : false)
+  }, [])
 
-  useEffect(() => {
-    syncHeight()
-  }, [input, hasInlineRefs, syncHeight])
-
-  const handleInputChange = useCallback((value: string) => {
-    setInput(value)
-    const cursor = textareaRef.current?.selectionStart ?? value.length
-    syncMentionFromInput(value, cursor)
+  // 根据当前光标上下文，驱动 @ 提及菜单开关与查询词。
+  const syncMention = useCallback(() => {
+    if (composingRef.current) return
+    const root = editorRef.current
+    if (!root) return
+    // 每次光标/输入变动都快照当前 Range，供随后「点菜单项」插入时定位。
+    caretRangeRef.current = captureCaretRange(root)
+    const { text, offset } = getCaretTextContext(root)
+    syncMentionFromInput(text, offset)
   }, [syncMentionFromInput])
 
-  const handleApplyQuickTask = useCallback((text: string) => {
-    setInput(text)
+  // 草稿同步（父组件注入）：重置编辑器为纯文本。
+  useEffect(() => {
+    if (!draftSync) return
+    const root = editorRef.current
+    if (!root) return
+    setEditorText(root, draftSync.text)
     closeMention()
-    textareaRef.current?.focus()
-  }, [closeMention])
+    refreshContentState()
+  }, [draftSync, closeMention, refreshContentState])
+
+  const buildChipData = useCallback((item: WatchlistItem): InlineChipData => {
+    const row = normalizeWatchlistItem(item)
+    const ref = resolveWatchlistInstrument(row)
+    const code = displayCodeFromInstrument(ref)
+    const market = ref.market !== 'CN' ? marketDisplayName(ref.market) : null
+    return {
+      key: watchlistItemKey(row),
+      sendText: `${row.name}(${code})`,
+      name: row.name,
+      code,
+      market,
+    }
+  }, [])
+
+  const insertStockChip = useCallback((item: WatchlistItem) => {
+    const root = editorRef.current
+    if (!root) return
+    // 用光标快照定位，避免点菜单项时实时 selection 退化到编辑器末尾。
+    const savedRange = caretRangeRef.current
+    root.focus()
+    const data = buildChipData(item)
+    if (collectChipKeys(root).includes(data.key)) {
+      // 已存在同一标的：仅删除 @query 触发文本，不重复插入。
+      const dup = createChipElement(data)
+      insertMentionChip(root, dup, savedRange)
+      dup.remove()
+    } else {
+      insertMentionChip(root, createChipElement(data), savedRange)
+    }
+    caretRangeRef.current = captureCaretRange(root)
+    closeMention()
+    refreshContentState()
+  }, [buildChipData, closeMention, refreshContentState])
+
+  const handleApplyQuickTask = useCallback((text: string) => {
+    const root = editorRef.current
+    if (!root) return
+    setEditorText(root, text)
+    closeMention()
+    refreshContentState()
+    focusEditorEnd(root)
+  }, [closeMention, refreshContentState])
 
   const handleSelectMention = useCallback((item: WatchlistItem) => {
-    const el = textareaRef.current
-    if (!el) return
-    const cursor = el.selectionStart ?? input.length
-    const { nextText, nextCursor } = applyMentionSelection(input, cursor)
-    setStockRefs(prev => mergeStockRef(prev, item))
-    setInput(nextText)
-    window.requestAnimationFrame(() => {
-      el.focus()
-      el.setSelectionRange(nextCursor, nextCursor)
-    })
-  }, [applyMentionSelection, input])
+    insertStockChip(item)
+  }, [insertStockChip])
 
-  const handleRemoveStockRef = useCallback((code: string) => {
-    setStockRefs(prev => prev.filter(r => stockRefKey(r) !== code))
+  const clearEditorContent = useCallback(() => {
+    const root = editorRef.current
+    if (root) clearEditor(root)
+    setHasContent(false)
   }, [])
 
   const handleSubmitMessage = useCallback((text?: string) => {
     const explicit = text?.trim()
     if (explicit) {
       onSubmit(explicit)
-      setInput('')
-      setStockRefs([])
+      clearEditorContent()
       return
     }
-    const composed = composeComposerMessage(input, stockRefs)
-    if (!composed.trim() || loading) return
+    const root = editorRef.current
+    const composed = root ? getSendText(root).trim() : ''
+    if (!composed || loading) return
     onSubmit(composed)
-    setInput('')
-    setStockRefs([])
-  }, [input, loading, onSubmit, stockRefs])
+    clearEditorContent()
+  }, [clearEditorContent, loading, onSubmit])
 
-  const canSend = Boolean(input.trim() || stockRefs.length) && !loading && !userPrompt
+  const canSend = hasContent && !loading && !userPrompt
   const composerLocked = loading || Boolean(userPrompt)
 
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+  const handleInput = useCallback(() => {
+    refreshContentState()
+    syncMention()
+  }, [refreshContentState, syncMention])
+
+  const handleCompositionStart = useCallback(() => {
+    composingRef.current = true
+  }, [])
+
+  const handleCompositionEnd = useCallback(() => {
+    composingRef.current = false
+    refreshContentState()
+    syncMention()
+  }, [refreshContentState, syncMention])
+
+  const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
+    // 只接受纯文本，避免粘贴富文本/HTML 破坏编辑器结构。
+    e.preventDefault()
+    const text = e.clipboardData.getData('text/plain')
+    if (text) document.execCommand('insertText', false, text)
+    refreshContentState()
+    syncMention()
+  }, [refreshContentState, syncMention])
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    if (composingRef.current) return
+
     if (mentionState.open && mentionMatches.length) {
       if (e.key === 'ArrowDown') {
         e.preventDefault()
@@ -386,18 +452,8 @@ export default function ChatComposer({
       }
       if (e.key === 'Enter' || e.key === 'Tab') {
         e.preventDefault()
-        const el = textareaRef.current
-        if (!el) return
-        const cursor = el.selectionStart ?? input.length
-        const result = selectMentionActive(input, cursor)
-        if (result) {
-          setStockRefs(prev => mergeStockRef(prev, result.item))
-          setInput(result.nextText)
-          window.requestAnimationFrame(() => {
-            el.focus()
-            el.setSelectionRange(result.nextCursor, result.nextCursor)
-          })
-        }
+        const item = mentionMatches[mentionState.activeIndex]
+        if (item) insertStockChip(item)
         return
       }
     }
@@ -409,35 +465,33 @@ export default function ChatComposer({
     }
 
     if (e.key === 'Enter') {
-      // Shift+Enter: let the browser insert a newline (default behaviour).
-      if (e.shiftKey) return
-      // Ctrl/Cmd+Enter: insert a newline manually (not inserted by default).
-      if (e.ctrlKey || e.metaKey) {
+      // Shift+Enter / Ctrl+Cmd+Enter: 插入换行。
+      if (e.shiftKey || e.ctrlKey || e.metaKey) {
         e.preventDefault()
-        const el = textareaRef.current
-        if (!el) return
-        const start = el.selectionStart ?? input.length
-        const end = el.selectionEnd ?? input.length
-        const nextText = `${input.slice(0, start)}\n${input.slice(end)}`
-        const nextCursor = start + 1
-        setInput(nextText)
-        window.requestAnimationFrame(() => {
-          el.focus()
-          el.setSelectionRange(nextCursor, nextCursor)
-        })
+        const root = editorRef.current
+        if (root) {
+          insertLineBreakAtCaret(root)
+          refreshContentState()
+        }
         return
       }
-      // Plain Enter: send.
+      // 普通 Enter：发送。
       e.preventDefault()
       if (canSend) handleSubmitMessage()
     }
   }
 
-  const handleTextareaSelect = useCallback(() => {
-    const el = textareaRef.current
-    if (!el) return
-    syncMentionFromInput(input, el.selectionStart ?? input.length)
-  }, [input, syncMentionFromInput])
+  const handleSelect = useCallback(() => {
+    syncMention()
+  }, [syncMention])
+
+  // 失焦时延迟关闭提及菜单，避免与菜单项点击（mousedown）产生时序竞争。
+  const handleBlur = useCallback(() => {
+    window.setTimeout(() => {
+      if (composingRef.current) return
+      closeMention()
+    }, 120)
+  }, [closeMention])
 
   return (
     <div className={s.wrap}>
@@ -473,38 +527,39 @@ export default function ChatComposer({
         )}
         <div className={mergeClasses(s.panel, 'opptrix-composer-shell')}>
           <div className={s.inputRow}>
-            <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
             {contextRef && (
               <ComposerContextRefTag
                 contextRef={contextRef}
                 onClear={onClearContextRef}
               />
             )}
-            {stockRefs.map(item => (
-              <ComposerStockRefTag
-                key={stockRefKey(item)}
-                item={item}
-                onRemove={() => handleRemoveStockRef(stockRefKey(item))}
+            <div className={s.editorRow}>
+              <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
+              <div
+                ref={editorRef}
+                className={mergeClasses(
+                  s.editor,
+                  isMobile && s.editorMobile,
+                  'opptrix-scroll',
+                  'opptrix-composer-editor',
+                )}
+                contentEditable={!composerLocked}
+                suppressContentEditableWarning
+                role="textbox"
+                aria-multiline="true"
+                aria-label="输入问题，@ 选择关注股票"
+                data-placeholder={isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…'}
+                data-empty={hasContent ? undefined : 'true'}
+                onInput={handleInput}
+                onKeyDown={handleKeyDown}
+                onKeyUp={handleSelect}
+                onMouseUp={handleSelect}
+                onPaste={handlePaste}
+                onCompositionStart={handleCompositionStart}
+                onCompositionEnd={handleCompositionEnd}
+                onBlur={handleBlur}
               />
-            ))}
-            <textarea
-              ref={textareaRef}
-              className={mergeClasses(
-                s.textarea,
-                hasInlineRefs ? s.textareaWithRef : s.textareaSolo,
-                !hasInlineRefs && s.textareaFull,
-                isMobile && s.textareaMobile,
-              )}
-              value={input}
-              onChange={e => handleInputChange(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onClick={handleTextareaSelect}
-              onKeyUp={handleTextareaSelect}
-              placeholder={isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…'}
-              rows={ROWS}
-              disabled={composerLocked}
-              enterKeyHint="send"
-            />
+            </div>
           </div>
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
