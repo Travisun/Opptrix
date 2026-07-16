@@ -73,8 +73,6 @@ const useListStyles = makeStyles({
     },
   },
   listRowExpanded: {
-    flexDirection: 'column',
-    alignItems: 'stretch',
     paddingBottom: '8px',
   },
   listRowTop: {
@@ -89,7 +87,13 @@ const useListStyles = makeStyles({
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '1px',
+    gap: '8px',
+  },
+  listRowMainTop: {
+    display: 'flex',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: '4px 8px',
   },
   listRowTitle: {
     fontSize: 'var(--opptrix-font-base)',
@@ -113,7 +117,9 @@ const useListStyles = makeStyles({
   },
   credentialExpand: {
     width: '100%',
-    padding: '0 2px 2px',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
   },
   urlToggle: {
     display: 'inline-flex',
@@ -670,25 +676,31 @@ function ProviderListRow({
           </span>
         )}
         <div className={s.listRowMain}>
-          <Text className={s.listRowTitle} block title={provider.title}>
-            {provider.title}
-          </Text>
-          <Text className={s.listRowMeta} block>
-            {statusMeta}
-          </Text>
-          {hasSettings && (
-            <OpptrixButton
-              variant="ghost"
-              size="small"
-              className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
-              aria-expanded={expanded}
-              onClick={() => setExpanded(v => !v)}
-            >
-              {expanded
-                ? <ChevronDownRegular fontSize={11} />
-                : <ChevronRightRegular fontSize={11} />}
-              <span>{expanded ? '收起设置' : '配置连接'}</span>
-            </OpptrixButton>
+          <div className={s.listRowMainTop}>
+            <Text className={s.listRowTitle} block title={provider.title}>
+              {provider.title}
+            </Text>
+            <Text className={s.listRowMeta} block>
+              {statusMeta}
+            </Text>
+            {hasSettings && (
+              <button
+                type="button"
+                className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
+                aria-expanded={expanded}
+                onClick={() => setExpanded(v => !v)}
+              >
+                {expanded
+                  ? <ChevronDownRegular fontSize={11} />
+                  : <ChevronRightRegular fontSize={11} />}
+                <span>{expanded ? '收起设置' : '配置连接'}</span>
+              </button>
+            )}
+          </div>
+          {expanded && hasSettings && (
+            <div className={s.credentialExpand}>
+              <ProviderSettingsForm provider={provider} onSaved={onSaved} />
+            </div>
           )}
         </div>
         <div className={s.listRowControls}>
@@ -722,11 +734,6 @@ function ProviderListRow({
           />
         </div>
       </div>
-      {expanded && hasSettings && (
-        <div className={s.credentialExpand}>
-          <ProviderSettingsForm provider={provider} onSaved={onSaved} />
-        </div>
-      )}
     </div>
   )
 }

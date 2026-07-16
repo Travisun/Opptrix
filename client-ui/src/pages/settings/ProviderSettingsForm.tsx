@@ -24,6 +24,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '10px',
     width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
   },
   fieldBlock: {
     display: 'flex',
@@ -43,6 +46,8 @@ const useStyles = makeStyles({
   },
   inlineControl: {
     width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
   },
   secretBlock: {
     display: 'flex',
