@@ -373,6 +373,35 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '0.7.0': {
+    welcomeTitle: '全球市场的投研，一句话说清楚',
+    welcomeSubtitle:
+      '这一版让投研看得更深：宏观、资金、机构持仓与行业数据更全，报告在下结论前会主动补齐缺口。',
+    updateLine: '欢迎回来。你的会话、关注列表与已保存的资料都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '看得更深',
+        title: '宏观、资金与机构动向，一并纳入',
+        desc:
+          '宏观经济走势、资金流向、机构持仓与行业板块数据更完整，个股与大势的判断更有依据。',
+        note: '专业维度，不用再四处找。',
+      },
+      {
+        kicker: '更完备',
+        title: '报告下结论前，先补齐缺口',
+        desc:
+          '生成投研报告时会自检数据是否完整，缺失的维度会主动再取一轮，再纳入分析。',
+        note: '尽量不带着空白下判断。',
+      },
+      {
+        kicker: '更权威',
+        title: '接入你信任的数据来源',
+        desc:
+          '可按需接入更权威的行情与财务数据服务，优先取用，本地数据作为兜底，结论更可靠。',
+        note: '数据来源，由你掌控。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
