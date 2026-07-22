@@ -1073,6 +1073,7 @@ export class ResearchHub {
     if (!normalizedRefs.length) return ok({ quotes: [] }, '暂无关注', t0)
     await this.fillMissingStockNames(normalizedRefs.map(r => r.symbol))
     const batch = await this.stockBatchRealtime(normalizedRefs)
+    // Sparse list: failed refs omitted. Callers (routeInstrumentQuotes) must match by code, not index.
     const quotes = normalizedRefs
       .map((ref, i) => this.mergeQuoteWithLocal(ref.symbol, batch.data?.[i] ?? null))
       .filter((q): q is NonNullable<ReturnType<ResearchHub['mergeQuoteWithLocal']>> => q != null)
@@ -1592,6 +1593,7 @@ export class ResearchHub {
 
   private async stockBatchRealtime(refs: (string | InstrumentRef)[]) {
     const normalizedRefs = refs.map(r => resolveCnInstrumentRef(r))
+    // Keep one slot per ref (null on failure) so callers can merge by index.
     const rows = await Promise.all(
       normalizedRefs.map(async ref => {
         const result = await this.stockRealtime(ref)
@@ -1599,8 +1601,7 @@ export class ResearchHub {
         return data?.[0] ?? null
       }),
     )
-    const quotes = rows.filter((row): row is NonNullable<typeof row> => row != null)
-    return { success: quotes.length > 0, data: quotes }
+    return { success: rows.some(row => row != null), data: rows }
   }
 
   private async resolveIntradaySessionPreClose(

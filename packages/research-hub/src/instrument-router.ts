@@ -85,6 +85,19 @@ function wrapChart(ref: InstrumentRef, period: string, resp: ResearchResult): Re
   return { ...resp, data: chart }
 }
 
+/** Match a quote row to ref by symbol (+ exchange). Never trust sparse/filtered array index. */
+function findQuoteRowForRef(
+  rows: Record<string, unknown>[],
+  ref: InstrumentRef,
+): Record<string, unknown> | undefined {
+  return rows.find(r => {
+    const code = String(r.code ?? '')
+    if (code !== ref.symbol) return false
+    if (!ref.exchange || r.exchange == null || r.exchange === '') return true
+    return String(r.exchange).toUpperCase() === ref.exchange.toUpperCase()
+  })
+}
+
 export async function routeInstrumentSnapshot(
   params: Record<string, unknown>,
   handlers: InstrumentRouteHandlers,
@@ -140,16 +153,8 @@ export async function routeInstrumentQuotes(
     const resp = await handlers.stockQuotes(cnRefs)
     if (resp.success && resp.data && typeof resp.data === 'object') {
       const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-      for (let i = 0; i < cnRefs.length; i++) {
-        const ref = cnRefs[i]!
-        const row = rows[i] ?? rows.find(r => {
-          const code = String(r.code ?? '')
-          return code === ref.symbol && (
-            !ref.exchange
-            || !r.exchange
-            || String(r.exchange).toUpperCase() === ref.exchange.toUpperCase()
-          )
-        })
+      for (const ref of cnRefs) {
+        const row = findQuoteRowForRef(rows, ref)
         if (row) {
           quotes.push(quoteFromProviderRow(ref, row, handlers.localInsights?.(ref) ? 'mixed' : 'live'))
         }
@@ -184,7 +189,7 @@ export async function routeInstrumentQuotes(
       const resp = await handlers.stockQuotes([ref])
       if (resp.success && resp.data && typeof resp.data === 'object') {
         const rows = (resp.data as { quotes?: Record<string, unknown>[] }).quotes ?? []
-        const row = rows[0] ?? rows.find(r => String(r.code) === ref.symbol)
+        const row = findQuoteRowForRef(rows, ref)
         if (row) quotes.push(quoteFromProviderRow(ref, row, 'mixed'))
       }
     }

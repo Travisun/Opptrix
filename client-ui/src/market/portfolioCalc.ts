@@ -92,3 +92,35 @@ export function followReturnPct(
   if (currentPrice == null || addedPrice == null || addedPrice <= 0) return null
   return Math.round(((currentPrice - addedPrice) / addedPrice) * 10000) / 100
 }
+
+/** Minimal holding fields needed to recompute total return from a live quote. */
+export type HoldingReturnInputs = {
+  shares: number
+  totalCost?: number
+  realizedPnl?: number
+  totalPnlPct?: number | null
+  unrealizedPnlPct?: number | null
+}
+
+/**
+ * Recompute holding total return % from the current quote price — same formula as
+ * server `calcPnlForStock` / `calcHoldingFromTrades`. Falls back to server pct when
+ * price is missing.
+ */
+export function holdingReturnPctFromQuote(
+  holding: HoldingReturnInputs | null | undefined,
+  price: number | null | undefined,
+): number | null {
+  if (!holding || holding.shares <= 0) return null
+  if (price == null || !Number.isFinite(price)) {
+    return holding.totalPnlPct ?? holding.unrealizedPnlPct ?? null
+  }
+  const totalCost = holding.totalCost ?? 0
+  const realizedPnl = holding.realizedPnl ?? 0
+  const unrealizedPnl = price * holding.shares - totalCost
+  const totalPnl = unrealizedPnl + realizedPnl
+  if (totalCost > 0 || realizedPnl !== 0) {
+    return Math.round((totalPnl / (totalCost + Math.abs(realizedPnl))) * 10000) / 100
+  }
+  return 0
+}

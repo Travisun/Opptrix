@@ -11,7 +11,7 @@ import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, StarRegular 
 import SidebarListEmpty from './SidebarListEmpty'
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
-import { followReturnPct } from './portfolioCalc'
+import { followReturnPct, holdingReturnPctFromQuote } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPriceForMarket, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
@@ -319,18 +319,29 @@ export default function WatchlistTab({
   const [loadingQuotes, setLoadingQuotes] = useState(false)
   const [updatedAt, setUpdatedAt] = useState('')
   const patchedRef = useRef<Set<string>>(new Set())
+  const itemsRef = useRef(items)
+  itemsRef.current = items
+  const loadSeqRef = useRef(0)
+  const itemsKey = useMemo(
+    () => items.map(watchlistItemKey).join('|'),
+    [items],
+  )
 
-  const refreshQuotes = useCallback(async () => {
-    if (!items.length) {
+  const refreshQuotes = useCallback(async (opts?: { silent?: boolean }) => {
+    const currentItems = itemsRef.current
+    if (!currentItems.length) {
       setQuotes({})
       return
     }
-    setLoadingQuotes(true)
+    const seq = ++loadSeqRef.current
+    const silent = opts?.silent === true
+    if (!silent) setLoadingQuotes(true)
     try {
-      const instruments = items.map(resolveWatchlistInstrument)
+      const instruments = currentItems.map(resolveWatchlistInstrument)
       const resp = await research.instrumentQuotes(instruments)
+      if (seq !== loadSeqRef.current) return
       if (resp.success && resp.data?.quotes) {
-        const map: Record<string, MarketQuote> = {}
+        const patch: Record<string, MarketQuote> = {}
         for (const q of resp.data.quotes) {
           const itemRef = q.instrument ?? resolveWatchlistInstrument({
             code: q.code,
@@ -349,22 +360,23 @@ export default function WatchlistTab({
             volume: q.volume ?? null,
             amount: q.amount ?? null,
           }
-          map[code] = quote
-          map[rowKey] = quote
-          map[instrumentKey(itemRef)] = quote
+          patch[code] = quote
+          patch[rowKey] = quote
+          patch[instrumentKey(itemRef)] = quote
         }
-        setQuotes(map)
+        setQuotes(prev => ({ ...prev, ...patch }))
         setUpdatedAt(new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' }))
       }
     } catch {
       /* ignore transient quote errors */
     } finally {
-      setLoadingQuotes(false)
+      if (seq === loadSeqRef.current) setLoadingQuotes(false)
     }
-  }, [items])
+  }, [])
 
   const refreshRadar = useCallback(async () => {
-    const cnItems = items.filter(item => {
+    const currentItems = itemsRef.current
+    const cnItems = currentItems.filter(item => {
       const ref = resolveWatchlistInstrument(item)
       return ref.market === 'CN' && hasApplicationCapability(ref, 'scorecard')
     })
@@ -391,7 +403,7 @@ export default function WatchlistTab({
     } catch {
       /* ignore transient radar errors */
     }
-  }, [items])
+  }, [itemsKey])
 
   useEffect(() => {
     if (!active) return undefined
@@ -402,7 +414,9 @@ export default function WatchlistTab({
 
   useEffect(() => {
     if (!active || !selectedCode) return undefined
-    const item = items.find(row => row.code === selectedCode || watchlistItemKey(row) === selectedCode)
+    const item = itemsRef.current.find(
+      row => row.code === selectedCode || watchlistItemKey(row) === selectedCode,
+    )
     if (!item) return undefined
     const ref = resolveWatchlistInstrument(item)
     if (!hasApplicationCapability(ref, 'strategy_signal')) return undefined
@@ -415,14 +429,14 @@ export default function WatchlistTab({
       ))
     }).catch(() => {})
     return () => { cancelled = true }
-  }, [active, selectedCode, items])
+  }, [active, selectedCode, itemsKey])
 
   useEffect(() => {
     if (!active) return undefined
     void refreshQuotes()
-    const timer = window.setInterval(() => { void refreshQuotes() }, 15000)
+    const timer = window.setInterval(() => { void refreshQuotes({ silent: true }) }, 15000)
     return () => window.clearInterval(timer)
-  }, [refreshQuotes, active])
+  }, [refreshQuotes, active, itemsKey])
 
   useEffect(() => {
     for (const item of items) {
@@ -563,7 +577,7 @@ export default function WatchlistTab({
           const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)]
           const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
           const isHolding = (holding?.shares ?? 0) > 0
-          const holdPct = holding?.totalPnlPct ?? holding?.unrealizedPnlPct
+          const holdPct = holdingReturnPctFromQuote(holding, quote?.price ?? null)
           const followPct = followReturnPct(quote?.price, item.addedPrice)
           const holdTone = pctTone(holdPct)
           const followTone = pctTone(followPct)
