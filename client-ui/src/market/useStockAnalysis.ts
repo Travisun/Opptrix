@@ -1,16 +1,12 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { getConfig, research } from '../api/client'
-import type { InstitutionRatingData, LatestEvalData, StrategySignalData } from '../types/schemas'
-import type { ChipDistributionPoint } from '../types/market'
-import type { WatchlistRadarItem } from '../types/schemas'
+import { fetchStockAnalysis, getConfig, research, saveStockAnalysis } from '../api/client'
 import { displayCodeFromInstrument, instrumentKey, parseInstrumentInput } from './instrument'
 import { hasApplicationCapability } from './capabilities'
 import type { ApplicationCapability, InstrumentRef } from '../types/instrument'
-import { normalizeCode } from './format'
 import type { RawDecisionPayload } from './useStockDecisionCard'
 
 export type AnalysisStepStatus = 'pending' | 'running' | 'done' | 'error' | 'skipped'
-export type AnalysisJobStatus = 'idle' | 'running' | 'done' | 'error'
+export type AnalysisJobStatus = 'idle' | 'loading' | 'running' | 'done' | 'error'
 
 export interface AnalysisStep {
   id: string
@@ -43,12 +39,21 @@ const STEP_DEFS = [
 
 function freshSteps(ref: InstrumentRef | null): AnalysisStep[] {
   return STEP_DEFS
-    .filter(def => !ref || hasApplicationCapability(ref, STEP_CAPS[def.id]!))
+    .filter(def => {
+      const cap = STEP_CAPS[def.id]
+      return !ref || (cap != null && hasApplicationCapability(ref, cap))
+    })
     .map(def => ({ ...def, status: 'pending' as const, message: null }))
 }
 
 function isAbort(e: unknown): boolean {
   return e instanceof Error && e.name === 'AbortError'
+}
+
+function isRawPayload(value: unknown): value is RawDecisionPayload {
+  if (value == null || typeof value !== 'object' || Array.isArray(value)) return false
+  const o = value as Record<string, unknown>
+  return 'evalData' in o && 'strategy' in o && 'institution' in o && 'cyq' in o && 'radar' in o
 }
 
 const STEP_HINTS: Record<string, string> = {
@@ -68,31 +73,92 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
   const [steps, setSteps] = useState<AnalysisStep[]>(() => freshSteps(instrumentRef))
   const [percent, setPercent] = useState(0)
   const [raw, setRaw] = useState<RawDecisionPayload | null>(null)
+  const [analyzedAt, setAnalyzedAt] = useState<string | null>(null)
   const [error, setError] = useState('')
+  const [canRestoreLast, setCanRestoreLast] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const hydrateSeqRef = useRef(0)
+  const analysisSeqRef = useRef(0)
+  const lastGoodRef = useRef<{ raw: RawDecisionPayload; analyzedAt: string } | null>(null)
 
   const reset = useCallback(() => {
     abortRef.current?.abort()
     abortRef.current = null
+    hydrateSeqRef.current += 1
+    analysisSeqRef.current += 1
+    lastGoodRef.current = null
+    setCanRestoreLast(false)
     setStatus('idle')
     setSteps(freshSteps(instrumentRef))
     setPercent(0)
     setRaw(null)
+    setAnalyzedAt(null)
     setError('')
   }, [instrumentRef])
+
+  const restoreLast = useCallback(() => {
+    const last = lastGoodRef.current
+    if (!last) return
+    setRaw(last.raw)
+    setAnalyzedAt(last.analyzedAt)
+    setError('')
+    setPercent(100)
+    setStatus('done')
+  }, [])
 
   useEffect(() => {
     abortRef.current?.abort()
     abortRef.current = null
-    setStatus('idle')
+    analysisSeqRef.current += 1
+    const hydrateSeq = ++hydrateSeqRef.current
+    lastGoodRef.current = null
+    setCanRestoreLast(false)
     setSteps(freshSteps(instrumentRef))
     setPercent(0)
     setRaw(null)
+    setAnalyzedAt(null)
     setError('')
+
+    if (!instrumentRef) {
+      setStatus('idle')
+      return
+    }
+
+    const key = instrumentKey(instrumentRef)
+    setStatus('loading')
+    const controller = new AbortController()
+    abortRef.current = controller
+
+    void (async () => {
+      try {
+        const cached = await fetchStockAnalysis(key, controller.signal)
+        if (hydrateSeq !== hydrateSeqRef.current || controller.signal.aborted) return
+        if (cached && isRawPayload(cached.raw) && typeof cached.analyzedAt === 'string') {
+          lastGoodRef.current = { raw: cached.raw, analyzedAt: cached.analyzedAt }
+          setCanRestoreLast(true)
+          setRaw(cached.raw)
+          setAnalyzedAt(cached.analyzedAt)
+          setPercent(100)
+          setStatus('done')
+          return
+        }
+        setStatus('idle')
+      } catch (e) {
+        if (controller.signal.aborted || isAbort(e)) return
+        if (hydrateSeq !== hydrateSeqRef.current) return
+        setStatus('idle')
+      } finally {
+        if (abortRef.current === controller) abortRef.current = null
+      }
+    })()
+
+    return () => {
+      controller.abort()
+    }
   }, [code, instrumentRef])
 
   const start = useCallback(async (force = false) => {
-    if (!code || status === 'running') return
+    if (!code || status === 'running' || status === 'loading') return
     if (!force && status === 'done' && raw) return
     if (!instrumentRef || !steps.length) {
       setError('该标的暂不支持投研分析')
@@ -103,6 +169,7 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
     abortRef.current?.abort()
     const controller = new AbortController()
     abortRef.current = controller
+    const analysisSeq = ++analysisSeqRef.current
     let currentSteps = freshSteps(instrumentRef)
     setSteps(currentSteps)
     setPercent(0)
@@ -131,7 +198,7 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
       setPercent(stepPercent(currentSteps))
 
       const result = await task()
-      if (controller.signal.aborted) return false
+      if (controller.signal.aborted || analysisSeq !== analysisSeqRef.current) return false
 
       if (!result.ok) {
         currentSteps = currentSteps.map(s =>
@@ -173,7 +240,7 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
       })
 
       await runStep('institution', STEP_HINTS.institution, async () => {
-        const resp = await research.institutionRating(instrumentRef!, undefined, controller.signal)
+        const resp = await research.institutionRating(instrumentRef, undefined, controller.signal)
         if (resp.success && resp.data) payload.institution = resp.data
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
@@ -200,18 +267,31 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
         return { ok: resp.success, message: resp.success ? '已完成' : (resp.message ?? '未能完成') }
       })
 
-      if (controller.signal.aborted) return
+      if (controller.signal.aborted || analysisSeq !== analysisSeqRef.current) return
 
-      setRaw(payload)
-      setPercent(100)
-      setStatus('done')
-
+      const at = new Date().toISOString()
       if (!payload.evalData && !payload.strategy && !payload.institution && !payload.cyq) {
         setError('分析已结束，但未能获取到有效结果，请稍后重试')
         setStatus('error')
+        return
       }
+
+      lastGoodRef.current = { raw: payload, analyzedAt: at }
+      setCanRestoreLast(true)
+      setRaw(payload)
+      setAnalyzedAt(at)
+      setPercent(100)
+      setStatus('done')
+
+      void saveStockAnalysis({
+        instrumentKey: instrumentKey(instrumentRef),
+        analyzedAt: at,
+        raw: payload,
+      }).catch(() => {
+        /* 保存失败不挡展示 */
+      })
     } catch (e) {
-      if (controller.signal.aborted || isAbort(e)) return
+      if (controller.signal.aborted || isAbort(e) || analysisSeq !== analysisSeqRef.current) return
       const msg = e instanceof Error ? e.message : '分析未能完成，请稍后重试'
       setError(msg)
       setStatus('error')
@@ -227,8 +307,11 @@ export function useStockAnalysis(code: string | null, instrument?: InstrumentRef
     steps,
     percent,
     raw,
+    analyzedAt,
     error,
+    canRestoreLast,
     start,
     reset,
+    restoreLast,
   }
 }

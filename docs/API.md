@@ -119,6 +119,40 @@
 | GET | `/api/portfolio/trades` | `?code=` 可选 |
 | GET | `/api/portfolio/summary` | 账本汇总 |
 | POST | `/api/portfolio/trade` | `{ code, shares, price, side?, date? }` |
+| GET | `/api/stock-analysis/:instrumentKey` | 个股分析最近一次报告（本地用户库；无则 `data: null`） |
+| PUT | `/api/stock-analysis/:instrumentKey` | 写入/覆盖最近一次报告 `{ analyzedAt, raw }` |
+
+### 个股分析存档
+
+每只股票只保留**最近一次**完整分析结果（`documents` 命名空间 `stock_analysis`，id = `instrumentKey`，如 `CN:SH.600519`）。路径参数需 `encodeURIComponent`。
+
+```http
+GET /api/stock-analysis/CN%3ASH.600519
+```
+
+```json
+{
+  "success": true,
+  "data": {
+    "instrumentKey": "CN:SH.600519",
+    "analyzedAt": "2026-07-22T14:30:00.000Z",
+    "raw": {
+      "evalData": {},
+      "strategy": {},
+      "institution": {},
+      "cyq": {},
+      "radar": {}
+    }
+  }
+}
+```
+
+```http
+PUT /api/stock-analysis/CN%3ASH.600519
+Content-Type: application/json
+
+{ "analyzedAt": "2026-07-22T14:30:00.000Z", "raw": { "evalData": null, "strategy": null, "institution": null, "cyq": null, "radar": null } }
+```
 
 ### Instrument API（多市场统一）
 

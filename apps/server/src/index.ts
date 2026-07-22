@@ -21,6 +21,11 @@ import {
   upsertCustomDiscoverStrategy,
 } from './custom-discover-strategies.js'
 import { getUserPreference, setUserPreference } from './user-preferences.js'
+import {
+  getLatestStockAnalysis,
+  parseStockAnalysisBody,
+  saveStockAnalysis,
+} from './stock-analysis-store.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
 import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrategyProfile } from '@opptrix/shared'
@@ -229,6 +234,24 @@ app.put<{ Params: { key: string }; Body: { value?: unknown } }>('/api/preference
   const value = setUserPreference(req.params.key, req.body?.value ?? null)
   return { key: req.params.key, value }
 })
+
+/** 个股分析最近一次报告 — documents namespace `stock_analysis`，id = instrumentKey */
+app.get<{ Params: { instrumentKey: string } }>('/api/stock-analysis/:instrumentKey', async (req) => {
+  const instrumentKey = decodeURIComponent(req.params.instrumentKey)
+  const data = getLatestStockAnalysis(instrumentKey)
+  return { success: true, data }
+})
+
+app.put<{ Params: { instrumentKey: string }; Body: unknown }>(
+  '/api/stock-analysis/:instrumentKey',
+  async (req, reply) => {
+    const instrumentKey = decodeURIComponent(req.params.instrumentKey)
+    const parsed = parseStockAnalysisBody(instrumentKey, req.body)
+    if (!parsed.ok) return reply.code(400).send({ error: parsed.error })
+    const data = saveStockAnalysis(parsed.record)
+    return { success: true, data }
+  },
+)
 
 app.get<{ Params: { id: string } }>('/api/discover/strategies/:id', async (req, reply) => {
   const strategy = getDiscoverStrategy(req.params.id)

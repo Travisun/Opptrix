@@ -807,6 +807,33 @@ export async function setUserPreference<T>(key: string, value: T) {
   })
 }
 
+/** 个股分析最近一次报告（本地用户库 documents） */
+export interface StockAnalysisRecord {
+  instrumentKey: string
+  analyzedAt: string
+  raw: import('../market/useStockDecisionCard').RawDecisionPayload
+}
+
+export async function fetchStockAnalysis(instrumentKey: string, signal?: AbortSignal) {
+  const resp = await jsonFetch<{ success: boolean; data: StockAnalysisRecord | null }>(
+    `/stock-analysis/${encodeURIComponent(instrumentKey)}`,
+    signal ? { signal } : undefined,
+  )
+  return resp.data ?? null
+}
+
+export async function saveStockAnalysis(record: StockAnalysisRecord) {
+  const resp = await jsonFetch<{ success: boolean; data: StockAnalysisRecord }>(
+    `/stock-analysis/${encodeURIComponent(record.instrumentKey)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ analyzedAt: record.analyzedAt, raw: record.raw }),
+    },
+  )
+  return resp.data
+}
+
 export async function listDiscoverProfiles() {
   return jsonFetch<{ profiles: import('../types/schemas').DiscoverProfileMeta[] }>('/discover/profiles')
 }

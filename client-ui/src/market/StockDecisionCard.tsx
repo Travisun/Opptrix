@@ -187,8 +187,27 @@ const useStyles = makeStyles({
   headRow: {
     display: 'flex',
     alignItems: 'center',
-    justifyContent: 'flex-end',
-    minHeight: '16px',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minHeight: '28px',
+  },
+  analyzedAt: {
+    fontSize: 'var(--opptrix-font-xs)',
+    color: opptrixCssVars.textTertiary,
+    fontVariantNumeric: 'tabular-nums',
+  },
+  loadingCard: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '12px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixCssVars.canvas,
+    border: `1px solid ${opptrixCssVars.separator}`,
+  },
+  loadingText: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textSecondary,
   },
   idleCard: {
     display: 'flex',
@@ -348,6 +367,15 @@ function GuideLine({
   )
 }
 
+function formatAnalyzedAtLabel(iso: string | null): string | null {
+  if (!iso) return null
+  const d = new Date(iso)
+  if (Number.isNaN(d.getTime())) return null
+  const hh = String(d.getHours()).padStart(2, '0')
+  const mm = String(d.getMinutes()).padStart(2, '0')
+  return `分析于 ${d.getMonth() + 1}月${d.getDate()}日 ${hh}:${mm}`
+}
+
 function AnalysisStepBanner({
   steps,
   percent,
@@ -356,6 +384,7 @@ function AnalysisStepBanner({
   expanded,
   onToggle,
   onRetry,
+  onRestoreLast,
 }: {
   steps: AnalysisStep[]
   percent: number
@@ -364,6 +393,7 @@ function AnalysisStepBanner({
   expanded: boolean
   onToggle: () => void
   onRetry?: () => void
+  onRestoreLast?: () => void
 }) {
   const s = useStyles()
   const runningStep = steps.find(step => step.status === 'running')
@@ -400,10 +430,19 @@ function AnalysisStepBanner({
               </span>
             </div>
           ))}
-          {status === 'error' && onRetry && (
-            <OpptrixButton variant="secondary" onClick={onRetry}>
-              重试
-            </OpptrixButton>
+          {status === 'error' && (onRetry || onRestoreLast) && (
+            <div className={s.actions}>
+              {onRetry && (
+                <OpptrixButton variant="secondary" onClick={onRetry}>
+                  重试
+                </OpptrixButton>
+              )}
+              {onRestoreLast && (
+                <OpptrixButton variant="ghost" onClick={onRestoreLast}>
+                  查看上次分析
+                </OpptrixButton>
+              )}
+            </div>
           )}
         </div>
       )}
@@ -425,6 +464,7 @@ export default function StockDecisionCard({
   const instrumentRef = useMemo(() => resolveWatchlistInstrument(stock), [stock])
   const analysis = useStockAnalysis(stock.code, instrumentRef)
   const { data } = useStockDecisionCard(stock, analysis.raw, holding, price, moneyFlow, quotePe, quotePb)
+  const analyzedLabel = formatAnalyzedAtLabel(analysis.analyzedAt)
 
   const handleDiscuss = (topic: DiscussTopic) => {
     if (!data || !onDiscuss) return
@@ -440,6 +480,17 @@ export default function StockDecisionCard({
       ? `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）的买入时机、仓位与风险。`
       : `请结合以下投研摘要，讨论 ${stock.name}（${stock.code}）是否适合减仓或卖出，以及关键价位。`
     onDiscuss({ code: stock.code, name: stock.name, topic, contextText, prompt })
+  }
+
+  if (analysis.status === 'loading') {
+    return (
+      <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
+        <div className={s.loadingCard}>
+          <Spinner size="tiny" />
+          <Text className={s.loadingText}>正在加载分析…</Text>
+        </div>
+      </div>
+    )
   }
 
   if (analysis.status === 'idle') {
@@ -466,9 +517,14 @@ export default function StockDecisionCard({
           percent={analysis.percent}
           status={analysis.status}
           error={analysis.error}
-          expanded={stepsExpanded}
+          expanded={stepsExpanded || analysis.status === 'error'}
           onToggle={() => setStepsExpanded(v => !v)}
           onRetry={analysis.status === 'error' ? () => { void analysis.start(true) } : undefined}
+          onRestoreLast={
+            analysis.status === 'error' && analysis.canRestoreLast
+              ? () => { analysis.restoreLast() }
+              : undefined
+          }
         />
       </div>
     )
@@ -495,12 +551,18 @@ export default function StockDecisionCard({
   return (
     <div className={mergeClasses(s.panel, 'opptrix-stock-decision-card')}>
       <div className={s.headRow}>
+        {analyzedLabel
+          ? <Text className={s.analyzedAt}>{analyzedLabel}</Text>
+          : <span />}
         <OpptrixButton
-          variant="icon"
+          variant="secondary"
+          size="small"
+          aria-label="刷新分析"
           icon={<ArrowClockwiseRegular fontSize={14} />}
-          aria-label="重新分析"
           onClick={() => { void analysis.start(true) }}
-        />
+        >
+          刷新分析
+        </OpptrixButton>
       </div>
 
       <Section title="核心结论">
