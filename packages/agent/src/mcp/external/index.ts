@@ -12,6 +12,7 @@
  */
 
 import {
+  extractMcpConfigHint,
   isMcpServerFailoverError,
   parseNamespacedMcpTool,
 } from '@opptrix/shared'
@@ -73,19 +74,21 @@ export class AggregatingToolBroker {
     // ── 绑定链：按 sortOrder 尝试外部候选 ──
     const chain = this.external.resolveBindingChain(name)
     if (chain.length > 0) {
-      const result = await this.tryExternalChain(name, args, opts, chain)
+      const { result, configHint } = await this.tryExternalChain(name, args, opts, chain)
       if (result !== null) return result
+      return this.callLocalWithFallback(name, args, opts, true, configHint)
     }
 
     // ── 无绑定链：检查外部是否有同名工具（自动绑定场景） ──
     const autoBound = this.external.resolveAutoBindChain(name)
     if (autoBound.length > 0) {
-      const result = await this.tryExternalChain(name, args, opts, autoBound)
+      const { result, configHint } = await this.tryExternalChain(name, args, opts, autoBound)
       if (result !== null) return result
+      return this.callLocalWithFallback(name, args, opts, true, configHint)
     }
 
     // ── 兜底本地 ──
-    return this.callLocalWithFallback(name, args, opts, chain.length > 0 || autoBound.length > 0)
+    return this.callLocalWithFallback(name, args, opts, false)
   }
 
   /* ---------------------------------------------------------------------- */
@@ -118,10 +121,11 @@ export class AggregatingToolBroker {
     args: Record<string, unknown>,
     opts: McpToolCallOptions | undefined,
     chain: Array<{ serverId: string; remoteTool: string }>,
-  ): Promise<unknown | null> {
+  ): Promise<{ result: unknown | null; configHint?: string }> {
     let lastExternalResult: unknown = null
     let lastCheck: ReturnType<SufficiencyChecker['check']> | null = null
     let lastServerId = ''
+    let lastConfigHint: string | undefined
 
     for (const cand of chain) {
       try {
@@ -134,26 +138,32 @@ export class AggregatingToolBroker {
         const check = this.sufficiency.check(name, result)
         if (check.sufficient) {
           // 外部数据已完备，直接返回
-          return annotateMcpResult(result, cand.serverId, { sufficient: true })
+          return { result: annotateMcpResult(result, cand.serverId, { sufficient: true }) }
         }
         // 不充分：记录，继续尝试下一个外部源
         lastExternalResult = result
         lastCheck = check
         lastServerId = cand.serverId
       } catch (e) {
+        const hint = extractMcpConfigHint(e)
+        if (hint) lastConfigHint = hint
         if (isMcpServerFailoverError(e)) continue
         // 业务错误：不换源，直接返回
-        return { error: e instanceof Error ? e.message : String(e), _mcp: { source: cand.serverId } }
+        return {
+          result: { error: e instanceof Error ? e.message : String(e), _mcp: { source: cand.serverId } },
+        }
       }
     }
 
     // 所有外部源都不充分 → 补充本地
     if (lastExternalResult !== null && lastCheck) {
-      return this.supplementWithLocal(name, args, opts, lastExternalResult, lastCheck, lastServerId)
+      return {
+        result: this.supplementWithLocal(name, args, opts, lastExternalResult, lastCheck, lastServerId),
+      }
     }
 
     // 外部全部失败（无结果）
-    return null
+    return { result: null, configHint: lastConfigHint }
   }
 
   /** 补充本地数据并合并 */
@@ -207,11 +217,13 @@ export class AggregatingToolBroker {
     args: Record<string, unknown>,
     opts: McpToolCallOptions | undefined,
     externalTried: boolean,
+    configHint?: string,
   ): Promise<unknown> {
     const localResult = await this.local.call(name, args, opts)
     return annotateMcpResult(localResult, 'local', {
       degraded: externalTried,
       sufficient: !externalTried, // 未尝试外部时，本地视为充分
+      configHint,
     })
   }
 

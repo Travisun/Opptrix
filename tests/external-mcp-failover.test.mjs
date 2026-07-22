@@ -35,6 +35,24 @@ test('isMcpServerFailoverError classifies quota and network', () => {
   assert.equal(isMcpServerFailoverError(new Error('invalid argument foo')), false)
 })
 
+test('isMcpServerFailoverError classifies schema -32602 and auth', () => {
+  assert.equal(
+    isMcpServerFailoverError(new Error('MCP error -32602: Structured content does not match')),
+    true,
+  )
+  assert.equal(
+    isMcpServerFailoverError(new Error('Failed to validate structured content -32602')),
+    true,
+  )
+  assert.equal(
+    isMcpServerFailoverError(new Error('-32600 output schema but did not return structured content')),
+    true,
+  )
+  assert.equal(isMcpServerFailoverError(new Error('Missing X-api-key header')), true)
+  assert.equal(isMcpServerFailoverError(new Error('invalid api key')), true)
+  assert.equal(isMcpServerFailoverError(new Error('unknown symbol XYZ')), false)
+})
+
 test('ExternalMcpHealth opens after consecutive failover failures', () => {
   const h = new ExternalMcpHealth()
   assert.equal(h.shouldSkip('s1', false), false)
@@ -120,6 +138,70 @@ test('AggregatingToolBroker failover: skip failed external then local', async ()
   assert.equal(result.price, 42)
   assert.equal(result._mcp.source, 'local')
   assert.equal(result._mcp.degraded, true)
+  await broker.close()
+})
+
+test('AggregatingToolBroker schema -32602 error failover to local', async () => {
+  const calls = []
+  const local = {
+    async openAiTools() { return [] },
+    async call(name) {
+      calls.push(`local:${name}`)
+      return { price: 99 }
+    },
+    async close() {},
+  }
+  const external = {
+    async hydrate() {},
+    listNamespacedOpenAiTools() { return [] },
+    resolveBindingChain() {
+      return [{ serverId: 'a', remoteTool: 'quotes' }]
+    },
+    resolveAutoBindChain() { return [] },
+    async callExternal(serverId, toolName) {
+      calls.push(`${serverId}:${toolName}`)
+      throw new Error('MCP error -32602: Structured content does not match output schema')
+    },
+    async callNamespaced() { throw new Error('unused') },
+  }
+  const broker = await AggregatingToolBroker.create(async () => local, external)
+  const result = await broker.call('get_quotes', { code: '600519' })
+  assert.deepEqual(calls, ['a:quotes', 'local:get_quotes'])
+  assert.equal(result.price, 99)
+  assert.equal(result._mcp.source, 'local')
+  assert.equal(result._mcp.degraded, true)
+  await broker.close()
+})
+
+test('AggregatingToolBroker Missing X-api-key failover to local with configHint', async () => {
+  const calls = []
+  const local = {
+    async openAiTools() { return [] },
+    async call(name) {
+      calls.push(`local:${name}`)
+      return { price: 88 }
+    },
+    async close() {},
+  }
+  const external = {
+    async hydrate() {},
+    listNamespacedOpenAiTools() { return [] },
+    resolveBindingChain() {
+      return [{ serverId: 'a', remoteTool: 'quotes' }]
+    },
+    resolveAutoBindChain() { return [] },
+    async callExternal(serverId, toolName) {
+      calls.push(`${serverId}:${toolName}`)
+      throw new Error('Missing X-api-key header')
+    },
+    async callNamespaced() { throw new Error('unused') },
+  }
+  const broker = await AggregatingToolBroker.create(async () => local, external)
+  const result = await broker.call('get_quotes', { code: '600519' })
+  assert.deepEqual(calls, ['a:quotes', 'local:get_quotes'])
+  assert.equal(result.price, 88)
+  assert.equal(result._mcp.degraded, true)
+  assert.equal(result._mcp.configHint, '请在 MCP 服务器设置中配置 API Key')
   await broker.close()
 })
 

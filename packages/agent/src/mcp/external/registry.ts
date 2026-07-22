@@ -243,8 +243,9 @@ export class ExternalMcpRegistry {
       undefined,
       { timeout, maxTotalTimeout: timeout * 2, signal: opts?.signal },
     )
+    const parsed = parseToolResult(serverId, toolName, result)
     this.health.recordSuccess(serverId)
-    return parseToolResult(serverId, toolName, result)
+    return parsed
   }
 
   async callNamespaced(
@@ -514,35 +515,30 @@ export function annotateMcpResult(
     externalSource?: string
     missingFields?: string[]
     supplementError?: string
+    configHint?: string
   },
 ): unknown {
+  const mcpMeta: Record<string, unknown> = {
+    source,
+    degraded: Boolean(opts?.degraded),
+    sufficient: opts?.sufficient,
+    supplemented: opts?.supplemented,
+    supplementReason: opts?.supplementReason,
+    externalSource: opts?.externalSource,
+    missingFields: opts?.missingFields,
+    supplementError: opts?.supplementError,
+  }
+  if (opts?.configHint) mcpMeta.configHint = opts.configHint
+
   if (data && typeof data === 'object' && !Array.isArray(data)) {
     return {
       ...(data as Record<string, unknown>),
-      _mcp: {
-        source,
-        degraded: Boolean(opts?.degraded),
-        sufficient: opts?.sufficient,
-        supplemented: opts?.supplemented,
-        supplementReason: opts?.supplementReason,
-        externalSource: opts?.externalSource,
-        missingFields: opts?.missingFields,
-        supplementError: opts?.supplementError,
-      },
+      _mcp: mcpMeta,
     }
   }
   return {
     data,
-    _mcp: {
-      source,
-      degraded: Boolean(opts?.degraded),
-      sufficient: opts?.sufficient,
-      supplemented: opts?.supplemented,
-      supplementReason: opts?.supplementReason,
-      externalSource: opts?.externalSource,
-      missingFields: opts?.missingFields,
-      supplementError: opts?.supplementError,
-    },
+    _mcp: mcpMeta,
   }
 }
 

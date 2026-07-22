@@ -161,10 +161,30 @@ export function normalizeTransport(transport: string): McpServerTransport {
   return 'streamable-http'
 }
 
+/** 从外部 MCP 错误消息提取配置提示（不含密钥明文） */
+export function extractMcpConfigHint(error: unknown): string | undefined {
+  const msg = error instanceof Error ? error.message : String(error ?? '')
+  if (/missing\s+x-api-key/i.test(msg)) {
+    return '请在 MCP 服务器设置中配置 API Key'
+  }
+  if (/invalid\s+api\s*key/i.test(msg)) {
+    return 'API Key 无效，请检查设置'
+  }
+  if (/\bunauthorized\b/i.test(msg)) {
+    return '鉴权失败，请检查 MCP 服务器密钥配置'
+  }
+  return undefined
+}
+
 /** 判定外部调用失败是否应 failover / 熔断（业务参数错误不在此列） */
 export function isMcpServerFailoverError(error: unknown): boolean {
   const msg = error instanceof Error ? error.message : String(error ?? '')
   if (!msg.trim()) return false
+
+  if (/invalid\s+argument|unknown\s+symbol|invalid\s+parameter/i.test(msg)) {
+    return false
+  }
+
   if (/quota|rate\s*limit|too\s*many|429|credit|额度过|额度用尽|限流|请求过于频繁/i.test(msg)) {
     return true
   }
@@ -175,6 +195,18 @@ export function isMcpServerFailoverError(error: unknown): boolean {
     const status = Number((error as { status: unknown }).status)
     if (status === 401 || status === 403 || status === 429 || status >= 500) return true
   }
+
+  if (/-32602\b/.test(msg) && /Structured content does not match|Failed to validate structured content/i.test(msg)) {
+    return true
+  }
+  if (/-32600\b/.test(msg) && /output schema but did not return structured content/i.test(msg)) {
+    return true
+  }
+
+  if (/missing\s+x-api-key|invalid\s+api\s*key|\bunauthorized\b/i.test(msg)) {
+    return true
+  }
+
   return false
 }
 
