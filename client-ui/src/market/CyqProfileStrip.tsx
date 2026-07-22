@@ -1,14 +1,17 @@
 import { useEffect, useMemo, useRef } from 'react'
 import { makeStyles } from '@fluentui/react-components'
 import type { ChipDistributionPoint, ChipDistributionProfileData } from '../types/market'
-import { MARKET_DOWN, MARKET_UP } from './chartTheme'
+import { MARKET_UP } from './chartTheme'
 import { priceToCanvasY } from './cyqUtils'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars } from '../theme/tokens'
 
 const useStyles = makeStyles({
   root: {
     width: '88px',
     flexShrink: 0,
+    alignSelf: 'stretch',
+    height: '100%',
+    overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
     borderLeft: `1px solid ${opptrixCssVars.separator}`,
@@ -33,8 +36,11 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     position: 'relative',
+    overflow: 'hidden',
   },
   canvas: {
+    position: 'absolute',
+    inset: 0,
     display: 'block',
     width: '100%',
     height: '100%',
@@ -49,24 +55,27 @@ interface Props {
 
 function drawStrip(
   canvas: HTMLCanvasElement,
+  wrap: HTMLElement,
   profile: ChipDistributionProfileData,
   latest: ChipDistributionPoint,
   priceSpan: { min: number; max: number },
-) {
-  const rect = canvas.getBoundingClientRect()
-  const w = Math.max(1, Math.floor(rect.width))
-  const h = Math.max(1, Math.floor(rect.height))
+): { w: number; h: number } {
+  const w = Math.max(1, Math.floor(wrap.clientWidth))
+  const h = Math.max(1, Math.floor(wrap.clientHeight))
   const dpr = window.devicePixelRatio || 1
+  // CSS 显示尺寸与 bitmap 分离，避免 height:100% 回退到固有高度形成反馈环
+  canvas.style.width = `${w}px`
+  canvas.style.height = `${h}px`
   canvas.width = Math.floor(w * dpr)
   canvas.height = Math.floor(h * dpr)
   const ctx = canvas.getContext('2d')
-  if (!ctx) return
+  if (!ctx) return { w, h }
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   ctx.clearRect(0, 0, w, h)
 
   const { min, max } = priceSpan
   const levels = profile.levels.filter(l => l.weight > 0)
-  if (!levels.length) return
+  if (!levels.length) return { w, h }
 
   const y90Top = priceToCanvasY(latest.cost90High, min, max, h)
   const y90Bot = priceToCanvasY(latest.cost90Low, min, max, h)
@@ -107,12 +116,14 @@ function drawStrip(
   ctx.font = '8px -apple-system, BlinkMacSystemFont, sans-serif'
   ctx.textAlign = 'left'
   ctx.fillText(profile.currentPrice.toFixed(2), 2, Math.max(9, Math.min(h - 2, yNow - 2)))
+  return { w, h }
 }
 
 export default function CyqProfileStrip({ profile, latest, priceSpan }: Props) {
   const s = useStyles()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const wrapRef = useRef<HTMLDivElement>(null)
+  const lastSizeRef = useRef<{ w: number; h: number } | null>(null)
 
   const profitPct = useMemo(
     () => `${(latest.benefitPart * 100).toFixed(1)}%`,
@@ -121,13 +132,23 @@ export default function CyqProfileStrip({ profile, latest, priceSpan }: Props) {
 
   useEffect(() => {
     const canvas = canvasRef.current
-    if (!canvas) return undefined
-    drawStrip(canvas, profile, latest, priceSpan)
-
     const wrap = wrapRef.current
-    if (!wrap) return undefined
+    if (!canvas || !wrap) return undefined
+
+    const paint = (force: boolean) => {
+      const w = Math.max(1, Math.floor(wrap.clientWidth))
+      const h = Math.max(1, Math.floor(wrap.clientHeight))
+      const prev = lastSizeRef.current
+      if (!force && prev && prev.w === w && prev.h === h) return
+      const size = drawStrip(canvas, wrap, profile, latest, priceSpan)
+      lastSizeRef.current = size
+    }
+
+    lastSizeRef.current = null
+    paint(true)
+
     const ro = new ResizeObserver(() => {
-      drawStrip(canvas, profile, latest, priceSpan)
+      paint(false)
     })
     ro.observe(wrap)
     return () => { ro.disconnect() }
