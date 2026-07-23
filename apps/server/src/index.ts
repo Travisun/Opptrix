@@ -3,6 +3,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
+import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, initOutboundNetwork, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
@@ -1278,6 +1279,9 @@ async function bootstrap() {
 
 let shuttingDown = false
 
+const browserSessionManager = createBrowserSessionManager()
+registerBrowserShutdownHooks(browserSessionManager)
+
 async function shutdown(signal: string) {
   if (shuttingDown) return
   shuttingDown = true
@@ -1287,6 +1291,7 @@ async function shutdown(signal: string) {
     process.exit(signal === 'uncaughtException' ? 1 : 0)
   }, 8_000)
   try {
+    await browserSessionManager.closeAll()
     await app.close()
     getMarketDataService().store.close()
   } catch (err) {

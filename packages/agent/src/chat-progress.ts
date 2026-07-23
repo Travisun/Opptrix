@@ -183,6 +183,12 @@ const TOOL_LABELS: Record<string, string> = {
   get_instrument_cyq: '分析筹码分布',
   get_instrument_institution_rating: '汇总机构评级',
   get_instrument_institution_report: '生成机构评级报告',
+  browser_navigate: '打开网页',
+  browser_snapshot: '读取页面',
+  browser_click: '点击',
+  browser_type: '输入',
+  browser_screenshot: '网页截图',
+  browser_close: '关闭浏览',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {

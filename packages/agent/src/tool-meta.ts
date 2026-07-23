@@ -494,6 +494,36 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '调整外部 MCP 故障转移优先级（列表越前越优先；本地始终最后兜底）。',
     compliance: 'server_ids 为完整顺序列表。',
   },
+  browser_navigate: {
+    packId: 'browser',
+    usageGuide: '用户给出外部 http(s) URL 或要打开网页时首选；打开后用 browser_snapshot 读取页面。',
+    compliance: '仅 http/https；禁止 file/javascript/data 等协议；导航后 ref 清空，须重新 snapshot。',
+  },
+  browser_snapshot: {
+    packId: 'browser',
+    usageGuide: '读取当前浏览器页面的无障碍快照（含 [ref=eN]）；点击/输入前必须先 snapshot。',
+    compliance: '返回精简 a11y 树；勿向用户朗读完整快照或文件路径；同一页面交互后可重复调用刷新 ref。',
+  },
+  browser_click: {
+    packId: 'browser',
+    usageGuide: '对 snapshot 中的 ref 执行点击；表单提交或导航后应重新 snapshot。',
+    compliance: 'ref 须来自最近一次 browser_snapshot；无效 ref 时先 snapshot 再试。',
+  },
+  browser_type: {
+    packId: 'browser',
+    usageGuide: '向 snapshot 中的输入框键入文本；搜索框可 submit=true 提交。',
+    compliance: 'ref 须来自最近一次 browser_snapshot；clear=true 可先清空；勿输入敏感凭证除非用户明确要求。',
+  },
+  browser_screenshot: {
+    packId: 'browser',
+    usageGuide: '保存当前页面 PNG 截图供内部分析；需要视觉确认页面布局时使用。',
+    compliance: '返回本地 path 供模型参考；勿对用户朗读路径；非 base64 inline。',
+  },
+  browser_close: {
+    packId: 'browser',
+    usageGuide: '外部网页任务结束或切换站点前关闭浏览器，释放资源。',
+    compliance: '无参数；关闭后再次浏览须 browser_navigate 重新打开。',
+  },
 }
 
 /** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */

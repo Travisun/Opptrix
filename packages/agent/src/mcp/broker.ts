@@ -16,6 +16,8 @@ const SLOW_TOOLS = new Set([
   'verify_instrument_strategy',
   'batch_instrument_snapshots',
   'evaluate_instrument',
+  'browser_navigate',
+  'browser_screenshot',
 ])
 
 export interface McpToolCallOptions {

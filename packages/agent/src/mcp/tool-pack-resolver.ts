@@ -43,6 +43,15 @@ const SEED_RULES: SeedRule[] = [
     ],
   },
   {
+    pack: 'browser',
+    weight: 3,
+    patterns: [
+      /https?:\/\//i,
+      /打开(?:网页|网站|页面|链接)|访问(?:网页|网站)|浏览(?:网页|网站)/,
+      /网页截图|页面快照|当前页面|外部网站/,
+    ],
+  },
+  {
     pack: 'industry',
     weight: 3,
     patterns: [

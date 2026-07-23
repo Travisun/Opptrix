@@ -1,9 +1,9 @@
-import type { ColorScheme } from './tokens'
+import type { ColorScheme, ThemePreference } from './tokens'
 import { applyCssVars } from './cssVars'
 
 const THEME_COLOR_META = 'theme-color'
 
-export function applyTheme(scheme: ColorScheme): void {
+export function applyTheme(scheme: ColorScheme, preference: ThemePreference = 'system'): void {
   const root = document.documentElement
   root.dataset.theme = scheme
 
@@ -20,7 +20,6 @@ export function applyTheme(scheme: ColorScheme): void {
     meta.content = canvas
   }
 
-  // Electron native title bar / system chrome (optional)
-  const electronApi = (window as Window & { opptrix?: { setThemeSource?: (source: string) => void } }).opptrix
-  electronApi?.setThemeSource?.(scheme)
+  // Electron: sync OS vibrancy/acrylic with app theme preference (not just resolved scheme).
+  window.electronAPI?.setThemeSource?.(preference)
 }

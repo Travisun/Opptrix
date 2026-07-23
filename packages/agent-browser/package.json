@@ -1,6 +1,6 @@
 {
-  "name": "@opptrix/agent",
-  "version": "0.5.0",
+  "name": "@opptrix/agent-browser",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "main": "./dist/index.js",
@@ -11,18 +11,12 @@
       "import": "./dist/index.js"
     }
   },
-  "bin": {
-    "opptrix-mcp": "./dist/mcp/stdio-entry.js"
-  },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "mcp": "node dist/mcp/stdio-entry.js"
+    "install-browser": "playwright install chromium"
   },
   "dependencies": {
-    "@opptrix/agent-browser": "*",
-    "@opptrix/research-hub": "*",
     "@opptrix/shared": "*",
-    "@opptrix/user-store": "*",
-    "@modelcontextprotocol/sdk": "^1.29.0"
+    "playwright-core": "^1.51.0"
   }
 }

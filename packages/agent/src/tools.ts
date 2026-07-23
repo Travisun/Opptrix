@@ -17,6 +17,7 @@ import {
   buildUnifiedInstrumentTools,
   CHAT_MCP_TOOL_NAMES,
 } from './unified-mcp-tools.js'
+import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildAgentSystemRules, resolveInstrumentFromParams } from '@opptrix/shared'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
@@ -111,7 +112,12 @@ export class ToolRegistry {
 
   constructor(private hub: ResearchHub, appContext?: AgentAppContext) {
     this.appContext = appContext ?? createDefaultAppContext()
-    this.tools = [...this.buildDataTools(), ...this.buildBasicTools(), ...this.buildMetaTools()]
+    this.tools = [
+      ...this.buildDataTools(),
+      ...this.buildBasicTools(),
+      ...this.buildMetaTools(),
+      ...buildBrowserTools(),
+    ]
   }
 
   bindPackSession(bridge: NonNullable<ToolRegistry['packBridge']>) {
