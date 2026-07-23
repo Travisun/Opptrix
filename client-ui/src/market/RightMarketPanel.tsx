@@ -102,9 +102,12 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
     color: opptrixCssVars.textSecondary,
     fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
+    fontWeight: 400,
     lineHeight: 1,
-    // Remove Fluent underline indicator
+    // Fluent pending (::before) + selected (::after) underline indicators
+    '::before': { display: 'none' },
+    ':hover::before': { display: 'none' },
+    ':active::before': { display: 'none' },
     '::after': {
       display: 'none',
       content: '""',
@@ -113,6 +116,12 @@ const useStyles = makeStyles({
       backgroundColor: 'transparent',
       border: 'none',
     },
+    ':enabled:hover::after': { display: 'none' },
+    ':enabled:active::after': { display: 'none' },
+    // Content slot owns selected semibold — override to match ChromeToolButton
+    '& .fui-Tab__content': { fontWeight: 400 },
+    // Suppress Fluent Tabster focus box-shadow; keep ghostInteractive focusVisibleRing
+    '&[data-fui-focus-visible]': { boxShadow: 'none' },
     ':hover': {
       backgroundColor: opptrixCssVars.surfaceHover,
       color: opptrixCssVars.textPrimary,
@@ -120,6 +129,7 @@ const useStyles = makeStyles({
     '&[aria-selected="true"]': {
       backgroundColor: opptrixCssVars.accentSoft,
       color: opptrixCssVars.accent,
+      '& .fui-Tab__content': { fontWeight: 400 },
       ':hover': {
         backgroundColor: opptrixCssVars.accentSoft,
         color: opptrixCssVars.accent,

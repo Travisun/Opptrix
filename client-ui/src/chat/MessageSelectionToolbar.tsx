@@ -13,7 +13,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MarkdownMessage from './MarkdownMessage'
 import type { EphemeralAskTurn, MessageSelection } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { motion } from '../theme/mixins'
+import { glassDropdown, motion } from '../theme/mixins'
 import { useRotatingPhrase } from '../hooks/useRotatingPhrase'
 import { listRowKey } from '../utils/listRowKey'
 
@@ -36,6 +36,7 @@ type ToolbarMode = 'compact' | 'ask' | 'custom' | 'conversation'
 
 const useStyles = makeStyles({
   toolbar: {
+    ...glassDropdown,
     position: 'absolute',
     zIndex: 20,
     display: 'flex',
@@ -46,11 +47,6 @@ const useStyles = makeStyles({
     gap: '2px',
     padding: '2px',
     borderRadius: opptrixTokens.radiusXl,
-    backgroundColor: 'rgba(255, 255, 255, 0.72)',
-    backdropFilter: 'blur(16px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(16px) saturate(160%)',
-    border: '1px solid rgba(255, 255, 255, 0.55)',
-    boxShadow: '0 6px 20px rgba(0, 0, 0, 0.1)',
     pointerEvents: 'auto',
     overflow: 'hidden',
     transitionProperty: 'width, max-width, border-radius',
@@ -87,7 +83,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     whiteSpace: 'nowrap',
     ':hover': {
-      backgroundColor: 'rgba(29, 29, 31, 0.08)',
+      backgroundColor: opptrixCssVars.accentSoft,
     },
     ':disabled': {
       opacity: 0.5,
@@ -128,7 +124,7 @@ const useStyles = makeStyles({
     resize: 'none',
     border: 'none',
     outline: 'none',
-    backgroundColor: 'rgba(29, 29, 31, 0.06)',
+    backgroundColor: opptrixCssVars.inputBg,
     borderRadius: opptrixTokens.radiusMd,
     padding: '6px 8px',
     fontSize: 'var(--opptrix-font-md)',
@@ -207,7 +203,7 @@ const useStyles = makeStyles({
     resize: 'none',
     border: 'none',
     outline: 'none',
-    backgroundColor: 'rgba(29, 29, 31, 0.06)',
+    backgroundColor: opptrixCssVars.inputBg,
     borderRadius: opptrixTokens.radiusMd,
     padding: '6px 8px',
     fontSize: 'var(--opptrix-font-md)',
