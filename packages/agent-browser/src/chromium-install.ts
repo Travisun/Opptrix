@@ -1,3 +1,11 @@
+/**
+ * Chromium install / probe for @opptrix/agent-browser.
+ *
+ * Runtime launch uses the full Chromium binary via `chromium.executablePath()`
+ * (see playwright-session.ts). Probing that path is enough — we intentionally do
+ * NOT depend on Playwright's chromium-headless-shell. Keep `playwright install chromium`
+ * (do not add `--with-deps` / force a separate shell download for our headless path).
+ */
 import { spawn } from 'node:child_process'
 import fs from 'node:fs'
 import path from 'node:path'
@@ -31,6 +39,7 @@ export function configurePlaywrightBrowsersPath(): void {
   }
 }
 
+/** True when the full Chromium executable exists (same path used at launch). */
 export function isChromiumAvailable(): boolean {
   configurePlaywrightBrowsersPath()
   try {

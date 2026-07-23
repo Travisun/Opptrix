@@ -32,7 +32,7 @@ function formatBrowserError(err: unknown): Error {
   if (/Executable doesn't exist|browserType.launch/i.test(message)) {
     if (isDesktopRuntime()) {
       return new Error(
-        'Unable to start the browser. Try restarting the app, or reinstall Opptrix.',
+        '浏览组件未就绪。请重启应用，或更新到最新版后再试。',
       )
     }
     return new Error(
@@ -161,7 +161,12 @@ export async function launchPlaywrightSession(headless = true): Promise<Playwrig
   let page: Page | null = null
 
   try {
-    browser = await chromium.launch({ headless })
+    // Playwright 1.61+ defaults headless:true to chromium-headless-shell; we force the
+    // full Chromium binary so launch matches isChromiumAvailable() / install probes.
+    browser = await chromium.launch({
+      headless,
+      executablePath: chromium.executablePath(),
+    })
     context = await browser.newContext({
       viewport: { width: 1280, height: 720 },
       ignoreHTTPSErrors: false,

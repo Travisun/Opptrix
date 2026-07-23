@@ -2,6 +2,11 @@
 /**
  * Ensure Playwright Chromium is installed for @opptrix/agent-browser.
  *
+ * Runtime launch uses the full Chromium binary via `chromium.executablePath()`
+ * (agent-browser does not depend on chromium-headless-shell). Probing that path
+ * is enough; `playwright install chromium` installs full Chromium — we do not
+ * require a separate headless-shell download.
+ *
  * Usage:
  *   node scripts/ensure-chromium.mjs            # postinstall: install if missing, warn on failure
  *   node scripts/ensure-chromium.mjs --strict   # stage-runtime: fail if install fails

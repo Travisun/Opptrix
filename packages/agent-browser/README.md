@@ -5,6 +5,7 @@ Agent 内置浏览器会话（Playwright Chromium，headless）。
 ## Chromium 安装
 
 `npm install` 时会通过 `postinstall` 自动尝试安装 Chromium（仅 chromium，不含 firefox/webkit）。
+Agent 浏览在 headless 下使用已安装的完整 Chromium（`executablePath`），无需单独的 headless-shell。
 
 跳过自动安装：
 
