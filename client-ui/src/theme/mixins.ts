@@ -285,6 +285,13 @@ export const iconBtnMixin = (size: 'sm' | 'md' | 'lg' | 'xl' = 'md') => {
     justifyContent: 'center',
     padding: 0,
     borderRadius: s.radius,
+    // Explicit App tokens — Fluent icons use currentColor; without this,
+    // portal'd chrome buttons inherit UA ButtonText (OS appearance).
+    color: opptrixCssVars.textSecondary,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
     '& svg': { width: s.iconSize, height: s.iconSize },
   } as const
 }

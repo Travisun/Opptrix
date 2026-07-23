@@ -6,6 +6,8 @@ const THEME_COLOR_META = 'theme-color'
 export function applyTheme(scheme: ColorScheme, preference: ThemePreference = 'system'): void {
   const root = document.documentElement
   root.dataset.theme = scheme
+  // Align UA system colors (ButtonText, etc.) with resolved App scheme
+  root.style.colorScheme = scheme
 
   applyCssVars(scheme, root)
 

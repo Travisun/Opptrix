@@ -11,7 +11,8 @@ import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
-import { opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -87,6 +88,43 @@ const useStyles = makeStyles({
     minHeight: 'unset',
     flexWrap: 'nowrap',
     width: 'max-content',
+    gap: '2px',
+    alignItems: 'center',
+  },
+  /** Text pill — same ghost / accentSoft language as ChromeToolButton (not 28×28 icon). */
+  tab: {
+    ...ghostInteractive,
+    minWidth: 'unset',
+    height: '28px',
+    padding: '0 10px',
+    margin: 0,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 500,
+    lineHeight: 1,
+    // Remove Fluent underline indicator
+    '::after': {
+      display: 'none',
+      content: '""',
+      height: '0',
+      width: '0',
+      backgroundColor: 'transparent',
+      border: 'none',
+    },
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+    '&[aria-selected="true"]': {
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.accent,
+      ':hover': {
+        backgroundColor: opptrixCssVars.accentSoft,
+        color: opptrixCssVars.accent,
+      },
+    },
   },
   titleBarDragLead: {
     flex: '0 0 auto',
@@ -351,9 +389,9 @@ function RightMarketPanel({
             selectedValue={tab}
             onTabSelect={handleTabSelect}
           >
-            <Tab value="watchlist">关注</Tab>
-            <Tab value="portfolio">组合</Tab>
-            {showDetailTab ? <Tab value="detail">详情</Tab> : null}
+            <Tab className={s.tab} value="watchlist">关注</Tab>
+            <Tab className={s.tab} value="portfolio">组合</Tab>
+            {showDetailTab ? <Tab className={s.tab} value="detail">详情</Tab> : null}
           </TabList>
         </div>
 
