@@ -53,4 +53,5 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notificationRequestPermission: () => ipcRenderer.invoke('notification-request-permission'),
   showLocalNotification: (payload) => ipcRenderer.invoke('notification-show', payload),
   signalShellReady: () => ipcRenderer.send('shell-ready'),
+  setThemeSource: (source) => ipcRenderer.send('set-theme-source', source),
 })

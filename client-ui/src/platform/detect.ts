@@ -43,6 +43,7 @@ declare global {
       notificationRequestPermission?: () => Promise<NotificationPermissionState>
       showLocalNotification?: (payload: LocalNotificationPayload) => Promise<boolean>
       signalShellReady?: () => void
+      setThemeSource?: (source: 'system' | 'light' | 'dark') => void
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
     showSaveFilePicker?: (options?: {

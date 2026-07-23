@@ -34,8 +34,8 @@ export function ThemeProvider({ children }: { children: ReactNode }) {
   )
 
   useEffect(() => {
-    applyTheme(resolvedScheme)
-  }, [resolvedScheme])
+    applyTheme(resolvedScheme, preference)
+  }, [resolvedScheme, preference])
 
   useEffect(() => {
     const mq = window.matchMedia('(prefers-color-scheme: dark)')

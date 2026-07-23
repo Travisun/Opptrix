@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog, shell, session } = require('electron')
+const { app, BrowserWindow, ipcMain, dialog, shell, session, nativeTheme } = require('electron')
 const path = require('path')
 const fs = require('fs/promises')
 const { spawn } = require('node:child_process')
@@ -680,9 +680,27 @@ async function openMainWindowFromMenu() {
   await bootstrapApp({ withSplash: false })
 }
 
+function applyNativeThemeSource(source) {
+  if (source !== 'system' && source !== 'light' && source !== 'dark') return
+  nativeTheme.themeSource = source
+  // Re-apply vibrancy so macOS sidebar material picks up the new theme source.
+  const win = mainWindow
+  if (win && !win.isDestroyed() && process.platform === 'darwin') {
+    try {
+      win.setVibrancy('sidebar')
+    } catch {
+      /* older Electron */
+    }
+  }
+}
+
 function registerWindowIpc() {
   ipcMain.on('shell-ready', (event) => {
     notifyShellReady(event.sender)
+  })
+
+  ipcMain.on('set-theme-source', (_event, source) => {
+    applyNativeThemeSource(source)
   })
 
   ipcMain.on('window-minimize', (event) => {
