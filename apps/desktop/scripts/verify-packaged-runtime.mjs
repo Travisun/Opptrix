@@ -10,6 +10,7 @@
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertPlaywrightChromiumExecutable } from './lib/assert-playwright-chromium.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
@@ -60,10 +61,14 @@ function assertStage(stageDir) {
     fail(`${path.join(stageDir, 'deps')} must be renamed to node_modules after pack`)
   }
   const playwrightBrowsers = path.join(stageDir, 'playwright-browsers')
-  if (!fs.existsSync(playwrightBrowsers)) {
-    fail(`missing ${playwrightBrowsers} — stage-runtime must install Playwright Chromium`)
-  }
+  const chromiumExe = assertPlaywrightChromiumExecutable(
+    playwrightBrowsers,
+    // Prefer restored node_modules; deps/ should already be renamed after pack.
+    [path.join(stageDir, 'node_modules'), path.join(stageDir, 'deps')],
+    fail,
+  )
   console.log(`verify-packaged-runtime: OK ${nmFastify}`)
+  console.log(`verify-packaged-runtime: OK Chromium ${chromiumExe}`)
 }
 
 const releaseDir = path.resolve(process.argv[2] || path.join(__dirname, '../release'))

@@ -443,6 +443,35 @@ function ensurePlaywrightChromium() {
     )
     process.exit(install.status ?? 1)
   }
+
+  // Same probe as runtime launch (`chromium.executablePath()`); empty dir must not pass.
+  const prevBrowsers = process.env.PLAYWRIGHT_BROWSERS_PATH
+  process.env.PLAYWRIGHT_BROWSERS_PATH = PLAYWRIGHT_BROWSERS
+  try {
+    const pwPkg = path.join(STAGE_NM, 'playwright-core/package.json')
+    if (!fs.existsSync(pwPkg)) {
+      console.error(`Playwright Chromium post-check failed — missing ${pwPkg}`)
+      process.exit(1)
+    }
+    const { chromium } = createRequire(pwPkg)('.')
+    const exe = chromium.executablePath()
+    if (!exe || !fs.existsSync(exe)) {
+      console.error(
+        `Playwright Chromium executable missing after install under ${PLAYWRIGHT_BROWSERS}`
+        + ` (resolved ${exe || 'n/a'}).`,
+      )
+      process.exit(1)
+    }
+    console.log(`Playwright Chromium ready: ${exe}`)
+  } catch (err) {
+    console.error(
+      `Playwright Chromium post-check failed: ${err instanceof Error ? err.message : err}`,
+    )
+    process.exit(1)
+  } finally {
+    if (prevBrowsers == null) delete process.env.PLAYWRIGHT_BROWSERS_PATH
+    else process.env.PLAYWRIGHT_BROWSERS_PATH = prevBrowsers
+  }
 }
 
 rm(STAGE)

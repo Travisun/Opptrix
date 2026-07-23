@@ -5,6 +5,7 @@ import { createRequire } from 'node:module'
 import fs from 'node:fs'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { assertPlaywrightChromiumExecutable } from './lib/assert-playwright-chromium.mjs'
 import { hostMatchesTarget, resolveRuntimeTarget } from './lib/runtime-target.mjs'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -110,9 +111,12 @@ if (!fs.existsSync(path.join(depsRoot, 'fastify'))) {
 }
 
 const playwrightBrowsers = path.join(STAGE, 'playwright-browsers')
-if (!fs.existsSync(playwrightBrowsers)) {
-  fail(`missing ${playwrightBrowsers} — run stage-runtime.mjs`)
-}
+const chromiumExe = assertPlaywrightChromiumExecutable(
+  playwrightBrowsers,
+  [depsRoot, path.join(STAGE, 'node_modules')],
+  fail,
+)
+console.log(`verify-runtime: OK Chromium ${chromiumExe}`)
 
 if (!hostMatchesTarget(target)) {
   console.log(
