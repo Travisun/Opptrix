@@ -12,6 +12,21 @@ export interface WatchlistItem {
   instrument?: import('./instrument').InstrumentRef
 }
 
+export interface WatchlistGroup {
+  id: string
+  title: string
+  sortOrder: number
+  createdAt?: string
+}
+
+export interface WatchlistGroupsDocument {
+  groups: WatchlistGroup[]
+  membership: Record<string, string[]>
+}
+
+/** 虚拟「全部」筛选器 — 不落库 */
+export const WATCHLIST_ALL_GROUP_ID = '__all__'
+
 export interface MarketQuote {
   code: string
   name: string

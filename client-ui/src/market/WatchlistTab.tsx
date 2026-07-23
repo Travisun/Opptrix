@@ -7,11 +7,12 @@ import {
   makeStyles,
   mergeClasses,
 } from '@fluentui/react-components'
-import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, StarRegular } from '@fluentui/react-icons'
+import { DismissRegular, DeleteRegular, EditRegular, SearchRegular, SettingsRegular, StarRegular } from '@fluentui/react-icons'
 import SidebarListEmpty from './SidebarListEmpty'
+import WatchlistGroupsDialog from './WatchlistGroupsDialog'
+import { filterWatchlistByGroup, useWatchlistGroups } from './WatchlistGroupsContext'
 import { research } from '../api/client'
 import type { MarketQuote, WatchlistItem } from '../types/market'
-import { followReturnPct, holdingReturnPctFromQuote } from './portfolioCalc'
 import type { HoldingSnapshot } from './useFollowPortfolio'
 import { formatPct, formatPriceForMarket, pctTone, portfolioHoldingsKey, resolveDisplayStockName, hasCjkText } from './format'
 import { formatWatchlistRadarLine } from './watchlistRadar'
@@ -40,11 +41,74 @@ const useStyles = makeStyles({
     height: '100%',
   },
   searchRow: {
-    padding: `8px ${CONTENT_PAD} 6px`,
+    padding: `8px ${CONTENT_PAD} 4px`,
     display: 'flex',
     gap: '6px',
     alignItems: 'center',
+  },
+  /** Group chips — equal vertical rhythm under search; single bottom rule for the chrome block. */
+  chipRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    padding: `4px ${CONTENT_PAD} 8px`,
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    minWidth: 0,
+    minHeight: '34px',
+    boxSizing: 'border-box',
+  },
+  chipsWrap: {
+    flex: 1,
+    minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+  },
+  chip: {...ghostInteractive,
+    flexShrink: 0,
+    height: '26px',
+    padding: '0 10px',
+    border: 'none',
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 500,
+    cursor: 'pointer',
+    whiteSpace: 'nowrap',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+  },
+  chipActive: {
+    backgroundColor: opptrixCssVars.accentSoft,
+    color: opptrixCssVars.accent,
+    ':hover': {
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.accent,
+    },
+  },
+  chipEditBtn: {...ghostInteractive,
+    flexShrink: 0,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '26px',
+    height: '26px',
+    padding: 0,
+    border: 'none',
+    borderRadius: opptrixTokens.radiusFull,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    cursor: 'pointer',
+    lineHeight: 0,
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
   },
   searchInput: {
     flex: 1,
@@ -106,8 +170,11 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '8px',
-    padding: `6px ${ITEM_INNER_PAD}`,
-    minHeight: '34px',
+    padding: `0 ${ITEM_INNER_PAD}`,
+    height: '40px',
+    minHeight: '40px',
+    maxHeight: '40px',
+    overflow: 'hidden',
     borderRadius: opptrixTokens.radiusMd,
     backgroundColor: 'transparent',
     width: '100%',
@@ -133,10 +200,14 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0,
     display: 'flex',
-    flexDirection: 'column',
-    gap: '1px',
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: '6px',
+    overflow: 'hidden',
   },
   rowTitle: {
+    flex: '1 1 auto',
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
@@ -147,20 +218,17 @@ const useStyles = makeStyles({
     alignItems: 'center',
     gap: '4px',
   },
-  rowNote: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textTertiary,
+  rowName: {
+    minWidth: 0,
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  rowRadar: {
+  rowCode: {
+    flexShrink: 0,
     fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textSecondary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
+    color: opptrixCssVars.textTertiary,
     whiteSpace: 'nowrap',
-    lineHeight: 1.25,
   },
   holdBadge: {
     flexShrink: 0,
@@ -168,8 +236,8 @@ const useStyles = makeStyles({
   rowTrailing: {
     position: 'relative',
     flexShrink: 0,
-    width: '112px',
-    minHeight: '28px',
+    width: '96px',
+    height: '28px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'flex-end',
@@ -180,9 +248,9 @@ const useStyles = makeStyles({
     top: '50%',
     transform: 'translateY(-50%)',
     display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'flex-end',
-    gap: '1px',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'flex-end',
     transitionProperty: 'opacity',
     transitionDuration: motion.fast,
     '@media (hover: none)': {
@@ -198,22 +266,9 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
     lineHeight: 1.1,
   },
-  quoteSecondary: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '5px',
-    fontSize: 'var(--opptrix-font-xs)',
-    fontVariantNumeric: 'tabular-nums',
-    whiteSpace: 'nowrap',
-    lineHeight: 1.1,
-  },
   metricPrice: {
     fontWeight: 650,
     color: opptrixCssVars.textPrimary,
-  },
-  retLabel: {
-    color: opptrixCssVars.textTertiary,
-    fontWeight: 500,
   },
   pctUp: { color: MARKET_UP, fontWeight: 600 },
   pctDown: { color: MARKET_DOWN, fontWeight: 600 },
@@ -310,6 +365,15 @@ export default function WatchlistTab({
   onPatchItem,
 }: Props) {
   const s = useStyles()
+  const {
+    groups,
+    membership,
+    selectedGroupId,
+    setSelectedGroupId,
+    replaceDoc,
+    dialogOpen,
+    setDialogOpen,
+  } = useWatchlistGroups()
   const [keyword, setKeyword] = useState('')
   const [searching, setSearching] = useState(false)
   const [searchHits, setSearchHits] = useState<WatchlistItem[]>([])
@@ -325,6 +389,21 @@ export default function WatchlistTab({
   const itemsKey = useMemo(
     () => items.map(watchlistItemKey).join('|'),
     [items],
+  )
+
+  const filteredItems = useMemo(
+    () => filterWatchlistByGroup(items, membership, selectedGroupId, watchlistItemKey),
+    [items, membership, selectedGroupId],
+  )
+
+  const selectedGroupTitle = useMemo(() => {
+    if (!selectedGroupId) return null
+    return groups.find(g => g.id === selectedGroupId)?.title ?? null
+  }, [groups, selectedGroupId])
+
+  const groupsDoc = useMemo(
+    () => ({ groups, membership }),
+    [groups, membership],
   )
 
   const refreshQuotes = useCallback(async (opts?: { silent?: boolean }) => {
@@ -519,6 +598,36 @@ export default function WatchlistTab({
         )}
       </div>
 
+      <div className={s.chipRow}>
+        <div className={mergeClasses(s.chipsWrap, 'opptrix-scroll-x')}>
+          <button
+            type="button"
+            className={mergeClasses(s.chip, !selectedGroupId && s.chipActive)}
+            onClick={() => setSelectedGroupId(null)}
+          >
+            全部
+          </button>
+          {groups.map(group => (
+            <button
+              key={group.id}
+              type="button"
+              className={mergeClasses(s.chip, selectedGroupId === group.id && s.chipActive)}
+              onClick={() => setSelectedGroupId(group.id)}
+            >
+              {group.title}
+            </button>
+          ))}
+        </div>
+        <button
+          type="button"
+          className={s.chipEditBtn}
+          aria-label="管理分组"
+          onClick={() => setDialogOpen(true)}
+        >
+          <SettingsRegular fontSize={14} />
+        </button>
+      </div>
+
       {keyword.trim().length >= 2 && (
         <div className={mergeClasses(s.results, 'opptrix-scroll', !searching && searchHits.length === 0 && s.resultsCentered)}>
           {searching && (
@@ -564,35 +673,35 @@ export default function WatchlistTab({
         </div>
       )}
 
-      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !items.length && s.listCentered)}>
-        {!items.length && (
+      <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover', !filteredItems.length && s.listCentered)}>
+        {!filteredItems.length && !items.length && (
           <SidebarListEmpty
             icon={<StarRegular />}
             title="还没有关注的股票"
             hint="在上方搜索并添加后，会在这里显示行情与涨跌"
           />
         )}
-        {items.map(item => {
+        {!filteredItems.length && items.length > 0 && selectedGroupId && (
+          <SidebarListEmpty
+            icon={<StarRegular />}
+            title={selectedGroupTitle ? `「${selectedGroupTitle}」还没有标的` : '这个分组还没有标的'}
+            hint="在上方搜索添加新关注，或点右侧设置把已有关注移入此分组"
+          />
+        )}
+        {filteredItems.map(item => {
           const ref = resolveWatchlistInstrument(item)
           const quote = quotes[item.code] ?? quotes[watchlistItemKey(item)]
           const holding = holdingsByCode[portfolioHoldingsKey(item.code, ref.market)]
           const isHolding = (holding?.shares ?? 0) > 0
-          const holdPct = holdingReturnPctFromQuote(holding, quote?.price ?? null)
-          const followPct = followReturnPct(quote?.price, item.addedPrice)
-          const holdTone = pctTone(holdPct)
-          const followTone = pctTone(followPct)
           const dayTone = pctTone(quote?.changePct)
-          const showHoldReturn = isHolding && holdPct != null
-          const secondaryPct = showHoldReturn ? holdPct : followPct
-          const secondaryTone = showHoldReturn ? holdTone : followTone
-          const secondaryLabel = showHoldReturn ? '持' : '关'
-          const hasSecondary = secondaryPct != null
           const radarRow = ref.market === 'CN' ? radar[instrumentKey(ref)] : undefined
           const radarLine = formatWatchlistRadarLine(
             item,
             radarRow,
             selectedCode === item.code ? strategyByCode[item.code] : null,
           )
+          const displayName = resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)
+          const rowTooltip = [radarLine, item.note?.trim()].filter(Boolean).join('\n') || undefined
 
           return (
             <div
@@ -605,6 +714,7 @@ export default function WatchlistTab({
               )}
               role="button"
               tabIndex={0}
+              title={rowTooltip}
               onClick={() => onSelect(item)}
               onKeyDown={e => {
                 if (e.key === 'Enter' || e.key === ' ') {
@@ -615,20 +725,12 @@ export default function WatchlistTab({
             >
               <div className={s.rowBody}>
                 <span className={s.rowTitle}>
-                  {resolveDisplayStockName(item.code, quote?.name, radarRow?.name, item.name)}
+                  <span className={s.rowName}>{displayName}</span>
                   {isHolding && (
                     <Badge className={s.holdBadge} size="small" color="informative" appearance="outline">持有</Badge>
                   )}
                 </span>
-                {(item.note || item.code) && (
-                  <span className={s.rowNote}>
-                    {item.code}
-                    {item.note ? ` · ${item.note}` : ''}
-                  </span>
-                )}
-                {radarLine && (
-                  <span className={s.rowRadar}>{radarLine}</span>
-                )}
+                <span className={s.rowCode}>{item.code}</span>
               </div>
 
               <div
@@ -644,13 +746,6 @@ export default function WatchlistTab({
                       {formatPct(quote?.changePct ?? null, 1)}
                     </span>
                   </span>
-                  {hasSecondary && (
-                    <span className={s.quoteSecondary}>
-                      <span className={mergeClasses(secondaryTone === 'up' && s.pctUp, secondaryTone === 'down' && s.pctDown, secondaryTone === 'flat' && s.pctFlat)}>
-                        <span className={s.retLabel}>{secondaryLabel}</span>{formatPct(secondaryPct, 1)}
-                      </span>
-                    </span>
-                  )}
                 </div>
 
                 <span className={mergeClasses(s.rowActions, 'opptrix-follow-actions')}>
@@ -681,10 +776,20 @@ export default function WatchlistTab({
         <span>
           {loadingQuotes
             ? '刷新中…'
-            : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
+            : selectedGroupId
+              ? `${filteredItems.length} 只 · ${selectedGroupTitle ?? '分组'}${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`
+              : `${items.length} 只关注${holdingCount ? ` · ${holdingCount} 持有` : ''}${updatedAt ? ` · ${updatedAt}` : ''}`}
         </span>
         <button type="button" className={s.iconBtn} onClick={() => void refreshQuotes()}>刷新</button>
       </div>
+
+      <WatchlistGroupsDialog
+        open={dialogOpen}
+        items={items}
+        doc={groupsDoc}
+        onClose={() => setDialogOpen(false)}
+        onSave={replaceDoc}
+      />
     </div>
   )
 }

@@ -1180,6 +1180,27 @@ app.put<{ Body: { items: Array<{ code: string; name: string; industry?: string; 
   },
 )
 
+app.get('/api/watchlist/groups', async () => {
+  const r = await hub.dispatch('watchlist_groups_get', {})
+  return { success: r.success, data: r.data, message: r.message }
+})
+
+app.put<{ Body: { groups?: Array<{ id: string; title: string; sortOrder: number; createdAt?: string }>; membership?: Record<string, string[]> } }>(
+  '/api/watchlist/groups',
+  async (req, reply) => {
+    const { groups, membership } = req.body ?? {}
+    if (groups != null && !Array.isArray(groups)) {
+      return reply.code(400).send({ error: 'groups must be an array when provided' })
+    }
+    if (membership != null && (typeof membership !== 'object' || Array.isArray(membership))) {
+      return reply.code(400).send({ error: 'membership must be an object when provided' })
+    }
+    const r = await hub.dispatch('watchlist_groups_save', { groups: groups ?? [], membership: membership ?? {} })
+    if (!r.success) return reply.code(400).send({ error: r.message })
+    return { success: true, data: r.data, message: r.message }
+  },
+)
+
 app.post<{ Body: { code: string; shares: number; price: number; side?: string; date?: string; market?: string } }>(
   '/api/portfolio/trade',
   async (req, reply) => {

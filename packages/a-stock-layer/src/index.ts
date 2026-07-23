@@ -118,7 +118,11 @@ export {
 } from './portfolio/instrument.js'
 export type { TradeRecord, HoldingPosition, PnLSummary } from './portfolio/models.js'
 export { WatchlistManager } from './watchlist/manager.js'
+export { WatchlistGroupsManager } from './watchlist/groups-manager.js'
 export type { WatchlistItem } from './watchlist/models.js'
+export type { WatchlistGroup, WatchlistGroupsDocument } from './watchlist/groups-models.js'
+export { WATCHLIST_ALL_GROUP_ID, emptyWatchlistGroupsDocument } from './watchlist/groups-models.js'
+export { normalizeWatchlistGroupsDocument, WatchlistGroupsStore } from './watchlist/groups-store.js'
 export { normalizeWatchlistItem, watchlistItemKey, displayCodeFromInstrument, legacyToInstrument } from './watchlist/instrument.js'
 
 export { normalizeCode, isBseCode, isBse920Code, resolveMarket, resolveSecId, resolveStockSecId, secFullCode, cnSecSymbol, secXueqiuSymbol } from './utils/helpers.js'

@@ -944,6 +944,67 @@ select:focus-visible {
   overflow: visible !important;
 }
 
+/* 管理关注分组 — 宽操作区 + 内层列表滚动（不改动默认 glass 440 / Content overflow） */
+.opptrix-watchlist-groups-dialog.fui-DialogSurface {
+  width: min(720px, calc(100vw - 32px)) !important;
+  max-width: min(720px, calc(100vw - 32px)) !important;
+  max-height: min(80vh, 640px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.opptrix-watchlist-groups-dialog .fui-DialogBody {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.opptrix-watchlist-groups-dialog .fui-DialogTitle {
+  flex-shrink: 0 !important;
+}
+
+.opptrix-watchlist-groups-dialog .fui-DialogContent {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.opptrix-watchlist-groups-dialog .fui-DialogActions {
+  flex-shrink: 0 !important;
+}
+
+/* 管理关注分组 — 彻底去除右侧个股 Checkbox 所有状态下的 outline / ring / box-shadow */
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox::before,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox::after,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *::before,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *::after {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+  ring: none !important;
+}
+
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-within,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-visible,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus-within,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:focus-visible,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox *:active,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox[aria-checked="true"],
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox input:checked,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox:focus-within .fui-Checkbox__indicator,
+.opptrix-watchlist-groups-dialog .opptrix-watchlist-groups-checkbox input:focus-visible + .fui-Checkbox__indicator {
+  outline: none !important;
+  outline-offset: 0 !important;
+  box-shadow: none !important;
+}
+
 /* 二次确认 Dialog — 紧凑毛玻璃 */
 .opptrix-dialog-alert-surface.fui-DialogSurface {
   max-width: min(360px, calc(100vw - 32px)) !important;

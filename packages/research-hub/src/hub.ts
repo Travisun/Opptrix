@@ -244,6 +244,8 @@ export class ResearchHub {
         case 'watchlist_radar': return this.watchlistRadar(params.codes as string[] | undefined, t0)
         case 'watchlist_list': return this.watchlistList(t0)
         case 'watchlist_save': return this.watchlistSave(params, t0)
+        case 'watchlist_groups_get': return this.watchlistGroupsGet(t0)
+        case 'watchlist_groups_save': return this.watchlistGroupsSave(params, t0)
         case 'market_data_packs': return this.marketDataPacks(t0)
         case 'market_data_packs_save': return this.marketDataPacksSave(params, t0)
         case 'discover_profile_readiness': return this.discoverProfileReadiness(params, t0)
@@ -3797,13 +3799,35 @@ export class ResearchHub {
 
   private watchlistList(t0: number) {
     const items = this.de.watchlist.list()
-    return ok({ items, count: items.length }, `关注列表 ${items.length} 只`, t0)
+    const groupsDoc = this.de.watchlist.groups.get()
+    return ok(
+      { items, count: items.length, groups: groupsDoc.groups, membership: groupsDoc.membership },
+      `关注列表 ${items.length} 只`,
+      t0,
+    )
   }
 
   private watchlistSave(params: Record<string, unknown>, t0: number) {
     const items = Array.isArray(params.items) ? params.items as import('@opptrix/a-stock-layer').WatchlistItem[] : []
     const saved = this.de.watchlist.replace(items)
     return ok({ items: saved, count: saved.length }, `已保存关注 ${saved.length} 只`, t0)
+  }
+
+  private watchlistGroupsGet(t0: number) {
+    const doc = this.de.watchlist.groups.get()
+    return ok(doc, `关注分组 ${doc.groups.length} 个`, t0)
+  }
+
+  private watchlistGroupsSave(params: Record<string, unknown>, t0: number) {
+    const doc = this.de.watchlist.groups.replace({
+      groups: Array.isArray(params.groups)
+        ? params.groups as import('@opptrix/a-stock-layer').WatchlistGroup[]
+        : [],
+      membership: params.membership && typeof params.membership === 'object' && !Array.isArray(params.membership)
+        ? params.membership as Record<string, string[]>
+        : {},
+    })
+    return ok(doc, `已保存关注分组 ${doc.groups.length} 个`, t0)
   }
 
   private async latestEvaluation(code: string, params: Record<string, unknown>, t0: number) {

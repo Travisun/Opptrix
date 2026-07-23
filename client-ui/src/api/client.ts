@@ -665,6 +665,26 @@ export async function saveWatchlist(items: import('../types/market').WatchlistIt
   return resp.data ?? { items, count: items.length }
 }
 
+export async function fetchWatchlistGroups() {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: import('../types/market').WatchlistGroupsDocument
+  }>('/watchlist/groups')
+  return resp.data ?? { groups: [], membership: {} }
+}
+
+export async function saveWatchlistGroups(doc: import('../types/market').WatchlistGroupsDocument) {
+  const resp = await jsonFetch<{
+    success: boolean
+    data?: import('../types/market').WatchlistGroupsDocument
+  }>('/watchlist/groups', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(doc),
+  })
+  return resp.data ?? doc
+}
+
 export interface MarketDataPackEntry {
   enabled: boolean
   prepared_at?: string | null

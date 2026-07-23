@@ -5,6 +5,7 @@ import App from './App'
 import { OpptrixDialogAlertProvider } from './components/opptrix/OpptrixDialogAlert'
 import { AppUpdateProvider } from './desktop/AppUpdateProvider'
 import { WatchlistProvider } from './market/WatchlistContext'
+import { WatchlistGroupsProvider } from './market/WatchlistGroupsContext'
 import { getOpptrixFluentTheme } from './theme/opptrixTheme'
 import { ThemeProvider, useTheme } from './theme/ThemeContext'
 import { isDesktopApp, isElectron } from './platform/detect'
@@ -43,7 +44,9 @@ function ThemedApp() {
       <OpptrixDialogAlertProvider>
         <AppUpdateProvider>
           <WatchlistProvider>
-            <App />
+            <WatchlistGroupsProvider>
+              <App />
+            </WatchlistGroupsProvider>
           </WatchlistProvider>
         </AppUpdateProvider>
       </OpptrixDialogAlertProvider>

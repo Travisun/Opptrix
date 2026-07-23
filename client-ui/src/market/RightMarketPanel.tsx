@@ -9,6 +9,7 @@ import CrossMarketDetailTab from './CrossMarketDetailTab'
 import type { StockDiscussPayload } from './StockDecisionCard'
 import FollowStockDialog from './FollowStockDialog'
 import { useWatchlist } from './useWatchlist'
+import { useWatchlistGroups } from './WatchlistGroupsContext'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
@@ -203,6 +204,7 @@ function RightMarketPanel({
 }: Props) {
   const s = useStyles()
   const { items, addItem, updateItem, removeItem } = useWatchlist()
+  const { removeItemMembership } = useWatchlistGroups()
   const [tab, setTab] = useState<MarketTab>('watchlist')
   const {
     holdingsByCode,
@@ -329,6 +331,7 @@ function RightMarketPanel({
   const handleRemove = useCallback((item: WatchlistItem) => {
     const ref = resolveWatchlistInstrument(normalizeWatchlistItem(item))
     void clearPortfolioForCode(item.code, ref.market)
+    removeItemMembership(watchlistItemKey(normalizeWatchlistItem(item)))
     removeItem(item.code)
     const selectedKey = selected
       ? watchlistItemKey(normalizeWatchlistItem(selected))
@@ -342,7 +345,7 @@ function RightMarketPanel({
       setManageStock(null)
       setDialogPrice(null)
     }
-  }, [clearPortfolioForCode, removeItem, selected, manageStock])
+  }, [clearPortfolioForCode, removeItem, removeItemMembership, selected, manageStock])
 
   const handleManageClick = useCallback((item: WatchlistItem) => {
     void handleManage(item)
