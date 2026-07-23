@@ -142,6 +142,33 @@ const INTENT_RULES: IntentRule[] = [
     hint: '浏览资讯 → list_news_groups/list_news_articles；深度分析标的勿替代资讯工具',
   },
   {
+    intent: 'web_browse',
+    priority: 87,
+    patterns: [
+      /https?:\/\//i,
+      /打开(?:一下|下)?(?:网页|网站|页面|链接)/,
+      /访问(?:网页|网站|页面|链接|这个网址)/,
+      /浏览(?:一下|下)?(?:网页|网站|外部网站)/,
+      /网页截图|页面截图|网站截图/,
+      /去.*(?:官网|网站)看看/,
+    ],
+    preferredTools: ['browser_navigate', 'browser_snapshot'],
+    avoidTools: ['get_news_article', 'get_notice_content', 'list_news_articles'],
+    confidence: 'high',
+    hint: '外部网页 URL → browser_navigate + browser_snapshot；勿用资讯/公告工具代替网页正文',
+  },
+  {
+    intent: 'web_snapshot_only',
+    priority: 86,
+    patterns: [
+      /当前页面|页面快照|网页内容|页面内容|看看这个页面|读取页面/,
+    ],
+    preferredTools: ['browser_snapshot'],
+    avoidTools: ['get_instrument_snapshot'],
+    confidence: 'high',
+    hint: '已打开的外部网页 → browser_snapshot；勿用 get_instrument_snapshot',
+  },
+  {
     intent: 'market_regime',
     priority: 84,
     patterns: [/牛熊|风险偏好|市场状态|宏观环境|现在是牛市|熊市吗/],
@@ -578,6 +605,10 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'list_news_articles', avoid: 'get_instrument_snapshot', when: '主任务是读资讯而非个股快照' },
   { prefer: 'industry_mining', avoid: 'search_instruments', when: '先做产业链，再搜代表公司' },
   { prefer: 'search_instruments', avoid: 'evaluate_instrument', when: '代码未确认时禁止先评估' },
+  { prefer: 'browser_navigate', avoid: 'list_news_articles', when: '用户给出外部 URL 而非读订阅资讯' },
+  { prefer: 'browser_snapshot', avoid: 'get_instrument_snapshot', when: '读取外部网页而非标的快照' },
+  { prefer: 'browser_snapshot', avoid: 'get_news_article', when: '外部网页内容而非 RSS 资讯正文' },
+  { prefer: 'list_news_articles', avoid: 'browser_navigate', when: '浏览订阅资讯而非任意 URL' },
 ]
 
 const CN_CODE_RE = /(?:^|[^\d])([036]\d{5})(?:[^\d]|$)/
@@ -619,6 +650,7 @@ const L1_INTENTS = new Set([
   'etf_profile',
   'etf_nav',
   'etf_holdings',
+  'web_snapshot_only',
 ])
 
 const L3_INTENTS = new Set([

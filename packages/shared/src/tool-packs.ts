@@ -15,6 +15,7 @@ export const TOOL_PACK_IDS = [
   'portfolio',
   'industry',
   'news',
+  'browser',
   'strategy_extra',
   'provider_ext',
 ] as const
@@ -88,6 +89,12 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     title: '资讯公告',
     description: '新闻中心列表/正文、标的公告列表与公告内容',
     whenToUse: '资讯、新闻、公告、研报订阅、上市公司披露',
+  },
+  {
+    id: 'browser',
+    title: '网页浏览',
+    description: '打开外部网页、读取页面快照、点击与输入、截图',
+    whenToUse: '用户给出 URL 或要查看/操作外部网站（非内置资讯源）',
   },
   {
     id: 'strategy_extra',
@@ -194,6 +201,14 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_news_article: 'news',
   get_notice_content: 'news',
   get_instrument_notices: 'news',
+
+  // browser
+  browser_navigate: 'browser',
+  browser_snapshot: 'browser',
+  browser_click: 'browser',
+  browser_type: 'browser',
+  browser_screenshot: 'browser',
+  browser_close: 'browser',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

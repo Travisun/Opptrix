@@ -24,6 +24,7 @@
   "dependencies": {
     "@fastify/static": "^10.1.0",
     "@opptrix/agent": "*",
+    "@opptrix/agent-browser": "*",
     "@opptrix/article-enrichment": "*",
     "@opptrix/local-inference": "*",
     "@opptrix/market-data-store": "*",

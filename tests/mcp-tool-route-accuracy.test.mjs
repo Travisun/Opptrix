@@ -59,6 +59,7 @@ const PRIMARY_CASES = [
   { message: '我的持仓盈亏怎么样', expectPrimary: 'get_portfolio_holdings', intent: 'portfolio_holdings' },
   { message: '读一下我的关注列表', expectPrimary: 'get_watchlist', intent: 'watchlist' },
   { message: '最近有什么重要资讯', expectPrimary: 'list_news_articles', intent: 'news_browse' },
+  { message: '打开 https://example.com 看看内容', expectPrimary: 'browser_navigate', intent: 'web_browse' },
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },
