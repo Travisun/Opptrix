@@ -29,6 +29,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url))
 const REPO_ROOT = path.resolve(__dirname, '../../..')
 const DESKTOP_ROOT = path.join(REPO_ROOT, 'apps/desktop')
 const STAGE = path.join(DESKTOP_ROOT, 'runtime-stage')
+const PLAYWRIGHT_BROWSERS = path.join(STAGE, 'playwright-browsers')
 // Keep download cache outside runtime-stage — Apple notarization unpacks nested
 // archives and rejects unsigned .node binaries left in staged .cache/prebuilds.
 const PREBUILD_CACHE = path.join(DESKTOP_ROOT, '.cache/prebuilds')
@@ -413,6 +414,37 @@ function ensureDuckdbNeoBindings() {
   return true
 }
 
+function ensurePlaywrightChromium() {
+  const ensureScript = path.join(REPO_ROOT, 'packages/agent-browser/scripts/ensure-chromium.mjs')
+  if (!fs.existsSync(ensureScript)) {
+    throw new Error(`missing ${ensureScript}`)
+  }
+
+  fs.mkdirSync(PLAYWRIGHT_BROWSERS, { recursive: true })
+  console.log(`Installing Playwright Chromium for desktop runtime (${target.platform}-${target.arch})…`)
+
+  const install = spawnSync(
+    process.execPath,
+    [ensureScript, '--strict'],
+    {
+      cwd: STAGE,
+      env: {
+        ...process.env,
+        PLAYWRIGHT_BROWSERS_PATH: PLAYWRIGHT_BROWSERS,
+        NODE_PATH: STAGE_NM,
+      },
+      stdio: 'inherit',
+    },
+  )
+  if (install.status !== 0) {
+    console.error(
+      `Playwright Chromium install failed — agent browser tools require Chromium`
+      + ` at ${PLAYWRIGHT_BROWSERS}.`,
+    )
+    process.exit(install.status ?? 1)
+  }
+}
+
 rm(STAGE)
 fs.mkdirSync(STAGE, { recursive: true })
 
@@ -471,6 +503,8 @@ const install = runNpm(
   { cwd: STAGE, target, useRosetta: false },
 )
 if (install.status !== 0) process.exit(install.status ?? 1)
+
+ensurePlaywrightChromium()
 
 ensureFfmpegStatic()
 

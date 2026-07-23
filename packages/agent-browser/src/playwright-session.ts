@@ -2,7 +2,8 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { chromium, type Browser, type BrowserContext, type Page } from 'playwright-core'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
+import { configurePlaywrightBrowsersPath, ensureChromiumAvailable } from './chromium-install.js'
 import { RefMap, RefNotFoundError, normalizeRef } from './ref-map.js'
 import { truncateSnapshot } from './snapshot.js'
 import { normalizeUrl, UrlPolicyError } from './url-policy.js'
@@ -29,8 +30,13 @@ function formatBrowserError(err: unknown): Error {
   }
   const message = err instanceof Error ? err.message : String(err)
   if (/Executable doesn't exist|browserType.launch/i.test(message)) {
+    if (isDesktopRuntime()) {
+      return new Error(
+        'Unable to start the browser. Try restarting the app, or reinstall Opptrix.',
+      )
+    }
     return new Error(
-      'Chromium is not installed. Run: npx playwright install chromium',
+      'Chromium is not installed. Run: npm run install-browser -w @opptrix/agent-browser',
     )
   }
   if (/Timeout|timeout/i.test(message)) {
@@ -147,6 +153,9 @@ interface LaunchResult {
 }
 
 export async function launchPlaywrightSession(headless = true): Promise<PlaywrightBrowserSession> {
+  configurePlaywrightBrowsersPath()
+  await ensureChromiumAvailable()
+
   let browser: Browser | null = null
   let context: BrowserContext | null = null
   let page: Page | null = null

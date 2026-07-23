@@ -109,6 +109,11 @@ if (!fs.existsSync(path.join(depsRoot, 'fastify'))) {
   fail(`missing ${path.join(depsRoot, 'fastify')} — sidecar cannot start without Fastify`)
 }
 
+const playwrightBrowsers = path.join(STAGE, 'playwright-browsers')
+if (!fs.existsSync(playwrightBrowsers)) {
+  fail(`missing ${playwrightBrowsers} — run stage-runtime.mjs`)
+}
+
 if (!hostMatchesTarget(target)) {
   console.log(
     `verify-runtime: skip live sidecar (host ${process.platform}-${process.arch}`
@@ -142,6 +147,7 @@ console.log(`verify-runtime: starting sidecar on port ${PORT}…`)
       STOCK_RESEARCH_PORT: PORT,
       UI_DIST_PATH: path.join(STAGE, 'client-ui/dist'),
       ELECTRON_RUN_AS_NODE: '1',
+      PLAYWRIGHT_BROWSERS_PATH: playwrightBrowsers,
       // Prefer staged deps; STAGE/node_modules symlink handles parent-walk resolution.
       NODE_PATH: [depsRoot, path.join(STAGE, 'node_modules')].filter((p, i, a) => a.indexOf(p) === i).join(path.delimiter),
     },

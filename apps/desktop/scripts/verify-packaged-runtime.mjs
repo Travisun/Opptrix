@@ -59,6 +59,10 @@ function assertStage(stageDir) {
   if (fs.existsSync(path.join(stageDir, 'deps'))) {
     fail(`${path.join(stageDir, 'deps')} must be renamed to node_modules after pack`)
   }
+  const playwrightBrowsers = path.join(stageDir, 'playwright-browsers')
+  if (!fs.existsSync(playwrightBrowsers)) {
+    fail(`missing ${playwrightBrowsers} — stage-runtime must install Playwright Chromium`)
+  }
   console.log(`verify-packaged-runtime: OK ${nmFastify}`)
 }
 

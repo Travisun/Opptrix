@@ -13,10 +13,12 @@
   },
   "scripts": {
     "build": "tsc -p tsconfig.json",
-    "install-browser": "playwright install chromium"
+    "postinstall": "node scripts/ensure-chromium.mjs",
+    "install-browser": "node scripts/ensure-chromium.mjs --strict"
   },
   "dependencies": {
     "@opptrix/shared": "*",
+    "playwright": "^1.51.0",
     "playwright-core": "^1.51.0"
   }
 }

@@ -205,6 +205,10 @@ function sidecarEnv(root) {
     if (fs.existsSync(moduleRoot)) {
       env.NODE_PATH = moduleRoot
     }
+    const browsersPath = path.join(root, 'playwright-browsers')
+    if (fs.existsSync(browsersPath)) {
+      env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
+    }
   }
 
   return env
