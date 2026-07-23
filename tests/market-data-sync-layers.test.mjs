@@ -116,7 +116,8 @@ test('kline daily only runs Monday after CN market close', () => {
   const tuesday = new Date('2026-07-14T08:00:00.000Z')
   assert.equal(isCnMondayAfterMarketClose(tuesday), false)
 
-  const lastSync = { kline_daily: daysAgo(8) }
+  // 相对 mondayAfterClose 固定 ≥7 天前且不同周，避免 daysAgo(墙钟) 与 fixture 同周撞车
+  const lastSync = { kline_daily: '2026-07-06T08:00:00.000Z' } // 上周一 16:00 BJ
   assert.equal(cnKlineDailyMaintenanceDue(lastSync, mondayAfterClose), true)
   assert.equal(cnKlineDailyMaintenanceDue(lastSync, tuesday), false)
 })

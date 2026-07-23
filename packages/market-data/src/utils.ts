@@ -56,9 +56,10 @@ export function detectSt(name: string): boolean {
   return /^\*?ST/i.test(name.trim())
 }
 
-export function daysSince(iso: string | null): number {
+export function daysSince(iso: string | null, now: number | Date = Date.now()): number {
   if (!iso) return Number.POSITIVE_INFINITY
-  return (Date.now() - new Date(iso).getTime()) / 86400000
+  const nowMs = typeof now === 'number' ? now : now.getTime()
+  return (nowMs - new Date(iso).getTime()) / 86400000
 }
 
 export function minutesSince(iso: string | null): number {

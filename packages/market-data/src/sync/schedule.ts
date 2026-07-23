@@ -112,13 +112,21 @@ export function cnKlineDailyMaintenanceDue(
   const last = lastSync.kline_daily ?? null
   if (!last) return true
 
+  const lastAt = new Date(last)
   const nowBj = beijingClock(now)
-  const lastBj = beijingClock(new Date(last))
+  const lastBj = beijingClock(lastAt)
   const thisMonday = mondayDateKeyOfWeek(nowBj)
   const lastMonday = mondayDateKeyOfWeek(lastBj)
 
-  if (lastMonday === thisMonday && lastBj.hour >= CN_MARKET_CLOSE_HOUR) return false
-  return daysSince(last) >= CN_WEEKLY_MAINTENANCE_DAYS
+  // last 晚于 now 时不当成「本周已跑」（时钟漂移 / 脏数据防御）
+  if (
+    lastAt.getTime() <= now.getTime()
+    && lastMonday === thisMonday
+    && lastBj.hour >= CN_MARKET_CLOSE_HOUR
+  ) {
+    return false
+  }
+  return daysSince(last, now) >= CN_WEEKLY_MAINTENANCE_DAYS
 }
 
 /** 就绪后维护任务（名录 / 行业错开一周；日 K 周一收盘后） */
