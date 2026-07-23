@@ -2,7 +2,7 @@ import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import type { MarketIndexQuote } from '../../types/schemas'
 import { opptrixCssVars } from '../../theme/tokens'
 import { focusVisibleRing, interactiveTransition } from '../../theme/mixins'
-import { formatPct, pctTone } from '../../market/format'
+import { formatPct, formatPrice, pctTone } from '../../market/format'
 import { MARKET_DOWN, MARKET_UP } from '../../market/chartTheme'
 import { indexKey, isCnChartableIndex } from './marketBoardUtils'
 
@@ -39,13 +39,13 @@ const useStyles = makeStyles({
     whiteSpace: 'nowrap',
   },
   indexCell: {
-    flex: '1 0 86px',
+    flex: '1 0 96px',
     display: 'flex',
     flexDirection: 'column',
     justifyContent: 'center',
     gap: '1px',
     padding: '6px 10px',
-    minWidth: '86px',
+    minWidth: '96px',
     margin: 0,
     border: 'none',
     borderRight: `1px solid ${opptrixCssVars.separator}`,
@@ -63,11 +63,12 @@ const useStyles = makeStyles({
     boxSizing: 'border-box',
     color: 'inherit',
   },
-  indexCellClickable: {...interactiveTransition,
-
+  indexCellClickable: {
+    ...interactiveTransition,
     cursor: 'pointer',
-    borderRadius: '6px',
-...focusVisibleRing,
+    // Keep flush with strip separators — no pill radius (CN indices sit first).
+    borderRadius: 0,
+    ...focusVisibleRing,
     ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   indexName: {
@@ -80,42 +81,24 @@ const useStyles = makeStyles({
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
   },
-  indexPct: {
+  indexPrice: {
     display: 'block',
-    fontSize: 'var(--opptrix-font-xl)',
+    fontSize: 'var(--opptrix-font-md)',
     fontWeight: 650,
     fontVariantNumeric: 'tabular-nums',
-    lineHeight: 1.2,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.25,
+  },
+  indexPct: {
+    display: 'block',
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    fontVariantNumeric: 'tabular-nums',
+    lineHeight: 1.25,
   },
   pctUp: { color: MARKET_UP },
   pctDown: { color: MARKET_DOWN },
   pctFlat: { color: opptrixCssVars.textSecondary },
-  briefCell: {
-    flex: '1 1 180px',
-    minWidth: '140px',
-    display: 'flex',
-    flexDirection: 'column',
-    justifyContent: 'center',
-    gap: '2px',
-    padding: '6px 12px',
-  },
-  briefKicker: {
-    fontSize: 'var(--opptrix-font-xs)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-  },
-  briefText: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.4,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
 })
 
 function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefined) {
@@ -132,9 +115,6 @@ type Props = {
   cnIndices: MarketIndexQuote[]
   mood: Mood
   onIndexSelect?: (item: MarketIndexQuote) => void
-  briefTitle?: string | null
-  briefSummary?: string | null
-  stacked?: boolean
 }
 
 export default function MarketBoardStrip({
@@ -142,12 +122,8 @@ export default function MarketBoardStrip({
   cnIndices,
   mood,
   onIndexSelect,
-  briefTitle,
-  briefSummary,
-  stacked = false,
 }: Props) {
   const s = useStyles()
-  const showBrief = Boolean(briefTitle || briefSummary)
 
   return (
     <div className={mergeClasses(s.root, 'opptrix-market-board-strip', 'opptrix-scroll-x')}>
@@ -159,6 +135,7 @@ export default function MarketBoardStrip({
       {indices.map(item => {
         const key = indexKey(item)
         const clickable = Boolean(onIndexSelect && isCnChartableIndex(item, cnIndices))
+        const select = onIndexSelect
 
         return (
           <div
@@ -166,28 +143,25 @@ export default function MarketBoardStrip({
             className={mergeClasses(s.indexCell, clickable && s.indexCellClickable)}
             role={clickable ? 'button' : undefined}
             tabIndex={clickable ? 0 : undefined}
-            onClick={clickable ? () => onIndexSelect!(item) : undefined}
-            onKeyDown={clickable ? (e) => {
+            title={clickable ? '查看走势' : undefined}
+            onClick={clickable && select ? () => select(item) : undefined}
+            onKeyDown={clickable && select ? (e) => {
               if (e.key === 'Enter' || e.key === ' ') {
                 e.preventDefault()
-                onIndexSelect!(item)
+                select(item)
               }
             } : undefined}
           >
             <span className={s.indexName}>{item.name}</span>
+            <span className={s.indexPrice}>
+              {item.price != null ? formatPrice(item.price, 2) : '—'}
+            </span>
             <span className={mergeClasses(s.indexPct, pctClass(s, item.change_pct))}>
               {formatPct(item.change_pct, 2)}
             </span>
           </div>
         )
       })}
-
-      {showBrief && !stacked && (
-        <div className={s.briefCell}>
-          {briefTitle && <Text className={s.briefKicker} block>{briefTitle}</Text>}
-          {briefSummary && <Text className={s.briefText} block>{briefSummary}</Text>}
-        </div>
-      )}
     </div>
   )
 }

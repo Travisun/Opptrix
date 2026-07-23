@@ -7,10 +7,10 @@ import { rethrowIfFreeProviderThrottleTrigger } from '../../common/free-provider
 
 const QT_INDEX_URL = 'https://qt.gtimg.cn/q='
 
-/** mstats 首页 ScrollIndex 滚动条 codes */
+/** mstats 首页 ScrollIndex 滚动条 codes（不含 CAC/DAX/日经：上游常空） */
 export const TENCENT_MSTATS_SCROLL_INDEX_CODES = [
   'sh000001', 'sz399001', 'r_hkHSI', 'usDJI', 'usIXIC',
-  'gzFCHI', 'gzGDAXI', 'gzN225', 'gzFTSTI', 'gzTWII', 'fqUS_GC_1', 'fqUS_CL_1',
+  'gzFTSTI', 'gzTWII', 'fqUS_GC_1', 'fqUS_CL_1',
 ] as const
 
 /** mstats A 股主要指数快照（沪深市场一览） */

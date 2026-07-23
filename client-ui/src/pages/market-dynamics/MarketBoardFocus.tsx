@@ -19,13 +19,9 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     display: 'grid',
-    gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
-    overflow: 'hidden',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-  },
-  rootStacked: {
     gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
     gridTemplateRows: '1fr 1fr',
+    overflow: 'hidden',
   },
   col: {
     minWidth: 0,
@@ -34,11 +30,9 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     overflow: 'hidden',
     borderRight: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderRight: 'none' },
-  },
-  colStacked: {
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':nth-child(2n)': { borderRight: 'none' },
-    ':nth-child(-n+2)': { borderBottom: `1px solid ${opptrixCssVars.separator}` },
+    ':nth-child(n+3)': { borderBottom: 'none' },
   },
   colHead: {
     flexShrink: 0,
@@ -63,20 +57,16 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflowY: 'auto',
   },
-  row: {...ghostInteractive,
-
+  row: {
+    ...ghostInteractive,
     display: 'grid',
-    gridTemplateColumns: 'minmax(0, 1fr) auto',
-    gap: '4px',
+    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
+    gap: '4px 6px',
     alignItems: 'center',
     padding: '4px 6px',
     minHeight: '24px',
     borderRadius: '6px',
-':hover': { backgroundColor: opptrixCssVars.accentSoft },
-  },
-  rowWide: {
-    gridTemplateColumns: 'minmax(0, 1fr) auto auto',
-    gap: '4px 6px',
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   rowBody: {
     minWidth: 0,
@@ -143,11 +133,9 @@ function pctClass(s: ReturnType<typeof useStyles>, value: number | null | undefi
 function MoverRows({
   items,
   s,
-  compact,
 }: {
   items: MarketStockMover[]
   s: ReturnType<typeof useStyles>
-  compact?: boolean
 }) {
   if (!items.length) {
     return <div className={s.empty}>暂无</div>
@@ -155,14 +143,12 @@ function MoverRows({
   return (
     <div className={s.listPad}>
       {items.map(item => (
-        <div key={item.code} className={mergeClasses(s.row, !compact && s.rowWide)}>
+        <div key={item.code} className={s.row}>
           <div className={s.rowBody}>
             <span className={s.rowTitle}>{item.name}</span>
             <span className={s.rowMeta}>{item.code}</span>
           </div>
-          {!compact && (
-            <span className={s.rowNum}>{formatPrice(item.price)}</span>
-          )}
+          <span className={s.rowNum}>{formatPrice(item.price)}</span>
           <span className={mergeClasses(s.rowPct, pctClass(s, item.change_pct))}>
             {formatPct(item.change_pct, 2)}
           </span>
@@ -175,14 +161,13 @@ function MoverRows({
 type PanelColProps = {
   title: string
   s: ReturnType<typeof useStyles>
-  stacked?: boolean
   headAction?: ReactNode
   children: ReactNode
 }
 
-function PanelCol({ title, s, stacked, headAction, children }: PanelColProps) {
+function PanelCol({ title, s, headAction, children }: PanelColProps) {
   return (
-    <div className={mergeClasses(s.col, stacked && s.colStacked)}>
+    <div className={s.col}>
       <div className={s.colHead}>
         <span className={s.colHeadTitle}>{title}</span>
         {headAction}
@@ -197,36 +182,33 @@ function PanelCol({ title, s, stacked, headAction, children }: PanelColProps) {
 type Props = {
   gainers: MarketStockMover[]
   losers: MarketStockMover[]
-  stacked?: boolean
 }
 
-export default function MarketBoardFocus({ gainers, losers, stacked = false }: Props) {
+export default function MarketBoardFocus({ gainers, losers }: Props) {
   const s = useStyles()
-  const compactRows = !stacked
 
   return (
-    <div className={mergeClasses(s.root, stacked && s.rootStacked)}>
-      <PanelCol title="涨幅" s={s} stacked={stacked}>
-        <MoverRows items={gainers} s={s} compact={compactRows} />
+    <div className={s.root}>
+      <PanelCol title="涨幅" s={s}>
+        <MoverRows items={gainers} s={s} />
       </PanelCol>
 
-      <PanelCol title="跌幅" s={s} stacked={stacked}>
-        <MoverRows items={losers} s={s} compact={compactRows} />
+      <PanelCol title="跌幅" s={s}>
+        <MoverRows items={losers} s={s} />
       </PanelCol>
 
       <MarketUsTechWatchProvider>
         <PanelCol
           title="美股龙头"
           s={s}
-          stacked={stacked}
           headAction={<MarketUsTechWatchManageButton />}
         >
-          <MarketUsTechWatchList compact scrollable quad />
+          <MarketUsTechWatchList scrollable />
         </PanelCol>
       </MarketUsTechWatchProvider>
 
-      <PanelCol title="我的关注" s={s} stacked={stacked}>
-        <MarketWatchlistQuotes compact={compactRows} />
+      <PanelCol title="我的关注" s={s}>
+        <MarketWatchlistQuotes />
       </PanelCol>
     </div>
   )

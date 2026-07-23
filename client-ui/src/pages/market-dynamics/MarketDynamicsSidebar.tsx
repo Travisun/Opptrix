@@ -225,7 +225,8 @@ export default function MarketDynamicsSidebar({
         <div className={s.rowBody}>
           <span className={s.rowTitle}>{item.name}</span>
           <span className={s.rowMeta}>
-            {[item.location, item.trade_state_label].filter(Boolean).join(' · ') || (chartable ? '点击查看走势' : '—')}
+            {[item.location, item.trade_state_label].filter(Boolean).join(' · ')
+              || (chartable ? '点击查看走势' : '')}
           </span>
         </div>
         <span className={s.rowNum}>
@@ -284,7 +285,7 @@ export default function MarketDynamicsSidebar({
       <div className={mergeClasses(s.scroll, 'opptrix-scroll-hidden')}>
         <div className={s.sectionHead}>
           <Text className={s.sectionTitle}>指数列表</Text>
-          <Text className={s.sectionHint}>A 股指数可点查看 K 线</Text>
+          <Text className={s.sectionHint}>A 股可点查看走势</Text>
         </div>
         {loading && !sections.length ? (
           <div className={s.loading}><Spinner size="small" label="加载行情…" /></div>

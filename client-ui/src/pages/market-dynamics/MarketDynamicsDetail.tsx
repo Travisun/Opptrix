@@ -17,7 +17,8 @@ import { indexChartCodeFromQuote, writeCnIndexChartCode } from './cnIndexChartSt
 import MarketBoardFocus from './MarketBoardFocus'
 import MarketDragonTigerList from './MarketDragonTigerList'
 
-type BriefTab = 'report' | 'dragon_tiger'
+type DetailTab = 'focus' | 'brief' | 'news'
+type BriefSubTab = 'report' | 'dragon_tiger'
 
 const CONTENT_PAD = '10px'
 
@@ -60,8 +61,8 @@ const useStyles = makeStyles({
       ':focus-visible': { backgroundColor: 'transparent' },
     },
   },
-  closeBtn: {...ghostInteractive,
-
+  closeBtn: {
+    ...ghostInteractive,
     flex: '0 0 auto',
     border: 'none',
     background: 'transparent',
@@ -74,7 +75,7 @@ const useStyles = makeStyles({
     fontWeight: 600,
     padding: '4px 6px',
     borderRadius: '6px',
-':hover': { backgroundColor: opptrixCssVars.accentSoft },
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   body: {
     flex: 1,
@@ -83,61 +84,18 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     overflow: 'hidden',
   },
-  mainPane: {
-    flex: '1 1 45%',
-    minHeight: '140px',
+  pane: {
+    flex: 1,
+    minHeight: 0,
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-  },
-  mainPaneChart: {
-    flex: '0 0 auto',
-    minHeight: 'unset',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
   },
   chartWrap: {
     padding: `6px ${CONTENT_PAD} 8px`,
     minHeight: '200px',
   },
-  briefSection: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-    borderRight: `1px solid ${opptrixCssVars.separator}`,
-  },
-  insightsRow: {
-    flex: '1 1 32%',
-    minHeight: '120px',
-    display: 'grid',
-    gridTemplateColumns: '2fr 3fr',
-    overflow: 'hidden',
-    borderTop: `1px solid ${opptrixCssVars.separator}`,
-  },
-  insightsRowStacked: {
-    gridTemplateColumns: '1fr',
-  },
-  insightsCol: {
-    minWidth: 0,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  insightsColStacked: {
-    borderRight: 'none',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
-  },
-  newsSection: {
-    flex: 1,
-    minHeight: 0,
-    display: 'flex',
-    flexDirection: 'column',
-    overflow: 'hidden',
-  },
-  sectionHead: {
+  briefHead: {
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
@@ -148,14 +106,6 @@ const useStyles = makeStyles({
     height: '32px',
     minHeight: '32px',
     boxSizing: 'border-box',
-  },
-  sectionHeadTitle: {
-    fontSize: 'var(--opptrix-font-xs)',
-    fontWeight: 600,
-    color: opptrixCssVars.textTertiary,
-    letterSpacing: '0.03em',
-    lineHeight: 1,
-    whiteSpace: 'nowrap',
   },
   sectionTabList: {
     flex: 1,
@@ -231,8 +181,8 @@ const useStyles = makeStyles({
     gap: '1px',
     padding: `0 ${CONTENT_PAD} 10px`,
   },
-  newsRow: {...ghostInteractive,
-
+  newsRow: {
+    ...ghostInteractive,
     display: 'flex',
     flexDirection: 'column',
     gap: '2px',
@@ -240,7 +190,7 @@ const useStyles = makeStyles({
     minHeight: '28px',
     borderRadius: '6px',
     cursor: 'pointer',
-':hover': { backgroundColor: opptrixCssVars.accentSoft },
+    ':hover': { backgroundColor: opptrixCssVars.accentSoft },
   },
   newsTitle: {
     fontSize: 'var(--opptrix-font-md)',
@@ -258,6 +208,20 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+  },
+  newsHead: {
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '6px',
+    padding: '6px 10px 4px',
+  },
+  newsHeadTitle: {
+    fontSize: 'var(--opptrix-font-xs)',
+    fontWeight: 600,
+    color: opptrixCssVars.textTertiary,
+    letterSpacing: '0.03em',
   },
   iconBox: {
     display: 'inline-flex',
@@ -313,19 +277,20 @@ export default function MarketDynamicsDetail({
   stacked = false,
 }: Props) {
   const s = useStyles()
-  const [briefTab, setBriefTab] = useState<BriefTab>('report')
+  const [detailTab, setDetailTab] = useState<DetailTab>('focus')
+  const [briefTab, setBriefTab] = useState<BriefSubTab>('report')
   const showChart = Boolean(chartCode)
   const activeName = cnIndices.find(item => indexChartCodeFromQuote(item) === chartCode)?.name ?? chartCode
   const chartMinHeight = stacked ? '180px' : '220px'
 
-  const handleTabSelect = (code: string) => {
+  const handleChartTabSelect = (code: string) => {
     onChartCodeChange(code)
     writeCnIndexChartCode(code)
   }
 
   return (
     <div className={mergeClasses(s.root, 'opptrix-market-dynamics-detail')}>
-      {showChart && (
+      {showChart ? (
         <div className={s.chrome}>
           <Text className={s.chromeMeta}>指数走势</Text>
           {cnIndices.length > 0 && (
@@ -334,7 +299,7 @@ export default function MarketDynamicsDetail({
               size="small"
               appearance="subtle"
               selectedValue={chartCode ?? undefined}
-              onTabSelect={(_, d) => handleTabSelect(String(d.value))}
+              onTabSelect={(_, d) => handleChartTabSelect(String(d.value))}
             >
               {cnIndices.map(item => (
                 <Tab key={item.qt_code || item.code} value={indexChartCodeFromQuote(item)}>
@@ -352,46 +317,55 @@ export default function MarketDynamicsDetail({
             返回看板
           </button>
         </div>
+      ) : (
+        <div className={s.chrome}>
+          <Text className={s.chromeMeta}>观察</Text>
+          <TabList
+            className={s.tabList}
+            size="small"
+            appearance="subtle"
+            selectedValue={detailTab}
+            onTabSelect={(_, d) => setDetailTab(String(d.value) as DetailTab)}
+          >
+            <Tab value="focus">热度</Tab>
+            <Tab value="brief">简报·龙虎</Tab>
+            <Tab value="news">资讯</Tab>
+          </TabList>
+        </div>
       )}
 
       <div className={s.body}>
-        <div className={mergeClasses(s.mainPane, showChart && s.mainPaneChart)}>
-          {showChart ? (
-            <>
-              <div className={s.chartWrap} style={{ minHeight: chartMinHeight }}>
-                <TradingViewChart code={chartCode!} expanded active />
-              </div>
-              {activeName && (
-                <Text
-                  block
-                  style={{
-                    fontSize: 'var(--opptrix-font-xs)',
-                    color: opptrixCssVars.textTertiary,
-                    padding: '0 10px 6px',
-                  }}
-                >
-                  {activeName} · 仅 A 股宽基指数
-                </Text>
-              )}
-            </>
-          ) : (
-            <MarketBoardFocus
-              gainers={gainers}
-              losers={losers}
-              stacked={stacked}
-            />
-          )}
-        </div>
-
-        <div className={mergeClasses(s.insightsRow, stacked && s.insightsRowStacked)}>
-          <div className={mergeClasses(s.insightsCol, s.briefSection, stacked && s.insightsColStacked)}>
-            <div className={s.sectionHead}>
+        {showChart && chartCode ? (
+          <div className={s.pane}>
+            <div className={s.chartWrap} style={{ minHeight: chartMinHeight }}>
+              <TradingViewChart code={chartCode} expanded active />
+            </div>
+            {activeName && (
+              <Text
+                block
+                style={{
+                  fontSize: 'var(--opptrix-font-xs)',
+                  color: opptrixCssVars.textTertiary,
+                  padding: '0 10px 6px',
+                }}
+              >
+                {activeName} · 仅 A 股宽基指数
+              </Text>
+            )}
+          </div>
+        ) : detailTab === 'focus' ? (
+          <div className={s.pane}>
+            <MarketBoardFocus gainers={gainers} losers={losers} />
+          </div>
+        ) : detailTab === 'brief' ? (
+          <div className={s.pane}>
+            <div className={s.briefHead}>
               <TabList
                 className={s.sectionTabList}
                 size="small"
                 appearance="subtle"
                 selectedValue={briefTab}
-                onTabSelect={(_, d) => setBriefTab(String(d.value) as BriefTab)}
+                onTabSelect={(_, d) => setBriefTab(String(d.value) as BriefSubTab)}
               >
                 <Tab value="report">市场简报</Tab>
                 <Tab value="dragon_tiger">龙虎榜</Tab>
@@ -416,7 +390,10 @@ export default function MarketDynamicsDetail({
                       ))}
                     </>
                   ) : (
-                    <div className={s.empty}>暂无市场简报</div>
+                    <div className={s.empty}>
+                      暂无市场简报
+                      <div>稍后刷新，或等盘中要点生成后再看</div>
+                    </div>
                   )}
                 </div>
               ) : marketLoading && !dragonTiger.length ? (
@@ -426,10 +403,10 @@ export default function MarketDynamicsDetail({
               )}
             </div>
           </div>
-
-          <div className={mergeClasses(s.insightsCol, s.newsSection, stacked && s.insightsColStacked)}>
-            <div className={s.sectionHead}>
-              <span className={s.sectionHeadTitle}>最新资讯</span>
+        ) : (
+          <div className={s.pane}>
+            <div className={s.newsHead}>
+              <span className={s.newsHeadTitle}>最新资讯</span>
               <span className={s.sectionHeadHint}>{articles.length} 篇</span>
             </div>
             {insightsLoading && !articles.length ? (
@@ -468,7 +445,7 @@ export default function MarketDynamicsDetail({
               </div>
             )}
           </div>
-        </div>
+        )}
       </div>
     </div>
   )

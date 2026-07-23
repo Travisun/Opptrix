@@ -109,28 +109,6 @@ const useStyles = makeStyles({
     borderRight: 'none',
     borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
   },
-  briefInline: {
-    flexShrink: 0,
-    padding: '6px 12px 8px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    backgroundColor: opptrixCssVars.canvas,
-  },
-  briefInlineTitle: {
-    fontSize: 'var(--opptrix-font-sm)',
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-    lineHeight: 1.4,
-    marginBottom: '2px',
-  },
-  briefInlineText: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.45,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
   detail: {
     flex: 1,
     minWidth: 0,
@@ -277,19 +255,7 @@ function MarketDynamicsContent({ electronChrome = false }: Props) {
             cnIndices={cnIndices}
             mood={mood}
             onIndexSelect={handleIndexSelect}
-            briefTitle={insights.report?.title}
-            briefSummary={insights.report?.summary}
-            stacked={stacked}
           />
-
-          {stacked && insights.report?.summary && (
-            <div className={s.briefInline}>
-              {insights.report.title && (
-                <Text className={s.briefInlineTitle} block>{insights.report.title}</Text>
-              )}
-              <Text className={s.briefInlineText} block>{insights.report.summary}</Text>
-            </div>
-          )}
 
           <div
             ref={bodyRef}
