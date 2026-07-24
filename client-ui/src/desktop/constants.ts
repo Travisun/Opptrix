@@ -37,11 +37,24 @@ export const DESKTOP_TOOLBAR_TOOL_COUNT = 4
 /** Settings nav column (Codex-style) */
 export const DESKTOP_SETTINGS_SIDEBAR_WIDTH = 210
 
-/** sidebarWidth (200) × 2.5 — below this, expanded sidebar floats over content */
-export const DESKTOP_SIDEBAR_OVERLAY_THRESHOLD = 500
+/** Default session sidebar width (px) — persisted via `opptrix-sidebar-width` */
+export const SIDEBAR_DEFAULT_WIDTH = 200
+/** Inline sidebar must clear title-bar chrome (traffic lights + toolbar tools) so session title does not overlap icons */
+export const SIDEBAR_MIN_WIDTH =
+  DESKTOP_TRAFFIC_LIGHT_WIDTH +
+  DESKTOP_TOOLBAR_TOOL_COUNT * DESKTOP_TOOL_SIZE +
+  (DESKTOP_TOOLBAR_TOOL_COUNT - 1) * DESKTOP_TOOL_GAP
+export const SIDEBAR_MAX_WIDTH = 360
 
-/** sidebarWidth (200) × 3 — at/above this width, auto-expand inline sidebar when growing */
-export const DESKTOP_SIDEBAR_EXPAND_THRESHOLD = 600
+/** Overlay / expand thresholds are sidebarWidth × these multipliers — see `useBreakpoint` helpers */
+export const SIDEBAR_OVERLAY_MULTIPLIER = 2.5
+export const SIDEBAR_EXPAND_MULTIPLIER = 3
+
+/** @deprecated use `sidebarOverlayThreshold(sidebarWidth)` from useBreakpoint */
+export const DESKTOP_SIDEBAR_OVERLAY_THRESHOLD = SIDEBAR_DEFAULT_WIDTH * SIDEBAR_OVERLAY_MULTIPLIER
+
+/** @deprecated use `sidebarExpandThreshold(sidebarWidth)` from useBreakpoint */
+export const DESKTOP_SIDEBAR_EXPAND_THRESHOLD = SIDEBAR_DEFAULT_WIDTH * SIDEBAR_EXPAND_MULTIPLIER
 
 /** Shared duration for inline panel width + title chrome when sidebar toggles */
 export const DESKTOP_SIDEBAR_LAYOUT_MS = 340
@@ -64,8 +77,8 @@ export const WORKSPACE_SPLITTER_HIT_SLOP = 1
 /** Stacking above chat / right panel so the widened hit layer receives pointer events */
 export const WORKSPACE_SPLITTER_Z_INDEX = 50
 
-/** Inline left sidebar width — keep in sync with opptrixTokens.sidebarWidthPx */
-export const SIDEBAR_INLINE_WIDTH = 200
+/** Default inline sidebar width — runtime width from `useSessionSidebarWidth`; alias for fallbacks */
+export const SIDEBAR_INLINE_WIDTH = SIDEBAR_DEFAULT_WIDTH
 
 /**
  * Minimum workspace width (chat area) to keep chat + splitter + right panel open.

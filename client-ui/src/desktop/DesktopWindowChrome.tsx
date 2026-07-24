@@ -17,7 +17,7 @@ import {
   DESKTOP_Z_CHROME_TOOLS,
   DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN,
   DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN,
-  SIDEBAR_INLINE_WIDTH,
+  SIDEBAR_DEFAULT_WIDTH,
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
 } from './constants'
 import {
@@ -124,6 +124,8 @@ interface DesktopWindowChromeProps {
   viewMode?: DesktopViewMode
   sidebarOpen?: boolean
   sidebarInline?: boolean
+  sidebarWidth?: number
+  sidebarDragging?: boolean
   showSidebarToggle?: boolean
   sidebarHoverReveal?: boolean
   canGoBack?: boolean
@@ -156,6 +158,7 @@ function resolveDragRightClip(
   rightPanelOpen: boolean,
   chatColumnVisible: boolean,
   sidebarInline: boolean,
+  sidebarWidth: number,
   rightPanelWidth: number,
 ): DragClipStyle {
   if (isStandalonePanel) {
@@ -167,7 +170,7 @@ function resolveDragRightClip(
   if (isSettings || !rightPanelOpen) return {}
   if (!chatColumnVisible) {
     if (sidebarInline) {
-      return { right: `calc(100% - ${SIDEBAR_INLINE_WIDTH}px)` }
+      return { right: `calc(100% - ${sidebarWidth}px)` }
     }
     return {
       width: 0,
@@ -186,6 +189,8 @@ export default function DesktopWindowChrome({
   viewMode = 'chat',
   sidebarOpen = false,
   sidebarInline = false,
+  sidebarWidth = SIDEBAR_DEFAULT_WIDTH,
+  sidebarDragging = false,
   showSidebarToggle = true,
   sidebarHoverReveal = false,
   canGoBack = false,
@@ -223,7 +228,7 @@ export default function DesktopWindowChrome({
   const isStandalonePanel = isNews || isMarket
   const chromeTop = desktopChromeTopOffset()
   const chromeBand = desktopChromeBandHeight()
-  const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen)
+  const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen, sidebarWidth)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
   const titleBarActionsRight = desktopTitleBarActionsRight()
   const showTitleBarActions = !isSettings && !rightPanelOpen && Boolean(onToggleRightPanel || onToggleChatColumn)
@@ -270,12 +275,17 @@ export default function DesktopWindowChrome({
     ? titleLeft + (titleBlockWidth > 0 ? titleBlockWidth : 0)
     : titleLeft
 
+  const chromeTransition = sidebarDragging
+    ? 'none'
+    : `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`
+
   const dragRightClip = resolveDragRightClip(
     isStandalonePanel,
     isSettings,
     rightPanelOpen,
     chatColumnVisible,
     sidebarInline,
+    sidebarWidth,
     rightPanelWidth,
   )
 
@@ -319,12 +329,13 @@ export default function DesktopWindowChrome({
         {showPageTitle && (
           <div
             className={mergeClasses(s.title, titleSlot != null && titleSlot !== false && s.titleInteractive)}
-            style={{
-              top: `${chromeTop}px`,
-              height: `${chromeBand}px`,
-              left: `${titleLeft}px`,
-              maxWidth: `${titleMaxWidth}px`,
-            }}
+          style={{
+            top: `${chromeTop}px`,
+            height: `${chromeBand}px`,
+            left: `${titleLeft}px`,
+            maxWidth: `${titleMaxWidth}px`,
+            transitionDuration: chromeTransition,
+          }}
           >
             {titleSlotWithLayout ? (
               <div ref={titleMeasureRef} className={s.titleSlotWrap}>
@@ -342,6 +353,7 @@ export default function DesktopWindowChrome({
             top: `${chromeTop}px`,
             height: `${chromeBand}px`,
             left: `${toolbarLeft}px`,
+            transitionDuration: chromeTransition,
           }}
         >
           {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (

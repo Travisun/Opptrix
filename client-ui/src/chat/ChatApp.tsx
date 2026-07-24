@@ -38,8 +38,9 @@ import { setNewsFeedSelectedId } from '../pages/news/newsFeedSession'
 import WorkspaceSearchDialog, { type WorkspaceSearchAction } from './WorkspaceSearchDialog'
 import { normalizeWatchlistItem } from '../market/instrument'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync } from '../hooks/useBreakpoint'
+import { useBreakpoint, useSidebarPreference, useSidebarOverlayMode, useSidebarResizeSync, sidebarExpandThreshold } from '../hooks/useBreakpoint'
 import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
+import { useSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
@@ -51,7 +52,7 @@ import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_SIDEBAR_EXPAND_THRESHOLD, DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_INLINE_WIDTH } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -146,21 +147,15 @@ export default function ChatApp() {
   const { confirm } = useOpptrixDialogAlert()
   const breakpoint = useBreakpoint()
   const isMobile = breakpoint === 'mobile'
-  const {
-    visible: sidebarVisible,
-    drawerOpen,
-    setVisible: setSidebarVisible,
-    toggleVisible,
-    openDrawer,
-    closeDrawer,
-  } = useSidebarPreference(isMobile)
-  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
-  const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
-  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(() => {
-    if (typeof window === 'undefined') return false
-    return window.innerWidth >= DESKTOP_SIDEBAR_EXPAND_THRESHOLD
-  })
-  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>()
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280,
+  )
+
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
 
   const {
     current: view,
@@ -170,6 +165,53 @@ export default function ChatApp() {
     goBack,
     goForward,
   } = useAppNavigation('chat')
+
+  const splitEnabled = !isMobile && view === 'chat'
+
+  const {
+    workspaceRef,
+    rightPanelOpen: rightPanelVisible,
+    chatVisible,
+    rightPanelWidth,
+    showSplitter,
+    chatWidth,
+    isDragging,
+    canToggleChatColumn,
+    beginDrag,
+    collapseRightPanel,
+    toggleRightPanel: handleToggleRightPanel,
+    toggleChatColumn: handleToggleChatColumn,
+  } = useWorkspaceSplit({ enabled: splitEnabled })
+
+  const workspaceMinWidth = splitEnabled && rightPanelVisible
+    ? WORKSPACE_CHAT_RIGHT_MIN_WIDTH
+    : WORKSPACE_CHAT_MIN_WIDTH
+
+  const {
+    width: sidebarWidth,
+    isDragging: sidebarDragging,
+    beginDrag: beginSidebarDrag,
+  } = useSessionSidebarWidth({
+    enabled: !isMobile,
+    viewportWidth,
+    workspaceMinWidth,
+  })
+
+  const {
+    visible: sidebarVisible,
+    drawerOpen,
+    setVisible: setSidebarVisible,
+    toggleVisible,
+    openDrawer,
+    closeDrawer,
+  } = useSidebarPreference(isMobile, sidebarWidth)
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, sidebarWidth)
+  const sidebarInlineVisible = sidebarVisible && !sidebarOverlayMode
+  const [settingsSidebarVisible, setSettingsSidebarVisible] = useState(() => {
+    if (typeof window === 'undefined') return false
+    return window.innerWidth >= sidebarExpandThreshold(SIDEBAR_DEFAULT_WIDTH)
+  })
+  const [settingsInitialSection, setSettingsInitialSection] = useState<SettingsSection | undefined>()
 
   const electronChrome = isElectron() && !isMobile
 
@@ -193,22 +235,6 @@ export default function ChatApp() {
   const chromeToolbarReserve = electronChrome && !sidebarInlineVisible
     ? desktopChromeToolbarReserve(macFullscreen)
     : 0
-  const splitEnabled = !isMobile && view === 'chat'
-
-  const {
-    workspaceRef,
-    rightPanelOpen: rightPanelVisible,
-    chatVisible,
-    rightPanelWidth,
-    showSplitter,
-    chatWidth,
-    isDragging,
-    canToggleChatColumn,
-    beginDrag,
-    collapseRightPanel,
-    toggleRightPanel: handleToggleRightPanel,
-    toggleChatColumn: handleToggleChatColumn,
-  } = useWorkspaceSplit({ enabled: splitEnabled })
 
   const collapseSidebars = useCallback(() => {
     setSidebarVisible(false)
@@ -221,7 +247,7 @@ export default function ChatApp() {
     setSettingsSidebarVisible(true)
   }, [setSidebarVisible])
 
-  useSidebarResizeSync(!isMobile, collapseSidebars, expandSidebars)
+  useSidebarResizeSync(!isMobile, sidebarWidth, collapseSidebars, expandSidebars)
 
   const handleToggleSidebar = useCallback(() => {
     if (view === 'settings') {
@@ -1067,6 +1093,8 @@ export default function ChatApp() {
           sidebarInline={isSettings
             ? settingsSidebarVisible && !sidebarOverlayMode
             : sidebarInlineVisible}
+          sidebarWidth={sidebarWidth}
+          sidebarDragging={sidebarDragging}
           showSidebarToggle={!isSettings || sidebarOverlayMode}
           sidebarHoverReveal={sidebarOverlayMode}
           onRevealSidebar={handleEdgeRevealSidebar}
@@ -1079,7 +1107,7 @@ export default function ChatApp() {
           rightPanelOpen={view === 'chat' && !isMobile ? rightPanelVisible : undefined}
           rightPanelWidth={view === 'chat' && !isMobile && rightPanelVisible ? rightPanelWidth : undefined}
           chatColumnWidth={view === 'chat' && !isMobile && chatVisible && showSplitter ? chatWidth : undefined}
-          chatAreaLeft={sidebarInlineVisible ? SIDEBAR_INLINE_WIDTH : 0}
+          chatAreaLeft={sidebarInlineVisible ? sidebarWidth : 0}
           chatColumnVisible={view === 'chat' && !isMobile ? chatVisible : undefined}
           onToggleRightPanel={view === 'chat' && !isMobile ? handleToggleRightPanel : undefined}
           onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
@@ -1088,12 +1116,24 @@ export default function ChatApp() {
       <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'opptrix-app-shell')}>
         <div className={s.rootLayout}>
         {!isMobile && !isSettings && (
-          <SessionSidebar
-            mode={sidebarOverlayMode ? 'overlay' : 'panel'}
-            visible={sidebarVisible}
-            onClose={handleSidebarClose}
-            {...sidebarProps}
-          />
+          <>
+            <SessionSidebar
+              mode={sidebarOverlayMode ? 'overlay' : 'panel'}
+              width={sidebarWidth}
+              isDragging={sidebarDragging}
+              visible={sidebarVisible}
+              onClose={handleSidebarClose}
+              {...sidebarProps}
+            />
+            {sidebarInlineVisible && (
+              <WorkspaceSplitDivider
+                electronChrome={electronChrome}
+                isDragging={sidebarDragging}
+                onBeginDrag={beginSidebarDrag}
+                ariaLabel="调整侧栏宽度"
+              />
+            )}
+          </>
         )}
 
         {isSettings && (
@@ -1125,6 +1165,7 @@ export default function ChatApp() {
             {isMobile && isNews && (
               <SessionSidebar
                 mode="drawer"
+                width={sidebarWidth}
                 drawerOpen={drawerOpen}
                 onClose={closeDrawer}
                 {...sidebarProps}
@@ -1159,6 +1200,7 @@ export default function ChatApp() {
             {isMobile && isMarket && (
               <SessionSidebar
                 mode="drawer"
+                width={sidebarWidth}
                 drawerOpen={drawerOpen}
                 onClose={closeDrawer}
                 {...sidebarProps}
@@ -1189,6 +1231,7 @@ export default function ChatApp() {
           {isMobile && !isNews && !isMarket && !isSettings && (
             <SessionSidebar
               mode="drawer"
+              width={sidebarWidth}
               drawerOpen={drawerOpen}
               onClose={closeDrawer}
               {...sidebarProps}

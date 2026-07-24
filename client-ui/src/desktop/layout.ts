@@ -1,5 +1,4 @@
 import { electronPlatform } from '../platform/detect'
-import { opptrixTokens } from '../theme/tokens'
 import {
   DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_CHROME_TOP_OFFSET_WIN,
@@ -14,6 +13,7 @@ import {
   DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN,
   DESKTOP_WIN_WINDOW_CONTROLS_RESERVE,
   DESKTOP_Z_TITLE_INTERACTIVE,
+  SIDEBAR_DEFAULT_WIDTH,
 } from './constants'
 
 /** Platform chrome inset — Windows sits higher to share a line with window buttons */
@@ -47,6 +47,7 @@ export function desktopTitleLeft(
   sidebarInline: boolean,
   view: DesktopViewMode = 'chat',
   fullscreen = false,
+  sidebarWidth = SIDEBAR_DEFAULT_WIDTH,
 ): number {
   const afterToolbar = desktopToolbarLeft(fullscreen) + desktopToolbarWidth() + DESKTOP_TITLE_GAP
   if (view === 'settings') {
@@ -56,7 +57,7 @@ export function desktopTitleLeft(
     return afterToolbar
   }
   if (sidebarInline) {
-    return opptrixTokens.sidebarWidthPx + DESKTOP_TITLE_GAP
+    return sidebarWidth + DESKTOP_TITLE_GAP
   }
   return afterToolbar
 }

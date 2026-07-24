@@ -33,8 +33,13 @@
 ┌─────────────┬──────────────────────────────┬──────────────────┐
 │  Session    │  Chat + 工具过程 + 输入区     │  关注/发现/个股   │
 │  Sidebar    │  (flex 1)                    │  RightMarketPanel │
+│  可调宽     │                              │                   │
 └─────────────┴──────────────────────────────┴──────────────────┘
 ```
+
+- **默认宽度** 200px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
+- **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
+- **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 
 代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`。
 

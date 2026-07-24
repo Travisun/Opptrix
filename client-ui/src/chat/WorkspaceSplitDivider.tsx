@@ -8,7 +8,7 @@ import {
   WORKSPACE_SPLITTER_Z_INDEX,
 } from '../desktop/constants'
 
-const FOCUS_FADE_PERCENT = 14
+const FOCUS_FADE_PERCENT = 10
 
 function buildLineBackground(focusRatio: number | null): string {
   const normal = opptrixCssVars.separatorStrong
@@ -63,12 +63,14 @@ interface Props {
   electronChrome?: boolean
   isDragging?: boolean
   onBeginDrag: (clientX: number) => void
+  ariaLabel?: string
 }
 
 export default function WorkspaceSplitDivider({
   electronChrome = false,
   isDragging = false,
   onBeginDrag,
+  ariaLabel = '调整聊天区与右侧面板宽度',
 }: Props) {
   const s = useStyles()
   const dividerRef = useRef<HTMLDivElement>(null)
@@ -111,7 +113,7 @@ export default function WorkspaceSplitDivider({
       className={mergeClasses(s.divider, electronChrome && s.dividerElectron)}
       role="separator"
       aria-orientation="vertical"
-      aria-label="调整聊天区与右侧面板宽度"
+      aria-label={ariaLabel}
     >
       <div
         className={s.line}
