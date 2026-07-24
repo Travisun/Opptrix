@@ -15,6 +15,7 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@anthropic-ai/sandbox-runtime": "^0.0.67",
     "@opptrix/shared": "*"
   }
 }

@@ -67,6 +67,8 @@ const PRIMARY_CASES = [
   { message: '你能访问哪些目录', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '本对话有哪些授权工作区', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '能读哪些文件夹', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
+  { message: '运行这段 python 脚本', expectPrimary: 'shell_run', intent: 'workspace_shell' },
+  { message: 'pip install requests 装进工作区', expectPrimary: 'shell_install', intent: 'workspace_shell_install' },
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },
@@ -299,4 +301,5 @@ test('system rules include workspace access guardrails', () => {
   const rules = buildAgentSystemRules()
   assert.match(rules, /list_workspace_grants/)
   assert.match(rules, /禁止把 get_project_info/)
+  assert.match(rules, /shell_run/)
 })

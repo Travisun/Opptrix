@@ -569,6 +569,169 @@ if (!ensureDuckdbNeoBindings()) {
   process.exit(1)
 }
 
+function assertSandboxRuntimeVendor(depsRoot) {
+  const vendorRoot = path.join(depsRoot, '@anthropic-ai/sandbox-runtime/vendor')
+  const seccomp = path.join(vendorRoot, 'seccomp')
+  const srtWin = path.join(vendorRoot, 'srt-win')
+  if (!fs.existsSync(seccomp)) {
+    throw new Error(`missing sandbox-runtime vendor seccomp at ${seccomp}`)
+  }
+  for (const arch of ['x64', 'arm64']) {
+    const exe = path.join(srtWin, arch, 'srt-win.exe')
+    if (!fs.existsSync(exe)) {
+      throw new Error(`missing sandbox-runtime vendor ${exe}`)
+    }
+  }
+  console.log('sandbox-runtime vendor OK (srt-win + seccomp)')
+}
+
+function ensureLinuxSandboxBins() {
+  if (target.platform !== 'linux') return
+
+  const arch = target.arch === 'x64' ? 'x64' : target.arch === 'arm64' ? 'arm64' : target.arch
+  const destDir = path.join(STAGE, 'sandbox-bins', arch)
+  fs.mkdirSync(destDir, { recursive: true })
+
+  const debArch = arch === 'arm64' ? 'arm64' : 'amd64'
+  const ubuntuPool = debArch === 'arm64'
+    ? 'http://ports.ubuntu.com/ubuntu-ports/pool/main'
+    : 'http://archive.ubuntu.com/ubuntu/pool/main'
+
+  /** Pinned Ubuntu 24.04 (noble) packages — reproducible AppImage vendor. */
+  const SANDBOX_BIN_SOURCES = {
+    bwrap: {
+      debUrl: `${ubuntuPool}/b/bubblewrap/bubblewrap_0.9.0-1ubuntu0.1_${debArch}.deb`,
+      innerPath: 'usr/bin/bwrap',
+    },
+    socat: {
+      debUrl: `${ubuntuPool}/s/socat/socat_1.8.0.0-4build3_${debArch}.deb`,
+      innerPath: 'usr/bin/socat',
+    },
+    rg: {
+      version: '14.1.1',
+      tarUrl: `https://github.com/BurntSushi/ripgrep/releases/download/14.1.1/ripgrep-14.1.1-${debArch === 'arm64' ? 'aarch64' : 'x86_64'}-unknown-linux-musl.tar.gz`,
+      innerPath: `ripgrep-14.1.1-${debArch === 'arm64' ? 'aarch64' : 'x86_64'}-unknown-linux-musl/rg`,
+    },
+  }
+
+  function extractDebBinary(debUrl, innerPath, destPath) {
+    const cacheDir = path.join(DESKTOP_ROOT, '.cache/sandbox-bins')
+    const debName = path.basename(new URL(debUrl).pathname)
+    const debPath = path.join(cacheDir, debName)
+    fs.mkdirSync(cacheDir, { recursive: true })
+    if (!fs.existsSync(debPath)) downloadFile(debUrl, debPath)
+
+    const workDir = fs.mkdtempSync(path.join(cacheDir, 'deb-'))
+    try {
+      const ar = spawnSync('ar', ['x', debPath], { cwd: workDir, encoding: 'utf8' })
+      if (ar.status !== 0) throw new Error(`ar extract failed for ${debName}`)
+      const dataTar = ['data.tar.xz', 'data.tar.zst', 'data.tar.gz'].find(name =>
+        fs.existsSync(path.join(workDir, name)),
+      )
+      if (!dataTar) throw new Error(`missing data tarball in ${debName}`)
+      const tarArgs = dataTar.endsWith('.xz')
+        ? ['-xJf', dataTar]
+        : dataTar.endsWith('.zst')
+          ? ['--zstd', '-xf', dataTar]
+          : ['-xzf', dataTar]
+      const tar = spawnSync('tar', [...tarArgs, '-C', workDir, innerPath], {
+        cwd: workDir,
+        encoding: 'utf8',
+      })
+      if (tar.status !== 0) throw new Error(`tar extract failed for ${innerPath} in ${debName}`)
+      const extracted = path.join(workDir, innerPath)
+      if (!fs.existsSync(extracted)) throw new Error(`missing ${innerPath} in ${debName}`)
+      fs.copyFileSync(extracted, destPath)
+      fs.chmodSync(destPath, 0o755)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+    }
+  }
+
+  function extractRipgrepTar(tarUrl, innerPath, destPath) {
+    const cacheDir = path.join(DESKTOP_ROOT, '.cache/sandbox-bins')
+    const tarName = path.basename(new URL(tarUrl).pathname)
+    const tarPath = path.join(cacheDir, tarName)
+    fs.mkdirSync(cacheDir, { recursive: true })
+    if (!fs.existsSync(tarPath)) downloadFile(tarUrl, tarPath)
+    const workDir = fs.mkdtempSync(path.join(cacheDir, 'rg-'))
+    try {
+      extractTarGz(tarPath, workDir)
+      const extracted = path.join(workDir, innerPath)
+      if (!fs.existsSync(extracted)) throw new Error(`missing ${innerPath} in ${tarName}`)
+      fs.copyFileSync(extracted, destPath)
+      fs.chmodSync(destPath, 0o755)
+    } finally {
+      fs.rmSync(workDir, { recursive: true, force: true })
+    }
+  }
+
+  function stageFromDownload(name, dest, fetchFn) {
+    const outPath = path.join(destDir, dest)
+    if (fs.existsSync(outPath)) return true
+    try {
+      fetchFn(outPath)
+      console.log(`sandbox-bins: downloaded ${dest}`)
+      return true
+    } catch (err) {
+      console.warn(
+        `sandbox-bins: download ${name} failed — ${err instanceof Error ? err.message : err}`,
+      )
+      return false
+    }
+  }
+
+  function stageFromHostWhich(name, dest) {
+    if (!hostMatchesTarget(target)) return false
+    const outPath = path.join(destDir, dest)
+    if (fs.existsSync(outPath)) return true
+    const which = spawnSync('which', [name], { encoding: 'utf8' })
+    if (which.status !== 0 || !which.stdout.trim()) return false
+    fs.copyFileSync(which.stdout.trim(), outPath)
+    fs.chmodSync(outPath, 0o755)
+    console.log(`sandbox-bins: staged ${dest} from host`)
+    return true
+  }
+
+  const bins = [
+    {
+      name: 'bwrap',
+      dest: 'bwrap',
+      download: out => extractDebBinary(SANDBOX_BIN_SOURCES.bwrap.debUrl, SANDBOX_BIN_SOURCES.bwrap.innerPath, out),
+    },
+    {
+      name: 'socat',
+      dest: 'socat',
+      download: out => extractDebBinary(SANDBOX_BIN_SOURCES.socat.debUrl, SANDBOX_BIN_SOURCES.socat.innerPath, out),
+    },
+    {
+      name: 'rg',
+      dest: 'rg',
+      download: out => extractRipgrepTar(SANDBOX_BIN_SOURCES.rg.tarUrl, SANDBOX_BIN_SOURCES.rg.innerPath, out),
+    },
+  ]
+
+  const missing = []
+  for (const { name, dest, download } of bins) {
+    const outPath = path.join(destDir, dest)
+    if (fs.existsSync(outPath)) continue
+    if (stageFromDownload(name, dest, download)) continue
+    if (stageFromHostWhich(name, dest)) continue
+    missing.push(name)
+    console.warn(`sandbox-bins: ${name} unavailable — AppImage may need system packages or deb install`)
+  }
+
+  if (missing.length) {
+    console.warn(
+      `sandbox-bins incomplete (${missing.join(', ')}) for ${target.platform}-${target.arch}`
+      + ' — deb package remains the most reliable Linux install path',
+    )
+  }
+}
+
+assertSandboxRuntimeVendor(STAGE_NM)
+ensureLinuxSandboxBins()
+
 if (rebuildFailed) {
   console.warn('better-sqlite3 rebuild reported errors but required native bindings are ready — continuing')
 }

@@ -10,6 +10,7 @@ export {
   QuotaExceededError,
   SsrfBlockedError,
   ConfirmationRequiredError,
+  NetworkInstallConfirmationRequiredError,
 } from './errors.js'
 export { buildGlobalDenyPaths, isPathDenied, isWorkspaceRootPath } from './deny.js'
 export { resolveSafePath, ensureDirectory } from './path-gate.js'
@@ -42,3 +43,20 @@ export {
   type ConfirmHandler,
   type WorkspaceServiceOptions,
 } from './service.js'
+export {
+  ShellRunner,
+  NetworkInstallStickyStore,
+  NETWORK_INSTALL_CONFIRM_OPTIONS,
+  parseNetworkInstallChoice,
+  buildSandboxConfigFromGrants,
+  buildSandboxConfigFromGrantPaths,
+  assertAllowedShellArgv,
+  assertPackageInstallPolicy,
+  commandNeedsNetwork,
+  getShellPlatformStatus,
+  PACKAGE_INSTALL_ALLOWED_DOMAINS,
+  type ShellRunParams,
+  type ShellRunResult,
+  type ShellInstallParams,
+  type ShellPlatformStatus,
+} from './shell/index.js'

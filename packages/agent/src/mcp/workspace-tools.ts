@@ -1,6 +1,7 @@
 import path from 'node:path'
 import {
   ConfirmationRequiredError,
+  NetworkInstallConfirmationRequiredError,
   getWorkspaceService,
   type ConfirmHandler,
   type WorkspaceGrant,
@@ -56,6 +57,31 @@ function formatConfirmationResult(err: ConfirmationRequiredError): {
     needs_confirmation: true,
     confirmation: err.confirmation,
   }
+}
+
+function formatNetworkInstallConfirmation(err: NetworkInstallConfirmationRequiredError): {
+  needs_confirmation: true
+  confirmation: NetworkInstallConfirmationRequiredError['confirmation']
+} {
+  return {
+    needs_confirmation: true,
+    confirmation: err.confirmation,
+  }
+}
+
+function handleShellError(err: unknown): unknown {
+  if (err instanceof NetworkInstallConfirmationRequiredError) {
+    return formatNetworkInstallConfirmation(err)
+  }
+  if (err instanceof ConfirmationRequiredError) {
+    return formatConfirmationResult(err)
+  }
+  return toolError(err)
+}
+
+function parseArgv(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  return raw.map(v => String(v ?? '')).filter(v => v.length > 0)
 }
 
 function requireBridge(): WorkspaceToolBridge {
@@ -368,6 +394,91 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
           return summarizeWorkspaceGrants(grants)
         } catch (err) {
           return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'shell_platform_status',
+      category: '工作区',
+      description: '检查系统隔离环境是否可用（运行 python/node 命令前可先调用）',
+      parameters: S({}),
+      handler: async () => {
+        try {
+          requireBridge()
+          return await ws.shellPlatformStatus()
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'shell_run',
+      category: '工作区',
+      description: '在系统隔离环境中运行 python/node/npm/pip 命令；只能访问已授权工作区，包须装进工作区',
+      parameters: S({
+        root_id: { type: 'string', description: '工作区 root_id，默认 default' },
+        cwd: { type: 'string', description: '相对工作目录，默认根目录' },
+        argv: {
+          type: 'array',
+          description: '命令参数数组，如 ["python3","-c","print(1)"]；禁止 shell 管道与 sudo',
+          items: { type: 'string' },
+        },
+        timeout_ms: { type: 'number', description: '超时毫秒，默认 120000' },
+        network_intent: { type: 'string', description: 'none | install；pip/npm 安装时填 install' },
+      }, ['argv']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const argv = parseArgv(args.argv)
+          const intentRaw = String(args.network_intent ?? 'none')
+          const networkIntent = intentRaw === 'install' ? 'install' as const : 'none' as const
+          return await ws.shellRun({
+            sessionId: b.sessionId,
+            rootId: String(args.root_id ?? 'default'),
+            cwdRel: args.cwd != null ? String(args.cwd) : '',
+            argv,
+            timeoutMs: typeof args.timeout_ms === 'number' ? args.timeout_ms : undefined,
+            networkIntent,
+            signal: b.signal,
+          }, b.confirm)
+        } catch (err) {
+          return handleShellError(err)
+        }
+      },
+    },
+    {
+      name: 'shell_install',
+      category: '工作区',
+      description: '在授权工作区内安装 Python 或 Node 依赖（联网需用户确认；包装进工作区子目录）',
+      parameters: S({
+        root_id: { type: 'string', description: '工作区 root_id' },
+        cwd: { type: 'string', description: '相对工作目录' },
+        manager: { type: 'string', description: 'pip 或 npm' },
+        packages: {
+          type: 'array',
+          description: '包名列表；npm 可留空表示按 package.json 安装',
+          items: { type: 'string' },
+        },
+      }, ['manager']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const managerRaw = String(args.manager ?? '').toLowerCase()
+          const manager = managerRaw === 'npm' ? 'npm' as const : managerRaw === 'pip' ? 'pip' as const : null
+          if (!manager) {
+            return { error: 'manager 须为 pip 或 npm' }
+          }
+          const packages = parseArgv(args.packages)
+          return await ws.shellInstall({
+            sessionId: b.sessionId,
+            rootId: String(args.root_id ?? 'default'),
+            cwdRel: args.cwd != null ? String(args.cwd) : '',
+            manager,
+            packages,
+            signal: b.signal,
+          }, b.confirm)
+        } catch (err) {
+          return handleShellError(err)
         }
       },
     },

@@ -169,6 +169,31 @@ const INTENT_RULES: IntentRule[] = [
     hint: '已打开的外部网页 → browser_snapshot；勿用 get_instrument_snapshot',
   },
   {
+    intent: 'workspace_shell_install',
+    priority: 90,
+    patterns: [
+      /pip\s+install|npm\s+install|npm\s+ci|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
+      /shell_install/i,
+    ],
+    preferredTools: ['shell_install', 'shell_run', 'shell_platform_status'],
+    avoidTools: ['workspace_write', 'http_fetch'],
+    confidence: 'high',
+    hint: '安装依赖 → shell_install（装进工作区）；联网需用户确认',
+  },
+  {
+    intent: 'workspace_shell',
+    priority: 89,
+    patterns: [
+      /运行(?:一下|这段)?\s*(?:python|py|node|js|脚本|代码)/i,
+      /执行(?:命令|shell|终端)/i,
+      /shell_run/i,
+    ],
+    preferredTools: ['shell_run', 'shell_install', 'shell_platform_status'],
+    avoidTools: ['workspace_write', 'http_fetch'],
+    confidence: 'high',
+    hint: '运行代码 → shell_run（系统隔离）；先 shell_platform_status 若环境未知',
+  },
+  {
     intent: 'workspace_files',
     priority: 88,
     patterns: [

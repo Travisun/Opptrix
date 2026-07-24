@@ -52,6 +52,18 @@ const SEED_RULES: SeedRule[] = [
     ],
   },
   {
+    pack: 'workspace',
+    weight: 3,
+    patterns: [
+      /工作区|保存(?:到|成)?(?:文件|报告)|写入(?:文件|报告)|读取(?:本地|工作区)?文件/,
+      /列出(?:目录|文件夹|文件)|创建文件夹|删除(?:文件|目录)/,
+      /下载(?:到|保存).*(?:文件|pdf|附件)/i,
+      /运行(?:一下|这段)?\s*(?:python|py|node|js|脚本|代码)/i,
+      /pip\s+install|npm\s+install|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
+      /shell_run|shell_install/i,
+    ],
+  },
+  {
     pack: 'industry',
     weight: 3,
     patterns: [

@@ -1,6 +1,8 @@
 const { app, BrowserWindow, ipcMain, dialog, shell, session, nativeTheme } = require('electron')
 const path = require('path')
 const fs = require('fs/promises')
+const fsSync = require('node:fs')
+const { pathToFileURL } = require('node:url')
 const { spawn } = require('node:child_process')
 const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
@@ -195,6 +197,7 @@ function sidecarEnv(root) {
 
   if (!isDev) {
     env.ELECTRON_RUN_AS_NODE = '1'
+    env.OPPTRIX_RUNTIME_STAGE = root
     const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
     const fs = require('node:fs')
     // afterPack restores deps → node_modules so ESM bare imports resolve.
@@ -698,6 +701,84 @@ function applyNativeThemeSource(source) {
   }
 }
 
+async function installWindowsSandboxFromMain() {
+  if (process.platform !== 'win32') {
+    return { ok: false, message: '当前系统无需此步骤' }
+  }
+  const root = repoRoot()
+  const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
+  const nmDir = path.join(root, 'node_modules')
+  const depsDir = path.join(root, RUNTIME_DEPS_DIR)
+  const moduleRoot = fsSync.existsSync(nmDir) ? nmDir : depsDir
+  const entry = path.join(moduleRoot, '@anthropic-ai/sandbox-runtime/dist/index.js')
+  if (!fsSync.existsSync(entry)) {
+    return { ok: false, message: '命令隔离组件未随应用分发，请重新安装 Opptrix' }
+  }
+  const mod = await import(pathToFileURL(entry).href)
+  const arch = process.arch === 'x64' ? 'x64' : process.arch === 'arm64' ? 'arm64' : process.arch
+  const srtWinExe = path.join(
+    moduleRoot,
+    '@anthropic-ai/sandbox-runtime/vendor/srt-win',
+    arch,
+    'srt-win.exe',
+  )
+  if (!fsSync.existsSync(srtWinExe)) {
+    return { ok: false, message: '命令隔离组件不完整，请重新安装 Opptrix' }
+  }
+  const srtWin = mod.resolveSrtWin({ path: srtWinExe })
+  const result = await mod.installWindowsSandboxAsync({ srtWin })
+  if (result.cancelled) {
+    return {
+      ok: false,
+      cancelled: true,
+      message: '未完成系统授权，命令隔离环境尚未就绪；可稍后在设置中重试',
+    }
+  }
+  const ready = Boolean(result.user?.provisioned && result.wfp?.state === 'installed')
+  return {
+    ok: ready,
+    message: ready ? '命令隔离环境已就绪' : '命令隔离环境尚未就绪，请稍后重试',
+  }
+}
+
+async function resolveAgentWorkspaceShellModule(subpath) {
+  const root = repoRoot()
+  const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
+  const candidates = [
+    path.join(root, RUNTIME_DEPS_DIR, '@opptrix/agent-workspace/dist', subpath),
+    path.join(root, 'node_modules/@opptrix/agent-workspace/dist', subpath),
+    path.join(root, 'packages/agent-workspace/dist', subpath),
+  ]
+  for (const entry of candidates) {
+    if (fsSync.existsSync(entry)) {
+      return import(pathToFileURL(entry).href)
+    }
+  }
+  return null
+}
+
+async function installLinuxSandboxFromMain() {
+  if (process.platform !== 'linux') {
+    return { ok: false, message: '当前系统无需此步骤' }
+  }
+  const mod = await resolveAgentWorkspaceShellModule('shell/ensure-linux-sandbox.js')
+  if (!mod?.ensureLinuxSandboxReady) {
+    return { ok: false, message: '命令隔离组件未随应用分发，请重新安装 Opptrix' }
+  }
+  const result = await mod.ensureLinuxSandboxReady({ allowAutoInstall: true, forceRetry: true })
+  if (result.cancelled) {
+    return {
+      ok: false,
+      cancelled: true,
+      message: result.message ?? '未完成系统授权，命令隔离环境尚未就绪；可稍后在设置中重试',
+    }
+  }
+  return {
+    ok: Boolean(result.ready),
+    message: result.message ?? (result.ready ? '命令隔离环境已就绪' : '命令隔离环境尚未就绪，请稍后重试'),
+  }
+}
+
 function registerWindowIpc() {
   ipcMain.on('shell-ready', (event) => {
     notifyShellReady(event.sender)
@@ -769,6 +850,14 @@ function registerWindowIpc() {
   })
 
   ipcMain.handle('client-version', async () => VERSION)
+
+  ipcMain.handle('shell-install-windows-sandbox', async () => {
+    return installWindowsSandboxFromMain()
+  })
+
+  ipcMain.handle('shell-install-linux-sandbox', async () => {
+    return installLinuxSandboxFromMain()
+  })
 
   ipcMain.handle('open-external-url', async (_event, url) => {
     const target = String(url ?? '').trim()

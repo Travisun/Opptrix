@@ -166,8 +166,8 @@ Opptrix/
   - **标的公告（`news` pack）**：`get_instrument_notices` → `get_notice_content`
   - **网页浏览（`browser` pack）**：`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot` / `browser_close`（Playwright 完整 Chromium，headless，无需单独 headless-shell；开发环境 `npm install` 会自动安装 Chromium，可用 `OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1` 跳过；桌面安装包已内置）
   - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
-    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants`
-    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）
+    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install`
+    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）
     - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面展示「公共工作区」，**不**把 `~/.opptrix` 根目录标为可访问目录。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
     - **根目录**：默认 `root_id=default` → 仅公共工作区子目录 `agent-workspace`（读写），不是整个用户数据根；额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
@@ -176,6 +176,9 @@ Opptrix/
       - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
       - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
       - `request_folder_access` 仅提示用户去界面授权，不直接弹系统选目录；授权 API 见 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)
+      - **命令隔离（shell_*）**：实现 `packages/agent-workspace/src/shell/`（`ShellRunner` + `@anthropic-ai/sandbox-runtime` OS 级沙箱）。`shell_run` 以结构化 `argv` 传参（`shell: false`），白名单二进制：`python` / `python3` / `node` / `npm` / `npx` / `pip` / `pip3`；禁止 sudo、管道删根等高危模式。cwd 须在 session grant 内（可读即可）；文件系统以 grants 为第一层闸门，SRT `allowRead`/`allowWrite`/`denyRead`（含用户数据根、homedir、`.ssh` 与 Global Deny）为第二层强制隔离。默认超时 120s；stdout/stderr 截断。意图精排：`workspace_shell` → 首选 `shell_run`；`workspace_shell_install` → 首选 `shell_install`
+      - **包安装与联网 sticky**：`shell_install(manager=pip|npm)` 或 `shell_run` 且 `network_intent=install` / 检测到 `pip|npm install|ci|update` 时触发联网确认。选项：`once`（仅此一次）/ `sticky`（本对话一律允许）/ `cancel`。sticky 存 `NetworkInstallStickyStore`（**内存**，会话删除时随 `WorkspaceService.clearSession` 清除）。允许联网时沙箱域名白名单为 PyPI / npm / yarn / GitHub 相关域（见 `network-policy.ts`）；未授权时 `allowedDomains=[]`（默认断网）。包只能装进授权工作区：pip 默认 `--target .opptrix-packages`；npm 禁止 `-g`/`--global`/`--user`/`--system`
+      - **平台依赖（`shell_platform_status`）**：返回 `platform` / `supported` / `sandbox_available` / `ready` / `message`，以及可选 `missing_dependencies` / `setup_hint` / `needs_windows_install` / `needs_linux_install` / `can_auto_install` / `needs_elevation` / `userns_restricted`。`ready=false` 时 `shell_run` / `shell_install` 直接失败并返回 `message`。**macOS**：一般无需额外操作；**Linux deb**：依赖随 apt 安装；**Linux AppImage**：尽量使用内置 `sandbox-bins`（deb 仍最稳）；**Ubuntu 24.04+ userns 限制**：首次 `shell_*` 可自动触发一次 **pkexec** 系统授权（`can_auto_install` / `needs_elevation`），无需手敲终端命令；取消授权后可稍后重试；无 polkit/无管理员权限的企业机仍可能失败。**Windows**：首次 `shell_*` 可自动触发一次 UAC，无需用户手敲 `npx windows-install`；取消授权后可稍后重试。不支持的 OS → `supported=false`
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
   - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示

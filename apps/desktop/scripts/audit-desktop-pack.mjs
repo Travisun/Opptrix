@@ -96,6 +96,13 @@ console.log('audit-desktop-pack: start')
   if (!pkg.build?.electronVersion) fail('build.electronVersion missing')
   else ok(`electronVersion=${pkg.build.electronVersion}`)
 
+  const debDepends = pkg.build?.deb?.depends ?? []
+  for (const dep of ['bubblewrap', 'socat', 'ripgrep']) {
+    if (!debDepends.includes(dep)) {
+      fail(`build.deb.depends must include ${dep} for Linux shell sandbox`)
+    } else ok(`deb depends includes ${dep}`)
+  }
+
   for (const script of [
     'verify:release-metadata-policy',
     'verify:packaged-updater',
@@ -120,6 +127,9 @@ console.log('audit-desktop-pack: start')
   if (!stageSrc.includes('renameSync') || !stageSrc.includes('RUNTIME_DEPS_DIR')) {
     fail('stage-runtime.mjs must rename node_modules → RUNTIME_DEPS_DIR before packaging')
   } else ok('stage-runtime renames node_modules → deps')
+  if (!stageSrc.includes('assertSandboxRuntimeVendor')) {
+    fail('stage-runtime.mjs must assert @anthropic-ai/sandbox-runtime vendor (srt-win + seccomp)')
+  } else ok('stage-runtime asserts sandbox-runtime vendor')
 
   const mainSrc = read('electron/main.cjs')
   if (!mainSrc.includes('RUNTIME_DEPS_DIR') || !mainSrc.includes('NODE_PATH')) {

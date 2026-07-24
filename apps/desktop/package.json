@@ -170,7 +170,12 @@
       "createStartMenuShortcut": true
     },
     "deb": {
-      "packageName": "opptrix"
+      "packageName": "opptrix",
+      "depends": [
+        "bubblewrap",
+        "socat",
+        "ripgrep"
+      ]
     },
     "linux": {
       "icon": "build/icons/linux",

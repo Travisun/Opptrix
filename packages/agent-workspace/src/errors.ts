@@ -49,3 +49,18 @@ export class ConfirmationRequiredError extends WorkspaceError {
     this.confirmation = confirmation
   }
 }
+
+export class NetworkInstallConfirmationRequiredError extends WorkspaceError {
+  readonly confirmation: {
+    kind: 'network_install'
+    title: string
+    prompt: string
+    options: Array<{ id: string; label: string }>
+  }
+
+  constructor(confirmation: NetworkInstallConfirmationRequiredError['confirmation']) {
+    super('需要用户确认联网安装')
+    this.name = 'NetworkInstallConfirmationRequiredError'
+    this.confirmation = confirmation
+  }
+}

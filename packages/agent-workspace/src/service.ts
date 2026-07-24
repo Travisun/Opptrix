@@ -22,6 +22,14 @@ import { resolveAgentWorkspaceRoot } from './paths.js'
 import { QuotaTracker, DEFAULT_WORKSPACE_QUOTA_BYTES } from './quota.js'
 import { httpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 import { streamDownloadToFile } from './download.js'
+import {
+  ShellRunner,
+  NetworkInstallStickyStore,
+  type ShellInstallParams,
+  type ShellPlatformStatus,
+  type ShellRunParams,
+  type ShellRunResult,
+} from './shell/index.js'
 
 export interface ConfirmHandler {
   (payload: {
@@ -38,20 +46,30 @@ export interface WorkspaceServiceOptions {
   quotaBytes?: number
   grantStore?: GrantStore
   stickyStore?: StickyPolicyStore
+  networkInstallSticky?: NetworkInstallStickyStore
+  shellRunner?: ShellRunner
 }
 
 export class WorkspaceService {
   private readonly grants: GrantStore
   private readonly sticky: StickyPolicyStore
+  private readonly networkSticky: NetworkInstallStickyStore
   private readonly quota: QuotaTracker
+  private readonly shell: ShellRunner
 
   constructor(opts: WorkspaceServiceOptions = {}) {
     this.grants = opts.grantStore ?? new GrantStore()
     this.sticky = opts.stickyStore ?? new StickyPolicyStore()
+    this.networkSticky = opts.networkInstallSticky ?? new NetworkInstallStickyStore()
     this.quota = new QuotaTracker(
       resolveAgentWorkspaceRoot(),
       opts.quotaBytes ?? DEFAULT_WORKSPACE_QUOTA_BYTES,
     )
+    this.shell = opts.shellRunner ?? new ShellRunner({
+      listGrants: (sessionId) => this.listGrants(sessionId),
+      gatePath: (sessionId, rootId, relPath) => this.gatePath(sessionId, rootId, relPath),
+      stickyNetwork: this.networkSticky,
+    })
   }
 
   getGrantStore(): GrantStore {
@@ -65,6 +83,7 @@ export class WorkspaceService {
   clearSession(sessionId: string): void {
     this.grants.clearSession(sessionId)
     this.sticky.clearSession(sessionId)
+    this.shell.clearSession(sessionId)
   }
 
   async ensureDefaultRoot(sessionId: string): Promise<WorkspaceGrant> {
@@ -268,6 +287,24 @@ export class WorkspaceService {
 
   httpFetch(params: HttpFetchParams): Promise<HttpFetchResult> {
     return httpFetch(params)
+  }
+
+  shellPlatformStatus(): Promise<ShellPlatformStatus> {
+    return this.shell.platformStatus()
+  }
+
+  shellRun(
+    params: ShellRunParams,
+    confirm?: ConfirmHandler,
+  ): Promise<ShellRunResult> {
+    return this.shell.run(params, confirm)
+  }
+
+  shellInstall(
+    params: ShellInstallParams,
+    confirm?: ConfirmHandler,
+  ): Promise<ShellRunResult> {
+    return this.shell.install(params, confirm)
   }
 }
 

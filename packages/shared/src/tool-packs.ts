@@ -100,8 +100,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'workspace',
     title: '工作区与文件',
-    description: '读写本地工作区、下载文件、受控 HTTP 请求、文件夹授权',
-    whenToUse: '保存/读取报告与数据文件、下载附件、调用开放 API、访问用户授权的文件夹',
+    description: '读写本地工作区、下载文件、受控 HTTP 请求、文件夹授权、隔离环境运行代码',
+    whenToUse: '保存/读取报告与数据文件、下载附件、调用开放 API、访问用户授权的文件夹、运行 python/node 脚本或安装依赖',
   },
   {
     id: 'strategy_extra',
@@ -227,6 +227,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   http_fetch: 'workspace',
   request_folder_access: 'workspace',
   list_workspace_grants: 'workspace',
+
+  shell_platform_status: 'workspace',
+  shell_run: 'workspace',
+  shell_install: 'workspace',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

@@ -141,6 +141,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 禁止把 get_project_info 或 get_system_info 的路径/ cwd 说成可访问目录',
     '- 禁止向用户朗读 ~/.opptrix 应用数据根、sessions、watchlist、数据库、providers 等内部结构',
     '- 默认公共工作区 root_id=default；额外目录需界面授权或 request_folder_access',
+    '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 shell_run / shell_install（系统隔离环境）；勿声称可读写未授权路径',
   ].join('\n')
 }
 

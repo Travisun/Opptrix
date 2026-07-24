@@ -569,6 +569,21 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '用户问可访问哪些目录、本对话有哪些授权工作区、能读哪些文件夹时首选。',
     compliance: '只读；返回 root_id/label/mode 与公共工作区摘要；勿用 get_project_info 代替；额外目录需 request_folder_access 或界面授权。',
   },
+  shell_platform_status: {
+    packId: 'workspace',
+    usageGuide: '运行代码或安装依赖前，确认系统隔离环境是否就绪；不可用时向用户说明缺少组件。',
+    compliance: '只读；返回平台与就绪状态；用户文案勿暴露内部实现细节。',
+  },
+  shell_run: {
+    packId: 'workspace',
+    usageGuide: '在授权工作区内运行 python/node/npm/pip；自定义脚本必须经此工具，勿声称可访问未授权路径。',
+    compliance: 'argv 结构化传参；禁止 sudo/管道删根；pip/npm 安装须 network_intent=install；包只能装进工作区。',
+  },
+  shell_install: {
+    packId: 'workspace',
+    usageGuide: '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；比手写 pip/npm 更安全。',
+    compliance: 'manager=pip|npm；联网安装需用户确认或本会话 sticky；禁止 -g/--user。',
+  },
 }
 
 /** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */
