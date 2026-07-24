@@ -19,6 +19,7 @@ import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
+import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -636,6 +637,9 @@ function SettingsPageView({
 
       case 'sandbox':
         return <SandboxSettingsSection />
+
+      case 'python':
+        return <PythonEnvironmentSettingsSection />
 
       case 'translation':
         return <TranslationSettingsSection />

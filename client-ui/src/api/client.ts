@@ -1987,3 +1987,59 @@ export const sandboxSettings = {
       body: JSON.stringify(settings),
     }),
 }
+
+// ─── Python settings API ───
+
+export interface PythonSettings {
+  pip_index_urls: string[]
+  prefer_opptrix_python: boolean
+}
+
+export interface PythonRuntimeStatus {
+  system_path: string | null
+  system_version: string | null
+  opptrix_path: string | null
+  opptrix_version: string | null
+  active_source: 'system' | 'opptrix' | 'none'
+  active_path: string | null
+  active_version: string | null
+  ready: boolean
+  recommend_install: boolean
+  message: string
+}
+
+export interface PythonInstallJobSnapshot {
+  state: 'idle' | 'queued' | 'running' | 'failed' | 'completed'
+  message: string
+  accepted: boolean
+  phase: 'idle' | 'prepare' | 'download' | 'extract' | 'configure' | 'pip' | 'verify' | 'done'
+  percent: number
+  bytes_downloaded: number
+  bytes_total: number | null
+  steps: string[]
+  error: string | null
+}
+
+export const pythonSettings = {
+  getSettings: () =>
+    jsonFetch<{ settings: PythonSettings }>('/settings/python'),
+
+  getStatus: () =>
+    jsonFetch<{ status: PythonRuntimeStatus }>('/settings/python/status'),
+
+  saveSettings: (settings: Partial<PythonSettings>) =>
+    jsonFetch<{ settings: PythonSettings }>('/settings/python', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }),
+
+  startInstall: () =>
+    jsonFetch<{ job: PythonInstallJobSnapshot; status: PythonInstallJobSnapshot }>(
+      '/settings/python/install',
+      { method: 'POST' },
+    ),
+
+  getInstallJob: () =>
+    jsonFetch<{ job: PythonInstallJobSnapshot }>('/settings/python/install'),
+}

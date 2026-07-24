@@ -5,7 +5,7 @@ import {
   getDefaultWritePaths,
   type SandboxRuntimeConfig,
 } from '@anthropic-ai/sandbox-runtime'
-import { resolveUserDataRoot } from '@opptrix/shared'
+import { resolveUserDataRoot, resolvePythonRuntimeRoot } from '@opptrix/shared'
 import { buildGlobalDenyPaths } from '../deny.js'
 import type { WorkspaceGrant } from '../grants.js'
 import {
@@ -133,6 +133,7 @@ export async function buildSandboxConfigFromGrants(
   const allowRead = uniquePaths([
     ...grantRealpaths,
     ...systemReadAllowPaths(),
+    resolvePythonRuntimeRoot(),
   ])
 
   const allowWrite = uniquePaths([
@@ -209,7 +210,7 @@ export function buildSandboxConfigFromGrantPaths(
     },
     filesystem: {
       denyRead: uniquePaths([userData, homedir, path.join(homedir, '.ssh'), ...buildGlobalDenyPaths()]),
-      allowRead: uniquePaths([...grantPaths, ...systemReadAllowPaths()]),
+      allowRead: uniquePaths([...grantPaths, ...systemReadAllowPaths(), resolvePythonRuntimeRoot()]),
       allowWrite: uniquePaths([...rwPaths, ...systemWriteAllowPaths(), ...getDefaultWritePaths()]),
       denyWrite: uniquePaths([...buildGlobalDenyPaths(), ...roPaths]),
     },

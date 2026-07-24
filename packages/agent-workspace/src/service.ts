@@ -22,6 +22,8 @@ import { resolveAgentWorkspaceRoot, deleteSessionWorkspaceDirectory } from './pa
 import { QuotaTracker, DEFAULT_WORKSPACE_QUOTA_BYTES } from './quota.js'
 import { httpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 import { streamDownloadToFile } from './download.js'
+import { getPythonPlatformStatus } from './python/python-platform-status.js'
+import { startPythonInstallJob } from './python/install-job.js'
 import {
   ShellRunner,
   NetworkInstallStickyStore,
@@ -317,6 +319,37 @@ export class WorkspaceService {
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
     return this.shell.install(params, confirm)
+  }
+
+  pythonEnvStatus() {
+    return getPythonPlatformStatus()
+  }
+
+  ensurePython() {
+    return getPythonPlatformStatus().then(async status => {
+      if (status.ready) {
+        return {
+          ok: true,
+          ready: true,
+          active_source: status.active_source,
+          active_version: status.active_version,
+          message: status.message,
+        }
+      }
+      const job = startPythonInstallJob()
+      const installing = job.state === 'running' || job.state === 'queued'
+      return {
+        ok: false,
+        ready: false,
+        recommend_install: status.recommend_install,
+        message: installing
+          ? '正在安装 Opptrix 托管 Python，可在设置页查看进度。'
+          : job.state === 'failed'
+            ? job.message
+            : status.message,
+        install: job,
+      }
+    })
   }
 }
 

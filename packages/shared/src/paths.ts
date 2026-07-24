@@ -19,6 +19,11 @@ export function resolveProvidersDir(): string {
   return path.join(resolveUserDataRoot(), 'providers')
 }
 
+/** Opptrix 托管 Python 运行时根目录 (~/.opptrix/runtimes/python) */
+export function resolvePythonRuntimeRoot(): string {
+  return path.join(resolveUserDataRoot(), 'runtimes', 'python')
+}
+
 export function isDesktopRuntime(): boolean {
   return process.env.OPPTRIX_DESKTOP === '1' || process.env.OPPTRIX_DESKTOP === '1'
 }

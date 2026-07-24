@@ -51,6 +51,40 @@ export {
   resetSandboxSettingsStoreForTests,
 } from './sandbox-settings-store.js'
 export {
+  getPythonSettings,
+  savePythonSettings,
+  resetPythonSettingsStoreForTests,
+} from './python-settings-store.js'
+export {
+  resolvePythonRuntime,
+  resolveShellArgv,
+  type PythonActiveSource,
+  type PythonRuntimeStatus,
+} from './python/resolve-python.js'
+export { getPythonPlatformStatus } from './python/python-platform-status.js'
+export {
+  probePipIndexUrls,
+  resolvePreferredPipIndexUrl,
+  getPreferredPipIndexUrlSync,
+  getSortedPipIndexUrlsSync,
+  invalidatePipMirrorCache,
+  rotatePreferredPipMirror,
+  isPipMirrorNetworkFailure,
+  PIP_MIRROR_CACHE_TTL_MS,
+  resetPipMirrorCacheForTests,
+  readPipMirrorCacheFileForTests,
+} from './python/pip-mirrors.js'
+export {
+  getPythonInstallJobStatus,
+  startPythonInstallJob,
+  resetPythonInstallJobForTests,
+  setPythonInstallPipelineDepsForTests,
+  type PythonInstallJobSnapshot,
+  type PythonInstallJobState,
+  type PythonInstallPhase,
+  type PythonInstallPipelineDeps,
+} from './python/install-job.js'
+export {
   WorkspaceService,
   getWorkspaceService,
   resetWorkspaceService,

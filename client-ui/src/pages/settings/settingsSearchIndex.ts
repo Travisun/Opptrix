@@ -29,6 +29,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'mcp_servers', title: 'MCP 服务器', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具'] },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'sandbox', title: '沙盒环境', desc: '管理命令隔离环境的网络访问规则' },
+  { section: 'python', title: 'Python 环境', desc: '查看 Python 状态与镜像源配置' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
   { section: 'about', title: '关于 Opptrix', desc: '产品说明、版本更新、法律条款与帮助反馈' },
@@ -78,6 +79,10 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'sandbox', title: '永久允许的目标', desc: '出站访问白名单', keywords: ['白名单', '域名', '网络'] },
   { section: 'sandbox', title: '允许局域网访问', desc: '授权本地网络内的目标', keywords: ['局域网', '本地', '私网'] },
 
+  // Python 环境
+  { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
+  { section: 'python', title: '优先使用 Opptrix 托管', desc: '托管 Python 优先于系统环境', keywords: ['托管', '系统'] },
+
   // 翻译
   { section: 'translation', group: '翻译服务', title: '服务类型', desc: '离线优先或远程大模型', keywords: ['离线', '远程', 'offline', 'remote'] },
   { section: 'translation', group: '离线翻译', title: '离线翻译模型', desc: '本地下载 HY-MT 等模型', keywords: ['HY-MT', 'GGUF', '下载', '腾讯'] },
@@ -104,6 +109,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   mcp_servers: 'MCP 服务器',
   news_feed: '新闻订阅',
   sandbox: '沙盒环境',
+  python: 'Python 环境',
   translation: '翻译',
   multimodal: '多模态',
   about: '关于 Opptrix',

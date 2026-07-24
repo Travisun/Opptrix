@@ -12,6 +12,15 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
+import { resolveShellArgv } from '../python/resolve-python.js'
+import { getPythonSettings } from '../python-settings-store.js'
+import {
+  getPreferredPipIndexUrlSync,
+  invalidatePipMirrorCache,
+  isPipMirrorNetworkFailure,
+  resolvePreferredPipIndexUrl,
+  rotatePreferredPipMirror,
+} from '../python/pip-mirrors.js'
 import {
   assertEgressHostGrantable,
   buildNeedsNetworkEgressPayload,
@@ -84,6 +93,23 @@ function truncateStream(text: string, maxBytes: number): { text: string; truncat
   return { text: buf.subarray(0, maxBytes).toString('utf8'), truncated: true }
 }
 
+function isPipShellCommand(argv: readonly string[]): boolean {
+  return argv.some(token => {
+    const base = path.basename(String(token)).toLowerCase()
+    return base === 'pip' || base === 'pip3' || base.startsWith('pip')
+  })
+}
+
+function shouldInvalidatePipMirrorCache(
+  argv: readonly string[],
+  exitCode: number | null,
+  stderr: string,
+): boolean {
+  if (exitCode === 0) return false
+  if (!isPipShellCommand(argv)) return false
+  return isPipMirrorNetworkFailure(stderr)
+}
+
 function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
   cwdAbs: string,
@@ -104,6 +130,11 @@ function sanitizeChildEnv(
   out.npm_config_prefix = cwdAbs
   out.npm_config_global = 'false'
   out.NPM_CONFIG_GLOBAL = 'false'
+  const pipUrls = getPythonSettings().pip_index_urls
+  const pipMirror = getPreferredPipIndexUrlSync(pipUrls)
+  if (pipMirror) {
+    out.PIP_INDEX_URL = pipMirror
+  }
   return out
 }
 
@@ -397,8 +428,8 @@ export class ShellRunner {
   ): Promise<ShellRunResult> {
     await this.assertShellReady(true)
 
-    const argv = [...params.argv]
-    assertAllowedShellArgv(argv)
+    const resolvedArgv = await resolveShellArgv(params.argv)
+    assertAllowedShellArgv(resolvedArgv)
 
     const cwdRel = params.cwdRel ?? ''
     const { grant, abs: cwdAbs } = await this.deps.gatePath(
@@ -408,7 +439,7 @@ export class ShellRunner {
     )
     assertReadable(grant)
 
-    const normalizedArgv = assertPackageInstallPolicy(argv, cwdAbs, grant.abs_path)
+    const normalizedArgv = assertPackageInstallPolicy(resolvedArgv, cwdAbs, grant.abs_path)
 
     const diagnostic = isNetworkDiagnosticCommand(normalizedArgv)
     let diagnosticTargetHost: string | undefined
@@ -453,6 +484,8 @@ export class ShellRunner {
 
     const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const started = Date.now()
+
+    await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
 
     return withSandboxMutex(async () => {
       const grants = await this.deps.listGrants(params.sessionId)
@@ -535,6 +568,14 @@ export class ShellRunner {
         shellResult.needs_network_egress = buildNeedsNetworkEgressPayload(suggested)
       }
 
+      if (shouldInvalidatePipMirrorCache(normalizedArgv, result.exitCode, stderr.text)) {
+        invalidatePipMirrorCache()
+        const pipUrls = getPythonSettings().pip_index_urls
+        if (pipUrls.length > 1) {
+          rotatePreferredPipMirror(pipUrls)
+        }
+      }
+
       return shellResult
     })
   }
@@ -543,9 +584,10 @@ export class ShellRunner {
     params: ShellInstallParams,
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
-    const argv = params.manager === 'pip'
+    const rawArgv = params.manager === 'pip'
       ? buildPipInstallArgv(params.packages)
       : buildNpmInstallArgv(params.packages)
+    const argv = await resolveShellArgv(rawArgv)
     return this.run({
       sessionId: params.sessionId,
       rootId: params.rootId,

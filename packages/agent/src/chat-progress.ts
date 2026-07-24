@@ -192,6 +192,8 @@ const TOOL_LABELS: Record<string, string> = {
   shell_run: '运行命令',
   shell_install: '安装依赖',
   shell_platform_status: '检查命令隔离环境',
+  python_env_status: '查看 Python 环境',
+  ensure_python: '确认 Python 就绪',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -316,6 +318,8 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       return mgr ? `${base} · ${mgr} · ${pkgHint}` : base
     }
     case 'shell_platform_status':
+    case 'python_env_status':
+    case 'ensure_python':
       return base
     default:
       return ref ? `${base} · ${ref}` : base
@@ -593,6 +597,8 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
     case 'shell_run':
     case 'shell_install':
     case 'shell_platform_status':
+    case 'python_env_status':
+    case 'ensure_python':
       return summarizeShellRunResult(result)
     default:
       return null
