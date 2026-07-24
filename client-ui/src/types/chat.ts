@@ -1,5 +1,36 @@
 import type { ChatToolStep } from './chatProgress'
 
+export interface ExpertIcon {
+  kind: 'emoji' | 'icon'
+  value: string
+}
+
+export interface ExpertCatalogEntry {
+  id: string
+  title: string
+  summary: string
+  icon: ExpertIcon
+  tags: string[]
+  official?: boolean
+  version?: string
+  source?: 'local' | 'builtin'
+}
+
+export interface ExpertDefinition extends ExpertCatalogEntry {
+  persona: string
+  defaultPacks: string[]
+  defaultResearchTier: 'L1' | 'L2' | 'L3'
+  defaultSessionTitle?: string
+  complianceVersion: string
+}
+
+export interface ExpertCatalog {
+  experts: ExpertCatalogEntry[]
+  source: 'local' | 'remote'
+  fetchedAt: string
+  nextCursor?: string
+}
+
 export interface SessionMeta {
   id: string
   title: string
@@ -9,6 +40,8 @@ export interface SessionMeta {
   model?: string
   archivedAt?: string | null
   archiveFolderId?: string | null
+  expertId?: string | null
+  expertIcon?: ExpertIcon | null
 }
 
 export interface SessionArchiveFolder {

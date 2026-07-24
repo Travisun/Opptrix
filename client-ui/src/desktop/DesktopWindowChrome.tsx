@@ -225,7 +225,8 @@ export default function DesktopWindowChrome({
   const isSettings = viewMode === 'settings'
   const isNews = viewMode === 'news'
   const isMarket = viewMode === 'market'
-  const isStandalonePanel = isNews || isMarket
+  const isExperts = viewMode === 'experts'
+  const isStandalonePanel = isNews || isMarket || isExperts
   const chromeTop = desktopChromeTopOffset()
   const chromeBand = desktopChromeBandHeight()
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen, sidebarWidth)

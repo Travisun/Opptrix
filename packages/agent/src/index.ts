@@ -82,7 +82,19 @@ export {
   type ToolRoutePlan,
   type RouteConfidence,
 } from './mcp/tool-route-plan.js'
-export { SessionStore, setSessionPersistHooks, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef } from './sessions.js'
+export { SessionStore, setSessionPersistHooks, sessionToMeta, type SessionMeta, type SessionRecord, type DisplayMessage, type SessionContextRef, type SessionForkContextRef, type SessionSelectionContextRef, type SessionArticleContextRef, type CreateSessionOptions } from './sessions.js'
+export {
+  getExpertCatalogService,
+  ExpertCatalogService,
+  resetExpertCatalogServiceForTests,
+} from './experts/catalog-service.js'
+export {
+  assembleSystemPrompt,
+  buildLayer0Baseline,
+  buildRolePersona,
+  sanitizeExpertPersona,
+  DEFAULT_RESEARCHER_PERSONA,
+} from './experts/prompt-assembler.js'
 export { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS, type SessionArchiveFolder } from './archive-folders.js'
 export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'

@@ -439,6 +439,258 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/chat` 使用 `@opptrix/agent` 的 `AgentEngine`，内置 tools 调用同一 `ResearchHub`。
 
+### Experts（专家目录）
+
+内置专家来自 `catalog.mock.json`（`LocalJsonExpertProvider`，`source: "builtin"`）；用户自建专家持久化于 user-store `local_experts`（`source: "local"`）。`ExpertCatalogService` 合并二者；`ExpertCatalog.source` 响应字段仍为 `"local"`。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/experts` | 分页列表；响应为 `ExpertCatalog` |
+| GET | `/api/experts/:id` | 单条完整定义；响应 `{ expert: ExpertDefinition }` |
+| POST | `/api/experts` | 创建本地专家；响应 `{ expert: ExpertDefinition }`（201） |
+| PATCH | `/api/experts/:id` | 更新本地专家（内置拒绝 403） |
+| DELETE | `/api/experts/:id` | 删除本地专家（内置拒绝 403） |
+
+**GET `/api/experts` 查询参数**
+
+| 参数 | 类型 | 说明 |
+|------|------|------|
+| `q` | string | 可选；匹配 `title` / `summary` / `tags`（不区分大小写） |
+| `tag` | string | 可选；精确匹配某一 tag |
+| `scope` | `"public" \| "personal" \| "all"` | 可选；默认 `all`（公开=内置，个人=本地） |
+| `limit` | number | 可选；默认 50，范围 1–100 |
+| `cursor` | string | 可选；上一页 `nextCursor`（数值 offset） |
+
+**POST `/api/experts` 请求体**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `title` | string | 必填；空白 → 400 `请填写专家名称` |
+| `summary` | string | 必填；空白 → 400 `请填写专家简介` |
+| `persona` | string | 必填；经 `sanitizeExpertPersona` 消毒；空白 → 400 `请填写角色设定`；消毒失败 → 400 `角色设定无效，请修改后重试` |
+| `tags` | string[] | 可选；trim 后去重，最多 8 个 |
+
+创建成功后服务端自动写入（客户端不可指定）：`id`（由 `title` slug 为 `local-{slug}`，冲突加后缀）、`source: "local"`、`official: false`、`icon`（默认 expert 图标）、`defaultPacks: ["fundamentals", "instrument_analytics"]`、`defaultResearchTier: "L2"`、`defaultSessionTitle`（同 `title`）、`complianceVersion: "1"`、`version: "1.0.0"`。
+
+```http
+POST /api/experts
+Content-Type: application/json
+
+{
+  "title": "行业研究助手",
+  "summary": "聚焦产业链景气与竞争格局的结构化解读",
+  "persona": "你是一位行业研究助手，熟悉 A 股中游制造…",
+  "tags": ["行业", "产业链"]
+}
+```
+
+```json
+{
+  "expert": {
+    "id": "local-hang-ye-yan-jiu-zhu-shou",
+    "title": "行业研究助手",
+    "summary": "聚焦产业链景气与竞争格局的结构化解读",
+    "icon": { "kind": "icon", "value": "expert" },
+    "tags": ["行业", "产业链"],
+    "official": false,
+    "source": "local",
+    "version": "1.0.0",
+    "persona": "你是一位行业研究助手…",
+    "defaultPacks": ["fundamentals", "instrument_analytics"],
+    "defaultResearchTier": "L2",
+    "defaultSessionTitle": "行业研究助手",
+    "complianceVersion": "1"
+  }
+}
+```
+
+**PATCH `/api/experts/:id` 请求体**：`title` / `summary` / `persona` / `tags` 均可选；仅 `source: "local"` 可更新。内置专家 → 403 `{ "error": "内置专家不可编辑" }`；id 不存在 → 404。字段校验与 POST 相同；`persona` 省略时保留原值。
+
+```http
+PATCH /api/experts/local-hang-ye-yan-jiu-zhu-shou
+Content-Type: application/json
+
+{ "title": "行业研究助手 v2", "persona": "更新后的角色设定…" }
+```
+
+响应 `{ expert: ExpertDefinition }`。
+
+**DELETE `/api/experts/:id`**
+
+- 成功：`{ "ok": true, "deleted": "<id>" }`
+- 404：id 不存在 `{ "error": "expert not found" }`
+- 403：内置专家 `{ "error": "内置专家不可删除" }`
+
+删除仅移除目录条目；**已有绑定该专家的会话与消息不受影响**（之后聊天因目录无定义而回退默认研究员 persona）。
+
+> persona **不**快照进会话消息；每轮从目录加载并消毒。详见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
+
+**`ExpertCatalogEntry`（列表项，不含 `persona`）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 专家唯一 id（如 `equity-analysis`） |
+| `title` | string | 展示标题 |
+| `summary` | string | 一句话简介 |
+| `icon` | `{ kind: "emoji" \| "icon"; value: string }` | 元数据；UI 统一固定 Fluent 图标 |
+| `tags` | string[] | 分类标签 |
+| `official` | boolean | 可选；官方内置 |
+| `source` | `"builtin" \| "local"` | 可选；来源 |
+| `version` | string | 可选；目录版本 |
+
+**`ExpertCatalog` 响应**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `experts` | `ExpertCatalogEntry[]` | 当前页 |
+| `source` | `"local" \| "remote"` | 一期恒为 `"local"` |
+| `fetchedAt` | string | ISO 8601 |
+| `nextCursor` | string | 可选；有更多时返回 |
+
+**`ExpertDefinition`（详情，扩展列表项）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `persona` | string | 角色 persona（注入 system prompt Layer 1；服务端会消毒，见 [EXPERT-GUIDE §3](./EXPERT-GUIDE.md#3-角色设定persona写法指导)） |
+| `defaultPacks` | string[] | 创建会话后自动激活的工具包 id |
+| `defaultResearchTier` | `"L1" \| "L2" \| "L3"` | 默认研究档位 |
+| `defaultSessionTitle` | string | 可选；新建会话默认标题 |
+| `complianceVersion` | string | persona 合规版本标记 |
+
+**示例**
+
+```json
+{
+  "experts": [
+    {
+      "id": "macro-strategy",
+      "title": "宏观策略顾问",
+      "summary": "解读宏观周期、政策取向与跨资产联动，帮你建立自上而下视角",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["宏观", "策略", "政策"],
+      "official": true,
+      "source": "builtin",
+      "version": "1.0.0"
+    }
+  ],
+  "source": "local",
+  "fetchedAt": "2026-07-24T12:00:00.000Z"
+}
+```
+
+```json
+{
+  "expert": {
+    "id": "equity-analysis",
+    "title": "个股分析助手",
+    "summary": "聚焦单只标的的基本面、估值与趋势结构，给出结构化研究解读",
+    "icon": { "kind": "icon", "value": "expert" },
+    "tags": ["个股", "基本面", "估值"],
+    "official": true,
+    "source": "builtin",
+    "version": "1.0.0",
+    "persona": "你是一位个股分析助手，擅长从商业模式、财务质量…",
+    "defaultPacks": ["fundamentals", "instrument_analytics"],
+    "defaultResearchTier": "L3",
+    "defaultSessionTitle": "个股分析",
+    "complianceVersion": "1"
+  }
+}
+```
+
+**错误**
+
+| 状态码 | 场景 | 响应体 `error` 示例 |
+|--------|------|---------------------|
+| 404 | `GET` / `PATCH` / `DELETE` 时 id 不存在 | `expert not found` |
+| 403 | `PATCH` 内置专家 | `内置专家不可编辑` |
+| 403 | `DELETE` 内置专家 | `内置专家不可删除` |
+| 400 | POST 缺 `title` / `summary` / `persona` | `请填写专家名称` / `请填写专家简介` / `请填写角色设定` |
+| 400 | persona 消毒失败（空、>4000 字、命中注入模式） | `角色设定无效，请修改后重试` |
+| 400 | PATCH 后 `title` / `summary` 为空 | `请填写专家名称` / `请填写专家简介` |
+| 400 | PATCH 本地专家 id 存在但 repo 层找不到 | `找不到该专家` |
+
+前端客户端：`listExperts` / `getExpert` / `createExpert` / `updateExpert` / `deleteExpert`（`client-ui/src/api/client.ts`）。
+
+**设计自己的专家**（persona 写法、Layer 0/1 关系、产品交互）：见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
+
+### Sessions（会话）
+
+会话元数据持久化于 user-store；列表与创建经下列 REST。带 `expertId` 的会话在侧栏显示 `expertIcon`，并在 Agent 每轮 system prompt 注入对应 persona（见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/sessions` | `{ sessions: SessionMeta[] }` 活跃会话（含 `expertId` / `expertIcon`） |
+| POST | `/api/sessions` | 创建会话；body 见下；响应 `{ session: SessionMeta }` |
+| GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
+
+**POST `/api/sessions` body**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `title` | string | 可选；省略时：无 `expertId` 为「新对话」，有 `expertId` 为专家的 `defaultSessionTitle` 或 `title` |
+| `expertId` | string | 可选；须存在于专家目录；创建后写入 `expertId` 与 `expertIcon` |
+
+**`SessionMeta`（`GET /api/sessions` / `POST` 成功响应中的 `session`）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 会话 id |
+| `title` | string | 标题 |
+| `createdAt` / `updatedAt` | string | ISO 8601 |
+| `model` | string | 可选；`providerId:modelName` |
+| `archivedAt` | string \| null | 归档时间 |
+| `archiveFolderId` | string \| null | 归档文件夹 |
+| `expertId` | string \| null | 绑定专家 id；`null` 为默认投研研究员会话 |
+| `expertIcon` | `{ kind: "emoji" \| "icon"; value: string } \| null` | 侧栏图标；无专家时为 `null` |
+
+**示例 — 默认研究员会话**
+
+```json
+{ "title": "新对话" }
+```
+
+```json
+{
+  "session": {
+    "id": "…",
+    "title": "新对话",
+    "createdAt": "2026-07-24T12:00:00.000Z",
+    "updatedAt": "2026-07-24T12:00:00.000Z",
+    "expertId": null,
+    "expertIcon": null
+  }
+}
+```
+
+**示例 — 专家会话**
+
+```json
+{ "expertId": "macro-strategy" }
+```
+
+```json
+{
+  "session": {
+    "id": "…",
+    "title": "宏观策略研讨",
+    "createdAt": "2026-07-24T12:00:00.000Z",
+    "updatedAt": "2026-07-24T12:00:00.000Z",
+    "expertId": "macro-strategy",
+    "expertIcon": { "kind": "emoji", "value": "🌐" }
+  }
+}
+```
+
+**错误**
+
+| 状态码 | 场景 |
+|--------|------|
+| 400 | `expertId` 不在目录中（`{ "error": "未知专家：…" }`） |
+| 404 | `GET /api/sessions/:id` 时会话不存在 |
+
+前端客户端：`createSession({ title?, expertId? })`（`client-ui/src/api/client.ts`）。
+
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
 工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` 等）与会话文件夹授权见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与下方 grants 路由。

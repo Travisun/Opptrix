@@ -843,9 +843,102 @@ app.get('/api/templates', async () => ({ templates: listTemplates() }))
 
 app.get('/api/sessions', async () => ({ sessions: agent.listSessions() }))
 
-app.post<{ Body: { title?: string } }>('/api/sessions', async (req) => {
-  const session = agent.createSession(req.body?.title)
-  return { session: { id: session.id, title: session.title, createdAt: session.createdAt, updatedAt: session.updatedAt } }
+app.get<{ Querystring: { q?: string; tag?: string; limit?: string; cursor?: string; scope?: string } }>(
+  '/api/experts',
+  async (req) => {
+    const limitRaw = req.query.limit ? Number.parseInt(req.query.limit, 10) : undefined
+    const scopeRaw = req.query.scope?.trim()
+    const scope = scopeRaw === 'public' || scopeRaw === 'personal' || scopeRaw === 'all'
+      ? scopeRaw
+      : undefined
+    const catalog = await agent.listExperts({
+      q: req.query.q,
+      tag: req.query.tag,
+      limit: Number.isFinite(limitRaw) ? limitRaw : undefined,
+      cursor: req.query.cursor,
+      scope,
+    })
+    return catalog
+  },
+)
+
+app.get<{ Params: { id: string } }>('/api/experts/:id', async (req, reply) => {
+  const expert = await agent.getExpert(req.params.id)
+  if (!expert) return reply.code(404).send({ error: 'expert not found' })
+  return { expert }
+})
+
+app.post<{
+  Body: { title?: string; summary?: string; persona?: string; tags?: string[] }
+}>('/api/experts', async (req, reply) => {
+  const title = String(req.body?.title ?? '').trim()
+  const summary = String(req.body?.summary ?? '').trim()
+  const persona = String(req.body?.persona ?? '').trim()
+  if (!title) return reply.code(400).send({ error: '请填写专家名称' })
+  if (!summary) return reply.code(400).send({ error: '请填写专家简介' })
+  if (!persona) return reply.code(400).send({ error: '请填写角色设定' })
+  const tags = Array.isArray(req.body?.tags)
+    ? req.body.tags.map(t => String(t).trim()).filter(Boolean)
+    : undefined
+  try {
+    const expert = agent.createExpert({ title, summary, persona, tags })
+    return reply.code(201).send({ expert })
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '创建专家失败'
+    return reply.code(400).send({ error: message })
+  }
+})
+
+app.patch<{
+  Params: { id: string }
+  Body: { title?: string; summary?: string; persona?: string; tags?: string[] }
+}>('/api/experts/:id', async (req, reply) => {
+  const existing = await agent.getExpert(req.params.id)
+  if (!existing) return reply.code(404).send({ error: 'expert not found' })
+  if (existing.source !== 'local') {
+    return reply.code(403).send({ error: '内置专家不可编辑' })
+  }
+  const patch: import('@opptrix/shared').ExpertPatchInput = {}
+  if (req.body?.title !== undefined) patch.title = String(req.body.title)
+  if (req.body?.summary !== undefined) patch.summary = String(req.body.summary)
+  if (req.body?.persona !== undefined) patch.persona = String(req.body.persona)
+  if (req.body?.tags !== undefined) {
+    patch.tags = Array.isArray(req.body.tags)
+      ? req.body.tags.map(t => String(t).trim()).filter(Boolean)
+      : []
+  }
+  try {
+    const expert = agent.updateExpert(req.params.id, patch)
+    return { expert }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : '更新专家失败'
+    return reply.code(400).send({ error: message })
+  }
+})
+
+app.delete<{ Params: { id: string } }>('/api/experts/:id', async (req, reply) => {
+  const existing = await agent.getExpert(req.params.id)
+  if (!existing) return reply.code(404).send({ error: 'expert not found' })
+  if (existing.source !== 'local' && existing.official) {
+    return reply.code(403).send({ error: '内置专家不可删除' })
+  }
+  const deleted = agent.deleteExpert(req.params.id)
+  if (!deleted) return reply.code(403).send({ error: '内置专家不可删除' })
+  return { ok: true, deleted: req.params.id }
+})
+
+app.post<{ Body: { title?: string; expertId?: string } }>('/api/sessions', async (req, reply) => {
+  try {
+    const session = agent.createSession({
+      title: req.body?.title,
+      expertId: req.body?.expertId,
+    })
+    return { session: agent.sessionMeta(session) }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'create session failed'
+    if (message.includes('未知专家')) return reply.code(400).send({ error: message })
+    throw e
+  }
 })
 
 app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {

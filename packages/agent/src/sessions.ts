@@ -4,6 +4,8 @@ import type { ChatMessage } from './llm/provider.js'
 import type { ChatToolStep } from './chat-progress.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
 
+import type { ExpertIcon } from '@opptrix/shared'
+
 export type { ChatToolStep }
 
 const NAMESPACE = 'session'
@@ -17,6 +19,14 @@ export interface SessionMeta {
   model?: string
   archivedAt?: string | null
   archiveFolderId?: string | null
+  expertId?: string | null
+  expertIcon?: ExpertIcon | null
+}
+
+export interface CreateSessionOptions {
+  title?: string
+  expertId?: string | null
+  expertIcon?: ExpertIcon | null
 }
 
 export interface DisplayMessage {
@@ -116,6 +126,8 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     ...raw,
     turns: raw.turns ?? [],
     contextRef: raw.contextRef ?? null,
+    expertId: raw.expertId ?? null,
+    expertIcon: raw.expertIcon ?? null,
   }
   return migrateTurns(record)
 }
@@ -129,7 +141,13 @@ function toMeta(raw: SessionRecord): SessionMeta {
     model: raw.model,
     archivedAt: raw.archivedAt ?? null,
     archiveFolderId: raw.archiveFolderId ?? null,
+    expertId: raw.expertId ?? null,
+    expertIcon: raw.expertIcon ?? null,
   }
+}
+
+export function sessionToMeta(raw: SessionRecord): SessionMeta {
+  return toMeta(raw)
 }
 
 function isArchived(record: SessionRecord): boolean {
@@ -225,7 +243,11 @@ export class SessionStore {
     return normalizeRecord(raw)
   }
 
-  create(title = '新对话'): SessionRecord {
+  create(opts?: string | CreateSessionOptions): SessionRecord {
+    const normalized: CreateSessionOptions = typeof opts === 'string'
+      ? { title: opts }
+      : opts ?? {}
+    const title = normalized.title?.trim() || '新对话'
     const now = new Date().toISOString()
     const record: SessionRecord = {
       id: randomUUID(),
@@ -235,6 +257,8 @@ export class SessionStore {
       messages: [],
       turns: [],
       contextRef: null,
+      expertId: normalized.expertId ?? null,
+      expertIcon: normalized.expertIcon ?? null,
     }
     writeRecord(record)
     return record
@@ -314,6 +338,8 @@ export class SessionStore {
       createdAt: now,
       updatedAt: now,
       model: source.model,
+      expertId: source.expertId ?? null,
+      expertIcon: source.expertIcon ?? null,
       messages: [],
       turns: [],
       contextRef: {

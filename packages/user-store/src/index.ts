@@ -11,4 +11,5 @@ export {
   initFreeProviderThrottleSchema,
 } from './free-provider-throttle.js'
 export { McpServersRepository } from './mcp-servers.js'
+export { LocalExpertsRepository } from './local-experts.js'
 export { UserDataStore, getUserDataStore } from './store.js'
