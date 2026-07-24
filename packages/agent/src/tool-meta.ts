@@ -584,6 +584,16 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；比手写 pip/npm 更安全。',
     compliance: 'manager=pip|npm；联网安装需用户确认或本会话 sticky；禁止 -g/--user。',
   },
+  python_env_status: {
+    packId: 'workspace',
+    usageGuide: '用户问 Python 环境、版本、是否可用时首选；运行脚本前可先确认 active_source。',
+    compliance: '只读；返回 ready/active_source/版本摘要；勿暴露内部路径细节给用户文案。',
+  },
+  ensure_python: {
+    packId: 'workspace',
+    usageGuide: '运行 Python 脚本或 pip 安装前，确认环境就绪；未就绪时会启动托管安装或引导去设置页查看进度。',
+    compliance: 'ready=false 时返回 recommend_install 与 install 进度；勿假装已安装。',
+  },
 }
 
 /** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */

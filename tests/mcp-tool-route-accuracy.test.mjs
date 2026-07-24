@@ -71,6 +71,7 @@ const PRIMARY_CASES = [
   { message: 'ping 一下 baidu.com', expectPrimary: 'shell_run', intent: 'workspace_shell' },
   { message: '测一下到百度的网络延迟', expectPrimary: 'http_fetch', intent: 'workspace_network_latency' },
   { message: 'pip install requests 装进工作区', expectPrimary: 'shell_install', intent: 'workspace_shell_install' },
+  { message: '检查一下 Python 环境', expectPrimary: 'python_env_status', intent: 'python_env' },
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },

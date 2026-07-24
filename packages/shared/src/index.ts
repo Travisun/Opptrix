@@ -46,7 +46,21 @@ export {
 } from './outbound-network.js'
 export { outboundFetch, formatOutboundFetchError } from './outbound-fetch.js'
 export { ok, fail, elapsedSince } from './result.js'
-export { resolveUserDataRoot, resolveProvidersDir, isDesktopRuntime, resolveProjectRoot } from './paths.js'
+export {
+  resolveUserDataRoot,
+  resolveProvidersDir,
+  resolvePythonRuntimeRoot,
+  isDesktopRuntime,
+  resolveProjectRoot,
+} from './paths.js'
+export {
+  DEFAULT_PIP_INDEX_URLS,
+  DEFAULT_PYTHON_SETTINGS,
+  normalizePythonSettings,
+  validatePythonSettingsInput,
+  type PythonSettings,
+  type ValidatePythonSettingsResult,
+} from './python-settings.js'
 export {
   DEFAULT_SANDBOX_SETTINGS,
   normalizeSandboxDomainLine,

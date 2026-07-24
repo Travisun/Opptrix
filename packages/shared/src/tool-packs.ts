@@ -231,6 +231,8 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   shell_platform_status: 'workspace',
   shell_run: 'workspace',
   shell_install: 'workspace',
+  python_env_status: 'workspace',
+  ensure_python: 'workspace',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

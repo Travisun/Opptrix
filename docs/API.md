@@ -351,6 +351,58 @@ POST /api/research
 
 Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "network_egress"`）见下方 Shell 说明与 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
 
+### Python 环境设置
+
+运行 Python 脚本与 `pip` 安装依赖时的解释器选择与镜像源。持久化于用户 SQLite：`preference` / `python_settings`。设置页入口：**设置 → Python 环境**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/python` | 读取当前设置 |
+| GET | `/api/settings/python/status` | 探测系统 / Opptrix 托管 Python 与当前采用源 |
+| PUT | `/api/settings/python` | 校验并保存镜像列表与优先托管开关 |
+| POST | `/api/settings/python/install` | 启动托管 Python 安装（幂等：进行中返回当前 job） |
+| GET | `/api/settings/python/install` | 查询安装任务状态与进度 snapshot |
+
+**GET `/api/settings/python/status` 响应（摘要）**
+
+```json
+{
+  "status": {
+    "active_source": "system",
+    "ready": true,
+    "recommend_install": false,
+    "message": "已检测到系统 Python，可直接运行脚本与安装依赖。"
+  }
+}
+```
+
+**PUT body**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `pip_index_urls` | string[] | pip 镜像 URL 列表（首个用于 `PIP_INDEX_URL`） |
+| `prefer_opptrix_python` | boolean | 默认 `false`；为 `true` 且托管已安装时优先于系统 Python |
+
+**GET `/api/settings/python/install` 响应（摘要）**
+
+```json
+{
+  "job": {
+    "state": "running",
+    "message": "正在下载 Python 安装包…",
+    "accepted": true,
+    "phase": "download",
+    "percent": 35,
+    "bytes_downloaded": 5242880,
+    "bytes_total": 15728640,
+    "steps": ["准备安装", "下载安装包", "解压文件", "配置环境", "安装 pip", "验证安装"],
+    "error": null
+  }
+}
+```
+
+`POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
+
 ### 外部 MCP Server
 
 用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429、远程 outputSchema 校验失败（如 JSON-RPC `-32602`）、缺 API Key 等鉴权错误后 failover 至下一外部源或本地 ToolRegistry（最终兜底）；降级结果可含 `_mcp.configHint` 指向设置页补密钥。

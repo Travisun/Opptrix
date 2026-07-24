@@ -169,6 +169,18 @@ const INTENT_RULES: IntentRule[] = [
     hint: '已打开的外部网页 → browser_snapshot；勿用 get_instrument_snapshot',
   },
   {
+    intent: 'python_env',
+    priority: 92,
+    patterns: [
+      /python.*环境|检查.*python|python.*版本|有没有.*python|python.*就绪/i,
+      /ensure_python|python_env_status/i,
+    ],
+    preferredTools: ['python_env_status', 'ensure_python', 'shell_platform_status'],
+    avoidTools: ['get_system_info'],
+    confidence: 'high',
+    hint: '问 Python 环境/版本 → python_env_status；运行脚本前 ensure_python 确认就绪',
+  },
+  {
     intent: 'workspace_network_latency',
     priority: 91,
     patterns: [

@@ -510,6 +510,34 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         }
       },
     },
+    {
+      name: 'python_env_status',
+      category: '工作区',
+      description: '查看当前 Python 环境状态（系统 / Opptrix 托管 / 当前采用）；运行脚本前可先调用',
+      parameters: S({}),
+      handler: async () => {
+        try {
+          requireBridge()
+          return await ws.pythonEnvStatus()
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'ensure_python',
+      category: '工作区',
+      description: '确认 Python 是否可用；不可用时可在设置页安装 Opptrix 托管版本，或返回安装进度',
+      parameters: S({}),
+      handler: async () => {
+        try {
+          requireBridge()
+          return await ws.ensurePython()
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
   ]
 
   return tools.map(t => ({ ...t, meta: TOOL_META[t.name] }))

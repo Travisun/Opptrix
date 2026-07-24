@@ -3,6 +3,7 @@ import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BotRegular,
   ImageRegular,
+  CodeRegular,
   InfoRegular,
   NewsRegular,
   SearchRegular,
@@ -38,6 +39,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'mcp_servers', label: 'MCP 服务器', icon: PlugConnectedRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
   { id: 'sandbox', label: '沙盒环境', icon: ShieldRegular },
+  { id: 'python', label: 'Python 环境', icon: CodeRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
   { id: 'about', label: '关于 Opptrix', icon: InfoRegular },
@@ -388,6 +390,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '订阅源与更新频率'
     case 'sandbox':
       return '管理命令隔离环境的网络访问规则'
+    case 'python':
+      return '查看 Python 状态、配置镜像源与安装选项'
     case 'translation':
       return '离线翻译与远程回退'
     case 'multimodal':

@@ -32,6 +32,7 @@ import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } fro
 import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
+import { registerPythonSettingsRoutes } from './python-settings-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
@@ -1301,6 +1302,7 @@ async function bootstrap() {
 
   await registerNewsRoutes(app)
   registerSandboxSettingsRoutes(app)
+  registerPythonSettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
   registerSearchRoutes(app, hub, agent)

@@ -18,6 +18,7 @@ export function buildGlobalDenyPaths(): string[] {
     'portfolio.json',
     'market-data',
     'browser-screenshots',
+    'runtimes',
   ]
   return [
     resolveAgentPrivilegesRoot(),
