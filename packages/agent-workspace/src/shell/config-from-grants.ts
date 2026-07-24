@@ -9,8 +9,9 @@ import { resolveUserDataRoot } from '@opptrix/shared'
 import { buildGlobalDenyPaths } from '../deny.js'
 import type { WorkspaceGrant } from '../grants.js'
 import {
-  networkDomainsForInstallAllowed,
-  networkDomainsWhenDenied,
+  getGrantableMergedAllowedDomains,
+  getGrantableMergedAllowedDomainsSync,
+  mergeAllowedNetworkDomains,
 } from './network-policy.js'
 import { resolveBundledSandboxBinConfig } from './resolve-sandbox-bins.js'
 
@@ -95,6 +96,12 @@ function systemWriteAllowPaths(): string[] {
 export interface BuildSandboxConfigOptions {
   grants: readonly WorkspaceGrant[]
   allowNetworkInstall: boolean
+  /** 用户确认后的 ping/traceroute 目标主机 */
+  diagnosticTargetHosts?: readonly string[]
+  /** 本会话已 grant 的出站 host */
+  sessionEgress?: { hosts: readonly string[] }
+  /** 仅此一次 grant 的 host（不写入 session store） */
+  onceEgressHosts?: readonly string[]
 }
 
 /** 从 session grants 构建 SandboxRuntimeConfig */
@@ -139,9 +146,17 @@ export async function buildSandboxConfigFromGrants(
     ...roPaths,
   ])
 
-  const allowedDomains = opts.allowNetworkInstall
-    ? networkDomainsForInstallAllowed()
-    : networkDomainsWhenDenied()
+  const sessionHosts = [
+    ...(opts.sessionEgress?.hosts ?? []),
+    ...(opts.onceEgressHosts ?? []),
+  ]
+  const configuredDomains = await getGrantableMergedAllowedDomains()
+  const allowedDomains = mergeAllowedNetworkDomains({
+    allowInstall: opts.allowNetworkInstall,
+    diagnosticTargets: opts.diagnosticTargetHosts,
+    sessionHosts,
+    configuredDomains,
+  })
 
   return {
     ...resolveBundledSandboxBinConfig(),
@@ -165,6 +180,9 @@ export async function buildSandboxConfigFromGrants(
 export function buildSandboxConfigFromGrantPaths(
   grants: Array<{ abs_path: string; mode: 'ro' | 'rw' }>,
   allowNetworkInstall: boolean,
+  diagnosticTargetHosts?: readonly string[],
+  sessionEgress?: { hosts: readonly string[] },
+  onceEgressHosts?: readonly string[],
 ): SandboxRuntimeConfig {
   const userData = path.resolve(resolveUserDataRoot())
   const homedir = os.homedir()
@@ -172,12 +190,21 @@ export function buildSandboxConfigFromGrantPaths(
   const roPaths = grants.filter(g => g.mode === 'ro').map(g => path.resolve(g.abs_path))
   const grantPaths = grants.map(g => path.resolve(g.abs_path))
 
+  const sessionHosts = [
+    ...(sessionEgress?.hosts ?? []),
+    ...(onceEgressHosts ?? []),
+  ]
+  const configuredDomains = getGrantableMergedAllowedDomainsSync()
+
   return {
     ...resolveBundledSandboxBinConfig(),
     network: {
-      allowedDomains: allowNetworkInstall
-        ? networkDomainsForInstallAllowed()
-        : networkDomainsWhenDenied(),
+      allowedDomains: mergeAllowedNetworkDomains({
+        allowInstall: allowNetworkInstall,
+        diagnosticTargets: diagnosticTargetHosts,
+        sessionHosts,
+        configuredDomains,
+      }),
       deniedDomains: [],
     },
     filesystem: {

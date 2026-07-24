@@ -49,31 +49,50 @@ export function assertAllowedProtocol(url: URL): void {
   }
 }
 
-export async function assertAllowedHost(url: URL): Promise<void> {
+export async function assertAllowedHost(
+  url: URL,
+  opts?: { allowLan?: boolean },
+): Promise<void> {
   assertAllowedProtocol(url)
   const host = url.hostname.toLowerCase()
   if (!host) throw new SsrfBlockedError('无效主机名')
-  if (BLOCKED_HOSTNAMES.has(host)) throw new SsrfBlockedError('不允许访问本地地址')
-  if (host.endsWith('.localhost') || host.endsWith('.local')) {
-    throw new SsrfBlockedError('不允许访问本地地址')
+
+  if (METADATA_IPS.has(host)) {
+    throw new SsrfBlockedError('不允许访问私有或本地网络地址')
   }
 
-  if (net.isIP(host)) {
-    if (isBlockedIp(host)) throw new SsrfBlockedError('不允许访问私有或本地网络地址')
+  if (!opts?.allowLan) {
+    if (BLOCKED_HOSTNAMES.has(host)) throw new SsrfBlockedError('不允许访问本地地址')
+    if (host.endsWith('.localhost') || host.endsWith('.local')) {
+      throw new SsrfBlockedError('不允许访问本地地址')
+    }
+
+    if (net.isIP(host)) {
+      if (isBlockedIp(host)) throw new SsrfBlockedError('不允许访问私有或本地网络地址')
+      return
+    }
+
+    let addresses: Array<{ address: string }>
+    try {
+      addresses = await dns.lookup(host, { all: true, verbatim: true })
+    } catch {
+      throw new SsrfBlockedError('无法解析主机名')
+    }
+    if (!addresses.length) throw new SsrfBlockedError('无法解析主机名')
+    for (const { address } of addresses) {
+      if (isBlockedIp(address)) {
+        throw new SsrfBlockedError('不允许访问私有或本地网络地址')
+      }
+    }
     return
   }
 
-  let addresses: Array<{ address: string }>
+  if (net.isIP(host)) return
+
   try {
-    addresses = await dns.lookup(host, { all: true, verbatim: true })
+    await dns.lookup(host, { all: true, verbatim: true })
   } catch {
     throw new SsrfBlockedError('无法解析主机名')
-  }
-  if (!addresses.length) throw new SsrfBlockedError('无法解析主机名')
-  for (const { address } of addresses) {
-    if (isBlockedIp(address)) {
-      throw new SsrfBlockedError('不允许访问私有或本地网络地址')
-    }
   }
 }
 

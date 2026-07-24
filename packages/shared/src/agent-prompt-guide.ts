@@ -142,6 +142,18 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 禁止向用户朗读 ~/.opptrix 应用数据根、sessions、watchlist、数据库、providers 等内部结构',
     '- 默认公共工作区 root_id=default；额外目录需界面授权或 request_folder_access',
     '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 shell_run / shell_install（系统隔离环境）；勿声称可读写未授权路径',
+    '',
+    '【shell_run — 先识平台，再组 argv】',
+    '- 调用 shell_run 前必须先 get_system_info（或本轮已有 platform 字段）；按 platform 组装 argv，禁止凭训练记忆猜 Unix/Windows 参数',
+    '- 一律传 argv 字符串数组（如 ["ping","-c","4","example.com"]）；禁止编造 powershell -Command / cmd /c / bash -c 等整串拼接绕过',
+    '- darwin / linux：ping 用 -c（如 ["ping","-c","4",host]）；路由探测用 traceroute；解释器用 python3/node（以 get_system_info 为准）',
+    '- win32：ping 用 -n（如 ["ping","-n","4",host]）；路由探测用 tracert（勿用 traceroute）；解释器用 python / python3 / node（按系统实际存在）',
+    '- 测网站连通性或 HTTP 耗时 → 优先 http_fetch；用户明确要求 ICMP ping 时才用 shell_run',
+    '- 默认禁止沙箱 TCP 出站；访问外网站点需用户按域名确认（仅此一次 / 本对话允许该域名）。可通过环境变量 OPPTRIX_SHELL_ALLOWED_DOMAINS 预置免确认域名（逗号分隔，支持 *.example.com）',
+    '- 系统 DNS 解析可用，但解析到私网地址仍会被拒绝',
+    '- python/node 等无明确目标时不弹全网确认；禁网运行，若因出站受限失败则返回需确认的域名',
+    '- 本轮已加载 shell_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」',
+    '- 未加载 shell_run / workspace_* 时：勿声称具备本地命令或工作区能力；缺工具时 activate_tool_pack 加载 workspace 或说明当前无法完成',
   ].join('\n')
 }
 
@@ -372,8 +384,23 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     '- 每个已加载工具描述含【何时使用】【调用规范】，严格遵守；以本轮选型卡与证据纪律为首要决策依据',
     '- 不推荐具体买卖，仅提供研究与数据解读',
     '- L1 走最短正确路径；L3 按备忘录骨架覆盖并声明缺口；禁止为堆砌而重复调用',
-    '- 禁止 Shell 执行、任意文件读写或未提供的工具能力',
   )
+
+  const hasShellTools = opts?.activeToolNames?.some(
+    name => name === 'shell_run' || name === 'shell_install' || name.startsWith('workspace_'),
+  )
+  if (hasShellTools) {
+    sections.push(
+      '- 本轮已加载 shell_run / workspace_*：用户请求的运行本地命令、读写工作区、网络探测须用已加载工具完成；禁止声称「出于安全规范禁止执行 Shell」',
+      '- shell_run 前须 get_system_info（或本轮已有 platform）再按平台组 argv；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
+      '- 测网站连通性或 HTTP 延迟优先 http_fetch；用户明确要求 ICMP ping 时用 shell_run',
+      '- 沙箱默认禁 TCP 出站；访问外网需用户确认。系统 DNS 可用，私网/localhost 仍拒',
+    )
+  } else {
+    sections.push(
+      '- 未加载 shell_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；缺能力时 activate_tool_pack 或说明当前无法完成',
+    )
+  }
 
   return sections.join('\n')
 }

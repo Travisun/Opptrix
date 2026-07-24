@@ -576,8 +576,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   shell_run: {
     packId: 'workspace',
-    usageGuide: '在授权工作区内运行 python/node/npm/pip；自定义脚本必须经此工具，勿声称可访问未授权路径。',
-    compliance: 'argv 结构化传参；禁止 sudo/管道删根；pip/npm 安装须 network_intent=install；包只能装进工作区。',
+    usageGuide: '在授权工作区内运行允许的命令（含 python/node/npm/pip/ping）；测网站延迟优先 http_fetch；自定义脚本必须经此工具。',
+    compliance: 'argv 结构化传参；禁止 sudo/管道删根；ping/traceroute 需用户确认网络探测且拒绝私网目标；pip/npm 安装须 network_intent=install。',
   },
   shell_install: {
     packId: 'workspace',

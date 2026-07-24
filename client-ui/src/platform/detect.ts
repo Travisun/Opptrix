@@ -44,6 +44,8 @@ declare global {
       showLocalNotification?: (payload: LocalNotificationPayload) => Promise<boolean>
       signalShellReady?: () => void
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void
+      shellInstallWindowsSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>
+      shellInstallLinuxSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>
     }
     showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>
     showSaveFilePicker?: (options?: {

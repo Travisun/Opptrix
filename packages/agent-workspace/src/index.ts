@@ -18,6 +18,7 @@ export {
   SsrfBlockedError,
   ConfirmationRequiredError,
   NetworkInstallConfirmationRequiredError,
+  NetworkEgressConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
 } from './errors.js'
 export { buildGlobalDenyPaths, isPathDenied, isWorkspaceRootPath } from './deny.js'
@@ -45,6 +46,11 @@ export {
 export { httpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 export { streamDownloadToFile, type DownloadParams } from './download.js'
 export {
+  getSandboxSettings,
+  saveSandboxSettings,
+  resetSandboxSettingsStoreForTests,
+} from './sandbox-settings-store.js'
+export {
   WorkspaceService,
   getWorkspaceService,
   resetWorkspaceService,
@@ -53,7 +59,10 @@ export {
 } from './service.js'
 export {
   ShellRunner,
+  SessionNetworkEgressStore,
   NetworkInstallStickyStore,
+  NETWORK_EGRESS_CONFIRM_OPTIONS,
+  parseNetworkEgressChoice,
   NETWORK_INSTALL_CONFIRM_OPTIONS,
   parseNetworkInstallChoice,
   ShellRunStickyStore,
@@ -65,8 +74,26 @@ export {
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
   commandNeedsNetwork,
+  commandMayNeedEgressConfirmation,
+  isNetworkDiagnosticCommand,
+  parseDiagnosticTargetHost,
+  mergeAllowedNetworkDomains,
+  networkDomainsForDiagnosticTarget,
+  networkDomainsForSessionHost,
+  getGrantableMergedAllowedDomains,
+  getGrantableMergedAllowedDomainsSync,
+  getMergedRawAllowedDomains,
+  getConfiguredAllowedDomains,
+  getGrantableConfiguredAllowedDomains,
+  getGrantableConfiguredAllowedDomainsSync,
+  isHostInConfiguredAllowlist,
+  isEgressHostPreAuthorized,
+  resetConfiguredAllowedDomainsForTests,
   getShellPlatformStatus,
   PACKAGE_INSTALL_ALLOWED_DOMAINS,
+  SRT_SUPPORTS_ALLOW_ALL_IN_ALLOWED_DOMAINS,
+  detectNetworkEgressBlocked,
+  buildNeedsNetworkEgressPayload,
   type ShellRunParams,
   type ShellRunResult,
   type ShellInstallParams,

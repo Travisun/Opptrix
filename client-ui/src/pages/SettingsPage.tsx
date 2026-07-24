@@ -18,6 +18,7 @@ import McpServersSettingsSection from './settings/McpServersSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
+import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import AboutSettingsSection from './settings/AboutSettingsSection'
 import { SettingsToastProvider, useSettingsToast } from './settings/SettingsToast'
 import {
@@ -632,6 +633,9 @@ function SettingsPageView({
 
       case 'news_feed':
         return <NewsFeedSettingsSection />
+
+      case 'sandbox':
+        return <SandboxSettingsSection />
 
       case 'translation':
         return <TranslationSettingsSection />

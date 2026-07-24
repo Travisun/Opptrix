@@ -10,6 +10,7 @@ import {
   TranslateRegular,
   ServerRegular,
   PlugConnectedRegular,
+  ShieldRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -36,6 +37,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
   { id: 'mcp_servers', label: 'MCP 服务器', icon: PlugConnectedRegular },
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
+  { id: 'sandbox', label: '沙盒环境', icon: ShieldRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
   { id: 'about', label: '关于 Opptrix', icon: InfoRegular },
@@ -384,6 +386,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '接入外部智能服务'
     case 'news_feed':
       return '订阅源与更新频率'
+    case 'sandbox':
+      return '管理命令隔离环境的网络访问规则'
     case 'translation':
       return '离线翻译与远程回退'
     case 'multimodal':

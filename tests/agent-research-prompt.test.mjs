@@ -8,6 +8,7 @@ import {
   buildResearchEpistemicPlaybook,
   buildResearchOutputPlaybook,
   buildSessionClockPlaybook,
+  buildWorkspaceAccessPlaybook,
 } from '../packages/shared/dist/agent-prompt-guide.js'
 import {
   resolveToolRoutePlan,
@@ -114,6 +115,41 @@ test('ToolRegistry systemPrompt embeds researcher persona and epistemic rules', 
   assert.match(prompt, /投研研究员/)
   assert.match(prompt, /投研证据纪律/)
   assert.match(prompt, /答复档位 L2/)
+})
+
+test('workspace playbook requires get_system_info and network egress policy', () => {
+  const playbook = buildWorkspaceAccessPlaybook()
+  assert.match(playbook, /get_system_info/)
+  assert.match(playbook, /默认禁止|禁网|出站/)
+  assert.match(playbook, /OPPTRIX_SHELL_ALLOWED_DOMAINS/)
+  assert.match(playbook, /DNS|系统.*解析/)
+  assert.match(playbook, /-c/)
+  assert.match(playbook, /-n/)
+  assert.match(playbook, /tracert/)
+  assert.match(playbook, /powershell|cmd \/c|bash -c/)
+  assert.match(playbook, /禁止.*整串拼接绕过|禁止编造/)
+  assert.ok(!playbook.includes('禁止 Shell 执行'))
+
+  const rules = buildAgentSystemRules({
+    activePacks: ['core', 'meta', 'workspace'],
+    activeToolNames: ['shell_run', 'http_fetch', 'get_system_info'],
+    researchTier: 'L1',
+  })
+  assert.match(rules, /get_system_info/)
+  assert.match(rules, /-c.*win32.*-n|win32.*-n/s)
+  assert.ok(!rules.includes('禁止 Shell 执行'))
+  assert.match(rules, /禁止声称.*禁止执行 Shell/)
+  assert.match(rules, /禁 TCP 出站|默认禁/)
+})
+
+test('route hints mention get_system_info before shell argv', () => {
+  const shellPlan = resolveToolRoutePlan({ message: 'ping 一下 baidu.com' })
+  assert.equal(shellPlan.intent, 'workspace_shell')
+  assert.match(shellPlan.routeHint, /get_system_info/)
+
+  const latencyPlan = resolveToolRoutePlan({ message: '测一下百度网站延迟' })
+  assert.equal(latencyPlan.intent, 'workspace_network_latency')
+  assert.match(latencyPlan.routeHint, /get_system_info/)
 })
 
 test('全面分析 seeds market pack when budget allows', () => {

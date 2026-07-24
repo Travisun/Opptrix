@@ -24,6 +24,10 @@ export interface ShellRunResult {
   sandbox: true
   platform: Platform
   duration_ms: number
+  needs_network_egress?: {
+    message: string
+    suggested_host?: string
+  }
 }
 
 export interface ShellPlatformStatus {

@@ -16,6 +16,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.67",
-    "@opptrix/shared": "*"
+    "@opptrix/shared": "*",
+    "@opptrix/user-store": "*"
   }
 }

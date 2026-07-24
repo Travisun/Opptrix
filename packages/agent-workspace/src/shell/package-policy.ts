@@ -9,7 +9,17 @@ const ALLOWED_BINARIES = new Set([
   'npx',
   'pip',
   'pip3',
+  'ping',
+  'traceroute',
+  'tracert',
 ])
+
+const DIAGNOSTIC_BINARIES = new Set(['ping', 'traceroute', 'tracert'])
+
+const INTERPRETER_BINARIES = new Set(['python', 'python3', 'node', 'npx'])
+
+const ALLOWED_BINARY_LABEL =
+  'python/node/npm/pip 等解释器与包管理器，以及 ping/traceroute 等网络诊断命令'
 
 const DANGEROUS_PATTERNS: RegExp[] = [
   /\brm\s+(-[^\s]*\s+)*-[^\s]*r[^\s]*f[^\s]*\s+\//i,
@@ -46,7 +56,7 @@ export function assertAllowedShellArgv(argv: string[]): void {
   }
   const bin = basenameOfArgv0(argv)
   if (!ALLOWED_BINARIES.has(bin)) {
-    throw new WorkspaceError(`不允许运行「${bin || argv[0]}」；仅支持 python/node/npm/pip 等解释器与包管理器`)
+    throw new WorkspaceError(`不允许运行「${bin || argv[0]}」；仅支持 ${ALLOWED_BINARY_LABEL}`)
   }
   const joined = argv.join(' ')
   for (const re of DANGEROUS_PATTERNS) {
@@ -56,8 +66,34 @@ export function assertAllowedShellArgv(argv: string[]): void {
   }
 }
 
+export function isNetworkDiagnosticCommand(argv: string[]): boolean {
+  return DIAGNOSTIC_BINARIES.has(basenameOfArgv0(argv))
+}
+
+/** 从 ping/traceroute/tracert argv 解析目标主机（跳过常见 flag） */
+export function parseDiagnosticTargetHost(argv: string[]): string | null {
+  if (!isNetworkDiagnosticCommand(argv)) return null
+  const skipNext = new Set(['-c', '-n', '-w', '-W', '-h', '-m', '-q', '-p', '-s', '-i', '-I'])
+  for (let i = 1; i < argv.length; i++) {
+    const arg = argv[i]?.trim()
+    if (!arg) continue
+    if (arg.startsWith('-')) {
+      const eq = arg.indexOf('=')
+      if (eq > 0) continue
+      const flag = arg.toLowerCase()
+      if (skipNext.has(flag) && i + 1 < argv.length && !argv[i + 1].startsWith('-')) {
+        i++
+      }
+      continue
+    }
+    return arg.replace(/^\[/, '').replace(/\]$/, '')
+  }
+  return null
+}
+
 export function commandNeedsNetwork(argv: string[]): boolean {
   const bin = basenameOfArgv0(argv)
+  if (DIAGNOSTIC_BINARIES.has(bin)) return true
   const rest = argv.slice(1).map(a => a.toLowerCase())
   if (bin === 'pip' || bin === 'pip3') {
     return rest.includes('install') || rest.includes('download')
@@ -67,6 +103,14 @@ export function commandNeedsNetwork(argv: string[]): boolean {
   }
   if (bin === 'node' && rest[0] === '-e') return false
   return false
+}
+
+/** 解释器命令可能访问外网 — 触发出站确认（非 pip/npm install、非诊断） */
+export function commandMayNeedEgressConfirmation(argv: string[]): boolean {
+  const bin = basenameOfArgv0(argv)
+  if (DIAGNOSTIC_BINARIES.has(bin)) return false
+  if (commandNeedsNetwork(argv)) return false
+  return INTERPRETER_BINARIES.has(bin)
 }
 
 export function assertPackageInstallPolicy(

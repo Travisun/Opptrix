@@ -1951,3 +1951,39 @@ export async function unsubscribeMcpResource(id: string, uri: string) {
     },
   )
 }
+
+// ─── Sandbox settings API ───
+
+export interface SandboxSettings {
+  allowed_domains: string[]
+  allow_lan_access: boolean
+}
+
+export interface SandboxPlatformStatus {
+  platform: string
+  supported: boolean
+  sandbox_available: boolean
+  ready: boolean
+  message: string
+  setup_hint?: string
+  needs_windows_install?: boolean
+  needs_linux_install?: boolean
+  can_auto_install?: boolean
+  needs_elevation?: boolean
+  userns_restricted?: boolean
+}
+
+export const sandboxSettings = {
+  getSettings: () =>
+    jsonFetch<{ settings: SandboxSettings }>('/settings/sandbox'),
+
+  getStatus: () =>
+    jsonFetch<{ status: SandboxPlatformStatus }>('/settings/sandbox/status'),
+
+  saveSettings: (settings: Partial<SandboxSettings>) =>
+    jsonFetch<{ settings: SandboxSettings }>('/settings/sandbox', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(settings),
+    }),
+}

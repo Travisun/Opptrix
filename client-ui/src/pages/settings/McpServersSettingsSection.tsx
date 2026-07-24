@@ -7,7 +7,6 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import CodeMirror from '@uiw/react-codemirror'
 import { json as jsonLanguage } from '@codemirror/lang-json'
 import { linter, type Diagnostic } from '@codemirror/lint'
 import { EditorView } from '@codemirror/view'
@@ -26,6 +25,7 @@ import type { McpServerFlatConfig } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import McpApiKeyField from '../../components/opptrix/McpApiKeyField'
 import { useSettingsToast } from './SettingsToast'
+import SettingsMonospaceEditor from './SettingsMonospaceEditor'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { ghostInteractive, motion } from '../../theme/mixins'
 
@@ -155,25 +155,6 @@ const useStyles = makeStyles({
   },
 
   // ── JSON 编辑器 ──
-  editorWrap: {
-    border: opptrixCssVars.settingsPanelBorder,
-    borderRadius: opptrixTokens.radiusMd,
-    overflow: 'hidden',
-    backgroundColor: opptrixCssVars.canvasAlt,
-    minHeight: '360px',
-    '& .cm-editor': {
-      height: '100%',
-      minHeight: '360px',
-      fontSize: 'var(--opptrix-font-md)',
-    },
-    '& .cm-scroller': {
-      fontFamily: 'ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas, monospace',
-    },
-    '& .cm-gutters': {
-      backgroundColor: opptrixCssVars.canvasAlt,
-      borderRight: `1px solid ${opptrixCssVars.separator}`,
-    },
-  },
   toolbar: {
     display: 'flex',
     justifyContent: 'space-between',
@@ -558,24 +539,12 @@ export default function McpServersSettingsSection() {
             <Spinner size="tiny" label="加载配置…" />
           ) : (
             <>
-              <div className={s.editorWrap}>
-                <CodeMirror
-                  value={raw}
-                  height="360px"
-                  extensions={cmExtensions}
-                  onChange={(value) => { setRaw(value); setDirty(true) }}
-                  basicSetup={{
-                    lineNumbers: true,
-                    foldGutter: true,
-                    highlightActiveLine: true,
-                    highlightSelectionMatches: true,
-                    autocompletion: true,
-                    bracketMatching: true,
-                    closeBrackets: true,
-                    indentOnInput: true,
-                  }}
-                />
-              </div>
+              <SettingsMonospaceEditor
+                value={raw}
+                height="360px"
+                extensions={cmExtensions}
+                onChange={(value) => { setRaw(value); setDirty(true) }}
+              />
 
               {validationError && (
                 <Text className={s.error} block>{validationError}</Text>

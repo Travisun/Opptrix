@@ -61,6 +61,9 @@ const SEED_RULES: SeedRule[] = [
       /运行(?:一下|这段)?\s*(?:python|py|node|js|脚本|代码)/i,
       /pip\s+install|npm\s+install|安装(?:python|py|node|npm|pip)?(?:包|依赖)/i,
       /shell_run|shell_install/i,
+      /\bping\b/i,
+      /traceroute|tracert/i,
+      /网络延迟|连通性|运行命令|执行(?:命令|shell|脚本)/,
     ],
   },
   {

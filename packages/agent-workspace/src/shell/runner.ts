@@ -1,7 +1,10 @@
 import { spawn } from 'node:child_process'
 import path from 'node:path'
-import { SandboxManager, type Platform } from '@anthropic-ai/sandbox-runtime'
+import { SandboxManager, type Platform, type SandboxRuntimeConfig } from '@anthropic-ai/sandbox-runtime'
+
+type SandboxAskCallback = (params: { host: string; port: number | undefined }) => Promise<boolean>
 import {
+  NetworkEgressConfirmationRequiredError,
   NetworkInstallConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
   WorkspaceError,
@@ -9,6 +12,12 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
+import {
+  assertEgressHostGrantable,
+  buildNeedsNetworkEgressPayload,
+  detectNetworkEgressBlocked,
+  isEgressHostPreAuthorized,
+} from './egress-runtime.js'
 import { ensureLinuxSandboxReady } from './ensure-linux-sandbox.js'
 import { ensureWindowsSandboxReady } from './ensure-windows-sandbox.js'
 import { getShellPlatformStatus } from './platform.js'
@@ -19,7 +28,15 @@ import {
   buildNpmInstallArgv,
   buildPipInstallArgv,
   commandNeedsNetwork,
+  isNetworkDiagnosticCommand,
+  parseDiagnosticTargetHost,
 } from './package-policy.js'
+import {
+  SessionNetworkEgressStore,
+  NETWORK_EGRESS_CONFIRM_OPTIONS,
+  normalizeEgressHost,
+  parseNetworkEgressChoice,
+} from './session-network-egress.js'
 import {
   NetworkInstallStickyStore,
   NETWORK_INSTALL_CONFIRM_OPTIONS,
@@ -90,9 +107,15 @@ function sanitizeChildEnv(
   return out
 }
 
+interface EgressRunGrants {
+  onceHosts: string[]
+  runWithDeniedNetwork: boolean
+}
+
 async function requireNetworkInstallConfirmation(
   sessionId: string,
   sticky: NetworkInstallStickyStore,
+  egress: SessionNetworkEgressStore,
   confirm?: ConfirmHandler,
 ): Promise<void> {
   if (sticky.has(sessionId)) return
@@ -116,6 +139,24 @@ async function requireNetworkInstallConfirmation(
   const choice = parseNetworkInstallChoice(answer.selected_ids)
   if (choice === 'cancel') throw new WorkspaceError('用户已取消联网安装')
   if (choice === 'sticky') sticky.grant(sessionId)
+}
+
+async function assertDiagnosticTargetAllowed(host: string): Promise<string> {
+  return assertEgressHostGrantable(host)
+}
+
+function appendDiagnosticFallbackHint(
+  argv: readonly string[],
+  exitCode: number | null,
+  stdout: string,
+  stderr: string,
+): string {
+  if (!isNetworkDiagnosticCommand([...argv]) || exitCode === 0) return stderr
+  const combined = `${stdout}\n${stderr}`.toLowerCase()
+  const icmpBlocked = /operation not permitted|permission denied|network is unreachable|unknown host|name or service not known|socket: operation not permitted|无法访问|不允许/.test(combined)
+  if (!icmpBlocked && exitCode === 1) return stderr
+  const hint = '\n\n提示：ICMP 探测可能受隔离环境限制。测网站连通性或 HTTP 延迟请改用 http_fetch 访问 https://目标主机'
+  return stderr.includes('http_fetch') ? stderr : `${stderr}${hint}`
 }
 
 async function requireShellRunConfirmation(
@@ -149,6 +190,70 @@ async function requireShellRunConfirmation(
   if (choice === 'allow_session') sticky.grant(sessionId)
 }
 
+async function requireDiagnosticMergedConfirmation(
+  sessionId: string,
+  argv: readonly string[],
+  targetHost: string,
+  shellSticky: ShellRunStickyStore,
+  egress: SessionNetworkEgressStore,
+  confirm?: ConfirmHandler,
+): Promise<EgressRunGrants> {
+  const normalizedTarget = await assertEgressHostGrantable(targetHost)
+  if (isEgressHostPreAuthorized(sessionId, normalizedTarget, egress)) {
+    return { onceHosts: [], runWithDeniedNetwork: false }
+  }
+
+  const commandSummary = summarizeShellArgv(argv)
+  const payload = {
+    kind: 'network_egress' as const,
+    title: '允许运行命令',
+    prompt: [
+      `将在隔离环境中运行：`,
+      commandSummary,
+      '',
+      `测连通性需要访问外部网络（目标：${normalizedTarget}）。是否允许？`,
+    ].join('\n'),
+    command_summary: commandSummary,
+    target_host: normalizedTarget,
+    options: [...NETWORK_EGRESS_CONFIRM_OPTIONS],
+  }
+  if (!confirm) {
+    throw new NetworkEgressConfirmationRequiredError(payload)
+  }
+  const answer = await confirm({
+    title: payload.title,
+    prompt: payload.prompt,
+    options: payload.options,
+    operation: 'overwrite',
+    root_id: 'default',
+    path: '',
+  })
+  return applyEgressChoice(sessionId, normalizedTarget, answer.selected_ids, shellSticky, egress)
+}
+
+function applyEgressChoice(
+  sessionId: string,
+  targetHost: string | undefined,
+  selectedIds: readonly string[],
+  shellSticky?: ShellRunStickyStore,
+  egress?: SessionNetworkEgressStore,
+): EgressRunGrants {
+  const choice = parseNetworkEgressChoice(selectedIds)
+  if (choice === 'cancel') throw new WorkspaceError('用户已取消外网访问')
+  if (!targetHost) {
+    throw new WorkspaceError('未指定访问目标，无法仅允许该目标')
+  }
+  if (choice === 'allow_host_session') {
+    egress?.grantHost(sessionId, targetHost)
+    shellSticky?.grant(sessionId)
+    return { onceHosts: [], runWithDeniedNetwork: false }
+  }
+  if (choice === 'allow_host_once') {
+    return { onceHosts: [targetHost], runWithDeniedNetwork: false }
+  }
+  throw new WorkspaceError('用户已取消外网访问')
+}
+
 function detectPlatformLabel(): Platform {
   if (!SandboxManager.isSupportedPlatform()) return 'unknown'
   const p = process.platform
@@ -158,6 +263,96 @@ function detectPlatformLabel(): Platform {
   return 'unknown'
 }
 
+interface SandboxExecContext {
+  sessionId: string
+  normalizedArgv: string[]
+  cwdRel: string
+  cwdAbs: string
+  grantRootAbs: string
+  config: SandboxRuntimeConfig
+  timeoutMs: number
+  signal?: AbortSignal
+  sandboxAskCallback?: SandboxAskCallback
+}
+
+function createSandboxAskCallback(opts: {
+  sessionId: string
+  confirm?: ConfirmHandler
+  sessionEgress: SessionNetworkEgressStore
+  shellSticky: ShellRunStickyStore
+  signal?: AbortSignal
+  runOnceHosts: Set<string>
+}): SandboxAskCallback {
+  return async ({ host }) => {
+    if (opts.signal?.aborted) return false
+    let normalized: string
+    try {
+      normalized = await assertEgressHostGrantable(host)
+    } catch {
+      return false
+    }
+    if (isEgressHostPreAuthorized(opts.sessionId, normalized, opts.sessionEgress)) {
+      return true
+    }
+    if (opts.runOnceHosts.has(normalized)) return true
+    if (!opts.confirm) return false
+
+    const payload = {
+      kind: 'network_egress' as const,
+      title: '允许访问外部目标',
+      prompt: `命令需要访问 ${normalized}。是否允许？`,
+      target_host: normalized,
+      options: [...NETWORK_EGRESS_CONFIRM_OPTIONS],
+    }
+    try {
+      const answer = await opts.confirm({
+        title: payload.title,
+        prompt: payload.prompt,
+        options: payload.options,
+        operation: 'overwrite',
+        root_id: 'default',
+        path: '',
+      })
+      if (opts.signal?.aborted) return false
+      const grants = applyEgressChoice(
+        opts.sessionId,
+        normalized,
+        answer.selected_ids,
+        opts.shellSticky,
+        opts.sessionEgress,
+      )
+      if (grants.onceHosts.length > 0) {
+        opts.runOnceHosts.add(normalized)
+      }
+      return true
+    } catch {
+      return false
+    }
+  }
+}
+
+async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
+  exitCode: number | null
+  stdout: string
+  stderr: string
+}> {
+  const command = argvToCommandString(ctx.normalizedArgv)
+  await SandboxManager.initialize(ctx.config, ctx.sandboxAskCallback)
+  const wrapped = await SandboxManager.wrapWithSandboxArgv(
+    command,
+    undefined,
+    undefined,
+    ctx.signal,
+    ctx.cwdAbs,
+  )
+  const childEnv = sanitizeChildEnv(
+    { ...process.env, ...wrapped.env },
+    ctx.cwdAbs,
+    ctx.grantRootAbs,
+  )
+  return spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
+}
+
 export interface ShellRunnerDeps {
   listGrants: (sessionId: string) => Promise<WorkspaceGrant[]>
   gatePath: (sessionId: string, rootId: string, relPath: string) => Promise<{
@@ -165,6 +360,7 @@ export interface ShellRunnerDeps {
     abs: string
   }>
   stickyNetwork: NetworkInstallStickyStore
+  sessionEgress: SessionNetworkEgressStore
   stickyShellRun: ShellRunStickyStore
 }
 
@@ -213,65 +409,133 @@ export class ShellRunner {
     assertReadable(grant)
 
     const normalizedArgv = assertPackageInstallPolicy(argv, cwdAbs, grant.abs_path)
-    await requireShellRunConfirmation(
-      params.sessionId,
-      normalizedArgv,
-      this.deps.stickyShellRun,
-      confirm,
-    )
 
-    const needsNetwork = params.networkIntent === 'install' || commandNeedsNetwork(normalizedArgv)
-    if (needsNetwork) {
-      await requireNetworkInstallConfirmation(params.sessionId, this.deps.stickyNetwork, confirm)
+    const diagnostic = isNetworkDiagnosticCommand(normalizedArgv)
+    let diagnosticTargetHost: string | undefined
+    if (diagnostic) {
+      const rawHost = parseDiagnosticTargetHost(normalizedArgv)
+      if (!rawHost) throw new WorkspaceError('未能从命令中识别探测目标主机')
+      diagnosticTargetHost = await assertDiagnosticTargetAllowed(rawHost)
     }
 
-    const grants = await this.deps.listGrants(params.sessionId)
-    const allowNetworkInstall = needsNetwork || this.deps.stickyNetwork.has(params.sessionId)
-    const config = await buildSandboxConfigFromGrants({
-      grants,
-      allowNetworkInstall,
-    })
+    const needsInstallNetwork = !diagnostic && (
+      params.networkIntent === 'install' || commandNeedsNetwork(normalizedArgv)
+    )
 
-    const command = argvToCommandString(normalizedArgv)
+    let egressGrants: EgressRunGrants = { onceHosts: [], runWithDeniedNetwork: false }
+
+    if (diagnostic && diagnosticTargetHost) {
+      egressGrants = await requireDiagnosticMergedConfirmation(
+        params.sessionId,
+        normalizedArgv,
+        diagnosticTargetHost,
+        this.deps.stickyShellRun,
+        this.deps.sessionEgress,
+        confirm,
+      )
+    } else {
+      await requireShellRunConfirmation(
+        params.sessionId,
+        normalizedArgv,
+        this.deps.stickyShellRun,
+        confirm,
+      )
+    }
+
+    if (needsInstallNetwork) {
+      await requireNetworkInstallConfirmation(
+        params.sessionId,
+        this.deps.stickyNetwork,
+        this.deps.sessionEgress,
+        confirm,
+      )
+    }
+
     const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const started = Date.now()
 
     return withSandboxMutex(async () => {
-      await SandboxManager.initialize(config)
+      const grants = await this.deps.listGrants(params.sessionId)
+      const allowNetworkInstall = !egressGrants.runWithDeniedNetwork && (
+        needsInstallNetwork || this.deps.stickyNetwork.has(params.sessionId)
+      )
+      const diagnosticTargetHosts = diagnosticTargetHost && !egressGrants.runWithDeniedNetwork
+        ? [diagnosticTargetHost]
+        : undefined
+      const sessionEgress = egressGrants.runWithDeniedNetwork
+        ? undefined
+        : this.deps.sessionEgress.snapshot(params.sessionId)
+      const onceEgressHosts = egressGrants.runWithDeniedNetwork
+        ? undefined
+        : egressGrants.onceHosts
+
+      const config = await buildSandboxConfigFromGrants({
+        grants,
+        allowNetworkInstall,
+        diagnosticTargetHosts,
+        sessionEgress,
+        onceEgressHosts,
+      })
+
+      const runOnceHosts = new Set<string>(
+        egressGrants.onceHosts.map(h => normalizeEgressHost(h)).filter(Boolean),
+      )
+      const sandboxAskCallback = egressGrants.runWithDeniedNetwork
+        ? undefined
+        : createSandboxAskCallback({
+          sessionId: params.sessionId,
+          confirm,
+          sessionEgress: this.deps.sessionEgress,
+          shellSticky: this.deps.stickyShellRun,
+          signal: params.signal,
+          runOnceHosts,
+        })
+
+      let result: { exitCode: number | null; stdout: string; stderr: string }
       try {
-        const wrapped = await SandboxManager.wrapWithSandboxArgv(
-          command,
-          undefined,
-          undefined,
-          params.signal,
+        result = await executeSandboxOnce({
+          sessionId: params.sessionId,
+          normalizedArgv,
+          cwdRel,
           cwdAbs,
-        )
-        const childEnv = sanitizeChildEnv(
-          { ...process.env, ...wrapped.env },
-          cwdAbs,
-          grant.abs_path,
-        )
-
-        const result = await spawnSandboxed(wrapped.argv, childEnv, cwdAbs, timeoutMs, params.signal)
-        const stdout = truncateStream(result.stdout, MAX_STREAM_BYTES)
-        const stderr = truncateStream(result.stderr, MAX_STREAM_BYTES)
-
-        return {
-          ok: result.exitCode === 0,
-          exit_code: result.exitCode,
-          stdout: stdout.text,
-          stderr: stderr.text,
-          stdout_truncated: stdout.truncated,
-          stderr_truncated: stderr.truncated,
-          cwd: cwdRel || '.',
-          command: normalizedArgv,
-          sandbox: true as const,
-          platform: detectPlatformLabel(),
-          duration_ms: Date.now() - started,
-        }
+          grantRootAbs: grant.abs_path,
+          config,
+          timeoutMs,
+          signal: params.signal,
+          sandboxAskCallback,
+        })
       } finally {
         await SandboxManager.reset()
       }
+
+      const stdout = truncateStream(result.stdout, MAX_STREAM_BYTES)
+      let stderr = truncateStream(result.stderr, MAX_STREAM_BYTES)
+      stderr = {
+        ...stderr,
+        text: appendDiagnosticFallbackHint(normalizedArgv, result.exitCode, stdout.text, stderr.text),
+      }
+
+      const egressBlocked = detectNetworkEgressBlocked(result.exitCode, stdout.text, stderr.text)
+      const shellResult: ShellRunResult = {
+        ok: result.exitCode === 0,
+        exit_code: result.exitCode,
+        stdout: stdout.text,
+        stderr: stderr.text,
+        stdout_truncated: stdout.truncated,
+        stderr_truncated: stderr.truncated,
+        cwd: cwdRel || '.',
+        command: normalizedArgv,
+        sandbox: true as const,
+        platform: detectPlatformLabel(),
+        duration_ms: Date.now() - started,
+      }
+
+      if (egressBlocked.blocked) {
+        const suggested = egressBlocked.suggestedHost ?? diagnosticTargetHost
+        shellResult.needs_network_egress = buildNeedsNetworkEgressPayload(suggested)
+      }
+
+      return shellResult
     })
   }
 
@@ -294,6 +558,7 @@ export class ShellRunner {
 
   clearSession(sessionId: string): void {
     this.deps.stickyNetwork.clearSession(sessionId)
+    this.deps.sessionEgress.clearSession(sessionId)
     this.deps.stickyShellRun.clearSession(sessionId)
   }
 }

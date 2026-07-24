@@ -276,6 +276,81 @@ POST /api/research
 | GET | `/api/news/articles/:id` | 单篇文章 |
 | POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
 
+### 沙盒环境设置
+
+命令隔离（`shell_run` / `shell_install`）的**永久出站白名单**与局域网策略。持久化于用户 SQLite：`preference` / `sandbox_settings`。运行时与部署环境变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）**并集**合并；命中合并白名单的目标免弹出站确认（仍受 SSRF / LAN 策略约束）。设置页入口：**设置 → 沙盒环境**。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/sandbox` | 读取当前设置 |
+| GET | `/api/settings/sandbox/status` | 命令隔离环境自检（就绪 / 组件 / 是否开启） |
+| PUT | `/api/settings/sandbox` | 校验并保存（归一化后写入 SQLite） |
+
+**GET 响应**
+
+```json
+{
+  "settings": {
+    "allowed_domains": ["example.com", "*.example.com"],
+    "allow_lan_access": false
+  }
+}
+```
+
+**GET `/api/settings/sandbox/status` 响应**
+
+```json
+{
+  "status": {
+    "platform": "linux",
+    "supported": true,
+    "sandbox_available": true,
+    "ready": false,
+    "message": "首次使用命令隔离需要一次系统授权；运行命令时将自动请求，也可稍后在设置中重试",
+    "setup_hint": "首次使用命令隔离需要一次系统授权；运行命令时将自动请求，也可稍后在设置中重试",
+    "needs_linux_install": true,
+    "can_auto_install": true,
+    "needs_elevation": true
+  }
+}
+```
+
+**`status` 字段**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `platform` | string | `macos` / `linux` / `windows` / `unknown` |
+| `supported` | boolean | 当前 OS 是否支持命令隔离 |
+| `sandbox_available` | boolean | 命令隔离是否已开启（SRT 是否启用） |
+| `ready` | boolean | 总体就绪（依赖齐全且平台安装步骤已完成） |
+| `message` | string | 面向用户的摘要说明（不含路径） |
+| `setup_hint` | string? | 可选；设置引导文案 |
+| `missing_dependencies` | string[]? | 可选；缺失或未就绪的组件（诊断用，UI 一般不直出） |
+| `needs_windows_install` | boolean? | Windows：WFP / 隔离用户尚未配置 |
+| `needs_linux_install` | boolean? | Linux：AppArmor / userns 等尚未配置 |
+| `can_auto_install` | boolean? | 桌面版可触发一次系统授权（UAC / pkexec） |
+| `needs_elevation` | boolean? | 需用户批准提升权限一次 |
+| `userns_restricted` | boolean? | Linux：内核限制非特权 user namespace（如 Ubuntu 24.04+） |
+
+设置页 `SandboxEnvironmentStatusCard` 消费本端点；`needs_elevation` + `can_auto_install` 为真时显示「完成设置」（桌面版 IPC）。
+
+**PUT body**（字段均可选；缺省沿用当前值或默认）
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `allowed_domains` | string[] | 域名或 IP 列表；支持 `*.example.com` 通配 |
+| `allow_lan_access` | boolean | 默认 `false`；为 `false` 时拒绝保存 localhost / 私网条目 |
+
+**PUT 成功**：`{ "settings": { allowed_domains, allow_lan_access } }`（去重、小写、去尾点）
+
+**PUT 失败（400）**：`{ "error": "…", "invalid_lines"?: string[] }`
+
+- 请求体无效
+- 域名格式非法（`invalid_lines` 列出原行）
+- `allow_lan_access=false` 且列表含 localhost / 私网地址
+
+Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "network_egress"`）见下方 Shell 说明与 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
+
 ### 外部 MCP Server
 
 用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429、远程 outputSchema 校验失败（如 JSON-RPC `-32602`）、缺 API Key 等鉴权错误后 failover 至下一外部源或本地 ToolRegistry（最终兜底）；降级结果可含 `_mcp.configHint` 指向设置页补密钥。
@@ -316,7 +391,7 @@ POST /api/research
 
 工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` 等）与会话文件夹授权见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与下方 grants 路由。
 
-**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 一次 UAC、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
+**Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，SRT `sandboxAskCallback` 触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 一次 UAC、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 
 ### Workspace grants（会话文件夹授权）
 

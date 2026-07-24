@@ -131,6 +131,7 @@
 │ 数据源            │  │  │  margin: 0 auto             ││ │
 │ MCP 服务器        │  │  │                             ││ │
 │ 新闻订阅          │  │  │  [SettingsGroup]            ││ │
+│ 沙盒环境          │  │  │  ├─ SettingsRow ────────────┤│ │
 │ 翻译              │  │  │  ├─ SettingsRow ────────────┤│ │
 │ 多模态            │  │  │  ├─ SettingsDivider ────────┤│ │
 │ 关于              │  │  │  └─ SettingsRow ────────────┤│ │
@@ -158,3 +159,15 @@
 | 行 | `SettingsActionRow` | 可点击整行 |
 | 输入 | `SettingsTextField` | 行内文本输入 |
 | 输入 | `SettingsCredentialRow` | 密钥编辑行（密码+眼睛+测试+保存） |
+| 输入 | `SettingsMonospaceEditor` | 等宽 CodeMirror 编辑器（行号、折行）；沙盒白名单与 MCP JSON 配置复用 |
+| 状态 | `SandboxEnvironmentStatusCard` | 命令隔离环境就绪自检（`GET /api/settings/sandbox/status`） |
+
+### 7.3 沙盒环境分区
+
+**设置 → 沙盒环境**（`SandboxSettingsSection`）：命令隔离出站策略，非 MCP / 数据源配置。自上而下：**环境状态** → **永久允许的目标** → **局域网**。
+
+| 区块 | 组件 | 说明 |
+|------|------|------|
+| 环境状态 | `SandboxEnvironmentStatusCard` | 调用 `GET /api/settings/sandbox/status`；展示总体就绪、命令隔离是否开启、说明文案；桌面版在需系统授权时显示「完成设置」（经 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC）；支持「刷新状态」 |
+| 永久允许的目标 | `SettingsMonospaceEditor` | 每行一条域名或地址；支持 `*.example.com`；500ms 防抖自动保存；底部保存状态提示 |
+| 局域网 | `SettingsGroup` + Switch | 「允许局域网访问」；开启后在 `SettingsStaticBlock` 显示风险提示 |

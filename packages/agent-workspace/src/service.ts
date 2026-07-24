@@ -25,6 +25,7 @@ import { streamDownloadToFile } from './download.js'
 import {
   ShellRunner,
   NetworkInstallStickyStore,
+  SessionNetworkEgressStore,
   ShellRunStickyStore,
   type ShellInstallParams,
   type ShellPlatformStatus,
@@ -48,6 +49,7 @@ export interface WorkspaceServiceOptions {
   grantStore?: GrantStore
   stickyStore?: StickyPolicyStore
   networkInstallSticky?: NetworkInstallStickyStore
+  sessionNetworkEgress?: SessionNetworkEgressStore
   shellRunSticky?: ShellRunStickyStore
   shellRunner?: ShellRunner
 }
@@ -56,6 +58,7 @@ export class WorkspaceService {
   private readonly grants: GrantStore
   private readonly sticky: StickyPolicyStore
   private readonly networkSticky: NetworkInstallStickyStore
+  private readonly sessionEgress: SessionNetworkEgressStore
   private readonly quota: QuotaTracker
   private readonly shell: ShellRunner
 
@@ -63,6 +66,7 @@ export class WorkspaceService {
     this.grants = opts.grantStore ?? new GrantStore()
     this.sticky = opts.stickyStore ?? new StickyPolicyStore()
     this.networkSticky = opts.networkInstallSticky ?? new NetworkInstallStickyStore()
+    this.sessionEgress = opts.sessionNetworkEgress ?? new SessionNetworkEgressStore()
     this.quota = new QuotaTracker(
       resolveAgentWorkspaceRoot(),
       opts.quotaBytes ?? DEFAULT_WORKSPACE_QUOTA_BYTES,
@@ -71,6 +75,7 @@ export class WorkspaceService {
       listGrants: (sessionId) => this.listGrants(sessionId),
       gatePath: (sessionId, rootId, relPath) => this.gatePath(sessionId, rootId, relPath),
       stickyNetwork: this.networkSticky,
+      sessionEgress: this.sessionEgress,
       stickyShellRun: opts.shellRunSticky ?? new ShellRunStickyStore(),
     })
   }

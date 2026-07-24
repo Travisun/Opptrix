@@ -2,6 +2,7 @@ import path from 'node:path'
 import {
   ConfirmationRequiredError,
   NetworkInstallConfirmationRequiredError,
+  NetworkEgressConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
   getWorkspaceService,
   type ConfirmHandler,
@@ -80,9 +81,22 @@ function formatShellRunConfirmation(err: ShellRunConfirmationRequiredError): {
   }
 }
 
+function formatNetworkEgressConfirmation(err: NetworkEgressConfirmationRequiredError): {
+  needs_confirmation: true
+  confirmation: NetworkEgressConfirmationRequiredError['confirmation']
+} {
+  return {
+    needs_confirmation: true,
+    confirmation: err.confirmation,
+  }
+}
+
 function handleShellError(err: unknown): unknown {
   if (err instanceof ShellRunConfirmationRequiredError) {
     return formatShellRunConfirmation(err)
+  }
+  if (err instanceof NetworkEgressConfirmationRequiredError) {
+    return formatNetworkEgressConfirmation(err)
   }
   if (err instanceof NetworkInstallConfirmationRequiredError) {
     return formatNetworkInstallConfirmation(err)
@@ -428,7 +442,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'shell_run',
       category: '工作区',
-      description: '在系统隔离环境中运行 python/node/npm/pip 命令；只能访问已授权工作区，包须装进工作区',
+      description: '在系统隔离环境中运行允许的命令（python/node/npm/pip/ping 等）；测网站延迟优先 http_fetch；只能访问已授权工作区',
       parameters: S({
         root_id: { type: 'string', description: '工作区 root_id，默认 default' },
         cwd: { type: 'string', description: '相对工作目录，默认根目录' },

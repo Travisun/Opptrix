@@ -94,7 +94,15 @@ In Electron, the client forces **desktop layout** (sidebar visible, no mobile dr
 
 ## 命令隔离（Agent Shell）
 
-智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；安装依赖时还会单独确认联网。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
+
+**出站与 DNS（默认禁网）**：
+
+- 沙箱内 **默认禁止 TCP 出站**；访问具体外网站点需你按域名确认（仅此一次 / 本对话允许该域名）。
+- **永久白名单**：在 **设置 → 沙盒环境** 配置「访问白名单」与「允许局域网访问」；与部署变量 `OPPTRIX_SHELL_ALLOWED_DOMAINS`（逗号分隔，支持 `*.example.com`）合并，命中后不再询问。未开启局域网访问时，不能保存本地或私网地址。
+- 运行命令时若沙箱拦截出站连接，会通过 **sandboxAskCallback** 即时弹出确认（与聊天侧外网访问确认同一套选项）。
+- **DNS**：命令仍可使用系统解析公网域名；沙盒内自行运行 `dig` / `nslookup` 等会被拦截（且不在允许命令列表）。解析到私网或本机地址的连接仍会被拒绝。
+- `ping` / 路由探测与运行命令**合并为一次确认**（展示命令与目标）。若仍失败，助手会提示改用 `http_fetch` 测网站连通性。
 
 桌面安装包会尽量自带组件并自动就绪；**仍可能需要你配合一次系统授权或系统策略调整**。
 
@@ -109,13 +117,14 @@ In Electron, the client forces **desktop layout** (sidebar visible, no mobile dr
 **边界说明（可行性）**：
 
 - Windows 的机器级隔离用户与网络策略需要**一次**提升授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行 `npx … windows-install`。
-- **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；联网安装另有单独确认，二者独立。
+- **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；访问外网或联网安装另有单独确认（`ping` 与运行命令合并为一次）。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。
 - Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `shell_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。
 - Electron 主进程提供 `shellInstallWindowsSandbox` / `shellInstallLinuxSandbox` IPC，供 UI 在 sidecar 无法完成授权时重试（同样是一次系统授权）。
+- **设置页自检**：**设置 → 沙盒环境** 顶部 `SandboxEnvironmentStatusCard` 经 `GET /api/settings/sandbox/status` 展示就绪状态与说明；未就绪且 `can_auto_install` 时显示「完成设置」，触发上述 IPC 完成一次系统授权（与首次 `shell_run` 自动请求等价，可提前在设置中完成）。
 
-详见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 中 `shell_platform_status` 字段（`ready` / `needs_elevation` / `can_auto_install` / `userns_restricted` 等）。
+详见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 中 `shell_platform_status` 字段（`ready` / `needs_elevation` / `can_auto_install` / `userns_restricted` 等）；REST 等价见 [API.md · 沙盒环境设置](./API.md#沙盒环境设置)。
 
 ### Window blur + sidebar
 

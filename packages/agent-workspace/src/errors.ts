@@ -65,6 +65,23 @@ export class NetworkInstallConfirmationRequiredError extends WorkspaceError {
   }
 }
 
+export class NetworkEgressConfirmationRequiredError extends WorkspaceError {
+  readonly confirmation: {
+    kind: 'network_egress'
+    title: string
+    prompt: string
+    command_summary?: string
+    target_host?: string
+    options: Array<{ id: string; label: string }>
+  }
+
+  constructor(confirmation: NetworkEgressConfirmationRequiredError['confirmation']) {
+    super('需要用户确认外网访问')
+    this.name = 'NetworkEgressConfirmationRequiredError'
+    this.confirmation = confirmation
+  }
+}
+
 export class ShellRunConfirmationRequiredError extends WorkspaceError {
   readonly confirmation: {
     kind: 'shell_run'

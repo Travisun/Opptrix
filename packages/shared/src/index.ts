@@ -47,6 +47,15 @@ export {
 export { outboundFetch, formatOutboundFetchError } from './outbound-fetch.js'
 export { ok, fail, elapsedSince } from './result.js'
 export { resolveUserDataRoot, resolveProvidersDir, isDesktopRuntime, resolveProjectRoot } from './paths.js'
+export {
+  DEFAULT_SANDBOX_SETTINGS,
+  normalizeSandboxDomainLine,
+  normalizeSandboxSettings,
+  validateSandboxSettingsInput,
+  isPrivateOrLocalHostPattern,
+  type SandboxSettings,
+  type ValidateSandboxSettingsResult,
+} from './sandbox-settings.js'
 export type { InstalledProviderRecord, InstalledProvidersIndex } from './installed-provider.js'
 export {
   computeMarketRegime,

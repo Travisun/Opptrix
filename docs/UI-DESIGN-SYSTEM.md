@@ -224,6 +224,7 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 | `SettingsPanelHeader` | 面板标题行 | Group 内小写大写分组标签 + action 区域 |
 | `SettingsInlineInput` | 行内输入框容器 | `inputShellInteractive` 外壳，最大宽 240px |
 | `SettingsTextField` | 文本输入 | 封装 `SettingsInlineInput` + Fluent `Input` |
+| `SettingsMonospaceEditor` | 等宽多行编辑 | CodeMirror（`@uiw/react-codemirror`）：行号、折行、括号匹配；`canvasAlt` 底 + `settingsPanelBorder` 外框；默认高 320px。用于**沙盒环境**访问白名单与 **MCP 服务器** JSON 高级编辑 |
 | `SettingsCredentialRow` | 密钥编辑行 | 密码框 + 眼睛切换 + 测试/保存按钮，连续编组 |
 | `SettingsActionRow` | 可点击行 | 整行可点击的导航/操作入口 |
 | `SettingsDivider` | 分割线 | 可选 fullWidth |

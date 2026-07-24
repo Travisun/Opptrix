@@ -6,6 +6,7 @@ export type {
   ShellRunResult,
 } from './types.js'
 export { buildSandboxConfigFromGrants, buildSandboxConfigFromGrantPaths } from './config-from-grants.js'
+export type { BuildSandboxConfigOptions } from './config-from-grants.js'
 export {
   assertAllowedShellArgv,
   assertPackageInstallPolicy,
@@ -14,17 +15,45 @@ export {
   buildNpmInstallArgv,
   buildPipInstallArgv,
   commandNeedsNetwork,
+  commandMayNeedEgressConfirmation,
+  isNetworkDiagnosticCommand,
+  parseDiagnosticTargetHost,
 } from './package-policy.js'
 export {
+  mergeAllowedNetworkDomains,
   networkDomainsForInstallAllowed,
+  networkDomainsForDiagnosticTarget,
+  networkDomainsForSessionHost,
   networkDomainsWhenDenied,
+  getConfiguredAllowedDomains,
+  getGrantableMergedAllowedDomains,
+  getGrantableMergedAllowedDomainsSync,
+  getMergedRawAllowedDomains,
+  getGrantableConfiguredAllowedDomains,
+  getGrantableConfiguredAllowedDomainsSync,
+  isHostInConfiguredAllowlist,
+  resetConfiguredAllowedDomainsForTests,
   PACKAGE_INSTALL_ALLOWED_DOMAINS,
+  SRT_SUPPORTS_ALLOW_ALL_IN_ALLOWED_DOMAINS,
 } from './network-policy.js'
+export {
+  detectNetworkEgressBlocked,
+  assertEgressHostGrantable,
+  isEgressHostPreAuthorized,
+  buildNeedsNetworkEgressPayload,
+} from './egress-runtime.js'
 export {
   NetworkInstallStickyStore,
   NETWORK_INSTALL_CONFIRM_OPTIONS,
   parseNetworkInstallChoice,
 } from './sticky-network.js'
+export {
+  SessionNetworkEgressStore,
+  NETWORK_EGRESS_CONFIRM_OPTIONS,
+  normalizeEgressHost,
+  parseNetworkEgressChoice,
+} from './session-network-egress.js'
+export type { NetworkEgressConfirmChoice } from './session-network-egress.js'
 export {
   ShellRunStickyStore,
   SHELL_RUN_CONFIRM_OPTIONS,
