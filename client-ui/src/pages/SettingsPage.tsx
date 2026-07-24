@@ -37,9 +37,10 @@ import {
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { DESKTOP_TITLEBAR_HEIGHT, WORKSPACE_CHAT_MIN_WIDTH } from '../desktop/constants'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
 import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
+import { getSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
 
 const SCORECARD_SAVE_MS = 650
 
@@ -319,7 +320,19 @@ function SettingsPageView({
     setFontScaleState(name)
   }, [])
   const s = useStyles()
-  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile)
+  const [viewportWidth, setViewportWidth] = useState(() =>
+    typeof window !== 'undefined' ? window.innerWidth : 1280,
+  )
+  useEffect(() => {
+    const onResize = () => setViewportWidth(window.innerWidth)
+    window.addEventListener('resize', onResize)
+    return () => window.removeEventListener('resize', onResize)
+  }, [])
+  const sessionSidebarWidth = useMemo(
+    () => getSessionSidebarWidth(viewportWidth, WORKSPACE_CHAT_MIN_WIDTH),
+    [viewportWidth],
+  )
+  const sidebarOverlayMode = useSidebarOverlayMode(!isMobile, sessionSidebarWidth)
   const [section, setSection] = useState<SettingsSection>(() => normalizeSettingsSection(initialSection))
   const [search, setSearch] = useState('')
   const [wizardOpen, setWizardOpen] = useState(false)

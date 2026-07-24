@@ -43,12 +43,9 @@ const useStyles = makeStyles({
     backgroundColor: 'transparent',
   },
   panelShellVisible: {
-    width: opptrixTokens.sidebarWidth,
     pointerEvents: 'auto',
   },
   sidebarPanel: {
-    width: opptrixTokens.sidebarWidth,
-    minWidth: opptrixTokens.sidebarWidth,
     height: '100%',
     opacity: 0,
     transform: 'translateX(-12px)',
@@ -273,6 +270,8 @@ const useStyles = makeStyles({
 
 interface SessionSidebarProps {
   mode: SidebarMode
+  width: number
+  isDragging?: boolean
   visible?: boolean
   drawerOpen?: boolean
   sessions: SessionMeta[]
@@ -304,7 +303,7 @@ function formatDate(iso: string) {
 }
 
 function SessionSidebar({
-  mode, visible = true, drawerOpen = false,
+  mode, width, isDragging = false, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat', busySessionIds = [],
   onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
   listTab: listTabProp,
@@ -520,7 +519,7 @@ function SessionSidebar({
     return (
       <OverlaySidebarShell
         open={visible}
-        width={opptrixTokens.sidebarWidth}
+        width={`${width}px`}
         onClose={onClose}
       >
         <div
@@ -549,8 +548,9 @@ function SessionSidebar({
         sidebarSolidDark && s.sidebarElectronSolid,
         electronChrome && s.sidebarTopElectron,
         sidebarGlass && 'opptrix-glass-sidebar',
-        !isDrawer && 'opptrix-sidebar-edge',
+        isDrawer && 'opptrix-sidebar-edge',
       )}
+      style={!isDrawer ? { width, minWidth: width } : undefined}
     >
       {sidebarBody}
     </aside>
@@ -570,7 +570,13 @@ function SessionSidebar({
   }
 
   return (
-    <div className={mergeClasses(s.panelShell, visible && s.panelShellVisible)}>
+    <div
+      className={mergeClasses(s.panelShell, visible && s.panelShellVisible)}
+      style={{
+        width: visible ? width : 0,
+        transitionProperty: isDragging ? 'none' : 'width',
+      }}
+    >
       {sidebarEl}
     </div>
   )
