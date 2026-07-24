@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "references": [{ "path": "../agent-browser" }, { "path": "../research-hub" }],
+  "references": [{ "path": "../agent-browser" }, { "path": "../agent-workspace" }, { "path": "../research-hub" }],
   "include": ["src/**/*"]
 }

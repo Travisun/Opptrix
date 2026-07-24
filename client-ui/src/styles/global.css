@@ -944,6 +944,42 @@ select:focus-visible {
   overflow: visible !important;
 }
 
+/* 授权文件夹 — 列表 + 添加区 */
+.opptrix-workspace-grants-dialog.fui-DialogSurface {
+  width: min(520px, calc(100vw - 32px)) !important;
+  max-width: min(520px, calc(100vw - 32px)) !important;
+  max-height: min(80vh, 640px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.opptrix-workspace-grants-dialog .fui-DialogBody {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.opptrix-workspace-grants-dialog .fui-DialogTitle {
+  flex-shrink: 0 !important;
+}
+
+.opptrix-workspace-grants-dialog .fui-DialogContent {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow-y: auto !important;
+  padding: 0 20px !important;
+}
+
+.opptrix-workspace-grants-dialog .fui-DialogActions {
+  flex-shrink: 0 !important;
+  padding: 12px 20px 18px !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+}
+
 /* 管理关注分组 — 宽操作区 + 内层列表滚动（不改动默认 glass 440 / Content overflow） */
 .opptrix-watchlist-groups-dialog.fui-DialogSurface {
   width: min(720px, calc(100vw - 32px)) !important;
@@ -1804,10 +1840,46 @@ html.opptrix-electron .opptrix-session-title-inline-btn {
   transition: background-color 140ms ease, color 140ms ease;
 }
 
+.opptrix-composer-quick-add svg {
+  fill: currentColor;
+}
+
 .opptrix-composer-quick-add:hover,
 .opptrix-composer-quick-add--open {
   color: var(--opptrix-text, #1A1A1A);
   background: rgba(60, 60, 67, 0.08);
+}
+
+.opptrix-composer-grants {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex-shrink: 1;
+}
+
+.opptrix-composer-grants__count {
+  padding: 2px 4px;
+  border: none;
+  background: transparent;
+  color: var(--opptrix-text-secondary, #6B6B6B);
+  font-size: var(--opptrix-font-xs, 11px);
+  font-weight: 500;
+  line-height: 1.3;
+  white-space: nowrap;
+  cursor: pointer;
+  border-radius: 4px;
+  transition: background-color 140ms ease, color 140ms ease, opacity 140ms ease;
+}
+
+.opptrix-composer-grants__count:hover:not(:disabled) {
+  color: var(--opptrix-text, #1A1A1A);
+  background: rgba(60, 60, 67, 0.08);
+}
+
+.opptrix-composer-grants__count:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
 }
 
 .opptrix-composer-quick-menu__task-text {

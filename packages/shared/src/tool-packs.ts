@@ -16,6 +16,7 @@ export const TOOL_PACK_IDS = [
   'industry',
   'news',
   'browser',
+  'workspace',
   'strategy_extra',
   'provider_ext',
 ] as const
@@ -95,6 +96,12 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     title: '网页浏览',
     description: '打开外部网页、读取页面快照、点击与输入、截图',
     whenToUse: '用户给出 URL 或要查看/操作外部网站（非内置资讯源）',
+  },
+  {
+    id: 'workspace',
+    title: '工作区与文件',
+    description: '读写本地工作区、下载文件、受控 HTTP 请求、文件夹授权',
+    whenToUse: '保存/读取报告与数据文件、下载附件、调用开放 API、访问用户授权的文件夹',
   },
   {
     id: 'strategy_extra',
@@ -209,6 +216,17 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   browser_type: 'browser',
   browser_screenshot: 'browser',
   browser_close: 'browser',
+
+  // workspace
+  workspace_list: 'workspace',
+  workspace_read: 'workspace',
+  workspace_write: 'workspace',
+  workspace_mkdir: 'workspace',
+  workspace_delete: 'workspace',
+  download_file: 'workspace',
+  http_fetch: 'workspace',
+  request_folder_access: 'workspace',
+  list_workspace_grants: 'workspace',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

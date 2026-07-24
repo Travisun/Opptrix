@@ -682,6 +682,7 @@ function ChatView({
               : undefined}
           >
             <ChatComposer
+              sessionId={sessionId}
               draftSync={composerDraft}
               loading={loading}
               error={error}

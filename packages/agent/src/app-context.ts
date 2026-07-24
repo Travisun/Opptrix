@@ -1,7 +1,5 @@
-import fs from 'node:fs'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { isDesktopRuntime, resolveProjectRoot, resolveUserDataRoot } from '@opptrix/shared'
+import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
 
 const DATA_ROOT = resolveUserDataRoot()
 
@@ -33,6 +31,7 @@ export interface AgentAppContext {
 
 export { resolveProjectRoot } from '@opptrix/shared'
 
+/** 内部用：完整数据层路径（勿直接暴露给 Agent / LLM） */
 export function getDataLayerPaths() {
   return {
     data_root: DATA_ROOT,
@@ -41,6 +40,35 @@ export function getDataLayerPaths() {
     watchlist_file: path.join(DATA_ROOT, 'watchlist.json'),
     portfolio_dir: DATA_ROOT,
     tushare_config: path.join(DATA_ROOT, 'tushare-config.json'),
+  }
+}
+
+const AGENT_WORKSPACE_NOTE =
+  'Agent 可访问目录请调用 list_workspace_grants；本工具不返回应用数据根或内部路径'
+
+/** Agent 可见：数据层摘要（无 ~/.opptrix 绝对路径） */
+export function getAgentSafeDataLayerSummary(): Record<string, unknown> {
+  return {
+    user_data_configured: true,
+    workspace_note: AGENT_WORKSPACE_NOTE,
+  }
+}
+
+/**
+ * 脱敏 project info — 去掉 paths / project_root / agent_package 等敏感或易误导字段。
+ * 供 get_project_info 工具与服务端注入共用。
+ */
+export function buildAgentSafeProjectInfo(
+  fields: Record<string, unknown>,
+): Record<string, unknown> {
+  const safe = { ...fields }
+  delete safe.paths
+  delete safe.project_root
+  delete safe.agent_package
+  return {
+    ...safe,
+    ...getAgentSafeDataLayerSummary(),
+    note: '运行环境元数据，不是用户授权目录清单；询问可访问目录请用 list_workspace_grants',
   }
 }
 
@@ -76,7 +104,6 @@ export function getCurrentTime() {
 }
 
 export function createDefaultAppContext(): AgentAppContext {
-  const agentPkgRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
   return {
     async getAppSettings() {
       return {
@@ -88,15 +115,12 @@ export function createDefaultAppContext(): AgentAppContext {
       }
     },
     async getProjectInfo() {
-      return {
+      return buildAgentSafeProjectInfo({
         app: 'Opptrix',
         component: 'agent-mcp',
         version: '0.6.0',
         runtime: isDesktopRuntime() ? 'desktop' : 'node',
-        project_root: resolveProjectRoot(),
-        agent_package: agentPkgRoot,
-        paths: getDataLayerPaths(),
-      }
+      })
     },
   }
 }

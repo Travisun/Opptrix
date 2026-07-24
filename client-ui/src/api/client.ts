@@ -1310,6 +1310,36 @@ export async function deleteSession(id: string) {
   return jsonFetch<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' })
 }
 
+export interface WorkspaceGrantDto {
+  id: string
+  root_id: string
+  abs_path: string
+  mode: 'ro' | 'rw'
+  label?: string
+  is_default?: boolean
+}
+
+export async function listWorkspaceGrants(sessionId: string) {
+  return jsonFetch<{ grants: WorkspaceGrantDto[] }>(`/sessions/${sessionId}/workspace/grants`)
+}
+
+export async function addWorkspaceGrant(
+  sessionId: string,
+  payload: { path: string; mode?: 'ro' | 'rw'; label?: string },
+) {
+  return jsonFetch<{ grant: WorkspaceGrantDto }>(`/sessions/${sessionId}/workspace/grants`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(payload),
+  })
+}
+
+export async function removeWorkspaceGrant(sessionId: string, grantId: string) {
+  return jsonFetch<{ status: string }>(`/sessions/${sessionId}/workspace/grants/${encodeURIComponent(grantId)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function listSessionArchiveFolders() {
   return jsonFetch<{ folders: import('../types/chat').SessionArchiveFolder[] }>('/sessions/archive-folders')
 }

@@ -37,9 +37,15 @@ import {
   createUserPromptId,
   parseAskUserArgs,
   type UserPromptAnswer,
+  type UserPromptOption,
   UserPromptCancelledError,
 } from './user-prompt.js'
 import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
+import { getWorkspaceService } from '@opptrix/agent-workspace'
+import {
+  bindWorkspaceToolBridge,
+  type WorkspaceToolBridge,
+} from './mcp/workspace-tools.js'
 
 export interface AgentSettings {
   providers?: ProviderProfile[]
@@ -88,6 +94,7 @@ export class AgentEngine {
   /** 本轮路由计划（首选工具 + 选型卡） */
   private lastRoutePlan: ToolRoutePlan | null = null
   readonly userPromptBridge = new UserPromptBridge()
+  private readonly workspaceService = getWorkspaceService()
 
   constructor(
     private hub: ResearchHub,
@@ -162,6 +169,54 @@ export class AgentEngine {
     // 远程 MCP 工具整体优先于本地兜底工具；preferred 排序仅在各自分组内生效。
     const openAiTools = orderToolsByPreference(rawTools, preferred, { remoteFirst: true })
     return { broker, openAiTools }
+  }
+
+  private bindWorkspaceBridge(sessionId: string, emit: (event: ChatProgressEvent) => void, signal?: AbortSignal) {
+    const bridge: WorkspaceToolBridge = {
+      sessionId,
+      signal,
+      confirm: async (payload: {
+        title: string
+        prompt: string
+        options: Array<{ id: string; label: string }>
+        operation: 'overwrite' | 'delete'
+        root_id: string
+        path: string
+      }) => {
+        const promptId = createUserPromptId()
+        emit({
+          type: 'user_prompt',
+          prompt: {
+            id: promptId,
+            title: payload.title,
+            prompt: payload.prompt,
+            options: payload.options as UserPromptOption[],
+          },
+        })
+        const answer = await this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
+        return { selected_ids: answer.selected_ids }
+      },
+    }
+    bindWorkspaceToolBridge(bridge)
+  }
+
+  listWorkspaceGrants(sessionId: string) {
+    return this.workspaceService.listGrants(sessionId)
+  }
+
+  addWorkspaceGrant(
+    sessionId: string,
+    absPath: string,
+    mode: 'ro' | 'rw',
+    label?: string,
+  ) {
+    if (!this.sessions.get(sessionId)) return null
+    return this.workspaceService.addGrant(sessionId, absPath, mode, label)
+  }
+
+  removeWorkspaceGrant(sessionId: string, grantId: string) {
+    if (!this.sessions.get(sessionId)) return false
+    return this.workspaceService.removeGrant(sessionId, grantId)
   }
 
   private bindPackBridge(sessionId: string) {
@@ -257,6 +312,8 @@ export class AgentEngine {
 
   deleteSession(id: string) {
     this.userPromptBridge.cancelSession(id)
+    this.toolPackSessions.clear(id)
+    this.workspaceService.clearSession(id)
     this.sessions.delete(id)
   }
 
@@ -437,6 +494,7 @@ export class AgentEngine {
       contextRef: record.contextRef,
     })
     this.bindPackBridge(sessionId)
+    this.bindWorkspaceBridge(sessionId, emit, signal)
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
     let { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
@@ -627,6 +685,7 @@ export class AgentEngine {
     } finally {
       await broker.close().catch(() => {})
       this.tools.clearPackSession()
+      bindWorkspaceToolBridge(null)
     }
     } catch (e) {
       if (

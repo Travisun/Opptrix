@@ -133,6 +133,17 @@ export function newsCrossReadHintForRef(ref: InstrumentRef): string {
   return `主市场优先 ${ref.market} 分组；不足时可交叉查阅：${hints.join('、')}`
 }
 
+/** 聊天 Agent — 工作区与文件访问边界 */
+export function buildWorkspaceAccessPlaybook(): string {
+  return [
+    '【工作区与可访问目录】',
+    '- 用户问可访问哪些目录、能读哪些文件夹、本对话授权工作区 → 只调用 list_workspace_grants',
+    '- 禁止把 get_project_info 或 get_system_info 的路径/ cwd 说成可访问目录',
+    '- 禁止向用户朗读 ~/.opptrix 应用数据根、sessions、watchlist、数据库、providers 等内部结构',
+    '- 默认公共工作区 root_id=default；额外目录需界面授权或 request_folder_access',
+  ].join('\n')
+}
+
 /** 聊天 Agent — 用户交互确认（ask_user 工具） */
 export function buildUserInteractionPlaybook(): string {
   return [
@@ -311,6 +322,8 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     buildResearchEpistemicPlaybook(),
     buildResearchOutputPlaybook(tier),
   )
+
+  sections.push(buildWorkspaceAccessPlaybook())
 
   // 完备性闭环仅作用于 L2/L3 报告类输出；L1 事实快答保持轻量。
   if (tier !== 'L1') {

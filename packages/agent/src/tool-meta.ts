@@ -418,8 +418,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   get_project_info: {
     miningEligible: false,
-    usageGuide: '需要数据根目录、关注列表文件、会话存储或项目根路径时调用。',
-    compliance: '只读；仅返回路径元数据，不读取文件内容。',
+    usageGuide: '需要确认应用版本、运行时或数据是否已配置时调用；不是可访问目录清单。',
+    compliance: '只读；不返回 ~/.opptrix 内部路径；询问可访问目录请用 list_workspace_grants，勿将本工具结果当作授权目录。',
   },
   get_integration_status: {
     miningEligible: false,
@@ -523,6 +523,51 @@ export const TOOL_META: Record<string, ToolMeta> = {
     packId: 'browser',
     usageGuide: '外部网页任务结束或切换站点前关闭浏览器，释放资源。',
     compliance: '无参数；关闭后再次浏览须 browser_navigate 重新打开。',
+  },
+  workspace_list: {
+    packId: 'workspace',
+    usageGuide: '查看工作区或授权文件夹内的文件列表；先 list_workspace_grants 确认 root_id。',
+    compliance: '只读；path 为相对路径；禁止 .. 穿越。',
+  },
+  workspace_read: {
+    packId: 'workspace',
+    usageGuide: '读取工作区内文本文件（报告、CSV、JSON 等）；大文件自动截断。',
+    compliance: '只读；root_id + 相对 path；勿读二进制大文件进上下文。',
+  },
+  workspace_write: {
+    packId: 'workspace',
+    usageGuide: '保存分析结果、导出报告到工作区；覆盖已有文件会触发用户确认。',
+    compliance: '须 rw 授权；覆盖/删除可走 sticky；工作区总配额 20GB。',
+  },
+  workspace_mkdir: {
+    packId: 'workspace',
+    usageGuide: '在工作区内创建子目录，组织输出文件。',
+    compliance: '须 rw 授权；path 相对 root_id。',
+  },
+  workspace_delete: {
+    packId: 'workspace',
+    usageGuide: '删除工作区内文件或目录；会触发用户确认。',
+    compliance: '须 rw 授权；删除不可恢复；可走 sticky。',
+  },
+  download_file: {
+    packId: 'workspace',
+    usageGuide: '从 http(s) URL 流式下载大文件到工作区（公告 PDF、数据集等）。',
+    compliance: '禁止内网/本地 URL；覆盖已有文件需确认；更新工作区配额。',
+  },
+  http_fetch: {
+    packId: 'workspace',
+    usageGuide: '调用开放 HTTP API 获取 JSON/文本；响应自动截断以节约 token。',
+    compliance: '仅 http/https；禁止 SSRF；请求体 ≤32MB；响应用于模型上下文时截断。',
+  },
+  request_folder_access: {
+    packId: 'workspace',
+    usageGuide: '需要访问工作区外的文件夹时，提示用户在界面授权（ro/rw）。',
+    compliance: '工具本身不弹窗；用户授权后 list_workspace_grants 获取 root_id。',
+  },
+  list_workspace_grants: {
+    packId: 'workspace',
+    usageGuide: '用户问可访问哪些目录、本对话有哪些授权工作区、能读哪些文件夹时首选。',
+    compliance: '只读；返回 root_id/label/mode 与公共工作区摘要；勿用 get_project_info 代替；额外目录需 request_folder_access 或界面授权。',
   },
 }
 

@@ -314,6 +314,60 @@ POST /api/research
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
+工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `list_workspace_grants` 等）与会话文件夹授权见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与下方 grants 路由。
+
+### Workspace grants（会话文件夹授权）
+
+按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace`，`mode: "rw"`，`is_default: true`）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants / sticky 策略。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/sessions/:id/workspace/grants` | `{ grants: WorkspaceGrant[] }` |
+| POST | `/api/sessions/:id/workspace/grants` | 新增授权；body 见下 |
+| DELETE | `/api/sessions/:id/workspace/grants/:grantId` | 按 grant `id` 移除；默认根返回 404 |
+
+**POST body**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `path` | string | **必填**，要授权的绝对路径 |
+| `mode` | `"ro"` \| `"rw"` | 默认 `"ro"`；其它值按只读处理 |
+| `label` | string | 可选显示名；缺省时用目录名 |
+
+**成功响应示例**
+
+```json
+{
+  "grants": [
+    {
+      "id": "…",
+      "root_id": "default",
+      "abs_path": "/Users/…/.opptrix/agent-workspace",
+      "mode": "rw",
+      "label": "默认工作区",
+      "is_default": true
+    }
+  ]
+}
+```
+
+```json
+{ "grant": { "id": "…", "root_id": "grant_a1b2c3d4", "abs_path": "/path/to/folder", "mode": "ro", "label": "folder" } }
+```
+
+```json
+{ "status": "removed" }
+```
+
+**错误**
+
+| 状态码 | 场景 |
+|--------|------|
+| 400 | `path` 缺失；路径受保护或其它校验失败（`{ "error": "…" }`） |
+| 404 | 会话不存在；DELETE 时 grant 不存在或试图删除默认根 |
+
+前端客户端：`listWorkspaceGrants` / `addWorkspaceGrant` / `removeWorkspaceGrant`（`client-ui/src/api/client.ts`）。Agent 侧对应工具：`list_workspace_grants`（问可访问目录时首选）、`request_folder_access`（仅提示用户授权，不代替本 API）；`get_project_info` 已脱敏且不是授权清单。
+
 ## 错误
 
 - HTTP 400：`{ "error": "..." }` 参数缺失或业务失败

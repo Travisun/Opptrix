@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, fetchOpenAiModelList, getDataLayerPaths, initOutboundNetwork, resolveProjectRoot, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -29,7 +29,7 @@ import {
 } from './stock-analysis-store.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
-import { isDiscoverStrategyProfile, listDiscoverProfileMeta, type DiscoverStrategyProfile } from '@opptrix/shared'
+import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
@@ -66,14 +66,12 @@ function syncAgentProviders() {
 let agent!: AgentEngine
 const serverAppContext = {
   getAppSettings: async () => publicConfig(cfg),
-  getProjectInfo: async () => ({
+  getProjectInfo: async () => buildAgentSafeProjectInfo({
     app: 'Opptrix',
     version: APP_VERSION,
     runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
     desktop: process.env.OPPTRIX_DESKTOP === '1',
-    project_root: resolveProjectRoot(),
     server: { host: HOST, port: PORT },
-    paths: getDataLayerPaths(),
     tool_count: agent.tools.list().length,
     mining_tool_count: agent.tools.miningTools().length,
   }),
@@ -901,6 +899,46 @@ app.delete<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) =
   agent.deleteSession(req.params.id)
   return { status: 'deleted' }
 })
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id/workspace/grants', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  const grants = await agent.listWorkspaceGrants(req.params.id)
+  return { grants }
+})
+
+app.post<{
+  Params: { id: string }
+  Body: { path?: string; mode?: string; label?: string }
+}>('/api/sessions/:id/workspace/grants', async (req, reply) => {
+  if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+  const absPath = String(req.body?.path ?? '').trim()
+  if (!absPath) return reply.code(400).send({ error: 'path required' })
+  const modeRaw = String(req.body?.mode ?? 'ro').trim()
+  const mode = modeRaw === 'rw' ? 'rw' : 'ro'
+  try {
+    const grant = agent.addWorkspaceGrant(
+      req.params.id,
+      absPath,
+      mode,
+      req.body?.label != null ? String(req.body.label) : undefined,
+    )
+    if (!grant) return reply.code(404).send({ error: 'session not found' })
+    return { grant }
+  } catch (e) {
+    const message = e instanceof Error ? e.message : String(e)
+    return reply.code(400).send({ error: message })
+  }
+})
+
+app.delete<{ Params: { id: string; grantId: string } }>(
+  '/api/sessions/:id/workspace/grants/:grantId',
+  async (req, reply) => {
+    if (!agent.getSession(req.params.id)) return reply.code(404).send({ error: 'session not found' })
+    const removed = agent.removeWorkspaceGrant(req.params.id, req.params.grantId)
+    if (!removed) return reply.code(404).send({ error: 'grant not found or cannot remove default' })
+    return { status: 'removed' }
+  },
+)
 
 app.post<{ Params: { id: string }; Body: { message_index: number } }>(
   '/api/sessions/:id/fork',

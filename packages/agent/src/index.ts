@@ -23,6 +23,8 @@ export {
   createDefaultAppContext,
   getCurrentTime,
   getDataLayerPaths,
+  getAgentSafeDataLayerSummary,
+  buildAgentSafeProjectInfo,
   getSystemInfo,
   resolveProjectRoot,
 } from './app-context.js'

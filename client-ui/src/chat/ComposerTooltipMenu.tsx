@@ -26,6 +26,8 @@ interface Props {
   children: ReactNode
   footer?: ReactNode
   showClose?: boolean
+  /** Portal stacking; default keeps Composer menus below Fluent Dialog portals */
+  zIndex?: number
 }
 
 export const COMPOSER_MENU_WIDTH = {
@@ -36,7 +38,11 @@ export const COMPOSER_MENU_WIDTH = {
 
 const DEFAULT_WIDTH = COMPOSER_MENU_WIDTH.quickTasks
 const DEFAULT_MAX_HEIGHT = 280
+const DEFAULT_Z_INDEX = 2000
 const VIEWPORT_PAD = 12
+
+/** Fluent `@fluentui/react-portal` mount node uses z-index 1_000_000 */
+export const COMPOSER_TOOLTIP_ABOVE_DIALOG_Z_INDEX = 1_000_001
 
 function clamp(value: number, min: number, max: number) {
   return Math.min(Math.max(value, min), max)
@@ -59,6 +65,7 @@ export default function ComposerTooltipMenu({
   children,
   footer,
   showClose = false,
+  zIndex = DEFAULT_Z_INDEX,
 }: Props) {
   const panelRef = useRef<HTMLDivElement>(null)
   const menuWidth = resolveMenuWidth(width)
@@ -66,7 +73,7 @@ export default function ComposerTooltipMenu({
     position: 'fixed',
     width: menuWidth,
     maxWidth: menuWidth,
-    zIndex: 2000,
+    zIndex,
     visibility: 'hidden',
   }))
 
@@ -97,10 +104,10 @@ export default function ComposerTooltipMenu({
       left,
       width: panelWidth,
       maxWidth: panelWidth,
-      zIndex: 2000,
+      zIndex,
       visibility: 'visible',
     })
-  }, [align, anchorRef, menuWidth, open])
+  }, [align, anchorRef, menuWidth, open, zIndex])
 
   useLayoutEffect(() => {
     if (!open) return

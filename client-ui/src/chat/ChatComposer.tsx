@@ -4,6 +4,7 @@ import { ArrowUpRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ComposerContextRefTag from './ComposerContextRefTag'
 import ComposerQuickTasks from './ComposerQuickTasks'
+import ChatWorkspaceGrants from './ChatWorkspaceGrants'
 import ComposerStockMentionList from './ComposerStockMentionList'
 import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
@@ -197,7 +198,9 @@ position: 'relative',
   toolbarLeft: {
     display: 'flex',
     alignItems: 'center',
-    flexShrink: 0,
+    gap: '4px',
+    flexShrink: 1,
+    minWidth: 0,
   },
   toolbarRight: {
     display: 'flex',
@@ -253,6 +256,7 @@ borderRadius: opptrixTokens.radiusFull,
 interface ChatComposerProps {
   /** 父组件注入草稿（revision 递增时同步到输入框） */
   draftSync?: { revision: number; text: string }
+  sessionId?: string | null
   loading: boolean
   error: string
   isEmpty: boolean
@@ -273,6 +277,7 @@ interface ChatComposerProps {
 
 export default function ChatComposer({
   draftSync,
+  sessionId = null,
   loading,
   error,
   isEmpty,
@@ -566,6 +571,11 @@ export default function ChatComposer({
               <ComposerQuickTasks
                 disabled={composerLocked}
                 onApply={handleApplyQuickTask}
+              />
+              <ChatWorkspaceGrants
+                sessionId={sessionId}
+                variant="toolbar"
+                disabled={composerLocked}
               />
             </div>
             <div className={s.toolbarRight}>

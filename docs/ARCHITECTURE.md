@@ -81,7 +81,7 @@ server · (desktop 仅壳层 + 打包)
 ## 应用层 `@opptrix/agent`
 
 - **AgentEngine**：OpenAI 兼容 Function Calling + 进程内 MCP Broker。
-- **ToolRegistry**：投研 MCP 工具（市场、ETF、组合、跨市场搜索与评估等），见 `packages/agent/src/tools.ts`。
+- **ToolRegistry**：投研 MCP 工具（市场、ETF、组合、跨市场搜索与评估等），见 `packages/agent/src/tools.ts`；工作区 / `http_fetch` / 会话文件夹授权见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)。
 - **多会话**：会话与消息持久化经 server → user-store。
 
 ## Hub 与 Search

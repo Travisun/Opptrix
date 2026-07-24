@@ -102,7 +102,9 @@ Opptrix/
 │   ├── news-feed/ · article-enrichment/
 │   ├── local-inference/
 │   ├── user-store/          # SQLite 用户数据
-│   └── agent/
+│   ├── agent/
+│   ├── agent-workspace/     # Agent 默认工作区、文件夹授权、http_fetch / download
+│   └── agent-browser/       # Playwright 网页浏览工具后端
 ├── docs/                    # 架构、API、UI；入口 docs/README.md
 ├── tests/                   # smoke + integration tests (*.test.mjs)
 ├── .cursor/rules/           # Cursor 工程规则（UI 与改动原则）
@@ -136,7 +138,7 @@ Opptrix/
          ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具 + 内置 `ask_user` 交互确认 + 工具包元工具 + 外部 MCP 运维工具）
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
 - **工具包路由（Tool Pack Router）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
@@ -163,6 +165,17 @@ Opptrix/
   - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
   - **标的公告（`news` pack）**：`get_instrument_notices` → `get_notice_content`
   - **网页浏览（`browser` pack）**：`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot` / `browser_close`（Playwright 完整 Chromium，headless，无需单独 headless-shell；开发环境 `npm install` 会自动安装 Chromium，可用 `OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1` 跳过；桌面安装包已内置）
+  - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
+    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants`
+    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）
+    - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面展示「公共工作区」，**不**把 `~/.opptrix` 根目录标为可访问目录。
+    - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
+    - **根目录**：默认 `root_id=default` → 仅公共工作区子目录 `agent-workspace`（读写），不是整个用户数据根；额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
+    - **安全边界摘要**：
+      - 路径闸门：相对路径，禁止 `..` 穿越；Global Deny 优先于 grant（如 `agent-privileges`、用户库 `opptrix.db*`、`providers/`、`sessions/`、`tushare-config.json`、`watchlist.json`、`portfolio.json`、`market-data/` 等）；用户数据根本身不可作为 grant 目标暴露给 Agent
+      - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
+      - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
+      - `request_folder_access` 仅提示用户去界面授权，不直接弹系统选目录；授权 API 见 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
   - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示
@@ -241,6 +254,7 @@ npm run serve               # 生产预览
 | 新增 Hub feature | `packages/research-hub/src/hub.ts` |
 | 新增 REST 端点 | `apps/server/src/index.ts` |
 | 新增 Agent/MCP 工具 | `packages/agent/src/tools.ts` + `tool-meta.ts` + `packages/shared/src/tool-packs.ts`（挂 pack）+ `tool-route-plan.ts`（意图精排）；遵循 `.cursor/rules/mcp-tool-pack-routing.mdc` |
+| 工作区 / http_fetch / 文件夹授权 | `packages/agent-workspace/` + `packages/agent/src/mcp/workspace-tools.ts`；grant REST：`apps/server/src/index.ts`（`/api/sessions/:id/workspace/grants`） |
 | 调整聊天工具包播种 | `packages/agent/src/mcp/tool-pack-resolver.ts` |
 | 新增数据源 | `packages/a-stock-layer/src/drivers/` + `register.ts`（规范见 [DATA-LAYER.md §12](./DATA-LAYER.md#12-新增-provider-检查清单)） |
 | 新增因子 | `packages/stock-eval/src/factors/` |
@@ -302,7 +316,8 @@ npm run serve               # 生产预览
 |-------------|------|
 | `apps/server/data/config.json` | LLM provider、model、API Key、默认评分卡 |
 | `~/.opptrix/portfolio.json` | 交易账本 |
-| `~/.opptrix/market-data/` | 本地 SQLite 与市场数据（路径以实现为准，可用 `get_project_info` 工具查询） |
+| `~/.opptrix/`（用户数据根） | 内部存储根；**不对** Agent/`list_workspace_grants`/用户界面暴露为可访问目录；默认可写平面仅为其中的 `agent-workspace/` |
+| `~/.opptrix/market-data/` | 本地 SQLite 与市场数据（Deny；`get_project_info` 不返回内部路径） |
 | `.env` | 复制自 `.env.example`；`LLM_API_KEY` 等 |
 | `STOCK_RESEARCH_PORT` | API 端口，默认 `8711` |
 | `OPPTRIX_DESKTOP=1` | 桌面模式标记 |

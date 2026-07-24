@@ -15,6 +15,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { buildAgentSystemRules } from '../packages/shared/dist/agent-prompt-guide.js'
+import { buildAgentSafeProjectInfo } from '../packages/agent/dist/app-context.js'
 import {
   resolveToolRoutePlan,
   buildRoundRoutePlaybook,
@@ -60,6 +61,12 @@ const PRIMARY_CASES = [
   { message: '读一下我的关注列表', expectPrimary: 'get_watchlist', intent: 'watchlist' },
   { message: '最近有什么重要资讯', expectPrimary: 'list_news_articles', intent: 'news_browse' },
   { message: '打开 https://example.com 看看内容', expectPrimary: 'browser_navigate', intent: 'web_browse' },
+  { message: '把工作区文件列表列出来', expectPrimary: 'workspace_list', intent: 'workspace_files' },
+  { message: '下载这个 PDF 保存到工作区', expectPrimary: 'workspace_list', intent: 'workspace_files' },
+  { message: '用 http 请求拉取远程 JSON 数据', expectPrimary: 'http_fetch', intent: 'http_api' },
+  { message: '你能访问哪些目录', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
+  { message: '本对话有哪些授权工作区', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
+  { message: '能读哪些文件夹', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },
@@ -272,4 +279,24 @@ test('D1+D2 aggregate accuracy score ≥ 95% on goldens', () => {
   const recallRate = recallOk / PRIMARY_CASES.length
   assert.ok(primaryRate >= 0.95, `primary precision ${primaryRate}`)
   assert.ok(recallRate >= 0.95, `visibility recall ${recallRate}`)
+})
+
+test('get_project_info sanitizer strips sensitive ~/.opptrix paths', () => {
+  const safe = buildAgentSafeProjectInfo({
+    app: 'Opptrix',
+    paths: { data_root: '/Users/x/.opptrix', sessions_dir: '/Users/x/.opptrix/sessions' },
+    project_root: '/Users/x/Documents/Opptrix',
+    agent_package: '/Users/x/packages/agent',
+  })
+  assert.equal(safe.paths, undefined)
+  assert.equal(safe.project_root, undefined)
+  assert.equal(safe.agent_package, undefined)
+  assert.equal(safe.user_data_configured, true)
+  assert.match(String(safe.workspace_note), /list_workspace_grants/)
+})
+
+test('system rules include workspace access guardrails', () => {
+  const rules = buildAgentSystemRules()
+  assert.match(rules, /list_workspace_grants/)
+  assert.match(rules, /禁止把 get_project_info/)
 })

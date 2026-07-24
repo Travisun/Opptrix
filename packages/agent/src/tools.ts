@@ -1,11 +1,10 @@
 import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import {
+  buildAgentSafeProjectInfo,
   createDefaultAppContext,
   getCurrentTime,
-  getDataLayerPaths,
   getSystemInfo,
-  resolveProjectRoot,
 } from './app-context.js'
 import {
   DATA_LAYER_MINING_TOOL_NAMES,
@@ -18,6 +17,7 @@ import {
   CHAT_MCP_TOOL_NAMES,
 } from './unified-mcp-tools.js'
 import { buildBrowserTools } from './mcp/browser-tools.js'
+import { buildWorkspaceTools } from './mcp/workspace-tools.js'
 import { buildAgentSystemRules, resolveInstrumentFromParams } from '@opptrix/shared'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
@@ -117,6 +117,7 @@ export class ToolRegistry {
       ...this.buildBasicTools(),
       ...this.buildMetaTools(),
       ...buildBrowserTools(),
+      ...buildWorkspaceTools(),
     ]
   }
 
@@ -434,17 +435,15 @@ export class ToolRegistry {
       },
       {
         name: 'get_project_info', category: '基础',
-        description: '读取项目与数据层路径（版本、运行时、数据根目录、会话/关注列表/组合路径）',
+        description: '读取运行环境元数据（版本、运行时、数据是否已配置）；不是可访问目录清单，询问授权目录请用 list_workspace_grants',
         parameters: S({}),
         handler: async () => {
           if (ctx.getProjectInfo) return ctx.getProjectInfo()
-          return {
+          return buildAgentSafeProjectInfo({
             app: 'Opptrix',
             version: '0.6.0',
             runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
-            project_root: resolveProjectRoot(),
-            paths: getDataLayerPaths(),
-          }
+          })
         },
       },
       {
