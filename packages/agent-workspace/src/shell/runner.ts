@@ -3,6 +3,7 @@ import path from 'node:path'
 import { SandboxManager, type Platform } from '@anthropic-ai/sandbox-runtime'
 import {
   NetworkInstallConfirmationRequiredError,
+  ShellRunConfirmationRequiredError,
   WorkspaceError,
 } from '../errors.js'
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
@@ -24,6 +25,12 @@ import {
   NETWORK_INSTALL_CONFIRM_OPTIONS,
   parseNetworkInstallChoice,
 } from './sticky-network.js'
+import {
+  ShellRunStickyStore,
+  SHELL_RUN_CONFIRM_OPTIONS,
+  parseShellRunConfirmChoice,
+  summarizeShellArgv,
+} from './sticky-shell-run.js'
 import type {
   ShellInstallParams,
   ShellPlatformStatus,
@@ -111,6 +118,37 @@ async function requireNetworkInstallConfirmation(
   if (choice === 'sticky') sticky.grant(sessionId)
 }
 
+async function requireShellRunConfirmation(
+  sessionId: string,
+  argv: readonly string[],
+  sticky: ShellRunStickyStore,
+  confirm?: ConfirmHandler,
+): Promise<void> {
+  if (sticky.has(sessionId)) return
+  const commandSummary = summarizeShellArgv(argv)
+  const payload = {
+    kind: 'shell_run' as const,
+    title: '允许运行命令',
+    prompt: `将在隔离环境中运行：\n${commandSummary}\n\n仅限本对话工作区与已授权目录；系统隔离执行。`,
+    command_summary: commandSummary,
+    options: [...SHELL_RUN_CONFIRM_OPTIONS],
+  }
+  if (!confirm) {
+    throw new ShellRunConfirmationRequiredError(payload)
+  }
+  const answer = await confirm({
+    title: payload.title,
+    prompt: payload.prompt,
+    options: payload.options,
+    operation: 'overwrite',
+    root_id: 'default',
+    path: '',
+  })
+  const choice = parseShellRunConfirmChoice(answer.selected_ids)
+  if (choice === 'cancel') throw new WorkspaceError('用户已取消运行命令')
+  if (choice === 'allow_session') sticky.grant(sessionId)
+}
+
 function detectPlatformLabel(): Platform {
   if (!SandboxManager.isSupportedPlatform()) return 'unknown'
   const p = process.platform
@@ -127,6 +165,7 @@ export interface ShellRunnerDeps {
     abs: string
   }>
   stickyNetwork: NetworkInstallStickyStore
+  stickyShellRun: ShellRunStickyStore
 }
 
 export class ShellRunner {
@@ -174,6 +213,13 @@ export class ShellRunner {
     assertReadable(grant)
 
     const normalizedArgv = assertPackageInstallPolicy(argv, cwdAbs, grant.abs_path)
+    await requireShellRunConfirmation(
+      params.sessionId,
+      normalizedArgv,
+      this.deps.stickyShellRun,
+      confirm,
+    )
+
     const needsNetwork = params.networkIntent === 'install' || commandNeedsNetwork(normalizedArgv)
     if (needsNetwork) {
       await requireNetworkInstallConfirmation(params.sessionId, this.deps.stickyNetwork, confirm)
@@ -248,6 +294,7 @@ export class ShellRunner {
 
   clearSession(sessionId: string): void {
     this.deps.stickyNetwork.clearSession(sessionId)
+    this.deps.stickyShellRun.clearSession(sessionId)
   }
 }
 

@@ -1,6 +1,11 @@
 import { randomUUID } from 'node:crypto'
 import path from 'node:path'
-import { DEFAULT_ROOT_ID, resolveAgentWorkspaceRoot } from './paths.js'
+import {
+  DEFAULT_ROOT_ID,
+  migrateLegacyWorkspaceFiles,
+  resolveAgentWorkspaceRoot,
+  resolveSessionWorkspaceRoot,
+} from './paths.js'
 import { ensureDirectory } from './path-gate.js'
 import { isPathDenied } from './deny.js'
 import { DenyPathError, WorkspaceError } from './errors.js'
@@ -41,16 +46,18 @@ export class GrantStore {
   }
 
   async ensureDefaultRoot(sessionId: string): Promise<WorkspaceGrant> {
-    const wsRoot = resolveAgentWorkspaceRoot()
-    await ensureDirectory(wsRoot)
+    await migrateLegacyWorkspaceFiles()
+    await ensureDirectory(resolveAgentWorkspaceRoot())
+    const sessionRoot = resolveSessionWorkspaceRoot(sessionId)
+    await ensureDirectory(sessionRoot)
     const existing = this.session(sessionId).byRootId.get(DEFAULT_ROOT_ID)
     if (existing) return existing
     const grant: WorkspaceGrant = {
       id: randomUUID(),
       root_id: DEFAULT_ROOT_ID,
-      abs_path: wsRoot,
+      abs_path: sessionRoot,
       mode: 'rw',
-      label: '默认工作区',
+      label: '本对话工作区',
       is_default: true,
     }
     this.session(sessionId).byRootId.set(DEFAULT_ROOT_ID, grant)

@@ -25,6 +25,12 @@ export {
   NETWORK_INSTALL_CONFIRM_OPTIONS,
   parseNetworkInstallChoice,
 } from './sticky-network.js'
+export {
+  ShellRunStickyStore,
+  SHELL_RUN_CONFIRM_OPTIONS,
+  parseShellRunConfirmChoice,
+  summarizeShellArgv,
+} from './sticky-shell-run.js'
 export { getShellPlatformStatus } from './platform.js'
 export {
   ensureLinuxSandboxReady,

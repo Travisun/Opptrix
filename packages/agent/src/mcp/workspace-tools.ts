@@ -2,6 +2,7 @@ import path from 'node:path'
 import {
   ConfirmationRequiredError,
   NetworkInstallConfirmationRequiredError,
+  ShellRunConfirmationRequiredError,
   getWorkspaceService,
   type ConfirmHandler,
   type WorkspaceGrant,
@@ -69,7 +70,20 @@ function formatNetworkInstallConfirmation(err: NetworkInstallConfirmationRequire
   }
 }
 
+function formatShellRunConfirmation(err: ShellRunConfirmationRequiredError): {
+  needs_confirmation: true
+  confirmation: ShellRunConfirmationRequiredError['confirmation']
+} {
+  return {
+    needs_confirmation: true,
+    confirmation: err.confirmation,
+  }
+}
+
 function handleShellError(err: unknown): unknown {
+  if (err instanceof ShellRunConfirmationRequiredError) {
+    return formatShellRunConfirmation(err)
+  }
   if (err instanceof NetworkInstallConfirmationRequiredError) {
     return formatNetworkInstallConfirmation(err)
   }
@@ -122,18 +136,18 @@ function isUnderUserDataRoot(absPath: string): boolean {
 
 /** Agent 可见 grant 摘要 — 默认工作区不暴露 ~/.opptrix 绝对路径 */
 function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
-  const label = grant.label ?? (grant.is_default ? '公共工作区' : '授权文件夹')
+  const label = grant.label ?? (grant.is_default ? '本对话工作区' : '授权文件夹')
   const base = {
     root_id: grant.root_id,
     label,
-    display_name: grant.is_default ? '公共工作区（default）' : (grant.label ?? path.basename(grant.abs_path)),
+    display_name: grant.is_default ? '本对话工作区（default）' : (grant.label ?? path.basename(grant.abs_path)),
     mode: grant.mode,
     is_default: Boolean(grant.is_default),
   }
   if (grant.is_default) {
     return {
       ...base,
-      path_hint: '应用内默认读写工作区；使用 root_id=default 调用 workspace_* 工具',
+      path_hint: '本对话专属读写目录；使用 root_id=default 调用 workspace_* 工具',
     }
   }
   if (isUnderUserDataRoot(grant.abs_path)) {
@@ -152,8 +166,8 @@ function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
 function summarizeWorkspaceGrants(grants: WorkspaceGrant[]): Record<string, unknown> {
   const extra = grants.filter(g => !g.is_default)
   const summary = extra.length === 0
-    ? '当前对话可访问：公共工作区（default，读写）'
-    : `当前对话可访问：公共工作区 + ${extra.length} 个额外授权目录`
+    ? '当前对话可访问：本对话工作区（default，读写）'
+    : `当前对话可访问：本对话工作区 + ${extra.length} 个额外授权目录`
   return {
     summary,
     grants: grants.map(formatGrantForAgent),
@@ -385,7 +399,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'list_workspace_grants',
       category: '工作区',
-      description: '列出当前对话已授权的工作区（公共工作区 + 额外授权）；用户问可访问哪些目录时首选',
+      description: '列出当前对话已授权的工作区（本对话工作区 + 额外授权）；用户问可访问哪些目录时首选',
       parameters: S({}),
       handler: async () => {
         try {

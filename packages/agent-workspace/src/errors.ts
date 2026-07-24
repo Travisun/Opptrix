@@ -64,3 +64,19 @@ export class NetworkInstallConfirmationRequiredError extends WorkspaceError {
     this.confirmation = confirmation
   }
 }
+
+export class ShellRunConfirmationRequiredError extends WorkspaceError {
+  readonly confirmation: {
+    kind: 'shell_run'
+    title: string
+    prompt: string
+    command_summary: string
+    options: Array<{ id: string; label: string }>
+  }
+
+  constructor(confirmation: ShellRunConfirmationRequiredError['confirmation']) {
+    super('需要用户确认运行命令')
+    this.name = 'ShellRunConfirmationRequiredError'
+    this.confirmation = confirmation
+  }
+}

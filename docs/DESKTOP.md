@@ -94,7 +94,9 @@ In Electron, the client forces **desktop layout** (sidebar visible, no mobile dr
 
 ## 命令隔离（Agent Shell）
 
-智能助手在授权工作区内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。桌面安装包会尽量自带组件并自动就绪；**仍可能需要你配合一次系统授权或系统策略调整**。
+智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；安装依赖时还会单独确认联网。
+
+桌面安装包会尽量自带组件并自动就绪；**仍可能需要你配合一次系统授权或系统策略调整**。
 
 | 平台 | 分发方式 | 你需要做什么 |
 |------|----------|--------------|
@@ -107,6 +109,7 @@ In Electron, the client forces **desktop layout** (sidebar visible, no mobile dr
 **边界说明（可行性）**：
 
 - Windows 的机器级隔离用户与网络策略需要**一次**提升授权；Opptrix 会在首次 `shell_run` / `shell_install` 时自动尝试触发，**不会**要求你自行执行 `npx … windows-install`。
+- **命令确认**：首次在本对话运行命令时会弹出确认（可勾选「本对话一律允许」）；联网安装另有单独确认，二者独立。
 - Linux deb 通过 `Depends: bubblewrap, socat, ripgrep` 在系统包管理器层拉齐依赖。
 - AppImage 构建时会优先从可信源下载便携二进制到 `runtime-stage/sandbox-bins/{arch}/`（失败时回退构建机 `which`），sidecar 通过 `OPPTRIX_RUNTIME_STAGE` 注入 `bwrapPath` / `socatPath` / `ripgrep.command`。**deb 仍是最稳的安装路径**。
 - Ubuntu 24.04+ 等系统若限制 user namespace，Opptrix 会在首次 `shell_run` / `shell_install` 时经 **pkexec** 一次性写入 AppArmor 配置并 reload，**不会**要求你自行粘贴终端命令。

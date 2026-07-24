@@ -15,6 +15,9 @@ import {
   getShellPlatformStatus,
   NetworkInstallStickyStore,
   parseNetworkInstallChoice,
+  ShellRunStickyStore,
+  parseShellRunConfirmChoice,
+  summarizeShellArgv,
   WorkspaceService,
 } from '../packages/agent-workspace/dist/index.js'
 
@@ -160,6 +163,52 @@ test('network install sticky store', () => {
   sticky.clearSession('s1')
   assert.equal(sticky.has('s1'), false)
   assert.equal(parseNetworkInstallChoice(['sticky']), 'sticky')
+})
+
+test('shell run sticky store and argv summary', () => {
+  const sticky = new ShellRunStickyStore()
+  assert.equal(sticky.has('s1'), false)
+  sticky.grant('s1')
+  assert.equal(sticky.has('s1'), true)
+  sticky.clearSession('s1')
+  assert.equal(parseShellRunConfirmChoice(['allow_session']), 'allow_session')
+  const long = summarizeShellArgv(['python3', '-c', 'x'.repeat(200)])
+  assert.ok(long.endsWith('…'))
+})
+
+test('shell_run requires run confirmation without sticky', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    const sessionId = 'run-confirm'
+    await svc.ensureDefaultRoot(sessionId)
+    await assert.rejects(
+      () => svc.shellRun({
+        sessionId,
+        rootId: 'default',
+        argv: ['python3', '-c', 'print(1)'],
+      }),
+      /确认|运行命令/,
+    )
+  })
+})
+
+test('shell_run skips run confirmation when session sticky granted', async () => {
+  await withTmpDataDir(async () => {
+    const shellSticky = new ShellRunStickyStore()
+    shellSticky.grant('sticky-run')
+    const svc = new WorkspaceService({ shellRunSticky: shellSticky })
+    const sessionId = 'sticky-run'
+    await svc.ensureDefaultRoot(sessionId)
+    await assert.rejects(
+      () => svc.shellRun({
+        sessionId,
+        rootId: 'default',
+        argv: ['pip3', 'install', 'six'],
+        networkIntent: 'install',
+      }),
+      /确认|联网/,
+    )
+  })
 })
 
 test('shell platform status returns structured payload', async () => {

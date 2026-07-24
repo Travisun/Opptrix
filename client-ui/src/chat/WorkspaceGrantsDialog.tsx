@@ -241,18 +241,18 @@ export default function WorkspaceGrantsDialog({
             <DialogContent className={s.body}>
               <Text className={s.intro} block>
                 在本对话中，助手只能读取你授权的本地文件夹。{'\n'}
-                下方「公共工作区」默认可用，所有对话共用。{'\n'}
+                下方「本对话工作区」默认可用，仅当前对话可读写。{'\n'}
                 需要查看电脑上的其他资料时，再添加额外文件夹；可随时更换或移除。{'\n'}
                 额外授权仅对本对话生效，关闭对话后将不再保留。
               </Text>
 
               <div className={s.section}>
-                <Text className={s.sectionTitle}>公共工作区</Text>
+                <Text className={s.sectionTitle}>本对话工作区</Text>
                 {defaultGrant ? (
                   <div className={mergeClasses(s.grantRow, s.grantRowDefault)}>
                     <div className={s.grantMeta}>
                       <Text className={s.grantName} block>
-                        {defaultGrant.label?.trim() || '公共工作区'}
+                        {defaultGrant.label?.trim() || '本对话工作区'}
                       </Text>
                       <Text className={s.grantPath} block title={defaultGrant.abs_path}>
                         {grantFolderName(defaultGrant)}
@@ -262,7 +262,7 @@ export default function WorkspaceGrantsDialog({
                   </div>
                 ) : (
                   <Text className={s.emptyHint} block>
-                    正在加载默认工作区…
+                    正在加载本对话工作区…
                   </Text>
                 )}
               </div>

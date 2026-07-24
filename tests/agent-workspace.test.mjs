@@ -151,3 +151,57 @@ test('agent cannot read deny paths via workspace service', async () => {
 test('DEFAULT_WORKSPACE_QUOTA_BYTES is 20GB', () => {
   assert.equal(DEFAULT_WORKSPACE_QUOTA_BYTES, 20 * 1024 ** 3)
 })
+
+test('ensureDefaultRoot uses per-session subdirectory', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const svc = new WorkspaceService()
+    const a = await svc.ensureDefaultRoot('session-alpha')
+    const b = await svc.ensureDefaultRoot('session-beta')
+    assert.notEqual(a.abs_path, b.abs_path)
+    assert.match(a.abs_path, /sessions[\\/]session-alpha[\\/]?$/)
+    assert.match(b.abs_path, /sessions[\\/]session-beta[\\/]?$/)
+    assert.equal(a.label, '本对话工作区')
+    const statA = await fs.stat(a.abs_path)
+    const statB = await fs.stat(b.abs_path)
+    assert.equal(statA.isDirectory(), true)
+    assert.equal(statB.isDirectory(), true)
+  })
+})
+
+test('legacy files migrate into _legacy idempotently', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const wsRoot = path.join(tmp, 'agent-workspace')
+    await fs.mkdir(wsRoot, { recursive: true })
+    await fs.writeFile(path.join(wsRoot, 'old-note.txt'), 'legacy')
+    const svc = new WorkspaceService()
+    await svc.ensureDefaultRoot('migrate-test')
+    const legacyFile = path.join(wsRoot, '_legacy', 'old-note.txt')
+    const content = await fs.readFile(legacyFile, 'utf8')
+    assert.equal(content, 'legacy')
+    await assert.rejects(() => fs.access(path.join(wsRoot, 'old-note.txt')))
+    await svc.ensureDefaultRoot('migrate-test-2')
+    assert.equal(await fs.readFile(legacyFile, 'utf8'), 'legacy')
+  })
+})
+
+test('clearSession removes session workspace directory', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const svc = new WorkspaceService()
+    const sessionId = 'cleanup-sess'
+    const grant = await svc.ensureDefaultRoot(sessionId)
+    await fs.writeFile(path.join(grant.abs_path, 'tmp.txt'), 'x')
+    svc.clearSession(sessionId)
+    await new Promise(r => setTimeout(r, 50))
+    await assert.rejects(() => fs.access(grant.abs_path))
+  })
+})
+
+test('invalid session id rejected for workspace root', async () => {
+  await withTmpDataDir(async () => {
+    const svc = new WorkspaceService()
+    await assert.rejects(
+      () => svc.ensureDefaultRoot('../evil'),
+      /无效|会话/,
+    )
+  })
+})

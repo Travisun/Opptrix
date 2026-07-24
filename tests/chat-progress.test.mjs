@@ -63,3 +63,24 @@ test('enrichStepFromResult marks failed hub responses as error', () => {
   assert.equal(step.status, 'error')
   assert.match(step.resultPreview ?? '', /instruments 或 codes 必填/)
 })
+
+test('shell tools have Chinese labels and result summaries', () => {
+  const runLabel = formatToolLabel('shell_run', { argv: ['python3', '-c', 'print(1)'] })
+  assert.match(runLabel, /运行命令/)
+  assert.match(runLabel, /python3/)
+
+  const { preview: runPreview } = formatResultPreview({
+    ok: true,
+    exit_code: 0,
+    stdout: 'hello\n',
+  }, 'shell_run')
+  assert.match(runPreview, /退出码 0/)
+  assert.match(runPreview, /hello/)
+
+  const { preview: statusPreview } = formatResultPreview({
+    ready: true,
+    supported: true,
+    message: '就绪',
+  }, 'shell_platform_status')
+  assert.match(statusPreview, /隔离环境已就绪/)
+})

@@ -189,6 +189,9 @@ const TOOL_LABELS: Record<string, string> = {
   browser_type: '输入',
   browser_screenshot: '网页截图',
   browser_close: '关闭浏览',
+  shell_run: '运行命令',
+  shell_install: '安装依赖',
+  shell_platform_status: '检查命令隔离环境',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -298,6 +301,22 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       const short = q.length > 36 ? `${q.slice(0, 36)}…` : q
       return `等待你的确认：${short}`
     }
+    case 'shell_run': {
+      const argv = Array.isArray(args.argv)
+        ? args.argv.filter((v): v is string => typeof v === 'string').slice(0, 4)
+        : []
+      const cmd = argv.length ? argv.join(' ') : ''
+      const short = cmd.length > 48 ? `${cmd.slice(0, 48)}…` : cmd
+      return short ? `${base} · ${short}` : base
+    }
+    case 'shell_install': {
+      const mgr = typeof args.manager === 'string' ? args.manager : ''
+      const pkgs = Array.isArray(args.packages) ? args.packages.filter((p): p is string => typeof p === 'string') : []
+      const pkgHint = pkgs.length ? pkgs.slice(0, 3).join(', ') : 'package.json'
+      return mgr ? `${base} · ${mgr} · ${pkgHint}` : base
+    }
+    case 'shell_platform_status':
+      return base
     default:
       return ref ? `${base} · ${ref}` : base
   }
@@ -485,6 +504,33 @@ function summarizeInstrumentEvaluation(data: unknown, message?: string): string 
   return message ?? label
 }
 
+function summarizeShellRunResult(result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null
+  const r = result as Record<string, unknown>
+  if (typeof r.error === 'string') return r.error
+  if (r.needs_confirmation === true) return '等待你的确认'
+  const exitCode = r.exit_code
+  const ok = r.ok === true || exitCode === 0
+  const parts: string[] = []
+  if (typeof exitCode === 'number') {
+    parts.push(ok ? `退出码 ${exitCode}` : `失败，退出码 ${exitCode}`)
+  } else if (ok) {
+    parts.push('执行完成')
+  }
+  const stdout = typeof r.stdout === 'string' ? r.stdout.trim() : ''
+  if (stdout) {
+    const line = stdout.split('\n').find(l => l.trim()) ?? stdout
+    const snippet = line.length > 80 ? `${line.slice(0, 80)}…` : line
+    parts.push(snippet)
+  }
+  if (typeof r.ready === 'boolean') {
+    parts.push(r.ready ? '隔离环境已就绪' : '隔离环境未就绪')
+    const msg = typeof r.message === 'string' ? r.message.trim() : ''
+    if (msg && !r.ready) parts.push(msg.length > 60 ? `${msg.slice(0, 60)}…` : msg)
+  }
+  return parts.length ? parts.join(' · ') : null
+}
+
 function summarizeToolResult(tool: string, result: unknown): string | null {
   if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
     const err = (result as { error?: unknown }).error
@@ -544,6 +590,10 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
       const name = typeof p.industry === 'string' ? p.industry : ''
       return name ? `${name} 产业链分析完成` : '产业链分析完成'
     }
+    case 'shell_run':
+    case 'shell_install':
+    case 'shell_platform_status':
+      return summarizeShellRunResult(result)
     default:
       return null
   }

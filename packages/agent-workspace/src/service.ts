@@ -18,13 +18,14 @@ import {
   parseConfirmChoice,
   type StickyOperation,
 } from './ask-policy.js'
-import { resolveAgentWorkspaceRoot } from './paths.js'
+import { resolveAgentWorkspaceRoot, deleteSessionWorkspaceDirectory } from './paths.js'
 import { QuotaTracker, DEFAULT_WORKSPACE_QUOTA_BYTES } from './quota.js'
 import { httpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 import { streamDownloadToFile } from './download.js'
 import {
   ShellRunner,
   NetworkInstallStickyStore,
+  ShellRunStickyStore,
   type ShellInstallParams,
   type ShellPlatformStatus,
   type ShellRunParams,
@@ -47,6 +48,7 @@ export interface WorkspaceServiceOptions {
   grantStore?: GrantStore
   stickyStore?: StickyPolicyStore
   networkInstallSticky?: NetworkInstallStickyStore
+  shellRunSticky?: ShellRunStickyStore
   shellRunner?: ShellRunner
 }
 
@@ -69,6 +71,7 @@ export class WorkspaceService {
       listGrants: (sessionId) => this.listGrants(sessionId),
       gatePath: (sessionId, rootId, relPath) => this.gatePath(sessionId, rootId, relPath),
       stickyNetwork: this.networkSticky,
+      stickyShellRun: opts.shellRunSticky ?? new ShellRunStickyStore(),
     })
   }
 
@@ -84,6 +87,10 @@ export class WorkspaceService {
     this.grants.clearSession(sessionId)
     this.sticky.clearSession(sessionId)
     this.shell.clearSession(sessionId)
+    void deleteSessionWorkspaceDirectory(sessionId).catch(err => {
+      const msg = err instanceof Error ? err.message : String(err)
+      console.warn(`[agent-workspace] 清理会话目录失败 (${sessionId}): ${msg}`)
+    })
   }
 
   async ensureDefaultRoot(sessionId: string): Promise<WorkspaceGrant> {

@@ -1,7 +1,14 @@
 export {
   resolveAgentWorkspaceRoot,
   resolveAgentPrivilegesRoot,
+  resolveSessionWorkspaceRoot,
+  assertSafeSessionId,
+  migrateLegacyWorkspaceFiles,
+  deleteSessionWorkspaceDirectory,
   DEFAULT_ROOT_ID,
+  SESSIONS_SUBDIR,
+  SHARED_SUBDIR,
+  LEGACY_SUBDIR,
 } from './paths.js'
 export {
   WorkspaceError,
@@ -11,6 +18,7 @@ export {
   SsrfBlockedError,
   ConfirmationRequiredError,
   NetworkInstallConfirmationRequiredError,
+  ShellRunConfirmationRequiredError,
 } from './errors.js'
 export { buildGlobalDenyPaths, isPathDenied, isWorkspaceRootPath } from './deny.js'
 export { resolveSafePath, ensureDirectory } from './path-gate.js'
@@ -48,6 +56,10 @@ export {
   NetworkInstallStickyStore,
   NETWORK_INSTALL_CONFIRM_OPTIONS,
   parseNetworkInstallChoice,
+  ShellRunStickyStore,
+  SHELL_RUN_CONFIRM_OPTIONS,
+  parseShellRunConfirmChoice,
+  summarizeShellArgv,
   buildSandboxConfigFromGrants,
   buildSandboxConfigFromGrantPaths,
   assertAllowedShellArgv,
