@@ -1505,7 +1505,7 @@ export async function submitUserPromptResponse(
     custom_text?: string
   },
 ) {
-  return jsonFetch<{ ok: boolean }>(`/sessions/${sessionId}/chat/user-prompt`, {
+  return jsonFetch<{ ok: boolean; stale?: boolean }>(`/sessions/${sessionId}/chat/user-prompt`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({

@@ -29,9 +29,13 @@ const failures = []
 for (const file of testFiles) {
   const label = path.basename(file)
   const t0 = Date.now()
+  const nodeArgs = ['--test', '--test-force-exit', file]
+  if (label === 'session-stream-runtime.test.mjs') {
+    nodeArgs.unshift('--experimental-strip-types')
+  }
   const result = spawnSync(
     process.execPath,
-    ['--test', '--test-force-exit', file],
+    nodeArgs,
     {
       cwd: root,
       stdio: 'inherit',

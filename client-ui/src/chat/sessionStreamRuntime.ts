@@ -55,13 +55,10 @@ export function applyChatProgressEvent(
           steps: [...(snapshot.liveTrace?.steps ?? []), event.step],
         },
       }
-    case 'tool_done': {
-      const pendingUserPrompt = event.step.tool === 'ask_user'
-        ? null
-        : snapshot.pendingUserPrompt
+    case 'tool_done':
       return {
         ...snapshot,
-        pendingUserPrompt,
+        pendingUserPrompt: null,
         liveTrace: {
           thinkingLabel: snapshot.liveTrace?.thinkingLabel ?? '模型正在整理结果…',
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
@@ -70,7 +67,6 @@ export function applyChatProgressEvent(
           ),
         },
       }
-    }
     case 'reply':
       return {
         ...snapshot,
@@ -79,6 +75,12 @@ export function applyChatProgressEvent(
           thinkingLabel: '正在生成回复…',
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
         },
+      }
+    case 'done':
+    case 'error':
+      return {
+        ...snapshot,
+        pendingUserPrompt: null,
       }
     default:
       return snapshot

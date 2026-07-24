@@ -1064,7 +1064,7 @@ app.post<{
       selected_labels: selectedLabels,
       custom_text: kind === 'custom' ? customText : undefined,
     })
-    if (!ok) return reply.code(404).send({ error: 'no pending user prompt' })
+    if (!ok) return { ok: true, stale: true }
     return { ok: true }
   },
 )

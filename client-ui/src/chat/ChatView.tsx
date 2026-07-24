@@ -267,6 +267,7 @@ interface ChatViewProps {
   onToggleChatColumn?: () => void
   onStreamError?: (message: string) => void
   resolveStreamSnapshot?: (sessionId: string | null) => SessionStreamSnapshot | null
+  onClearPendingUserPrompt?: (sessionId: string | null) => void
 }
 
 function ChatView({
@@ -284,6 +285,7 @@ function ChatView({
   onToggleChatColumn,
   onStreamError,
   resolveStreamSnapshot,
+  onClearPendingUserPrompt,
 }: ChatViewProps) {
   const s = useStyles()
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
@@ -326,6 +328,11 @@ function ChatView({
     }
   }, [streamUiRef])
 
+  const dismissPendingUserPrompt = useCallback(() => {
+    setPendingUserPrompt(null)
+    onClearPendingUserPrompt?.(sessionId)
+  }, [onClearPendingUserPrompt, sessionId])
+
   const handleUserPromptSubmit = useCallback(async (answer: UserPromptAnswerPayload) => {
     const sid = sessionId
     const prompt = pendingUserPromptRef.current
@@ -334,13 +341,14 @@ function ChatView({
     onStreamError?.('')
     try {
       await submitUserPromptResponse(sid, prompt.id, answer)
-      setPendingUserPrompt(null)
+      dismissPendingUserPrompt()
     } catch (e) {
+      dismissPendingUserPrompt()
       onStreamError?.(e instanceof Error ? e.message : '提交失败，请重试')
     } finally {
       setUserPromptSubmitting(false)
     }
-  }, [onStreamError, sessionId])
+  }, [dismissPendingUserPrompt, onStreamError, sessionId])
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const bodyShellRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)

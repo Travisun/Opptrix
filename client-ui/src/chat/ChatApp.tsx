@@ -276,6 +276,17 @@ export default function ChatApp() {
     return streamCacheRef.current.get(id) ?? createThinkingStreamSnapshot()
   }, [streamingSessionIds])
 
+  const clearPendingUserPrompt = useCallback((sessionId: string | null) => {
+    if (!sessionId || !streamingSessionIdsRef.current.has(sessionId)) return
+    const prev = streamCacheRef.current.get(sessionId)
+    if (!prev?.pendingUserPrompt) return
+    const next: SessionStreamSnapshot = { ...prev, pendingUserPrompt: null }
+    streamCacheRef.current.set(sessionId, next)
+    if (activeIdRef.current === sessionId) {
+      syncStreamSnapshotToUi(next, streamUiRef.current)
+    }
+  }, [])
+
   const abortSessionStream = useCallback(async (sessionId: string) => {
     sessionStreamGenRef.current.set(
       sessionId,
@@ -1234,6 +1245,7 @@ export default function ChatApp() {
                   onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
                   onStreamError={handleStreamError}
                   resolveStreamSnapshot={resolveStreamSnapshot}
+                  onClearPendingUserPrompt={clearPendingUserPrompt}
                 />
               </div>
             </div>
