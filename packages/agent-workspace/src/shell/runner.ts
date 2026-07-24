@@ -426,8 +426,6 @@ export class ShellRunner {
     params: ShellRunParams,
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
-    await this.assertShellReady(true)
-
     const resolvedArgv = await resolveShellArgv(params.argv)
     assertAllowedShellArgv(resolvedArgv)
 
@@ -486,6 +484,8 @@ export class ShellRunner {
     const started = Date.now()
 
     await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
+
+    await this.assertShellReady(true)
 
     return withSandboxMutex(async () => {
       const grants = await this.deps.listGrants(params.sessionId)
