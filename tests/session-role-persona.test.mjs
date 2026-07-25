@@ -49,7 +49,7 @@ function makeEngine() {
 test('createSession without expert snapshots DEFAULT_RESEARCHER_PERSONA', async () => {
   await withTempStore(async () => {
     const engine = makeEngine()
-    const session = engine.createSession({ title: '新对话' })
+    const session = await engine.createSession({ title: '新对话' })
     assert.equal(session.rolePersona, DEFAULT_RESEARCHER_PERSONA)
     const payload = engine.getSessionRolePersona(session.id)
     assert.ok(payload)
@@ -66,7 +66,7 @@ test('createSession with expert snapshots catalog persona at create time', async
     const expert = await catalog.getDefinition('equity-analysis')
     assert.ok(expert?.persona)
 
-    const session = engine.createSession({ expertId: 'equity-analysis' })
+    const session = await engine.createSession({ expertId: 'equity-analysis' })
     assert.equal(session.expertId, 'equity-analysis')
     assert.equal(session.rolePersona, resolveInitialRolePersona(expert.persona))
 
@@ -91,7 +91,7 @@ test('catalog persona change does not affect existing session Layer1 body', asyn
     })
     assert.ok(created)
 
-    const session = engine.createSession({ expertId: created.id })
+    const session = await engine.createSession({ expertId: created.id })
     const snapshot = session.rolePersona
     assert.ok(snapshot?.includes('现金流'))
 
@@ -118,7 +118,7 @@ test('catalog persona change does not affect existing session Layer1 body', asyn
 test('setSessionRolePersona sanitizes and rejects injection', async () => {
   await withTempStore(async () => {
     const engine = makeEngine()
-    const session = engine.createSession()
+    const session = await engine.createSession()
 
     const updated = engine.setSessionRolePersona(session.id, '  你擅长解读财报与行业景气度。  ')
     assert.ok(updated)
@@ -168,7 +168,7 @@ test('legacy null rolePersona is lazily backfilled and persisted', async () => {
 test('fork copies source rolePersona', async () => {
   await withTempStore(async () => {
     const engine = makeEngine()
-    const session = engine.createSession()
+    const session = await engine.createSession()
     engine.setSessionRolePersona(session.id, '本会话专长：关注事件驱动与公告解读。')
 
     const record = engine.sessions.get(session.id)

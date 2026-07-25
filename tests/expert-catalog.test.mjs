@@ -10,8 +10,10 @@ import {
   ExpertCatalogService,
   resetExpertCatalogServiceForTests,
   sanitizeExpertPersona,
+  StaticHttpExpertProvider,
 } from '../packages/agent/dist/index.js'
 import { resetBuiltinExpertCacheForTests } from '../packages/agent/dist/experts/local-json-provider.js'
+import { resetStaticHttpExpertProviderForTests } from '../packages/agent/dist/experts/static-http-provider.js'
 import { getUserDataStore } from '../packages/user-store/dist/index.js'
 
 function withTempStore(fn) {
@@ -20,11 +22,13 @@ function withTempStore(fn) {
   process.env.OPPTRIX_DATA_DIR = tmp
   getUserDataStore().close()
   resetBuiltinExpertCacheForTests()
+  resetStaticHttpExpertProviderForTests()
   resetExpertCatalogServiceForTests()
   return fn().finally(() => {
     getUserDataStore().close()
     resetExpertCatalogServiceForTests()
     resetBuiltinExpertCacheForTests()
+    resetStaticHttpExpertProviderForTests()
     fs.rmSync(tmp, { recursive: true, force: true })
     if (prev == null) delete process.env.OPPTRIX_DATA_DIR
     else process.env.OPPTRIX_DATA_DIR = prev
@@ -67,6 +71,58 @@ test('expert catalog getDefinition returns persona', async () => {
     assert.match(expert.persona, /个股/)
     assert.ok(Array.isArray(expert.defaultPacks) && expert.defaultPacks.length > 0)
     assert.equal(expert.source, 'builtin')
+  })
+})
+
+test('expert catalog falls back to builtin when remote unavailable', async () => {
+  await withTempStore(async () => {
+    const remote = new StaticHttpExpertProvider('http://127.0.0.1:1')
+    const service = new ExpertCatalogService({ remote })
+    const catalog = await service.listExperts({ scope: 'public' })
+    assert.equal(catalog.source, 'local')
+    assert.ok(catalog.experts.some(e => e.id === 'macro-strategy'))
+  })
+})
+
+test('expert catalog uses remote when available', async () => {
+  await withTempStore(async () => {
+    const http = await import('node:http')
+    const fs = await import('node:fs')
+    const path = await import('node:path')
+    const { fileURLToPath } = await import('node:url')
+    const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
+    const expertsDir = path.join(repoRoot, 'experts')
+    const catalog = JSON.parse(fs.readFileSync(path.join(expertsDir, 'catalog.json'), 'utf8'))
+
+    const server = http.createServer((req, res) => {
+      if (req.url === '/catalog.json') {
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(JSON.stringify(catalog))
+        return
+      }
+      res.writeHead(404)
+      res.end()
+    })
+
+    const baseUrl = await new Promise((resolve, reject) => {
+      server.listen(0, '127.0.0.1', () => {
+        const addr = server.address()
+        if (!addr || typeof addr === 'string') {
+          reject(new Error('bad server address'))
+          return
+        }
+        resolve(`http://127.0.0.1:${addr.port}`)
+      })
+    })
+
+    try {
+      const service = new ExpertCatalogService({ remote: new StaticHttpExpertProvider(baseUrl) })
+      const listed = await service.listExperts({ scope: 'public' })
+      assert.equal(listed.source, 'remote')
+      assert.ok(listed.experts.some(e => e.id === 'news-interpreter'))
+    } finally {
+      await new Promise((r) => server.close(() => r(undefined)))
+    }
   })
 })
 

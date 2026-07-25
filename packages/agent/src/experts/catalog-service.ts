@@ -8,7 +8,8 @@ import type {
 } from '@opptrix/shared'
 import { getUserDataStore, LocalExpertsRepository } from '@opptrix/user-store'
 import { sanitizeExpertPersona } from './prompt-assembler.js'
-import { LocalJsonExpertProvider, type RemoteExpertProvider } from './local-json-provider.js'
+import { LocalJsonExpertProvider } from './local-json-provider.js'
+import { StaticHttpExpertProvider } from './static-http-provider.js'
 
 function toCatalogEntry(def: ExpertDefinition): ExpertCatalogEntry {
   return {
@@ -41,7 +42,8 @@ function listPersonalEntries(repo: LocalExpertsRepository): ExpertCatalogEntry[]
 
 function paginateEntries(
   all: ExpertCatalogEntry[],
-  query?: ExpertListQuery,
+  query: ExpertListQuery | undefined,
+  source: ExpertCatalog['source'],
 ): ExpertCatalog {
   const limit = Math.min(Math.max(query?.limit ?? 50, 1), 100)
   const offset = query?.cursor ? Number.parseInt(query.cursor, 10) : 0
@@ -50,45 +52,80 @@ function paginateEntries(
   const nextStart = start + slice.length
   return {
     experts: slice,
-    source: 'local',
+    source,
     fetchedAt: new Date().toISOString(),
     nextCursor: nextStart < all.length ? String(nextStart) : undefined,
   }
 }
 
 export class ExpertCatalogService {
-  private readonly builtin: LocalJsonExpertProvider
+  private readonly fallback: LocalJsonExpertProvider
+  private readonly remote: StaticHttpExpertProvider
   private readonly localRepo: LocalExpertsRepository
+  private readonly remoteDefCache = new Map<string, ExpertDefinition>()
+  private remoteListCache: ExpertCatalogEntry[] | null = null
 
-  constructor(builtin: RemoteExpertProvider = new LocalJsonExpertProvider()) {
-    if (!(builtin instanceof LocalJsonExpertProvider)) {
-      throw new Error('ExpertCatalogService 一期仅支持 LocalJsonExpertProvider 作为内置源')
-    }
-    this.builtin = builtin
+  constructor(options?: {
+    fallback?: LocalJsonExpertProvider
+    remote?: StaticHttpExpertProvider
+  }) {
+    this.fallback = options?.fallback ?? new LocalJsonExpertProvider()
+    this.remote = options?.remote ?? new StaticHttpExpertProvider()
     this.localRepo = new LocalExpertsRepository(getUserDataStore())
   }
 
-  listExperts(query?: ExpertListQuery): Promise<ExpertCatalog> {
+  async listExperts(query?: ExpertListQuery): Promise<ExpertCatalog> {
     const scope = query?.scope ?? 'all'
     let entries: ExpertCatalogEntry[] = []
+    let source: ExpertCatalog['source'] = 'local'
+
     if (scope === 'public' || scope === 'all') {
-      entries = entries.concat(listBuiltinEntries(this.builtin))
+      const remoteEntries = await this.tryFetchRemoteEntries()
+      if (remoteEntries) {
+        entries = entries.concat(remoteEntries)
+        source = 'remote'
+        this.cacheRemoteList(remoteEntries)
+      } else {
+        entries = entries.concat(listBuiltinEntries(this.fallback))
+      }
     }
     if (scope === 'personal' || scope === 'all') {
       entries = entries.concat(listPersonalEntries(this.localRepo))
     }
     const filtered = entries.filter(entry => matchesQuery(entry, query))
-    return Promise.resolve(paginateEntries(filtered, query))
+    return paginateEntries(filtered, query, source)
   }
 
-  getDefinition(id: string): Promise<ExpertDefinition | null> {
-    return Promise.resolve(this.getDefinitionSync(id))
+  async getDefinition(id: string): Promise<ExpertDefinition | null> {
+    const trimmed = id.trim()
+    if (!trimmed) return null
+
+    const local = this.localRepo.get(trimmed)
+    if (local) return local
+
+    const cached = this.remoteDefCache.get(trimmed)
+    if (cached) return cached
+
+    try {
+      const remote = await this.remote.getExpert(trimmed)
+      if (remote) {
+        this.remoteDefCache.set(trimmed, remote)
+        return remote
+      }
+    } catch {
+      // fall through to builtin fallback
+    }
+
+    const builtin = this.fallback.getExpertSync(trimmed)
+    return builtin
   }
 
   getDefinitionSync(id: string): ExpertDefinition | null {
     const trimmed = id.trim()
     if (!trimmed) return null
-    return this.localRepo.get(trimmed) ?? this.builtin.getExpertSync(trimmed)
+    return this.localRepo.get(trimmed)
+      ?? this.remoteDefCache.get(trimmed)
+      ?? this.fallback.getExpertSync(trimmed)
   }
 
   createExpert(input: ExpertCreateInput): ExpertDefinition {
@@ -112,9 +149,27 @@ export class ExpertCatalogService {
   }
 
   deleteExpert(id: string): boolean {
-    const builtin = this.builtin.getExpertSync(id)
-    if (builtin) return false
+    if (this.fallback.getExpertSync(id)) return false
+    if (this.remoteDefCache.has(id)) return false
+    if (this.remoteListCache?.some(entry => entry.id === id)) return false
     return this.localRepo.delete(id)
+  }
+
+  resetCachesForTests(): void {
+    this.remoteDefCache.clear()
+    this.remoteListCache = null
+  }
+
+  private async tryFetchRemoteEntries(): Promise<ExpertCatalogEntry[] | null> {
+    try {
+      return await this.remote.fetchCatalogEntries()
+    } catch {
+      return null
+    }
+  }
+
+  private cacheRemoteList(entries: ExpertCatalogEntry[]): void {
+    this.remoteListCache = entries
   }
 }
 
@@ -126,5 +181,6 @@ export function getExpertCatalogService(): ExpertCatalogService {
 }
 
 export function resetExpertCatalogServiceForTests(): void {
+  singleton?.resetCachesForTests()
   singleton = null
 }

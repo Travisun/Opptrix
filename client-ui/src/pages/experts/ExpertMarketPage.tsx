@@ -194,7 +194,7 @@ const useStyles = makeStyles({
     padding: 0,
     ':hover': {
       color: opptrixCssVars.textSecondary,
-      backgroundColor: opptrixCssVars.surfaceHover,
+      backgroundColor: opptrixCssVars.gray100,
     },
   },
   sectionTitle: {
@@ -225,7 +225,7 @@ const useStyles = makeStyles({
     transitionProperty: 'background-color',
     transitionDuration: '120ms',
     ':hover': {
-      backgroundColor: opptrixCssVars.surfaceHover,
+      backgroundColor: opptrixCssVars.gray100,
     },
   },
   cardMain: {

@@ -171,6 +171,13 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 4. 校验 `update.opptrix.org` 上 yml 可访问；
 5. **Purge** Cloudflare 边缘缓存中的三个 `latest-*.yml`（安装包文件名带版本号，无需 purge）。
 
+**远程专家市场（`experts/` 前缀，与 `desktop/` 隔离）**
+
+- 静态 JSON 源文件：仓库根 [`experts/`](../experts/README.md)
+- `push` → `main` 且 `experts/**` 变更：`.github/workflows/sync-experts.yml` 同步 R2 前缀 `experts/` 并 purge CDN
+- 桌面发版 `release-desktop.yml`：若相对上一 `desktop-v*` 标签含 `experts/**` 变更，旁路执行同一脚本
+- 公开 URL：`https://update.opptrix.org/experts/catalog.json` 与各 `{id}.json`
+
 #### 自动更新链路不变量（dev / beta / 正式版通用）
 
 | 环节 | 约定 | 说明 |

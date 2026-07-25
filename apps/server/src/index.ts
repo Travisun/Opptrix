@@ -929,7 +929,7 @@ app.delete<{ Params: { id: string } }>('/api/experts/:id', async (req, reply) =>
 
 app.post<{ Body: { title?: string; expertId?: string } }>('/api/sessions', async (req, reply) => {
   try {
-    const session = agent.createSession({
+    const session = await agent.createSession({
       title: req.body?.title,
       expertId: req.body?.expertId,
     })
@@ -1267,7 +1267,7 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
 /** @deprecated use POST /api/sessions/:id/chat */
 app.post<{ Body: { message: string } }>('/api/chat', async (req) => {
   const sessions = agent.listSessions()
-  const id = sessions[0]?.id ?? agent.createSession().id
+  const id = sessions[0]?.id ?? (await agent.createSession()).id
   const result = await agent.chat(id, req.body?.message ?? '')
   return { reply: result.reply, tools_used: result.toolsUsed, session_id: result.sessionId }
 })

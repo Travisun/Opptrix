@@ -367,9 +367,9 @@ export class AgentEngine {
     return { modelView: result.modelView }
   }
 
-  createSession(opts?: CreateSessionOptions) {
+  async createSession(opts?: CreateSessionOptions) {
     if (opts?.expertId) {
-      const expert = getExpertCatalogService().getDefinitionSync(opts.expertId)
+      const expert = await getExpertCatalogService().getDefinition(opts.expertId)
       if (!expert) {
         throw new Error(`未知专家：${opts.expertId}`)
       }

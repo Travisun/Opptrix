@@ -441,7 +441,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 ### Experts（专家目录）
 
-内置专家来自 `catalog.mock.json`（`LocalJsonExpertProvider`，`source: "builtin"`）；用户自建专家持久化于 user-store `local_experts`（`source: "local"`）。`ExpertCatalogService` 合并二者；`ExpertCatalog.source` 响应字段仍为 `"local"`。
+内置专家来自远程静态目录 `https://update.opptrix.org/experts/`（`StaticHttpExpertProvider`）；网络不可用时降级到包内 `catalog.mock.json`（`LocalJsonExpertProvider`，`source: "builtin"`）。用户自建专家持久化于 user-store `local_experts`（`source: "local"`）。`ExpertCatalogService` 合并公开/远程与本地自建；列表 `ExpertCatalog.source` 为 `"remote"`（远程成功）或 `"local"`（降级）。
 
 **JSON Schema（远程/静态目录契约）**
 
@@ -554,7 +554,7 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `experts` | `ExpertCatalogEntry[]` | 当前页 |
-| `source` | `"local" \| "remote"` | 一期恒为 `"local"` |
+| `source` | `"local" \| "remote"` | 远程目录成功时为 `"remote"`；降级内置 mock 时为 `"local"` |
 | `fetchedAt` | string | ISO 8601 |
 | `nextCursor` | string | 可选；有更多时返回 |
 
