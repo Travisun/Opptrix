@@ -1,7 +1,5 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { createPortal } from 'react-dom'
+import { useCallback, useEffect, useState } from 'react'
 import {
-  Input,
   Spinner,
   Text,
   makeStyles,
@@ -10,14 +8,12 @@ import {
 import {
   AddRegular,
   ArrowSyncRegular,
-  DeleteRegular,
-  EditRegular,
-  MoreHorizontalRegular,
+  DismissRegular,
   SearchRegular,
 } from '@fluentui/react-icons'
 import { electronPlatform } from '../../platform/detect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
-import { OPPTRIX_GLASS_PANEL_CLASS } from '../../theme/mixins'
+import { inputShellInteractive, nativeIconInteractive } from '../../theme/mixins'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
@@ -25,14 +21,13 @@ import {
 } from '../../desktop/constants'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import OpptrixSegmentedControl from '../../components/opptrix/OpptrixSegmentedControl'
+import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
 import { deleteExpert, listExperts } from '../../api/client'
 import type { ExpertCatalogEntry, ExpertDefinition } from '../../types/chat'
 import ExpertIconTile from './ExpertIconTile'
 import CreateExpertDialog from './CreateExpertDialog'
-
-const SHADOW_CARD = '0 1px 2px rgba(26, 26, 26, 0.04), 0 4px 12px rgba(26, 26, 26, 0.06)'
+import ExpertDetailDialog from './ExpertDetailDialog'
 
 const useStyles = makeStyles({
   root: {
@@ -55,6 +50,7 @@ const useStyles = makeStyles({
     paddingLeft: '12px',
     borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
     backgroundColor: opptrixCssVars.canvas,
+    position: 'relative',
   },
   electronTitleBarMac: { paddingRight: '12px' },
   electronTitleBarWin: { paddingRight: '132px' },
@@ -98,14 +94,20 @@ const useStyles = makeStyles({
     minHeight: 0,
     overflowY: 'auto',
   },
-  content: {
-    maxWidth: '920px',
+  contentColumn: {
+    width: opptrixTokens.settingsContentWidth,
+    maxWidth: opptrixTokens.expertsContentMaxWidth,
+    minWidth: 0,
     marginLeft: 'auto',
     marginRight: 'auto',
-    padding: '20px 24px 32px',
+    boxSizing: 'border-box',
+    paddingTop: '20px',
+    paddingBottom: '32px',
+    paddingLeft: 'clamp(12px, 3.5vw, 32px)',
+    paddingRight: 'clamp(12px, 3.5vw, 32px)',
     display: 'flex',
     flexDirection: 'column',
-    gap: '20px',
+    gap: '18px',
   },
   pageHeader: {
     display: 'flex',
@@ -132,13 +134,68 @@ const useStyles = makeStyles({
     flex: 1,
     minWidth: 0,
   },
+  searchShell: {
+    ...inputShellInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    minHeight: '36px',
+    paddingLeft: '10px',
+    paddingRight: '6px',
+    boxSizing: 'border-box',
+    '& .fui-Input': {
+      flex: 1,
+      minWidth: 0,
+      backgroundColor: 'transparent',
+      border: 'none',
+      boxShadow: 'none',
+      padding: 0,
+    },
+    '& .fui-Input__input': {
+      backgroundColor: 'transparent',
+      padding: '0',
+      minWidth: 0,
+    },
+    '& .fui-Input:hover, & .fui-Input:focus-within, & .fui-Input::after': {
+      backgroundColor: 'transparent',
+      border: 'none',
+      boxShadow: 'none',
+    },
+  },
+  searchShellFilled: {
+    backgroundColor: opptrixCssVars.inputBgHover,
+    ':hover': {
+      backgroundColor: opptrixCssVars.inputBgFocus,
+    },
+    ':focus-within': {
+      backgroundColor: opptrixCssVars.inputBgFocus,
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+    },
+  },
   searchInput: {
+    flex: 1,
+    minWidth: 0,
     width: '100%',
   },
-  section: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '10px',
+  searchClear: {
+    ...nativeIconInteractive,
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: '24px',
+    height: '24px',
+    border: 'none',
+    borderRadius: opptrixTokens.radiusSm,
+    background: 'transparent',
+    color: opptrixCssVars.textTertiary,
+    cursor: 'pointer',
+    flexShrink: 0,
+    padding: 0,
+    ':hover': {
+      color: opptrixCssVars.textSecondary,
+      backgroundColor: opptrixCssVars.surfaceHover,
+    },
   },
   sectionTitle: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -146,174 +203,60 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     letterSpacing: '0.01em',
   },
-  myExpertsRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '10px',
-    overflowX: 'auto',
-    paddingBottom: '4px',
-  },
-  myExpertItem: {
-    display: 'flex',
-    flexDirection: 'column',
-    alignItems: 'center',
-    gap: '6px',
-    minWidth: '72px',
-    maxWidth: '88px',
-    padding: 0,
-    border: 'none',
-    background: 'transparent',
-    cursor: 'pointer',
-    textAlign: 'center',
-  },
-  myExpertLabel: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textSecondary,
-    lineHeight: 1.35,
-    display: '-webkit-box',
-    WebkitLineClamp: 2,
-    WebkitBoxOrient: 'vertical',
-    overflow: 'hidden',
-  },
-  addTile: {
-    width: '56px',
-    height: '56px',
-    borderRadius: '14px',
-    border: `1px dashed ${opptrixCssVars.separatorStrong}`,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    color: opptrixCssVars.textTertiary,
-    backgroundColor: opptrixCssVars.surfaceMuted,
-    flexShrink: 0,
-  },
-  myEmpty: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    lineHeight: 1.6,
-  },
-  tabRow: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '12px',
-  },
   list: {
     display: 'grid',
-    gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))',
-    gap: '12px',
-    '@media (max-width: 720px)': {
+    gridTemplateColumns: 'repeat(2, minmax(0, 1fr))',
+    gap: '8px 12px',
+    '@media (max-width: 560px)': {
       gridTemplateColumns: '1fr',
     },
   },
   card: {
     display: 'flex',
-    flexDirection: 'column',
-    gap: '12px',
-    padding: '16px',
-    borderRadius: opptrixTokens.radiusLg,
-    border: `1px solid ${opptrixCssVars.separator}`,
-    backgroundColor: opptrixCssVars.surface,
-    boxShadow: SHADOW_CARD,
-    textAlign: 'left',
-    transitionProperty: 'background-color, box-shadow',
-    transitionDuration: '150ms',
-    transitionTimingFunction: 'ease',
-    ':hover': {
-      backgroundColor: opptrixCssVars.surfaceMuted,
-    },
-  },
-  cardHead: {
-    display: 'flex',
-    alignItems: 'flex-start',
-    gap: '12px',
+    alignItems: 'center',
+    gap: '10px',
     minWidth: 0,
+    padding: '10px 8px',
+    border: 'none',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    cursor: 'pointer',
+    textAlign: 'left',
+    transitionProperty: 'background-color',
+    transitionDuration: '120ms',
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+    },
   },
   cardMain: {
     flex: 1,
     minWidth: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
+    gap: '2px',
   },
   cardTitle: {
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 600,
     color: opptrixCssVars.textPrimary,
+    overflow: 'hidden',
+    whiteSpace: 'nowrap',
+    textOverflow: 'ellipsis',
   },
   cardSummary: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textSecondary,
-    lineHeight: 1.55,
+    lineHeight: 1.45,
     display: '-webkit-box',
-    WebkitLineClamp: 3,
+    WebkitLineClamp: 2,
     WebkitBoxOrient: 'vertical',
     overflow: 'hidden',
   },
-  cardTags: {
-    display: 'flex',
-    flexWrap: 'wrap',
-    gap: '6px',
-  },
-  tag: {
-    fontSize: 'var(--opptrix-font-xs)',
-    color: opptrixCssVars.textTertiary,
-    backgroundColor: opptrixCssVars.surfaceMuted,
-    borderRadius: opptrixTokens.radiusSm,
-    padding: '2px 8px',
-  },
-  cardActions: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '8px',
-    marginTop: 'auto',
-  },
-  menuBtn: {
-    width: '32px',
-    height: '32px',
-    border: 'none',
-    borderRadius: opptrixTokens.radiusSm,
-    background: 'transparent',
-    color: opptrixCssVars.textSecondary,
-    display: 'inline-flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    cursor: 'pointer',
+  cardChat: {
     flexShrink: 0,
-    ':hover': {
-      backgroundColor: opptrixCssVars.surfaceHover,
-    },
-  },
-  menuPanel: {
-    position: 'fixed',
-    zIndex: 10000,
-    minWidth: '140px',
-    padding: '6px',
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
-  menuItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px 10px',
-    border: 'none',
-    borderRadius: opptrixTokens.radiusSm,
-    background: 'transparent',
-    color: opptrixCssVars.textPrimary,
-    fontSize: 'var(--opptrix-font-sm)',
-    cursor: 'pointer',
-    textAlign: 'left',
-    ':hover': {
-      backgroundColor: opptrixCssVars.surfaceHover,
-    },
-  },
-  menuItemDanger: {
-    color: opptrixCssVars.error,
   },
   empty: {
-    padding: '48px 24px',
+    padding: '40px 16px',
     textAlign: 'center',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.7,
@@ -321,7 +264,7 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
   },
   loading: {
-    padding: '48px 24px',
+    padding: '40px 16px',
     display: 'flex',
     justifyContent: 'center',
   },
@@ -331,7 +274,9 @@ const useStyles = makeStyles({
   },
 })
 
-type ScopeTab = 'public' | 'personal'
+function isPersonalExpert(expert: ExpertCatalogEntry) {
+  return expert.source === 'local'
+}
 
 interface Props {
   electronChrome?: boolean
@@ -343,16 +288,12 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
   const { confirm } = useOpptrixDialogAlert()
   const [query, setQuery] = useState('')
   const [debouncedQuery, setDebouncedQuery] = useState('')
-  const [scopeTab, setScopeTab] = useState<ScopeTab>('public')
-  const [publicExperts, setPublicExperts] = useState<ExpertCatalogEntry[]>([])
-  const [personalExperts, setPersonalExperts] = useState<ExpertCatalogEntry[]>([])
+  const [experts, setExperts] = useState<ExpertCatalogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [dialogOpen, setDialogOpen] = useState(false)
+  const [createOpen, setCreateOpen] = useState(false)
   const [editingId, setEditingId] = useState<string | null>(null)
-  const [menuExpertId, setMenuExpertId] = useState<string | null>(null)
-  const [menuPos, setMenuPos] = useState<{ top: number; left: number } | null>(null)
-  const menuRef = useRef<HTMLDivElement | null>(null)
+  const [detailExpert, setDetailExpert] = useState<ExpertCatalogEntry | null>(null)
 
   useEffect(() => {
     const timer = setTimeout(() => setDebouncedQuery(query.trim()), 250)
@@ -363,17 +304,20 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
     setLoading(true)
     setError('')
     try {
-      const searchOpts = q ? { q } : undefined
-      const [pub, personal] = await Promise.all([
-        listExperts({ ...searchOpts, scope: 'public' }),
-        listExperts({ ...searchOpts, scope: 'personal' }),
-      ])
-      setPublicExperts(pub.experts)
-      setPersonalExperts(personal.experts)
+      const result = await listExperts({
+        ...(q ? { q } : {}),
+        scope: 'all',
+      })
+      const sorted = [...result.experts].sort((a, b) => {
+        const ap = isPersonalExpert(a) ? 0 : 1
+        const bp = isPersonalExpert(b) ? 0 : 1
+        if (ap !== bp) return ap - bp
+        return a.title.localeCompare(b.title, 'zh')
+      })
+      setExperts(sorted)
     } catch (e) {
-      setPublicExperts([])
-      setPersonalExperts([])
-      setError(e instanceof Error ? e.message : '暂时无法加载专家列表')
+      setExperts([])
+      setError(e instanceof Error ? e.message : '暂时无法加载，请稍后重试')
     } finally {
       setLoading(false)
     }
@@ -383,68 +327,43 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
     void loadExperts(debouncedQuery)
   }, [debouncedQuery, loadExperts])
 
-  useEffect(() => {
-    if (!menuExpertId) return
-    const close = (e: MouseEvent) => {
-      const target = e.target as Node
-      if (menuRef.current?.contains(target)) return
-      setMenuExpertId(null)
-      setMenuPos(null)
-    }
-    document.addEventListener('mousedown', close)
-    return () => document.removeEventListener('mousedown', close)
-  }, [menuExpertId])
-
-  const visibleExperts = scopeTab === 'public' ? publicExperts : personalExperts
-
   const openCreate = () => {
     setEditingId(null)
-    setDialogOpen(true)
+    setCreateOpen(true)
   }
 
   const openEdit = (id: string) => {
-    setMenuExpertId(null)
-    setMenuPos(null)
+    setDetailExpert(null)
     setEditingId(id)
-    setDialogOpen(true)
+    setCreateOpen(true)
   }
 
   const handleDelete = async (expert: ExpertCatalogEntry) => {
-    setMenuExpertId(null)
-    setMenuPos(null)
     const ok = await confirm({
       title: '删除后将无法恢复，确定继续？',
-      message: `将删除「${expert.title}」，已有对话不会受影响。`,
-      confirmLabel: '删除专家',
+      message: `将删除「${expert.title}」。你和他的聊天记录还会留着，不受影响。`,
+      confirmLabel: '删除',
       confirmTone: 'danger',
     })
     if (!ok) return
     try {
       await deleteExpert(expert.id)
+      setDetailExpert(null)
       await loadExperts(debouncedQuery)
     } catch (e) {
       setError(e instanceof Error ? e.message : '删除失败，请稍后重试')
     }
   }
 
-  const handleSaved = async (expert: ExpertDefinition, startChat?: boolean) => {
+  const handleSaved = async (_expert: ExpertDefinition) => {
     await loadExperts(debouncedQuery)
-    if (startChat) {
-      await onSelectExpert(expert.id)
-    }
-  }
-
-  const openMenu = (expertId: string, anchor: HTMLElement) => {
-    const rect = anchor.getBoundingClientRect()
-    setMenuExpertId(expertId)
-    setMenuPos({ top: rect.bottom + 4, left: Math.max(8, rect.right - 140) })
   }
 
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
 
   const refreshAction = electronChrome ? (
     <ChromeToolButton
-      label="刷新列表"
+      label="刷新"
       iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
       disabled={loading}
       onClick={() => { void loadExperts(debouncedQuery) }}
@@ -468,12 +387,20 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
         <div
           className={mergeClasses(
             s.electronTitleBar,
+            'opptrix-experts-title-bar',
             electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
           )}
         >
-          <Text className={s.titleBarPageTitle}>专家</Text>
-          <div className={s.titleBarSpacer} aria-hidden />
-          <div className={s.titleBarActions}>{refreshAction}</div>
+          <Text className={mergeClasses(s.titleBarPageTitle, 'opptrix-panel-title-no-drag')} block>
+            专家
+          </Text>
+          <div
+            className={mergeClasses(s.titleBarSpacer, 'opptrix-experts-title-drag')}
+            aria-hidden
+          />
+          <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
+            {refreshAction}
+          </div>
         </div>
       ) : (
         <div className={s.webHead}>
@@ -483,182 +410,125 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
       )}
 
       <div className={mergeClasses(s.scrollBody, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-        <div className={s.content}>
+        <div className={s.contentColumn}>
           <div className={s.pageHeader}>
             {electronChrome && (
               <Text className={s.pageTitle} block>专家</Text>
             )}
             <Text className={s.pageSubtitle} block>
-              挑选擅长领域的助手，开始更聚焦的投研对话
+              选一位助手聊聊行情与想法；也可以自己创建一个更合口味的。
             </Text>
           </div>
 
           <div className={s.toolRow}>
             <div className={s.searchField}>
-              <Input
-                className={s.searchInput}
-                value={query}
-                onChange={(_e, data) => setQuery(data.value)}
-                placeholder="搜索专家"
-                contentBefore={<SearchRegular />}
-                aria-label="搜索专家"
-              />
+              <div
+                className={mergeClasses(
+                  s.searchShell,
+                  'opptrix-input-shell',
+                  query.trim() && s.searchShellFilled,
+                )}
+              >
+                <SearchRegular fontSize={14} color={opptrixCssVars.textTertiary} />
+                <OpptrixInput
+                  className={mergeClasses(s.searchInput, 'opptrix-experts-search')}
+                  value={query}
+                  onChange={(_e, data) => setQuery(data.value)}
+                  placeholder="搜索名称或擅长领域"
+                  contentBefore={null}
+                  aria-label="搜索专家"
+                />
+                {query.trim() ? (
+                  <button
+                    type="button"
+                    className={mergeClasses(s.searchClear, 'opptrix-focusable')}
+                    aria-label="清空搜索"
+                    onClick={() => setQuery('')}
+                  >
+                    <DismissRegular fontSize={14} />
+                  </button>
+                ) : null}
+              </div>
             </div>
             <OpptrixButton variant="primary" icon={<AddRegular />} onClick={openCreate}>
               创建
             </OpptrixButton>
           </div>
 
-          <div className={s.section}>
-            <Text className={s.sectionTitle}>我的专家</Text>
-            {personalExperts.length === 0 ? (
-              <Text className={s.myEmpty}>
-                还没有自建专家，点搜索框旁的「创建」开始定制
-              </Text>
-            ) : (
-              <div className={mergeClasses(s.myExpertsRow, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-                {personalExperts.map(expert => (
-                  <button
-                    key={expert.id}
-                    type="button"
-                    className={mergeClasses(s.myExpertItem, 'opptrix-focusable')}
-                    onClick={() => { void onSelectExpert(expert.id) }}
-                    title={expert.title}
-                  >
-                    <ExpertIconTile expertId={expert.id} size="lg" />
-                    <span className={s.myExpertLabel}>{expert.title}</span>
-                  </button>
-                ))}
-                <button
-                  type="button"
-                  className={mergeClasses(s.myExpertItem, 'opptrix-focusable')}
-                  onClick={openCreate}
-                  aria-label="创建专家"
-                >
-                  <span className={s.addTile}><AddRegular fontSize={22} /></span>
-                  <span className={s.myExpertLabel}>创建</span>
-                </button>
-              </div>
-            )}
-            {personalExperts.length === 0 && (
-              <div className={mergeClasses(s.myExpertsRow, 'opptrix-scroll')}>
-                <button
-                  type="button"
-                  className={mergeClasses(s.myExpertItem, 'opptrix-focusable')}
-                  onClick={openCreate}
-                  aria-label="创建专家"
-                >
-                  <span className={s.addTile}><AddRegular fontSize={22} /></span>
-                  <span className={s.myExpertLabel}>创建</span>
-                </button>
-              </div>
-            )}
-          </div>
-
-          <div className={s.tabRow}>
-            <OpptrixSegmentedControl<ScopeTab>
-              value={scopeTab}
-              onChange={setScopeTab}
-              options={[
-                { value: 'public', label: '公开' },
-                { value: 'personal', label: '个人' },
-              ]}
-            />
-          </div>
-
+          <Text className={s.sectionTitle} block>全部专家</Text>
           {error && <div className={s.error}>{error}</div>}
 
           {loading ? (
             <div className={s.loading}>
-              <Spinner size="medium" label="正在加载专家…" />
+              <Spinner size="medium" label="正在加载…" />
             </div>
-          ) : visibleExperts.length === 0 ? (
+          ) : experts.length === 0 ? (
             <div className={s.empty}>
               {debouncedQuery
-                ? '没有找到匹配的专家\n试试换个关键词，或清空搜索查看全部'
-                : scopeTab === 'personal'
-                  ? '还没有个人专家\n点搜索框旁的「创建」定制你的投研助手'
-                  : '暂时没有公开专家\n稍后再试，或先创建个人专家'}
+                ? '没有找到相关助手\n换个词试试，或清空搜索看看全部'
+                : '暂时还没有可用的助手\n点「创建」定制一位，或稍后再来看看'}
             </div>
           ) : (
             <div className={s.list}>
-              {visibleExperts.map(expert => (
-                <div key={expert.id} className={s.card}>
-                  <div className={s.cardHead}>
-                    <ExpertIconTile expertId={expert.id} size="md" />
+              {experts.map(expert => {
+                const personal = isPersonalExpert(expert)
+                return (
+                  <div
+                    key={expert.id}
+                    className={mergeClasses(s.card, 'opptrix-focusable')}
+                    role="button"
+                    tabIndex={0}
+                    onClick={() => setDetailExpert(expert)}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault()
+                        setDetailExpert(expert)
+                      }
+                    }}
+                    aria-label={`查看${expert.title}详情`}
+                  >
+                    <ExpertIconTile expertId={expert.id} size="md" personal={personal} />
                     <div className={s.cardMain}>
-                      <Text className={s.cardTitle} block>{expert.title}</Text>
-                      <Text className={s.cardSummary} block>{expert.summary}</Text>
+                      <span className={s.cardTitle}>{expert.title}</span>
+                      <span className={s.cardSummary}>{expert.summary}</span>
                     </div>
-                    {expert.source === 'local' && (
-                      <button
-                        type="button"
-                        className={mergeClasses(s.menuBtn, 'opptrix-focusable')}
-                        aria-label={`${expert.title} 更多操作`}
-                        onClick={e => openMenu(expert.id, e.currentTarget)}
+                    <div className={s.cardChat}>
+                      <OpptrixButton
+                        variant="outline"
+                        size="small"
+                        onClick={e => {
+                          e.stopPropagation()
+                          void onSelectExpert(expert.id)
+                        }}
                       >
-                        <MoreHorizontalRegular fontSize={18} />
-                      </button>
-                    )}
-                  </div>
-                  {expert.tags.length > 0 && (
-                    <div className={s.cardTags}>
-                      {expert.tags.map(tag => (
-                        <span key={tag} className={s.tag}>{tag}</span>
-                      ))}
+                        聊天
+                      </OpptrixButton>
                     </div>
-                  )}
-                  <div className={s.cardActions}>
-                    <OpptrixButton
-                      variant="primary"
-                      onClick={() => { void onSelectExpert(expert.id) }}
-                    >
-                      开始对话
-                    </OpptrixButton>
                   </div>
-                </div>
-              ))}
+                )
+              })}
             </div>
           )}
         </div>
       </div>
 
       <CreateExpertDialog
-        open={dialogOpen}
+        open={createOpen}
         editingId={editingId}
-        onOpenChange={setDialogOpen}
+        onOpenChange={setCreateOpen}
         onSaved={handleSaved}
       />
 
-      {menuExpertId && menuPos && createPortal(
-        <div
-          ref={menuRef}
-          className={mergeClasses(s.menuPanel, OPPTRIX_GLASS_PANEL_CLASS)}
-          style={{ top: menuPos.top, left: menuPos.left }}
-          role="menu"
-        >
-          <button
-            type="button"
-            className={mergeClasses(s.menuItem, 'opptrix-focusable')}
-            onClick={() => openEdit(menuExpertId)}
-          >
-            <EditRegular fontSize={16} />
-            <span>编辑</span>
-          </button>
-          <button
-            type="button"
-            className={mergeClasses(s.menuItem, s.menuItemDanger, 'opptrix-focusable')}
-            onClick={() => {
-              const expert = personalExperts.find(e => e.id === menuExpertId)
-              if (expert) void handleDelete(expert)
-            }}
-          >
-            <DeleteRegular fontSize={16} />
-            <span>删除</span>
-          </button>
-        </div>,
-        document.body,
-      )}
+      <ExpertDetailDialog
+        open={Boolean(detailExpert)}
+        expert={detailExpert}
+        onOpenChange={open => {
+          if (!open) setDetailExpert(null)
+        }}
+        onChat={id => { void onSelectExpert(id) }}
+        onEdit={openEdit}
+        onDelete={expert => { void handleDelete(expert) }}
+      />
     </div>
   )
 }

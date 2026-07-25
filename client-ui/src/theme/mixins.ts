@@ -131,9 +131,11 @@ export const primaryInteractive = {
   color: opptrixCssVars.accentForeground,
   ':hover': {
     backgroundColor: opptrixCssVars.accentHover,
+    color: opptrixCssVars.accentForeground,
   },
   ':active': {
     opacity: 0.88,
+    color: opptrixCssVars.accentForeground,
   },
   ':disabled': {
     opacity: 0.35,
@@ -155,6 +157,34 @@ export const secondaryInteractive = {
     opacity: opptrixTokens.activeOpacity,
   },
   ...focusVisibleRing,
+} as const
+
+/** Outline — white fill + strong border; hover uses canvasAlt for visible feedback */
+export const outlineInteractive = {
+  ...interactiveTransition,
+  border: `1px solid ${opptrixCssVars.borderStrong}`,
+  borderRadius: opptrixTokens.radiusSm,
+  backgroundColor: opptrixCssVars.canvas,
+  color: opptrixCssVars.textPrimary,
+  ':hover': {
+    backgroundColor: opptrixCssVars.canvasAlt,
+    border: `1px solid ${opptrixCssVars.separatorStrong}`,
+    color: opptrixCssVars.textPrimary,
+  },
+  ':active': {
+    backgroundColor: opptrixCssVars.canvasMuted,
+    opacity: opptrixTokens.activeOpacity,
+  },
+  ':focus-visible': {
+    ...focusRing,
+    border: `1px solid ${opptrixCssVars.inputBorderFocus}`,
+  },
+  ':disabled': {
+    opacity: 0.35,
+    backgroundColor: opptrixCssVars.canvas,
+    color: opptrixCssVars.textPrimary,
+  },
+  ':focus': { outline: 'none' },
 } as const
 
 export const nativeIconInteractive = {
@@ -238,9 +268,24 @@ export const sidebarTopMenuIcon = {
 
 /** Button size tokens — injected onto root for size prop */
 export const buttonSizes = {
-  small: { minHeight: '24px', paddingX: '8px', fontSize: 'var(--opptrix-font-sm)' },
-  medium: { minHeight: '32px', paddingX: '14px', fontSize: 'var(--opptrix-font-base)' },
-  large: { minHeight: '40px', paddingX: '18px', fontSize: 'var(--opptrix-font-lg)' },
+  small: {
+    minHeight: '22px',
+    paddingX: '8px',
+    paddingY: '1px',
+    fontSize: 'var(--opptrix-font-sm)',
+  },
+  medium: {
+    minHeight: '32px',
+    paddingX: '14px',
+    paddingY: '0px',
+    fontSize: 'var(--opptrix-font-base)',
+  },
+  large: {
+    minHeight: '40px',
+    paddingX: '18px',
+    paddingY: '0px',
+    fontSize: 'var(--opptrix-font-lg)',
+  },
 } as const
 
 /** Danger variant — destructive actions (delete, stop, quit) */

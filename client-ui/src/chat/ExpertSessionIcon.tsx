@@ -1,5 +1,5 @@
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { PersonSupportRegular } from '@fluentui/react-icons'
+import { PersonStarRegular } from '@fluentui/react-icons'
 
 const useStyles = makeStyles({
   root: {
@@ -31,7 +31,7 @@ export default function ExpertSessionIcon({ className, size = 'sm' }: Props) {
       className={mergeClasses(s.root, size === 'md' && s.md, className)}
       aria-hidden
     >
-      <PersonSupportRegular fontSize={iconSize} />
+      <PersonStarRegular fontSize={iconSize} />
     </span>
   )
 }

@@ -26,6 +26,15 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '14px',
   },
+  personaArea: {
+    width: '100%',
+    maxHeight: '240px',
+    '& textarea': {
+      maxHeight: '220px',
+      overflowY: 'auto',
+      resize: 'vertical',
+    },
+  },
   actions: {
     display: 'flex',
     justifyContent: 'flex-end',
@@ -43,7 +52,7 @@ interface Props {
   open: boolean
   editingId?: string | null
   onOpenChange: (open: boolean) => void
-  onSaved: (expert: ExpertDefinition, startChat?: boolean) => void | Promise<void>
+  onSaved: (expert: ExpertDefinition) => void | Promise<void>
 }
 
 export default function CreateExpertDialog({
@@ -92,7 +101,7 @@ export default function CreateExpertDialog({
       })
       .catch(e => {
         if (cancelled) return
-        setError(e instanceof Error ? e.message : '暂时无法加载专家信息')
+        setError(e instanceof Error ? e.message : '暂时无法加载，请稍后重试')
       })
       .finally(() => {
         if (!cancelled) setPrefillLoading(false)
@@ -105,7 +114,7 @@ export default function CreateExpertDialog({
     .map(t => t.trim())
     .filter(Boolean)
 
-  const handleSave = async (startChat = false) => {
+  const handleSave = async () => {
     setLoading(true)
     setError('')
     const payload = {
@@ -119,7 +128,7 @@ export default function CreateExpertDialog({
         ? await updateExpert(editingId, payload)
         : await createExpert(payload)
       onOpenChange(false)
-      await onSaved(result.expert, startChat)
+      await onSaved(result.expert)
     } catch (e) {
       setError(e instanceof Error ? e.message : '保存失败，请稍后重试')
     } finally {
@@ -141,36 +150,37 @@ export default function CreateExpertDialog({
                   <OpptrixInput
                     value={title}
                     onChange={(_e, data) => setTitle(data.value)}
-                    placeholder="如：行业研究助手"
+                    placeholder="例如：行业观察专家"
                     disabled={loading}
                   />
                 </OpptrixField>
-                <OpptrixField label="简介">
+                <OpptrixField label="一句话介绍">
                   <OpptrixInput
                     value={summary}
                     onChange={(_e, data) => setSummary(data.value)}
-                    placeholder="一句话说明擅长领域"
+                    placeholder="这位专家擅长帮你做什么"
                     disabled={loading}
                   />
                 </OpptrixField>
                 <OpptrixField
-                  label="角色设定"
-                  hint="描述专家的思考方式与回答风格，不会覆盖投研安全底线"
+                  label="回答风格"
+                  hint="用几句话描述他怎么思考、怎么说话。写得越清楚，回答越贴合你的习惯。"
                   multiline
                 >
                   <OpptrixTextarea
+                    className={s.personaArea}
                     value={persona}
                     onChange={(_e, data) => setPersona(data.value)}
-                    placeholder="你是一位…"
-                    rows={5}
+                    placeholder={'例如：\n你善于把复杂行情讲清楚。\n先给结论，再补充依据和需要留意的风险。'}
+                    rows={6}
                     disabled={loading}
                   />
                 </OpptrixField>
-                <OpptrixField label="标签（可选）" hint="用逗号或顿号分隔，如：宏观、策略">
+                <OpptrixField label="标签（可选）" hint="方便以后查找，用顿号或逗号分开">
                   <OpptrixInput
                     value={tagsText}
                     onChange={(_e, data) => setTagsText(data.value)}
-                    placeholder="宏观、策略"
+                    placeholder="例如：宏观、个股"
                     disabled={loading}
                   />
                 </OpptrixField>
@@ -179,19 +189,10 @@ export default function CreateExpertDialog({
                   <OpptrixButton variant="ghost" onClick={() => onOpenChange(false)} disabled={loading}>
                     取消
                   </OpptrixButton>
-                  {!isEdit && (
-                    <OpptrixButton
-                      variant="secondary"
-                      disabled={loading || !title.trim() || !summary.trim() || !persona.trim()}
-                      onClick={() => { void handleSave(true) }}
-                    >
-                      保存并开始对话
-                    </OpptrixButton>
-                  )}
                   <OpptrixButton
                     variant="primary"
                     disabled={loading || !title.trim() || !summary.trim() || !persona.trim()}
-                    onClick={() => { void handleSave(false) }}
+                    onClick={() => { void handleSave() }}
                   >
                     {loading ? '保存中…' : '保存'}
                   </OpptrixButton>
