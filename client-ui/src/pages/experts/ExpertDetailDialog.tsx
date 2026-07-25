@@ -14,6 +14,7 @@ import { DeleteRegular, EditRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { getExpert } from '../../api/client'
 import type { ExpertCatalogEntry, ExpertDefinition } from '../../types/chat'
+import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import ExpertIconTile from './ExpertIconTile'
 
 const useStyles = makeStyles({
@@ -41,23 +42,23 @@ const useStyles = makeStyles({
   title: {
     fontSize: 'var(--opptrix-font-lg)',
     fontWeight: 650,
-    color: 'var(--opptrix-text-primary)',
+    color: opptrixCssVars.textPrimary,
   },
   summary: {
     fontSize: 'var(--opptrix-font-sm)',
-    color: 'var(--opptrix-text-secondary)',
+    color: opptrixCssVars.textSecondary,
     lineHeight: 1.55,
   },
   sectionLabel: {
     fontSize: 'var(--opptrix-font-xs)',
     fontWeight: 600,
-    color: 'var(--opptrix-text-tertiary)',
+    color: opptrixCssVars.textTertiary,
     letterSpacing: '0.04em',
     textTransform: 'uppercase',
   },
   persona: {
     fontSize: 'var(--opptrix-font-sm)',
-    color: 'var(--opptrix-text-primary)',
+    color: opptrixCssVars.textPrimary,
     lineHeight: 1.65,
     whiteSpace: 'pre-wrap',
     maxHeight: '220px',
@@ -69,11 +70,15 @@ const useStyles = makeStyles({
     gap: '6px',
   },
   tag: {
+    display: 'inline-flex',
+    alignItems: 'center',
     fontSize: 'var(--opptrix-font-xs)',
-    color: 'var(--opptrix-text-tertiary)',
-    backgroundColor: 'var(--opptrix-surface-muted)',
-    borderRadius: '6px',
-    padding: '2px 8px',
+    fontWeight: 500,
+    lineHeight: 1.3,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderRadius: opptrixTokens.radiusSm,
+    padding: '3px 8px',
   },
   actions: {
     display: 'flex',
@@ -83,7 +88,7 @@ const useStyles = makeStyles({
     marginTop: '4px',
   },
   error: {
-    color: 'var(--opptrix-error)',
+    color: opptrixCssVars.error,
     fontSize: 'var(--opptrix-font-sm)',
   },
 })
@@ -167,7 +172,7 @@ export default function ExpertDetailDialog({
                 {error && <Text className={s.error}>{error}</Text>}
                 {persona && (
                   <>
-                    <Text className={s.sectionLabel} block>回答风格</Text>
+                    <Text className={s.sectionLabel} block>技能专长</Text>
                     <Text className={s.persona} block>{persona}</Text>
                   </>
                 )}

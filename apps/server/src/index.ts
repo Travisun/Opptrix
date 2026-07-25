@@ -957,6 +957,37 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   }
 })
 
+app.get<{ Params: { id: string } }>('/api/sessions/:id/role-persona', async (req, reply) => {
+  try {
+    const result = agent.getSessionRolePersona(req.params.id)
+    if (!result) return reply.code(404).send({ error: 'session not found' })
+    return result
+  } catch (e) {
+    const message = e instanceof Error ? e.message : 'load role persona failed'
+    return reply.code(400).send({ error: message })
+  }
+})
+
+app.put<{ Params: { id: string }; Body: { rolePersona?: string } }>(
+  '/api/sessions/:id/role-persona',
+  async (req, reply) => {
+    const raw = req.body?.rolePersona
+    if (typeof raw !== 'string') {
+      return reply.code(400).send({ error: '请填写技能专长' })
+    }
+    try {
+      const updated = agent.setSessionRolePersona(req.params.id, raw)
+      if (!updated) return reply.code(404).send({ error: 'session not found' })
+      return {
+        rolePersona: updated.rolePersona,
+        expertId: updated.expertId ?? null,
+      }
+    } catch (e) {
+      const message = e instanceof Error ? e.message : '技能专长无效，请修改后重试'
+      return reply.code(400).send({ error: message })
+    }
+  },
+)
 app.patch<{ Params: { id: string }; Body: { title?: string; model?: string | null } }>(
   '/api/sessions/:id',
   async (req, reply) => {

@@ -42,6 +42,10 @@ import {
 } from './user-prompt.js'
 import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions } from './sessions.js'
 import { getExpertCatalogService } from './experts/catalog-service.js'
+import {
+  resolveInitialRolePersona,
+  sanitizeExpertPersona,
+} from './experts/prompt-assembler.js'
 import { getWorkspaceService } from '@opptrix/agent-workspace'
 import {
   bindWorkspaceToolBridge,
@@ -149,7 +153,7 @@ export class AgentEngine {
   }
 
   private buildRoundSystemPrompt(sessionId: string, activeNames: readonly string[]) {
-    const record = this.sessions.get(sessionId)
+    const record = this.ensureSessionRolePersona(sessionId)
     const expert = record?.expertId
       ? getExpertCatalogService().getDefinitionSync(record.expertId)
       : null
@@ -160,6 +164,8 @@ export class AgentEngine {
     const clock = getCurrentTime()
     return this.tools.systemPrompt({
       expert,
+      sessionRolePersona: record?.rolePersona ?? null,
+      roleLabel: expert?.title ?? null,
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
       researchTier: expert?.defaultResearchTier ?? plan.researchTier,
@@ -167,6 +173,21 @@ export class AgentEngine {
       sessionClock: buildSessionClockPlaybook(clock),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
     })
+  }
+
+  /** 旧会话 rolePersona 为空时惰性回填并持久化 */
+  private ensureSessionRolePersona(sessionId: string): SessionRecord | null {
+    const record = this.sessions.get(sessionId)
+    if (!record) return null
+    if (record.rolePersona?.trim()) return record
+    let seed: string | null = null
+    if (record.expertId) {
+      const expert = getExpertCatalogService().getDefinitionSync(record.expertId)
+      seed = expert?.persona ?? null
+    }
+    record.rolePersona = resolveInitialRolePersona(seed)
+    this.sessions.save(record)
+    return record
   }
 
   private seedExpertDefaultPacks(sessionId: string, record: SessionRecord) {
@@ -288,9 +309,13 @@ export class AgentEngine {
         title: opts.title?.trim() || expert.defaultSessionTitle || expert.title,
         expertId: expert.id,
         expertIcon: expert.icon,
+        rolePersona: resolveInitialRolePersona(expert.persona),
       })
     }
-    return this.sessions.create({ title: opts?.title?.trim() || '新对话' })
+    return this.sessions.create({
+      title: opts?.title?.trim() || '新对话',
+      rolePersona: resolveInitialRolePersona(null),
+    })
   }
 
   listExperts(query?: import('@opptrix/shared').ExpertListQuery) {
@@ -361,6 +386,24 @@ export class AgentEngine {
     return this.sessions.get(id)
   }
 
+  getSessionRolePersona(id: string): { rolePersona: string; expertId: string | null } | null {
+    const record = this.ensureSessionRolePersona(id)
+    if (!record) return null
+    return {
+      rolePersona: record.rolePersona ?? resolveInitialRolePersona(null),
+      expertId: record.expertId ?? null,
+    }
+  }
+
+  setSessionRolePersona(id: string, raw: string): SessionRecord | null {
+    if (!this.sessions.get(id)) return null
+    const sanitized = sanitizeExpertPersona(raw)
+    if (!sanitized) {
+      throw new Error('技能专长无效，请修改后重试')
+    }
+    return this.sessions.updateRolePersona(id, sanitized)
+  }
+
   sessionMeta(record: SessionRecord) {
     return sessionToMeta(record)
   }
@@ -383,7 +426,7 @@ export class AgentEngine {
   }
 
   forkSession(sessionId: string, messageIndex: number) {
-    const source = this.sessions.get(sessionId)
+    const source = this.ensureSessionRolePersona(sessionId)
     if (!source) return null
     return this.sessions.fork(source, messageIndex)
   }

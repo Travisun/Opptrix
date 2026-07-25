@@ -163,8 +163,8 @@ export default function CreateExpertDialog({
                   />
                 </OpptrixField>
                 <OpptrixField
-                  label="回答风格"
-                  hint="用几句话描述他怎么思考、怎么说话。写得越清楚，回答越贴合你的习惯。"
+                  label="技能专长"
+                  hint="用几句话写清他擅长什么、怎么思考。写得越清楚，回答越贴合你的需求。"
                   multiline
                 >
                   <OpptrixTextarea

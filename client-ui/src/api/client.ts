@@ -1360,6 +1360,18 @@ export async function setSessionModel(id: string, model: string | null) {
   })
 }
 
+export async function getSessionRolePersona(id: string) {
+  return jsonFetch<{ rolePersona: string; expertId: string | null }>(`/sessions/${id}/role-persona`)
+}
+
+export async function updateSessionRolePersona(id: string, rolePersona: string) {
+  return jsonFetch<{ rolePersona: string; expertId: string | null }>(`/sessions/${id}/role-persona`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rolePersona }),
+  })
+}
+
 export async function deleteSession(id: string) {
   return jsonFetch<{ status: string }>(`/sessions/${id}`, { method: 'DELETE' })
 }

@@ -1,0 +1,271 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opptrix.dev/schemas/remote-expert-http.schema.json",
+  "title": "Remote Expert HTTP Datasource",
+  "description": "RemoteExpertProvider 的 HTTP 契约。部署方提供 baseUrl；Opptrix 客户端（二期）将按此契约拉取远程官方专家目录。列表响应 ExpertCatalog.source 必须为 \"remote\"；单条详情不含列表级 source 字段。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["baseUrl", "endpoints"],
+  "properties": {
+    "baseUrl": {
+      "type": "string",
+      "format": "uri",
+      "description": "远程目录根 URL，不含尾部斜杠。示例：https://catalog.example.com/v1"
+    },
+    "endpoints": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["listExperts", "getExpert"],
+      "properties": {
+        "listExperts": {
+          "$ref": "#/$defs/ListExpertsEndpoint"
+        },
+        "getExpert": {
+          "$ref": "#/$defs/GetExpertEndpoint"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "ExpertIcon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": { "type": "string", "enum": ["emoji", "icon"] },
+        "value": { "type": "string", "minLength": 1, "maxLength": 64 }
+      }
+    },
+    "ExpertCatalogEntry": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "summary", "icon", "tags"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+        },
+        "title": { "type": "string", "minLength": 1 },
+        "summary": { "type": "string", "minLength": 1 },
+        "icon": { "$ref": "#/$defs/ExpertIcon" },
+        "tags": {
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "maxItems": 8
+        },
+        "official": { "type": "boolean" },
+        "version": { "type": "string" },
+        "source": {
+          "type": "string",
+          "enum": ["builtin"],
+          "description": "远程官方条目建议为 builtin。"
+        }
+      },
+      "description": "列表项；不含 persona。"
+    },
+    "ExpertDefinition": {
+      "$ref": "expert-definition.schema.json"
+    },
+    "ExpertListQuery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "q": {
+          "type": "string",
+          "description": "可选。匹配 title / summary / tags（不区分大小写，子串包含）。"
+        },
+        "tag": {
+          "type": "string",
+          "description": "可选。精确匹配某一 tag。"
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 50,
+          "description": "每页条数；默认 50。"
+        },
+        "cursor": {
+          "type": "string",
+          "description": "可选。上一页响应中的 nextCursor（数值 offset 字符串）。"
+        },
+        "scope": {
+          "type": "string",
+          "enum": ["public", "personal", "all"],
+          "default": "all",
+          "description": "远程 datasource 通常仅实现 public（官方目录）；personal 由客户端本地 user-store 提供。"
+        }
+      }
+    },
+    "ExpertCatalog": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["experts", "source", "fetchedAt"],
+      "properties": {
+        "experts": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/ExpertCatalogEntry" }
+        },
+        "source": {
+          "type": "string",
+          "const": "remote",
+          "description": "远程 HTTP 响应必须为 remote。"
+        },
+        "fetchedAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "服务端生成响应时的 ISO 8601 时间戳。"
+        },
+        "nextCursor": {
+          "type": "string",
+          "description": "有更多数据时返回；客户端原样传回 cursor 参数。"
+        }
+      }
+    },
+    "GetExpertSuccessBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["expert"],
+      "properties": {
+        "expert": { "$ref": "#/$defs/ExpertDefinition" }
+      }
+    },
+    "ErrorBody": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["error"],
+      "properties": {
+        "error": { "type": "string", "minLength": 1 }
+      }
+    },
+    "ListExpertsEndpoint": {
+      "type": "object",
+      "description": "GET {baseUrl}/experts — 分页列表。Content-Type: application/json; charset=utf-8。",
+      "additionalProperties": false,
+      "required": ["method", "path", "query", "responses"],
+      "properties": {
+        "method": { "const": "GET" },
+        "path": { "const": "/experts" },
+        "query": { "$ref": "#/$defs/ExpertListQuery" },
+        "responses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["200"],
+          "properties": {
+            "200": {
+              "type": "object",
+              "required": ["contentType", "body"],
+              "properties": {
+                "contentType": { "const": "application/json" },
+                "body": { "$ref": "#/$defs/ExpertCatalog" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "GetExpertEndpoint": {
+      "type": "object",
+      "description": "GET {baseUrl}/experts/{id} — 单条完整定义（含 persona）。id 须 URL 编码。",
+      "additionalProperties": false,
+      "required": ["method", "path", "pathParams", "responses"],
+      "properties": {
+        "method": { "const": "GET" },
+        "path": { "const": "/experts/{id}" },
+        "pathParams": {
+          "type": "object",
+          "required": ["id"],
+          "properties": {
+            "id": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_-]{0,63}$"
+            }
+          }
+        },
+        "responses": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["200", "404"],
+          "properties": {
+            "200": {
+              "type": "object",
+              "required": ["contentType", "body"],
+              "properties": {
+                "contentType": { "const": "application/json" },
+                "body": { "$ref": "#/$defs/GetExpertSuccessBody" }
+              }
+            },
+            "404": {
+              "type": "object",
+              "required": ["contentType", "body"],
+              "properties": {
+                "contentType": { "const": "application/json" },
+                "body": {
+                  "allOf": [
+                    { "$ref": "#/$defs/ErrorBody" },
+                    {
+                      "properties": {
+                        "error": { "const": "expert not found" }
+                      }
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "examples": [
+    {
+      "baseUrl": "https://catalog.example.com/v1",
+      "endpoints": {
+        "listExperts": {
+          "method": "GET",
+          "path": "/experts",
+          "query": { "scope": "public", "limit": 50 },
+          "responses": {
+            "200": {
+              "contentType": "application/json",
+              "body": {
+                "experts": [],
+                "source": "remote",
+                "fetchedAt": "2026-07-25T06:00:00.000Z"
+              }
+            }
+          }
+        },
+        "getExpert": {
+          "method": "GET",
+          "path": "/experts/{id}",
+          "pathParams": { "id": "macro-strategy" },
+          "responses": {
+            "200": {
+              "contentType": "application/json",
+              "body": {
+                "expert": {
+                  "id": "macro-strategy",
+                  "title": "宏观策略顾问",
+                  "summary": "解读宏观周期与政策取向",
+                  "icon": { "kind": "icon", "value": "expert" },
+                  "tags": ["宏观"],
+                  "official": true,
+                  "source": "builtin",
+                  "persona": "你是一位宏观策略顾问…",
+                  "defaultPacks": ["market", "news"],
+                  "defaultResearchTier": "L2",
+                  "complianceVersion": "1"
+                }
+              }
+            },
+            "404": {
+              "contentType": "application/json",
+              "body": { "error": "expert not found" }
+            }
+          }
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opptrix.dev/schemas/expert-definition.schema.json",
+  "title": "ExpertDefinition",
+  "description": "单条专家完整定义。类型权威来源：packages/shared/src/expert.ts。UI 中 persona 对用户显示为「技能专长」，API 字段名仍为 persona。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": [
+    "id",
+    "title",
+    "summary",
+    "icon",
+    "tags",
+    "persona",
+    "defaultPacks",
+    "defaultResearchTier",
+    "complianceVersion"
+  ],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_-]{0,63}$",
+      "description": "专家唯一标识。须小写字母开头，仅含 a-z、0-9、_、-，最长 64 字符。"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "展示标题。"
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 500,
+      "description": "一句话简介；列表展示，不注入 prompt。"
+    },
+    "icon": {
+      "$ref": "#/$defs/ExpertIcon"
+    },
+    "tags": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "minLength": 1,
+        "maxLength": 32
+      },
+      "maxItems": 8,
+      "uniqueItems": true,
+      "description": "分类与搜索标签；去重后最多 8 个。"
+    },
+    "official": {
+      "type": "boolean",
+      "default": true,
+      "description": "是否为官方/公开专家。"
+    },
+    "version": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 32,
+      "description": "目录条目版本，如 1.0.0。"
+    },
+    "source": {
+      "type": "string",
+      "enum": ["local", "builtin"],
+      "description": "来源。静态/远程官方目录通常为 builtin；用户自建为 local。"
+    },
+    "persona": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 4000,
+      "description": "技能专长正文（API 字段 persona）。注入 Agent system prompt Layer 1；须非空、≤4000 字，且不得命中注入拦截模式（运行时 sanitizeExpertPersona 大小写不敏感校验）。",
+      "not": {
+        "anyOf": [
+          { "pattern": "忽略.*规则" },
+          { "pattern": "无视.*规则" },
+          { "pattern": "可以荐股" },
+          { "pattern": "推荐买入|推荐卖出" },
+          { "pattern": "ignore\\s+(all\\s+)?rules" },
+          { "pattern": "you\\s+may\\s+recommend\\s+(buy|sell)" },
+          { "pattern": "override\\s+system" }
+        ]
+      }
+    },
+    "defaultPacks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "enum": [
+          "core",
+          "meta",
+          "instrument_analytics",
+          "fundamentals",
+          "market",
+          "etf",
+          "portfolio",
+          "industry",
+          "news",
+          "browser",
+          "workspace",
+          "strategy_extra",
+          "provider_ext"
+        ]
+      },
+      "minItems": 1,
+      "uniqueItems": true,
+      "description": "会话首聊前自动激活的工具包 id（不含 core/meta，二者始终加载）。"
+    },
+    "defaultResearchTier": {
+      "type": "string",
+      "enum": ["L1", "L2", "L3"],
+      "description": "默认研究档位：L1 事实、L2 解读、L3 深度分析。"
+    },
+    "defaultSessionTitle": {
+      "type": "string",
+      "minLength": 1,
+      "maxLength": 200,
+      "description": "绑定该专家新建会话时的默认标题；省略时客户端可用 title。"
+    },
+    "complianceVersion": {
+      "type": "string",
+      "const": "1",
+      "description": "persona 合规版本标记；当前固定为 1。"
+    }
+  },
+  "$defs": {
+    "ExpertIcon": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["kind", "value"],
+      "properties": {
+        "kind": {
+          "type": "string",
+          "enum": ["emoji", "icon"]
+        },
+        "value": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        }
+      }
+    }
+  }
+}

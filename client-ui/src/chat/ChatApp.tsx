@@ -47,6 +47,7 @@ import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ChatSessionTitleTools from './ChatSessionTitleTools'
+import SessionRolePersonaDrawer from './SessionRolePersonaDrawer'
 import { sessionToMarkdown } from './sessionExportMarkdown'
 import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
@@ -330,6 +331,7 @@ export default function ChatApp() {
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [rolePersonaOpen, setRolePersonaOpen] = useState(false)
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
   const [marketDynamicsMounted, setMarketDynamicsMounted] = useState(() => view === 'market')
@@ -1021,6 +1023,21 @@ export default function ChatApp() {
   const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : isMarket ? 'market' : isExperts ? 'experts' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
+  useEffect(() => {
+    setRolePersonaOpen(false)
+  }, [activeId, view])
+
+  const openRolePersonaDrawer = useCallback(() => {
+    setRolePersonaOpen(true)
+  }, [])
+
+  const rolePersonaDrawer = (
+    <SessionRolePersonaDrawer
+      open={rolePersonaOpen && view === 'chat' && !isStandaloneView}
+      sessionId={activeId}
+      onOpenChange={setRolePersonaOpen}
+    />
+  )
   const sidebarSessions = useMemo(() => {
     if (sidebarListTab === 'experts') return sessions.filter(s => !!s.expertId)
     if (sidebarListTab === 'chat') return sessions.filter(s => !s.expertId)
@@ -1037,6 +1054,7 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
 
@@ -1049,6 +1067,7 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
 
@@ -1332,6 +1351,7 @@ export default function ChatApp() {
                 <ChatView
                   title={activeSession?.title ?? '新对话'}
                   titleSlot={electronChrome ? undefined : chatTitleSlot}
+                  overlaySlot={rolePersonaDrawer}
                   sessionId={activeId}
                   welcomeEpoch={welcomeEpoch}
                   chatScrollEpoch={chatScrollEpoch}

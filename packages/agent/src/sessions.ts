@@ -27,6 +27,8 @@ export interface CreateSessionOptions {
   title?: string
   expertId?: string | null
   expertIcon?: ExpertIcon | null
+  /** 会话级技能专长快照（已消毒） */
+  rolePersona?: string | null
 }
 
 export interface DisplayMessage {
@@ -76,6 +78,11 @@ export interface SessionRecord extends SessionMeta {
   /** UI-visible turns (user/assistant only) */
   turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; toolSteps?: ChatToolStep[]; at: string }[]
   contextRef?: SessionContextRef | null
+  /**
+   * 会话级 Layer1 技能专长快照。创建时从专家/默认研究员复制；之后与目录解耦。
+   * 列表 meta 不返回此字段全文。
+   */
+  rolePersona?: string | null
 }
 
 function previewText(content: string, max = 72): string {
@@ -128,6 +135,7 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     contextRef: raw.contextRef ?? null,
     expertId: raw.expertId ?? null,
     expertIcon: raw.expertIcon ?? null,
+    rolePersona: raw.rolePersona ?? null,
   }
   return migrateTurns(record)
 }
@@ -259,6 +267,7 @@ export class SessionStore {
       contextRef: null,
       expertId: normalized.expertId ?? null,
       expertIcon: normalized.expertIcon ?? null,
+      rolePersona: normalized.rolePersona ?? null,
     }
     writeRecord(record)
     return record
@@ -304,6 +313,15 @@ export class SessionStore {
     return record
   }
 
+  /** 更新会话级技能专长（调用方须已消毒） */
+  updateRolePersona(id: string, rolePersona: string): SessionRecord | null {
+    const record = this.get(id)
+    if (!record) return null
+    record.rolePersona = rolePersona
+    this.save(record)
+    return record
+  }
+
   toDisplayMessages(record: SessionRecord): DisplayMessage[] {
     if (record.turns?.length) {
       return record.turns.map(t => ({
@@ -340,6 +358,7 @@ export class SessionStore {
       model: source.model,
       expertId: source.expertId ?? null,
       expertIcon: source.expertIcon ?? null,
+      rolePersona: source.rolePersona ?? null,
       messages: [],
       turns: [],
       contextRef: {

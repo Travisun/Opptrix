@@ -182,6 +182,8 @@ export class ToolRegistry {
 
   systemPrompt(opts?: {
     expert?: import('@opptrix/shared').ExpertDefinition | null
+    sessionRolePersona?: string | null
+    roleLabel?: string | null
     activePacks?: readonly string[]
     routePlaybook?: string
     activeToolNames?: readonly string[]

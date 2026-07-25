@@ -93,6 +93,7 @@ export {
   buildLayer0Baseline,
   buildRolePersona,
   sanitizeExpertPersona,
+  resolveInitialRolePersona,
   DEFAULT_RESEARCHER_PERSONA,
 } from './experts/prompt-assembler.js'
 export { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS, type SessionArchiveFolder } from './archive-folders.js'

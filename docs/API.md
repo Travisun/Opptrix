@@ -443,6 +443,17 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 内置专家来自 `catalog.mock.json`（`LocalJsonExpertProvider`，`source: "builtin"`）；用户自建专家持久化于 user-store `local_experts`（`source: "local"`）。`ExpertCatalogService` 合并二者；`ExpertCatalog.source` 响应字段仍为 `"local"`。
 
+**JSON Schema（远程/静态目录契约）**
+
+| 文件 | 说明 |
+|------|------|
+| [`expert-definition.schema.json`](../packages/agent/src/experts/schemas/expert-definition.schema.json) | 单条 `ExpertDefinition` |
+| [`expert-catalog-file.schema.json`](../packages/agent/src/experts/schemas/expert-catalog-file.schema.json) | 静态文件 `{ schemaVersion?, experts[] }` |
+| [`remote-expert-http.schema.json`](../packages/agent/src/experts/schemas/remote-expert-http.schema.json) | 远程 HTTP 列表/详情契约 |
+| [`remote-catalog.example.json`](../packages/agent/src/experts/examples/remote-catalog.example.json) | 部署示例 |
+
+部署与字段说明见 [EXPERT-GUIDE §7 远程专家 datasource](./EXPERT-GUIDE.md#7-远程专家-datasource)。UI 中 `persona` 对用户显示为「技能专长」，API 字段名不变。
+
 | 方法 | 路径 | 说明 |
 |------|------|------|
 | GET | `/api/experts` | 分页列表；响应为 `ExpertCatalog` |
@@ -467,7 +478,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 |------|------|------|
 | `title` | string | 必填；空白 → 400 `请填写专家名称` |
 | `summary` | string | 必填；空白 → 400 `请填写专家简介` |
-| `persona` | string | 必填；经 `sanitizeExpertPersona` 消毒；空白 → 400 `请填写角色设定`；消毒失败 → 400 `角色设定无效，请修改后重试` |
+| `persona` | string | 必填；技能专长（API 字段 `persona`；UI 同义文案）；经 `sanitizeExpertPersona` 消毒；空白 → 400 `请填写角色设定`；消毒失败 → 400 `角色设定无效，请修改后重试` |
 | `tags` | string[] | 可选；trim 后去重，最多 8 个 |
 
 创建成功后服务端自动写入（客户端不可指定）：`id`（由 `title` slug 为 `local-{slug}`，冲突加后缀）、`source: "local"`、`official: false`、`icon`（默认 expert 图标）、`defaultPacks: ["fundamentals", "instrument_analytics"]`、`defaultResearchTier: "L2"`、`defaultSessionTitle`（同 `title`）、`complianceVersion: "1"`、`version: "1.0.0"`。
@@ -510,7 +521,7 @@ Content-Type: application/json
 PATCH /api/experts/local-hang-ye-yan-jiu-zhu-shou
 Content-Type: application/json
 
-{ "title": "行业研究助手 v2", "persona": "更新后的角色设定…" }
+{ "title": "行业研究助手 v2", "persona": "更新后的技能专长…" }
 ```
 
 响应 `{ expert: ExpertDefinition }`。
@@ -521,9 +532,9 @@ Content-Type: application/json
 - 404：id 不存在 `{ "error": "expert not found" }`
 - 403：内置专家 `{ "error": "内置专家不可删除" }`
 
-删除仅移除目录条目；**已有绑定该专家的会话与消息不受影响**（之后聊天因目录无定义而回退默认研究员 persona）。
+删除仅移除目录条目；**已有绑定该专家的会话与消息不受影响**（会话已快照的 `rolePersona` 继续用于 Layer 1）。
 
-> persona **不**快照进会话消息；每轮从目录加载并消毒。详见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
+> 目录 `persona` 仅在**创建会话**时复制到 `session.rolePersona`；之后与目录解耦。详见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
 
 **`ExpertCatalogEntry`（列表项，不含 `persona`）**
 
@@ -551,7 +562,7 @@ Content-Type: application/json
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
-| `persona` | string | 角色 persona（注入 system prompt Layer 1；服务端会消毒，见 [EXPERT-GUIDE §3](./EXPERT-GUIDE.md#3-角色设定persona写法指导)） |
+| `persona` | string | 技能专长（注入 system prompt Layer 1；服务端会消毒，见 [EXPERT-GUIDE §3](./EXPERT-GUIDE.md#3-技能专长persona写法指导)） |
 | `defaultPacks` | string[] | 创建会话后自动激活的工具包 id |
 | `defaultResearchTier` | `"L1" \| "L2" \| "L3"` | 默认研究档位 |
 | `defaultSessionTitle` | string | 可选；新建会话默认标题 |
@@ -612,24 +623,46 @@ Content-Type: application/json
 
 前端客户端：`listExperts` / `getExpert` / `createExpert` / `updateExpert` / `deleteExpert`（`client-ui/src/api/client.ts`）。
 
-**设计自己的专家**（persona 写法、Layer 0/1 关系、产品交互）：见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
+**设计自己的专家**（技能专长写法、Layer 0/1 关系、远程目录部署）：见 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)。
 
 ### Sessions（会话）
 
-会话元数据持久化于 user-store；列表与创建经下列 REST。带 `expertId` 的会话在侧栏显示 `expertIcon`，并在 Agent 每轮 system prompt 注入对应 persona（见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
+会话元数据持久化于 user-store；列表与创建经下列 REST。带 `expertId` 的会话在侧栏显示 `expertIcon`；Agent 每轮 Layer 1 使用会话快照 `rolePersona`（见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)、[EXPERT-GUIDE §4](./EXPERT-GUIDE.md#4-注意事项)）。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/sessions` | `{ sessions: SessionMeta[] }` 活跃会话（含 `expertId` / `expertIcon`） |
-| POST | `/api/sessions` | 创建会话；body 见下；响应 `{ session: SessionMeta }` |
+| GET | `/api/sessions` | `{ sessions: SessionMeta[] }` 活跃会话（含 `expertId` / `expertIcon`；**不含** `rolePersona` 全文） |
+| POST | `/api/sessions` | 创建会话；body 见下；响应 `{ session: SessionMeta }`；同时写入 `rolePersona` 快照 |
 | GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
+| GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
+| PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
 
 **POST `/api/sessions` body**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `title` | string | 可选；省略时：无 `expertId` 为「新对话」，有 `expertId` 为专家的 `defaultSessionTitle` 或 `title` |
-| `expertId` | string | 可选；须存在于专家目录；创建后写入 `expertId` 与 `expertIcon` |
+| `expertId` | string | 可选；须存在于专家目录；创建后写入 `expertId` 与 `expertIcon`，并将消毒后的专家 `persona`（失败则默认研究员）写入会话 `rolePersona` |
+
+无 `expertId` 时，`rolePersona` 初始为默认投研研究员文案（可随后编辑）。
+
+**`GET/PUT /api/sessions/:id/role-persona`**
+
+| 方法 | 说明 |
+|------|------|
+| GET | 返回本会话技能专长全文；若记录中为空则按专家目录或默认研究员回填一次 |
+| PUT | 更新本会话技能专长；**不**修改专家目录；消毒失败 → 400 `技能专长无效，请修改后重试`；缺字段 → 400 `请填写技能专长` |
+
+```http
+PUT /api/sessions/{id}/role-persona
+Content-Type: application/json
+
+{ "rolePersona": "你擅长解读财报与行业景气度。" }
+```
+
+```json
+{ "rolePersona": "你擅长解读财报与行业景气度。", "expertId": "equity-analysis" }
+```
 
 **`SessionMeta`（`GET /api/sessions` / `POST` 成功响应中的 `session`）**
 

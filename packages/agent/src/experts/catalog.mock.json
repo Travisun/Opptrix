@@ -1,4 +1,5 @@
 {
+  "$schema": "./schemas/expert-catalog-file.schema.json",
   "experts": [
     {
       "id": "macro-strategy",

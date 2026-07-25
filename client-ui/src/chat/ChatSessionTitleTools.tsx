@@ -22,6 +22,7 @@ import {
   DismissRegular,
   EditRegular,
   FolderRegular,
+  TextDescriptionRegular,
 } from '@fluentui/react-icons'
 import { OPPTRIX_GLASS_PANEL_CLASS } from '../theme/mixins'
 import type { SessionArchiveFolder } from '../types/chat'
@@ -52,6 +53,8 @@ export interface ChatSessionTitleToolsProps {
   onArchive: (folderId: string) => void | Promise<void>
   onDelete: () => void
   onExport: () => void | Promise<void>
+  /** 打开本会话技能专长编辑抽屉 */
+  onEditRolePersona?: () => void
 }
 
 export default function ChatSessionTitleTools({
@@ -67,6 +70,7 @@ export default function ChatSessionTitleTools({
   onArchive,
   onDelete,
   onExport,
+  onEditRolePersona,
 }: ChatSessionTitleToolsProps) {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -302,6 +306,11 @@ export default function ChatSessionTitleTools({
     await onExport()
   }
 
+  const handleEditRolePersonaClick = () => {
+    closeMenus()
+    onEditRolePersona?.()
+  }
+
   const titleStyle: CSSProperties | undefined = maxWidth != null
     ? { maxWidth: `${maxWidth}px` }
     : style
@@ -387,6 +396,12 @@ export default function ChatSessionTitleTools({
         <EditRegular fontSize={16} />
         <span>重命名</span>
       </ComposerTooltipMenuItem>
+      {onEditRolePersona ? (
+        <ComposerTooltipMenuItem onClick={handleEditRolePersonaClick}>
+          <TextDescriptionRegular fontSize={16} />
+          <span>技能专长</span>
+        </ComposerTooltipMenuItem>
+      ) : null}
       <ComposerTooltipMenuItem
         active={archiveOpen}
         onClick={openArchivePanel}
