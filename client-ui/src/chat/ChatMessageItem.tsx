@@ -210,6 +210,12 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }
       ) : (
         <>
           {timeNode}
+          {!isUser && message.usage && message.usage.totalTokens > 0 && (
+            <MessageTokenLabel
+              totalTokens={message.usage.totalTokens}
+              estimated={message.usageEstimated}
+            />
+          )}
           {forkButton}
           {copyButton}
         </>
@@ -253,12 +259,6 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }
           <div style={{ marginTop: 12 }}>
             <ChatProcessTrace steps={message.toolSteps} />
           </div>
-        )}
-        {!isUser && message.usage && message.usage.totalTokens > 0 && (
-          <MessageTokenLabel
-            totalTokens={message.usage.totalTokens}
-            estimated={message.usageEstimated}
-          />
         )}
         {!message.toolSteps?.length && message.toolsUsed && message.toolsUsed.length > 0 && (
           <div className={s.toolTags}>
