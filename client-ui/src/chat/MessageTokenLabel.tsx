@@ -6,8 +6,8 @@ const useStyles = makeStyles({
   root: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
-    lineHeight: 1.4,
-    marginTop: '6px',
+    lineHeight: 1,
+    display: 'inline',
   },
 })
 
@@ -20,7 +20,7 @@ export default function MessageTokenLabel({ totalTokens, estimated }: MessageTok
   const s = useStyles()
   if (totalTokens <= 0) return null
   return (
-    <Text className={s.root} block>
+    <Text className={s.root}>
       {formatTurnUsageLabel(totalTokens, estimated)}
     </Text>
   )
