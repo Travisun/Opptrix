@@ -1,0 +1,151 @@
+import type { MediaKind, ChatAttachmentMeta, ModelMediaCapabilities } from '../types/chat'
+
+const KIND_LABEL: Record<Exclude<MediaKind, 'text'>, string> = {
+  image: '图片',
+  pdf: 'PDF',
+  video: '视频',
+  audio: '音频',
+}
+
+const EXT_MIME: Record<string, string> = {
+  '.png': 'image/png',
+  '.jpg': 'image/jpeg',
+  '.jpeg': 'image/jpeg',
+  '.gif': 'image/gif',
+  '.webp': 'image/webp',
+  '.bmp': 'image/bmp',
+  '.svg': 'image/svg+xml',
+  '.pdf': 'application/pdf',
+  '.mp4': 'video/mp4',
+  '.webm': 'video/webm',
+  '.mov': 'video/quicktime',
+  '.mkv': 'video/x-matroska',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.m4a': 'audio/mp4',
+  '.ogg': 'audio/ogg',
+  '.aac': 'audio/aac',
+}
+
+export function inferMimeFromFilename(filename: string): string | null {
+  const dot = filename.lastIndexOf('.')
+  if (dot < 0) return null
+  return EXT_MIME[filename.slice(dot).toLowerCase()] ?? null
+}
+
+export function resolveFileMime(file: Pick<File, 'type' | 'name'>): string {
+  const normalized = file.type.toLowerCase().split(';')[0]?.trim() ?? ''
+  if (normalized && normalized !== 'application/octet-stream') return normalized
+  return inferMimeFromFilename(file.name) ?? (normalized || 'application/octet-stream')
+}
+
+export function resolveActiveModelMedia(
+  models: Array<{ ref: string; media?: ModelMediaCapabilities; attachment?: boolean; inputModalities?: MediaKind[]; attachmentLimits?: ModelMediaCapabilities['limits'] }>,
+  modelRef?: string,
+): ModelMediaCapabilities | null {
+  const ref = modelRef?.trim()
+  const hit = ref ? models.find(m => m.ref === ref) : models[0]
+  if (!hit) return null
+  if (hit.media) return hit.media
+  if (hit.inputModalities || hit.attachmentLimits) {
+    return {
+      attachment: hit.attachment ?? false,
+      input: hit.inputModalities ?? ['text'],
+      output: ['text'],
+      limits: hit.attachmentLimits ?? { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 },
+    }
+  }
+  return null
+}
+
+export function modelAllowsAttachments(media: ModelMediaCapabilities | null): boolean {
+  if (!media) return false
+  return media.input.some(k => k !== 'text')
+}
+
+export function buildAcceptForMedia(media: ModelMediaCapabilities | null): string {
+  if (!modelAllowsAttachments(media) || !media) return ''
+  const parts: string[] = []
+  if (media.input.includes('image')) parts.push('image/*')
+  if (media.input.includes('pdf')) parts.push('application/pdf')
+  if (media.input.includes('video')) parts.push('video/*')
+  if (media.input.includes('audio')) parts.push('audio/*')
+  return parts.join(',')
+}
+
+export function modelMediaHint(media: ModelMediaCapabilities | null): string | null {
+  if (!media) return null
+  const kinds = media.input.filter(k => k !== 'text')
+  if (!kinds.length) return null
+  if (kinds.length === 1 && kinds[0] === 'image') return '支持图片'
+  return `支持${kinds.map(k => KIND_LABEL[k as Exclude<MediaKind, 'text'>] ?? k).join('、')}`
+}
+
+export function isKindSupported(media: ModelMediaCapabilities | null, kind: MediaKind): boolean {
+  if (kind === 'text') return true
+  if (!media) return false
+  return media.input.includes(kind)
+}
+
+export function formatBytesShort(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+}
+
+export function mimeToKind(mime: string, filename?: string): MediaKind | null {
+  const m = resolveFileMime({ type: mime, name: filename ?? '' }).toLowerCase().split(';')[0]?.trim() ?? ''
+  if (!m || m === 'application/octet-stream') return null
+  if (m.startsWith('image/')) return 'image'
+  if (m === 'application/pdf') return 'pdf'
+  if (m.startsWith('video/')) return 'video'
+  if (m.startsWith('audio/')) return 'audio'
+  return null
+}
+
+export function validateFileForModel(
+  file: File,
+  media: ModelMediaCapabilities | null,
+  pinnedCount: number,
+  pinnedTotal: number,
+): string | null {
+  const kind = mimeToKind(resolveFileMime(file), file.name)
+  if (!kind) return '不支持此文件类型'
+  if (!isKindSupported(media, kind)) {
+    return '当前模型不支持此类文件，可换模型或去掉附件'
+  }
+  const maxBytes = media?.limits.maxBytesByKind[kind]
+  if (maxBytes && file.size > maxBytes) {
+    return `文件过大（上限 ${formatBytesShort(maxBytes)}）`
+  }
+  if (media && pinnedCount >= media.limits.maxCount) {
+    return `附件数量已达上限（${media.limits.maxCount} 个）`
+  }
+  if (media && pinnedTotal + file.size > media.limits.maxTotalBytes) {
+    return `附件总大小超出限制（上限 ${formatBytesShort(media.limits.maxTotalBytes)}）`
+  }
+  return null
+}
+
+/** 按模型能力拆分 pin：media 未加载时不移除任何项 */
+export function partitionPinsForModel(
+  pinned: ChatAttachmentMeta[],
+  media: ModelMediaCapabilities | null,
+): { kept: ChatAttachmentMeta[]; removedIds: string[] } {
+  if (media == null) return { kept: pinned, removedIds: [] }
+  const kept: ChatAttachmentMeta[] = []
+  const removedIds: string[] = []
+  let total = 0
+  for (const item of pinned) {
+    const fake = new File([], item.name, { type: item.mime })
+    Object.defineProperty(fake, 'size', { value: item.size })
+    const err = validateFileForModel(fake, media, kept.length, total)
+    if (err) {
+      removedIds.push(item.id)
+      continue
+    }
+    kept.push(item)
+    total += item.size
+  }
+  return { kept, removedIds }
+}

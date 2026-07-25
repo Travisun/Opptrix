@@ -66,6 +66,33 @@ export interface SessionArchiveFolder {
   isDefault: boolean
 }
 
+export interface AttachmentLimits {
+  maxBytesByKind: Partial<Record<MediaKind, number>>
+  maxCount: number
+  maxTotalBytes: number
+}
+
+export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
+
+export interface ChatAttachmentMeta {
+  id: string
+  kind: MediaKind
+  mime: string
+  name: string
+  size: number
+  createdAt: string
+  width?: number
+  height?: number
+  duration?: number
+}
+
+export interface ModelMediaCapabilities {
+  attachment: boolean
+  input: MediaKind[]
+  output: MediaKind[]
+  limits: AttachmentLimits
+}
+
 export interface AvailableModel {
   ref: string
   model: string
@@ -73,6 +100,11 @@ export interface AvailableModel {
   providerName: string
   /** 启发式上下文窗口（tokens） */
   contextTokens?: number
+  attachment?: boolean
+  inputModalities?: MediaKind[]
+  outputModalities?: MediaKind[]
+  attachmentLimits?: AttachmentLimits
+  media?: ModelMediaCapabilities
 }
 
 export interface ChatDisplayMessage {
@@ -83,6 +115,7 @@ export interface ChatDisplayMessage {
   at: string
   usage?: TokenUsage
   usageEstimated?: boolean
+  attachments?: ChatAttachmentMeta[]
 }
 
 export interface SessionForkContextRef {

@@ -120,7 +120,41 @@ export {
   lookupModelsDevContextLimit,
   getModelsDevCatalog,
   resetModelsDevCacheForTests,
+  resolveModelMediaCapabilitiesAsync,
+  lookupModelsDevMediaEntry,
+  defaultTextOnlyMediaCapabilities,
 } from './llm/models-dev-context.js'
+export {
+  type MediaKind,
+  type ChatAttachmentMeta,
+  type AttachmentLimits,
+  type ModelMediaCapabilities,
+  mimeToMediaKind,
+  inferMimeFromFilename,
+  resolveMediaMime,
+  formatBytesShort,
+  mediaKindLabel,
+} from './media-types.js'
+export { resolveAttachmentLimits } from './attachment-limits.js'
+export {
+  saveAttachment,
+  readAttachmentMeta,
+  readAttachmentBuffer,
+  deleteAttachment,
+  resolveAttachmentFilePath,
+  validateAttachmentAgainstCapabilities,
+  isAttachmentReferenced,
+  summarizePinnedLimits,
+  parseNonNegativeIntHeader,
+  resolveUploadMime,
+} from './chat-attachments.js'
+export {
+  buildUserContentParts,
+  attachmentToContentPart,
+  chatMessageContentToText,
+  parseAssistantResponseContent,
+} from './content-parts.js'
+export type { ContentPart, TextContentPart, ImageUrlContentPart, FileContentPart, InputAudioContentPart } from './llm/provider.js'
 export {
   formatTokenCount,
   formatTurnUsageLabel,

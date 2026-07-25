@@ -5,10 +5,12 @@ import {
   CheckmarkCircleFilled,
   ClipboardPasteRegular,
 } from '@fluentui/react-icons'
-import type { ChatDisplayMessage } from '../types/chat'
 import MarkdownMessage from './MarkdownMessage'
 import ChatProcessTrace from './ChatProcessTrace'
 import MessageTokenLabel from './MessageTokenLabel'
+import { MessageAttachmentStrip } from './ComposerAttachmentStrip'
+import MediaPreviewBox from './MediaPreviewBox'
+import type { ChatAttachmentMeta, ChatDisplayMessage } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
@@ -140,13 +142,15 @@ const useStyles = makeStyles({
 interface Props {
   message: ChatDisplayMessage
   index: number
+  sessionId?: string | null
   isMobile?: boolean
   onFork?: () => void
 }
 
-function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
+function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }: Props) {
   const s = useStyles()
   const [copied, setCopied] = useState(false)
+  const [previewAttachment, setPreviewAttachment] = useState<ChatAttachmentMeta | null>(null)
   const isUser = message.role === 'user'
   const timeLabel = formatFriendlyTime(message.at)
 
@@ -236,6 +240,12 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
             : s.assistantBubble,
         )}
       >
+        {message.attachments && message.attachments.length > 0 && (
+          <MessageAttachmentStrip
+            items={message.attachments}
+            onOpen={setPreviewAttachment}
+          />
+        )}
         {isUser
           ? message.content
           : <MarkdownMessage content={message.content} />}
@@ -260,6 +270,14 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
         {!isUser && metaFooter}
       </div>
       {isUser && metaFooter}
+      {sessionId && (
+        <MediaPreviewBox
+          open={Boolean(previewAttachment)}
+          sessionId={sessionId}
+          attachment={previewAttachment}
+          onClose={() => setPreviewAttachment(null)}
+        />
+      )}
     </div>
   )
 }

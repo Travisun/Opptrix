@@ -1,4 +1,4 @@
-import { createProvider } from '@opptrix/agent'
+import { createProvider, chatMessageContentToText } from '@opptrix/agent'
 import type { NewsTranslationSettings } from '@opptrix/news-feed'
 import { loadConfig } from './config.js'
 import {
@@ -71,10 +71,10 @@ async function translateRemoteSegment(
 
   const turn = await llm.chat([{ role: 'user', content: prompt }])
   if (turn.finishReason === 'error') {
-    throw new Error(turn.error ?? turn.message.content ?? '远程翻译请求失败')
+    throw new Error(turn.error ?? (chatMessageContentToText(turn.message.content) || '远程翻译请求失败'))
   }
 
-  const raw = String(turn.message.content ?? '').trim()
+  const raw = chatMessageContentToText(turn.message.content).trim()
   if (kind === 'html') {
     return cleanHtmlTranslationOutput(raw, sourceText) || raw
   }

@@ -4,7 +4,7 @@ import {
 } from '@fluentui/react-components'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef,
-  AvailableModel,
+  AvailableModel, ChatAttachmentMeta,
 } from '../types/chat'
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import { submitUserPromptResponse } from '../api/client'
@@ -268,9 +268,10 @@ interface ChatViewProps {
   sidebarVisible?: boolean
   llmLabel?: string
   backendOk?: boolean
-  onSubmit: (text?: string) => void
+  onSubmit: (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => void
   onStop?: () => void
   onForkMessage?: (messageIndex: number) => void
+  ensureSession?: () => Promise<string>
   onQuoteSelection?: (selection: MessageSelection) => void
   onEphemeralAsk?: (
     message: string,
@@ -301,6 +302,7 @@ function ChatView({
   llmLabel = '',
   backendOk = false,
   onSubmit, onStop, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
+  ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
   onToggleRightPanel,
@@ -562,9 +564,9 @@ function ChatView({
     })
   }, [chatScrollEpoch, sessionId, loading, liveTrace, messages.length, scrollToMessageStart])
 
-  const handleSubmit = (text?: string) => {
+  const handleSubmit = (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
     stickToBottomRef.current = true
-    onSubmit(text)
+    onSubmit(text, attachmentIds, attachmentMetas)
   }
 
   const threadColumnClass = mergeClasses(s.threadColumn, isMobile && s.threadColumnMobile)
@@ -685,6 +687,7 @@ function ChatView({
                   key={listRowKey(i, m.at, m.role)}
                   message={m}
                   index={i}
+                  sessionId={sessionId}
                   isMobile={isMobile}
                   onFork={onForkMessage ? () => onForkMessage(i) : undefined}
                 />
@@ -737,6 +740,7 @@ function ChatView({
               onStop={onStop}
               onModelChange={onModelChange}
               onClearContextRef={onClearContextRef}
+              ensureSession={ensureSession}
               userPrompt={pendingUserPrompt}
               userPromptSubmitting={userPromptSubmitting}
               onUserPromptSubmit={pendingUserPrompt ? handleUserPromptSubmit : undefined}

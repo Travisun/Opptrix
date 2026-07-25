@@ -1,5 +1,5 @@
-import type { ChatMessage } from '../llm/provider.js'
-import type { LlmProvider } from '../llm/provider.js'
+import { chatMessageContentToText } from '../content-parts.js'
+import type { ChatMessage, LlmProvider } from '../llm/provider.js'
 import { repairToolCallSequences, tailMessagesForLlm } from '../llm/messages.js'
 import {
   type ContextBudget,
@@ -158,7 +158,7 @@ export async function structuredCompact(
   ]
   const compactUsage = resolveTurnUsage(turn, compactPrompt)
 
-  if (turn.finishReason === 'error' || !turn.message.content?.trim()) {
+  if (turn.finishReason === 'error' || !chatMessageContentToText(turn.message.content).trim()) {
     const micro = microcompactMessages(repaired, keepRecent)
     return {
       state: { messages: micro.messages, sessionMemory: state.sessionMemory },
@@ -167,7 +167,7 @@ export async function structuredCompact(
   }
 
   const memory = parseSessionMemoryFromModelText(
-    turn.message.content,
+    chatMessageContentToText(turn.message.content),
     state.sessionMemory,
     cut,
   )

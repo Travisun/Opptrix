@@ -1,6 +1,6 @@
-import { useRef, useEffect, useCallback, useState } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowUpRegular, PauseFilled } from '@fluentui/react-icons'
+import { ArrowUpRegular, AttachRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ContextUsageMeter from './ContextUsageMeter'
 import ComposerContextRefTag from './ComposerContextRefTag'
@@ -11,7 +11,7 @@ import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
-import type { AvailableModel, ChatContextUsage, SessionContextRef } from '../types/chat'
+import type { AvailableModel, ChatAttachmentMeta, ChatContextUsage, SessionContextRef } from '../types/chat'
 import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { WatchlistItem } from '../types/market'
 import {
@@ -37,6 +37,9 @@ import {
 } from './composerEditor'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
+import ComposerAttachmentStrip from './ComposerAttachmentStrip'
+import { useComposerAttachments } from './useComposerAttachments'
+import { resolveActiveModelMedia, modelAllowsAttachments, buildAcceptForMedia } from './mediaCapabilities'
 import { listRowKey } from '../utils/listRowKey'
 
 const LINE_HEIGHT = 1.5
@@ -268,10 +271,11 @@ interface ChatComposerProps {
   availableModels: AvailableModel[]
   sessionModel?: string
   contextUsage?: ChatContextUsage | null
-  onSubmit: (text?: string) => void
+  onSubmit: (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => void
   onStop?: () => void
   onModelChange?: (ref: string) => void
   onClearContextRef?: () => void
+  ensureSession?: () => Promise<string>
   userPrompt?: ChatUserPromptPayload | null
   userPromptSubmitting?: boolean
   onUserPromptSubmit?: (answer: UserPromptAnswerPayload) => void
@@ -294,6 +298,7 @@ export default function ChatComposer({
   onStop,
   onModelChange,
   onClearContextRef,
+  ensureSession,
   userPrompt = null,
   userPromptSubmitting = false,
   onUserPromptSubmit,
@@ -307,6 +312,31 @@ export default function ChatComposer({
   const caretRangeRef = useRef<Range | null>(null)
   // 有无可发送内容（文字或 chip）；驱动发送按钮与 placeholder。
   const [hasContent, setHasContent] = useState(false)
+  const {
+    pinned,
+    uploading,
+    toast: attachmentToast,
+    fileInputRef,
+    addFiles,
+    removePinned,
+    reconcileWithModel,
+    clearPinned,
+    openFilePicker,
+    attachmentIds,
+  } = useComposerAttachments(sessionId, ensureSession)
+
+  const activeMedia = useMemo(
+    () => resolveActiveModelMedia(availableModels, sessionModel),
+    [availableModels, sessionModel],
+  )
+
+  const acceptTypes = useMemo(() => buildAcceptForMedia(activeMedia), [activeMedia])
+  const attachmentsAllowed = modelAllowsAttachments(activeMedia)
+
+  useEffect(() => {
+    reconcileWithModel(activeMedia)
+  }, [activeMedia, reconcileWithModel])
+
   const { items: watchlistItems } = useWatchlist()
 
   const {
@@ -405,19 +435,23 @@ export default function ChatComposer({
 
   const handleSubmitMessage = useCallback((text?: string) => {
     const explicit = text?.trim()
+    const metas = pinned.length ? pinned : undefined
+    const ids = attachmentIds.length ? attachmentIds : undefined
     if (explicit) {
-      onSubmit(explicit)
+      onSubmit(explicit, ids, metas)
       clearEditorContent()
+      clearPinned()
       return
     }
     const root = editorRef.current
     const composed = root ? getSendText(root).trim() : ''
-    if (!composed || loading) return
-    onSubmit(composed)
+    if ((!composed && !attachmentIds.length) || loading) return
+    onSubmit(composed || undefined, ids, metas)
     clearEditorContent()
-  }, [clearEditorContent, loading, onSubmit])
+    clearPinned()
+  }, [attachmentIds, clearEditorContent, clearPinned, loading, onSubmit, pinned])
 
-  const canSend = hasContent && !loading && !userPrompt
+  const canSend = (hasContent || attachmentIds.length > 0) && !loading && !userPrompt && !uploading
   const composerLocked = loading || Boolean(userPrompt)
 
   const handleInput = useCallback(() => {
@@ -436,13 +470,37 @@ export default function ChatComposer({
   }, [refreshContentState, syncMention])
 
   const handlePaste = useCallback((e: React.ClipboardEvent<HTMLDivElement>) => {
-    // 只接受纯文本，避免粘贴富文本/HTML 破坏编辑器结构。
+    const items = e.clipboardData.items
+    const imageFiles: File[] = []
+    for (const item of items) {
+      if (item.type.startsWith('image/')) {
+        const f = item.getAsFile()
+        if (f) imageFiles.push(f)
+      }
+    }
+    if (imageFiles.length) {
+      e.preventDefault()
+      void addFiles(imageFiles, activeMedia)
+      return
+    }
     e.preventDefault()
     const text = e.clipboardData.getData('text/plain')
     if (text) document.execCommand('insertText', false, text)
     refreshContentState()
     syncMention()
-  }, [refreshContentState, syncMention])
+  }, [activeMedia, addFiles, refreshContentState, syncMention])
+
+  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    if (composerLocked || uploading) return
+    if (e.dataTransfer.files?.length) {
+      void addFiles(e.dataTransfer.files, activeMedia)
+    }
+  }, [activeMedia, addFiles, composerLocked, uploading])
+
+  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+  }, [])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (composingRef.current) return
@@ -523,6 +581,9 @@ export default function ChatComposer({
       )}
 
       {error && <div className={s.error} role="alert">{error}</div>}
+      {attachmentToast && !error && (
+        <div className={s.error} role="status">{attachmentToast}</div>
+      )}
 
       <div className={s.panelWrap}>
         <div className={s.panelGround} aria-hidden />
@@ -533,7 +594,22 @@ export default function ChatComposer({
             onSubmit={onUserPromptSubmit}
           />
         )}
-        <div className={mergeClasses(s.panel, 'opptrix-composer-shell')}>
+        <div
+          className={mergeClasses(s.panel, 'opptrix-composer-shell')}
+          onDrop={handleDrop}
+          onDragOver={handleDragOver}
+        >
+          <input
+            ref={fileInputRef}
+            type="file"
+            hidden
+            multiple
+            accept={acceptTypes || undefined}
+            onChange={(e) => {
+              if (e.target.files?.length) void addFiles(e.target.files, activeMedia)
+              e.target.value = ''
+            }}
+          />
           <div className={s.inputRow}>
             {contextRef && (
               <ComposerContextRefTag
@@ -541,6 +617,11 @@ export default function ChatComposer({
                 onClear={onClearContextRef}
               />
             )}
+            <ComposerAttachmentStrip
+              items={pinned}
+              sessionId={sessionId}
+              onRemove={removePinned}
+            />
             <div className={s.editorRow}>
               <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />
               <div
@@ -571,6 +652,14 @@ export default function ChatComposer({
           </div>
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
+              <OpptrixButton
+                variant="ghost"
+                size="small"
+                icon={<AttachRegular fontSize={16} />}
+                disabled={composerLocked || uploading || !attachmentsAllowed}
+                aria-label="添加附件"
+                onClick={openFilePicker}
+              />
               <ComposerQuickTasks
                 disabled={composerLocked}
                 onApply={handleApplyQuickTask}

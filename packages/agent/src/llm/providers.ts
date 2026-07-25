@@ -1,6 +1,11 @@
 import { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './provider.js'
 import { resolveModelContextTokens } from './model-context.js'
-import { resolveModelContextTokensAsync } from './models-dev-context.js'
+import {
+  resolveModelContextTokensAsync,
+  resolveModelMediaCapabilitiesAsync,
+  defaultTextOnlyMediaCapabilities,
+} from './models-dev-context.js'
+import type { ModelMediaCapabilities } from '../media-types.js'
 
 export { fetchOpenAiModelList }
 
@@ -19,6 +24,13 @@ export interface AvailableModel {
   providerName: string
   /** 启发式上下文窗口（tokens） */
   contextTokens: number
+  /** 是否支持附件上传 */
+  attachment?: boolean
+  inputModalities?: import('../media-types.js').MediaKind[]
+  outputModalities?: import('../media-types.js').MediaKind[]
+  attachmentLimits?: import('../media-types.js').AttachmentLimits
+  /** 嵌套媒体能力（与上述字段等价，便于 API 消费） */
+  media?: ModelMediaCapabilities
 }
 
 export function normalizeBaseUrl(url: string): string {
@@ -44,12 +56,18 @@ export class ProviderRegistry {
     for (const p of this.providers) {
       if (!p.apiKey || !p.baseUrl) continue
       for (const model of p.models) {
+        const media = defaultTextOnlyMediaCapabilities()
         out.push({
           ref: `${p.id}:${model}`,
           model,
           providerId: p.id,
           providerName: p.name,
           contextTokens: resolveModelContextTokens(model),
+          attachment: media.attachment,
+          inputModalities: media.input,
+          outputModalities: media.output,
+          attachmentLimits: media.limits,
+          media,
         })
       }
     }
@@ -61,13 +79,21 @@ export class ProviderRegistry {
     for (const p of this.providers) {
       if (!p.apiKey || !p.baseUrl) continue
       for (const model of p.models) {
-        const contextTokens = await resolveModelContextTokensAsync(model, p.id)
+        const [contextTokens, media] = await Promise.all([
+          resolveModelContextTokensAsync(model, p.id),
+          resolveModelMediaCapabilitiesAsync(model, p.id),
+        ])
         out.push({
           ref: `${p.id}:${model}`,
           model,
           providerId: p.id,
           providerName: p.name,
           contextTokens,
+          attachment: media.attachment,
+          inputModalities: media.input,
+          outputModalities: media.output,
+          attachmentLimits: media.limits,
+          media,
         })
       }
     }

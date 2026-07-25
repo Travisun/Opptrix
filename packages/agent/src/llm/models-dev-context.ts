@@ -1,3 +1,5 @@
+import { resolveAttachmentLimits } from '../attachment-limits.js'
+import type { MediaKind, ModelMediaCapabilities } from '../media-types.js'
 import { resolveModelContextTokens } from './model-context.js'
 
 const MODELS_DEV_URL = 'https://models.dev/api.json'
@@ -33,8 +35,15 @@ export interface ModelsDevLimit {
   output?: number
 }
 
+interface ModelsDevModalities {
+  input?: string[]
+  output?: string[]
+}
+
 interface ModelsDevModelEntry {
   limit?: { context?: number; output?: number }
+  attachment?: boolean
+  modalities?: ModelsDevModalities
 }
 
 interface ModelsDevProviderEntry {
@@ -249,6 +258,133 @@ export async function resolveModelContextTokensAsync(
   }
   const { model } = splitModelRef(modelId)
   return resolveModelContextTokens(model || modelId)
+}
+
+function normalizeMediaKind(raw: string): MediaKind | null {
+  const v = raw.trim().toLowerCase()
+  if (v === 'text' || v === 'image' || v === 'pdf' || v === 'video' || v === 'audio') {
+    return v
+  }
+  return null
+}
+
+function mediaFromEntry(entry: ModelsDevModelEntry | undefined): {
+  attachment: boolean
+  input: MediaKind[]
+  output: MediaKind[]
+} {
+  const inputRaw = entry?.modalities?.input ?? ['text']
+  const outputRaw = entry?.modalities?.output ?? ['text']
+  const input = inputRaw
+    .map(normalizeMediaKind)
+    .filter((k): k is MediaKind => k !== null)
+  const output = outputRaw
+    .map(normalizeMediaKind)
+    .filter((k): k is MediaKind => k !== null)
+  const attachment = entry?.attachment === true
+    || input.some(k => k !== 'text')
+  return {
+    attachment,
+    input: input.length ? input : ['text'],
+    output: output.length ? output : ['text'],
+  }
+}
+
+function matchModelEntry(
+  catalog: ModelsDevCatalog,
+  modelId: string,
+  providerId?: string,
+): ModelsDevModelEntry | null {
+  const { provider: refProvider, model } = splitModelRef(modelId)
+  const effectiveProvider = providerId?.trim() || refProvider
+  const query = model || modelId
+
+  if (effectiveProvider) {
+    const provider = catalog[effectiveProvider]
+    if (provider?.models) {
+      const candidates = [
+        query,
+        query.toLowerCase(),
+        stripCommonPrefix(query),
+        normalizeModelKey(query),
+        normalizeModelKey(stripCommonPrefix(query)),
+      ]
+      for (const candidate of candidates) {
+        if (!candidate) continue
+        if (provider.models[candidate]) return provider.models[candidate]
+        const lower = candidate.toLowerCase()
+        for (const [key, entry] of Object.entries(provider.models)) {
+          if (key.toLowerCase() === lower) return entry
+        }
+      }
+    }
+  }
+
+  for (const { provider, modelKey } of collectModelKeys(catalog, providerId)) {
+    const normalizedQuery = normalizeModelKey(stripCommonPrefix(query))
+    const normalizedKey = normalizeModelKey(stripCommonPrefix(modelKey))
+    if (normalizedQuery.length >= MIN_SUBSTRING_LEN && (
+      normalizedKey.includes(normalizedQuery) || normalizedQuery.includes(normalizedKey)
+    )) {
+      return catalog[provider]?.models?.[modelKey] ?? null
+    }
+  }
+
+  for (const provider of Object.keys(catalog)) {
+    if (provider === effectiveProvider) continue
+    const hit = matchInProvider(catalog, provider, query)
+    if (hit) {
+      const providerEntry = catalog[provider]
+      if (!providerEntry?.models) continue
+      for (const [key, entry] of Object.entries(providerEntry.models)) {
+        const limit = limitFromEntry(entry)
+        if (limit && limit.context === hit.context) return entry
+        if (key.toLowerCase().includes(query.toLowerCase())) return entry
+      }
+    }
+  }
+
+  return null
+}
+
+export function lookupModelsDevMediaEntry(
+  catalog: ModelsDevCatalog,
+  modelId: string,
+  providerId?: string,
+): ReturnType<typeof mediaFromEntry> | null {
+  const entry = matchModelEntry(catalog, modelId, providerId)
+  if (!entry) return null
+  return mediaFromEntry(entry)
+}
+
+export async function resolveModelMediaCapabilitiesAsync(
+  modelId: string,
+  providerId?: string,
+): Promise<ModelMediaCapabilities> {
+  const catalog = await getModelsDevCatalog()
+  const fromCatalog = catalog
+    ? lookupModelsDevMediaEntry(catalog, modelId, providerId)
+    : null
+
+  const input = fromCatalog?.input ?? ['text']
+  const output = fromCatalog?.output ?? ['text']
+  const attachment = fromCatalog?.attachment ?? input.some(k => k !== 'text')
+
+  return {
+    attachment,
+    input,
+    output,
+    limits: resolveAttachmentLimits(modelId, input),
+  }
+}
+
+export function defaultTextOnlyMediaCapabilities(): ModelMediaCapabilities {
+  return {
+    attachment: false,
+    input: ['text'],
+    output: ['text'],
+    limits: resolveAttachmentLimits('default', ['text']),
+  }
 }
 
 export async function resolveModelsDevOutputReserve(

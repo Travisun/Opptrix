@@ -198,6 +198,7 @@ Opptrix/
 - **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
   - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。
   - **窗长**：`resolveModelContextTokensAsync` 优先 models.dev（精确/大小写/去品牌前缀/规范化/子串/跨 provider），失败降级 `resolveModelContextTokens` 启发式（未知默认 128k）；`AvailableModel.contextTokens` 只读派生。预算预留输出与 system/tools；**soft 75%** → microcompact（压缩较早 tool 结果正文）；**hard 85%** → structuredCompact（独立一轮 LLM 写 `SessionMemory`，目标/约束神圣不可丢）。
+  - **多媒体**：`resolveModelMediaCapabilitiesAsync` 从 models.dev 读取 `modalities` / `attachment`；`resolveAttachmentLimits` 按模型族分档限额。用户附件经 `POST .../attachments` 落盘，聊天以 OpenAI 兼容 content parts 发送；模型原生输出（`image_url` / base64 file 等）解析落盘并挂到 assistant `turns[].attachments`。
   - **触发**：每轮 `llm.chat` 前检查；上游 `context_length_exceeded` 等 → 强制 aggressive compact 后**重试 1 次**；`setSessionModel` 换模型后按新窗再检查。
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer 已用/窗长估算）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`

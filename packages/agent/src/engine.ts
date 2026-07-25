@@ -58,7 +58,7 @@ import {
   isContextOverflowError,
   KEEP_RECENT_DEFAULT,
 } from './context/compact.js'
-import { resolveModelContextTokensAsync } from './llm/models-dev-context.js'
+import { resolveModelContextTokensAsync, resolveModelMediaCapabilitiesAsync } from './llm/models-dev-context.js'
 import { estimateToolsTokens } from './context/token-estimate.js'
 import {
   accumulateChatUsage,
@@ -66,6 +66,9 @@ import {
   resolveTurnUsage,
 } from './llm/usage-estimate.js'
 import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
+import { readAttachmentMeta, validateAttachmentAgainstCapabilities } from './chat-attachments.js'
+import type { ChatAttachmentMeta } from './media-types.js'
+import { buildUserContentParts, chatMessageContentToText } from './content-parts.js'
 
 export interface SessionContextUsage {
   usedTokens: number
@@ -130,6 +133,13 @@ export class AgentEngine {
   private readonly expertPacksSeeded = new Set<string>()
   readonly userPromptBridge = new UserPromptBridge()
   private readonly workspaceService = getWorkspaceService()
+  /** 附件 GET 与 content parts 本地 URL 前缀 */
+  private apiBaseUrl = 'http://127.0.0.1:8711/api'
+
+  setApiBaseUrl(url: string) {
+    const trimmed = url.trim().replace(/\/$/, '')
+    if (trimmed) this.apiBaseUrl = trimmed
+  }
 
   constructor(
     private hub: ResearchHub,
@@ -660,9 +670,9 @@ export class AgentEngine {
 
     const turn = await llm.chat(messages)
     if (turn.finishReason === 'error') {
-      return { reply: turn.message.content ?? turn.error ?? '请求失败' }
+      return { reply: chatMessageContentToText(turn.message.content) || turn.error || '请求失败' }
     }
-    return { reply: turn.message.content?.trim() || '（无回复内容）' }
+    return { reply: chatMessageContentToText(turn.message.content).trim() || '（无回复内容）' }
   }
 
   resolveUserPrompt(sessionId: string, promptId: string, answer: UserPromptAnswer) {
@@ -674,6 +684,7 @@ export class AgentEngine {
     message: string,
     modelRef?: string,
     progress?: ChatProgressOptions,
+    attachmentIds?: string[],
   ): Promise<ChatResult> {
     const text = message.trim()
     let record = this.sessions.get(sessionId)
@@ -682,21 +693,72 @@ export class AgentEngine {
       sessionId = record.id
     }
 
-    if (!text) return { reply: '请输入问题。', toolsUsed: [], sessionId }
+    const attachmentMetas: ChatAttachmentMeta[] = []
+    for (const id of attachmentIds ?? []) {
+      const trimmed = id.trim()
+      if (!trimmed) continue
+      const meta = readAttachmentMeta(sessionId, trimmed)
+      if (meta) attachmentMetas.push(meta)
+    }
+
+    if (!text && !attachmentMetas.length) {
+      return { reply: '请输入问题。', toolsUsed: [], sessionId }
+    }
 
     const activeModel = modelRef?.trim() || record.model
+
+    if (attachmentMetas.length) {
+      const resolvedModel = this.registry.resolve(activeModel)
+      const modelId = resolvedModel?.model
+        ?? activeModel?.replace(/^[^:]+:/, '')
+        ?? 'default'
+      const providerId = providerIdFromModelRef(activeModel)
+      const caps = await resolveModelMediaCapabilitiesAsync(modelId, providerId)
+      let count = 0
+      let total = 0
+      for (const meta of attachmentMetas) {
+        const validation = validateAttachmentAgainstCapabilities(
+          meta.kind,
+          meta.size,
+          caps,
+          count,
+          total,
+        )
+        if (!validation.ok) {
+          return {
+            reply: validation.error,
+            toolsUsed: [],
+            sessionId,
+            title: record.title,
+          }
+        }
+        count += 1
+        total += meta.size
+      }
+    }
+
     const llm = this.registry.createLlm(activeModel)
     if (modelRef?.trim()) {
       record.model = modelRef.trim()
     }
 
-    record.messages.push({ role: 'user', content: text })
+    const userContent = attachmentMetas.length
+      ? buildUserContentParts(text, sessionId, attachmentMetas, this.apiBaseUrl)
+      : text
+
+    record.messages.push({ role: 'user', content: userContent })
     if (!record.turns) record.turns = []
     const turnsBeforeAssistant = record.turns.length
-    record.turns.push({ role: 'user', content: text, at: new Date().toISOString() })
+    record.turns.push({
+      role: 'user',
+      content: text || '（附件）',
+      attachments: attachmentMetas.length ? attachmentMetas : undefined,
+      at: new Date().toISOString(),
+    })
     const messagesBeforeAssistant = record.messages.length
     if (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1) {
-      record.title = text.slice(0, 28) + (text.length > 28 ? '…' : '')
+      const titleSeed = text || attachmentMetas[0]?.name || '新对话'
+      record.title = titleSeed.slice(0, 28) + (titleSeed.length > 28 ? '…' : '')
     }
     this.sessions.save(record)
 
@@ -739,8 +801,9 @@ export class AgentEngine {
       steps: ChatToolStep[],
       usage?: TokenUsage,
       usageEstimated?: boolean,
+      attachments?: ChatAttachmentMeta[],
     ) => {
-      this.pushAssistant(record!, reply, used, steps, usage, usageEstimated)
+      this.pushAssistant(record!, reply, used, steps, usage, usageEstimated, attachments)
     }
 
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
@@ -820,7 +883,7 @@ export class AgentEngine {
             estimated: budgeted.compactUsageEstimated ?? true,
           })
         }
-        const turn = await llm.chat(budgeted.modelView, openAiTools, signal)
+        const turn = await llm.chat(budgeted.modelView, openAiTools, signal, { sessionId })
         chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, budgeted.modelView))
         return turn
       }
@@ -842,7 +905,7 @@ export class AgentEngine {
       if (
         turn.finishReason === 'error'
         && !overflowRetried
-        && (turn.contextOverflow || isContextOverflowError(turn.error, turn.message.content))
+        && (turn.contextOverflow || isContextOverflowError(turn.error, chatMessageContentToText(turn.message.content)))
       ) {
         overflowRetried = true
         emit({
@@ -858,10 +921,10 @@ export class AgentEngine {
         if (turn.error === 'cancelled' || signal?.aborted) {
           return finalizeCancelled(toolsUsed, toolSteps)
         }
-        const overflow = turn.contextOverflow || isContextOverflowError(turn.error, turn.message.content)
+        const overflow = turn.contextOverflow || isContextOverflowError(turn.error, chatMessageContentToText(turn.message.content))
         const reply = overflow
           ? '对话内容过多，整理后仍无法继续。请新开对话，或换用更大上下文窗口的模型。'
-          : (turn.message.content ?? turn.error ?? '请求失败')
+          : (chatMessageContentToText(turn.message.content) || turn.error || '请求失败')
         pushAssistant(reply, toolsUsed, toolSteps, chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined, chatUsage.estimated)
         emit({
           type: 'error',
@@ -872,7 +935,7 @@ export class AgentEngine {
       }
 
       if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
-        const thinkingSnippet = turn.message.content?.trim()
+        const thinkingSnippet = chatMessageContentToText(turn.message.content).trim()
         if (thinkingSnippet) {
           emit({
             type: 'thinking',
@@ -886,7 +949,7 @@ export class AgentEngine {
 
         record.messages.push({
           role: 'assistant',
-          content: turn.message.content ?? null,
+          content: chatMessageContentToText(turn.message.content) || null,
           tool_calls: turn.message.tool_calls,
         })
         this.sessions.save(record)
@@ -982,7 +1045,8 @@ export class AgentEngine {
         continue
       }
 
-      const reply = turn.message.content?.trim() || '（无回复内容）'
+      const reply = chatMessageContentToText(turn.message.content).trim() || '（无回复内容）'
+      const outputAttachments = turn.outputAttachments
       emit({ type: 'reply', content: reply })
       pushAssistant(
         reply,
@@ -990,6 +1054,7 @@ export class AgentEngine {
         toolSteps,
         chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
         chatUsage.estimated,
+        outputAttachments,
       )
       void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
@@ -1029,6 +1094,7 @@ export class AgentEngine {
     toolSteps: ChatToolStep[] = [],
     usage?: TokenUsage,
     usageEstimated?: boolean,
+    attachments?: ChatAttachmentMeta[],
   ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
@@ -1043,6 +1109,7 @@ export class AgentEngine {
       at: new Date().toISOString(),
       usage,
       usageEstimated,
+      attachments: attachments?.length ? attachments : undefined,
     })
     if (usage) {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)
