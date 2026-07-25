@@ -98,5 +98,28 @@ export {
 } from './experts/prompt-assembler.js'
 export { SessionArchiveFolderStore, DEFAULT_SESSION_ARCHIVE_FOLDERS, type SessionArchiveFolder } from './archive-folders.js'
 export { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
+export {
+  resolveModelContextTokens,
+  resolveContextBudget,
+  DEFAULT_CONTEXT_TOKENS,
+  SOFT_USAGE_RATIO,
+  HARD_USAGE_RATIO,
+} from './llm/model-context.js'
+export {
+  type SessionMemory,
+  formatSessionMemoryForPrompt,
+  emptySessionMemory,
+  parseSessionMemoryFromModelText,
+} from './context/session-memory.js'
+export {
+  ensureContextBudget,
+  assembleModelView,
+  microcompactMessages,
+  isContextOverflowError,
+  CONTEXT_COMPACT_HINT,
+  type CompactLevel,
+  type CompactResult,
+} from './context/compact.js'
+export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
 export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'

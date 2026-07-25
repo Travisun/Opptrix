@@ -4,6 +4,8 @@ export type SessionStreamSnapshot = {
   liveTrace: ChatLiveTrace | null
   pendingUserPrompt: ChatUserPromptPayload | null
   userPromptSubmitting: boolean
+  /** 会话内上下文整理轻提示 */
+  contextHint: string | null
 }
 
 export function createEmptyStreamSnapshot(): SessionStreamSnapshot {
@@ -11,6 +13,7 @@ export function createEmptyStreamSnapshot(): SessionStreamSnapshot {
     liveTrace: null,
     pendingUserPrompt: null,
     userPromptSubmitting: false,
+    contextHint: null,
   }
 }
 
@@ -19,6 +22,7 @@ export function createThinkingStreamSnapshot(label = '模型正在思考…'): S
     liveTrace: { steps: [], thinkingLabel: label },
     pendingUserPrompt: null,
     userPromptSubmitting: false,
+    contextHint: null,
   }
 }
 
@@ -34,6 +38,16 @@ export function applyChatProgressEvent(
           steps: snapshot.liveTrace?.steps ?? [],
           thinkingLabel: event.label,
           thinkingSnippet: event.snippet ?? snapshot.liveTrace?.thinkingSnippet,
+        },
+      }
+    case 'context_compact':
+      return {
+        ...snapshot,
+        contextHint: event.message,
+        liveTrace: {
+          steps: snapshot.liveTrace?.steps ?? [],
+          thinkingLabel: '正在整理对话要点…',
+          thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
         },
       }
     case 'user_prompt':

@@ -637,6 +637,28 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
 
+**会话上下文压缩（长对话）**
+
+- 每轮聊天按当前模型启发式 `contextTokens` 估算用量；接近上限时 micro / structured 压缩，SSE 推送 `context_compact`。
+- UI transcript（`turns`）不变；模型侧使用 `sessionMemory` + 近端消息。详见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
+- `PATCH /api/sessions/:id` 切换 `model` 时按新窗口再检查；响应可含 `contextHint`（有压缩时）。
+
+**SSE `context_compact` 事件**
+
+```json
+{
+  "type": "context_compact",
+  "level": "structured",
+  "message": "已整理较早对话要点，后续仍按你的目标继续。",
+  "usageRatio": 0.88,
+  "contextTokens": 128000
+}
+```
+
+`level`：`micro` | `structured` | `overflow_retry`。
+
+**`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带启发式上下文窗口（只读派生，无需用户配置）。
+
 **POST `/api/sessions` body**
 
 | 字段 | 类型 | 说明 |

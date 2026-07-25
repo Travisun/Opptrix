@@ -45,6 +45,13 @@ export type ChatProgressEvent =
     cancelled?: boolean
   }
   | { type: 'error'; message: string }
+  | {
+    type: 'context_compact'
+    level: 'micro' | 'structured' | 'overflow_retry'
+    message: string
+    usageRatio?: number
+    contextTokens?: number
+  }
 
 export interface ChatLiveTrace {
   thinkingLabel?: string

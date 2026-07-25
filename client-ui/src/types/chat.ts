@@ -56,6 +56,8 @@ export interface AvailableModel {
   model: string
   providerId: string
   providerName: string
+  /** 启发式上下文窗口（tokens） */
+  contextTokens?: number
 }
 
 export interface ChatDisplayMessage {

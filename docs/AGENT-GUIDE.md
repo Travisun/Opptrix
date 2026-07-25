@@ -195,6 +195,11 @@ Opptrix/
   - **默认研究员**：`POST /api/sessions` 不传 `expertId` → `expertId` / `expertIcon` 为 `null`，`rolePersona` 初始为默认投研研究员文案（可编辑）。
   - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）。
   - **专家目录（一期）**：`ExpertCatalogService` 合并内置（`LocalJsonExpertProvider` → `catalog.mock.json`，`source: "builtin"`）与用户自建（user-store `local_experts`，`source: "local"`）；`RemoteExpertProvider` 预留远程目录，REST 路径不变。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 专家市场见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。**如何设计自建专家与远程目录 JSON/HTTP 契约**（技能专长写法、消毒规则、静态/HTTP 部署）：[EXPERT-GUIDE.md §7](./EXPERT-GUIDE.md#7-远程专家-datasource)。
+- **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
+  - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。
+  - **窗长**：`resolveModelContextTokens(modelId)` 启发式（未知默认 128k）；`AvailableModel.contextTokens` 只读派生。预算预留输出与 system/tools；**soft 75%** → microcompact（压缩较早 tool 结果正文）；**hard 85%** → structuredCompact（独立一轮 LLM 写 `SessionMemory`，目标/约束神圣不可丢）。
+  - **触发**：每轮 `llm.chat` 前检查；上游 `context_length_exceeded` 等 → 强制 aggressive compact 后**重试 1 次**；`setSessionModel` 换模型后按新窗再检查。
+  - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。测试：`tests/session-context-compact.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（末项可自由输入），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
 - **行业分析**：`industry_mining` / `industry_mermaid`（属 `industry` pack，需播种或 activate）→ 代表公司用 `search_instruments` + `get_instrument_*`

@@ -2,7 +2,6 @@ import type { ResearchHub } from '@opptrix/research-hub'
 import type { AgentAppContext } from './app-context.js'
 import { getCurrentTime } from './app-context.js'
 import { type ChatMessage } from './llm/provider.js'
-import { tailMessagesForLlm } from './llm/messages.js'
 import { ProviderRegistry, type ProviderProfile, type AvailableModel } from './llm/providers.js'
 import { DiscoverRunner } from './discover.js'
 import { ToolRegistry } from './tools.js'
@@ -51,6 +50,11 @@ import {
   bindWorkspaceToolBridge,
   type WorkspaceToolBridge,
 } from './mcp/workspace-tools.js'
+import {
+  CONTEXT_COMPACT_HINT,
+  ensureContextBudget,
+  isContextOverflowError,
+} from './context/compact.js'
 
 export interface AgentSettings {
   providers?: ProviderProfile[]
@@ -291,12 +295,76 @@ export class AgentEngine {
     return this.registry.listAvailable()
   }
 
-  setSessionModel(sessionId: string, modelRef: string | null) {
+  async setSessionModel(sessionId: string, modelRef: string | null): Promise<{
+    session: SessionRecord
+    contextHint?: string
+  } | null> {
     const record = this.sessions.get(sessionId)
     if (!record) return null
     record.model = modelRef?.trim() || undefined
     this.sessions.save(record)
-    return record
+
+    const activeModel = record.model
+    const llm = this.registry.createLlm(activeModel)
+    const resolved = this.registry.resolve(activeModel)
+    const modelId = resolved?.model ?? activeModel?.replace(/^[^:]+:/, '') ?? 'default'
+    const systemPrompt = this.buildRoundSystemPrompt(sessionId, [])
+    const budget = await this.applyContextBudget(record, {
+      modelId,
+      systemPrompt,
+      tools: undefined,
+      llm,
+      emit: undefined,
+      aggressive: false,
+    })
+    return { session: record, contextHint: budget.hint }
+  }
+
+  /** 按模型窗预算压缩；返回用户可见轻提示文案（无变更则 undefined） */
+  private async applyContextBudget(
+    record: SessionRecord,
+    opts: {
+      modelId: string
+      systemPrompt: string
+      tools?: import('./tools.js').OpenAiTool[]
+      llm: ReturnType<ProviderRegistry['createLlm']>
+      emit?: (event: ChatProgressEvent) => void
+      aggressive?: boolean
+      contextPrefix?: ChatMessage[]
+      signal?: AbortSignal
+    },
+  ): Promise<{ hint?: string; modelView: ChatMessage[] }> {
+    const result = await ensureContextBudget({
+      modelId: opts.modelId,
+      systemPrompt: opts.systemPrompt,
+      tools: opts.tools,
+      state: {
+        messages: record.messages,
+        sessionMemory: record.sessionMemory,
+      },
+      contextPrefix: opts.contextPrefix,
+      llm: opts.llm,
+      signal: opts.signal,
+      aggressive: opts.aggressive,
+    })
+
+    if (result.results.some(r => r.changed)) {
+      record.messages = result.state.messages
+      record.sessionMemory = result.state.sessionMemory ?? null
+      this.sessions.save(record)
+      for (const r of result.results) {
+        if (!r.changed) continue
+        opts.emit?.({
+          type: 'context_compact',
+          level: r.level,
+          message: r.message,
+          usageRatio: r.usageRatio,
+          contextTokens: r.contextTokens,
+        })
+      }
+      return { hint: CONTEXT_COMPACT_HINT, modelView: result.modelView }
+    }
+    return { modelView: result.modelView }
   }
 
   createSession(opts?: CreateSessionOptions) {
@@ -604,11 +672,25 @@ export class AgentEngine {
       // 每轮刷新会话时钟，保证长工具链下「截至」仍准确
       const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
       const contextMessages = contextRefToChatMessages(record.contextRef)
-      const messages: ChatMessage[] = [
-        { role: 'system', content: systemPrompt },
-        ...contextMessages,
-        ...tailMessagesForLlm(record.messages),
-      ]
+      const resolvedModel = this.registry.resolve(activeModel)
+      const modelId = resolvedModel?.model
+        ?? activeModel?.replace(/^[^:]+:/, '')
+        ?? 'default'
+
+      let overflowRetried = false
+      const runLlmRound = async (aggressive: boolean) => {
+        const budgeted = await this.applyContextBudget(record, {
+          modelId,
+          systemPrompt,
+          tools: openAiTools,
+          llm,
+          emit,
+          aggressive,
+          contextPrefix: contextMessages,
+          signal,
+        })
+        return llm.chat(budgeted.modelView, openAiTools, signal)
+      }
 
       emit({
         type: 'thinking',
@@ -621,14 +703,32 @@ export class AgentEngine {
         research_tier: this.lastRoutePlan?.researchTier,
       })
 
-      const turn = await llm.chat(messages, openAiTools, signal)
+      let turn = await runLlmRound(false)
       throwIfAborted(signal)
+
+      if (
+        turn.finishReason === 'error'
+        && !overflowRetried
+        && (turn.contextOverflow || isContextOverflowError(turn.error, turn.message.content))
+      ) {
+        overflowRetried = true
+        emit({
+          type: 'context_compact',
+          level: 'overflow_retry',
+          message: CONTEXT_COMPACT_HINT,
+        })
+        turn = await runLlmRound(true)
+        throwIfAborted(signal)
+      }
 
       if (turn.finishReason === 'error') {
         if (turn.error === 'cancelled' || signal?.aborted) {
           return finalizeCancelled(toolsUsed, toolSteps)
         }
-        const reply = turn.message.content ?? turn.error ?? '请求失败'
+        const overflow = turn.contextOverflow || isContextOverflowError(turn.error, turn.message.content)
+        const reply = overflow
+          ? '对话内容过多，整理后仍无法继续。请新开对话，或换用更大上下文窗口的模型。'
+          : (turn.message.content ?? turn.error ?? '请求失败')
         pushAssistant(reply, toolsUsed, toolSteps)
         emit({
           type: 'error',
