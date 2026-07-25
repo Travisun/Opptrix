@@ -1,0 +1,74 @@
+name: Sync Experts to R2
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'experts/**'
+
+concurrency:
+  group: sync-experts-main
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    name: Validate experts catalog
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+
+      - name: Validate experts JSON
+        run: node scripts/validate-experts.mjs
+
+  sync-r2:
+    name: Sync experts to Cloudflare R2
+    needs: validate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify R2 credentials
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/verify-r2-credentials.mjs
+
+      - name: Sync experts to R2 (purge experts/ + upload JSON)
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/sync-experts-to-r2.mjs
+
+      - name: Purge Cloudflare CDN cache (experts/*.json)
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_EXPERT_CATALOG_BASE_URL: https://update.opptrix.org/experts/
+        run: node apps/desktop/scripts/purge-experts-cdn-cache.mjs

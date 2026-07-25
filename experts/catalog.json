@@ -1,0 +1,35 @@
+{
+  "schemaVersion": 1,
+  "experts": [
+    {
+      "id": "macro-strategy",
+      "title": "宏观策略顾问",
+      "summary": "解读宏观周期、政策取向与跨资产联动，帮你建立自上而下视角",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["宏观", "策略", "政策"],
+      "official": true,
+      "version": "1.0.0",
+      "source": "builtin"
+    },
+    {
+      "id": "equity-analysis",
+      "title": "个股分析助手",
+      "summary": "聚焦单只标的的基本面、估值与趋势结构，给出结构化研究解读",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["个股", "基本面", "估值"],
+      "official": true,
+      "version": "1.0.0",
+      "source": "builtin"
+    },
+    {
+      "id": "news-interpreter",
+      "title": "资讯解读官",
+      "summary": "快速梳理新闻要点、影响路径与后续观察点，辅助事件驱动决策",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["资讯", "事件", "解读"],
+      "official": true,
+      "version": "1.0.0",
+      "source": "builtin"
+    }
+  ]
+}

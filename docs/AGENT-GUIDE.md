@@ -194,7 +194,7 @@ Opptrix/
 - **专家会话 vs 默认研究员**：
   - **默认研究员**：`POST /api/sessions` 不传 `expertId` → `expertId` / `expertIcon` 为 `null`，`rolePersona` 初始为默认投研研究员文案（可编辑）。
   - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）。
-  - **专家目录（一期）**：`ExpertCatalogService` 合并内置（`LocalJsonExpertProvider` → `catalog.mock.json`，`source: "builtin"`）与用户自建（user-store `local_experts`，`source: "local"`）；`RemoteExpertProvider` 预留远程目录，REST 路径不变。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 专家市场见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。**如何设计自建专家与远程目录 JSON/HTTP 契约**（技能专长写法、消毒规则、静态/HTTP 部署）：[EXPERT-GUIDE.md §7](./EXPERT-GUIDE.md#7-远程专家-datasource)。
+  - **专家目录**：`ExpertCatalogService` 优先 `StaticHttpExpertProvider`（默认 `https://update.opptrix.org/experts/` 的 `catalog.json` / `{id}.json`），失败降级包内 `LocalJsonExpertProvider`（`catalog.mock.json`）；再合并用户自建（user-store `local_experts`）。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。部署与契约：[EXPERT-GUIDE.md §7](./EXPERT-GUIDE.md#7-远程专家-datasource)、[`experts/README.md`](../experts/README.md)。
 - **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
   - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。
   - **窗长**：`resolveModelContextTokens(modelId)` 启发式（未知默认 128k）；`AvailableModel.contextTokens` 只读派生。预算预留输出与 system/tools；**soft 75%** → microcompact（压缩较早 tool 结果正文）；**hard 85%** → structuredCompact（独立一轮 LLM 写 `SessionMemory`，目标/约束神圣不可丢）。
@@ -280,7 +280,7 @@ npm run serve               # 生产预览
 | 新增因子 | `packages/stock-eval/src/factors/` |
 | 本地库查询/同步 | `packages/market-data/src/` |
 | 聊天 UI | `client-ui/src/chat/` |
-| 专家目录 / persona 组装 | `packages/agent/src/experts/`（`catalog.mock.json`、`schemas/`、`prompt-assembler.ts`、`catalog-service.ts`）；REST `/api/experts*`；用户指南 [EXPERT-GUIDE.md](./EXPERT-GUIDE.md)（含 [远程 datasource §7](./EXPERT-GUIDE.md#7-远程专家-datasource)） |
+| 专家目录 / persona 组装 | `packages/agent/src/experts/`（`static-http-provider.ts`、`catalog.mock.json` fallback、`schemas/`、`prompt-assembler.ts`、`catalog-service.ts`）；仓库根 [`experts/`](../experts/)；REST `/api/experts*`；[EXPERT-GUIDE.md](./EXPERT-GUIDE.md)（含 [远程 §7](./EXPERT-GUIDE.md#7-远程专家-datasource)） |
 | 右侧面板 | `client-ui/src/market/` |
 | 设计 Token | `client-ui/src/theme/tokens.ts` |
 | 全局样式 | `client-ui/src/styles/global.css` |

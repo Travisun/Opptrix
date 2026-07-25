@@ -489,3 +489,65 @@ jobs:
           CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
           OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
         run: node apps/desktop/scripts/purge-update-cdn-cache.mjs
+
+  sync-experts-r2:
+    name: Sync experts to R2 (if changed)
+    needs: sync-r2
+    runs-on: ubuntu-latest
+    if: ${{ needs.sync-r2.result == 'success' }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Detect experts/ changes since previous desktop tag
+        id: experts
+        shell: bash
+        run: |
+          TAG="${{ github.ref_name }}"
+          PREV="$(git tag -l 'desktop-v*' --sort=-v:refname | grep -v "^${TAG}$" | head -1 || true)"
+          if [[ -z "$PREV" ]]; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "No previous desktop tag — syncing experts/"
+            exit 0
+          fi
+          if git diff --name-only "$PREV" "$TAG" -- experts/ | grep -q .; then
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "experts/ changed between $PREV and $TAG"
+          else
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "No experts/ changes between $PREV and $TAG — skip"
+          fi
+
+      - name: Validate experts JSON
+        if: steps.experts.outputs.changed == 'true'
+        run: node scripts/validate-experts.mjs
+
+      - name: Sync experts to R2
+        if: steps.experts.outputs.changed == 'true'
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/sync-experts-to-r2.mjs
+
+      - name: Purge experts CDN cache
+        if: steps.experts.outputs.changed == 'true'
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_EXPERT_CATALOG_BASE_URL: https://update.opptrix.org/experts/
+        run: node apps/desktop/scripts/purge-experts-cdn-cache.mjs

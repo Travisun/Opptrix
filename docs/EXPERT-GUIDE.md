@@ -186,7 +186,18 @@ persona 描述「**你是谁、怎么思考、怎么表达**」，不是工具�
 
 ## 7. 远程专家 datasource
 
-Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`listExperts(query?) → ExpertCatalog`、`getExpert(id) → ExpertDefinition | null`。一期客户端仅接 **本地 JSON 文件**（`LocalJsonExpertProvider` → `catalog.mock.json`）与用户自建（user-store）；**二期**将接入 HTTP 远程目录，REST 路径 `/api/experts*` 对 UI 保持不变。
+Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`listExperts(query?) → ExpertCatalog`、`getExpert(id) → ExpertDefinition | null`。客户端通过 `StaticHttpExpertProvider` 拉取仓库根目录 `experts/` 托管的静态 JSON（默认 `https://update.opptrix.org/experts/`）；失败时降级到包内 `catalog.mock.json`（`LocalJsonExpertProvider`）。用户自建专家仍由 user-store 提供；REST 路径 `/api/experts*` 对 UI 保持不变。
+
+### 静态托管布局（当前）
+
+| URL | 文件 | 说明 |
+|-----|------|------|
+| `{base}/catalog.json` | `experts/catalog.json` | 列表；`experts[]` **不含** `persona` |
+| `{base}/{id}.json` | `experts/{id}.json` | 完整 `ExpertDefinition` |
+
+环境变量 `OPPTRIX_EXPERT_CATALOG_BASE_URL` 可覆盖 `{base}`（无尾部斜杠）。CI：`experts/**` 变更 push 到 `main` 时由 `.github/workflows/sync-experts.yml` 同步 R2 前缀 `experts/`（**独立**于 `desktop/`）；桌面发版 workflow 在检测到 experts 变更时旁路调用同一脚本。详见 [`experts/README.md`](../experts/README.md)。
+
+本地校验：`node scripts/validate-experts.mjs`。
 
 ### JSON Schema 与示例
 
@@ -203,32 +214,26 @@ Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`li
 
 1. 按 `expert-catalog-file.schema.json` 编写 `{ "schemaVersion": 1, "experts": [ … ] }`。
 2. 每条专家须满足 `expert-definition.schema.json`（见下表）。
-3. 托管至 HTTPS 静态站点、对象存储或内网文件服务；**二期**客户端或 sidecar 可配置 URL 拉取。
+3. 托管至 R2 / CDN（仓库根 `experts/` 经 CI 同步到 `https://update.opptrix.org/experts/`）；客户端默认拉取该 URL，可用 `OPPTRIX_EXPERT_CATALOG_BASE_URL` 覆盖。
 4. 远程官方条目建议：`official: true`、`source: "builtin"`、`complianceVersion: "1"`。
 
-本地开发可对照 [`remote-catalog.example.json`](../packages/agent/src/experts/examples/remote-catalog.example.json) 与现有 [`catalog.mock.json`](../packages/agent/src/experts/catalog.mock.json)。
+本地开发可对照仓库根 [`experts/`](../experts/) 与包内 [`catalog.mock.json`](../packages/agent/src/experts/catalog.mock.json)（离线 fallback）。
 
-### HTTP 契约（RemoteExpertProvider）
+### HTTP 契约说明
 
-部署方提供 `baseUrl`（无尾部斜杠）。客户端请求：
+**当前生产路径为静态文件**（见上文「静态托管布局」），不是动态 REST：
 
 | 操作 | 请求 | 成功响应 |
 |------|------|----------|
-| 列表 | `GET {baseUrl}/experts?q=&tag=&limit=&cursor=&scope=` | `ExpertCatalog`；**`source` 必须为 `"remote"`** |
-| 详情 | `GET {baseUrl}/experts/{id}` | `{ "expert": ExpertDefinition }` |
-| 未找到 | 同上，未知 id | **404** `{ "error": "expert not found" }` |
+| 列表 | `GET {baseUrl}/catalog.json` | `{ "schemaVersion": 1, "experts": ExpertCatalogEntry[] }`（无 `persona`） |
+| 详情 | `GET {baseUrl}/{id}.json` | 裸 `ExpertDefinition`（含 `persona`） |
+| 未找到 | 详情 | **404**；Provider 返回 `null` 并降级 fallback |
 
-**列表查询参数**（与 `ExpertListQuery` 对齐）：
+`q` / `tag` / `limit` / `cursor` / `scope` 由 **客户端**在拉取 catalog 后过滤分页；`ExpertCatalogService` 合并 personal 后返回的 `source` 为 `"remote"`（远程成功）或 `"local"`（降级）。
 
-| 参数 | 说明 |
-|------|------|
-| `q` | 可选；匹配 `title` / `summary` / `tags`（子串，不区分大小写） |
-| `tag` | 可选；精确匹配某一 tag |
-| `limit` | 可选；默认 50，范围 1–100 |
-| `cursor` | 可选；上一页 `nextCursor`（数值 offset 字符串） |
-| `scope` | 可选；远程通常仅 `public`；`personal` 仍由客户端本地存储 |
+**预留（未部署）**：[`remote-expert-http.schema.json`](../packages/agent/src/experts/schemas/remote-expert-http.schema.json) 描述动态 `GET {baseUrl}/experts` / `GET {baseUrl}/experts/{id}` 形态，供日后 Worker 实现；与静态路径并存时以文档「静态托管布局」为准。
 
-**列表响应**（不含 `persona`）：
+**列表经 Service 聚合后的形态**（不含 `persona`）：
 
 ```json
 {
@@ -239,7 +244,7 @@ Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`li
 }
 ```
 
-**详情响应**（含完整 `persona` 与 `defaultPacks` 等）：见 [API.md §Experts](./API.md#experts专家目录) 示例。
+**详情**（含完整 `persona` 与 `defaultPacks` 等）：见 [API.md §Experts](./API.md#experts专家目录) 示例。
 
 ### 字段表（ExpertDefinition）
 
@@ -270,10 +275,10 @@ Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`li
 
 | 阶段 | 数据源 | 说明 |
 |------|--------|------|
-| **一期（当前）** | `LocalJsonExpertProvider` + user-store | 内置 `catalog.mock.json`；`ExpertCatalogService` 合并本地自建；API `ExpertCatalog.source` 为 `"local"` |
-| **二期（规划）** | HTTP `RemoteExpertProvider` | 配置远程 `baseUrl`；拉取列表 `source: "remote"`，与内置/本地合并；失败可降级至缓存或内置目录 |
+| **当前** | `StaticHttpExpertProvider` + fallback `LocalJsonExpertProvider` + user-store | 优先远程 `catalog.json` / `{id}.json`；失败降级 mock；`ExpertCatalog.source` 为 `remote` 或 `local` |
+| **离线** | `catalog.mock.json` | 与远程目录内容对齐，供无网络场景 |
 
-实现入口（供开发者对照，部署方无需改代码）：`packages/agent/src/experts/local-json-provider.ts`（`RemoteExpertProvider` 接口）、`packages/agent/src/experts/catalog-service.ts`。
+实现入口：`packages/agent/src/experts/static-http-provider.ts`、`local-json-provider.ts`、`catalog-service.ts`。
 
 ---
 

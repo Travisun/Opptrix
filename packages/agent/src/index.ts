@@ -89,6 +89,16 @@ export {
   resetExpertCatalogServiceForTests,
 } from './experts/catalog-service.js'
 export {
+  StaticHttpExpertProvider,
+  DEFAULT_EXPERT_CATALOG_BASE_URL,
+  resetStaticHttpExpertProviderForTests,
+} from './experts/static-http-provider.js'
+export {
+  LocalJsonExpertProvider,
+  resetBuiltinExpertCacheForTests,
+  type RemoteExpertProvider,
+} from './experts/local-json-provider.js'
+export {
   assembleSystemPrompt,
   buildLayer0Baseline,
   buildRolePersona,

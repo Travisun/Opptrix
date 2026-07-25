@@ -136,6 +136,7 @@ export async function putObjectFile(client, bucket, key, filePath, contentType) 
 
 export function contentTypeForFileName(name) {
   const lower = name.toLowerCase()
+  if (lower.endsWith('.json')) return 'application/json; charset=utf-8'
   if (lower.endsWith('.yml')) return 'text/yaml; charset=utf-8'
   if (lower.endsWith('.blockmap')) return 'application/octet-stream'
   if (lower.endsWith('.exe')) return 'application/vnd.microsoft.portable-executable'
