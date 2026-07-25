@@ -32,15 +32,22 @@
 
 ---
 
-## 💬 技术交流群
+## 💬 技术交流与作者动态
 
-使用问题、功能建议、贡献讨论，欢迎扫码加入 **Opptrix 技术交流群**（微信）：
+使用问题、功能建议、贡献讨论，欢迎扫码加入 **微信技术交流群**；也可扫码在 **抖音** 关注项目作者，获取产品与开发动态：
 
-<p align="center">
-  <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="280" />
-</p>
-
-<p align="center"><sub>群聊：Opptrix 技术交流群 · 扫码加入后可在群内交流使用与开发问题</sub></p>
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
+      <sub>微信 · Opptrix 技术交流群</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="author/douyin-qr.jpg" alt="抖音扫码关注项目作者动态" width="220" /><br />
+      <sub>抖音 · 关注项目作者动态</sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
