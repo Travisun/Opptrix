@@ -92,6 +92,75 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 In Electron, the client forces **desktop layout** (sidebar visible, no mobile drawer) via `client-ui/src/platform/detect.ts`.
 
+## 本地聊天通知
+
+Electron 桌面端在用户**未盯着该会话聊天页**时，用系统本地通知提示对话完成或需要确认。逻辑在 renderer（`client-ui/src/platform/chatNotifications.ts` + `ChatApp`），展示与点击由主进程（`apps/desktop/electron/notifications.cjs`）完成。Web 端 no-op。
+
+### 触发点
+
+| 流事件 | 通知 `kind` | `tag` 格式 | 标题（UI 文案） | body |
+|--------|-------------|------------|-----------------|------|
+| `done`（且非 `cancelled`） | `chat_done` | `chat:done:{sessionId}` | 对话已生成完成 | 会话标题（截断至 120 字） |
+| `user_prompt` | `chat_ask` | `chat:ask:{sessionId}` | 需要你的确认 | `prompt.title` 或 `prompt.prompt`（截断至 120 字） |
+
+触发位置：`ChatApp` 的 `pushStreamEvent`。仅 Electron（`electronAPI.isElectron`）且通过注意力判断后才调用 `showLocalNotification`。
+
+### 失焦定义（何时发通知）
+
+「正在盯着该会话」需**同时**满足（`isAttendingChat`）：
+
+1. `activeSessionId ===` 目标 `sessionId`
+2. 当前 `view === 'chat'`
+3. `document.visibilityState === 'visible'`
+4. 主窗口 focused（优先 `electronAPI.windowIsFocused()` → IPC `window-is-focused` → `BrowserWindow.isFocused()`；无 API 时回退 `document.hasFocus()`）
+
+任一不满足 → `shouldNotify` 为 true → 发通知。因此：切到其他会话 / 非聊天页 / 文档隐藏 / 窗口失焦都会通知。
+
+### 点击深链
+
+通知带有效 `sessionId` 时，主进程 `onNotificationClick` 调用：
+
+```text
+opptrix://chat?session={encodeURIComponent(sessionId)}
+```
+
+经既有 `deliverProtocolUrl` → renderer `onProtocolOpen` → `useDesktopShell` 解析 `route=chat` + `params.session` → `openChat(sessionId)`。无 `sessionId` 时仅 `focusMainWindow()`。
+
+### IPC 与 preload
+
+| IPC channel | preload API | 说明 |
+|-------------|-------------|------|
+| `notification-is-supported` | `notificationIsSupported()` | `Notification.isSupported()` |
+| `notification-get-permission` | `notificationGetPermission()` | 缓存权限状态 |
+| `notification-request-permission` | `notificationRequestPermission()` | 壳启动时 `useDesktopShell` 会请求一次 |
+| `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick` |
+| `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
+
+协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
+
+### Payload（`LocalNotificationPayload`）
+
+| 字段 | 类型 | 校验（主进程 `sanitizeNotificationPayload`） |
+|------|------|-----------------------------------------------|
+| `title` | string | 必填；trim 后非空且 ≤ 120 |
+| `body` | string? | 可选；trim 后 ≤ 200 |
+| `silent` | boolean? | 可选 |
+| `tag` | string? | 可选；`^[A-Za-z0-9:_-]+$`，≤ 128 |
+| `sessionId` | string? | 可选；`^[A-Za-z0-9_-]+$`，≤ 64；非法则丢弃（点击仅聚焦窗口） |
+| `kind` | `'chat_done' \| 'chat_ask'`? | 未知 kind 忽略 |
+
+非法 `title` → 整包拒绝（返回 `false`）。未知字段忽略。
+
+### 平台注意
+
+| 平台 | 注意 |
+|------|------|
+| **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用 |
+| **macOS** | 需系统「通知」权限；启动时请求；用户在系统设置中拒绝则无法展示 |
+| **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败 |
+
+单元测试：`tests/chat-notifications.test.mjs`（注意力、builder、sanitize）。
+
 ## 命令隔离（Agent Shell）
 
 智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
