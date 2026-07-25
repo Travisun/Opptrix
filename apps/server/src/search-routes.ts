@@ -73,14 +73,7 @@ export function registerSearchRoutes(
       const record = agent.archiveSession(req.params.id, folderId)
       if (!record) return reply.code(404).send({ error: 'session not found' })
       return {
-        session: {
-          id: record.id,
-          title: record.title,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-          archivedAt: record.archivedAt,
-          archiveFolderId: record.archiveFolderId,
-        },
+        session: agent.sessionMeta(record),
       }
     },
   )
@@ -91,14 +84,7 @@ export function registerSearchRoutes(
       const record = agent.unarchiveSession(req.params.id)
       if (!record) return reply.code(404).send({ error: 'session not found' })
       return {
-        session: {
-          id: record.id,
-          title: record.title,
-          createdAt: record.createdAt,
-          updatedAt: record.updatedAt,
-          archivedAt: record.archivedAt,
-          archiveFolderId: record.archiveFolderId,
-        },
+        session: agent.sessionMeta(record),
       }
     },
   )

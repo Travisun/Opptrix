@@ -1,0 +1,29 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://opptrix.dev/schemas/expert-catalog-file.schema.json",
+  "title": "ExpertCatalogFile",
+  "description": "静态专家目录 JSON 文件格式。兼容 packages/agent/src/experts/catalog.mock.json；部署时可托管于 CDN、对象存储或本地文件。",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["experts"],
+  "properties": {
+    "$schema": {
+      "type": "string",
+      "description": "可选。编辑器 JSON Schema 提示；运行时 JSON.parse 会忽略此字段。"
+    },
+    "schemaVersion": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 1,
+      "description": "目录文件格式版本；省略时视为 1。"
+    },
+    "experts": {
+      "type": "array",
+      "items": {
+        "$ref": "expert-definition.schema.json"
+      },
+      "minItems": 1,
+      "description": "专家完整定义列表。"
+    }
+  }
+}

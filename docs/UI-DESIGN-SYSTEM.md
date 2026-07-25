@@ -201,6 +201,21 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 - 列表内选项 Hover：半透明白底 `rgba(255,255,255,0.45)`，不用实体灰块
 - 自定义锚定面板：`OpptrixDropdownPanel`；Fluent 下拉 listbox：`mergeOpptrixDropdownListboxProps`
 
+### 7.7.1 OpptrixButton
+
+统一按钮组件（`components/opptrix/OpptrixButton.tsx`），交互态来自 `theme/mixins.ts`，禁止在业务页手写 hover/active。
+
+| variant | 视觉 | 适用场景 |
+|---------|------|----------|
+| `primary` | 强调色实心 | 主操作（创建、保存、开始聊天） |
+| `secondary` | 浅底无描边 | 次要实心操作（刷新、编辑） |
+| `outline` | 白底 + 描边；hover 变浅灰、描边加深；focus-visible 焦点环 | 紧凑行内操作（列表「聊天」） |
+| `ghost` | 透明 | 弱操作（取消、删除旁） |
+| `danger` | 错误色软底 | 破坏性确认 |
+| `icon` | 透明图标按钮 | 工具栏图标 |
+
+尺寸：`small`（左右 `8px`）/ `medium` / `large`。所有变体共享 hover、active（含轻微缩放）与 focus-visible。
+
 ### 7.8 浮层与反馈（统一组件）
 
 | 场景 | 组件 | 样式类 / Provider |

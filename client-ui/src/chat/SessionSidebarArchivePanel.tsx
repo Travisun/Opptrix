@@ -16,6 +16,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } from '../theme/mixins'
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ThinkingDots from '../components/ThinkingDots'
+import ExpertSessionIcon from './ExpertSessionIcon'
 
 const useStyles = makeStyles({
   root: {
@@ -293,6 +294,14 @@ const useStyles = makeStyles({
   sessionTitle: {
     flex: 1,
     minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    overflow: 'hidden',
+  },
+  sessionTitleText: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
@@ -355,7 +364,7 @@ export interface ArchiveFolderGroup {
 interface Props {
   groups: ArchiveFolderGroup[]
   activeId: string | null
-  activeRoute?: 'chat' | 'news' | 'market'
+  activeRoute?: 'chat' | 'news' | 'market' | 'experts'
   busySessionIds?: readonly string[]
   onSelect: (id: string) => void
   onDeleteSession: (id: string) => void | Promise<void>
@@ -779,7 +788,8 @@ export default function SessionSidebarArchivePanel({
                             onKeyDown={e => e.key === 'Enter' && onSelect(sess.id)}
                           >
                             <span className={s.sessionTitle}>
-                              {sess.title}
+                              {(sess.expertId || sess.expertIcon) && <ExpertSessionIcon />}
+                              <span className={s.sessionTitleText}>{sess.title}</span>
                             </span>
                             <span className={mergeClasses(s.sessionTrailing, 'opptrix-archive-session-trailing')}>
                               {busy && <ThinkingDots className={s.sessionSpinner} label="" />}

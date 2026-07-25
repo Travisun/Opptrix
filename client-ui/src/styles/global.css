@@ -356,6 +356,22 @@ html.opptrix-electron .opptrix-market-dynamics-title-drag {
   min-width: 8px;
 }
 
+html.opptrix-electron .opptrix-experts-title-bar {
+  background: var(--opptrix-canvas) !important;
+  border-bottom: 1px solid var(--opptrix-separator-strong) !important;
+  position: relative;
+  z-index: 1200;
+  pointer-events: none;
+  -webkit-app-region: no-drag;
+}
+
+html.opptrix-electron .opptrix-experts-title-drag {
+  pointer-events: auto;
+  -webkit-app-region: drag;
+  align-self: stretch;
+  min-width: 8px;
+}
+
 /** 可滚动但隐藏滚动条（保留滚轮 / 触控滑动） */
 .opptrix-scroll-hidden {
   scrollbar-width: none;
@@ -830,8 +846,12 @@ select:focus-visible {
   border: none !important;
 }
 
-.fui-Button--primary:hover {
+.fui-Button--primary:hover:not(:disabled),
+.fui-Button--primary:active:not(:disabled) {
   background-color: var(--opptrix-accent-hover) !important;
+  /* Keep on-accent text — dark mode accentHover is near-white; Fluent brand hover
+     would otherwise flip label to white → white-on-white */
+  color: var(--opptrix-accent-foreground, #FFFFFF) !important;
 }
 
 .fui-Button--secondary {
@@ -840,9 +860,48 @@ select:focus-visible {
   border: none !important;
 }
 
+.fui-Button--secondary:hover:not(:disabled) {
+  background-color: var(--opptrix-canvas-muted) !important;
+}
+
 .fui-Button--subtle {
   background-color: transparent !important;
   color: var(--opptrix-text-secondary) !important;
+}
+
+/* Outline — white fill + border; must beat Fluent outline appearance */
+.opptrix-btn-outline.fui-Button {
+  background-color: var(--opptrix-canvas) !important;
+  color: var(--opptrix-text) !important;
+  border: 1px solid var(--opptrix-border-strong) !important;
+  border-radius: var(--opptrix-radius-sm, 6px) !important;
+}
+
+.opptrix-btn-outline.fui-Button:hover:not(:disabled) {
+  background-color: var(--opptrix-canvas-alt) !important;
+  border-color: var(--opptrix-separator-strong) !important;
+  color: var(--opptrix-text) !important;
+}
+
+.opptrix-btn-outline.fui-Button:active:not(:disabled) {
+  background-color: var(--opptrix-canvas-muted) !important;
+}
+
+.opptrix-btn-outline.fui-Button:focus-visible {
+  border-color: var(--opptrix-input-border-focus) !important;
+  outline: var(--opptrix-focus-ring) !important;
+  outline-offset: var(--opptrix-focus-offset) !important;
+}
+
+/* Compact small — beat Fluent default vertical padding */
+.opptrix-btn-sm.fui-Button {
+  min-height: 22px !important;
+  height: 22px !important;
+  padding-top: 1px !important;
+  padding-bottom: 1px !important;
+  padding-left: 8px !important;
+  padding-right: 8px !important;
+  line-height: 1.2 !important;
 }
 
 /* ── Dialog (Codex modal) ── */

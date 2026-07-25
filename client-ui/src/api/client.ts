@@ -1274,11 +1274,65 @@ export async function listSessions() {
   return jsonFetch<{ sessions: SessionMeta[] }>('/sessions')
 }
 
-export async function createSession(title?: string) {
+export async function createSession(opts?: { title?: string; expertId?: string }) {
+  const body: { title?: string; expertId?: string } = {}
+  if (opts?.title) body.title = opts.title
+  if (opts?.expertId) body.expertId = opts.expertId
   return jsonFetch<{ session: SessionMeta }>('/sessions', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(title ? { title } : {}),
+    body: JSON.stringify(body),
+  })
+}
+
+export async function listExperts(query?: {
+  q?: string
+  tag?: string
+  limit?: number
+  cursor?: string
+  scope?: 'public' | 'personal' | 'all'
+}) {
+  const params = new URLSearchParams()
+  if (query?.q) params.set('q', query.q)
+  if (query?.tag) params.set('tag', query.tag)
+  if (query?.limit != null) params.set('limit', String(query.limit))
+  if (query?.cursor) params.set('cursor', query.cursor)
+  if (query?.scope) params.set('scope', query.scope)
+  const qs = params.toString()
+  return jsonFetch<import('../types/chat').ExpertCatalog>(`/experts${qs ? `?${qs}` : ''}`)
+}
+
+export async function getExpert(id: string) {
+  return jsonFetch<{ expert: import('../types/chat').ExpertDefinition }>(`/experts/${encodeURIComponent(id)}`)
+}
+
+export async function createExpert(body: {
+  title: string
+  summary: string
+  persona: string
+  tags?: string[]
+}) {
+  return jsonFetch<{ expert: import('../types/chat').ExpertDefinition }>('/experts', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function updateExpert(
+  id: string,
+  body: { title?: string; summary?: string; persona?: string; tags?: string[] },
+) {
+  return jsonFetch<{ expert: import('../types/chat').ExpertDefinition }>(`/experts/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  })
+}
+
+export async function deleteExpert(id: string) {
+  return jsonFetch<{ ok: boolean; deleted: string }>(`/experts/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
   })
 }
 
@@ -1303,6 +1357,18 @@ export async function setSessionModel(id: string, model: string | null) {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model }),
+  })
+}
+
+export async function getSessionRolePersona(id: string) {
+  return jsonFetch<{ rolePersona: string; expertId: string | null }>(`/sessions/${id}/role-persona`)
+}
+
+export async function updateSessionRolePersona(id: string, rolePersona: string) {
+  return jsonFetch<{ rolePersona: string; expertId: string | null }>(`/sessions/${id}/role-persona`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ rolePersona }),
   })
 }
 

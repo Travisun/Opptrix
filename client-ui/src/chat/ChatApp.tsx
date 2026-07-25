@@ -13,6 +13,7 @@ import {
 import type { ChatProgressEvent } from '../types/chatProgress'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
+import ExpertMarketPage from '../pages/experts/ExpertMarketPage'
 import MarketDynamicsPage from '../pages/market-dynamics/MarketDynamicsPage'
 import type { SettingsSection } from '../pages/settings/SettingsSidebar'
 import { normalizeSettingsSection } from '../pages/settings/settingsTypes'
@@ -46,6 +47,7 @@ import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ChatSessionTitleTools from './ChatSessionTitleTools'
+import SessionRolePersonaDrawer from './SessionRolePersonaDrawer'
 import { sessionToMarkdown } from './sessionExportMarkdown'
 import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
@@ -329,9 +331,11 @@ export default function ChatApp() {
   const [welcomeEpoch, setWelcomeEpoch] = useState(0)
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
+  const [rolePersonaOpen, setRolePersonaOpen] = useState(false)
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
   const [marketDynamicsMounted, setMarketDynamicsMounted] = useState(() => view === 'market')
+  const [expertMarketMounted, setExpertMarketMounted] = useState(() => view === 'experts')
 
   const refreshModels = useCallback(async () => {
     try {
@@ -407,6 +411,7 @@ export default function ChatApp() {
   useEffect(() => {
     if (view === 'news') setNewsCenterMounted(true)
     if (view === 'market') setMarketDynamicsMounted(true)
+    if (view === 'experts') setExpertMarketMounted(true)
   }, [view])
 
   const openSettings = useCallback((section?: SettingsSection) => {
@@ -423,6 +428,11 @@ export default function ChatApp() {
   const openMarketDynamics = useCallback(() => {
     closeDrawer()
     navigate('market')
+  }, [closeDrawer, navigate])
+
+  const openExpertMarket = useCallback(() => {
+    closeDrawer()
+    navigate('experts')
   }, [closeDrawer, navigate])
 
   const openNewsSettings = useCallback(() => {
@@ -533,6 +543,28 @@ export default function ChatApp() {
       setError(e instanceof Error ? e.message : '删除失败')
     }
   }, [activeId, abortSessionStream, confirm, loadSession, refreshSessions])
+
+  const handleSelectExpert = useCallback(async (expertId: string) => {
+    restoreChatColumn()
+    try {
+      const { session } = await createSession({ expertId })
+      const list = await refreshSessions()
+      setSessions(list)
+      setActiveId(session.id)
+      setActiveSessionMeta(session)
+      setMessages([])
+      setContextRef(null)
+      setSessionModelState(undefined)
+      pushComposerDraft('')
+      setError('')
+      setWelcomeEpoch(epoch => epoch + 1)
+      setSidebarListTab('experts')
+      closeDrawer()
+      navigate('chat')
+    } catch (e) {
+      setError(e instanceof Error ? e.message : '创建专家对话失败')
+    }
+  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn])
 
   const handleArchive = useCallback(async (id: string, folderId: string) => {
     try {
@@ -985,11 +1017,34 @@ export default function ChatApp() {
   const isSettings = view === 'settings'
   const isNews = view === 'news'
   const isMarket = view === 'market'
-  const chromeTitle = isNews ? '新闻中心' : isMarket ? '市场动态' : (activeSession?.title ?? '新对话')
-  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : isMarket ? 'market' : 'chat'
+  const isExperts = view === 'experts'
+  const isStandaloneView = isNews || isMarket || isExperts
+  const chromeTitle = isNews ? '新闻中心' : isMarket ? '市场动态' : isExperts ? '专家' : (activeSession?.title ?? '新对话')
+  const chromeViewMode = isSettings ? 'settings' : isNews ? 'news' : isMarket ? 'market' : isExperts ? 'experts' : 'chat'
   const overlaySidebarOpen = isSettings ? settingsSidebarVisible : sidebarVisible
 
-  const sessionTitleTools = view === 'chat' && !isNews && !isMarket ? (
+  useEffect(() => {
+    setRolePersonaOpen(false)
+  }, [activeId, view])
+
+  const openRolePersonaDrawer = useCallback(() => {
+    setRolePersonaOpen(true)
+  }, [])
+
+  const rolePersonaDrawer = (
+    <SessionRolePersonaDrawer
+      open={rolePersonaOpen && view === 'chat' && !isStandaloneView}
+      sessionId={activeId}
+      onOpenChange={setRolePersonaOpen}
+    />
+  )
+  const sidebarSessions = useMemo(() => {
+    if (sidebarListTab === 'experts') return sessions.filter(s => !!s.expertId)
+    if (sidebarListTab === 'chat') return sessions.filter(s => !s.expertId)
+    return sessions
+  }, [sessions, sidebarListTab])
+
+  const sessionTitleTools = view === 'chat' && !isStandaloneView ? (
     <ChatSessionTitleTools
       title={activeSession?.title ?? '新对话'}
       sessionId={activeId}
@@ -999,10 +1054,11 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
 
-  const chatTitleSlot = view === 'chat' && !isNews && !isMarket ? (
+  const chatTitleSlot = view === 'chat' && !isStandaloneView ? (
     <ChatSessionTitleTools
       title={activeSession?.title ?? '新对话'}
       sessionId={activeId}
@@ -1011,6 +1067,7 @@ export default function ChatApp() {
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
       onExport={handleExportSession}
+      onEditRolePersona={activeId ? openRolePersonaDrawer : undefined}
     />
   ) : null
 
@@ -1026,9 +1083,9 @@ export default function ChatApp() {
     setSidebarVisible(false)
   }, [setSidebarVisible])
 
-  const sidebarActiveRoute = isNews ? 'news' as const : isMarket ? 'market' as const : 'chat' as const
+  const sidebarActiveRoute = isNews ? 'news' as const : isMarket ? 'market' as const : isExperts ? 'experts' as const : 'chat' as const
   const sidebarProps = useMemo(() => ({
-    sessions,
+    sessions: sidebarSessions,
     activeId,
     activeRoute: sidebarActiveRoute,
     busySessionIds: streamingSessionIds,
@@ -1040,6 +1097,7 @@ export default function ChatApp() {
     onOpenSettings: openSettings,
     onOpenNewsCenter: openNewsCenter,
     onOpenMarketDynamics: openMarketDynamics,
+    onOpenExpertMarket: openExpertMarket,
     listTab: sidebarListTab,
     onListTabChange: handleSidebarListTabChange,
     archivedGroups,
@@ -1049,7 +1107,7 @@ export default function ChatApp() {
     onClearArchiveFolder: handleClearArchiveFolder,
     onDeleteArchivedSession: handleDeleteArchivedSession,
   }), [
-    sessions,
+    sidebarSessions,
     activeId,
     sidebarActiveRoute,
     streamingSessionIds,
@@ -1061,6 +1119,7 @@ export default function ChatApp() {
     openSettings,
     openNewsCenter,
     openMarketDynamics,
+    openExpertMarket,
     sidebarListTab,
     handleSidebarListTabChange,
     archivedGroups,
@@ -1217,6 +1276,40 @@ export default function ChatApp() {
           </div>
         )}
 
+        {expertMarketMounted && (
+          <div
+            className={mergeClasses(
+              s.contentWorkspace,
+              isMobile && s.contentWorkspaceMobile,
+              electronChrome && s.contentWorkspaceElectron,
+              electronChrome && 'opptrix-app-main',
+              !isExperts && s.viewHidden,
+            )}
+            aria-hidden={!isExperts}
+          >
+            {isMobile && isExperts && (
+              <SessionSidebar
+                mode="drawer"
+                width={sidebarWidth}
+                drawerOpen={drawerOpen}
+                onClose={closeDrawer}
+                {...sidebarProps}
+              />
+            )}
+            <div
+              className={mergeClasses(
+                s.chatColumn,
+                electronChrome && s.chatColumnElectron,
+              )}
+            >
+              <ExpertMarketPage
+                electronChrome={electronChrome}
+                onSelectExpert={handleSelectExpert}
+              />
+            </div>
+          </div>
+        )}
+
         <div
           ref={workspaceRef}
           className={mergeClasses(
@@ -1224,11 +1317,11 @@ export default function ChatApp() {
             isMobile && s.contentWorkspaceMobile,
             electronChrome && s.contentWorkspaceElectron,
             electronChrome && 'opptrix-app-main',
-            (isSettings || isNews || isMarket) && s.viewHidden,
+            (isSettings || isStandaloneView) && s.viewHidden,
           )}
-          aria-hidden={isSettings || isNews || isMarket}
+          aria-hidden={isSettings || isStandaloneView}
         >
-          {isMobile && !isNews && !isMarket && !isSettings && (
+          {isMobile && !isStandaloneView && !isSettings && (
             <SessionSidebar
               mode="drawer"
               width={sidebarWidth}
@@ -1258,6 +1351,7 @@ export default function ChatApp() {
                 <ChatView
                   title={activeSession?.title ?? '新对话'}
                   titleSlot={electronChrome ? undefined : chatTitleSlot}
+                  overlaySlot={rolePersonaDrawer}
                   sessionId={activeId}
                   welcomeEpoch={welcomeEpoch}
                   chatScrollEpoch={chatScrollEpoch}

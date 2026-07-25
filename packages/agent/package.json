@@ -15,7 +15,7 @@
     "opptrix-mcp": "./dist/mcp/stdio-entry.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json",
+    "build": "tsc -p tsconfig.json && cp src/experts/catalog.mock.json dist/experts/",
     "mcp": "node dist/mcp/stdio-entry.js"
   },
   "dependencies": {

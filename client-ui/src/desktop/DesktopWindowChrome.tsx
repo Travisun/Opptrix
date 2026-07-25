@@ -121,6 +121,8 @@ interface DesktopWindowChromeProps {
   title: string
   /** 可点击标题与工具菜单；未提供时使用纯文本标题 */
   titleSlot?: ReactNode
+  /** 标题栏右侧额外操作（如技能专长），始终显示在窗口控件左侧 */
+  titleBarTrailing?: ReactNode
   viewMode?: DesktopViewMode
   sidebarOpen?: boolean
   sidebarInline?: boolean
@@ -186,6 +188,7 @@ function resolveDragRightClip(
 export default function DesktopWindowChrome({
   title,
   titleSlot,
+  titleBarTrailing,
   viewMode = 'chat',
   sidebarOpen = false,
   sidebarInline = false,
@@ -225,7 +228,8 @@ export default function DesktopWindowChrome({
   const isSettings = viewMode === 'settings'
   const isNews = viewMode === 'news'
   const isMarket = viewMode === 'market'
-  const isStandalonePanel = isNews || isMarket
+  const isExperts = viewMode === 'experts'
+  const isStandalonePanel = isNews || isMarket || isExperts
   const chromeTop = desktopChromeTopOffset()
   const chromeBand = desktopChromeBandHeight()
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen, sidebarWidth)
@@ -396,7 +400,7 @@ export default function DesktopWindowChrome({
         </div>
       </header>
 
-      {!isSettings && !rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
+      {!isSettings && (titleBarTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
         <div
           className={s.titleBarActions}
           style={{
@@ -405,7 +409,8 @@ export default function DesktopWindowChrome({
             right: `${titleBarActionsRight}px`,
           }}
         >
-          {onToggleChatColumn && (
+          {titleBarTrailing}
+          {!rightPanelOpen && onToggleChatColumn && (
             <ChromeToolButton
               label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
               iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
@@ -416,7 +421,7 @@ export default function DesktopWindowChrome({
                 : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
             </ChromeToolButton>
           )}
-          {onToggleRightPanel && (
+          {!rightPanelOpen && onToggleRightPanel && (
             <ChromeToolButton
               label="展开右侧面板"
               iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}

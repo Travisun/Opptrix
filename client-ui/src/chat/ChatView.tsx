@@ -231,6 +231,10 @@ interface ChatViewProps {
   title?: string
   /** 顶栏标题区（可点击工具菜单）；未提供时使用纯文本 */
   titleSlot?: React.ReactNode
+  /** Web 顶栏右侧额外操作（如技能专长） */
+  headerTrailing?: React.ReactNode
+  /** 聊天区顶部浮层（如技能专长抽屉） */
+  overlaySlot?: React.ReactNode
   sessionId?: string | null
   welcomeEpoch?: number
   chatScrollEpoch?: number
@@ -271,7 +275,7 @@ interface ChatViewProps {
 }
 
 function ChatView({
-  title = '新对话', titleSlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
+  title = '新对话', titleSlot, headerTrailing, overlaySlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -568,9 +572,10 @@ function ChatView({
             <div className={s.headerTitleSlot}>
               {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
             </div>
-            {!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn) && (
+            {(headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
               <div className={s.headerActions}>
-                {onToggleChatColumn && (
+                {headerTrailing}
+                {!rightPanelOpen && onToggleChatColumn && (
                   <ChromeToolButton
                     label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
                     iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
@@ -581,7 +586,7 @@ function ChatView({
                       : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
                   </ChromeToolButton>
                 )}
-                {onToggleRightPanel && (
+                {!rightPanelOpen && onToggleRightPanel && (
                   <ChromeToolButton
                     label="展开右侧面板"
                     iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
@@ -597,6 +602,7 @@ function ChatView({
       )}
 
       <div className={s.bodyShell} ref={bodyShellRef}>
+        {overlaySlot}
         {pinnedToolbar && onQuoteSelection && onEphemeralAsk && (
           <MessageSelectionToolbar
             style={{

@@ -40,7 +40,12 @@ import {
   type UserPromptOption,
   UserPromptCancelledError,
 } from './user-prompt.js'
-import { SessionStore, type SessionRecord, type SessionContextRef } from './sessions.js'
+import { SessionStore, sessionToMeta, type SessionRecord, type SessionContextRef, type CreateSessionOptions } from './sessions.js'
+import { getExpertCatalogService } from './experts/catalog-service.js'
+import {
+  resolveInitialRolePersona,
+  sanitizeExpertPersona,
+} from './experts/prompt-assembler.js'
 import { getWorkspaceService } from '@opptrix/agent-workspace'
 import {
   bindWorkspaceToolBridge,
@@ -93,6 +98,7 @@ export class AgentEngine {
   private lastChatSeedMessage = ''
   /** 本轮路由计划（首选工具 + 选型卡） */
   private lastRoutePlan: ToolRoutePlan | null = null
+  private readonly expertPacksSeeded = new Set<string>()
   readonly userPromptBridge = new UserPromptBridge()
   private readonly workspaceService = getWorkspaceService()
 
@@ -146,20 +152,55 @@ export class AgentEngine {
     return lines.join('\n')
   }
 
-  private buildRoundSystemPrompt(activeNames: readonly string[]) {
+  private buildRoundSystemPrompt(sessionId: string, activeNames: readonly string[]) {
+    const record = this.ensureSessionRolePersona(sessionId)
+    const expert = record?.expertId
+      ? getExpertCatalogService().getDefinitionSync(record.expertId)
+      : null
     const plan = this.lastRoutePlan ?? resolveToolRoutePlan({
       message: this.lastChatSeedMessage,
-      contextRef: null,
+      contextRef: record?.contextRef ?? null,
     })
     const clock = getCurrentTime()
     return this.tools.systemPrompt({
+      expert,
+      sessionRolePersona: record?.rolePersona ?? null,
+      roleLabel: expert?.title ?? null,
       activePacks: this.lastRoundPackIds,
       activeToolNames: activeNames,
-      researchTier: plan.researchTier,
+      researchTier: expert?.defaultResearchTier ?? plan.researchTier,
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
       sessionClock: buildSessionClockPlaybook(clock),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
     })
+  }
+
+  /** 旧会话 rolePersona 为空时惰性回填并持久化 */
+  private ensureSessionRolePersona(sessionId: string): SessionRecord | null {
+    const record = this.sessions.get(sessionId)
+    if (!record) return null
+    if (record.rolePersona?.trim()) return record
+    let seed: string | null = null
+    if (record.expertId) {
+      const expert = getExpertCatalogService().getDefinitionSync(record.expertId)
+      seed = expert?.persona ?? null
+    }
+    record.rolePersona = resolveInitialRolePersona(seed)
+    this.sessions.save(record)
+    return record
+  }
+
+  private seedExpertDefaultPacks(sessionId: string, record: SessionRecord) {
+    if (!record.expertId) return
+    const seedKey = `${sessionId}:${record.expertId}`
+    if (this.expertPacksSeeded.has(seedKey)) return
+    const expert = getExpertCatalogService().getDefinitionSync(record.expertId)
+    if (!expert?.defaultPacks?.length) {
+      this.expertPacksSeeded.add(seedKey)
+      return
+    }
+    this.toolPackSessions.activate(sessionId, expert.defaultPacks)
+    this.expertPacksSeeded.add(seedKey)
   }
 
   private async rebuildRoundTools(activeNames: readonly string[]) {
@@ -258,8 +299,43 @@ export class AgentEngine {
     return record
   }
 
-  createSession(title?: string) {
-    return this.sessions.create(title)
+  createSession(opts?: CreateSessionOptions) {
+    if (opts?.expertId) {
+      const expert = getExpertCatalogService().getDefinitionSync(opts.expertId)
+      if (!expert) {
+        throw new Error(`未知专家：${opts.expertId}`)
+      }
+      return this.sessions.create({
+        title: opts.title?.trim() || expert.defaultSessionTitle || expert.title,
+        expertId: expert.id,
+        expertIcon: expert.icon,
+        rolePersona: resolveInitialRolePersona(expert.persona),
+      })
+    }
+    return this.sessions.create({
+      title: opts?.title?.trim() || '新对话',
+      rolePersona: resolveInitialRolePersona(null),
+    })
+  }
+
+  listExperts(query?: import('@opptrix/shared').ExpertListQuery) {
+    return getExpertCatalogService().listExperts(query)
+  }
+
+  getExpert(id: string) {
+    return getExpertCatalogService().getDefinition(id)
+  }
+
+  createExpert(input: import('@opptrix/shared').ExpertCreateInput) {
+    return getExpertCatalogService().createExpert(input)
+  }
+
+  updateExpert(id: string, patch: import('@opptrix/shared').ExpertPatchInput) {
+    return getExpertCatalogService().updateExpert(id, patch)
+  }
+
+  deleteExpert(id: string) {
+    return getExpertCatalogService().deleteExpert(id)
   }
 
   listSessions() {
@@ -310,6 +386,28 @@ export class AgentEngine {
     return this.sessions.get(id)
   }
 
+  getSessionRolePersona(id: string): { rolePersona: string; expertId: string | null } | null {
+    const record = this.ensureSessionRolePersona(id)
+    if (!record) return null
+    return {
+      rolePersona: record.rolePersona ?? resolveInitialRolePersona(null),
+      expertId: record.expertId ?? null,
+    }
+  }
+
+  setSessionRolePersona(id: string, raw: string): SessionRecord | null {
+    if (!this.sessions.get(id)) return null
+    const sanitized = sanitizeExpertPersona(raw)
+    if (!sanitized) {
+      throw new Error('技能专长无效，请修改后重试')
+    }
+    return this.sessions.updateRolePersona(id, sanitized)
+  }
+
+  sessionMeta(record: SessionRecord) {
+    return sessionToMeta(record)
+  }
+
   deleteSession(id: string) {
     this.userPromptBridge.cancelSession(id)
     this.toolPackSessions.clear(id)
@@ -328,7 +426,7 @@ export class AgentEngine {
   }
 
   forkSession(sessionId: string, messageIndex: number) {
-    const source = this.sessions.get(sessionId)
+    const source = this.ensureSessionRolePersona(sessionId)
     if (!source) return null
     return this.sessions.fork(source, messageIndex)
   }
@@ -493,6 +591,7 @@ export class AgentEngine {
       message: text,
       contextRef: record.contextRef,
     })
+    this.seedExpertDefaultPacks(sessionId, record)
     this.bindPackBridge(sessionId)
     this.bindWorkspaceBridge(sessionId, emit, signal)
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
@@ -503,7 +602,7 @@ export class AgentEngine {
     for (let round = 0; round < MAX_SAFETY_ROUNDS; round++) {
       throwIfAborted(signal)
       // 每轮刷新会话时钟，保证长工具链下「截至」仍准确
-      const systemPrompt = this.buildRoundSystemPrompt(activeNames)
+      const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
       const contextMessages = contextRefToChatMessages(record.contextRef)
       const messages: ChatMessage[] = [
         { role: 'system', content: systemPrompt },

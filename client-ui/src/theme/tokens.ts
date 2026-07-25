@@ -17,6 +17,8 @@ const layoutTokens = {
   settingsSidebarWidthPx: 210,
   settingsContentWidth: '100%',
   settingsContentMaxWidth: '620px',
+  /** Expert market / catalog pages — wider than settings for dual-column cards */
+  expertsContentMaxWidth: '760px',
   windowInset: '6px',
   mobileDrawerWidth: 'min(88vw, 272px)',
   panelWidth: '380px',

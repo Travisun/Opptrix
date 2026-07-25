@@ -2,7 +2,7 @@ import { useState, useRef, useCallback, memo } from 'react'
 import {
   makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular, GlobeRegular } from '@fluentui/react-icons'
+import { SettingsRegular, DeleteRegular, DismissRegular, NewsRegular, ArchiveRegular, SearchRegular, GlobeRegular, PeopleTeamRegular } from '@fluentui/react-icons'
 import { ChatAddRegular } from './chatIcons'
 import type { SessionMeta } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
@@ -17,9 +17,10 @@ import OverlaySidebarShell from '../desktop/OverlaySidebarShell'
 import AppUpdateNotice from '../desktop/AppUpdateNotice'
 import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
+import ExpertSessionIcon from './ExpertSessionIcon'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
-export type SidebarListTab = 'chat' | 'archive'
+export type SidebarListTab = 'chat' | 'experts' | 'archive'
 
 const useStyles = makeStyles({
   sidebar: {
@@ -155,6 +156,14 @@ const useStyles = makeStyles({
   itemTitle: {
     flex: 1,
     minWidth: 0,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '4px',
+    overflow: 'hidden',
+  },
+  itemTitleText: {
+    flex: 1,
+    minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
     overflow: 'hidden',
@@ -230,6 +239,7 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-base)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.6,
+    whiteSpace: 'pre-line',
   },
   footer: {
     padding: '8px',
@@ -276,7 +286,7 @@ interface SessionSidebarProps {
   drawerOpen?: boolean
   sessions: SessionMeta[]
   activeId: string | null
-  activeRoute?: 'chat' | 'news' | 'market'
+  activeRoute?: 'chat' | 'news' | 'market' | 'experts'
   /** ids of sessions currently streaming a response (shows thinking dot) */
   busySessionIds?: readonly string[]
   onSelect: (id: string) => void
@@ -287,6 +297,7 @@ interface SessionSidebarProps {
   onOpenSettings: () => void
   onOpenNewsCenter: () => void
   onOpenMarketDynamics: () => void
+  onOpenExpertMarket: () => void
   onClose?: () => void
   listTab?: SidebarListTab
   onListTabChange?: (tab: SidebarListTab) => void
@@ -305,7 +316,7 @@ function formatDate(iso: string) {
 function SessionSidebar({
   mode, width, isDragging = false, visible = true, drawerOpen = false,
   sessions, activeId, activeRoute = 'chat', busySessionIds = [],
-  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onClose,
+  onSelect, onNew, onDelete, onArchive, onOpenSearch, onOpenSettings, onOpenNewsCenter, onOpenMarketDynamics, onOpenExpertMarket, onClose,
   listTab: listTabProp,
   onListTabChange,
   archivedGroups = [],
@@ -372,6 +383,19 @@ function SessionSidebar({
         <span>新对话</span>
       </button>
 
+      <button
+        type="button"
+        className={mergeClasses(
+          s.menuRow,
+          'opptrix-focusable',
+          activeRoute === 'experts' && s.menuRowActive,
+        )}
+        onClick={handleTopMenuClick(onOpenExpertMarket)}
+      >
+        <PeopleTeamRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
+        <span>专家</span>
+      </button>
+
       <button type="button" className={mergeClasses(s.menuRow, 'opptrix-focusable')} onClick={handleTopMenuClick(onOpenSearch)}>
         <SearchRegular className={s.menuIcon} fontSize={SIDEBAR_TOP_MENU_ICON_SIZE} />
         <span>搜索</span>
@@ -411,17 +435,22 @@ function SessionSidebar({
           value={listTab}
           options={[
             { value: 'chat', label: '对话' },
+            { value: 'experts', label: '专家' },
             { value: 'archive', label: '归档' },
           ]}
           onChange={setListTab}
         />
       </div>
 
-      {listTab === 'chat' ? (
+      {listTab === 'chat' || listTab === 'experts' ? (
       <div className={s.chatListWrap}>
       <div className={mergeClasses(s.list, 'opptrix-scroll', 'opptrix-scroll-hover')}>
         {sessions.length === 0 && (
-          <div className={s.empty}>暂无历史对话</div>
+          <div className={s.empty}>
+            {listTab === 'experts'
+              ? '还没有专家对话\n去「专家」挑选一位，开始专属研讨'
+              : '暂无历史对话'}
+          </div>
         )}
         {sessions.map(sess => {
           // Only show the active highlight when we're in the chat view; if the
@@ -447,7 +476,8 @@ function SessionSidebar({
               onKeyDown={e => e.key === 'Enter' && handleSelect(sess.id)}
             >
               <span className={s.itemTitle}>
-                {sess.title}
+                {(sess.expertId || sess.expertIcon) && <ExpertSessionIcon />}
+                <span className={s.itemTitleText}>{sess.title}</span>
               </span>
               <span className={mergeClasses(s.itemTrailing, 'opptrix-session-trailing')}>
                 {busy && <ThinkingDots className={s.itemSpinner} label="" />}
