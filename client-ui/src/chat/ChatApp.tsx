@@ -296,6 +296,9 @@ export default function ChatApp() {
     streamCacheRef.current.set(targetSessionId, next)
     if (activeIdRef.current === targetSessionId) {
       syncStreamSnapshotToUi(next, streamUiRef.current)
+      if (event.type === 'context_compact' && next.contextHint) {
+        setContextHintBanner(next.contextHint)
+      }
     }
   }, [])
 
@@ -332,6 +335,8 @@ export default function ChatApp() {
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [rolePersonaOpen, setRolePersonaOpen] = useState(false)
+  const [contextHintBanner, setContextHintBanner] = useState('')
+
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
   const [newsCenterMounted, setNewsCenterMounted] = useState(() => view === 'news')
   const [marketDynamicsMounted, setMarketDynamicsMounted] = useState(() => view === 'market')
@@ -1004,10 +1009,13 @@ export default function ChatApp() {
     setSessionModelState(ref)
     if (!activeId) return
     try {
-      await setSessionModel(activeId, ref)
+      const res = await setSessionModel(activeId, ref)
       setSessions(prev => prev.map(sess =>
         sess.id === activeId ? { ...sess, model: ref } : sess,
       ))
+      if (res.contextHint?.trim()) {
+        setContextHintBanner(res.contextHint.trim())
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : '切换模型失败')
     }
@@ -1025,7 +1033,14 @@ export default function ChatApp() {
 
   useEffect(() => {
     setRolePersonaOpen(false)
+    setContextHintBanner('')
   }, [activeId, view])
+
+  useEffect(() => {
+    if (!contextHintBanner) return
+    const timer = window.setTimeout(() => setContextHintBanner(''), 4200)
+    return () => window.clearTimeout(timer)
+  }, [contextHintBanner])
 
   const openRolePersonaDrawer = useCallback(() => {
     setRolePersonaOpen(true)
@@ -1352,6 +1367,7 @@ export default function ChatApp() {
                   title={activeSession?.title ?? '新对话'}
                   titleSlot={electronChrome ? undefined : chatTitleSlot}
                   overlaySlot={rolePersonaDrawer}
+                  contextHint={contextHintBanner}
                   sessionId={activeId}
                   welcomeEpoch={welcomeEpoch}
                   chatScrollEpoch={chatScrollEpoch}

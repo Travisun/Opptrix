@@ -1,4 +1,5 @@
 import { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './provider.js'
+import { resolveModelContextTokens } from './model-context.js'
 
 export { fetchOpenAiModelList }
 
@@ -15,6 +16,8 @@ export interface AvailableModel {
   model: string
   providerId: string
   providerName: string
+  /** 启发式上下文窗口（tokens） */
+  contextTokens: number
 }
 
 export function normalizeBaseUrl(url: string): string {
@@ -45,6 +48,7 @@ export class ProviderRegistry {
           model,
           providerId: p.id,
           providerName: p.name,
+          contextTokens: resolveModelContextTokens(model),
         })
       }
     }

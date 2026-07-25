@@ -29,6 +29,8 @@ export interface LlmTurn {
   message: ChatMessage
   finishReason: 'stop' | 'tool_calls' | 'error'
   error?: string
+  /** 上游响应表明上下文超限 */
+  contextOverflow?: boolean
 }
 
 export interface LlmProvider {
@@ -42,6 +44,28 @@ export function isConfigured(cfg: LlmConfig) {
 
 export function createProvider(cfg: LlmConfig): LlmProvider {
   return new OpenAiCompatibleProvider(cfg)
+}
+
+function isContextLengthHttpError(status: number, body: string): boolean {
+  const text = body.toLowerCase()
+  if (
+    text.includes('context_length_exceeded')
+    || text.includes('context length')
+    || text.includes('maximum context')
+    || text.includes('too many tokens')
+    || text.includes('prompt is too long')
+    || text.includes('token limit')
+    || (text.includes('context window') && text.includes('exceed'))
+  ) {
+    return true
+  }
+  // 部分网关用 400/413 表示超限
+  if ((status === 400 || status === 413) && (
+    text.includes('token') || text.includes('context') || text.includes('length')
+  )) {
+    return /exceed|too (?:long|large|many)|maximum|limit/i.test(text)
+  }
+  return false
 }
 
 export class OpenAiCompatibleProvider implements LlmProvider {
@@ -93,12 +117,20 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
       if (!resp.ok) {
         const text = (await resp.text()).slice(0, 300)
+        const overflow = isContextLengthHttpError(resp.status, text)
         const msg = resp.status === 401
           ? '⚠️ API Key 无效'
           : resp.status === 429
             ? '⚠️ 请求过于频繁'
-            : `⚠️ HTTP ${resp.status}: ${text}`
-        return { message: { role: 'assistant', content: msg }, finishReason: 'error', error: msg }
+            : overflow
+              ? '对话内容过多，正在整理后重试…'
+              : `⚠️ HTTP ${resp.status}: ${text}`
+        return {
+          message: { role: 'assistant', content: msg },
+          finishReason: 'error',
+          error: overflow ? 'context_length_exceeded' : msg,
+          contextOverflow: overflow,
+        }
       }
 
       const data = await resp.json() as {

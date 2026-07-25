@@ -83,6 +83,10 @@ export interface SessionRecord extends SessionMeta {
    * 列表 meta 不返回此字段全文。
    */
   rolePersona?: string | null
+  /**
+   * 结构化会话工作记忆（压缩产物）。列表 meta 不返回；UI transcript 仍用 turns。
+   */
+  sessionMemory?: import('./context/session-memory.js').SessionMemory | null
 }
 
 function previewText(content: string, max = 72): string {
@@ -136,6 +140,7 @@ function normalizeRecord(raw: SessionRecord): SessionRecord {
     expertId: raw.expertId ?? null,
     expertIcon: raw.expertIcon ?? null,
     rolePersona: raw.rolePersona ?? null,
+    sessionMemory: raw.sessionMemory ?? null,
   }
   return migrateTurns(record)
 }

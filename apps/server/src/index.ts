@@ -1005,15 +1005,16 @@ app.patch<{ Params: { id: string }; Body: { title?: string; model?: string | nul
       }
     }
     if (model !== undefined) {
-      const updated = agent.setSessionModel(req.params.id, model)
+      const updated = await agent.setSessionModel(req.params.id, model)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
       return {
         session: {
-          id: updated.id,
-          title: updated.title,
-          model: updated.model,
-          updatedAt: updated.updatedAt,
+          id: updated.session.id,
+          title: updated.session.title,
+          model: updated.session.model,
+          updatedAt: updated.session.updatedAt,
         },
+        contextHint: updated.contextHint,
       }
     }
     return reply.code(400).send({ error: 'title or model required' })

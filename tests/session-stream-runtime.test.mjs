@@ -73,4 +73,14 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     })
     assert.deepEqual(next.pendingUserPrompt, pendingPrompt)
   })
+
+  it('sets contextHint on context_compact', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'context_compact',
+      level: 'structured',
+      message: '已整理较早对话要点，后续仍按你的目标继续。',
+    })
+    assert.match(next.contextHint ?? '', /整理/)
+    assert.match(next.liveTrace?.thinkingLabel ?? '', /整理/)
+  })
 })

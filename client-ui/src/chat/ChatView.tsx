@@ -222,6 +222,21 @@ const useStyles = makeStyles({
     padding: '4px 0 8px',
     ...fadeInUp,
   },
+  contextHint: {
+    flexShrink: 0,
+    margin: '0 auto',
+    width: '100%',
+    maxWidth: opptrixTokens.chatThreadMaxWidth,
+    padding: '8px 16px',
+    boxSizing: 'border-box',
+    fontSize: 'var(--opptrix-font-sm)',
+    lineHeight: 1.45,
+    color: opptrixCssVars.textSecondary,
+    backgroundColor: opptrixCssVars.canvasAlt,
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ...fadeInUp,
+    animationDuration: '280ms',
+  },
 })
 
 const WELCOME_LETTERS = ['O', 'p', 'p', 't', 'r', 'i', 'x'] as const
@@ -235,6 +250,8 @@ interface ChatViewProps {
   headerTrailing?: React.ReactNode
   /** 聊天区顶部浮层（如技能专长抽屉） */
   overlaySlot?: React.ReactNode
+  /** 上下文整理轻提示 */
+  contextHint?: string
   sessionId?: string | null
   welcomeEpoch?: number
   chatScrollEpoch?: number
@@ -275,7 +292,7 @@ interface ChatViewProps {
 }
 
 function ChatView({
-  title = '新对话', titleSlot, headerTrailing, overlaySlot, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
+  title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
   isMobile = false,
@@ -600,6 +617,12 @@ function ChatView({
           </div>
         </div>
       )}
+
+      {contextHint ? (
+        <div className={s.contextHint} role="status">
+          {contextHint}
+        </div>
+      ) : null}
 
       <div className={s.bodyShell} ref={bodyShellRef}>
         {overlaySlot}

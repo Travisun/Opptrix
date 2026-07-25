@@ -1353,7 +1353,10 @@ export async function renameSession(id: string, title: string) {
 }
 
 export async function setSessionModel(id: string, model: string | null) {
-  return jsonFetch<{ session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'updatedAt'> }>(`/sessions/${id}`, {
+  return jsonFetch<{
+    session: Pick<SessionMeta, 'id' | 'title' | 'model' | 'updatedAt'>
+    contextHint?: string
+  }>(`/sessions/${id}`, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ model }),

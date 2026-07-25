@@ -100,6 +100,13 @@ export type ChatProgressEvent =
     cancelled?: boolean
   }
   | { type: 'error'; message: string }
+  | {
+    type: 'context_compact'
+    level: 'micro' | 'structured' | 'overflow_retry'
+    message: string
+    usageRatio?: number
+    contextTokens?: number
+  }
 
 /**
  * 聊天进度回调选项 — 配置进度推送回调和中断信号。
