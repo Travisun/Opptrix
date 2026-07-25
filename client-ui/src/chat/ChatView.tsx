@@ -3,7 +3,7 @@ import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
 import type {
-  ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef,
+  ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef,
   AvailableModel,
 } from '../types/chat'
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
@@ -263,6 +263,7 @@ interface ChatViewProps {
   error: string
   availableModels?: AvailableModel[]
   sessionModel?: string
+  contextUsage?: ChatContextUsage | null
   isMobile?: boolean
   sidebarVisible?: boolean
   llmLabel?: string
@@ -295,6 +296,7 @@ function ChatView({
   title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
+  contextUsage,
   isMobile = false,
   llmLabel = '',
   backendOk = false,
@@ -730,6 +732,7 @@ function ChatView({
               welcomeKey={welcomeEpoch}
               availableModels={availableModels}
               sessionModel={sessionModel}
+              contextUsage={contextUsage}
               onSubmit={handleSubmit}
               onStop={onStop}
               onModelChange={onModelChange}

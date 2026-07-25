@@ -4,9 +4,9 @@ import { repairToolCallSequences, tailMessagesForLlm } from '../llm/messages.js'
 import {
   type ContextBudget,
   resolveContextBudget,
-  resolveModelContextTokens,
   usageRatio,
 } from '../llm/model-context.js'
+import { resolveModelContextTokensAsync } from '../llm/models-dev-context.js'
 import {
   formatSessionMemoryForPrompt,
   parseSessionMemoryFromModelText,
@@ -19,6 +19,8 @@ import {
   estimateTextTokens,
 } from './token-estimate.js'
 import type { OpenAiTool } from '../tools.js'
+import { resolveTurnUsage } from '../llm/usage-estimate.js'
+import type { TokenUsage } from '../llm/token-usage.js'
 
 export const CONTEXT_COMPACT_HINT =
   '已整理较早对话要点，后续仍按你的目标继续。'
@@ -39,7 +41,7 @@ export interface SessionCompactState {
 }
 
 const MICRO_TOOL_MAX = 480
-const KEEP_RECENT_DEFAULT = 16
+export const KEEP_RECENT_DEFAULT = 16
 const KEEP_RECENT_AGGRESSIVE = 8
 
 function summarizeToolContent(content: string, toolName?: string): string {
@@ -121,7 +123,7 @@ export async function structuredCompact(
   llm: LlmProvider,
   state: SessionCompactState,
   opts?: { keepRecent?: number; signal?: AbortSignal },
-): Promise<{ state: SessionCompactState; changed: boolean }> {
+): Promise<{ state: SessionCompactState; changed: boolean; usage?: TokenUsage; usageEstimated?: boolean }> {
   const keepRecent = opts?.keepRecent ?? KEEP_RECENT_DEFAULT
   const repaired = repairToolCallSequences(state.messages)
   if (repaired.length <= keepRecent + 2) {
@@ -150,6 +152,11 @@ export async function structuredCompact(
     undefined,
     opts?.signal,
   )
+  const compactPrompt = [
+    { role: 'system' as const, content: STRUCTURED_COMPACT_SYSTEM },
+    { role: 'user' as const, content: userContent },
+  ]
+  const compactUsage = resolveTurnUsage(turn, compactPrompt)
 
   if (turn.finishReason === 'error' || !turn.message.content?.trim()) {
     const micro = microcompactMessages(repaired, keepRecent)
@@ -172,6 +179,8 @@ export async function structuredCompact(
       sessionMemory: memory,
     },
     changed: true,
+    usage: compactUsage.usage,
+    usageEstimated: compactUsage.estimated,
   }
 }
 
@@ -199,18 +208,20 @@ export function estimateModelViewTokens(messages: ChatMessage[]): number {
   return estimateMessageTokens(messages)
 }
 
-export function buildBudgetForModel(
+export async function buildBudgetForModel(
   modelId: string,
   systemPrompt: string,
   tools?: OpenAiTool[],
-): ContextBudget {
-  const contextTokens = resolveModelContextTokens(modelId)
+  providerId?: string,
+): Promise<ContextBudget> {
+  const contextTokens = await resolveModelContextTokensAsync(modelId, providerId)
   const reserve = estimateSystemToolsReserve(systemPrompt, tools)
   return resolveContextBudget(contextTokens, reserve)
 }
 
 export async function ensureContextBudget(opts: {
   modelId: string
+  providerId?: string
   systemPrompt: string
   tools?: OpenAiTool[]
   state: SessionCompactState
@@ -218,14 +229,25 @@ export async function ensureContextBudget(opts: {
   llm: LlmProvider | null
   signal?: AbortSignal
   aggressive?: boolean
-}): Promise<{ state: SessionCompactState; results: CompactResult[]; modelView: ChatMessage[] }> {
+}): Promise<{
+  state: SessionCompactState
+  results: CompactResult[]
+  modelView: ChatMessage[]
+  compactUsage?: TokenUsage
+  compactUsageEstimated?: boolean
+}> {
   const results: CompactResult[] = []
   let state: SessionCompactState = {
     messages: repairToolCallSequences(opts.state.messages),
     sessionMemory: opts.state.sessionMemory ?? null,
   }
   const keepRecent = opts.aggressive ? KEEP_RECENT_AGGRESSIVE : KEEP_RECENT_DEFAULT
-  const budget = buildBudgetForModel(opts.modelId, opts.systemPrompt, opts.tools)
+  const budget = await buildBudgetForModel(
+    opts.modelId,
+    opts.systemPrompt,
+    opts.tools,
+    opts.providerId,
+  )
 
   const buildView = () => assembleModelView({
     systemPrompt: opts.systemPrompt,
@@ -306,7 +328,13 @@ export async function ensureContextBudget(opts: {
     })
   }
 
-  return { state, results, modelView: view }
+  return {
+    state,
+    results,
+    modelView: view,
+    compactUsage: structured.usage,
+    compactUsageEstimated: structured.usageEstimated,
+  }
 }
 
 export function isContextOverflowError(error: string | undefined, content?: string | null): boolean {

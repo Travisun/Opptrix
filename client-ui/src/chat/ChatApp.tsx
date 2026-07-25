@@ -21,7 +21,7 @@ import RightPanel from './RightPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
 import WorkspaceSplitDivider from './WorkspaceSplitDivider'
 import {
-  listSessions, createSession, getSession, deleteSession, forkSession, clearSessionContext,
+  listSessions, createSession, getSession, getSessionContextUsage, deleteSession, forkSession, clearSessionContext,
   setSessionContext, ephemeralAsk,
   streamSessionChat, cancelSessionChat, getHealth, listAvailableModels, setSessionModel,
   archiveSession,
@@ -29,7 +29,7 @@ import {
   clearSessionArchiveFolder, renameSession,
 } from '../api/client'
 import type {
-  ChatDisplayMessage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
+  ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
   SessionMeta, AvailableModel,
 } from '../types/chat'
 import type { FeedArticle } from '../types/schemas'
@@ -275,6 +275,7 @@ export default function ChatApp() {
   const [error, setError] = useState('')
   const [availableModels, setAvailableModels] = useState<AvailableModel[]>([])
   const [sessionModel, setSessionModelState] = useState<string | undefined>()
+  const [contextUsage, setContextUsage] = useState<ChatContextUsage | null>(null)
   const [llmLabel, setLlmLabel] = useState('连接中…')
   const [backendOk, setBackendOk] = useState(false)
   const streamCacheRef = useRef(new Map<string, SessionStreamSnapshot>())
@@ -298,6 +299,9 @@ export default function ChatApp() {
       syncStreamSnapshotToUi(next, streamUiRef.current)
       if (event.type === 'context_compact' && next.contextHint) {
         setContextHintBanner(next.contextHint)
+      }
+      if (event.type === 'done' && event.context_usage) {
+        setContextUsage(event.context_usage)
       }
     }
   }, [])
@@ -389,9 +393,23 @@ export default function ChatApp() {
     setMessages(data.messages)
     setContextRef(data.contextRef ?? null)
     setSessionModelState(data.session.model)
+    setContextUsage(data.contextUsage ?? null)
     setError('')
     setChatScrollEpoch(epoch => epoch + 1)
   }, [pushComposerDraft])
+
+  const refreshContextUsage = useCallback(async (sessionId: string) => {
+    try {
+      const { contextUsage: next } = await getSessionContextUsage(sessionId)
+      if (activeIdRef.current === sessionId) {
+        setContextUsage(next)
+      }
+    } catch {
+      if (activeIdRef.current === sessionId) {
+        setContextUsage(null)
+      }
+    }
+  }, [])
 
   useEffect(() => {
     let cancelled = false
@@ -811,6 +829,7 @@ export default function ChatApp() {
         setMessages(fresh.messages)
         setContextRef(fresh.contextRef ?? null)
         setSessionModelState(fresh.session.model)
+        setContextUsage(fresh.contextUsage ?? null)
       }
       const list = await refreshSessions()
       if (isStreamStale()) return
@@ -1016,10 +1035,11 @@ export default function ChatApp() {
       if (res.contextHint?.trim()) {
         setContextHintBanner(res.contextHint.trim())
       }
+      await refreshContextUsage(activeId)
     } catch (e) {
       setError(e instanceof Error ? e.message : '切换模型失败')
     }
-  }, [activeId])
+  }, [activeId, refreshContextUsage])
 
   const activeSession = activeSessionMeta ?? sessions.find(x => x.id === activeId) ?? null
   const isSettings = view === 'settings'
@@ -1065,6 +1085,8 @@ export default function ChatApp() {
       sessionId={activeId}
       variant="chrome"
       textClassName="opptrix-desktop-title-text"
+      createdAt={activeSession?.createdAt}
+      sessionUsageTotal={activeSession?.usageTotals?.totalTokens ?? null}
       onRename={handleRenameSession}
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
@@ -1078,6 +1100,8 @@ export default function ChatApp() {
       title={activeSession?.title ?? '新对话'}
       sessionId={activeId}
       variant="header"
+      createdAt={activeSession?.createdAt}
+      sessionUsageTotal={activeSession?.usageTotals?.totalTokens ?? null}
       onRename={handleRenameSession}
       onArchive={handleArchiveActiveSession}
       onDelete={() => { void handleDeleteActiveSession() }}
@@ -1379,6 +1403,7 @@ export default function ChatApp() {
                   error={error}
                   availableModels={availableModels}
                   sessionModel={sessionModel}
+                  contextUsage={contextUsage}
                   isMobile={isMobile}
                   llmLabel={llmLabel}
                   backendOk={backendOk}

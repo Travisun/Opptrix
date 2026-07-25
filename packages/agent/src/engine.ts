@@ -53,8 +53,27 @@ import {
 import {
   CONTEXT_COMPACT_HINT,
   ensureContextBudget,
+  assembleModelView,
+  estimateModelViewTokens,
   isContextOverflowError,
+  KEEP_RECENT_DEFAULT,
 } from './context/compact.js'
+import { resolveModelContextTokensAsync } from './llm/models-dev-context.js'
+import { estimateToolsTokens } from './context/token-estimate.js'
+import {
+  accumulateChatUsage,
+  createEmptyChatUsage,
+  resolveTurnUsage,
+} from './llm/usage-estimate.js'
+import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
+
+export interface SessionContextUsage {
+  usedTokens: number
+  limitTokens: number
+  remainingTokens: number
+  modelRef: string
+  estimated: true
+}
 
 export interface AgentSettings {
   providers?: ProviderProfile[]
@@ -77,6 +96,12 @@ export interface ChatResult {
 // Safety: if 50 rounds reached without convergence, force stop.
 const MAX_SAFETY_ROUNDS = 50
 const TRUNCATE = 12_000
+
+function providerIdFromModelRef(modelRef?: string): string | undefined {
+  if (!modelRef) return undefined
+  const colonIdx = modelRef.indexOf(':')
+  return colonIdx > 0 ? modelRef.slice(0, colonIdx) : undefined
+}
 
 export class ChatCancelledError extends Error {
   constructor() {
@@ -295,6 +320,57 @@ export class AgentEngine {
     return this.registry.listAvailable()
   }
 
+  async listAvailableModelsAsync(): Promise<AvailableModel[]> {
+    return this.registry.listAvailableAsync()
+  }
+
+  async getSessionContextUsage(sessionId: string): Promise<SessionContextUsage | null> {
+    const record = this.sessions.get(sessionId)
+    if (!record) return null
+
+    const modelRef = record.model?.trim()
+      || this.settings.defaultModel
+      || this.registry.listAvailable()[0]?.ref
+      || ''
+    const colonIdx = modelRef.indexOf(':')
+    const providerId = colonIdx > 0 ? modelRef.slice(0, colonIdx) : undefined
+    const resolved = this.registry.resolve(modelRef)
+    const modelId = resolved?.model ?? modelRef.replace(/^[^:]+:/, '') ?? 'default'
+    const limitTokens = await resolveModelContextTokensAsync(modelId, providerId)
+
+    const activeNames = toolNamesForPacks(this.resolveRoundPackIds(sessionId))
+    const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
+    const contextMessages = contextRefToChatMessages(record.contextRef)
+    const modelView = assembleModelView({
+      systemPrompt,
+      sessionMemory: record.sessionMemory,
+      messages: record.messages,
+      contextPrefix: contextMessages,
+      keepRecent: KEEP_RECENT_DEFAULT,
+    })
+    let toolsTokens = activeNames.length * 120
+    try {
+      const { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
+      try {
+        toolsTokens = estimateToolsTokens(openAiTools)
+      } finally {
+        await broker.close().catch(() => {})
+      }
+    } catch {
+      /* 无完整 schema 时沿用 activeNames 粗估 */
+    }
+    // modelView 已含 system + memory + 近端；tools 为 API 侧单独字段，另加固定开销
+    const usedTokens = estimateModelViewTokens(modelView) + toolsTokens + 512
+
+    return {
+      usedTokens,
+      limitTokens,
+      remainingTokens: Math.max(0, limitTokens - usedTokens),
+      modelRef,
+      estimated: true,
+    }
+  }
+
   async setSessionModel(sessionId: string, modelRef: string | null): Promise<{
     session: SessionRecord
     contextHint?: string
@@ -308,9 +384,12 @@ export class AgentEngine {
     const llm = this.registry.createLlm(activeModel)
     const resolved = this.registry.resolve(activeModel)
     const modelId = resolved?.model ?? activeModel?.replace(/^[^:]+:/, '') ?? 'default'
-    const systemPrompt = this.buildRoundSystemPrompt(sessionId, [])
+    const providerId = providerIdFromModelRef(activeModel)
+    const activeNames = toolNamesForPacks(this.resolveRoundPackIds(sessionId))
+    const systemPrompt = this.buildRoundSystemPrompt(sessionId, activeNames)
     const budget = await this.applyContextBudget(record, {
       modelId,
+      providerId,
       systemPrompt,
       tools: undefined,
       llm,
@@ -325,6 +404,7 @@ export class AgentEngine {
     record: SessionRecord,
     opts: {
       modelId: string
+      providerId?: string
       systemPrompt: string
       tools?: import('./tools.js').OpenAiTool[]
       llm: ReturnType<ProviderRegistry['createLlm']>
@@ -333,9 +413,15 @@ export class AgentEngine {
       contextPrefix?: ChatMessage[]
       signal?: AbortSignal
     },
-  ): Promise<{ hint?: string; modelView: ChatMessage[] }> {
+  ): Promise<{
+    hint?: string
+    modelView: ChatMessage[]
+    compactUsage?: TokenUsage
+    compactUsageEstimated?: boolean
+  }> {
     const result = await ensureContextBudget({
       modelId: opts.modelId,
+      providerId: opts.providerId,
       systemPrompt: opts.systemPrompt,
       tools: opts.tools,
       state: {
@@ -362,9 +448,18 @@ export class AgentEngine {
           contextTokens: r.contextTokens,
         })
       }
-      return { hint: CONTEXT_COMPACT_HINT, modelView: result.modelView }
+      return {
+        hint: CONTEXT_COMPACT_HINT,
+        modelView: result.modelView,
+        compactUsage: result.compactUsage,
+        compactUsageEstimated: result.compactUsageEstimated,
+      }
     }
-    return { modelView: result.modelView }
+    return {
+      modelView: result.modelView,
+      compactUsage: result.compactUsage,
+      compactUsageEstimated: result.compactUsageEstimated,
+    }
   }
 
   async createSession(opts?: CreateSessionOptions) {
@@ -611,6 +706,43 @@ export class AgentEngine {
 
     const signal = progress?.signal
 
+    const toolsUsed: string[] = []
+    const toolSteps: ChatToolStep[] = []
+    let chatUsage = createEmptyChatUsage()
+
+    const emitDone = async (payload: {
+      reply: string
+      partialTools?: string[]
+      partialSteps?: ChatToolStep[]
+      cancelled?: boolean
+    }) => {
+      const contextUsage = await this.getSessionContextUsage(sessionId)
+      emit({
+        type: 'done',
+        reply: payload.reply,
+        tools_used: payload.partialTools ?? toolsUsed,
+        session_id: sessionId,
+        title: record!.title,
+        tool_steps: payload.partialSteps ?? toolSteps,
+        cancelled: payload.cancelled,
+        turn_usage: chatUsage.usage.totalTokens > 0 ? {
+          ...chatUsage.usage,
+          estimated: chatUsage.estimated || undefined,
+        } : undefined,
+        context_usage: contextUsage ?? undefined,
+      })
+    }
+
+    const pushAssistant = (
+      reply: string,
+      used: string[],
+      steps: ChatToolStep[],
+      usage?: TokenUsage,
+      usageEstimated?: boolean,
+    ) => {
+      this.pushAssistant(record!, reply, used, steps, usage, usageEstimated)
+    }
+
     const finalizeCancelled = (partialTools: string[], partialSteps: ChatToolStep[]): ChatResult => {
       this.userPromptBridge.cancelSession(sessionId)
       record!.messages = record!.messages.slice(0, messagesBeforeAssistant)
@@ -618,26 +750,17 @@ export class AgentEngine {
         record!.turns = record!.turns.slice(0, turnsBeforeAssistant + 1)
       }
       const reply = '（已停止）'
-      pushAssistant(reply, partialTools, partialSteps)
-      emit({ type: 'error', message: '已取消' })
-      emit({
-        type: 'done',
+      pushAssistant(
         reply,
-        tools_used: partialTools,
-        session_id: sessionId,
-        title: record!.title,
-        tool_steps: partialSteps,
-        cancelled: true,
-      })
+        partialTools,
+        partialSteps,
+        chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
+        chatUsage.estimated,
+      )
+      emit({ type: 'error', message: '已取消' })
+      void emitDone({ reply, partialTools, partialSteps, cancelled: true })
       return { reply, toolsUsed: partialTools, sessionId, title: record!.title }
     }
-
-    const pushAssistant = (reply: string, used: string[], steps: ChatToolStep[]) => {
-      this.pushAssistant(record!, reply, used, steps)
-    }
-
-    const toolsUsed: string[] = []
-    const toolSteps: ChatToolStep[] = []
 
     try {
     if (!llm) {
@@ -676,11 +799,13 @@ export class AgentEngine {
       const modelId = resolvedModel?.model
         ?? activeModel?.replace(/^[^:]+:/, '')
         ?? 'default'
+      const providerId = providerIdFromModelRef(activeModel)
 
       let overflowRetried = false
       const runLlmRound = async (aggressive: boolean) => {
         const budgeted = await this.applyContextBudget(record, {
           modelId,
+          providerId,
           systemPrompt,
           tools: openAiTools,
           llm,
@@ -689,7 +814,15 @@ export class AgentEngine {
           contextPrefix: contextMessages,
           signal,
         })
-        return llm.chat(budgeted.modelView, openAiTools, signal)
+        if (budgeted.compactUsage) {
+          chatUsage = accumulateChatUsage(chatUsage, {
+            usage: budgeted.compactUsage,
+            estimated: budgeted.compactUsageEstimated ?? true,
+          })
+        }
+        const turn = await llm.chat(budgeted.modelView, openAiTools, signal)
+        chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, budgeted.modelView))
+        return turn
       }
 
       emit({
@@ -729,19 +862,12 @@ export class AgentEngine {
         const reply = overflow
           ? '对话内容过多，整理后仍无法继续。请新开对话，或换用更大上下文窗口的模型。'
           : (turn.message.content ?? turn.error ?? '请求失败')
-        pushAssistant(reply, toolsUsed, toolSteps)
+        pushAssistant(reply, toolsUsed, toolSteps, chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined, chatUsage.estimated)
         emit({
           type: 'error',
           message: reply,
         })
-        emit({
-          type: 'done',
-          reply,
-          tools_used: toolsUsed,
-          session_id: sessionId,
-          title: record.title,
-          tool_steps: toolSteps,
-        })
+        void emitDone({ reply })
         return { reply, toolsUsed, sessionId, title: record.title }
       }
 
@@ -858,28 +984,26 @@ export class AgentEngine {
 
       const reply = turn.message.content?.trim() || '（无回复内容）'
       emit({ type: 'reply', content: reply })
-      pushAssistant(reply, toolsUsed, toolSteps)
-      emit({
-        type: 'done',
+      pushAssistant(
         reply,
-        tools_used: toolsUsed,
-        session_id: sessionId,
-        title: record.title,
-        tool_steps: toolSteps,
-      })
+        toolsUsed,
+        toolSteps,
+        chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
+        chatUsage.estimated,
+      )
+      void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
     }
 
     const reply = '⚠️ 分析轮次过多，请简化问题或明确分析方向后重试。'
-    pushAssistant(reply, toolsUsed, toolSteps)
-    emit({
-      type: 'done',
+    pushAssistant(
       reply,
-      tools_used: toolsUsed,
-      session_id: sessionId,
-      title: record.title,
-      tool_steps: toolSteps,
-    })
+      toolsUsed,
+      toolSteps,
+      chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
+      chatUsage.estimated,
+    )
+    void emitDone({ reply })
     return { reply, toolsUsed, sessionId, title: record.title }
     } finally {
       await broker.close().catch(() => {})
@@ -903,6 +1027,8 @@ export class AgentEngine {
     reply: string,
     toolsUsed: string[],
     toolSteps: ChatToolStep[] = [],
+    usage?: TokenUsage,
+    usageEstimated?: boolean,
   ) {
     if (this.sessions.shouldMaterializeContext(record)) {
       this.sessions.materializeContextRef(record)
@@ -915,7 +1041,12 @@ export class AgentEngine {
       toolsUsed: toolsUsed.length ? toolsUsed : undefined,
       toolSteps: toolSteps.length ? toolSteps : undefined,
       at: new Date().toISOString(),
+      usage,
+      usageEstimated,
     })
+    if (usage) {
+      record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)
+    }
     this.sessions.save(record)
   }
 }

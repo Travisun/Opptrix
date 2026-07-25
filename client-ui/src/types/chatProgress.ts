@@ -1,3 +1,5 @@
+import type { TokenUsage } from './chat'
+
 export type ChatToolStepStatus = 'running' | 'done' | 'error'
 
 export interface ChatUserPromptPayload {
@@ -29,6 +31,18 @@ export interface ChatToolStep {
   finishedAt?: string
 }
 
+export interface ChatTurnUsageSnapshot extends TokenUsage {
+  estimated?: boolean
+}
+
+export interface ChatContextUsageSnapshot {
+  usedTokens: number
+  limitTokens: number
+  remainingTokens: number
+  modelRef: string
+  estimated: boolean
+}
+
 export type ChatProgressEvent =
   | { type: 'thinking'; round: number; label: string; snippet?: string }
   | { type: 'tool_start'; step: ChatToolStep }
@@ -43,6 +57,8 @@ export type ChatProgressEvent =
     title?: string
     tool_steps: ChatToolStep[]
     cancelled?: boolean
+    turn_usage?: ChatTurnUsageSnapshot
+    context_usage?: ChatContextUsageSnapshot
   }
   | { type: 'error'; message: string }
   | {

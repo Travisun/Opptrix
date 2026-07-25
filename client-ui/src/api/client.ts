@@ -9,7 +9,7 @@ import type {
   ValidateFeedResult,
 } from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
-import type { ChatDisplayMessage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
+import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
 import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
 import {
   formatExportResultMessage,
@@ -1341,7 +1341,12 @@ export async function getSession(id: string) {
     session: SessionMeta
     messages: ChatDisplayMessage[]
     contextRef: SessionContextRef | null
+    contextUsage?: ChatContextUsage | null
   }>(`/sessions/${id}`)
+}
+
+export async function getSessionContextUsage(id: string) {
+  return jsonFetch<{ contextUsage: ChatContextUsage }>(`/sessions/${id}/context-usage`)
 }
 
 export async function renameSession(id: string, title: string) {

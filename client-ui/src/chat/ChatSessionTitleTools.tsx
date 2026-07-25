@@ -28,6 +28,8 @@ import { OPPTRIX_GLASS_PANEL_CLASS } from '../theme/mixins'
 import type { SessionArchiveFolder } from '../types/chat'
 import { createSessionArchiveFolder, listSessionArchiveFolders } from '../api/client'
 import { ComposerTooltipMenuItem } from './ComposerTooltipMenu'
+import { formatTokenCount } from './formatTokenCount'
+import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
 const MENU_WIDTH = 208
 const ARCHIVE_PANEL_WIDTH = 220
@@ -55,6 +57,10 @@ export interface ChatSessionTitleToolsProps {
   onExport: () => void | Promise<void>
   /** 打开本会话技能专长编辑抽屉 */
   onEditRolePersona?: () => void
+  /** 会话创建时间 ISO */
+  createdAt?: string | null
+  /** 会话累计用量 */
+  sessionUsageTotal?: number | null
 }
 
 export default function ChatSessionTitleTools({
@@ -71,6 +77,8 @@ export default function ChatSessionTitleTools({
   onDelete,
   onExport,
   onEditRolePersona,
+  createdAt,
+  sessionUsageTotal,
 }: ChatSessionTitleToolsProps) {
   const anchorRef = useRef<HTMLButtonElement>(null)
   const renameInputRef = useRef<HTMLInputElement>(null)
@@ -419,6 +427,16 @@ export default function ChatSessionTitleTools({
         <ArrowExportRegular fontSize={16} />
         <span>导出会话</span>
       </ComposerTooltipMenuItem>
+      {(createdAt || (sessionUsageTotal != null && sessionUsageTotal > 0)) && (
+        <div className="opptrix-session-tools-menu__meta">
+          {createdAt && (
+            <span>{`创建于 ${formatFriendlyTime(createdAt)}`}</span>
+          )}
+          {sessionUsageTotal != null && sessionUsageTotal > 0 && (
+            <span>{`累计用量 ${formatTokenCount(sessionUsageTotal)}`}</span>
+          )}
+        </div>
+      )}
     </div>,
     document.body,
   ) : null
