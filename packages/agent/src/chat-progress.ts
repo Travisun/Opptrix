@@ -5,6 +5,8 @@
  * 事件流：thinking → tool_start → tool_done → ... → done
  */
 
+import { parseNamespacedMcpTool } from '@opptrix/shared'
+
 /**
  * 工具调用步骤状态 — 标识单次工具调用的当前阶段。
  * - running: 正在执行
@@ -154,7 +156,7 @@ const TOOL_LABELS: Record<string, string> = {
   get_current_time: '获取当前时间',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',
-  get_project_info: '读取项目路径信息',
+  get_project_info: '读取应用信息',
   get_integration_status: '检查外部集成状态',
   ask_user: '向你确认问题',
   get_instrument_capabilities: '查询标的能力',
@@ -191,16 +193,35 @@ const TOOL_LABELS: Record<string, string> = {
   get_instrument_institution_rating: '汇总机构评级',
   get_instrument_institution_report: '生成机构评级报告',
   browser_navigate: '打开网页',
-  browser_snapshot: '读取页面',
+  browser_snapshot: '读取页面内容',
   browser_click: '点击',
   browser_type: '输入',
   browser_screenshot: '网页截图',
-  browser_close: '关闭浏览',
+  browser_close: '关闭网页浏览',
   shell_run: '运行命令',
   shell_install: '安装依赖',
-  shell_platform_status: '检查命令隔离环境',
+  shell_platform_status: '检查运行环境是否就绪',
   python_env_status: '查看 Python 环境',
-  ensure_python: '确认 Python 就绪',
+  ensure_python: '准备 Python 环境',
+  workspace_list: '浏览工作区文件',
+  workspace_read: '读取工作区文件',
+  workspace_write: '保存到工作区',
+  workspace_mkdir: '创建工作区文件夹',
+  workspace_delete: '删除工作区内容',
+  download_file: '下载文件到工作区',
+  http_fetch: '获取网页内容',
+  request_folder_access: '请求授权文件夹',
+  list_workspace_grants: '查看可访问目录',
+  list_mcp_servers: '查看已连接扩展',
+  enable_mcp_server: '启用扩展服务',
+  disable_mcp_server: '停用扩展服务',
+  edit_mcp_server: '修改扩展配置',
+  install_mcp_server: '添加扩展服务',
+  uninstall_mcp_server: '移除扩展服务',
+  reorder_mcp_servers: '调整扩展优先级',
+  list_enabled_providers: '查看可用数据源',
+  list_provider_custom_methods: '查询扩展数据能力',
+  invoke_provider_custom_method: '调用扩展数据能力',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -248,6 +269,74 @@ function extractStockName(result: unknown): string | null {
   return typeof name === 'string' && name.trim() ? name.trim() : null
 }
 
+function truncateLabel(text: string, max = 40): string {
+  return text.length <= max ? text : `${text.slice(0, max)}…`
+}
+
+function humanizeToolName(name: string): string {
+  const readable = name.replace(/_/g, ' ').trim()
+  return truncateLabel(readable, 48)
+}
+
+function pathBasename(path: string): string {
+  const normalized = path.replace(/\\/g, '/').replace(/\/+$/, '')
+  const i = normalized.lastIndexOf('/')
+  const base = i >= 0 ? normalized.slice(i + 1) : normalized
+  return base || path
+}
+
+function workspacePathHint(args: Record<string, unknown>): string {
+  const path = typeof args.path === 'string' ? args.path.trim() : ''
+  if (!path) return ''
+  return truncateLabel(pathBasename(path) || path, 40)
+}
+
+function urlHostnameHint(args: Record<string, unknown>): string {
+  const url = typeof args.url === 'string' ? args.url.trim() : ''
+  if (!url) return ''
+  try {
+    const host = new URL(url).hostname
+    return host || truncateLabel(url, 40)
+  } catch {
+    return truncateLabel(url, 40)
+  }
+}
+
+function mcpServerHint(args: Record<string, unknown>): string {
+  const title = typeof args.title === 'string' ? args.title.trim() : ''
+  if (title) return truncateLabel(title, 40)
+  const id = typeof args.server_id === 'string'
+    ? args.server_id.trim()
+    : typeof args.serverId === 'string'
+      ? args.serverId.trim()
+      : ''
+  return id ? truncateLabel(id, 40) : ''
+}
+
+function providerHint(args: Record<string, unknown>, includeMethod = false): string {
+  const provider = typeof args.provider_id === 'string' ? args.provider_id.trim() : ''
+  const method = typeof args.method === 'string' ? args.method.trim() : ''
+  const keyword = typeof args.keyword === 'string' ? args.keyword.trim() : ''
+  if (includeMethod && provider && method) return `${provider} · ${method}`
+  if (provider && keyword) return `${provider} · ${keyword}`
+  if (provider) return provider
+  if (keyword) return keyword
+  if (method) return method
+  return ''
+}
+
+function packIdsHint(args: Record<string, unknown>): string {
+  const raw = args.pack_ids ?? args.packIds
+  const ids = Array.isArray(raw)
+    ? raw.filter((v): v is string => typeof v === 'string').map(s => s.trim()).filter(Boolean)
+    : typeof raw === 'string' && raw.trim()
+      ? [raw.trim()]
+      : []
+  if (!ids.length) return ''
+  const shown = ids.slice(0, 3).join(', ')
+  return ids.length > 3 ? `${shown}…` : shown
+}
+
 /**
  * 生成工具调用的中文显示标签 — 根据工具名和参数生成可读描述。
  *
@@ -257,7 +346,12 @@ function extractStockName(result: unknown): string | null {
  * @returns 中文标签（如"评估 贵州茅台（600519）因子与评分"）
  */
 export function formatToolLabel(tool: string, args: Record<string, unknown> = {}, result?: unknown): string {
-  const base = TOOL_LABELS[tool] ?? tool.replace(/_/g, ' ')
+  const parsed = parseNamespacedMcpTool(tool)
+  if (parsed) {
+    return `调用扩展能力 · ${humanizeToolName(parsed.toolName)}`
+  }
+
+  const base = TOOL_LABELS[tool] ?? humanizeToolName(tool)
   const ref = stockRef(args, result)
 
   switch (tool) {
@@ -328,6 +422,47 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'python_env_status':
     case 'ensure_python':
       return base
+    case 'workspace_read':
+    case 'workspace_write':
+    case 'workspace_list':
+    case 'workspace_mkdir':
+    case 'workspace_delete': {
+      const hint = workspacePathHint(args)
+      return hint ? `${base} · ${hint}` : base
+    }
+    case 'http_fetch':
+    case 'download_file':
+    case 'browser_navigate': {
+      const host = urlHostnameHint(args)
+      return host ? `${base} · ${host}` : base
+    }
+    case 'activate_tool_pack': {
+      const packs = packIdsHint(args)
+      return packs ? `${base} · ${packs}` : base
+    }
+    case 'enable_mcp_server':
+    case 'disable_mcp_server':
+    case 'install_mcp_server':
+    case 'uninstall_mcp_server':
+    case 'edit_mcp_server': {
+      const hint = mcpServerHint(args)
+      return hint ? `${base} · ${hint}` : base
+    }
+    case 'list_provider_custom_methods': {
+      const hint = providerHint(args, false)
+      return hint ? `${base} · ${hint}` : base
+    }
+    case 'invoke_provider_custom_method': {
+      const hint = providerHint(args, true)
+      return hint ? `${base} · ${hint}` : base
+    }
+    case 'request_folder_access': {
+      const hint = typeof args.hint === 'string' ? args.hint.trim() : ''
+      const pathHint = typeof args.path === 'string' ? args.path.trim() : ''
+      const text = hint || pathHint
+      if (!text) return base
+      return `${base} · ${truncateLabel(text, 36)}`
+    }
     default:
       return ref ? `${base} · ${ref}` : base
   }

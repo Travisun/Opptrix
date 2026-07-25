@@ -84,3 +84,28 @@ test('shell tools have Chinese labels and result summaries', () => {
   }, 'shell_platform_status')
   assert.match(statusPreview, /隔离环境已就绪/)
 })
+
+test('formatToolLabel covers workspace, fetch, mcp, and namespaced tools', () => {
+  const httpLabel = formatToolLabel('http_fetch', { url: 'https://quotes.example.com/v1/data' })
+  assert.match(httpLabel, /获取网页内容/)
+  assert.match(httpLabel, /quotes\.example\.com/)
+  assert.doesNotMatch(httpLabel, /\bHTTP\b|\bMCP\b|\bAPI\b|\bProvider\b/i)
+
+  const readLabel = formatToolLabel('workspace_read', { path: 'reports/2024/summary.md' })
+  assert.match(readLabel, /读取工作区文件/)
+  assert.match(readLabel, /summary\.md/)
+
+  const mcpListLabel = formatToolLabel('list_mcp_servers', {})
+  assert.equal(mcpListLabel, '查看已连接扩展')
+
+  const namespacedLabel = formatToolLabel('tonghuashun__foo_bar', {})
+  assert.match(namespacedLabel, /调用扩展能力/)
+  assert.match(namespacedLabel, /foo bar/)
+  assert.doesNotMatch(namespacedLabel, /tonghuashun|\bMCP\b|\bHTTP\b/i)
+
+  const packLabel = formatToolLabel('activate_tool_pack', {
+    pack_ids: ['news', 'etf', 'workspace'],
+  })
+  assert.match(packLabel, /激活工具包/)
+  assert.match(packLabel, /news, etf, workspace/)
+})
