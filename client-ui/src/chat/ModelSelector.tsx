@@ -4,6 +4,7 @@ import { ChevronDownRegular, CheckmarkRegular } from '@fluentui/react-icons'
 import type { AvailableModel } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { focusVisibleRing, ghostInteractive, motion } from '../theme/mixins'
+import { modelMediaHint } from './mediaCapabilities'
 import ComposerTooltipMenu, {
   COMPOSER_MENU_WIDTH,
   ComposerTooltipMenuItem,
@@ -133,6 +134,7 @@ export default function ModelSelector({
   const active = models.find(m => m.ref === activeRef)
   const groups = useMemo(() => groupModelsByProvider(models), [models])
   const displayModel = active?.model ?? '选择模型'
+  const mediaHint = modelMediaHint(active?.media ?? null)
 
   if (!models.length) {
     return (
@@ -166,7 +168,7 @@ export default function ModelSelector({
           'opptrix-focusable',
         )}
         disabled={disabled}
-        aria-label={`当前模型：${displayModel}`}
+        aria-label={`当前模型：${displayModel}${mediaHint ? `，${mediaHint}` : ''}`}
         aria-expanded={open}
         onClick={() => setOpen(v => !v)}
       >
@@ -198,6 +200,16 @@ export default function ModelSelector({
                 }}
               >
                 <span className={s.modelName}>{model.model}</span>
+                {modelMediaHint(model.media ?? null) ? (
+                  <span style={{
+                    marginLeft: 6,
+                    fontSize: 'var(--opptrix-font-sm)',
+                    color: 'var(--opptrix-text-tertiary)',
+                  }}
+                  >
+                    {modelMediaHint(model.media ?? null)}
+                  </span>
+                ) : null}
                 {activeRef === model.ref ? (
                   <CheckmarkRegular fontSize={16} />
                 ) : null}

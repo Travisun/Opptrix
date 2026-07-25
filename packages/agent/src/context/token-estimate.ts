@@ -1,5 +1,9 @@
 import type { ChatMessage } from '../llm/provider.js'
 import type { OpenAiTool } from '../tools.js'
+import { chatMessageContentToText } from '../content-parts.js'
+
+const IMAGE_PART_TOKEN_ESTIMATE = 512
+const FILE_PART_TOKEN_ESTIMATE = 800
 
 /** 中英混合粗估：CJK 偏多时略紧 */
 export function estimateTextTokens(text: string): number {
@@ -25,7 +29,18 @@ export function estimateMessageTokens(messages: ChatMessage[]): number {
   let total = 0
   for (const m of messages) {
     total += 4
-    if (m.content) total += estimateTextTokens(String(m.content))
+    if (m.content != null) {
+      if (typeof m.content === 'string') {
+        total += estimateTextTokens(m.content)
+      } else {
+        for (const part of m.content) {
+          if (part.type === 'text') total += estimateTextTokens(part.text)
+          else if (part.type === 'image_url') total += IMAGE_PART_TOKEN_ESTIMATE
+          else if (part.type === 'file') total += FILE_PART_TOKEN_ESTIMATE
+          else if (part.type === 'input_audio') total += FILE_PART_TOKEN_ESTIMATE
+        }
+      }
+    }
     if (m.name) total += estimateTextTokens(m.name)
     if (m.tool_calls?.length) {
       for (const tc of m.tool_calls) {

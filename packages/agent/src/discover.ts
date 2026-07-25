@@ -14,6 +14,7 @@ import type { ToolRegistry } from './tools.js'
 import { McpToolBroker } from './mcp/broker.js'
 import type { ProviderRegistry } from './llm/providers.js'
 import type { ChatMessage } from './llm/provider.js'
+import { chatMessageContentToText } from './content-parts.js'
 import {
   getDiscoverStrategy,
   buildStrategyExecutionPrompt,
@@ -758,7 +759,7 @@ export class DiscoverRunner {
       { role: 'user', content: prompt },
     ]
     const turn = await llm.chat(messages)
-    const content = turn.message.content ?? ''
+    const content = chatMessageContentToText(turn.message.content)
     const json = extractJsonObject(content)
     if (!json) throw new Error('策略解析失败')
     return normalizePlan(json, prompt, profile)
@@ -893,13 +894,13 @@ export class DiscoverRunner {
 
         const turn = await llm.chat(messages, openAiTools.length ? openAiTools : undefined)
         if (turn.finishReason === 'error') {
-          throw new Error(turn.error ?? turn.message.content ?? 'Agent 请求失败')
+          throw new Error(turn.error ?? (chatMessageContentToText(turn.message.content) || 'Agent 请求失败'))
         }
 
         if (turn.finishReason === 'tool_calls' && turn.message.tool_calls?.length) {
           messages.push({
             role: 'assistant',
-            content: turn.message.content ?? null,
+            content: chatMessageContentToText(turn.message.content) || null,
             tool_calls: turn.message.tool_calls,
           })
           for (const tc of turn.message.tool_calls) {
@@ -928,7 +929,7 @@ export class DiscoverRunner {
           continue
         }
 
-        const content = turn.message.content?.trim() ?? ''
+        const content = chatMessageContentToText(turn.message.content).trim()
         const json = extractJsonObject(content)
         if (json && Array.isArray(json.items)) {
           const allowed = new Set(candidates.map(c => c.code))

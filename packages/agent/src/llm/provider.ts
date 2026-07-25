@@ -1,6 +1,7 @@
 import type { OpenAiTool } from '../tools.js'
 import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
 import { parseOpenAiUsage, type TokenUsage } from './token-usage.js'
+import { parseAssistantResponseContent } from '../content-parts.js'
 
 export interface LlmConfig {
   provider: string
@@ -18,9 +19,35 @@ export interface ToolCall {
   function: { name: string; arguments: string }
 }
 
+export interface TextContentPart {
+  type: 'text'
+  text: string
+}
+
+export interface ImageUrlContentPart {
+  type: 'image_url'
+  image_url: { url: string; detail?: 'auto' | 'low' | 'high' }
+}
+
+export interface FileContentPart {
+  type: 'file'
+  file: { filename: string; file_data: string }
+}
+
+export interface InputAudioContentPart {
+  type: 'input_audio'
+  input_audio: { data: string; format: string }
+}
+
+export type ContentPart =
+  | TextContentPart
+  | ImageUrlContentPart
+  | FileContentPart
+  | InputAudioContentPart
+
 export interface ChatMessage {
   role: 'system' | 'user' | 'assistant' | 'tool'
-  content?: string | null
+  content?: string | null | ContentPart[]
   tool_calls?: ToolCall[]
   tool_call_id?: string
   name?: string
@@ -33,10 +60,17 @@ export interface LlmTurn {
   /** 上游响应表明上下文超限 */
   contextOverflow?: boolean
   usage?: TokenUsage
+  /** 从模型原生 content parts 解析出的输出媒体 */
+  outputAttachments?: import('./../media-types.js').ChatAttachmentMeta[]
 }
 
 export interface LlmProvider {
-  chat(messages: ChatMessage[], tools?: OpenAiTool[], signal?: AbortSignal): Promise<LlmTurn>
+  chat(
+    messages: ChatMessage[],
+    tools?: OpenAiTool[],
+    signal?: AbortSignal,
+    opts?: { sessionId?: string },
+  ): Promise<LlmTurn>
   listModels(): Promise<string[]>
 }
 
@@ -70,10 +104,34 @@ function isContextLengthHttpError(status: number, body: string): boolean {
   return false
 }
 
+function serializeMessageContent(content: ChatMessage['content']): string | ContentPart[] | null {
+  if (content == null) return null
+  if (typeof content === 'string') return content
+  return content
+}
+
+function serializeMessage(m: ChatMessage): Record<string, unknown> {
+  const content = serializeMessageContent(m.content)
+  return {
+    role: m.role,
+    ...(m.role === 'assistant' && m.tool_calls
+      ? { content: content ?? null }
+      : { content: content ?? '' }),
+    ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
+    ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
+    ...(m.name ? { name: m.name } : {}),
+  }
+}
+
 export class OpenAiCompatibleProvider implements LlmProvider {
   constructor(private cfg: LlmConfig) {}
 
-  async chat(messages: ChatMessage[], tools?: OpenAiTool[], signal?: AbortSignal): Promise<LlmTurn> {
+  async chat(
+    messages: ChatMessage[],
+    tools?: OpenAiTool[],
+    signal?: AbortSignal,
+    opts?: { sessionId?: string },
+  ): Promise<LlmTurn> {
     if (!isConfigured(this.cfg)) {
       return {
         message: { role: 'assistant', content: '[LLM 未配置] 请在设置或环境变量中填入 API Key' },
@@ -85,15 +143,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
     try {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
-        messages: messages.map(m => ({
-          role: m.role,
-          ...(m.role === 'assistant' && m.tool_calls
-            ? { content: m.content ?? null }
-            : { content: m.content ?? '' }),
-          ...(m.tool_calls ? { tool_calls: m.tool_calls } : {}),
-          ...(m.tool_call_id ? { tool_call_id: m.tool_call_id } : {}),
-          ...(m.name ? { name: m.name } : {}),
-        })),
+        messages: messages.map(serializeMessage),
         temperature: this.cfg.temperature ?? 0.3,
         max_tokens: this.cfg.maxTokens ?? 4096,
       }
@@ -140,7 +190,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         choices?: {
           finish_reason?: string
           message?: {
-            content?: string | null
+            content?: string | null | unknown[]
             tool_calls?: ToolCall[]
           }
         }[]
@@ -158,14 +208,40 @@ export class OpenAiCompatibleProvider implements LlmProvider {
 
       if (raw.tool_calls?.length) {
         return {
-          message: { role: 'assistant', content: raw.content ?? null, tool_calls: raw.tool_calls },
+          message: {
+            role: 'assistant',
+            content: typeof raw.content === 'string' ? raw.content : null,
+            tool_calls: raw.tool_calls,
+          },
           finishReason: 'tool_calls',
           usage,
         }
       }
 
+      const sessionId = opts?.sessionId
+      if (sessionId && Array.isArray(raw.content)) {
+        const parsed = parseAssistantResponseContent(sessionId, raw.content)
+        return {
+          message: { role: 'assistant', content: parsed.text || '（无回复内容）' },
+          finishReason: 'stop',
+          usage,
+          outputAttachments: parsed.attachments.length ? parsed.attachments : undefined,
+        }
+      }
+
+      const textContent = typeof raw.content === 'string'
+        ? raw.content
+        : Array.isArray(raw.content)
+          ? raw.content
+            .filter((p): p is { type: 'text'; text: string } =>
+              typeof p === 'object' && p !== null && (p as { type?: string }).type === 'text'
+              && typeof (p as { text?: unknown }).text === 'string')
+            .map(p => p.text)
+            .join('\n')
+          : ''
+
       return {
-        message: { role: 'assistant', content: raw.content ?? '' },
+        message: { role: 'assistant', content: textContent ?? '' },
         finishReason: 'stop',
         usage,
       }

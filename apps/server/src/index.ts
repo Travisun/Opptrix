@@ -35,6 +35,7 @@ import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
+import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
 import {
   startNewsFeedScheduler,
@@ -86,6 +87,7 @@ agent = new AgentEngine(hub, {
   defaultTopN: cfg.default_top_n,
   appContext: serverAppContext,
 })
+agent.setApiBaseUrl(`http://${HOST}:${PORT}/api`)
 
 setSessionPersistHooks({
   onPersist: syncSessionSearchIndex,
@@ -1204,10 +1206,13 @@ app.post<{
   },
 )
 
-app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
+app.post<{ Params: { id: string }; Body: { message: string; model?: string; attachments?: string[] } }>(
   '/api/sessions/:id/chat/stream',
   async (req, reply) => {
-    if (!req.body?.message?.trim()) return reply.code(400).send({ error: 'message required' })
+    const hasAttachments = Array.isArray(req.body?.attachments) && req.body.attachments.length > 0
+    if (!req.body?.message?.trim() && !hasAttachments) {
+      return reply.code(400).send({ error: 'message required' })
+    }
 
     reply.hijack()
     reply.raw.writeHead(200, {
@@ -1232,9 +1237,10 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
     try {
       await agent.chat(
         req.params.id,
-        req.body.message,
+        req.body.message ?? '',
         req.body.model,
         { onProgress: write, signal: ac.signal },
+        req.body.attachments,
       )
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
@@ -1255,14 +1261,19 @@ app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
   },
 )
 
-app.post<{ Params: { id: string }; Body: { message: string; model?: string } }>(
+app.post<{ Params: { id: string }; Body: { message: string; model?: string; attachments?: string[] } }>(
   '/api/sessions/:id/chat',
   async (req, reply) => {
-    if (!req.body?.message?.trim()) return reply.code(400).send({ error: 'message required' })
+    const hasAttachments = Array.isArray(req.body?.attachments) && req.body.attachments.length > 0
+    if (!req.body?.message?.trim() && !hasAttachments) {
+      return reply.code(400).send({ error: 'message required' })
+    }
     const result = await agent.chat(
       req.params.id,
-      req.body.message,
+      req.body.message ?? '',
       req.body.model,
+      undefined,
+      req.body.attachments,
     )
     return {
       reply: result.reply,
@@ -1440,6 +1451,7 @@ async function bootstrap() {
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
   registerSearchRoutes(app, hub, agent)
+  registerSessionAttachmentRoutes(app, agent)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})

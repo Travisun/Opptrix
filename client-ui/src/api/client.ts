@@ -9,7 +9,8 @@ import type {
   ValidateFeedResult,
 } from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
-import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel } from '../types/chat'
+import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel, ChatAttachmentMeta } from '../types/chat'
+import { resolveFileMime } from '../chat/mediaCapabilities'
 import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
 import {
   formatExportResultMessage,
@@ -1589,12 +1590,48 @@ export async function submitUserPromptResponse(
   }, CHAT_REQUEST_TIMEOUT)
 }
 
+export async function uploadSessionAttachment(
+  sessionId: string,
+  file: File,
+  pinnedCount = 0,
+  pinnedTotalBytes = 0,
+): Promise<ChatAttachmentMeta> {
+  const resp = await fetchWithTimeout(`${API_BASE}/sessions/${sessionId}/attachments`, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/octet-stream',
+      'X-Attachment-Mime': resolveFileMime(file),
+      'X-Attachment-Name': encodeURIComponent(file.name),
+      'X-Pinned-Count': String(pinnedCount),
+      'X-Pinned-Total-Bytes': String(pinnedTotalBytes),
+    },
+    body: file,
+  }, 120_000)
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `上传失败 (${resp.status})`)
+  }
+  const data = await resp.json() as { attachment: ChatAttachmentMeta }
+  return data.attachment
+}
+
+export function sessionAttachmentUrl(sessionId: string, attachmentId: string): string {
+  return `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}`
+}
+
+export async function deleteSessionAttachment(sessionId: string, attachmentId: string) {
+  return jsonFetch<{ ok: boolean }>(`/sessions/${sessionId}/attachments/${attachmentId}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function streamSessionChat(
   sessionId: string,
   message: string,
   onEvent: (event: ChatProgressEvent) => void,
   model?: string,
   signal?: AbortSignal,
+  attachments?: string[],
 ): Promise<void> {
   const resp = await fetchWithTimeout(`${API_BASE}/sessions/${sessionId}/chat/stream`, {
     method: 'POST',
@@ -1605,6 +1642,7 @@ export async function streamSessionChat(
     body: JSON.stringify({
       message,
       ...(model ? { model } : {}),
+      ...(attachments?.length ? { attachments } : {}),
     }),
     signal,
   }, CHAT_REQUEST_TIMEOUT)

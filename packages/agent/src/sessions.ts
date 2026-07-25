@@ -1,13 +1,15 @@
 import { randomUUID } from 'node:crypto'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { ChatMessage } from './llm/provider.js'
+import { chatMessageContentToText } from './content-parts.js'
 import type { ChatToolStep } from './chat-progress.js'
 import type { TokenUsage } from './llm/token-usage.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
 
+import type { ChatAttachmentMeta } from './media-types.js'
 import type { ExpertIcon } from '@opptrix/shared'
 
-export type { ChatToolStep }
+export type { ChatToolStep, ChatAttachmentMeta }
 
 const NAMESPACE = 'session'
 
@@ -42,6 +44,7 @@ export interface DisplayMessage {
   at: string
   usage?: TokenUsage
   usageEstimated?: boolean
+  attachments?: ChatAttachmentMeta[]
 }
 
 export interface SessionForkContextRef {
@@ -89,6 +92,7 @@ export interface SessionRecord extends SessionMeta {
     at: string
     usage?: TokenUsage
     usageEstimated?: boolean
+    attachments?: ChatAttachmentMeta[]
   }[]
   contextRef?: SessionContextRef | null
   /**
@@ -130,10 +134,10 @@ function migrateTurns(record: SessionRecord): SessionRecord {
 
   const turns: SessionRecord['turns'] = []
   for (const m of record.messages) {
-    if ((m.role === 'user' || m.role === 'assistant') && m.content) {
+    if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
       turns.push({
         role: m.role,
-        content: String(m.content),
+        content: chatMessageContentToText(m.content),
         at: record.updatedAt,
       })
     }
@@ -351,12 +355,17 @@ export class SessionStore {
         at: t.at,
         usage: t.usage,
         usageEstimated: t.usageEstimated,
+        attachments: t.attachments,
       }))
     }
     const out: DisplayMessage[] = []
     for (const m of record.messages) {
-      if ((m.role === 'user' || m.role === 'assistant') && m.content) {
-        out.push({ role: m.role, content: m.content, at: record.updatedAt })
+      if ((m.role === 'user' || m.role === 'assistant') && m.content != null) {
+        out.push({
+          role: m.role,
+          content: chatMessageContentToText(m.content),
+          at: record.updatedAt,
+        })
       }
     }
     return out

@@ -30,7 +30,7 @@ import {
 } from '../api/client'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef, SessionSelectionContextRef,
-  SessionMeta, AvailableModel,
+  SessionMeta, AvailableModel, ChatAttachmentMeta,
 } from '../types/chat'
 import type { FeedArticle } from '../types/schemas'
 import { previewSelectionText } from '../utils/formatContextRefPreview'
@@ -774,11 +774,12 @@ export default function ChatApp() {
   loadingRef.current = loading
   sessionModelRef.current = sessionModel
 
-  const submitImplRef = useRef<(text?: string) => Promise<void>>(async () => {})
+  const submitImplRef = useRef<(text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => Promise<void>>(async () => {})
 
-  submitImplRef.current = async (text?: string) => {
+  submitImplRef.current = async (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
     const msg = (text ?? '').trim()
-    if (!msg) return
+    const ids = attachmentIds?.filter(Boolean) ?? []
+    if (!msg && !ids.length) return
 
     let sessionId = activeIdRef.current
     if (!sessionId) {
@@ -808,8 +809,9 @@ export default function ChatApp() {
 
     const optimistic: ChatDisplayMessage = {
       role: 'user',
-      content: msg,
+      content: msg || '（附件）',
       at: new Date().toISOString(),
+      ...(attachmentMetas?.length ? { attachments: attachmentMetas } : {}),
     }
     if (activeIdRef.current === sessionId) {
       setMessages(prev => [...prev, optimistic])
@@ -842,7 +844,7 @@ export default function ChatApp() {
         if (event.type === 'done') {
           resolvedSessionId = event.session_id || resolvedSessionId
         }
-      }, sessionModelRef.current, abortController.signal)
+      }, sessionModelRef.current, abortController.signal, ids.length ? ids : undefined)
 
       if (isStreamStale()) return
 
@@ -889,9 +891,18 @@ export default function ChatApp() {
     }
   }
 
-  const handleSubmit = useCallback((text?: string) => {
-    void submitImplRef.current(text)
+  const handleSubmit = useCallback((text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
+    void submitImplRef.current(text, attachmentIds, attachmentMetas)
   }, [])
+
+  const ensureSession = useCallback(async (): Promise<string> => {
+    if (activeIdRef.current) return activeIdRef.current
+    const { session } = await createSession()
+    setActiveId(session.id)
+    setActiveSessionMeta(session)
+    await refreshSessions()
+    return session.id
+  }, [refreshSessions])
 
   const handleStreamError = useCallback((message: string) => {
     setError(message)
@@ -1408,6 +1419,7 @@ export default function ChatApp() {
                   llmLabel={llmLabel}
                   backendOk={backendOk}
                   onSubmit={handleSubmit}
+                  ensureSession={ensureSession}
                   onStop={handleStop}
                   onForkMessage={handleForkFromMessage}
                   onQuoteSelection={activeId ? handleQuoteSelection : undefined}

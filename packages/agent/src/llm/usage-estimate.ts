@@ -1,5 +1,6 @@
 import type { ChatMessage, LlmTurn } from './provider.js'
 import { estimateMessageTokens, estimateTextTokens } from '../context/token-estimate.js'
+import { chatMessageContentToText } from '../content-parts.js'
 import { emptyTokenUsage, mergeTokenUsage, type TokenUsage } from './token-usage.js'
 
 export function estimateUsageFromMessages(messages: ChatMessage[]): TokenUsage {
@@ -16,8 +17,8 @@ export function estimateUsageFromTurn(
   promptMessages: ChatMessage[],
 ): TokenUsage {
   const promptTokens = estimateMessageTokens(promptMessages)
-  const content = turn.message.content ?? ''
-  const completionTokens = typeof content === 'string' ? estimateTextTokens(content) : 0
+  const content = chatMessageContentToText(turn.message.content)
+  const completionTokens = content ? estimateTextTokens(content) : 0
   return {
     promptTokens,
     completionTokens,

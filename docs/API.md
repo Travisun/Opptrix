@@ -636,6 +636,11 @@ Content-Type: application/json
 | GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
+| POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` + `X-Attachment-Name`）；校验当前会话模型 `media` 能力与限额；响应 `{ attachment: ChatAttachmentMeta }` |
+| GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；路径规范化防穿越） |
+| DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
+| POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
+| POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
 
 **会话上下文压缩（长对话）**
 
@@ -656,6 +661,25 @@ Content-Type: application/json
 ```
 
 `level`：`micro` | `structured` | `overflow_retry`。
+
+**`AvailableModel`（`GET /api/models/available`）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `contextTokens` | number | 上下文窗口（models.dev + 启发式） |
+| `attachment` | boolean | 是否支持附件上传 |
+| `inputModalities` / `outputModalities` | `MediaKind[]` | 输入/输出模态（含 `text` / `image` / `pdf` / `video` / `audio`） |
+| `attachmentLimits` | `{ maxBytesByKind; maxCount; maxTotalBytes }` | 按模型族动态分档的上传限额 |
+| `media` | 同上嵌套对象 | 与上述字段等价的组合视图 |
+
+**`ChatAttachmentMeta`**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 附件 id（落盘 `~/.opptrix/chat-attachments/{sessionId}/{id}/`） |
+| `kind` | `image` \| `pdf` \| `video` \| `audio` | 媒体种类 |
+| `mime` / `name` / `size` / `createdAt` | — | MIME、原始文件名、字节数、ISO 时间 |
+| `width` / `height` / `duration` | number | 可选元数据 |
 
 **`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 
@@ -705,6 +729,7 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `messages[].usage` | `{ promptTokens; completionTokens; totalTokens }` | 可选；该轮 assistant 回复累计用量（含 tool 循环与压缩） |
+| `messages[].attachments` | `ChatAttachmentMeta[]` | 可选；用户 pin 或模型原生输出的媒体元数据 |
 | `messages[].usageEstimated` | boolean | 可选；无上游 usage 时为 `true`（客户端展示「约」） |
 | `contextUsage` | `{ usedTokens; limitTokens; remainingTokens; modelRef; estimated }` | Composer 上下文占用估算（`assembleModelView` + 窗长） |
 
