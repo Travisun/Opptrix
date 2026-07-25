@@ -974,6 +974,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
   translationTranslateArticle: (payload) => ipcRenderer.invoke('translation-translate-article', payload),
   // 通知
   showLocalNotification: (payload) => ipcRenderer.invoke('notification-show', payload),
+  notificationIsSupported: () => ipcRenderer.invoke('notification-is-supported'),
+  notificationGetPermission: () => ipcRenderer.invoke('notification-get-permission'),
+  notificationRequestPermission: () => ipcRenderer.invoke('notification-request-permission'),
+  // 窗口焦点（聊天通知注意力判断）
+  windowIsFocused: () => ipcRenderer.invoke('window-is-focused'),
 })
 ```
 
@@ -1002,7 +1007,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
 - 使用 Electron 原生 `Notification` API
 - 支持权限请求与缓存
 - Windows 设置 `appUserModelId` 以正确显示通知
-- 支持点击通知聚焦主窗口
+- 支持点击通知聚焦主窗口；聊天通知带 `sessionId` 时深链 `opptrix://chat?session=`
+
+**聊天本地通知**（触发条件、失焦定义、IPC、payload）：见 [DESKTOP.md · 本地聊天通知](./DESKTOP.md#本地聊天通知)。
 
 ---
 

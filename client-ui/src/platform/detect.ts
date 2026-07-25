@@ -38,6 +38,7 @@ declare global {
       onTranslationProgress?: (callback: (progress: TranslationProgress) => void) => () => void
       onFullscreenChange?: (callback: (fullscreen: boolean) => void) => () => void
       onProtocolOpen?: (callback: (payload: OpptrixProtocolPayload) => void) => () => void
+      windowIsFocused?: () => Promise<boolean>
       notificationIsSupported?: () => Promise<boolean>
       notificationGetPermission?: () => Promise<NotificationPermissionState>
       notificationRequestPermission?: () => Promise<NotificationPermissionState>
@@ -170,11 +171,15 @@ export type AppUpdateStatus = {
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied'
 
+export type LocalNotificationKind = 'chat_done' | 'chat_ask'
+
 export type LocalNotificationPayload = {
   title: string
   body?: string
   silent?: boolean
   tag?: string
+  sessionId?: string
+  kind?: LocalNotificationKind
 }
 
 export type OpptrixProtocolPayload = {

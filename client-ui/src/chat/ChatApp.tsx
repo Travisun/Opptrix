@@ -54,6 +54,12 @@ import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
 import { isElectron } from '../platform/detect'
+import {
+  buildChatAskNotification,
+  buildChatDoneNotification,
+  maybeShowChatLocalNotification,
+  resolveWindowFocused,
+} from '../platform/chatNotifications'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
@@ -284,6 +290,9 @@ export default function ChatApp() {
   const stoppingSessionsRef = useRef(new Set<string>())
   const streamingSessionIdsRef = useRef(new Set<string>())
   const activeIdRef = useRef<string | null>(null)
+  const viewRef = useRef(view)
+  const sessionsRef = useRef(sessions)
+  const activeSessionMetaRef = useRef(activeSessionMeta)
   const loading = activeId ? streamingSessionIds.includes(activeId) : false
   const markSessionStreaming = useCallback((sessionId: string, streaming: boolean) => {
     if (streaming) streamingSessionIdsRef.current.add(sessionId)
@@ -303,6 +312,48 @@ export default function ChatApp() {
       if (event.type === 'done' && event.context_usage) {
         setContextUsage(event.context_usage)
       }
+    }
+
+    if (event.type === 'done' && !event.cancelled) {
+      const sessionTitle = event.title
+        ?? (activeSessionMetaRef.current?.id === targetSessionId
+          ? activeSessionMetaRef.current.title
+          : undefined)
+        ?? sessionsRef.current.find(s => s.id === targetSessionId)?.title
+      void (async () => {
+        const documentVisible = typeof document !== 'undefined'
+          && document.visibilityState === 'visible'
+        const windowFocused = await resolveWindowFocused()
+        await maybeShowChatLocalNotification(
+          targetSessionId,
+          {
+            activeSessionId: activeIdRef.current,
+            view: viewRef.current,
+            documentVisible,
+            windowFocused,
+          },
+          buildChatDoneNotification(targetSessionId, sessionTitle),
+        )
+      })()
+    }
+
+    if (event.type === 'user_prompt') {
+      const promptSummary = event.prompt.title || event.prompt.prompt
+      void (async () => {
+        const documentVisible = typeof document !== 'undefined'
+          && document.visibilityState === 'visible'
+        const windowFocused = await resolveWindowFocused()
+        await maybeShowChatLocalNotification(
+          targetSessionId,
+          {
+            activeSessionId: activeIdRef.current,
+            view: viewRef.current,
+            documentVisible,
+            windowFocused,
+          },
+          buildChatAskNotification(targetSessionId, promptSummary),
+        )
+      })()
     }
   }, [])
 
@@ -771,6 +822,9 @@ export default function ChatApp() {
   const loadingRef = useRef(loading)
   const sessionModelRef = useRef(sessionModel)
   activeIdRef.current = activeId
+  viewRef.current = view
+  sessionsRef.current = sessions
+  activeSessionMetaRef.current = activeSessionMeta
   loadingRef.current = loading
   sessionModelRef.current = sessionModel
 

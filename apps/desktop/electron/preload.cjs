@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),
   getIsFullscreen: () => ipcRenderer.invoke('window-is-fullscreen'),
+  windowIsFocused: () => ipcRenderer.invoke('window-is-focused'),
   pickExportDirectory: () => ipcRenderer.invoke('pick-export-directory'),
   writeBinaryFile: (payload) => ipcRenderer.invoke('write-binary-file', payload),
   pickSaveFile: (payload) => ipcRenderer.invoke('pick-save-file', payload),

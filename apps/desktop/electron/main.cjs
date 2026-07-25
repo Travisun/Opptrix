@@ -803,6 +803,11 @@ function registerWindowIpc() {
   ipcMain.handle('window-is-fullscreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
   })
+  ipcMain.handle('window-is-focused', (event) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return false
+    return win.isFocused()
+  })
 
   ipcMain.handle('pick-export-directory', async (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -910,7 +915,14 @@ function registerWindowIpc() {
   registerUpdaterIpc(ipcMain, { prepareForUpdateInstall })
   registerProtocolIpc(ipcMain)
   registerNotificationIpc(ipcMain, {
-    onNotificationClick: () => focusMainWindow(),
+    onNotificationClick: (payload) => {
+      const sessionId = typeof payload?.sessionId === 'string' ? payload.sessionId.trim() : ''
+      if (sessionId) {
+        deliverProtocolUrl(`opptrix://chat?session=${encodeURIComponent(sessionId)}`)
+        return
+      }
+      focusMainWindow()
+    },
   })
 }
 
