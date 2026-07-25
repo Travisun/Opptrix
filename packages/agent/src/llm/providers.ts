@@ -1,5 +1,6 @@
 import { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './provider.js'
 import { resolveModelContextTokens } from './model-context.js'
+import { resolveModelContextTokensAsync } from './models-dev-context.js'
 
 export { fetchOpenAiModelList }
 
@@ -49,6 +50,24 @@ export class ProviderRegistry {
           providerId: p.id,
           providerName: p.name,
           contextTokens: resolveModelContextTokens(model),
+        })
+      }
+    }
+    return out
+  }
+
+  async listAvailableAsync(): Promise<AvailableModel[]> {
+    const out: AvailableModel[] = []
+    for (const p of this.providers) {
+      if (!p.apiKey || !p.baseUrl) continue
+      for (const model of p.models) {
+        const contextTokens = await resolveModelContextTokensAsync(model, p.id)
+        out.push({
+          ref: `${p.id}:${model}`,
+          model,
+          providerId: p.id,
+          providerName: p.name,
+          contextTokens,
         })
       }
     }

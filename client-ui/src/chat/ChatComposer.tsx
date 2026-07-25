@@ -2,6 +2,7 @@ import { useRef, useEffect, useCallback, useState } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
+import ContextUsageMeter from './ContextUsageMeter'
 import ComposerContextRefTag from './ComposerContextRefTag'
 import ComposerQuickTasks from './ComposerQuickTasks'
 import ChatWorkspaceGrants from './ChatWorkspaceGrants'
@@ -10,7 +11,7 @@ import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
-import type { AvailableModel, SessionContextRef } from '../types/chat'
+import type { AvailableModel, ChatContextUsage, SessionContextRef } from '../types/chat'
 import type { ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
 import type { WatchlistItem } from '../types/market'
 import {
@@ -266,6 +267,7 @@ interface ChatComposerProps {
   welcomeKey?: number
   availableModels: AvailableModel[]
   sessionModel?: string
+  contextUsage?: ChatContextUsage | null
   onSubmit: (text?: string) => void
   onStop?: () => void
   onModelChange?: (ref: string) => void
@@ -287,6 +289,7 @@ export default function ChatComposer({
   welcomeKey = 0,
   availableModels,
   sessionModel,
+  contextUsage,
   onSubmit,
   onStop,
   onModelChange,
@@ -579,6 +582,7 @@ export default function ChatComposer({
               />
             </div>
             <div className={s.toolbarRight}>
+              <ContextUsageMeter usage={contextUsage} />
               {onModelChange && (
                 <ModelSelector
                   models={availableModels}

@@ -8,6 +8,7 @@ import {
 import type { ChatDisplayMessage } from '../types/chat'
 import MarkdownMessage from './MarkdownMessage'
 import ChatProcessTrace from './ChatProcessTrace'
+import MessageTokenLabel from './MessageTokenLabel'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
@@ -242,6 +243,12 @@ function ChatMessageItem({ message, index, isMobile = false, onFork }: Props) {
           <div style={{ marginTop: 12 }}>
             <ChatProcessTrace steps={message.toolSteps} />
           </div>
+        )}
+        {!isUser && message.usage && message.usage.totalTokens > 0 && (
+          <MessageTokenLabel
+            totalTokens={message.usage.totalTokens}
+            estimated={message.usageEstimated}
+          />
         )}
         {!message.toolSteps?.length && message.toolsUsed && message.toolsUsed.length > 0 && (
           <div className={s.toolTags}>

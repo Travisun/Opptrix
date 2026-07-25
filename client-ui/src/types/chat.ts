@@ -31,6 +31,20 @@ export interface ExpertCatalog {
   nextCursor?: string
 }
 
+export interface TokenUsage {
+  promptTokens: number
+  completionTokens: number
+  totalTokens: number
+}
+
+export interface ChatContextUsage {
+  usedTokens: number
+  limitTokens: number
+  remainingTokens: number
+  modelRef: string
+  estimated: boolean
+}
+
 export interface SessionMeta {
   id: string
   title: string
@@ -42,6 +56,7 @@ export interface SessionMeta {
   archiveFolderId?: string | null
   expertId?: string | null
   expertIcon?: ExpertIcon | null
+  usageTotals?: TokenUsage | null
 }
 
 export interface SessionArchiveFolder {
@@ -66,6 +81,8 @@ export interface ChatDisplayMessage {
   toolsUsed?: string[]
   toolSteps?: ChatToolStep[]
   at: string
+  usage?: TokenUsage
+  usageEstimated?: boolean
 }
 
 export interface SessionForkContextRef {

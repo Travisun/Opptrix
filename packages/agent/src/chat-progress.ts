@@ -6,6 +6,7 @@
  */
 
 import { parseNamespacedMcpTool } from '@opptrix/shared'
+import type { TokenUsage } from './llm/token-usage.js'
 
 /**
  * 工具调用步骤状态 — 标识单次工具调用的当前阶段。
@@ -14,6 +15,18 @@ import { parseNamespacedMcpTool } from '@opptrix/shared'
  * - error:   执行出错
  */
 export type ChatToolStepStatus = 'running' | 'done' | 'error'
+
+export interface ChatContextUsageSnapshot {
+  usedTokens: number
+  limitTokens: number
+  remainingTokens: number
+  modelRef: string
+  estimated: boolean
+}
+
+export interface ChatTurnUsageSnapshot extends TokenUsage {
+  estimated?: boolean
+}
 
 /**
  * 工具调用步骤 — 单次工具调用的完整生命周期信息。
@@ -100,6 +113,10 @@ export type ChatProgressEvent =
     tool_steps: ChatToolStep[]
     /** 是否被用户取消 */
     cancelled?: boolean
+    /** 本轮 assistant 累计用量 */
+    turn_usage?: ChatTurnUsageSnapshot
+    /** Composer 上下文占用快照 */
+    context_usage?: ChatContextUsageSnapshot
   }
   | { type: 'error'; message: string }
   | {

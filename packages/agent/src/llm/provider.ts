@@ -1,5 +1,6 @@
 import type { OpenAiTool } from '../tools.js'
 import { formatOutboundFetchError, outboundFetch } from './outbound-fetch.js'
+import { parseOpenAiUsage, type TokenUsage } from './token-usage.js'
 
 export interface LlmConfig {
   provider: string
@@ -31,6 +32,7 @@ export interface LlmTurn {
   error?: string
   /** 上游响应表明上下文超限 */
   contextOverflow?: boolean
+  usage?: TokenUsage
 }
 
 export interface LlmProvider {
@@ -134,6 +136,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       }
 
       const data = await resp.json() as {
+        usage?: unknown
         choices?: {
           finish_reason?: string
           message?: {
@@ -144,6 +147,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
       }
       const choice = data.choices?.[0]
       const raw = choice?.message
+      const usage = parseOpenAiUsage(data.usage)
       if (!raw) {
         return {
           message: { role: 'assistant', content: '⚠️ API 返回格式异常' },
@@ -156,12 +160,14 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         return {
           message: { role: 'assistant', content: raw.content ?? null, tool_calls: raw.tool_calls },
           finishReason: 'tool_calls',
+          usage,
         }
       }
 
       return {
         message: { role: 'assistant', content: raw.content ?? '' },
         finishReason: 'stop',
+        usage,
       }
     } catch (e) {
       if (signal?.aborted) {

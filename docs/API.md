@@ -639,7 +639,7 @@ Content-Type: application/json
 
 **会话上下文压缩（长对话）**
 
-- 每轮聊天按当前模型启发式 `contextTokens` 估算用量；接近上限时 micro / structured 压缩，SSE 推送 `context_compact`。
+- 每轮聊天按当前模型窗长（优先 [models.dev](https://models.dev) 模糊匹配，失败降级启发式，默认 128k）估算用量；接近上限时 micro / structured 压缩，SSE 推送 `context_compact`。
 - UI transcript（`turns`）不变；模型侧使用 `sessionMemory` + 近端消息。详见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
 - `PATCH /api/sessions/:id` 切换 `model` 时按新窗口再检查；响应可含 `contextHint`（有压缩时）。
 
@@ -657,7 +657,7 @@ Content-Type: application/json
 
 `level`：`micro` | `structured` | `overflow_retry`。
 
-**`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带启发式上下文窗口（只读派生，无需用户配置）。
+**`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 
 **POST `/api/sessions` body**
 
@@ -698,6 +698,21 @@ Content-Type: application/json
 | `archiveFolderId` | string \| null | 归档文件夹 |
 | `expertId` | string \| null | 绑定专家 id；`null` 为默认投研研究员会话 |
 | `expertIcon` | `{ kind: "emoji" \| "icon"; value: string } \| null` | 侧栏图标；无专家时为 `null` |
+| `usageTotals` | `{ promptTokens; completionTokens; totalTokens } \| null` | 可选；会话累计 LLM 用量 |
+
+**`GET /api/sessions/:id` 附加字段**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `messages[].usage` | `{ promptTokens; completionTokens; totalTokens }` | 可选；该轮 assistant 回复累计用量（含 tool 循环与压缩） |
+| `messages[].usageEstimated` | boolean | 可选；无上游 usage 时为 `true`（客户端展示「约」） |
+| `contextUsage` | `{ usedTokens; limitTokens; remainingTokens; modelRef; estimated }` | Composer 上下文占用估算（`assembleModelView` + 窗长） |
+
+**`GET /api/sessions/:id/context-usage`**
+
+返回 `{ contextUsage }`；404 时会话不存在。切模型后客户端应 refetch。
+
+**聊天 SSE `done` 事件** 可附带 `turn_usage`（本轮 assistant 用量）与 `context_usage`（同上结构），便于流式结束后刷新 UI。
 
 **示例 — 默认研究员会话**
 

@@ -1,4 +1,4 @@
-export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult } from './engine.js'
+export { AgentEngine, ChatCancelledError, type AgentSettings, type ChatResult, type SessionContextUsage } from './engine.js'
 export {
   type ChatProgressEvent,
   type ChatProgressOptions,
@@ -116,6 +116,28 @@ export {
   HARD_USAGE_RATIO,
 } from './llm/model-context.js'
 export {
+  resolveModelContextTokensAsync,
+  lookupModelsDevContextLimit,
+  getModelsDevCatalog,
+  resetModelsDevCacheForTests,
+} from './llm/models-dev-context.js'
+export {
+  formatTokenCount,
+  formatTurnUsageLabel,
+} from './llm/format-token-count.js'
+export {
+  type TokenUsage,
+  type TokenUsageDisplay,
+  emptyTokenUsage,
+  mergeTokenUsage,
+  parseOpenAiUsage,
+} from './llm/token-usage.js'
+
+export {
+  type ChatContextUsageSnapshot,
+  type ChatTurnUsageSnapshot,
+} from './chat-progress.js'
+export {
   type SessionMemory,
   formatSessionMemoryForPrompt,
   emptySessionMemory,
@@ -123,6 +145,7 @@ export {
 } from './context/session-memory.js'
 export {
   ensureContextBudget,
+  buildBudgetForModel,
   assembleModelView,
   microcompactMessages,
   isContextOverflowError,

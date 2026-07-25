@@ -18,6 +18,7 @@ import {
   parseSessionMemoryFromModelText,
   ensureContextBudget,
   CONTEXT_COMPACT_HINT,
+  buildBudgetForModel,
 } from '../packages/agent/dist/index.js'
 
 function buildFatToolHistory(rounds, payloadChars) {
@@ -157,6 +158,13 @@ test('isContextOverflowError detects common upstream phrases', () => {
   assert.equal(isContextOverflowError(undefined, 'Error: maximum context length'), true)
   assert.equal(isContextOverflowError('rate_limit'), false)
   assert.ok(CONTEXT_COMPACT_HINT.includes('整理'))
+})
+
+test('buildBudgetForModel resolves context window asynchronously', async () => {
+  const budget = await buildBudgetForModel('unknown-model-xyz-for-test', 'LAYER0')
+  assert.ok(budget.contextTokens > 0)
+  assert.ok(budget.historyBudget > 0)
+  assert.ok(budget.softLimit < budget.hardLimit)
 })
 
 test('ensureContextBudget soft path triggers micro on small window', async () => {

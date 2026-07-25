@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { getUserDataStore } from '@opptrix/user-store'
 import type { ChatMessage } from './llm/provider.js'
 import type { ChatToolStep } from './chat-progress.js'
+import type { TokenUsage } from './llm/token-usage.js'
 import { SessionArchiveFolderStore } from './archive-folders.js'
 
 import type { ExpertIcon } from '@opptrix/shared'
@@ -21,6 +22,8 @@ export interface SessionMeta {
   archiveFolderId?: string | null
   expertId?: string | null
   expertIcon?: ExpertIcon | null
+  /** 会话累计用量（列表 meta 可含） */
+  usageTotals?: TokenUsage
 }
 
 export interface CreateSessionOptions {
@@ -37,6 +40,8 @@ export interface DisplayMessage {
   toolsUsed?: string[]
   toolSteps?: ChatToolStep[]
   at: string
+  usage?: TokenUsage
+  usageEstimated?: boolean
 }
 
 export interface SessionForkContextRef {
@@ -76,7 +81,15 @@ export type SessionContextRef = SessionForkContextRef | SessionSelectionContextR
 export interface SessionRecord extends SessionMeta {
   messages: ChatMessage[]
   /** UI-visible turns (user/assistant only) */
-  turns: { role: 'user' | 'assistant'; content: string; toolsUsed?: string[]; toolSteps?: ChatToolStep[]; at: string }[]
+  turns: {
+    role: 'user' | 'assistant'
+    content: string
+    toolsUsed?: string[]
+    toolSteps?: ChatToolStep[]
+    at: string
+    usage?: TokenUsage
+    usageEstimated?: boolean
+  }[]
   contextRef?: SessionContextRef | null
   /**
    * 会话级 Layer1 技能专长快照。创建时从专家/默认研究员复制；之后与目录解耦。
@@ -156,6 +169,7 @@ function toMeta(raw: SessionRecord): SessionMeta {
     archiveFolderId: raw.archiveFolderId ?? null,
     expertId: raw.expertId ?? null,
     expertIcon: raw.expertIcon ?? null,
+    usageTotals: raw.usageTotals,
   }
 }
 
@@ -335,6 +349,8 @@ export class SessionStore {
         toolsUsed: t.toolsUsed,
         toolSteps: t.toolSteps,
         at: t.at,
+        usage: t.usage,
+        usageEstimated: t.usageEstimated,
       }))
     }
     const out: DisplayMessage[] = []

@@ -835,7 +835,7 @@ app.delete<{ Params: { id: string } }>('/api/providers/:id', async (req, reply) 
 })
 
 app.get('/api/models/available', async () => ({
-  models: agent.listAvailableModels(),
+  models: await agent.listAvailableModelsAsync(),
   default_model: cfg.default_model ?? null,
 }))
 
@@ -944,6 +944,7 @@ app.post<{ Body: { title?: string; expertId?: string } }>('/api/sessions', async
 app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   const session = agent.getSession(req.params.id)
   if (!session) return reply.code(404).send({ error: 'session not found' })
+  const contextUsage = await agent.getSessionContextUsage(req.params.id)
   return {
     session: {
       id: session.id,
@@ -951,10 +952,18 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
       model: session.model,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
+      usageTotals: session.usageTotals ?? null,
     },
     messages: agent.getDisplayMessages(req.params.id),
     contextRef: session.contextRef ?? null,
+    contextUsage,
   }
+})
+
+app.get<{ Params: { id: string } }>('/api/sessions/:id/context-usage', async (req, reply) => {
+  const contextUsage = await agent.getSessionContextUsage(req.params.id)
+  if (!contextUsage) return reply.code(404).send({ error: 'session not found' })
+  return { contextUsage }
 })
 
 app.get<{ Params: { id: string } }>('/api/sessions/:id/role-persona', async (req, reply) => {
