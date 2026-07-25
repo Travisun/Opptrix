@@ -15,6 +15,7 @@ alwaysApply: true
 | **文档同步** | 架构/API/调用方式变更后必须同步更新文档 | `doc-sync.mdc` |
 | **需求澄清** | 重要修改前必须向用户提问确认需求 | `requirement-clarification.mdc` |
 | **UI 文案规范** | 所有用户可见文案必须为产品级高端风格，禁止技术描述 | `ui-copy-standard.mdc` |
+| **双远程同步** | push / merge 后 GitHub 与 Gitee 必须 tip 一致 | `dual-remote-sync.mdc` |
 
 ## 场景规则（按 glob 自动挂载）
 
@@ -108,6 +109,11 @@ alwaysApply: true
 - [ ] `docs/releases/{version}.md` 已撰写
 - [ ] 用户确认后打标签
 
+### push / merge 后
+
+- [ ] GitHub 与 Gitee 对应分支 tip 一致（`dual-remote-sync.mdc`）
+- [ ] `gh pr merge` 后已 `git push gitee main` 并删除 Gitee 功能分支（如有）
+
 ## 原文与扩展
 
 | Cursor 规则 | 路径 |
@@ -123,6 +129,7 @@ alwaysApply: true
 | **文档同步** | `.cursor/rules/doc-sync.mdc` |
 | **需求澄清** | `.cursor/rules/requirement-clarification.mdc` |
 | **UI 文案** | `.cursor/rules/ui-copy-standard.mdc` |
+| **双远程同步** | `.cursor/rules/dual-remote-sync.mdc` |
 | CodeGraph | `.cursor/rules/codegraph.mdc` |
 | 兼容 | `.cursor/rules/backward-compatibility.mdc` |
 | Schema | `.cursor/rules/schema-migration.mdc` |

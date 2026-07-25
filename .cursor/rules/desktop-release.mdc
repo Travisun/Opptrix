@@ -141,8 +141,10 @@ node scripts/assemble-release-notes.mjs 0.6.1 | head -40
 node -p "require('./apps/desktop/package.json').version"
 OPPTRIX_RELEASE_STRICT=1 node scripts/assemble-release-notes.mjs "$(node -p "require('./apps/desktop/package.json').version")" | head -30
 git push origin main
+git push gitee main    # 双远程：见 dual-remote-sync.mdc
 git tag desktop-v0.6.1
 git push origin desktop-v0.6.1
+git push gitee desktop-v0.6.1
 ```
 
 ---

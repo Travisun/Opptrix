@@ -148,6 +148,15 @@ packages 改动后：
 - 耗时操作给用户预期；失败说明可采取的动作
 - 像一位专业顾问在对话，不像说明书在朗读
 
+### R10. 双远程同步（GitHub + Gitee）
+
+**凡 push / merge / merge 后 push，必须使 GitHub 与 Gitee 对应分支 tip 一致。**
+
+- `gh pr merge` 只更新 GitHub → 合并后必须立刻 `git push gitee main`，并删除 Gitee 上残留功能分支
+- 功能分支 / `main` / 发版 tag 均需两端存在且 tip 一致
+- 完成前校验：`origin/main` 与 `gitee/main` SHA 相同；汇报时写明两侧均已更新
+- 细则：`.cursor/rules/dual-remote-sync.mdc`
+
 ---
 
 ## 架构分层
