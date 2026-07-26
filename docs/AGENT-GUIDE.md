@@ -202,7 +202,7 @@ Opptrix/
 - 分类：`instrument_standard`（标准 capability / `queryInstrumentData`）/ `agent_tools` / `hub_features`（如 `hub.search_local_instruments`，`access: hub_feature`）/ `shared_packages` / `fuyao_dump` / `workspace_fs`。
 - 常用 `api_id`：`cap.realtime`、`fuyao.dump`、`shared.packages`、`workspace.shared`、`workspace.default`、`hub.search_local_instruments`。
 
-**公共复用区（`root_id=shared`）**
+**公共资产（`root_id=shared`；用户界面称「公共资产」，路径概念仍为 shared）**
 
 | 路径 | 用途 |
 |------|------|

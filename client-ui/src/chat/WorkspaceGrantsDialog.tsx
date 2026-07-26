@@ -21,6 +21,13 @@ import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import type { WorkspaceGrantDto } from '../api/client'
 
+/** 与 agent-workspace `SHARED_ROOT_ID` 一致 */
+export const SHARED_ROOT_ID = 'shared'
+
+export function isBuiltinGrant(grant: WorkspaceGrantDto): boolean {
+  return grant.is_default === true || grant.root_id === SHARED_ROOT_ID
+}
+
 export function grantFolderName(grant: WorkspaceGrantDto): string {
   if (grant.label?.trim()) return grant.label.trim()
   const normalized = grant.abs_path.replace(/\\/g, '/').replace(/\/+$/, '')
@@ -206,7 +213,8 @@ export default function WorkspaceGrantsDialog({
   const [removeTarget, setRemoveTarget] = useState<WorkspaceGrantDto | null>(null)
 
   const defaultGrant = grants.find(grant => grant.is_default) ?? null
-  const extraGrants = grants.filter(grant => !grant.is_default)
+  const sharedGrant = grants.find(grant => grant.root_id === SHARED_ROOT_ID) ?? null
+  const extraGrants = grants.filter(grant => !isBuiltinGrant(grant))
 
   useEffect(() => {
     if (!open) setAddMenuOpen(false)
@@ -240,39 +248,55 @@ export default function WorkspaceGrantsDialog({
             <DialogTitle>授权文件夹访问</DialogTitle>
             <DialogContent className={s.body}>
               <Text className={s.intro} block>
-                在本对话中，助手只能读取你授权的本地文件夹。{'\n'}
-                下方「本对话工作区」默认可用，仅当前对话可读写。{'\n'}
-                需要查看电脑上的其他资料时，再添加额外文件夹；可随时更换或移除。{'\n'}
-                额外授权仅对本对话生效，关闭对话后将不再保留。
+                助手只能访问你授权的文件夹。下方默认两项始终可用，也可添加仅本对话有效的额外授权。
               </Text>
 
               <div className={s.section}>
-                <Text className={s.sectionTitle}>本对话工作区</Text>
-                {defaultGrant ? (
-                  <div className={mergeClasses(s.grantRow, s.grantRowDefault)}>
-                    <div className={s.grantMeta}>
-                      <Text className={s.grantName} block>
-                        {defaultGrant.label?.trim() || '本对话工作区'}
-                      </Text>
-                      <Text className={s.grantPath} block title={defaultGrant.abs_path}>
-                        {grantFolderName(defaultGrant)}
-                      </Text>
+                <Text className={s.sectionTitle}>默认授权：</Text>
+                <div className={s.grantList}>
+                  {defaultGrant ? (
+                    <div className={mergeClasses(s.grantRow, s.grantRowDefault)}>
+                      <div className={s.grantMeta}>
+                        <Text className={s.grantName} block>
+                          本对话工作区
+                        </Text>
+                        <Text className={s.grantPath} block title={defaultGrant.abs_path}>
+                          仅当前对话可读写
+                        </Text>
+                      </div>
+                      <Text className={s.grantBadge}>默认 · 可读写</Text>
                     </div>
-                    <Text className={s.grantBadge}>默认 · 可读写</Text>
-                  </div>
-                ) : (
-                  <Text className={s.emptyHint} block>
-                    正在加载本对话工作区…
-                  </Text>
-                )}
+                  ) : (
+                    <Text className={s.emptyHint} block>
+                      正在加载本对话工作区…
+                    </Text>
+                  )}
+                  {sharedGrant ? (
+                    <div className={mergeClasses(s.grantRow, s.grantRowDefault)}>
+                      <div className={s.grantMeta}>
+                        <Text className={s.grantName} block>
+                          公共资产
+                        </Text>
+                        <Text className={s.grantPath} block title={sharedGrant.abs_path}>
+                          跨对话可复用的资料与工具包
+                        </Text>
+                      </div>
+                      <Text className={s.grantBadge}>默认 · 可读写</Text>
+                    </div>
+                  ) : (
+                    <Text className={s.emptyHint} block>
+                      正在加载公共资产…
+                    </Text>
+                  )}
+                </div>
               </div>
 
               <div className={s.section}>
-                <Text className={s.sectionTitle}>本对话额外文件夹</Text>
+                <Text className={s.sectionTitle}>额外授权</Text>
                 <div className={s.grantList}>
                   {extraGrants.length === 0 ? (
                     <Text className={s.emptyHint} block>
-                      还没有额外文件夹。添加后，助手才能读取其中的文件。
+                      还没有额外授权。添加后，助手才能读取其中的文件。
                     </Text>
                   ) : (
                     extraGrants.map(grant => (

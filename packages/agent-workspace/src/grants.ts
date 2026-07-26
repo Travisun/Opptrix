@@ -56,14 +56,19 @@ export class GrantStore {
     await ensureDirectory(sessionRoot)
     const bucket = this.session(sessionId)
 
-    if (!bucket.byRootId.has(SHARED_ROOT_ID)) {
+    const sharedLabel = '公共资产'
+    const existingShared = bucket.byRootId.get(SHARED_ROOT_ID)
+    if (!existingShared) {
       bucket.byRootId.set(SHARED_ROOT_ID, {
         id: randomUUID(),
         root_id: SHARED_ROOT_ID,
         abs_path: resolveSharedWorkspaceRoot(),
         mode: 'rw',
-        label: '公共复用区',
+        label: sharedLabel,
       })
+    } else {
+      // 幂等纠正历史标签（公共复用区 / 公共资产区 → 公共资产）
+      existingShared.label = sharedLabel
     }
 
     const existing = bucket.byRootId.get(DEFAULT_ROOT_ID)

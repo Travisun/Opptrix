@@ -199,6 +199,37 @@ test('clearSession removes session workspace directory', async () => {
   })
 })
 
+test('listGrants orders default then shared then extras', async () => {
+  const grants = new GrantStore()
+  const sessionId = 'order-sess'
+  await grants.ensureDefaultRoot(sessionId)
+  grants.addGrant(sessionId, os.tmpdir(), 'ro', 'extra-a')
+  grants.addGrant(sessionId, path.join(os.tmpdir(), 'b'), 'rw', 'extra-b')
+  const listed = grants.listGrants(sessionId)
+  assert.equal(listed.length, 4)
+  assert.equal(listed[0].is_default, true)
+  assert.equal(listed[1].root_id, SHARED_ROOT_ID)
+  assert.equal(listed[1].label, '公共资产')
+  assert.ok(listed[2].root_id.startsWith('grant_'))
+  assert.ok(listed[3].root_id.startsWith('grant_'))
+})
+
+test('removeGrant rejects default and shared grants', async () => {
+  const grants = new GrantStore()
+  const sessionId = 'remove-builtin'
+  await grants.ensureDefaultRoot(sessionId)
+  const listed = grants.listGrants(sessionId)
+  const defaultGrant = listed.find(g => g.is_default)
+  const sharedGrant = listed.find(g => g.root_id === SHARED_ROOT_ID)
+  assert.ok(defaultGrant)
+  assert.ok(sharedGrant)
+  assert.equal(grants.removeGrant(sessionId, defaultGrant.id), false)
+  assert.equal(grants.removeGrant(sessionId, sharedGrant.id), false)
+  const extra = grants.addGrant(sessionId, os.tmpdir(), 'ro', 'tmp')
+  assert.equal(grants.removeGrant(sessionId, extra.id), true)
+  assert.equal(grants.listGrants(sessionId).length, 2)
+})
+
 test('shared workspace auto-granted and survives clearSession', async () => {
   await withTmpDataDir(async () => {
     resetSharedWorkspaceLayoutCacheForTests()
@@ -209,6 +240,7 @@ test('shared workspace auto-granted and survives clearSession', async () => {
     const shared = grants.find(g => g.root_id === SHARED_ROOT_ID)
     assert.ok(shared)
     assert.equal(shared.mode, 'rw')
+    assert.equal(shared.label, '公共资产')
     const sharedRoot = resolveSharedWorkspaceRoot()
     await fs.access(path.join(sharedRoot, 'README.md'))
     await fs.access(path.join(sharedRoot, 'data', 'dumps'))

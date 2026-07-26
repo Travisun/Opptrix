@@ -7,7 +7,7 @@ import {
   type WorkspaceGrantDto,
 } from '../api/client'
 import { isElectron } from '../platform/detect'
-import WorkspaceGrantsDialog, { grantFolderName } from './WorkspaceGrantsDialog'
+import WorkspaceGrantsDialog, { grantFolderName, isBuiltinGrant } from './WorkspaceGrantsDialog'
 
 interface ChatWorkspaceGrantsProps {
   sessionId: string | null
@@ -113,7 +113,7 @@ export default function ChatWorkspaceGrants({
   }, [disabled, pickDirectory, refresh, reportError, sessionId])
 
   const handleRemove = useCallback(async (grant: WorkspaceGrantDto) => {
-    if (!sessionId || grant.is_default || disabled) return
+    if (!sessionId || isBuiltinGrant(grant) || disabled) return
     setLoading(true)
     setDialogError(null)
     try {
@@ -127,7 +127,7 @@ export default function ChatWorkspaceGrants({
   }, [disabled, reportError, sessionId, refresh])
 
   const handleReplaceGrant = useCallback(async (grant: WorkspaceGrantDto) => {
-    if (!sessionId || grant.is_default || disabled) return
+    if (!sessionId || isBuiltinGrant(grant) || disabled) return
     setLoading(true)
     setDialogError(null)
     try {
@@ -156,7 +156,7 @@ export default function ChatWorkspaceGrants({
     setDialogError(null)
   }, [])
 
-  const userGrants = grants.filter(grant => !grant.is_default)
+  const userGrants = grants.filter(grant => !isBuiltinGrant(grant))
 
   if (!sessionId) return null
 
