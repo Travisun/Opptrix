@@ -208,7 +208,8 @@ export function buildUserInteractionPlaybook(): string {
   return [
     '【用户确认 — ask_user 内置交互工具】',
     '- 当分析方向、标的范围、时间窗口、偏好（短线/中线、是否含资讯等）存在多种合理路径且无法从上下文推断时，调用 ask_user 而非在正文里罗列选项让用户打字回复',
-    '- 参数：prompt 写一句面向投资者的问题；options 提供 2–5 个互斥或常见选项（id 英文/数字，label 中文简短）；allow_multiple 仅在「可多选」时设为 true',
+    '- 参数：prompt 写一句面向投资者的问题；options 提供至少 2 个、最多 50 个互斥或常见选项（id 英文/数字，label 中文简短）；allow_multiple 仅在「可多选」时设为 true',
+    '- prompt 与 options.label 均不要使用 emoji（界面更清晰、便于朗读与无障碍）',
     '- 界面会在输入框上方展示题目；最后一项为「自行输入」，用户可直接打字后按 Enter 提交',
     '- 收到返回的 selected_labels / custom_text 后再继续拉数与分析；同一轮对话最多调用 1 次 ask_user',
     '- 禁止用于索要密码等敏感信息（须用 request_secret 写入保险箱）；禁止在已有明确用户指令时重复确认',

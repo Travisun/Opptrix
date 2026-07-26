@@ -477,7 +477,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   ask_user: {
     miningEligible: false,
     usageGuide: '分析前需用户确认方向、范围或偏好，且上下文无法推断时调用；会在聊天输入框上方展示选择题，用户点选或自行输入后继续。',
-    compliance: 'prompt 必填、面向投资者；options 2–5 项且 id 唯一；allow_multiple 默认 false；同一轮对话最多 1 次；禁止索要密钥。',
+    compliance: 'prompt 必填、面向投资者且勿用 emoji；options 2–50 项且 id 唯一，label 勿用 emoji；allow_multiple 默认 false；同一轮对话最多 1 次；禁止索要密钥。',
   },
   list_enabled_providers: {
     hubFeature: 'provider_list',

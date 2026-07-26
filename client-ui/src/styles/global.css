@@ -1384,6 +1384,19 @@ select:focus-visible {
   display: flex;
   flex-direction: column;
   gap: 4px;
+  max-height: 248px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 2px;
+}
+
+.opptrix-composer-user-prompt-panel__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: -2px;
 }
 
 .opptrix-composer-user-prompt-panel__option {
@@ -1391,15 +1404,16 @@ select:focus-visible {
   align-items: center;
   justify-content: flex-start;
   width: 100%;
-  padding: 8px 10px;
+  min-height: 36px;
+  padding: 10px 12px;
   border: none;
   border-radius: 8px;
   background: transparent;
   text-align: left;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
-  line-height: 1.35;
+  line-height: 1.4;
   color: var(--opptrix-text, #1A1A1A);
   transition: background-color 140ms ease, box-shadow 140ms ease;
 }
@@ -1432,7 +1446,7 @@ select:focus-visible {
   align-items: center;
   gap: 8px;
   width: 100%;
-  margin-top: 4px;
+  margin-top: 0;
   padding-top: 8px;
   border-top: 1px solid rgba(0, 0, 0, 0.06);
 }
@@ -1455,6 +1469,7 @@ select:focus-visible {
 
 .opptrix-composer-user-prompt-panel__confirm {
   display: flex;
+  align-items: center;
   justify-content: flex-end;
   gap: 10px;
 }
