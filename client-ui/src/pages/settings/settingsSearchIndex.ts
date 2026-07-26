@@ -22,17 +22,17 @@ function haystack(entry: SettingsSearchEntry): string {
 }
 
 export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
-  // 分类
+  // 分类（与侧栏导航顺序一致）
   { section: 'general', title: '常规', desc: '管理默认评分卡与后端连接状态' },
-  { section: 'models', title: '模型', desc: '配置 LLM 提供商与可用模型' },
+  { section: 'models', title: '大模型', desc: '配置大模型提供商与可用模型', keywords: ['模型', 'LLM', 'AI'] },
   { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商、拖拽回退顺序', keywords: ['priority', '回退', '拖拽', '排序'] },
-  { section: 'mcp_servers', title: 'MCP 服务器', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具'] },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
-  { section: 'sandbox', title: '沙盒环境', desc: '管理命令隔离环境的网络访问规则' },
-  { section: 'python', title: 'Python 环境', desc: '查看 Python 状态与镜像源配置' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
-  { section: 'about', title: '关于 Opptrix', desc: '产品说明、版本更新、法律条款与帮助反馈' },
+  { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
+  { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
+  { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
+  { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
   { section: 'about', title: '检查更新', keywords: ['更新', 'upgrade'] },
   { section: 'about', title: '官方网站', desc: 'Opptrix 官网', keywords: ['官网', 'opptrix.org', '网站'] },
@@ -49,10 +49,10 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'general', group: '偏好', title: '评分卡', desc: '因子评估默认使用的评分模板', keywords: ['scorecard', 'G=B+M', '因子'] },
   { section: 'general', group: '连接', title: '后端连接', desc: '检查 API 服务与 LLM 提供商配置', keywords: ['测试', 'health', '连接'] },
 
-  // 模型
-  { section: 'models', title: '模型提供商', desc: '配置 Base URL 与 API Key', keywords: ['LLM', 'OpenAI', 'API', '密钥', '提供商'] },
-  { section: 'models', title: '添加模型提供商', keywords: ['新增', '添加'] },
-  { section: 'models', title: '编辑模型提供商', keywords: ['修改'] },
+  // 大模型
+  { section: 'models', title: '提供商', desc: '配置服务地址与密钥', keywords: ['大模型', 'LLM', 'OpenAI', '密钥', '提供商'] },
+  { section: 'models', title: '添加提供商', keywords: ['新增', '添加', '大模型'] },
+  { section: 'models', title: '编辑提供商', keywords: ['修改', '大模型'] },
 
   // 数据源
   { section: 'data_providers', group: 'A 股', title: 'Tushare Pro', keywords: ['tushare', '行情源', 'token'] },
@@ -104,15 +104,15 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
 
 const SECTION_LABEL: Record<SettingsSection, string> = {
   general: '常规',
-  models: '模型',
+  models: '大模型',
   data_providers: '数据源',
-  mcp_servers: 'MCP 服务器',
   news_feed: '新闻订阅',
-  sandbox: '沙盒环境',
-  python: 'Python 环境',
   translation: '翻译',
   multimodal: '多模态',
-  about: '关于 Opptrix',
+  mcp_servers: 'MCP 服务',
+  sandbox: '沙盒',
+  python: 'Python',
+  about: '关于',
 }
 
 export function settingsSectionLabel(section: SettingsSection): string {

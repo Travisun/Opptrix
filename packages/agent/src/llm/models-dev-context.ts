@@ -46,12 +46,21 @@ interface ModelsDevModelEntry {
   modalities?: ModelsDevModalities
 }
 
-interface ModelsDevProviderEntry {
+export interface ModelsDevProviderEntry {
   id?: string
+  name?: string
+  /** OpenAI-compatible base URL when present in models.dev catalog */
+  api?: string
   models?: Record<string, ModelsDevModelEntry>
 }
 
-type ModelsDevCatalog = Record<string, ModelsDevProviderEntry>
+export type ModelsDevCatalog = Record<string, ModelsDevProviderEntry>
+
+export interface ModelsDevProviderMeta {
+  id: string
+  name?: string
+  api?: string
+}
 
 let memoryCache: { fetchedAt: number; catalog: ModelsDevCatalog } | null = null
 let inflightFetch: Promise<ModelsDevCatalog | null> | null = null
@@ -80,18 +89,43 @@ function stripCommonPrefix(id: string): string {
   return id
 }
 
+function parseProviderEntry(key: string, value: unknown): ModelsDevProviderEntry | null {
+  if (!isRecord(value) || !isRecord(value.models)) return null
+  const name = typeof value.name === 'string' ? value.name : undefined
+  const api = typeof value.api === 'string' ? value.api : undefined
+  const id = typeof value.id === 'string' ? value.id : key
+  return {
+    id,
+    ...(name ? { name } : {}),
+    ...(api ? { api } : {}),
+    models: value.models as Record<string, ModelsDevModelEntry>,
+  }
+}
+
 function parseProvidersMap(data: unknown): ModelsDevCatalog {
   if (!isRecord(data)) return {}
-  if (isRecord(data.providers)) {
-    return data.providers as ModelsDevCatalog
-  }
+  const root = isRecord(data.providers) ? data.providers : data
   const out: ModelsDevCatalog = {}
-  for (const [key, value] of Object.entries(data)) {
-    if (isRecord(value) && isRecord(value.models)) {
-      out[key] = value as ModelsDevProviderEntry
-    }
+  for (const [key, value] of Object.entries(root)) {
+    const entry = parseProviderEntry(key, value)
+    if (entry) out[key] = entry
   }
   return out
+}
+
+/** Lookup display name + api URL for a models.dev provider id. */
+export function resolveModelsDevProviderMeta(
+  id: string,
+  catalog: ModelsDevCatalog | null | undefined,
+): ModelsDevProviderMeta | null {
+  if (!catalog || !id.trim()) return null
+  const entry = catalog[id]
+  if (!entry) return null
+  return {
+    id,
+    ...(entry.name ? { name: entry.name } : {}),
+    ...(entry.api ? { api: entry.api } : {}),
+  }
 }
 
 function limitFromEntry(entry: ModelsDevModelEntry | undefined): ModelsDevLimit | null {

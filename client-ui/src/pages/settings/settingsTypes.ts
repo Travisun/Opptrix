@@ -14,12 +14,12 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'general',
   'models',
   'data_providers',
-  'mcp_servers',
   'news_feed',
-  'sandbox',
-  'python',
   'translation',
   'multimodal',
+  'mcp_servers',
+  'sandbox',
+  'python',
   'about',
 ]
 

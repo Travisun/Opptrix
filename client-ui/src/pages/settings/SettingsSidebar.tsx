@@ -33,16 +33,20 @@ export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
 
 const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[] = [
+  // 基础与核心能力
   { id: 'general', label: '常规', icon: SettingsRegular },
-  { id: 'models', label: '模型', icon: BotRegular },
+  { id: 'models', label: '大模型', icon: BotRegular },
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
-  { id: 'mcp_servers', label: 'MCP 服务器', icon: PlugConnectedRegular },
+  // 内容与阅读
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
-  { id: 'sandbox', label: '沙盒环境', icon: ShieldRegular },
-  { id: 'python', label: 'Python 环境', icon: CodeRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
-  { id: 'about', label: '关于 Opptrix', icon: InfoRegular },
+  // 扩展与运行环境
+  { id: 'mcp_servers', label: 'MCP 服务', icon: PlugConnectedRegular },
+  { id: 'sandbox', label: '沙盒', icon: ShieldRegular },
+  { id: 'python', label: 'Python', icon: CodeRegular },
+  // 关于
+  { id: 'about', label: '关于', icon: InfoRegular },
 ]
 
 const useStyles = makeStyles({
@@ -381,21 +385,21 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
     case 'general':
       return '评分偏好与连接设置'
     case 'models':
-      return '添加和管理 AI 模型服务'
+      return '添加和管理大模型服务'
     case 'data_providers':
       return '管理行情与资讯数据来源'
-    case 'mcp_servers':
-      return '接入外部智能服务'
     case 'news_feed':
       return '订阅源与更新频率'
-    case 'sandbox':
-      return '管理命令隔离环境的网络访问规则'
-    case 'python':
-      return '查看 Python 状态、配置镜像源与安装选项'
     case 'translation':
       return '离线翻译与远程回退'
     case 'multimodal':
       return '图片、语音与媒体处理'
+    case 'mcp_servers':
+      return '接入外部智能服务'
+    case 'sandbox':
+      return '管理命令隔离环境的网络访问规则'
+    case 'python':
+      return '查看 Python 状态、配置镜像源与安装选项'
     case 'about':
       return '版本信息与法律说明'
     default:

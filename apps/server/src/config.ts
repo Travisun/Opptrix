@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { fileURLToPath } from 'node:url'
+import { getModelsDevCatalog, resolveModelsDevProviderMeta } from '@opptrix/agent'
 import { getUserDataStore } from '@opptrix/user-store'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
@@ -39,12 +40,85 @@ const DEFAULTS: AppConfig = {
   default_top_n: Number(process.env.DEFAULT_TOP_N ?? 20),
 }
 
-export const PROVIDER_PRESETS = [
-  { id: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com' },
-  { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com' },
-  { id: 'moonshot', name: 'Moonshot', base_url: 'https://api.moonshot.cn' },
-  { id: 'custom', name: '自定义', base_url: '' },
-] as const
+export type ProviderPresetRegion = 'cn' | 'global' | 'custom'
+
+export interface ProviderPresetSpec {
+  id: string
+  name: string
+  region: ProviderPresetRegion
+  /** OpenAI 兼容地址；catalog 缺失或非 OpenAI 路径时使用 */
+  fallback_base_url: string
+}
+
+export interface ProviderPreset {
+  id: string
+  name: string
+  base_url: string
+  region: ProviderPresetRegion
+}
+
+/** 有序白名单：中国组 → 海外组 → 自定义；展示名以产品文案为准 */
+export const PROVIDER_PRESET_WHITELIST: readonly ProviderPresetSpec[] = [
+  { id: 'deepseek', name: 'DeepSeek', region: 'cn', fallback_base_url: 'https://api.deepseek.com/v1' },
+  { id: 'minimax-cn', name: 'MiniMax', region: 'cn', fallback_base_url: 'https://api.minimaxi.com/v1' },
+  { id: 'moonshotai-cn', name: 'Kimi', region: 'cn', fallback_base_url: 'https://api.moonshot.cn/v1' },
+  { id: 'xiaomi', name: 'MiMo', region: 'cn', fallback_base_url: 'https://api.xiaomimimo.com/v1' },
+  { id: 'siliconflow-cn', name: 'SiliconFlow (China)', region: 'cn', fallback_base_url: 'https://api.siliconflow.cn/v1' },
+  { id: 'alibaba-cn', name: 'Alibaba (China)', region: 'cn', fallback_base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1' },
+  { id: 'zhipuai', name: 'Zhipu AI', region: 'cn', fallback_base_url: 'https://open.bigmodel.cn/api/paas/v4' },
+  { id: 'moonshotai', name: 'Moonshot AI', region: 'cn', fallback_base_url: 'https://api.moonshot.ai/v1' },
+  { id: 'longcat', name: 'Meituan', region: 'cn', fallback_base_url: 'https://api.longcat.chat/openai' },
+  { id: 'openai', name: 'OpenAI', region: 'global', fallback_base_url: 'https://api.openai.com/v1' },
+  { id: 'openrouter', name: 'OpenRouter', region: 'global', fallback_base_url: 'https://openrouter.ai/api/v1' },
+  {
+    id: 'google',
+    name: 'Google',
+    region: 'global',
+    fallback_base_url: 'https://generativelanguage.googleapis.com/v1beta/openai',
+  },
+  { id: 'meta', name: 'Meta', region: 'global', fallback_base_url: 'https://api.meta.ai/v1' },
+  { id: 'ollama', name: '本地 Ollama', region: 'global', fallback_base_url: 'http://127.0.0.1:11434/v1' },
+  { id: 'custom', name: '自定义', region: 'custom', fallback_base_url: '' },
+]
+
+function isOpenAiCompatibleApi(api: string): boolean {
+  const lower = api.toLowerCase()
+  // models.dev 上 MiniMax 等可能给出 anthropic 路径，本产品仅接 OpenAI 兼容
+  return !lower.includes('/anthropic')
+}
+
+function normalizeBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '')
+}
+
+/** 用 models.dev 缓存填充 api；miss / 非 OpenAI 兼容时用静态 fallback */
+export async function resolveProviderPresets(): Promise<ProviderPreset[]> {
+  const catalog = await getModelsDevCatalog()
+  return PROVIDER_PRESET_WHITELIST.map((spec) => {
+    if (spec.id === 'custom') {
+      return { id: spec.id, name: spec.name, base_url: '', region: spec.region }
+    }
+    const meta = resolveModelsDevProviderMeta(spec.id, catalog)
+    const catalogApi = meta?.api?.trim()
+    const base_url = catalogApi && isOpenAiCompatibleApi(catalogApi)
+      ? normalizeBaseUrl(catalogApi)
+      : normalizeBaseUrl(spec.fallback_base_url)
+    return {
+      id: spec.id,
+      name: spec.name,
+      base_url,
+      region: spec.region,
+    }
+  })
+}
+
+/** @deprecated 同步静态列表；请优先 `resolveProviderPresets()` */
+export const PROVIDER_PRESETS: readonly ProviderPreset[] = PROVIDER_PRESET_WHITELIST.map((spec) => ({
+  id: spec.id,
+  name: spec.name,
+  base_url: spec.fallback_base_url,
+  region: spec.region,
+}))
 
 function migrateLegacy(file: Partial<AppConfig> & { llm?: LegacyLlmConfig }): StoredProvider[] {
   if (file.providers?.length) return file.providers

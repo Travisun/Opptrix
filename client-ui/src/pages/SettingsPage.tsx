@@ -197,12 +197,31 @@ const useStyles = makeStyles({
   dialogSurface: {
     maxWidth: '520px',
     width: 'calc(100vw - 40px)',
+    maxHeight: 'calc(100dvh - 32px)',
+    display: 'flex',
+    flexDirection: 'column',
+    overflow: 'hidden',
+  },
+  dialogBody: {
+    display: 'flex',
+    flexDirection: 'column',
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
   },
   dialogTitle: {
     fontSize: 'var(--opptrix-font-2xl)',
     fontWeight: 650,
     letterSpacing: '-0.02em',
     color: opptrixCssVars.textPrimary,
+    flexShrink: 0,
+  },
+  dialogContent: {
+    flex: 1,
+    minHeight: 0,
+    overflow: 'hidden',
+    display: 'flex',
+    flexDirection: 'column',
   },
   themePicker: {
     display: 'inline-flex',
@@ -475,7 +494,7 @@ function SettingsPageView({
       const health = await getHealth()
       toast.showSuccess(health.llm_configured
         ? `连接正常 · ${health.available_models ?? 0} 个可用模型`
-        : '后端已连接，但尚未配置 LLM 提供商')
+        : '后端已连接，但尚未配置大模型提供商')
     } catch (e) {
       toast.showError(e instanceof Error ? e.message : '连接失败')
     }
@@ -489,8 +508,8 @@ function SettingsPageView({
       entries.push({
         section: 'models',
         title: p.name,
-        desc: '模型提供商',
-        keywords: [p.base_url, ...p.models],
+        desc: '提供商',
+        keywords: [p.base_url, ...p.models, '大模型'],
       })
     }
     entries.push(...newsSearchEntries)
@@ -576,7 +595,7 @@ function SettingsPageView({
               <SettingsGroup>
                 <SettingsRow
                   title="后端连接"
-                  desc="检查 API 服务与 LLM 提供商配置是否正常"
+                  desc="检查服务连接与大模型配置是否正常"
                   control={(
                     <OpptrixButton variant="secondary" onClick={handleTest}>
                       测试
@@ -597,7 +616,7 @@ function SettingsPageView({
               {providers.length === 0 ? (
                 <SettingsStaticBlock>
                   <Text className={s.aboutMeta} block>
-                    尚未配置任何提供商。添加 OpenAI 兼容接口以启用多模型对话。
+                    还没有配置任何提供商。添加后即可开始多模型对话。
                   </Text>
                 </SettingsStaticBlock>
               ) : (
@@ -629,10 +648,12 @@ function SettingsPageView({
                 ))
               )}
               <SettingsActionRow
-                title="添加模型提供商"
-                desc="配置 Base URL 与 API Key"
+                title="添加提供商"
+                desc="选择预置服务或自定义，填写密钥即可使用"
                 icon={<ChevronRightRegular fontSize={16} color={opptrixCssVars.textTertiary} />}
                 onClick={() => openProviderWizard()}
+                dividerAbove
+                last
               />
             </SettingsGroup>
           </div>
@@ -740,12 +761,16 @@ function SettingsPageView({
       </div>
 
       <Dialog open={wizardOpen} onOpenChange={(_, data) => { if (!data.open) closeProviderWizard() }}>
-        <DialogSurface className={mergeClasses(s.dialogSurface, 'opptrix-dialog-surface')}>
-          <DialogBody>
+        <DialogSurface className={mergeClasses(
+          s.dialogSurface,
+          'opptrix-dialog-surface',
+          'opptrix-provider-wizard-dialog',
+        )}>
+          <DialogBody className={s.dialogBody}>
             <DialogTitle className={s.dialogTitle}>
-              {editingProvider ? '编辑模型提供商' : '添加模型提供商'}
+              {editingProvider ? '编辑提供商' : '添加提供商'}
             </DialogTitle>
-            <DialogContent>
+            <DialogContent className={s.dialogContent}>
               <ProviderWizard
                 key={editingProvider?.id ?? 'new'}
                 provider={editingProvider}

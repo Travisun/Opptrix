@@ -562,6 +562,7 @@ export function SettingsActionRow({
   onClick,
   icon,
   last = false,
+  dividerAbove = false,
   dividerFullWidth = false,
 }: {
   title: string
@@ -569,11 +570,14 @@ export function SettingsActionRow({
   onClick: () => void
   icon?: ReactNode
   last?: boolean
+  /** 分割线画在行上方（用于组内末行操作入口） */
+  dividerAbove?: boolean
   dividerFullWidth?: boolean
 }) {
   const s = useStyles()
   return (
     <>
+      {dividerAbove && <SettingsDivider fullWidth={dividerFullWidth} />}
       <OpptrixButton
         variant="ghost"
         block
