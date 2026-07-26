@@ -1834,6 +1834,18 @@ export const news = {
   getMultimodalStatus: () =>
     newsJsonFetch<import('../types/schemas').MultimodalStatusResponse>('/news/multimodal/status'),
 
+  ensureSenseVoiceModel: () =>
+    newsJsonFetch<{
+      ok: boolean
+      modelName: string
+      ready: boolean
+      modelsDir: string
+      source?: 'bundled' | 'user' | 'missing'
+    }>('/news/multimodal/sensevoice/ensure', {
+      method: 'POST',
+    }),
+
+  /** @deprecated 兼容旧调用；服务端已代理到 SenseVoice */
   ensureWhisperModel: () =>
     newsJsonFetch<{ ok: boolean; modelName: string }>('/news/multimodal/whisper/ensure', {
       method: 'POST',

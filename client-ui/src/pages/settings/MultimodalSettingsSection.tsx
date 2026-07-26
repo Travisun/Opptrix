@@ -37,7 +37,7 @@ const DEFAULT_ENRICHMENT: NewsEnrichmentSettings = {
   extract_video: true,
   service_mode: 'remote',
   offline_vision_model: '__auto__',
-  offline_whisper_model: 'tiny',
+  offline_whisper_model: 'q8',
   remote_provider_id: null,
   remote_model: null,
 }
@@ -195,7 +195,7 @@ export default function MultimodalSettingsSection() {
   })
   const [providers, setProviders] = useState<PublicProvider[]>([])
   const [mmStatus, setMmStatus] = useState<MultimodalStatusResponse | null>(null)
-  const [whisperEnsuring, setWhisperEnsuring] = useState(false)
+  const [speechEnsuring, setSpeechEnsuring] = useState(false)
   const [saveState, setSaveState] = useState<SaveState>('idle')
   const [viewMode, setViewMode] = useState<ViewMode>('enrichment')
   const skipSettingsSave = useRef(true)
@@ -271,20 +271,20 @@ export default function MultimodalSettingsSection() {
   const speechExtractionEnabled = settings.enrichment.enabled
     && (settings.enrichment.extract_audio || settings.enrichment.extract_video)
 
-  const handleEnsureWhisper = async () => {
+  const handleEnsureSpeech = async () => {
     if (!speechExtractionEnabled) {
       toast.showError('请先开启媒体提取并勾选音视频')
       return
     }
-    setWhisperEnsuring(true)
+    setSpeechEnsuring(true)
     try {
-      await news.ensureWhisperModel()
-      toast.showSuccess('语音模型已下载完成')
+      await news.ensureSenseVoiceModel()
+      toast.showSuccess('语音识别模型已就绪')
       await refreshStatus()
     } catch (e) {
-      toast.showError(e instanceof Error ? e.message : '语音模型准备失败')
+      toast.showError(e instanceof Error ? e.message : '语音识别模型准备失败')
     } finally {
-      setWhisperEnsuring(false)
+      setSpeechEnsuring(false)
     }
   }
 
@@ -309,8 +309,8 @@ export default function MultimodalSettingsSection() {
     }
     if (settings.enrichment.extract_audio || settings.enrichment.extract_video) {
       parts.push(mmStatus?.canEnrichSpeech
-        ? '音视频：本机 ffmpeg + Whisper 转写'
-        : '音视频：ffmpeg 未就绪，请检查服务端依赖')
+        ? '音视频：本机音视频转写'
+        : '音视频：暂时无法处理，请检查服务端依赖')
     }
     return parts.join(' · ') || '请在下方配置提取能力'
   })()
@@ -620,32 +620,32 @@ export default function MultimodalSettingsSection() {
             </div>
             <div className={s.listRow}>
               <div className={s.listRowMain}>
-                <Text className={s.listRowTitle} block>
-                  Whisper {settings.enrichment.offline_whisper_model}
-                </Text>
+                <Text className={s.listRowTitle} block>本机语音识别</Text>
                 <Text className={s.listRowMeta} block>
-                  {runtime?.whisper.ready
-                    ? '模型已缓存，可直接转写'
-                    : '开启媒体提取后后台将自动检测并下载（约 75 MB），也可点击下方预下载'}
+                  {runtime?.sensevoice.ready
+                    ? runtime.sensevoice.source === 'bundled'
+                      ? '已随应用安装，可直接转写'
+                      : '模型已就绪，可直接转写'
+                    : '开启媒体提取后后台将自动检测；也可点击下方立即准备'}
                 </Text>
               </div>
-              {!runtime?.whisper.ready ? (
+              {!runtime?.sensevoice.ready ? (
                 <OpptrixButton
                   variant="secondary"
                   size="small"
-                  disabled={whisperEnsuring}
-                  onClick={() => { void handleEnsureWhisper() }}
+                  disabled={speechEnsuring}
+                  onClick={() => { void handleEnsureSpeech() }}
                 >
-                  {whisperEnsuring ? '下载中…' : '预下载'}
+                  {speechEnsuring ? '准备中…' : '立即准备'}
                 </OpptrixButton>
               ) : (
                 <span className={mergeClasses(s.statusBadge, s.statusReady)}>已就绪</span>
               )}
             </div>
           </div>
-          {runtime?.whisper.modelsDir && (
+          {runtime?.sensevoice.modelsDir && runtime.sensevoice.source === 'user' && (
             <Text className={s.panelFooter} block>
-              语音模型目录：{runtime.whisper.modelsDir}
+              语音模型目录：{runtime.sensevoice.modelsDir}
             </Text>
           )}
         </div>

@@ -87,7 +87,7 @@ export interface NewsEnrichmentSettings {
   service_mode: MultimodalServiceMode
   /** `__auto__` 或已安装 SmolVLM GGUF 文件名 */
   offline_vision_model: string
-  /** 本地 Whisper 模型名，如 tiny */
+  /** 本地语音识别模型（字段名兼容）；`q8` / `f16` */
   offline_whisper_model: string
   remote_provider_id: string | null
   remote_model: string | null
@@ -161,7 +161,7 @@ export const DEFAULT_ENRICHMENT_SETTINGS: NewsEnrichmentSettings = {
   extract_video: true,
   service_mode: 'remote',
   offline_vision_model: '__auto__',
-  offline_whisper_model: 'tiny',
+  offline_whisper_model: 'q8',
   remote_provider_id: null,
   remote_model: null,
 }

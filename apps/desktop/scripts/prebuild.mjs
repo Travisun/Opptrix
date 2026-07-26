@@ -16,6 +16,7 @@ run('npm', ['run', 'build:packages'])
 run('npm', ['run', 'build', '-w', 'opptrix-client'])
 run('node', ['scripts/prepare-icons.mjs'], DESKTOP_ROOT)
 // Static + updater staging gate (same script CI runs before electron-builder).
+run('node', ['scripts/stage-sensevoice.mjs'], DESKTOP_ROOT)
 process.env.OPPTRIX_AUDIT_STAGE_UPDATER = '1'
 run('node', ['scripts/audit-desktop-pack.mjs'], DESKTOP_ROOT)
 run('node', ['scripts/stage-runtime.mjs'], DESKTOP_ROOT)

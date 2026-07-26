@@ -1,6 +1,13 @@
 import { createRequire } from 'node:module'
-import { isWhisperModelInstalled } from './whisper/whisper-runtime.js'
-import { getWhisperModelsDir } from './paths.js'
+import {
+  getSenseVoiceModelsDir,
+  type SenseVoiceAssetSource,
+} from './paths.js'
+import {
+  getSenseVoiceReadyInfo,
+  isSenseVoiceReady,
+} from './sensevoice/sensevoice-runtime.js'
+import { isSupportedSenseVoiceModel } from './sensevoice/sensevoice-download.js'
 
 const require = createRequire(import.meta.url)
 
@@ -10,16 +17,17 @@ export type MultimodalRuntimeStatus = {
     ready: boolean
     path: string | null
   }
-  whisper: {
+  sensevoice: {
     modelName: string
     ready: boolean
     modelsDir: string
+    source?: SenseVoiceAssetSource
   }
 }
 
 export function getMultimodalRuntimeStatus(
-  _repoRoot?: string,
-  whisperModel = 'tiny',
+  repoRoot?: string,
+  speechModel = 'q8',
 ): MultimodalRuntimeStatus {
   let ffmpegPath: string | null = null
   try {
@@ -28,7 +36,9 @@ export function getMultimodalRuntimeStatus(
     ffmpegPath = process.env.FFMPEG_PATH ?? null
   }
 
-  const whisperReady = isWhisperModelInstalled(whisperModel)
+  const normalizedModel = speechModel.trim().toLowerCase() || 'q8'
+  const modelName = isSupportedSenseVoiceModel(normalizedModel) ? normalizedModel : 'q8'
+  const readyInfo = getSenseVoiceReadyInfo(modelName, repoRoot)
   const ffmpegReady = Boolean(ffmpegPath)
 
   return {
@@ -37,10 +47,11 @@ export function getMultimodalRuntimeStatus(
       ready: ffmpegReady,
       path: ffmpegPath,
     },
-    whisper: {
-      modelName: whisperModel,
-      ready: whisperReady,
-      modelsDir: getWhisperModelsDir(),
+    sensevoice: {
+      modelName,
+      ready: isSenseVoiceReady(modelName, repoRoot),
+      modelsDir: readyInfo.modelsDir || getSenseVoiceModelsDir(),
+      source: readyInfo.source,
     },
   }
 }

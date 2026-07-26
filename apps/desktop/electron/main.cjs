@@ -23,6 +23,11 @@ const {
   registerNotificationIpc,
   requestNotificationPermission,
 } = require('./notifications.cjs')
+const {
+  installMediaPermissionHandlers,
+  registerMediaPermissionIpc,
+} = require('./media-permissions.cjs')
+const { registerSpeechIpc } = require('./speech-whisper.cjs')
 const { attachCloseToTray, createTray, destroyTray, hasTray } = require('./tray.cjs')
 const {
   getTranslationStatus,
@@ -924,6 +929,8 @@ function registerWindowIpc() {
       focusMainWindow()
     },
   })
+  registerMediaPermissionIpc(ipcMain)
+  registerSpeechIpc(ipcMain)
 }
 
 function setupDesktopChrome() {
@@ -948,6 +955,7 @@ if (!gotTheLock) {
 
   app.whenReady().then(async () => {
     configureNotificationIdentity(APP_ID)
+    installMediaPermissionHandlers(session.defaultSession)
     applyAppIcon(app)
     setupDesktopChrome()
     registerWindowIpc()

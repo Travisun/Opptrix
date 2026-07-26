@@ -37,6 +37,7 @@ import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
+import { registerSpeechRoutes } from './speech-routes.js'
 import {
   startNewsFeedScheduler,
   getNewsSettings,
@@ -1453,6 +1454,7 @@ async function bootstrap() {
   await registerMcpServerRoutes(app)
   registerSearchRoutes(app, hub, agent)
   registerSessionAttachmentRoutes(app, agent)
+  await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})

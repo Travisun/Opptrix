@@ -9,6 +9,12 @@ import {
   downloadWhisperModelFile,
   resolveWhisperModelFilename,
 } from './whisper-download.js'
+import { ensureWhisperCliBuilt } from './ensure-whisper-cli.js'
+import { runWhisperCli } from './run-whisper-cli.js'
+import { cleanWhisperTranscript } from './whisper-text.js'
+
+export { cleanWhisperTranscript, COMPOSER_SPEECH_PROMPT } from './whisper-text.js'
+export { runWhisperCli } from './run-whisper-cli.js'
 
 const require = createRequire(import.meta.url)
 
@@ -16,6 +22,21 @@ export type WhisperTranscribeResult = {
   text: string
   segments: WhisperSegment[]
   lang?: string
+}
+
+export type WhisperTranscribeOptions = {
+  /** ISO 639-1 / whisper language code；默认 auto */
+  language?: string
+  /**
+   * whisper.cpp initial prompt。
+   * 用于偏置简体中文、股票代码等；不会作为用户可见正文输出。
+   */
+  prompt?: string
+  /**
+   * true（默认）：走自研 whisper-cli 封装（支持 prompt）。
+   * false：回退 nodejs-whisper（无 prompt）。
+   */
+  useCli?: boolean
 }
 
 async function loadWhisperEntry() {
@@ -50,9 +71,32 @@ export class WhisperRuntime {
     }
   }
 
-  async transcribe(wavPath: string, modelName = 'tiny'): Promise<WhisperTranscribeResult> {
+  async transcribe(
+    wavPath: string,
+    modelName = 'tiny',
+    opts?: WhisperTranscribeOptions,
+  ): Promise<WhisperTranscribeResult> {
     return globalInferenceQueue.enqueue(async () => {
       await this.ensureModel(modelName)
+      const language = opts?.language?.trim() || undefined
+      const prompt = opts?.prompt?.trim() || undefined
+      const useCli = opts?.useCli !== false
+
+      if (useCli) {
+        await ensureWhisperCliBuilt()
+        const text = await runWhisperCli(wavPath, {
+          modelName,
+          language: language || 'auto',
+          prompt,
+        })
+        return {
+          text,
+          segments: text ? [{ text }] : [],
+          lang: language || 'auto',
+        }
+      }
+
+      await ensureWhisperCliBuilt()
       const { nodewhisper } = await loadWhisperEntry()
       const result = await nodewhisper(wavPath, {
         modelName,
@@ -60,19 +104,20 @@ export class WhisperRuntime {
         whisperOptions: {
           outputInText: true,
           wordTimestamps: false,
+          ...(language ? { language } : {}),
         },
       })
 
-      const text = String(
+      const text = cleanWhisperTranscript(String(
         (result as { text?: string })?.text
         ?? (typeof result === 'string' ? result : '')
         ?? '',
-      ).trim()
+      ))
 
       return {
         text,
         segments: text ? [{ text }] : [],
-        lang: undefined,
+        lang: language,
       }
     })
   }

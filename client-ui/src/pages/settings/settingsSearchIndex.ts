@@ -97,7 +97,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', group: '图片理解', title: '视觉模型', desc: '支持 image_url 的模型' },
   { section: 'multimodal', group: '音视频转写', title: '媒体下载', keywords: ['缓存'] },
   { section: 'multimodal', group: '音视频转写', title: 'ffmpeg', desc: '音视频解码' },
-  { section: 'multimodal', group: '音视频转写', title: 'Whisper', desc: '语音转写模型', keywords: ['语音', '转写', 'ASR'] },
+  { section: 'multimodal', group: '音视频转写', title: '本机语音识别', desc: '文章音视频转写就绪状态', keywords: ['语音', '转写', '识别', 'ASR'] },
 
   // 关于
 ]

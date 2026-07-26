@@ -203,6 +203,32 @@ export function insertMentionChip(
   return true
 }
 
+/** 在光标处插入纯文本（语音识别结果等）；无选区时追加到末尾。 */
+export function insertTextAtCaret(root: HTMLElement, text: string): boolean {
+  const value = text.trim()
+  if (!value) return false
+  root.focus()
+  const range = selectionInRoot(root)
+  if (range) {
+    range.deleteContents()
+    const node = document.createTextNode(value)
+    range.insertNode(node)
+    range.setStartAfter(node)
+    range.collapse(true)
+    const sel = window.getSelection()
+    if (sel) {
+      sel.removeAllRanges()
+      sel.addRange(range)
+    }
+    return true
+  }
+  // 无有效选区：追加到末尾
+  const spacer = root.childNodes.length > 0 ? ' ' : ''
+  root.appendChild(document.createTextNode(spacer + value))
+  focusEditorEnd(root)
+  return true
+}
+
 /** 在光标处插入换行（供 Shift+Enter / Ctrl+Enter）。 */
 export function insertLineBreakAtCaret(root: HTMLElement): void {
   const range = selectionInRoot(root)

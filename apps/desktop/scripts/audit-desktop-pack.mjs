@@ -93,6 +93,38 @@ console.log('audit-desktop-pack: start')
     warn(`win.signtoolOptions.publisherName is ${JSON.stringify(winPub)} (expected Opptrix for update trust CN)`)
   } else ok('Windows publisherName = Opptrix')
 
+  const sensevoiceExtra = extra.find((e) => e?.from === 'resources/sensevoice' && e?.to === 'sensevoice')
+  if (!sensevoiceExtra) {
+    fail('extraResources must copy resources/sensevoice → sensevoice')
+  } else {
+    ok('extraResources maps sensevoice GGUF bundle')
+    const filter = sensevoiceExtra.filter ?? []
+    if (!filter.includes('**/*.gguf')) {
+      fail('sensevoice extraResources filter must include **/*.gguf')
+    } else ok('sensevoice extraResources filters *.gguf')
+  }
+
+  for (const gguf of ['sensevoice-small-q8.gguf', 'fsmn-vad.gguf']) {
+    const rel = path.join('resources/sensevoice', gguf)
+    if (!exists(rel)) {
+      fail(`missing staged ${rel} — run node scripts/stage-sensevoice.mjs before packaging`)
+    } else ok(`present ${rel}`)
+  }
+
+  const stageSensevoiceSrc = read('scripts/stage-sensevoice.mjs')
+  if (!stageSensevoiceSrc.includes('sensevoice-small-q8.gguf') || !stageSensevoiceSrc.includes('fsmn-vad.gguf')) {
+    fail('stage-sensevoice.mjs must stage q8 model and VAD')
+  } else ok('stage-sensevoice.mjs stages required GGUF files')
+
+  if (!pkg.scripts?.['build']?.includes('prebuild.mjs')) {
+    warn('desktop build script should run prebuild.mjs (includes stage-sensevoice)')
+  }
+
+  const prebuildSrc = read('scripts/prebuild.mjs')
+  if (!prebuildSrc.includes('stage-sensevoice.mjs')) {
+    fail('prebuild.mjs must run stage-sensevoice.mjs before audit-desktop-pack')
+  } else ok('prebuild runs stage-sensevoice')
+
   if (!pkg.build?.electronVersion) fail('build.electronVersion missing')
   else ok(`electronVersion=${pkg.build.electronVersion}`)
 

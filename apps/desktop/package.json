@@ -96,6 +96,13 @@
           "!**/.cache",
           "!**/.cache/**"
         ]
+      },
+      {
+        "from": "resources/sensevoice",
+        "to": "sensevoice",
+        "filter": [
+          "**/*.gguf"
+        ]
       }
     ],
     "mac": {
@@ -113,6 +120,7 @@
         "CFBundleGetInfoString": "Opptrix — 全球多市场投研数据助手",
         "NSHumanReadableCopyright": "Copyright © 2026 Opptrix contributors",
         "NSUserNotificationUsageDescription": "Opptrix 需要在后台向你发送版本更新、任务完成等本地通知。",
+        "NSMicrophoneUsageDescription": "Opptrix 需要使用麦克风，以便你用语音输入投研问题。",
         "NSHighResolutionCapable": true,
         "ITSAppUsesNonExemptEncryption": false,
         "LSApplicationCategoryType": "public.app-category.finance",
