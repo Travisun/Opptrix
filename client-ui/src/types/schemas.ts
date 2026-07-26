@@ -543,10 +543,11 @@ export interface ArticleEnrichment {
 export interface MultimodalRuntimeStatus {
   platform: string
   ffmpeg: { ready: boolean; path: string | null }
-  whisper: {
+  sensevoice: {
     modelName: string
     ready: boolean
     modelsDir: string
+    source?: 'bundled' | 'user' | 'missing'
   }
 }
 

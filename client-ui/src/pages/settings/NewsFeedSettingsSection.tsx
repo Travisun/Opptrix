@@ -375,7 +375,7 @@ const DEFAULT_ENRICHMENT: NewsSettings['enrichment'] = {
   extract_video: true,
   service_mode: 'remote',
   offline_vision_model: '__auto__',
-  offline_whisper_model: 'tiny',
+  offline_whisper_model: 'q8',
   remote_provider_id: null,
   remote_model: null,
 }

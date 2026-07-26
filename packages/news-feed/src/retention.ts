@@ -21,6 +21,17 @@ export function normalizeTranslationSettings(
   }
 }
 
+const LEGACY_WHISPER_SPEECH_MODELS = new Set([
+  'tiny', 'base', 'small', 'medium', 'large', 'large-v2', 'large-v3',
+])
+
+function normalizeOfflineSpeechModel(raw: string): string {
+  const key = raw.trim().toLowerCase() || 'q8'
+  if (key === 'f16' || key === 'q8') return key
+  if (LEGACY_WHISPER_SPEECH_MODELS.has(key) || key.startsWith('ggml-')) return 'q8'
+  return 'q8'
+}
+
 export function normalizeEnrichmentSettings(
   raw?: Partial<NewsEnrichmentSettings> | null,
 ): NewsEnrichmentSettings {
@@ -30,7 +41,7 @@ export function normalizeEnrichmentSettings(
     processingMode = merged.auto_on_refresh === true ? 'background' : 'on_demand'
   }
   const offlineVision = String(merged.offline_vision_model ?? '__auto__').trim() || '__auto__'
-  const offlineWhisper = String(merged.offline_whisper_model ?? 'tiny').trim() || 'tiny'
+  const offlineWhisper = normalizeOfflineSpeechModel(String(merged.offline_whisper_model ?? 'q8'))
   const remoteModel = merged.remote_model == null
     ? null
     : String(merged.remote_model).trim() || null

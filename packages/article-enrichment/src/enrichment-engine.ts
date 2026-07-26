@@ -6,7 +6,7 @@ import type {
 } from '@opptrix/news-feed'
 import {
   ffmpegRuntime,
-  whisperRuntime,
+  senseVoiceRuntime,
 } from '@opptrix/local-inference'
 import { scanHtmlMedia, type ScannedMedia } from './html-media-scan.js'
 import { fetchMediaToCache } from './media-fetch.js'
@@ -93,38 +93,40 @@ async function processImage(
 
 async function processAudio(
   item: ScannedMedia,
-  whisperModel: string,
+  speechModel: string,
+  repoRoot?: string,
 ): Promise<ArticleDerivedSegment> {
   const localPath = await fetchMediaToCache(item)
-  await whisperRuntime.ensureModel(whisperModel)
+  await senseVoiceRuntime.ensureAssets(speechModel, repoRoot)
   const wavPath = path.join(getMediaCacheDir(), `${item.id.replace(':', '_')}.wav`)
   await ffmpegRuntime.extractAudioWav(localPath, wavPath)
-  const result = await whisperRuntime.transcribe(wavPath, whisperModel)
+  const result = await senseVoiceRuntime.transcribe(wavPath, speechModel, repoRoot)
   return {
     id: item.id,
     kind: 'audio_asr',
     text: labelText('audio_asr', result.text || '（未识别到语音）'),
     anchor: { media_src: item.src, insert: 'after_media' },
-    model: `whisper-${whisperModel}`,
+    model: `sensevoice-${speechModel}`,
     created_at: new Date().toISOString(),
   }
 }
 
 async function processVideo(
   item: ScannedMedia,
-  whisperModel: string,
+  speechModel: string,
+  repoRoot?: string,
 ): Promise<ArticleDerivedSegment> {
   const localPath = await fetchMediaToCache(item)
-  await whisperRuntime.ensureModel(whisperModel)
+  await senseVoiceRuntime.ensureAssets(speechModel, repoRoot)
   const wavPath = path.join(getMediaCacheDir(), `${item.id.replace(':', '_')}.wav`)
   await ffmpegRuntime.extractAudioWav(localPath, wavPath)
-  const result = await whisperRuntime.transcribe(wavPath, whisperModel)
+  const result = await senseVoiceRuntime.transcribe(wavPath, speechModel, repoRoot)
   return {
     id: item.id,
     kind: 'video_asr',
     text: labelText('video_asr', result.text || '（未识别到语音）'),
     anchor: { media_src: item.src, insert: 'after_media' },
-    model: `whisper-${whisperModel}`,
+    model: `sensevoice-${speechModel}`,
     created_at: new Date().toISOString(),
   }
 }
@@ -154,7 +156,8 @@ export async function enrichArticle(
 ): Promise<ArticleEnrichment> {
   const store = getEnrichmentStore()
   const articleId = article.id
-  const whisperModel = options.settings.offline_whisper_model?.trim() || 'tiny'
+  const speechModel = options.settings.offline_whisper_model?.trim() || 'q8'
+  const repoRoot = options.repoRoot
   const started = {
     ...emptyEnrichment(articleId),
     status: 'running' as const,
@@ -192,9 +195,9 @@ export async function enrichArticle(
       if (item.kind === 'image') {
         segments.push(await processImage(item, options.settings, article))
       } else if (item.kind === 'audio') {
-        segments.push(await processAudio(item, whisperModel))
+        segments.push(await processAudio(item, speechModel, repoRoot))
       } else {
-        segments.push(await processVideo(item, whisperModel))
+        segments.push(await processVideo(item, speechModel, repoRoot))
       }
     } catch (e) {
       errors.push({

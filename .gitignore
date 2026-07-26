@@ -56,6 +56,9 @@ apps/server/data/
 apps/server/llms/*.gguf
 llms/*.gguf
 
+# Desktop bundled SenseVoice GGUF (staged at build time)
+apps/desktop/resources/sensevoice/*.gguf
+
 # Logs & cache
 logs/
 data/cache/

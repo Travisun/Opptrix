@@ -17,12 +17,15 @@ export function isOfflineTranslationEnabled(settings: TranslationBootstrapSettin
   return settings.service_mode === 'offline'
 }
 
-export function shouldBootstrapWhisper(settings: EnrichmentBootstrapSettings): boolean {
+export function shouldBootstrapSenseVoice(settings: EnrichmentBootstrapSettings): boolean {
   return Boolean(
     settings.enabled
     && (settings.extract_audio || settings.extract_video),
   )
 }
+
+/** @deprecated 使用 shouldBootstrapSenseVoice */
+export const shouldBootstrapWhisper = shouldBootstrapSenseVoice
 
 /** 离线翻译开启且本地无 HY-MT 时后台下载 */
 export async function maybeBootstrapTranslationModel(

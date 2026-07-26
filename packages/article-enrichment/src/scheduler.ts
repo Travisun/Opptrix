@@ -1,11 +1,10 @@
 import { getArticle, getNewsSettings } from '@opptrix/news-feed'
-import { queueArticleEnrichment, canEnrichWithSettings } from './enrichment-engine.js'
+import { queueArticleEnrichment } from './enrichment-engine.js'
 import { getEnrichmentStore } from './enrichment-store.js'
 import {
-  getMultimodalRuntimeStatus,
-  isWhisperModelInstalled,
-  shouldBootstrapWhisper,
-  whisperRuntime,
+  isSenseVoiceModelInstalled,
+  shouldBootstrapSenseVoice,
+  senseVoiceRuntime,
 } from '@opptrix/local-inference'
 
 let schedulerTimer: ReturnType<typeof setInterval> | null = null
@@ -20,10 +19,10 @@ export function startEnrichmentScheduler(tickMs = 90_000, repoRoot?: string): vo
     try {
       const settings = getNewsSettings()
       const enrichment = settings.enrichment
-      if (shouldBootstrapWhisper(enrichment)) {
-        const whisperModel = enrichment.offline_whisper_model?.trim() || 'tiny'
-        if (!isWhisperModelInstalled(whisperModel)) {
-          void whisperRuntime.ensureModel(whisperModel).catch(() => {})
+      if (shouldBootstrapSenseVoice(enrichment)) {
+        const speechModel = enrichment.offline_whisper_model?.trim() || 'q8'
+        if (!isSenseVoiceModelInstalled(speechModel, repoRoot)) {
+          void senseVoiceRuntime.ensureAssets(speechModel, repoRoot).catch(() => {})
         }
       }
 

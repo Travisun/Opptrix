@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Stage bundled SenseVoice models
+        run: node apps/desktop/scripts/stage-sensevoice.mjs
+
       - name: Audit desktop packaging preflight
         run: OPPTRIX_AUDIT_STAGE_UPDATER=1 node apps/desktop/scripts/audit-desktop-pack.mjs
 

@@ -44,6 +44,14 @@ declare global {
       notificationRequestPermission?: () => Promise<NotificationPermissionState>
       notificationOpenSettings?: () => Promise<boolean>
       showLocalNotification?: (payload: LocalNotificationPayload) => Promise<boolean>
+      mediaGetMicPermission?: () => Promise<'default' | 'granted' | 'denied'>
+      mediaRequestMicPermission?: () => Promise<'default' | 'granted' | 'denied'>
+      mediaOpenMicSettings?: () => Promise<boolean>
+      speechTranscribe?: (payload: {
+        data: ArrayBuffer
+        mime?: string
+      }) => Promise<{ ok: true; text: string; model: string } | { ok: false; error: string }>
+      speechGetStatus?: () => Promise<{ ready: boolean; modelName: string; modelsDir?: string }>
       signalShellReady?: () => void
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void
       shellInstallWindowsSandbox?: () => Promise<{ ok: boolean; cancelled?: boolean; message?: string }>

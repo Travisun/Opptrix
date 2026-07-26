@@ -13,8 +13,8 @@ import {
   isOfflineTranslationEnabled,
   maybeBootstrapTranslationModel,
   resolveTranslationModelPath,
-  shouldBootstrapWhisper,
-  whisperRuntime,
+  shouldBootstrapSenseVoice,
+  senseVoiceRuntime,
 } from '@opptrix/local-inference'
 import { resolveProjectRoot } from '@opptrix/agent'
 
@@ -27,6 +27,18 @@ const jobs = new Map<string, {
 
 function newJobId(articleId: string): string {
   return `${articleId}:${Date.now()}`
+}
+
+async function handleSenseVoiceEnsure(modelName: string, repoRoot: string) {
+  await senseVoiceRuntime.ensureAssets(modelName, repoRoot)
+  const runtime = getMultimodalRuntimeStatus(repoRoot, modelName)
+  return {
+    ok: true as const,
+    modelName,
+    ready: runtime.sensevoice.ready,
+    modelsDir: runtime.sensevoice.modelsDir,
+    source: runtime.sensevoice.source,
+  }
 }
 
 export async function registerEnrichmentRoutes(app: FastifyInstance) {
@@ -68,21 +80,31 @@ export async function registerEnrichmentRoutes(app: FastifyInstance) {
     }
   })
 
-  app.post('/api/news/multimodal/whisper/ensure', async (_req, reply) => {
+  app.post('/api/news/multimodal/sensevoice/ensure', async (_req, reply) => {
     const settings = getNewsSettings()
-    if (!shouldBootstrapWhisper(settings.enrichment)) {
+    if (!shouldBootstrapSenseVoice(settings.enrichment)) {
       return reply.code(400).send({ error: '请先开启媒体提取并勾选音视频转写' })
     }
-    const modelName = settings.enrichment.offline_whisper_model || 'tiny'
+    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
+    const repoRoot = resolveProjectRoot()
     try {
-      await whisperRuntime.ensureModel(modelName)
-      const runtime = getMultimodalRuntimeStatus(resolveProjectRoot(), modelName)
-      return {
-        ok: true,
-        modelName,
-        ready: runtime.whisper.ready,
-        modelsDir: runtime.whisper.modelsDir,
-      }
+      return await handleSenseVoiceEnsure(modelName, repoRoot)
+    } catch (e) {
+      const message = e instanceof Error ? e.message : String(e)
+      return reply.code(400).send({ error: message })
+    }
+  })
+
+  /** @deprecated 兼容旧客户端；代理到 SenseVoice ensure */
+  app.post('/api/news/multimodal/whisper/ensure', async (_req, reply) => {
+    const settings = getNewsSettings()
+    if (!shouldBootstrapSenseVoice(settings.enrichment)) {
+      return reply.code(400).send({ error: '请先开启媒体提取并勾选音视频转写' })
+    }
+    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
+    const repoRoot = resolveProjectRoot()
+    try {
+      return await handleSenseVoiceEnsure(modelName, repoRoot)
     } catch (e) {
       const message = e instanceof Error ? e.message : String(e)
       return reply.code(400).send({ error: message })

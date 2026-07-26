@@ -1,6 +1,6 @@
 import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowUpRegular, AttachRegular, PauseFilled } from '@fluentui/react-icons'
+import { ArrowUpRegular, AttachRegular, MicFilled, MicRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
 import ContextUsageMeter from './ContextUsageMeter'
 import ComposerContextRefTag from './ComposerContextRefTag'
@@ -32,9 +32,11 @@ import {
   getSendText,
   insertLineBreakAtCaret,
   insertMentionChip,
+  insertTextAtCaret,
   setEditorText,
   type InlineChipData,
 } from './composerEditor'
+import { useComposerSpeech } from './useComposerSpeech'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 import ComposerAttachmentStrip from './ComposerAttachmentStrip'
@@ -241,6 +243,14 @@ borderRadius: opptrixTokens.radiusFull,
       to: { opacity: 1 },
     },
   },
+  speechHint: {
+    fontSize: 'var(--opptrix-font-base)',
+    color: opptrixCssVars.textSecondary,
+    padding: `0 0 0 ${opptrixTokens.chatComposerPadding}`,
+  },
+  micRecording: {
+    color: opptrixCssVars.error,
+  },
   disclaimer: {
     position: 'relative',
     zIndex: 1,
@@ -312,6 +322,7 @@ export default function ChatComposer({
   const caretRangeRef = useRef<Range | null>(null)
   // 有无可发送内容（文字或 chip）；驱动发送按钮与 placeholder。
   const [hasContent, setHasContent] = useState(false)
+  const [speechError, setSpeechError] = useState('')
   const {
     pinned,
     uploading,
@@ -454,6 +465,27 @@ export default function ChatComposer({
   const canSend = (hasContent || attachmentIds.length > 0) && !loading && !userPrompt && !uploading
   const composerLocked = loading || Boolean(userPrompt)
 
+  const handleSpeechTranscript = useCallback((text: string) => {
+    const root = editorRef.current
+    if (!root) return
+    insertTextAtCaret(root, text)
+    refreshContentState()
+    setSpeechError('')
+  }, [refreshContentState])
+
+  const {
+    available: speechAvailable,
+    phase: speechPhase,
+    statusHint: speechHint,
+    isBusy: speechBusy,
+    isRecording,
+    toggle: toggleSpeech,
+  } = useComposerSpeech({
+    disabled: composerLocked || uploading,
+    onTranscript: handleSpeechTranscript,
+    onError: (message) => setSpeechError(message),
+  })
+
   const handleInput = useCallback(() => {
     refreshContentState()
     syncMention()
@@ -581,7 +613,13 @@ export default function ChatComposer({
       )}
 
       {error && <div className={s.error} role="alert">{error}</div>}
-      {attachmentToast && !error && (
+      {speechError && !error && (
+        <div className={s.error} role="alert">{speechError}</div>
+      )}
+      {speechHint && !speechError && !error && (
+        <div className={s.speechHint} role="status">{speechHint}</div>
+      )}
+      {attachmentToast && !error && !speechError && (
         <div className={s.error} role="status">{attachmentToast}</div>
       )}
 
@@ -652,6 +690,24 @@ export default function ChatComposer({
           </div>
           <div className={s.toolbar}>
             <div className={s.toolbarLeft}>
+              <ComposerQuickTasks
+                disabled={composerLocked}
+                onApply={handleApplyQuickTask}
+              />
+              {speechAvailable && (
+                <OpptrixButton
+                  variant="ghost"
+                  size="small"
+                  className={isRecording ? s.micRecording : undefined}
+                  icon={isRecording
+                    ? <MicFilled fontSize={16} />
+                    : <MicRegular fontSize={16} />}
+                  disabled={composerLocked || uploading || speechPhase === 'transcribing' || speechPhase === 'requesting'}
+                  aria-label={isRecording ? '停止语音输入' : speechBusy ? '正在识别' : '语音输入'}
+                  aria-pressed={isRecording}
+                  onClick={toggleSpeech}
+                />
+              )}
               <OpptrixButton
                 variant="ghost"
                 size="small"
@@ -659,10 +715,6 @@ export default function ChatComposer({
                 disabled={composerLocked || uploading || !attachmentsAllowed}
                 aria-label="添加附件"
                 onClick={openFilePicker}
-              />
-              <ComposerQuickTasks
-                disabled={composerLocked}
-                onApply={handleApplyQuickTask}
               />
               <ChatWorkspaceGrants
                 sessionId={sessionId}

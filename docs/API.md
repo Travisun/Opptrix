@@ -276,6 +276,17 @@ POST /api/research
 | PUT | `/api/news/subscriptions/:id/group` | `{ group_id }` 移动订阅 |
 | GET | `/api/news/articles/:id` | 单篇文章 |
 | POST | `/api/news/refresh` | 强制刷新全部 enabled 源 |
+| GET | `/api/news/multimodal/status` | 多模态运行时状态（ffmpeg、SenseVoice 就绪、`canEnrich*`） |
+| POST | `/api/news/multimodal/sensevoice/ensure` | 准备本机语音识别模型（内置优先，缺失则下载到用户目录） |
+| POST | `/api/news/multimodal/whisper/ensure` | **已废弃**；代理到 `sensevoice/ensure` |
+| GET | `/api/news/articles/:id/enrichment` | 文章 enrichment 结果 |
+| POST | `/api/news/articles/:id/enrich` | 触发 enrichment；返回 `{ job_id }` |
+| GET | `/api/news/enrichment/jobs/:jobId` | 查询 enrichment 任务进度 |
+
+**新闻 enrichment 音视频**
+
+- 转写引擎：**SenseVoice q8**（设置字段 `offline_whisper_model` 保留兼容；旧值 `tiny`/`base`/… 归一化为 `q8`）。
+- 模型加载：**内置（安装包）→ `~/.opptrix/sensevoice/models` → 按需下载**。
 
 ### 沙盒环境设置
 
@@ -642,6 +653,17 @@ Content-Type: application/json
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
+| GET | `/api/speech/status` | 本机语音识别就绪状态：`{ ready, engine, modelName, modelsDir, language?, promptEnabled? }` |
+| POST | `/api/speech/transcribe` | 语音转写；raw body（`application/octet-stream`）+ `X-Speech-Mime`；响应 `{ text, engine, model, language?, empty? }` |
+
+**Composer 语音转写**
+
+- 默认引擎 **SenseVoice**（`OPPTRIX_SPEECH_ENGINE=sensevoice`）；备选 Whisper（`whisper`）。
+- SenseVoice 默认模型 `q8`（ModelScope `FunAudioLLM/SenseVoiceSmall-GGUF` → `sensevoice-small-q8.gguf`，约 242MB）+ `fsmn-vad.gguf`。
+- SenseVoice 首次转写自动下载：预编译 CLI（约 6MB）+ q8 模型（约 242MB）+ VAD（约 2MB）；可选 `OPPTRIX_SENSEVOICE_MODEL=f16`。
+- Whisper 分支：默认 `tiny`（`~/.opptrix/whisper-models/ggml-tiny.bin`），语言 `zh`；经 whisper-cli `--prompt` 偏置简体与股票代码。
+- 环境变量：`OPPTRIX_SPEECH_ENGINE`、`OPPTRIX_SENSEVOICE_MODEL`、`OPPTRIX_SENSEVOICE_BIN`、`OPPTRIX_MODELSCOPE_BASE`、`OPPTRIX_HF_MIRROR`；Whisper 专用：`OPPTRIX_WHISPER_MODEL`、`OPPTRIX_WHISPER_LANGUAGE`、`OPPTRIX_WHISPER_PROMPT`。
+- 桌面端经 Electron IPC 上传录音；服务端用 ffmpeg 转 16 kHz WAV 后调用 `@opptrix/local-inference`。新闻 enrichment 音视频转写同样使用 SenseVoice q8；桌面安装包内置模型优先加载。
 
 **会话上下文压缩（长对话）**
 

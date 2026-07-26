@@ -23,14 +23,16 @@ import {
   type NewsSettings,
   type NewsTranslationSettings,
 } from '@opptrix/news-feed'
-import { maybeBootstrapTranslationModel, shouldBootstrapWhisper, whisperRuntime } from '@opptrix/local-inference'
+import { maybeBootstrapTranslationModel, shouldBootstrapSenseVoice, senseVoiceRuntime } from '@opptrix/local-inference'
+import { resolveProjectRoot } from '@opptrix/agent'
 import { translateArticleRemote } from './translation-remote.js'
 
 function scheduleOfflineModelBootstrap(settings: NewsSettings): void {
   void maybeBootstrapTranslationModel(settings.translation).catch(() => {})
-  if (shouldBootstrapWhisper(settings.enrichment)) {
-    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'tiny'
-    void whisperRuntime.ensureModel(modelName).catch(() => {})
+  if (shouldBootstrapSenseVoice(settings.enrichment)) {
+    const modelName = settings.enrichment.offline_whisper_model?.trim() || 'q8'
+    const repoRoot = resolveProjectRoot()
+    void senseVoiceRuntime.ensureAssets(modelName, repoRoot).catch(() => {})
   }
 }
 

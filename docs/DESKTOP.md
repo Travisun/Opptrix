@@ -177,6 +177,63 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 单元测试：`tests/chat-notifications.test.mjs`（注意力、离开标记、builder、sanitize、macOS 权限映射）。
 
+## Composer 语音输入（本机 ASR）
+
+聊天输入框工具栏提供麦克风按钮（**仅 Electron**）。流程：系统麦克风授权 → 浏览器 `MediaRecorder` 录音 → 主进程 IPC `speech-transcribe` → 本地 sidecar `POST /api/speech/transcribe` → `ffmpeg` 转 16kHz WAV → `@opptrix/local-inference` 识别 → 文本插入 composer 光标处。
+
+**默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
+
+### 交互
+
+- 点按开始：空闲 → 正在聆听 → **说完静音约 2.8 秒自动结束并识别**；也可再点一次手动结束；`Escape` 取消当前录音。
+- 最长约 60 秒；识别中按钮短暂禁用。
+- Web / 非 Electron：不显示麦克风按钮。
+
+### 权限与打包
+
+| 项 | 说明 |
+|----|------|
+| macOS `NSMicrophoneUsageDescription` | `apps/desktop/package.json` → `build.mac.extendInfo` |
+| Hardened Runtime | `entitlements.mac.plist` / inherit 含 `com.apple.security.device.audio-input` |
+| Chromium media | `session.setPermissionRequestHandler` 仅放行音频 `media` |
+| IPC | `media-get-mic-permission` / `media-request-mic-permission` / `media-open-mic-settings`；`speech-transcribe` / `speech-get-status` |
+
+拒绝授权后可引导打开系统麦克风设置（macOS Privacy_Microphone / Windows `ms-settings:privacy-microphone`）。**不**申请扬声器权限。
+
+### 环境变量（可选）
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `OPPTRIX_SPEECH_ENGINE` | `sensevoice` | Composer 语音引擎：`sensevoice` 或 `whisper` |
+| `OPPTRIX_SENSEVOICE_MODEL` | `q8` | SenseVoice 模型：`q8`（约 242MB）或 `f16`（约 448MB）；须用官方 FunAudioLLM GGUF |
+
+| `OPPTRIX_SENSEVOICE_BIN` | — | 可选，覆盖 SenseVoice CLI 路径 |
+| `OPPTRIX_MODELSCOPE_BASE` | `https://modelscope.cn` | SenseVoice GGUF 主下载源 |
+| `OPPTRIX_HF_MIRROR` | `https://hf-mirror.com` | ModelScope 失败时的 HF 回退镜像 |
+| `OPPTRIX_WHISPER_MODEL` | `tiny` | Whisper 模型名（`OPPTRIX_SPEECH_ENGINE=whisper` 时） |
+| `OPPTRIX_WHISPER_LANGUAGE` | `zh` | Whisper 语言代码 |
+| `OPPTRIX_WHISPER_PROMPT` | 投研简体提示 | whisper.cpp `--prompt`；偏置简体与数字代码。设为空字符串可关闭 |
+
+#### SenseVoice（默认）
+
+- 用户目录：`~/.opptrix/sensevoice/`（`models/` 放 GGUF，`bin/` 放预编译 CLI）。
+- **安装包内置**：`resources/sensevoice/` → 打包后位于 `process.resourcesPath/sensevoice/`，含 `sensevoice-small-q8.gguf`（约 242MB）与 `fsmn-vad.gguf`（约 2MB）。
+- **加载优先级**：内置 → `~/.opptrix/sensevoice/models` → 按需下载到用户目录（不写内置路径）。
+- 构建时 `scripts/stage-sensevoice.mjs` 会优先从本地 `~/.opptrix/sensevoice/models` 拷贝，否则从 ModelScope 下载。
+- 模型源：ModelScope [`FunAudioLLM/SenseVoiceSmall-GGUF`](https://modelscope.cn/models/FunAudioLLM/SenseVoiceSmall-GGUF/files)；默认 `sensevoice-small-q8.gguf`。
+- 首次在无内置包环境（如 Web 自托管）转写时自动下载：预编译运行时（约 6MB）+ q8 模型 + VAD。
+- **不要**使用 cloudlnk 的 `q4_k` / `q8_0`（缺 `embed.weight`，官方 CLI 会失败）。
+- 支持平台：macOS arm64、Linux x64/arm64、Windows x64；其他平台请设 `OPPTRIX_SPEECH_ENGINE=whisper`。
+- 中文 CER 相对 Whisper tiny 通常更好；无需 `--prompt`，输出会自动去掉 `<|...|>` 情感/事件标签。
+
+#### Whisper（备选）
+
+默认提示词会引导「简体中文 + 股票代码用阿拉伯数字（如 600519）」。提示词只影响解码偏置，不会出现在插入文本里。`tiny` 对代码仍可能不稳，可换 `small` 等更大模型。
+
+换更大模型时：将对应 `ggml-*.bin` 放到 `~/.opptrix/whisper-models`，并设置 `OPPTRIX_WHISPER_MODEL`（如 `small`），无需改 UI。
+
+首次 Whisper 转写前会在 `nodejs-whisper` 自带的 whisper.cpp 目录下用 CMake 编译 `whisper-cli`（需本机已装 CMake / 编译工具）；编译产物留在 `node_modules/nodejs-whisper/cpp/whisper.cpp/build/`。
+
 ## 命令隔离（Agent Shell）
 
 智能助手在**本对话工作区**与已授权目录内运行 Python / Node 命令时，使用系统级隔离环境（`shell_run` / `shell_install`）。每段对话有独立的默认读写目录（`agent-workspace/sessions/<会话ID>/`），不会默认与其他对话共享文件。首次运行命令前会请你确认；访问外网或安装依赖时会另行确认。
