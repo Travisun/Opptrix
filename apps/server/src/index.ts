@@ -946,7 +946,8 @@ app.post<{ Body: { title?: string; expertId?: string } }>('/api/sessions', async
 app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   const session = agent.getSession(req.params.id)
   if (!session) return reply.code(404).send({ error: 'session not found' })
-  const contextUsage = await agent.getSessionContextUsage(req.params.id)
+  // 仅读缓存；miss 不阻塞（UI 再异步拉 /context-usage）
+  const contextUsage = agent.getCachedSessionContextUsage(req.params.id)
   return {
     session: {
       id: session.id,

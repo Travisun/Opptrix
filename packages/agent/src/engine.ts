@@ -133,6 +133,8 @@ export class AgentEngine {
   private readonly expertPacksSeeded = new Set<string>()
   readonly userPromptBridge = new UserPromptBridge()
   private readonly workspaceService = getWorkspaceService()
+  /** 会话上下文用量估算缓存（内存；切会话命中则不再 rebuildRoundTools） */
+  private readonly contextUsageCache = new Map<string, SessionContextUsage>()
   /** 附件 GET 与 content parts 本地 URL 前缀 */
   private apiBaseUrl = 'http://127.0.0.1:8711/api'
 
@@ -306,6 +308,7 @@ export class AgentEngine {
       activatePacks: (packIds: string[]) => {
         const { activated, skipped } = this.toolPackSessions.activate(sessionId, packIds)
         this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
+        this.invalidateContextUsage(sessionId)
         return {
           ok: true,
           activated,
@@ -324,6 +327,7 @@ export class AgentEngine {
     this.registry.setProviders(providers, defaultModel)
     this.settings.defaultModel = defaultModel
     this.settings.providers = providers
+    this.contextUsageCache.clear()
   }
 
   listAvailableModels(): AvailableModel[] {
@@ -334,9 +338,29 @@ export class AgentEngine {
     return this.registry.listAvailableAsync()
   }
 
-  async getSessionContextUsage(sessionId: string): Promise<SessionContextUsage | null> {
+  /** 仅读缓存；miss 时返回 null，不触发估算（供 getSession 非阻塞） */
+  getCachedSessionContextUsage(sessionId: string): SessionContextUsage | null {
+    return this.contextUsageCache.get(sessionId) ?? null
+  }
+
+  private invalidateContextUsage(sessionId: string) {
+    this.contextUsageCache.delete(sessionId)
+  }
+
+  async getSessionContextUsage(
+    sessionId: string,
+    opts?: { force?: boolean },
+  ): Promise<SessionContextUsage | null> {
+    if (opts?.force !== true) {
+      const cached = this.contextUsageCache.get(sessionId)
+      if (cached) return cached
+    }
+
     const record = this.sessions.get(sessionId)
-    if (!record) return null
+    if (!record) {
+      this.invalidateContextUsage(sessionId)
+      return null
+    }
 
     const modelRef = record.model?.trim()
       || this.settings.defaultModel
@@ -372,13 +396,15 @@ export class AgentEngine {
     // modelView 已含 system + memory + 近端；tools 为 API 侧单独字段，另加固定开销
     const usedTokens = estimateModelViewTokens(modelView) + toolsTokens + 512
 
-    return {
+    const usage: SessionContextUsage = {
       usedTokens,
       limitTokens,
       remainingTokens: Math.max(0, limitTokens - usedTokens),
       modelRef,
       estimated: true,
     }
+    this.contextUsageCache.set(sessionId, usage)
+    return usage
   }
 
   async setSessionModel(sessionId: string, modelRef: string | null): Promise<{
@@ -389,6 +415,7 @@ export class AgentEngine {
     if (!record) return null
     record.model = modelRef?.trim() || undefined
     this.sessions.save(record)
+    this.invalidateContextUsage(sessionId)
 
     const activeModel = record.model
     const llm = this.registry.createLlm(activeModel)
@@ -406,6 +433,7 @@ export class AgentEngine {
       emit: undefined,
       aggressive: false,
     })
+    // UI 会 refreshContextUsage；此处不 force，避免 setModel 路径额外阻塞
     return { session: record, contextHint: budget.hint }
   }
 
@@ -448,6 +476,7 @@ export class AgentEngine {
       record.messages = result.state.messages
       record.sessionMemory = result.state.sessionMemory ?? null
       this.sessions.save(record)
+      this.invalidateContextUsage(record.id)
       for (const r of result.results) {
         if (!r.changed) continue
         opts.emit?.({
@@ -574,7 +603,9 @@ export class AgentEngine {
     if (!sanitized) {
       throw new Error('技能专长无效，请修改后重试')
     }
-    return this.sessions.updateRolePersona(id, sanitized)
+    const updated = this.sessions.updateRolePersona(id, sanitized)
+    this.invalidateContextUsage(id)
+    return updated
   }
 
   sessionMeta(record: SessionRecord) {
@@ -586,6 +617,7 @@ export class AgentEngine {
     this.toolPackSessions.clear(id)
     this.workspaceService.clearSession(id)
     this.sessions.delete(id)
+    this.invalidateContextUsage(id)
   }
 
   renameSession(id: string, title: string) {
@@ -610,11 +642,15 @@ export class AgentEngine {
   }
 
   clearSessionContextRef(sessionId: string) {
-    return this.sessions.clearContextRef(sessionId)
+    const updated = this.sessions.clearContextRef(sessionId)
+    this.invalidateContextUsage(sessionId)
+    return updated
   }
 
   setSessionContextRef(sessionId: string, contextRef: SessionContextRef | null) {
-    return this.sessions.setContextRef(sessionId, contextRef)
+    const updated = this.sessions.setContextRef(sessionId, contextRef)
+    this.invalidateContextUsage(sessionId)
+    return updated
   }
 
   async ephemeralAsk(
@@ -761,6 +797,7 @@ export class AgentEngine {
       record.title = titleSeed.slice(0, 28) + (titleSeed.length > 28 ? '…' : '')
     }
     this.sessions.save(record)
+    this.invalidateContextUsage(sessionId)
 
     const emit = (event: ChatProgressEvent) => {
       progress?.onProgress?.(event)
@@ -778,7 +815,7 @@ export class AgentEngine {
       partialSteps?: ChatToolStep[]
       cancelled?: boolean
     }) => {
-      const contextUsage = await this.getSessionContextUsage(sessionId)
+      const contextUsage = await this.getSessionContextUsage(sessionId, { force: true })
       emit({
         type: 'done',
         reply: payload.reply,
@@ -1115,6 +1152,7 @@ export class AgentEngine {
       record.usageTotals = mergeTokenUsage(record.usageTotals ?? emptyTokenUsage(), usage)
     }
     this.sessions.save(record)
+    this.invalidateContextUsage(record.id)
   }
 }
 

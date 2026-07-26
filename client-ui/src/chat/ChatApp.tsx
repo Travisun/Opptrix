@@ -436,19 +436,6 @@ export default function ChatApp() {
     return groups
   }, [])
 
-  const loadSession = useCallback(async (id: string) => {
-    pushComposerDraft('')
-    const data = await getSession(id)
-    setActiveId(id)
-    setActiveSessionMeta(data.session)
-    setMessages(data.messages)
-    setContextRef(data.contextRef ?? null)
-    setSessionModelState(data.session.model)
-    setContextUsage(data.contextUsage ?? null)
-    setError('')
-    setChatScrollEpoch(epoch => epoch + 1)
-  }, [pushComposerDraft])
-
   const refreshContextUsage = useCallback(async (sessionId: string) => {
     try {
       const { contextUsage: next } = await getSessionContextUsage(sessionId)
@@ -461,6 +448,23 @@ export default function ChatApp() {
       }
     }
   }, [])
+
+  const loadSession = useCallback(async (id: string) => {
+    pushComposerDraft('')
+    const data = await getSession(id)
+    setActiveId(id)
+    setActiveSessionMeta(data.session)
+    setMessages(data.messages)
+    setContextRef(data.contextRef ?? null)
+    setSessionModelState(data.session.model)
+    setContextUsage(data.contextUsage ?? null)
+    setError('')
+    setChatScrollEpoch(epoch => epoch + 1)
+    // miss 时异步补拉，不阻塞消息切换
+    if (!data.contextUsage) {
+      void refreshContextUsage(id)
+    }
+  }, [pushComposerDraft, refreshContextUsage])
 
   useEffect(() => {
     let cancelled = false
@@ -986,10 +990,11 @@ export default function ChatApp() {
     try {
       await clearSessionContext(activeId)
       setContextRef(null)
+      await refreshContextUsage(activeId)
     } catch (e) {
       setError(e instanceof Error ? e.message : '移除引用失败')
     }
-  }, [activeId])
+  }, [activeId, refreshContextUsage])
 
   const handleQuoteSelection = useCallback(async (selection: MessageSelection) => {
     if (!activeId) return
@@ -1011,10 +1016,11 @@ export default function ChatApp() {
       const data = await setSessionContext(activeId, nextRef)
       setContextRef(data.contextRef ?? nextRef)
       setError('')
+      await refreshContextUsage(activeId)
     } catch (e) {
       setError(e instanceof Error ? e.message : '设置引用失败')
     }
-  }, [activeId, messages])
+  }, [activeId, messages, refreshContextUsage])
 
   const handleFocusStockConsumed = useCallback(() => {
     setFocusStockCode(null)
@@ -1045,10 +1051,11 @@ export default function ChatApp() {
       setContextRef(data.contextRef ?? nextRef)
       pushComposerDraft(payload.prompt)
       setError('')
+      await refreshContextUsage(activeId)
     } catch (e) {
       setError(e instanceof Error ? e.message : '无法开始讨论，请稍后重试')
     }
-  }, [activeId, pushComposerDraft, restoreChatColumn])
+  }, [activeId, pushComposerDraft, refreshContextUsage, restoreChatColumn])
 
   const handleDiscussArticle = useCallback(async (article: FeedArticle) => {
     restoreChatColumn()
@@ -1068,10 +1075,11 @@ export default function ChatApp() {
       setWelcomeEpoch(epoch => epoch + 1)
       closeDrawer()
       navigate('chat')
+      await refreshContextUsage(session.id)
     } catch (e) {
       setError(e instanceof Error ? e.message : '创建对话失败')
     }
-  }, [closeDrawer, navigate, pushComposerDraft, refreshSessions, restoreChatColumn])
+  }, [closeDrawer, navigate, pushComposerDraft, refreshContextUsage, refreshSessions, restoreChatColumn])
 
   const handleEphemeralAsk = useCallback(async (
     message: string,
