@@ -367,8 +367,8 @@ export default function MultimodalSettingsSection() {
           onClick={() => setViewMode('speech')}
         >
           音视频转写
-          <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg.ready && s.statusReady)}>
-            {runtime?.ffmpeg.ready ? 'ffmpeg 就绪' : '待配置'}
+          <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg?.ready && s.statusReady)}>
+            {runtime?.ffmpeg?.ready ? '已就绪' : '待配置'}
           </span>
         </OpptrixButton>
       </div>
@@ -609,27 +609,31 @@ export default function MultimodalSettingsSection() {
             </div>
             <div className={s.listRow}>
               <div className={s.listRowMain}>
-                <Text className={s.listRowTitle} block>ffmpeg（解码）</Text>
+                <Text className={s.listRowTitle} block>媒体解码</Text>
                 <Text className={s.listRowMeta} block>
-                  {runtime?.ffmpeg.ready ? '服务端已内置' : '未找到，请检查安装'}
+                  {runtime?.ffmpeg?.ready ? '已就绪，可处理音视频' : '暂时不可用，请重启应用后再试'}
                 </Text>
               </div>
-              <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg.ready && s.statusReady)}>
-                {runtime?.ffmpeg.ready ? '已就绪' : '不可用'}
+              <span className={mergeClasses(s.statusBadge, runtime?.ffmpeg?.ready && s.statusReady)}>
+                {runtime?.ffmpeg?.ready ? '已就绪' : '不可用'}
               </span>
             </div>
             <div className={s.listRow}>
               <div className={s.listRowMain}>
                 <Text className={s.listRowTitle} block>本机语音识别</Text>
                 <Text className={s.listRowMeta} block>
-                  {runtime?.sensevoice.ready
-                    ? runtime.sensevoice.source === 'bundled'
-                      ? '已随应用安装，可直接转写'
-                      : '模型已就绪，可直接转写'
-                    : '开启媒体提取后后台将自动检测；也可点击下方立即准备'}
+                  {!runtime?.sensevoice
+                    ? '转写能力暂时不可用，请重启应用后再试'
+                    : runtime.sensevoice.ready
+                      ? runtime.sensevoice.source === 'bundled'
+                        ? '已随应用安装，可直接转写'
+                        : '模型已就绪，可直接转写'
+                      : '开启媒体提取后后台将自动检测；也可点击下方立即准备'}
                 </Text>
               </div>
-              {!runtime?.sensevoice.ready ? (
+              {!runtime?.sensevoice ? (
+                <span className={mergeClasses(s.statusBadge, s.statusWarn)}>暂不可用</span>
+              ) : !runtime.sensevoice.ready ? (
                 <OpptrixButton
                   variant="secondary"
                   size="small"
@@ -643,7 +647,7 @@ export default function MultimodalSettingsSection() {
               )}
             </div>
           </div>
-          {runtime?.sensevoice.modelsDir && runtime.sensevoice.source === 'user' && (
+          {runtime?.sensevoice?.modelsDir && runtime?.sensevoice?.source === 'user' && (
             <Text className={s.panelFooter} block>
               语音模型目录：{runtime.sensevoice.modelsDir}
             </Text>
