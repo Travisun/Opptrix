@@ -270,33 +270,17 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 ### Window blur + sidebar
 
+路线 1（系统窗形）：隐藏标题栏，**保留系统圆角与阴影**；**不开**整窗 `transparent: true`，也**不用** CSS 大圆角裁切外轮廓。侧栏毛玻璃仍靠平台材质。
+
 | 平台 | 窗口层 | 固定左侧栏 |
 |------|--------|------------|
-| macOS | `frame: false` + `transparent` + `vibrancy: 'sidebar'` | CSS 透明，露系统毛玻璃；缩放时主进程临时实色缓解漏底 |
-| Windows | `frame: false` + `transparent` + `backgroundMaterial: 'acrylic'` | 同上 |
-| Linux | `frame: false` + `transparent` | 保留 CSS `.opptrix-glass-sidebar` 毛玻璃（无原生 acrylic） |
+| macOS | `titleBarStyle: 'hiddenInset'` + `vibrancy: 'sidebar'`（**不开** `transparent`） | CSS 透明，露系统毛玻璃；缩放不会漏裸桌面 |
+| Windows | `frame: false` + `backgroundMaterial: 'acrylic'`（**不开** `transparent`） | 同上；Win11 系统圆角默认开启 |
+| Linux | `frame: false` + 实色窗口底 | 保留 CSS `.opptrix-glass-sidebar` 毛玻璃（无原生 acrylic） |
+
+启动时窗口底先实色 splash（`SPLASH_CANVAS`）；shell ready 后 mac/win 将 `backgroundColor` 设为 `#00000000`，仅让网页透明区透出 vibrancy/acrylic（窗口本身仍非 transparent）。最大化/全屏时系统窗形自动直角，无需 CSS squared 逻辑。
 
 窄窗浮层侧栏仍盖在实色主内容上，继续用 CSS 毛玻璃。文档标记类：`html.opptrix-electron-vibrancy`。
-
-### 窗口圆角
-
-三端统一：`frame: false` + `transparent: true` + 渲染侧 CSS 圆角（`--opptrix-window-radius: 10px`）。
-
-| 阶段 | 行为 |
-|------|------|
-| 启动 | 窗口底先实色 `SPLASH_CANVAS`（`#F5F5F7`），展示 splash |
-| Shell ready | 主进程 `enableWindowBlurBackground` → 背景 `#00000000`，尽量保留 vibrancy / acrylic |
-| 缩放中 | `will-resize` → 临时实色；`resized` → 再透明（缓解透明窗缩放漏桌面） |
-| 常态 | `html.opptrix-window-css-radius` 对 `#root` / `.opptrix-app-shell` 设 `border-radius` + `overflow: hidden` |
-| 最大化 / 全屏 | 主进程推送 `window-squared-changed`，挂 `html.opptrix-window-squared`，圆角为 0 |
-
-平台差异（仅材质/辅助，不改变圆角策略）：
-
-- **macOS**：保留 `titleBarStyle: 'hiddenInset'`、`trafficLightPosition`、`vibrancy`
-- **Windows 11+**：可保留 `roundedCorners: true` 辅助系统阴影；圆角视觉仍由 CSS 统一
-- **Windows 10 / Linux**：无系统圆角依赖，纯 CSS
-
-IPC：`getIsWindowSquared` / `onWindowSquaredChange`（对齐既有 `window-is-fullscreen` / `window-fullscreen-changed`）。不再按平台分支 native/css 圆角模式。
 
 ### Title bar z-index
 
