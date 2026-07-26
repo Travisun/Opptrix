@@ -8,6 +8,12 @@
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.7-blue)](https://www.typescriptlang.org/)
 [![License](https://img.shields.io/badge/License-Apache%202.0-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="screenshot.jpg" alt="Opptrix 主界面：对话投研、工具执行过程与右侧个股行情面板" width="920" />
+</p>
+
+<p align="center"><sub>主界面：多会话聊天、Agent 工具链路、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
+
 ---
 
 ## ⚠️ 重要风险提示与用户须知
@@ -52,12 +58,6 @@
 ---
 
 > 🤖 **协作者 / Vibe Coding**：请先阅读 **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** — 单文件说明项目用途、目录地图、架构约束与设计规范。
-
-<p align="center">
-  <img src="screenshot.jpg" alt="Opptrix 主界面：对话投研、工具执行过程与右侧个股行情面板" width="920" />
-</p>
-
-<p align="center"><sub>主界面：多会话聊天、Agent 工具链路、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
 
 ---
 
