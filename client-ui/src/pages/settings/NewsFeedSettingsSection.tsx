@@ -15,6 +15,7 @@ import {
   ArrowSyncRegular,
   ChevronDownRegular,
   ChevronRightRegular,
+  CopyRegular,
   DeleteRegular,
   DocumentArrowDownRegular,
   DocumentArrowUpRegular,
@@ -98,15 +99,22 @@ const useStyles = makeStyles({
   },
   listRow: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '10px',
-    padding: '5px 12px',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '4px',
+    padding: '8px 12px',
     minHeight: '34px',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': {
       borderBottom: 'none',
     },
+  },
+  listRowPrimary: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '10px',
+    minWidth: 0,
   },
   listRowMain: {
     flex: 1,
@@ -134,6 +142,14 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+  },
+  listRowSecondary: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'stretch',
+    gap: '4px',
+    minWidth: 0,
+    paddingRight: '2px',
   },
   groupSelect: {
     minWidth: '88px',
@@ -228,11 +244,6 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     whiteSpace: 'nowrap',
   },
-  subMeta: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '2px',
-  },
   subError: {
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.error,
@@ -241,8 +252,10 @@ const useStyles = makeStyles({
   urlToggle: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '3px',
-    padding: 0,
+    gap: '4px',
+    alignSelf: 'flex-start',
+    maxWidth: '100%',
+    padding: '1px 0',
     border: 'none',
     background: 'none',
     fontSize: 'var(--opptrix-font-sm)',
@@ -250,7 +263,7 @@ const useStyles = makeStyles({
     cursor: 'pointer',
     textAlign: 'left',
     lineHeight: 1.45,
-    maxWidth: '100%',
+    borderRadius: opptrixTokens.radiusSm,
     ':hover': {
       color: opptrixCssVars.textSecondary,
     },
@@ -259,11 +272,49 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     textOverflow: 'ellipsis',
     whiteSpace: 'nowrap',
+    minWidth: 0,
+  },
+  urlPanel: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+    width: '100%',
+    boxSizing: 'border-box',
+    padding: '8px 10px',
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: opptrixCssVars.canvasAlt,
+  },
+  urlPanelHeader: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '8px',
+    minWidth: 0,
+  },
+  urlPanelLabel: {
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 600,
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.3,
+  },
+  urlPanelActions: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '2px',
+    flexShrink: 0,
+  },
+  urlPanelAction: {
+    minHeight: '24px',
+    height: '24px',
+    paddingLeft: '8px',
+    paddingRight: '8px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   urlFull: {
     fontSize: 'var(--opptrix-font-sm)',
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
     color: opptrixCssVars.textSecondary,
-    lineHeight: 1.4,
+    lineHeight: 1.45,
     wordBreak: 'break-all',
     userSelect: 'text',
   },
@@ -503,6 +554,15 @@ export default function NewsFeedSettingsSection() {
 
   const toggleSubUrl = (id: string) => {
     setExpandedSubIds(prev => ({ ...prev, [id]: !prev[id] }))
+  }
+
+  const copySubscriptionUrl = async (url: string) => {
+    try {
+      await navigator.clipboard.writeText(url)
+      toast.showSuccess('已复制订阅地址')
+    } catch {
+      toast.showError('无法复制，请手动选择地址')
+    }
   }
 
   const checkDuplicateUrl = (url: string): FeedSubscription | undefined => {
@@ -764,62 +824,92 @@ export default function NewsFeedSettingsSection() {
           </div>
         ) : (
           <div className={mergeClasses(s.listScroll, 'opptrix-scroll', 'opptrix-scroll-hover')}>
-            {subs.map(sub => (
-              <div key={sub.id} className={s.listRow}>
-                <div className={s.listRowMain}>
-                  <Text className={s.listRowTitle} block title={sub.title}>{sub.title}</Text>
-                  <div className={s.subMeta}>
+            {subs.map(sub => {
+              const expanded = !!expandedSubIds[sub.id]
+              return (
+                <div key={sub.id} className={s.listRow}>
+                  <div className={s.listRowPrimary}>
+                    <div className={s.listRowMain}>
+                      <Text className={s.listRowTitle} block title={sub.title}>{sub.title}</Text>
+                    </div>
+                    <div className={s.listRowControls}>
+                      <OpptrixSelect
+                        className={s.groupSelect}
+                        size="small"
+                        selectedOptions={[sub.group_id ?? '']}
+                        onOptionSelect={(_, d) => {
+                          void handleMoveGroup(sub.id, d.optionValue ?? '')
+                        }}
+                      >
+                        <OpptrixOption value="">未分组</OpptrixOption>
+                        {groups.map(g => (
+                          <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
+                        ))}
+                      </OpptrixSelect>
+                      <Switch
+                        checked={sub.enabled}
+                        onChange={(_, d) => { void toggleEnabled(sub, d.checked) }}
+                      />
+                      <OpptrixButton
+                        variant="icon"
+                        icon={<DeleteRegular />}
+                        aria-label="删除"
+                        onClick={() => { void handleDelete(sub.id) }}
+                      />
+                    </div>
+                  </div>
+                  <div className={s.listRowSecondary}>
                     {sub.last_error && (
-                      <Text className={s.subError} block>拉取失败：{sub.last_error}</Text>
+                      <Text className={s.subError} block>暂时无法更新：{sub.last_error}</Text>
                     )}
-                    <OpptrixButton
-                      variant="ghost"
-                      size="small"
-                      className={s.urlToggle}
-                      aria-expanded={!!expandedSubIds[sub.id]}
-                      onClick={() => toggleSubUrl(sub.id)}
-                    >
-                      {expandedSubIds[sub.id]
-                        ? <ChevronDownRegular fontSize={11} />
-                        : <ChevronRightRegular fontSize={11} />}
-                      <span className={s.urlToggleLabel}>
-                        {expandedSubIds[sub.id] ? '收起订阅地址' : formatSubscriptionUrlShort(sub.url)}
-                      </span>
-                    </OpptrixButton>
-                    {expandedSubIds[sub.id] && (
-                      <Text className={s.urlFull} block>
-                        {sub.url}
-                      </Text>
+                    {!expanded ? (
+                      <button
+                        type="button"
+                        className={mergeClasses(s.urlToggle, 'opptrix-focusable')}
+                        aria-expanded={false}
+                        aria-label="查看订阅地址"
+                        onClick={() => toggleSubUrl(sub.id)}
+                      >
+                        <ChevronRightRegular fontSize={11} />
+                        <span className={s.urlToggleLabel}>
+                          {formatSubscriptionUrlShort(sub.url)}
+                        </span>
+                      </button>
+                    ) : (
+                      <div className={s.urlPanel}>
+                        <div className={s.urlPanelHeader}>
+                          <Text className={s.urlPanelLabel} block>订阅地址</Text>
+                          <div className={s.urlPanelActions}>
+                            <OpptrixButton
+                              variant="ghost"
+                              size="small"
+                              className={s.urlPanelAction}
+                              icon={<CopyRegular fontSize={12} />}
+                              onClick={() => { void copySubscriptionUrl(sub.url) }}
+                            >
+                              复制
+                            </OpptrixButton>
+                            <OpptrixButton
+                              variant="ghost"
+                              size="small"
+                              className={s.urlPanelAction}
+                              icon={<ChevronDownRegular fontSize={12} />}
+                              aria-expanded
+                              onClick={() => toggleSubUrl(sub.id)}
+                            >
+                              收起
+                            </OpptrixButton>
+                          </div>
+                        </div>
+                        <Text className={s.urlFull} block>
+                          {sub.url}
+                        </Text>
+                      </div>
                     )}
                   </div>
                 </div>
-                <div className={s.listRowControls}>
-                  <OpptrixSelect
-                    className={s.groupSelect}
-                    size="small"
-                    selectedOptions={[sub.group_id ?? '']}
-                    onOptionSelect={(_, d) => {
-                      void handleMoveGroup(sub.id, d.optionValue ?? '')
-                    }}
-                  >
-                    <OpptrixOption value="">未分组</OpptrixOption>
-                    {groups.map(g => (
-                      <OpptrixOption key={g.id} value={g.id}>{g.title}</OpptrixOption>
-                    ))}
-                  </OpptrixSelect>
-                  <Switch
-                    checked={sub.enabled}
-                    onChange={(_, d) => { void toggleEnabled(sub, d.checked) }}
-                  />
-                  <OpptrixButton
-                    variant="icon"
-                    icon={<DeleteRegular />}
-                    aria-label="删除"
-                    onClick={() => { void handleDelete(sub.id) }}
-                  />
-                </div>
-              </div>
-            ))}
+              )
+            })}
           </div>
         )}
         </div>
@@ -857,23 +947,25 @@ export default function NewsFeedSettingsSection() {
                 const count = subs.filter(sub => sub.group_id === g.id).length
                 return (
                   <div key={g.id} className={s.listRow}>
-                    <div className={s.listRowMain}>
-                      <Text className={s.listRowTitle} block title={g.title}>{g.title}</Text>
-                      <Text className={s.listRowMeta} block>{count} 个订阅源</Text>
-                    </div>
-                    <div className={s.listRowControls}>
-                      <OpptrixButton
-                        variant="icon"
-                        icon={<EditRegular />}
-                        aria-label={`重命名 ${g.title}`}
-                        onClick={() => openGroupDialog(g)}
-                      />
-                      <OpptrixButton
-                        variant="icon"
-                        icon={<DeleteRegular />}
-                        aria-label={`删除 ${g.title}`}
-                        onClick={() => { void handleDeleteGroup(g.id) }}
-                      />
+                    <div className={s.listRowPrimary}>
+                      <div className={s.listRowMain}>
+                        <Text className={s.listRowTitle} block title={g.title}>{g.title}</Text>
+                        <Text className={s.listRowMeta} block>{count} 个订阅源</Text>
+                      </div>
+                      <div className={s.listRowControls}>
+                        <OpptrixButton
+                          variant="icon"
+                          icon={<EditRegular />}
+                          aria-label={`重命名 ${g.title}`}
+                          onClick={() => openGroupDialog(g)}
+                        />
+                        <OpptrixButton
+                          variant="icon"
+                          icon={<DeleteRegular />}
+                          aria-label={`删除 ${g.title}`}
+                          onClick={() => { void handleDeleteGroup(g.id) }}
+                        />
+                      </div>
                     </div>
                   </div>
                 )
