@@ -39,7 +39,7 @@ import {
   readChatSoundPreference,
   writeChatSoundPreference,
 } from '../platform/chatSound'
-import FontScaleSlider from './settings/FontScaleSlider'
+import FontScalePreferencePicker from './settings/FontScalePreferencePicker'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
@@ -582,7 +582,7 @@ function SettingsPageView({
                   title="字体大小"
                   desc="调整全局文字尺寸，切换后立即生效"
                   control={(
-                    <FontScaleSlider
+                    <FontScalePreferencePicker
                       value={fontScale}
                       onChange={setFontScale}
                     />
