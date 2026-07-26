@@ -52,6 +52,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   notificationIsSupported: () => ipcRenderer.invoke('notification-is-supported'),
   notificationGetPermission: () => ipcRenderer.invoke('notification-get-permission'),
   notificationRequestPermission: () => ipcRenderer.invoke('notification-request-permission'),
+  notificationOpenSettings: () => ipcRenderer.invoke('notification-open-settings'),
   showLocalNotification: (payload) => ipcRenderer.invoke('notification-show', payload),
   signalShellReady: () => ipcRenderer.send('shell-ready'),
   shellInstallWindowsSandbox: () => ipcRenderer.invoke('shell-install-windows-sandbox'),

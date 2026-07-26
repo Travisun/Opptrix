@@ -7,7 +7,7 @@ import {
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { getHealth } from '../../api/client'
 import { useAppUpdate } from '../../hooks/useAppUpdate'
-import { isElectron } from '../../platform/detect'
+import { isElectron, type NotificationPermissionState } from '../../platform/detect'
 import { openExternalUrl } from '../../platform/openUrl'
 import { opptrixCssVars } from '../../theme/tokens'
 import {
@@ -134,6 +134,11 @@ const useStyles = makeStyles({
       height: '14px',
     },
   },
+  notifyActions: {
+    display: 'flex',
+    gap: '8px',
+    flexShrink: 0,
+  },
 })
 
 type AboutSettingsSectionProps = {
@@ -145,12 +150,16 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   const { status: updateStatus, checkNow, installUpdate } = useAppUpdate()
   const [versionLabel, setVersionLabel] = useState<string | null>(null)
   const [checkedOnce, setCheckedOnce] = useState(false)
+  const [notifyPermission, setNotifyPermission] = useState<NotificationPermissionState | null>(null)
 
   useEffect(() => {
     if (isElectron()) {
       void window.electronAPI?.clientVersion?.().then(version => {
         setVersionLabel(version ? `v${version}` : null)
       })
+      void window.electronAPI?.notificationGetPermission?.()
+        .then(perm => setNotifyPermission(perm))
+        .catch(() => setNotifyPermission(null))
       return
     }
     void getHealth()
@@ -163,6 +172,16 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
     void checkNow()
   }, [checkNow])
 
+  const handleOpenNotificationSettings = useCallback(() => {
+    void window.electronAPI?.notificationOpenSettings?.()
+  }, [])
+
+  const handleRefreshNotificationPermission = useCallback(() => {
+    void window.electronAPI?.notificationRequestPermission?.()
+      .then(perm => setNotifyPermission(perm))
+      .catch(() => {})
+  }, [])
+
   const versionDesc = versionLabel ?? '读取版本中…'
   const showUpdateBlock = isElectron()
   const checkBusy = isAppUpdateCheckBusy(updateStatus)
@@ -172,6 +191,19 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
     () => formatAboutCopyrightLine(typeof navigator !== 'undefined' ? navigator.language : undefined),
     [],
   )
+
+  const notifyPermissionDesc = (() => {
+    switch (notifyPermission) {
+      case 'granted':
+        return '已开启。对话完成或需要你确认时，会在你离开窗口时提醒你。'
+      case 'denied':
+        return '系统未允许通知。请在系统设置中开启，以免错过对话完成提醒。'
+      case 'default':
+        return '尚未确认。完成对话后若未收到提醒，请到系统设置中允许 Opptrix 发送通知。'
+      default:
+        return '正在读取通知状态…'
+    }
+  })()
 
   return (
     <div className={mergeClasses(s.root, contentFlush && s.rootFlush)}>
@@ -254,6 +286,32 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
           )}
         </SettingsGroup>
       </div>
+
+      {showUpdateBlock && (
+        <div className={s.sectionBlock}>
+          <Text className={s.sectionLabel} block>桌面通知</Text>
+          <SettingsGroup>
+            <SettingsRow
+              title="系统通知"
+              desc={notifyPermissionDesc}
+              control={(
+                <div className={s.notifyActions}>
+                  {notifyPermission === 'denied' || notifyPermission === 'default' ? (
+                    <OpptrixButton variant="secondary" onClick={handleOpenNotificationSettings}>
+                      打开系统设置
+                    </OpptrixButton>
+                  ) : (
+                    <OpptrixButton variant="secondary" onClick={handleRefreshNotificationPermission}>
+                      刷新状态
+                    </OpptrixButton>
+                  )}
+                </div>
+              )}
+              last
+            />
+          </SettingsGroup>
+        </div>
+      )}
 
       <div className={s.sectionBlock}>
         <Text className={s.sectionLabel} block>法律与官网</Text>
