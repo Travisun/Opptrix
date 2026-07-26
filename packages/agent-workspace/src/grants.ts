@@ -2,11 +2,14 @@ import { randomUUID } from 'node:crypto'
 import path from 'node:path'
 import {
   DEFAULT_ROOT_ID,
+  SHARED_ROOT_ID,
   migrateLegacyWorkspaceFiles,
   resolveAgentWorkspaceRoot,
   resolveSessionWorkspaceRoot,
+  resolveSharedWorkspaceRoot,
 } from './paths.js'
 import { ensureDirectory } from './path-gate.js'
+import { ensureSharedWorkspaceLayout } from './shared-workspace.js'
 import { isPathDenied } from './deny.js'
 import { DenyPathError, WorkspaceError } from './errors.js'
 
@@ -48,9 +51,22 @@ export class GrantStore {
   async ensureDefaultRoot(sessionId: string): Promise<WorkspaceGrant> {
     await migrateLegacyWorkspaceFiles()
     await ensureDirectory(resolveAgentWorkspaceRoot())
+    await ensureSharedWorkspaceLayout()
     const sessionRoot = resolveSessionWorkspaceRoot(sessionId)
     await ensureDirectory(sessionRoot)
-    const existing = this.session(sessionId).byRootId.get(DEFAULT_ROOT_ID)
+    const bucket = this.session(sessionId)
+
+    if (!bucket.byRootId.has(SHARED_ROOT_ID)) {
+      bucket.byRootId.set(SHARED_ROOT_ID, {
+        id: randomUUID(),
+        root_id: SHARED_ROOT_ID,
+        abs_path: resolveSharedWorkspaceRoot(),
+        mode: 'rw',
+        label: '公共复用区',
+      })
+    }
+
+    const existing = bucket.byRootId.get(DEFAULT_ROOT_ID)
     if (existing) return existing
     const grant: WorkspaceGrant = {
       id: randomUUID(),
@@ -60,7 +76,7 @@ export class GrantStore {
       label: '本对话工作区',
       is_default: true,
     }
-    this.session(sessionId).byRootId.set(DEFAULT_ROOT_ID, grant)
+    bucket.byRootId.set(DEFAULT_ROOT_ID, grant)
     return grant
   }
 
@@ -92,6 +108,8 @@ export class GrantStore {
     return grants.sort((a, b) => {
       if (a.is_default) return -1
       if (b.is_default) return 1
+      if (a.root_id === SHARED_ROOT_ID) return -1
+      if (b.root_id === SHARED_ROOT_ID) return 1
       return a.root_id.localeCompare(b.root_id)
     })
   }
@@ -101,7 +119,7 @@ export class GrantStore {
     if (!s) return false
     for (const [rootId, grant] of s.byRootId) {
       if (grant.id === grantId) {
-        if (grant.is_default) return false
+        if (grant.is_default || grant.root_id === SHARED_ROOT_ID) return false
         s.byRootId.delete(rootId)
         return true
       }

@@ -341,3 +341,19 @@ export {
   type SupplementPackId,
 } from './package-pack.js'
 export { resetMarketDataRuntime } from './runtime.js'
+export {
+  importDailyKDump,
+  resumeKlineParquetFromCacheIfNeeded,
+  importAdjustmentFactors,
+  fetchDownloadUrl,
+  ensureParquetDownloaded,
+  prepareFuyaoDump,
+  prepareFuyaoDumpForAgent,
+  parquetCachePath,
+  isParquetCacheFresh,
+  type DumpHttpGet,
+  type DumpImportHooks,
+  type DumpImportResult,
+  type FuyaoDumpKind,
+  type FuyaoDumpMode,
+} from './sync/dump-import.js'

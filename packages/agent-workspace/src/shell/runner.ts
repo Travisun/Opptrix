@@ -12,7 +12,8 @@ import {
 import { assertReadable, type WorkspaceGrant } from '../grants.js'
 import type { ConfirmHandler } from '../service.js'
 import { buildSandboxConfigFromGrants } from './config-from-grants.js'
-import { resolveShellArgv } from '../python/resolve-python.js'
+import { resolveShellArgv } from './resolve-shell-argv.js'
+import { usesElectronAsNodeArgv } from '../node/resolve-node.js'
 import { getPythonSettings } from '../python-settings-store.js'
 import {
   getPreferredPipIndexUrlSync,
@@ -114,6 +115,7 @@ function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
   cwdAbs: string,
   grantRootAbs: string,
+  electronRunAsNode: boolean,
 ): NodeJS.ProcessEnv {
   const out: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(base)) {
@@ -134,6 +136,9 @@ function sanitizeChildEnv(
   const pipMirror = getPreferredPipIndexUrlSync(pipUrls)
   if (pipMirror) {
     out.PIP_INDEX_URL = pipMirror
+  }
+  if (electronRunAsNode) {
+    out.ELECTRON_RUN_AS_NODE = '1'
   }
   return out
 }
@@ -172,8 +177,8 @@ async function requireNetworkInstallConfirmation(
   if (choice === 'sticky') sticky.grant(sessionId)
 }
 
-async function assertDiagnosticTargetAllowed(host: string): Promise<string> {
-  return assertEgressHostGrantable(host)
+async function assertDiagnosticTargetAllowed(host: string, sessionId: string): Promise<string> {
+  return assertEgressHostGrantable(host, sessionId)
 }
 
 function appendDiagnosticFallbackHint(
@@ -229,7 +234,7 @@ async function requireDiagnosticMergedConfirmation(
   egress: SessionNetworkEgressStore,
   confirm?: ConfirmHandler,
 ): Promise<EgressRunGrants> {
-  const normalizedTarget = await assertEgressHostGrantable(targetHost)
+  const normalizedTarget = await assertEgressHostGrantable(targetHost, sessionId)
   if (isEgressHostPreAuthorized(sessionId, normalizedTarget, egress)) {
     return { onceHosts: [], runWithDeniedNetwork: false }
   }
@@ -318,7 +323,7 @@ function createSandboxAskCallback(opts: {
     if (opts.signal?.aborted) return false
     let normalized: string
     try {
-      normalized = await assertEgressHostGrantable(host)
+      normalized = await assertEgressHostGrantable(host, opts.sessionId)
     } catch {
       return false
     }
@@ -380,6 +385,7 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
     { ...process.env, ...wrapped.env },
     ctx.cwdAbs,
     ctx.grantRootAbs,
+    usesElectronAsNodeArgv(ctx.normalizedArgv),
   )
   return spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
 }
@@ -426,8 +432,8 @@ export class ShellRunner {
     params: ShellRunParams,
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
+    assertAllowedShellArgv(params.argv)
     const resolvedArgv = await resolveShellArgv(params.argv)
-    assertAllowedShellArgv(resolvedArgv)
 
     const cwdRel = params.cwdRel ?? ''
     const { grant, abs: cwdAbs } = await this.deps.gatePath(
@@ -444,7 +450,7 @@ export class ShellRunner {
     if (diagnostic) {
       const rawHost = parseDiagnosticTargetHost(normalizedArgv)
       if (!rawHost) throw new WorkspaceError('未能从命令中识别探测目标主机')
-      diagnosticTargetHost = await assertDiagnosticTargetAllowed(rawHost)
+      diagnosticTargetHost = await assertDiagnosticTargetAllowed(rawHost, params.sessionId)
     }
 
     const needsInstallNetwork = !diagnostic && (
@@ -508,6 +514,7 @@ export class ShellRunner {
         diagnosticTargetHosts,
         sessionEgress,
         onceEgressHosts,
+        sessionId: params.sessionId,
       })
 
       const runOnceHosts = new Set<string>(

@@ -408,8 +408,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   get_system_info: {
     miningEligible: false,
-    usageGuide: '需要确认运行环境、桌面/服务端模式、时区或排查环境问题时调用。',
-    compliance: '只读；不含密钥。',
+    usageGuide: '运行 shell_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
+    compliance: '只读；返回 node_ready/node_source/sandbox_node_version、npm_ready、python_ready 等摘要；不含密钥与内部绝对路径。',
   },
   get_app_settings: {
     miningEligible: false,
@@ -576,13 +576,13 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   shell_run: {
     packId: 'workspace',
-    usageGuide: '在授权工作区内运行允许的命令（含 python/node/npm/pip/ping）；测网站延迟优先 http_fetch；自定义脚本必须经此工具。',
-    compliance: 'argv 结构化传参；禁止 sudo/管道删根；ping/traceroute 需用户确认网络探测且拒绝私网目标；pip/npm 安装须 network_intent=install。',
+    usageGuide: '在授权工作区内运行允许的命令（argv 用 node/python/npm/pip）；桌面端 node 由应用内嵌运行时注入；测网站延迟优先 http_fetch。',
+    compliance: '先 get_system_info 或 python_env_status 确认就绪；argv 结构化传参；依赖用 shell_install(pip|npm)；禁止 sudo/管道删根。',
   },
   shell_install: {
     packId: 'workspace',
     usageGuide: '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；比手写 pip/npm 更安全。',
-    compliance: 'manager=pip|npm；联网安装需用户确认或本会话 sticky；禁止 -g/--user。',
+    compliance: 'manager=pip|npm；pip 镜像由设置注入；python 未就绪用 ensure_python；联网安装需用户确认。',
   },
   python_env_status: {
     packId: 'workspace',
@@ -593,6 +593,26 @@ export const TOOL_META: Record<string, ToolMeta> = {
     packId: 'workspace',
     usageGuide: '运行 Python 脚本或 pip 安装前，确认环境就绪；未就绪时会启动托管安装或引导去设置页查看进度。',
     compliance: 'ready=false 时返回 recommend_install 与 install 进度；勿假装已安装。',
+  },
+  list_local_data_apis: {
+    packId: 'workspace',
+    usageGuide: '编程或取本地大数据前，先列本地/标准 API 索引；详情再 get_local_data_catalog。',
+    compliance: '只读索引；勿臆造未列出的 API；分类含 instrument_standard / fuyao_dump / workspace_fs 等。',
+  },
+  get_local_data_catalog: {
+    packId: 'workspace',
+    usageGuide: '按 api_id 获取调用方式、参数与示例；system 仅有索引句时必须用本工具补详情。',
+    compliance: 'api_id 来自 list_local_data_apis；include_examples 默认 true。',
+  },
+  prepare_fuyao_dump: {
+    packId: 'workspace',
+    usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL。',
+    compliance: '服务端持 Key；禁止注入沙盒；勿引导 sync/dailyDump；成功用 root_id=shared + relative_path。',
+  },
+  request_session_lan_access: {
+    packId: 'workspace',
+    usageGuide: '沙盒需访问局域网（NAS/内网 API）且全局未开局域网时，先申请本对话授权。',
+    compliance: '内部 ask_user；选项 allow_lan_session|deny；授权不写回全局设置；clearSession 清除。',
   },
 }
 

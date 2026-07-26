@@ -420,7 +420,7 @@ export class ToolRegistry {
       },
       {
         name: 'get_system_info', category: '基础',
-        description: '获取运行环境信息（平台、Node 版本、桌面/服务端模式、时区、内存）',
+        description: '获取运行环境信息（平台、时区、沙盒 node/python/npm 就绪状态、桌面/服务端模式）',
         parameters: S({}),
         handler: async () => getSystemInfo(),
       },

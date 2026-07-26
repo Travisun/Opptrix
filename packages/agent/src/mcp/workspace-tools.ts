@@ -4,12 +4,19 @@ import {
   NetworkInstallConfirmationRequiredError,
   NetworkEgressConfirmationRequiredError,
   ShellRunConfirmationRequiredError,
+  SHARED_ROOT_ID,
+  SESSION_LAN_ASK_OPTIONS,
+  applySessionLanAskChoice,
   getWorkspaceService,
+  sharedDumpsDir,
   type ConfirmHandler,
   type WorkspaceGrant,
 } from '@opptrix/agent-workspace'
+import { prepareFuyaoDumpForAgent, type FuyaoDumpKind, type FuyaoDumpMode } from '@opptrix/market-data-store'
 import { resolveUserDataRoot } from '@opptrix/shared'
 import { TOOL_META } from '../tool-meta.js'
+import { getLocalDataCatalog, listLocalDataApis } from '../local-data-catalog.js'
+import type { UserPromptAnswer, UserPromptOption } from '../user-prompt.js'
 
 type JsonSchema = {
   type: 'object'
@@ -35,6 +42,13 @@ export interface WorkspaceToolBridge {
   sessionId: string
   signal?: AbortSignal
   confirm: ConfirmHandler
+  /** 会话内问答（供 request_session_lan_access 等） */
+  askUser?: (payload: {
+    title?: string
+    prompt: string
+    options: UserPromptOption[]
+    allowMultiple?: boolean
+  }) => Promise<UserPromptAnswer>
 }
 
 let bridge: WorkspaceToolBridge | null = null
@@ -148,13 +162,17 @@ function isUnderUserDataRoot(absPath: string): boolean {
   return target === userData || target.startsWith(`${userData}${path.sep}`)
 }
 
-/** Agent 可见 grant 摘要 — 默认工作区不暴露 ~/.opptrix 绝对路径 */
+  /** Agent 可见 grant 摘要 — 默认工作区不暴露 ~/.opptrix 绝对路径 */
 function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
   const label = grant.label ?? (grant.is_default ? '本对话工作区' : '授权文件夹')
   const base = {
     root_id: grant.root_id,
     label,
-    display_name: grant.is_default ? '本对话工作区（default）' : (grant.label ?? path.basename(grant.abs_path)),
+    display_name: grant.is_default
+      ? '本对话工作区（default）'
+      : grant.root_id === SHARED_ROOT_ID
+        ? '公共复用区（shared）'
+        : (grant.label ?? path.basename(grant.abs_path)),
     mode: grant.mode,
     is_default: Boolean(grant.is_default),
   }
@@ -162,6 +180,13 @@ function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
     return {
       ...base,
       path_hint: '本对话专属读写目录；使用 root_id=default 调用 workspace_* 工具',
+    }
+  }
+  if (grant.root_id === SHARED_ROOT_ID) {
+    return {
+      ...base,
+      path_hint:
+        '跨对话公共区（packages/data/docs）；使用 root_id=shared；会话结束不清理；dumps 经 prepare_fuyao_dump',
     }
   }
   if (isUnderUserDataRoot(grant.abs_path)) {
@@ -178,14 +203,15 @@ function formatGrantForAgent(grant: WorkspaceGrant): Record<string, unknown> {
 }
 
 function summarizeWorkspaceGrants(grants: WorkspaceGrant[]): Record<string, unknown> {
-  const extra = grants.filter(g => !g.is_default)
-  const summary = extra.length === 0
-    ? '当前对话可访问：本对话工作区（default，读写）'
-    : `当前对话可访问：本对话工作区 + ${extra.length} 个额外授权目录`
+  const hasShared = grants.some(g => g.root_id === SHARED_ROOT_ID)
+  const extra = grants.filter(g => !g.is_default && g.root_id !== SHARED_ROOT_ID)
+  const parts = ['本对话工作区（default，读写）']
+  if (hasShared) parts.push('公共复用区（shared，读写）')
+  if (extra.length) parts.push(`${extra.length} 个额外授权目录`)
   return {
-    summary,
+    summary: `当前对话可访问：${parts.join(' + ')}`,
     grants: grants.map(formatGrantForAgent),
-    note: '使用 root_id 调用 workspace_list/read/write 等；需要更多目录请 request_folder_access 或请用户在界面授权',
+    note: '使用 root_id 调用 workspace_list/read/write 等；公共包/dump 用 shared；需要更多目录请 request_folder_access 或请用户在界面授权',
   }
 }
 
@@ -380,6 +406,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
               ? args.max_response_bytes
               : undefined,
             signal: b.signal,
+            sessionId: b.sessionId,
           })
         } catch (err) {
           return toolError(err)
@@ -533,6 +560,161 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         try {
           requireBridge()
           return await ws.ensurePython()
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'list_local_data_apis',
+      category: '工作区',
+      description: '列出本地/标准层数据 API 索引（按分类）；详情用 get_local_data_catalog',
+      parameters: S({
+        category: {
+          type: 'string',
+          description:
+            '可选：instrument_standard | agent_tools | hub_features | shared_packages | fuyao_dump | workspace_fs',
+        },
+      }),
+      handler: async (args) => {
+        try {
+          requireBridge()
+          return listLocalDataApis({
+            category: args.category != null ? String(args.category) : undefined,
+          })
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'get_local_data_catalog',
+      category: '工作区',
+      description: '按 api_id 获取本地数据 API 的调用方式、参数与示例',
+      parameters: S({
+        api_id: { type: 'string', description: '来自 list_local_data_apis 的 api_id' },
+        include_examples: { type: 'boolean', description: '是否含示例，默认 true' },
+      }, ['api_id']),
+      handler: async (args) => {
+        try {
+          requireBridge()
+          return getLocalDataCatalog({
+            api_id: String(args.api_id ?? ''),
+            include_examples: args.include_examples !== false,
+          })
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'prepare_fuyao_dump',
+      category: '工作区',
+      description:
+        '服务端鉴权下载扶摇 Parquet 到公共区 shared/data/dumps，或返回短时效 URL；禁止把密钥注入沙盒，勿引导 sync/dailyDump',
+      parameters: S({
+        dump_kind: {
+          type: 'string',
+          description: 'full | incremental | adjustment_factors',
+        },
+        mode: {
+          type: 'string',
+          description: 'local_path（默认，落盘 shared）| presigned_url',
+        },
+        force_refresh: { type: 'boolean', description: '忽略缓存强制重下' },
+      }, ['dump_kind']),
+      handler: async (args) => {
+        try {
+          requireBridge()
+          const kindRaw = String(args.dump_kind ?? '').trim()
+          const kind: FuyaoDumpKind | null =
+            kindRaw === 'full' || kindRaw === 'incremental' || kindRaw === 'adjustment_factors'
+              ? kindRaw
+              : null
+          if (!kind) {
+            return { error: 'dump_kind 须为 full | incremental | adjustment_factors' }
+          }
+          const modeRaw = String(args.mode ?? 'local_path').trim()
+          const mode: FuyaoDumpMode =
+            modeRaw === 'presigned_url' ? 'presigned_url' : 'local_path'
+          const result = await prepareFuyaoDumpForAgent({
+            dumpKind: kind,
+            mode,
+            forceRefresh: Boolean(args.force_refresh),
+            destDir: sharedDumpsDir(),
+          })
+          if (!result.ok) {
+            return {
+              ok: false,
+              dump_kind: result.dump_kind,
+              error: result.error,
+              sandbox_hint: result.sandbox_hint,
+            }
+          }
+          if (result.url) {
+            return {
+              ok: true,
+              dump_kind: result.dump_kind,
+              mode: 'presigned_url',
+              url: result.url,
+              url_expires_hint: result.url_expires_hint,
+              sandbox_hint: result.sandbox_hint,
+            }
+          }
+          const fileName = path.basename(result.path ?? '')
+          return {
+            ok: true,
+            dump_kind: result.dump_kind,
+            mode: 'local_path',
+            root_id: SHARED_ROOT_ID,
+            relative_path: fileName ? `data/dumps/${fileName}` : 'data/dumps',
+            bytes: result.bytes,
+            from_cache: result.from_cache,
+            sandbox_hint: result.sandbox_hint,
+            note: '用 workspace_list/read 或 shell_run，root_id=shared + relative_path；勿注入 API Key',
+          }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'request_session_lan_access',
+      category: '工作区',
+      description: '本对话申请局域网访问（内部 ask_user）；可覆盖全局关闭局域网',
+      parameters: S({
+        reason: { type: 'string', description: '向用户说明为何需要局域网（可选）' },
+      }),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          if (!b.askUser) {
+            return {
+              needs_ask_user: true,
+              ask_user_args: {
+                title: '局域网访问',
+                prompt: String(args.reason ?? '').trim()
+                  || '本对话需要访问局域网地址（如 NAS、内网 API）。是否允许？仅对本对话生效。',
+                options: SESSION_LAN_ASK_OPTIONS.map(o => ({ id: o.id, label: o.label })),
+              },
+              message: '请调用 ask_user 使用上方选项；选择 allow_lan_session 后本对话可访问局域网。',
+            }
+          }
+          const answer = await b.askUser({
+            title: '局域网访问',
+            prompt: String(args.reason ?? '').trim()
+              || '本对话需要访问局域网地址（如 NAS、内网 API）。是否允许？仅对本对话生效。',
+            options: SESSION_LAN_ASK_OPTIONS.map(o => ({ id: o.id, label: o.label })),
+          })
+          const lan = applySessionLanAskChoice(b.sessionId, answer.selected_ids)
+          return {
+            ok: true,
+            ...answer,
+            lan_granted: lan.granted,
+            message: lan.granted
+              ? '本对话已允许局域网；具体域名访问仍可能需出站确认'
+              : '用户未允许本对话局域网访问',
+          }
         } catch (err) {
           return toolError(err)
         }

@@ -50,12 +50,33 @@ export function basenameOfArgv0(argv: string[]): string {
   return base.toLowerCase()
 }
 
+function isAllowedArgv0(rawArgv0: string): boolean {
+  const trimmed = rawArgv0.trim()
+  if (!trimmed) return false
+  if (path.resolve(trimmed) === path.resolve(process.execPath)) return true
+  const bin = basenameOfArgv0([trimmed])
+  return ALLOWED_BINARIES.has(bin)
+}
+
+function effectiveShellBinary(argv: string[]): string {
+  const raw0 = argv[0]?.trim() ?? ''
+  if (path.resolve(raw0) === path.resolve(process.execPath)) {
+    if (argv.length >= 2) {
+      const cliBase = path.basename(argv[1].replace(/\\/g, '/')).toLowerCase()
+      if (cliBase === 'npm-cli.js') return 'npm'
+      if (cliBase === 'npx-cli.js') return 'npx'
+    }
+    return 'node'
+  }
+  return basenameOfArgv0(argv)
+}
+
 export function assertAllowedShellArgv(argv: string[]): void {
   if (!argv.length || !argv[0]?.trim()) {
     throw new WorkspaceError('命令不能为空')
   }
-  const bin = basenameOfArgv0(argv)
-  if (!ALLOWED_BINARIES.has(bin)) {
+  if (!isAllowedArgv0(argv[0])) {
+    const bin = basenameOfArgv0(argv)
     throw new WorkspaceError(`不允许运行「${bin || argv[0]}」；仅支持 ${ALLOWED_BINARY_LABEL}`)
   }
   const joined = argv.join(' ')
@@ -92,7 +113,7 @@ export function parseDiagnosticTargetHost(argv: string[]): string | null {
 }
 
 export function commandNeedsNetwork(argv: string[]): boolean {
-  const bin = basenameOfArgv0(argv)
+  const bin = effectiveShellBinary(argv)
   if (DIAGNOSTIC_BINARIES.has(bin)) return true
   const rest = argv.slice(1).map(a => a.toLowerCase())
   if (bin === 'pip' || bin === 'pip3') {
@@ -118,7 +139,7 @@ export function assertPackageInstallPolicy(
   cwdAbs: string,
   grantRootAbs: string,
 ): string[] {
-  const bin = basenameOfArgv0(argv)
+  const bin = effectiveShellBinary(argv)
   if (bin !== 'pip' && bin !== 'pip3' && bin !== 'npm' && bin !== 'npx') {
     return argv
   }

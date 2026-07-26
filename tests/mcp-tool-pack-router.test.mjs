@@ -117,6 +117,14 @@ test('unloaded tool hint points to activate_tool_pack', () => {
   assert.match(hint, /instrument_analytics/)
 })
 
+test('unknown tool hint falls back to workspace sandbox', () => {
+  const hint = unloadedToolHint('totally_fake_tool_xyz')
+  assert.match(hint, /list_tool_packs/)
+  assert.match(hint, /workspace/)
+  assert.match(hint, /shell_run|ensure_python|workspace_/)
+  assert.match(hint, /勿虚构/)
+})
+
 test('list_tool_packs payload marks loaded state', () => {
   const payload = listToolPacksPayload(['core', 'meta', 'etf'])
   assert.equal(payload.packs.length, TOOL_PACK_DEFS.length)
@@ -129,8 +137,18 @@ test('list_tool_packs payload marks loaded state', () => {
 test('pack catalog prompt is slim vs legacy routing tables', () => {
   const prompt = buildToolPackCatalogPrompt()
   assert.match(prompt, /activate_tool_pack/)
-  assert.ok(prompt.length < 4000, 'catalog should stay compact')
+  assert.match(prompt, /调用纪律/)
+  assert.match(prompt, /workspace/)
+  assert.match(prompt, /shell_run|沙盒|编程实现/)
+  assert.match(prompt, /禁止仅为「开工」再 activate|勿仪式化|已加载/)
+  assert.ok(prompt.length < 5000, 'catalog should stay compact')
   assert.ok(!prompt.includes('Tier 1'))
+})
+
+test('workspace seed patterns cover programming fallback without research spam', () => {
+  assert.ok(resolveSeedPacks({ message: '写个脚本批量清洗这份 CSV' }).includes('workspace'))
+  assert.ok(resolveSeedPacks({ message: '现成工具不够，编程实现自定义计算' }).includes('workspace'))
+  assert.ok(!resolveSeedPacks({ message: '茅台现价多少' }).includes('workspace'))
 })
 
 test('cold start exposed tools << full registry', () => {

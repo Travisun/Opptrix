@@ -32,7 +32,7 @@ async function detectSystemPython() {
 describe('resolvePythonRuntime / resolveShellArgv', () => {
   it('leaves non-python argv unchanged', async () => {
     const { resolveShellArgv } = await importResolvePython()
-    const argv = ['node', '-v']
+    const argv = ['ping', '-c', '1', '127.0.0.1']
     const out = await resolveShellArgv(argv)
     assert.deepEqual(out, argv)
   })

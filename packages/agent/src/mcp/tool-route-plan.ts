@@ -228,6 +228,47 @@ const INTENT_RULES: IntentRule[] = [
     hint: '运行命令 → shell_run（系统隔离）；先 get_system_info 再按平台组 argv（darwin/linux ping -c + traceroute；win32 ping -n + tracert）；测网站延迟优先 http_fetch',
   },
   {
+    intent: 'local_data_catalog',
+    priority: 94,
+    patterns: [
+      /本地(?:数据|API|能力)(?:目录|清单|有哪些)/,
+      /list_local_data_apis|get_local_data_catalog/i,
+      /有哪些(?:本地|标准层)(?:数据)?(?:\s)?(?:API|能力|接口|目录|清单)/,
+      /公共(?:复用)?包|shared\/packages/i,
+    ],
+    preferredTools: ['list_local_data_apis', 'get_local_data_catalog', 'list_workspace_grants'],
+    avoidTools: ['get_project_info', 'get_system_info'],
+    confidence: 'high',
+    hint: '查本地/标准 API → list_local_data_apis → get_local_data_catalog；公共包扫 shared/packages',
+  },
+  {
+    intent: 'fuyao_dump',
+    priority: 94,
+    patterns: [
+      /扶摇.*(?:dump|数据包|parquet)/i,
+      /(?:全量|增量).*(?:日K|K线).*(?:包|dump|parquet)/i,
+      /prepare_fuyao_dump|adjustment_factors|复权因子.*(?:包|dump)/i,
+      /下载.*(?:parquet|离线(?:行情|K线))/i,
+    ],
+    preferredTools: ['prepare_fuyao_dump', 'list_local_data_apis', 'workspace_list'],
+    avoidTools: ['http_fetch', 'shell_run'],
+    confidence: 'high',
+    hint: '扶摇离线 dump → prepare_fuyao_dump 落盘 shared；禁止 Key 进沙盒，勿 sync/dailyDump',
+  },
+  {
+    intent: 'session_lan',
+    priority: 93,
+    patterns: [
+      /局域网|内网(?:访问|API|地址)|NAS|192\.168\./i,
+      /request_session_lan_access|allow_lan_session/i,
+      /本对话.*(?:允许|授权).*局域网/,
+    ],
+    preferredTools: ['request_session_lan_access', 'ask_user', 'http_fetch'],
+    avoidTools: ['browser_navigate'],
+    confidence: 'high',
+    hint: '需局域网 → request_session_lan_access 或 ask_user（allow_lan_session）；有效 LAN=全局||会话',
+  },
+  {
     intent: 'workspace_files',
     priority: 88,
     patterns: [
@@ -941,13 +982,19 @@ export function buildRoundRoutePlaybook(
 
   if (preferred.length) {
     lines.push(`- 首选调用顺序：${preferred.join(' → ')}`)
+    lines.push('- 首选工具已在本轮 tools 中：直接调用，勿仅为开工再 activate_tool_pack；结果不够再扩业务 pack，或 activate workspace 用沙盒编程补齐')
     if (plan.researchTier === 'L1') {
       lines.push('- L1：证据足够即停，禁止为「看起来专业」继续堆工具')
     } else {
       lines.push('- 若首选结果已足够回答用户，停止继续堆工具；不足再沿顺序下调')
     }
   } else {
-    lines.push('- 当前 tools 列表中尚无意图对应工具：先 list_tool_packs，再 activate_tool_pack 加载后重试')
+    lines.push('- 当前 tools 列表中尚无意图对应工具，按阶梯处理：')
+    lines.push('  1) list_tool_packs 查看是否有匹配的业务 pack')
+    lines.push('  2) 有则 activate_tool_pack 加载对应 pack 后重试')
+    lines.push(
+      '  3) 仍无匹配或激活后仍不够 → activate_tool_pack([\'workspace\'])，用 shell_run / ensure_python / workspace_* 编程完成（可与已有数据工具结合）；勿空转 activate 无关 pack，勿直接声称无法完成',
+    )
   }
 
   if (avoid.length) {
@@ -970,7 +1017,9 @@ export function buildRoundRoutePlaybook(
     lines.push(`  · 事件披露：${loaded.has('list_news_articles') || loaded.has('get_notice_content') ? 'news/notice 可用' : '用户问事件时再 activate news；勿臆造催化'}`)
   }
 
-  lines.push('- 禁止调用未出现在本轮 tools 参数中的工具名；缺能力时 activate_tool_pack')
+  lines.push(
+    '- 禁止调用未出现在本轮 tools 参数中的工具名；缺能力时先 activate 对应业务 pack，标准工具仍不够则 activate workspace 用沙盒编程实现',
+  )
   return lines.join('\n')
 }
 

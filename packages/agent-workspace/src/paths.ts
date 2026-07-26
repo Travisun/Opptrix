@@ -15,10 +15,17 @@ export function resolveAgentPrivilegesRoot(): string {
 }
 
 export const DEFAULT_ROOT_ID = 'default'
+/** 跨会话公共复用区 root_id（自动 grant，clearSession 不删） */
+export const SHARED_ROOT_ID = 'shared'
 
 export const SESSIONS_SUBDIR = 'sessions'
 export const SHARED_SUBDIR = 'shared'
 export const LEGACY_SUBDIR = '_legacy'
+
+/** 公共复用区根：agent-workspace/shared/ */
+export function resolveSharedWorkspaceRoot(): string {
+  return path.join(resolveAgentWorkspaceRoot(), SHARED_SUBDIR)
+}
 
 const SAFE_SESSION_ID = /^[a-zA-Z0-9_-]+$/
 

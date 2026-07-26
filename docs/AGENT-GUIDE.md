@@ -166,23 +166,94 @@ Opptrix/
   - **标的公告（`news` pack）**：`get_instrument_notices` → `get_notice_content`
   - **网页浏览（`browser` pack）**：`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot` / `browser_close`（Playwright 完整 Chromium，headless，无需单独 headless-shell；开发环境 `npm install` 会自动安装 Chromium，可用 `OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1` 跳过；桌面安装包已内置）
   - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
-    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install` / `python_env_status` / `ensure_python`
-    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）
+    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access`
+    - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `shell_run` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
     - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
-    - **根目录布局**：容器根 `{userData}/agent-workspace/`（quota / 清理统计）；每会话默认 `root_id=default` → `agent-workspace/sessions/<sessionId>/`（读写，**会话隔离**）；可选 `shared/`（本轮未挂入 default）；旧版全局根下散落文件幂等迁入 `_legacy/`。额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
+    - **根目录布局**：容器根 `{userData}/agent-workspace/`（quota / 清理统计）；每会话默认 `root_id=default` → `agent-workspace/sessions/<sessionId>/`（读写，**会话隔离**）；**公共复用区** `root_id=shared` → `agent-workspace/shared/`（`packages/` / `data/dumps|exports|cache` / `docs/` + README；会话自动 grant rw；**`clearSession` 不删 shared**）；旧版全局根下散落文件幂等迁入 `_legacy/`。额外目录由用户在界面「授权文件夹」或 REST grant 写入本会话（`ro`/`rw`）
+    - **本地数据目录**：`list_local_data_apis` → `get_local_data_catalog({ api_id })`。分类：`instrument_standard` / `agent_tools` / `hub_features`（如 Hub `search_local_instruments`，`access: hub_feature`）/ `shared_packages` / `fuyao_dump` / `workspace_fs`。system 仅挂索引句 + 编程协议短段。
+    - **编程协议**：查目录 → 扫 `shared/packages` → `shell_install` → 自写回写 README；离线大数据用 `prepare_fuyao_dump`（服务端持 Key 落盘 `shared/data/dumps` 或短时效 URL）；**禁止** Key 进沙盒；**禁止**引导 `market sync` / `dailyDump`。
+    - **会话局域网（P1）**：`SessionLanAccessStore`（内存）；有效 LAN = 全局 `allow_lan_access` **\|\|** 本对话授权。`ask_user` 选 `allow_lan_session` 或 `request_session_lan_access`；`clearSession` 清除。`http_fetch` / egress 读有效 LAN。
     - **安全边界摘要**：
       - 路径闸门：相对路径，禁止 `..` 穿越；Global Deny 优先于 grant（如 `agent-privileges`、用户库 `opptrix.db*`、`providers/`、`sessions/`、`tushare-config.json`、`watchlist.json`、`portfolio.json`、`market-data/` 等）；用户数据根本身不可作为 grant 目标暴露给 Agent
       - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
-      - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
+      - `http_fetch` / `download_file`：仅 `http`/`https`；DNS 解析后禁止 localhost / 私网 / 链路本地 / 云元数据地址（SSRF）；**会话/全局已允许局域网时**可访问私网 host（具体域名仍可能需出站确认）；响应进上下文默认截断约 1.5MB；请求体 ≤32MB
       - `request_folder_access` 仅提示用户去界面授权，不直接弹系统选目录；授权 API 见 [API.md · Workspace grants](./API.md#workspace-grants会话文件夹授权)
-      - **命令隔离（shell_*）**：实现 `packages/agent-workspace/src/shell/`（`ShellRunner` + `@anthropic-ai/sandbox-runtime` OS 级沙箱）。`shell_run` 以结构化 `argv` 传参（`shell: false`），白名单二进制：`python` / `python3` / `node` / `npm` / `npx` / `pip` / `pip3` / `ping` / `traceroute` / `tracert`；禁止 sudo、管道删根等高危模式。`python`/`pip` 在 spawn 前经 `resolveShellArgv` 重写为当前 active 解释器绝对路径（系统优先，除非设置 `prefer_opptrix_python`）。`PIP_INDEX_URL` 取自设置页首个 pip 镜像。调用 `shell_run` 前须 `get_system_info`（或本轮已有 platform）再按平台组 argv（darwin/linux：`ping -c` + `traceroute`；win32：`ping -n` + `tracert`）；禁止 `powershell`/`cmd`/`bash -c` 整串绕过。测网站延迟优先 `http_fetch`；用户明确要求 ICMP 时用 `shell_run` + `ping`。系统提示**不再**写「禁止 Shell」；本轮已加载 `shell_run` 时必须用它完成本地命令。cwd 须在 session grant 内（可读即可）；文件系统以 grants 为第一层闸门，SRT `allowRead`/`allowWrite`/`denyRead`（含用户数据根、homedir、`.ssh` 与 Global Deny，`runtimes/` 在 Deny 但托管 Python 目录在 allowRead）为第二层强制隔离。默认超时 120s；stdout/stderr 截断。意图精排：`python_env` → 首选 `python_env_status`；`workspace_shell` → 首选 `shell_run`；`workspace_network_latency` → 优先 `http_fetch`；`workspace_shell_install` → 首选 `shell_install`
+      - **命令隔离（shell_*）**：实现 `packages/agent-workspace/src/shell/`（`ShellRunner` + `@anthropic-ai/sandbox-runtime` OS 级沙箱）。`shell_run` 以结构化 `argv` 传参（`shell: false`），白名单二进制：`python` / `python3` / `node` / `npm` / `npx` / `pip` / `pip3` / `ping` / `traceroute` / `tracert`；禁止 sudo、管道删根等高危模式。白名单校验在 **argv 重写前**（用户传 `node`，非 `Opptrix`/`Electron` 可执行名）。`python`/`pip`/`node`/`npm`/`npx` 在 spawn 前经 `resolveShellArgv` 重写：Python → active 解释器；桌面端 **Node 注入（方案 A）** → `process.execPath` + `ELECTRON_RUN_AS_NODE=1`；npm/npx → 系统二进制或 `[node, npm-cli.js, …]`（探测顺序：PATH → `OPPTRIX_RUNTIME_STAGE` → `require('npm/bin/npm-cli.js')`）。`get_system_info` 返回 `node_ready` / `node_source` / `sandbox_node_version`、`npm_ready` / `npm_source`、`python_ready` / `python_source` / `sandbox_python_version`、`electron_run_as_node`（不含内部绝对路径）。`allowRead` 追加 Node 运行时目录（execPath 父目录、macOS Frameworks/Resources、`OPPTRIX_RUNTIME_STAGE`、npm CLI 所在 node_modules）。`PIP_INDEX_URL` 取自设置页首个 pip 镜像。调用 `shell_run` 前须 `get_system_info`（或本轮已有 platform）再按平台组 argv（darwin/linux：`ping -c` + `traceroute`；win32：`ping -n` + `tracert`）；禁止 `powershell`/`cmd`/`bash -c` 整串绕过。测网站延迟优先 `http_fetch`；用户明确要求 ICMP 时用 `shell_run` + `ping`。系统提示**不再**写「禁止 Shell」；本轮已加载 `shell_run` 时必须用它完成本地命令；**能力不足**时 activate `workspace` 兜底（见 playbook）。cwd 须在 session grant 内（可读即可）；文件系统以 grants 为第一层闸门，SRT `allowRead`/`allowWrite`/`denyRead`（含用户数据根、homedir、`.ssh` 与 Global Deny，`runtimes/` 在 Deny 但托管 Python 目录在 allowRead）为第二层强制隔离。默认超时 120s；stdout/stderr 截断。意图精排：`local_data_catalog` → `list_local_data_apis`；`fuyao_dump` → `prepare_fuyao_dump`；`session_lan` → `request_session_lan_access`；`python_env` → 首选 `python_env_status`；`workspace_shell` → 首选 `shell_run`；`workspace_network_latency` → 优先 `http_fetch`；`workspace_shell_install` → 首选 `shell_install`
       - **命令运行确认（shell sticky）**：首次 `shell_run` / `shell_install` 在真正 spawn 前弹出确认（展示 argv 摘要）；选项 `allow_once` / `allow_session` / `cancel`。`allow_session` 写入 `ShellRunStickyStore`（**内存**，会话删除时清除）。`shell_platform_status` 无需确认。聊天进度（`chat-progress`）对 shell 工具有中文标签与 exit_code / stdout 截断摘要
       - **包安装与联网 sticky**：`shell_install(manager=pip|npm)` 或 `shell_run` 且 `network_intent=install` / 检测到 `pip|npm install|ci|update` 时在命令确认之后触发联网安装确认（若本会话已 sticky 则跳过）。选项：`once` / `sticky` / `cancel`，存 `NetworkInstallStickyStore`（**内存**）。允许联网时沙箱 `allowedDomains` 为 PyPI / npm / yarn / GitHub 相关域（见 `network-policy.ts`）。包只能装进授权工作区：pip 默认 `--target .opptrix-packages`；npm 禁止 `-g`/`--global`/`--user`/`--system`
-      - **出站授权（SessionNetworkEgressStore + sandboxAskCallback）**：默认 `allowedDomains=[]`（禁 TCP 出站）。**永久免确认白名单**：`OPPTRIX_SHELL_ALLOWED_DOMAINS` **∪** 设置页白名单（`GET/PUT /api/settings/sandbox`，存 `preference/sandbox_settings`；支持 `*.example.com`）。`allow_lan_access=true` 时允许白名单含私网/localhost；否则 PUT 校验与运行时 `getGrantableMergedAllowedDomains*` 均过滤私网/localhost。`ping` / `traceroute` / `tracert` 与命令运行**合并一次**确认（argv 摘要 + 目标主机）；选项 `allow_host_once` / `allow_host_session` / `cancel`。本会话已 grant 的 host 或命中永久白名单免确认。运行中 SRT 拦截出站 connect 时，`sandboxAskCallback`（`createSandboxAskCallback` → `SandboxManager.initialize`）弹出 `confirmation.kind === "network_egress"`（同上选项）；无 confirm handler 时拒绝。`python`/`node`/`npx` 无明确 host 时不弹全网确认；禁网运行，出站被拒时返回 `needs_network_egress`（含建议 host）由 Agent/用户确认该域名后重试。grant 经 SSRF 校验（`assertEgressHostGrantable`，受 `allow_lan_access` 约束）。SRT 不支持 `allowedDomains=*`
+      - **出站授权（SessionNetworkEgressStore + sandboxAskCallback）**：默认 `allowedDomains=[]`（禁 TCP 出站）。**永久免确认白名单**：`OPPTRIX_SHELL_ALLOWED_DOMAINS` **∪** 设置页白名单（`GET/PUT /api/settings/sandbox`，存 `preference/sandbox_settings`；支持 `*.example.com`）。`allow_lan_access=true` **或本对话 SessionLanAccessStore 已授权**时允许白名单含私网/localhost；否则 PUT 校验与运行时 `getGrantableMergedAllowedDomains*` 均过滤私网/localhost。`ping` / `traceroute` / `tracert` 与命令运行**合并一次**确认（argv 摘要 + 目标主机）；选项 `allow_host_once` / `allow_host_session` / `cancel`。本会话已 grant 的 host 或命中永久白名单免确认。运行中 SRT 拦截出站 connect 时，`sandboxAskCallback`（`createSandboxAskCallback` → `SandboxManager.initialize`）弹出 `confirmation.kind === "network_egress"`（同上选项）；无 confirm handler 时拒绝。`python`/`node`/`npx` 无明确 host 时不弹全网确认；禁网运行，出站被拒时返回 `needs_network_egress`（含建议 host）由 Agent/用户确认该域名后重试。grant 经 SSRF 校验（`assertEgressHostGrantable`，受有效 LAN 约束）。SRT 不支持 `allowedDomains=*`
       - **设置页白名单（用户可见）**：**设置 → 沙盒环境** — 「访问白名单」（每行一条，命中后不再询问）与「允许局域网访问」开关；变更经 REST 持久化，sidecar 通过 `getSandboxSettings()` 读取
       - **DNS 策略**：SRT 下系统 `getaddrinfo` / 宿主代理解析不受 fence；沙盒内自打 UDP/53 的 `dig`/`nslookup`/`host` 会被 fence（且不在 `ALLOWED_BINARIES`）。授权对象是连接目标，不是 DNS；解析到私网后 connect 仍拒
       - **平台依赖（`shell_platform_status`）**：返回 `platform` / `supported` / `sandbox_available` / `ready` / `message`，以及可选 `missing_dependencies` / `setup_hint` / `needs_windows_install` / `needs_linux_install` / `can_auto_install` / `needs_elevation` / `userns_restricted`。`ready=false` 时 `shell_run` / `shell_install` 直接失败并返回 `message`。**macOS**：一般无需额外操作；**Linux deb**：依赖随 apt 安装；**Linux AppImage**：尽量使用内置 `sandbox-bins`（deb 仍最稳）；**Ubuntu 24.04+ userns 限制**：首次 `shell_*` 可自动触发一次 **pkexec** 系统授权（`can_auto_install` / `needs_elevation`），无需手敲终端命令；取消授权后可稍后重试；无 polkit/无管理员权限的企业机仍可能失败。**Windows**：首次 `shell_*` 可自动触发一次 UAC，无需用户手敲 `npx windows-install`；取消授权后可稍后重试。不支持的 OS → `supported=false`
+
+#### 工作区编程、本地数据目录与扶摇 Dump
+
+以下能力均属 **`workspace` pack**（须播种或 `activate_tool_pack`）；实现：`packages/agent/src/local-data-catalog.ts`、`packages/agent/src/mcp/workspace-tools.ts`、`packages/market-data/src/sync/dump-import.ts`（`prepareFuyaoDumpForAgent`）、`packages/agent-workspace/src/shared-workspace.ts`。
+
+**渐进加载（本地数据目录）**
+
+| 步骤 | 工具 | 说明 |
+|------|------|------|
+| 1 | `list_local_data_apis({ category? })` | 轻量索引：`api_id` / `category` / `title` / `summary` / `access`；可按分类过滤 |
+| 2 | `get_local_data_catalog({ api_id, include_examples? })` | 按 `api_id` 取调用方式、参数、`how_to_call`、示例（默认含示例） |
+
+- system 提示仅挂**索引句** + 编程协议短段（`buildLocalDataCatalogIndexHint` / `buildLocalProgrammingPlaybook`），**勿臆造**未通过 catalog 加载的 API 细节。
+- 分类：`instrument_standard`（标准 capability / `queryInstrumentData`）/ `agent_tools` / `hub_features`（如 `hub.search_local_instruments`，`access: hub_feature`）/ `shared_packages` / `fuyao_dump` / `workspace_fs`。
+- 常用 `api_id`：`cap.realtime`、`fuyao.dump`、`shared.packages`、`workspace.shared`、`workspace.default`、`hub.search_local_instruments`。
+
+**公共复用区（`root_id=shared`）**
+
+| 路径 | 用途 |
+|------|------|
+| `packages/<name>/` | 可复用脚本/包（须含 README） |
+| `data/dumps/` | 扶摇 Parquet 等离线大数据（经 `prepare_fuyao_dump`） |
+| `data/exports/` | 导出 CSV/JSON 等结果 |
+| `data/cache/` | 可删中间缓存 |
+| `docs/` | 公共约定；含 `package-readme-template.md` |
+
+- 容器：`{userData}/agent-workspace/shared/`；首次访问幂等初始化目录树与根 `README.md`（文案见 `shared-workspace.ts`）。
+- 会话自动 grant `rw`；**`clearSession` 不删 shared**（仅删 `sessions/<sessionId>/`）。
+
+**编程协议（摘要）**
+
+1. `list_local_data_apis` → `get_local_data_catalog({ api_id })` 了解能力
+2. `workspace_list({ root_id: "shared", path: "packages" })` → 读 `packages/<name>/README.md`，能复用则复用
+3. 缺依赖 → `shell_install`（npm/pip），勿盲造轮子
+4. 最后自写；可复用产物写入 `shared/packages/<name>/` + README（目的/入口/入参出参/依赖/示例/勿存密钥）
+5. 离线大数据 → `prepare_fuyao_dump`；在线行情优先标准 Agent 工具，勿平行造数据源
+6. 需局域网 → `request_session_lan_access` 或 `ask_user`（选项见下）
+
+**`prepare_fuyao_dump` — 用法与安全**
+
+- **用途**：服务端持扶摇 Key 鉴权下载 Parquet，**不把 Key 返回给 Agent/沙盒**；Agent 侧取 dump 的**唯一主路径**（见下方废弃说明）。
+- **参数**：
+  - `dump_kind`（必填）：`full` | `incremental` | `adjustment_factors`
+  - `mode`（可选，默认 `local_path`）：`local_path`（落盘 `shared/data/dumps`）| `presigned_url`（返回短时效预签名 URL）
+  - `force_refresh`（可选）：忽略缓存强制重下
+- **成功返回**：
+  - `local_path` 模式：`ok: true`、`root_id: "shared"`、`relative_path`（如 `data/dumps/<file>`）、`bytes`、`from_cache`、`sandbox_hint`
+  - `presigned_url` 模式：`url`、`url_expires_hint`、`sandbox_hint`
+- **沙盒侧**：用 `workspace_read` / `workspace_list` / `shell_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
+- **失败**：返回 `ok: false` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
+
+**已废弃：Agent 侧 `market sync` / `dailyDump` 作为主取 dump 路径**
+
+- `packages/market-data` 的 `sync()` / `dailyDump` 仍供 **UI 与后台**维护本地 SQLite 因子库，**不是** Agent 获取扶摇 Parquet 的入口。
+- Agent / 文档 / 系统提示：**禁止**引导用户或自行在沙盒跑 `market sync`、`dailyDump`、或把 Key 注入环境变量来拉 dump；统一 `prepare_fuyao_dump`。
+
+**会话局域网与全局设置**
+
+| 层级 | 存储 | 作用 |
+|------|------|------|
+| 全局 | 用户 SQLite `preference/sandbox_settings.allow_lan_access`（设置 → 沙盒环境；REST `GET/PUT /api/settings/sandbox`） | 所有对话允许私网/localhost 连接判定 |
+| 本对话 | `SessionLanAccessStore`（**内存**） | 仅当前 session；**可覆盖**全局 `false`；**不写回** preference |
+
+- **有效 LAN** = 全局 `allow_lan_access` **OR** 本会话已授权（`isEffectiveLanAllowed(sessionId)`）。
+- **申请方式**：`request_session_lan_access({ reason? })`（内部 `ask_user`）或 Agent 直接 `ask_user`，选项 `allow_lan_session` | `deny`。
+- **生命周期**：`clearSession` 清除本对话 LAN 授权；全局开关不受单会话授权影响。
+- **与出站关系**：LAN 仅放宽私网/localhost **连接判定**；具体域名仍可能需 `network_egress` 确认（`http_fetch` / `shell_run` ping 等读有效 LAN）。
+
   - **板块 / 指数成分**：`get_sector_list` / `get_sector_constituents`；`get_index_constituents`；`get_etf_profile`
   - **会话时钟**：Engine 每轮将 `getCurrentTime()`（Asia/Shanghai）注入 system【会话时钟】，作为「截至」时效基准；`get_current_time` 仅在用户明确问时刻时调用
   - 调用未加载工具 → fail-closed，返回 `activate_tool_pack` 提示

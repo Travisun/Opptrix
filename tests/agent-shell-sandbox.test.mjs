@@ -53,7 +53,7 @@ test('buildSandboxConfigFromGrantPaths maps rw/ro and network sticky', async () 
     await fs.mkdir(rw, { recursive: true })
     await fs.mkdir(ro, { recursive: true })
 
-    const denied = buildSandboxConfigFromGrantPaths(
+    const denied = await buildSandboxConfigFromGrantPaths(
       [
         { abs_path: rw, mode: 'rw' },
         { abs_path: ro, mode: 'ro' },
@@ -66,7 +66,7 @@ test('buildSandboxConfigFromGrantPaths maps rw/ro and network sticky', async () 
     assert.deepEqual(denied.network.allowedDomains, [])
     assert.ok(denied.filesystem.allowRead.some(p => path.resolve(p) === path.resolve(ro)))
 
-    const allowed = buildSandboxConfigFromGrantPaths(
+    const allowed = await buildSandboxConfigFromGrantPaths(
       [{ abs_path: rw, mode: 'rw' }],
       true,
     )
@@ -110,6 +110,71 @@ test('buildSandboxConfigFromGrants aligns realpaths when ro grant precedes rw', 
     assert.equal(cfg.filesystem.allowWrite.includes(roR), false)
     assert.equal(cfg.filesystem.denyWrite.includes(roR), true)
     assert.equal(cfg.filesystem.denyWrite.includes(rwR), false)
+  })
+})
+
+test('assertAllowedShellArgv allows process.execPath after node rewrite', () => {
+  assert.doesNotThrow(() => assertAllowedShellArgv([process.execPath, '-v']))
+})
+
+test('assertAllowedShellArgv validates original argv before electron rewrite', () => {
+  assert.doesNotThrow(() => assertAllowedShellArgv(['node', '-v']))
+  assert.throws(
+    () => assertAllowedShellArgv(['Opptrix', '-v']),
+    /不允许运行|opptrix/i,
+  )
+})
+
+test('commandNeedsNetwork detects npm-cli.js install argv shape', () => {
+  assert.equal(
+    commandNeedsNetwork([process.execPath, '/tmp/npm-cli.js', 'install', 'lodash']),
+    true,
+  )
+  assert.equal(
+    commandNeedsNetwork([process.execPath, '/tmp/npx-cli.js', 'install', 'lodash']),
+    true,
+  )
+})
+
+test('buildSandboxConfigFromGrants includes node runtime allowRead paths', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const rw = path.join(tmp, 'rw-grant')
+    await fs.mkdir(rw, { recursive: true })
+    const { nodeRuntimeAllowReadPaths } = await import('../packages/agent-workspace/dist/node/resolve-node.js')
+    const nodePaths = await nodeRuntimeAllowReadPaths()
+    const cfg = await buildSandboxConfigFromGrants({
+      grants: [{
+        id: 'rw1',
+        root_id: 'rw1',
+        abs_path: rw,
+        mode: 'rw',
+        label: 'rw',
+        is_default: false,
+      }],
+      allowNetworkInstall: false,
+    })
+    for (const p of nodePaths) {
+      assert.ok(
+        cfg.filesystem.allowRead.some(r => path.resolve(r) === path.resolve(p)),
+        `missing node allowRead path: ${p}`,
+      )
+    }
+  })
+})
+
+test('buildSandboxConfigFromGrantPaths includes node runtime allowRead paths', async () => {
+  await withTmpDataDir(async (tmp) => {
+    const rw = path.join(tmp, 'rw-grant')
+    await fs.mkdir(rw, { recursive: true })
+    const { nodeRuntimeAllowReadPaths } = await import('../packages/agent-workspace/dist/node/resolve-node.js')
+    const nodePaths = await nodeRuntimeAllowReadPaths()
+    const cfg = await buildSandboxConfigFromGrantPaths([{ abs_path: rw, mode: 'rw' }], false)
+    for (const p of nodePaths) {
+      assert.ok(
+        cfg.filesystem.allowRead.some(r => path.resolve(r) === path.resolve(p)),
+        `missing node allowRead path: ${p}`,
+      )
+    }
   })
 })
 
@@ -247,11 +312,11 @@ test('getGrantableConfiguredAllowedDomainsSync filters private hosts', () => {
   else process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS = prev
 })
 
-test('buildSandboxConfigFromGrantPaths with no grants yields empty domains', () => {
+test('buildSandboxConfigFromGrantPaths with no grants yields empty domains', async () => {
   resetConfiguredAllowedDomainsForTests()
   const prev = process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS
   delete process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS
-  const cfg = buildSandboxConfigFromGrantPaths(
+  const cfg = await buildSandboxConfigFromGrantPaths(
     [{ abs_path: '/tmp/ws', mode: 'rw' }],
     false,
   )
@@ -301,8 +366,8 @@ test('buildNeedsNetworkEgressPayload includes suggested host', () => {
   assert.match(payload.message, /api\.example\.com/)
 })
 
-test('buildSandboxConfigFromGrantPaths includes granted host after ping confirm', () => {
-  const cfg = buildSandboxConfigFromGrantPaths(
+test('buildSandboxConfigFromGrantPaths includes granted host after ping confirm', async () => {
+  const cfg = await buildSandboxConfigFromGrantPaths(
     [{ abs_path: '/tmp/ws', mode: 'rw' }],
     false,
     ['baidu.com'],
@@ -312,11 +377,11 @@ test('buildSandboxConfigFromGrantPaths includes granted host after ping confirm'
   assert.deepEqual(cfg.network.deniedDomains, [])
 })
 
-test('buildSandboxConfigFromGrantPaths includes configured allowlist', () => {
+test('buildSandboxConfigFromGrantPaths includes configured allowlist', async () => {
   const prev = process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS
   resetConfiguredAllowedDomainsForTests()
   process.env.OPPTRIX_SHELL_ALLOWED_DOMAINS = 'trusted.example.com'
-  const cfg = buildSandboxConfigFromGrantPaths(
+  const cfg = await buildSandboxConfigFromGrantPaths(
     [{ abs_path: '/tmp/ws', mode: 'rw' }],
     false,
   )
@@ -515,7 +580,7 @@ test('shell_run ping requires single merged confirm then grants host', async () 
     }
     assert.equal(confirmCalls, 1)
     assert.equal(egress.hasHost(sessionId, 'baidu.com'), true)
-    const cfg = buildSandboxConfigFromGrantPaths(
+    const cfg = await buildSandboxConfigFromGrantPaths(
       [{ abs_path: '/tmp/ws', mode: 'rw' }],
       false,
       ['baidu.com'],

@@ -15,6 +15,9 @@ import {
   StickyPolicyStore,
   GrantStore,
   DEFAULT_WORKSPACE_QUOTA_BYTES,
+  SHARED_ROOT_ID,
+  resolveSharedWorkspaceRoot,
+  resetSharedWorkspaceLayoutCacheForTests,
 } from '../packages/agent-workspace/dist/index.js'
 
 async function withTmpDataDir(fn) {
@@ -129,7 +132,7 @@ test('grant store clears on session delete', async () => {
   const sessionId = 'grant-sess'
   await grants.ensureDefaultRoot(sessionId)
   grants.addGrant(sessionId, os.tmpdir(), 'ro', 'tmp')
-  assert.equal(grants.listGrants(sessionId).length, 2)
+  assert.equal(grants.listGrants(sessionId).length, 3)
   grants.clearSession(sessionId)
   assert.equal(grants.listGrants(sessionId).length, 0)
 })
@@ -193,6 +196,26 @@ test('clearSession removes session workspace directory', async () => {
     svc.clearSession(sessionId)
     await new Promise(r => setTimeout(r, 50))
     await assert.rejects(() => fs.access(grant.abs_path))
+  })
+})
+
+test('shared workspace auto-granted and survives clearSession', async () => {
+  await withTmpDataDir(async () => {
+    resetSharedWorkspaceLayoutCacheForTests()
+    const svc = new WorkspaceService()
+    const sessionId = 'shared-sess'
+    await svc.ensureDefaultRoot(sessionId)
+    const grants = await svc.listGrants(sessionId)
+    const shared = grants.find(g => g.root_id === SHARED_ROOT_ID)
+    assert.ok(shared)
+    assert.equal(shared.mode, 'rw')
+    const sharedRoot = resolveSharedWorkspaceRoot()
+    await fs.access(path.join(sharedRoot, 'README.md'))
+    await fs.access(path.join(sharedRoot, 'data', 'dumps'))
+    await fs.writeFile(path.join(sharedRoot, 'data', 'dumps', 'keep.txt'), 'persist')
+    svc.clearSession(sessionId)
+    await new Promise(r => setTimeout(r, 50))
+    assert.equal(await fs.readFile(path.join(sharedRoot, 'data', 'dumps', 'keep.txt'), 'utf8'), 'persist')
   })
 })
 

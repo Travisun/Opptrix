@@ -20,7 +20,7 @@ import {
 } from './ask-policy.js'
 import { resolveAgentWorkspaceRoot, deleteSessionWorkspaceDirectory } from './paths.js'
 import { QuotaTracker, DEFAULT_WORKSPACE_QUOTA_BYTES } from './quota.js'
-import { httpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
+import { httpFetch as doHttpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 import { streamDownloadToFile } from './download.js'
 import { getPythonPlatformStatus } from './python/python-platform-status.js'
 import { startPythonInstallJob } from './python/install-job.js'
@@ -29,6 +29,7 @@ import {
   NetworkInstallStickyStore,
   SessionNetworkEgressStore,
   ShellRunStickyStore,
+  getSessionLanAccessStore,
   type ShellInstallParams,
   type ShellPlatformStatus,
   type ShellRunParams,
@@ -94,6 +95,7 @@ export class WorkspaceService {
     this.grants.clearSession(sessionId)
     this.sticky.clearSession(sessionId)
     this.shell.clearSession(sessionId)
+    getSessionLanAccessStore().clearSession(sessionId)
     void deleteSessionWorkspaceDirectory(sessionId).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[agent-workspace] 清理会话目录失败 (${sessionId}): ${msg}`)
@@ -300,7 +302,7 @@ export class WorkspaceService {
   }
 
   httpFetch(params: HttpFetchParams): Promise<HttpFetchResult> {
-    return httpFetch(params)
+    return doHttpFetch(params)
   }
 
   shellPlatformStatus(): Promise<ShellPlatformStatus> {

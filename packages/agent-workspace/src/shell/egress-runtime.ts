@@ -1,8 +1,8 @@
 import { assertAllowedHost } from '../ssrf.js'
 import { WorkspaceError } from '../errors.js'
-import { getSandboxSettings } from '../sandbox-settings-store.js'
 import { normalizeEgressHost, type SessionNetworkEgressStore } from './session-network-egress.js'
 import { isHostInConfiguredAllowlist } from './network-policy.js'
+import { isEffectiveLanAllowed } from './session-lan-access.js'
 
 export function detectNetworkEgressBlocked(
   exitCode: number | null,
@@ -22,10 +22,13 @@ export function detectNetworkEgressBlocked(
   }
 }
 
-export async function assertEgressHostGrantable(host: string): Promise<string> {
+export async function assertEgressHostGrantable(
+  host: string,
+  sessionId?: string,
+): Promise<string> {
   const trimmed = normalizeEgressHost(host)
   if (!trimmed) throw new WorkspaceError('目标主机无效')
-  const allowLan = getSandboxSettings().allow_lan_access
+  const allowLan = isEffectiveLanAllowed(sessionId)
   await assertAllowedHost(new URL(`http://${trimmed}/`), { allowLan })
   return trimmed
 }
@@ -36,7 +39,7 @@ export function isEgressHostPreAuthorized(
   host: string,
   egress: SessionNetworkEgressStore,
 ): boolean {
-  return egress.hasHost(sessionId, host) || isHostInConfiguredAllowlist(host)
+  return egress.hasHost(sessionId, host) || isHostInConfiguredAllowlist(host, sessionId)
 }
 
 export function buildNeedsNetworkEgressPayload(

@@ -2,14 +2,21 @@ export {
   resolveAgentWorkspaceRoot,
   resolveAgentPrivilegesRoot,
   resolveSessionWorkspaceRoot,
+  resolveSharedWorkspaceRoot,
   assertSafeSessionId,
   migrateLegacyWorkspaceFiles,
   deleteSessionWorkspaceDirectory,
   DEFAULT_ROOT_ID,
+  SHARED_ROOT_ID,
   SESSIONS_SUBDIR,
   SHARED_SUBDIR,
   LEGACY_SUBDIR,
 } from './paths.js'
+export {
+  ensureSharedWorkspaceLayout,
+  sharedDumpsDir,
+  resetSharedWorkspaceLayoutCacheForTests,
+} from './shared-workspace.js'
 export {
   WorkspaceError,
   PathEscapeError,
@@ -56,10 +63,23 @@ export {
   resetPythonSettingsStoreForTests,
 } from './python-settings-store.js'
 export {
+  resolveNodeRuntime,
+  resolveNpmCliJs,
+  nodeRuntimeAllowReadPaths,
+  usesElectronAsNodeArgv,
+  NODE_BINARIES,
+  NPM_BINARIES,
+  type NodeActiveSource,
+  type NpmActiveSource,
+  type NodeRuntimeStatus,
+} from './node/resolve-node.js'
+export { resolveShellArgv } from './shell/resolve-shell-argv.js'
+export {
   resolvePythonRuntime,
-  resolveShellArgv,
   type PythonActiveSource,
   type PythonRuntimeStatus,
+  PYTHON_BINARIES,
+  PIP_BINARIES,
 } from './python/resolve-python.js'
 export { getPythonPlatformStatus } from './python/python-platform-status.js'
 export {
@@ -94,6 +114,12 @@ export {
 export {
   ShellRunner,
   SessionNetworkEgressStore,
+  SessionLanAccessStore,
+  getSessionLanAccessStore,
+  resetSessionLanAccessStoreForTests,
+  isEffectiveLanAllowed,
+  applySessionLanAskChoice,
+  SESSION_LAN_ASK_OPTIONS,
   NetworkInstallStickyStore,
   NETWORK_EGRESS_CONFIRM_OPTIONS,
   parseNetworkEgressChoice,

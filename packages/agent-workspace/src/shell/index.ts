@@ -55,6 +55,14 @@ export {
 } from './session-network-egress.js'
 export type { NetworkEgressConfirmChoice } from './session-network-egress.js'
 export {
+  SessionLanAccessStore,
+  getSessionLanAccessStore,
+  resetSessionLanAccessStoreForTests,
+  isEffectiveLanAllowed,
+  applySessionLanAskChoice,
+  SESSION_LAN_ASK_OPTIONS,
+} from './session-lan-access.js'
+export {
   ShellRunStickyStore,
   SHELL_RUN_CONFIRM_OPTIONS,
   parseShellRunConfirmChoice,

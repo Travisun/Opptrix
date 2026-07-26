@@ -23,6 +23,10 @@ import {
 } from './mcp/tool-route-plan.js'
 import { buildSessionClockPlaybook, parseNamespacedMcpTool } from '@opptrix/shared'
 import {
+  applySessionLanAskChoice,
+  getWorkspaceService,
+} from '@opptrix/agent-workspace'
+import {
   type ChatProgressEvent,
   type ChatProgressOptions,
   type ChatToolStep,
@@ -45,7 +49,6 @@ import {
   resolveInitialRolePersona,
   sanitizeExpertPersona,
 } from './experts/prompt-assembler.js'
-import { getWorkspaceService } from '@opptrix/agent-workspace'
 import {
   bindWorkspaceToolBridge,
   type WorkspaceToolBridge,
@@ -277,6 +280,20 @@ export class AgentEngine {
         })
         const answer = await this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
         return { selected_ids: answer.selected_ids }
+      },
+      askUser: async (payload) => {
+        const promptId = createUserPromptId()
+        emit({
+          type: 'user_prompt',
+          prompt: {
+            id: promptId,
+            title: payload.title,
+            prompt: payload.prompt,
+            options: payload.options,
+            allowMultiple: payload.allowMultiple,
+          },
+        })
+        return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
       },
     }
     bindWorkspaceToolBridge(bridge)
@@ -1070,7 +1087,13 @@ export class AgentEngine {
                   prompt: { id: promptId, ...parsed.payload },
                 })
                 const answer = await answerPromise
-                result = { ok: true, ...answer }
+                const resultPayload: Record<string, unknown> = { ok: true, ...answer }
+                if (answer.selected_ids.includes('allow_lan_session')) {
+                  applySessionLanAskChoice(sessionId, answer.selected_ids)
+                  resultPayload.lan_granted = true
+                  resultPayload.lan_note = '本对话已允许局域网；具体域名仍可能需出站确认'
+                }
+                result = resultPayload
               }
             } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
