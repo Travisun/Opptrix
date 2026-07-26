@@ -345,9 +345,12 @@ test('agent system rules include analysis and news playbooks', async () => {
   assert.ok(rules.includes('【数据源扩展'))
   assert.ok(rules.includes('仅使用当前会话已加载的 MCP 工具'))
   assert.doesNotMatch(rules, /screen_stocks/)
-  assert.doesNotMatch(rules, /get_local_/)
+  // 允许 get_local_data_catalog / list_local_data_apis；禁止已退役本地筛股/行业工具名
+  assert.doesNotMatch(rules, /get_local_(?:hk_|universe_|industry_|data_status)/)
+  assert.doesNotMatch(rules, /get_local_\w*screen/)
   assert.doesNotMatch(rules, /market_db_/)
   assert.doesNotMatch(rules, /【已停用/)
+  assert.match(rules, /get_local_data_catalog/)
   assert.ok(rules.includes('market_hints'))
   assert.ok(rules.includes('JP/KR'))
   const cnSteps = instrumentAnalysisStepsForRef({ market: 'CN', assetClass: 'EQUITY', symbol: '600519' })
