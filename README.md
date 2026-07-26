@@ -14,6 +14,23 @@
 
 <p align="center"><sub>主界面：多会话聊天、Agent 工具链路、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
 
+## 💬 技术交流与作者动态
+
+使用问题、功能建议、贡献讨论，欢迎扫码加入 **微信技术交流群**；也可扫码在 **抖音** 关注项目作者，获取产品与开发动态：
+
+<table align="center">
+  <tr>
+    <td align="center" width="50%">
+      <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
+      <sub>微信 · Opptrix 技术交流群</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="author/douyin-qr.jpg" alt="抖音扫码关注项目作者动态" width="220" /><br />
+      <sub>抖音 · 关注项目作者动态</sub>
+    </td>
+  </tr>
+</table>
+
 ---
 
 ## ⚠️ 重要风险提示与用户须知
@@ -35,25 +52,6 @@
 ---
 
 **Opptrix** 是一款开源的 **全球多市场投研数据助手**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场的行情查询、筛选与 Agent 分析。用自然语言提问，由大模型调用 **40+ 投研工具** 拉取结构化数据并整理为中文可读报告。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
-
----
-
-## 💬 技术交流与作者动态
-
-使用问题、功能建议、贡献讨论，欢迎扫码加入 **微信技术交流群**；也可扫码在 **抖音** 关注项目作者，获取产品与开发动态：
-
-<table align="center">
-  <tr>
-    <td align="center" width="50%">
-      <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
-      <sub>微信 · Opptrix 技术交流群</sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="author/douyin-qr.jpg" alt="抖音扫码关注项目作者动态" width="220" /><br />
-      <sub>抖音 · 关注项目作者动态</sub>
-    </td>
-  </tr>
-</table>
 
 ---
 
