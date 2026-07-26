@@ -70,7 +70,15 @@ import {
   newsArticleDetail,
   newsArticlesList,
   newsCenterStatus,
+  newsGroupCreate,
+  newsGroupDelete,
+  newsGroupUpdate,
   newsGroupsList,
+  newsSourceAdd,
+  newsSourceDelete,
+  newsSourceMoveGroup,
+  newsSourceValidate,
+  newsSourcesImport,
   newsSourcesList,
 } from './news-hub.js'
 import { noticeContent } from './notice-content-hub.js'
@@ -278,6 +286,14 @@ export class ResearchHub {
         case 'news_sources_list': return newsSourcesList(t0)
         case 'news_articles_list': return newsArticlesList(params, t0)
         case 'news_article_detail': return await newsArticleDetail(params, t0)
+        case 'news_source_add': return await newsSourceAdd(params, t0)
+        case 'news_source_delete': return newsSourceDelete(params, t0)
+        case 'news_sources_import': return await newsSourcesImport(params, t0)
+        case 'news_group_create': return newsGroupCreate(params, t0)
+        case 'news_group_update': return newsGroupUpdate(params, t0)
+        case 'news_group_delete': return newsGroupDelete(params, t0)
+        case 'news_source_move_group': return newsSourceMoveGroup(params, t0)
+        case 'news_source_validate': return await newsSourceValidate(params, t0)
         case 'notice_content':
         case 'instrument_notice_content':
           return await noticeContent(params, t0)

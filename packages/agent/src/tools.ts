@@ -355,6 +355,156 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('news_article_detail', { article_id: a.article_id }),
       },
       {
+        name: 'add_news_source', category: '资讯中心',
+        description: '添加 RSS/Atom 订阅来源；会先验证地址再写入',
+        parameters: S({
+          url: { type: 'string', description: '订阅源 URL' },
+          title: { type: 'string', description: '可选显示名称；缺省用源标题' },
+          group_id: { type: 'string', description: '可选分组 id；未分组省略或传空' },
+          enabled: { type: 'boolean', description: '是否启用，默认 true' },
+        }, ['url']),
+        handler: (a: Record<string, unknown>) => d('news_source_add', a),
+      },
+      {
+        name: 'delete_news_source', category: '资讯中心',
+        description: '删除资讯订阅来源。首次勿传 confirmed；ask_user 确认后再以 confirmed=true 重试',
+        parameters: S({
+          subscription_id: { type: 'string', description: '订阅 id，来自 list_news_sources' },
+          confirmed: { type: 'boolean', description: '用户已确认删除；缺省或 false 时仅返回确认摘要' },
+        }, ['subscription_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const id = String(a.subscription_id ?? a.id ?? '').trim()
+          if (!id) return { error: 'subscription_id 必填' }
+          if (a.confirmed !== true) {
+            const listed = await d('news_sources_list', {})
+            const sources = listed.success && listed.data && typeof listed.data === 'object'
+              && Array.isArray((listed.data as { sources?: unknown }).sources)
+              ? (listed.data as { sources: Array<{ id?: string; title?: string }> }).sources
+              : []
+            const hit = sources.find(s => s.id === id)
+            const label = hit?.title ? `「${hit.title}」` : `（id=${id}）`
+            return {
+              needs_confirmation: true,
+              summary: `将删除资讯订阅${label}，相关文章也会一并清除`,
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 delete_news_source',
+              subscription_id: id,
+            }
+          }
+          return d('news_source_delete', { subscription_id: id })
+        },
+      },
+      {
+        name: 'import_news_sources', category: '资讯中心',
+        description: '批量导入订阅。入参与导出一致：schema_version=1 + subscriptions；或仅传 subscriptions 数组。须 confirmed=true',
+        parameters: S({
+          schema_version: { type: 'number', description: '固定为 1；仅传 subscriptions 时内部按 1 处理' },
+          subscriptions: {
+            type: 'array',
+            description: '订阅项列表，每项含 url，可选 title',
+            items: {
+              type: 'object',
+              properties: {
+                url: { type: 'string' },
+                title: { type: 'string' },
+              },
+            },
+          },
+          payload: { type: 'object', description: '可选：完整导出对象 { schema_version, subscriptions }' },
+          confirmed: { type: 'boolean', description: '用户已确认导入；缺省或 false 时仅返回确认摘要' },
+        }),
+        handler: async (a: Record<string, unknown>) => {
+          let count = 0
+          if (Array.isArray(a.subscriptions)) count = a.subscriptions.length
+          else if (a.payload && typeof a.payload === 'object' && !Array.isArray(a.payload)) {
+            const subs = (a.payload as { subscriptions?: unknown }).subscriptions
+            if (Array.isArray(subs)) count = subs.length
+          }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: count > 0
+                ? `将导入 ${count} 个资讯订阅（已存在的会跳过）`
+                : '将导入资讯订阅列表（已存在的会跳过）',
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 import_news_sources',
+            }
+          }
+          return d('news_sources_import', a)
+        },
+      },
+      {
+        name: 'create_news_group', category: '资讯中心',
+        description: '创建资讯分组',
+        parameters: S({
+          title: { type: 'string', description: '分组名称' },
+        }, ['title']),
+        handler: (a: Record<string, unknown>) => d('news_group_create', { title: a.title }),
+      },
+      {
+        name: 'update_news_group', category: '资讯中心',
+        description: '更新资讯分组名称或排序',
+        parameters: S({
+          group_id: { type: 'string', description: '分组 id，来自 list_news_groups' },
+          title: { type: 'string', description: '新名称' },
+          sort_order: { type: 'number', description: '排序权重，越小越靠前' },
+        }, ['group_id']),
+        handler: (a: Record<string, unknown>) => d('news_group_update', a),
+      },
+      {
+        name: 'delete_news_group', category: '资讯中心',
+        description: '删除资讯分组（组内订阅改为未分组，不删订阅）。须 confirmed=true',
+        parameters: S({
+          group_id: { type: 'string', description: '分组 id，来自 list_news_groups' },
+          confirmed: { type: 'boolean', description: '用户已确认删除；缺省或 false 时仅返回确认摘要' },
+        }, ['group_id']),
+        handler: async (a: Record<string, unknown>) => {
+          const id = String(a.group_id ?? a.id ?? '').trim()
+          if (!id) return { error: 'group_id 必填' }
+          if (a.confirmed !== true) {
+            const listed = await d('news_groups_list', {})
+            const groups = listed.success && listed.data && typeof listed.data === 'object'
+              && Array.isArray((listed.data as { groups?: unknown }).groups)
+              ? (listed.data as { groups: Array<{ id?: string; title?: string; subscription_count?: number }> }).groups
+              : []
+            const hit = groups.find(g => g.id === id)
+            const label = hit?.title ? `「${hit.title}」` : `（id=${id}）`
+            const count = typeof hit?.subscription_count === 'number' ? hit.subscription_count : undefined
+            return {
+              needs_confirmation: true,
+              summary: count != null
+                ? `将删除资讯分组${label}，组内 ${count} 个订阅会改为未分组（订阅本身保留）`
+                : `将删除资讯分组${label}，组内订阅会改为未分组（订阅本身保留）`,
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 delete_news_group',
+              group_id: id,
+            }
+          }
+          return d('news_group_delete', { group_id: id })
+        },
+      },
+      {
+        name: 'move_news_source', category: '资讯中心',
+        description: '将订阅移入指定分组，或移出为未分组',
+        parameters: S({
+          subscription_id: { type: 'string', description: '订阅 id，来自 list_news_sources' },
+          group_id: {
+            type: 'string',
+            description: '目标分组 id；未分组传空字符串或省略',
+          },
+        }, ['subscription_id']),
+        handler: (a: Record<string, unknown>) => d('news_source_move_group', {
+          subscription_id: a.subscription_id,
+          group_id: a.group_id ?? null,
+        }),
+      },
+      {
+        name: 'validate_news_source', category: '资讯中心',
+        description: '验证 RSS/Atom 订阅地址是否可解析（不写入）',
+        parameters: S({
+          url: { type: 'string', description: '待验证的订阅源 URL' },
+          title: { type: 'string', description: '可选标题提示' },
+        }, ['url']),
+        handler: (a: Record<string, unknown>) => d('news_source_validate', a),
+      },
+      {
         name: 'get_notice_content', category: '公告研报',
         description: '按公告 URL 获取正文（自动解析 HTML 页面或 PDF 附件，剥离标签并压缩空白，供阅读年报/公告）',
         parameters: S({

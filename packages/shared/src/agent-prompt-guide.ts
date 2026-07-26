@@ -124,6 +124,11 @@ export function buildNewsRetrievalPlaybook(): string {
     '5) get_news_article：仅对最相关 1–3 篇拉正文；article_id 必须来自 list 返回，禁止编造',
     '6) 效率：同一任务 list_news_groups / list_news_sources 各最多 1 次；避免对所有分组逐一遍历',
     '7) A 股个股公告/新闻也可参考 get_instrument_snapshot 内嵌新闻字段（若有），与 RSS 互补而非重复堆砌',
+    '【资讯订阅管理 — 写路径与确认纪律】',
+    '8) 添加：可选 validate_news_source → add_news_source（url 必填）；创建分组 create_news_group；改名/排序 update_news_group；归类 move_news_source',
+    '9) 删除订阅 delete_news_source、删除分组 delete_news_group、批量导入 import_news_sources：首次勿传 confirmed；先 ask_user（面向用户、说明后果），用户同意后再带 confirmed=true 重试',
+    '10) 导入入参：{ schema_version:1, subscriptions:[{url,title?}] }，或仅传 subscriptions 数组；已存在地址会跳过',
+    '11) 禁止全量覆盖订阅列表；勿用浏览工具代替写操作',
   ].join('\n')
 }
 
