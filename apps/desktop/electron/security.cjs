@@ -34,6 +34,8 @@ function mainWindowWebPreferences({ isDev, preloadPath }) {
     webSecurity: true,
     allowRunningInsecureContent: false,
     enableWebSQL: false,
+    // 对话完成等无用户手势回调也能播放应用内提示音
+    autoplayPolicy: 'no-user-gesture-required',
   }
 }
 

@@ -71,6 +71,7 @@ export function buildChatDoneNotification(
   return {
     title: '对话已生成完成',
     body,
+    silent: true,
     tag: `chat:done:${sessionId}`,
     sessionId,
     kind: 'chat_done',
@@ -85,6 +86,7 @@ export function buildChatAskNotification(
   return {
     title: '需要你的确认',
     body,
+    silent: true,
     tag: `chat:ask:${sessionId}`,
     sessionId,
     kind: 'chat_ask',

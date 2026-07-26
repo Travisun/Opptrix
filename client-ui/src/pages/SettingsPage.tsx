@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
-  Text, Spinner, makeStyles, mergeClasses,
+  Text, Spinner, Switch, makeStyles, mergeClasses,
   Dialog, DialogSurface, DialogBody, DialogTitle, DialogContent,
 } from '@fluentui/react-components'
 import { ChevronRightRegular, DeleteRegular, EditRegular, SystemRegular, WeatherMoonRegular, WeatherSunnyRegular } from '@fluentui/react-icons'
@@ -34,6 +34,11 @@ import {
   applyFontScale, readFontScalePreference, writeFontScalePreference,
   type FontScaleName,
 } from '../theme/fontScale'
+import {
+  playChatCueSound,
+  readChatSoundPreference,
+  writeChatSoundPreference,
+} from '../platform/chatSound'
 import FontScaleSlider from './settings/FontScaleSlider'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
@@ -355,6 +360,12 @@ function SettingsPageView({
     applyFontScale(name)
     setFontScaleState(name)
   }, [])
+  const [chatSoundEnabled, setChatSoundEnabled] = useState(() => readChatSoundPreference())
+  const setChatSound = useCallback((enabled: boolean) => {
+    writeChatSoundPreference(enabled)
+    setChatSoundEnabled(enabled)
+    if (enabled) playChatCueSound()
+  }, [])
   const s = useStyles()
   const [viewportWidth, setViewportWidth] = useState(() =>
     typeof window !== 'undefined' ? window.innerWidth : 1280,
@@ -574,6 +585,17 @@ function SettingsPageView({
                     <FontScaleSlider
                       value={fontScale}
                       onChange={setFontScale}
+                    />
+                  )}
+                />
+                <SettingsRow
+                  title="提示音"
+                  desc="对话完成或需要你确认时播放轻提示"
+                  control={(
+                    <Switch
+                      checked={chatSoundEnabled}
+                      onChange={(_, data) => setChatSound(Boolean(data.checked))}
+                      aria-label="提示音"
                     />
                   )}
                   last

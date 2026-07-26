@@ -61,6 +61,7 @@ import {
   maybeShowChatLocalNotification,
   resolveWindowFocused,
 } from '../platform/chatNotifications'
+import { playChatCueSound } from '../platform/chatSound'
 import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
@@ -326,6 +327,7 @@ export default function ChatApp() {
     const dedupeKey = `${targetSessionId}:${streamGen}`
     if (doneNotifiedGensRef.current.has(dedupeKey)) return
     doneNotifiedGensRef.current.add(dedupeKey)
+    playChatCueSound()
 
     void (async () => {
       const documentVisible = typeof document !== 'undefined'
@@ -408,6 +410,7 @@ export default function ChatApp() {
 
     if (event.type === 'user_prompt') {
       const promptSummary = event.prompt.title || event.prompt.prompt
+      playChatCueSound()
       void (async () => {
         const documentVisible = typeof document !== 'undefined'
           && document.visibilityState === 'visible'
