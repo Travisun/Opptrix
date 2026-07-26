@@ -60,7 +60,7 @@ function paginateEntries(
 
 export class ExpertCatalogService {
   private readonly fallback: LocalJsonExpertProvider
-  private readonly remote: StaticHttpExpertProvider
+  private readonly remote: StaticHttpExpertProvider | undefined
   private readonly localRepo: LocalExpertsRepository
   private readonly remoteDefCache = new Map<string, ExpertDefinition>()
   private remoteListCache: ExpertCatalogEntry[] | null = null
@@ -70,7 +70,7 @@ export class ExpertCatalogService {
     remote?: StaticHttpExpertProvider
   }) {
     this.fallback = options?.fallback ?? new LocalJsonExpertProvider()
-    this.remote = options?.remote ?? new StaticHttpExpertProvider()
+    this.remote = options?.remote
     this.localRepo = new LocalExpertsRepository(getUserDataStore())
   }
 
@@ -106,14 +106,16 @@ export class ExpertCatalogService {
     const cached = this.remoteDefCache.get(trimmed)
     if (cached) return cached
 
-    try {
-      const remote = await this.remote.getExpert(trimmed)
-      if (remote) {
-        this.remoteDefCache.set(trimmed, remote)
-        return remote
+    if (this.remote) {
+      try {
+        const remote = await this.remote.getExpert(trimmed)
+        if (remote) {
+          this.remoteDefCache.set(trimmed, remote)
+          return remote
+        }
+      } catch {
+        // fall through to builtin fallback
       }
-    } catch {
-      // fall through to builtin fallback
     }
 
     const builtin = this.fallback.getExpertSync(trimmed)
@@ -161,6 +163,7 @@ export class ExpertCatalogService {
   }
 
   private async tryFetchRemoteEntries(): Promise<ExpertCatalogEntry[] | null> {
+    if (!this.remote) return null
     try {
       return await this.remote.fetchCatalogEntries()
     } catch {
