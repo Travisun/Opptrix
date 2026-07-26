@@ -81,6 +81,20 @@
 | `sector_constituents` | `board_key` 或 `industry_code` + 分页 | 板块/行业成分 |
 | `etf_profile` | InstrumentRef / code | ETF 档案 |
 | `market_session` | `market?` | 轻量交易时段状态 |
+| `news_center_status` | — | 资讯中心状态（刷新/订阅规模/文章总量） |
+| `news_groups_list` | — | 资讯分组列表 |
+| `news_sources_list` | — | 订阅来源列表 |
+| `news_articles_list` | `view` + `group_id`/`subscription_id` + `limit?` | 本地订阅文章列表 |
+| `news_article_detail` | `article_id` | 单篇正文 |
+| `news_source_validate` | `url`, `title?` | 添加前探测（不写入） |
+| `news_source_add` | `url`, `title?`, `group_id?`, `enabled?` | 验证并添加订阅 |
+| `news_source_delete` | `subscription_id` | 删除订阅（Agent 工具层须 `confirmed=true`） |
+| `news_sources_import` | `schema_version` + `subscriptions`（或仅数组） | 批量导入（Agent 工具层须 `confirmed=true`） |
+| `news_group_create` | `title` | 新建资讯分组 |
+| `news_group_update` | `group_id` + `title?`/`sort_order?` | 重命名 / 排序 |
+| `news_group_delete` | `group_id` | 删分组（订阅改未分组；Agent 须 `confirmed=true`） |
+| `news_source_move_group` | `subscription_id`, `group_id?` | 移动订阅分组（空=`未分组`） |
+| `notice_content` | `url`, `max_chars?` | 公告/披露正文（HTML/PDF） |
 | `cn_market_special` | `kind` + 可选 code/date/tag… | A 股专题（连板天梯/飙升/热股/异动/同花顺概念目录；成分/财务指标用专用 feature） |
 | `trade_calendar` | `year?` | A 股交易日历 |
 | `macro_series` | `scope?` / `kind` / `page?` / `page_size?` | 宏观序列（中国 MACRO_INDICATOR；国外/行业/油价/翻页→eastmoney cjsj） |
@@ -256,7 +270,7 @@ POST /api/research
 | `etf_profile` | InstrumentRef / code | ETF 档案 |
 | `market_session` | `market?` | 轻量交易时段（非完整日历） |
 
-服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。
+服务端通过 `@opptrix/news-feed` 拉取并缓存订阅源；浏览器不直连第三方 feed。Agent 聊天工具（`news` pack：`add_news_source` / `delete_news_source` / `import_news_sources` / `create_news_group` 等）经同一 ResearchHub `news_*` feature 调度，与下表 REST 共用存储；破坏性写操作的确认纪律见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
@@ -265,7 +279,8 @@ POST /api/research
 | GET | `/api/news/subscriptions` | 订阅列表 |
 | PUT | `/api/news/subscriptions` | `{ subscriptions: FeedSubscription[] }` 全量保存 |
 | DELETE | `/api/news/subscriptions/:id` | 删除单条 |
-| POST | `/api/news/subscriptions/item` | `{ url, title?, enabled? }` 验证并添加 |
+| POST | `/api/news/subscriptions/item` | `{ url, title?, enabled?, group_id? }` 验证并添加 |
+| POST | `/api/news/subscriptions/import` | `{ schema_version, subscriptions }` 批量导入（已存在 url 跳过） |
 | POST | `/api/news/validate` | `{ url, title? }` 添加前探测 |
 | GET | `/api/news/feed` | `?limit=20&cursor=&subscription_id=&group_id=` 分页（默认 20 篇） |
 | GET | `/api/news/feed/grouped` | 按自定义分组 / 来源聚合的本地文章 |

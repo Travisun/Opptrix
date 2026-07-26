@@ -40,6 +40,7 @@ const SEED_RULES: SeedRule[] = [
     patterns: [
       /资讯|新闻|公告|研报|订阅|RSS|新闻中心|notice|disclosure|公告列表|公司公告/i,
       /看好空|舆情|媒体报道/,
+      /添加.*(?:订阅|RSS)|导入.*订阅|删除.*订阅|创建.*分组|移动.*订阅/i,
     ],
   },
   {

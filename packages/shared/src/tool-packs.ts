@@ -88,8 +88,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'news',
     title: '资讯公告',
-    description: '新闻中心列表/正文、标的公告列表与公告内容',
-    whenToUse: '资讯、新闻、公告、研报订阅、上市公司披露',
+    description: '新闻中心列表/正文、订阅与分组管理、标的公告列表与公告内容',
+    whenToUse: '资讯、新闻、公告、研报订阅、添加/导入/管理订阅源、上市公司披露',
   },
   {
     id: 'browser',
@@ -208,6 +208,14 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   list_news_sources: 'news',
   list_news_articles: 'news',
   get_news_article: 'news',
+  add_news_source: 'news',
+  delete_news_source: 'news',
+  import_news_sources: 'news',
+  create_news_group: 'news',
+  update_news_group: 'news',
+  delete_news_group: 'news',
+  move_news_source: 'news',
+  validate_news_source: 'news',
   get_notice_content: 'news',
   get_instrument_notices: 'news',
 
