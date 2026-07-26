@@ -7,6 +7,8 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),
   getIsFullscreen: () => ipcRenderer.invoke('window-is-fullscreen'),
+  getIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
+  getIsWindowSquared: () => ipcRenderer.invoke('window-is-squared'),
   windowIsFocused: () => ipcRenderer.invoke('window-is-focused'),
   pickExportDirectory: () => ipcRenderer.invoke('pick-export-directory'),
   writeBinaryFile: (payload) => ipcRenderer.invoke('write-binary-file', payload),
@@ -43,6 +45,11 @@ contextBridge.exposeInMainWorld('electronAPI', {
     const handler = (_event, fullscreen) => callback(Boolean(fullscreen))
     ipcRenderer.on('window-fullscreen-changed', handler)
     return () => ipcRenderer.removeListener('window-fullscreen-changed', handler)
+  },
+  onWindowSquaredChange: (callback) => {
+    const handler = (_event, squared) => callback(Boolean(squared))
+    ipcRenderer.on('window-squared-changed', handler)
+    return () => ipcRenderer.removeListener('window-squared-changed', handler)
   },
   onProtocolOpen: (callback) => {
     const handler = (_event, payload) => callback(payload)

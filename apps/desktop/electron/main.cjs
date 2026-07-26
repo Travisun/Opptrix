@@ -2,6 +2,7 @@ const { app, BrowserWindow, ipcMain, dialog, shell, session, nativeTheme } = req
 const path = require('path')
 const fs = require('fs/promises')
 const fsSync = require('node:fs')
+const os = require('node:os')
 const { pathToFileURL } = require('node:url')
 const { spawn } = require('node:child_process')
 const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
@@ -91,7 +92,23 @@ function setOpaqueWindowBackground(win) {
   win.setBackgroundColor(SPLASH_CANVAS)
 }
 
-/** macOS vibrancy / Windows acrylic — 勿开 BrowserWindow.transparent，否则缩放动画会漏出桌面空透明。 */
+/** Windows 11+ build number (10.0.22000). Used for optional OS roundedCorners (shadow assist). */
+function isWindows11OrNewer() {
+  if (process.platform !== 'win32') return false
+  const build = Number(String(os.release()).split('.')[2] ?? 0)
+  return Number.isFinite(build) && build >= 22000
+}
+
+/** Maximized or fullscreen — CSS radius must be removed (squared edges). */
+function isWindowSquared(win) {
+  if (!win || win.isDestroyed()) return false
+  return win.isMaximized() || win.isFullScreen()
+}
+
+/**
+ * Shell ready（或缩放结束）后：透明底 + 尽量保留系统毛玻璃。
+ * 缩放动画漏底由 will-resize → 临时实色 / resized → 再透明缓解。
+ */
 function enableWindowBlurBackground(win) {
   if (win.isDestroyed()) return
   if (process.platform === 'darwin') {
@@ -100,11 +117,7 @@ function enableWindowBlurBackground(win) {
     } catch {
       /* older Electron */
     }
-    // 透明网页区域露的是 vibrancy 材质层，不是裸桌面；背景色用 0 alpha 才能看见材质
-    win.setBackgroundColor('#00000000')
-    return
-  }
-  if (process.platform === 'win32') {
+  } else if (process.platform === 'win32') {
     try {
       if (typeof win.setBackgroundMaterial === 'function') {
         win.setBackgroundMaterial('acrylic')
@@ -112,8 +125,8 @@ function enableWindowBlurBackground(win) {
     } catch {
       /* unsupported on older Windows */
     }
-    win.setBackgroundColor('#00000000')
   }
+  win.setBackgroundColor('#00000000')
 }
 
 /** @deprecated use enableWindowBlurBackground */
@@ -511,7 +524,9 @@ function buildMainWindowOptions() {
     minWidth: MIN_WIDTH,
     minHeight: MIN_HEIGHT,
     title: APP_TITLE,
-    // Splash / Linux 默认实色；mac/win 有原生毛玻璃时启动阶段仍先用不透明底防闪
+    // 三端统一：无边框 + 透明；启动先实色 splash，shell ready 后再透明
+    frame: false,
+    transparent: true,
     backgroundColor: SPLASH_CANVAS,
     show: false,
     center,
@@ -525,15 +540,12 @@ function buildMainWindowOptions() {
   if (process.platform === 'darwin') {
     options.titleBarStyle = 'hiddenInset'
     options.trafficLightPosition = { x: 16, y: 16 }
-    // 系统侧栏毛玻璃。不要设 transparent:true —— 缩放时新区域会短暂变成「空透明」漏桌面。
     options.vibrancy = 'sidebar'
     options.visualEffectState = 'active'
   } else if (process.platform === 'win32') {
-    options.frame = false
-    // 同 mac：用系统材料，避免整窗 transparent 导致缩放漏底
     options.backgroundMaterial = 'acrylic'
-  } else {
-    options.frame = false
+    // Win11+：系统圆角辅助阴影；圆角视觉仍由 CSS `--opptrix-window-radius` 统一
+    options.roundedCorners = isWindows11OrNewer()
   }
 
   return options
@@ -568,9 +580,30 @@ function attachMainWindowHandlers(win) {
   const notifyFullscreen = () => {
     win.webContents.send('window-fullscreen-changed', win.isFullScreen())
   }
-  win.on('enter-full-screen', notifyFullscreen)
-  win.on('leave-full-screen', notifyFullscreen)
-  win.webContents.on('did-finish-load', notifyFullscreen)
+  const notifySquared = () => {
+    win.webContents.send('window-squared-changed', isWindowSquared(win))
+  }
+  win.on('enter-full-screen', () => {
+    notifyFullscreen()
+    notifySquared()
+  })
+  win.on('leave-full-screen', () => {
+    notifyFullscreen()
+    notifySquared()
+  })
+  win.on('maximize', notifySquared)
+  win.on('unmaximize', notifySquared)
+  // 透明窗缩放时新露出区域会短暂空透明漏桌面：缩放中临时实色，结束后再透明
+  win.on('will-resize', () => {
+    setOpaqueWindowBackground(win)
+  })
+  win.on('resized', () => {
+    enableWindowBlurBackground(win)
+  })
+  win.webContents.on('did-finish-load', () => {
+    notifyFullscreen()
+    notifySquared()
+  })
   win.on('closed', () => {
     if (mainWindow === win) mainWindow = null
   })
@@ -807,6 +840,12 @@ function registerWindowIpc() {
   })
   ipcMain.handle('window-is-fullscreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
+  })
+  ipcMain.handle('window-is-maximized', (event) => {
+    return BrowserWindow.fromWebContents(event.sender)?.isMaximized() ?? false
+  })
+  ipcMain.handle('window-is-squared', (event) => {
+    return isWindowSquared(BrowserWindow.fromWebContents(event.sender))
   })
   ipcMain.handle('window-is-focused', (event) => {
     const win = BrowserWindow.fromWebContents(event.sender)
