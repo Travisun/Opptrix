@@ -2,6 +2,15 @@ import type { Platform } from '@anthropic-ai/sandbox-runtime'
 
 export type ShellNetworkIntent = 'none' | 'install'
 
+/** shell_run 引用保险箱条目 — 仅传名字；host 注入 sentinel，明文不进子进程 env */
+export interface ShellSecretRef {
+  name: string
+  /** 注入到子进程的环境变量名，默认与 name 相同 */
+  env?: string
+  /** 出站时可替换 sentinel 的目标 host；优先于 vault 默认 meta */
+  inject_hosts?: string[]
+}
+
 export interface ShellRunParams {
   sessionId: string
   rootId: string
@@ -10,6 +19,7 @@ export interface ShellRunParams {
   timeoutMs?: number
   networkIntent?: ShellNetworkIntent
   signal?: AbortSignal
+  secret_refs?: ShellSecretRef[]
 }
 
 export interface ShellRunResult {

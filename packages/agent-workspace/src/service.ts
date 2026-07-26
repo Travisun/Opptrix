@@ -30,6 +30,7 @@ import {
   SessionNetworkEgressStore,
   ShellRunStickyStore,
   getSessionLanAccessStore,
+  getSessionSecretAccessStore,
   type ShellInstallParams,
   type ShellPlatformStatus,
   type ShellRunParams,
@@ -96,6 +97,7 @@ export class WorkspaceService {
     this.sticky.clearSession(sessionId)
     this.shell.clearSession(sessionId)
     getSessionLanAccessStore().clearSession(sessionId)
+    getSessionSecretAccessStore().clearSession(sessionId)
     void deleteSessionWorkspaceDirectory(sessionId).catch(err => {
       const msg = err instanceof Error ? err.message : String(err)
       console.warn(`[agent-workspace] 清理会话目录失败 (${sessionId}): ${msg}`)

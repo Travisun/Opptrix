@@ -7,16 +7,22 @@ import {
   SHARED_ROOT_ID,
   SESSION_LAN_ASK_OPTIONS,
   applySessionLanAskChoice,
+  SESSION_SECRET_GRANT_ASK_OPTIONS,
+  applySessionSecretGrantChoice,
+  getSessionSecretAccessStore,
   getWorkspaceService,
   sharedDumpsDir,
   type ConfirmHandler,
   type WorkspaceGrant,
+  type ShellSecretRef,
 } from '@opptrix/agent-workspace'
 import { prepareFuyaoDumpForAgent, type FuyaoDumpKind, type FuyaoDumpMode } from '@opptrix/market-data-store'
 import { resolveUserDataRoot } from '@opptrix/shared'
+import { getUserDataStore } from '@opptrix/user-store'
 import { TOOL_META } from '../tool-meta.js'
 import { getLocalDataCatalog, listLocalDataApis } from '../local-data-catalog.js'
 import type { UserPromptAnswer, UserPromptOption } from '../user-prompt.js'
+import { normalizeVaultSecretName } from '../user-prompt.js'
 
 type JsonSchema = {
   type: 'object'
@@ -48,6 +54,13 @@ export interface WorkspaceToolBridge {
     prompt: string
     options: UserPromptOption[]
     allowMultiple?: boolean
+  }) => Promise<UserPromptAnswer>
+  /** 保险箱安全录入 — 推送 kind=secret，明文永不回传给工具结果 */
+  askSecret?: (payload: {
+    title?: string
+    prompt: string
+    name: string
+    inject_hosts?: string[]
   }) => Promise<UserPromptAnswer>
 }
 
@@ -124,6 +137,33 @@ function handleShellError(err: unknown): unknown {
 function parseArgv(raw: unknown): string[] {
   if (!Array.isArray(raw)) return []
   return raw.map(v => String(v ?? '')).filter(v => v.length > 0)
+}
+
+function parseSecretRefs(raw: unknown): ShellSecretRef[] | undefined {
+  if (!Array.isArray(raw) || !raw.length) return undefined
+  const out: ShellSecretRef[] = []
+  for (const item of raw) {
+    if (!item || typeof item !== 'object') continue
+    const row = item as Record<string, unknown>
+    const name = String(row.name ?? '').trim()
+    if (!name) continue
+    const env = row.env != null ? String(row.env).trim() : undefined
+    const injectHosts = Array.isArray(row.inject_hosts)
+      ? row.inject_hosts.map(h => String(h ?? '').trim()).filter(Boolean)
+      : undefined
+    out.push({
+      name,
+      env: env || undefined,
+      inject_hosts: injectHosts?.length ? injectHosts : undefined,
+    })
+  }
+  return out.length ? out : undefined
+}
+
+function parseInjectHostsArg(raw: unknown): string[] | undefined {
+  if (!Array.isArray(raw)) return undefined
+  const hosts = raw.map(h => String(h ?? '').trim()).filter(Boolean)
+  return hosts.length ? hosts : undefined
 }
 
 function requireBridge(): WorkspaceToolBridge {
@@ -480,6 +520,19 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
         },
         timeout_ms: { type: 'number', description: '超时毫秒，默认 120000' },
         network_intent: { type: 'string', description: 'none | install；pip/npm 安装时填 install' },
+        secret_refs: {
+          type: 'array',
+          description:
+            '引用保险箱密钥（仅名字）：[{name, env?, inject_hosts?}]；子进程读到 sentinel，出站由代理替换；须先 request_secret / grant_session_secret',
+          items: {
+            type: 'object',
+            properties: {
+              name: { type: 'string' },
+              env: { type: 'string' },
+              inject_hosts: { type: 'array', items: { type: 'string' } },
+            },
+          },
+        },
       }, ['argv']),
       handler: async (args) => {
         try {
@@ -495,6 +548,7 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             timeoutMs: typeof args.timeout_ms === 'number' ? args.timeout_ms : undefined,
             networkIntent,
             signal: b.signal,
+            secret_refs: parseSecretRefs(args.secret_refs),
           }, b.confirm)
         } catch (err) {
           return handleShellError(err)
@@ -715,6 +769,220 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
               ? '本对话已允许局域网；具体域名访问仍可能需出站确认'
               : '用户未允许本对话局域网访问',
           }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'request_secret',
+      category: '工作区',
+      description:
+        '安全录入第三方密钥到用户保险箱（密码框）；明文永不进对话/模型。编程需密钥时必须用此工具，禁止 ask_user/聊天粘贴',
+      parameters: S({
+        name: {
+          type: 'string',
+          description: '保险箱条目名，建议大写蛇形如 OPENAI_API_KEY、WEBHOOK_SECRET',
+        },
+        reason: {
+          type: 'string',
+          description: '面向用户的说明：为何需要、将用于何处',
+        },
+        inject_hosts: {
+          type: 'array',
+          description: '出站时可替换 sentinel 的目标域名，如 ["api.openai.com"]',
+          items: { type: 'string' },
+        },
+        overwrite: {
+          type: 'boolean',
+          description: '同名已存在时是否覆盖；默认 false，需用户确认后再以 overwrite=true 重试',
+        },
+      }, ['name', 'reason']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const name = normalizeVaultSecretName(args.name)
+          if (!name) return { error: 'name 不能为空' }
+          const reason = String(args.reason ?? '').trim()
+          if (!reason) return { error: 'reason 不能为空' }
+          const injectHosts = parseInjectHostsArg(args.inject_hosts)
+          const overwrite = args.overwrite === true
+          const vault = getUserDataStore().agentVault
+
+          if (vault.has(name) && !overwrite) {
+            return {
+              exists: true,
+              need_overwrite: true,
+              name,
+              message: `保险箱已有「${name}」。若用户确认覆盖，请以 overwrite=true 重试；或用 grant_session_secret 授权本对话使用已有条目。`,
+            }
+          }
+
+          if (!b.askSecret) {
+            return {
+              error: '当前会话不支持安全录入面板，请升级客户端后重试',
+            }
+          }
+
+          const answer = await b.askSecret({
+            title: '存入密钥保险箱',
+            prompt: reason,
+            name,
+            inject_hosts: injectHosts,
+          })
+
+          if (answer.cancelled || answer.selected_ids.includes('cancel')) {
+            return { ok: false, cancelled: true, name, message: '用户已取消录入' }
+          }
+
+          // 服务端已写 vault + grant；工具结果永不含明文
+          return {
+            ok: true,
+            name: answer.name ?? name,
+            saved: answer.saved === true,
+            session_granted: answer.session_granted === true,
+          }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'list_vault_secrets',
+      category: '工作区',
+      description: '列出保险箱密钥名称与末位提示（无明文）；编程前先查是否已有条目',
+      parameters: S({}),
+      handler: async () => {
+        try {
+          requireBridge()
+          const secrets = getUserDataStore().agentVault.listSecrets().map(s => ({
+            name: s.name,
+            hint: s.hint,
+            updated_at: s.updatedAt,
+            inject_hosts: s.injectHosts,
+          }))
+          return { ok: true, secrets, count: secrets.length }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'grant_session_secret',
+      category: '工作区',
+      description: '对本对话授权使用保险箱中已有密钥（需用户确认）；不重新录入明文',
+      parameters: S({
+        name: { type: 'string', description: '保险箱条目名' },
+        reason: { type: 'string', description: '向用户说明本对话为何需要使用该密钥（可选）' },
+      }, ['name']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const name = normalizeVaultSecretName(args.name)
+          if (!name) return { error: 'name 不能为空' }
+          const vault = getUserDataStore().agentVault
+          if (!vault.has(name)) {
+            return {
+              error: `保险箱中没有「${name}」。请先 request_secret 写入。`,
+              missing: true,
+            }
+          }
+          if (getSessionSecretAccessStore().has(b.sessionId, name)) {
+            return { ok: true, name, session_granted: true, already: true }
+          }
+          if (!b.askUser) {
+            return {
+              needs_ask_user: true,
+              ask_user_args: {
+                title: '授权使用密钥',
+                prompt: String(args.reason ?? '').trim()
+                  || `是否允许本对话使用保险箱中的「${name}」？仅对本对话生效，不会展示密钥内容。`,
+                options: SESSION_SECRET_GRANT_ASK_OPTIONS.map(o => ({ id: o.id, label: o.label })),
+              },
+            }
+          }
+          const answer = await b.askUser({
+            title: '授权使用密钥',
+            prompt: String(args.reason ?? '').trim()
+              || `是否允许本对话使用保险箱中的「${name}」？仅对本对话生效，不会展示密钥内容。`,
+            options: SESSION_SECRET_GRANT_ASK_OPTIONS.map(o => ({ id: o.id, label: o.label })),
+          })
+          const granted = applySessionSecretGrantChoice(b.sessionId, name, answer.selected_ids)
+          return {
+            ok: true,
+            name,
+            session_granted: granted.granted,
+            message: granted.granted
+              ? `本对话已可使用「${name}」；shell_run 请用 secret_refs 引用名称`
+              : '用户未授权本对话使用该密钥',
+          }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'revoke_session_secret',
+      category: '工作区',
+      description: '撤销本对话对某保险箱密钥的使用授权（不删除保险箱条目）',
+      parameters: S({
+        name: { type: 'string', description: '保险箱条目名' },
+      }, ['name']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const name = normalizeVaultSecretName(args.name)
+          if (!name) return { error: 'name 不能为空' }
+          const revoked = getSessionSecretAccessStore().revoke(b.sessionId, name)
+          return { ok: true, name, revoked }
+        } catch (err) {
+          return toolError(err)
+        }
+      },
+    },
+    {
+      name: 'delete_vault_secret',
+      category: '工作区',
+      description: '删除保险箱中的密钥条目（须用户确认；不可恢复）',
+      parameters: S({
+        name: { type: 'string', description: '保险箱条目名' },
+      }, ['name']),
+      handler: async (args) => {
+        try {
+          const b = requireBridge()
+          const name = normalizeVaultSecretName(args.name)
+          if (!name) return { error: 'name 不能为空' }
+          const vault = getUserDataStore().agentVault
+          if (!vault.has(name)) {
+            return { ok: true, name, deleted: false, missing: true }
+          }
+          if (!b.askUser) {
+            return {
+              needs_ask_user: true,
+              ask_user_args: {
+                title: '删除保险箱密钥',
+                prompt: `确定删除保险箱中的「${name}」吗？删除后无法恢复。`,
+                options: [
+                  { id: 'confirm_delete', label: '删除密钥' },
+                  { id: 'cancel', label: '取消' },
+                ],
+              },
+            }
+          }
+          const answer = await b.askUser({
+            title: '删除保险箱密钥',
+            prompt: `确定删除保险箱中的「${name}」吗？删除后无法恢复。`,
+            options: [
+              { id: 'confirm_delete', label: '删除密钥' },
+              { id: 'cancel', label: '取消' },
+            ],
+          })
+          if (!answer.selected_ids.includes('confirm_delete')) {
+            return { ok: false, cancelled: true, name }
+          }
+          const deleted = vault.delete(name)
+          getSessionSecretAccessStore().revoke(b.sessionId, name)
+          return { ok: true, name, deleted }
         } catch (err) {
           return toolError(err)
         }

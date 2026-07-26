@@ -5,6 +5,8 @@ import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { getSessionSecretAccessStore } from '@opptrix/agent-workspace'
+import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
@@ -1165,10 +1167,13 @@ app.post<{
   Params: { id: string }
   Body: {
     prompt_id: string
-    kind: 'option' | 'custom'
+    kind: 'option' | 'custom' | 'secret'
     selected_ids?: string[]
     selected_labels?: string[]
     custom_text?: string
+    name?: string
+    secret_value?: string
+    inject_hosts?: string[]
   }
 }>(
   '/api/sessions/:id/chat/user-prompt',
@@ -1177,8 +1182,58 @@ app.post<{
     if (!promptId) return reply.code(400).send({ error: 'prompt_id required' })
 
     const kind = req.body?.kind
-    if (kind !== 'option' && kind !== 'custom') {
-      return reply.code(400).send({ error: 'kind must be option or custom' })
+    if (kind !== 'option' && kind !== 'custom' && kind !== 'secret') {
+      return reply.code(400).send({ error: 'kind must be option, custom, or secret' })
+    }
+
+    if (kind === 'secret') {
+      const name = String(req.body?.name ?? '').trim()
+      if (!name) return reply.code(400).send({ error: 'name required for kind=secret' })
+
+      const cancelled = Array.isArray(req.body.selected_ids)
+        && req.body.selected_ids.map(id => String(id)).includes('cancel')
+      const secretValue = typeof req.body.secret_value === 'string' ? req.body.secret_value : ''
+
+      if (cancelled || !secretValue) {
+        const ok = agent.resolveUserPrompt(req.params.id, promptId, {
+          kind: 'secret',
+          selected_ids: ['cancel'],
+          selected_labels: ['取消'],
+          name,
+          cancelled: true,
+          saved: false,
+          session_granted: false,
+        })
+        if (!ok) return { ok: true, stale: true }
+        return { ok: true }
+      }
+
+      const injectHosts = Array.isArray(req.body.inject_hosts)
+        ? req.body.inject_hosts.map(h => String(h ?? '').trim()).filter(Boolean)
+        : undefined
+
+      try {
+        getUserDataStore().agentVault.put(name, secretValue, {
+          overwrite: true,
+          injectHosts,
+        })
+        getSessionSecretAccessStore().grant(req.params.id, name)
+      } catch (err) {
+        const message = err instanceof Error ? err.message : '保存密钥失败'
+        return reply.code(500).send({ error: message })
+      }
+
+      // 回传给 Agent 的答案永不含 secret_value
+      const ok = agent.resolveUserPrompt(req.params.id, promptId, {
+        kind: 'secret',
+        selected_ids: [],
+        selected_labels: [],
+        name,
+        saved: true,
+        session_granted: true,
+      })
+      if (!ok) return { ok: true, stale: true }
+      return { ok: true }
     }
 
     const selectedIds = Array.isArray(req.body.selected_ids)

@@ -4,6 +4,7 @@ export type {
   ShellPlatformStatus,
   ShellRunParams,
   ShellRunResult,
+  ShellSecretRef,
 } from './types.js'
 export { buildSandboxConfigFromGrants, buildSandboxConfigFromGrantPaths } from './config-from-grants.js'
 export type { BuildSandboxConfigOptions } from './config-from-grants.js'
@@ -62,6 +63,14 @@ export {
   applySessionLanAskChoice,
   SESSION_LAN_ASK_OPTIONS,
 } from './session-lan-access.js'
+export {
+  SessionSecretAccessStore,
+  getSessionSecretAccessStore,
+  resetSessionSecretAccessStoreForTests,
+  applySessionSecretGrantChoice,
+  SESSION_SECRET_GRANT_ASK_OPTIONS,
+} from './session-secret-access.js'
+export { redactSecretsInText, redactSecretsInUnknown } from './secret-redact.js'
 export {
   ShellRunStickyStore,
   SHELL_RUN_CONFIRM_OPTIONS,

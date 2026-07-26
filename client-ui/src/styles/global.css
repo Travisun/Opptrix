@@ -1456,6 +1456,60 @@ select:focus-visible {
 .opptrix-composer-user-prompt-panel__confirm {
   display: flex;
   justify-content: flex-end;
+  gap: 10px;
+}
+
+/* 密钥保险箱录入 — 更大按钮、更松排版 */
+.opptrix-composer-user-prompt-panel--secret {
+  gap: 14px;
+  padding: 14px 16px 16px;
+}
+
+.opptrix-composer-user-prompt-panel__hint {
+  margin: 2px 0 0;
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.45;
+  color: var(--opptrix-text-secondary, #6B6B6B);
+}
+
+.opptrix-composer-user-prompt-panel__secret-field {
+  display: flex;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: none;
+}
+
+.opptrix-composer-user-prompt-panel__secret-input {
+  width: 100%;
+  min-width: 0;
+}
+
+.opptrix-composer-user-prompt-panel__actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+  width: 100%;
+  margin-top: 2px;
+  padding-top: 12px;
+  border-top: 1px solid rgba(0, 0, 0, 0.06);
+}
+
+[data-theme="dark"] .opptrix-composer-user-prompt-panel__actions {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.opptrix-composer-user-prompt-panel__action-btn {
+  flex: 0 0 auto;
+  width: 112px;
+  min-height: 36px !important;
+  height: 36px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+  font-size: 14px !important;
+  font-weight: 600 !important;
 }
 
 /* Composer tooltip menus — @ mention, quick tasks, model picker */

@@ -162,6 +162,12 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 本轮已加载 shell_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」；标准 API 不够时主动用沙盒补齐计算/处理，勿推诿',
     '- 未加载 shell_run / workspace_* 时：勿声称已具备本地命令或工作区能力；需要时 activate_tool_pack([\'workspace\']) 后再用沙盒工具',
     '',
+    '【密钥保险箱】',
+    '- 需要第三方密钥/口令时：禁止让用户在聊天正文粘贴；禁止 ask_user 普通选项收集密钥；必须 request_secret 写入保险箱（密码框录入，明文永不进模型）',
+    '- 编程前 list_vault_secrets；已有则 grant_session_secret；没有则 request_secret',
+    '- shell_run 只用 secret_refs 传名字（及可选 inject_hosts/env）；脚本读 process.env.NAME / os.environ["NAME"]（值为 sentinel，出站由代理替换）',
+    '- 禁止把密钥写入工作区文件、日志、README；禁止明文进沙盒；经保险箱 + secret_refs 注入 sentinel',
+    '',
     '【能力不足时的沙盒兜底】',
     '- 内置/已匹配工具无法完成、或没有匹配工具时：若尚未加载 workspace → activate_tool_pack([\'workspace\'])，再用 shell_run / ensure_python / workspace_write 等编程实现',
     '- 可先用标准投研工具取数，再在沙盒计算/汇总；禁止空转反复 activate 无关 pack，禁止直接声称无法完成',
@@ -177,8 +183,9 @@ export function buildLocalProgrammingPlaybook(): string {
     '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
     '3. 缺依赖先 shell_install（npm/pip），勿盲造轮子',
     '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README',
-    '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止 Key/Token 进沙盒；勿引导 sync/dailyDump',
+    '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前判断联网/局域网；需 LAN → request_session_lan_access / ask_user(allow_lan_session)',
+    '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；shell_run 用 secret_refs 传名字',
   ].join('\n')
 }
 
@@ -199,7 +206,7 @@ export function buildUserInteractionPlaybook(): string {
     '- 参数：prompt 写一句面向投资者的问题；options 提供 2–5 个互斥或常见选项（id 英文/数字，label 中文简短）；allow_multiple 仅在「可多选」时设为 true',
     '- 界面会在输入框上方展示题目；最后一项为「自行输入」，用户可直接打字后按 Enter 提交',
     '- 收到返回的 selected_labels / custom_text 后再继续拉数与分析；同一轮对话最多调用 1 次 ask_user',
-    '- 禁止用于索要 API Key、密码等敏感信息；禁止在已有明确用户指令时重复确认',
+    '- 禁止用于索要密码等敏感信息（须用 request_secret 写入保险箱）；禁止在已有明确用户指令时重复确认',
   ].join('\n')
 }
 
@@ -433,7 +440,8 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
       '- shell_run argv 用 node/python/npm/pip；依赖用 shell_install(pip|npm)；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
       '- 测网站连通性或 HTTP 延迟优先 http_fetch；用户明确要求 ICMP ping 时用 shell_run',
       '- 沙箱默认禁 TCP 出站；访问外网需用户确认。系统 DNS 可用；私网/localhost 默认拒，需局域网时先 request_session_lan_access / ask_user(allow_lan_session)',
-      '- 编程：list_local_data_apis → get_local_data_catalog → 复用 shared/packages → shell_install → 自写回写；离线 dump 用 prepare_fuyao_dump，禁止 Key 进沙盒',
+      '- 编程：list_local_data_apis → get_local_data_catalog → 复用 shared/packages → shell_install → 自写回写；离线 dump 用 prepare_fuyao_dump',
+      '- 【密钥保险箱】需要第三方密钥/口令时：禁止让用户在聊天正文粘贴；禁止 ask_user 普通选项收集密钥；必须 request_secret 写入保险箱。编程前 list_vault_secrets；已有则 grant_session_secret；没有则 request_secret。shell_run 只用 secret_refs 传名字；脚本读 process.env.NAME / os.environ["NAME"]（值为 sentinel）。禁止把密钥写入工作区文件、日志、README；禁止明文进沙盒',
     )
   } else {
     sections.push(

@@ -17,6 +17,10 @@ import {
 } from './free-provider-throttle.js'
 import { McpServersRepository } from './mcp-servers.js'
 import {
+  AgentVaultRepository,
+  initAgentVaultSchema,
+} from './agent-vault.js'
+import {
   clearFtsNews,
   clearFtsSessions,
   deleteFtsNews,
@@ -39,6 +43,7 @@ export class UserDataStore {
   readonly speedRanking: SpeedRankingRepository
   readonly freeProviderThrottle: FreeProviderThrottleRepository
   readonly mcpServers: McpServersRepository
+  readonly agentVault: AgentVaultRepository
 
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -47,10 +52,12 @@ export class UserDataStore {
     initProviderSettingsSchema(this.db)
     initSpeedRankingSchema(this.db)
     initFreeProviderThrottleSchema(this.db)
+    initAgentVaultSchema(this.db)
     this.providerSettings = new ProviderSettingsRepository(this.db)
     this.speedRanking = new SpeedRankingRepository(this.db)
     this.freeProviderThrottle = new FreeProviderThrottleRepository(this.db)
     this.mcpServers = new McpServersRepository(this)
+    this.agentVault = new AgentVaultRepository(this.db)
     this.initSchema()
     this.migrateFromLegacyFiles()
     this.providerSettings.migrateFromLegacy(

@@ -1575,10 +1575,13 @@ export async function submitUserPromptResponse(
   sessionId: string,
   promptId: string,
   answer: {
-    kind: 'option' | 'custom'
+    kind: 'option' | 'custom' | 'secret'
     selected_ids?: string[]
     selected_labels?: string[]
     custom_text?: string
+    name?: string
+    secret_value?: string
+    inject_hosts?: string[]
   },
 ) {
   return jsonFetch<{ ok: boolean; stale?: boolean }>(`/sessions/${sessionId}/chat/user-prompt`, {

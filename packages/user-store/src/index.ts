@@ -12,4 +12,10 @@ export {
 } from './free-provider-throttle.js'
 export { McpServersRepository } from './mcp-servers.js'
 export { LocalExpertsRepository } from './local-experts.js'
+export {
+  AgentVaultRepository,
+  initAgentVaultSchema,
+  type VaultSecretMeta,
+  type VaultPutOpts,
+} from './agent-vault.js'
 export { UserDataStore, getUserDataStore } from './store.js'

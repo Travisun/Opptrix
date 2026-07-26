@@ -576,8 +576,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   shell_run: {
     packId: 'workspace',
-    usageGuide: '在授权工作区内运行允许的命令（argv 用 node/python/npm/pip）；桌面端 node 由应用内嵌运行时注入；测网站延迟优先 http_fetch。',
-    compliance: '先 get_system_info 或 python_env_status 确认就绪；argv 结构化传参；依赖用 shell_install(pip|npm)；禁止 sudo/管道删根。',
+    usageGuide: '在授权工作区内运行允许的命令（argv 用 node/python/npm/pip）；桌面端 node 由应用内嵌运行时注入；测网站延迟优先 http_fetch；第三方密钥用 secret_refs 引用保险箱名字。',
+    compliance: '先 get_system_info 或 python_env_status 确认就绪；argv 结构化传参；依赖用 shell_install(pip|npm)；禁止 sudo/管道删根；secret_refs 须已 request_secret/grant_session_secret，且提供 inject_hosts。',
   },
   shell_install: {
     packId: 'workspace',
@@ -607,12 +607,37 @@ export const TOOL_META: Record<string, ToolMeta> = {
   prepare_fuyao_dump: {
     packId: 'workspace',
     usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL。',
-    compliance: '服务端持 Key；禁止注入沙盒；勿引导 sync/dailyDump；成功用 root_id=shared + relative_path。',
+    compliance: '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；成功用 root_id=shared + relative_path。',
   },
   request_session_lan_access: {
     packId: 'workspace',
     usageGuide: '沙盒需访问局域网（NAS/内网 API）且全局未开局域网时，先申请本对话授权。',
     compliance: '内部 ask_user；选项 allow_lan_session|deny；授权不写回全局设置；clearSession 清除。',
+  },
+  request_secret: {
+    packId: 'workspace',
+    usageGuide: '需要第三方数据密钥/口令时安全录入保险箱；禁止 ask_user 或聊天粘贴收集密钥。',
+    compliance: 'name+reason 必填；同名存在且未 overwrite 返回 need_overwrite；工具结果仅 ok/name/saved，永不含明文。',
+  },
+  list_vault_secrets: {
+    packId: 'workspace',
+    usageGuide: '编程前查看保险箱已有哪些密钥名称与末位提示；无明文。',
+    compliance: '只读；返回 name/hint/updated_at；禁止声称能读出密钥内容。',
+  },
+  grant_session_secret: {
+    packId: 'workspace',
+    usageGuide: '保险箱已有条目时，为本对话授权使用（用户确认）；再 shell_run.secret_refs。',
+    compliance: 'name 必填且须已存在；内部 ask_user；clearSession 清除授权。',
+  },
+  revoke_session_secret: {
+    packId: 'workspace',
+    usageGuide: '撤销本对话对某保险箱密钥的使用授权（不删除条目）。',
+    compliance: '仅清会话 allowlist；不删 vault。',
+  },
+  delete_vault_secret: {
+    packId: 'workspace',
+    usageGuide: '用户明确要求删除保险箱中某密钥时使用；须确认。',
+    compliance: '内部 ask_user 确认；删除不可恢复；同步撤销本会话授权。',
   },
 }
 

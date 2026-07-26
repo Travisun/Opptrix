@@ -239,6 +239,11 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_local_data_catalog: 'workspace',
   prepare_fuyao_dump: 'workspace',
   request_session_lan_access: 'workspace',
+  request_secret: 'workspace',
+  list_vault_secrets: 'workspace',
+  grant_session_secret: 'workspace',
+  revoke_session_secret: 'workspace',
+  delete_vault_secret: 'workspace',
 
   // strategy_extra
   run_backtest: 'strategy_extra',

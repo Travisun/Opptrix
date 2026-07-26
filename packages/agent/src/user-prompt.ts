@@ -20,14 +20,28 @@ export interface UserPromptPayload {
   prompt: string
   options: UserPromptOption[]
   allowMultiple?: boolean
+  /** choice=普通选项；secret=保险箱密码录入 */
+  kind?: 'choice' | 'secret'
+  /** kind=secret 时的保险箱条目名 */
+  name?: string
+  /** kind=secret 时建议的 inject_hosts */
+  inject_hosts?: string[]
 }
 
-/** 用户作答结果 — 回传给 Agent 工具输出 */
+/** 用户作答结果 — 回传给 Agent 工具输出（secret 永不含明文） */
 export interface UserPromptAnswer {
-  kind: 'option' | 'custom'
+  kind: 'option' | 'custom' | 'secret'
   selected_ids: string[]
   selected_labels: string[]
   custom_text?: string
+  /** kind=secret：保险箱条目名 */
+  name?: string
+  /** kind=secret：是否已写入保险箱 */
+  saved?: boolean
+  /** kind=secret：是否已授予本会话 */
+  session_granted?: boolean
+  /** kind=secret：用户取消 */
+  cancelled?: boolean
 }
 
 interface PendingPrompt {
@@ -41,7 +55,7 @@ function sessionPrefix(sessionId: string) {
 }
 
 /**
- * 进程内问答桥 — Agent 调用 ask_user 时挂起，待客户端 POST 作答后恢复。
+ * 进程内问答桥 — Agent 调用 ask_user / request_secret 时挂起，待客户端 POST 作答后恢复。
  * 每个 AgentEngine 实例持有一个 bridge；按 sessionId + promptId 匹配 pending。
  */
 export class UserPromptBridge {
@@ -140,10 +154,16 @@ export function parseAskUserArgs(args: Record<string, unknown>): {
 
   return {
     payload: {
+      kind: 'choice',
       prompt,
       title,
       options,
       allowMultiple: Boolean(args.allow_multiple ?? args.allowMultiple),
     },
   }
+}
+
+/** 规范化保险箱条目名（建议大写蛇形） */
+export function normalizeVaultSecretName(raw: unknown): string {
+  return String(raw ?? '').trim().toUpperCase().replace(/[^A-Z0-9_]/g, '_')
 }
