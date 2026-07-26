@@ -122,8 +122,15 @@ export function createUserPromptId() {
   return randomUUID()
 }
 
+/** 预置选项下限（单选体验需要至少两项） */
+export const USER_PROMPT_OPTIONS_MIN = 2
+/** 预置选项软上限（防滥用；超过拒绝） */
+export const USER_PROMPT_OPTIONS_MAX = 50
+
 export function normalizeUserPromptOptions(raw: unknown): UserPromptOption[] | null {
-  if (!Array.isArray(raw) || raw.length < 2 || raw.length > 5) return null
+  if (!Array.isArray(raw) || raw.length < USER_PROMPT_OPTIONS_MIN || raw.length > USER_PROMPT_OPTIONS_MAX) {
+    return null
+  }
   const options: UserPromptOption[] = []
   for (const item of raw) {
     if (!item || typeof item !== 'object') return null
@@ -144,9 +151,20 @@ export function parseAskUserArgs(args: Record<string, unknown>): {
   const prompt = String(args.prompt ?? args.question ?? '').trim()
   if (!prompt) return { error: 'prompt 不能为空' }
 
-  const options = normalizeUserPromptOptions(args.options)
+  const rawOptions = args.options
+  if (!Array.isArray(rawOptions)) {
+    return { error: `options 须为 ${USER_PROMPT_OPTIONS_MIN}–${USER_PROMPT_OPTIONS_MAX} 个对象数组，每项含 id 与 label` }
+  }
+  if (rawOptions.length > USER_PROMPT_OPTIONS_MAX) {
+    return { error: `选项过多（最多 ${USER_PROMPT_OPTIONS_MAX} 个），请精简后再试` }
+  }
+  if (rawOptions.length < USER_PROMPT_OPTIONS_MIN) {
+    return { error: `请至少提供 ${USER_PROMPT_OPTIONS_MIN} 个选项` }
+  }
+
+  const options = normalizeUserPromptOptions(rawOptions)
   if (!options) {
-    return { error: 'options 须为 2–5 个对象数组，每项含 id 与 label' }
+    return { error: `options 须为 ${USER_PROMPT_OPTIONS_MIN}–${USER_PROMPT_OPTIONS_MAX} 个对象数组，每项含唯一 id 与非空 label` }
   }
 
   const titleRaw = args.title

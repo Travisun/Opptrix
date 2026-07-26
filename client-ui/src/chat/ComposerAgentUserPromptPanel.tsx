@@ -20,6 +20,8 @@ export default function ComposerAgentUserPromptPanel({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [secretValue, setSecretValue] = useState('')
   const isSecret = prompt.kind === 'secret'
+  const allSelected = prompt.options.length > 0
+    && selectedIds.length === prompt.options.length
 
   useEffect(() => {
     setCustomText('')
@@ -52,6 +54,15 @@ export default function ComposerAgentUserPromptPanel({
       prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]
     ))
   }, [])
+
+  const toggleSelectAll = useCallback(() => {
+    if (submitting) return
+    if (allSelected) {
+      setSelectedIds([])
+      return
+    }
+    setSelectedIds(prompt.options.map(opt => opt.id))
+  }, [allSelected, prompt.options, submitting])
 
   const submitMultiple = useCallback(() => {
     if (submitting || !selectedIds.length) return
@@ -178,7 +189,20 @@ export default function ComposerAgentUserPromptPanel({
         <p className="opptrix-composer-user-prompt-panel__prompt">{prompt.prompt}</p>
       </div>
 
-      <div className="opptrix-composer-user-prompt-panel__options">
+      {prompt.allowMultiple ? (
+        <div className="opptrix-composer-user-prompt-panel__toolbar">
+          <OpptrixButton
+            variant="ghost"
+            size="medium"
+            disabled={submitting || prompt.options.length === 0}
+            onClick={toggleSelectAll}
+          >
+            {allSelected ? '取消全选' : '全选'}
+          </OpptrixButton>
+        </div>
+      ) : null}
+
+      <div className="opptrix-composer-user-prompt-panel__options opptrix-scroll">
         {prompt.options.map(opt => (
           <button
             key={opt.id}
@@ -201,26 +225,26 @@ export default function ComposerAgentUserPromptPanel({
             {opt.label}
           </button>
         ))}
+      </div>
 
-        <div className="opptrix-composer-user-prompt-panel__custom">
-          <OpptrixInput
-            className="opptrix-composer-user-prompt-panel__custom-input"
-            value={customText}
-            disabled={submitting}
-            placeholder="其他，输入后按 Enter 提交"
-            onChange={(_e, data) => setCustomText(data.value)}
-            onKeyDown={handleCustomKeyDown}
-            aria-label="自行输入答案"
-          />
-          <span className="opptrix-composer-user-prompt-panel__custom-hint">Enter</span>
-        </div>
+      <div className="opptrix-composer-user-prompt-panel__custom">
+        <OpptrixInput
+          className="opptrix-composer-user-prompt-panel__custom-input"
+          value={customText}
+          disabled={submitting}
+          placeholder="其他，输入后按 Enter 提交"
+          onChange={(_e, data) => setCustomText(data.value)}
+          onKeyDown={handleCustomKeyDown}
+          aria-label="自行输入答案"
+        />
+        <span className="opptrix-composer-user-prompt-panel__custom-hint">Enter</span>
       </div>
 
       {prompt.allowMultiple && (
         <div className="opptrix-composer-user-prompt-panel__confirm">
           <OpptrixButton
             variant="primary"
-            size="small"
+            size="medium"
             disabled={submitting || selectedIds.length === 0}
             onClick={submitMultiple}
           >

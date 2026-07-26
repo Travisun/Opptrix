@@ -5,9 +5,10 @@ import {
   parseAskUserArgs,
   normalizeUserPromptOptions,
   UserPromptCancelledError,
+  USER_PROMPT_OPTIONS_MAX,
 } from '../packages/agent/dist/user-prompt.js'
 
-test('normalizeUserPromptOptions accepts 2–5 unique options', () => {
+test('normalizeUserPromptOptions accepts 2–50 unique options', () => {
   const ok = normalizeUserPromptOptions([
     { id: 'a', label: '选项 A' },
     { id: 'b', label: '选项 B' },
@@ -17,15 +18,44 @@ test('normalizeUserPromptOptions accepts 2–5 unique options', () => {
     { id: 'b', label: '选项 B' },
   ])
 
+  const six = Array.from({ length: 6 }, (_, i) => ({
+    id: `o${i}`,
+    label: `选项 ${i + 1}`,
+  }))
+  assert.equal(normalizeUserPromptOptions(six)?.length, 6)
+
+  const many = Array.from({ length: USER_PROMPT_OPTIONS_MAX }, (_, i) => ({
+    id: `o${i}`,
+    label: `选项 ${i + 1}`,
+  }))
+  assert.equal(normalizeUserPromptOptions(many)?.length, USER_PROMPT_OPTIONS_MAX)
+
   assert.equal(normalizeUserPromptOptions([{ id: 'a', label: '仅一项' }]), null)
   assert.equal(normalizeUserPromptOptions([
     { id: 'a', label: 'A' },
     { id: 'a', label: '重复' },
   ]), null)
+  assert.equal(
+    normalizeUserPromptOptions([
+      ...many,
+      { id: 'overflow', label: '超出' },
+    ]),
+    null,
+  )
 })
 
 test('parseAskUserArgs validates prompt and options', () => {
   assert.match(parseAskUserArgs({ prompt: '', options: [] }).error ?? '', /prompt/)
+  assert.match(
+    parseAskUserArgs({
+      prompt: '选一个',
+      options: Array.from({ length: USER_PROMPT_OPTIONS_MAX + 1 }, (_, i) => ({
+        id: `o${i}`,
+        label: `选项 ${i + 1}`,
+      })),
+    }).error ?? '',
+    /最多|精简/,
+  )
   const parsed = parseAskUserArgs({
     prompt: '你想分析哪类标的？',
     title: '分析范围',

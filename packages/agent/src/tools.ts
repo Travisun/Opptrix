@@ -611,7 +611,7 @@ export class ToolRegistry {
           prompt: { type: 'string', description: '要向用户提出的具体问题（面向投资者，避免技术术语）' },
           options: {
             type: 'array',
-            description: '2–5 个预置选项，每项为 { id, label }；id 为稳定标识，label 为展示文案',
+            description: '至少 2 个、最多 50 个预置选项，每项为 { id, label }；id 为稳定标识，label 为展示文案；prompt 与 label 均勿使用 emoji',
           },
           allow_multiple: { type: 'boolean', description: '是否允许多选，默认 false' },
         }, ['prompt', 'options']),
