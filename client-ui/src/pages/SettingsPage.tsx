@@ -32,8 +32,9 @@ import {
 } from '../api/client'
 import {
   applyFontScale, readFontScalePreference, writeFontScalePreference,
-  FONT_SCALE_LABELS, FONT_SCALE_OPTIONS, type FontScaleName,
+  type FontScaleName,
 } from '../theme/fontScale'
+import FontScaleSlider from './settings/FontScaleSlider'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
@@ -551,18 +552,10 @@ function SettingsPageView({
                   title="字体大小"
                   desc="调整全局文字尺寸，切换后立即生效"
                   control={(
-                    <div style={{ display: 'flex', gap: '4px' }}>
-                      {FONT_SCALE_OPTIONS.map(name => (
-                        <OpptrixButton
-                          key={name}
-                          variant={fontScale === name ? 'primary' : 'secondary'}
-                          onClick={() => setFontScale(name)}
-                          style={{ minWidth: '48px', fontSize: 'var(--opptrix-font-sm)' }}
-                        >
-                          {FONT_SCALE_LABELS[name]}
-                        </OpptrixButton>
-                      ))}
-                    </div>
+                    <FontScaleSlider
+                      value={fontScale}
+                      onChange={setFontScale}
+                    />
                   )}
                   last
                 />
