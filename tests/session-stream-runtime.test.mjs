@@ -83,4 +83,49 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     assert.match(next.contextHint ?? '', /整理/)
     assert.match(next.liveTrace?.thinkingLabel ?? '', /整理/)
   })
+
+  it('shows estimated token progress on reply without content', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      estimatedTokens: 128,
+    })
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 128 tokens')
+  })
+
+  it('prefers estimatedTokens label even when content is present', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '最终正文',
+      estimatedTokens: 1500,
+    })
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 1.5k tokens')
+  })
+
+  it('falls back to thinking label when reply has no estimatedTokens', () => {
+    const next = applyChatProgressEvent(createEmptyStreamSnapshot(), {
+      type: 'reply',
+      content: '正文',
+    })
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考…')
+  })
+
+  it('keeps consolidating label after tools when reply streams tokens', () => {
+    const withTools = {
+      ...createEmptyStreamSnapshot(),
+      liveTrace: {
+        steps: [],
+        thinkingLabel: '模型正在整理结果…',
+      },
+    }
+    const withTokens = applyChatProgressEvent(withTools, {
+      type: 'reply',
+      estimatedTokens: 64,
+    })
+    assert.equal(withTokens.liveTrace?.thinkingLabel, '模型正在整理结果 · 约 64 tokens')
+
+    const withoutTokens = applyChatProgressEvent(withTools, {
+      type: 'reply',
+    })
+    assert.equal(withoutTokens.liveTrace?.thinkingLabel, '模型正在整理结果…')
+  })
 })

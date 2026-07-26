@@ -59,7 +59,7 @@ import {
   KEEP_RECENT_DEFAULT,
 } from './context/compact.js'
 import { resolveModelContextTokensAsync, resolveModelMediaCapabilitiesAsync } from './llm/models-dev-context.js'
-import { estimateToolsTokens } from './context/token-estimate.js'
+import { estimateToolsTokens, estimateTextTokens } from './context/token-estimate.js'
 import {
   accumulateChatUsage,
   createEmptyChatUsage,
@@ -902,6 +902,7 @@ export class AgentEngine {
       const providerId = providerIdFromModelRef(activeModel)
 
       let overflowRetried = false
+      let lastRoundEstimatedTokens: number | undefined
       const runLlmRound = async (aggressive: boolean) => {
         const budgeted = await this.applyContextBudget(record, {
           modelId,
@@ -920,7 +921,46 @@ export class AgentEngine {
             estimated: budgeted.compactUsageEstimated ?? true,
           })
         }
-        const turn = await llm.chat(budgeted.modelView, openAiTools, signal, { sessionId })
+        let accumulated = ''
+        let stopTokenProgress = false
+        let lastEmitAt = 0
+        let lastTokens = -1
+        let pendingTokens: number | null = null
+        const TOKEN_PROGRESS_THROTTLE_MS = 80
+        const emitTokenProgress = (n: number) => {
+          lastEmitAt = Date.now()
+          lastTokens = n
+          pendingTokens = null
+          emit({ type: 'reply', estimatedTokens: n })
+        }
+        const turn = await llm.chat(budgeted.modelView, openAiTools, signal, {
+          sessionId,
+          onDelta: (delta) => {
+            if (delta.hasToolCalls) {
+              stopTokenProgress = true
+              pendingTokens = null
+              return
+            }
+            if (stopTokenProgress || !delta.text) return
+            accumulated += delta.text
+            const n = estimateTextTokens(accumulated)
+            if (n === lastTokens) return
+            const now = Date.now()
+            if (lastEmitAt > 0 && now - lastEmitAt < TOKEN_PROGRESS_THROTTLE_MS) {
+              pendingTokens = n
+              return
+            }
+            emitTokenProgress(n)
+          },
+        })
+        // 流结束：flush pending，并保证有一次最终 estimatedTokens
+        if (!stopTokenProgress && accumulated) {
+          const n = estimateTextTokens(accumulated)
+          emitTokenProgress(n)
+          lastRoundEstimatedTokens = n
+        } else {
+          lastRoundEstimatedTokens = undefined
+        }
         chatUsage = accumulateChatUsage(chatUsage, resolveTurnUsage(turn, budgeted.modelView))
         return turn
       }
@@ -1084,7 +1124,11 @@ export class AgentEngine {
 
       const reply = chatMessageContentToText(turn.message.content).trim() || '（无回复内容）'
       const outputAttachments = turn.outputAttachments
-      emit({ type: 'reply', content: reply })
+      emit({
+        type: 'reply',
+        content: reply,
+        ...(lastRoundEstimatedTokens != null ? { estimatedTokens: lastRoundEstimatedTokens } : {}),
+      })
       pushAssistant(
         reply,
         toolsUsed,
