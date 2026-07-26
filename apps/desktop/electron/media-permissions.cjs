@@ -68,10 +68,17 @@ async function openSystemMicrophoneSettings() {
 
 /**
  * 仅放行麦克风相关 media；拒绝摄像头等无关权限。
+ * 本地 wav 提示音播放无需系统喇叭授权；此处放行 speaker-selection，
+ * 避免 Chromium 权限层误拦输出设备选择（与 autoplayPolicy 配合）。
+ * 不要把「播放」绑到 askForMediaAccess('microphone')。
  * @param {import('electron').Session} ses
  */
 function installMediaPermissionHandlers(ses) {
   const target = ses ?? session.defaultSession
+
+  const isSpeakerPermission = (permission) =>
+    permission === 'speaker-selection'
+    || (typeof permission === 'string' && permission.includes('speaker'))
 
   target.setPermissionRequestHandler((_webContents, permission, callback, details) => {
     if (permission === 'media') {
@@ -85,6 +92,10 @@ function installMediaPermissionHandlers(ses) {
       callback(true)
       return
     }
+    if (isSpeakerPermission(permission)) {
+      callback(true)
+      return
+    }
     callback(false)
   })
 
@@ -94,6 +105,7 @@ function installMediaPermissionHandlers(ses) {
       if (mediaType === 'video') return false
       return true
     }
+    if (isSpeakerPermission(permission)) return true
     return false
   })
 }

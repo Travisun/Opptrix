@@ -61,6 +61,7 @@ describe('chat notification builders', () => {
     const payload = buildChatDoneNotification('abc_12', '贵州茅台投研')
     assert.equal(payload.title, '对话已生成完成')
     assert.equal(payload.body, '贵州茅台投研')
+    assert.equal(payload.silent, true)
     assert.equal(payload.tag, 'chat:done:abc_12')
     assert.equal(payload.sessionId, 'abc_12')
     assert.equal(payload.kind, 'chat_done')
@@ -72,6 +73,7 @@ describe('chat notification builders', () => {
     assert.equal(payload.title, '需要你的确认')
     assert.ok(payload.body)
     assert.ok((payload.body?.length ?? 0) <= 120)
+    assert.equal(payload.silent, true)
     assert.equal(payload.tag, 'chat:ask:s1')
     assert.equal(payload.kind, 'chat_ask')
   })
@@ -87,6 +89,7 @@ describe('sanitizeNotificationPayload', () => {
     const out = sanitizeNotificationPayload({
       title: '对话已生成完成',
       body: '摘要',
+      silent: true,
       tag: 'chat:done:sess1',
       sessionId: 'sess1',
       kind: 'chat_done',
@@ -95,6 +98,7 @@ describe('sanitizeNotificationPayload', () => {
     assert.deepEqual(out, {
       title: '对话已生成完成',
       body: '摘要',
+      silent: true,
       tag: 'chat:done:sess1',
       sessionId: 'sess1',
       kind: 'chat_done',
