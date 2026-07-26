@@ -181,11 +181,19 @@ html.opptrix-desktop {
 }
 
 /* ── Electron: 壳层透明以露出窗口材质（vibrancy/acrylic），主内容区自行实底 ──
- * 注意：BrowserWindow 本身不应 transparent:true，否则缩放动画漏出桌面。
+ * BrowserWindow.transparent:true + 统一 CSS 圆角；缩放漏底由主进程 will-resize 临时实色缓解。
  */
 html.opptrix-electron {
   --opptrix-app-bg: transparent;
   --opptrix-chrome-bg: transparent;
+  --opptrix-window-radius: 10px;
+}
+
+/* 三端统一 CSS 圆角；最大化/全屏时 .opptrix-window-squared 去掉圆角 */
+html.opptrix-electron.opptrix-window-css-radius:not(.opptrix-window-squared) #root,
+html.opptrix-electron.opptrix-window-css-radius:not(.opptrix-window-squared) .opptrix-app-shell {
+  border-radius: var(--opptrix-window-radius);
+  overflow: hidden;
 }
 
 html.opptrix-electron.opptrix-electron-startup,

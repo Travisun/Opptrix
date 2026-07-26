@@ -28,6 +28,16 @@ if (isElectron()) {
   if (platform === 'darwin' || platform === 'win32') {
     document.documentElement.classList.add('opptrix-electron-vibrancy')
   }
+
+  // 三端统一 CSS 圆角；最大化/全屏时挂 squared 去掉圆角
+  document.documentElement.classList.add('opptrix-window-css-radius')
+  const api = window.electronAPI
+  const applySquared = (squared: boolean) => {
+    document.documentElement.classList.toggle('opptrix-window-squared', squared)
+  }
+  void api?.getIsWindowSquared?.().then(applySquared)
+  api?.onWindowSquaredChange?.(applySquared)
+
   window.setTimeout(() => {
     document.documentElement.classList.remove('opptrix-electron-startup')
     window.electronAPI?.signalShellReady?.()
