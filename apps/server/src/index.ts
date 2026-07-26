@@ -9,7 +9,7 @@ import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
 import {
   loadConfig, saveConfig, publicConfig, toAgentProviders,
-  PROVIDER_PRESETS, type StoredProvider,
+  resolveProviderPresets, type StoredProvider,
 } from './config.js'
 import { getMarketDataService } from '@opptrix/market-data-store'
 import { registerStaticUi, shouldServeUi, isApiPath, resolveUiDist } from './static-ui.js'
@@ -753,7 +753,7 @@ app.patch<{ Body: { default_scorecard?: string; default_top_n?: number; default_
   },
 )
 
-app.get('/api/providers/presets', async () => ({ presets: PROVIDER_PRESETS }))
+app.get('/api/providers/presets', async () => ({ presets: await resolveProviderPresets() }))
 
 app.post<{ Body: { base_url: string; api_key: string } }>(
   '/api/providers/discover-models',

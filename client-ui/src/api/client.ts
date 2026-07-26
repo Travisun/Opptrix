@@ -1169,6 +1169,7 @@ export interface ProviderPreset {
   id: string
   name: string
   base_url: string
+  region?: 'cn' | 'global' | 'custom'
 }
 
 export interface AppConfig {

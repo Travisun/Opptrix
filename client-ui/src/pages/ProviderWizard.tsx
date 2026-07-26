@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, useRef } from 'react'
+import { useState, useEffect, useCallback, useRef, useMemo } from 'react'
 import {
   Text, Checkbox, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
-import { CheckmarkRegular } from '@fluentui/react-icons'
+import { CheckmarkRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import OpptrixField from '../components/opptrix/OpptrixField'
 import OpptrixInput from '../components/opptrix/OpptrixInput'
-import OpptrixSelect, { OpptrixOption } from '../components/opptrix/OpptrixSelect'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import {
   getProviderPresets, discoverModels, createProvider, updateProvider,
@@ -13,18 +12,84 @@ import {
 } from '../api/client'
 import { useSettingsToast } from './settings/SettingsToast'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { focusRing, ghostInteractive } from '../theme/mixins'
+
+/** 返利预置置顶顺序（kimi → xiaomimimo → siliconflow → bigmodel） */
+const PROMO_PRESET_IDS = ['moonshotai-cn', 'xiaomi', 'siliconflow-cn', 'zhipuai'] as const
+
+/** 次要文案：返利权益说明 */
+const PROMO_PRESET_HINTS: Record<(typeof PROMO_PRESET_IDS)[number], string> = {
+  'moonshotai-cn': '新注册用户100%得会员权益',
+  xiaomi: '新注册免费得10元体验金',
+  'siliconflow-cn': '新用户注册得14元体验金',
+  zhipuai: '新注册免费得2000万Tokens',
+}
+
+const PROMO_PRESET_ID_SET = new Set<string>(PROMO_PRESET_IDS)
+
+/** 预置提供商注册/控制台链接；返利四家必须用指定 URL，勿改 */
+const PRESET_SIGNUP_URLS: Record<string, string> = {
+  'moonshotai-cn': 'https://kimi-bot.com/activities/zh-cn/viral-referral/share?scenario=invite&from=share_poster&invitation_code=ST7TJY',
+  xiaomi: 'https://platform.xiaomimimo.com?ref=BFGUJ2',
+  'siliconflow-cn': 'https://cloud.siliconflow.cn/i/USDgicnv',
+  zhipuai: 'https://www.bigmodel.cn/invite?icode=3vdsl7O%2FnRjGs22eJGFJ3VwpqjqOwPB5EXW6OL4DgqY%3D',
+  deepseek: 'https://platform.deepseek.com/',
+  'minimax-cn': 'https://platform.minimaxi.com/',
+  'alibaba-cn': 'https://dashscope.console.aliyun.com/',
+  moonshotai: 'https://platform.moonshot.ai/',
+  longcat: 'https://longcat.chat/',
+  openai: 'https://platform.openai.com/api-keys',
+  openrouter: 'https://openrouter.ai/keys',
+  google: 'https://aistudio.google.com/apikey',
+  meta: 'https://llama.developer.meta.com/',
+  ollama: 'https://ollama.com/',
+}
+
+function normalizePresetBaseUrl(url: string): string {
+  return url.trim().replace(/\/+$/, '')
+}
+
+/** 从已选 id，或按 name/baseUrl 反查预置 id（编辑已有提供商时） */
+function resolvePresetId(
+  presets: ProviderPreset[],
+  selectedPresetId: string | null,
+  name: string,
+  baseUrl: string,
+): string | null {
+  if (selectedPresetId && selectedPresetId !== 'custom') return selectedPresetId
+  const u = normalizePresetBaseUrl(baseUrl)
+  if (u) {
+    const byUrl = presets.find(p => p.id !== 'custom' && normalizePresetBaseUrl(p.base_url) === u)
+    if (byUrl) return byUrl.id
+  }
+  const n = name.trim()
+  if (n) {
+    const byName = presets.find(p => p.id !== 'custom' && p.name === n)
+    if (byName) return byName.id
+  }
+  return null
+}
+
+function resolveSignupUrl(presetId: string | null): string | undefined {
+  if (!presetId) return undefined
+  const url = PRESET_SIGNUP_URLS[presetId]?.trim()
+  return url || undefined
+}
 
 const useStyles = makeStyles({
   root: {
     display: 'flex',
     flexDirection: 'column',
     gap: '18px',
+    flex: 1,
     minHeight: 0,
+    overflow: 'hidden',
   },
   steps: {
     display: 'flex',
     gap: '6px',
     width: '100%',
+    flexShrink: 0,
   },
   stepDot: {
     flex: 1,
@@ -39,9 +104,8 @@ const useStyles = makeStyles({
   },
   scroll: {
     flex: 1,
-    overflowY: 'auto',
     minHeight: 0,
-    maxHeight: 'min(52vh, 420px)',
+    overflowY: 'auto',
     marginRight: '-4px',
     paddingRight: '4px',
   },
@@ -71,6 +135,106 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '14px',
+  },
+  providerMeta: {
+    display: 'flex',
+    flexWrap: 'wrap',
+    alignItems: 'baseline',
+    gap: '6px 12px',
+  },
+  providerMetaName: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 600,
+    color: opptrixCssVars.textPrimary,
+    lineHeight: 1.4,
+  },
+  signupLink: {
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 500,
+    color: opptrixCssVars.accent,
+    textDecoration: 'none',
+    lineHeight: 1.4,
+    ':hover': {
+      textDecoration: 'underline',
+    },
+    ':focus-visible': {
+      ...focusRing,
+      borderRadius: opptrixTokens.radiusSm,
+    },
+  },
+  presetList: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+    border: `1px solid ${opptrixCssVars.border}`,
+    borderRadius: opptrixTokens.radiusMd,
+    padding: '4px',
+    overflow: 'hidden',
+  },
+  presetRow: {
+    ...ghostInteractive,
+    display: 'flex',
+    alignItems: 'center',
+    gap: '10px',
+    width: '100%',
+    padding: '10px 12px',
+    minHeight: '42px',
+    cursor: 'pointer',
+    textAlign: 'left',
+    color: opptrixCssVars.textPrimary,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 500,
+    lineHeight: 1.35,
+    position: 'relative',
+    borderRadius: opptrixTokens.radiusSm,
+    border: 'none',
+    backgroundColor: 'transparent',
+    /* 分割线独立于圆角，避免 borderBottom 随 radius 弯折 */
+    '::after': {
+      content: '""',
+      position: 'absolute',
+      left: '12px',
+      right: '12px',
+      bottom: 0,
+      height: '1px',
+      backgroundColor: opptrixCssVars.separator,
+      borderRadius: 0,
+      pointerEvents: 'none',
+    },
+    ':last-child::after': {
+      display: 'none',
+    },
+    /* surfaceHover 在浅色底上近乎不可见；改用 canvasAlt */
+    ':hover': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+    },
+    ':hover::after': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+    },
+    ':focus': {
+      outline: 'none',
+    },
+    ':focus-visible': {
+      ...focusRing,
+      backgroundColor: opptrixCssVars.canvasAlt,
+    },
+    ':focus-visible::after': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+    },
+  },
+  presetRowLabel: {
+    flex: 1,
+    minWidth: 0,
+  },
+  presetRowHint: {
+    fontSize: 'var(--opptrix-font-sm)',
+    fontWeight: 400,
+    color: opptrixCssVars.textTertiary,
+    marginTop: '2px',
+  },
+  presetChevron: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
   },
   modelList: {
     display: 'flex',
@@ -161,11 +325,56 @@ export interface ProviderWizardNavState {
 }
 
 const DEFAULT_PRESETS: ProviderPreset[] = [
-  { id: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1' },
-  { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1' },
-  { id: 'moonshot', name: 'Moonshot', base_url: 'https://api.moonshot.cn/v1' },
-  { id: 'custom', name: '自定义', base_url: '' },
+  { id: 'deepseek', name: 'DeepSeek', base_url: 'https://api.deepseek.com/v1', region: 'cn' },
+  { id: 'minimax-cn', name: 'MiniMax', base_url: 'https://api.minimaxi.com/v1', region: 'cn' },
+  { id: 'moonshotai-cn', name: 'Kimi', base_url: 'https://api.moonshot.cn/v1', region: 'cn' },
+  { id: 'xiaomi', name: 'MiMo', base_url: 'https://api.xiaomimimo.com/v1', region: 'cn' },
+  { id: 'siliconflow-cn', name: 'SiliconFlow (China)', base_url: 'https://api.siliconflow.cn/v1', region: 'cn' },
+  { id: 'alibaba-cn', name: 'Alibaba (China)', base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', region: 'cn' },
+  { id: 'zhipuai', name: 'Zhipu AI', base_url: 'https://open.bigmodel.cn/api/paas/v4', region: 'cn' },
+  { id: 'moonshotai', name: 'Moonshot AI', base_url: 'https://api.moonshot.ai/v1', region: 'cn' },
+  { id: 'longcat', name: 'Meituan', base_url: 'https://api.longcat.chat/openai', region: 'cn' },
+  { id: 'openai', name: 'OpenAI', base_url: 'https://api.openai.com/v1', region: 'global' },
+  { id: 'openrouter', name: 'OpenRouter', base_url: 'https://openrouter.ai/api/v1', region: 'global' },
+  { id: 'google', name: 'Google', base_url: 'https://generativelanguage.googleapis.com/v1beta/openai', region: 'global' },
+  { id: 'meta', name: 'Meta', base_url: 'https://api.meta.ai/v1', region: 'global' },
+  { id: 'ollama', name: '本地 Ollama', base_url: 'http://127.0.0.1:11434/v1', region: 'global' },
+  { id: 'custom', name: '自定义', base_url: '', region: 'custom' },
 ]
+
+function presetRegion(p: ProviderPreset): 'cn' | 'global' | 'custom' {
+  if (p.region) return p.region
+  if (p.id === 'custom') return 'custom'
+  if (
+    p.id === 'openai'
+    || p.id === 'openrouter'
+    || p.id === 'google'
+    || p.id === 'meta'
+    || p.id === 'ollama'
+  ) {
+    return 'global'
+  }
+  return 'cn'
+}
+
+/** 合并远端预置：禁止被旧短列表覆盖；白名单顺序/名称/region 为准，非空 base_url 取远端。 */
+function mergeProviderPresets(remote: ProviderPreset[]): ProviderPreset[] {
+  const remoteIsFull =
+    remote.length >= DEFAULT_PRESETS.length
+    && remote.every(p => p.region != null)
+  if (remoteIsFull) return remote
+
+  const byId = new Map(remote.map(p => [p.id, p]))
+  return DEFAULT_PRESETS.map(local => {
+    const fromApi = byId.get(local.id)
+    if (!fromApi) return local
+    const remoteUrl = typeof fromApi.base_url === 'string' ? fromApi.base_url.trim() : ''
+    return {
+      ...local,
+      base_url: remoteUrl || local.base_url,
+    }
+  })
+}
 
 export default function ProviderWizard({
   onCancel,
@@ -182,9 +391,10 @@ export default function ProviderWizard({
   const isEdit = Boolean(provider)
   const [step, setStep] = useState(1)
   const [presets, setPresets] = useState<ProviderPreset[]>(DEFAULT_PRESETS)
-  const [presetId, setPresetId] = useState('deepseek')
-  const [name, setName] = useState('DeepSeek')
-  const [baseUrl, setBaseUrl] = useState('https://api.deepseek.com')
+  const [customFormOpen, setCustomFormOpen] = useState(false)
+  const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null)
+  const [name, setName] = useState('')
+  const [baseUrl, setBaseUrl] = useState('')
   const [apiKey, setApiKey] = useState('')
   const [discovered, setDiscovered] = useState<string[]>([])
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -196,7 +406,7 @@ export default function ProviderWizard({
   useEffect(() => {
     getProviderPresets()
       .then(({ presets: list }) => {
-        if (list.length) setPresets(list)
+        if (list.length) setPresets(mergeProviderPresets(list))
       })
       .catch(() => { /* keep defaults */ })
   }, [])
@@ -209,33 +419,56 @@ export default function ProviderWizard({
     setDiscovered(provider.models)
     setApiKey('')
     setStep(1)
+    setCustomFormOpen(false)
+    setSelectedPresetId(null)
     setDiscoverHint('')
   }, [provider])
 
-  useEffect(() => {
-    if (!provider || !presets.length) return
-    const match = presets.find(
-      p => p.id !== 'custom' && p.base_url.replace(/\/$/, '') === provider.base_url.replace(/\/$/, ''),
-    )
-    setPresetId(match?.id ?? 'custom')
-  }, [provider, presets])
+  /** 扁平列表：返利置顶 → 其余中国 → 海外 → 自定义 */
+  const flatPresets = useMemo((): ProviderPreset[] => {
+    const byId = new Map(presets.map(p => [p.id, p]))
+    const promo = PROMO_PRESET_IDS
+      .map(id => byId.get(id))
+      .filter((p): p is ProviderPreset => p != null)
+    const rest = presets.filter(p => !PROMO_PRESET_ID_SET.has(p.id) && presetRegion(p) !== 'custom')
+    const cn = rest.filter(p => presetRegion(p) === 'cn')
+    const global = rest.filter(p => presetRegion(p) === 'global')
+    const custom = presets.find(p => presetRegion(p) === 'custom')
+      ?? { id: 'custom', name: '自定义', base_url: '', region: 'custom' as const }
+    return [...promo, ...cn, ...global, custom]
+  }, [presets])
 
-  const isCustom = presetId === 'custom' || isEdit
+  const showPresetList = !isEdit && !customFormOpen
+  const showCustomForm = !isEdit && customFormOpen
 
-  const handlePresetChange = (id: string) => {
-    setPresetId(id)
-    const preset = presets.find(p => p.id === id)
-    if (preset) {
-      setName(preset.id === 'custom' ? '' : preset.name)
-      setBaseUrl(preset.id === 'custom' ? '' : preset.base_url)
+  const matchedPresetId = useMemo(
+    () => resolvePresetId(presets, selectedPresetId, name, baseUrl),
+    [presets, selectedPresetId, name, baseUrl],
+  )
+  const signupUrl = resolveSignupUrl(matchedPresetId)
+
+  const selectPreset = (preset: ProviderPreset) => {
+    if (preset.id === 'custom') {
+      setName('')
+      setBaseUrl('')
+      setSelectedPresetId(null)
+      setCustomFormOpen(true)
+      return
     }
+    setName(preset.name)
+    setBaseUrl(preset.base_url)
+    setSelectedPresetId(preset.id)
+    // Ollama 兼容接口需带 Authorization，本地常用占位密钥即可
+    setApiKey(preset.id === 'ollama' ? 'ollama' : '')
+    setCustomFormOpen(false)
+    setStep(2)
   }
 
   const runDiscover = async (): Promise<boolean> => {
     const url = baseUrl.trim()
     if (!url || !apiKey.trim()) return false
     setDiscovering(true)
-    setDiscoverHint('正在验证 API Key 并拉取模型…')
+    setDiscoverHint('正在验证密钥并拉取模型…')
     setDiscovered([])
     setSelected(new Set())
     try {
@@ -255,7 +488,7 @@ export default function ProviderWizard({
       return true
     } catch (e) {
       setDiscoverHint('')
-      toast.showError(e instanceof Error ? e.message : 'API Key 验证失败，请检查后重试')
+      toast.showError(e instanceof Error ? e.message : '密钥验证失败，请检查后重试')
       return false
     } finally {
       setDiscovering(false)
@@ -335,6 +568,13 @@ export default function ProviderWizard({
 
   const handleBack = () => {
     if (step === 1) {
+      if (showCustomForm) {
+        setCustomFormOpen(false)
+        setName('')
+        setBaseUrl('')
+        setSelectedPresetId(null)
+        return
+      }
       if (!hideCancel) onCancel()
       return
     }
@@ -350,7 +590,7 @@ export default function ProviderWizard({
       : (isOnboarding ? '完成配置' : (isEdit ? '保存更改' : '完成添加')))
 
   const canAdvance = step === 1
-    ? canNextStep1
+    ? (showPresetList ? false : canNextStep1)
     : step === 2
       ? canNextStep2 && !discovering
       : canSave && !saving
@@ -375,7 +615,7 @@ export default function ProviderWizard({
     if (!hideFooter || !onNavStateChange) return
     onNavStateChange({
       step,
-      canWizardBack: step > 1,
+      canWizardBack: step > 1 || showCustomForm,
       canAdvance,
       advancing: discovering,
       saving,
@@ -387,6 +627,7 @@ export default function ProviderWizard({
     hideFooter,
     onNavStateChange,
     step,
+    showCustomForm,
     canAdvance,
     discovering,
     saving,
@@ -402,6 +643,21 @@ export default function ProviderWizard({
     return () => { onNavStateChange(null) }
   }, [hideFooter, onNavStateChange])
 
+  const renderPresetRow = (preset: ProviderPreset, hint?: string) => (
+    <button
+      key={preset.id}
+      type="button"
+      className={mergeClasses(s.presetRow, 'opptrix-focusable')}
+      onClick={() => selectPreset(preset)}
+    >
+      <span className={s.presetRowLabel}>
+        {preset.name}
+        {hint ? <div className={s.presetRowHint}>{hint}</div> : null}
+      </span>
+      <ChevronRightRegular className={s.presetChevron} fontSize={16} />
+    </button>
+  )
+
   return (
     <div className={s.root}>
       {!compact && (
@@ -415,41 +671,55 @@ export default function ProviderWizard({
       <div className={`${s.scroll} opptrix-scroll`}>
         <div className={s.bodyInner}>
 
-          {step === 1 && (
+          {step === 1 && showPresetList && (
             <>
               <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>{isEdit ? '编辑提供商' : '选择提供商'}</Text>
-                <Text className={s.stepDesc} block>OpenAI 兼容接口（/v1/chat/completions）</Text>
+                <Text className={s.stepTitle} block>选择提供商</Text>
+                <Text className={s.stepDesc} block>
+                  选一个预置服务，直接填写密钥；也可自定义服务地址。
+                </Text>
+              </div>
+              <div className={s.presetList}>
+                {flatPresets.map(p => {
+                  const promoId = PROMO_PRESET_IDS.find(id => id === p.id)
+                  return renderPresetRow(
+                    p,
+                    p.id === 'custom'
+                      ? '自行填写名称与服务地址'
+                      : (promoId ? PROMO_PRESET_HINTS[promoId] : undefined),
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          {step === 1 && (isEdit || showCustomForm) && (
+            <>
+              <div className={s.stepIntro}>
+                <Text className={s.stepTitle} block>
+                  {isEdit ? '编辑提供商' : '自定义提供商'}
+                </Text>
+                <Text className={s.stepDesc} block>
+                  {isEdit
+                    ? '可调整显示名称与服务地址'
+                    : '填写显示名称与服务地址，下一步再配置密钥'}
+                </Text>
               </div>
               <div className={s.formGrid}>
-                {!isEdit && (
-                  <OpptrixField label="提供商">
-                    <OpptrixSelect
-                      selectedOptions={[presetId]}
-                      onOptionSelect={(_, d) => handlePresetChange(d.optionValue || presetId)}
-                    >
-                      {presets.map(p => (
-                        <OpptrixOption key={p.id} value={p.id}>{p.name}</OpptrixOption>
-                      ))}
-                    </OpptrixSelect>
-                  </OpptrixField>
-                )}
                 <OpptrixField label="显示名称">
                   <OpptrixInput
                     value={name}
                     onChange={(_, d) => setName(d.value || '')}
-                    placeholder={isCustom ? '例如 My Provider' : '例如 DeepSeek'}
+                    placeholder="例如 我的服务"
                   />
                 </OpptrixField>
-                {isCustom && (
-                  <OpptrixField label="Base URL" hint="请填写完整的 API 地址（含 /v1 等路径）">
-                    <OpptrixInput
-                      value={baseUrl}
-                      onChange={(_, d) => setBaseUrl(d.value || '')}
-                      placeholder="https://api.example.com/v1"
-                    />
-                  </OpptrixField>
-                )}
+                <OpptrixField label="服务地址" hint="请填写完整地址（通常含 /v1 等路径）">
+                  <OpptrixInput
+                    value={baseUrl}
+                    onChange={(_, d) => setBaseUrl(d.value || '')}
+                    placeholder="https://api.example.com/v1"
+                  />
+                </OpptrixField>
               </div>
             </>
           )}
@@ -457,22 +727,37 @@ export default function ProviderWizard({
           {step === 2 && (
             <>
               <div className={s.stepIntro}>
-                <Text className={s.stepTitle} block>配置 API Key</Text>
+                <Text className={s.stepTitle} block>填写密钥</Text>
                 <Text className={s.stepDesc} block>
                   {isEdit
                     ? '留空表示沿用已保存的密钥；填写新密钥将重新验证并拉取模型列表。'
                     : isOnboarding
                       ? '密钥保存在你的电脑上。点「继续」将自动验证并拉取可用模型。'
-                      : '密钥保存在本地服务端。点击「下一步」将自动验证并拉取可用模型。'}
+                      : '密钥保存在本地。点击「下一步」将自动验证并拉取可用模型。'}
                 </Text>
               </div>
               <div className={s.formGrid}>
-                <OpptrixField label={isEdit ? 'API Key（可选）' : 'API Key'}>
+                {name.trim() ? (
+                  <div className={s.providerMeta}>
+                    <Text className={s.providerMetaName}>{name.trim()}</Text>
+                    {signupUrl ? (
+                      <a
+                        className={s.signupLink}
+                        href={signupUrl}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        点此获取密钥
+                      </a>
+                    ) : null}
+                  </div>
+                ) : null}
+                <OpptrixField label={isEdit ? '密钥（可选）' : '密钥'}>
                   <OpptrixInput
                     type="password"
                     value={apiKey}
                     onChange={(_, d) => setApiKey(d.value || '')}
-                    placeholder={isEdit ? '留空不修改' : 'sk-...'}
+                    placeholder={isEdit ? '留空不修改' : '粘贴密钥'}
                   />
                 </OpptrixField>
               </div>
@@ -539,26 +824,30 @@ export default function ProviderWizard({
 
       {!hideFooter && (
       <div className={s.footer}>
-        {!(hideCancel && step === 1) && (
+        {!(hideCancel && step === 1 && !showCustomForm) && (
         <OpptrixButton
           className={s.footerBack}
           variant="secondary"
           onClick={handleBack}
         >
-          {step === 1 ? '取消' : '上一步'}
+          {step === 1
+            ? (showCustomForm ? '返回列表' : '取消')
+            : '上一步'}
         </OpptrixButton>
         )}
         {step < 3 ? (
-          <OpptrixButton
-            variant="primary"
-            onClick={() => void handleNext()}
-            disabled={
-              (step === 1 && !canNextStep1)
-              || (step === 2 && (!canNextStep2 || discovering))
-            }
-          >
-            {step === 2 && discovering ? '验证中…' : '下一步'}
-          </OpptrixButton>
+          showPresetList ? null : (
+            <OpptrixButton
+              variant="primary"
+              onClick={() => void handleNext()}
+              disabled={
+                (step === 1 && !canNextStep1)
+                || (step === 2 && (!canNextStep2 || discovering))
+              }
+            >
+              {step === 2 && discovering ? '验证中…' : '下一步'}
+            </OpptrixButton>
+          )
         ) : (
           <OpptrixButton
             variant="primary"

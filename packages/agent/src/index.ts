@@ -119,10 +119,14 @@ export {
   resolveModelContextTokensAsync,
   lookupModelsDevContextLimit,
   getModelsDevCatalog,
+  resolveModelsDevProviderMeta,
   resetModelsDevCacheForTests,
   resolveModelMediaCapabilitiesAsync,
   lookupModelsDevMediaEntry,
   defaultTextOnlyMediaCapabilities,
+  type ModelsDevCatalog,
+  type ModelsDevProviderEntry,
+  type ModelsDevProviderMeta,
 } from './llm/models-dev-context.js'
 export {
   type MediaKind,

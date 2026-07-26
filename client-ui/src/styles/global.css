@@ -933,6 +933,34 @@ select:focus-visible {
   overflow: visible !important;
 }
 
+/* 添加/编辑提供商向导 — 小窗口内 footer 始终可见，中间列表滚动 */
+.opptrix-provider-wizard-dialog.fui-DialogSurface {
+  max-height: calc(100dvh - 32px) !important;
+  display: flex !important;
+  flex-direction: column !important;
+  overflow: hidden !important;
+}
+
+.opptrix-provider-wizard-dialog .fui-DialogBody {
+  display: flex !important;
+  flex-direction: column !important;
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.opptrix-provider-wizard-dialog .fui-DialogTitle {
+  flex-shrink: 0 !important;
+}
+
+.opptrix-provider-wizard-dialog .fui-DialogContent {
+  flex: 1 1 auto !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  display: flex !important;
+  flex-direction: column !important;
+}
+
 /* Workspace search — flush body, borderless inline input */
 .opptrix-workspace-search-dialog.fui-DialogBody {
   padding: 0 !important;
