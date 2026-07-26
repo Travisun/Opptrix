@@ -57,6 +57,7 @@ import { isElectron } from '../platform/detect'
 import {
   buildChatAskNotification,
   buildChatDoneNotification,
+  isAwayFromForeground,
   maybeShowChatLocalNotification,
   resolveWindowFocused,
 } from '../platform/chatNotifications'
@@ -289,6 +290,12 @@ export default function ChatApp() {
   const sessionStreamGenRef = useRef(new Map<string, number>())
   const stoppingSessionsRef = useRef(new Set<string>())
   const streamingSessionIdsRef = useRef(new Set<string>())
+  /** 本轮生成期间曾失焦/不可见（sessionId → true） */
+  const streamAwayDuringGenRef = useRef(new Map<string, boolean>())
+  /** 同轮完成通知去重键：`${sessionId}:${streamGen}` */
+  const doneNotifiedGensRef = useRef(new Set<string>())
+  /** 系统通知被拒时仅温和提示一次 */
+  const notificationDeniedHintedRef = useRef(false)
   const activeIdRef = useRef<string | null>(null)
   const viewRef = useRef(view)
   const sessionsRef = useRef(sessions)
@@ -299,6 +306,78 @@ export default function ChatApp() {
     else streamingSessionIdsRef.current.delete(sessionId)
     setStreamingSessionIds(Array.from(streamingSessionIdsRef.current))
   }, [])
+
+  const resolveSessionTitle = useCallback((targetSessionId: string, eventTitle?: string) => {
+    return eventTitle
+      ?? (activeSessionMetaRef.current?.id === targetSessionId
+        ? activeSessionMetaRef.current.title
+        : undefined)
+      ?? sessionsRef.current.find(s => s.id === targetSessionId)?.title
+  }, [])
+
+  const handleNotificationResult = useCallback((result: 'skipped' | 'shown' | 'denied' | 'failed') => {
+    if (result !== 'denied' || notificationDeniedHintedRef.current) return
+    notificationDeniedHintedRef.current = true
+    setError('桌面通知未开启。可在系统设置中允许 Opptrix 发送通知，以免错过对话完成提醒。')
+  }, [])
+
+  const maybeNotifyChatDone = useCallback((targetSessionId: string, sessionTitle?: string) => {
+    const streamGen = sessionStreamGenRef.current.get(targetSessionId) ?? 0
+    const dedupeKey = `${targetSessionId}:${streamGen}`
+    if (doneNotifiedGensRef.current.has(dedupeKey)) return
+    doneNotifiedGensRef.current.add(dedupeKey)
+
+    void (async () => {
+      const documentVisible = typeof document !== 'undefined'
+        && document.visibilityState === 'visible'
+      const windowFocused = await resolveWindowFocused()
+      const result = await maybeShowChatLocalNotification(
+        targetSessionId,
+        {
+          activeSessionId: activeIdRef.current,
+          view: viewRef.current,
+          documentVisible,
+          windowFocused,
+          awayDuringGeneration: streamAwayDuringGenRef.current.get(targetSessionId) === true,
+        },
+        buildChatDoneNotification(targetSessionId, sessionTitle),
+      )
+      handleNotificationResult(result)
+    })()
+  }, [handleNotificationResult])
+
+  const markStreamingSessionsAwayIfNeeded = useCallback(async () => {
+    if (streamingSessionIdsRef.current.size === 0) return
+    const documentVisible = typeof document !== 'undefined'
+      && document.visibilityState === 'visible'
+    const windowFocused = await resolveWindowFocused()
+    if (!isAwayFromForeground({ documentVisible, windowFocused })) return
+    for (const sessionId of streamingSessionIdsRef.current) {
+      streamAwayDuringGenRef.current.set(sessionId, true)
+    }
+  }, [])
+
+  useEffect(() => {
+    if (!isElectron()) return
+
+    const onVisibilityOrFocusChange = () => {
+      void markStreamingSessionsAwayIfNeeded()
+    }
+
+    document.addEventListener('visibilitychange', onVisibilityOrFocusChange)
+    window.addEventListener('blur', onVisibilityOrFocusChange)
+    window.addEventListener('focus', onVisibilityOrFocusChange)
+    const timer = window.setInterval(() => {
+      void markStreamingSessionsAwayIfNeeded()
+    }, 2000)
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibilityOrFocusChange)
+      window.removeEventListener('blur', onVisibilityOrFocusChange)
+      window.removeEventListener('focus', onVisibilityOrFocusChange)
+      window.clearInterval(timer)
+    }
+  }, [markStreamingSessionsAwayIfNeeded])
 
   const pushStreamEvent = useCallback((targetSessionId: string, event: ChatProgressEvent) => {
     const prev = streamCacheRef.current.get(targetSessionId) ?? createThinkingStreamSnapshot()
@@ -314,27 +393,17 @@ export default function ChatApp() {
       }
     }
 
+    // 内容已落定：优先在 reply 触发完成通知，避免等待慢 done（token/工具重建）
+    if (event.type === 'reply') {
+      maybeNotifyChatDone(targetSessionId, resolveSessionTitle(targetSessionId))
+    }
+
+    // done 作为兜底（无 reply 的路径）；同轮已通知则去重跳过
     if (event.type === 'done' && !event.cancelled) {
-      const sessionTitle = event.title
-        ?? (activeSessionMetaRef.current?.id === targetSessionId
-          ? activeSessionMetaRef.current.title
-          : undefined)
-        ?? sessionsRef.current.find(s => s.id === targetSessionId)?.title
-      void (async () => {
-        const documentVisible = typeof document !== 'undefined'
-          && document.visibilityState === 'visible'
-        const windowFocused = await resolveWindowFocused()
-        await maybeShowChatLocalNotification(
-          targetSessionId,
-          {
-            activeSessionId: activeIdRef.current,
-            view: viewRef.current,
-            documentVisible,
-            windowFocused,
-          },
-          buildChatDoneNotification(targetSessionId, sessionTitle),
-        )
-      })()
+      maybeNotifyChatDone(
+        targetSessionId,
+        resolveSessionTitle(targetSessionId, event.title),
+      )
     }
 
     if (event.type === 'user_prompt') {
@@ -343,7 +412,7 @@ export default function ChatApp() {
         const documentVisible = typeof document !== 'undefined'
           && document.visibilityState === 'visible'
         const windowFocused = await resolveWindowFocused()
-        await maybeShowChatLocalNotification(
+        const result = await maybeShowChatLocalNotification(
           targetSessionId,
           {
             activeSessionId: activeIdRef.current,
@@ -353,9 +422,10 @@ export default function ChatApp() {
           },
           buildChatAskNotification(targetSessionId, promptSummary),
         )
+        handleNotificationResult(result)
       })()
     }
-  }, [])
+  }, [handleNotificationResult, maybeNotifyChatDone, resolveSessionTitle])
 
   const resolveStreamSnapshot = useCallback((id: string | null) => {
     if (!id || !streamingSessionIdsRef.current.has(id)) return null
@@ -856,9 +926,15 @@ export default function ChatApp() {
 
     const streamGen = (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1
     sessionStreamGenRef.current.set(sessionId, streamGen)
+    streamAwayDuringGenRef.current.set(sessionId, false)
+    for (const key of [...doneNotifiedGensRef.current]) {
+      if (key.startsWith(`${sessionId}:`)) doneNotifiedGensRef.current.delete(key)
+    }
     const initialSnapshot = createThinkingStreamSnapshot()
     streamCacheRef.current.set(sessionId, initialSnapshot)
     markSessionStreaming(sessionId, true)
+    // 若发送时已不在前台，立即记为曾离开
+    void markStreamingSessionsAwayIfNeeded()
     stoppingSessionsRef.current.delete(sessionId)
     if (activeIdRef.current === sessionId) {
       syncStreamSnapshotToUi(initialSnapshot, streamUiRef.current)

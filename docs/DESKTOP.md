@@ -100,10 +100,13 @@ Electron 桌面端在用户**未盯着该会话聊天页**时，用系统本地�
 
 | 流事件 | 通知 `kind` | `tag` 格式 | 标题（UI 文案） | body |
 |--------|-------------|------------|-----------------|------|
-| `done`（且非 `cancelled`） | `chat_done` | `chat:done:{sessionId}` | 对话已生成完成 | 会话标题（截断至 120 字） |
+| `reply`（内容已落定；优先） | `chat_done` | `chat:done:{sessionId}` | 对话已生成完成 | 会话标题（截断至 120 字） |
+| `done`（且非 `cancelled`；兜底） | 同上 | 同上 | 同上 | 优先用 `event.title`，否则会话标题 |
 | `user_prompt` | `chat_ask` | `chat:ask:{sessionId}` | 需要你的确认 | `prompt.title` 或 `prompt.prompt`（截断至 120 字） |
 
-触发位置：`ChatApp` 的 `pushStreamEvent`。仅 Electron（`electronAPI.isElectron`）且通过注意力判断后才调用 `showLocalNotification`。
+触发位置：`ChatApp` 的 `pushStreamEvent`。完成通知**优先在 `reply`** 发出，避免等待服务端慢 `done`（重建工具 / 估 token）造成「用户已切回前台 → 误判 attending → 漏通知」。同一轮（`sessionId` + `streamGen`）只通知一次；`done` 若已通知则去重跳过。`user_prompt` 仍为即时事件。
+
+仅 Electron（`electronAPI.isElectron`）且通过注意力判断后才调用 `showLocalNotification`。
 
 ### 失焦定义（何时发通知）
 
@@ -115,6 +118,8 @@ Electron 桌面端在用户**未盯着该会话聊天页**时，用系统本地�
 4. 主窗口 focused（优先 `electronAPI.windowIsFocused()` → IPC `window-is-focused` → `BrowserWindow.isFocused()`；无 API 时回退 `document.hasFocus()`）
 
 任一不满足 → `shouldNotify` 为 true → 发通知。因此：切到其他会话 / 非聊天页 / 文档隐藏 / 窗口失焦都会通知。
+
+**生成期间曾离开**：流式开始时清零；在 `visibilitychange` / `blur`/`focus` 与短周期轮询中，若文档不可见或主窗口失焦，则标记 `awayDuringGeneration`。完成后即使当前又回到前台，只要本轮曾离开，仍会尝试发完成通知。
 
 ### 点击深链
 
@@ -131,12 +136,23 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | IPC channel | preload API | 说明 |
 |-------------|-------------|------|
 | `notification-is-supported` | `notificationIsSupported()` | `Notification.isSupported()` |
-| `notification-get-permission` | `notificationGetPermission()` | 缓存权限状态 |
-| `notification-request-permission` | `notificationRequestPermission()` | 壳启动时 `useDesktopShell` 会请求一次 |
-| `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick` |
+| `notification-get-permission` | `notificationGetPermission()` | 读取系统真实权限（见下），非假 granted |
+| `notification-request-permission` | `notificationRequestPermission()` | 刷新系统权限状态；壳启动时 `useDesktopShell` 会请求一次 |
+| `notification-open-settings` | `notificationOpenSettings()` | 打开系统「通知」设置页（macOS / Windows） |
+| `notification-show` | `showLocalNotification(payload)` | 校验后展示；点击走 `onNotificationClick`；权限为 denied 时返回 `false` |
 | `window-is-focused` | `windowIsFocused()` | 主窗口是否 focused（注意力判断） |
 
 协议事件仍为 `opptrix-protocol`（`onProtocolOpen`），与通知点击深链共用。
+
+### 权限模型
+
+| 平台 | 行为 |
+|------|------|
+| **macOS** | 优先 `systemPreferences.getNotificationSettings?.()` 的 `authorizationStatus` 映射为 `granted` / `denied` / `default`。无该 API 时**不得**无条件写 `granted`。`Notification.show` 的 `failed` 事件会记日志并回读权限。系统拒绝后无法编程式弹授权框，需用户在系统设置中开启；设置 → 关于提供引导，「打开系统设置」走 `notification-open-settings`。 |
+| **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`；能力可用时视为 `granted` |
+| **Linux** | 依赖桌面环境；`Notification.isSupported()` 为真时视为可发 |
+
+Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一次（引导去系统设置）；设置「关于」也展示当前通知状态与操作入口。
 
 ### Payload（`LocalNotificationPayload`）
 
@@ -156,10 +172,10 @@ opptrix://chat?session={encodeURIComponent(sessionId)}
 | 平台 | 注意 |
 |------|------|
 | **Windows** | `configureNotificationIdentity(appId)` → `app.setAppUserModelId`（`package.json` `build.appId`），否则通知可能不归到本应用 |
-| **macOS** | 需系统「通知」权限；启动时请求；用户在系统设置中拒绝则无法展示 |
+| **macOS** | 需系统「通知」权限；启动时刷新权限状态；用户在系统设置中拒绝则无法展示，应用内会引导去开启 |
 | **Linux** | 依赖桌面环境对 Electron `Notification` 的支持（`Notification.isSupported()`）；部分环境可能静默失败 |
 
-单元测试：`tests/chat-notifications.test.mjs`（注意力、builder、sanitize）。
+单元测试：`tests/chat-notifications.test.mjs`（注意力、离开标记、builder、sanitize、macOS 权限映射）。
 
 ## 命令隔离（Agent Shell）
 

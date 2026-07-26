@@ -42,6 +42,7 @@ declare global {
       notificationIsSupported?: () => Promise<boolean>
       notificationGetPermission?: () => Promise<NotificationPermissionState>
       notificationRequestPermission?: () => Promise<NotificationPermissionState>
+      notificationOpenSettings?: () => Promise<boolean>
       showLocalNotification?: (payload: LocalNotificationPayload) => Promise<boolean>
       signalShellReady?: () => void
       setThemeSource?: (source: 'system' | 'light' | 'dark') => void

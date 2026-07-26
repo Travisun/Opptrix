@@ -5,7 +5,18 @@ export type ChatNotificationAttention = {
   view: string
   documentVisible: boolean
   windowFocused: boolean
+  /**
+   * 本轮流式生成期间曾不可见或主窗口失焦。
+   * 为 true 时即使当前又回到前台，完成通知仍应发出。
+   */
+  awayDuringGeneration?: boolean
 }
+
+export type ChatLocalNotificationResult =
+  | 'skipped'
+  | 'shown'
+  | 'denied'
+  | 'failed'
 
 const BODY_MAX = 120
 
@@ -27,11 +38,20 @@ export function isAttendingChat(
   )
 }
 
-/** 失焦 / 非 chat 页 / 其他会话 → 应发通知 */
+/** 文档隐藏或主窗口失焦 → 视为离开（用于生成期间标记） */
+export function isAwayFromForeground(state: {
+  documentVisible: boolean
+  windowFocused: boolean
+}): boolean {
+  return !state.documentVisible || !state.windowFocused
+}
+
+/** 失焦 / 非 chat 页 / 其他会话 / 生成期间曾离开 → 应发通知 */
 export function shouldNotify(
   targetSessionId: string,
   state: ChatNotificationAttention,
 ): boolean {
+  if (state.awayDuringGeneration) return true
   return !isAttendingChat(targetSessionId, state)
 }
 
@@ -88,17 +108,22 @@ export async function resolveWindowFocused(): Promise<boolean> {
 
 /**
  * Electron 下按注意力状态决定是否展示本地通知；Web / 失败静默 no-op。
+ * 返回结果便于权限被拒时做一次温和引导。
  */
 export async function maybeShowChatLocalNotification(
   targetSessionId: string,
   attention: ChatNotificationAttention,
   payload: LocalNotificationPayload,
-): Promise<void> {
-  if (!isElectronRuntime()) return
-  if (!shouldNotify(targetSessionId, attention)) return
+): Promise<ChatLocalNotificationResult> {
+  if (!isElectronRuntime()) return 'skipped'
+  if (!shouldNotify(targetSessionId, attention)) return 'skipped'
   try {
-    await window.electronAPI?.showLocalNotification?.(payload)
+    const shown = await window.electronAPI?.showLocalNotification?.(payload)
+    if (shown) return 'shown'
+    const permission = await window.electronAPI?.notificationGetPermission?.()
+    if (permission === 'denied') return 'denied'
+    return 'failed'
   } catch {
-    /* fire-and-forget */
+    return 'failed'
   }
 }

@@ -5,12 +5,16 @@ import {
   buildChatAskNotification,
   buildChatDoneNotification,
   isAttendingChat,
+  isAwayFromForeground,
   shouldNotify,
   truncateNotificationText,
 } from '../client-ui/src/platform/chatNotifications.ts'
 
 const require = createRequire(import.meta.url)
-const { sanitizeNotificationPayload } = require('../apps/desktop/electron/notifications.cjs')
+const {
+  mapDarwinAuthorizationStatus,
+  sanitizeNotificationPayload,
+} = require('../apps/desktop/electron/notifications.cjs')
 
 describe('chat notification attention', () => {
   const attending = {
@@ -32,6 +36,23 @@ describe('chat notification attention', () => {
     assert.equal(shouldNotify('sess-1', attending), false)
     assert.equal(shouldNotify('sess-1', { ...attending, view: 'settings' }), true)
     assert.equal(shouldNotify('sess-2', attending), true)
+  })
+
+  it('awayDuringGeneration forces notify even when currently attending', () => {
+    assert.equal(
+      shouldNotify('sess-1', { ...attending, awayDuringGeneration: true }),
+      true,
+    )
+    assert.equal(
+      shouldNotify('sess-1', { ...attending, awayDuringGeneration: false }),
+      false,
+    )
+  })
+
+  it('isAwayFromForeground when hidden or blurred', () => {
+    assert.equal(isAwayFromForeground({ documentVisible: true, windowFocused: true }), false)
+    assert.equal(isAwayFromForeground({ documentVisible: false, windowFocused: true }), true)
+    assert.equal(isAwayFromForeground({ documentVisible: true, windowFocused: false }), true)
   })
 })
 
@@ -106,5 +127,25 @@ describe('sanitizeNotificationPayload', () => {
     })
     assert.equal(out?.body?.length, 200)
     assert.equal(out?.kind, undefined)
+  })
+})
+
+describe('mapDarwinAuthorizationStatus', () => {
+  it('maps authorized family to granted', () => {
+    assert.equal(mapDarwinAuthorizationStatus('authorized'), 'granted')
+    assert.equal(mapDarwinAuthorizationStatus('provisional'), 'granted')
+    assert.equal(mapDarwinAuthorizationStatus('temporary'), 'granted')
+    assert.equal(mapDarwinAuthorizationStatus('ephemeral'), 'granted')
+  })
+
+  it('maps denied family to denied', () => {
+    assert.equal(mapDarwinAuthorizationStatus('denied'), 'denied')
+    assert.equal(mapDarwinAuthorizationStatus('restricted'), 'denied')
+  })
+
+  it('maps undetermined to default (never fake granted)', () => {
+    assert.equal(mapDarwinAuthorizationStatus('not-determined'), 'default')
+    assert.equal(mapDarwinAuthorizationStatus(''), 'default')
+    assert.equal(mapDarwinAuthorizationStatus(undefined), 'default')
   })
 })
