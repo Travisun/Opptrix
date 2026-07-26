@@ -64,6 +64,15 @@ const SEED_RULES: SeedRule[] = [
       /\bping\b/i,
       /traceroute|tracert/i,
       /网络延迟|连通性|运行命令|执行(?:命令|shell|脚本)/,
+      // 编程/自定义处理兜底（避免纯投研问句误种子：需显式计算/脚本/清洗等意图）
+      /写(?:个|一个)?(?:脚本|程序)|编程实现|自定义(?:处理|计算|脚本)/,
+      /批量(?:清洗|处理|转换)|数据清洗|脚本计算/,
+      /无法用(?:现成|内置|标准)工具|现成工具不够|没有匹配(?:的)?工具/,
+      /\b(?:write|run)\s+(?:a\s+)?(?:script|program)\b|custom\s+(?:processing|script|computation)\b/i,
+      /\bbatch\s+(?:clean|process|transform)\b|\bdata\s+cleaning\b/i,
+      /本地(?:数据|API|能力)(?:目录|清单)|list_local_data_apis|get_local_data_catalog/i,
+      /扶摇.*(?:dump|parquet)|prepare_fuyao_dump|复权因子.*(?:包|dump)/i,
+      /局域网|request_session_lan_access|allow_lan_session|公共复用区|shared\/packages/i,
     ],
   },
   {

@@ -1,4 +1,5 @@
 import path from 'node:path'
+import { resolveNodeRuntime, resolvePythonRuntime } from '@opptrix/agent-workspace'
 import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
 
 const DATA_ROOT = resolveUserDataRoot()
@@ -72,8 +73,12 @@ export function buildAgentSafeProjectInfo(
   }
 }
 
-export function getSystemInfo() {
+export async function getSystemInfo() {
   const now = new Date()
+  const [nodeRuntime, pythonRuntime] = await Promise.all([
+    resolveNodeRuntime(),
+    resolvePythonRuntime(),
+  ])
   return {
     platform: process.platform,
     arch: process.arch,
@@ -88,6 +93,15 @@ export function getSystemInfo() {
       rss: Math.round(process.memoryUsage().rss / 1024 / 1024),
       heap_used: Math.round(process.memoryUsage().heapUsed / 1024 / 1024),
     },
+    node_ready: nodeRuntime.ready,
+    node_source: nodeRuntime.active_source,
+    sandbox_node_version: nodeRuntime.active_version,
+    npm_ready: nodeRuntime.npm_ready,
+    npm_source: nodeRuntime.npm_source,
+    electron_run_as_node: nodeRuntime.electron_run_as_node,
+    python_ready: pythonRuntime.ready,
+    python_source: pythonRuntime.active_source,
+    sandbox_python_version: pythonRuntime.active_version,
     at: now.toISOString(),
   }
 }

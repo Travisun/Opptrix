@@ -100,8 +100,10 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'workspace',
     title: '工作区与文件',
-    description: '读写本地工作区、下载文件、受控 HTTP 请求、文件夹授权、隔离环境运行代码',
-    whenToUse: '保存/读取报告与数据文件、下载附件、调用开放 API、访问用户授权的文件夹、运行 python/node 脚本或安装依赖',
+    description:
+      '读写本地工作区与公共复用区、本地数据目录、扶摇 dump、受控 HTTP、文件夹授权、隔离环境运行代码；内置/已匹配工具不够或无匹配能力时，可在沙盒写脚本完成计算与处理，并可与其它 pack 取数结合',
+    whenToUse:
+      '保存/读取报告与数据文件、公共包复用、离线 Parquet、下载附件、调用开放 API、访问用户授权的文件夹、运行 python/node 脚本或安装依赖；标准投研工具覆盖不了的计算/清洗/自定义处理时作沙盒兜底（可先取数再沙盒计算）',
   },
   {
     id: 'strategy_extra',
@@ -233,6 +235,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   shell_install: 'workspace',
   python_env_status: 'workspace',
   ensure_python: 'workspace',
+  list_local_data_apis: 'workspace',
+  get_local_data_catalog: 'workspace',
+  prepare_fuyao_dump: 'workspace',
+  request_session_lan_access: 'workspace',
 
   // strategy_extra
   run_backtest: 'strategy_extra',
@@ -282,7 +288,16 @@ export function buildToolPackCatalogPrompt(): string {
   lines.push('- 同一任务对同一工具最多调用 2 次')
   lines.push('- 用户已明确代码时跳过搜索直接分析；跨市场先 search_instruments')
   lines.push('- A 股专用工具（机构评级、筹码等）勿用于非 A 股')
-  lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代')
+  lines.push('- 标准 API 可用时禁止用自定义 Provider 方法替代；标准工具能做的禁止先上沙盒瞎写')
+  lines.push(
+    '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → activate_tool_pack([\'workspace\'])，用 shell_run / ensure_python / workspace_* 编程实现，勿空转反复 activate 无关 pack，勿直接声称无法完成',
+  )
+  lines.push(
+    '- 可结合：先用标准投研工具取数，再在沙盒里计算/汇总/出图（若需要）',
+  )
+  lines.push(
+    '- 目标 pack 已加载、或选型卡首选工具已在本轮 tools 中时：禁止仅为「开工」再 activate_tool_pack',
+  )
   lines.push('- 外部 MCP：已绑定工具由引擎优先外部再本地兜底；独有工具名形如 serverId__tool；安装/卸载须用户确认')
   return lines.join('\n')
 }

@@ -4,6 +4,7 @@ import https from 'node:https'
 import { formatOutboundFetchError } from '@opptrix/shared'
 import { SsrfBlockedError } from './errors.js'
 import { assertAllowedHost, assertAllowedProtocol } from './ssrf.js'
+import { isEffectiveLanAllowed } from './shell/session-lan-access.js'
 
 export type HttpBodyEncoding = 'utf8' | 'base64'
 export type HttpResponseType = 'text' | 'json' | 'bytes_meta'
@@ -21,6 +22,10 @@ export interface HttpFetchParams {
   response_type?: HttpResponseType
   max_response_bytes?: number
   signal?: AbortSignal
+  /** 显式允许局域网（优先于 sessionId） */
+  allowLan?: boolean
+  /** 用于有效 LAN = 全局 \|\| 会话授权 */
+  sessionId?: string
 }
 
 export interface HttpFetchResult {
@@ -136,11 +141,12 @@ export async function httpFetch(params: HttpFetchParams): Promise<HttpFetchResul
   const follow = params.follow_redirects !== false
   const responseType = params.response_type ?? 'text'
   const encoding = params.body_encoding ?? 'utf8'
+  const allowLan = params.allowLan ?? isEffectiveLanAllowed(params.sessionId)
 
   let parsed: URL
   try {
     parsed = new URL(params.url.trim())
-    await assertAllowedHost(parsed)
+    await assertAllowedHost(parsed, { allowLan })
   } catch (e) {
     return {
       ok: false,
@@ -188,7 +194,7 @@ export async function httpFetch(params: HttpFetchParams): Promise<HttpFetchResul
     }
 
     try {
-      await assertAllowedHost(new URL(currentUrl))
+      await assertAllowedHost(new URL(currentUrl), { allowLan })
     } catch (e) {
       return {
         ok: false,

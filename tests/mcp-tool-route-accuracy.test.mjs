@@ -63,6 +63,11 @@ const PRIMARY_CASES = [
   { message: '打开 https://example.com 看看内容', expectPrimary: 'browser_navigate', intent: 'web_browse' },
   { message: '把工作区文件列表列出来', expectPrimary: 'workspace_list', intent: 'workspace_files' },
   { message: '下载这个 PDF 保存到工作区', expectPrimary: 'workspace_list', intent: 'workspace_files' },
+  { message: '有哪些本地数据 API', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
+  { message: 'list_local_data_apis 看下目录', expectPrimary: 'list_local_data_apis', intent: 'local_data_catalog' },
+  { message: '下载扶摇增量日K parquet 包', expectPrimary: 'prepare_fuyao_dump', intent: 'fuyao_dump' },
+  { message: 'prepare_fuyao_dump 准备全量包', expectPrimary: 'prepare_fuyao_dump', intent: 'fuyao_dump' },
+  { message: '本对话允许访问局域网 NAS', expectPrimary: 'request_session_lan_access', intent: 'session_lan' },
   { message: '用 http 请求拉取远程 JSON 数据', expectPrimary: 'http_fetch', intent: 'http_api' },
   { message: '你能访问哪些目录', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '本对话有哪些授权工作区', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
@@ -165,6 +170,8 @@ test('D4 route playbook only names loaded tools', () => {
 
   assert.match(card, /本轮工具选型卡/)
   assert.match(card, /get_instrument_snapshot/)
+  assert.match(card, /勿仅为开工再 activate|直接调用/)
+  assert.match(card, /workspace|沙盒/)
   assert.ok(!card.includes('run_backtest') || names.includes('run_backtest'))
 
   // 未加载 news 时，选型卡不应把 news 工具写成首选（若 plan 不含）
@@ -172,6 +179,13 @@ test('D4 route playbook only names loaded tools', () => {
   const coldNames = toolNamesForPacks(resolveActivePackIds(store, 'd4b', { message: '你好' }))
   const coldCard = buildRoundRoutePlaybook(cold, coldNames)
   assert.ok(!coldCard.includes('list_news_articles') || coldNames.includes('list_news_articles'))
+
+  // 无 preferred 可见时：阶梯兜底须含 workspace 沙盒编程路径
+  const noPreferredCard = buildRoundRoutePlaybook(cold, [])
+  assert.match(noPreferredCard, /list_tool_packs/)
+  assert.match(noPreferredCard, /workspace/)
+  assert.match(noPreferredCard, /shell_run|ensure_python|workspace_/)
+  assert.match(noPreferredCard, /勿直接声称无法完成|勿空转/)
 })
 
 test('D5 conditional playbooks — unloaded packs omitted from system rules', () => {

@@ -140,8 +140,14 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 用户问可访问哪些目录、能读哪些文件夹、本对话授权工作区 → 只调用 list_workspace_grants',
     '- 禁止把 get_project_info 或 get_system_info 的路径/ cwd 说成可访问目录',
     '- 禁止向用户朗读 ~/.opptrix 应用数据根、sessions、watchlist、数据库、providers 等内部结构',
-    '- 默认公共工作区 root_id=default；额外目录需界面授权或 request_folder_access',
+    '- 本对话工作区 root_id=default；公共复用区 root_id=shared（packages/data/docs，会话结束不删）；额外目录需界面授权或 request_folder_access',
     '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 shell_run / shell_install（系统隔离环境）；勿声称可读写未授权路径',
+    '',
+    '【沙盒 node / python / npm — 先确认就绪】',
+    '- 桌面端 node 由应用内嵌运行时提供（Electron-as-Node）；勿因 PATH 无 node 声称无法执行',
+    '- 运行 shell_run 前先 get_system_info（或 python_env_status 查 Python）；确认 node_ready / npm_ready / python_ready 与 platform',
+    '- shell_run argv 用 node / python / npm / pip；依赖安装用 shell_install(manager=pip|npm) → 装进 .opptrix-packages 或 node_modules',
+    '- pip 镜像由设置注入；python 未就绪时先 ensure_python',
     '',
     '【shell_run — 先识平台，再组 argv】',
     '- 调用 shell_run 前必须先 get_system_info（或本轮已有 platform 字段）；按 platform 组装 argv，禁止凭训练记忆猜 Unix/Windows 参数',
@@ -150,10 +156,38 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- win32：ping 用 -n（如 ["ping","-n","4",host]）；路由探测用 tracert（勿用 traceroute）；解释器用 python / python3 / node（按系统实际存在）',
     '- 测网站连通性或 HTTP 耗时 → 优先 http_fetch；用户明确要求 ICMP ping 时才用 shell_run',
     '- 默认禁止沙箱 TCP 出站；访问外网站点需用户按域名确认（仅此一次 / 本对话允许该域名）。可通过环境变量 OPPTRIX_SHELL_ALLOWED_DOMAINS 预置免确认域名（逗号分隔，支持 *.example.com）',
-    '- 系统 DNS 解析可用，但解析到私网地址仍会被拒绝',
+    '- 系统 DNS 解析可用，但解析到私网地址仍会被拒绝（除非本对话/全局已允许局域网）',
+    '- 沙盒前预估是否需联网或局域网：需 LAN → request_session_lan_access 或 ask_user（选项 allow_lan_session|deny）；有效 LAN = 全局设置 || 本对话授权',
     '- python/node 等无明确目标时不弹全网确认；禁网运行，若因出站受限失败则返回需确认的域名',
-    '- 本轮已加载 shell_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」',
-    '- 未加载 shell_run / workspace_* 时：勿声称具备本地命令或工作区能力；缺工具时 activate_tool_pack 加载 workspace 或说明当前无法完成',
+    '- 本轮已加载 shell_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」；标准 API 不够时主动用沙盒补齐计算/处理，勿推诿',
+    '- 未加载 shell_run / workspace_* 时：勿声称已具备本地命令或工作区能力；需要时 activate_tool_pack([\'workspace\']) 后再用沙盒工具',
+    '',
+    '【能力不足时的沙盒兜底】',
+    '- 内置/已匹配工具无法完成、或没有匹配工具时：若尚未加载 workspace → activate_tool_pack([\'workspace\'])，再用 shell_run / ensure_python / workspace_write 等编程实现',
+    '- 可先用标准投研工具取数，再在沙盒计算/汇总；禁止空转反复 activate 无关 pack，禁止直接声称无法完成',
+    '- 标准投研 API 已能覆盖的任务禁止先上沙盒；目标 pack / 首选工具已在本轮 tools 中时勿仪式化重复 activate',
+  ].join('\n')
+}
+
+/** 本地编程协议 — 查目录→公共包→npm/pip→自写→回写（短段；详情靠 catalog） */
+export function buildLocalProgrammingPlaybook(): string {
+  return [
+    '【本地编程协议】',
+    '1. list_local_data_apis → get_local_data_catalog({ api_id }) 了解可用能力（system 仅索引，勿臆造详情）',
+    '2. 扫 shared/packages/*/README，能复用则复用（root_id=shared）',
+    '3. 缺依赖先 shell_install（npm/pip），勿盲造轮子',
+    '4. 最后自写；可复用产物写入 shared/packages/<name>/ + README',
+    '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止 Key/Token 进沙盒；勿引导 sync/dailyDump',
+    '6. 沙盒前判断联网/局域网；需 LAN → request_session_lan_access / ask_user(allow_lan_session)',
+  ].join('\n')
+}
+
+/** system 挂载的本地数据目录短索引句 */
+export function buildLocalDataCatalogIndexPrompt(): string {
+  return [
+    '【本地数据目录 — 渐进加载】',
+    '- 先 list_local_data_apis（可按 category）拿索引，再 get_local_data_catalog({ api_id }) 取调用方式/参数/示例',
+    '- 分类：instrument_standard / agent_tools / hub_features / shared_packages / fuyao_dump / workspace_fs',
   ].join('\n')
 }
 
@@ -337,6 +371,8 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   )
 
   sections.push(buildWorkspaceAccessPlaybook())
+  sections.push(buildLocalDataCatalogIndexPrompt())
+  sections.push(buildLocalProgrammingPlaybook())
 
   // 完备性闭环仅作用于 L2/L3 报告类输出；L1 事实快答保持轻量。
   if (tier !== 'L1') {
@@ -392,13 +428,16 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   if (hasShellTools) {
     sections.push(
       '- 本轮已加载 shell_run / workspace_*：用户请求的运行本地命令、读写工作区、网络探测须用已加载工具完成；禁止声称「出于安全规范禁止执行 Shell」',
-      '- shell_run 前须 get_system_info（或本轮已有 platform）再按平台组 argv；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
+      '- 标准投研 API 不够时主动用沙盒编程补齐（计算/清洗/汇总），勿推诿；标准工具能做的禁止先上沙盒',
+      '- shell_run 前须 get_system_info（或本轮已有 platform）确认 node_ready/python_ready；桌面端 node 由应用内嵌运行时提供',
+      '- shell_run argv 用 node/python/npm/pip；依赖用 shell_install(pip|npm)；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
       '- 测网站连通性或 HTTP 延迟优先 http_fetch；用户明确要求 ICMP ping 时用 shell_run',
-      '- 沙箱默认禁 TCP 出站；访问外网需用户确认。系统 DNS 可用，私网/localhost 仍拒',
+      '- 沙箱默认禁 TCP 出站；访问外网需用户确认。系统 DNS 可用；私网/localhost 默认拒，需局域网时先 request_session_lan_access / ask_user(allow_lan_session)',
+      '- 编程：list_local_data_apis → get_local_data_catalog → 复用 shared/packages → shell_install → 自写回写；离线 dump 用 prepare_fuyao_dump，禁止 Key 进沙盒',
     )
   } else {
     sections.push(
-      '- 未加载 shell_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；缺能力时 activate_tool_pack 或说明当前无法完成',
+      '- 未加载 shell_run / workspace_* 时：勿声称具备本地命令、工作区文件或未提供的工具能力；内置工具不够或无匹配时 → activate_tool_pack([\'workspace\'])，用 shell_run / ensure_python / workspace_* 沙盒编程实现（可先标准工具取数再沙盒计算），勿空转 activate 无关 pack，勿直接声称无法完成',
     )
   }
 

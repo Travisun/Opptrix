@@ -3,14 +3,12 @@ import fs from 'node:fs/promises'
 import path from 'node:path'
 import { promisify } from 'node:util'
 import { resolvePythonRuntimeRoot } from '@opptrix/shared'
-import { WorkspaceError } from '../errors.js'
 import { getPythonSettings } from '../python-settings-store.js'
-import { basenameOfArgv0 } from '../shell/package-policy.js'
 
 const execFileAsync = promisify(execFile)
 
-const PYTHON_BINARIES = new Set(['python', 'python3'])
-const PIP_BINARIES = new Set(['pip', 'pip3'])
+export const PYTHON_BINARIES = new Set(['python', 'python3'])
+export const PIP_BINARIES = new Set(['pip', 'pip3'])
 
 export type PythonActiveSource = 'system' | 'opptrix' | 'none'
 
@@ -171,26 +169,4 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   }
 }
 
-/** 将 argv 中的 python/pip 重写为当前 active 解释器绝对路径 */
-export async function resolveShellArgv(argv: readonly string[]): Promise<string[]> {
-  if (!argv.length) return [...argv]
-
-  const bin = basenameOfArgv0([...argv])
-  if (!PYTHON_BINARIES.has(bin) && !PIP_BINARIES.has(bin)) {
-    return [...argv]
-  }
-
-  const runtime = await resolvePythonRuntime()
-  if (!runtime.ready || !runtime.active_path) {
-    throw new WorkspaceError(runtime.message || 'Python 环境尚未就绪')
-  }
-
-  const out = [...argv]
-  if (PYTHON_BINARIES.has(bin)) {
-    out[0] = runtime.active_path
-    return out
-  }
-
-  out[0] = runtime.active_path
-  return [out[0], '-m', 'pip', ...out.slice(1)]
-}
+export { resolveShellArgv } from '../shell/resolve-shell-argv.js'

@@ -15,6 +15,7 @@
 import { isPrivateOrLocalHostPattern } from '@opptrix/shared'
 import { assertAllowedHost } from '../ssrf.js'
 import { getSandboxSettings } from '../sandbox-settings-store.js'
+import { isEffectiveLanAllowed } from './session-lan-access.js'
 
 /** 联网安装白名单 — PyPI / npm 及常见 CDN */
 export const PACKAGE_INSTALL_ALLOWED_DOMAINS: readonly string[] = [
@@ -74,10 +75,10 @@ function filterLanPolicy(domains: readonly string[], allowLan: boolean): string[
 }
 
 /** host 是否匹配合并永久白名单（含通配符 *.example.com） */
-export function isHostInConfiguredAllowlist(host: string): boolean {
+export function isHostInConfiguredAllowlist(host: string, sessionId?: string): boolean {
   const normalized = host.trim().toLowerCase().replace(/\.$/, '')
   if (!normalized) return false
-  const patterns = getGrantableMergedAllowedDomainsSync()
+  const patterns = getGrantableMergedAllowedDomainsSync(sessionId)
   for (const pattern of patterns) {
     if (pattern.startsWith('*.')) {
       const base = pattern.slice(2)
@@ -91,8 +92,8 @@ export function isHostInConfiguredAllowlist(host: string): boolean {
 }
 
 /** 同步：合并名单经 LAN 策略与字面量私网过滤 */
-export function getGrantableMergedAllowedDomainsSync(): string[] {
-  const allowLan = getSandboxSettings().allow_lan_access
+export function getGrantableMergedAllowedDomainsSync(sessionId?: string): string[] {
+  const allowLan = isEffectiveLanAllowed(sessionId)
   const merged = filterLanPolicy(getMergedRawAllowedDomains(), allowLan)
   return merged.filter(p => {
     if (p.startsWith('*.')) return true
@@ -106,8 +107,8 @@ export function getGrantableConfiguredAllowedDomainsSync(): string[] {
 }
 
 /** 异步 SSRF 校验后返回可写入 allowlist 的合并域 */
-export async function getGrantableMergedAllowedDomains(): Promise<string[]> {
-  const allowLan = getSandboxSettings().allow_lan_access
+export async function getGrantableMergedAllowedDomains(sessionId?: string): Promise<string[]> {
+  const allowLan = isEffectiveLanAllowed(sessionId)
   const out: string[] = []
   for (const pattern of filterLanPolicy(getMergedRawAllowedDomains(), allowLan)) {
     if (pattern.startsWith('*.')) {

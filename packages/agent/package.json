@@ -21,6 +21,7 @@
   "dependencies": {
     "@opptrix/agent-browser": "*",
     "@opptrix/agent-workspace": "*",
+    "@opptrix/market-data-store": "*",
     "@opptrix/research-hub": "*",
     "@opptrix/shared": "*",
     "@opptrix/user-store": "*",

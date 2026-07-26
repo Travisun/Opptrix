@@ -65,7 +65,7 @@ export function isParquetCacheFresh(
   }
 }
 
-async function fetchDownloadUrl(get: DumpHttpGet, dumpId: string): Promise<string> {
+export async function fetchDownloadUrl(get: DumpHttpGet, dumpId: string): Promise<string> {
   const pathMap: Record<string, string> = {
     'a_share_daily_k_1d_none_10y': 'daily-k',
     'a_share_daily_k_1d_none_10d': 'daily-k-10d',
@@ -118,13 +118,14 @@ async function downloadToFile(
   }
 }
 
-async function ensureParquetDownloaded(
+export async function ensureParquetDownloaded(
   type: 'full' | 'incremental',
   get: DumpHttpGet,
   hooks?: DumpImportHooks,
+  opts?: { forceRefresh?: boolean; destPath?: string },
 ): Promise<{ path: string; fromCache: boolean }> {
-  const cachePath = parquetCachePath(type)
-  if (isParquetCacheFresh(cachePath)) {
+  const cachePath = opts?.destPath ?? parquetCachePath(type)
+  if (!opts?.forceRefresh && isParquetCacheFresh(cachePath)) {
     const size = fs.statSync(cachePath).size
     hooks?.onPhase?.(
       `使用本地缓存（${formatMb(size)}，${formatCacheAge(cachePath)}）`,
@@ -136,6 +137,7 @@ async function ensureParquetDownloaded(
   const dumpId = type === 'full' ? DUMP_IMPORT_CONFIG.fullDumpId : DUMP_IMPORT_CONFIG.incrementalDumpId
   const timeoutMs = type === 'full' ? FULL_DUMP_TIMEOUT_MS : INCR_DUMP_TIMEOUT_MS
   const tmpPath = `${cachePath}.tmp`
+  fs.mkdirSync(path.dirname(cachePath), { recursive: true })
 
   try { fs.unlinkSync(tmpPath) } catch { /* ignore stale partial */ }
 
@@ -222,4 +224,162 @@ export async function importAdjustmentFactors(_store: MarketDataStore, get: Dump
   } catch (e) {
     return { type: 'adjustments', rowsImported: 0, success: false, error: e instanceof Error ? e.message : String(e) }
   }
+}
+
+export type FuyaoDumpKind = 'full' | 'incremental' | 'adjustment_factors'
+export type FuyaoDumpMode = 'local_path' | 'presigned_url'
+
+const DUMP_FILE_NAMES: Record<FuyaoDumpKind, string> = {
+  full: 'cn-daily-k-full.parquet',
+  incremental: 'cn-daily-k-incr.parquet',
+  adjustment_factors: 'cn-adjustment-factors.parquet',
+}
+
+function dumpIdForKind(kind: FuyaoDumpKind): string {
+  if (kind === 'full') return DUMP_IMPORT_CONFIG.fullDumpId
+  if (kind === 'incremental') return DUMP_IMPORT_CONFIG.incrementalDumpId
+  return DUMP_IMPORT_CONFIG.adjustmentDumpId
+}
+
+/**
+ * 为 Agent 沙盒准备扶摇 dump：服务端持 Key 取链/落盘，返回 shared 路径或短时效 URL。
+ * 禁止把 API Key 注入沙盒。
+ */
+export async function prepareFuyaoDump(opts: {
+  dumpKind: FuyaoDumpKind
+  mode?: FuyaoDumpMode
+  forceRefresh?: boolean
+  destDir: string
+  get: DumpHttpGet
+  hooks?: DumpImportHooks
+}): Promise<{
+  ok: boolean
+  path?: string
+  url?: string
+  url_expires_hint?: string
+  bytes?: number
+  from_cache?: boolean
+  dump_kind: FuyaoDumpKind
+  sandbox_hint: string
+  error?: string
+}> {
+  const mode = opts.mode ?? 'local_path'
+  const kind = opts.dumpKind
+  const sandboxHint =
+    '已在服务端完成鉴权下载；沙盒请用返回的 path（root_id=shared）或短时效 url，禁止注入 API Key。勿引导跑 market sync / dailyDump。'
+
+  try {
+    if (mode === 'presigned_url') {
+      const url = await fetchDownloadUrl(opts.get, dumpIdForKind(kind))
+      return {
+        ok: true,
+        url,
+        url_expires_hint: '短时效预签名链接，尽快下载',
+        dump_kind: kind,
+        sandbox_hint: sandboxHint,
+      }
+    }
+
+    fs.mkdirSync(opts.destDir, { recursive: true })
+    const destPath = path.join(opts.destDir, DUMP_FILE_NAMES[kind])
+
+    if (kind === 'adjustment_factors') {
+      if (!opts.forceRefresh && isParquetCacheFresh(destPath)) {
+        const size = fs.statSync(destPath).size
+        return {
+          ok: true,
+          path: destPath,
+          bytes: size,
+          from_cache: true,
+          dump_kind: kind,
+          sandbox_hint: sandboxHint,
+        }
+      }
+      opts.hooks?.onPhase?.('获取复权因子下载链接', 5)
+      const url = await fetchDownloadUrl(opts.get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
+      const tmpPath = `${destPath}.tmp`
+      try { fs.unlinkSync(tmpPath) } catch { /* ignore */ }
+      opts.hooks?.onPhase?.('下载复权因子包', 20)
+      await downloadToFile(url, INCR_DUMP_TIMEOUT_MS, tmpPath)
+      fs.renameSync(tmpPath, destPath)
+      return {
+        ok: true,
+        path: destPath,
+        bytes: fs.statSync(destPath).size,
+        from_cache: false,
+        dump_kind: kind,
+        sandbox_hint: sandboxHint,
+      }
+    }
+
+    // 优先复用 market dumps 缓存，再拷到 shared；force 或无缓存则直接下到 shared
+    const marketCache = parquetCachePath(kind)
+    if (!opts.forceRefresh && isParquetCacheFresh(marketCache)) {
+      fs.copyFileSync(marketCache, destPath)
+      return {
+        ok: true,
+        path: destPath,
+        bytes: fs.statSync(destPath).size,
+        from_cache: true,
+        dump_kind: kind,
+        sandbox_hint: sandboxHint,
+      }
+    }
+
+    const { path: downloaded, fromCache } = await ensureParquetDownloaded(
+      kind,
+      opts.get,
+      opts.hooks,
+      { forceRefresh: opts.forceRefresh, destPath },
+    )
+    return {
+      ok: true,
+      path: downloaded,
+      bytes: fs.statSync(downloaded).size,
+      from_cache: fromCache,
+      dump_kind: kind,
+      sandbox_hint: sandboxHint,
+    }
+  } catch (e) {
+    return {
+      ok: false,
+      dump_kind: kind,
+      sandbox_hint: sandboxHint,
+      error: e instanceof Error ? e.message : String(e),
+    }
+  }
+}
+
+/** Agent / Hub 入口：内部创建 FuyaoClient，不把 Key 返回给调用方 */
+export async function prepareFuyaoDumpForAgent(opts: {
+  dumpKind: FuyaoDumpKind
+  mode?: FuyaoDumpMode
+  forceRefresh?: boolean
+  destDir: string
+  hooks?: DumpImportHooks
+}): Promise<{
+  ok: boolean
+  path?: string
+  url?: string
+  url_expires_hint?: string
+  bytes?: number
+  from_cache?: boolean
+  dump_kind: FuyaoDumpKind
+  sandbox_hint: string
+  error?: string
+}> {
+  const { FuyaoClient } = await import('@opptrix/a-stock-layer')
+  const client = FuyaoClient.fromConfig()
+  if (!client) {
+    return {
+      ok: false,
+      dump_kind: opts.dumpKind,
+      sandbox_hint: '扶摇未配置；请在设置中启用同花顺数据源。禁止向沙盒注入密钥。',
+      error: '同花顺未启用或 API Key 未配置，无法准备数据包',
+    }
+  }
+  return prepareFuyaoDump({
+    ...opts,
+    get: client.get.bind(client),
+  })
 }

@@ -13,6 +13,7 @@ import {
   getGrantableMergedAllowedDomainsSync,
   mergeAllowedNetworkDomains,
 } from './network-policy.js'
+import { nodeRuntimeAllowReadPaths } from '../node/resolve-node.js'
 import { resolveBundledSandboxBinConfig } from './resolve-sandbox-bins.js'
 
 async function realpathSafe(p: string): Promise<string> {
@@ -102,6 +103,8 @@ export interface BuildSandboxConfigOptions {
   sessionEgress?: { hosts: readonly string[] }
   /** 仅此一次 grant 的 host（不写入 session store） */
   onceEgressHosts?: readonly string[]
+  /** 用于有效 LAN（全局 \|\| 会话） */
+  sessionId?: string
 }
 
 /** 从 session grants 构建 SandboxRuntimeConfig */
@@ -130,10 +133,13 @@ export async function buildSandboxConfigFromGrants(
     ...buildGlobalDenyPaths(),
   ])
 
+  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
+
   const allowRead = uniquePaths([
     ...grantRealpaths,
     ...systemReadAllowPaths(),
     resolvePythonRuntimeRoot(),
+    ...nodeReadPaths,
   ])
 
   const allowWrite = uniquePaths([
@@ -151,7 +157,7 @@ export async function buildSandboxConfigFromGrants(
     ...(opts.sessionEgress?.hosts ?? []),
     ...(opts.onceEgressHosts ?? []),
   ]
-  const configuredDomains = await getGrantableMergedAllowedDomains()
+  const configuredDomains = await getGrantableMergedAllowedDomains(opts.sessionId)
   const allowedDomains = mergeAllowedNetworkDomains({
     allowInstall: opts.allowNetworkInstall,
     diagnosticTargets: opts.diagnosticTargetHosts,
@@ -177,19 +183,20 @@ export async function buildSandboxConfigFromGrants(
   }
 }
 
-/** 测试辅助：同步 grants 路径（不 realpath） */
-export function buildSandboxConfigFromGrantPaths(
+/** 测试辅助：grants 路径（不 realpath）；allowRead 与 buildSandboxConfigFromGrants 对齐 */
+export async function buildSandboxConfigFromGrantPaths(
   grants: Array<{ abs_path: string; mode: 'ro' | 'rw' }>,
   allowNetworkInstall: boolean,
   diagnosticTargetHosts?: readonly string[],
   sessionEgress?: { hosts: readonly string[] },
   onceEgressHosts?: readonly string[],
-): SandboxRuntimeConfig {
+): Promise<SandboxRuntimeConfig> {
   const userData = path.resolve(resolveUserDataRoot())
   const homedir = os.homedir()
   const rwPaths = grants.filter(g => g.mode === 'rw').map(g => path.resolve(g.abs_path))
   const roPaths = grants.filter(g => g.mode === 'ro').map(g => path.resolve(g.abs_path))
   const grantPaths = grants.map(g => path.resolve(g.abs_path))
+  const nodeReadPaths = await nodeRuntimeAllowReadPaths()
 
   const sessionHosts = [
     ...(sessionEgress?.hosts ?? []),
@@ -210,7 +217,12 @@ export function buildSandboxConfigFromGrantPaths(
     },
     filesystem: {
       denyRead: uniquePaths([userData, homedir, path.join(homedir, '.ssh'), ...buildGlobalDenyPaths()]),
-      allowRead: uniquePaths([...grantPaths, ...systemReadAllowPaths(), resolvePythonRuntimeRoot()]),
+      allowRead: uniquePaths([
+        ...grantPaths,
+        ...systemReadAllowPaths(),
+        resolvePythonRuntimeRoot(),
+        ...nodeReadPaths,
+      ]),
       allowWrite: uniquePaths([...rwPaths, ...systemWriteAllowPaths(), ...getDefaultWritePaths()]),
       denyWrite: uniquePaths([...buildGlobalDenyPaths(), ...roPaths]),
     },

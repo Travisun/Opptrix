@@ -9,6 +9,8 @@ import {
   buildResearchOutputPlaybook,
   buildSessionClockPlaybook,
   buildWorkspaceAccessPlaybook,
+  buildLocalProgrammingPlaybook,
+  buildLocalDataCatalogIndexPrompt,
 } from '../packages/shared/dist/agent-prompt-guide.js'
 import {
   resolveToolRoutePlan,
@@ -165,7 +167,12 @@ test('workspace playbook requires get_system_info and network egress policy', ()
   assert.match(playbook, /tracert/)
   assert.match(playbook, /powershell|cmd \/c|bash -c/)
   assert.match(playbook, /禁止.*整串拼接绕过|禁止编造/)
+  assert.match(playbook, /沙盒兜底/)
+  assert.match(playbook, /node_ready|内嵌运行时/)
+  assert.match(playbook, /shell_install/)
+  assert.match(playbook, /activate_tool_pack\(\['workspace'\]\)/)
   assert.ok(!playbook.includes('禁止 Shell 执行'))
+  assert.ok(!playbook.includes('说明当前无法完成'))
 
   const rules = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'workspace'],
@@ -177,6 +184,16 @@ test('workspace playbook requires get_system_info and network egress policy', ()
   assert.ok(!rules.includes('禁止 Shell 执行'))
   assert.match(rules, /禁止声称.*禁止执行 Shell/)
   assert.match(rules, /禁 TCP 出站|默认禁/)
+  assert.match(rules, /标准投研 API 不够时主动用沙盒|沙盒编程补齐/)
+
+  const noShell = buildAgentSystemRules({
+    activePacks: ['core', 'meta'],
+    activeToolNames: ['search_instruments', 'list_tool_packs'],
+    researchTier: 'L1',
+  })
+  assert.match(noShell, /activate_tool_pack\(\['workspace'\]\)/)
+  assert.match(noShell, /shell_run|ensure_python|workspace_/)
+  assert.ok(!noShell.includes('说明当前无法完成'))
 })
 
 test('route hints mention get_system_info before shell argv', () => {
@@ -198,4 +215,21 @@ test('全面分析 seeds market pack when budget allows', () => {
   )
   // 全面 → market 应进入 required/seed（预算 2 内与 analytics 并存）
   assert.ok(plan.seedPacks.includes('market'), '全面分析应尝试加载 market pack')
+})
+
+test('system rules include local programming playbook and catalog index', () => {
+  const prog = buildLocalProgrammingPlaybook()
+  assert.match(prog, /list_local_data_apis/)
+  assert.match(prog, /prepare_fuyao_dump/)
+  assert.match(prog, /allow_lan_session|request_session_lan_access/)
+  const idx = buildLocalDataCatalogIndexPrompt()
+  assert.match(idx, /渐进加载|get_local_data_catalog/)
+  const rules = buildAgentSystemRules({
+    activePacks: ['core', 'meta', 'workspace'],
+    researchTier: 'L2',
+    activeToolNames: ['shell_run', 'list_local_data_apis', 'prepare_fuyao_dump'],
+  })
+  assert.match(rules, /本地编程协议/)
+  assert.match(rules, /本地数据目录/)
+  assert.match(rules, /root_id=shared|公共复用区/)
 })

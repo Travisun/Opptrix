@@ -361,6 +361,8 @@ POST /api/research
 - 域名格式非法（`invalid_lines` 列出原行）
 - `allow_lan_access=false` 且列表含 localhost / 私网地址
 
+**会话级局域网（无独立 REST）**：除全局 `allow_lan_access` 外，单对话可通过 Agent 工具 `request_session_lan_access` 或 `ask_user`（选项 `allow_lan_session`）在内存中授权（`SessionLanAccessStore`）；**可覆盖**全局关闭，**不写回**本 API 的 settings。有效 LAN = 全局 **OR** 本对话；`clearSession` 清除会话授权。LAN 仅影响私网/localhost 连接判定，具体 host 仍可能需出站确认。详见 [AGENT-GUIDE.md · 会话局域网](./AGENT-GUIDE.md#会话局域网与全局设置)。
+
 Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "network_egress"`）见下方 Shell 说明与 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)。
 
 ### Python 环境设置
@@ -811,13 +813,13 @@ Content-Type: application/json
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
-工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` 等）与会话文件夹授权见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp) 与下方 grants 路由。
+工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区，Agent **勿**用 `market sync` / `dailyDump` 作主路径。
 
 **Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，SRT `sandboxAskCallback` 触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 一次 UAC、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 
 ### Workspace grants（会话文件夹授权）
 
-按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace/sessions/<sessionId>/`，`mode: "rw"`，`is_default: true`；**每会话隔离**）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 容器目录本身等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants、写/删 sticky 策略、**命令运行 sticky** 与**联网安装 sticky**，并尽量删除 `sessions/<sessionId>/` 磁盘目录（`WorkspaceService.clearSession`）。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
+按**会话**管理 Agent 可访问的本地根目录。列表时会确保存在默认工作区（`root_id: "default"`，路径为用户数据目录下 `agent-workspace/sessions/<sessionId>/`，`mode: "rw"`，`is_default: true`；**每会话隔离**）。额外授权由用户在聊天侧选择文件夹后写入；受保护路径（如用户库、`agent-privileges`、`sessions/` 容器目录本身等）不可授权。默认根不可删除。会话删除时服务端会清理该会话的 grants、写/删 sticky 策略、**命令运行 sticky**、**联网安装 sticky**、**会话局域网授权**（`SessionLanAccessStore`），并尽量删除 `sessions/<sessionId>/` 磁盘目录（`WorkspaceService.clearSession`；**不删** `agent-workspace/shared/`）。本 REST 响应可含 `abs_path`（供 UI）；Agent 工具 `list_workspace_grants` 对默认工作区与用户数据根下路径脱敏，**不**把 `~/.opptrix` 根当作可访问目录暴露给模型（见 [AGENT-GUIDE.md §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)）。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
