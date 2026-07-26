@@ -269,6 +269,20 @@ const INTENT_RULES: IntentRule[] = [
     hint: '需局域网 → request_session_lan_access 或 ask_user（allow_lan_session）；有效 LAN=全局||会话',
   },
   {
+    intent: 'secret_vault',
+    priority: 95,
+    patterns: [
+      /密钥保险箱|保险箱.*密钥|存入保险箱/,
+      /(?:录入|保存|写入).*(?:数据密钥|密钥|口令)/,
+      /request_secret|list_vault_secrets|grant_session_secret/i,
+      /API\s*密钥|第三方密钥|脚本.*密钥|不要.*粘贴.*密钥/i,
+    ],
+    preferredTools: ['request_secret', 'list_vault_secrets', 'grant_session_secret'],
+    avoidTools: ['ask_user'],
+    confidence: 'high',
+    hint: '第三方密钥 → request_secret 写入保险箱；已有则 list_vault_secrets + grant_session_secret；禁止 ask_user 收密钥',
+  },
+  {
     intent: 'workspace_files',
     priority: 88,
     patterns: [

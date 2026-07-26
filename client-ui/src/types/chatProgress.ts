@@ -8,13 +8,19 @@ export interface ChatUserPromptPayload {
   prompt: string
   options: Array<{ id: string; label: string }>
   allowMultiple?: boolean
+  kind?: 'choice' | 'secret'
+  name?: string
+  inject_hosts?: string[]
 }
 
 export interface UserPromptAnswerPayload {
-  kind: 'option' | 'custom'
+  kind: 'option' | 'custom' | 'secret'
   selected_ids: string[]
   selected_labels: string[]
   custom_text?: string
+  name?: string
+  secret_value?: string
+  inject_hosts?: string[]
 }
 
 export interface ChatToolStep {

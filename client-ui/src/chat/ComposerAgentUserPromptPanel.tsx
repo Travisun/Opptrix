@@ -18,10 +18,13 @@ export default function ComposerAgentUserPromptPanel({
 }: ComposerAgentUserPromptPanelProps) {
   const [customText, setCustomText] = useState('')
   const [selectedIds, setSelectedIds] = useState<string[]>([])
+  const [secretValue, setSecretValue] = useState('')
+  const isSecret = prompt.kind === 'secret'
 
   useEffect(() => {
     setCustomText('')
     setSelectedIds([])
+    setSecretValue('')
   }, [prompt.id])
 
   const submitOption = useCallback((id: string, label: string) => {
@@ -62,11 +65,101 @@ export default function ComposerAgentUserPromptPanel({
     })
   }, [onSubmit, prompt.options, selectedIds, submitting])
 
+  const submitSecret = useCallback(() => {
+    if (submitting || !secretValue) return
+    onSubmit({
+      kind: 'secret',
+      selected_ids: [],
+      selected_labels: [],
+      name: prompt.name,
+      secret_value: secretValue,
+      inject_hosts: prompt.inject_hosts,
+    })
+  }, [onSubmit, prompt.inject_hosts, prompt.name, secretValue, submitting])
+
+  const cancelSecret = useCallback(() => {
+    if (submitting) return
+    onSubmit({
+      kind: 'secret',
+      selected_ids: ['cancel'],
+      selected_labels: ['取消'],
+      name: prompt.name,
+    })
+  }, [onSubmit, prompt.name, submitting])
+
   const handleCustomKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
       e.preventDefault()
       submitCustom()
     }
+  }
+
+  const handleSecretKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      submitSecret()
+    }
+  }
+
+  if (isSecret) {
+    return (
+      <div
+        className={mergeClasses(
+          'opptrix-composer-user-prompt-panel',
+          'opptrix-composer-user-prompt-panel--secret',
+          OPPTRIX_GLASS_PANEL_CLASS,
+        )}
+        role="region"
+        aria-label="密钥保险箱录入"
+      >
+        <div className="opptrix-composer-user-prompt-panel__head">
+          <span className="opptrix-composer-user-prompt-panel__title">
+            {prompt.title?.trim() || '存入密钥保险箱'}
+          </span>
+          <p className="opptrix-composer-user-prompt-panel__prompt">{prompt.prompt}</p>
+          {prompt.name ? (
+            <p className="opptrix-composer-user-prompt-panel__hint">
+              将保存为「{prompt.name}」，仅本机加密存放，不会发给助手。
+            </p>
+          ) : null}
+        </div>
+
+        <div className="opptrix-composer-user-prompt-panel__secret-field">
+          <OpptrixInput
+            className="opptrix-composer-user-prompt-panel__secret-input"
+            type="password"
+            value={secretValue}
+            disabled={submitting}
+            placeholder="输入数据密钥"
+            autoComplete="off"
+            onChange={(_e, data) => setSecretValue(data.value)}
+            onKeyDown={handleSecretKeyDown}
+            aria-label="数据密钥"
+          />
+        </div>
+
+        <div className="opptrix-composer-user-prompt-panel__actions">
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="secondary"
+            size="medium"
+            disabled={submitting}
+            onClick={cancelSecret}
+          >
+            取消
+          </OpptrixButton>
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="primary"
+            size="medium"
+            disabled={submitting || !secretValue}
+            onClick={submitSecret}
+          >
+            存入保险箱
+          </OpptrixButton>
+        </div>
+      </div>
+    )
   }
 
   return (

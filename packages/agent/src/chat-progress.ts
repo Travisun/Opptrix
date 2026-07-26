@@ -76,6 +76,9 @@ export interface ChatUserPromptPayload {
   prompt: string
   options: Array<{ id: string; label: string }>
   allowMultiple?: boolean
+  kind?: 'choice' | 'secret'
+  name?: string
+  inject_hosts?: string[]
 }
 
 export type ChatProgressEvent =
@@ -233,6 +236,11 @@ const TOOL_LABELS: Record<string, string> = {
   get_local_data_catalog: '查阅数据调用说明',
   prepare_fuyao_dump: '准备离线数据包',
   request_session_lan_access: '申请局域网访问',
+  request_secret: '录入保险箱密钥',
+  list_vault_secrets: '查看保险箱',
+  grant_session_secret: '授权本对话密钥',
+  revoke_session_secret: '撤销本对话密钥',
+  delete_vault_secret: '删除保险箱密钥',
   list_mcp_servers: '查看已连接扩展',
   enable_mcp_server: '启用扩展服务',
   disable_mcp_server: '停用扩展服务',

@@ -166,7 +166,7 @@ Opptrix/
   - **标的公告（`news` pack）**：`get_instrument_notices` → `get_notice_content`
   - **网页浏览（`browser` pack）**：`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot` / `browser_close`（Playwright 完整 Chromium，headless，无需单独 headless-shell；开发环境 `npm install` 会自动安装 Chromium，可用 `OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1` 跳过；桌面安装包已内置）
   - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
-    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access`
+    - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
     - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `shell_run` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
     - **可访问目录（唯一清单）**：Agent 问「能访问哪些目录」时**只**用 `list_workspace_grants`（属 `workspace` pack，须已播种或 `activate_tool_pack`；返回 `summary` + 脱敏后的 `grants[]`：`root_id` / `label` / `mode` / `path_hint`）。默认项**不**返回 `~/.opptrix` 绝对路径；落在用户数据根下的额外 grant 亦脱敏为 basename +「应用内部路径」提示。用户侧界面与 Agent 摘要均称「**本对话工作区**」，**不**把 `~/.opptrix` 根目录或跨会话全局目录标为默认可写区。
     - **`get_project_info`（已脱敏，非授权清单）**：经 `buildAgentSafeProjectInfo` 剥离 `paths` / `project_root` / `agent_package`，仅保留版本/运行时等元数据 + `user_data_configured`；**勿**当作目录清单，亦**勿**向用户复述内部数据根路径。
@@ -174,6 +174,7 @@ Opptrix/
     - **本地数据目录**：`list_local_data_apis` → `get_local_data_catalog({ api_id })`。分类：`instrument_standard` / `agent_tools` / `hub_features`（如 Hub `search_local_instruments`，`access: hub_feature`）/ `shared_packages` / `fuyao_dump` / `workspace_fs`。system 仅挂索引句 + 编程协议短段。
     - **编程协议**：查目录 → 扫 `shared/packages` → `shell_install` → 自写回写 README；离线大数据用 `prepare_fuyao_dump`（服务端持 Key 落盘 `shared/data/dumps` 或短时效 URL）；**禁止** Key 进沙盒；**禁止**引导 `market sync` / `dailyDump`。
     - **会话局域网（P1）**：`SessionLanAccessStore`（内存）；有效 LAN = 全局 `allow_lan_access` **\|\|** 本对话授权。`ask_user` 选 `allow_lan_session` 或 `request_session_lan_access`；`clearSession` 清除。`http_fetch` / egress 读有效 LAN。
+    - **密钥保险箱**：用户级 AES-GCM（`agent_vault` + `vault.key`）；会话 allowlist。`request_secret` → `user_prompt.kind=secret`（密码框）；服务端写 vault + grant 后再 resolve；工具结果无明文。`shell_run.secret_refs` → SRT sentinel + stdout 脱敏。意图 `secret_vault` 首选 `request_secret`。
     - **安全边界摘要**：
       - 路径闸门：相对路径，禁止 `..` 穿越；Global Deny 优先于 grant（如 `agent-privileges`、用户库 `opptrix.db*`、`providers/`、`sessions/`、`tushare-config.json`、`watchlist.json`、`portfolio.json`、`market-data/` 等）；用户数据根本身不可作为 grant 目标暴露给 Agent
       - 写/删/覆盖：`rw` 授权；覆盖与删除需用户确认（可本对话 sticky）；默认工作区总配额约 20GB
@@ -221,7 +222,7 @@ Opptrix/
 2. `workspace_list({ root_id: "shared", path: "packages" })` → 读 `packages/<name>/README.md`，能复用则复用
 3. 缺依赖 → `shell_install`（npm/pip），勿盲造轮子
 4. 最后自写；可复用产物写入 `shared/packages/<name>/` + README（目的/入口/入参出参/依赖/示例/勿存密钥）
-5. 离线大数据 → `prepare_fuyao_dump`；在线行情优先标准 Agent 工具，勿平行造数据源
+5. 离线大数据 → `prepare_fuyao_dump`；在线行情优先标准 Agent 工具，勿平行造数据源；第三方密钥经 `request_secret` + `shell_run.secret_refs`（禁止明文进沙盒）
 6. 需局域网 → `request_session_lan_access` 或 `ask_user`（选项见下）
 
 **`prepare_fuyao_dump` — 用法与安全**

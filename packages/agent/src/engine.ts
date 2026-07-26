@@ -291,6 +291,23 @@ export class AgentEngine {
             prompt: payload.prompt,
             options: payload.options,
             allowMultiple: payload.allowMultiple,
+            kind: 'choice',
+          },
+        })
+        return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
+      },
+      askSecret: async (payload) => {
+        const promptId = createUserPromptId()
+        emit({
+          type: 'user_prompt',
+          prompt: {
+            id: promptId,
+            title: payload.title,
+            prompt: payload.prompt,
+            options: [{ id: 'cancel', label: '取消' }],
+            kind: 'secret',
+            name: payload.name,
+            inject_hosts: payload.inject_hosts,
           },
         })
         return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)

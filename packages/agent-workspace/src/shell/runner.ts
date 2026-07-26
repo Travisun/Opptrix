@@ -47,6 +47,8 @@ import {
   normalizeEgressHost,
   parseNetworkEgressChoice,
 } from './session-network-egress.js'
+import { getSessionSecretAccessStore } from './session-secret-access.js'
+import { redactSecretsInText } from './secret-redact.js'
 import {
   NetworkInstallStickyStore,
   NETWORK_INSTALL_CONFIRM_OPTIONS,
@@ -63,7 +65,9 @@ import type {
   ShellPlatformStatus,
   ShellRunParams,
   ShellRunResult,
+  ShellSecretRef,
 } from './types.js'
+import { getUserDataStore } from '@opptrix/user-store'
 
 const DEFAULT_TIMEOUT_MS = 120_000
 const MAX_STREAM_BYTES = 200_000
@@ -299,6 +303,12 @@ function detectPlatformLabel(): Platform {
   return 'unknown'
 }
 
+interface ResolvedSecretInjection {
+  envName: string
+  plainValue: string
+  injectHosts: string[]
+}
+
 interface SandboxExecContext {
   sessionId: string
   normalizedArgv: string[]
@@ -309,6 +319,54 @@ interface SandboxExecContext {
   timeoutMs: number
   signal?: AbortSignal
   sandboxAskCallback?: SandboxAskCallback
+  secretInjections?: ResolvedSecretInjection[]
+}
+
+/**
+ * 解析 secret_refs：校验 vault + 会话授权 + inject_hosts；返回注入计划。
+ * 明文仅留在本函数返回值，供 host 注册 sentinel，勿打日志。
+ */
+function resolveSecretInjections(
+  sessionId: string,
+  refs: readonly ShellSecretRef[] | undefined,
+): ResolvedSecretInjection[] {
+  if (!refs?.length) return []
+  const vault = getUserDataStore().agentVault
+  const access = getSessionSecretAccessStore()
+  const out: ResolvedSecretInjection[] = []
+
+  for (const ref of refs) {
+    const name = String(ref.name ?? '').trim()
+    if (!name) {
+      throw new WorkspaceError('secret_refs 中 name 不能为空')
+    }
+    if (!vault.has(name)) {
+      throw new WorkspaceError(
+        `保险箱中没有「${name}」。请先 request_secret 写入，或 list_vault_secrets 核对名称。`,
+      )
+    }
+    if (!access.has(sessionId, name)) {
+      throw new WorkspaceError(
+        `本对话尚未授权使用「${name}」。请先 grant_session_secret，或重新 request_secret。`,
+      )
+    }
+    const plain = vault.getPlain(name)
+    if (plain == null || plain === '') {
+      throw new WorkspaceError(`无法读取保险箱条目「${name}」`)
+    }
+    const meta = vault.getMeta(name)
+    const fromParam = (ref.inject_hosts ?? []).map(h => String(h).trim()).filter(Boolean)
+    const fromMeta = meta?.injectHosts ?? []
+    const injectHosts = fromParam.length ? fromParam : fromMeta
+    if (!injectHosts.length) {
+      throw new WorkspaceError(
+        `「${name}」缺少 inject_hosts。请在 secret_refs 中提供，或 request_secret 时指定可注入的目标域名。`,
+      )
+    }
+    const envName = String(ref.env ?? name).trim() || name
+    out.push({ envName, plainValue: plain, injectHosts })
+  }
+  return out
 }
 
 function createSandboxAskCallback(opts: {
@@ -374,6 +432,19 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
 }> {
   const command = argvToCommandString(ctx.normalizedArgv)
   await SandboxManager.initialize(ctx.config, ctx.sandboxAskCallback)
+
+  // Prefer getSentinelRegistry().register over credentials.envVars：
+  // 明文不进 process.env / child env，仅 registry + sentinel 字符串。
+  const sentinelEnv: Record<string, string> = {}
+  for (const inj of ctx.secretInjections ?? []) {
+    const sentinel = SandboxManager.getSentinelRegistry().register(
+      inj.envName,
+      inj.plainValue,
+      inj.injectHosts,
+    )
+    sentinelEnv[inj.envName] = sentinel
+  }
+
   const wrapped = await SandboxManager.wrapWithSandboxArgv(
     command,
     undefined,
@@ -387,6 +458,10 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
     ctx.grantRootAbs,
     usesElectronAsNodeArgv(ctx.normalizedArgv),
   )
+  // 在 sanitize 之后写入 sentinel（SENSITIVE_ENV_KEYS 会剥真实密钥名，此处只放 fake）
+  for (const [envName, sentinel] of Object.entries(sentinelEnv)) {
+    childEnv[envName] = sentinel
+  }
   return spawnSandboxed(wrapped.argv, childEnv, ctx.cwdAbs, ctx.timeoutMs, ctx.signal)
 }
 
@@ -489,6 +564,12 @@ export class ShellRunner {
     const timeoutMs = params.timeoutMs ?? DEFAULT_TIMEOUT_MS
     const started = Date.now()
 
+    const secretInjections = resolveSecretInjections(params.sessionId, params.secret_refs)
+    const secretInjectHosts = [
+      ...new Set(secretInjections.flatMap(s => s.injectHosts.map(h => normalizeEgressHost(h)).filter(Boolean))),
+    ]
+    const plainSecretsForRedact = secretInjections.map(s => s.plainValue)
+
     await resolvePreferredPipIndexUrl(getPythonSettings().pip_index_urls)
 
     await this.assertShellReady(true)
@@ -506,7 +587,7 @@ export class ShellRunner {
         : this.deps.sessionEgress.snapshot(params.sessionId)
       const onceEgressHosts = egressGrants.runWithDeniedNetwork
         ? undefined
-        : egressGrants.onceHosts
+        : [...egressGrants.onceHosts, ...secretInjectHosts]
 
       const config = await buildSandboxConfigFromGrants({
         grants,
@@ -518,7 +599,9 @@ export class ShellRunner {
       })
 
       const runOnceHosts = new Set<string>(
-        egressGrants.onceHosts.map(h => normalizeEgressHost(h)).filter(Boolean),
+        [...egressGrants.onceHosts, ...secretInjectHosts]
+          .map(h => normalizeEgressHost(h))
+          .filter(Boolean),
       )
       const sandboxAskCallback = egressGrants.runWithDeniedNetwork
         ? undefined
@@ -543,13 +626,16 @@ export class ShellRunner {
           timeoutMs,
           signal: params.signal,
           sandboxAskCallback,
+          secretInjections,
         })
       } finally {
         await SandboxManager.reset()
       }
 
-      const stdout = truncateStream(result.stdout, MAX_STREAM_BYTES)
-      let stderr = truncateStream(result.stderr, MAX_STREAM_BYTES)
+      const stdoutRaw = redactSecretsInText(result.stdout, plainSecretsForRedact)
+      const stderrRaw = redactSecretsInText(result.stderr, plainSecretsForRedact)
+      const stdout = truncateStream(stdoutRaw, MAX_STREAM_BYTES)
+      let stderr = truncateStream(stderrRaw, MAX_STREAM_BYTES)
       stderr = {
         ...stderr,
         text: appendDiagnosticFallbackHint(normalizedArgv, result.exitCode, stdout.text, stderr.text),

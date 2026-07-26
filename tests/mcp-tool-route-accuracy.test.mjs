@@ -68,6 +68,7 @@ const PRIMARY_CASES = [
   { message: '下载扶摇增量日K parquet 包', expectPrimary: 'prepare_fuyao_dump', intent: 'fuyao_dump' },
   { message: 'prepare_fuyao_dump 准备全量包', expectPrimary: 'prepare_fuyao_dump', intent: 'fuyao_dump' },
   { message: '本对话允许访问局域网 NAS', expectPrimary: 'request_session_lan_access', intent: 'session_lan' },
+  { message: '把第三方数据密钥存入保险箱', expectPrimary: 'request_secret', intent: 'secret_vault' },
   { message: '用 http 请求拉取远程 JSON 数据', expectPrimary: 'http_fetch', intent: 'http_api' },
   { message: '你能访问哪些目录', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
   { message: '本对话有哪些授权工作区', expectPrimary: 'list_workspace_grants', intent: 'folder_access' },
