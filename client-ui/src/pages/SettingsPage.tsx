@@ -38,7 +38,8 @@ import FontScaleSlider from './settings/FontScaleSlider'
 import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/tokens'
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
-import { DESKTOP_TITLEBAR_HEIGHT, WORKSPACE_CHAT_MIN_WIDTH } from '../desktop/constants'
+import { WORKSPACE_CHAT_MIN_WIDTH } from '../desktop/constants'
+import StandaloneElectronTitleBar from '../desktop/StandaloneElectronTitleBar'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
 import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
 import { getSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
@@ -57,9 +58,23 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
+  pageElectron: {
+    flexDirection: 'column',
+  },
   pageMobile: {
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
+  },
+  pageBody: {
+    display: 'flex',
+    flexDirection: 'row',
+    flex: 1,
+    minWidth: 0,
+    minHeight: 0,
+    overflow: 'hidden',
+  },
+  pageBodyMobile: {
+    flexDirection: 'column',
   },
   contentShell: {
     flex: 1,
@@ -70,9 +85,6 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
-  },
-  contentShellElectron: {
-    paddingTop: `calc(${DESKTOP_TITLEBAR_HEIGHT}px + ${opptrixTokens.windowInset})`,
   },
   contentScroll: {
     flex: 1,
@@ -314,6 +326,11 @@ interface SettingsPageProps {
   sidebarVisible?: boolean
   onSidebarClose?: () => void
   initialSection?: SettingsSection
+  /**
+   * Electron left inset when the session sidebar is not occupying the chrome band.
+   * Settings always hides the session sidebar — pass `desktopChromeToolbarReserve(fullscreen)`.
+   */
+  chromeToolbarReserve?: number
 }
 
 export default function SettingsPage(props: SettingsPageProps) {
@@ -329,6 +346,7 @@ function SettingsPageView({
   sidebarVisible = true,
   onSidebarClose,
   initialSection,
+  chromeToolbarReserve = 0,
 }: SettingsPageProps) {
   const toast = useSettingsToast()
   const { confirm } = useOpptrixDialogAlert()
@@ -686,7 +704,21 @@ function SettingsPageView({
   const sectionSubtitle = settingsSectionSubtitle(section)
 
   return (
-    <div className={mergeClasses(s.page, isMobile && s.pageMobile)}>
+    <div className={mergeClasses(
+      s.page,
+      electronChrome && s.pageElectron,
+      isMobile && s.pageMobile,
+    )}
+    >
+      {electronChrome && (
+        <StandaloneElectronTitleBar
+          title="设置"
+          chromeToolbarReserve={chromeToolbarReserve}
+          className="opptrix-settings-title-bar"
+          dragRegionClassName="opptrix-settings-title-drag"
+        />
+      )}
+      <div className={mergeClasses(s.pageBody, isMobile && s.pageBodyMobile)}>
       {!sidebarOverlayMode && (
         <SettingsSidebar
           mode="panel"
@@ -697,6 +729,7 @@ function SettingsPageView({
           onSearchChange={setSearch}
           dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
+          titleBarOwned={electronChrome}
         />
       )}
       {sidebarOverlayMode && (
@@ -718,7 +751,6 @@ function SettingsPageView({
         className={mergeClasses(
           s.contentShell,
           'opptrix-settings-content',
-          electronChrome && s.contentShellElectron,
         )}
       >
         <div className={mergeClasses(
@@ -751,6 +783,7 @@ function SettingsPageView({
             </div>
           </div>
         </div>
+      </div>
       </div>
 
       <Dialog open={wizardOpen} onOpenChange={(_, data) => { if (!data.open) closeProviderWizard() }}>

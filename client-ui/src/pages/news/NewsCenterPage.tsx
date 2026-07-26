@@ -2,12 +2,11 @@ import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-compone
 import { ArrowSyncRegular, SettingsRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
-import { electronPlatform } from '../../platform/detect'
-import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
+import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
+import { opptrixCssVars } from '../../theme/tokens'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
-  DESKTOP_TITLEBAR_HEIGHT,
 } from '../../desktop/constants'
 import NewsFeedSidebar from './NewsFeedSidebar'
 import NewsArticleDetail from './NewsArticleDetail'
@@ -25,48 +24,6 @@ const useStyles = makeStyles({
     height: '100%',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
-  },
-  electronTitleBar: {
-    flexShrink: 0,
-    height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    boxSizing: 'border-box',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingLeft: '12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
-    backgroundColor: opptrixCssVars.canvas,
-    position: 'relative',
-  },
-  electronTitleBarMac: {
-    paddingRight: '12px',
-  },
-  electronTitleBarWin: {
-    paddingRight: '132px',
-  },
-  titleBarSpacer: {
-    flex: 1,
-    minWidth: 0,
-  },
-  titleBarPageTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
-    letterSpacing: '-0.01em',
-    color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-  },
-  titleBarMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-  },
-  titleBarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
   },
   toolbarMeta: {
     fontSize: 'var(--opptrix-font-sm)',
@@ -128,12 +85,15 @@ const useStyles = makeStyles({
 
 type Props = {
   electronChrome?: boolean
+  /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
+  chromeToolbarReserve?: number
   onOpenSettings?: () => void
   onDiscussArticle?: (article: FeedArticle) => void
 }
 
 function NewsCenterContent({
   electronChrome = false,
+  chromeToolbarReserve = 0,
   onOpenSettings,
   onDiscussArticle,
 }: Props) {
@@ -187,41 +147,35 @@ function NewsCenterContent({
       ? `更新 ${updatedLabel}`
       : '尚未刷新'
 
-  const electronWin = electronChrome && electronPlatform() !== 'darwin'
-
   const electronTitleBar = electronChrome ? (
-    <div
-      className={mergeClasses(
-        s.electronTitleBar,
-        'opptrix-news-title-bar',
-        electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
-      )}
-    >
-      <Text className={mergeClasses(s.titleBarPageTitle, 'opptrix-panel-title-no-drag')} block>
-        新闻中心
-      </Text>
-      <div className={mergeClasses(s.titleBarSpacer, 'opptrix-news-title-drag')} aria-hidden />
-      <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
-      <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
-        {onOpenSettings && (
+    <StandaloneElectronTitleBar
+      title="新闻中心"
+      chromeToolbarReserve={chromeToolbarReserve}
+      className="opptrix-news-title-bar"
+      dragRegionClassName="opptrix-news-title-drag"
+      meta={statusLabel}
+      actions={(
+        <>
+          {onOpenSettings && (
+            <ChromeToolButton
+              label="订阅设置"
+              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+              onClick={onOpenSettings}
+            >
+              <SettingsRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            </ChromeToolButton>
+          )}
           <ChromeToolButton
-            label="订阅设置"
+            label="刷新列表"
             iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-            onClick={onOpenSettings}
+            disabled={refreshing}
+            onClick={() => { void refresh() }}
           >
-            <SettingsRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+            <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
           </ChromeToolButton>
-        )}
-        <ChromeToolButton
-          label="刷新列表"
-          iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-          disabled={refreshing}
-          onClick={() => { void refresh() }}
-        >
-          <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-        </ChromeToolButton>
-      </div>
-    </div>
+        </>
+      )}
+    />
   ) : null
 
   const webHead = !electronChrome ? (

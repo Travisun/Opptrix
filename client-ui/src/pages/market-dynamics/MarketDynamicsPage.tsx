@@ -2,13 +2,12 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowSyncRegular } from '@fluentui/react-icons'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
+import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
-import { electronPlatform } from '../../platform/detect'
 import { opptrixCssVars } from '../../theme/tokens'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
-  DESKTOP_TITLEBAR_HEIGHT,
 } from '../../desktop/constants'
 import { useMarketDynamics } from './useMarketDynamics'
 import { useMarketInsights } from './useMarketInsights'
@@ -31,37 +30,6 @@ const useStyles = makeStyles({
     height: '100%',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
-  },
-  electronTitleBar: {
-    flexShrink: 0,
-    height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    boxSizing: 'border-box',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingLeft: '12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
-    backgroundColor: opptrixCssVars.canvas,
-  },
-  electronTitleBarMac: { paddingRight: '12px' },
-  electronTitleBarWin: { paddingRight: '132px' },
-  titleBarSpacer: { flex: 1, minWidth: 0 },
-  titleBarPageTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
-    color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
-  },
-  titleBarMeta: {
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
-    flexShrink: 0,
-  },
-  titleBarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
   },
   webHead: {
     flexShrink: 0,
@@ -137,9 +105,11 @@ const useStyles = makeStyles({
 
 type Props = {
   electronChrome?: boolean
+  /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
+  chromeToolbarReserve?: number
 }
 
-function MarketDynamicsContent({ electronChrome = false }: Props) {
+function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 0 }: Props) {
   const s = useStyles()
   const bodyRef = useRef<HTMLDivElement>(null)
   const layout = useMarketDynamicsLayout(bodyRef)
@@ -192,22 +162,14 @@ function MarketDynamicsContent({ electronChrome = false }: Props) {
     void insights.refresh()
   }
 
-  const electronWin = electronChrome && electronPlatform() !== 'darwin'
-
   const titleBar = electronChrome ? (
-    <div
-      className={mergeClasses(
-        s.electronTitleBar,
-        'opptrix-market-dynamics-title-bar',
-        electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
-      )}
-    >
-      <Text className={mergeClasses(s.titleBarPageTitle, 'opptrix-panel-title-no-drag')} block>
-        市场动态
-      </Text>
-      <div className={mergeClasses(s.titleBarSpacer, 'opptrix-market-dynamics-title-drag')} aria-hidden />
-      <Text className={mergeClasses(s.titleBarMeta, 'opptrix-panel-title-no-drag')}>{statusLabel}</Text>
-      <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
+    <StandaloneElectronTitleBar
+      title="市场动态"
+      chromeToolbarReserve={chromeToolbarReserve}
+      className="opptrix-market-dynamics-title-bar"
+      dragRegionClassName="opptrix-market-dynamics-title-drag"
+      meta={statusLabel}
+      actions={(
         <ChromeToolButton
           label="刷新"
           iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
@@ -216,8 +178,8 @@ function MarketDynamicsContent({ electronChrome = false }: Props) {
         >
           <ArrowSyncRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
         </ChromeToolButton>
-      </div>
-    </div>
+      )}
+    />
   ) : null
 
   const webHead = !electronChrome ? (

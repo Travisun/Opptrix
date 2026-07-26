@@ -11,15 +11,14 @@ import {
   DismissRegular,
   SearchRegular,
 } from '@fluentui/react-icons'
-import { electronPlatform } from '../../platform/detect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { inputShellInteractive, nativeIconInteractive } from '../../theme/mixins'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
-  DESKTOP_TITLEBAR_HEIGHT,
 } from '../../desktop/constants'
 import ChromeToolButton from '../../desktop/ChromeToolButton'
+import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import OpptrixInput from '../../components/opptrix/OpptrixInput'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
@@ -39,35 +38,6 @@ const useStyles = makeStyles({
     height: '100%',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
-  },
-  electronTitleBar: {
-    flexShrink: 0,
-    height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
-    boxSizing: 'border-box',
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    paddingLeft: '12px',
-    borderBottom: `1px solid ${opptrixCssVars.separatorStrong}`,
-    backgroundColor: opptrixCssVars.canvas,
-    position: 'relative',
-  },
-  electronTitleBarMac: { paddingRight: '12px' },
-  electronTitleBarWin: { paddingRight: '132px' },
-  titleBarSpacer: { flex: 1, minWidth: 0 },
-  titleBarPageTitle: {
-    fontSize: 'var(--opptrix-font-base)',
-    fontWeight: 500,
-    letterSpacing: '-0.01em',
-    color: opptrixCssVars.textPrimary,
-    flexShrink: 0,
-    whiteSpace: 'nowrap',
-  },
-  titleBarActions: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    flexShrink: 0,
   },
   webHead: {
     flexShrink: 0,
@@ -280,10 +250,16 @@ function isPersonalExpert(expert: ExpertCatalogEntry) {
 
 interface Props {
   electronChrome?: boolean
+  /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
+  chromeToolbarReserve?: number
   onSelectExpert: (expertId: string) => void | Promise<void>
 }
 
-export default function ExpertMarketPage({ electronChrome = false, onSelectExpert }: Props) {
+export default function ExpertMarketPage({
+  electronChrome = false,
+  chromeToolbarReserve = 0,
+  onSelectExpert,
+}: Props) {
   const s = useStyles()
   const { confirm } = useOpptrixDialogAlert()
   const [query, setQuery] = useState('')
@@ -359,8 +335,6 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
     await loadExperts(debouncedQuery)
   }
 
-  const electronWin = electronChrome && electronPlatform() !== 'darwin'
-
   const refreshAction = electronChrome ? (
     <ChromeToolButton
       label="刷新"
@@ -384,24 +358,13 @@ export default function ExpertMarketPage({ electronChrome = false, onSelectExper
   return (
     <div className={s.root}>
       {electronChrome ? (
-        <div
-          className={mergeClasses(
-            s.electronTitleBar,
-            'opptrix-experts-title-bar',
-            electronWin ? s.electronTitleBarWin : s.electronTitleBarMac,
-          )}
-        >
-          <Text className={mergeClasses(s.titleBarPageTitle, 'opptrix-panel-title-no-drag')} block>
-            专家
-          </Text>
-          <div
-            className={mergeClasses(s.titleBarSpacer, 'opptrix-experts-title-drag')}
-            aria-hidden
-          />
-          <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
-            {refreshAction}
-          </div>
-        </div>
+        <StandaloneElectronTitleBar
+          title="专家"
+          chromeToolbarReserve={chromeToolbarReserve}
+          className="opptrix-experts-title-bar"
+          dragRegionClassName="opptrix-experts-title-drag"
+          actions={refreshAction}
+        />
       ) : (
         <div className={s.webHead}>
           <Text className={s.webTitle}>专家</Text>
