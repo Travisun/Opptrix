@@ -219,8 +219,6 @@ interface SettingsSidebarProps {
   onSearchChange: (value: string) => void
   dynamicSearchEntries?: SettingsSearchEntry[]
   isMobile?: boolean
-  /** Parent already renders Electron title bar above this sidebar */
-  titleBarOwned?: boolean
 }
 
 export default function SettingsSidebar({
@@ -228,7 +226,6 @@ export default function SettingsSidebar({
   visible = true,
   onClose,
   active, onSelect, onBack, search, onSearchChange, dynamicSearchEntries = [], isMobile = false,
-  titleBarOwned = false,
 }: SettingsSidebarProps) {
   const s = useStyles()
   const { resolvedScheme } = useTheme()
@@ -237,7 +234,6 @@ export default function SettingsSidebar({
   const nativeVibrancy = supportsNativeWindowVibrancy()
   const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
   const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
-  const applyTitleBarInset = electronChrome && !titleBarOwned
 
   const searchActive = Boolean(search.trim()) && !isMobile
 
@@ -369,7 +365,7 @@ export default function SettingsSidebar({
         !electronChrome && !isMobile && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
         sidebarSolidDark && s.sidebarElectronSolid,
-        applyTitleBarInset && s.sidebarTopElectron,
+        electronChrome && s.sidebarTopElectron,
         sidebarGlass && 'opptrix-glass-sidebar',
         'opptrix-settings-sidebar',
         'opptrix-sidebar-edge',

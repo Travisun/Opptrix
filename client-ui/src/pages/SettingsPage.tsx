@@ -58,9 +58,6 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     backgroundColor: 'transparent',
   },
-  pageElectron: {
-    flexDirection: 'column',
-  },
   pageMobile: {
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
@@ -327,8 +324,9 @@ interface SettingsPageProps {
   onSidebarClose?: () => void
   initialSection?: SettingsSection
   /**
-   * Electron left inset when the session sidebar is not occupying the chrome band.
-   * Settings always hides the session sidebar — pass `desktopChromeToolbarReserve(fullscreen)`.
+   * Electron left inset for the content-column title bar when settings sidebar is overlay.
+   * Panel (inline) mode ignores this and uses the compact `DESKTOP_TITLE_GAP` inset.
+   * Pass `desktopChromeToolbarReserve(fullscreen)` from ChatApp.
    */
   chromeToolbarReserve?: number
 }
@@ -545,6 +543,9 @@ function SettingsPageView({
   })()
 
   const contentFlush = isMobile || sidebarOverlayMode
+  // Panel: title sits beside the glass sidebar → compact inset (~12).
+  // Overlay: sidebar is gone → reserve for traffic-light / toolbar chrome.
+  const titleChromeReserve = sidebarOverlayMode ? chromeToolbarReserve : 0
 
   const renderSection = () => {
     if (loading && needsConfig) return <Spinner size="tiny" label="加载配置…" />
@@ -706,18 +707,9 @@ function SettingsPageView({
   return (
     <div className={mergeClasses(
       s.page,
-      electronChrome && s.pageElectron,
       isMobile && s.pageMobile,
     )}
     >
-      {electronChrome && (
-        <StandaloneElectronTitleBar
-          title="设置"
-          chromeToolbarReserve={chromeToolbarReserve}
-          className="opptrix-settings-title-bar"
-          dragRegionClassName="opptrix-settings-title-drag"
-        />
-      )}
       <div className={mergeClasses(s.pageBody, isMobile && s.pageBodyMobile)}>
       {!sidebarOverlayMode && (
         <SettingsSidebar
@@ -729,7 +721,6 @@ function SettingsPageView({
           onSearchChange={setSearch}
           dynamicSearchEntries={dynamicSearchEntries}
           isMobile={isMobile}
-          titleBarOwned={electronChrome}
         />
       )}
       {sidebarOverlayMode && (
@@ -753,6 +744,14 @@ function SettingsPageView({
           'opptrix-settings-content',
         )}
       >
+        {electronChrome && (
+          <StandaloneElectronTitleBar
+            title="设置"
+            chromeToolbarReserve={titleChromeReserve}
+            className="opptrix-settings-title-bar"
+            dragRegionClassName="opptrix-settings-title-drag"
+          />
+        )}
         <div className={mergeClasses(
           s.contentScroll,
           'opptrix-scroll',
