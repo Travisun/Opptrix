@@ -290,4 +290,6 @@ Stacking order (low → high), defined in `client-ui/src/desktop/constants.ts` a
 | Toolbar + window controls | `1300` | `DESKTOP_Z_CHROME_TOOLS` — global fixed chrome |
 | Clickable session title | `1310` | `DESKTOP_Z_TITLE_INTERACTIVE` — title text above drag layer |
 
+Standalone pages (news / market / experts / settings) reuse `StandaloneElectronTitleBar` with left inset from `desktopChromeToolbarReserve` when the session sidebar is fully collapsed (same as chat `desktopTitleLeft(false)`), and right inset from `desktopTitleBarActionsRight()`.
+
 Narrow windows (&lt; current session sidebar width × 2.5): left sidebar becomes a **full-height overlay** (`top: 0; bottom: 0`), light glass, **no fullscreen scrim**. At ≥ × 3, growing the window auto-expands the inline sidebar. Sidebar width defaults to 200px, draggable between ~196–360px, persisted in `localStorage` (`opptrix-sidebar-width`). Minimum window width: `DESKTOP_CHAT_MIN_WIDTH` (510px), synced with `apps/desktop/electron/main.cjs`.

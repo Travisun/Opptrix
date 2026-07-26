@@ -1391,6 +1391,7 @@ export default function ChatApp() {
               onSidebarClose={() => setSettingsSidebarVisible(false)}
               onBack={handleExitSettings}
               initialSection={settingsInitialSection}
+              chromeToolbarReserve={electronChrome ? desktopChromeToolbarReserve(macFullscreen) : 0}
               onSaved={async () => {
                 await refreshHealth()
               }}
@@ -1426,6 +1427,7 @@ export default function ChatApp() {
             >
               <NewsCenterPage
                 electronChrome={electronChrome}
+                chromeToolbarReserve={chromeToolbarReserve}
                 onOpenSettings={openNewsSettings}
                 onDiscussArticle={handleDiscussArticle}
               />
@@ -1459,7 +1461,10 @@ export default function ChatApp() {
                 electronChrome && s.chatColumnElectron,
               )}
             >
-              <MarketDynamicsPage electronChrome={electronChrome} />
+              <MarketDynamicsPage
+                electronChrome={electronChrome}
+                chromeToolbarReserve={chromeToolbarReserve}
+              />
             </div>
           </div>
         )}
@@ -1492,6 +1497,7 @@ export default function ChatApp() {
             >
               <ExpertMarketPage
                 electronChrome={electronChrome}
+                chromeToolbarReserve={chromeToolbarReserve}
                 onSelectExpert={handleSelectExpert}
               />
             </div>
