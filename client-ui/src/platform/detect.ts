@@ -8,9 +8,6 @@ declare global {
       windowClose?: () => void
       getIsFullscreen?: () => Promise<boolean>
       getIsMaximized?: () => Promise<boolean>
-      /** true when maximized or fullscreen — CSS radius should be removed */
-      getIsWindowSquared?: () => Promise<boolean>
-      onWindowSquaredChange?: (callback: (squared: boolean) => void) => () => void
       pickExportDirectory?: () => Promise<string | null>
       writeBinaryFile?: (payload: {
         dirPath: string
