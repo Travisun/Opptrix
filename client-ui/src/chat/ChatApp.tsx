@@ -291,6 +291,8 @@ export default function ChatApp() {
   const sessionStreamGenRef = useRef(new Map<string, number>())
   const stoppingSessionsRef = useRef(new Set<string>())
   const streamingSessionIdsRef = useRef(new Set<string>())
+  /** 流结束后延迟清除过程条的 timer（sessionId → timeout id） */
+  const streamResetTimersRef = useRef(new Map<string, number>())
   /** 本轮生成期间曾失焦/不可见（sessionId → true） */
   const streamAwayDuringGenRef = useRef(new Map<string, boolean>())
   /** 同轮完成通知去重键：`${sessionId}:${streamGen}` */
@@ -395,8 +397,8 @@ export default function ChatApp() {
       }
     }
 
-    // 内容已落定：优先在 reply 触发完成通知，避免等待慢 done（token/工具重建）
-    if (event.type === 'reply') {
+    // 内容已落定：优先在最终 reply（含 content）触发完成通知，避免进度计数误触
+    if (event.type === 'reply' && event.content) {
       maybeNotifyChatDone(targetSessionId, resolveSessionTitle(targetSessionId))
     }
 
@@ -523,6 +525,14 @@ export default function ChatApp() {
   }, [])
 
   const loadSession = useCallback(async (id: string) => {
+    const prevId = activeIdRef.current
+    if (prevId && prevId !== id) {
+      const pending = streamResetTimersRef.current.get(prevId)
+      if (pending != null) {
+        window.clearTimeout(pending)
+        streamResetTimersRef.current.delete(prevId)
+      }
+    }
     pushComposerDraft('')
     const data = await getSession(id)
     setActiveId(id)
@@ -927,6 +937,12 @@ export default function ChatApp() {
 
     if (streamingSessionIdsRef.current.has(sessionId)) return
 
+    const pendingReset = streamResetTimersRef.current.get(sessionId)
+    if (pendingReset != null) {
+      window.clearTimeout(pendingReset)
+      streamResetTimersRef.current.delete(sessionId)
+    }
+
     const streamGen = (sessionStreamGenRef.current.get(sessionId) ?? 0) + 1
     sessionStreamGenRef.current.set(sessionId, streamGen)
     streamAwayDuringGenRef.current.set(sessionId, false)
@@ -1023,7 +1039,17 @@ export default function ChatApp() {
       streamCacheRef.current.delete(sessionId)
       markSessionStreaming(sessionId, false)
       if (activeIdRef.current === sessionId) {
-        streamUiRef.current?.resetStreamUi()
+        // 延迟清除过程条，让用户能看到最后的「约 N tokens」一小会儿
+        const prevTimer = streamResetTimersRef.current.get(sessionId)
+        if (prevTimer != null) window.clearTimeout(prevTimer)
+        const timer = window.setTimeout(() => {
+          streamResetTimersRef.current.delete(sessionId)
+          if (activeIdRef.current !== sessionId) return
+          if (streamGen !== (sessionStreamGenRef.current.get(sessionId) ?? 0)) return
+          if (streamingSessionIdsRef.current.has(sessionId)) return
+          streamUiRef.current?.resetStreamUi()
+        }, 500)
+        streamResetTimersRef.current.set(sessionId, timer)
       }
     }
   }

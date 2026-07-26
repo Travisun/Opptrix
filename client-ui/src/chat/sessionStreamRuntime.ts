@@ -1,4 +1,5 @@
 import type { ChatLiveTrace, ChatProgressEvent, ChatUserPromptPayload } from '../types/chatProgress'
+import { formatTokenCount } from './formatTokenCount.ts'
 
 export type SessionStreamSnapshot = {
   liveTrace: ChatLiveTrace | null
@@ -81,15 +82,22 @@ export function applyChatProgressEvent(
           ),
         },
       }
-    case 'reply':
+    case 'reply': {
+      // 与思考态同位文案；多轮工具后若已是「整理」态则保持，避免回跳
+      const consolidating = (snapshot.liveTrace?.thinkingLabel ?? '').includes('整理')
+      const base = consolidating ? '模型正在整理结果' : '模型正在思考'
+      const thinkingLabel = event.estimatedTokens != null
+        ? `${base} · 约 ${formatTokenCount(event.estimatedTokens)} tokens`
+        : `${base}…`
       return {
         ...snapshot,
         liveTrace: {
           steps: snapshot.liveTrace?.steps ?? [],
-          thinkingLabel: '正在生成回复…',
+          thinkingLabel,
           thinkingSnippet: snapshot.liveTrace?.thinkingSnippet,
         },
       }
+    }
     case 'done':
     case 'error':
       return {
