@@ -82,7 +82,12 @@ export type ChatProgressEvent =
   }
 
 export interface ChatLiveTrace {
+  /** 展示用完整状态行（由 phaseLabel / tokens / 步数拼装） */
   thinkingLabel?: string
+  /** 阶段文案，不含省略号后缀，如「模型正在整理结果」 */
+  phaseLabel?: string
+  /** 当前 LLM 轮次已消耗的估算 token */
+  estimatedTokens?: number
   thinkingSnippet?: string
   steps: ChatToolStep[]
 }

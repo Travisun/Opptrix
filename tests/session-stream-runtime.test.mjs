@@ -3,6 +3,8 @@ import assert from 'node:assert/strict'
 import {
   applyChatProgressEvent,
   createEmptyStreamSnapshot,
+  formatLiveThinkingStatus,
+  stripPhaseEllipsis,
 } from '../client-ui/src/chat/sessionStreamRuntime.ts'
 
 const pendingPrompt = {
@@ -17,6 +19,35 @@ function snapshotWithPending() {
     pendingUserPrompt: pendingPrompt,
   }
 }
+
+describe('formatLiveThinkingStatus', () => {
+  it('strips trailing ellipsis for phaseLabel', () => {
+    assert.equal(stripPhaseEllipsis('模型正在思考…'), '模型正在思考')
+    assert.equal(stripPhaseEllipsis('模型正在整理结果...'), '模型正在整理结果')
+  })
+
+  it('omits token and step segments when absent', () => {
+    assert.equal(formatLiveThinkingStatus('模型正在思考', undefined, 0), '模型正在思考…')
+  })
+
+  it('includes token estimate when present', () => {
+    assert.equal(
+      formatLiveThinkingStatus('模型正在思考', 128, 0),
+      '模型正在思考 · 约 128 tokens…',
+    )
+  })
+
+  it('includes step count only when > 0', () => {
+    assert.equal(
+      formatLiveThinkingStatus('模型正在整理结果', 1200, 8),
+      '模型正在整理结果 · 约 1.2k tokens · 共 8 步…',
+    )
+    assert.equal(
+      formatLiveThinkingStatus('模型正在整理结果', undefined, 3),
+      '模型正在整理结果 · 共 3 步…',
+    )
+  })
+})
 
 describe('applyChatProgressEvent pendingUserPrompt', () => {
   it('clears pending on tool_done for shell_run', () => {
@@ -89,7 +120,9 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       type: 'reply',
       estimatedTokens: 128,
     })
-    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 128 tokens')
+    assert.equal(next.liveTrace?.phaseLabel, '模型正在思考')
+    assert.equal(next.liveTrace?.estimatedTokens, 128)
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 128 tokens…')
   })
 
   it('prefers estimatedTokens label even when content is present', () => {
@@ -98,7 +131,7 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       content: '最终正文',
       estimatedTokens: 1500,
     })
-    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 1.5k tokens')
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考 · 约 1.5k tokens…')
   })
 
   it('falls back to thinking label when reply has no estimatedTokens', () => {
@@ -106,6 +139,7 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       type: 'reply',
       content: '正文',
     })
+    assert.equal(next.liveTrace?.estimatedTokens, undefined)
     assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考…')
   })
 
@@ -114,6 +148,7 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       ...createEmptyStreamSnapshot(),
       liveTrace: {
         steps: [],
+        phaseLabel: '模型正在整理结果',
         thinkingLabel: '模型正在整理结果…',
       },
     }
@@ -121,11 +156,94 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       type: 'reply',
       estimatedTokens: 64,
     })
-    assert.equal(withTokens.liveTrace?.thinkingLabel, '模型正在整理结果 · 约 64 tokens')
+    assert.equal(withTokens.liveTrace?.thinkingLabel, '模型正在整理结果 · 约 64 tokens…')
 
     const withoutTokens = applyChatProgressEvent(withTools, {
       type: 'reply',
     })
     assert.equal(withoutTokens.liveTrace?.thinkingLabel, '模型正在整理结果…')
+  })
+
+  it('clears prior estimatedTokens on new thinking round', () => {
+    const prior = {
+      ...createEmptyStreamSnapshot(),
+      liveTrace: {
+        steps: [],
+        phaseLabel: '模型正在思考',
+        estimatedTokens: 999,
+        thinkingLabel: '模型正在思考 · 约 999 tokens…',
+      },
+    }
+    const next = applyChatProgressEvent(prior, {
+      type: 'thinking',
+      round: 2,
+      label: '模型正在思考…',
+    })
+    assert.equal(next.liveTrace?.estimatedTokens, undefined)
+    assert.equal(next.liveTrace?.thinkingLabel, '模型正在思考…')
+  })
+
+  it('shows total step count with tokens after tool_done and reply', () => {
+    let snap = createEmptyStreamSnapshot()
+    snap = applyChatProgressEvent(snap, {
+      type: 'thinking',
+      round: 1,
+      label: '模型正在思考…',
+    })
+    snap = applyChatProgressEvent(snap, {
+      type: 'tool_start',
+      step: {
+        id: 's1',
+        tool: 'search',
+        label: '搜索',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      },
+    })
+    snap = applyChatProgressEvent(snap, {
+      type: 'tool_done',
+      step: {
+        id: 's1',
+        tool: 'search',
+        label: '搜索',
+        status: 'done',
+        startedAt: new Date().toISOString(),
+      },
+    })
+    assert.equal(snap.liveTrace?.phaseLabel, '模型正在整理结果')
+    assert.match(snap.liveTrace?.thinkingLabel ?? '', /共 1 步/)
+
+    snap = applyChatProgressEvent(snap, {
+      type: 'reply',
+      estimatedTokens: 1200,
+    })
+    assert.equal(
+      snap.liveTrace?.thinkingLabel,
+      '模型正在整理结果 · 约 1.2k tokens · 共 1 步…',
+    )
+  })
+
+  it('preserves tokens across tool_start while updating step count', () => {
+    let snap = {
+      ...createEmptyStreamSnapshot(),
+      liveTrace: {
+        steps: [],
+        phaseLabel: '模型正在思考',
+        estimatedTokens: 50,
+        thinkingLabel: '模型正在思考 · 约 50 tokens…',
+      },
+    }
+    snap = applyChatProgressEvent(snap, {
+      type: 'tool_start',
+      step: {
+        id: 's1',
+        tool: 'search',
+        label: '搜索',
+        status: 'running',
+        startedAt: new Date().toISOString(),
+      },
+    })
+    assert.equal(snap.liveTrace?.estimatedTokens, 50)
+    assert.equal(snap.liveTrace?.thinkingLabel, '模型正在思考 · 约 50 tokens · 共 1 步…')
   })
 })
