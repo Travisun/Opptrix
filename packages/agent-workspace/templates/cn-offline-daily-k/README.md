@@ -15,8 +15,8 @@
 
 Agent 侧典型流程：
 
-1. `prepare_fuyao_dump({ dump_kind: "full"|"incremental" })`（服务端持 Key 落盘）
-2. 成功后调用本包 `markUpdateSuccess(...)` 写元数据
+1. `prepare_fuyao_dump({ dump_kind: "full"|"incremental" })`（服务端持 Key 落盘；**成功会自动写** `data/cache/offline-k-meta.json`）
+2. （可选）本包 `markUpdateSuccess(...)` 仅作手动补写
 3. `shell_run` + 本包 `query` / `screen` 做挖掘
 
 ## 入参 / 出参
@@ -68,7 +68,7 @@ const meta = await readMeta('/path/to/shared/data/cache/offline-k-meta.json')
 const kind = decideDumpKind(meta) // 'full' | 'incremental'
 
 // Agent 工具：prepare_fuyao_dump({ dump_kind: kind })
-// 成功后：
+// full|incremental + local_path 成功后服务端已自动写 meta；以下仅作手动补写示例：
 await markUpdateSuccess('/path/to/shared/data/cache/offline-k-meta.json', {
   dumpKind: kind,
   fullPath: 'data/dumps/cn-daily-k-full.parquet',

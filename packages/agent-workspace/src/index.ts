@@ -18,6 +18,19 @@ export {
   resetSharedWorkspaceLayoutCacheForTests,
 } from './shared-workspace.js'
 export {
+  OFFLINE_K_META_RELATIVE_PATH,
+  FULL_DUMP_RELATIVE_PATH,
+  INCR_DUMP_RELATIVE_PATH,
+  offlineKMetaPath,
+  shouldAutoWriteOfflineKMeta,
+  readOfflineKMeta,
+  writeOfflineKMeta,
+  recordOfflineKDumpSuccess,
+  tryRecordOfflineKDumpSuccess,
+  type OfflineKDumpKind,
+  type OfflineKMeta,
+} from './offline-k-meta.js'
+export {
   WorkspaceError,
   PathEscapeError,
   DenyPathError,

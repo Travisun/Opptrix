@@ -239,6 +239,8 @@ Opptrix/
   - `force_refresh`（可选）：忽略缓存强制重下
 - **成功返回**：
   - `local_path` 模式：`ok: true`、`root_id: "shared"`、`relative_path`（如 `data/dumps/<file>`）、`bytes`、`from_cache`、`sandbox_hint`
+  - `full` / `incremental` + `local_path` 成功时**额外**：服务端自动写入 `shared/data/cache/offline-k-meta.json`，返回 `meta_written: true`、`meta_path: "data/cache/offline-k-meta.json"`（写失败不改 dump 成功态，仅 `meta_warning`）
+  - `adjustment_factors` / `presigned_url`：**不**写 offline-k-meta
   - `presigned_url` 模式：`url`、`url_expires_hint`、`sandbox_hint`
 - **沙盒侧**：用 `workspace_read` / `workspace_list` / `shell_run`（`root_id=shared` + `relative_path`）或下载 `url`；**禁止**向 shell 环境注入 `API_KEY` / `TOKEN` / 扶摇凭证。
 - **失败**：返回 `ok: false` + `error` + `sandbox_hint`；勿改用 sync/dailyDump 兜底。
