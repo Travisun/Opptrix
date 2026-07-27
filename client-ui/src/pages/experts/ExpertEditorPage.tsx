@@ -274,13 +274,31 @@ function toDraftStarters(prompts: ExpertStarterPrompt[] | undefined): DraftStart
 
 function toPayloadStarters(drafts: DraftStarter[]): ExpertStarterPrompt[] {
   return drafts
-    .map((d, index) => ({
-      id: d.key || `sp-${index + 1}`,
-      title: '',
-      content: d.content.trim(),
-    }))
+    .map((d, index) => {
+      const content = d.content.trim()
+      return {
+        id: d.key || `sp-${index + 1}`,
+        title: content,
+        content,
+      }
+    })
     .filter(p => p.content.length > 0)
     .slice(0, MAX_STARTERS)
+}
+
+/** 保存前以 DOM 为准同步 content，避免 IME 组字中 state 未跟上导致静默丢弃。 */
+function syncStartersFromDom(drafts: DraftStarter[]): DraftStarter[] {
+  const escape = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
+    ? CSS.escape
+    : (raw: string) => raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
+  return drafts.map(row => {
+    const root = document.querySelector(`[data-starter-key="${escape(row.key)}"]`)
+    const el = root?.querySelector('input')
+    if (el instanceof HTMLInputElement) {
+      return { ...row, content: el.value }
+    }
+    return row
+  })
 }
 
 function serializeStarters(drafts: DraftStarter[]): string {
@@ -429,12 +447,20 @@ export default function ExpertEditorPage({
   const handleSave = async () => {
     setLoading(true)
     setError('')
+    const syncedStarters = syncStartersFromDom(starters)
+    setStarters(syncedStarters)
+    const starterPrompts = toPayloadStarters(syncedStarters)
+    if (syncedStarters.length > 0 && starterPrompts.length === 0) {
+      setError('请填写提问内容，或删除空白提问')
+      setLoading(false)
+      return
+    }
     const payload = {
       title: title.trim(),
       summary: summary.trim(),
       persona: persona.trim(),
       tags: parseTags(tagsText),
-      starterPrompts: toPayloadStarters(starters),
+      starterPrompts,
     }
     try {
       const result = isEdit && editingId
