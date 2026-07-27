@@ -217,12 +217,12 @@ export function buildUserInteractionPlaybook(): string {
   return [
     '【用户确认 — ask_user 内置交互工具】',
     '- 当分析方向、标的范围、时间窗口、偏好（短线/中线、是否含资讯等）存在多种合理路径且无法从上下文推断时，调用 ask_user 而非在正文里罗列选项让用户打字回复',
-    '- 确认模式：省略 options（或传 []）→ 底部「拒绝/确认」双按钮；回传 selected_ids 固定为 reject / confirm；可用 reject_label / confirm_label 定制文案（如「不允许」「授权使用」）',
-    '- 选择题：options 提供 2–50 个互斥或常见选项（id 英文/数字，label 中文简短）；allow_multiple 仅在「可多选」时设为 true',
-    '- allow_custom：是否允许自行输入；确认模式默认 false，选择题默认 true；可显式覆盖',
-    '- prompt 与 options.label / 按钮文案均不要使用 emoji（界面更清晰、便于朗读与无障碍）',
-    '- 收到返回的 selected_ids / selected_labels / custom_text 后再继续拉数与分析；同一轮对话最多调用 1 次 ask_user',
-    '- 禁止用于索要密码等敏感信息（须用 request_secret 写入保险箱）；禁止在已有明确用户指令时重复确认',
+    '- 三种 mode（亦可用参数别名 interaction）：',
+    '  · confirm：授权/是否继续/危险操作 → mode:"confirm"，或省略 options（空/[]）且不设 mode=text、不设 allow_custom=true；底部「拒绝/确认」；回传 id 固定 reject/confirm；可用 reject_label/confirm_label',
+    '  · choice：有限选项 → options 2–50（id 英文/数字，label 中文简短），mode:"choice"；allow_multiple 仅在可多选时为 true；allow_custom 默认 true',
+    '  · text：开放式/需用户填内容 → mode:"text"（推荐），或空 options + allow_custom=true；仅文本输入，无拒绝/确认授权钮',
+    '- 禁止用 confirm 收集开放答案；禁止用 ask_user 索要密钥（须用 request_secret）；禁止在已有明确用户指令时重复确认',
+    '- prompt 与 options.label / 按钮文案均不要使用 emoji；收到 selected_ids / selected_labels / custom_text 后再继续；同一轮最多 1 次 ask_user',
   ].join('\n')
 }
 

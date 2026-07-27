@@ -11,6 +11,7 @@ export {
   type UserPromptAnswer,
   type UserPromptOption,
   type UserPromptPayload,
+  type UserPromptMode,
   UserPromptBridge,
   UserPromptCancelledError,
   createUserPromptId,

@@ -608,27 +608,33 @@ export class ToolRegistry {
         name: 'ask_user',
         category: '交互',
         description:
-          '向用户发起确认：省略 options（或空数组）为底部「拒绝/确认」双按钮；提供 2–50 个选项为选择题。可用 reject_label/confirm_label 定制按钮文案；allow_custom 控制是否可自行输入（确认模式默认关，选择题默认开）',
+          '向用户提问：mode=confirm（或空 options 默认）为拒绝/确认授权；mode=choice + 2–50 options 为选择题；mode=text（或空 options+allow_custom=true）为开放填空。禁止用 confirm 收集开放答案；禁止索要密钥',
         parameters: S({
-          title: { type: 'string', description: '可选面板标题，如「分析范围确认」' },
+          title: { type: 'string', description: '可选面板标题；text 模式默认「请补充」，confirm 默认「请确认」' },
           prompt: { type: 'string', description: '要向用户提出的具体问题（面向投资者，避免技术术语）' },
+          mode: {
+            type: 'string',
+            description:
+              'confirm | choice | text（亦可用参数别名 interaction）。开放填空用 text；授权/危险操作用 confirm；有限选项用 choice',
+          },
           options: {
             type: 'array',
             description:
-              '可选。省略或 [] → 确认模式（回传 selected_ids 为 reject/confirm）；选择题须 2–50 项 { id, label }；prompt 与 label 均勿使用 emoji',
+              '可选。省略/[] 且未设 text/allow_custom → confirm（回传 reject/confirm）；空 options+allow_custom=true → text；选择题须 2–50 项 { id, label }；勿用 emoji',
           },
-          allow_multiple: { type: 'boolean', description: '选择题是否允许多选，默认 false；确认模式忽略' },
+          allow_multiple: { type: 'boolean', description: '选择题是否允许多选，默认 false；confirm/text 忽略' },
           reject_label: {
             type: 'string',
-            description: '确认模式拒绝按钮文案，默认「拒绝」；回传 id 固定为 reject（授权场景可用「不允许」）',
+            description: 'confirm 模式拒绝按钮文案，默认「拒绝」；回传 id 固定为 reject（授权场景可用「不允许」）',
           },
           confirm_label: {
             type: 'string',
-            description: '确认模式确认按钮文案，默认「确认」；回传 id 固定为 confirm（授权场景可用「授权使用」）',
+            description: 'confirm 模式确认按钮文案，默认「确认」；回传 id 固定为 confirm（授权场景可用「授权使用」）',
           },
           allow_custom: {
             type: 'boolean',
-            description: '是否允许「其它，自行输入」；确认模式默认 false，选择题默认 true',
+            description:
+              '是否允许自行输入；confirm 默认 false，choice 默认 true；空 options 且为 true 时进入 text 开放填空（无授权双钮）',
           },
         }, ['prompt']),
         handler: async () => ({ error: 'ask_user 由 Agent 引擎直接处理' }),

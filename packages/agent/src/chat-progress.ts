@@ -74,9 +74,11 @@ export interface ChatUserPromptPayload {
   id: string
   title?: string
   prompt: string
-  /** 空数组 = confirm 模式（底部拒绝/确认） */
+  /** confirm/text 为空数组；choice 为 2–50 项 */
   options: Array<{ id: string; label: string }>
   allowMultiple?: boolean
+  /** confirm=拒绝/确认；choice=选项；text=开放填空（解析层应始终写出） */
+  mode?: 'confirm' | 'choice' | 'text'
   kind?: 'choice' | 'secret'
   name?: string
   inject_hosts?: string[]
