@@ -22,6 +22,7 @@ import {
 import type { ChatToolStep } from '../types/chatProgress'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp, motion } from '../theme/mixins'
+import { copyTextToClipboard } from '../platform/clipboard'
 import ThinkingDots from '../components/ThinkingDots'
 
 const useStyles = makeStyles({
@@ -370,10 +371,11 @@ function CopyButton({ text }: { text: string }) {
   const s = useStyles()
   const [copied, setCopied] = useState(false)
   const handleCopy = useCallback(() => {
-    void navigator.clipboard?.writeText(text).then(() => {
+    void copyTextToClipboard(text).then((ok) => {
+      if (!ok) return
       setCopied(true)
       window.setTimeout(() => setCopied(false), 1500)
-    }).catch(() => { /* clipboard unavailable */ })
+    })
   }, [text])
   return (
     <button

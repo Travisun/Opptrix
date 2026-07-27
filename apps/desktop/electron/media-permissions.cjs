@@ -67,9 +67,10 @@ async function openSystemMicrophoneSettings() {
 }
 
 /**
- * 仅放行麦克风相关 media；拒绝摄像头等无关权限。
+ * 仅放行麦克风相关 media、扬声器选择、以及剪贴板写入；拒绝摄像头等无关权限。
  * 本地 wav 提示音播放无需系统喇叭授权；此处放行 speaker-selection，
  * 避免 Chromium 权限层误拦输出设备选择（与 autoplayPolicy 配合）。
+ * clipboard-*：聊天复制 / Markdown 表格复制依赖 navigator.clipboard.writeText。
  * 不要把「播放」绑到 askForMediaAccess('microphone')。
  * @param {import('electron').Session} ses
  */
@@ -79,6 +80,11 @@ function installMediaPermissionHandlers(ses) {
   const isSpeakerPermission = (permission) =>
     permission === 'speaker-selection'
     || (typeof permission === 'string' && permission.includes('speaker'))
+
+  const isClipboardPermission = (permission) =>
+    permission === 'clipboard-sanitized-write'
+    || permission === 'clipboard-write'
+    || permission === 'clipboard-read'
 
   target.setPermissionRequestHandler((_webContents, permission, callback, details) => {
     if (permission === 'media') {
@@ -92,7 +98,7 @@ function installMediaPermissionHandlers(ses) {
       callback(true)
       return
     }
-    if (isSpeakerPermission(permission)) {
+    if (isSpeakerPermission(permission) || isClipboardPermission(permission)) {
       callback(true)
       return
     }
@@ -105,7 +111,7 @@ function installMediaPermissionHandlers(ses) {
       if (mediaType === 'video') return false
       return true
     }
-    if (isSpeakerPermission(permission)) return true
+    if (isSpeakerPermission(permission) || isClipboardPermission(permission)) return true
     return false
   })
 }

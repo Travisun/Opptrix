@@ -80,17 +80,24 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
   },
   searchWrap: {
-    padding: '8px 12px 6px',
+    padding: '8px 8px 6px',
   },
   searchWrapOverlay: {
     padding: '8px 10px 6px',
   },
-  searchShell: {...inputShellInteractive,
-padding: '0 8px',
+  searchShell: {
+    ...inputShellInteractive,
+    // 设置搜索框默认可见边框（覆盖 mixin / .opptrix-input-shell 的 transparent）
+    border: `1px solid ${opptrixCssVars.border}`,
+    padding: '0 8px',
     minHeight: '28px',
     display: 'flex',
     alignItems: 'center',
     gap: '6px',
+    ':focus-within': {
+      ...inputShellInteractive[':focus-within'],
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+    },
   },
   nav: {
     flex: 1,
