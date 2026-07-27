@@ -23,6 +23,7 @@ import { QuotaTracker, DEFAULT_WORKSPACE_QUOTA_BYTES } from './quota.js'
 import { httpFetch as doHttpFetch, type HttpFetchParams, type HttpFetchResult } from './http-fetch.js'
 import { streamDownloadToFile } from './download.js'
 import { getPythonPlatformStatus } from './python/python-platform-status.js'
+import { toAgentPythonEnvView } from './python/agent-python-env-view.js'
 import { startPythonInstallJob } from './python/install-job.js'
 import {
   ShellRunner,
@@ -337,7 +338,7 @@ export class WorkspaceService {
   }
 
   pythonEnvStatus() {
-    return getPythonPlatformStatus()
+    return getPythonPlatformStatus().then(status => toAgentPythonEnvView(status))
   }
 
   ensurePython() {

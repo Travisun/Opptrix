@@ -22,6 +22,14 @@ export interface ShellRunParams {
   secret_refs?: ShellSecretRef[]
 }
 
+/** shell_run / shell_install 附带的 Python 运行时摘要（不暴露绝对路径） */
+export interface ShellPythonRuntimeInfo {
+  source: 'system' | 'opptrix' | 'none'
+  version: string | null
+  /** 本命令 argv 的 python/pip 是否被改写到当前优先解释器 */
+  rewritten: boolean
+}
+
 export interface ShellRunResult {
   ok: boolean
   exit_code: number | null
@@ -34,6 +42,7 @@ export interface ShellRunResult {
   sandbox: true
   platform: Platform
   duration_ms: number
+  python_runtime?: ShellPythonRuntimeInfo
   needs_network_egress?: {
     message: string
     suggested_host?: string

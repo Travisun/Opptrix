@@ -595,7 +595,8 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
     {
       name: 'python_env_status',
       category: '工作区',
-      description: '查看当前 Python 环境状态（系统 / Opptrix 托管 / 当前采用）；运行脚本前可先调用',
+      description:
+        '查看当前优先 Python（系统或 Opptrix 托管之一）是否就绪；shell 只用 python/pip 字面量 argv，勿手写绝对路径',
       parameters: S({}),
       handler: async () => {
         try {

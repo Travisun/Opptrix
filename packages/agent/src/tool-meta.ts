@@ -483,7 +483,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_system_info: {
     miningEligible: false,
     usageGuide: '运行 shell_run 前先调用，确认 platform 与沙盒 node/python/npm 是否就绪；桌面端 node 由应用内嵌运行时提供，勿因 PATH 无 node 声称无法执行。',
-    compliance: '只读；返回 node_ready/node_source/sandbox_node_version、npm_ready、python_ready 等摘要；不含密钥与内部绝对路径。',
+    compliance:
+      '只读；看 python_priority / python_source / sandbox_python_version 与 python_argv_hint；只用 argv「python|pip」，禁止手写系统/托管绝对路径；不含密钥与内部绝对路径。',
   },
   get_app_settings: {
     miningEligible: false,
@@ -652,18 +653,24 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   shell_run: {
     packId: 'workspace',
-    usageGuide: '在授权工作区内运行允许的命令（argv 用 node/python/npm/pip）；桌面端 node 由应用内嵌运行时注入；测网站延迟优先 http_fetch；第三方密钥用 secret_refs 引用保险箱名字。',
-    compliance: '先 get_system_info 或 python_env_status 确认就绪；argv 结构化传参；依赖用 shell_install(pip|npm)；禁止 sudo/管道删根；secret_refs 须已 request_secret/grant_session_secret，且提供 inject_hosts。',
+    usageGuide:
+      '在授权工作区内运行允许的命令；argv 只用字面量 node/python/python3/npm/pip（勿写系统或托管绝对路径）；安装与运行共用同一解释器与 .opptrix-packages；第三方密钥用 secret_refs。',
+    compliance:
+      '先 get_system_info 或 python_env_status 确认就绪与 python_priority；argv 结构化传参；依赖用 shell_install(pip|npm)；运行时会改写到当前优先解释器并注入 PYTHONPATH；禁止 sudo/管道删根；secret_refs 须已授权。',
   },
   shell_install: {
     packId: 'workspace',
-    usageGuide: '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；比手写 pip/npm 更安全。',
-    compliance: 'manager=pip|npm；pip 镜像由设置注入；python 未就绪用 ensure_python；联网安装需用户确认。',
+    usageGuide:
+      '安装 Python 或 Node 依赖到工作区（.opptrix-packages 或 node_modules）；与 shell_run 共用同一 Python；比手写 pip/npm 更安全。',
+    compliance:
+      'manager=pip|npm；pip 装进 .opptrix-packages，运行时经 PYTHONPATH 可见；python 未就绪用 ensure_python；联网安装需用户确认。',
   },
   python_env_status: {
     packId: 'workspace',
-    usageGuide: '用户问 Python 环境、版本、是否可用时首选；运行脚本前可先确认 active_source。',
-    compliance: '只读；返回 ready/active_source/版本摘要；勿暴露内部路径细节给用户文案。',
+    usageGuide:
+      '用户问 Python 环境、版本、是否可用时首选；只看当前优先解释器（priority / active_source），勿把两套路径都当可执行选项。',
+    compliance:
+      '只读；返回 ready/active_source/priority/argv_policy 与诊断布尔；不含 system_path/opptrix_path；shell 只用 python/pip 字面量 argv。',
   },
   ensure_python: {
     packId: 'workspace',

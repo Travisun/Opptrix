@@ -7,7 +7,9 @@ import { getPythonSettings } from '../python-settings-store.js'
 
 const execFileAsync = promisify(execFile)
 
+/** @deprecated 改用 looksLikePythonBin（支持 python3.x） */
 export const PYTHON_BINARIES = new Set(['python', 'python3'])
+/** @deprecated 改用 looksLikePipBin（支持 pip3.x） */
 export const PIP_BINARIES = new Set(['pip', 'pip3'])
 
 export type PythonActiveSource = 'system' | 'opptrix' | 'none'
@@ -169,4 +171,9 @@ export async function resolvePythonRuntime(): Promise<PythonRuntimeStatus> {
   }
 }
 
-export { resolveShellArgv } from '../shell/resolve-shell-argv.js'
+export {
+  resolveShellArgv,
+  looksLikePythonBin,
+  looksLikePipBin,
+  type ResolveShellArgvResult,
+} from '../shell/resolve-shell-argv.js'

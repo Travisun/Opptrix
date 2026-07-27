@@ -103,6 +103,11 @@ export async function getSystemInfo() {
     python_ready: pythonRuntime.ready,
     python_source: pythonRuntime.active_source,
     sandbox_python_version: pythonRuntime.active_version,
+    python_priority: pythonRuntime.active_source === 'none'
+      ? 'none'
+      : pythonRuntime.active_source,
+    python_argv_hint:
+      'shell_run/shell_install 只用 argv「python」或「pip」；运行时会改写到当前优先解释器。禁止手写系统/托管绝对路径。',
     at: now.toISOString(),
   }
 }
