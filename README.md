@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icons/opptrix-full-logo.png" alt="Opptrix" height="56" />
+  <img src="icons/opptrix-full-logo.png" alt="Opptrix" height="98" />
 </p>
 
 # Opptrix — 全球多市场投研助手
@@ -345,4 +345,6 @@ Node.js · TypeScript · Fastify · React · Fluent UI v9 · Vite · Electron ·
 - Releases：[桌面安装包下载](https://github.com/Travisun/Opptrix/releases)  
 - Issues：[报告问题或提议功能](https://github.com/Travisun/Opptrix/issues)
 
-<a href="https://linux.do"><img src="https://ld.xh.do/ld-badge.svg" alt="认可linux.do" width="200" height="28"></a>
+<a href="https://linux.do?ref=seal-click" target="_blank" rel="noopener noreferrer" title="Born in LINUX DO">
+  <img src="https://linuxdo-seal.cuishushu.com/seals/seal-born-in.svg" alt="Born in LINUX DO" width="120" height="37" />
+</a>
