@@ -1,8 +1,11 @@
 /**
- * Expert starterPrompts — normalize + parseExpertDefinition
+ * Expert starterPrompts — normalize + parseExpertDefinition + LocalExpertsRepository 往返
  */
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import fs from 'node:fs'
+import os from 'node:os'
+import path from 'node:path'
 import { normalizeExpertStarterPrompts, MAX_EXPERT_STARTER_PROMPTS } from '../packages/shared/dist/expert.js'
 import { parseExpertDefinition } from '../packages/agent/dist/experts/static-http-provider.js'
 
@@ -82,4 +85,85 @@ test('parseExpertDefinition skips bad starter items without failing whole expert
   assert.ok(parsed)
   assert.equal(parsed.starterPrompts?.length, 1)
   assert.equal(parsed.starterPrompts[0].content, 'ok')
+})
+
+// --- LocalExpertsRepository 往返（临时 OPPTRIX_DATA_DIR）---
+
+const expertsTmpRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'opptrix-experts-sp-'))
+
+async function withExpertsRepo(fn) {
+  const prevDir = process.env.OPPTRIX_DATA_DIR
+  process.env.OPPTRIX_DATA_DIR = expertsTmpRoot
+  const { UserDataStore, LocalExpertsRepository } = await import('../packages/user-store/dist/index.js')
+  try {
+    try {
+      UserDataStore.getInstance().close()
+    } catch { /* 尚无实例 */ }
+    const store = UserDataStore.getInstance()
+    const repo = new LocalExpertsRepository(store)
+    return await fn(repo)
+  } finally {
+    try {
+      UserDataStore.getInstance().close()
+    } catch { /* ignore */ }
+    if (prevDir === undefined) delete process.env.OPPTRIX_DATA_DIR
+    else process.env.OPPTRIX_DATA_DIR = prevDir
+  }
+}
+
+test.after(() => {
+  fs.rmSync(expertsTmpRoot, { recursive: true, force: true })
+})
+
+test('LocalExpertsRepository create+get keeps starterPrompts when title empty and content set', async () => {
+  await withExpertsRepo(repo => {
+    const created = repo.create(
+      {
+        title: '快捷提问落库专家',
+        summary: '验证 title 空、content 非空仍写入',
+        tags: ['测试'],
+        starterPrompts: [
+          { id: 'sp-1', title: '', content: '帮我梳理这只股票的估值与风险' },
+        ],
+      },
+      '你是一位测试专家。',
+    )
+    assert.ok(created.id)
+    const got = repo.get(created.id)
+    assert.ok(got)
+    assert.ok(got.starterPrompts)
+    assert.ok(got.starterPrompts.length >= 1)
+    assert.equal(got.starterPrompts[0].content, '帮我梳理这只股票的估值与风险')
+    assert.ok(got.starterPrompts[0].title.length > 0)
+  })
+})
+
+test('LocalExpertsRepository save updates starterPrompts roundtrip', async () => {
+  await withExpertsRepo(repo => {
+    const created = repo.create(
+      {
+        title: '更新提问专家',
+        summary: '验证 save 往返',
+        starterPrompts: [
+          { id: 'sp-a', title: '旧提问', content: '旧提问内容' },
+        ],
+      },
+      '你是一位测试专家。',
+    )
+    const saved = repo.save(created.id, {
+      starterPrompts: [
+        { id: 'sp-b', title: '', content: '更新后的快捷提问正文' },
+        { id: 'sp-c', title: '第二条', content: '另一条提问' },
+      ],
+    })
+    assert.equal(saved.starterPrompts?.length, 2)
+    assert.equal(saved.starterPrompts[0].content, '更新后的快捷提问正文')
+    assert.ok(saved.starterPrompts[0].title.length > 0)
+
+    const got = repo.get(created.id)
+    assert.ok(got?.starterPrompts)
+    assert.equal(got.starterPrompts.length, 2)
+    assert.equal(got.starterPrompts[0].content, '更新后的快捷提问正文')
+    assert.equal(got.starterPrompts[1].content, '另一条提问')
+  })
 })
