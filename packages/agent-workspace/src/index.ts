@@ -88,7 +88,8 @@ export {
   type NpmActiveSource,
   type NodeRuntimeStatus,
 } from './node/resolve-node.js'
-export { resolveShellArgv } from './shell/resolve-shell-argv.js'
+export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './shell/resolve-shell-argv.js'
+export type { ResolveShellArgvResult } from './shell/resolve-shell-argv.js'
 export {
   resolvePythonRuntime,
   type PythonActiveSource,
@@ -97,6 +98,10 @@ export {
   PIP_BINARIES,
 } from './python/resolve-python.js'
 export { getPythonPlatformStatus } from './python/python-platform-status.js'
+export {
+  toAgentPythonEnvView,
+  type AgentPythonEnvView,
+} from './python/agent-python-env-view.js'
 export {
   probePipIndexUrls,
   resolvePreferredPipIndexUrl,
@@ -128,6 +133,7 @@ export {
 } from './service.js'
 export {
   ShellRunner,
+  applyPythonRuntimeToChildEnv,
   SessionNetworkEgressStore,
   SessionLanAccessStore,
   getSessionLanAccessStore,
@@ -180,5 +186,6 @@ export {
   type ShellRunResult,
   type ShellInstallParams,
   type ShellPlatformStatus,
+  type ShellPythonRuntimeInfo,
   type ShellSecretRef,
 } from './shell/index.js'

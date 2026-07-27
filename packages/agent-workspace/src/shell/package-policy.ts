@@ -19,7 +19,20 @@ const DIAGNOSTIC_BINARIES = new Set(['ping', 'traceroute', 'tracert'])
 const INTERPRETER_BINARIES = new Set(['python', 'python3', 'node', 'npx'])
 
 const ALLOWED_BINARY_LABEL =
-  'python/node/npm/pip 等解释器与包管理器，以及 ping/traceroute 等网络诊断命令'
+  'python/python3.x/node/npm/pip/pip3.x 等解释器与包管理器，以及 ping/traceroute 等网络诊断命令'
+
+/** 允许 python3.12 / pip3.11 等带次版本号的 basename */
+function isVersionedPythonOrPip(bin: string): boolean {
+  return /^python3\.\d+$/.test(bin) || /^pip3\.\d+$/.test(bin)
+}
+
+function isPipLikeBinary(bin: string): boolean {
+  return bin === 'pip' || bin === 'pip3' || /^pip3\.\d+$/.test(bin)
+}
+
+function isPythonLikeBinary(bin: string): boolean {
+  return bin === 'python' || bin === 'python3' || /^python3\.\d+$/.test(bin)
+}
 
 const DANGEROUS_PATTERNS: RegExp[] = [
   /\brm\s+(-[^\s]*\s+)*-[^\s]*r[^\s]*f[^\s]*\s+\//i,
@@ -55,7 +68,7 @@ function isAllowedArgv0(rawArgv0: string): boolean {
   if (!trimmed) return false
   if (path.resolve(trimmed) === path.resolve(process.execPath)) return true
   const bin = basenameOfArgv0([trimmed])
-  return ALLOWED_BINARIES.has(bin)
+  return ALLOWED_BINARIES.has(bin) || isVersionedPythonOrPip(bin)
 }
 
 function effectiveShellBinary(argv: string[]): string {
@@ -116,8 +129,16 @@ export function commandNeedsNetwork(argv: string[]): boolean {
   const bin = effectiveShellBinary(argv)
   if (DIAGNOSTIC_BINARIES.has(bin)) return true
   const rest = argv.slice(1).map(a => a.toLowerCase())
-  if (bin === 'pip' || bin === 'pip3') {
+  if (isPipLikeBinary(bin)) {
     return rest.includes('install') || rest.includes('download')
+  }
+  // python -m pip install（resolveShellArgv 改写后）
+  if (isPythonLikeBinary(bin)) {
+    const mIdx = rest.findIndex((a, i) => a === '-m' && rest[i + 1] === 'pip')
+    if (mIdx >= 0) {
+      const afterPip = rest.slice(mIdx + 2)
+      return afterPip.includes('install') || afterPip.includes('download')
+    }
   }
   if (bin === 'npm' || bin === 'npx') {
     return rest.includes('install') || rest.includes('ci') || rest.includes('update')
@@ -131,7 +152,14 @@ export function commandMayNeedEgressConfirmation(argv: string[]): boolean {
   const bin = basenameOfArgv0(argv)
   if (DIAGNOSTIC_BINARIES.has(bin)) return false
   if (commandNeedsNetwork(argv)) return false
-  return INTERPRETER_BINARIES.has(bin)
+  return INTERPRETER_BINARIES.has(bin) || isPythonLikeBinary(bin)
+}
+
+function isPipInstallArgv(argv: string[], bin: string): boolean {
+  if (isPipLikeBinary(bin)) return true
+  if (!isPythonLikeBinary(bin)) return false
+  const lower = argv.map(a => a.toLowerCase())
+  return lower.some((a, i) => a === '-m' && lower[i + 1] === 'pip')
 }
 
 export function assertPackageInstallPolicy(
@@ -140,7 +168,8 @@ export function assertPackageInstallPolicy(
   grantRootAbs: string,
 ): string[] {
   const bin = effectiveShellBinary(argv)
-  if (bin !== 'pip' && bin !== 'pip3' && bin !== 'npm' && bin !== 'npx') {
+  const pipInstall = isPipInstallArgv(argv, bin)
+  if (!pipInstall && bin !== 'npm' && bin !== 'npx') {
     return argv
   }
 
@@ -169,7 +198,7 @@ export function assertPackageInstallPolicy(
     return argv
   }
 
-  // pip: 若无 --target / -t / -d，注入 --target 到工作区 vendor
+  // pip / python -m pip: 若无 --target / -t / -d，注入 --target 到工作区 vendor
   const hasTarget = lowerArgs.some(a => a === '--target' || a === '-t' || a === '-d' || a.startsWith('--target='))
   if (hasTarget) {
     for (let i = 0; i < argv.length; i++) {

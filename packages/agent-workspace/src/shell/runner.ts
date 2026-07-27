@@ -15,6 +15,7 @@ import { buildSandboxConfigFromGrants } from './config-from-grants.js'
 import { resolveShellArgv } from './resolve-shell-argv.js'
 import { usesElectronAsNodeArgv } from '../node/resolve-node.js'
 import { getPythonSettings } from '../python-settings-store.js'
+import { resolvePythonRuntime } from '../python/resolve-python.js'
 import {
   getPreferredPipIndexUrlSync,
   invalidatePipMirrorCache,
@@ -63,6 +64,7 @@ import {
 import type {
   ShellInstallParams,
   ShellPlatformStatus,
+  ShellPythonRuntimeInfo,
   ShellRunParams,
   ShellRunResult,
   ShellSecretRef,
@@ -101,7 +103,10 @@ function truncateStream(text: string, maxBytes: number): { text: string; truncat
 function isPipShellCommand(argv: readonly string[]): boolean {
   return argv.some(token => {
     const base = path.basename(String(token)).toLowerCase()
-    return base === 'pip' || base === 'pip3' || base.startsWith('pip')
+    return base === 'pip' || base === 'pip3' || /^pip3\.\d+$/.test(base)
+  }) || argv.some((token, i) => {
+    const t = String(token).toLowerCase()
+    return t === '-m' && String(argv[i + 1] ?? '').toLowerCase() === 'pip'
   })
 }
 
@@ -115,12 +120,36 @@ function shouldInvalidatePipMirrorCache(
   return isPipMirrorNetworkFailure(stderr)
 }
 
-function sanitizeChildEnv(
+/**
+ * 将 active Python bin 目录前置到 PATH，并把 PIP_TARGET 注入 PYTHONPATH。
+ * 导出供单测；生产路径由 sanitizeChildEnv 调用。
+ */
+export function applyPythonRuntimeToChildEnv(
+  env: NodeJS.ProcessEnv,
+  opts: { activePath: string | null; pipTarget: string },
+): void {
+  if (!opts.activePath) return
+  const binDir = path.dirname(opts.activePath)
+  const existingPath = env.PATH ?? env.Path ?? ''
+  env.PATH = existingPath
+    ? `${binDir}${path.delimiter}${existingPath}`
+    : binDir
+  if (process.platform === 'win32') {
+    env.Path = env.PATH
+  }
+  const existingPythonPath = env.PYTHONPATH ?? ''
+  env.PYTHONPATH = existingPythonPath
+    ? `${opts.pipTarget}${path.delimiter}${existingPythonPath}`
+    : opts.pipTarget
+  env.PYTHONNOUSERSITE = '1'
+}
+
+async function sanitizeChildEnv(
   base: NodeJS.ProcessEnv,
   cwdAbs: string,
   grantRootAbs: string,
   electronRunAsNode: boolean,
-): NodeJS.ProcessEnv {
+): Promise<NodeJS.ProcessEnv> {
   const out: NodeJS.ProcessEnv = {}
   for (const [key, value] of Object.entries(base)) {
     if (value == null) continue
@@ -130,7 +159,8 @@ function sanitizeChildEnv(
   out.PWD = cwdAbs
   out.HOME = grantRootAbs
   out.USERPROFILE = grantRootAbs
-  out.PIP_TARGET = path.join(cwdAbs, '.opptrix-packages')
+  const pipTarget = path.join(cwdAbs, '.opptrix-packages')
+  out.PIP_TARGET = pipTarget
   out.PIP_USER = '0'
   out.PIP_NO_USER = '1'
   out.npm_config_prefix = cwdAbs
@@ -143,6 +173,17 @@ function sanitizeChildEnv(
   }
   if (electronRunAsNode) {
     out.ELECTRON_RUN_AS_NODE = '1'
+  }
+  try {
+    const runtime = await resolvePythonRuntime()
+    if (runtime.ready && runtime.active_path) {
+      applyPythonRuntimeToChildEnv(out, {
+        activePath: runtime.active_path,
+        pipTarget,
+      })
+    }
+  } catch {
+    /* Python 未就绪时仍允许非 python 命令 */
   }
   return out
 }
@@ -452,7 +493,7 @@ async function executeSandboxOnce(ctx: SandboxExecContext): Promise<{
     ctx.signal,
     ctx.cwdAbs,
   )
-  const childEnv = sanitizeChildEnv(
+  const childEnv = await sanitizeChildEnv(
     { ...process.env, ...wrapped.env },
     ctx.cwdAbs,
     ctx.grantRootAbs,
@@ -508,7 +549,25 @@ export class ShellRunner {
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
     assertAllowedShellArgv(params.argv)
-    const resolvedArgv = await resolveShellArgv(params.argv)
+    const resolved = await resolveShellArgv(params.argv)
+    const resolvedArgv = resolved.argv
+    const pythonRewritten = resolved.python_rewritten
+
+    let pythonRuntimeInfo: ShellPythonRuntimeInfo | undefined
+    try {
+      const py = await resolvePythonRuntime()
+      pythonRuntimeInfo = {
+        source: py.active_source,
+        version: py.active_version,
+        rewritten: pythonRewritten,
+      }
+    } catch {
+      pythonRuntimeInfo = {
+        source: 'none',
+        version: null,
+        rewritten: pythonRewritten,
+      }
+    }
 
     const cwdRel = params.cwdRel ?? ''
     const { grant, abs: cwdAbs } = await this.deps.gatePath(
@@ -654,6 +713,7 @@ export class ShellRunner {
         sandbox: true as const,
         platform: detectPlatformLabel(),
         duration_ms: Date.now() - started,
+        python_runtime: pythonRuntimeInfo,
       }
 
       if (egressBlocked.blocked) {
@@ -677,10 +737,9 @@ export class ShellRunner {
     params: ShellInstallParams,
     confirm?: ConfirmHandler,
   ): Promise<ShellRunResult> {
-    const rawArgv = params.manager === 'pip'
+    const argv = params.manager === 'pip'
       ? buildPipInstallArgv(params.packages)
       : buildNpmInstallArgv(params.packages)
-    const argv = await resolveShellArgv(rawArgv)
     return this.run({
       sessionId: params.sessionId,
       rootId: params.rootId,

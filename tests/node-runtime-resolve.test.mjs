@@ -34,7 +34,8 @@ describe('resolveNodeRuntime / resolveShellArgv (node)', () => {
     const { resolveShellArgv } = await importShellArgv()
     const argv = ['ping', '-c', '1', '127.0.0.1']
     const out = await resolveShellArgv(argv)
-    assert.deepEqual(out, argv)
+    assert.deepEqual(out.argv, argv)
+    assert.equal(out.python_rewritten, false)
   })
 
   it('resolveNodeRuntime returns structured status', async () => {
@@ -57,9 +58,10 @@ describe('resolveNodeRuntime / resolveShellArgv (node)', () => {
     }
 
     const rewritten = await resolveArgv(['node', '-v'])
-    assert.ok(path.isAbsolute(rewritten[0]))
-    assert.equal(rewritten[0], status.active_path)
-    assert.equal(rewritten[1], '-v')
+    assert.ok(path.isAbsolute(rewritten.argv[0]))
+    assert.equal(rewritten.argv[0], status.active_path)
+    assert.equal(rewritten.argv[1], '-v')
+    assert.equal(rewritten.python_rewritten, false)
   })
 
   it('usesElectronAsNodeArgv detects execPath spawn', async () => {

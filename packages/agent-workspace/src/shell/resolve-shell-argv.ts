@@ -1,4 +1,3 @@
-import path from 'node:path'
 import { WorkspaceError } from '../errors.js'
 import {
   NODE_BINARIES,
@@ -6,48 +5,78 @@ import {
   resolveNodeRuntime,
   resolveNpmCliJs,
 } from '../node/resolve-node.js'
-import {
-  PYTHON_BINARIES,
-  PIP_BINARIES,
-  resolvePythonRuntime,
-} from '../python/resolve-python.js'
+import { resolvePythonRuntime } from '../python/resolve-python.js'
 import { basenameOfArgv0 } from './package-policy.js'
 
+/** basename 是否为 python / python3 / python3.x */
+export function looksLikePythonBin(name: string): boolean {
+  const b = name.trim().toLowerCase()
+  if (!b) return false
+  if (b === 'python' || b === 'python3') return true
+  return /^python3\.\d+$/.test(b)
+}
+
+/** basename 是否为 pip / pip3 / pip3.x */
+export function looksLikePipBin(name: string): boolean {
+  const b = name.trim().toLowerCase()
+  if (!b) return false
+  if (b === 'pip' || b === 'pip3') return true
+  return /^pip3\.\d+$/.test(b)
+}
+
+export interface ResolveShellArgvResult {
+  argv: string[]
+  /** 本命令 argv0 的 python/pip（含绝对路径 basename）是否被改写到 active */
+  python_rewritten: boolean
+}
+
 /** 将 argv 中的 python/pip/node/npm/npx 重写为当前 active 运行时绝对路径 */
-export async function resolveShellArgv(argv: readonly string[]): Promise<string[]> {
-  if (!argv.length) return [...argv]
+export async function resolveShellArgv(
+  argv: readonly string[],
+): Promise<ResolveShellArgvResult> {
+  if (!argv.length) return { argv: [...argv], python_rewritten: false }
 
   const bin = basenameOfArgv0([...argv])
 
-  if (PYTHON_BINARIES.has(bin) || PIP_BINARIES.has(bin)) {
+  if (looksLikePythonBin(bin) || looksLikePipBin(bin)) {
     return resolvePythonShellArgv(argv, bin)
   }
 
   if (NODE_BINARIES.has(bin)) {
-    return resolveNodeShellArgv(argv)
+    const out = await resolveNodeShellArgv(argv)
+    return { argv: out, python_rewritten: false }
   }
 
   if (NPM_BINARIES.has(bin)) {
-    return resolveNpmShellArgv(argv, bin)
+    const out = await resolveNpmShellArgv(argv, bin)
+    return { argv: out, python_rewritten: false }
   }
 
-  return [...argv]
+  return { argv: [...argv], python_rewritten: false }
 }
 
-async function resolvePythonShellArgv(argv: readonly string[], bin: string): Promise<string[]> {
+async function resolvePythonShellArgv(
+  argv: readonly string[],
+  bin: string,
+): Promise<ResolveShellArgvResult> {
   const runtime = await resolvePythonRuntime()
   if (!runtime.ready || !runtime.active_path) {
     throw new WorkspaceError(runtime.message || 'Python 环境尚未就绪')
   }
 
   const out = [...argv]
-  if (PYTHON_BINARIES.has(bin)) {
+  const wasPip = looksLikePipBin(bin)
+  if (looksLikePythonBin(bin) && !wasPip) {
+    const rewritten = out[0] !== runtime.active_path
     out[0] = runtime.active_path
-    return out
+    return { argv: out, python_rewritten: rewritten }
   }
 
-  out[0] = runtime.active_path
-  return [out[0], '-m', 'pip', ...out.slice(1)]
+  // pip* → [active_path, '-m', 'pip', ...rest]
+  return {
+    argv: [runtime.active_path, '-m', 'pip', ...out.slice(1)],
+    python_rewritten: true,
+  }
 }
 
 async function resolveNodeShellArgv(argv: readonly string[]): Promise<string[]> {

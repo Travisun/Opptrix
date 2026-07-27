@@ -2,6 +2,7 @@ export type {
   ShellInstallParams,
   ShellNetworkIntent,
   ShellPlatformStatus,
+  ShellPythonRuntimeInfo,
   ShellRunParams,
   ShellRunResult,
   ShellSecretRef,
@@ -95,4 +96,6 @@ export {
 } from './linux-sandbox-common.js'
 export { ensureWindowsSandboxReady, resetWindowsSandboxAutoInstallAttempt } from './ensure-windows-sandbox.js'
 export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
-export { ShellRunner, type ShellRunnerDeps } from './runner.js'
+export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'
+export type { ResolveShellArgvResult } from './resolve-shell-argv.js'
+export { ShellRunner, applyPythonRuntimeToChildEnv, type ShellRunnerDeps } from './runner.js'
