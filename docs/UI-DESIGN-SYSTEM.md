@@ -216,6 +216,17 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 
 尺寸：`small`（左右 `8px`）/ `medium` / `large`。所有变体共享 hover、active（含轻微缩放）与 focus-visible。
 
+### 7.7.2 OpptrixInlineEdit
+
+行内编辑（`components/opptrix/OpptrixInlineEdit.tsx`）：输入 + 确认/取消，供 titlebar 会话重命名等场景复用。
+
+| `sizeMode` | 行为 | 适用 |
+|------------|------|------|
+| `auto`（默认） | 隐形 sizer 随文案撑宽，`minWidth` / `maxWidth` 可约束 | 标题栏重命名 |
+| `fill` | 输入占满父级剩余宽度 | 侧栏/归档行内 |
+
+Enter 确认、Esc 取消；Electron 宿主需挂 `-webkit-app-region: no-drag`（类名 `.opptrix-inline-edit`）。
+
 ### 7.8 浮层与反馈（统一组件）
 
 | 场景 | 组件 | 样式类 / Provider |
@@ -223,7 +234,7 @@ Electron **固定左侧栏**：macOS / Windows 走窗口原生毛玻璃（侧栏
 | 二次确认（删除、清空等） | `OpptrixDialogAlert`、`useOpptrixDialogAlert()` | `.opptrix-glass-dialog-surface`；根节点 `OpptrixDialogAlertProvider`（`main.tsx`） |
 | 复杂表单 Dialog | Fluent `Dialog` + `OpptrixField` 等 | `.opptrix-dialog-surface` |
 | 操作结果 Toast | `useSettingsToast()` | `SettingsToastProvider`（设置页等）；mixin `glassPanel` |
-| 侧栏内联确认 | 列表行内 `inlineEditRow` + 按钮 | 与行同高，不用 Dialog |
+| 侧栏内联确认 | `OpptrixInlineEdit`（`sizeMode="fill"`）或列表行内按钮 | 与行同高，不用 Dialog |
 | 分段 Tab（胶囊） | `OpptrixSegmentedControl` | `.opptrix-segmented-control`；侧栏用 `variant="embedded"` |
 
 ### 7.9 设置页组件体系

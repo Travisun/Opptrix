@@ -62,10 +62,12 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
     paddingLeft: opptrixTokens.chatComposerPadding,
+  },
+  /** 空态入场；勿写死 opacity:0，否则常驻态关掉动画后会一直隐形 */
+  startersSectionEnter: {
     ...fadeInUp,
     animationDuration: '480ms',
     animationDelay: '0.95s',
-    opacity: 0,
   },
   startersLabel: {
     fontSize: 'var(--opptrix-font-md)',
@@ -274,6 +276,11 @@ interface ChatComposerProps {
   loading: boolean
   error: string
   isEmpty: boolean
+  /**
+   * 为 true 时即使会话非空也展示 starters（专家对话快捷提问常驻）。
+   * 普通对话仍仅在空态展示。
+   */
+  alwaysShowStarters?: boolean
   isMobile?: boolean
   contextRef?: SessionContextRef | null
   starters: Array<{ label: string; text: string }>
@@ -297,6 +304,7 @@ export default function ChatComposer({
   loading,
   error,
   isEmpty,
+  alwaysShowStarters = false,
   isMobile = false,
   contextRef = null,
   starters,
@@ -464,6 +472,7 @@ export default function ChatComposer({
 
   const canSend = (hasContent || attachmentIds.length > 0) && !loading && !userPrompt && !uploading
   const composerLocked = loading || Boolean(userPrompt)
+  const showStarters = starters.length > 0 && (isEmpty || alwaysShowStarters)
 
   const handleSpeechTranscript = useCallback((text: string) => {
     const root = editorRef.current
@@ -593,8 +602,14 @@ export default function ChatComposer({
 
   return (
     <div className={s.wrap}>
-      {isEmpty && starters.length > 0 && (
-        <div key={welcomeKey} className={s.startersSection}>
+      {showStarters && (
+        <div
+          key={isEmpty ? welcomeKey : 'persistent-starters'}
+          className={mergeClasses(
+            s.startersSection,
+            isEmpty && s.startersSectionEnter,
+          )}
+        >
           <Text className={s.startersLabel}>你可以这样问</Text>
           <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
             {starters.map((st, index) => (
@@ -603,6 +618,7 @@ export default function ChatComposer({
                 className={s.starterChip}
                 variant="pill"
                 size="small"
+                disabled={composerLocked}
                 onClick={() => onSubmit(st.text)}
               >
                 {st.label}
