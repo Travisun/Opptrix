@@ -24,6 +24,7 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp, motion } from '../theme/mixins'
 import { copyTextToClipboard } from '../platform/clipboard'
 import ThinkingDots from '../components/ThinkingDots'
+import { formatLiveThinkingStatus } from './sessionStreamRuntime'
 
 const useStyles = makeStyles({
   root: {
@@ -603,6 +604,9 @@ function ThinkingSnippetRow({ snippet, active }: ThinkingSnippetRowProps) {
 interface Props {
   steps: ChatToolStep[]
   thinkingLabel?: string
+  /** 阶段文案（不含省略号）；与 estimatedTokens 一起优先拼装状态行 */
+  phaseLabel?: string
+  estimatedTokens?: number
   thinkingSnippet?: string
   live?: boolean
 }
@@ -610,6 +614,8 @@ interface Props {
 export default function ChatProcessTrace({
   steps,
   thinkingLabel,
+  phaseLabel,
+  estimatedTokens,
   thinkingSnippet,
   live = false,
 }: Props) {
@@ -619,9 +625,13 @@ export default function ChatProcessTrace({
   const [historyExpanded, setHistoryExpanded] = useState(false)
   const runningStep = live ? steps.find(st => st.status === 'running') : null
   const modelThinking = live && !runningStep
-  const snippetActive = modelThinking && Boolean(thinkingLabel?.includes('思路'))
+  const statusLabel = live
+    ? (formatLiveThinkingStatus(phaseLabel, estimatedTokens, steps.length) ?? thinkingLabel)
+    : thinkingLabel
+  const phaseHint = phaseLabel ?? thinkingLabel ?? ''
+  const snippetActive = modelThinking && phaseHint.includes('思路')
   const hideStatusForSnippet = snippetActive && Boolean(thinkingSnippet)
-  const showStatusHead = Boolean(thinkingLabel && (live || thinkingSnippet)) && !hideStatusForSnippet
+  const showStatusHead = Boolean(statusLabel && (live || thinkingSnippet)) && !hideStatusForSnippet
   const showLiveSnippet = live && Boolean(thinkingSnippet)
   const showHistorySnippet = Boolean(thinkingSnippet && !live)
 
@@ -659,7 +669,7 @@ export default function ChatProcessTrace({
               )}
               block
             >
-              {thinkingLabel}
+              {statusLabel}
             </Text>
           </div>
         </div>

@@ -780,6 +780,8 @@ function ChatView({
                   <ChatProcessTrace
                     steps={liveTrace.steps}
                     thinkingLabel={liveTrace.thinkingLabel}
+                    phaseLabel={liveTrace.phaseLabel}
+                    estimatedTokens={liveTrace.estimatedTokens}
                     thinkingSnippet={liveTrace.thinkingSnippet}
                     live
                   />
