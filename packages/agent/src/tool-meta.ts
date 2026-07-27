@@ -446,7 +446,7 @@ export const TOOL_META: Record<string, ToolMeta> = {
   list_rsshub_categories: {
     miningEligible: false,
     usageGuide:
-      '添加 RSSHub 订阅三级漏斗第 1 步：列出内置分类后 ask_user 单选分类（option.id 用分类 id，label 可用 description）；再 list_rsshub_domains。',
+      '添加 RSS 订阅三级漏斗第 1 步：列出内置分类后 ask_user 单选分类（option.id 用分类 id，label 可用 description）；再 list_rsshub_domains。',
     compliance: '只读；无参数；返回分类摘要 + hint，不含全量路由。',
   },
   list_rsshub_domains: {
@@ -502,8 +502,10 @@ export const TOOL_META: Record<string, ToolMeta> = {
   },
   ask_user: {
     miningEligible: false,
-    usageGuide: '分析前需用户确认方向、范围或偏好，且上下文无法推断时调用；会在聊天输入框上方展示选择题，用户点选或自行输入后继续。',
-    compliance: 'prompt 必填、面向投资者且勿用 emoji；options 2–50 项且 id 唯一，label 勿用 emoji；allow_multiple 默认 false；同一轮对话最多 1 次；禁止索要密钥。',
+    usageGuide:
+      '分析前需用户确认方向、范围、授权或偏好且上下文无法推断时调用：省略 options 为拒绝/确认双按钮（可用 reject_label/confirm_label）；有 2–50 选项为选择题。',
+    compliance:
+      'prompt 必填、面向投资者且勿用 emoji；options 可省略/[]（确认模式）或 2–50 项且 id 唯一；confirm 回传 id 固定 reject|confirm；allow_custom 确认默认 false、选择题默认 true；同一轮最多 1 次；禁止索要密钥。',
   },
   list_enabled_providers: {
     hubFeature: 'provider_list',

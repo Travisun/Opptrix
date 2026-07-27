@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react'
 import { Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ChatRegular, ImageRegular, TranslateRegular } from '@fluentui/react-icons'
 import type { FeedArticle } from '../../types/schemas'
-import { openExternalUrl } from '../../platform/openUrl'
+import { isHttpUrl, openExternalUrl } from '../../platform/openUrl'
 import { isElectron } from '../../platform/detect'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive } from '../../theme/mixins'
@@ -318,19 +318,25 @@ export default function NewsArticleDetail({ article, onDiscussArticle }: Props) 
           <Text className={s.meta}>{article.source_title}</Text>
           <span className={s.metaSep} aria-hidden>·</span>
           <Text className={s.meta}>{formatRelativeTime(article.pub_date)}</Text>
-          {article.link && (
-            <>
-              <span className={s.metaSep} aria-hidden>·</span>
-              <a
-                className={s.metaLink}
-                href={article.link}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={event => openExternalUrl(article.link, event)}
-              >
-                查看原文
-              </a>
-            </>
+          <span className={s.metaSep} aria-hidden>·</span>
+          {isHttpUrl(article.link) ? (
+            <a
+              className={s.metaLink}
+              href={article.link}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={event => openExternalUrl(article.link, event)}
+            >
+              查看原文
+            </a>
+          ) : (
+            <span
+              className={mergeClasses(s.metaLink, s.metaActionDisabled)}
+              aria-disabled="true"
+              title="暂无可用原文链接"
+            >
+              查看原文
+            </span>
           )}
           {isElectron() && translation.available && (
             <>

@@ -162,3 +162,27 @@ test('parseFeedXml normalizes Twitter items and stores guid', async () => {
     items[1].id,
   )
 })
+
+test('parseFeedXml keeps only http(s) links; non-URL guid is not used as link', async () => {
+  const xml = `<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>No link feed</title>
+    <item>
+      <title>仅 guid</title>
+      <guid isPermaLink="false">urn:uuid:abc-123</guid>
+      <description>摘要</description>
+    </item>
+    <item>
+      <title>有链接</title>
+      <link>https://example.com/ok</link>
+      <guid isPermaLink="false">local-id-1</guid>
+    </item>
+  </channel>
+</rss>`
+  const { items } = await parseFeedXml(xml, stubSub)
+  assert.equal(items.length, 2)
+  assert.equal(items[0].link, '')
+  assert.equal(items[0].guid, 'urn:uuid:abc-123')
+  assert.equal(items[1].link, 'https://example.com/ok')
+})

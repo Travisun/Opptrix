@@ -74,11 +74,15 @@ export interface ChatUserPromptPayload {
   id: string
   title?: string
   prompt: string
+  /** 空数组 = confirm 模式（底部拒绝/确认） */
   options: Array<{ id: string; label: string }>
   allowMultiple?: boolean
   kind?: 'choice' | 'secret'
   name?: string
   inject_hosts?: string[]
+  reject_label?: string
+  confirm_label?: string
+  allow_custom?: boolean
 }
 
 export type ChatProgressEvent =
@@ -178,6 +182,10 @@ const TOOL_LABELS: Record<string, string> = {
   delete_news_group: '删除资讯分组',
   move_news_source: '移动资讯订阅',
   validate_news_source: '验证资讯订阅地址',
+  list_rsshub_categories: '浏览 RSS 分类',
+  list_rsshub_domains: '浏览 RSS 网站',
+  search_rsshub_routes: '搜索可订阅 RSS',
+  get_rsshub_domain_routes: '列出网站 RSS 订阅项',
   get_notice_content: '读取公告正文',
   list_tool_packs: '列出可用工具包',
   activate_tool_pack: '激活工具包',
@@ -311,7 +319,8 @@ function truncateLabel(text: string, max = 40): string {
 }
 
 function humanizeToolName(name: string): string {
-  const readable = name.replace(/_/g, ' ').trim()
+  // 屏蔽内部 rsshub 标识，避免过程条 fallback 暴露实现名
+  const readable = name.replace(/_/g, ' ').replace(/\brsshub\b/gi, 'RSS').trim()
   return truncateLabel(readable, 48)
 }
 
@@ -388,7 +397,8 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     return `调用扩展能力 · ${humanizeToolName(parsed.toolName)}`
   }
 
-  const base = TOOL_LABELS[tool] ?? humanizeToolName(tool)
+  const baseRaw = TOOL_LABELS[tool] ?? humanizeToolName(tool)
+  const base = baseRaw.replace(/rsshub/gi, 'RSS')
   const ref = stockRef(args, result)
 
   switch (tool) {
@@ -416,6 +426,20 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'get_instrument_cyq': {
       const iref = instrumentRefFromArgs(args) ?? ref
       return iref ? `${base} · ${iref}` : base
+    }
+    case 'list_rsshub_categories':
+      return base
+    case 'list_rsshub_domains': {
+      const category = typeof args.category === 'string' ? args.category.trim() : ''
+      return category ? `${base} · ${truncateLabel(category, 24)}` : base
+    }
+    case 'search_rsshub_routes': {
+      const q = typeof args.q === 'string' ? args.q.trim() : ''
+      return q ? `${base} · ${truncateLabel(q, 24)}` : base
+    }
+    case 'get_rsshub_domain_routes': {
+      const domain = typeof args.domain === 'string' ? args.domain.trim() : ''
+      return domain ? `${base} · ${truncateLabel(domain, 28)}` : base
     }
     case 'search_instruments': {
       const kw = typeof args.keyword === 'string' ? args.keyword.trim() : ''

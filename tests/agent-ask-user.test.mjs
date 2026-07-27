@@ -67,6 +67,55 @@ test('parseAskUserArgs validates prompt and options', () => {
   assert.equal(parsed.error, undefined)
   assert.equal(parsed.payload?.title, '分析范围')
   assert.equal(parsed.payload?.options.length, 2)
+  assert.equal(parsed.payload?.allow_custom, true)
+})
+
+test('parseAskUserArgs confirm mode when options omitted or empty', () => {
+  const omitted = parseAskUserArgs({ prompt: '是否授权使用本对话局域网？' })
+  assert.equal(omitted.error, undefined)
+  assert.deepEqual(omitted.payload?.options, [])
+  assert.equal(omitted.payload?.allow_custom, false)
+  assert.equal(omitted.payload?.reject_label, undefined)
+  assert.equal(omitted.payload?.confirm_label, undefined)
+
+  const empty = parseAskUserArgs({ prompt: '继续？', options: [] })
+  assert.equal(empty.error, undefined)
+  assert.deepEqual(empty.payload?.options, [])
+  assert.equal(empty.payload?.allow_custom, false)
+
+  const customLabels = parseAskUserArgs({
+    prompt: '是否授权？',
+    reject_label: '不允许',
+    confirm_label: '授权使用',
+    allow_custom: true,
+  })
+  assert.equal(customLabels.error, undefined)
+  assert.equal(customLabels.payload?.reject_label, '不允许')
+  assert.equal(customLabels.payload?.confirm_label, '授权使用')
+  assert.equal(customLabels.payload?.allow_custom, true)
+})
+
+test('parseAskUserArgs allow_custom false hides custom for choice mode', () => {
+  const parsed = parseAskUserArgs({
+    prompt: '选一个',
+    options: [
+      { id: 'a', label: 'A' },
+      { id: 'b', label: 'B' },
+    ],
+    allow_custom: false,
+  })
+  assert.equal(parsed.error, undefined)
+  assert.equal(parsed.payload?.allow_custom, false)
+})
+
+test('parseAskUserArgs rejects single option array', () => {
+  assert.match(
+    parseAskUserArgs({
+      prompt: '选一个',
+      options: [{ id: 'a', label: '仅一项' }],
+    }).error ?? '',
+    /至少|确认模式/,
+  )
 })
 
 test('UserPromptBridge resolves submitted answers', async () => {

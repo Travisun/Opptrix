@@ -20,6 +20,10 @@ export default function ComposerAgentUserPromptPanel({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [secretValue, setSecretValue] = useState('')
   const isSecret = prompt.kind === 'secret'
+  const isConfirm = !isSecret && prompt.options.length === 0
+  const allowCustom = prompt.allow_custom ?? (isConfirm ? false : true)
+  const rejectLabel = prompt.reject_label?.trim() || '拒绝'
+  const confirmLabel = prompt.confirm_label?.trim() || '确认'
   const allSelected = prompt.options.length > 0
     && selectedIds.length === prompt.options.length
 
@@ -177,6 +181,7 @@ export default function ComposerAgentUserPromptPanel({
     <div
       className={mergeClasses(
         'opptrix-composer-user-prompt-panel',
+        isConfirm && 'opptrix-composer-user-prompt-panel--confirm',
         OPPTRIX_GLASS_PANEL_CLASS,
       )}
       role="region"
@@ -189,7 +194,7 @@ export default function ComposerAgentUserPromptPanel({
         <p className="opptrix-composer-user-prompt-panel__prompt">{prompt.prompt}</p>
       </div>
 
-      {prompt.allowMultiple ? (
+      {!isConfirm && prompt.allowMultiple ? (
         <div className="opptrix-composer-user-prompt-panel__toolbar">
           <OpptrixButton
             variant="ghost"
@@ -202,45 +207,72 @@ export default function ComposerAgentUserPromptPanel({
         </div>
       ) : null}
 
-      <div className="opptrix-composer-user-prompt-panel__options opptrix-scroll">
-        {prompt.options.map(opt => (
-          <button
-            key={opt.id}
-            type="button"
-            className={mergeClasses(
-              'opptrix-composer-user-prompt-panel__option',
-              'opptrix-focusable',
-              prompt.allowMultiple && selectedIds.includes(opt.id)
-                && 'opptrix-composer-user-prompt-panel__option--selected',
-            )}
+      {!isConfirm ? (
+        <div className="opptrix-composer-user-prompt-panel__options opptrix-scroll">
+          {prompt.options.map(opt => (
+            <button
+              key={opt.id}
+              type="button"
+              className={mergeClasses(
+                'opptrix-composer-user-prompt-panel__option',
+                'opptrix-focusable',
+                prompt.allowMultiple && selectedIds.includes(opt.id)
+                  && 'opptrix-composer-user-prompt-panel__option--selected',
+              )}
+              disabled={submitting}
+              onClick={() => {
+                if (prompt.allowMultiple) {
+                  toggleMulti(opt.id)
+                  return
+                }
+                submitOption(opt.id, opt.label)
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+      ) : null}
+
+      {allowCustom ? (
+        <div className="opptrix-composer-user-prompt-panel__custom">
+          <OpptrixInput
+            className="opptrix-composer-user-prompt-panel__custom-input"
+            value={customText}
             disabled={submitting}
-            onClick={() => {
-              if (prompt.allowMultiple) {
-                toggleMulti(opt.id)
-                return
-              }
-              submitOption(opt.id, opt.label)
-            }}
+            placeholder="其他，输入后按 Enter 提交"
+            onChange={(_e, data) => setCustomText(data.value)}
+            onKeyDown={handleCustomKeyDown}
+            aria-label="自行输入答案"
+          />
+          <span className="opptrix-composer-user-prompt-panel__custom-hint">Enter</span>
+        </div>
+      ) : null}
+
+      {isConfirm ? (
+        <div className="opptrix-composer-user-prompt-panel__actions">
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="secondary"
+            size="medium"
+            disabled={submitting}
+            onClick={() => submitOption('reject', rejectLabel)}
           >
-            {opt.label}
-          </button>
-        ))}
-      </div>
+            {rejectLabel}
+          </OpptrixButton>
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="primary"
+            size="medium"
+            disabled={submitting}
+            onClick={() => submitOption('confirm', confirmLabel)}
+          >
+            {confirmLabel}
+          </OpptrixButton>
+        </div>
+      ) : null}
 
-      <div className="opptrix-composer-user-prompt-panel__custom">
-        <OpptrixInput
-          className="opptrix-composer-user-prompt-panel__custom-input"
-          value={customText}
-          disabled={submitting}
-          placeholder="其他，输入后按 Enter 提交"
-          onChange={(_e, data) => setCustomText(data.value)}
-          onKeyDown={handleCustomKeyDown}
-          aria-label="自行输入答案"
-        />
-        <span className="opptrix-composer-user-prompt-panel__custom-hint">Enter</span>
-      </div>
-
-      {prompt.allowMultiple && (
+      {!isConfirm && prompt.allowMultiple && (
         <div className="opptrix-composer-user-prompt-panel__confirm">
           <OpptrixButton
             variant="primary"

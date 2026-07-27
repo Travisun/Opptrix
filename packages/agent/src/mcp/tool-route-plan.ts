@@ -212,7 +212,7 @@ const INTENT_RULES: IntentRule[] = [
   },
   {
     intent: 'rsshub_catalog',
-    // 高于 news_source_add(90)：问「有哪些 RSSHub / 路由目录」先查内置目录
+    // 高于 news_source_add(90)：问「有哪些 RSS / 路由目录」先查内置目录
     priority: 91,
     patterns: [
       /RSSHub/i,
@@ -229,7 +229,7 @@ const INTENT_RULES: IntentRule[] = [
     ],
     avoidTools: ['list_news_articles', 'browser_navigate', 'get_instrument_snapshot'],
     confidence: 'high',
-    hint: '查 RSSHub 路由 → 三级漏斗 list_rsshub_categories → list_rsshub_domains → get_rsshub_domain_routes（拉平叶子多选）；用户已点名媒体才用 search_rsshub_routes',
+    hint: '查 RSS 路由 → 三级漏斗 list_rsshub_categories → list_rsshub_domains → get_rsshub_domain_routes（拉平叶子多选）；用户已点名媒体才用 search_rsshub_routes',
   },
   {
     intent: 'news_source_add',

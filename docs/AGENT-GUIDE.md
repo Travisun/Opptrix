@@ -165,7 +165,7 @@ Opptrix/
   - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
   - **资讯与订阅（`news` pack）**：
     - **只读浏览**：`get_news_center_status` → `list_news_groups` / `list_news_sources` → `list_news_articles` → `get_news_article`；标的公告 `get_instrument_notices` → `get_notice_content`
-    - **RSSHub 路由目录（内置 curated schema v3，三级漏斗）**：`list_rsshub_categories` → `list_rsshub_domains` → `get_rsshub_domain_routes`（返回路由+频道**拉平**后的可订阅叶子，`ask_user(allow_multiple=true)` 直接多选；禁止再先选路由再选频道；叶子过多用 `q` 缩小）→ 拼短名单基址 + `add_news_source`；`search_rsshub_routes` 仅用户已点名媒体时捷径；不依赖 GitHub docs / 全量 radar
+    - **RSS 路由目录（内置 curated schema v3，三级漏斗）**：`list_rsshub_categories` → `list_rsshub_domains` → `get_rsshub_domain_routes`（返回路由+频道**拉平**后的可订阅叶子，`ask_user(allow_multiple=true)` 直接多选；禁止再先选路由再选频道；叶子过多用 `q` 缩小）→ 拼短名单基址 + `add_news_source`；`search_rsshub_routes` 仅用户已点名媒体时捷径；不依赖 GitHub docs / 全量 radar
     - **订阅 CRUD**：`validate_news_source`（添加前探测，不写入）→ `add_news_source`（`url` 必填，可选 `title`/`group_id`）；`create_news_group` / `update_news_group` / `move_news_source` 可直接执行
     - **确认纪律（与 MCP 安装同类）**：`delete_news_source`、`import_news_sources`、`delete_news_group` **须先 `ask_user`，再以相同参数 + `confirmed=true` 重试**；未 confirmed 只返回摘要、不落库。删订阅不可恢复；删分组仅把组内订阅改为未分组，不删订阅本身。导入入参：`schema_version=1` + `subscriptions`，或仅 `subscriptions` 数组（已存在 url 跳过）
     - Hub feature 映射：`news_center_status` / `news_groups_list` / `news_sources_list` / `news_articles_list` / `news_article_detail` / `news_source_add|delete|validate` / `news_sources_import` / `news_group_create|update|delete` / `news_source_move_group`（见 [API.md](./API.md) Hub Features）
@@ -279,7 +279,7 @@ Opptrix/
   - **触发**：每轮 `llm.chat` 前检查；上游 `context_length_exceeded` 等 → 强制 aggressive compact 后**重试 1 次**；`setSessionModel` 换模型后按新窗再检查。
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer 已用/窗长估算）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
-- **`ask_user`**：Agent 需用户确认分析方向/范围时调用；SSE 推送 `user_prompt` 事件，客户端在输入框上方展示选择题（预置选项 2–50 个、末项可自由输入；多选支持全选；prompt/label 勿用 emoji），用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
+- **`ask_user`**：Agent 需用户确认分析方向/范围/授权时调用；SSE 推送 `user_prompt` 事件。**确认模式**：省略 `options`（或 `[]`）→ 底部「拒绝/确认」（可用 `reject_label`/`confirm_label` 定制；回传 id 固定 `reject`/`confirm`）；**选择题**：预置选项 2–50 个。`allow_custom` 控制自行输入（确认默认关、选择题默认开）。多选支持全选；prompt/label 勿用 emoji。用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
 - **行业分析**：`industry_mining` / `industry_mermaid`（属 `industry` pack，需播种或 activate）→ 代表公司用 `search_instruments` + `get_instrument_*`
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack
 - **跨市场搜索**：唯一入口 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO）

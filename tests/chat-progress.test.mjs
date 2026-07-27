@@ -109,3 +109,24 @@ test('formatToolLabel covers workspace, fetch, mcp, and namespaced tools', () =>
   assert.match(packLabel, /激活工具包/)
   assert.match(packLabel, /news, etf, workspace/)
 })
+
+test('formatToolLabel RSS tools use RSS wording without rsshub', () => {
+  const cats = formatToolLabel('list_rsshub_categories', {})
+  assert.match(cats, /RSS/)
+  assert.doesNotMatch(cats, /rsshub/i)
+
+  const domains = formatToolLabel('list_rsshub_domains', { category: 'finance' })
+  assert.match(domains, /RSS/)
+  assert.match(domains, /finance/)
+  assert.doesNotMatch(domains, /rsshub/i)
+
+  const search = formatToolLabel('search_rsshub_routes', { q: '财联社' })
+  assert.match(search, /RSS/)
+  assert.match(search, /财联社/)
+  assert.doesNotMatch(search, /rsshub/i)
+
+  const routes = formatToolLabel('get_rsshub_domain_routes', { domain: 'cls.cn' })
+  assert.match(routes, /RSS/)
+  assert.match(routes, /cls\.cn/)
+  assert.doesNotMatch(routes, /rsshub/i)
+})
