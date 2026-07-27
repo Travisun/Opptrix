@@ -18,6 +18,7 @@ import {
   SHARED_ROOT_ID,
   resolveSharedWorkspaceRoot,
   resetSharedWorkspaceLayoutCacheForTests,
+  ensureSharedWorkspaceLayout,
 } from '../packages/agent-workspace/dist/index.js'
 
 async function withTmpDataDir(fn) {
@@ -248,6 +249,49 @@ test('shared workspace auto-granted and survives clearSession', async () => {
     svc.clearSession(sessionId)
     await new Promise(r => setTimeout(r, 50))
     assert.equal(await fs.readFile(path.join(sharedRoot, 'data', 'dumps', 'keep.txt'), 'utf8'), 'persist')
+  })
+})
+
+test('ensureSharedWorkspaceLayout seeds cn-offline-daily-k and is idempotent', async () => {
+  await withTmpDataDir(async () => {
+    resetSharedWorkspaceLayoutCacheForTests()
+    const root = await ensureSharedWorkspaceLayout()
+    const pkgJson = path.join(root, 'packages', 'cn-offline-daily-k', 'package.json')
+    const indexJs = path.join(root, 'packages', 'cn-offline-daily-k', 'src', 'index.js')
+    await fs.access(pkgJson)
+    await fs.access(indexJs)
+    const original = await fs.readFile(pkgJson, 'utf8')
+    assert.match(original, /cn-offline-daily-k/)
+
+    await fs.writeFile(pkgJson, '{"name":"user-edited","version":"9.9.9"}\n')
+    resetSharedWorkspaceLayoutCacheForTests()
+    await ensureSharedWorkspaceLayout()
+    assert.equal(
+      await fs.readFile(pkgJson, 'utf8'),
+      '{"name":"user-edited","version":"9.9.9"}\n',
+    )
+
+    await fs.rm(indexJs)
+    resetSharedWorkspaceLayoutCacheForTests()
+    await ensureSharedWorkspaceLayout()
+    await fs.access(indexJs)
+    assert.equal(
+      await fs.readFile(pkgJson, 'utf8'),
+      '{"name":"user-edited","version":"9.9.9"}\n',
+    )
+  })
+})
+
+test('listDir missing path returns empty entries with missing flag', async () => {
+  await withTmpDataDir(async () => {
+    resetSharedWorkspaceLayoutCacheForTests()
+    const svc = new WorkspaceService()
+    const sessionId = 'listdir-missing'
+    await svc.ensureDefaultRoot(sessionId)
+    const result = await svc.listDir(sessionId, SHARED_ROOT_ID, 'packages/does-not-exist-xyz')
+    assert.deepEqual(result.entries, [])
+    assert.equal(result.missing, true)
+    assert.equal(result.path, 'packages/does-not-exist-xyz')
   })
 })
 

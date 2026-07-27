@@ -14,6 +14,8 @@ export {
 } from './paths.js'
 export {
   ensureSharedWorkspaceLayout,
+  seedBuiltinSharedPackages,
+  resolveBuiltinSharedPackageTemplateDir,
   sharedDumpsDir,
   resetSharedWorkspaceLayoutCacheForTests,
 } from './shared-workspace.js'

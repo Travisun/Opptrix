@@ -4,6 +4,7 @@
  */
 import fs from 'node:fs/promises'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { ensureDirectory } from './path-gate.js'
 import { resolveSharedWorkspaceRoot } from './paths.js'
 
@@ -16,6 +17,7 @@ const SHARED_README = `# Opptrix Agent 公共复用区
 | 路径 | 用途 |
 |------|------|
 | \`packages/<name>/\` | 可复用脚本/包（须含 README） |
+| \`packages/cn-offline-daily-k/\` | 内置：A 股离线日 K（初始化 shared 时自动落入） |
 | \`data/dumps/\` | 扶摇 Parquet 等离线大数据（经 prepare_fuyao_dump） |
 | \`data/exports/\` | 导出 CSV/JSON 等结果 |
 | \`data/cache/\` | 可删中间缓存 |
@@ -82,9 +84,92 @@ python -m src.main
 - 勿将 API Key / Token 写入本目录或代码
 `
 
+/** 随包发布的内置 shared 包（源在 templates/<name>/） */
+const BUILTIN_SHARED_PACKAGES = ['cn-offline-daily-k'] as const
+
 let ensuredRoots = new Set<string>()
 
-/** 幂等初始化 shared 目录树与 README */
+/**
+ * 解析内置模板目录。
+ * 编译产物在 dist/：优先包根 `../templates/<name>`；构建会再复制到 `dist/templates/`，
+ * 以便桌面只带 dist 时仍能找到。
+ */
+export async function resolveBuiltinSharedPackageTemplateDir(
+  packageName: string,
+): Promise<string | null> {
+  const here = path.dirname(fileURLToPath(import.meta.url))
+  const candidates = [
+    path.join(here, '..', 'templates', packageName),
+    path.join(here, 'templates', packageName),
+  ]
+  for (const candidate of candidates) {
+    try {
+      const st = await fs.stat(candidate)
+      if (st.isDirectory()) return candidate
+    } catch {
+      /* try next */
+    }
+  }
+  return null
+}
+
+/**
+ * WHY: 用户可能已改过 shared 下的包文件；只补缺失路径，绝不覆盖已有内容。
+ */
+async function copyTreeFillMissing(srcDir: string, destDir: string): Promise<void> {
+  await ensureDirectory(destDir)
+  const entries = await fs.readdir(srcDir, { withFileTypes: true })
+  for (const ent of entries) {
+    const src = path.join(srcDir, ent.name)
+    const dest = path.join(destDir, ent.name)
+    if (ent.isDirectory()) {
+      await copyTreeFillMissing(src, dest)
+      continue
+    }
+    if (!ent.isFile()) continue
+    try {
+      await fs.access(dest)
+    } catch {
+      await fs.copyFile(src, dest)
+    }
+  }
+}
+
+/**
+ * 幂等 seed：把内置模板落到 shared/packages/<name>/。
+ * - 目标不存在 → 完整 cp
+ * - 已存在 → 仅补齐缺失文件（含缺 package.json / src/index.js 的残缺目录）
+ */
+export async function seedBuiltinSharedPackages(sharedRoot: string): Promise<void> {
+  const packagesRoot = path.join(sharedRoot, 'packages')
+  await ensureDirectory(packagesRoot)
+
+  for (const name of BUILTIN_SHARED_PACKAGES) {
+    const templateDir = await resolveBuiltinSharedPackageTemplateDir(name)
+    if (!templateDir) {
+      console.warn(`[agent-workspace] 内置模板缺失，跳过 seed: ${name}`)
+      continue
+    }
+
+    const dest = path.join(packagesRoot, name)
+    let destExists = false
+    try {
+      await fs.access(dest)
+      destExists = true
+    } catch {
+      /* new */
+    }
+
+    if (!destExists) {
+      await fs.cp(templateDir, dest, { recursive: true })
+      continue
+    }
+
+    await copyTreeFillMissing(templateDir, dest)
+  }
+}
+
+/** 幂等初始化 shared 目录树与 README，并 seed 内置 packages */
 export async function ensureSharedWorkspaceLayout(): Promise<string> {
   const root = resolveSharedWorkspaceRoot()
   if (ensuredRoots.has(root)) return root
@@ -109,6 +194,8 @@ export async function ensureSharedWorkspaceLayout(): Promise<string> {
   } catch {
     await fs.writeFile(templatePath, PACKAGE_README_TEMPLATE, 'utf8')
   }
+
+  await seedBuiltinSharedPackages(root)
 
   ensuredRoots.add(root)
   return root

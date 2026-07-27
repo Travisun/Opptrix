@@ -11,8 +11,12 @@
       "import": "./dist/index.js"
     }
   },
+  "files": [
+    "dist",
+    "templates"
+  ],
   "scripts": {
-    "build": "tsc -p tsconfig.json"
+    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync})=>cpSync('templates','dist/templates',{recursive:true}))\""
   },
   "dependencies": {
     "@anthropic-ai/sandbox-runtime": "^0.0.67",
