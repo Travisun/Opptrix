@@ -907,6 +907,19 @@ select:focus-visible {
   line-height: 1.2 !important;
 }
 
+/* Circular icon-only send — beat Fluent size padding */
+.opptrix-round-icon-btn.fui-Button {
+  box-sizing: border-box !important;
+  min-width: 28px !important;
+  max-width: 28px !important;
+  width: 28px !important;
+  min-height: 28px !important;
+  max-height: 28px !important;
+  height: 28px !important;
+  padding: 0 !important;
+  border-radius: 9999px !important;
+}
+
 /* ── Dialog (Codex modal) ── */
 .opptrix-dialog-surface.fui-DialogSurface {
   background: var(--opptrix-canvas) !important;

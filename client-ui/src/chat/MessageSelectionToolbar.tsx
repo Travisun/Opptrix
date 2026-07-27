@@ -13,7 +13,7 @@ import OpptrixButton from '../components/opptrix/OpptrixButton'
 import MarkdownMessage from './MarkdownMessage'
 import type { EphemeralAskTurn, MessageSelection } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { glassDropdown, motion } from '../theme/mixins'
+import { glassDropdown, motion, primaryInteractive } from '../theme/mixins'
 import { useRotatingPhrase } from '../hooks/useRotatingPhrase'
 import { listRowKey } from '../utils/listRowKey'
 
@@ -135,12 +135,17 @@ const useStyles = makeStyles({
       color: opptrixCssVars.textTertiary,
     },
   },
+  /* 与 ChatComposer 发送钮一致；勿用 size="small"（会触发 .opptrix-btn-sm 的 22px 高 !important） */
   sendBtn: {
+    ...primaryInteractive,
+    borderRadius: opptrixTokens.radiusFull,
     minWidth: '28px',
+    maxWidth: '28px',
     width: '28px',
+    minHeight: '28px',
+    maxHeight: '28px',
     height: '28px',
     padding: 0,
-    borderRadius: opptrixTokens.radiusFull,
     flexShrink: 0,
   },
   thread: {
@@ -444,7 +449,7 @@ export default function MessageSelectionToolbar({
             disabled={loading}
           />
           <OpptrixButton
-            className={s.sendBtn}
+            className={mergeClasses(s.sendBtn, 'opptrix-round-icon-btn')}
             variant="primary"
             icon={<ArrowUpRegular fontSize={14} />}
             disabled={loading || !customInput.trim()}
@@ -504,7 +509,7 @@ export default function MessageSelectionToolbar({
                   disabled={loading}
                 />
                 <OpptrixButton
-                  className={s.sendBtn}
+                  className={mergeClasses(s.sendBtn, 'opptrix-round-icon-btn')}
                   variant="primary"
                   icon={<ArrowUpRegular fontSize={14} />}
                   disabled={loading || !followUpInput.trim()}
