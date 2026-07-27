@@ -735,7 +735,7 @@ export default function ChatComposer({
                 />
               )}
               <OpptrixButton
-                className={s.sendBtn}
+                className={mergeClasses(s.sendBtn, 'opptrix-round-icon-btn')}
                 variant="primary"
                 icon={loading ? <PauseFilled fontSize={14} /> : <ArrowUpRegular fontSize={14} />}
                 disabled={loading ? !onStop : !canSend}
