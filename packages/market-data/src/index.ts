@@ -27,7 +27,7 @@ import {
 } from './package-pack.js'
 import { registerMarketDataServiceReset, resetMarketDataRuntime } from './runtime.js'
 import { MarketDataLifecycle } from './sync/lifecycle.js'
-import { queryLocalDailyKlines, queryLocalLatestQuote } from './query/local-bars.js'
+import { queryLocalLatestQuote } from './query/local-bars.js'
 import { searchUniverseStocks } from './query/search-stocks.js'
 import { buildEtfScorecardSchema, computeEtfScorecard } from './query/etf-scorecard.js'
 import { searchLocalInstruments, listLocalInstrumentsSummary } from './query/search-instruments.js'
@@ -159,8 +159,9 @@ export class MarketDataService {
     return queryLocalLatestQuote(this.store, code)
   }
 
-  localDailyKlines(code: string, limit = 800, before?: string) {
-    return queryLocalDailyKlines(this.store, code, limit, before)
+  localDailyKlines(_code: string, _limit = 800, _before?: string) {
+    // 主库不再提供静态日 K；图表/诊断请走在线 queryInstrumentData('kline')
+    return [] as import('@opptrix/shared').StockKline[]
   }
 
   listLocalEtfs(limit = 5000) {
@@ -303,7 +304,6 @@ export {
   isCnMondayAfterMarketClose,
   cnUniverseMaintenanceDue,
   cnTaxonomyMaintenanceDue,
-  cnKlineDailyMaintenanceDue,
   cnMaintenanceJobsDue,
 } from './sync/schedule.js'
 export {
@@ -342,8 +342,6 @@ export {
 } from './package-pack.js'
 export { resetMarketDataRuntime } from './runtime.js'
 export {
-  importDailyKDump,
-  resumeKlineParquetFromCacheIfNeeded,
   importAdjustmentFactors,
   fetchDownloadUrl,
   ensureParquetDownloaded,

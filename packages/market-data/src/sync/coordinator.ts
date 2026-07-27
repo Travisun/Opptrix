@@ -2,9 +2,7 @@ import { markMarketPackPrepared } from '../market-pack-settings.js'
 import type { MarketDbStatus, MarketDataStore } from '../store.js'
 import { jobsForMarketPack } from './market-packs.js'
 import { ALL_SYNC_JOBS, BOOTSTRAP_SYNC_JOBS, CN_MANUAL_SYNC_JOBS, type MarketDataSyncEngine, type SyncMode, type SyncOptions, type SyncProgress } from './engine.js'
-import { THS_KLINE_DUMP_JOBS } from './config.js'
 import { resolveAutoBootPlan } from './plan.js'
-import { resumeKlineParquetFromCacheIfNeeded } from './dump-import.js'
 import { setMarketSyncActive, isMarketSyncActive, isDerivedMaintenanceActive } from '../duck/duck-subprocess-gate.js'
 import {
   computeBootstrapOverallPercent,
@@ -41,7 +39,6 @@ export interface SyncStateSnapshot {
 const MAX_MEMORY_LOGS = 500
 const DB_STATUS_CACHE_MS_IDLE = 10_000
 const DB_STATUS_CACHE_MS_RUNNING = 12_000
-const DB_STATUS_CACHE_MS_HEAVY_IMPORT = 18_000
 
 /** 名录/行业等 bootstrap 任务 — 运行中用内存进度覆盖 DB 聚合（避免 DuckDB 写入滞后） */
 const BOOTSTRAP_PROGRESS_JOBS = new Set([
@@ -93,16 +90,11 @@ export class MarketSyncCoordinator {
   private dbStatus(): MarketDbStatus {
     const now = Date.now()
     const currentJob = this.snapshot.current_job ?? null
-    const heavyImport = this.running
-      && currentJob != null
-      && THS_KLINE_DUMP_JOBS.has(currentJob)
 
     if (this.running) {
-      const cacheMs = heavyImport ? DB_STATUS_CACHE_MS_HEAVY_IMPORT : DB_STATUS_CACHE_MS_RUNNING
-      if (this.dbStatusCache && now - this.dbStatusCache.at < cacheMs) {
+      if (this.dbStatusCache && now - this.dbStatusCache.at < DB_STATUS_CACHE_MS_RUNNING) {
         let value = this.dbStatusCache.value
-        if (heavyImport) value = this.overlayThsKlineProgress(value)
-        else if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
+        if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
           value = this.overlayBootstrapJobProgress(value)
         }
         return value
@@ -111,7 +103,6 @@ export class MarketSyncCoordinator {
         ? this.store.getStatusLite(this.dbStatusCache.value)
         : this.store.getStatusLight()
       this.dbStatusCache = { at: now, value }
-      if (heavyImport) return this.overlayThsKlineProgress(value)
       if (currentJob && BOOTSTRAP_PROGRESS_JOBS.has(currentJob)) {
         return this.overlayBootstrapJobProgress(value)
       }
@@ -140,28 +131,6 @@ export class MarketSyncCoordinator {
         [job]: {
           done: current,
           pending: Math.max(0, total - current),
-          error: status.job_progress[job]?.error ?? 0,
-        },
-      },
-    }
-  }
-
-  /** Overlay in-memory dump import percent onto kline job progress (avoids COUNT DISTINCT during import). */
-  private overlayThsKlineProgress(status: MarketDbStatus): MarketDbStatus {
-    const job = this.snapshot.current_job
-    if (!job || !THS_KLINE_DUMP_JOBS.has(job)) return status
-    const current = this.snapshot.job_current ?? 0
-    const total = this.snapshot.job_total ?? 100
-    const stockCount = status.stock_count
-    const frac = total > 0 ? current / total : 0
-    const done = Math.min(stockCount, Math.round(frac * stockCount))
-    return {
-      ...status,
-      job_progress: {
-        ...status.job_progress,
-        [job]: {
-          done,
-          pending: Math.max(0, stockCount - done),
           error: status.job_progress[job]?.error ?? 0,
         },
       },
@@ -235,14 +204,9 @@ export class MarketSyncCoordinator {
       ? (this.snapshot.message ?? session?.message ?? null)
       : (session?.message ?? this.snapshot.message ?? null)
 
-    const isThsKlineJob = currentJob != null && THS_KLINE_DUMP_JOBS.has(currentJob)
-
     let jobCurrent = 0
     let jobTotal = stockCount
-    if (isThsKlineJob && sessionRunning) {
-      jobCurrent = rawJobCurrent
-      jobTotal = rawJobTotal > 0 ? rawJobTotal : 100
-    } else if (currentJob && stockCount > 0) {
+    if (currentJob && stockCount > 0) {
       if (this.running) {
         jobCurrent = Math.min(stockCount, this.snapshot.job_current ?? 0)
       } else {
@@ -526,9 +490,9 @@ export class MarketSyncCoordinator {
     if (this.incompleteBootstrapRetryTimer != null) clearTimeout(this.incompleteBootstrapRetryTimer)
     this.incompleteBootstrapRetryAttempts += 1
     const waitSec = Math.round(MarketSyncCoordinator.INCOMPLETE_BOOTSTRAP_RETRY_MS / 1000)
-    const hint = !bootstrap.klines
-      ? '历史 K 线 Parquet 包未完成'
-      : '名录/行业等待补全'
+    const hint = !bootstrap.initial_cn || !bootstrap.initial_taxonomy
+      ? '名录或行业分类待补全'
+      : '基础数据等待补全'
     this.log(sessionId, `初选包构建中（${hint}），${waitSec} 秒后继续后台补全…`)
     this.incompleteBootstrapRetryTimer = setTimeout(() => {
       this.incompleteBootstrapRetryTimer = null
@@ -566,11 +530,6 @@ export class MarketSyncCoordinator {
       try {
         this.store.repairKlineImportArtifacts()
       } catch { /* background repair */ }
-      void resumeKlineParquetFromCacheIfNeeded(this.store).then(result => {
-        if (result?.success && !this.running && !isDerivedMaintenanceActive()) {
-          void this.autoSyncOnBoot()
-        }
-      }).catch(() => { /* 缓存恢复失败时由后续同步计划重试 */ })
     })
   }
 

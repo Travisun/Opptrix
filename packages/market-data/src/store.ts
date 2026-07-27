@@ -102,7 +102,7 @@ export interface MarketDbStatus {
 
 export interface DerivedReadiness {
   ready: boolean
-  /** 需先完成 K 线 Parquet 导入 */
+  /** @deprecated 主库不再要求静态日 K 前置；恒为 true */
   klines_prerequisite: boolean
   screen_factors: boolean
   industry_stats: boolean
@@ -125,6 +125,7 @@ export interface BootstrapReadiness {
   universe: boolean
   /** @deprecated 本地 K 线层已停用 */
   quotes: boolean
+  /** @deprecated 主库不再导入静态日 K；恒为 true */
   klines: boolean
   fundamentals: boolean
   screen_factors: boolean
@@ -1025,11 +1026,9 @@ export class MarketDataStore {
 
     const klineMeta = cursorMeta.kline_bootstrap
     const klineCodesFromCursor = Number(klineMeta?.codes ?? 0)
-    const klines = this.isKlineParquetImportComplete(lastSync, cursorMeta)
-    const klineRecent = klineCodesFromCursor > 0
-      ? klineCodesFromCursor
-      : (klines ? cnEquity : 0)
-    const klineWithMin = klines ? klineRecent : 0
+    const klines = true
+    const klineRecent = klineCodesFromCursor > 0 ? klineCodesFromCursor : 0
+    const klineWithMin = 0
     const kline_stock_ratio = cnEquity > 0
       ? Math.round((klineWithMin / cnEquity) * 1000) / 10
       : 0
@@ -1037,7 +1036,7 @@ export class MarketDataStore {
       ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
     const screen_factors = !!latestFactorDate || !!lastSync.screen_factors
-    const ready = initial_cn && initial_taxonomy && klines
+    const ready = initial_cn && initial_taxonomy
 
     return {
       ready,
@@ -1060,26 +1059,19 @@ export class MarketDataStore {
     }
   }
 
+  /** 静态日 K 任务已下线：进度恒为完成，避免 UI「未完成导入」死锁 */
   private enrichKlineJobProgressLight(
     jobProgress: Record<string, JobProgressSummary>,
     _stockCount: number,
-    bootstrap: BootstrapReadiness,
-    lastSync: Record<string, string | null>,
+    _bootstrap: BootstrapReadiness,
+    _lastSync: Record<string, string | null>,
   ): void {
-    const importDone = bootstrap.klines
-    jobProgress.kline_bootstrap = {
-      done: importDone ? 1 : 0,
-      pending: importDone ? 0 : 1,
-      error: jobProgress.kline_bootstrap?.error ?? 0,
-    }
-
-    const bootstrapFresh = !!lastSync.kline_bootstrap && daysSince(lastSync.kline_bootstrap) < 7
-    const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
-    const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
-    jobProgress.kline_daily = {
-      done: klineMaintOk ? 1 : 0,
-      pending: klineMaintOk ? 0 : 1,
-      error: jobProgress.kline_daily?.error ?? 0,
+    for (const job of ['kline_bootstrap', 'kline_daily'] as const) {
+      jobProgress[job] = {
+        done: 1,
+        pending: 0,
+        error: jobProgress[job]?.error ?? 0,
+      }
     }
   }
 
@@ -1144,10 +1136,10 @@ export class MarketDataStore {
     const kline_recent_ratio = cnEquity > 0
       ? Math.round((klineRecent / cnEquity) * 1000) / 10
       : 0
-    const klines = this.isKlineParquetImportComplete(undefined, undefined, true)
+    const klines = true
     const screen_factors = (duck.factors ?? 0) > 0 || Boolean(_latestFactorDate)
 
-    const ready = initial_cn && initial_taxonomy && klines
+    const ready = initial_cn && initial_taxonomy
 
     return {
       ready,
@@ -1226,21 +1218,36 @@ export class MarketDataStore {
     return row?.c ?? 0
   }
 
-  /** 本地衍生指标完整性 — 因子覆盖率相对有 K 线标的，非 A 股名录 */
+  /** 本地衍生指标完整性 — 主库日 K 不再作为硬前置（避免与静态日 K 下线形成死循环） */
   assessDerivedReadiness(
     latestFactorDate?: string | null,
     bootstrap?: BootstrapReadiness,
     _duckStats?: MarketDuckStats,
   ): DerivedReadiness {
-    const bootstrapState = bootstrap ?? this.assessBootstrapReadiness()
-    const klinesReady = bootstrapState.klines || this.hasSubstantialCnKlineData()
-    if (!klinesReady) {
-      return this.emptyDerivedReadiness(latestFactorDate ?? this.latestFactorTradeDate())
+    void bootstrap
+    const hasLocalKlines = this.hasSubstantialCnKlineData()
+    const factorTradeDate = latestFactorDate ?? this.latestFactorTradeDate()
+    const industryMeta = this.getCursorMeta('industry_stats')
+    const industryTradeDate = industryMeta?.trade_date != null
+      ? String(industryMeta.trade_date).slice(0, 10)
+      : null
+
+    if (!hasLocalKlines) {
+      // 主库无静态日 K / 本地因子管道已下线：不阻塞就绪
+      return {
+        ready: true,
+        klines_prerequisite: true,
+        screen_factors: true,
+        industry_stats: true,
+        factor_coverage_ratio: 0,
+        factor_trade_date: factorTradeDate,
+        kline_trade_date: null,
+        industry_trade_date: industryTradeDate,
+      }
     }
 
     const stats = this.klineStats()
     const klineTradeDate = stats.maxDate
-    const factorTradeDate = latestFactorDate ?? this.latestFactorTradeDate()
     const klineCodes = stats.codes || this.countDistinctKlineCodes()
     const factorCodes = klineTradeDate ? this.countDistinctFactorCodes(klineTradeDate) : 0
     const minFactorCodes = klineCodes > 0 ? Math.max(1, Math.floor(klineCodes * 0.98)) : 0
@@ -1252,10 +1259,6 @@ export class MarketDataStore {
       && klineCodes > 0
       && factorCodes >= minFactorCodes
 
-    const industryMeta = this.getCursorMeta('industry_stats')
-    const industryTradeDate = industryMeta?.trade_date != null
-      ? String(industryMeta.trade_date).slice(0, 10)
-      : null
     const industry_stats = !this.industryStatsStale()
 
     return {
@@ -1278,10 +1281,9 @@ export class MarketDataStore {
     latestFactorDate: string | null,
     lastTradeDate: Record<string, string | null>,
   ): DerivedReadiness {
-    const klinesReady = bootstrap.klines || this.isKlineParquetImportComplete(lastSync, cursorMeta)
-    if (!klinesReady) {
-      return this.emptyDerivedReadiness(latestFactorDate)
-    }
+    void bootstrap
+    const hasLocalKlines = this.isKlineParquetImportComplete(lastSync, cursorMeta)
+      || this.hasSubstantialCnKlineData()
 
     const factorMeta = cursorMeta.screen_factors
     const factorDate = latestFactorDate
@@ -1295,6 +1297,19 @@ export class MarketDataStore {
       || lastTradeDate.kline_daily?.slice(0, 10)
       || lastTradeDate.kline_bootstrap?.slice(0, 10)
       || null
+
+    if (!hasLocalKlines) {
+      return {
+        ready: true,
+        klines_prerequisite: true,
+        screen_factors: true,
+        industry_stats: true,
+        factor_coverage_ratio: 0,
+        factor_trade_date: factorDate,
+        kline_trade_date: null,
+        industry_trade_date: industryTradeDate,
+      }
+    }
 
     const screen_factors = Boolean(lastSync.screen_factors)
       && Boolean(factorDate)
@@ -1310,19 +1325,6 @@ export class MarketDataStore {
       factor_trade_date: factorDate,
       kline_trade_date: klineTradeDate,
       industry_trade_date: industryTradeDate,
-    }
-  }
-
-  private emptyDerivedReadiness(factorTradeDate: string | null): DerivedReadiness {
-    return {
-      ready: false,
-      klines_prerequisite: false,
-      screen_factors: false,
-      industry_stats: false,
-      factor_coverage_ratio: 0,
-      factor_trade_date: factorTradeDate,
-      kline_trade_date: null,
-      industry_trade_date: null,
     }
   }
 
@@ -1470,27 +1472,19 @@ export class MarketDataStore {
     return row.c
   }
 
-  /** 同花顺 Parquet 导入任务 — 以导入完成（cursor）为准，不用名录覆盖率 */
+  /** 静态日 K 任务已下线：进度恒为完成，避免 UI「未完成导入」死锁 */
   private enrichThsKlineDumpJobProgress(
     jobProgress: Record<string, JobProgressSummary>,
     _stockCount: number,
-    bootstrap: BootstrapReadiness,
-    lastSync: Record<string, string | null>,
+    _bootstrap: BootstrapReadiness,
+    _lastSync: Record<string, string | null>,
   ): void {
-    const importDone = bootstrap.klines
-    jobProgress.kline_bootstrap = {
-      done: importDone ? 1 : 0,
-      pending: importDone ? 0 : 1,
-      error: jobProgress.kline_bootstrap?.error ?? 0,
-    }
-
-    const bootstrapFresh = !!lastSync.kline_bootstrap && daysSince(lastSync.kline_bootstrap) < 7
-    const dailyFresh = !!lastSync.kline_daily && daysSince(lastSync.kline_daily) < 7
-    const klineMaintOk = bootstrap.klines && (bootstrapFresh || dailyFresh)
-    jobProgress.kline_daily = {
-      done: klineMaintOk ? 1 : 0,
-      pending: klineMaintOk ? 0 : 1,
-      error: jobProgress.kline_daily?.error ?? 0,
+    for (const job of ['kline_bootstrap', 'kline_daily'] as const) {
+      jobProgress[job] = {
+        done: 1,
+        pending: 0,
+        error: jobProgress[job]?.error ?? 0,
+      }
     }
   }
 

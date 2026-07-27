@@ -726,17 +726,14 @@ export class ResearchHub {
     const cnRef = resolveCnInstrumentRef(ref)
     const normalized = cnRef.symbol
     const exchange = cnRef.exchange
-    let klines = this.marketData.localDailyKlines(normalized, 280)
-    if (klines.length < 30) {
-      const kl = await this.de.queryInstrumentData(cnRef, 'kline', { count: 280 })
-      const klData = instrumentQueryData<import('@opptrix/shared').StockKline[]>(kl)
-      if (kl.success && klData?.length) klines = klData
-    }
-    if (klines.length < 20) {
-      return fail('K 线数据不足，请先同步本地行情后再查看趋势研判', t0)
+    const kl = await this.de.queryInstrumentData(cnRef, 'kline', { count: 280 })
+    const klines = instrumentQueryData<import('@opptrix/shared').StockKline[]>(kl) ?? []
+    if (!kl.success || klines.length < 20) {
+      return fail('暂时无法获取足够的走势数据，请稍后重试', t0)
     }
 
-    const indexKlines = this.marketData.localDailyKlines('000300', 280)
+    const indexKl = await this.queryCnKline('000300', { count: 280 })
+    const indexKlines = instrumentQueryData<import('@opptrix/shared').StockKline[]>(indexKl) ?? []
     const quoteR = await this.stockRealtime(cnRef)
     const quote = instrumentQueryData<import('@opptrix/shared').StockRealtime[]>(quoteR)?.[0] ?? null
     const name = this.resolveStockName(normalized, exchange ?? quote?.name, quote?.name)
@@ -915,7 +912,8 @@ export class ResearchHub {
   }
 
   private async marketRegimeCn(t0: number) {
-    const klines = this.marketData.localDailyKlines('000300', 280)
+    const indexKl = await this.queryCnKline('000300', { count: 280 })
+    const klines = instrumentQueryData<StockKline[]>(indexKl) ?? []
     const klineBars = klines.map((k: StockKline) => ({ close: k.close, amount: k.amount }))
 
     let indexM6m: number | null = null
@@ -1537,23 +1535,6 @@ export class ResearchHub {
     return this.enrichQuote(normalized)
   }
 
-  private fetchLocalChartKlines(
-    code: string,
-    safeCount: number,
-    before: string,
-  ): { klines: import('@opptrix/shared').StockKline[]; hasMore: boolean } | null {
-    const klines = this.marketData.store.queryDuckDailyKlines(
-      normalizeCode(code),
-      safeCount,
-      before ? before.slice(0, 10) : undefined,
-    )
-    if (!klines.length) return null
-    return {
-      klines,
-      hasMore: klines.length >= safeCount,
-    }
-  }
-
   private enrichQuote(quote: NonNullable<Awaited<ReturnType<MarketDataEngine['realtime']>>['data']>[0]) {
     const price = quote.price
     const preClose = quote.preClose
@@ -1868,7 +1849,7 @@ export class ResearchHub {
         }
       }
       if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') return null
-      return this.fetchLocalChartKlines(code, safeCount, before)
+      return null
     }
 
     let klineR = await this.queryCnKline(code, {
@@ -1889,8 +1870,7 @@ export class ResearchHub {
         hasMore: klineData.length >= safeCount && safeCount < 800,
       }
     }
-    if (inferCnAssetClass(normalizeCode(code)) === 'INDEX') return null
-    return this.fetchLocalChartKlines(code, safeCount, before)
+    return null
   }
 
   private async stockChart(
@@ -1985,7 +1965,7 @@ export class ResearchHub {
           hasMore: false,
           bars: [],
           indicators: [],
-        }, `${name} 暂无K线数据（可先同步本地行情）`, t0)
+        }, `${name} 暂时无法获取走势，请稍后重试`, t0)
       }
       return fail('K线获取失败', t0)
     }

@@ -1,6 +1,5 @@
 import type { MarketDbStatus } from '../store.js'
 import { CN_AUTO_SYNC_JOB_UNIVERSE } from './config.js'
-import { CN_WEEKLY_MAINTENANCE_DAYS } from './schedule.js'
 import { daysSince } from '../utils.js'
 
 function stockRatio(done: number, stockCount: number): number {
@@ -36,16 +35,9 @@ export function bootstrapJobRatio(
     case 'quotes':
       return b?.quotes ? 1 : (ratioPct('quote_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'kline_bootstrap':
-      return b?.klines || !!dbStatus.last_sync.kline_bootstrap ? 1 : 0
-    case 'kline_daily': {
-      const bootLast = dbStatus.last_sync.kline_bootstrap
-      const dailyLast = dbStatus.last_sync.kline_daily
-      if (b?.klines && (
-        (bootLast && daysSince(bootLast) < CN_WEEKLY_MAINTENANCE_DAYS)
-        || (dailyLast && daysSince(dailyLast) < CN_WEEKLY_MAINTENANCE_DAYS)
-      )) return 1
-      return stockRatio(progress?.done ?? 0, stockCount)
-    }
+    case 'kline_daily':
+      // 主库静态日 K 已下线；历史 job 名视为完成，避免进度卡死
+      return 1
     case 'financials':
       return b?.fundamentals ? 1 : (ratioPct('fin_stock_ratio') ?? stockRatio(progress?.done ?? 0, stockCount))
     case 'screen_factors':

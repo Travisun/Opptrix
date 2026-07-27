@@ -29,19 +29,17 @@ export const STOCKINDEX_LIST_SYNC_JOBS = [
   'initial_us_universe',
 ] as const
 
-/** 首次/未完成：A 股名录 → ETF/港美名录 → 行业 → 历史 K 补全 */
+/** 首次/未完成：A 股名录 → ETF/港美名录 → 行业（主库不再导入静态日 K） */
 export const CN_BOOTSTRAP_SYNC_JOBS = [
   'initial_cn_universe',
   ...STOCKINDEX_LIST_SYNC_JOBS,
   'initial_taxonomy',
-  'kline_bootstrap',
 ] as const
 
 /** 就绪后按 TTL 自动维护 */
 export const CN_MAINTENANCE_SYNC_JOBS = [
   'initial_cn_universe',
   ...STOCKINDEX_LIST_SYNC_JOBS,
-  'kline_daily',
   'initial_taxonomy',
 ] as const
 
@@ -51,25 +49,20 @@ export const CN_CORE_SYNC_JOBS = [
   'initial_taxonomy',
 ] as const
 
-/** 设置页手动「全量刷新」— 与自动 pipeline 一致并含日 K */
+/** 设置页手动「全量刷新」— 与自动 pipeline 一致 */
 export const CN_MANUAL_SYNC_JOBS = [
   ...CN_BOOTSTRAP_SYNC_JOBS,
-  'kline_daily',
 ] as const
 
 /** 全部 A 股自动同步 job（UI / 进度） */
 export const CN_AUTO_SYNC_JOB_UNIVERSE = [
   ...CN_BOOTSTRAP_SYNC_JOBS,
-  'kline_daily',
 ] as const
-
-/** 同花顺 Parquet 批量 K 线任务（非逐股 Provider） */
-export const THS_KLINE_DUMP_JOBS = new Set(['kline_bootstrap', 'kline_daily'])
 
 /** @deprecated 使用 STOCKINDEX_LIST_SYNC_JOBS */
 export const LEGACY_INITIAL_SYNC_JOBS = [...STOCKINDEX_LIST_SYNC_JOBS] as const
 
-/** L0 bootstrap = A 股首次 pipeline（含历史 K 补全） */
+/** L0 bootstrap = A 股首次 pipeline（名录 + 行业） */
 export const INITIAL_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
 export const BOOTSTRAP_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
 export const DEFAULT_AUTO_SYNC_JOBS = [...CN_BOOTSTRAP_SYNC_JOBS] as const
@@ -84,7 +77,6 @@ export const DEEP_SYNC_JOBS = [
   'etf_list',
   'etf_nav',
   'etf_holdings',
-  'etf_kline_bootstrap',
   'us_list',
   'us_quotes',
   'crypto_list',
@@ -115,11 +107,13 @@ export const HYDRATE_SYNC_JOBS = [
 
 /**
  * 深度/跨市场 job — 不参与 A 股自动 boot / 维护 pipeline。
- * kline_bootstrap / kline_daily 已纳入 CN_*_SYNC_JOBS，不在此排除。
+ * 静态日 K 任务（kline_* / etf_kline_bootstrap）已下线，不再调度。
  */
 export const AUTO_BOOT_EXCLUDED_JOBS = new Set([
-  'etf_kline_bootstrap',
   'quotes',
+  'kline_bootstrap',
+  'kline_daily',
+  'etf_kline_bootstrap',
   ...DEEP_SYNC_JOBS,
   ...HYDRATE_SYNC_JOBS,
 ])
@@ -131,7 +125,6 @@ export const ALL_SYNC_JOBS = [
   'etf_list',
   'etf_nav',
   'etf_holdings',
-  'etf_kline_bootstrap',
   'us_list',
   'us_quotes',
   'crypto_list',
@@ -274,14 +267,15 @@ export const SYNC_JOB_CONFIG: Record<string, JobSyncConfig> = {
   /** @deprecated */ universe: { concurrency: 1, delayMs: 0, ttlDays: 7, minIntervalMinutes: STOCKINDEX_MIN_RESYNC_MINUTES },
   /** 日频截面 — 每个交易日刷新 */
   quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },
-  /** 6 月日 K 首次补全 — 同花顺 10 年 Parquet 全量包 */
+  /** @deprecated 主库不再导入静态日 K；保留配置键以免旧 cursor 读失败 */
   kline_bootstrap: { concurrency: 1, delayMs: 0, ttlDays: 30 },
-  /** A 股日 K 增量 — 同花顺 10 天 Parquet 增量包；周一下午收盘后 */
+  /** @deprecated 主库不再导入静态日 K */
   kline_daily: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   profiles: { concurrency: 2, delayMs: 320, ttlDays: 30 },
   etf_list: { concurrency: 1, delayMs: 0, ttlDays: 7 },
   etf_nav: { concurrency: 2, delayMs: 280, ttlDays: 7 },
   etf_holdings: { concurrency: 2, delayMs: 320, ttlDays: 30 },
+  /** @deprecated ETF 静态日 K 写库已下线 */
   etf_kline_bootstrap: { concurrency: 2, delayMs: 200, ttlDays: 1 },
   us_list: { concurrency: 1, delayMs: 300, ttlDays: 7 },
   us_quotes: { concurrency: 2, delayMs: 280, ttlDays: 1 },

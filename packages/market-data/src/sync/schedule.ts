@@ -101,38 +101,10 @@ export function cnTaxonomyMaintenanceDue(
   return true
 }
 
-/**
- * A 股日 K 增量：仅周一下午收盘后；每周至多一次。
- */
-export function cnKlineDailyMaintenanceDue(
-  lastSync: Record<string, string | null>,
-  now = new Date(),
-): boolean {
-  if (!isCnMondayAfterMarketClose(now)) return false
-  const last = lastSync.kline_daily ?? null
-  if (!last) return true
-
-  const lastAt = new Date(last)
-  const nowBj = beijingClock(now)
-  const lastBj = beijingClock(lastAt)
-  const thisMonday = mondayDateKeyOfWeek(nowBj)
-  const lastMonday = mondayDateKeyOfWeek(lastBj)
-
-  // last 晚于 now 时不当成「本周已跑」（时钟漂移 / 脏数据防御）
-  if (
-    lastAt.getTime() <= now.getTime()
-    && lastMonday === thisMonday
-    && lastBj.hour >= CN_MARKET_CLOSE_HOUR
-  ) {
-    return false
-  }
-  return daysSince(last, now) >= CN_WEEKLY_MAINTENANCE_DAYS
-}
-
-/** 就绪后维护任务（名录 / 行业错开一周；日 K 周一收盘后） */
+/** 就绪后维护任务（名录 / 行业错开一周；主库不再维护静态日 K） */
 export function cnMaintenanceJobsDue(
   lastSync: Record<string, string | null>,
-  now = new Date(),
+  _now = new Date(),
 ): string[] {
   const jobs: string[] = []
   const universe = cnUniverseMaintenanceDue(lastSync)
@@ -146,8 +118,6 @@ export function cnMaintenanceJobsDue(
     if (universe) jobs.push('initial_cn_universe')
     if (taxonomy) jobs.push('initial_taxonomy')
   }
-
-  if (cnKlineDailyMaintenanceDue(lastSync, now)) jobs.push('kline_daily')
 
   for (const job of ['initial_cn_etf', 'initial_hk_universe', 'initial_us_universe'] as const) {
     if (selfStale(job, lastSync)) jobs.push(job)

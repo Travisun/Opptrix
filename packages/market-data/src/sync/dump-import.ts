@@ -1,12 +1,12 @@
 /**
- * Parquet dump import — 持久化缓存 ~/.opptrix/dumps/，7 天内复用本地文件跳过下载。
+ * 扶摇 Parquet 下载与缓存 — 仅落盘 ~/.opptrix/dumps/（及 Agent shared），
+ * 不写入 market.db / market-kline.duckdb。Agent 离线入口见 prepareFuyaoDump*。
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import type { MarketDataStore } from '../store.js'
 import { DUMP_IMPORT_CONFIG } from './config.js'
 import { marketDataDir } from '../paths.js'
-import { getMarketDuckGateway } from '../duck/market-duck-gateway.js'
 
 export interface DumpImportResult {
   type: 'full' | 'incremental' | 'adjustments'
@@ -157,64 +157,6 @@ export async function ensureParquetDownloaded(
   return { path: cachePath, fromCache: false }
 }
 
-async function importParquetFromCache(
-  store: MarketDataStore,
-  type: 'full' | 'incremental',
-  parquetPath: string,
-  hooks?: DumpImportHooks,
-  fromCache = true,
-): Promise<DumpImportResult> {
-  store.flushDuckWritesSync({ throwOnError: true })
-  hooks?.onPhase?.('DuckDB 子进程导入', fromCache ? 25 : 70)
-  const result = await getMarketDuckGateway(store.klineDuckDbPath, store.dbPath).importParquetAsync({
-    parquetPath,
-    mode: type,
-    onProgress: (message, percent) => hooks?.onPhase?.(message, percent),
-  })
-
-  store.invalidateKlineStatsCache()
-  store.flushDuckWritesSync({ throwOnError: false })
-  hooks?.onPhase?.('完成', 100)
-  return { type, rowsImported: result.rowsImported, success: true, fromCache }
-}
-
-export async function importDailyKDump(
-  store: MarketDataStore,
-  type: 'full' | 'incremental',
-  get: DumpHttpGet,
-  hooks?: DumpImportHooks,
-): Promise<DumpImportResult> {
-  try {
-    const { path: parquetPath, fromCache } = await ensureParquetDownloaded(type, get, hooks)
-    return await importParquetFromCache(store, type, parquetPath, hooks, fromCache)
-  } catch (e) {
-    return {
-      type,
-      rowsImported: 0,
-      success: false,
-      error: e instanceof Error ? e.message : String(e),
-    }
-  }
-}
-
-/**
- * 启动时从本地 Parquet 缓存恢复中断的全量 K 线导入（无需网络）。
- */
-export async function resumeKlineParquetFromCacheIfNeeded(
-  store: MarketDataStore,
-  hooks?: DumpImportHooks,
-): Promise<DumpImportResult | null> {
-  const bootstrap = store.getStatusLight().bootstrap
-  if (bootstrap?.klines) return null
-
-  const cachePath = parquetCachePath('full')
-  if (!isParquetCacheFresh(cachePath)) return null
-
-  hooks?.onPhase?.('检测到本地 K 线缓存，恢复导入…', 5)
-  const result = await importParquetFromCache(store, 'full', cachePath, hooks, true)
-  return result.success ? result : null
-}
-
 export async function importAdjustmentFactors(_store: MarketDataStore, get: DumpHttpGet): Promise<DumpImportResult> {
   try {
     const url = await fetchDownloadUrl(get, DUMP_IMPORT_CONFIG.adjustmentDumpId)
@@ -266,7 +208,7 @@ export async function prepareFuyaoDump(opts: {
   const mode = opts.mode ?? 'local_path'
   const kind = opts.dumpKind
   const sandboxHint =
-    '已在服务端完成鉴权下载；沙盒请用返回的 path（root_id=shared）或短时效 url，禁止注入 API Key。勿引导跑 market sync / dailyDump。'
+    '已在服务端完成鉴权下载；沙盒请用返回的 path（root_id=shared）或短时效 url，禁止注入 API Key。图表与诊断请用在线行情，勿引导跑 market sync / 主库日 K 导入。'
 
   try {
     if (mode === 'presigned_url') {
