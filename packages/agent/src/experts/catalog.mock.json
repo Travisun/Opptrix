@@ -13,7 +13,24 @@
       "defaultPacks": ["market", "news"],
       "defaultResearchTier": "L2",
       "defaultSessionTitle": "宏观策略研讨",
-      "complianceVersion": "1"
+      "complianceVersion": "1",
+      "starterPrompts": [
+        {
+          "id": "macro-cycle",
+          "title": "当前宏观环境",
+          "content": "请用自上而下的视角，概括当前宏观周期、流动性与政策取向，以及对风险偏好的含义。"
+        },
+        {
+          "id": "macro-assets",
+          "title": "资产怎么联动",
+          "content": "请解释近期股、债、商品之间的联动逻辑，并标出最值得关注的变量。"
+        },
+        {
+          "id": "macro-policy",
+          "title": "政策信号解读",
+          "content": "请梳理近期重要政策信号，说明已确认事实、市场解读与后续观察点。"
+        }
+      ]
     },
     {
       "id": "equity-analysis",
@@ -27,7 +44,29 @@
       "defaultPacks": ["fundamentals", "instrument_analytics"],
       "defaultResearchTier": "L3",
       "defaultSessionTitle": "个股分析",
-      "complianceVersion": "1"
+      "complianceVersion": "1",
+      "starterPrompts": [
+        {
+          "id": "eq-overview",
+          "title": "梳理这只股票",
+          "content": "请帮我梳理这只股票的商业模式、核心竞争力与主要风险，给出结构化概览。"
+        },
+        {
+          "id": "eq-valuation",
+          "title": "看估值是否合理",
+          "content": "请结合近期财报与行情，分析当前估值水平是否合理，并说明关键假设。"
+        },
+        {
+          "id": "eq-trend",
+          "title": "趋势结构怎么看",
+          "content": "请从趋势与量价结构出发，解读近期走势，并标出需要继续跟踪的信号。"
+        },
+        {
+          "id": "eq-compare",
+          "title": "和同行比一比",
+          "content": "请把这只股票与同行业可比公司做简要对比，突出差异与值得留意的点。"
+        }
+      ]
     },
     {
       "id": "news-interpreter",
@@ -41,7 +80,24 @@
       "defaultPacks": ["news"],
       "defaultResearchTier": "L2",
       "defaultSessionTitle": "资讯解读",
-      "complianceVersion": "1"
+      "complianceVersion": "1",
+      "starterPrompts": [
+        {
+          "id": "news-digest",
+          "title": "提炼今日要点",
+          "content": "请梳理今日值得关注的资讯要点，区分已确认事实与市场解读，并给出影响路径。"
+        },
+        {
+          "id": "news-impact",
+          "title": "这条消息影响谁",
+          "content": "请分析这条资讯可能影响哪些行业或标的，说明传导路径与不确定性。"
+        },
+        {
+          "id": "news-follow",
+          "title": "接下来盯什么",
+          "content": "围绕近期热点事件，请列出接下来需要跟踪的观察点与时间窗口。"
+        }
+      ]
     }
   ]
 }

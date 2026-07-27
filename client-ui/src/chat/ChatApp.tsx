@@ -272,6 +272,7 @@ export default function ChatApp() {
   const [sidebarListTab, setSidebarListTab] = useState<SidebarListTab>('chat')
   const [activeId, setActiveId] = useState<string | null>(null)
   const [activeSessionMeta, setActiveSessionMeta] = useState<SessionMeta | null>(null)
+  const [expertRefreshKey, setExpertRefreshKey] = useState(0)
   const [messages, setMessages] = useState<ChatDisplayMessage[]>([])
   const [contextRef, setContextRef] = useState<SessionContextRef | null>(null)
   const [composerDraft, setComposerDraft] = useState({ revision: 0, text: '' })
@@ -1528,6 +1529,7 @@ export default function ChatApp() {
                 electronChrome={electronChrome}
                 chromeToolbarReserve={chromeToolbarReserve}
                 onSelectExpert={handleSelectExpert}
+                onExpertSaved={() => setExpertRefreshKey(k => k + 1)}
               />
             </div>
           </div>
@@ -1577,6 +1579,8 @@ export default function ChatApp() {
                   overlaySlot={rolePersonaDrawer}
                   contextHint={contextHintBanner}
                   sessionId={activeId}
+                  expertId={activeSession?.expertId ?? null}
+                  expertRefreshKey={expertRefreshKey}
                   welcomeEpoch={welcomeEpoch}
                   chatScrollEpoch={chatScrollEpoch}
                   messages={messages}

@@ -5,6 +5,12 @@ export interface ExpertIcon {
   value: string
 }
 
+export interface ExpertStarterPrompt {
+  id: string
+  title: string
+  content: string
+}
+
 export interface ExpertCatalogEntry {
   id: string
   title: string
@@ -22,6 +28,12 @@ export interface ExpertDefinition extends ExpertCatalogEntry {
   defaultResearchTier: 'L1' | 'L2' | 'L3'
   defaultSessionTitle?: string
   complianceVersion: string
+  starterPrompts?: ExpertStarterPrompt[]
+}
+
+export interface ComposerStarterChip {
+  label: string
+  text: string
 }
 
 export interface ExpertCatalog {

@@ -4,10 +4,10 @@ import {
 } from '@fluentui/react-components'
 import type {
   ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, MessageSelection, SessionContextRef,
-  AvailableModel, ChatAttachmentMeta,
+  AvailableModel, ChatAttachmentMeta, ComposerStarterChip, ExpertStarterPrompt,
 } from '../types/chat'
 import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } from '../types/chatProgress'
-import { submitUserPromptResponse } from '../api/client'
+import { getExpert, submitUserPromptResponse } from '../api/client'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import type { SessionStreamSnapshot } from './sessionStreamRuntime'
 import MobileTopBar from './MobileTopBar'
@@ -182,6 +182,9 @@ const useStyles = makeStyles({
     lineHeight: 1,
     animationDelay: '0.35s',
   },
+  welcomeBrandExpert: {
+    letterSpacing: '0.04em',
+  },
   welcomeBrandLetter: {
     display: 'inline-block',
     color: opptrixCssVars.textTertiary,
@@ -240,6 +243,8 @@ const useStyles = makeStyles({
 })
 
 const WELCOME_LETTERS = ['O', 'p', 'p', 't', 'r', 'i', 'x'] as const
+/** 专家空会话：替换顶部 Opptrix 逐字动画 */
+const WELCOME_EXPERT_LETTERS = Array.from('Opptrix 专家')
 const WELCOME_LETTER_BASE_DELAY_S = 0.55
 
 interface ChatViewProps {
@@ -253,6 +258,10 @@ interface ChatViewProps {
   /** 上下文整理轻提示 */
   contextHint?: string
   sessionId?: string | null
+  /** 绑定专家时切换空会话欢迎与快捷提问 */
+  expertId?: string | null
+  /** 编辑专家保存后递增，驱动空态重新拉取定义 */
+  expertRefreshKey?: number
   welcomeEpoch?: number
   chatScrollEpoch?: number
   messages: ChatDisplayMessage[]
@@ -294,7 +303,7 @@ interface ChatViewProps {
 }
 
 function ChatView({
-  title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
+  title = '新对话', titleSlot, headerTrailing, overlaySlot, contextHint, sessionId = null, expertId = null, expertRefreshKey = 0, welcomeEpoch = 0, chatScrollEpoch = 0, messages, contextRef = null, composerDraft, loading, streamUiRef, error,
   availableModels = [],
   sessionModel,
   contextUsage,
@@ -316,6 +325,8 @@ function ChatView({
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
   const [pendingUserPrompt, setPendingUserPrompt] = useState<ChatUserPromptPayload | null>(null)
   const [userPromptSubmitting, setUserPromptSubmitting] = useState(false)
+  const [expertSummary, setExpertSummary] = useState<string | null>(null)
+  const [expertStarters, setExpertStarters] = useState<ExpertStarterPrompt[] | null>(null)
   const pendingUserPromptRef = useRef(pendingUserPrompt)
   const userPromptSubmittingRef = useRef(userPromptSubmitting)
   pendingUserPromptRef.current = pendingUserPrompt
@@ -463,7 +474,48 @@ function ChatView({
 
   const isEmpty = messages.length === 0 && !loading && !contextRef
   const welcome = pickWelcomeVariant(welcomeEpoch)
-  const starters = isMobile ? welcome.starters.slice(0, 3) : welcome.starters
+  const isExpertSession = Boolean(expertId)
+
+  useEffect(() => {
+    if (!expertId || !isEmpty) {
+      setExpertSummary(null)
+      setExpertStarters(null)
+      return
+    }
+    let cancelled = false
+    void getExpert(expertId)
+      .then(({ expert }) => {
+        if (cancelled) return
+        setExpertSummary(expert.summary)
+        setExpertStarters(expert.starterPrompts?.length ? expert.starterPrompts : [])
+      })
+      .catch(() => {
+        if (cancelled) return
+        setExpertSummary(null)
+        setExpertStarters([])
+      })
+    return () => { cancelled = true }
+  }, [expertId, isEmpty, expertRefreshKey])
+
+  const globalStarters: ComposerStarterChip[] = welcome.starters.map(text => ({ label: text, text }))
+  const expertChipStarters: ComposerStarterChip[] = (expertStarters ?? []).map(p => ({
+    label: p.title || p.content,
+    text: p.content,
+  }))
+  // 专家会话：加载中不闪全局 chips；无专家提示时再回退全局
+  const starterSource: ComposerStarterChip[] = !isExpertSession
+    ? globalStarters
+    : expertStarters === null
+      ? []
+      : expertChipStarters.length > 0
+        ? expertChipStarters
+        : globalStarters
+  const starters = isMobile ? starterSource.slice(0, 3) : starterSource
+  const brandLetters = isExpertSession ? WELCOME_EXPERT_LETTERS : [...WELCOME_LETTERS]
+  const welcomeTitle = isExpertSession ? '专家可以帮你干点什么？' : welcome.title
+  const welcomeSubtitle = isExpertSession
+    ? (expertSummary ?? '')
+    : welcome.subtitle
   const electronChrome = isElectron() && !isMobile
 
   const syncScrollbarHalfOffset = useCallback(() => {
@@ -662,23 +714,35 @@ function ChatView({
                   key={welcomeEpoch}
                   className={mergeClasses(s.welcomeBanner, isMobile && s.welcomeBannerMobile)}
                 >
-                  <div className={mergeClasses(s.welcomeBrand, s.welcomeEnter)} aria-hidden>
-                    {WELCOME_LETTERS.map((letter, index) => (
+                  <div
+                    className={mergeClasses(
+                      s.welcomeBrand,
+                      isExpertSession && s.welcomeBrandExpert,
+                      s.welcomeEnter,
+                    )}
+                    aria-hidden
+                  >
+                    {brandLetters.map((letter, index) => (
                       <span
                         key={`${letter}-${index}`}
                         className={s.welcomeBrandLetter}
-                        style={{ animationDelay: `${WELCOME_LETTER_BASE_DELAY_S + index * 0.1}s` }}
+                        style={{
+                          animationDelay: `${WELCOME_LETTER_BASE_DELAY_S + index * 0.08}s`,
+                          ...(letter === ' ' ? { width: '0.32em' } : null),
+                        }}
                       >
-                        {letter}
+                        {letter === ' ' ? '\u00A0' : letter}
                       </span>
                     ))}
                   </div>
                   <Text className={mergeClasses(s.welcomeTitle, s.welcomeEnter)}>
-                    {welcome.title}
+                    {welcomeTitle}
                   </Text>
-                  <Text className={mergeClasses(s.welcomeSub, s.welcomeEnter)}>
-                    {welcome.subtitle}
-                  </Text>
+                  {welcomeSubtitle ? (
+                    <Text className={mergeClasses(s.welcomeSub, s.welcomeEnter)}>
+                      {welcomeSubtitle}
+                    </Text>
+                  ) : null}
                 </div>
               )}
 

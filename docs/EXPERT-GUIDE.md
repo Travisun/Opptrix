@@ -46,9 +46,10 @@
 | 字段 | 必填 | 说明 |
 |------|------|------|
 | **名称**（`title`） | 是 | 展示标题；本地专家 id 由名称 slug 生成（如 `local-hang-ye-yan-jiu`），冲突时自动加后缀 |
-| **简介**（`summary`） | 是 | 一句话说明擅长领域；列表卡片展示，不参与 prompt 注入 |
+| **简介**（`summary`） | 是 | 一句话说明擅长领域；列表卡片展示；专家空会话欢迎副文案也会用到；不参与 prompt 注入 |
 | **技能专长**（`persona`） | 是 | 注入 Layer 1 的正文；见下文写法指导 |
 | **标签**（`tags`） | 否 | 分类与搜索；去重后最多 8 个 |
+| **快捷提问**（`starterPrompts`） | 否 | `{ id, title, content }[]`，最多 **6** 条；空会话 Composer chips；`title` 为 chip 文案，`content` 为点击后发送正文；见 [API.md §Experts](./API.md#experts专家目录) |
 
 ### 系统自动填充（用户不可改）
 
@@ -161,7 +162,7 @@ persona 描述「**你是谁、怎么思考、怎么表达**」，不是工具�
 | **我的专家** | 横向滚动展示 `scope=personal` 列表；点击图标 → 以该专家开聊；「+」→ 创建 |
 | **公开 / 个人** | 分段切换：`公开` = 内置专家；`个人` = 本地自建 |
 | **列表卡片** | 展示简介与标签；「开始对话」→ 创建绑定该专家的会话 |
-| **创建 / 编辑** | 对话框：名称、简介、技能专长、标签；创建时可「保存并开始对话」 |
+| **创建 / 编辑** | 专家市场内独立编辑页：名称、简介、技能专长、标签；创建时可「保存并开始对话」 |
 | **更多菜单**（仅 `source: local`） | 编辑、删除（二次确认：已有对话不受影响） |
 
 顶部 **创建** / **刷新** 按钮；Electron 与 Web 布局一致，仅标题栏 chrome 不同。
@@ -260,6 +261,7 @@ Opptrix 专家目录采用 **Provider 抽象**（`RemoteExpertProvider`）：`li
 | `defaultResearchTier` | `"L1"\|"L2"\|"L3"` | 是 | 默认研究档位 |
 | `defaultSessionTitle` | string | 否 | 新建会话默认标题 |
 | `complianceVersion` | `"1"` | 是 | 当前固定为 `"1"` |
+| `starterPrompts` | `{ id, title, content }[]` | 否 | 空会话快捷提问；`maxItems: 6`；缺省或空 = 无 |
 | `official` | boolean | 否 | 官方目录建议 `true` |
 | `version` | string | 否 | 如 `1.0.0` |
 | `source` | `"builtin"\|"local"` | 否 | 远程官方为 `builtin` |

@@ -269,7 +269,7 @@ Opptrix/
   - **Layer 2 — 工具与投研纪律**：`ask_user` 用法、本轮工具选型卡与已加载 tools、`【会话时钟】`（Asia/Shanghai）、`buildDataSourcingPolicy`（远程 MCP 优先）、`buildAgentSystemRules`（含 `researchTier` 档位 playbook、route playbook 等）。
 - **专家会话 vs 默认研究员**：
   - **默认研究员**：`POST /api/sessions` 不传 `expertId` → `expertId` / `expertIcon` 为 `null`，`rolePersona` 初始为默认投研研究员文案（可编辑）。
-  - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）。
+  - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）；空会话欢迎可用专家 `starterPrompts`（最多 6 条，见 [API.md §Experts](./API.md#experts专家目录)）。
   - **专家目录**：`ExpertCatalogService` 优先 `StaticHttpExpertProvider`（默认 `https://update.opptrix.org/experts/` 的 `catalog.json` / `{id}.json`），失败降级包内 `LocalJsonExpertProvider`（`catalog.mock.json`）；再合并用户自建（user-store `local_experts`）。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。部署与契约：[EXPERT-GUIDE.md §7](./EXPERT-GUIDE.md#7-远程专家-datasource)、[`experts/README.md`](../experts/README.md)。
 - **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
   - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。

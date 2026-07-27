@@ -1313,6 +1313,7 @@ export async function createExpert(body: {
   summary: string
   persona: string
   tags?: string[]
+  starterPrompts?: import('../types/chat').ExpertStarterPrompt[]
 }) {
   return jsonFetch<{ expert: import('../types/chat').ExpertDefinition }>('/experts', {
     method: 'POST',
@@ -1323,7 +1324,13 @@ export async function createExpert(body: {
 
 export async function updateExpert(
   id: string,
-  body: { title?: string; summary?: string; persona?: string; tags?: string[] },
+  body: {
+    title?: string
+    summary?: string
+    persona?: string
+    tags?: string[]
+    starterPrompts?: import('../types/chat').ExpertStarterPrompt[]
+  },
 ) {
   return jsonFetch<{ expert: import('../types/chat').ExpertDefinition }>(`/experts/${encodeURIComponent(id)}`, {
     method: 'PATCH',

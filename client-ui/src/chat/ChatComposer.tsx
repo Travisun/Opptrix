@@ -276,7 +276,7 @@ interface ChatComposerProps {
   isEmpty: boolean
   isMobile?: boolean
   contextRef?: SessionContextRef | null
-  starters: string[]
+  starters: Array<{ label: string; text: string }>
   welcomeKey?: number
   availableModels: AvailableModel[]
   sessionModel?: string
@@ -593,19 +593,19 @@ export default function ChatComposer({
 
   return (
     <div className={s.wrap}>
-      {isEmpty && (
+      {isEmpty && starters.length > 0 && (
         <div key={welcomeKey} className={s.startersSection}>
           <Text className={s.startersLabel}>你可以这样问</Text>
           <div className={mergeClasses(s.starters, isMobile && `${s.startersMobile} opptrix-scroll-x`)}>
             {starters.map((st, index) => (
               <OpptrixButton
-                key={listRowKey(index, st)}
+                key={listRowKey(index, st.label, st.text)}
                 className={s.starterChip}
                 variant="pill"
                 size="small"
-                onClick={() => onSubmit(st)}
+                onClick={() => onSubmit(st.text)}
               >
-                {st}
+                {st.label}
               </OpptrixButton>
             ))}
           </div>

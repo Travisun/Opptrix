@@ -11,5 +11,22 @@
   "defaultPacks": ["news"],
   "defaultResearchTier": "L2",
   "defaultSessionTitle": "资讯解读",
-  "complianceVersion": "1"
+  "complianceVersion": "1",
+  "starterPrompts": [
+    {
+      "id": "news-digest",
+      "title": "提炼今日要点",
+      "content": "请梳理今日值得关注的资讯要点，区分已确认事实与市场解读，并给出影响路径。"
+    },
+    {
+      "id": "news-impact",
+      "title": "这条消息影响谁",
+      "content": "请分析这条资讯可能影响哪些行业或标的，说明传导路径与不确定性。"
+    },
+    {
+      "id": "news-follow",
+      "title": "接下来盯什么",
+      "content": "围绕近期热点事件，请列出接下来需要跟踪的观察点与时间窗口。"
+    }
+  ]
 }

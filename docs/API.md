@@ -509,6 +509,7 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | `summary` | string | 必填；空白 → 400 `请填写专家简介` |
 | `persona` | string | 必填；技能专长（API 字段 `persona`；UI 同义文案）；经 `sanitizeExpertPersona` 消毒；空白 → 400 `请填写角色设定`；消毒失败 → 400 `角色设定无效，请修改后重试` |
 | `tags` | string[] | 可选；trim 后去重，最多 8 个 |
+| `starterPrompts` | `ExpertStarterPrompt[]` | 可选；空会话 Composer 快捷提问；经 `normalizeExpertStarterPrompts` 规范化，**最多 6 条**；空/无效 → 不写入该字段 |
 
 创建成功后服务端自动写入（客户端不可指定）：`id`（由 `title` slug 为 `local-{slug}`，冲突加后缀）、`source: "local"`、`official: false`、`icon`（默认 expert 图标）、`defaultPacks: ["fundamentals", "instrument_analytics"]`、`defaultResearchTier: "L2"`、`defaultSessionTitle`（同 `title`）、`complianceVersion: "1"`、`version: "1.0.0"`。
 
@@ -520,7 +521,10 @@ Content-Type: application/json
   "title": "行业研究助手",
   "summary": "聚焦产业链景气与竞争格局的结构化解读",
   "persona": "你是一位行业研究助手，熟悉 A 股中游制造…",
-  "tags": ["行业", "产业链"]
+  "tags": ["行业", "产业链"],
+  "starterPrompts": [
+    { "id": "sp-chain", "title": "梳理产业链", "content": "请梳理该行业上下游与竞争格局。" }
+  ]
 }
 ```
 
@@ -539,18 +543,21 @@ Content-Type: application/json
     "defaultPacks": ["fundamentals", "instrument_analytics"],
     "defaultResearchTier": "L2",
     "defaultSessionTitle": "行业研究助手",
-    "complianceVersion": "1"
+    "complianceVersion": "1",
+    "starterPrompts": [
+      { "id": "sp-chain", "title": "梳理产业链", "content": "请梳理该行业上下游与竞争格局。" }
+    ]
   }
 }
 ```
 
-**PATCH `/api/experts/:id` 请求体**：`title` / `summary` / `persona` / `tags` 均可选；仅 `source: "local"` 可更新。内置专家 → 403 `{ "error": "内置专家不可编辑" }`；id 不存在 → 404。字段校验与 POST 相同；`persona` 省略时保留原值。
+**PATCH `/api/experts/:id` 请求体**：`title` / `summary` / `persona` / `tags` / `starterPrompts` 均可选；仅 `source: "local"` 可更新。内置专家 → 403 `{ "error": "内置专家不可编辑" }`；id 不存在 → 404。字段校验与 POST 相同；`persona` 省略时保留原值；传入 `starterPrompts` 时整体替换（规范化后为空则清除该字段）。
 
 ```http
 PATCH /api/experts/local-hang-ye-yan-jiu-zhu-shou
 Content-Type: application/json
 
-{ "title": "行业研究助手 v2", "persona": "更新后的技能专长…" }
+{ "title": "行业研究助手 v2", "persona": "更新后的技能专长…", "starterPrompts": [] }
 ```
 
 响应 `{ expert: ExpertDefinition }`。
@@ -596,6 +603,17 @@ Content-Type: application/json
 | `defaultResearchTier` | `"L1" \| "L2" \| "L3"` | 默认研究档位 |
 | `defaultSessionTitle` | string | 可选；新建会话默认标题 |
 | `complianceVersion` | string | persona 合规版本标记 |
+| `starterPrompts` | `ExpertStarterPrompt[]` | 可选；最多 6 条；缺省或空 = 无快捷提问。绑定该专家的**空会话**欢迎区：顶部动画品牌为「Opptrix 专家」，主标题为「专家可以帮你干点什么？」，副文案用 `summary`；Composer 优先展示这些 chips（无则回退全局欢迎提问） |
+
+**`ExpertStarterPrompt`**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `id` | string | 条目 id；缺省或冲突时服务端生成（如 `sp-…`） |
+| `title` | string | chip 短文案；空则用 `content` 前约 24 字 |
+| `content` | string | 点击后填入/发送的正文；trim 后为空的项会被跳过 |
+
+规范化（`normalizeExpertStarterPrompts` / `MAX_EXPERT_STARTER_PROMPTS = 6`）：trim、去空 `content`、保证 `id` 唯一、截断至最多 6 条；全部无效时返回「无字段」。
 
 **示例**
 

@@ -25,7 +25,7 @@ import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAle
 import { deleteExpert, listExperts } from '../../api/client'
 import type { ExpertCatalogEntry, ExpertDefinition } from '../../types/chat'
 import ExpertIconTile from './ExpertIconTile'
-import CreateExpertDialog from './CreateExpertDialog'
+import ExpertEditorPage from './ExpertEditorPage'
 import ExpertDetailDialog from './ExpertDetailDialog'
 
 const useStyles = makeStyles({
@@ -253,12 +253,15 @@ interface Props {
   /** When sidebar collapsed: `desktopChromeToolbarReserve`; inline: 0 */
   chromeToolbarReserve?: number
   onSelectExpert: (expertId: string) => void | Promise<void>
+  /** 本地专家保存后通知聊天空态刷新快捷提问 */
+  onExpertSaved?: (expert: ExpertDefinition) => void
 }
 
 export default function ExpertMarketPage({
   electronChrome = false,
   chromeToolbarReserve = 0,
   onSelectExpert,
+  onExpertSaved,
 }: Props) {
   const s = useStyles()
   const { confirm } = useOpptrixDialogAlert()
@@ -267,8 +270,7 @@ export default function ExpertMarketPage({
   const [experts, setExperts] = useState<ExpertCatalogEntry[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
-  const [createOpen, setCreateOpen] = useState(false)
-  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editorMode, setEditorMode] = useState<{ editingId: string | null } | null>(null)
   const [detailExpert, setDetailExpert] = useState<ExpertCatalogEntry | null>(null)
 
   useEffect(() => {
@@ -304,14 +306,12 @@ export default function ExpertMarketPage({
   }, [debouncedQuery, loadExperts])
 
   const openCreate = () => {
-    setEditingId(null)
-    setCreateOpen(true)
+    setEditorMode({ editingId: null })
   }
 
   const openEdit = (id: string) => {
     setDetailExpert(null)
-    setEditingId(id)
-    setCreateOpen(true)
+    setEditorMode({ editingId: id })
   }
 
   const handleDelete = async (expert: ExpertCatalogEntry) => {
@@ -331,8 +331,9 @@ export default function ExpertMarketPage({
     }
   }
 
-  const handleSaved = async (_expert: ExpertDefinition) => {
+  const handleSaved = async (expert: ExpertDefinition) => {
     await loadExperts(debouncedQuery)
+    onExpertSaved?.(expert)
   }
 
   const refreshAction = electronChrome ? (
@@ -354,6 +355,18 @@ export default function ExpertMarketPage({
       刷新
     </OpptrixButton>
   )
+
+  if (editorMode) {
+    return (
+      <ExpertEditorPage
+        editingId={editorMode.editingId}
+        electronChrome={electronChrome}
+        chromeToolbarReserve={chromeToolbarReserve}
+        onBack={() => setEditorMode(null)}
+        onSaved={handleSaved}
+      />
+    )
+  }
 
   return (
     <div className={s.root}>
@@ -474,13 +487,6 @@ export default function ExpertMarketPage({
           )}
         </div>
       </div>
-
-      <CreateExpertDialog
-        open={createOpen}
-        editingId={editingId}
-        onOpenChange={setCreateOpen}
-        onSaved={handleSaved}
-      />
 
       <ExpertDetailDialog
         open={Boolean(detailExpert)}

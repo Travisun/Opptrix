@@ -26,8 +26,45 @@ function readJson(filePath) {
 }
 
 function catalogEntryWithoutPersona(entry) {
-  const { persona: _persona, defaultPacks: _dp, defaultResearchTier: _tier, defaultSessionTitle: _title, complianceVersion: _cv, ...rest } = entry
+  const {
+    persona: _persona,
+    defaultPacks: _dp,
+    defaultResearchTier: _tier,
+    defaultSessionTitle: _title,
+    complianceVersion: _cv,
+    starterPrompts: _starters,
+    ...rest
+  } = entry
   return rest
+}
+
+function assertStarterPrompts(def, label) {
+  if (def.starterPrompts === undefined) return
+  if (!Array.isArray(def.starterPrompts)) {
+    fail(`${label} starterPrompts must be an array when present`)
+  }
+  if (def.starterPrompts.length > 6) {
+    fail(`${label} starterPrompts must have at most 6 items`)
+  }
+  const seen = new Set()
+  for (const [i, item] of def.starterPrompts.entries()) {
+    if (!item || typeof item !== 'object') {
+      fail(`${label} starterPrompts[${i}] must be an object`)
+    }
+    if (typeof item.content !== 'string' || !item.content.trim()) {
+      fail(`${label} starterPrompts[${i}] missing content`)
+    }
+    if (typeof item.title !== 'string' || !item.title.trim()) {
+      fail(`${label} starterPrompts[${i}] missing title`)
+    }
+    if (typeof item.id !== 'string' || !item.id.trim()) {
+      fail(`${label} starterPrompts[${i}] missing id`)
+    }
+    if (seen.has(item.id)) {
+      fail(`${label} starterPrompts duplicate id: ${item.id}`)
+    }
+    seen.add(item.id)
+  }
 }
 
 function assertCatalogEntryShape(entry, label) {
@@ -69,6 +106,7 @@ function assertExpertDefinition(def, label) {
   if (def.official !== true) {
     fail(`${label} official remote experts must set official: true`)
   }
+  assertStarterPrompts(def, label)
 }
 
 function main() {
