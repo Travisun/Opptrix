@@ -31,7 +31,7 @@ import {
 } from './stock-analysis-store.js'
 import { getStockPrep, startStockPrep } from './stock-prep-jobs.js'
 import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } from '@opptrix/agent'
-import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
+import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveOpptrixAppVersion, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
@@ -60,7 +60,7 @@ const { cleanupStaleApiListeners } = require('../../desktop/electron/resolve-por
 
 const PORT = Number(process.env.STOCK_RESEARCH_PORT ?? 8711)
 const HOST = process.env.STOCK_RESEARCH_HOST ?? '127.0.0.1'
-const APP_VERSION = process.env.OPPTRIX_APP_VERSION ?? '0.6.0'
+const APP_VERSION = resolveOpptrixAppVersion()
 
 const hub = new ResearchHub()
 let cfg = loadConfig()

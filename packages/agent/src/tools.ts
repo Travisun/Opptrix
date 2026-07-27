@@ -18,7 +18,7 @@ import {
 } from './unified-mcp-tools.js'
 import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildWorkspaceTools } from './mcp/workspace-tools.js'
-import { resolveInstrumentFromParams } from '@opptrix/shared'
+import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
 import { assembleSystemPrompt } from './experts/prompt-assembler.js'
 
 /** @deprecated 使用 DATA_LAYER_MINING_TOOL_NAMES */
@@ -588,7 +588,7 @@ export class ToolRegistry {
           if (ctx.getProjectInfo) return ctx.getProjectInfo()
           return buildAgentSafeProjectInfo({
             app: 'Opptrix',
-            version: '0.6.0',
+            version: resolveOpptrixAppVersion(),
             runtime: process.env.OPPTRIX_DESKTOP === '1' ? 'desktop' : 'node',
           })
         },

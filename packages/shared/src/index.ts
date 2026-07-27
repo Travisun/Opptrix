@@ -53,6 +53,7 @@ export {
   resolvePythonRuntimeRoot,
   isDesktopRuntime,
   resolveProjectRoot,
+  resolveOpptrixAppVersion,
 } from './paths.js'
 export {
   DEFAULT_PIP_INDEX_URLS,

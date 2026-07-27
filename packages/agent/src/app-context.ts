@@ -1,6 +1,6 @@
 import path from 'node:path'
 import { resolveNodeRuntime, resolvePythonRuntime } from '@opptrix/agent-workspace'
-import { isDesktopRuntime, resolveUserDataRoot } from '@opptrix/shared'
+import { isDesktopRuntime, resolveOpptrixAppVersion, resolveUserDataRoot } from '@opptrix/shared'
 
 const DATA_ROOT = resolveUserDataRoot()
 
@@ -83,6 +83,7 @@ export async function getSystemInfo() {
     platform: process.platform,
     arch: process.arch,
     node_version: process.version,
+    app_version: resolveOpptrixAppVersion(),
     runtime: isDesktopRuntime() ? 'desktop' : 'node',
     desktop: isDesktopRuntime(),
     pid: process.pid,
@@ -132,7 +133,7 @@ export function createDefaultAppContext(): AgentAppContext {
       return buildAgentSafeProjectInfo({
         app: 'Opptrix',
         component: 'agent-mcp',
-        version: '0.6.0',
+        version: resolveOpptrixAppVersion(),
         runtime: isDesktopRuntime() ? 'desktop' : 'node',
       })
     },
