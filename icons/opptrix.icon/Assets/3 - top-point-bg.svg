@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg width="1024px" height="1024px" viewBox="0 0 1024 1024" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+    <title>3 - top-point-bg</title>
+    <defs>
+        <path d="M692,194 C692,221.614237 669.614237,244 642,244 C614.385763,244 592,221.614237 592,194 C592,166.385763 614.385763,144 642,144 C669.614237,144 692,166.385763 692,194 Z" id="path-1"></path>
+    </defs>
+    <g id="3---top-point-bg" stroke="none" fill="none" xlink:href="#path-1" fill-opacity="0.32" fill-rule="evenodd">
+        <circle id="椭圆形" fill="color(display-p3 1.000 0.141 0.000)" transform="translate(642, 194) scale(-1, 1) translate(-642, -194)" cx="642" cy="194" r="50"></circle>
+    </g>
+</svg>

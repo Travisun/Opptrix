@@ -1,0 +1,53 @@
+{
+  "color-space-for-untagged-svg-colors" : "display-p3",
+  "fill" : {
+    "linear-gradient" : [
+      "extended-gray:1.00000,1.00000",
+      "extended-gray:0.75000,1.00000"
+    ]
+  },
+  "groups" : [
+    {
+      "layers" : [
+        {
+          "image-name" : "5 - top-point.svg",
+          "name" : "5 - top-point"
+        },
+        {
+          "image-name" : "4 - top-point-bg2.svg",
+          "name" : "4 - top-point-bg2"
+        },
+        {
+          "image-name" : "3 - top-point-bg.svg",
+          "name" : "3 - top-point-bg"
+        },
+        {
+          "image-name" : "2 - Klines.svg",
+          "name" : "2 - Klines"
+        },
+        {
+          "blend-mode" : "plus-lighter",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "1 - Klines-fill.svg",
+          "name" : "1 - Klines-fill",
+          "opacity" : 0.8
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.3
+      }
+    }
+  ],
+  "supported-platforms" : {
+    "circles" : [
+      "watchOS"
+    ],
+    "squares" : "shared"
+  }
+}

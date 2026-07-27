@@ -107,7 +107,7 @@
     ],
     "mac": {
       "category": "public.app-category.finance",
-      "icon": "build/icons/icon.icns",
+      "icon": "build/icons/icon.icon",
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "resources/entitlements.mac.plist",

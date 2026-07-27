@@ -40,6 +40,20 @@ function assertSource() {
   if (!fs.existsSync(master)) {
     throw new Error(`Missing app icon source: ${master}`)
   }
+  const iconComposer = path.join(SOURCE_DIR, 'opptrix.icon')
+  if (!fs.existsSync(iconComposer) || !fs.statSync(iconComposer).isDirectory()) {
+    throw new Error(`Missing Icon Composer package: ${iconComposer}`)
+  }
+  const iconJson = path.join(iconComposer, 'icon.json')
+  if (!fs.existsSync(iconJson)) {
+    throw new Error(`Missing icon.json in Icon Composer package: ${iconJson}`)
+  }
+}
+
+function stageIconComposerPackage() {
+  const src = path.join(SOURCE_DIR, 'opptrix.icon')
+  const dest = path.join(OUT_DIR, 'icon.icon')
+  fs.cpSync(src, dest, { recursive: true })
 }
 
 function copyFile(src, dest) {
@@ -152,10 +166,13 @@ fs.mkdirSync(OUT_DIR, { recursive: true })
 const masterIcon = path.join(SOURCE_DIR, 'logo.png')
 copyFile(masterIcon, path.join(OUT_DIR, 'logo.png'))
 createAppIcon(masterIcon, path.join(OUT_DIR, 'logo-app.png'))
+stageIconComposerPackage()
 createMacIcns()
 copyFile(path.join(OUT_DIR, 'logo-app.png'), path.join(DESKTOP_ROOT, 'electron', 'about-logo.png'))
 copyFile(path.join(SOURCE_DIR, 'logo@128.png'), path.join(DESKTOP_ROOT, 'electron', 'splash-logo.png'))
 stageLinuxIcons()
 await createWindowsIco()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
+console.log('  staged: icon.icon (mac App / Icon Composer)')
+console.log('  staged: icon.icns (DMG + Dock fallback)')
 
