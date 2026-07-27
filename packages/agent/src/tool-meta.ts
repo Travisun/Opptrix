@@ -683,7 +683,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   prepare_fuyao_dump: {
     packId: 'workspace',
     usageGuide: '需要扶摇全量/增量日 K 或复权因子 Parquet 时调用；落盘 shared/data/dumps 或返回短时效 URL。',
-    compliance: '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；成功用 root_id=shared + relative_path。',
+    compliance:
+      '服务端持密钥；禁止明文注入沙盒；勿引导 sync/dailyDump；full|incremental + local_path 成功会自动写 offline-k-meta（返回 meta_written）；adjustment_factors/presigned_url 不写 meta；成功用 root_id=shared + relative_path。',
   },
   request_session_lan_access: {
     packId: 'workspace',

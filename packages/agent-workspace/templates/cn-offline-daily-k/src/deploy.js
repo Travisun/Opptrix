@@ -56,7 +56,7 @@ export function decideDumpKind(meta, now = new Date()) {
       dumpKind: 'full',
       reason: '尚无成功更新记录，须全量（约十年日 K）',
       daysSinceSuccess: days,
-      agentHint: 'prepare_fuyao_dump({ dump_kind: "full" })；成功后 markUpdateSuccess',
+      agentHint: 'prepare_fuyao_dump({ dump_kind: "full" })；成功会自动写 offline-k-meta（markUpdateSuccess 仅补写）',
     }
   }
   if (days > STALE_FULL_DAYS) {
@@ -64,14 +64,14 @@ export function decideDumpKind(meta, now = new Date()) {
       dumpKind: 'full',
       reason: `距上次成功已 ${days.toFixed(1)} 日（>${STALE_FULL_DAYS}），须全量`,
       daysSinceSuccess: days,
-      agentHint: 'prepare_fuyao_dump({ dump_kind: "full" })；成功后 markUpdateSuccess',
+      agentHint: 'prepare_fuyao_dump({ dump_kind: "full" })；成功会自动写 offline-k-meta（markUpdateSuccess 仅补写）',
     }
   }
   return {
     dumpKind: 'incremental',
     reason: `距上次成功 ${days.toFixed(1)} 日（≤${STALE_FULL_DAYS}），可用增量（约 10 日）`,
     daysSinceSuccess: days,
-    agentHint: 'prepare_fuyao_dump({ dump_kind: "incremental" })；成功后 markUpdateSuccess',
+    agentHint: 'prepare_fuyao_dump({ dump_kind: "incremental" })；成功会自动写 offline-k-meta（markUpdateSuccess 仅补写）',
   }
 }
 
@@ -153,8 +153,8 @@ export function buildUpdatePlaybook(meta) {
     dumpKind: plan.dumpKind,
     steps: [
       '确认已 activate workspace；勿引导 market sync / importDailyKDump',
-      `调用 prepare_fuyao_dump({ dump_kind: "${plan.dumpKind}" })`,
-      '成功后 markUpdateSuccess 写入 data/cache/offline-k-meta.json',
+      `调用 prepare_fuyao_dump({ dump_kind: "${plan.dumpKind}" })（成功自动写 offline-k-meta）`,
+      '如需手动补写可用 markUpdateSuccess；通常不必',
       '用 query/screen 模块做挖掘；密钥禁止进沙盒',
     ],
   }

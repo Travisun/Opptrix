@@ -236,7 +236,7 @@ const AGENT_TOOLS: Array<{
   {
     id: 'tool.prepare_fuyao_dump',
     title: 'prepare_fuyao_dump',
-    summary: '服务端取扶摇 dump 到 shared，禁止 Key 进沙盒',
+    summary: '服务端取扶摇 dump 到 shared；full/incr 成功自动写 offline-k-meta',
     how: 'Agent tool prepare_fuyao_dump({ dump_kind, mode?, force_refresh? })',
     example: 'prepare_fuyao_dump({ dump_kind: "incremental", mode: "local_path" })',
   },
@@ -323,7 +323,8 @@ const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
   access: 'shared',
   how_to_call:
     '模板：packages/agent-workspace/templates/cn-offline-daily-k/；运行时复制到 shared/packages/cn-offline-daily-k/。'
-    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump → markUpdateSuccess 写 data/cache/offline-k-meta.json → query/screen',
+    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump（full|incremental + local_path 成功会自动写 data/cache/offline-k-meta.json）→ query/screen；'
+    + 'markUpdateSuccess 仅作手动补写保留',
   layer_entry: 'templates/cn-offline-daily-k → shared/packages/cn-offline-daily-k',
   params: [
     { name: 'dump_kind', type: 'string', required: true, description: 'full（≈10y）| incremental（≈10d）；由 decideDumpKind 决定' },
@@ -358,6 +359,7 @@ const FUYAO_DUMP: LocalDataApiDetail = {
   notes: [
     '禁止向沙盒注入 API Key；勿引导 market sync / dailyDump',
     '成功返回 root_id=shared + relative_path',
+    'full|incremental + local_path 成功后服务端自动写 shared/data/cache/offline-k-meta.json（meta_written）；adjustment_factors / presigned_url 不写',
   ],
   examples: [
     'prepare_fuyao_dump({ dump_kind: "incremental" })',

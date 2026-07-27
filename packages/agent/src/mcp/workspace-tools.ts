@@ -12,6 +12,7 @@ import {
   getSessionSecretAccessStore,
   getWorkspaceService,
   sharedDumpsDir,
+  tryRecordOfflineKDumpSuccess,
   type ConfirmHandler,
   type WorkspaceGrant,
   type ShellSecretRef,
@@ -716,10 +717,10 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             }
           }
           const fileName = path.basename(result.path ?? '')
-          return {
-            ok: true,
+          const base = {
+            ok: true as const,
             dump_kind: result.dump_kind,
-            mode: 'local_path',
+            mode: 'local_path' as const,
             root_id: SHARED_ROOT_ID,
             relative_path: fileName ? `data/dumps/${fileName}` : 'data/dumps',
             bytes: result.bytes,
@@ -727,6 +728,28 @@ export function buildWorkspaceTools(): WorkspaceToolDef[] {
             sandbox_hint: result.sandbox_hint,
             note: '用 workspace_list/read 或 shell_run，root_id=shared + relative_path；勿注入 API Key',
           }
+          // full|incremental + local_path 成功后自动写 offline-k-meta（等价 markUpdateSuccess）
+          const metaResult = await tryRecordOfflineKDumpSuccess({
+            dumpKind: kind,
+            mode: 'local_path',
+            ok: true,
+            bytes: result.bytes,
+          })
+          if (metaResult.meta_written) {
+            return {
+              ...base,
+              meta_written: true,
+              meta_path: metaResult.meta_path,
+            }
+          }
+          if (metaResult.meta_warning) {
+            return {
+              ...base,
+              meta_written: false,
+              meta_warning: metaResult.meta_warning,
+            }
+          }
+          return base
         } catch (err) {
           return toolError(err)
         }
