@@ -14,11 +14,13 @@ import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAle
 import StandaloneElectronTitleBar from '../../desktop/StandaloneElectronTitleBar'
 import { createExpert, getExpert, updateExpert } from '../../api/client'
 import type { ExpertDefinition, ExpertStarterPrompt } from '../../types/chat'
-import { focusVisibleRing, inputShellInteractive } from '../../theme/mixins'
+import { focusVisibleRing, inputShellInteractive, motion } from '../../theme/mixins'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
 import { listRowKey } from '../../utils/listRowKey'
 
 const MAX_STARTERS = 6
+/** 与 shared `STARTER_TITLE_FALLBACK_LEN` 一致：title 缺省时从 content 截断 */
+const STARTER_TITLE_FALLBACK_LEN = 24
 
 const useStyles = makeStyles({
   root: {
@@ -117,24 +119,65 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     gap: '8px',
   },
-  /** Shared size with starterAddBar — single shell surface, no outer card */
+  /**
+   * 分组底盘（非 opptrix-input-shell）：避免外壳与内部 filled 输入共用 inputBg*
+   * 在 hover/focus 时糊成一块；也不触发全局「shell 内控件透明」规则。
+   */
   starterShell: {
-    ...inputShellInteractive,
+    transitionProperty: 'background-color, border-color',
+    transitionDuration: motion.fast,
+    transitionTimingFunction: motion.ease,
     width: '100%',
     boxSizing: 'border-box',
-    minHeight: '36px',
     display: 'flex',
-    alignItems: 'center',
-    gap: '4px',
-    padding: '0 4px 0 10px',
+    flexDirection: 'column',
+    gap: '6px',
+    padding: '10px 8px 10px 10px',
     borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixCssVars.canvasMuted,
+    border: `1px solid ${opptrixCssVars.border}`,
+    ':hover': {
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+      backgroundColor: opptrixCssVars.canvasMuted,
+    },
+    ':focus-within': {
+      border: `1px solid ${opptrixCssVars.borderStrong}`,
+      backgroundColor: opptrixCssVars.canvasMuted,
+    },
   },
-  starterInput: {
+  starterTopRow: {
+    display: 'flex',
+    alignItems: 'flex-start',
+    gap: '4px',
+    width: '100%',
+    minWidth: 0,
+  },
+  starterFields: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
     flex: 1,
     minWidth: 0,
+  },
+  starterTitleInput: {
+    width: '100%',
+    minWidth: 0,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixCssVars.inputBg,
     '& input': {
       fontSize: 'var(--opptrix-font-base)',
-      minHeight: '34px',
+      minHeight: '32px',
+    },
+  },
+  starterContentInput: {
+    width: '100%',
+    minWidth: 0,
+    borderRadius: opptrixTokens.radiusSm,
+    backgroundColor: opptrixCssVars.inputBg,
+    '& textarea': {
+      fontSize: 'var(--opptrix-font-base)',
+      lineHeight: 1.45,
+      minHeight: '52px',
     },
   },
   starterRemove: {
@@ -150,6 +193,8 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     cursor: 'pointer',
     flexShrink: 0,
+    alignSelf: 'flex-start',
+    marginTop: '2px',
     ':hover': {
       color: opptrixCssVars.textPrimary,
       backgroundColor: opptrixCssVars.canvasAlt,
@@ -159,7 +204,7 @@ const useStyles = makeStyles({
       cursor: 'not-allowed',
     },
   },
-  /** Same footprint as starterShell — dashed outline add control */
+  /** 添加条：独立虚线控件，不嵌套输入 */
   starterAddBar: {
     ...inputShellInteractive,
     ...focusVisibleRing,
@@ -243,6 +288,7 @@ const useStyles = makeStyles({
 
 interface DraftStarter {
   key: string
+  title: string
   content: string
 }
 
@@ -261,12 +307,19 @@ function newDraftKey(): string {
   return `draft-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`
 }
 
+function fallbackStarterTitle(content: string): string {
+  if (content.length <= STARTER_TITLE_FALLBACK_LEN) return content
+  return `${content.slice(0, STARTER_TITLE_FALLBACK_LEN)}…`
+}
+
 function toDraftStarters(prompts: ExpertStarterPrompt[] | undefined): DraftStarter[] {
   if (!prompts?.length) return []
   return prompts.slice(0, MAX_STARTERS).map(p => {
     const content = p.content.trim() || p.title.trim()
+    const title = p.title.trim()
     return {
       key: p.id || newDraftKey(),
+      title,
       content,
     }
   })
@@ -276,9 +329,10 @@ function toPayloadStarters(drafts: DraftStarter[]): ExpertStarterPrompt[] {
   return drafts
     .map((d, index) => {
       const content = d.content.trim()
+      const titleRaw = d.title.trim()
       return {
         id: d.key || `sp-${index + 1}`,
-        title: content,
+        title: titleRaw || fallbackStarterTitle(content),
         content,
       }
     })
@@ -286,23 +340,32 @@ function toPayloadStarters(drafts: DraftStarter[]): ExpertStarterPrompt[] {
     .slice(0, MAX_STARTERS)
 }
 
-/** 保存前以 DOM 为准同步 content，避免 IME 组字中 state 未跟上导致静默丢弃。 */
+/** 保存前以 DOM 为准同步 title/content，避免 IME 组字中 state 未跟上导致静默丢弃。 */
 function syncStartersFromDom(drafts: DraftStarter[]): DraftStarter[] {
   const escape = typeof CSS !== 'undefined' && typeof CSS.escape === 'function'
     ? CSS.escape
     : (raw: string) => raw.replace(/\\/g, '\\\\').replace(/"/g, '\\"')
   return drafts.map(row => {
     const root = document.querySelector(`[data-starter-key="${escape(row.key)}"]`)
-    const el = root?.querySelector('input')
-    if (el instanceof HTMLInputElement) {
-      return { ...row, content: el.value }
+    if (!root) return row
+    const titleWrap = root.querySelector('[data-starter-field="title"]')
+    const contentWrap = root.querySelector('[data-starter-field="content"]')
+    const titleEl = titleWrap instanceof HTMLInputElement
+      ? titleWrap
+      : titleWrap?.querySelector('input')
+    const contentEl = contentWrap instanceof HTMLTextAreaElement
+      ? contentWrap
+      : contentWrap?.querySelector('textarea')
+    return {
+      ...row,
+      title: titleEl instanceof HTMLInputElement ? titleEl.value : row.title,
+      content: contentEl instanceof HTMLTextAreaElement ? contentEl.value : row.content,
     }
-    return row
   })
 }
 
 function serializeStarters(drafts: DraftStarter[]): string {
-  return JSON.stringify(drafts.map(d => ({ content: d.content })))
+  return JSON.stringify(drafts.map(d => ({ title: d.title, content: d.content })))
 }
 
 function buildBaseline(
@@ -395,7 +458,10 @@ export default function ExpertEditorPage({
     const key = focusStarterKeyRef.current
     if (!key) return
     const root = document.querySelector(`[data-starter-key="${key}"]`)
-    const el = root?.querySelector('input')
+    const titleWrap = root?.querySelector('[data-starter-field="title"]')
+    const el = titleWrap instanceof HTMLInputElement
+      ? titleWrap
+      : titleWrap?.querySelector('input')
     if (el instanceof HTMLInputElement) {
       el.focus()
       el.scrollIntoView({ block: 'nearest', behavior: 'smooth' })
@@ -427,8 +493,8 @@ export default function ExpertEditorPage({
     .map(t => t.trim())
     .filter(Boolean)
 
-  const updateStarter = (key: string, content: string) => {
-    setStarters(prev => prev.map(row => (row.key === key ? { ...row, content } : row)))
+  const updateStarter = (key: string, patch: Partial<Pick<DraftStarter, 'title' | 'content'>>) => {
+    setStarters(prev => prev.map(row => (row.key === key ? { ...row, ...patch } : row)))
   }
 
   const removeStarter = (key: string) => {
@@ -440,7 +506,7 @@ export default function ExpertEditorPage({
       if (prev.length >= MAX_STARTERS) return prev
       const key = newDraftKey()
       focusStarterKeyRef.current = key
-      return [...prev, { key, content: '' }]
+      return [...prev, { key, title: '', content: '' }]
     })
   }
 
@@ -562,33 +628,51 @@ export default function ExpertEditorPage({
                   </Text>
                 </div>
                 <Text className={s.startersHint} block>
-                  出现在空对话上方，点一下即可发送。
+                  上方短标题出现在对话里，下方是点一下实际发出的内容。
                 </Text>
 
                 <div className={s.startersList}>
                   {starters.map((row, index) => (
                     <div
                       key={listRowKey(index, row.key)}
-                      className={mergeClasses(s.starterShell, 'opptrix-input-shell')}
+                      className={s.starterShell}
                       data-starter-key={row.key}
                     >
-                      <OpptrixInput
-                        className={s.starterInput}
-                        value={row.content}
-                        onChange={(_e, data) => updateStarter(row.key, data.value)}
-                        placeholder="例如：帮我梳理这只股票的估值与风险"
-                        disabled={loading}
-                        aria-label={`提问 ${index + 1}`}
-                      />
-                      <button
-                        type="button"
-                        className={mergeClasses(s.starterRemove, 'opptrix-focusable')}
-                        aria-label="删除提问"
-                        disabled={loading}
-                        onClick={() => removeStarter(row.key)}
-                      >
-                        <DismissRegular fontSize={14} />
-                      </button>
+                      <div className={s.starterTopRow}>
+                        <div className={s.starterFields}>
+                          <div data-starter-field="title">
+                            <OpptrixInput
+                              className={s.starterTitleInput}
+                              value={row.title}
+                              onChange={(_e, data) => updateStarter(row.key, { title: data.value })}
+                              placeholder="对话里显示的短标题"
+                              disabled={loading}
+                              aria-label={`提问 ${index + 1} 短标题`}
+                            />
+                          </div>
+                          <div data-starter-field="content">
+                            <OpptrixTextarea
+                              className={s.starterContentInput}
+                              value={row.content}
+                              onChange={(_e, data) => updateStarter(row.key, { content: data.value })}
+                              placeholder="点一下后实际发出的完整问法"
+                              rows={2}
+                              resize="vertical"
+                              disabled={loading}
+                              aria-label={`提问 ${index + 1} 发送内容`}
+                            />
+                          </div>
+                        </div>
+                        <button
+                          type="button"
+                          className={mergeClasses(s.starterRemove, 'opptrix-focusable')}
+                          aria-label="删除提问"
+                          disabled={loading}
+                          onClick={() => removeStarter(row.key)}
+                        >
+                          <DismissRegular fontSize={14} />
+                        </button>
+                      </div>
                     </div>
                   ))}
                   {addStarterControl}

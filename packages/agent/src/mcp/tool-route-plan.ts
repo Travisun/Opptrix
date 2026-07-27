@@ -211,6 +211,27 @@ const INTENT_RULES: IntentRule[] = [
     hint: '移动订阅到分组 → move_news_source；先 list 拿到 id',
   },
   {
+    intent: 'rsshub_catalog',
+    // 高于 news_source_add(90)：问「有哪些 RSSHub / 路由目录」先查内置目录
+    priority: 91,
+    patterns: [
+      /RSSHub/i,
+      /路由目录/,
+      /有哪些.*(?:RSSHub|订阅源|RSS\s*源)/i,
+      /财联社.*RSS/i,
+      /(?:搜|查|找).*(?:RSSHub|路由).*(?:订阅|源|path)/i,
+    ],
+    preferredTools: [
+      'list_rsshub_categories',
+      'list_rsshub_domains',
+      'get_rsshub_domain_routes',
+      'search_rsshub_routes',
+    ],
+    avoidTools: ['list_news_articles', 'browser_navigate', 'get_instrument_snapshot'],
+    confidence: 'high',
+    hint: '查 RSSHub 路由 → 三级漏斗 list_rsshub_categories → list_rsshub_domains → get_rsshub_domain_routes（拉平叶子多选）；用户已点名媒体才用 search_rsshub_routes',
+  },
+  {
     intent: 'news_source_add',
     priority: 90,
     patterns: [
@@ -218,10 +239,17 @@ const INTENT_RULES: IntentRule[] = [
       /(?:订阅|RSS).*(?:添加|新增)/i,
       /订阅.*(?:地址|链接|URL)/i,
     ],
-    preferredTools: ['add_news_source', 'validate_news_source', 'list_news_sources'],
+    preferredTools: [
+      'list_rsshub_categories',
+      'list_rsshub_domains',
+      'get_rsshub_domain_routes',
+      'add_news_source',
+      'validate_news_source',
+      'list_news_sources',
+    ],
     avoidTools: ['import_news_sources', 'list_news_articles', 'get_instrument_snapshot'],
     confidence: 'high',
-    hint: '添加单个订阅 → add_news_source；可先 validate_news_source；批量用 import_news_sources',
+    hint: '添加订阅：三级漏斗分类→网站→拉平多选订阅项后再 add_news_source；禁止先选路由再选频道；已知 URL 直接 add；批量用 import_news_sources',
   },
   {
     intent: 'news_source_validate',

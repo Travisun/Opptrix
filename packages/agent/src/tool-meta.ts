@@ -398,8 +398,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   add_news_source: {
     hubFeature: 'news_source_add',
     miningEligible: false,
-    usageGuide: '用户要添加 RSS/Atom 订阅时使用；可先 validate_news_source 再添加。',
-    compliance: 'url 必填；会验证后写入；可选 group_id/title；写操作可直接执行。',
+    usageGuide: '用户要添加 RSS/Atom 订阅时直接使用；内部已验证，无需先 validate。',
+    compliance: 'url 必填；写入前内部验证；可选 group_id/title；禁止同一 URL 先 validate_news_source 再本工具（双重探测）；写操作可直接执行。',
   },
   delete_news_source: {
     hubFeature: 'news_source_delete',
@@ -440,8 +440,34 @@ export const TOOL_META: Record<string, ToolMeta> = {
   validate_news_source: {
     hubFeature: 'news_source_validate',
     miningEligible: false,
-    usageGuide: '添加前验证订阅地址是否可解析；不写入。',
-    compliance: 'url 必填；只读验证；通过后再 add_news_source。',
+    usageGuide: '仅当用户只要「测通」订阅地址、不写入时使用；添加订阅请直接 add_news_source（内部已验证）。',
+    compliance: 'url 必填；只读验证、不写入；禁止与 add_news_source 对同一 URL 串联双重探测。',
+  },
+  list_rsshub_categories: {
+    miningEligible: false,
+    usageGuide:
+      '添加 RSSHub 订阅三级漏斗第 1 步：列出内置分类后 ask_user 单选分类（option.id 用分类 id，label 可用 description）；再 list_rsshub_domains。',
+    compliance: '只读；无参数；返回分类摘要 + hint，不含全量路由。',
+  },
+  list_rsshub_domains: {
+    miningEligible: false,
+    usageGuide:
+      '三级漏斗第 2 步：按分类列出该分类全部域名（含 feed_count）后 ask_user 单选网站（域名一般 ≤15，应尽量全量展示，勿只给 3–6 候选）。优先传选中项的 category id；若只有中文分类名也可直接传（工具可解析）。',
+    compliance:
+      'category 必填（英文 id 或中文名/别名，大小写不敏感）；limit 默认 50、上限 50；只读；解析失败时返回可用 categories 提示。',
+  },
+  search_rsshub_routes: {
+    miningEligible: false,
+    usageGuide:
+      '用户已点名具体媒体时的捷径：按关键词搜可订阅叶子（含频道名/path）；模糊主题勿用本工具代替 list_rsshub_domains 全站选择。',
+    compliance: 'q 必填；可选 category（id 或中文名）；limit≤20；只返回短名单，禁止当作全站 radar 或 GitHub docs。',
+  },
+  get_rsshub_domain_routes: {
+    miningEligible: false,
+    usageGuide:
+      '三级漏斗第 3 步：返回该站拉平可订阅叶子（路由与频道已展开，如「电报 · 看盘」），供 ask_user(allow_multiple=true) 多选；禁止再先选路由再选频道。叶子过多用 q 缩小。再拼短名单基址 + add_news_source。',
+    compliance:
+      'domain 必填；可选 category（id 或中文名）、q；默认最多 50 条 + has_more（上限 100）；勿 dump 全量 schema。',
   },
   get_notice_content: {
     hubFeature: 'notice_content',

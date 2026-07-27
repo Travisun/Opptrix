@@ -125,10 +125,17 @@ export function buildNewsRetrievalPlaybook(): string {
     '6) 效率：同一任务 list_news_groups / list_news_sources 各最多 1 次；避免对所有分组逐一遍历',
     '7) A 股个股公告/新闻也可参考 get_instrument_snapshot 内嵌新闻字段（若有），与 RSS 互补而非重复堆砌',
     '【资讯订阅管理 — 写路径与确认纪律】',
-    '8) 添加：可选 validate_news_source → add_news_source（url 必填）；创建分组 create_news_group；改名/排序 update_news_group；归类 move_news_source',
-    '9) 删除订阅 delete_news_source、删除分组 delete_news_group、批量导入 import_news_sources：首次勿传 confirmed；先 ask_user（面向用户、说明后果），用户同意后再带 confirmed=true 重试',
-    '10) 导入入参：{ schema_version:1, subscriptions:[{url,title?}] }，或仅传 subscriptions 数组；已存在地址会跳过',
-    '11) 禁止全量覆盖订阅列表；勿用浏览工具代替写操作',
+    '8) 添加 RSSHub 订阅 — 三级漏斗（内置目录优先；勿拉 GitHub docs / 全量 radar）：',
+    '   ① 选分类：list_rsshub_categories → ask_user（单选；option.id 用分类 id，label 可用 description）',
+    '   ② 选网站：用选中项的 category id 调 list_rsshub_domains({category})（若只有中文分类名也可直接传，工具可解析）→ ask_user（单选网站；单分类域名一般 ≤15，应尽量全量展示，勿只给 3–6 候选）',
+    '   ③ 拉平多选：get_rsshub_domain_routes → 返回已展开的可订阅叶子（路由+频道已拉平，如「电报 · 看盘」）；ask_user(allow_multiple=true) 直接勾选；禁止再让用户先选路由再选频道',
+    '   · 叶子过多（has_more / total_feeds>50）时先传 q 关键词缩小，再 ask_user（最多 50 项）',
+    '   ④ 拼短名单基址 + 选中 path 后直接 add_news_source（可批量；url 必填；内部已验证，勿先 validate 再 add）',
+    '   · search_rsshub_routes / cookbook 仅加速「用户已点名具体媒体」时的捷径；禁止模糊主题时只丢 cookbook 3–6 项代替全站选择',
+    '9) 仅用户只要「测通」时用 validate_news_source；创建分组 create_news_group；改名/排序 update_news_group；归类 move_news_source',
+    '10) 删除订阅 delete_news_source、删除分组 delete_news_group、批量导入 import_news_sources：首次勿传 confirmed；先 ask_user（面向用户、说明后果），用户同意后再带 confirmed=true 重试',
+    '11) 导入入参：{ schema_version:1, subscriptions:[{url,title?}] }，或仅传 subscriptions 数组；已存在地址会跳过',
+    '12) 禁止全量覆盖订阅列表；勿用浏览工具代替写操作',
   ].join('\n')
 }
 

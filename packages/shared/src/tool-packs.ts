@@ -216,6 +216,10 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   delete_news_group: 'news',
   move_news_source: 'news',
   validate_news_source: 'news',
+  list_rsshub_categories: 'news',
+  list_rsshub_domains: 'news',
+  search_rsshub_routes: 'news',
+  get_rsshub_domain_routes: 'news',
   get_notice_content: 'news',
   get_instrument_notices: 'news',
 
