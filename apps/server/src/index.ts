@@ -972,14 +972,7 @@ app.get<{ Params: { id: string } }>('/api/sessions/:id', async (req, reply) => {
   // 仅读缓存；miss 不阻塞（UI 再异步拉 /context-usage）
   const contextUsage = agent.getCachedSessionContextUsage(req.params.id)
   return {
-    session: {
-      id: session.id,
-      title: session.title,
-      model: session.model,
-      createdAt: session.createdAt,
-      updatedAt: session.updatedAt,
-      usageTotals: session.usageTotals ?? null,
-    },
+    session: agent.sessionMeta(session),
     messages: agent.getDisplayMessages(req.params.id),
     contextRef: session.contextRef ?? null,
     contextUsage,
@@ -1030,25 +1023,13 @@ app.patch<{ Params: { id: string }; Body: { title?: string; model?: string | nul
     if (title !== undefined) {
       const updated = agent.renameSession(req.params.id, title)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
-      return {
-        session: {
-          id: updated.id,
-          title: updated.title,
-          model: updated.model,
-          updatedAt: updated.updatedAt,
-        },
-      }
+      return { session: agent.sessionMeta(updated) }
     }
     if (model !== undefined) {
       const updated = await agent.setSessionModel(req.params.id, model)
       if (!updated) return reply.code(404).send({ error: 'session not found' })
       return {
-        session: {
-          id: updated.session.id,
-          title: updated.session.title,
-          model: updated.session.model,
-          updatedAt: updated.session.updatedAt,
-        },
+        session: agent.sessionMeta(updated.session),
         contextHint: updated.contextHint,
       }
     }
@@ -1112,13 +1093,7 @@ app.post<{ Params: { id: string }; Body: { message_index: number } }>(
     const forked = agent.forkSession(req.params.id, messageIndex)
     if (!forked) return reply.code(404).send({ error: 'session or message not found' })
     return {
-      session: {
-        id: forked.id,
-        title: forked.title,
-        model: forked.model,
-        createdAt: forked.createdAt,
-        updatedAt: forked.updatedAt,
-      },
+      session: agent.sessionMeta(forked),
       messages: agent.getDisplayMessages(forked.id),
       contextRef: forked.contextRef ?? null,
     }
@@ -1134,13 +1109,7 @@ app.patch<{ Params: { id: string }; Body: { contextRef: SessionContextRef | null
     const updated = agent.setSessionContextRef(req.params.id, req.body?.contextRef ?? null)
     if (!updated) return reply.code(404).send({ error: 'session not found' })
     return {
-      session: {
-        id: updated.id,
-        title: updated.title,
-        model: updated.model,
-        createdAt: updated.createdAt,
-        updatedAt: updated.updatedAt,
-      },
+      session: agent.sessionMeta(updated),
       contextRef: updated.contextRef ?? null,
     }
   },
@@ -1150,13 +1119,7 @@ app.delete<{ Params: { id: string } }>('/api/sessions/:id/context', async (req, 
   const updated = agent.clearSessionContextRef(req.params.id)
   if (!updated) return reply.code(404).send({ error: 'session not found' })
   return {
-    session: {
-      id: updated.id,
-      title: updated.title,
-      model: updated.model,
-      createdAt: updated.createdAt,
-      updatedAt: updated.updatedAt,
-    },
+    session: agent.sessionMeta(updated),
     contextRef: null,
   }
 })

@@ -1685,7 +1685,9 @@ select:focus-visible {
 html.opptrix-electron .opptrix-session-title-btn,
 html.opptrix-electron .opptrix-session-title-btn--clickable,
 html.opptrix-electron .opptrix-session-title-inline-edit,
-html.opptrix-electron .opptrix-session-title-inline-input {
+html.opptrix-electron .opptrix-inline-edit,
+html.opptrix-electron .opptrix-inline-edit__input,
+html.opptrix-electron .opptrix-inline-edit__action {
   -webkit-app-region: no-drag !important;
   pointer-events: auto !important;
 }
@@ -1750,7 +1752,10 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
 }
 
 .opptrix-session-title-btn__chevron {
+  display: inline-flex;
+  align-items: center;
   flex-shrink: 0;
+  line-height: 0;
   color: var(--opptrix-text-tertiary, #9A9A9A);
   transition: transform 160ms ease;
 }
@@ -1759,70 +1764,13 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
   transform: rotate(180deg);
 }
 
+/* titlebar 会话重命名：宿主类名挂在 OpptrixInlineEdit 上，样式由组件承担 */
 .opptrix-session-title-inline-edit {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  min-height: 28px;
-  max-width: 100%;
-  min-width: 0;
-  padding: 2px 4px;
-  border-radius: var(--opptrix-radius-md, 8px);
-  background-color: var(--opptrix-surface-hover, rgba(0, 0, 0, 0.04));
-  box-sizing: border-box;
   -webkit-app-region: no-drag;
 }
 
 .opptrix-session-title-inline-edit--chrome {
   min-height: 28px;
-}
-
-.opptrix-session-title-inline-input {
-  flex: 1;
-  min-width: 72px;
-  height: 26px;
-  min-height: 26px;
-  font-size: 13px;
-  font-weight: 500;
-}
-
-.opptrix-session-title-inline-input.fui-Input,
-.opptrix-session-title-inline-input.fui-Input:hover,
-.opptrix-session-title-inline-input.fui-Input:focus-within {
-  background-color: var(--opptrix-surface-muted) !important;
-  border: none !important;
-  box-shadow: none !important;
-}
-
-.opptrix-session-title-inline-input.fui-Input::after {
-  display: none !important;
-}
-
-.opptrix-session-title-inline-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: 26px;
-  height: 26px;
-  padding: 0;
-  border: none;
-  border-radius: var(--opptrix-radius-md, 8px);
-  background: transparent;
-  color: var(--opptrix-text-secondary, #6B6B6B);
-  cursor: pointer;
-  flex-shrink: 0;
-  line-height: 0;
-}
-
-.opptrix-session-title-inline-btn:hover {
-  background-color: var(--opptrix-surface-hover, rgba(0, 0, 0, 0.06));
-  color: var(--opptrix-text-primary, #1D1D1F);
-}
-
-html.opptrix-electron .opptrix-session-title-inline-edit,
-html.opptrix-electron .opptrix-session-title-inline-btn {
-  -webkit-app-region: no-drag !important;
-  pointer-events: auto !important;
 }
 
 /* Session title tools menus */

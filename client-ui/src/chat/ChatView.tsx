@@ -258,9 +258,9 @@ interface ChatViewProps {
   /** 上下文整理轻提示 */
   contextHint?: string
   sessionId?: string | null
-  /** 绑定专家时切换空会话欢迎与快捷提问 */
+  /** 绑定专家时切换欢迎文案，并常驻展示快捷提问 */
   expertId?: string | null
-  /** 编辑专家保存后递增，驱动空态重新拉取定义 */
+  /** 编辑专家保存后递增，驱动重新拉取定义 */
   expertRefreshKey?: number
   welcomeEpoch?: number
   chatScrollEpoch?: number
@@ -327,6 +327,10 @@ function ChatView({
   const [userPromptSubmitting, setUserPromptSubmitting] = useState(false)
   const [expertSummary, setExpertSummary] = useState<string | null>(null)
   const [expertStarters, setExpertStarters] = useState<ExpertStarterPrompt[] | null>(null)
+  const expertStartersCacheRef = useRef(new Map<string, {
+    summary: string
+    starters: ExpertStarterPrompt[]
+  }>())
   const pendingUserPromptRef = useRef(pendingUserPrompt)
   const userPromptSubmittingRef = useRef(userPromptSubmitting)
   pendingUserPromptRef.current = pendingUserPrompt
@@ -477,25 +481,39 @@ function ChatView({
   const isExpertSession = Boolean(expertId)
 
   useEffect(() => {
-    if (!expertId || !isEmpty) {
+    if (!expertId) {
       setExpertSummary(null)
       setExpertStarters(null)
       return
+    }
+    const cached = expertStartersCacheRef.current.get(expertId)
+    if (cached) {
+      setExpertSummary(cached.summary)
+      setExpertStarters(cached.starters)
+    } else {
+      setExpertStarters(null)
     }
     let cancelled = false
     void getExpert(expertId)
       .then(({ expert }) => {
         if (cancelled) return
+        const starters = expert.starterPrompts?.length ? expert.starterPrompts : []
+        expertStartersCacheRef.current.set(expertId, {
+          summary: expert.summary,
+          starters,
+        })
         setExpertSummary(expert.summary)
-        setExpertStarters(expert.starterPrompts?.length ? expert.starterPrompts : [])
+        setExpertStarters(starters)
       })
       .catch(() => {
         if (cancelled) return
-        setExpertSummary(null)
-        setExpertStarters([])
+        if (!cached) {
+          setExpertSummary(null)
+          setExpertStarters([])
+        }
       })
     return () => { cancelled = true }
-  }, [expertId, isEmpty, expertRefreshKey])
+  }, [expertId, expertRefreshKey])
 
   const globalStarters: ComposerStarterChip[] = welcome.starters.map(text => ({ label: text, text }))
   const expertChipStarters: ComposerStarterChip[] = (expertStarters ?? []).map(p => ({
@@ -793,6 +811,7 @@ function ChatView({
               loading={loading}
               error={error}
               isEmpty={isEmpty}
+              alwaysShowStarters={isExpertSession}
               isMobile={isMobile}
               contextRef={contextRef}
               starters={starters}

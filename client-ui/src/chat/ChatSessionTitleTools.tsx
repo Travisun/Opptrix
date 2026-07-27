@@ -11,6 +11,7 @@ import {
 import { createPortal } from 'react-dom'
 import { Input, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import OpptrixInlineEdit from '../components/opptrix/OpptrixInlineEdit'
 import {
   AddRegular,
   ArchiveRegular,
@@ -81,7 +82,7 @@ export default function ChatSessionTitleTools({
   sessionUsageTotal,
 }: ChatSessionTitleToolsProps) {
   const anchorRef = useRef<HTMLButtonElement>(null)
-  const renameInputRef = useRef<HTMLInputElement>(null)
+  const chevronRef = useRef<HTMLSpanElement>(null)
   const primaryPanelRef = useRef<HTMLDivElement>(null)
   const archivePanelRef = useRef<HTMLDivElement>(null)
 
@@ -104,12 +105,6 @@ export default function ChatSessionTitleTools({
   useEffect(() => {
     if (!renaming) setRenameDraft(title)
   }, [title, renaming])
-
-  useEffect(() => {
-    if (!renaming) return
-    renameInputRef.current?.focus()
-    renameInputRef.current?.select()
-  }, [renaming])
 
   useEffect(() => {
     if (!creatingFolder) return
@@ -146,17 +141,17 @@ export default function ChatSessionTitleTools({
     if (!menuOpen || !anchor || !primary) return
 
     const rect = anchor.getBoundingClientRect()
-    const chevron = anchor.querySelector('.opptrix-session-title-btn__chevron')
-    const caretRect = chevron instanceof HTMLElement
-      ? chevron.getBoundingClientRect()
-      : rect
+    // Fluent 图标是 SVG，不能用 HTMLElement 判断；用 chevron 包裹 span 的几何
+    const caretRect = (chevronRef.current ?? anchor).getBoundingClientRect()
     const panelWidth = MENU_WIDTH
     const panelHeight = primary.offsetHeight
     const gap = 6
 
-    // 相对右侧 chevron 右对齐，标题长短变化时菜单仍贴下拉符号
-    let left = caretRect.right - panelWidth
-    left = clamp(left, VIEWPORT_PAD, window.innerWidth - panelWidth - VIEWPORT_PAD)
+    // 面板左侧对齐下拉符号，向右展开；仅在超出视口右侧时左移夹紧
+    let left = caretRect.left
+    const maxLeft = window.innerWidth - panelWidth - VIEWPORT_PAD
+    if (left > maxLeft) left = Math.max(VIEWPORT_PAD, maxLeft)
+    if (left < VIEWPORT_PAD) left = VIEWPORT_PAD
 
     let top = rect.bottom + gap
     if (top + panelHeight > window.innerHeight - VIEWPORT_PAD) {
@@ -242,16 +237,6 @@ export default function ChatSessionTitleTools({
     setRenameDraft(title)
   }, [title])
 
-  const handleRenameKeyDown = (e: ReactKeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault()
-      void commitRename()
-    } else if (e.key === 'Escape') {
-      e.preventDefault()
-      cancelRename()
-    }
-  }
-
   const handleTitleClick = () => {
     if (disabled || renaming) return
     if (!canUseTools) return
@@ -329,40 +314,25 @@ export default function ChatSessionTitleTools({
     : style
 
   const titleButton = renaming ? (
-    <div
+    <OpptrixInlineEdit
       className={mergeClasses(
         'opptrix-session-title-inline-edit',
         variant === 'chrome' && 'opptrix-session-title-inline-edit--chrome',
         className,
       )}
       style={titleStyle}
-      onMouseDown={handleTitleMouseDown}
-    >
-      <Input
-        ref={renameInputRef}
-        className="opptrix-session-title-inline-input opptrix-archive-inline-input"
-        value={renameDraft}
-        onChange={(_, data) => setRenameDraft(data.value)}
-        onKeyDown={handleRenameKeyDown}
-        aria-label="重命名对话"
-      />
-      <OpptrixButton
-        variant="icon"
-        className="opptrix-session-title-inline-btn"
-        aria-label="确认重命名"
-        onClick={() => { void commitRename() }}
-      >
-        <CheckmarkRegular fontSize={14} />
-      </OpptrixButton>
-      <OpptrixButton
-        variant="icon"
-        className="opptrix-session-title-inline-btn"
-        aria-label="取消重命名"
-        onClick={cancelRename}
-      >
-        <DismissRegular fontSize={14} />
-      </OpptrixButton>
-    </div>
+      value={renameDraft}
+      onChange={setRenameDraft}
+      onConfirm={() => { void commitRename() }}
+      onCancel={cancelRename}
+      label="重命名对话"
+      sizeMode="auto"
+      minWidth={80}
+      maxWidth={typeof maxWidth === 'number' ? Math.max(120, maxWidth - 8) : 360}
+      confirmLabel="确认重命名"
+      cancelLabel="取消重命名"
+      onMouseDown={e => e.stopPropagation()}
+    />
   ) : (
     <button
       ref={anchorRef}
@@ -386,13 +356,16 @@ export default function ChatSessionTitleTools({
         {title || '新对话'}
       </span>
       {canUseTools && (
-        <ChevronDownRegular
+        <span
+          ref={chevronRef}
           className={mergeClasses(
             'opptrix-session-title-btn__chevron',
             menuOpen && 'opptrix-session-title-btn__chevron--open',
           )}
-          fontSize={14}
-        />
+          aria-hidden
+        >
+          <ChevronDownRegular fontSize={14} />
+        </span>
       )}
     </button>
   )
