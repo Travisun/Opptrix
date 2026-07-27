@@ -10,7 +10,7 @@
 | `{id}.json` | 单条完整 `ExpertDefinition`（含 persona、defaultPacks 等） |
 | `README.md` | 本说明 |
 
-当前内置 3 条官方专家（与 `packages/agent/src/experts/catalog.mock.json` 一致，供离线 fallback）。
+当前内置 5 条官方专家（与 `packages/agent/src/experts/catalog.mock.json` 一致，供离线 fallback）。
 
 ## 字段说明
 

@@ -49,7 +49,7 @@ export function bootstrapReadinessIncomplete(status: MarketDbStatus): boolean {
   if (status.is_ready) return false
   const b = status.bootstrap
   if (!b) return status.stock_count > 0
-  if (!b.initial_cn || !b.initial_taxonomy || !b.klines) return true
+  if (!b.initial_cn || !b.initial_taxonomy) return true
   return false
 }
 
@@ -60,7 +60,6 @@ function bootstrapJobsForIncompleteReadiness(status: MarketDbStatus): string[] {
   const jobs: string[] = []
   if (!b.initial_cn) jobs.push('initial_cn_universe')
   if (!b.initial_taxonomy) jobs.push('initial_taxonomy')
-  if (!b.klines) jobs.push('kline_bootstrap')
   return jobs
 }
 
@@ -73,8 +72,8 @@ export function bootstrapJobsNeedRefresh(status: MarketDbStatus): boolean {
 /**
  * Pick sync mode + job list from DB state.
  *
- * - 未完成 bootstrap → 名录 + 行业 + 历史 K 补全（按 TTL 跳过未到期项）
- * - 已就绪 → 维护：名录/行业每周交替；日 K 周一收盘后增量
+ * - 未完成 bootstrap → 名录 + 行业（按 TTL 跳过未到期项）
+ * - 已就绪 → 维护：名录/行业每周交替
  */
 export function resolveSyncPlan(
   status: MarketDbStatus,

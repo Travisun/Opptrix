@@ -314,6 +314,33 @@ const SHARED_PACKAGES: LocalDataApiDetail = {
   ],
 }
 
+/** 仓库模板 → 复制到 shared/packages/cn-offline-daily-k/ */
+const CN_OFFLINE_DAILY_K: LocalDataApiDetail = {
+  api_id: 'shared.packages.cn-offline-daily-k',
+  category: 'shared_packages',
+  title: 'cn-offline-daily-k',
+  summary: 'A 股离线十年日 K：prepare_fuyao_dump 部署到公共区，查询/筛选/板块挖掘（不写主库）',
+  access: 'shared',
+  how_to_call:
+    '模板：packages/agent-workspace/templates/cn-offline-daily-k/；运行时复制到 shared/packages/cn-offline-daily-k/。'
+    + '先 decideDumpKind（>10 日未成功更新则 full）→ prepare_fuyao_dump → markUpdateSuccess 写 data/cache/offline-k-meta.json → query/screen',
+  layer_entry: 'templates/cn-offline-daily-k → shared/packages/cn-offline-daily-k',
+  params: [
+    { name: 'dump_kind', type: 'string', required: true, description: 'full（≈10y）| incremental（≈10d）；由 decideDumpKind 决定' },
+    { name: 'meta_path', type: 'string', description: '仅 shared/data/cache/offline-k-meta.json' },
+  ],
+  notes: [
+    '禁止 market sync / importDailyKDump / 写 App 主行情库',
+    '禁止 API Key 进沙盒；扶摇鉴权仅经 prepare_fuyao_dump',
+    '元数据只写 shared/data/cache/offline-k-meta.json',
+  ],
+  examples: [
+    'get_local_data_catalog({ api_id: "shared.packages.cn-offline-daily-k" })',
+    'prepare_fuyao_dump({ dump_kind: "full" })',
+    'workspace_list({ root_id: "shared", path: "packages/cn-offline-daily-k" })',
+  ],
+}
+
 const FUYAO_DUMP: LocalDataApiDetail = {
   api_id: 'fuyao.dump',
   category: 'fuyao_dump',
@@ -406,6 +433,7 @@ function buildCatalog(): LocalDataApiDetail[] {
   }
 
   out.push(SHARED_PACKAGES)
+  out.push(CN_OFFLINE_DAILY_K)
   out.push(FUYAO_DUMP)
   out.push(...WORKSPACE_FS)
   return out

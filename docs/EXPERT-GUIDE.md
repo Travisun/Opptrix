@@ -67,6 +67,18 @@
 
 内置专家可在 `catalog.mock.json` 中配置不同的 `defaultPacks` / `defaultResearchTier`（如宏观策略顾问用 `market` + `news`，个股分析助手用 `L3`）。
 
+### 官方内置专家一览
+
+| id | 标题 | defaultPacks | 说明 |
+|----|------|--------------|------|
+| `macro-strategy` | 宏观策略顾问 | `market`, `news` | 自上而下宏观与跨资产 |
+| `equity-analysis` | 个股分析助手 | `fundamentals`, `instrument_analytics` | 单票基本面与趋势（L3） |
+| `news-interpreter` | 资讯解读官 | `news` | 新闻要点与影响路径 |
+| `news-subscription-steward` | 新闻订阅管家 | `news` | RSSHub 三级漏斗找可达节点并添加/整理订阅；禁 GitHub 主路径、禁开场全量扫服 |
+| `offline-data-steward` | 离线数据专家 | `workspace` | 十年日 K 部署到公共区 + `cn-offline-daily-k` 查询挖掘；**禁止**写主库 / market sync；元数据仅 `shared/data/cache/offline-k-meta.json`（>10 日未成功更新则全量） |
+
+静态目录与校验：仓库根 `experts/catalog.json` + `experts/{id}.json`；`node scripts/validate-experts.mjs`。离线包模板：`packages/agent-workspace/templates/cn-offline-daily-k/`。
+
 ---
 
 ## 3. 技能专长（persona）写法指导

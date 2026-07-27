@@ -1142,7 +1142,7 @@ flowchart LR
 
 **原则**：
 
-1. **全市场批量数据** → Sync 入库（因子、日 K、ETF 列表）。
+1. **全市场批量数据** → Sync 入库（名录、行业、ETF 列表等）。**主库不再导入静态日 K**（`market.db` / `market-kline.duckdb` 的 `cn_daily_bars` / `stock_klines_daily` 表保留但不写入）；App 图表与诊断走在线 `queryInstrumentData(ref, 'kline')`；Agent 离线大数据仅经 `prepare_fuyao_dump` → shared。
 2. **单标的实时/分时** → 直查 Online Engine，可选短 TTL cache。
 3. **筛选/发现/雷达** → 优先 Local Store，降低源站压力（现有设计正确）。
 4. **多市场 Store**：Phase 2 起可按 `market` 分库或单库分表；首阶段 ETF 与 EQUITY 共库。
@@ -1188,7 +1188,7 @@ flowchart LR
 - [x] 新增 ETF Capability 与 eastmoney 实现
 - [x] `InstrumentResolver` 识别 ETF 代码段（15/51/56/58 等）
 - [x] SQLite migration v5：`instruments` + `etf_profiles` + `etf_nav_daily` + `etf_holdings`
-- [x] Sync jobs：`etf_list`、`etf_nav`、`etf_holdings`、`etf_kline_bootstrap`
+- [x] Sync jobs：`etf_list`、`etf_nav`、`etf_holdings`（`etf_kline_bootstrap` 已下线，主库不再写静态日 K）
 - [x] Hub features：`etf_list`、`etf_snapshot`、`etf_nav`、`etf_holdings`、`local_etf_*`、`etf_scorecard`、`search_etfs`
 - [x] REST：`GET /api/etf/list|search`、`GET /api/etf/:code/snapshot|nav|holdings|scorecard`
 - [x] Agent tools：`get_etf_list`、`get_etf_snapshot`、`get_etf_nav`、`get_etf_holdings`、`get_etf_scorecard`、`search_etfs`

@@ -1,0 +1,13 @@
+{
+  "name": "cn-offline-daily-k",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "A-share offline daily K helpers for Opptrix shared workspace (no main DB writes)",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "optionalDependencies": {
+    "hyparquet": "^1.8.0"
+  }
+}

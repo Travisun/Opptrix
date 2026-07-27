@@ -30,6 +30,26 @@
       "official": true,
       "version": "1.0.0",
       "source": "builtin"
+    },
+    {
+      "id": "news-subscription-steward",
+      "title": "新闻订阅管家",
+      "summary": "帮你找可达的资讯源节点，并完成添加与整理",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["资讯", "订阅", "RSS"],
+      "official": true,
+      "version": "1.0.0",
+      "source": "builtin"
+    },
+    {
+      "id": "offline-data-steward",
+      "title": "离线数据专家",
+      "summary": "把十年日 K 部署到公共区，并用公共包做筛选与板块挖掘",
+      "icon": { "kind": "icon", "value": "expert" },
+      "tags": ["离线", "日K", "公共包"],
+      "official": true,
+      "version": "1.0.0",
+      "source": "builtin"
     }
   ]
 }

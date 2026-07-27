@@ -245,7 +245,8 @@ Opptrix/
 
 **已废弃：Agent 侧 `market sync` / `dailyDump` 作为主取 dump 路径**
 
-- `packages/market-data` 的 `sync()` / `dailyDump` 仍供 **UI 与后台**维护本地 SQLite 因子库，**不是** Agent 获取扶摇 Parquet 的入口。
+- App 主库 **不再** 导入扶摇静态日 K；`prepare_fuyao_dump` 只落盘 shared / 缓存，不写 `market.db`。
+- `packages/market-data` 的 `sync()` 仍供 **UI 与后台**维护名录/行业等，**不是** Agent 获取扶摇 Parquet 的入口。
 - Agent / 文档 / 系统提示：**禁止**引导用户或自行在沙盒跑 `market sync`、`dailyDump`、或把 Key 注入环境变量来拉 dump；统一 `prepare_fuyao_dump`。
 
 **会话局域网与全局设置**
@@ -271,7 +272,7 @@ Opptrix/
 - **专家会话 vs 默认研究员**：
   - **默认研究员**：`POST /api/sessions` 不传 `expertId` → `expertId` / `expertIcon` 为 `null`，`rolePersona` 初始为默认投研研究员文案（可编辑）。
   - **专家会话**：传 `expertId`（须存在于目录）→ 持久化 `expertId` + `expertIcon` + `rolePersona` 快照；标题默认 `defaultSessionTitle` 或专家 `title`；首聊天轮前 `seedExpertDefaultPacks` 按专家 `defaultPacks` 激活工具包（每会话每专家仅播种一次）；`defaultResearchTier` 仍可从目录按 `expertId` 读取（未冻结）；空会话欢迎可用专家 `starterPrompts`（最多 6 条，见 [API.md §Experts](./API.md#experts专家目录)）。
-  - **专家目录**：`ExpertCatalogService` 优先 `StaticHttpExpertProvider`（默认 `https://update.opptrix.org/experts/` 的 `catalog.json` / `{id}.json`），失败降级包内 `LocalJsonExpertProvider`（`catalog.mock.json`）；再合并用户自建（user-store `local_experts`）。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。部署与契约：[EXPERT-GUIDE.md §7](./EXPERT-GUIDE.md#7-远程专家-datasource)、[`experts/README.md`](../experts/README.md)。
+  - **专家目录**：`ExpertCatalogService` 优先 `StaticHttpExpertProvider`（默认 `https://update.opptrix.org/experts/` 的 `catalog.json` / `{id}.json`），失败降级包内 `LocalJsonExpertProvider`（`catalog.mock.json`）；再合并用户自建（user-store `local_experts`）。REST：`GET/POST/PATCH/DELETE /api/experts*`；UI 见 `client-ui/src/pages/experts/ExpertMarketPage.tsx`。部署与契约：[EXPERT-GUIDE.md](./EXPERT-GUIDE.md)、[`experts/README.md`](../experts/README.md)。官方内置含「新闻订阅管家」（`news` pack + RSSHub 三级漏斗）与「离线数据专家」（`workspace` + `prepare_fuyao_dump` / `cn-offline-daily-k`，不写主库）；详见 [EXPERT-GUIDE 官方内置专家一览](./EXPERT-GUIDE.md#官方内置专家一览)。
 - **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
   - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。
   - **窗长**：`resolveModelContextTokensAsync` 优先 models.dev（精确/大小写/去品牌前缀/规范化/子串/跨 provider），失败降级 `resolveModelContextTokens` 启发式（未知默认 128k）；`AvailableModel.contextTokens` 只读派生。预算预留输出与 system/tools；**soft 75%** → microcompact（压缩较早 tool 结果正文）；**hard 85%** → structuredCompact（独立一轮 LLM 写 `SessionMemory`，目标/约束神圣不可丢）。
