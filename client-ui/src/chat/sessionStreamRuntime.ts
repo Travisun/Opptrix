@@ -15,7 +15,7 @@ export function stripPhaseEllipsis(label: string): string {
 }
 
 /**
- * 拼装实时状态行：`模型正在整理结果 · 约 1.2k tokens · 共 8 步…`
+ * 拼装实时状态行：`模型正在整理结果 · 约 1.2k tokens · 第 8 步…`
  * 无 token 时省略 token 段；steps≤0 时省略步数段。
  */
 export function formatLiveThinkingStatus(
@@ -25,11 +25,11 @@ export function formatLiveThinkingStatus(
 ): string | undefined {
   if (!phaseLabel) return undefined
   const parts = [phaseLabel]
-  if (estimatedTokens != null) {
+  if (estimatedTokens != null && Number.isFinite(estimatedTokens)) {
     parts.push(`约 ${formatTokenCount(estimatedTokens)} tokens`)
   }
   if (stepCount > 0) {
-    parts.push(`共 ${stepCount} 步`)
+    parts.push(`第 ${stepCount} 步`)
   }
   return `${parts.join(' · ')}…`
 }

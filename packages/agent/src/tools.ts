@@ -18,6 +18,7 @@ import {
 } from './unified-mcp-tools.js'
 import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildWorkspaceTools } from './mcp/workspace-tools.js'
+import { currentToolSessionId } from './mcp/tool-session-context.js'
 import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
 import { assembleSystemPrompt } from './experts/prompt-assembler.js'
@@ -105,12 +106,16 @@ export interface OpenAiTool {
 export class ToolRegistry {
   readonly tools: ToolDef[]
   private appContext: AgentAppContext
-  /** 聊天会话的 tool-pack 桥接（list/activate）；由 AgentEngine 在 chat 前绑定 */
-  private packBridge: {
-    sessionId: string
-    listPacks: () => unknown
-    activatePacks: (packIds: string[]) => unknown
-  } | null = null
+  /** 聊天会话的 tool-pack 桥接（list/activate）；按 session+gen 绑定，避免打断重发竞态 */
+  private packBridges = new Map<string, {
+    bridge: {
+      sessionId: string
+      listPacks: () => unknown
+      activatePacks: (packIds: string[]) => unknown
+    }
+    gen: number
+  }>()
+  private packBridgeGenSeq = 0
 
   constructor(private hub: ResearchHub, appContext?: AgentAppContext) {
     this.appContext = appContext ?? createDefaultAppContext()
@@ -123,12 +128,31 @@ export class ToolRegistry {
     ]
   }
 
-  bindPackSession(bridge: NonNullable<ToolRegistry['packBridge']>) {
-    this.packBridge = bridge
+  bindPackSession(bridge: {
+    sessionId: string
+    listPacks: () => unknown
+    activatePacks: (packIds: string[]) => unknown
+  }): number {
+    const gen = ++this.packBridgeGenSeq
+    this.packBridges.set(bridge.sessionId, { bridge, gen })
+    return gen
   }
 
-  clearPackSession() {
-    this.packBridge = null
+  clearPackSession(sessionId: string, gen: number): void {
+    const cur = this.packBridges.get(sessionId)
+    if (cur && cur.gen === gen) {
+      this.packBridges.delete(sessionId)
+    }
+  }
+
+  private requirePackBridge(): {
+    sessionId: string
+    listPacks: () => unknown
+    activatePacks: (packIds: string[]) => unknown
+  } | null {
+    const sessionId = currentToolSessionId()
+    if (!sessionId) return null
+    return this.packBridges.get(sessionId)?.bridge ?? null
   }
 
   list() { return this.tools }
@@ -653,10 +677,11 @@ export class ToolRegistry {
         description: '列出可用 MCP 工具包（id/标题/说明/工具数/是否已加载），不含完整 schema',
         parameters: S({}),
         handler: async () => {
-          if (!this.packBridge) {
+          const pack = this.requirePackBridge()
+          if (!pack) {
             return { error: 'list_tool_packs 需在聊天会话中调用' }
           }
-          return this.packBridge.listPacks()
+          return pack.listPacks()
         },
       },
       {
@@ -671,7 +696,8 @@ export class ToolRegistry {
           },
         }, ['pack_ids']),
         handler: async (a: Record<string, unknown>) => {
-          if (!this.packBridge) {
+          const pack = this.requirePackBridge()
+          if (!pack) {
             return { error: 'activate_tool_pack 需在聊天会话中调用' }
           }
           const raw = a.pack_ids ?? a.packIds
@@ -680,7 +706,7 @@ export class ToolRegistry {
             : typeof raw === 'string'
               ? [raw]
               : []
-          return this.packBridge.activatePacks(packIds)
+          return pack.activatePacks(packIds)
         },
       },
       {
