@@ -12,6 +12,7 @@ import {
   type TableHTMLAttributes,
 } from 'react'
 import { CheckmarkCircleFilled, ClipboardPasteRegular } from '@fluentui/react-icons'
+import { copyTextToClipboard } from '../platform/clipboard'
 
 const COPY_COL_CLASS = 'opptrix-md-table-copy-col'
 const COPY_COL_KEY = 'opptrix-md-table-copy-col'
@@ -149,16 +150,13 @@ export default function MarkdownTable({ children, ...props }: Props) {
     const markdown = tableToMarkdown(table)
     if (!markdown) return
 
-    try {
-      await navigator.clipboard.writeText(markdown)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard unavailable */
-    }
+    const ok = await copyTextToClipboard(markdown)
+    if (!ok) return
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
   }, [])
 
-  const label = copied ? 'Copied table markdown' : 'Copy table as Markdown'
+  const label = copied ? '已复制' : '复制表格'
 
   const tableChildren = useMemo(
     () => injectCopyColumn(

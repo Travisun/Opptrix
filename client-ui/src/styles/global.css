@@ -590,6 +590,15 @@ html.opptrix-electron .opptrix-overlay-sidebar {
   background-color: var(--opptrix-overlay-sidebar-hover) !important;
 }
 
+/* 覆盖 .opptrix-input-shell 的 transparent，使设置搜索框默认可见边框 */
+.opptrix-settings-search-shell.opptrix-input-shell {
+  border-color: var(--opptrix-border);
+}
+
+.opptrix-settings-search-shell.opptrix-input-shell:focus-within {
+  border-color: var(--opptrix-focus-border);
+}
+
 html.opptrix-electron .opptrix-settings-search-shell {
   background: var(--opptrix-glass);
 }

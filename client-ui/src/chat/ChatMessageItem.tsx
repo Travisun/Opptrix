@@ -13,6 +13,7 @@ import MediaPreviewBox from './MediaPreviewBox'
 import type { ChatAttachmentMeta, ChatDisplayMessage } from '../types/chat'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { fadeInUp } from '../theme/mixins'
+import { copyTextToClipboard } from '../platform/clipboard'
 import { formatFriendlyTime } from '../utils/formatFriendlyTime'
 
 const useStyles = makeStyles({
@@ -156,13 +157,10 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }
 
   const handleCopy = useCallback(async () => {
     if (!message.content) return
-    try {
-      await navigator.clipboard.writeText(message.content)
-      setCopied(true)
-      window.setTimeout(() => setCopied(false), 1500)
-    } catch {
-      /* clipboard unavailable */
-    }
+    const ok = await copyTextToClipboard(message.content)
+    if (!ok) return
+    setCopied(true)
+    window.setTimeout(() => setCopied(false), 1500)
   }, [message.content])
 
   const copyLabel = copied ? '已复制消息 Markdown' : '复制消息 Markdown'
