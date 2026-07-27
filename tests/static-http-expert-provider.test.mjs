@@ -86,6 +86,8 @@ test('StaticHttpExpertProvider getExpert sanitizes and caches detail', async () 
     assert.ok(expert)
     assert.match(expert.persona, /个股/)
     assert.equal(expert.complianceVersion, '1')
+    assert.ok(expert.starterPrompts?.length)
+    assert.ok(expert.starterPrompts.every(p => p.title && p.content && p.id))
 
     const cached = await provider.getExpert('equity-analysis')
     assert.equal(cached?.id, expert.id)

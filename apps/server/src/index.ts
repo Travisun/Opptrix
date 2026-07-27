@@ -874,7 +874,13 @@ app.get<{ Params: { id: string } }>('/api/experts/:id', async (req, reply) => {
 })
 
 app.post<{
-  Body: { title?: string; summary?: string; persona?: string; tags?: string[] }
+  Body: {
+    title?: string
+    summary?: string
+    persona?: string
+    tags?: string[]
+    starterPrompts?: unknown
+  }
 }>('/api/experts', async (req, reply) => {
   const title = String(req.body?.title ?? '').trim()
   const summary = String(req.body?.summary ?? '').trim()
@@ -885,8 +891,11 @@ app.post<{
   const tags = Array.isArray(req.body?.tags)
     ? req.body.tags.map(t => String(t).trim()).filter(Boolean)
     : undefined
+  const starterPrompts = Array.isArray(req.body?.starterPrompts)
+    ? req.body.starterPrompts as import('@opptrix/shared').ExpertStarterPrompt[]
+    : undefined
   try {
-    const expert = agent.createExpert({ title, summary, persona, tags })
+    const expert = agent.createExpert({ title, summary, persona, tags, starterPrompts })
     return reply.code(201).send({ expert })
   } catch (e) {
     const message = e instanceof Error ? e.message : '创建专家失败'
@@ -896,7 +905,13 @@ app.post<{
 
 app.patch<{
   Params: { id: string }
-  Body: { title?: string; summary?: string; persona?: string; tags?: string[] }
+  Body: {
+    title?: string
+    summary?: string
+    persona?: string
+    tags?: string[]
+    starterPrompts?: unknown
+  }
 }>('/api/experts/:id', async (req, reply) => {
   const existing = await agent.getExpert(req.params.id)
   if (!existing) return reply.code(404).send({ error: 'expert not found' })
@@ -910,6 +925,11 @@ app.patch<{
   if (req.body?.tags !== undefined) {
     patch.tags = Array.isArray(req.body.tags)
       ? req.body.tags.map(t => String(t).trim()).filter(Boolean)
+      : []
+  }
+  if (req.body?.starterPrompts !== undefined) {
+    patch.starterPrompts = Array.isArray(req.body.starterPrompts)
+      ? req.body.starterPrompts as import('@opptrix/shared').ExpertStarterPrompt[]
       : []
   }
   try {

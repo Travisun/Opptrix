@@ -8,6 +8,7 @@ import {
   EXPERT_COMPLIANCE_VERSION,
   isValidExpertId,
   LOCAL_EXPERTS_NAMESPACE,
+  normalizeExpertStarterPrompts,
   type ExpertCreateInput,
   type ExpertDefinition,
   type ExpertPatchInput,
@@ -72,7 +73,7 @@ export class LocalExpertsRepository {
       id = `${id.slice(0, 48)}-${randomUUID().slice(0, 4)}`
     }
 
-    const ts = nowIso()
+    const starterPrompts = normalizeExpertStarterPrompts(input.starterPrompts)
     const row: ExpertDefinition = {
       id,
       title,
@@ -87,6 +88,7 @@ export class LocalExpertsRepository {
       defaultSessionTitle: title,
       complianceVersion: EXPERT_COMPLIANCE_VERSION,
       version: '1.0.0',
+      ...(starterPrompts ? { starterPrompts } : {}),
     }
     this.store.setDocument(LOCAL_EXPERTS_NAMESPACE, id, row)
     return row
@@ -113,6 +115,11 @@ export class LocalExpertsRepository {
       tags: patch.tags !== undefined ? normalizeTags(patch.tags) : prev.tags,
       defaultSessionTitle: title,
       version: prev.version ?? '1.0.0',
+    }
+    if (patch.starterPrompts !== undefined) {
+      const next = normalizeExpertStarterPrompts(patch.starterPrompts)
+      if (next) row.starterPrompts = next
+      else delete row.starterPrompts
     }
     this.store.setDocument(LOCAL_EXPERTS_NAMESPACE, id, row)
     return row

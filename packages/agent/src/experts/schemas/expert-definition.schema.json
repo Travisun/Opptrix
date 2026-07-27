@@ -120,6 +120,14 @@
       "type": "string",
       "const": "1",
       "description": "persona 合规版本标记；当前固定为 1。"
+    },
+    "starterPrompts": {
+      "type": "array",
+      "maxItems": 6,
+      "description": "空会话快捷提问；缺省或空表示无。",
+      "items": {
+        "$ref": "#/$defs/ExpertStarterPrompt"
+      }
     }
   },
   "$defs": {
@@ -136,6 +144,30 @@
           "type": "string",
           "minLength": 1,
           "maxLength": 64
+        }
+      }
+    },
+    "ExpertStarterPrompt": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["id", "title", "content"],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 64
+        },
+        "title": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 80,
+          "description": "chip 短文案"
+        },
+        "content": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 2000,
+          "description": "点击后发送的正文"
         }
       }
     }

@@ -4,7 +4,12 @@ import type {
   ExpertDefinition,
   ExpertListQuery,
 } from '@opptrix/shared'
-import { DEFAULT_EXPERT_ICON, EXPERT_COMPLIANCE_VERSION, isValidExpertId } from '@opptrix/shared'
+import {
+  DEFAULT_EXPERT_ICON,
+  EXPERT_COMPLIANCE_VERSION,
+  isValidExpertId,
+  normalizeExpertStarterPrompts,
+} from '@opptrix/shared'
 import { sanitizeExpertPersona } from './prompt-assembler.js'
 import type { RemoteExpertProvider } from './local-json-provider.js'
 
@@ -67,7 +72,7 @@ function parseCatalogEntry(raw: unknown): ExpertCatalogEntry | null {
   }
 }
 
-function parseExpertDefinition(raw: unknown): ExpertDefinition | null {
+export function parseExpertDefinition(raw: unknown): ExpertDefinition | null {
   if (!isRecord(raw)) return null
   const entry = parseCatalogEntry(raw)
   if (!entry) return null
@@ -83,6 +88,7 @@ function parseExpertDefinition(raw: unknown): ExpertDefinition | null {
   if (tier !== 'L1' && tier !== 'L2' && tier !== 'L3') return null
   const complianceVersion = raw.complianceVersion
   if (complianceVersion !== EXPERT_COMPLIANCE_VERSION) return null
+  const starterPrompts = normalizeExpertStarterPrompts(raw.starterPrompts)
   return {
     ...entry,
     icon: entry.icon.kind === 'icon' ? entry.icon : DEFAULT_EXPERT_ICON,
@@ -96,6 +102,7 @@ function parseExpertDefinition(raw: unknown): ExpertDefinition | null {
         ? raw.defaultSessionTitle.trim()
         : undefined,
     complianceVersion,
+    ...(starterPrompts ? { starterPrompts } : {}),
   }
 }
 
