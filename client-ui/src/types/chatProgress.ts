@@ -6,11 +6,15 @@ export interface ChatUserPromptPayload {
   id: string
   title?: string
   prompt: string
+  /** 空数组 = confirm 模式（底部拒绝/确认） */
   options: Array<{ id: string; label: string }>
   allowMultiple?: boolean
   kind?: 'choice' | 'secret'
   name?: string
   inject_hosts?: string[]
+  reject_label?: string
+  confirm_label?: string
+  allow_custom?: boolean
 }
 
 export interface UserPromptAnswerPayload {

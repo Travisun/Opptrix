@@ -146,11 +146,16 @@ export default function ChatSessionTitleTools({
     if (!menuOpen || !anchor || !primary) return
 
     const rect = anchor.getBoundingClientRect()
+    const chevron = anchor.querySelector('.opptrix-session-title-btn__chevron')
+    const caretRect = chevron instanceof HTMLElement
+      ? chevron.getBoundingClientRect()
+      : rect
     const panelWidth = MENU_WIDTH
     const panelHeight = primary.offsetHeight
     const gap = 6
 
-    let left = rect.left
+    // 相对右侧 chevron 右对齐，标题长短变化时菜单仍贴下拉符号
+    let left = caretRect.right - panelWidth
     left = clamp(left, VIEWPORT_PAD, window.innerWidth - panelWidth - VIEWPORT_PAD)
 
     let top = rect.bottom + gap

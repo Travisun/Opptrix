@@ -1,6 +1,7 @@
 import { isElectron } from './detect'
 
-function isHttpUrl(url: string): boolean {
+/** True when the string is an absolute http(s) URL. */
+export function isHttpUrl(url: string): boolean {
   return /^https?:\/\//i.test(url.trim())
 }
 

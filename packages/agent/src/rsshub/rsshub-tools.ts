@@ -30,7 +30,7 @@ const S = (properties: JsonSchema['properties'], required?: string[]): JsonSchem
   ({ type: 'object', properties, required })
 
 /**
- * RSSHub 内置路由目录工具 — 三级漏斗：分类 → 网站 → 拉平多选订阅项 → 拼基址 + add_news_source。
+ * 内置 RSS 路由目录工具 — 三级漏斗：分类 → 网站 → 拉平多选订阅项 → 拼基址 + add_news_source。
  * 不经 Hub；结果已截断，禁止 dump 全量 schema。
  */
 export function buildRsshubTools(): Omit<RsshubToolDef, 'meta'>[] {
@@ -39,7 +39,7 @@ export function buildRsshubTools(): Omit<RsshubToolDef, 'meta'>[] {
       name: 'list_rsshub_categories',
       category: '资讯中心',
       description:
-        '列出内置 RSSHub 路由分类（财经/股票/政策等）及各分类域名与路由数量；添加订阅三级漏斗第 1 步',
+        '列出内置 RSS 路由分类（财经/股票/政策等）及各分类域名与路由数量；添加订阅三级漏斗第 1 步',
       parameters: S({}),
       handler: async () => listCategories(),
     },

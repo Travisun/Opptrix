@@ -23,6 +23,15 @@ export function articleId(subscriptionId: string, guid: string): string {
   return createHash('sha256').update(`${subscriptionId}:${guid}`).digest('hex').slice(0, 24)
 }
 
+/** Prefer http(s) article links; never treat non-URL guid as link. */
+function resolveArticleLink(link: string, guid: string): string {
+  const candidate = link.trim()
+  if (/^https?:\/\//i.test(candidate)) return candidate
+  const guidCandidate = guid.trim()
+  if (/^https?:\/\//i.test(guidCandidate)) return guidCandidate
+  return ''
+}
+
 function pickContent(item: Record<string, unknown>): { summary?: string; content_html?: string } {
   const encoded = item.contentEncoded as string | undefined
   const content = item.content as string | undefined
@@ -68,7 +77,7 @@ export async function parseFeedXml(
       subscription_id: subscription.id,
       guid: guid || undefined,
       title,
-      link: link || guid,
+      link: resolveArticleLink(link, guid),
       pub_date: parsePubDate(item),
       summary,
       content_html,

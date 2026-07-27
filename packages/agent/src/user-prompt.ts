@@ -18,6 +18,7 @@ export interface UserPromptPayload {
   id: string
   title?: string
   prompt: string
+  /** 选择题预置选项；空数组表示 confirm 模式（底部拒绝/确认） */
   options: UserPromptOption[]
   allowMultiple?: boolean
   /** choice=普通选项；secret=保险箱密码录入 */
@@ -26,6 +27,15 @@ export interface UserPromptPayload {
   name?: string
   /** kind=secret 时建议的 inject_hosts */
   inject_hosts?: string[]
+  /** confirm 模式拒绝按钮文案，默认「拒绝」；回传 id 固定为 reject */
+  reject_label?: string
+  /** confirm 模式确认按钮文案，默认「确认」；回传 id 固定为 confirm */
+  confirm_label?: string
+  /**
+   * 是否显示「其它，自行输入」。
+   * confirm 模式默认 false；有 options 的选择题默认 true。
+   */
+  allow_custom?: boolean
 }
 
 /** 用户作答结果 — 回传给 Agent 工具输出（secret 永不含明文） */
@@ -144,6 +154,21 @@ export function normalizeUserPromptOptions(raw: unknown): UserPromptOption[] | n
   return options
 }
 
+function parseOptionalLabel(raw: unknown, field: string): { label?: string; error?: string } {
+  if (raw == null) return {}
+  const label = String(raw).trim()
+  if (!label) return { error: `${field} 不能为空字符串` }
+  return { label }
+}
+
+function parseAllowCustom(raw: unknown, defaultValue: boolean): boolean {
+  if (raw == null) return defaultValue
+  if (typeof raw === 'boolean') return raw
+  if (raw === 'true' || raw === 1 || raw === '1') return true
+  if (raw === 'false' || raw === 0 || raw === '0') return false
+  return Boolean(raw)
+}
+
 export function parseAskUserArgs(args: Record<string, unknown>): {
   payload?: Omit<UserPromptPayload, 'id'>
   error?: string
@@ -151,24 +176,48 @@ export function parseAskUserArgs(args: Record<string, unknown>): {
   const prompt = String(args.prompt ?? args.question ?? '').trim()
   if (!prompt) return { error: 'prompt 不能为空' }
 
+  const titleRaw = args.title
+  const title = titleRaw == null ? undefined : String(titleRaw).trim() || undefined
+
   const rawOptions = args.options
+  const omitOrEmpty = rawOptions == null
+    || (Array.isArray(rawOptions) && rawOptions.length === 0)
+
+  // confirm 模式：省略 options 或传空数组
+  if (omitOrEmpty) {
+    const rejectParsed = parseOptionalLabel(args.reject_label ?? args.rejectLabel, 'reject_label')
+    if (rejectParsed.error) return { error: rejectParsed.error }
+    const confirmParsed = parseOptionalLabel(args.confirm_label ?? args.confirmLabel, 'confirm_label')
+    if (confirmParsed.error) return { error: confirmParsed.error }
+
+    return {
+      payload: {
+        kind: 'choice',
+        prompt,
+        title,
+        options: [],
+        allowMultiple: false,
+        reject_label: rejectParsed.label,
+        confirm_label: confirmParsed.label,
+        allow_custom: parseAllowCustom(args.allow_custom ?? args.allowCustom, false),
+      },
+    }
+  }
+
   if (!Array.isArray(rawOptions)) {
-    return { error: `options 须为 ${USER_PROMPT_OPTIONS_MIN}–${USER_PROMPT_OPTIONS_MAX} 个对象数组，每项含 id 与 label` }
+    return { error: `options 须为数组：省略/空数组为确认模式，或 ${USER_PROMPT_OPTIONS_MIN}–${USER_PROMPT_OPTIONS_MAX} 个选项对象` }
   }
   if (rawOptions.length > USER_PROMPT_OPTIONS_MAX) {
     return { error: `选项过多（最多 ${USER_PROMPT_OPTIONS_MAX} 个），请精简后再试` }
   }
   if (rawOptions.length < USER_PROMPT_OPTIONS_MIN) {
-    return { error: `请至少提供 ${USER_PROMPT_OPTIONS_MIN} 个选项` }
+    return { error: `选择题请提供至少 ${USER_PROMPT_OPTIONS_MIN} 个选项，或省略 options 使用确认模式` }
   }
 
   const options = normalizeUserPromptOptions(rawOptions)
   if (!options) {
     return { error: `options 须为 ${USER_PROMPT_OPTIONS_MIN}–${USER_PROMPT_OPTIONS_MAX} 个对象数组，每项含唯一 id 与非空 label` }
   }
-
-  const titleRaw = args.title
-  const title = titleRaw == null ? undefined : String(titleRaw).trim() || undefined
 
   return {
     payload: {
@@ -177,6 +226,7 @@ export function parseAskUserArgs(args: Record<string, unknown>): {
       title,
       options,
       allowMultiple: Boolean(args.allow_multiple ?? args.allowMultiple),
+      allow_custom: parseAllowCustom(args.allow_custom ?? args.allowCustom, true),
     },
   }
 }
