@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, memo } from 'react'
+import { useRef, useEffect, useLayoutEffect, useCallback, useState, memo } from 'react'
 import {
   Text, makeStyles, mergeClasses,
 } from '@fluentui/react-components'
@@ -10,6 +10,7 @@ import type { ChatLiveTrace, ChatUserPromptPayload, UserPromptAnswerPayload } fr
 import { getExpert, submitUserPromptResponse } from '../api/client'
 import type { ChatStreamUiRef } from './chatStreamUiBridge'
 import type { SessionStreamSnapshot } from './sessionStreamRuntime'
+import type { QueuedPrompt } from './sessionPromptQueue'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
@@ -70,7 +71,8 @@ const useStyles = makeStyles({
   },
   contentColumn: {
     width: '100%',
-    padding: `8px 0 ${opptrixTokens.chatThreadScrollPadBottom}`,
+    paddingTop: '8px',
+    paddingBottom: 0,
     display: 'flex',
     flexDirection: 'column',
     gap: '5px',
@@ -80,7 +82,7 @@ const useStyles = makeStyles({
     paddingTop: '4px',
   },
   contentColumnMobile: {
-    padding: `8px 0 ${opptrixTokens.chatThreadScrollPadBottomMobile}`,
+    paddingTop: '8px',
     gap: '5px',
   },
   composerDock: {
@@ -279,6 +281,9 @@ interface ChatViewProps {
   backendOk?: boolean
   onSubmit: (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => void
   onStop?: () => void
+  promptQueue?: QueuedPrompt[]
+  onPromptQueueRemove?: (id: string) => void
+  onPromptQueueRunNow?: (id: string) => void
   onForkMessage?: (messageIndex: number) => void
   ensureSession?: () => Promise<string>
   onQuoteSelection?: (selection: MessageSelection) => void
@@ -310,7 +315,7 @@ function ChatView({
   isMobile = false,
   llmLabel = '',
   backendOk = false,
-  onSubmit, onStop, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
+  onSubmit, onStop, promptQueue = [], onPromptQueueRemove, onPromptQueueRunNow, onForkMessage, onQuoteSelection, onEphemeralAsk, onClearContextRef, onModelChange,
   ensureSession,
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
@@ -391,9 +396,16 @@ function ChatView({
   }, [dismissPendingUserPrompt, onStreamError, sessionId])
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const bodyShellRef = useRef<HTMLDivElement>(null)
+  const composerInnerRef = useRef<HTMLDivElement>(null)
   const stickToBottomRef = useRef(true)
   const prevLoadingRef = useRef(false)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
+  /** 随 composer 实际高度（含「接下来」/快捷提问）动态抬高线程底部留白 */
+  const [threadScrollPadBottom, setThreadScrollPadBottom] = useState(() => (
+    typeof window !== 'undefined' && window.innerWidth < 768
+      ? Number.parseInt(opptrixTokens.chatThreadScrollPadBottomMobile, 10) || 196
+      : Number.parseInt(opptrixTokens.chatThreadScrollPadBottom, 10) || 212
+  ))
   const [pinnedToolbar, setPinnedToolbar] = useState<{
     selection: MessageSelection
     anchor: MessageSelectionAnchor
@@ -544,6 +556,32 @@ function ChatView({
     setScrollbarHalfOffset(hasScrollbar && gutter > 0 ? gutter / 2 : 0)
   }, [])
 
+  const syncThreadScrollPad = useCallback(() => {
+    const el = composerInnerRef.current
+    if (!el) return
+    const next = Math.ceil(el.getBoundingClientRect().height)
+    if (next > 0) setThreadScrollPadBottom(next)
+  }, [])
+
+  useLayoutEffect(() => {
+    syncThreadScrollPad()
+    const el = composerInnerRef.current
+    if (!el) return
+    const observer = new ResizeObserver(() => syncThreadScrollPad())
+    observer.observe(el)
+    return () => observer.disconnect()
+  }, [
+    syncThreadScrollPad,
+    promptQueue.length,
+    pendingUserPrompt,
+    starters.length,
+    isExpertSession,
+    isEmpty,
+    error,
+    loading,
+    contextRef,
+  ])
+
   useEffect(() => {
     syncScrollbarHalfOffset()
     const el = chatBoxRef.current
@@ -568,6 +606,11 @@ function ChatView({
     if (!el) return
     el.scrollTo({ top: el.scrollHeight, behavior })
   }, [])
+
+  useEffect(() => {
+    if (!stickToBottomRef.current) return
+    scrollToBottom('auto')
+  }, [threadScrollPadBottom, scrollToBottom])
 
   const scrollToMessageStart = useCallback((messageIndex: number, behavior: ScrollBehavior = 'auto') => {
     const container = chatBoxRef.current
@@ -726,6 +769,7 @@ function ChatView({
                 isMobile && s.contentColumnMobile,
                 electronChrome && s.contentColumnElectron,
               )}
+              style={{ paddingBottom: `${threadScrollPadBottom}px` }}
             >
               {isEmpty && (
                 <div
@@ -802,6 +846,7 @@ function ChatView({
 
         <div className={s.composerDock}>
           <div
+            ref={composerInnerRef}
             className={mergeClasses(s.composerInner, isMobile && s.composerInnerMobile)}
             style={scrollbarHalfOffset > 0
               ? { transform: `translateX(-${scrollbarHalfOffset}px)` }
@@ -829,6 +874,9 @@ function ChatView({
               userPrompt={pendingUserPrompt}
               userPromptSubmitting={userPromptSubmitting}
               onUserPromptSubmit={pendingUserPrompt ? handleUserPromptSubmit : undefined}
+              promptQueue={promptQueue}
+              onPromptQueueRemove={onPromptQueueRemove}
+              onPromptQueueRunNow={onPromptQueueRunNow}
             />
           </div>
         </div>

@@ -51,8 +51,10 @@ import {
 } from './experts/prompt-assembler.js'
 import {
   bindWorkspaceToolBridge,
+  unbindWorkspaceToolBridge,
   type WorkspaceToolBridge,
 } from './mcp/workspace-tools.js'
+import { runInToolSession } from './mcp/tool-session-context.js'
 import {
   CONTEXT_COMPACT_HINT,
   ensureContextBudget,
@@ -256,7 +258,7 @@ export class AgentEngine {
     return { broker, openAiTools }
   }
 
-  private bindWorkspaceBridge(sessionId: string, emit: (event: ChatProgressEvent) => void, signal?: AbortSignal) {
+  private bindWorkspaceBridge(sessionId: string, emit: (event: ChatProgressEvent) => void, signal?: AbortSignal): number {
     const bridge: WorkspaceToolBridge = {
       sessionId,
       signal,
@@ -313,7 +315,7 @@ export class AgentEngine {
         return this.userPromptBridge.waitForAnswer(sessionId, promptId, signal)
       },
     }
-    bindWorkspaceToolBridge(bridge)
+    return bindWorkspaceToolBridge(bridge)
   }
 
   listWorkspaceGrants(sessionId: string) {
@@ -335,8 +337,8 @@ export class AgentEngine {
     return this.workspaceService.removeGrant(sessionId, grantId)
   }
 
-  private bindPackBridge(sessionId: string) {
-    this.tools.bindPackSession({
+  private bindPackBridge(sessionId: string): number {
+    return this.tools.bindPackSession({
       sessionId,
       listPacks: () => listToolPacksPayload(this.lastRoundPackIds),
       activatePacks: (packIds: string[]) => {
@@ -917,8 +919,8 @@ export class AgentEngine {
       contextRef: record.contextRef,
     })
     this.seedExpertDefaultPacks(sessionId, record)
-    this.bindPackBridge(sessionId)
-    this.bindWorkspaceBridge(sessionId, emit, signal)
+    const packBridgeGen = this.bindPackBridge(sessionId)
+    const workspaceBridgeGen = this.bindWorkspaceBridge(sessionId, emit, signal)
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
     let { broker, openAiTools } = await this.rebuildRoundTools(activeNames)
@@ -1115,7 +1117,7 @@ export class AgentEngine {
             } else if (!activeSet.has(fn) && !parseNamespacedMcpTool(fn)) {
               result = { error: unloadedToolHint(fn) }
             } else {
-              result = await broker.call(fn, args, { signal })
+              result = await runInToolSession(sessionId, () => broker.call(fn, args, { signal }))
               if (
                 fn === 'activate_tool_pack'
                 || fn === 'enable_mcp_server'
@@ -1193,8 +1195,8 @@ export class AgentEngine {
     return { reply, toolsUsed, sessionId, title: record.title }
     } finally {
       await broker.close().catch(() => {})
-      this.tools.clearPackSession()
-      bindWorkspaceToolBridge(null)
+      this.tools.clearPackSession(sessionId, packBridgeGen)
+      unbindWorkspaceToolBridge(sessionId, workspaceBridgeGen)
     }
     } catch (e) {
       if (

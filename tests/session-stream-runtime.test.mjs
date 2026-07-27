@@ -40,11 +40,11 @@ describe('formatLiveThinkingStatus', () => {
   it('includes step count only when > 0', () => {
     assert.equal(
       formatLiveThinkingStatus('模型正在整理结果', 1200, 8),
-      '模型正在整理结果 · 约 1.2k tokens · 共 8 步…',
+      '模型正在整理结果 · 约 1.2k tokens · 第 8 步…',
     )
     assert.equal(
       formatLiveThinkingStatus('模型正在整理结果', undefined, 3),
-      '模型正在整理结果 · 共 3 步…',
+      '模型正在整理结果 · 第 3 步…',
     )
   })
 })
@@ -211,7 +211,7 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       },
     })
     assert.equal(snap.liveTrace?.phaseLabel, '模型正在整理结果')
-    assert.match(snap.liveTrace?.thinkingLabel ?? '', /共 1 步/)
+    assert.match(snap.liveTrace?.thinkingLabel ?? '', /第 1 步/)
 
     snap = applyChatProgressEvent(snap, {
       type: 'reply',
@@ -219,7 +219,7 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
     })
     assert.equal(
       snap.liveTrace?.thinkingLabel,
-      '模型正在整理结果 · 约 1.2k tokens · 共 1 步…',
+      '模型正在整理结果 · 约 1.2k tokens · 第 1 步…',
     )
   })
 
@@ -244,6 +244,6 @@ describe('applyChatProgressEvent pendingUserPrompt', () => {
       },
     })
     assert.equal(snap.liveTrace?.estimatedTokens, 50)
-    assert.equal(snap.liveTrace?.thinkingLabel, '模型正在思考 · 约 50 tokens · 共 1 步…')
+    assert.equal(snap.liveTrace?.thinkingLabel, '模型正在思考 · 约 50 tokens · 第 1 步…')
   })
 })

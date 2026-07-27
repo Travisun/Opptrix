@@ -10,6 +10,18 @@ import {
   syncStreamSnapshotToUi,
   type SessionStreamSnapshot,
 } from './sessionStreamRuntime'
+import {
+  clearSessionPromptQueue,
+  enqueueQueuedPrompt,
+  listQueuedPrompts,
+  promoteQueuedPrompt,
+  removeQueuedPrompt,
+  resolveDrainAction,
+  shiftQueuedPrompt,
+  takeQueuedPromptById,
+  type DrainIntent,
+  type QueuedPrompt,
+} from './sessionPromptQueue'
 import type { ChatProgressEvent } from '../types/chatProgress'
 import SettingsPage from '../pages/SettingsPage'
 import NewsCenterPage from '../pages/news/NewsCenterPage'
@@ -292,6 +304,10 @@ export default function ChatApp() {
   const sessionStreamGenRef = useRef(new Map<string, number>())
   const stoppingSessionsRef = useRef(new Set<string>())
   const streamingSessionIdsRef = useRef(new Set<string>())
+  /** 每会话 drain 意图：Stop=none；失败/成功=auto；打断指定项=runItem */
+  const drainIntentRef = useRef(new Map<string, DrainIntent>())
+  /** 当前会话排队提示（localStorage 镜像） */
+  const [promptQueue, setPromptQueue] = useState<QueuedPrompt[]>([])
   /** 流结束后延迟清除过程条的 timer（sessionId → timeout id） */
   const streamResetTimersRef = useRef(new Map<string, number>())
   /** 本轮生成期间曾失焦/不可见（sessionId → true） */
@@ -448,6 +464,20 @@ export default function ChatApp() {
       syncStreamSnapshotToUi(next, streamUiRef.current)
     }
   }, [])
+
+  const syncPromptQueueUi = useCallback((sessionId: string | null) => {
+    if (!sessionId) {
+      setPromptQueue([])
+      return
+    }
+    if (activeIdRef.current === sessionId) {
+      setPromptQueue(listQueuedPrompts(sessionId))
+    }
+  }, [])
+
+  useEffect(() => {
+    syncPromptQueueUi(activeId)
+  }, [activeId, syncPromptQueueUi])
 
   const abortSessionStream = useCallback(async (sessionId: string) => {
     sessionStreamGenRef.current.set(
@@ -689,6 +719,9 @@ export default function ChatApp() {
       if (streamingSessionIdsRef.current.has(id)) {
         await abortSessionStream(id)
       }
+      clearSessionPromptQueue(id)
+      drainIntentRef.current.delete(id)
+      syncPromptQueueUi(activeIdRef.current === id ? null : activeIdRef.current)
       await deleteSession(id)
       const list = await refreshSessions()
       if (activeId === id) {
@@ -731,6 +764,8 @@ export default function ChatApp() {
   const handleArchive = useCallback(async (id: string, folderId: string) => {
     try {
       await archiveSession(id, folderId)
+      clearSessionPromptQueue(id)
+      drainIntentRef.current.delete(id)
       const list = await refreshSessions()
       setSessions(list)
       void refreshArchived()
@@ -904,6 +939,7 @@ export default function ChatApp() {
   const handleStop = useCallback(async () => {
     const sid = activeId
     if (!sid || !streamingSessionIdsRef.current.has(sid) || stoppingSessionsRef.current.has(sid)) return
+    drainIntentRef.current.set(sid, { kind: 'none' })
     await abortSessionStream(sid)
   }, [abortSessionStream, activeId])
 
@@ -917,6 +953,41 @@ export default function ChatApp() {
   sessionModelRef.current = sessionModel
 
   const submitImplRef = useRef<(text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => Promise<void>>(async () => {})
+
+  const drainPromptQueueAfterStream = useCallback((sessionId: string) => {
+    const intent = drainIntentRef.current.get(sessionId) ?? { kind: 'auto' }
+    drainIntentRef.current.delete(sessionId)
+
+    const pendingAsk = Boolean(streamCacheRef.current.get(sessionId)?.pendingUserPrompt)
+    const decision = resolveDrainAction(intent, {
+      hasPendingUserPrompt: pendingAsk,
+      alreadyStreaming: streamingSessionIdsRef.current.has(sessionId)
+        || streamHandlesRef.current.has(sessionId),
+    })
+    if (decision.action === 'skip') {
+      syncPromptQueueUi(sessionId)
+      return
+    }
+
+    let next: QueuedPrompt | null = null
+    if (decision.action === 'take') {
+      next = takeQueuedPromptById(sessionId, decision.itemId).item
+    } else {
+      next = shiftQueuedPrompt(sessionId).item
+    }
+    syncPromptQueueUi(sessionId)
+    if (!next) return
+
+    // 微任务：确保本流 finally 的 streaming 清理已完成
+    queueMicrotask(() => {
+      if (streamingSessionIdsRef.current.has(sessionId)) return
+      void submitImplRef.current(
+        next.text || undefined,
+        next.attachmentIds,
+        next.attachmentMetas,
+      )
+    })
+  }, [syncPromptQueueUi])
 
   submitImplRef.current = async (text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
     const msg = (text ?? '').trim()
@@ -936,7 +1007,18 @@ export default function ChatApp() {
       }
     }
 
-    if (streamingSessionIdsRef.current.has(sessionId)) return
+    if (streamingSessionIdsRef.current.has(sessionId)) {
+      const result = enqueueQueuedPrompt(sessionId, {
+        text: msg,
+        attachmentIds: ids,
+        attachmentMetas,
+      })
+      syncPromptQueueUi(sessionId)
+      if (!result.ok && result.reason === 'full') {
+        setError('排队已满，请先处理或删除后再添加')
+      }
+      return
+    }
 
     const pendingReset = streamResetTimersRef.current.get(sessionId)
     if (pendingReset != null) {
@@ -950,6 +1032,8 @@ export default function ChatApp() {
     for (const key of [...doneNotifiedGensRef.current]) {
       if (key.startsWith(`${sessionId}:`)) doneNotifiedGensRef.current.delete(key)
     }
+    // 新一轮默认自动续跑下一条；Stop / runNow 会在本轮中途覆盖
+    drainIntentRef.current.set(sessionId, { kind: 'auto' })
     const initialSnapshot = createThinkingStreamSnapshot()
     streamCacheRef.current.set(sessionId, initialSnapshot)
     markSessionStreaming(sessionId, true)
@@ -1000,47 +1084,43 @@ export default function ChatApp() {
         }
       }, sessionModelRef.current, abortController.signal, ids.length ? ids : undefined)
 
-      if (isStreamStale()) return
-
-      const sid = resolvedSessionId
-      if (sid !== sessionId && activeIdRef.current === sessionId) {
-        setActiveId(sid)
+      if (!isStreamStale()) {
+        const sid = resolvedSessionId
+        if (sid !== sessionId && activeIdRef.current === sessionId) {
+          setActiveId(sid)
+        }
+        await applyFreshSession(sid)
       }
-      await applyFreshSession(sid)
     } catch (e) {
       const aborted = (
         (e instanceof DOMException && e.name === 'AbortError')
         || (e instanceof Error && e.name === 'AbortError')
       )
       if (aborted) {
-        if (isStreamStale()) return
         try {
           await applyFreshSession(sessionId)
         } catch {
           /* keep current messages */
         }
-        return
-      }
-      if (isStreamStale()) return
-      if (activeIdRef.current === sessionId) {
-        pushComposerDraft(msg)
-        setError(e instanceof Error ? e.message : '发送失败')
-      }
-      try {
-        await applyFreshSession(sessionId)
-      } catch {
-        if (isStreamStale()) return
+      } else if (!isStreamStale()) {
         if (activeIdRef.current === sessionId) {
-          setMessages(prev => prev.slice(0, -1))
+          setError(e instanceof Error ? e.message : '发送失败')
+        }
+        try {
+          await applyFreshSession(sessionId)
+        } catch {
+          if (!isStreamStale() && activeIdRef.current === sessionId) {
+            setMessages(prev => prev.slice(0, -1))
+          }
         }
       }
     } finally {
       streamHandlesRef.current.delete(sessionId)
       stoppingSessionsRef.current.delete(sessionId)
+      const hadPendingAsk = Boolean(streamCacheRef.current.get(sessionId)?.pendingUserPrompt)
       streamCacheRef.current.delete(sessionId)
       markSessionStreaming(sessionId, false)
       if (activeIdRef.current === sessionId) {
-        // 延迟清除过程条，让用户能看到最后的「约 N tokens」一小会儿
         const prevTimer = streamResetTimersRef.current.get(sessionId)
         if (prevTimer != null) window.clearTimeout(prevTimer)
         const timer = window.setTimeout(() => {
@@ -1052,12 +1132,47 @@ export default function ChatApp() {
         }, 500)
         streamResetTimersRef.current.set(sessionId, timer)
       }
+      if (hadPendingAsk) {
+        const intent = drainIntentRef.current.get(sessionId)
+        if (!intent || intent.kind === 'auto') {
+          drainIntentRef.current.set(sessionId, { kind: 'none' })
+        }
+      }
+      drainPromptQueueAfterStream(sessionId)
     }
   }
 
   const handleSubmit = useCallback((text?: string, attachmentIds?: string[], attachmentMetas?: ChatAttachmentMeta[]) => {
     void submitImplRef.current(text, attachmentIds, attachmentMetas)
   }, [])
+
+  const handlePromptQueueRemove = useCallback((id: string) => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    removeQueuedPrompt(sid, id)
+    syncPromptQueueUi(sid)
+  }, [syncPromptQueueUi])
+
+  const handlePromptQueueRunNow = useCallback((id: string) => {
+    const sid = activeIdRef.current
+    if (!sid) return
+    const pendingAsk = Boolean(streamCacheRef.current.get(sid)?.pendingUserPrompt)
+      || Boolean(streamUiRef.current?.readPendingUserPrompt?.())
+    if (pendingAsk) return
+
+    if (!streamingSessionIdsRef.current.has(sid)) {
+      const { item } = takeQueuedPromptById(sid, id)
+      syncPromptQueueUi(sid)
+      if (!item) return
+      void submitImplRef.current(item.text || undefined, item.attachmentIds, item.attachmentMetas)
+      return
+    }
+
+    promoteQueuedPrompt(sid, id)
+    syncPromptQueueUi(sid)
+    drainIntentRef.current.set(sid, { kind: 'runItem', itemId: id })
+    void abortSessionStream(sid)
+  }, [abortSessionStream, syncPromptQueueUi])
 
   const ensureSession = useCallback(async (): Promise<string> => {
     if (activeIdRef.current) return activeIdRef.current
@@ -1598,6 +1713,9 @@ export default function ChatApp() {
                   onSubmit={handleSubmit}
                   ensureSession={ensureSession}
                   onStop={handleStop}
+                  promptQueue={promptQueue}
+                  onPromptQueueRemove={handlePromptQueueRemove}
+                  onPromptQueueRunNow={handlePromptQueueRunNow}
                   onForkMessage={handleForkFromMessage}
                   onQuoteSelection={activeId ? handleQuoteSelection : undefined}
                   onEphemeralAsk={activeId ? handleEphemeralAsk : undefined}

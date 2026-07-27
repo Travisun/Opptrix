@@ -24,6 +24,7 @@ import { TOOL_META } from '../tool-meta.js'
 import { getLocalDataCatalog, listLocalDataApis } from '../local-data-catalog.js'
 import type { UserPromptAnswer, UserPromptOption } from '../user-prompt.js'
 import { normalizeVaultSecretName } from '../user-prompt.js'
+import { currentToolSessionId } from './tool-session-context.js'
 
 type JsonSchema = {
   type: 'object'
@@ -65,10 +66,34 @@ export interface WorkspaceToolBridge {
   }) => Promise<UserPromptAnswer>
 }
 
-let bridge: WorkspaceToolBridge | null = null
+type BoundWorkspaceBridge = {
+  bridge: WorkspaceToolBridge
+  gen: number
+}
 
-export function bindWorkspaceToolBridge(next: WorkspaceToolBridge | null) {
-  bridge = next
+let bridgeGenSeq = 0
+const bridgesBySession = new Map<string, BoundWorkspaceBridge>()
+
+/**
+ * 绑定会话级 workspace bridge，返回 generation。
+ * 解绑须带同一 gen，避免同会话打断重发时旧 chat finally 清掉新 bridge。
+ */
+export function bindWorkspaceToolBridge(next: WorkspaceToolBridge): number {
+  const gen = ++bridgeGenSeq
+  bridgesBySession.set(next.sessionId, { bridge: next, gen })
+  return gen
+}
+
+export function unbindWorkspaceToolBridge(sessionId: string, gen: number): void {
+  const cur = bridgesBySession.get(sessionId)
+  if (cur && cur.gen === gen) {
+    bridgesBySession.delete(sessionId)
+  }
+}
+
+/** @deprecated 仅兼容旧调用；请改用 unbindWorkspaceToolBridge(sessionId, gen) */
+export function clearWorkspaceToolBridge(): void {
+  bridgesBySession.clear()
 }
 
 const S = (properties: JsonSchema['properties'], required?: string[]): JsonSchema =>
@@ -168,10 +193,15 @@ function parseInjectHostsArg(raw: unknown): string[] | undefined {
 }
 
 function requireBridge(): WorkspaceToolBridge {
-  if (!bridge) {
+  const sessionId = currentToolSessionId()
+  if (!sessionId) {
     throw new Error('workspace 工具需在聊天会话中调用')
   }
-  return bridge
+  const bound = bridgesBySession.get(sessionId)
+  if (!bound) {
+    throw new Error('workspace 工具需在聊天会话中调用')
+  }
+  return bound.bridge
 }
 
 function parseHeaders(raw: unknown): Record<string, string> | undefined {

@@ -169,20 +169,20 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-base)',
     lineHeight: 1.45,
     color: opptrixCssVars.textSecondary,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
   },
   stepLabelRunning: {
     color: opptrixCssVars.textPrimary,
-    backgroundImage: `linear-gradient(90deg, ${opptrixCssVars.textSecondary} 0%, ${opptrixCssVars.textPrimary} 45%, ${opptrixCssVars.textSecondary} 90%)`,
-    backgroundSize: '220% 100%',
-    backgroundClip: 'text',
-    WebkitBackgroundClip: 'text',
-    WebkitTextFillColor: 'transparent',
-    animationDuration: '1.8s',
+    // 避免 background-clip:text：长状态（含 token / 步数）会被裁成透明看不见
+    opacity: 1,
+    animationDuration: '1.6s',
     animationTimingFunction: 'ease-in-out',
     animationIterationCount: 'infinite',
     animationName: {
-      '0%': { backgroundPosition: '120% center' },
-      '100%': { backgroundPosition: '-120% center' },
+      '0%, 100%': { opacity: 0.72 },
+      '50%': { opacity: 1 },
     },
   },
   stepLabelError: {
@@ -637,7 +637,7 @@ export default function ChatProcessTrace({
 
   // 实时执行时跟随最新步骤滚动到底部（步骤新增或内容/状态更新时）。
   const liveProgressKey = live
-    ? `${steps.length}:${steps.map(st => st.status).join(',')}`
+    ? `${steps.length}:${steps.map(st => st.status).join(',')}:${estimatedTokens ?? ''}:${phaseLabel ?? ''}`
     : ''
   useEffect(() => {
     if (!live) return

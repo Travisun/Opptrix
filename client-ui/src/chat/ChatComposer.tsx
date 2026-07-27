@@ -8,7 +8,9 @@ import ComposerQuickTasks from './ComposerQuickTasks'
 import ChatWorkspaceGrants from './ChatWorkspaceGrants'
 import ComposerStockMentionList from './ComposerStockMentionList'
 import ComposerAgentUserPromptPanel from './ComposerAgentUserPromptPanel'
+import ComposerPromptQueuePanel from './ComposerPromptQueuePanel'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
+import type { QueuedPrompt } from './sessionPromptQueue'
 import { useWatchlist } from '../market/useWatchlist'
 import { useStockMention } from './useStockMention'
 import type { AvailableModel, ChatAttachmentMeta, ChatContextUsage, SessionContextRef } from '../types/chat'
@@ -84,6 +86,26 @@ const useStyles = makeStyles({
     flexWrap: 'nowrap',
     overflowX: 'auto',
   },
+  /** 专家快捷：贴在 composer 输入区顶部；与「接下来」分区（无标题，省纵向空间） */
+  expertStarterBar: {
+    display: 'flex',
+    flexDirection: 'column',
+    width: '100%',
+    boxSizing: 'border-box',
+    margin: '0 0 2px',
+    padding: '0 0 8px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    overflow: 'hidden',
+  },
+  expertStarterTrack: {
+    display: 'flex',
+    flexWrap: 'nowrap',
+    alignItems: 'center',
+    gap: '8px',
+    width: '100%',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+  },
   starterChip: {
     borderRadius: opptrixTokens.radiusFull,
     fontWeight: 500,
@@ -105,6 +127,9 @@ const useStyles = makeStyles({
       outline: `${opptrixTokens.focusRingWidth} solid ${opptrixCssVars.inputBorderFocus}`,
       outlineOffset: opptrixTokens.focusRingOffset,
     },
+  },
+  expertStarterChip: {
+    backgroundColor: 'transparent',
   },
   panelWrap: {
     position: 'relative',
@@ -296,6 +321,10 @@ interface ChatComposerProps {
   userPrompt?: ChatUserPromptPayload | null
   userPromptSubmitting?: boolean
   onUserPromptSubmit?: (answer: UserPromptAnswerPayload) => void
+  /** 当前会话待执行任务（pin 在 composer 上方） */
+  promptQueue?: QueuedPrompt[]
+  onPromptQueueRemove?: (id: string) => void
+  onPromptQueueRunNow?: (id: string) => void
 }
 
 export default function ChatComposer({
@@ -320,6 +349,9 @@ export default function ChatComposer({
   userPrompt = null,
   userPromptSubmitting = false,
   onUserPromptSubmit,
+  promptQueue = [],
+  onPromptQueueRemove,
+  onPromptQueueRunNow,
 }: ChatComposerProps) {
   const s = useStyles()
   const editorRef = useRef<HTMLDivElement>(null)
@@ -464,15 +496,26 @@ export default function ChatComposer({
     }
     const root = editorRef.current
     const composed = root ? getSendText(root).trim() : ''
-    if ((!composed && !attachmentIds.length) || loading) return
+    if ((!composed && !attachmentIds.length) || userPrompt || uploading) return
     onSubmit(composed || undefined, ids, metas)
     clearEditorContent()
     clearPinned()
-  }, [attachmentIds, clearEditorContent, clearPinned, loading, onSubmit, pinned])
+  }, [attachmentIds, clearEditorContent, clearPinned, onSubmit, pinned, uploading, userPrompt])
 
-  const canSend = (hasContent || attachmentIds.length > 0) && !loading && !userPrompt && !uploading
-  const composerLocked = loading || Boolean(userPrompt)
-  const showStarters = starters.length > 0 && (isEmpty || alwaysShowStarters)
+  const hasSendPayload = hasContent || attachmentIds.length > 0
+  const canEnqueueOrSend = hasSendPayload && !userPrompt && !uploading
+  const canSend = canEnqueueOrSend && !loading
+  /** 仅 ask_user / 上传中锁定编辑；执行中仍可输入以加入排队 */
+  const composerLocked = Boolean(userPrompt) || uploading
+  const showWelcomeStarters = starters.length > 0 && isEmpty && !alwaysShowStarters
+  const showExpertStarterBar = alwaysShowStarters && starters.length > 0
+  const sendBusy = loading
+  const sendButtonDisabled = sendBusy
+    ? !(canEnqueueOrSend || onStop)
+    : !canSend
+  const sendAriaLabel = sendBusy
+    ? (canEnqueueOrSend ? '加入排队' : '停止生成')
+    : '发送'
 
   const handleSpeechTranscript = useCallback((text: string) => {
     const root = editorRef.current
@@ -582,9 +625,9 @@ export default function ChatComposer({
         }
         return
       }
-      // 普通 Enter：发送。
+      // 普通 Enter：发送或加入排队。
       e.preventDefault()
-      if (canSend) handleSubmitMessage()
+      if (canEnqueueOrSend) handleSubmitMessage()
     }
   }
 
@@ -602,12 +645,12 @@ export default function ChatComposer({
 
   return (
     <div className={s.wrap}>
-      {showStarters && (
+      {showWelcomeStarters && (
         <div
-          key={isEmpty ? welcomeKey : 'persistent-starters'}
+          key={welcomeKey}
           className={mergeClasses(
             s.startersSection,
-            isEmpty && s.startersSectionEnter,
+            s.startersSectionEnter,
           )}
         >
           <Text className={s.startersLabel}>你可以这样问</Text>
@@ -618,7 +661,7 @@ export default function ChatComposer({
                 className={s.starterChip}
                 variant="pill"
                 size="small"
-                disabled={composerLocked}
+                disabled={Boolean(userPrompt) || uploading}
                 onClick={() => onSubmit(st.text)}
               >
                 {st.label}
@@ -653,6 +696,38 @@ export default function ChatComposer({
           onDrop={handleDrop}
           onDragOver={handleDragOver}
         >
+          {promptQueue.length > 0 && onPromptQueueRemove && onPromptQueueRunNow && (
+            <ComposerPromptQueuePanel
+              items={promptQueue}
+              runNowDisabled={Boolean(userPrompt)}
+              waitingConfirmHint={Boolean(userPrompt)}
+              onRunNow={onPromptQueueRunNow}
+              onRemove={onPromptQueueRemove}
+            />
+          )}
+          {showExpertStarterBar && (
+            <div
+              className={s.expertStarterBar}
+              role="region"
+              aria-label="快捷提问"
+              data-composer-section="starters"
+            >
+              <div className={mergeClasses(s.expertStarterTrack, 'opptrix-scroll-x')}>
+                {starters.map((st, index) => (
+                  <OpptrixButton
+                    key={listRowKey(index, st.label, st.text)}
+                    className={mergeClasses(s.starterChip, s.expertStarterChip)}
+                    variant="pill"
+                    size="small"
+                    disabled={Boolean(userPrompt) || uploading}
+                    onClick={() => onSubmit(st.text)}
+                  >
+                    {st.label}
+                  </OpptrixButton>
+                ))}
+              </div>
+            </div>
+          )}
           <input
             ref={fileInputRef}
             type="file"
@@ -691,7 +766,11 @@ export default function ChatComposer({
                 role="textbox"
                 aria-multiline="true"
                 aria-label="输入问题，@ 选择关注股票"
-                data-placeholder={isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…'}
+                data-placeholder={
+                  loading
+                    ? (isMobile ? '继续输入，将加入排队…' : '继续输入，发送后加入排队…')
+                    : (isMobile ? '输入问题，@ 选择股票…' : '输入问题，@ 选择关注股票，Enter 发送…')
+                }
                 data-empty={hasContent ? undefined : 'true'}
                 onInput={handleInput}
                 onKeyDown={handleKeyDown}
@@ -753,13 +832,22 @@ export default function ChatComposer({
               <OpptrixButton
                 className={mergeClasses(s.sendBtn, 'opptrix-round-icon-btn')}
                 variant="primary"
-                icon={loading ? <PauseFilled fontSize={14} /> : <ArrowUpRegular fontSize={14} />}
-                disabled={loading ? !onStop : !canSend}
+                icon={sendBusy && !canEnqueueOrSend
+                  ? <PauseFilled fontSize={14} />
+                  : <ArrowUpRegular fontSize={14} />}
+                disabled={sendButtonDisabled}
                 onClick={() => {
-                  if (loading) onStop?.()
-                  else handleSubmitMessage()
+                  if (sendBusy && canEnqueueOrSend) {
+                    handleSubmitMessage()
+                    return
+                  }
+                  if (sendBusy) {
+                    onStop?.()
+                    return
+                  }
+                  handleSubmitMessage()
                 }}
-                aria-label={loading ? '停止生成' : '发送'}
+                aria-label={sendAriaLabel}
               />
             </div>
           </div>
