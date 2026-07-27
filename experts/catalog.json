@@ -44,7 +44,7 @@
     {
       "id": "offline-data-steward",
       "title": "离线数据专家",
-      "summary": "把十年日 K 部署到公共区，并用公共包做筛选与板块挖掘",
+      "summary": "部署十年日 K 与本地指标到公共区，并用公共包做筛选与板块挖掘",
       "icon": { "kind": "icon", "value": "expert" },
       "tags": ["离线", "日K", "公共包"],
       "official": true,

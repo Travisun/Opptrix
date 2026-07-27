@@ -180,10 +180,21 @@ export class WorkspaceService {
   async listDir(sessionId: string, rootId: string, relPath = ''): Promise<{
     entries: Array<{ name: string; type: 'file' | 'directory'; size?: number }>
     path: string
+    /** 目标路径尚不存在（非权限/穿越错误）时为 true，避免把裸 ENOENT 抛给 MCP */
+    missing?: boolean
   }> {
     const { grant, abs } = await this.gatePath(sessionId, rootId, relPath)
     assertReadable(grant)
-    const names = await fs.readdir(abs)
+    let names: string[]
+    try {
+      names = await fs.readdir(abs)
+    } catch (err) {
+      const code = err && typeof err === 'object' && 'code' in err ? String(err.code) : ''
+      if (code === 'ENOENT') {
+        return { entries: [], path: relPath || '.', missing: true }
+      }
+      throw err
+    }
     const entries = await Promise.all(names.map(async name => {
       const full = path.join(abs, name)
       const st = await fs.stat(full)
