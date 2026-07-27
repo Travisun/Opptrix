@@ -1,6 +1,7 @@
 import { Client } from '@modelcontextprotocol/sdk/client/index.js'
 import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import { ErrorCode, McpError } from '@modelcontextprotocol/sdk/types.js'
+import { resolveOpptrixAppVersion } from '@opptrix/shared'
 import type { ToolRegistry, OpenAiTool, JsonSchema } from '../tools.js'
 import { createMcpServer } from './server.js'
 
@@ -46,7 +47,7 @@ export class McpToolBroker {
     private readonly registry: ToolRegistry,
     private readonly toolNames: readonly string[] | null,
   ) {
-    this.client = new Client({ name: 'opptrix-agent', version: '0.6.0' })
+    this.client = new Client({ name: 'opptrix-agent', version: resolveOpptrixAppVersion() })
   }
 
   /** @param toolNames null = 全部工具；传数组 = 白名单子集（如挖掘场景） */

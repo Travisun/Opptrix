@@ -4,6 +4,7 @@ import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
 } from '@modelcontextprotocol/sdk/types.js'
+import { resolveOpptrixAppVersion } from '@opptrix/shared'
 import type { ToolRegistry } from '../tools.js'
 
 export interface CreateMcpServerOptions {
@@ -18,7 +19,7 @@ export function createMcpServer(
   const toolNames = opts.toolNames === undefined ? null : opts.toolNames
 
   const server = new Server(
-    { name: 'opptrix-data', version: '0.6.0' },
+    { name: 'opptrix-data', version: resolveOpptrixAppVersion() },
     { capabilities: { tools: {} } },
   )
 

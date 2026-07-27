@@ -45,3 +45,26 @@ export function resolveProjectRoot(start = process.cwd()): string {
   }
   return process.cwd()
 }
+
+/**
+ * Opptrix 产品版本（Agent / health / get_project_info）。
+ * 优先 `OPPTRIX_APP_VERSION`；否则读 monorepo `apps/desktop/package.json`；再否则 `unknown`。
+ * 权威来源是桌面端 package.json，不是 server package.json。
+ */
+export function resolveOpptrixAppVersion(): string {
+  const fromEnv = process.env.OPPTRIX_APP_VERSION?.trim()
+  if (fromEnv) return fromEnv
+
+  try {
+    const pkgPath = path.join(resolveProjectRoot(), 'apps', 'desktop', 'package.json')
+    if (!fs.existsSync(pkgPath)) return 'unknown'
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: unknown }
+    if (typeof pkg.version === 'string') {
+      const v = pkg.version.trim()
+      if (v) return v
+    }
+  } catch {
+    /* fall through */
+  }
+  return 'unknown'
+}
