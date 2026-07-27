@@ -504,9 +504,9 @@ export const TOOL_META: Record<string, ToolMeta> = {
   ask_user: {
     miningEligible: false,
     usageGuide:
-      '分析前需用户确认方向、范围、授权或偏好且上下文无法推断时调用：省略 options 为拒绝/确认双按钮（可用 reject_label/confirm_label）；有 2–50 选项为选择题。',
+      '需用户确认/选择/填空且上下文无法推断时调用。confirm=授权或是否继续；choice=有限选项 2–50；text=开放填空（mode:"text" 或空 options+allow_custom=true）。禁止用 confirm 收集开放答案。',
     compliance:
-      'prompt 必填、面向投资者且勿用 emoji；options 可省略/[]（确认模式）或 2–50 项且 id 唯一；confirm 回传 id 固定 reject|confirm；allow_custom 确认默认 false、选择题默认 true；同一轮最多 1 次；禁止索要密钥。',
+      'prompt 必填、面向投资者且勿用 emoji；mode（或别名 interaction）为 confirm|choice|text；空 options 默认 confirm（兼容），空 options+allow_custom=true 或 mode=text 为开放输入；choice 须 2–50 项且 id 唯一；confirm 回传 reject|confirm；同一轮最多 1 次；禁止索要密钥。',
   },
   list_enabled_providers: {
     hubFeature: 'provider_list',

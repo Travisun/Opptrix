@@ -67,6 +67,7 @@ test('parseAskUserArgs validates prompt and options', () => {
   assert.equal(parsed.error, undefined)
   assert.equal(parsed.payload?.title, '分析范围')
   assert.equal(parsed.payload?.options.length, 2)
+  assert.equal(parsed.payload?.mode, 'choice')
   assert.equal(parsed.payload?.allow_custom, true)
 })
 
@@ -74,6 +75,7 @@ test('parseAskUserArgs confirm mode when options omitted or empty', () => {
   const omitted = parseAskUserArgs({ prompt: '是否授权使用本对话局域网？' })
   assert.equal(omitted.error, undefined)
   assert.deepEqual(omitted.payload?.options, [])
+  assert.equal(omitted.payload?.mode, 'confirm')
   assert.equal(omitted.payload?.allow_custom, false)
   assert.equal(omitted.payload?.reject_label, undefined)
   assert.equal(omitted.payload?.confirm_label, undefined)
@@ -81,18 +83,59 @@ test('parseAskUserArgs confirm mode when options omitted or empty', () => {
   const empty = parseAskUserArgs({ prompt: '继续？', options: [] })
   assert.equal(empty.error, undefined)
   assert.deepEqual(empty.payload?.options, [])
+  assert.equal(empty.payload?.mode, 'confirm')
   assert.equal(empty.payload?.allow_custom, false)
 
   const customLabels = parseAskUserArgs({
     prompt: '是否授权？',
+    mode: 'confirm',
     reject_label: '不允许',
     confirm_label: '授权使用',
-    allow_custom: true,
   })
   assert.equal(customLabels.error, undefined)
+  assert.equal(customLabels.payload?.mode, 'confirm')
   assert.equal(customLabels.payload?.reject_label, '不允许')
   assert.equal(customLabels.payload?.confirm_label, '授权使用')
-  assert.equal(customLabels.payload?.allow_custom, true)
+  assert.equal(customLabels.payload?.allow_custom, false)
+})
+
+test('parseAskUserArgs text mode via mode=text or empty options + allow_custom', () => {
+  const byMode = parseAskUserArgs({
+    prompt: '请补充关注的行业',
+    mode: 'text',
+  })
+  assert.equal(byMode.error, undefined)
+  assert.equal(byMode.payload?.mode, 'text')
+  assert.deepEqual(byMode.payload?.options, [])
+  assert.equal(byMode.payload?.allow_custom, true)
+  assert.equal(byMode.payload?.reject_label, undefined)
+  assert.equal(byMode.payload?.confirm_label, undefined)
+
+  const byAllowCustom = parseAskUserArgs({
+    prompt: '还有哪些偏好？',
+    options: [],
+    allow_custom: true,
+  })
+  assert.equal(byAllowCustom.error, undefined)
+  assert.equal(byAllowCustom.payload?.mode, 'text')
+  assert.equal(byAllowCustom.payload?.allow_custom, true)
+
+  const byAlias = parseAskUserArgs({
+    prompt: '请填写备注',
+    interaction: 'text',
+  })
+  assert.equal(byAlias.error, undefined)
+  assert.equal(byAlias.payload?.mode, 'text')
+
+  // 显式 confirm 优先于 allow_custom=true
+  const confirmWins = parseAskUserArgs({
+    prompt: '是否继续？',
+    mode: 'confirm',
+    allow_custom: true,
+  })
+  assert.equal(confirmWins.error, undefined)
+  assert.equal(confirmWins.payload?.mode, 'confirm')
+  assert.equal(confirmWins.payload?.allow_custom, true)
 })
 
 test('parseAskUserArgs allow_custom false hides custom for choice mode', () => {
@@ -105,6 +148,7 @@ test('parseAskUserArgs allow_custom false hides custom for choice mode', () => {
     allow_custom: false,
   })
   assert.equal(parsed.error, undefined)
+  assert.equal(parsed.payload?.mode, 'choice')
   assert.equal(parsed.payload?.allow_custom, false)
 })
 
@@ -114,7 +158,14 @@ test('parseAskUserArgs rejects single option array', () => {
       prompt: '选一个',
       options: [{ id: 'a', label: '仅一项' }],
     }).error ?? '',
-    /至少|确认模式/,
+    /至少|confirm|text/,
+  )
+})
+
+test('parseAskUserArgs rejects choice mode without options', () => {
+  assert.match(
+    parseAskUserArgs({ prompt: '选一个', mode: 'choice' }).error ?? '',
+    /choice|options/,
   )
 })
 

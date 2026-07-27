@@ -282,7 +282,7 @@ Opptrix/
   - **触发**：每轮 `llm.chat` 前检查；上游 `context_length_exceeded` 等 → 强制 aggressive compact 后**重试 1 次**；`setSessionModel` 换模型后按新窗再检查。
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer 已用/窗长估算）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
-- **`ask_user`**：Agent 需用户确认分析方向/范围/授权时调用；SSE 推送 `user_prompt` 事件。**确认模式**：省略 `options`（或 `[]`）→ 底部「拒绝/确认」（可用 `reject_label`/`confirm_label` 定制；回传 id 固定 `reject`/`confirm`）；**选择题**：预置选项 2–50 个。`allow_custom` 控制自行输入（确认默认关、选择题默认开）。多选支持全选；prompt/label 勿用 emoji。用户作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
+- **`ask_user`**：Agent 需用户确认/选择/填空时调用；SSE 推送 `user_prompt`。**confirm**：省略 `options`（或 `[]`）且未设 `mode=text`/`allow_custom=true` → 底部「拒绝/确认」（可用 `reject_label`/`confirm_label`；回传 id 固定 `reject`/`confirm`）。**choice**：预置选项 2–50。**text**：`mode:"text"` 或空 options + `allow_custom=true` → 仅开放填空，无授权双钮。禁止用 confirm 收集开放答案。`allow_custom`：confirm 默认关、choice 默认开。多选支持全选；prompt/label 勿用 emoji。作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
 - **行业分析**：`industry_mining` / `industry_mermaid`（属 `industry` pack，需播种或 activate）→ 代表公司用 `search_instruments` + `get_instrument_*`
 - **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack
 - **跨市场搜索**：唯一入口 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO）

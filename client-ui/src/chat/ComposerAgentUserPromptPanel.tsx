@@ -20,12 +20,26 @@ export default function ComposerAgentUserPromptPanel({
   const [selectedIds, setSelectedIds] = useState<string[]>([])
   const [secretValue, setSecretValue] = useState('')
   const isSecret = prompt.kind === 'secret'
-  const isConfirm = !isSecret && prompt.options.length === 0
-  const allowCustom = prompt.allow_custom ?? (isConfirm ? false : true)
+  // 解析层应写出 mode；旧载荷无 mode 时按 options / allow_custom 推导
+  const resolvedMode = prompt.mode ?? (
+    prompt.options.length === 0
+      ? (prompt.allow_custom === true ? 'text' : 'confirm')
+      : 'choice'
+  )
+  const isConfirm = !isSecret && resolvedMode === 'confirm'
+  const isText = !isSecret && resolvedMode === 'text'
+  const allowCustom = isText
+    ? true
+    : (prompt.allow_custom ?? (isConfirm ? false : true))
   const rejectLabel = prompt.reject_label?.trim() || '拒绝'
   const confirmLabel = prompt.confirm_label?.trim() || '确认'
   const allSelected = prompt.options.length > 0
     && selectedIds.length === prompt.options.length
+  const defaultTitle = isText ? '请补充' : '请确认'
+  const customPlaceholder = isText
+    ? '请输入你的回答'
+    : '其他，输入后按 Enter 提交'
+  const regionLabel = isText ? 'Agent 填空问题' : 'Agent 确认问题'
 
   useEffect(() => {
     setCustomText('')
@@ -52,6 +66,15 @@ export default function ComposerAgentUserPromptPanel({
       custom_text: text,
     })
   }, [customText, onSubmit, submitting])
+
+  const cancelText = useCallback(() => {
+    if (submitting) return
+    onSubmit({
+      kind: 'custom',
+      selected_ids: ['cancel'],
+      selected_labels: ['取消'],
+    })
+  }, [onSubmit, submitting])
 
   const toggleMulti = useCallback((id: string) => {
     setSelectedIds(prev => (
@@ -182,19 +205,20 @@ export default function ComposerAgentUserPromptPanel({
       className={mergeClasses(
         'opptrix-composer-user-prompt-panel',
         isConfirm && 'opptrix-composer-user-prompt-panel--confirm',
+        isText && 'opptrix-composer-user-prompt-panel--text',
         OPPTRIX_GLASS_PANEL_CLASS,
       )}
       role="region"
-      aria-label="Agent 确认问题"
+      aria-label={regionLabel}
     >
       <div className="opptrix-composer-user-prompt-panel__head">
         <span className="opptrix-composer-user-prompt-panel__title">
-          {prompt.title?.trim() || '请确认'}
+          {prompt.title?.trim() || defaultTitle}
         </span>
         <p className="opptrix-composer-user-prompt-panel__prompt">{prompt.prompt}</p>
       </div>
 
-      {!isConfirm && prompt.allowMultiple ? (
+      {!isConfirm && !isText && prompt.allowMultiple ? (
         <div className="opptrix-composer-user-prompt-panel__toolbar">
           <OpptrixButton
             variant="ghost"
@@ -207,7 +231,7 @@ export default function ComposerAgentUserPromptPanel({
         </div>
       ) : null}
 
-      {!isConfirm ? (
+      {!isConfirm && !isText ? (
         <div className="opptrix-composer-user-prompt-panel__options opptrix-scroll">
           {prompt.options.map(opt => (
             <button
@@ -240,12 +264,35 @@ export default function ComposerAgentUserPromptPanel({
             className="opptrix-composer-user-prompt-panel__custom-input"
             value={customText}
             disabled={submitting}
-            placeholder="其他，输入后按 Enter 提交"
+            placeholder={customPlaceholder}
             onChange={(_e, data) => setCustomText(data.value)}
             onKeyDown={handleCustomKeyDown}
-            aria-label="自行输入答案"
+            aria-label={isText ? '输入回答' : '自行输入答案'}
           />
           <span className="opptrix-composer-user-prompt-panel__custom-hint">Enter</span>
+        </div>
+      ) : null}
+
+      {isText ? (
+        <div className="opptrix-composer-user-prompt-panel__actions">
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="secondary"
+            size="medium"
+            disabled={submitting}
+            onClick={cancelText}
+          >
+            取消
+          </OpptrixButton>
+          <OpptrixButton
+            className="opptrix-composer-user-prompt-panel__action-btn"
+            variant="primary"
+            size="medium"
+            disabled={submitting || !customText.trim()}
+            onClick={submitCustom}
+          >
+            提交
+          </OpptrixButton>
         </div>
       ) : null}
 
@@ -272,7 +319,7 @@ export default function ComposerAgentUserPromptPanel({
         </div>
       ) : null}
 
-      {!isConfirm && prompt.allowMultiple && (
+      {!isConfirm && !isText && prompt.allowMultiple && (
         <div className="opptrix-composer-user-prompt-panel__confirm">
           <OpptrixButton
             variant="primary"
