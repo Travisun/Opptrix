@@ -165,6 +165,7 @@ Opptrix/
   - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
   - **资讯与订阅（`news` pack）**：
     - **只读浏览**：`get_news_center_status` → `list_news_groups` / `list_news_sources` → `list_news_articles` → `get_news_article`；标的公告 `get_instrument_notices` → `get_notice_content`
+    - **RSSHub 路由目录（内置 curated schema v3，三级漏斗）**：`list_rsshub_categories` → `list_rsshub_domains` → `get_rsshub_domain_routes`（返回路由+频道**拉平**后的可订阅叶子，`ask_user(allow_multiple=true)` 直接多选；禁止再先选路由再选频道；叶子过多用 `q` 缩小）→ 拼短名单基址 + `add_news_source`；`search_rsshub_routes` 仅用户已点名媒体时捷径；不依赖 GitHub docs / 全量 radar
     - **订阅 CRUD**：`validate_news_source`（添加前探测，不写入）→ `add_news_source`（`url` 必填，可选 `title`/`group_id`）；`create_news_group` / `update_news_group` / `move_news_source` 可直接执行
     - **确认纪律（与 MCP 安装同类）**：`delete_news_source`、`import_news_sources`、`delete_news_group` **须先 `ask_user`，再以相同参数 + `confirmed=true` 重试**；未 confirmed 只返回摘要、不落库。删订阅不可恢复；删分组仅把组内订阅改为未分组，不删订阅本身。导入入参：`schema_version=1` + `subscriptions`，或仅 `subscriptions` 数组（已存在 url 跳过）
     - Hub feature 映射：`news_center_status` / `news_groups_list` / `news_sources_list` / `news_articles_list` / `news_article_detail` / `news_source_add|delete|validate` / `news_sources_import` / `news_group_create|update|delete` / `news_source_move_group`（见 [API.md](./API.md) Hub Features）

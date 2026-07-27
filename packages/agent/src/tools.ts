@@ -18,6 +18,7 @@ import {
 } from './unified-mcp-tools.js'
 import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildWorkspaceTools } from './mcp/workspace-tools.js'
+import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
 import { assembleSystemPrompt } from './experts/prompt-assembler.js'
 
@@ -504,6 +505,7 @@ export class ToolRegistry {
         }, ['url']),
         handler: (a: Record<string, unknown>) => d('news_source_validate', a),
       },
+      ...buildRsshubTools(),
       {
         name: 'get_notice_content', category: '公告研报',
         description: '按公告 URL 获取正文（自动解析 HTML 页面或 PDF 附件，剥离标签并压缩空白，供阅读年报/公告）',
