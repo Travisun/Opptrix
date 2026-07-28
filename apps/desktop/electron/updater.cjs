@@ -57,6 +57,9 @@ let status = {
 /** @type {(() => void) | null} */
 let prepareForUpdateInstall = null
 
+/** @type {(() => void | Promise<void>) | null} 安装未退出时恢复 UI（防空壳进程） */
+let onInstallStallRecover = null
+
 /** electron-updater 已加载待安装包（含 Squirrel 代理就绪） */
 let updatePackageHydrated = false
 
@@ -65,6 +68,12 @@ let startupResumeHandled = false
 
 /** 避免重复注册 autoUpdater 事件 */
 let autoUpdaterEventsBound = false
+
+/** 同一次安装只挂一次退出/恢复看门狗 */
+let installExitWatchdogScheduled = false
+
+const INSTALL_FORCE_EXIT_MS = 3_000
+const INSTALL_STALL_RECOVER_MS = 12_000
 
 function broadcast(channel, payload) {
   for (const win of BrowserWindow.getAllWindows()) {
@@ -80,7 +89,10 @@ function setStatus(patch) {
 }
 
 function shouldSkipStartupResume() {
-  return process.argv.includes('--opptrix-skip-update-resume')
+  if (process.argv.includes('--opptrix-skip-update-resume')) return true
+  // OS tick 唤醒只负责跑任务，不在此刻替换安装包（避免与后台调度 / 单实例转发竞态）
+  if (process.argv.includes('--schedule-tick')) return true
+  return false
 }
 
 /** 清理已成功应用、或降级后残留的 pending 包与 guard，避免误触发 resume */
@@ -330,7 +342,8 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
       // - Windows / Linux：唤起已下载的安装包（exe / AppImage），isForceRunAfter 安装后启动 App
       setImmediate(() => {
         if (!autoUpdater) {
-          app.quit()
+          scheduleInstallExitGuards()
+          app.exit(0)
           return
         }
         try {
@@ -343,11 +356,46 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
           autoUpdater.quitAndInstall(false, true)
         } catch (err) {
           console.error('[updater] quitAndInstall failed:', err)
-          app.quit()
+          try {
+            app.exit(0)
+          } catch {
+            process.exit(0)
+          }
         }
+        scheduleInstallExitGuards()
       })
       return true
     })
+}
+
+/**
+ * ShipIt 要求本进程真正退出，否则报 App Still Running。
+ * 若 quitAndInstall 未退出，先强制 exit；仍卡住则恢复 UI，避免无窗口空壳。
+ */
+function scheduleInstallExitGuards() {
+  if (installExitWatchdogScheduled) return
+  installExitWatchdogScheduled = true
+
+  setTimeout(() => {
+    if (!app.isUpdating) return
+    console.warn('[updater] forcing app.exit so the installer can replace the app bundle')
+    try {
+      app.exit(0)
+    } catch {
+      process.exit(0)
+    }
+  }, INSTALL_FORCE_EXIT_MS)
+
+  setTimeout(() => {
+    if (!app.isUpdating) return
+    console.error('[updater] install did not exit within grace period; recovering UI')
+    installExitWatchdogScheduled = false
+    app.isUpdating = false
+    app.isQuitting = false
+    void Promise.resolve(onInstallStallRecover?.()).catch((err) => {
+      console.error('[updater] install stall recovery failed:', err)
+    })
+  }, INSTALL_STALL_RECOVER_MS)
 }
 
 function waitForHydratedUpdate(currentVersion, timeoutMs = 20_000) {
@@ -495,6 +543,7 @@ async function installPendingUpdate() {
 
 function registerUpdaterIpc(ipcMain, deps = {}) {
   prepareForUpdateInstall = deps.prepareForUpdateInstall ?? null
+  onInstallStallRecover = deps.onInstallStallRecover ?? null
 
   ipcMain.handle('app-update-get-status', async () => status)
 

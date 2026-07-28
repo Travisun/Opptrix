@@ -445,6 +445,35 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.1': {
+    welcomeTitle: '投研助手，更懂替你守候',
+    welcomeSubtitle:
+      '这一版让更新更稳妥，托盘唤回更可靠，并可扫码加入用户交流群。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可靠',
+        title: '版本更新更稳妥',
+        desc:
+          '应用内更新与后台运行、计划任务配合更好，减少更新后空白窗口或安装卡住。',
+        note: '更新后打开即可继续使用。',
+      },
+      {
+        kicker: '更顺手',
+        title: '托盘一点，窗口回来',
+        desc:
+          '关窗在后台运行后，从托盘点显示即可正常唤回窗口。',
+        note: '后台守候，随时回到投研。',
+      },
+      {
+        kicker: '一起交流',
+        title: '扫码加入用户交流群',
+        desc:
+          '在设置中即可扫码入群，交流使用心得，也欢迎反馈问题。',
+        note: '有问题，有人一起聊。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

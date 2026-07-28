@@ -235,7 +235,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                 {checkBusy ? '检查中…' : '检查更新'}
               </OpptrixButton>
             ) : undefined}
-            last={!showUpdateStatusRow}
+            last
           />
           {showUpdateStatusRow && updatePanel && (
             <>

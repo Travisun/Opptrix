@@ -147,6 +147,24 @@ async function reconcileOsSchedule(opts = {}) {
   }
 }
 
+/**
+ * 更新安装前暂停 OS 级 tick，避免 launchd/schtasks/systemd 在替换 .app 期间
+ * 再拉起第二实例，导致 ShipIt「App Still Running」或空壳进程。
+ * 不改动登录项；安装成功或恢复 UI 后由 reconcileOsSchedule 重新注册。
+ */
+async function pauseOsScheduleForUpdateInstall() {
+  const adapter = getOsScheduleAdapter()
+  try {
+    const tickResult = await adapter.removeTickRegistration()
+    return { ok: tickResult.ok !== false, tick: tickResult }
+  } catch (err) {
+    return {
+      ok: false,
+      error: err instanceof Error ? err.message : String(err),
+    }
+  }
+}
+
 module.exports = {
   configureScheduleBridge,
   postScheduleTick,
@@ -157,4 +175,5 @@ module.exports = {
   ensureAutostart,
   probeAutostart,
   reconcileOsSchedule,
+  pauseOsScheduleForUpdateInstall,
 }
