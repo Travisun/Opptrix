@@ -29,7 +29,7 @@
 <table align="center">
   <tr>
     <td align="center" width="50%">
-      <img src="https://www.opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
+      <img src="https://opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
       <sub>微信 · Opptrix 技术交流群</sub>
     </td>
     <td align="center" width="50%">

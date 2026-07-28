@@ -148,7 +148,7 @@
 └───────────────────┴──────────────────────────────────────┘
 ```
 
-侧栏「用户交流群」为动作项（`WechatCommunityDialog`）：点击弹出扫码入群 Dialog，不切换右侧章节；二维码图为远程资源 `https://www.opptrix.org/images/wechat-group-qr.jpg`。
+侧栏「用户交流群」为动作项（`WechatCommunityDialog`）：点击弹出扫码入群 Dialog，不切换右侧章节；二维码图为远程资源 `https://opptrix.org/images/wechat-group-qr.jpg`。
 
 ### 7.1 内容区宽度控制
 

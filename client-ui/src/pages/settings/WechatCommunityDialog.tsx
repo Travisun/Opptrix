@@ -14,7 +14,7 @@ import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { opptrixCssVars } from '../../theme/tokens'
 
 /** 官网托管的微信群二维码；可在服务端直接替换文件，客户端无需发版。 */
-export const WECHAT_GROUP_QR_URL = 'https://www.opptrix.org/images/wechat-group-qr.jpg'
+export const WECHAT_GROUP_QR_URL = 'https://opptrix.org/images/wechat-group-qr.jpg'
 
 interface WechatCommunityDialogProps {
   open: boolean
