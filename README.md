@@ -59,7 +59,7 @@
 
 ---
 
-**Opptrix** 是一款开源的 **全球多市场投研数据助手**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场的行情查询、筛选与 Agent 分析。用自然语言提问，由大模型调用 **40+ 投研工具** 拉取结构化数据并整理为中文可读报告。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
+**Opptrix** 是一款开源的 **全球多市场投研数据助手**：覆盖 **A 股、美股、港股、日股、韩股与加密货币** 等市场的行情查询、筛选与 Agent 分析。用自然语言提问，由大模型调用 **127 个投研工具** 拉取结构化数据并整理为中文可读报告。支持 **浏览器 Web** 与 **Electron 桌面端**，共用同一套 React 界面与 Fastify API。
 
 ---
 
@@ -71,7 +71,7 @@
 
 | 维度 | 说明 |
 |------|------|
-| **是什么** | 本地/自托管的 **全球多市场数据查询与投研整理** 工具：跨市场标的搜索、聊天问答、新闻订阅、行情动态、关注列表与本地因子库（A 股深度最强） |
+| **是什么** | 本地/自托管的 **全球多市场数据查询与投研整理** 工具：跨市场标的搜索、聊天问答、新闻订阅、行情动态、关注列表、发现策略、计划任务与多市场本地数据包（A 股深度最强） |
 | **不是什么** | 持牌投顾、券商交易软件、理财销售或荐股/喊单系统 |
 | **支持市场** | **CN** A 股/ETF/指数 · **US** 美股 · **HK** 港股 · **JP** 日股 · **KR** 韩股 · **CRYPTO** 现货等（能力因市场而异，见 [MULTI-MARKET-ARCHITECTURE.md](docs/MULTI-MARKET-ARCHITECTURE.md)） |
 | **适合谁** | 希望 **自行查询与整理** 全球或多市场信息的投资者、研究者；需自备 LLM API Key 使用对话能力 |
@@ -83,16 +83,20 @@
 
 | 能力 | 说明 |
 |------|------|
-| **Chat Agent** | 流式对话，自动调用投研工具，展示执行过程 |
+| **Chat Agent** | 流式对话，自动调用投研工具，展示执行过程，Tool Pack 智能路由 |
 | **多会话** | 历史对话持久化（SQLite），侧栏新建/切换/归档 |
 | **全球多市场** | A 股 / 美股 / 港股 / 日股 / 韩股 / 加密货币：标的搜索、行情、K 线、截面筛选与 Agent 跨市场分析 |
-| **MCP 投研工具** | 个股/ETF 诊断、分市场 universe 筛选、机构评级（A 股）、策略/回测、市况与动态等（见 `packages/agent/src/tools.ts`） |
-| **右侧投研面板** | 跨市场关注列表、发现策略、A 股行业与决策卡、A 股组合账本 |
-| **新闻中心** | RSS 订阅、文章阅读；可选本地/远程翻译 |
-| **行情动态** | 全球与 A 股大盘/板块/龙虎榜等动态视图 |
-| **本地因子库** | A 股 SQLite 同步、全市场筛选、决策雷达（其他市场以在线数据为主） |
-| **桌面端** | Electron 打包、系统托盘、自动更新、`opptrix://` 深链 |
-| **设置** | LLM 提供商、分市场数据源 Provider、市场数据同步、新闻订阅、翻译/多模态等 |
+| **投研工具矩阵** | 127 个注册工具，覆盖个股诊断、基本面事实表、策略信号、资金流向、筹码分布、机构评级与产业链透视 |
+| **发现策略** | 内置 11 个市场策略（ETF / 美股 / 加密 / 日 / 韩 / 港），支持自建策略与回测验证 |
+| **计划任务** | 定时 / 周期 / Cron 调度，支持智能体提示词与受控脚本，双轨（应用内 + 桌面 OS tick） |
+| **Agent 工作区** | 文件读写、Shell 执行、HTTP 请求、网页浏览器、Python 环境、密钥保险箱，会话隔离沙盒 |
+| **专家体系** | 内置投研专家与本地自建专家，技能专长注入对话，Layer 0/1/2 投研纪律 |
+| **右侧投研面板** | 跨市场关注列表、发现策略、行业透视、组合账本、决策卡 |
+| **新闻中心** | RSS 订阅完整 CRUD、RSSHub 路由三级漏斗、文章阅读、本地/远程翻译 |
+| **行情动态** | 全球与 A 股大盘/板块/龙虎榜/涨跌停/市场情绪等动态视图 |
+| **本地数据** | 多市场基础数据包同步（`.opmd` 专用格式）、A 股全市场能力、多市场本地列表筛选 |
+| **桌面端** | Electron 打包、系统托盘、计划任务 OS tick、自动更新、`opptrix://` 深链 |
+| **设置** | LLM 提供商、分市场数据源 Provider、市场数据同步、新闻订阅、翻译/多模态、MCP 服务器管理 |
 
 ---
 
@@ -157,8 +161,10 @@ npm run serve    # → http://127.0.0.1:5173
      ┌───────────────────────┼───────────────────────┐
      ▼                       ▼                       ▼
  packages/agent      research-hub / search-hub   user-store
- LLM + MCP tools     dispatch / instrument_*     SQLite 用户数据
-     │                       │                       │
+ LLM + 127 工具       dispatch / instrument_*     SQLite 用户数据
+ + agent-workspace         │                       │
+ + agent-browser           │                       │
+ + schedule                │                       │
      └───────────────────────┼───────────────────────┘
                              ▼
               a-stock-layer (MarketDataEngine)
@@ -166,8 +172,8 @@ npm run serve    # → http://127.0.0.1:5173
                              │
         ┌────────────────────┼────────────────────┐
         ▼                    ▼                    ▼
-  market-data-store    stock-eval · institutions   news-feed
-  本地 SQLite 因子库    t-strategy · skills         文章 enrichment
+  market-data/          stock-eval · institutions   news-feed
+  多市场数据包同步        t-strategy · skills         article-enrichment
 ```
 
 ```
@@ -180,8 +186,8 @@ Opptrix/
     ├── shared/                 # InstrumentRef、市场注册表、类型
     ├── a-stock-layer/          # 在线数据 Engine、Provider、TDX
     ├── market-data-core/       # 数据层核心抽象
-    ├── market-data-store/      # 本地 SQLite 存储与同步
-    ├── market-data-providers-{cn,us,crypto}/
+    ├── market-data/            # 多市场本地数据包（.opmd 格式）与同步
+    ├── market-data-providers-{cn,us,crypto,jp,kr,hk}/
     ├── provider-sdk/           # Provider 开发 SDK
     ├── stock-eval/             # 因子 · 评分卡 · 回测
     ├── institutions/           # 机构综合评级
@@ -192,8 +198,11 @@ Opptrix/
     ├── news-feed/              # RSS 新闻
     ├── article-enrichment/     # 文章抓取与增强
     ├── local-inference/        # 本地翻译/推理（桌面）
+    ├── schedule/               # 计划任务服务（应用内 + OS tick）
+    ├── agent-workspace/        # Agent 工作区：文件/Shell/Python/密钥保险箱
+    ├── agent-browser/          # Playwright 网页浏览后端
     ├── user-store/             # 用户配置与会话持久化
-    └── agent/                  # LLM + MCP 工具
+    └── agent/                  # LLM + 127 MCP 工具 + Tool Pack 路由
 ```
 
 **延伸阅读**
@@ -218,8 +227,8 @@ Opptrix/
 | 实时/历史行情 | 分市场多 Provider | 免费接口可能延迟或限流；各市场覆盖度不同 |
 | 基本面 / 档案 | 东财、Tushare、Yahoo 等 | 字段与深度因市场、数据源而异 |
 | 机构观点 | institutions + 在线数据 | 以 **A 股** 为主；规则化评分，非研报全文 |
-| 本地因子库 | `market-data-store` 同步入库 | **A 股** 全市场筛选与雷达；其他市场以在线查询为主 |
-| 新闻 | RSS + 可选抓取 | 可按 CN / US / MACRO 等分组订阅 |
+| 本地基础数据包 | `market-data` 同步（`.opmd` 专用格式） | **A 股** 全市场 + 美股/加密货币/港股/日股/韩股本地列表；支持截面筛选与离线浏览 |
+| 新闻 | RSS + 可选抓取 | 可按 CN / US / MACRO 等分组订阅；支持 RSSHub 路由目录与本地/远程翻译 |
 
 **请勿** 将本软件作为生产交易决策的 **唯一** 依据。
 
@@ -311,6 +320,7 @@ npm run test:ci          # 仅跑测试（CI 在 build 之后）
 |------|------|------|
 | **[docs/README.md](docs/README.md)** | 所有人 | **文档总目录与阅读顺序** |
 | **[docs/AGENT-GUIDE.md](docs/AGENT-GUIDE.md)** | AI Agent | 协作手册、目录、规范 |
+| [docs/EXPERT-GUIDE.md](docs/EXPERT-GUIDE.md) | 用户/开发者 | 专家体系、技能专长与投研纪律 |
 | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) | 开发者 | 日常命令、调试、FAQ |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | 开发者 | 分层、Hub、持久化 |
 | [docs/DATA-LAYER.md](docs/DATA-LAYER.md) | 开发者 | Provider、Instrument、同步 |

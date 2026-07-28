@@ -10,9 +10,9 @@
 
 **Opptrix** 是一款 **全球多市场投研数据查询与信息整理工具**（非券商、非投顾、非交易终端）：
 
-- 用户通过自然语言提问，LLM 调用 **MCP 投研工具** 拉取 **A 股、美股、港股、日股、韩股、加密货币** 等市场的行情、评估、新闻与结构化数据，再生成中文分析。
+- 用户通过自然语言提问，LLM 调用 **127 个 MCP 投研工具** 拉取 **A 股、美股、港股、日股、韩股、加密货币** 等市场的行情、评估、新闻与结构化数据，再生成中文分析。
 - 提供 **Web** 与 **Desktop**（Electron + 本地 API sidecar），**共用同一套 React UI 与 Fastify API**。
-- 核心能力：跨市场标的搜索、个股/ETF 诊断、行业透视、新闻订阅、行情动态、机构评级（A 股）、策略回测、关注列表与组合账本等（A 股全市场本地因子选股已停用）。
+- 核心能力：跨市场标的搜索、个股/ETF 诊断、行业透视、新闻订阅、行情动态、机构评级（A 股）、策略回测、关注列表与组合账本、发现策略、计划任务、Agent 工作区与专家体系等（多市场本地数据包同步：A 股全市场 + 美股/加密货币/港股/日股/韩股本地列表）。
 
 **面向用户的完整说明与醒目风险提示**见根目录 [README.md](../README.md) 顶部「重要风险提示与用户须知」。
 
@@ -94,16 +94,17 @@ Opptrix/
 ├── packages/
 │   ├── shared/
 │   ├── a-stock-layer/       # MarketDataEngine、Provider、TDX
-│   ├── market-data-core/ · market-data-store/
-│   ├── market-data-providers-{cn,us,crypto}/
+│   ├── market-data-core/ · market-data/
+│   ├── market-data-providers-{cn,us,crypto,jp,kr,hk}/
 │   ├── provider-sdk/
 │   ├── stock-eval/ · institutions/ · t-strategy/ · skills/
 │   ├── research-hub/ · search-hub/
 │   ├── news-feed/ · article-enrichment/
 │   ├── local-inference/
+│   ├── schedule/            # 计划任务服务（应用内 timer + 桌面 OS tick）
 │   ├── user-store/          # SQLite 用户数据
-│   ├── agent/
-│   ├── agent-workspace/     # Agent 默认工作区、文件夹授权、http_fetch / download
+│   ├── agent/               # LLM + 127 MCP 工具 + Tool Pack 路由
+│   ├── agent-workspace/     # Agent 工作区：文件/Shell/Python/密钥保险箱
 │   └── agent-browser/       # Playwright 网页浏览工具后端
 ├── docs/                    # 架构、API、UI；入口 docs/README.md
 ├── tests/                   # smoke + integration tests (*.test.mjs)

@@ -24,22 +24,25 @@ flowchart TB
 
   UI -->|REST /api/*| Server["apps/server · Fastify"]
 
-  Server --> Agent["packages/agent · AgentEngine"]
+  Server --> Agent["packages/agent · 127 工具"]
   Server --> Hub["research-hub · dispatch"]
   Server --> Search["search-hub · searchInstruments"]
   Server --> Store["user-store · SQLite"]
 
   Agent --> Hub
   Agent --> Tools[MCP ToolRegistry]
+  Agent --> Workspace["agent-workspace · 文件/Shell/Python"]
+  Agent --> Browser["agent-browser · Playwright"]
+  Agent --> Schedule["schedule · 计划任务"]
 
   Hub --> Engine["a-stock-layer · MarketDataEngine"]
   Hub --> Eval["stock-eval"]
   Hub --> Inst["institutions"]
   Hub --> Strat["t-strategy"]
   Hub --> Skills["skills"]
-  Hub --> MDStore["market-data-store"]
+  Hub --> MDStore["market-data · 数据包同步"]
 
-  Engine --> Providers["Provider Registry · CN/US/Crypto…"]
+  Engine --> Providers["Provider Registry · CN/US/JP/KR/HK/Crypto…"]
   MDStore --> Engine
   NewsPkg["news-feed"] --> Server
 ```
@@ -51,13 +54,13 @@ shared  (+ market-registry, instrument-ref, discover profiles)
   ↑
 market-data-core · provider-sdk
   ↑
-a-stock-layer · market-data-providers-{cn,us,crypto}
+a-stock-layer · market-data-providers-{cn,us,crypto,jp,kr,hk}
   ↑
-market-data-store · stock-eval · institutions · t-strategy · skills · news-feed · article-enrichment
+market-data · stock-eval · institutions · t-strategy · skills · news-feed · article-enrichment
   ↑
-research-hub · search-hub · local-inference
+research-hub · search-hub · local-inference · schedule
   ↑
-agent · user-store
+agent · agent-workspace · agent-browser · user-store
   ↑
 server · (desktop 仅壳层 + 打包)
 ```
@@ -73,10 +76,10 @@ server · (desktop 仅壳层 + 打包)
 - **TDX**：纯 Node TCP 客户端；部分路径为性能保留 fast-path。
 - **多市场**：CN / US / HK / JP / KR / Crypto 等；`queryInstrumentData` 按市场路由 Provider；**A 股** 在组合、深度评分卡与机构评级等在线能力上最完整（见 [MULTI-MARKET-ARCHITECTURE.md](./MULTI-MARKET-ARCHITECTURE.md)）。
 
-### 本地层 `@opptrix/market-data` / `market-data-store`
+### 本地层 `@opptrix/market-data`
 
-- SQLite / DuckDB：历史行情缓存与控制面（向后兼容保留）；**本地因子选股与基础数据自动同步已停用**。
-- 选股与研究请走在线 `queryInstrumentData` / Hub `instrument_*` / Agent MCP 工具。
+- SQLite + DuckDB：历史行情缓存与在线查询加速；多市场本地基础数据包（`.opmd` 专用格式）同步：A 股全市场、美股列表、加密货币对、港股 / 日股 / 韩股列表。
+- 在线研究请走 `queryInstrumentData` / Hub `instrument_*` / Agent MCP 工具；本地数据包为截面筛选与离线浏览提供标的基础。
 
 ## 应用层 `@opptrix/agent`
 
@@ -95,10 +98,10 @@ server · (desktop 仅壳层 + 打包)
 | 区域 | 目录 | 说明 |
 |------|------|------|
 | 聊天工作区 | `src/chat/` | 主入口 `ChatApp.tsx`：会话、Composer、Markdown |
-| 新闻中心 | `src/pages/news/` | RSS 阅读、订阅筛选 |
+| 新闻中心 | `src/pages/news/` | RSS 订阅 CRUD、RSSHub 路由三级漏斗、文章阅读、本地/远程翻译 |
 | 行情动态 | `src/pages/market-dynamics/` | 大盘/板块/龙虎榜等 |
 | 右侧面板 | `src/market/` | 关注、发现、行业、个股、组合 |
-| 设置 | `src/pages/settings/` | LLM、数据源、市场数据、新闻、翻译 |
+| 设置 | `src/pages/settings/` | LLM、数据源、市场数据、新闻、翻译、MCP 服务器 |
 | 桌面壳 | `src/desktop/` | 标题栏、浮层侧栏、更新提示 |
 
 开发：Vite `:5173` 代理 `/api` → `:8711`。桌面：`npm run dev:desktop`。
@@ -121,7 +124,7 @@ Electron main
 |------|------|
 | `~/.opptrix/opptrix.db` | 配置、会话、关注、Provider 设置等（主存储） |
 | `~/.opptrix/portfolio.json` | A 股模拟组合账本 |
-| `~/.opptrix/market-data/` | 历史行情缓存与控制面（本地因子选股已停用） |
+| `~/.opptrix/market-data/` | 多市场本地基础数据包（`.opmd` 格式）：A 股全市场 + 美股/加密货币/港股/日股/韩股本地列表 |
 | `~/.opptrix/snapshots/` | 因子评估快照（stock-eval） |
 | `OPPTRIX_DATA_DIR` | 覆盖上述用户数据根目录 |
 

@@ -1275,7 +1275,7 @@ npm run test:ci          # 仅测试（CI 等价）
 | 文件 | 用途 |
 |------|------|
 | `~/.opptrix/opptrix.db` | 主数据库（配置、会话、Provider 设置） |
-| `~/.opptrix/market-data/` | 历史行情缓存与控制面（本地因子选股已停用） |
+| `~/.opptrix/market-data/` | 多市场本地基础数据包（`.opmd` 格式）：A 股全市场 + 美股/加密货币/港股/日股/韩股本地列表 |
 | `apps/desktop/package.json` | 桌面版本号（发版真源） |
 | `client-ui/package.json` | 前端版本号 |
 | `example/config/app-config.example.json` | 示例配置 |
