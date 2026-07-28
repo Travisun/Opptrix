@@ -1,9 +1,12 @@
 import { useCallback, useEffect, useState } from 'react'
 import { Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { ChevronDownRegular, ChevronRightRegular } from '@fluentui/react-icons'
 import type { ProviderCatalogResponse, PublicProviderRuntime } from '../types/provider'
 import { getProviderCatalog, saveProviderConfig } from '../api/client'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { SettingsListPanelSkeleton } from '../pages/settings/SettingsListPanelSkeleton'
+import { ProviderSettingsForm, isExpandableSettingsField } from '../pages/settings/ProviderSettingsForm'
+import { useSettingsToast } from '../pages/settings/SettingsToast'
 
 const useStyles = makeStyles({
   root: {
@@ -28,18 +31,36 @@ const useStyles = makeStyles({
   },
   row: {
     display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: '12px',
+    flexDirection: 'column',
+    gap: '8px',
     padding: '10px 14px',
     borderBottom: `1px solid ${opptrixCssVars.separator}`,
     ':last-child': {
       borderBottom: 'none',
     },
   },
+  rowExpanded: {
+    paddingBottom: '12px',
+  },
+  rowTop: {
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: '12px',
+    width: '100%',
+  },
   rowMain: {
     flex: 1,
     minWidth: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '6px',
+  },
+  rowMainTop: {
+    display: 'flex',
+    alignItems: 'baseline',
+    flexWrap: 'wrap',
+    gap: '4px 8px',
   },
   rowTitle: {
     fontSize: 'var(--opptrix-font-base)',
@@ -54,18 +75,68 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-sm)',
     color: opptrixCssVars.textTertiary,
     lineHeight: 1.4,
-    marginTop: '2px',
   },
   enabled: {
     color: opptrixCssVars.accent,
     fontWeight: 500,
   },
+  expandToggle: {
+    display: 'inline-flex',
+    alignItems: 'center',
+    gap: '4px',
+    padding: 0,
+    border: 'none',
+    background: 'none',
+    cursor: 'pointer',
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.accent,
+    lineHeight: 1.35,
+    ':hover': {
+      textDecoration: 'underline',
+    },
+  },
+  credentialExpand: {
+    width: '100%',
+    maxWidth: '100%',
+    boxSizing: 'border-box',
+    overflow: 'hidden',
+    paddingLeft: '2px',
+  },
 })
 
-function providerStatus(provider: PublicProviderRuntime): string {
-  if (provider.enabled) return '已启用'
-  if (!provider.canEnable) return '需在设置中完成配置'
-  return '未启用'
+function onboardingProviderStatus(provider: PublicProviderRuntime, marketLabel: string): string {
+  const parts: string[] = [marketLabel]
+  if (provider.enabled) {
+    parts.push('已启用')
+    return parts.join(' · ')
+  }
+
+  const requiredSecrets = provider.settingsFields.filter(f => f.type === 'secret' && f.required)
+  if (requiredSecrets.length) {
+    const configured = requiredSecrets.filter(f => provider.secretsConfigured[f.key]).length
+    if (configured === requiredSecrets.length) {
+      parts.push('密钥已填写，可启用')
+    } else {
+      parts.push('需填写数据密钥')
+    }
+    return parts.join(' · ')
+  }
+
+  if (provider.settingsFields.some(f => f.type === 'secret')) {
+    const anySecret = provider.settingsFields.some(
+      f => f.type === 'secret' && provider.secretsConfigured[f.key],
+    )
+    parts.push(anySecret ? '密钥已填写，可启用' : '需填写数据密钥')
+    return parts.join(' · ')
+  }
+
+  if (!provider.canEnable) {
+    parts.push('需完成配置后可启用')
+    return parts.join(' · ')
+  }
+
+  parts.push('未启用')
+  return parts.join(' · ')
 }
 
 function ProviderRow({
@@ -78,35 +149,75 @@ function ProviderRow({
   onSaved: () => void
 }) {
   const s = useStyles()
+  const toast = useSettingsToast()
+  const hasSettings = provider.settingsFields.some(isExpandableSettingsField)
+  const needsConfig = !provider.canEnable && hasSettings
+  const [expanded, setExpanded] = useState(needsConfig)
   const [toggling, setToggling] = useState(false)
 
+  useEffect(() => {
+    if (needsConfig) setExpanded(true)
+  }, [needsConfig])
+
   const handleToggle = async (checked: boolean) => {
-    if (checked && !provider.canEnable) return
+    if (checked && !provider.canEnable) {
+      toast.showError('请先填写必填项后再启用')
+      if (hasSettings) setExpanded(true)
+      return
+    }
     setToggling(true)
     try {
       await saveProviderConfig(provider.providerId, { enabled: checked })
+      toast.showSuccess(checked ? '已启用' : '已停用')
       onSaved()
+    } catch (e) {
+      toast.showError(e instanceof Error ? e.message : '更新失败')
     } finally {
       setToggling(false)
     }
   }
 
-  const status = providerStatus(provider)
+  const status = onboardingProviderStatus(provider, marketLabel)
+  const expandLabel = provider.requiresApiKey || provider.settingsFields.some(f => f.type === 'secret')
+    ? (expanded ? '收起' : '填写密钥')
+    : (expanded ? '收起' : '展开配置')
 
   return (
-    <div className={s.row}>
-      <div className={s.rowMain}>
-        <Text className={s.rowTitle} block title={provider.title}>{provider.title}</Text>
-        <Text className={mergeClasses(s.rowMeta, provider.enabled && s.enabled)} block>
-          {marketLabel} · {status}
-        </Text>
+    <div className={mergeClasses(s.row, expanded && hasSettings && s.rowExpanded)}>
+      <div className={s.rowTop}>
+        <div className={s.rowMain}>
+          <div className={s.rowMainTop}>
+            <Text className={s.rowTitle} block title={provider.title}>{provider.title}</Text>
+            <Text className={mergeClasses(s.rowMeta, provider.enabled && s.enabled)} block>
+              {status}
+            </Text>
+            {hasSettings && (
+              <button
+                type="button"
+                className={mergeClasses(s.expandToggle, 'opptrix-focusable')}
+                aria-expanded={expanded}
+                onClick={() => setExpanded(v => !v)}
+              >
+                {expanded
+                  ? <ChevronDownRegular fontSize={11} />
+                  : <ChevronRightRegular fontSize={11} />}
+                <span>{expandLabel}</span>
+              </button>
+            )}
+          </div>
+          {expanded && hasSettings && (
+            <div className={s.credentialExpand}>
+              <ProviderSettingsForm provider={provider} onSaved={onSaved} />
+            </div>
+          )}
+        </div>
+        <Switch
+          checked={provider.enabled}
+          disabled={toggling || (!provider.enabled && !provider.canEnable)}
+          onChange={(_, d) => { void handleToggle(!!d.checked) }}
+          aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
+        />
       </div>
-      <Switch
-        checked={provider.enabled}
-        disabled={toggling || (!provider.enabled && !provider.canEnable)}
-        onChange={(_, d) => { void handleToggle(!!d.checked) }}
-        aria-label={`${provider.enabled ? '停用' : '启用'} ${provider.title}`}
-      />
     </div>
   )
 }
@@ -139,7 +250,7 @@ export function OnboardingDataList() {
   if (!catalog) {
     return (
       <Text block style={{ fontSize: 'var(--opptrix-font-base)', color: opptrixCssVars.textSecondary }}>
-        暂时无法加载行情列表，可稍后在设置中查看。
+        暂时无法加载行情列表，请稍后重试。
       </Text>
     )
   }

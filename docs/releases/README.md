@@ -4,6 +4,16 @@ GitHub Release 页面正文由 **`docs/releases/{version}.md`** 与安装说明�
 
 `{version}` 必须与 `apps/desktop/package.json` 的 `version` **完全一致**（含 `-dev.N` 预发布号）。
 
+## 版本号 a.b.c 规则
+
+| 位 | 含义 | 何时 bump |
+|----|------|-----------|
+| **a**（主版本） | 重大能力跃迁 / 不兼容或产品里程碑 | 如迈入 `1.x` |
+| **b**（次版本） | 版本内功能增加 | 新功能发版 |
+| **c**（修订号） | bug 修复 | 热修 |
+
+完整说明（真源、标签、引导与日志对齐）见 [`docs/DESKTOP-RELEASE.md`](../DESKTOP-RELEASE.md) §2。
+
 ## 发版前必做
 
 1. 复制 [`TEMPLATE.md`](./TEMPLATE.md) 为 `{version}.md`（例如 `0.6.1.md`）

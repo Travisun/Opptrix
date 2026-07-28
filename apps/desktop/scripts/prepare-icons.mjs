@@ -99,6 +99,24 @@ function stageLinuxIcons() {
   }
 }
 
+/** Menu-bar / notification-area tray glyphs (mac Template + Win/Linux color). */
+function stageTrayIcons() {
+  const src = path.join(SOURCE_DIR, 'tray')
+  const dest = path.join(OUT_DIR, 'tray')
+  if (!fs.existsSync(src)) {
+    console.warn(`Missing tray icons dir: ${src} (tray will fall back to app logo)`)
+    return
+  }
+  const required = ['trayTemplate.png', 'trayTemplate@2x.png', 'tray-color.png', 'tray-color@2x.png']
+  for (const name of required) {
+    const file = path.join(src, name)
+    if (!fs.existsSync(file)) {
+      throw new Error(`Missing tray icon: ${file}`)
+    }
+  }
+  fs.cpSync(src, dest, { recursive: true })
+}
+
 async function createWindowsIco() {
   const { default: pngToIco } = await import('png-to-ico')
   const sizes = [
@@ -171,8 +189,10 @@ createMacIcns()
 copyFile(path.join(OUT_DIR, 'logo-app.png'), path.join(DESKTOP_ROOT, 'electron', 'about-logo.png'))
 copyFile(path.join(SOURCE_DIR, 'logo@128.png'), path.join(DESKTOP_ROOT, 'electron', 'splash-logo.png'))
 stageLinuxIcons()
+stageTrayIcons()
 await createWindowsIco()
 console.log(`Desktop icons staged at ${OUT_DIR}`)
 console.log('  staged: icon.icon (mac App / Icon Composer)')
 console.log('  staged: icon.icns (DMG + Dock fallback)')
+console.log('  staged: tray/ (mac Template + Win/Linux color)')
 

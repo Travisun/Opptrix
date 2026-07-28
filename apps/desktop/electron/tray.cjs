@@ -1,3 +1,5 @@
+const fs = require('node:fs')
+const path = require('node:path')
 const { Menu, Tray } = require('electron')
 const { loadAppIconImage } = require('./icon.cjs')
 const { APP_NAME } = require('./app-meta.cjs')
@@ -8,14 +10,46 @@ let tray = null
 /** @type {(() => Promise<{ label: string; enabled?: boolean; click?: () => void }>) | null} */
 let scheduleStatusProvider = null
 
-function resolveTrayIconImage() {
+/**
+ * Packaged: apps/desktop/build/icons/tray (via prepare-icons + electron-builder files).
+ * Dev / monorepo: repo icons/tray.
+ */
+function trayIconDirCandidates() {
+  return [
+    path.join(__dirname, '..', 'build', 'icons', 'tray'),
+    path.join(__dirname, '..', '..', '..', 'icons', 'tray'),
+  ]
+}
+
+/**
+ * macOS: trayTemplate.png (+ @2x/@3x) — filename Template enables system tinting + DPI.
+ * Windows / Linux: tray-color.png (+ @2x/@3x) — brand-color glyph.
+ * @returns {string | null} absolute path to 1x asset (Electron loads @2x siblings)
+ */
+function resolveDedicatedTrayIconPath() {
+  const fileName = process.platform === 'darwin' ? 'trayTemplate.png' : 'tray-color.png'
+  for (const dir of trayIconDirCandidates()) {
+    const candidate = path.join(dir, fileName)
+    if (fs.existsSync(candidate)) return candidate
+  }
+  return null
+}
+
+/**
+ * Prefer dedicated tray assets (path string keeps Retina Template/@2x). Fallback: resize app logo.
+ * @returns {string | import('electron').NativeImage | null}
+ */
+function resolveTrayIcon() {
+  const dedicated = resolveDedicatedTrayIconPath()
+  if (dedicated) return dedicated
+
   const image = loadAppIconImage()
   if (!image) return null
 
-  const size = process.platform === 'darwin' ? 22 : 32
+  const size = process.platform === 'darwin' ? 22 : 16
   const resized = image.resize({ width: size, height: size })
   if (process.platform === 'darwin') {
-    resized.setTemplateImage(false)
+    resized.setTemplateImage(true)
   }
   return resized
 }
@@ -106,7 +140,7 @@ function createTray(opts) {
   }
   scheduleStatusProvider = opts.scheduleStatusProvider ?? null
 
-  const image = resolveTrayIconImage()
+  const image = resolveTrayIcon()
   if (!image) {
     console.warn('[tray] icon missing; system tray disabled')
     return null
@@ -146,4 +180,5 @@ module.exports = {
   destroyTray,
   hasTray,
   refreshTrayMenu,
+  resolveDedicatedTrayIconPath,
 }

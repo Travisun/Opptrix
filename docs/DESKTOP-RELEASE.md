@@ -24,17 +24,29 @@
 
 ## 2. 版本号规则
 
-1. 采用 [语义化版本](https://semver.org/lang/zh-CN/)：`主版本.次版本.修订号`（如 `0.6.1`）。
-2. **只改** `apps/desktop/package.json` 中的 `version`（`app-meta.cjs`、侧栏版本、健康检查接口均读取此值）。
-3. 发布前打标签，标签名 **必须** 为：
+采用 [语义化版本](https://semver.org/lang/zh-CN/)：`a.b.c`（主版本.次版本.修订号）。
 
-   ```text
-   desktop-v{version}
-   ```
+### 2.1 各位含义与何时 bump
 
-   示例：版本 `0.6.1` → 标签 `desktop-v0.6.1`。
+| 位 | 含义 | 何时 bump | 示例 |
+|----|------|-----------|------|
+| **a**（主版本） | 重大能力跃迁、不兼容变更或产品里程碑 | 迈入新的产品阶段（如 `0.x` → `1.x`） | `0.7.0` → `1.2.0` |
+| **b**（次版本） | 版本内功能增加 | 新功能发版、用户可感知能力上线 | `1.2.0` → `1.3.0` |
+| **c**（修订号） | bug 修复、小改进 | 热修、无新功能的结果向修复 | `1.2.0` → `1.2.1` |
 
-4. CI 会校验：`desktop-v*` 标签去掉前缀后，必须与 `package.json` 的 `version` **完全一致**，否则构建失败。
+预发布号（如 `0.6.0-dev.17`）仍遵循 semver 比较规则；CI 与 `electron-updater` 按完整字符串比较。
+
+### 2.2 真源与对齐（硬性）
+
+1. **版本真源**：`apps/desktop/package.json` 的 `version`（`app-meta.cjs`、侧栏版本、健康检查接口均读取此值）。
+2. **同步 bump**（常规发版）：`client-ui/package.json` `version`（Vite 注入 `__OPPTRIX_CLIENT_VERSION__`，触发自托管与引导比对）。
+3. **Git 标签**：`desktop-v{version}`，例如 `1.2.0` → `desktop-v1.2.0`。
+4. **引导亮点**：`client-ui/src/onboarding/manifest.ts` → `ONBOARDING_RELEASE_BY_VERSION['{version}']` 键须与 `apps/desktop/package.json` `version` **前缀匹配**。
+5. **更新日志**：`docs/releases/{version}.md` 文件名与正文版本须与 `apps/desktop/package.json` `version` **完全一致**。
+
+CI 会校验：`desktop-v*` 标签去掉前缀后，必须与 `package.json` 的 `version` **完全一致**，否则构建失败。
+
+贡献者与发版维护者亦见 [`docs/releases/README.md`](./releases/README.md) §版本对齐。
 
 ---
 

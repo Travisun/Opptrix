@@ -224,7 +224,7 @@ export function ProviderSettingsForm({
       return next !== current
     })
     if (hasSecretChanges && !extra) {
-      toast.showError('请先填写 API Key 后再保存')
+      toast.showError('请先填写数据密钥后再保存')
       return
     }
     if (!extra && !hasPendingChanges) {

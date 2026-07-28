@@ -298,11 +298,11 @@ export default function OnboardingWizard({
     contentWide = true
     contentAlignStart = true
     body = (
-      <>
+      <SettingsToastProvider>
         <Text className={s.sectionTitle} block>{ONBOARDING_COPY.data.title}</Text>
         <Text className={s.sectionLead} block>{ONBOARDING_COPY.data.desc}</Text>
         <OnboardingDataList />
-      </>
+      </SettingsToastProvider>
     )
     footerPrimary = (
       <OpptrixButton variant="primary" onClick={goNext}>
@@ -318,7 +318,7 @@ export default function OnboardingWizard({
       body = <OnboardingFuyaoReadyPanel provider={fuyaoProvider} />
       footerSecondary = (
         <OpptrixButton variant="ghost" onClick={() => setFuyaoReconfiguring(true)}>
-          更换 API Key
+          更换密钥
         </OpptrixButton>
       )
       footerPrimary = (

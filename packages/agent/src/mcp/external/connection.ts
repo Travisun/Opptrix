@@ -82,7 +82,7 @@ function buildHeaders(record: McpServerRecord): Record<string, string> {
 /** 按 record 构造 SDK Client + Transport（尚未 connect） */
 export function createSdkConnection(record: McpServerRecord): SdkConnection {
   const client = new Client(
-    { name: 'opptrix-host', version: '0.7.0' },
+    { name: 'opptrix-host', version: '1.2.0' },
     { jsonSchemaValidator: PERMISSIVE_VALIDATOR },
   )
   const cfg = record.transportConfig

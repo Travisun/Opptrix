@@ -402,6 +402,49 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.0': {
+    welcomeTitle: '投研助手，更懂替你守候',
+    welcomeSubtitle:
+      '这一版让日常投研更省心：定时任务替你盯盘分析，对话可排队追问，密钥安全存放、按需授权。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '替你盯盘',
+        title: '计划任务，到点自动分析',
+        desc:
+          '设定时间与分析问题，助手会按你的提示定时执行，结果回来再通知你。',
+        note: '不用守着屏幕等。',
+      },
+      {
+        kicker: '更连贯',
+        title: '下一条问题，可以先排队',
+        desc:
+          '当前还在分析时，你可以接着写下一条，助手会按顺序处理。',
+        note: '思路不断线。',
+      },
+      {
+        kicker: '更安心',
+        title: '密钥保险箱，按对话授权',
+        desc:
+          '第三方密钥安全存放在本地，只在你说需要时才取用。',
+        note: '你的密钥，你做主。',
+      },
+      {
+        kicker: '更清楚',
+        title: '执行过程一目了然',
+        desc:
+          '步骤进度与用量可见，知道助手正在做什么、还要多久。',
+        note: '有据可查，心里有数。',
+      },
+      {
+        kicker: '更顺手',
+        title: '关窗继续跑，托盘随时唤回',
+        desc:
+          '关闭窗口后应用可在后台继续执行计划任务，托盘一点即回。',
+        note: '配合定时分析，更省心。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
@@ -431,11 +474,11 @@ export const ONBOARDING_COPY = {
   },
   mcp: {
     title: '配置扩展服务',
-    desc: '系统已内置若干能力服务，填写 API Key 后即可启用。跳过无妨，需要时随时可在设置中添加。',
+    desc: '系统已内置若干能力服务，填入密钥后即可启用。跳过无妨，需要时随时可在设置中添加。',
   },
   data: {
     title: '行情来源',
-    desc: '以下是已为你准备的行情渠道。免费来源可直接使用；专业数据需在设置中填入账号后启用。',
+    desc: '选择要启用的行情来源。免费来源可直接打开；需要密钥的来源，展开后填写并测试连接即可启用。',
   },
   fuyao: {
     title: '启用同花顺数据源',

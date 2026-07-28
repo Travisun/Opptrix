@@ -79,6 +79,15 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`）；sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
 
+托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）：
+
+| 平台 | 资源 | 尺寸 |
+|------|------|------|
+| **macOS** | `trayTemplate.png` / `@2x` / `@3x` | 22 / 44 / 66（Template，系统着色） |
+| **Windows / Linux** | `tray-color.png` / `@2x` / `@3x` | 16 / 32 / 48（品牌色剪影） |
+
+运行时优先加载上述专用图（路径字符串保留 Retina）；缺失时回退为应用 Logo 缩放。
+
 开发模式（未打包）默认 **无** 关窗驻托盘行为；关窗会走 `window-all-closed` → `app.quit()`。
 
 ### 启动参数（`launch-args.cjs`）

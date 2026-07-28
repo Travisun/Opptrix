@@ -24,9 +24,9 @@ export function buildOnboardingSteps(): OnboardingNavStep[] {
 export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'intro') return '介绍'
   if (step.phase === 'llm') return '模型'
-  if (step.phase === 'mcp') return 'MCP 服务'
+  if (step.phase === 'mcp') return '扩展服务'
   if (step.phase === 'data') return '行情'
-  if (step.phase === 'fuyao') return '同花顺数据源'
+  if (step.phase === 'fuyao') return '历史行情'
   return '协议'
 }
 
