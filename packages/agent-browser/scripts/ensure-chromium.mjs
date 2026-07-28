@@ -43,13 +43,19 @@ function resolveBrowsersPath() {
   return fromEnv || null
 }
 
-/** Prefer staged runtime deps (NODE_PATH) so browser revision matches sidecar Playwright. */
+/**
+ * Prefer staged runtime deps (NODE_PATH) over the monorepo package root.
+ * stage-runtime installs playwright into runtime-stage/node_modules without the
+ * repo lockfile; resolving PKG_ROOT first can install Chromium for a different
+ * revision than `chromium.executablePath()` from staged playwright-core.
+ */
 function resolveModuleSearchPaths() {
-  const paths = [PKG_ROOT]
+  const paths = []
   const nodePath = process.env.NODE_PATH?.split(path.delimiter).filter(Boolean) ?? []
   for (const entry of nodePath) {
     paths.push(entry)
   }
+  paths.push(PKG_ROOT)
   return paths
 }
 
@@ -58,15 +64,22 @@ function resolvePlaywrightCli() {
   return path.join(path.dirname(pkgJson), 'cli.js')
 }
 
+function loadChromiumFromSearchPaths() {
+  const pkgJson = require.resolve('playwright-core/package.json', {
+    paths: resolveModuleSearchPaths(),
+  })
+  return createRequire(pkgJson)('.').chromium
+}
+
 function isChromiumInstalled(browsersPath) {
   const prev = process.env.PLAYWRIGHT_BROWSERS_PATH
   if (browsersPath) {
     process.env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
   }
   try {
-    const { chromium } = require('playwright-core', { paths: resolveModuleSearchPaths() })
+    const chromium = loadChromiumFromSearchPaths()
     const exe = chromium.executablePath()
-    return fs.existsSync(exe)
+    return Boolean(exe && fs.existsSync(exe))
   } catch {
     return false
   } finally {

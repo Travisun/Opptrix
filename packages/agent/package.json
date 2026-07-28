@@ -15,7 +15,7 @@
     "opptrix-mcp": "./dist/mcp/stdio-entry.js"
   },
   "scripts": {
-    "build": "tsc -p tsconfig.json && cp src/experts/catalog.mock.json dist/experts/ && mkdir -p dist/rsshub && cp src/rsshub/rsshub_routes_schema.json dist/rsshub/",
+    "build": "tsc -p tsconfig.json && node -e \"import('node:fs').then(({cpSync,mkdirSync})=>{mkdirSync('dist/experts',{recursive:true});cpSync('src/experts/catalog.mock.json','dist/experts/catalog.mock.json');mkdirSync('dist/rsshub',{recursive:true});cpSync('src/rsshub/rsshub_routes_schema.json','dist/rsshub/rsshub_routes_schema.json')})\"",
     "mcp": "node dist/mcp/stdio-entry.js"
   },
   "dependencies": {
