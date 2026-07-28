@@ -1,4 +1,4 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import { Input, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
   BotRegular,
@@ -6,6 +6,7 @@ import {
   CodeRegular,
   InfoRegular,
   NewsRegular,
+  PeopleCommunityRegular,
   SearchRegular,
   SettingsRegular,
   TranslateRegular,
@@ -29,6 +30,7 @@ import {
 } from './settingsSearchIndex'
 import type { SettingsSection } from './settingsTypes'
 import { listRowKey } from '../../utils/listRowKey'
+import WechatCommunityDialog from './WechatCommunityDialog'
 
 export type { SettingsSection } from './settingsTypes'
 export type SettingsSidebarMode = 'panel' | 'overlay'
@@ -243,6 +245,7 @@ export default function SettingsSidebar({
   const nativeVibrancy = supportsNativeWindowVibrancy()
   const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
   const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
+  const [communityOpen, setCommunityOpen] = useState(false)
 
   const searchActive = Boolean(search.trim()) && !isMobile
 
@@ -342,7 +345,35 @@ export default function SettingsSidebar({
             </button>
           )
         })}
+
+        {/* 动作项：弹 Dialog，不切换右侧设置章节 */}
+        {!searchActive && (
+          <button
+            type="button"
+            className={mergeClasses(
+              s.navItem,
+              isOverlay && s.navItemOverlay,
+              isMobile && s.navItemMobile,
+              'opptrix-focusable',
+            )}
+            onClick={() => {
+              setCommunityOpen(true)
+              if (isOverlay) onClose?.()
+            }}
+          >
+            <PeopleCommunityRegular
+              className={mergeClasses(s.navIcon, isOverlay && s.navIconOverlay)}
+              fontSize={isOverlay ? SIDEBAR_TOP_MENU_ICON_SIZE : 17}
+            />
+            <span>用户交流群</span>
+          </button>
+        )}
       </nav>
+
+      <WechatCommunityDialog
+        open={communityOpen}
+        onClose={() => setCommunityOpen(false)}
+      />
 
       {!isMobile && (
         <div className={s.footer}>

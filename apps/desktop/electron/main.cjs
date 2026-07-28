@@ -36,6 +36,7 @@ const {
   fetchScheduleStatus,
   ensureAutostart,
   reconcileOsSchedule,
+  pauseOsScheduleForUpdateInstall,
 } = require('./schedule-bridge.cjs')
 const {
   getTranslationStatus,
@@ -75,6 +76,8 @@ app.isQuitting = false
 app.isUpdating = false
 /** @type {Promise<void> | null} */
 let prepareForUpdateInstallPromise = null
+/** @type {(() => Promise<void>) | null} */
+let recoverDesktopAfterUpdateStall = null
 
 /** @type {import('node:child_process').ChildProcess | null} */
 let serverProcess = null
@@ -457,12 +460,26 @@ function deliverProtocolPayload(payload) {
 }
 
 function prepareForUpdateInstall() {
-  if (app.isUpdating) return prepareForUpdateInstallPromise
+  if (app.isUpdating && prepareForUpdateInstallPromise) return prepareForUpdateInstallPromise
+  // 先立旗：关窗托盘化 / second-instance OS tick 都会读这两个标志
   app.isUpdating = true
   app.isQuitting = true
   prepareForUpdateInstallPromise = (async () => {
+    // 1) 停主进程内调度轮询，避免安装窗口期再 reconcile / 拉起 tick
+    stopScheduleReconcilePoll()
+    // 2) 卸掉 OS 级 tick（launchd / schtasks / systemd），防止第二实例顶上
+    try {
+      const paused = await pauseOsScheduleForUpdateInstall()
+      if (!paused.ok) {
+        console.warn('[updater] pause OS schedule tick:', paused.error ?? paused.tick)
+      }
+    } catch (err) {
+      console.warn('[updater] pause OS schedule tick failed:', err)
+    }
+    // 3) 托盘会让进程在关窗后仍存活；安装前必须拆掉
     destroyTray()
-    await stopSidecarAndWait()
+    // 4) sidecar 可能正跑计划任务；多等一会再强杀，再交给 ShipIt
+    await stopSidecarAndWait(5_000)
     for (const win of BrowserWindow.getAllWindows()) {
       if (win.isDestroyed()) continue
       try {
@@ -762,9 +779,9 @@ async function bootstrapBackgroundApp() {
   startScheduleReconcilePoll()
 }
 
-async function bootstrapForegroundApp() {
+async function bootstrapForegroundApp({ withSplash = true } = {}) {
   try {
-    await bootstrapApp()
+    await bootstrapApp({ withSplash })
   } catch (err) {
     await reportBootstrapFailure(err)
     app.quit()
@@ -778,29 +795,34 @@ async function bootstrapForegroundApp() {
   return true
 }
 
+function revealAppFromTray() {
+  if (process.platform === 'darwin') {
+    try {
+      app.dock.show()
+    } catch {
+      /* ignore */
+    }
+  }
+  // 与 focusMainWindow 一致：已有隐藏窗口则 show，否则再创建
+  focusMainWindow()
+}
+
 function createDesktopTray() {
   createTray({
-    onShowMainWindow: () => {
-      if (process.platform === 'darwin') {
-        try {
-          app.dock.show()
-        } catch {
-          /* ignore */
-        }
-      }
-      void openMainWindowFromMenu()
-    },
+    onShowMainWindow: revealAppFromTray,
     onQuit: quitApp,
-    onOpenScheduleStatus: () => {
-      void openMainWindowFromMenu()
-    },
+    onOpenScheduleStatus: revealAppFromTray,
     scheduleStatusProvider: buildTrayScheduleStatusItem,
   })
 }
 
 async function openMainWindowFromMenu() {
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.focus()
+  // 关窗进托盘后窗口仍在，只是 hide；仅 focus 无法唤出（尤其 macOS）
+  const win = getMainWindow()
+  if (win) {
+    if (win.isMinimized()) win.restore()
+    win.show()
+    win.focus()
     return
   }
   await bootstrapApp({ withSplash: false })
@@ -1034,7 +1056,10 @@ function registerWindowIpc() {
     })
   })
 
-  registerUpdaterIpc(ipcMain, { prepareForUpdateInstall })
+  registerUpdaterIpc(ipcMain, {
+    prepareForUpdateInstall,
+    onInstallStallRecover: () => recoverDesktopAfterUpdateStall?.(),
+  })
   registerProtocolIpc(ipcMain)
   registerNotificationIpc(ipcMain, {
     onNotificationClick: (payload) => {
@@ -1071,6 +1096,9 @@ if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
+    // 更新安装窗口期：忽略 OS tick / 二次唤起，避免拖住本进程或再开工作
+    if (app.isUpdating || app.isQuitting) return
+
     if (hasScheduleTickArg(argv)) {
       void handleScheduleTickFromOs()
       if (!hasBackgroundArg(argv)) {
@@ -1097,12 +1125,42 @@ if (!gotTheLock) {
 
     if (app.isPackaged) {
       const quittingForUpdate = await resumePendingUpdateOnStartup({ version: VERSION })
+      // true：已 destroy 窗口并进入 quitAndInstall；退出/恢复看门狗在 updater.triggerInstall
       if (quittingForUpdate) return
     }
 
+    await continueDesktopBootstrap({
+      withSplash: !launchArgs.background,
+      background: launchArgs.background,
+    })
+
+    app.on('activate', async () => {
+      if (launchArgs.background && !mainWindow) {
+        return
+      }
+      if (!mainWindow || mainWindow.isDestroyed()) {
+        try {
+          await bootstrapApp()
+        } catch (err) {
+          await reportBootstrapFailure(err)
+        }
+      } else {
+        focusMainWindow()
+      }
+    })
+  })
+
+  /**
+   * 正常启动（及更新安装失败后的恢复）共用：托盘 → sidecar/窗口 → updater。
+   * @param {{ withSplash?: boolean; background?: boolean }} [opts]
+   */
+  async function continueDesktopBootstrap(opts = {}) {
+    const background = opts.background === true
+    const withSplash = opts.withSplash !== false && !background
+
     createDesktopTray()
 
-    if (launchArgs.background) {
+    if (background) {
       try {
         await bootstrapBackgroundApp()
       } catch (err) {
@@ -1111,7 +1169,7 @@ if (!gotTheLock) {
         return
       }
     } else {
-      const ok = await bootstrapForegroundApp()
+      const ok = await bootstrapForegroundApp({ withSplash })
       if (!ok) return
     }
 
@@ -1132,22 +1190,15 @@ if (!gotTheLock) {
       }
     })
     initUpdater({ version: VERSION })
+  }
 
-    app.on('activate', async () => {
-      if (launchArgs.background && !mainWindow) {
-        return
-      }
-      if (!mainWindow || mainWindow.isDestroyed()) {
-        try {
-          await bootstrapApp()
-        } catch (err) {
-          await reportBootstrapFailure(err)
-        }
-      } else {
-        focusMainWindow()
-      }
-    })
-  })
+  recoverDesktopAfterUpdateStall = async () => {
+    console.error('[updater] recovering desktop UI after stalled update install')
+    app.isUpdating = false
+    app.isQuitting = false
+    prepareForUpdateInstallPromise = null
+    await continueDesktopBootstrap({ withSplash: true, background: false })
+  }
 
   app.on('window-all-closed', () => {
     // 更新安装中由 quitAndInstall 接管退出；勿抢先 app.quit()

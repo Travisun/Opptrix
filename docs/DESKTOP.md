@@ -79,6 +79,13 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`）；sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
 
+**更新安装防护（兼容托盘 / 计划任务）**：
+
+1. 安装前：`isUpdating` + `isQuitting` → 停 reconcile 轮询 → **暂停 OS tick**（launchd / 任务计划 / systemd-user）→ 销毁托盘 → 等待 sidecar 退出 → 销毁窗口（卸掉关窗进托盘）  
+2. 安装中：`second-instance`（含 `--schedule-tick`）一律忽略，避免第二实例拖住进程  
+3. OS tick 唤醒（`--schedule-tick`）**不**自动 `quitAndInstall`，等下次正常打开再装  
+4. `quitAndInstall` 后约 3s 仍未退出 → 强制 `app.exit`（防 ShipIt「App Still Running」）；约 12s 仍存活 → 清安装态并重建托盘/主窗口，再 `reconcileOsSchedule` 恢复 OS tick  
+
 托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）：
 
 | 平台 | 资源 | 尺寸 |
