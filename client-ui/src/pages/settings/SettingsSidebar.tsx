@@ -12,6 +12,7 @@ import {
   ServerRegular,
   PlugConnectedRegular,
   ShieldRegular,
+  CalendarClockRegular,
 } from '@fluentui/react-icons'
 import { opptrixTokens, opptrixCssVars } from '../../theme/tokens'
 import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, sidebarTopMenuIcon, sidebarTopMenuRow, SIDEBAR_TOP_MENU_ICON_SIZE } from '../../theme/mixins'
@@ -44,6 +45,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   // 扩展与运行环境
   { id: 'mcp_servers', label: 'MCP 服务', icon: PlugConnectedRegular },
   { id: 'sandbox', label: '沙盒', icon: ShieldRegular },
+  { id: 'schedule', label: '计划任务', icon: CalendarClockRegular },
   { id: 'python', label: 'Python', icon: CodeRegular },
   // 关于
   { id: 'about', label: '关于', icon: InfoRegular },
@@ -405,6 +407,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '接入外部智能服务'
     case 'sandbox':
       return '管理命令隔离环境的网络访问规则'
+    case 'schedule':
+      return '管理定时智能体任务与受控脚本'
     case 'python':
       return '查看 Python 状态、配置镜像源与安装选项'
     case 'about':

@@ -5,6 +5,9 @@ const { APP_NAME } = require('./app-meta.cjs')
 /** @type {import('electron').Tray | null} */
 let tray = null
 
+/** @type {(() => Promise<{ label: string; enabled?: boolean; click?: () => void }>) | null} */
+let scheduleStatusProvider = null
+
 function resolveTrayIconImage() {
   const image = loadAppIconImage()
   if (!image) return null
@@ -30,8 +33,78 @@ function attachCloseToTray(win, { enabled, shouldQuit }) {
   })
 }
 
-function createTray({ onShowMainWindow, onQuit }) {
+/**
+ * @param {{ onShowMainWindow: () => void; onQuit: () => void; onOpenScheduleStatus?: () => void }} handlers
+ */
+function buildTrayMenuTemplate(handlers, scheduleItem) {
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const items = [
+    {
+      label: `显示 ${APP_NAME}`,
+      click: () => handlers.onShowMainWindow(),
+    },
+  ]
+
+  if (scheduleItem) {
+    items.push({
+      label: scheduleItem.label,
+      enabled: scheduleItem.enabled !== false,
+      click: scheduleItem.click ?? handlers.onOpenScheduleStatus,
+    })
+  }
+
+  items.push(
+    { type: 'separator' },
+    {
+      label: `退出 ${APP_NAME}`,
+      click: () => handlers.onQuit(),
+    },
+  )
+
+  return items
+}
+
+async function resolveScheduleMenuItem(handlers) {
+  if (!scheduleStatusProvider) {
+    return {
+      label: '计划任务状态',
+      click: handlers.onOpenScheduleStatus,
+    }
+  }
+  try {
+    return await scheduleStatusProvider()
+  } catch {
+    return {
+      label: '计划任务：暂时无法获取状态',
+      enabled: false,
+    }
+  }
+}
+
+async function refreshTrayMenu(handlers) {
+  if (!tray) return
+  const scheduleItem = await resolveScheduleMenuItem(handlers)
+  const menu = Menu.buildFromTemplate(buildTrayMenuTemplate(handlers, scheduleItem))
+  tray.setContextMenu(menu)
+}
+
+/**
+ * @param {{
+ *   onShowMainWindow: () => void;
+ *   onQuit: () => void;
+ *   onOpenScheduleStatus?: () => void;
+ *   scheduleStatusProvider?: () => Promise<{ label: string; enabled?: boolean; click?: () => void }>;
+ * }} opts
+ */
+function createTray(opts) {
   if (tray) return tray
+
+  const handlers = {
+    onShowMainWindow: opts.onShowMainWindow,
+    onQuit: opts.onQuit,
+    onOpenScheduleStatus: opts.onOpenScheduleStatus,
+  }
+  scheduleStatusProvider = opts.scheduleStatusProvider ?? null
 
   const image = resolveTrayIconImage()
   if (!image) {
@@ -42,21 +115,15 @@ function createTray({ onShowMainWindow, onQuit }) {
   tray = new Tray(image)
   tray.setToolTip(APP_NAME)
 
-  const menu = Menu.buildFromTemplate([
-    {
-      label: `显示 ${APP_NAME}`,
-      click: () => onShowMainWindow(),
-    },
-    { type: 'separator' },
-    {
-      label: `退出 ${APP_NAME}`,
-      click: () => onQuit(),
-    },
-  ])
-  tray.setContextMenu(menu)
-  tray.on('double-click', () => onShowMainWindow())
+  void refreshTrayMenu(handlers)
+
+  tray.on('right-click', () => {
+    void refreshTrayMenu(handlers)
+  })
+
+  tray.on('double-click', () => handlers.onShowMainWindow())
   tray.on('click', () => {
-    if (process.platform === 'linux') onShowMainWindow()
+    if (process.platform === 'linux') handlers.onShowMainWindow()
   })
 
   return tray
@@ -66,6 +133,7 @@ function destroyTray() {
   if (!tray) return
   tray.destroy()
   tray = null
+  scheduleStatusProvider = null
 }
 
 function hasTray() {
@@ -77,4 +145,5 @@ module.exports = {
   createTray,
   destroyTray,
   hasTray,
+  refreshTrayMenu,
 }

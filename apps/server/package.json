@@ -32,6 +32,7 @@
     "@opptrix/news-feed": "*",
     "@opptrix/research-hub": "*",
     "@opptrix/search-hub": "*",
+    "@opptrix/schedule": "*",
     "@opptrix/stock-eval": "*",
     "@opptrix/user-store": "*",
     "fastify": "^5.2.0",

@@ -464,6 +464,99 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | GET | `/api/writer/history` |
 | GET | `/api/writer/themes` |
 
+### 计划任务 / Schedule
+
+定时执行智能体提示词或受控脚本。持久化于用户 SQLite（`packages/user-store` 的 `schedule` 命名空间）；调度引擎为 `@opptrix/schedule` 的 `ScheduleService`。Sidecar 启动时注册 `registerScheduleRoutes` 并调用 `scheduleService.start()`（进程内每 **20s** 扫描到期任务，`trigger: 'timer'`）。
+
+桌面端另有一套 **OS 级通用 tick**（用户级、无需 root），经 `POST /api/schedule/tick` 触发（`trigger: 'os'`）；详见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/schedule/settings` | 读取全局设置 |
+| PATCH | `/api/schedule/settings` | 更新设置；可选 `resync_os: true` 触发 OS tick 重新注册 |
+| GET | `/api/schedule/jobs` | 列出全部任务 |
+| GET | `/api/schedule/jobs/:id` | 单条任务详情 |
+| POST | `/api/schedule/jobs` | 创建任务 |
+| PATCH | `/api/schedule/jobs/:id` | 更新任务 |
+| DELETE | `/api/schedule/jobs/:id` | 删除任务 |
+| POST | `/api/schedule/jobs/:id/run` | 立即执行一次（`trigger: 'manual'`） |
+| POST | `/api/schedule/tick` | 扫描并执行到期任务（**仅本机**；`trigger: 'os'`） |
+| GET | `/api/schedule/status` | 汇总状态、启用任务数、最近失败 |
+| GET | `/api/schedule/os/reconcile` | 桌面 reconcile 提示（是否注册 OS tick、间隔等） |
+
+**`ScheduleSettings`（GET/PATCH `/api/schedule/settings`）**
+
+| 字段 | 类型 | 默认 | 说明 |
+|------|------|------|------|
+| `master_enabled` | boolean | `true` | 总开关；为 `false` 时 `tick` 跳过所有到期任务 |
+| `autostart` | boolean | `false` | 桌面：登录项 `--background` 后台常驻 + 启用 OS tick 注册 |
+| `allow_shell_scripts` | boolean | `false` | 为 `false` 时禁止创建/改为 `shell_script` 任务 |
+| `os_tick_status` | `'synced' \| 'pending' \| 'error' \| 'n/a'` | `'n/a'` | OS 级 tick 注册状态（桌面写入） |
+| `os_tick_error` | string \| null | `null` | OS 注册失败原因 |
+
+PATCH 时若变更 `master_enabled` 或 `autostart` 且未带 `resync_os`，响应会将 `os_tick_status` 置为 `pending`。`resync_os: true` 时额外调用 `resyncOsRegistration` 并返回 `os` 健康摘要。
+
+**任务类型**
+
+| 字段 | 取值 | 说明 |
+|------|------|------|
+| `kind` | `agent_prompt` \| `shell_script` | 载荷类型 |
+| `schedule_kind` | `once` \| `interval` \| `cron` | 调度方式 |
+| `schedule` | object | `once`: `{ run_at: ISO8601 }`；`interval`: `{ every_sec, anchor? }`；`cron`: `{ expression }` |
+| `payload` | object | `agent_prompt`: `{ prompt, session_id? }`；`shell_script`: `{ argv: string[], cwd? }` |
+
+**`ScheduledJob` 响应字段（节选）**：`id`、`title`、`enabled`、`kind`、`schedule_kind`、`schedule`、`payload`、`next_run_at`、`last_run_at`、`last_status`、`os_status`、`created_at`、`updated_at`。
+
+**POST `/api/schedule/jobs` body 示例（智能体定时分析）**
+
+```json
+{
+  "title": "每日收盘复盘",
+  "kind": "agent_prompt",
+  "schedule_kind": "cron",
+  "schedule": { "expression": "0 16 * * 1-5" },
+  "payload": { "prompt": "总结今日 A 股大盘与关注标的" },
+  "enabled": true
+}
+```
+
+**POST `/api/schedule/tick`**
+
+- 仅允许来源 IP 为 `127.0.0.1` / `::1` / `::ffff:127.0.0.1`；否则 **403** `{ "error": "仅允许本机调用" }`
+- 成功：`{ "result": { "due": string[], "ran": string[], "skipped": string[] } }`
+- `master_enabled=false` 时返回空数组（不执行）
+- 通过乐观 claim（推进 `next_run_at` + running lease）保证幂等，避免 OS tick 与进程内 timer 重复执行同一到期窗口
+
+**GET `/api/schedule/status` 响应（节选）**
+
+```json
+{
+  "master_enabled": true,
+  "allow_shell_scripts": false,
+  "autostart": true,
+  "os": { "status": "synced", "message": "…", "error": null, "autostart": true },
+  "jobs": { "total": 2, "enabled": 1, "disabled": 1, "next_due": "2026-07-28T08:00:00.000Z" },
+  "enabled_jobs": 1,
+  "recent_failures": [],
+  "recent_failure_count": 0
+}
+```
+
+**GET `/api/schedule/os/reconcile`**
+
+供 Electron `schedule-bridge.cjs` 读取：`register_tick`（= `master_enabled`）、`autostart`、`interval_sec`（固定 **60**）、`os_tick_status`、`desktop_required: true`。
+
+**错误**
+
+| 场景 | 状态码 | 说明 |
+|------|--------|------|
+| 任务不存在 | 404 | GET/PATCH/DELETE/run |
+| `shell_script` 未开启 | 400 | `尚未允许计划任务运行脚本，请先在设置中开启` |
+| 非法调度/载荷 | 400 | 创建或更新校验失败 |
+| 非本机 tick | 403 | `POST /api/schedule/tick` |
+
+执行历史暂无独立 REST 端点；Agent 经 `list_scheduled_job_runs` 读取，或 UI 经 status 的 `recent_failures` 摘要。
+
 ## Agent
 
 `POST /api/chat` 使用 `@opptrix/agent` 的 `AgentEngine`，内置 tools 调用同一 `ResearchHub`。

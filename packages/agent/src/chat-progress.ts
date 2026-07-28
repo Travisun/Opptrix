@@ -269,6 +269,15 @@ const TOOL_LABELS: Record<string, string> = {
   list_enabled_providers: '查看可用数据源',
   list_provider_custom_methods: '查询扩展数据能力',
   invoke_provider_custom_method: '调用扩展数据能力',
+  list_scheduled_jobs: '查看计划任务',
+  get_scheduled_job: '读取计划任务',
+  create_scheduled_job: '创建计划任务',
+  update_scheduled_job: '更新计划任务',
+  enable_scheduled_job: '启用计划任务',
+  disable_scheduled_job: '暂停计划任务',
+  delete_scheduled_job: '删除计划任务',
+  run_scheduled_job_now: '立即执行计划任务',
+  list_scheduled_job_runs: '查看执行记录',
 }
 
 function firstCode(args: Record<string, unknown>): string | null {
@@ -383,6 +392,95 @@ function packIdsHint(args: Record<string, unknown>): string {
   if (!ids.length) return ''
   const shown = ids.slice(0, 3).join(', ')
   return ids.length > 3 ? `${shown}…` : shown
+}
+
+function scheduleJobTitleFrom(args: Record<string, unknown>, result?: unknown): string {
+  const fromArgs = typeof args.title === 'string' ? args.title.trim() : ''
+  if (fromArgs) return truncateLabel(fromArgs, 28)
+  if (result && typeof result === 'object') {
+    const r = result as Record<string, unknown>
+    const job = r.job && typeof r.job === 'object' ? r.job as Record<string, unknown> : null
+    const title = typeof job?.title === 'string' ? job.title.trim() : ''
+    if (title) return truncateLabel(title, 28)
+  }
+  return ''
+}
+
+function scheduleKindHint(kind: unknown): string {
+  if (kind === 'agent_prompt') return '智能分析'
+  if (kind === 'shell_script') return '脚本'
+  return ''
+}
+
+function scheduleWhenHint(
+  scheduleKind: unknown,
+  schedule: unknown,
+): string {
+  if (scheduleKind === 'once') {
+    const runAt = schedule && typeof schedule === 'object'
+      && typeof (schedule as { run_at?: unknown }).run_at === 'string'
+      ? (schedule as { run_at: string }).run_at.trim()
+      : ''
+    if (!runAt) return '指定时间执行一次'
+    const d = new Date(runAt)
+    if (Number.isNaN(d.getTime())) return '指定时间执行一次'
+    return `于 ${d.toLocaleString('zh-CN', { hour12: false })} 执行一次`
+  }
+  if (scheduleKind === 'interval') {
+    const every = schedule && typeof schedule === 'object'
+      && typeof (schedule as { every_sec?: unknown }).every_sec === 'number'
+      ? (schedule as { every_sec: number }).every_sec
+      : 0
+    if (every >= 3600) {
+      const h = Math.round(every / 3600)
+      return `每隔 ${h} 小时`
+    }
+    if (every >= 60) {
+      const m = Math.round(every / 60)
+      return `每隔 ${m} 分钟`
+    }
+    if (every > 0) return `每隔 ${every} 秒`
+    return '按间隔重复'
+  }
+  if (scheduleKind === 'cron') return '按周期重复'
+  return ''
+}
+
+function formatScheduleToolLabel(
+  tool: string,
+  base: string,
+  args: Record<string, unknown>,
+  result?: unknown,
+): string {
+  const title = scheduleJobTitleFrom(args, result)
+  const kind = scheduleKindHint(
+    args.kind
+    ?? (result && typeof result === 'object'
+      && (result as { job?: { kind?: unknown } }).job?.kind),
+  )
+  const when = scheduleWhenHint(args.schedule_kind, args.schedule)
+
+  switch (tool) {
+    case 'list_scheduled_jobs':
+      return base
+    case 'create_scheduled_job': {
+      const bits = [base]
+      if (title) bits.push(title)
+      else if (kind) bits.push(kind)
+      if (when && title) bits.push(when)
+      return bits.length > 1 ? bits.join(' · ') : base
+    }
+    case 'get_scheduled_job':
+    case 'update_scheduled_job':
+    case 'enable_scheduled_job':
+    case 'disable_scheduled_job':
+    case 'delete_scheduled_job':
+    case 'run_scheduled_job_now':
+    case 'list_scheduled_job_runs':
+      return title ? `${base} · ${title}` : base
+    default:
+      return base
+  }
 }
 
 /**
@@ -526,6 +624,16 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
       if (!text) return base
       return `${base} · ${truncateLabel(text, 36)}`
     }
+    case 'list_scheduled_jobs':
+    case 'get_scheduled_job':
+    case 'create_scheduled_job':
+    case 'update_scheduled_job':
+    case 'enable_scheduled_job':
+    case 'disable_scheduled_job':
+    case 'delete_scheduled_job':
+    case 'run_scheduled_job_now':
+    case 'list_scheduled_job_runs':
+      return formatScheduleToolLabel(tool, base, args, result)
     default:
       return ref ? `${base} · ${ref}` : base
   }
@@ -740,6 +848,92 @@ function summarizeShellRunResult(result: unknown): string | null {
   return parts.length ? parts.join(' · ') : null
 }
 
+function scheduleRunStatusHint(status: unknown): string {
+  if (status === 'ok') return '已完成'
+  if (status === 'error') return '执行失败'
+  if (status === 'running') return '进行中'
+  if (status === 'skipped') return '已跳过'
+  return typeof status === 'string' && status.trim() ? status.trim() : ''
+}
+
+function summarizeScheduledJob(job: Record<string, unknown>): string {
+  const title = typeof job.title === 'string' && job.title.trim()
+    ? `「${truncateLabel(job.title.trim(), 24)}」`
+    : '计划任务'
+  const kind = scheduleKindHint(job.kind)
+  const enabled = job.enabled === true ? '已启用' : job.enabled === false ? '已暂停' : ''
+  const next = typeof job.next_run_at === 'string' && job.next_run_at.trim()
+    ? (() => {
+      const d = new Date(job.next_run_at as string)
+      if (Number.isNaN(d.getTime())) return ''
+      return `下次 ${d.toLocaleString('zh-CN', { hour12: false })}`
+    })()
+    : ''
+  const last = scheduleRunStatusHint(job.last_status)
+  return [title, kind, enabled, next, last ? `最近${last}` : ''].filter(Boolean).join(' · ')
+}
+
+function summarizeScheduleToolResult(tool: string, result: unknown): string | null {
+  if (!result || typeof result !== 'object') return null
+  const r = result as Record<string, unknown>
+  if (typeof r.error === 'string') return r.error
+
+  if (tool === 'list_scheduled_jobs') {
+    const jobs = Array.isArray(r.jobs) ? r.jobs : []
+    if (!jobs.length) return '还没有计划任务'
+    const sample = jobs.slice(0, 3).map((item) => {
+      if (!item || typeof item !== 'object') return null
+      const title = typeof (item as { title?: unknown }).title === 'string'
+        ? (item as { title: string }).title.trim()
+        : ''
+      return title ? truncateLabel(title, 16) : null
+    }).filter((v): v is string => Boolean(v))
+    const head = `共 ${jobs.length} 项计划任务`
+    return sample.length ? `${head}：${sample.join(' · ')}` : head
+  }
+
+  if (tool === 'list_scheduled_job_runs') {
+    const runs = Array.isArray(r.runs) ? r.runs : []
+    if (!runs.length) return '还没有执行记录'
+    const latest = runs[0] && typeof runs[0] === 'object'
+      ? runs[0] as Record<string, unknown>
+      : null
+    const status = latest ? scheduleRunStatusHint(latest.status) : ''
+    const head = `最近 ${runs.length} 次执行`
+    return status ? `${head} · 最新${status}` : head
+  }
+
+  if (tool === 'delete_scheduled_job') {
+    if (r.needs_confirmation === true) {
+      const summary = typeof r.summary === 'string' ? r.summary.trim() : ''
+      return summary || '删除前需要你确认'
+    }
+    if (r.ok === true || r.deleted) return '已删除该计划任务'
+  }
+
+  if (tool === 'run_scheduled_job_now') {
+    const run = r.run && typeof r.run === 'object' ? r.run as Record<string, unknown> : null
+    if (!run) return '已提交立即执行'
+    const status = scheduleRunStatusHint(run.status)
+    const summary = typeof run.summary === 'string' ? run.summary.trim() : ''
+    const short = summary ? truncateLabel(summary, 48) : ''
+    return [status ? `立即执行${status}` : '已提交立即执行', short].filter(Boolean).join(' · ')
+  }
+
+  const job = r.job && typeof r.job === 'object' ? r.job as Record<string, unknown> : null
+  if (job) {
+    const line = summarizeScheduledJob(job)
+    if (tool === 'create_scheduled_job') return `已创建 · ${line}`
+    if (tool === 'update_scheduled_job') return `已更新 · ${line}`
+    if (tool === 'enable_scheduled_job') return `已启用 · ${line}`
+    if (tool === 'disable_scheduled_job') return `已暂停 · ${line}`
+    if (tool === 'get_scheduled_job') return line
+    return line
+  }
+
+  return null
+}
+
 function summarizeToolResult(tool: string, result: unknown): string | null {
   if (result && typeof result === 'object' && 'error' in result && !('success' in result)) {
     const err = (result as { error?: unknown }).error
@@ -805,6 +999,16 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
     case 'python_env_status':
     case 'ensure_python':
       return summarizeShellRunResult(result)
+    case 'list_scheduled_jobs':
+    case 'get_scheduled_job':
+    case 'create_scheduled_job':
+    case 'update_scheduled_job':
+    case 'enable_scheduled_job':
+    case 'disable_scheduled_job':
+    case 'delete_scheduled_job':
+    case 'run_scheduled_job_now':
+    case 'list_scheduled_job_runs':
+      return summarizeScheduleToolResult(tool, result)
     default:
       return null
   }

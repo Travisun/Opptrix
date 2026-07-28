@@ -170,6 +170,22 @@ Opptrix/
     - **确认纪律（与 MCP 安装同类）**：`delete_news_source`、`import_news_sources`、`delete_news_group` **须先 `ask_user`，再以相同参数 + `confirmed=true` 重试**；未 confirmed 只返回摘要、不落库。删订阅不可恢复；删分组仅把组内订阅改为未分组，不删订阅本身。导入入参：`schema_version=1` + `subscriptions`，或仅 `subscriptions` 数组（已存在 url 跳过）
     - Hub feature 映射：`news_center_status` / `news_groups_list` / `news_sources_list` / `news_articles_list` / `news_article_detail` / `news_source_add|delete|validate` / `news_sources_import` / `news_group_create|update|delete` / `news_source_move_group`（见 [API.md](./API.md) Hub Features）
   - **网页浏览（`browser` pack）**：`browser_navigate` / `browser_snapshot` / `browser_click` / `browser_type` / `browser_screenshot` / `browser_close`（Playwright 完整 Chromium，headless，无需单独 headless-shell；开发环境 `npm install` 会自动安装 Chromium，可用 `OPPTRIX_SKIP_PLAYWRIGHT_BROWSER=1` 跳过；桌面安装包已内置）
+  - **计划任务（`automation` pack）**：实现 `packages/agent/src/mcp/schedule-tools.ts`，底层 `@opptrix/schedule` / user-store；REST 见 [API.md · 计划任务](./API.md#计划任务--schedule)；桌面 OS tick 见 [DESKTOP.md · 计划任务与后台常驻](./DESKTOP.md#计划任务与后台常驻)
+    - **工具**：`list_scheduled_jobs` / `get_scheduled_job` / `create_scheduled_job` / `update_scheduled_job` / `enable_scheduled_job` / `disable_scheduled_job` / `delete_scheduled_job` / `run_scheduled_job_now` / `list_scheduled_job_runs`
+    - **激活**：非 always-on；关键词播种（`tool-pack-resolver.ts`：`计划任务|定时任务|定时分析|自动执行` 等）或 `activate_tool_pack({ pack_ids: ["automation"] })`
+    - **何时用**：用户要**定时重复**跑智能体分析、提醒或受控脚本；一次性命令仍用 `shell_run`，勿用计划任务代替
+    - **意图精排**（`tool-route-plan.ts`）：`schedule_create` → 首选 `create_scheduled_job`；`schedule_manage` → `list_scheduled_jobs` / CRUD；`schedule_run_now` → `run_scheduled_job_now`；混淆对：计划任务优先于 `shell_run`
+    - **`create_scheduled_job` / `update_scheduled_job` 参数**：
+      - `title`（必填）、`kind`：`agent_prompt` | `shell_script`
+      - `schedule_kind`：`once` | `interval` | `cron`；`schedule`：`run_at` / `every_sec` / `expression`
+      - `payload`：`agent_prompt` → `{ prompt, session_id? }`；`shell_script` → `{ argv, cwd? }`
+      - `enabled`（可选，默认 true）
+    - **安全与纪律**：
+      - `kind=shell_script` **须**用户在设置中开启 `allow_shell_scripts`（`PATCH /api/schedule/settings`）；未开启时 create/update 返回错误，Agent 应引导用户先开开关，**禁止**用 `shell_run` 绕过定时登记
+      - `delete_scheduled_job` **须** `ask_user` 后以 `confirmed=true` 重试；未确认只返回 `needs_confirmation`
+      - `run_scheduled_job_now` 写入执行记录（`trigger: 'agent'`）；同一任务勿连续多次触发
+      - `list_scheduled_job_runs`：`job_id` 必填，`limit` 默认 20、最大 50
+    - **与调度关系**：Sidecar 进程内 timer（20s）在应用运行时常驻扫描；桌面 **OS tick**（60s 用户级）在关窗/后台时兜底——Agent 只读写任务定义，不负责触发 OS 注册（由桌面 `reconcileOsSchedule` 完成）
   - **工作区与文件（`workspace` pack）**：实现 `@opptrix/agent-workspace` + `packages/agent/src/mcp/workspace-tools.ts`
     - **工具**：`workspace_list` / `workspace_read` / `workspace_write` / `workspace_mkdir` / `workspace_delete` / `download_file` / `http_fetch` / `request_folder_access` / `list_workspace_grants` / `shell_platform_status` / `shell_run` / `shell_install` / `python_env_status` / `ensure_python` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` / `request_secret` / `list_vault_secrets` / `grant_session_secret` / `revoke_session_secret` / `delete_vault_secret`
     - **激活**：非 always-on；意图播种（本地读写/下载/开放 API/授权文件夹/运行代码/编程类处理）或 `activate_tool_pack({ pack_ids: ["workspace"] })`；须在聊天会话中调用（依赖 session bridge）。**能力不足兜底**：内置/已匹配工具无法完成或无匹配 pack 时 → activate `workspace`，用 `shell_run` / `ensure_python` / `workspace_*` 沙盒编程实现（可先标准工具取数再沙盒计算）；标准 API 能做的禁止先上沙盒；首选已加载时勿仪式化重复 activate
@@ -353,7 +369,8 @@ npm run serve               # 生产预览
 | 目标 | 首选文件 |
 |------|----------|
 | 新增 Hub feature | `packages/research-hub/src/hub.ts` |
-| 新增 REST 端点 | `apps/server/src/index.ts` |
+| 新增 REST 端点 | `apps/server/src/index.ts`（计划任务：`apps/server/src/schedule-routes.ts`） |
+| 计划任务 / 调度引擎 | `packages/schedule/` + `packages/user-store/src/schedule.ts`；Agent 工具：`packages/agent/src/mcp/schedule-tools.ts`；桌面 OS tick：`apps/desktop/electron/schedule-bridge.cjs`、`os-schedule/` |
 | 新增 Agent/MCP 工具 | `packages/agent/src/tools.ts` + `tool-meta.ts` + `packages/shared/src/tool-packs.ts`（挂 pack）+ `tool-route-plan.ts`（意图精排）；遵循 `.cursor/rules/mcp-tool-pack-routing.mdc` |
 | 工作区 / http_fetch / 文件夹授权 | `packages/agent-workspace/` + `packages/agent/src/mcp/workspace-tools.ts`；grant REST：`apps/server/src/index.ts`（`/api/sessions/:id/workspace/grants`） |
 | 调整聊天工具包播种 | `packages/agent/src/mcp/tool-pack-resolver.ts` |

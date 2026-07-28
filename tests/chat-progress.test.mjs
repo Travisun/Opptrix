@@ -130,3 +130,60 @@ test('formatToolLabel RSS tools use RSS wording without rsshub', () => {
   assert.match(routes, /cls\.cn/)
   assert.doesNotMatch(routes, /rsshub/i)
 })
+
+test('schedule tools have Chinese labels and result summaries', () => {
+  const createLabel = formatToolLabel('create_scheduled_job', {
+    title: '收盘复盘',
+    kind: 'agent_prompt',
+    schedule_kind: 'interval',
+    schedule: { every_sec: 3600 },
+  })
+  assert.match(createLabel, /创建计划任务/)
+  assert.match(createLabel, /收盘复盘/)
+  assert.match(createLabel, /每隔 1 小时/)
+  assert.doesNotMatch(createLabel, /agent_prompt|cron|shell_script|API|MCP/i)
+
+  const listLabel = formatToolLabel('list_scheduled_jobs', {})
+  assert.equal(listLabel, '查看计划任务')
+
+  const runLabel = formatToolLabel('run_scheduled_job_now', {}, {
+    job: { title: '晨间简报', kind: 'agent_prompt', enabled: true },
+  })
+  assert.match(runLabel, /立即执行计划任务/)
+  assert.match(runLabel, /晨间简报/)
+
+  const { preview: listPreview } = formatResultPreview({
+    jobs: [
+      { title: '收盘复盘', kind: 'agent_prompt', enabled: true },
+      { title: '晨间简报', kind: 'agent_prompt', enabled: false },
+    ],
+  }, 'list_scheduled_jobs')
+  assert.match(listPreview, /共 2 项/)
+  assert.match(listPreview, /收盘复盘/)
+
+  const { preview: createPreview } = formatResultPreview({
+    job: {
+      title: '收盘复盘',
+      kind: 'agent_prompt',
+      enabled: true,
+      next_run_at: '2026-07-28T15:00:00.000Z',
+      last_status: null,
+    },
+  }, 'create_scheduled_job')
+  assert.match(createPreview, /已创建/)
+  assert.match(createPreview, /收盘复盘/)
+  assert.match(createPreview, /智能分析/)
+  assert.doesNotMatch(createPreview, /agent_prompt|cron/i)
+
+  const { preview: deletePreview } = formatResultPreview({
+    needs_confirmation: true,
+    summary: '删除计划任务「收盘复盘」',
+  }, 'delete_scheduled_job')
+  assert.match(deletePreview, /删除计划任务/)
+
+  const { preview: runPreview } = formatResultPreview({
+    run: { status: 'ok', summary: '大盘震荡，关注白酒板块' },
+  }, 'run_scheduled_job_now')
+  assert.match(runPreview, /已完成/)
+  assert.match(runPreview, /大盘震荡/)
+})

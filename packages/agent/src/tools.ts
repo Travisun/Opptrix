@@ -18,6 +18,7 @@ import {
 } from './unified-mcp-tools.js'
 import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildWorkspaceTools } from './mcp/workspace-tools.js'
+import { buildScheduleTools } from './mcp/schedule-tools.js'
 import { currentToolSessionId } from './mcp/tool-session-context.js'
 import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
@@ -125,6 +126,7 @@ export class ToolRegistry {
       ...this.buildMetaTools(),
       ...buildBrowserTools(),
       ...buildWorkspaceTools(),
+      ...buildScheduleTools(),
     ]
   }
 

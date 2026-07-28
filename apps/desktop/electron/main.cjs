@@ -29,6 +29,14 @@ const {
 } = require('./media-permissions.cjs')
 const { registerSpeechIpc } = require('./speech-whisper.cjs')
 const { attachCloseToTray, createTray, destroyTray, hasTray } = require('./tray.cjs')
+const { parseLaunchArgs, hasScheduleTickArg, hasBackgroundArg } = require('./launch-args.cjs')
+const {
+  configureScheduleBridge,
+  postScheduleTick,
+  fetchScheduleStatus,
+  ensureAutostart,
+  reconcileOsSchedule,
+} = require('./schedule-bridge.cjs')
 const {
   getTranslationStatus,
   getTranslationModels,
@@ -47,6 +55,9 @@ const {
 } = require('./resolve-ports.cjs')
 
 const isDev = !app.isPackaged
+const launchArgs = parseLaunchArgs()
+/** @type {ReturnType<typeof setInterval> | null} */
+let scheduleReconcileTimer = null
 const API_HOST = '127.0.0.1'
 let API_PORT = process.env.STOCK_RESEARCH_PORT ?? '8711'
 let WEB_DEV_PORT = process.env.WEB_PORT ?? '5173'
@@ -685,6 +696,108 @@ async function bootstrapApp({ withSplash = true } = {}) {
   await loadAppInMainWindow(win, { enforceMinSplash: false })
 }
 
+async function handleScheduleTickFromOs() {
+  try {
+    await ensureSidecarReady()
+    await postScheduleTick()
+  } catch (err) {
+    console.warn('[schedule] os tick failed:', err instanceof Error ? err.message : err)
+  }
+}
+
+async function buildTrayScheduleStatusItem() {
+  try {
+    const status = await fetchScheduleStatus()
+    if (!status.master_enabled) {
+      return { label: '计划任务：已关闭' }
+    }
+    if (status.recent_failure_count > 0) {
+      return {
+        label: `计划任务：最近有 ${status.recent_failure_count} 项失败`,
+      }
+    }
+    return {
+      label: `计划任务：${status.enabled_jobs} 个任务运行中`,
+    }
+  } catch {
+    return { label: '计划任务：暂时无法获取状态', enabled: false }
+  }
+}
+
+function startScheduleReconcilePoll() {
+  if (scheduleReconcileTimer) return
+  scheduleReconcileTimer = setInterval(() => {
+    void reconcileOsSchedule().catch(() => {})
+  }, 30_000)
+  if (typeof scheduleReconcileTimer.unref === 'function') {
+    scheduleReconcileTimer.unref()
+  }
+}
+
+function stopScheduleReconcilePoll() {
+  if (!scheduleReconcileTimer) return
+  clearInterval(scheduleReconcileTimer)
+  scheduleReconcileTimer = null
+}
+
+async function bootstrapBackgroundApp() {
+  if (process.platform === 'darwin' && launchArgs.background) {
+    try {
+      app.dock.hide()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  await ensureSidecarReady()
+  configureScheduleBridge({ host: API_HOST, port: API_PORT })
+
+  if (launchArgs.scheduleTick) {
+    await handleScheduleTickFromOs()
+  }
+
+  await reconcileOsSchedule().catch((err) => {
+    console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
+  })
+  startScheduleReconcilePoll()
+}
+
+async function bootstrapForegroundApp() {
+  try {
+    await bootstrapApp()
+  } catch (err) {
+    await reportBootstrapFailure(err)
+    app.quit()
+    return false
+  }
+  configureScheduleBridge({ host: API_HOST, port: API_PORT })
+  await reconcileOsSchedule().catch((err) => {
+    console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
+  })
+  startScheduleReconcilePoll()
+  return true
+}
+
+function createDesktopTray() {
+  createTray({
+    onShowMainWindow: () => {
+      if (process.platform === 'darwin') {
+        try {
+          app.dock.show()
+        } catch {
+          /* ignore */
+        }
+      }
+      void openMainWindowFromMenu()
+    },
+    onQuit: quitApp,
+    onOpenScheduleStatus: () => {
+      void openMainWindowFromMenu()
+    },
+    scheduleStatusProvider: buildTrayScheduleStatusItem,
+  })
+}
+
 async function openMainWindowFromMenu() {
   if (mainWindow && !mainWindow.isDestroyed()) {
     mainWindow.focus()
@@ -935,6 +1048,11 @@ function registerWindowIpc() {
   })
   registerMediaPermissionIpc(ipcMain)
   registerSpeechIpc(ipcMain)
+
+  ipcMain.handle('schedule-os-reconcile', async () => reconcileOsSchedule())
+  ipcMain.handle('schedule-ensure-autostart', async (_event, enabled) => ensureAutostart(Boolean(enabled)))
+  ipcMain.handle('schedule-post-tick', async () => postScheduleTick())
+  ipcMain.handle('schedule-get-status', async () => fetchScheduleStatus())
 }
 
 function setupDesktopChrome() {
@@ -953,6 +1071,13 @@ if (!gotTheLock) {
   app.quit()
 } else {
   app.on('second-instance', (_event, argv) => {
+    if (hasScheduleTickArg(argv)) {
+      void handleScheduleTickFromOs()
+      if (!hasBackgroundArg(argv)) {
+        focusMainWindow()
+      }
+      return
+    }
     handleSecondInstanceArgv(argv)
     focusMainWindow()
   })
@@ -975,19 +1100,19 @@ if (!gotTheLock) {
       if (quittingForUpdate) return
     }
 
-    createTray({
-      onShowMainWindow: () => {
-        void openMainWindowFromMenu()
-      },
-      onQuit: quitApp,
-    })
+    createDesktopTray()
 
-    try {
-      await bootstrapApp()
-    } catch (err) {
-      await reportBootstrapFailure(err)
-      app.quit()
-      return
+    if (launchArgs.background) {
+      try {
+        await bootstrapBackgroundApp()
+      } catch (err) {
+        console.error('[bootstrap:background]', err instanceof Error ? err.message : err)
+        app.quit()
+        return
+      }
+    } else {
+      const ok = await bootstrapForegroundApp()
+      if (!ok) return
     }
 
     const launchUrl = findProtocolUrl()
@@ -1009,6 +1134,9 @@ if (!gotTheLock) {
     initUpdater({ version: VERSION })
 
     app.on('activate', async () => {
+      if (launchArgs.background && !mainWindow) {
+        return
+      }
       if (!mainWindow || mainWindow.isDestroyed()) {
         try {
           await bootstrapApp()
@@ -1031,6 +1159,7 @@ if (!gotTheLock) {
 
   app.on('before-quit', () => {
     app.isQuitting = true
+    stopScheduleReconcilePoll()
     destroyTray()
     stopSidecar()
     void disposeTranslation()
