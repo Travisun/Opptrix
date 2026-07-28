@@ -286,6 +286,43 @@ const INTENT_RULES: IntentRule[] = [
     hint: '浏览资讯 → list_news_groups/list_news_articles；深度分析标的勿替代资讯工具',
   },
   {
+    intent: 'schedule_create',
+    priority: 90,
+    patterns: [
+      /(?:创建|新建|添加).*(?:计划任务|定时任务)/,
+      /(?:计划任务|定时任务).*(?:创建|新建|添加)/,
+      /每天.*(?:分析|提醒|运行).*(?:计划|定时)/,
+    ],
+    preferredTools: ['create_scheduled_job', 'list_scheduled_jobs'],
+    avoidTools: ['get_instrument_snapshot', 'shell_run'],
+    confidence: 'high',
+    hint: '新建计划任务 → create_scheduled_job；先确认调度规则与提示词',
+  },
+  {
+    intent: 'schedule_manage',
+    priority: 88,
+    patterns: [
+      /计划任务|定时任务|定时执行|定时分析|定时提醒|自动执行/,
+      /(?:删除|暂停|启用|列出|查看).*(?:计划|定时)/,
+    ],
+    preferredTools: ['list_scheduled_jobs', 'create_scheduled_job', 'get_scheduled_job'],
+    avoidTools: ['get_instrument_snapshot', 'shell_run'],
+    confidence: 'high',
+    hint: '计划任务 → list/create/update/enable/disable；立刻执行用 run_scheduled_job_now；勿用 shell_run 代替',
+  },
+  {
+    intent: 'schedule_run_now',
+    priority: 89,
+    patterns: [
+      /(?:立刻|马上|现在).*(?:执行|运行).*(?:计划|定时)/,
+      /(?:跑|执行)一次.*计划任务/,
+    ],
+    preferredTools: ['run_scheduled_job_now', 'list_scheduled_jobs'],
+    avoidTools: ['shell_run', 'evaluate_instrument'],
+    confidence: 'high',
+    hint: '立即执行计划任务 → run_scheduled_job_now；先 list 拿 job_id',
+  },
+  {
     intent: 'web_browse',
     priority: 87,
     patterns: [
@@ -911,6 +948,9 @@ export const TOOL_CONFUSION_PAIRS: ReadonlyArray<{
   { prefer: 'browser_snapshot', avoid: 'get_instrument_snapshot', when: '读取外部网页而非标的快照' },
   { prefer: 'browser_snapshot', avoid: 'get_news_article', when: '外部网页内容而非 RSS 资讯正文' },
   { prefer: 'list_news_articles', avoid: 'browser_navigate', when: '浏览订阅资讯而非任意 URL' },
+  { prefer: 'list_scheduled_jobs', avoid: 'shell_run', when: '管理或查看计划任务而非临时跑脚本' },
+  { prefer: 'run_scheduled_job_now', avoid: 'shell_run', when: '执行已登记的计划任务' },
+  { prefer: 'create_scheduled_job', avoid: 'shell_run', when: '用户要定时重复执行而非一次性命令' },
 ]
 
 const CN_CODE_RE = /(?:^|[^\d])([036]\d{5})(?:[^\d]|$)/

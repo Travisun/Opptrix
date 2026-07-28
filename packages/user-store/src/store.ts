@@ -21,6 +21,11 @@ import {
   initAgentVaultSchema,
 } from './agent-vault.js'
 import {
+  ScheduleRepository,
+  initScheduleSchema,
+  SCHEDULE_SCHEMA_MIGRATION_KEY,
+} from './schedule.js'
+import {
   clearFtsNews,
   clearFtsSessions,
   deleteFtsNews,
@@ -44,6 +49,7 @@ export class UserDataStore {
   readonly freeProviderThrottle: FreeProviderThrottleRepository
   readonly mcpServers: McpServersRepository
   readonly agentVault: AgentVaultRepository
+  readonly schedule: ScheduleRepository
 
   private constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true })
@@ -59,6 +65,13 @@ export class UserDataStore {
     this.mcpServers = new McpServersRepository(this)
     this.agentVault = new AgentVaultRepository(this.db)
     this.initSchema()
+    initScheduleSchema(this.db)
+    this.schedule = new ScheduleRepository(
+      this.db,
+      (ns, id) => this.getDocument(ns, id),
+      (ns, id, data) => this.setDocument(ns, id, data),
+    )
+    this.ensureScheduleSchemaMigration()
     this.migrateFromLegacyFiles()
     this.providerSettings.migrateFromLegacy(
       key => this.hasMigration(key),
@@ -107,6 +120,13 @@ export class UserDataStore {
         ON documents(namespace, updated_at DESC);
     `)
     initFtsSchema(this.db)
+  }
+
+  /** 幂等：表已由 CREATE IF NOT EXISTS 创建，meta 标记保证迁移可观测 */
+  private ensureScheduleSchemaMigration() {
+    if (this.hasMigration(SCHEDULE_SCHEMA_MIGRATION_KEY)) return
+    initScheduleSchema(this.db)
+    this.markMigration(SCHEDULE_SCHEMA_MIGRATION_KEY)
   }
 
   getMetaFlag(key: string): boolean {

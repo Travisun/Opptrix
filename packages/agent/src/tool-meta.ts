@@ -723,6 +723,51 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '用户明确要求删除保险箱中某密钥时使用；须确认。',
     compliance: '内部 ask_user 确认；删除不可恢复；同步撤销本会话授权。',
   },
+  list_scheduled_jobs: {
+    packId: 'automation',
+    usageGuide: '用户询问已有计划任务、定时分析或自动执行安排时，先列出任务。',
+    compliance: '只读；返回 id/标题/下次时间/最近状态；同一轮最多调用 1 次。',
+  },
+  get_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '需要单个计划任务详情（调度规则、载荷）时使用。',
+    compliance: 'job_id 必填且来自 list_scheduled_jobs；只读。',
+  },
+  create_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '用户要新建定时智能体任务或受控脚本时使用。',
+    compliance: 'shell_script 须在设置中允许；schedule 须合法；写操作可直接执行。',
+  },
+  update_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '修改已有计划任务的标题、调度或载荷。',
+    compliance: 'job_id 必填；至少提供一个变更字段；脚本任务受 allow_shell_scripts 约束。',
+  },
+  enable_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '恢复已暂停的计划任务。',
+    compliance: 'job_id 必填；写操作可直接执行。',
+  },
+  disable_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '暂停计划任务，不再自动执行。',
+    compliance: 'job_id 必填；写操作可直接执行。',
+  },
+  delete_scheduled_job: {
+    packId: 'automation',
+    usageGuide: '删除计划任务；须 ask_user 后 confirmed=true。',
+    compliance: 'job_id 必填；未 confirmed 只返回摘要；删除不可恢复。',
+  },
+  run_scheduled_job_now: {
+    packId: 'automation',
+    usageGuide: '用户要求立刻跑一次计划任务时使用。',
+    compliance: 'job_id 必填；会写入执行记录；同一任务勿连续多次触发。',
+  },
+  list_scheduled_job_runs: {
+    packId: 'automation',
+    usageGuide: '查看计划任务历史执行结果与错误信息。',
+    compliance: 'job_id 必填；limit ≤50；只读。',
+  },
 }
 
 /** 为 TOOL_META 条目补全 packId（单一事实源仍是 TOOL_PACK_MEMBERSHIP） */

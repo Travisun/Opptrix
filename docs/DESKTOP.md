@@ -71,6 +71,56 @@ Stages a self-contained Node runtime under `apps/desktop/runtime-stage/`, bundle
 
 The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
+## 计划任务与后台常驻
+
+桌面端计划任务采用 **双轨调度**：Sidecar 内 `ScheduleService.start()` 每 **20s** 进程内扫描（`trigger: 'timer'`）；另注册 **OS 级通用 tick**（默认间隔 **60s**，用户级、**不要求 root**），在关窗或仅后台常驻时仍能唤醒 sidecar 执行 `POST /api/schedule/tick`（`trigger: 'os'`）。两路均经乐观 claim 幂等，避免重复跑同一到期任务。
+
+### 关窗 = 托盘常驻（生产包）
+
+打包应用（`app.isPackaged`）启用系统托盘（`tray.cjs`）。用户点关闭主窗口时 **不退出进程**（`attachCloseToTray` → `preventDefault` + `hide`）；sidecar 与进程内 20s timer 继续运行。托盘菜单含计划任务状态摘要（`fetchScheduleStatus`）与「显示 Opptrix」。真正退出须选托盘/菜单 **退出**（`app.isQuitting = true` 后允许窗口关闭并 `stopSidecar`）。
+
+开发模式（未打包）默认 **无** 关窗驻托盘行为；关窗会走 `window-all-closed` → `app.quit()`。
+
+### 启动参数（`launch-args.cjs`）
+
+| 参数 | 含义 |
+|------|------|
+| `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar 并 reconcile OS 调度 |
+| `--schedule-tick` | 本次启动为 OS tick 唤醒：sidecar ready 后 `POST /api/schedule/tick`，然后保持后台（常与 `--background` 合用） |
+
+OS 适配器写入的系统任务均带 `--background --schedule-tick`：
+
+| 平台 | 机制 | 标识 |
+|------|------|------|
+| **macOS** | 用户 LaunchAgent `~/Library/LaunchAgents/org.opptrix.schedule-tick.plist`，`StartInterval` ≥ 30s | `launchctl` gui 域 |
+| **Windows** | 用户计划任务 `schtasks`，按分钟重复 | 任务名 `OpptrixScheduleTick` |
+| **Linux** | 用户 systemd timer `~/.config/systemd/user/opptrix-schedule-tick.timer` | `systemctl --user` |
+
+实现：`apps/desktop/electron/os-schedule/{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。
+
+单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动只触发 `handleScheduleTickFromOs()`（经已有 sidecar），不重复开主窗（除非未带 `--background`）。
+
+### `schedule-bridge.cjs` 与 reconcile
+
+主进程通过 bridge 调用 sidecar REST（`configureScheduleBridge({ host, port })`）：
+
+1. `GET /api/schedule/os/reconcile` — 是否应注册 OS tick（`register_tick` = `master_enabled`）、`autostart`、`interval_sec`
+2. `getOsScheduleAdapter().ensureTickRegistration` / `removeTickRegistration` — 写系统级任务
+3. `app.setLoginItemSettings({ openAtLogin, args: ['--background'] })` — macOS/Windows 登录项（`autostart`）
+4. `PATCH /api/schedule/settings` — 回写 `os_tick_status` / `os_tick_error`
+
+前台与 `--background` 启动后均 `reconcileOsSchedule()`，并每 **30s** 轮询 reconcile（`startScheduleReconcilePoll`）。用户 PATCH settings 且 `resync_os: true` 时 sidecar 也会触发 `resyncOsRegistration`。
+
+### 设置字段（与 API 一致）
+
+| 字段 | 桌面行为 |
+|------|----------|
+| `master_enabled` | 为 false 时不注册 OS tick、tick 跳过执行 |
+| `autostart` | 登录项 `--background` + 参与 OS 健康计算（`computeOsHealth`） |
+| `allow_shell_scripts` | 与 Agent/REST 一致；脚本类任务门禁 |
+
+REST 与 Agent 工具详见 [API.md · 计划任务](./API.md#计划任务--schedule)、[AGENT-GUIDE.md §4.2 · automation pack](./AGENT-GUIDE.md#42-agent-与-mcp)。
+
 ## Environment
 
 | Variable | Description |

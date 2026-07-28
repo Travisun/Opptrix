@@ -31,6 +31,7 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
   { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
+  { section: 'schedule', title: '计划任务', desc: '管理定时智能体任务与受控脚本', keywords: ['定时', '自动执行', 'cron'] },
   { section: 'python', title: 'Python', desc: '查看 Python 状态与镜像源配置', keywords: ['Python 环境', 'pip'] },
   { section: 'about', title: '关于', desc: '产品说明、版本更新、法律条款与帮助反馈', keywords: ['关于 Opptrix', 'Opptrix'] },
   { section: 'about', title: '应用更新', desc: '检查更新与重启安装', keywords: ['版本', '升级', '热更新'] },
@@ -80,6 +81,11 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'sandbox', title: '永久允许的目标', desc: '出站访问白名单', keywords: ['白名单', '域名', '网络'] },
   { section: 'sandbox', title: '允许局域网访问', desc: '授权本地网络内的目标', keywords: ['局域网', '本地', '私网'] },
 
+  // 计划任务
+  { section: 'schedule', title: '计划任务总开关', desc: '关闭后所有任务都不会自动执行' },
+  { section: 'schedule', title: '允许运行脚本', desc: '计划任务可执行受控脚本' },
+  { section: 'schedule', title: '系统定时', desc: '后台常驻与系统定时同步状态', keywords: ['后台常驻', '同步'] },
+
   // Python 环境
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
   { section: 'python', title: '优先使用 Opptrix 托管', desc: '托管 Python 优先于系统环境', keywords: ['托管', '系统'] },
@@ -112,6 +118,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   multimodal: '多模态',
   mcp_servers: 'MCP 服务',
   sandbox: '沙盒',
+  schedule: '计划任务',
   python: 'Python',
   about: '关于',
 }

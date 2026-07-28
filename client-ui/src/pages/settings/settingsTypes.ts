@@ -5,6 +5,7 @@ export type SettingsSection =
   | 'mcp_servers'
   | 'news_feed'
   | 'sandbox'
+  | 'schedule'
   | 'python'
   | 'translation'
   | 'multimodal'
@@ -19,6 +20,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'multimodal',
   'mcp_servers',
   'sandbox',
+  'schedule',
   'python',
   'about',
 ]

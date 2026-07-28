@@ -5,7 +5,7 @@ import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
 import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
-import { getSessionSecretAccessStore } from '@opptrix/agent-workspace'
+import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
 import { listTemplates, REGISTRY } from '@opptrix/stock-eval'
@@ -34,6 +34,7 @@ import { listDiscoverStrategiesPublic, getDiscoverStrategy, mcpToolCatalog } fro
 import { isDiscoverStrategyProfile, listDiscoverProfileMeta, resolveOpptrixAppVersion, resolveProjectRoot, type DiscoverStrategyProfile } from '@opptrix/shared'
 import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
+import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
@@ -49,6 +50,7 @@ import {
 import { maybeBootstrapTranslationModel } from '@opptrix/local-inference'
 import { startEnrichmentScheduler, getEnrichmentStore, setEnrichmentPersistHook } from '@opptrix/article-enrichment'
 import { setSessionPersistHooks } from '@opptrix/agent'
+import { createJobExecutor, getScheduleService, type ScheduleJobNotificationEvent } from '@opptrix/schedule'
 import { removeSessionSearchIndex, syncNewsSearchIndex, syncSessionSearchIndex } from '@opptrix/search-hub'
 import { fetchUserAgreementHtml } from './legal-document.js'
 import { createRequire } from 'node:module'
@@ -107,6 +109,36 @@ setEnrichmentPersistHook(doc => {
 })
 
 const app = Fastify({ logger: true, bodyLimit: 64 * 1024 * 1024 })
+
+const scheduleService = getScheduleService()
+const workspaceService = getWorkspaceService()
+scheduleService.setExecutor(createJobExecutor({
+  agent: {
+    createSession: opts => agent.createSession(opts),
+    chat: (sessionId, message) => agent.chat(sessionId, message),
+    llmConfigured: agent.llmConfigured,
+  },
+  shell: {
+    run: (params, confirm) => workspaceService.shellRun(params, confirm),
+  },
+  getSettings: () => scheduleService.getSettings(),
+  assertShellArgv: assertAllowedShellArgv,
+  persistAgentSessionId: (jobId, sessionId) => {
+    const job = scheduleService.getJob(jobId)
+    if (!job || job.kind !== 'agent_prompt') return
+    scheduleService.updateJob(jobId, {
+      payload: { ...(job.payload as { prompt: string; session_id?: string }), session_id: sessionId },
+    })
+  },
+  // 桌面通知由 Electron 主进程处理；server 侧留 hook 供后续 IPC 桥接
+  onComplete: (event: ScheduleJobNotificationEvent) => {
+    app.log.info({
+      scheduleJobId: event.job.id,
+      scheduleJobTitle: event.job.title,
+      status: event.status,
+    }, 'schedule job finished')
+  },
+}))
 
 app.post<{ Params: { code: string }; Body: { force?: boolean } }>('/api/stock/:code/prep', async (req) => {
   const prep = startStockPrep(hub, req.params.code, { force: Boolean(req.body?.force) })
@@ -1487,6 +1519,7 @@ async function bootstrap() {
 
   await registerNewsRoutes(app)
   registerSandboxSettingsRoutes(app)
+  registerScheduleRoutes(app, scheduleService)
   registerPythonSettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
@@ -1495,6 +1528,7 @@ async function bootstrap() {
   await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
+  scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
   serveUi = shouldServeUi()
   if (serveUi) {
@@ -1542,6 +1576,7 @@ async function shutdown(signal: string) {
   }, 8_000)
   try {
     await browserSessionManager.closeAll()
+    scheduleService.stop()
     await app.close()
     getMarketDataService().store.close()
   } catch (err) {

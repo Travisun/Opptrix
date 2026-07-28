@@ -19,6 +19,7 @@ export const TOOL_PACK_IDS = [
   'workspace',
   'strategy_extra',
   'provider_ext',
+  'automation',
 ] as const
 
 export type ToolPackId = (typeof TOOL_PACK_IDS)[number]
@@ -116,6 +117,12 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     title: '数据源扩展',
     description: '自定义 Provider 方法',
     whenToUse: '标准 API 不够、需调自定义数据源',
+  },
+  {
+    id: 'automation',
+    title: '计划任务',
+    description: '创建与管理定时智能体任务与受控脚本',
+    whenToUse: '定时提醒、定期分析、自动执行重复投研流程',
   },
 ] as const
 
@@ -265,6 +272,17 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   list_enabled_providers: 'provider_ext',
   list_provider_custom_methods: 'provider_ext',
   invoke_provider_custom_method: 'provider_ext',
+
+  // automation
+  list_scheduled_jobs: 'automation',
+  get_scheduled_job: 'automation',
+  create_scheduled_job: 'automation',
+  update_scheduled_job: 'automation',
+  enable_scheduled_job: 'automation',
+  disable_scheduled_job: 'automation',
+  delete_scheduled_job: 'automation',
+  run_scheduled_job_now: 'automation',
+  list_scheduled_job_runs: 'automation',
 }
 
 export function isToolPackId(value: string): value is ToolPackId {

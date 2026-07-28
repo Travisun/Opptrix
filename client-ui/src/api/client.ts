@@ -2123,6 +2123,95 @@ export const sandboxSettings = {
     }),
 }
 
+// ─── Schedule API ───
+
+export type ScheduleOsStatus = 'synced' | 'pending' | 'error' | 'n/a'
+
+export interface ScheduleSettings {
+  master_enabled: boolean
+  autostart: boolean
+  allow_shell_scripts: boolean
+  os_tick_status?: ScheduleOsStatus
+  os_tick_error?: string | null
+}
+
+export interface ScheduleOsHealth {
+  status: ScheduleOsStatus
+  message: string
+  error: string | null
+  autostart: boolean
+}
+
+export interface ScheduleJobSummary {
+  total: number
+  enabled: number
+  disabled: number
+  next_due: string | null
+}
+
+export interface ScheduledJob {
+  id: string
+  title: string
+  enabled: boolean
+  kind: 'agent_prompt' | 'shell_script'
+  schedule_kind: 'once' | 'interval' | 'cron'
+  schedule: Record<string, unknown>
+  payload: Record<string, unknown>
+  os_registration_id: string | null
+  os_status: ScheduleOsStatus
+  next_run_at: string | null
+  last_run_at: string | null
+  last_status: string | null
+  created_at: string
+  updated_at: string
+}
+
+export const scheduleApi = {
+  getSettings: () =>
+    jsonFetch<{ settings: ScheduleSettings }>('/schedule/settings'),
+
+  patchSettings: (patch: Partial<ScheduleSettings> & { resync_os?: boolean }) =>
+    jsonFetch<{ settings: ScheduleSettings; os?: ScheduleOsHealth }>('/schedule/settings', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(patch),
+    }),
+
+  getStatus: () =>
+    jsonFetch<{
+      master_enabled: boolean
+      allow_shell_scripts: boolean
+      autostart: boolean
+      os: ScheduleOsHealth
+      jobs: ScheduleJobSummary
+      recent_failures: Array<{
+        job_id: string
+        job_title: string
+        run_id: string
+        started_at: string
+        error: string | null
+      }>
+      recent_failure_count: number
+    }>('/schedule/status'),
+
+  listJobs: () =>
+    jsonFetch<{ jobs: ScheduledJob[] }>('/schedule/jobs'),
+
+  enableJob: (id: string) =>
+    jsonFetch<{ job: ScheduledJob }>(`/schedule/jobs/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: true }),
+    }),
+
+  disableJob: (id: string) =>
+    jsonFetch<{ job: ScheduledJob }>(`/schedule/jobs/${encodeURIComponent(id)}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ enabled: false }),
+    }),
+}
+
 // ─── Python settings API ───
 
 export interface PythonSettings {

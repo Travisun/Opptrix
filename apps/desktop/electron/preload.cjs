@@ -63,5 +63,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   signalShellReady: () => ipcRenderer.send('shell-ready'),
   shellInstallWindowsSandbox: () => ipcRenderer.invoke('shell-install-windows-sandbox'),
   shellInstallLinuxSandbox: () => ipcRenderer.invoke('shell-install-linux-sandbox'),
+  scheduleOsReconcile: () => ipcRenderer.invoke('schedule-os-reconcile'),
+  scheduleEnsureAutostart: (enabled) => ipcRenderer.invoke('schedule-ensure-autostart', enabled),
+  schedulePostTick: () => ipcRenderer.invoke('schedule-post-tick'),
+  scheduleGetStatus: () => ipcRenderer.invoke('schedule-get-status'),
   setThemeSource: (source) => ipcRenderer.send('set-theme-source', source),
 })
