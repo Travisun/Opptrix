@@ -4,15 +4,17 @@
 
 # Opptrix — 全球多市场投研助手
 
-<table align="center"><tr><td align="center">
-  <a href="https://github.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/GitHub-%E4%BB%93%E5%BA%93-181717?logo=github&logoColor=white" alt="GitHub" /></a>
-  <a href="https://gitee.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/Gitee-%E4%BB%93%E5%BA%93-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a>
-  <a href="https://github.com/Travisun/Opptrix/releases"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-v0.7.0-2ea44f" alt="Download" /></a>
-  <a href="https://linux.do"><img src="https://img.shields.io/badge/Born%20in-LINUX.DO-009185" alt="Born in LINUX.DO" /></a>
-  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen" alt="Node.js" /></a>
-  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript" /></a>
-  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a>
-</td></tr></table>
+<table align="center">
+  <tr>
+    <td align="center"><a href="https://github.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/GitHub-%E4%BB%93%E5%BA%93-181717?logo=github&logoColor=white" alt="GitHub" /></a></td>
+    <td align="center"><a href="https://gitee.com/Travisun/Opptrix"><img src="https://img.shields.io/badge/Gitee-%E4%BB%93%E5%BA%93-C71D23?logo=gitee&logoColor=white" alt="Gitee" /></a></td>
+    <td align="center"><a href="https://github.com/Travisun/Opptrix/releases"><img src="https://img.shields.io/badge/%E4%B8%8B%E8%BD%BD-v0.7.0-2ea44f" alt="Download" /></a></td>
+    <td align="center"><a href="https://linux.do"><img src="https://img.shields.io/badge/Born%20in-LINUX.DO-009185" alt="Born in LINUX.DO" /></a></td>
+    <td align="center"><a href="https://nodejs.org/"><img src="https://img.shields.io/badge/node-%3E%3D24-brightgreen" alt="Node.js" /></a></td>
+    <td align="center"><a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.7-blue" alt="TypeScript" /></a></td>
+    <td align="center"><a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-blue.svg" alt="License" /></a></td>
+  </tr>
+</table>
 
 <p align="center">
   <img src="screenshot.jpg" alt="Opptrix 主界面：对话投研、工具执行过程与右侧个股行情面板" width="920" />
