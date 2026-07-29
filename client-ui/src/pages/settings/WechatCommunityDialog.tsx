@@ -6,6 +6,7 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Spinner,
   Text,
   makeStyles,
   mergeClasses,
@@ -44,16 +45,41 @@ const useStyles = makeStyles({
     gap: '10px',
   },
   qrFrame: {
+    position: 'relative',
     width: '220px',
     height: '220px',
     flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     lineHeight: 0,
+  },
+  qrLoading: {
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '10px',
+    width: '100%',
+    height: '100%',
+  },
+  qrLoadingLabel: {
+    fontSize: 'var(--opptrix-font-sm)',
+    color: opptrixCssVars.textTertiary,
+    lineHeight: 1.45,
   },
   qrImage: {
     width: '220px',
     height: '220px',
     display: 'block',
     objectFit: 'contain',
+  },
+  qrImageHidden: {
+    position: 'absolute',
+    width: '1px',
+    height: '1px',
+    opacity: 0,
+    pointerEvents: 'none',
   },
   qrFallback: {
     width: '220px',
@@ -81,10 +107,16 @@ const useStyles = makeStyles({
 
 export default function WechatCommunityDialog({ open, onClose }: WechatCommunityDialogProps) {
   const s = useStyles()
+  const [imgLoading, setImgLoading] = useState(true)
   const [imgFailed, setImgFailed] = useState(false)
+  const [loadGen, setLoadGen] = useState(0)
 
   useEffect(() => {
-    if (open) setImgFailed(false)
+    if (open) {
+      setImgFailed(false)
+      setImgLoading(true)
+      setLoadGen(g => g + 1)
+    }
   }, [open])
 
   return (
@@ -108,7 +140,7 @@ export default function WechatCommunityDialog({ open, onClose }: WechatCommunity
               扫码加入微信交流群，和其他用户一起聊聊使用心得，也欢迎把遇到的问题告诉我们。
             </Text>
             <div className={s.qrWrap}>
-              <div className={s.qrFrame} aria-hidden={imgFailed}>
+              <div className={s.qrFrame} aria-busy={imgLoading && !imgFailed} aria-hidden={imgFailed}>
                 {imgFailed ? (
                   <Text className={s.qrFallback} block>
                     暂时无法显示二维码
@@ -116,16 +148,31 @@ export default function WechatCommunityDialog({ open, onClose }: WechatCommunity
                     请稍后再试，或稍后再打开此窗口
                   </Text>
                 ) : (
-                  <img
-                    className={s.qrImage}
-                    src={WECHAT_GROUP_QR_URL}
-                    alt="微信用户交流群二维码"
-                    width={220}
-                    height={220}
-                    decoding="async"
-                    onError={() => setImgFailed(true)}
-                    onLoad={() => setImgFailed(false)}
-                  />
+                  <>
+                    {imgLoading && (
+                      <div className={s.qrLoading}>
+                        <Spinner size="medium" />
+                        <Text className={s.qrLoadingLabel} block>正在加载二维码…</Text>
+                      </div>
+                    )}
+                    <img
+                      key={loadGen}
+                      className={imgLoading ? s.qrImageHidden : s.qrImage}
+                      src={WECHAT_GROUP_QR_URL}
+                      alt="微信用户交流群二维码"
+                      width={220}
+                      height={220}
+                      decoding="async"
+                      onError={() => {
+                        setImgLoading(false)
+                        setImgFailed(true)
+                      }}
+                      onLoad={() => {
+                        setImgLoading(false)
+                        setImgFailed(false)
+                      }}
+                    />
+                  </>
                 )}
               </div>
               <Text className={s.hint} block>

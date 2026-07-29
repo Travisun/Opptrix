@@ -525,6 +525,21 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.4': {
+    welcomeTitle: '投研助手，更懂替你守候',
+    welcomeSubtitle:
+      '这一版让 Windows 升级安装更顺畅，覆盖更新时更少被卡住。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更顺畅',
+        title: 'Windows 升级安装更省心',
+        desc:
+          '覆盖安装时更少提示需要手动关闭应用，更新后更快回到投研。',
+        note: '少卡顿，少折腾。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
