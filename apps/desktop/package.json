@@ -1,6 +1,6 @@
 {
   "name": "@opptrix/desktop",
-  "version": "1.2.2",
+  "version": "1.2.3",
   "private": true,
   "description": "Opptrix 桌面端：Electron 壳 + 本地投研 API，支持自动更新与离线数据",
   "homepage": "https://www.opptrix.org",
@@ -175,7 +175,8 @@
       "uninstallerIcon": "build/icons/icon.ico",
       "installerHeaderIcon": "build/icons/icon.ico",
       "createDesktopShortcut": true,
-      "createStartMenuShortcut": true
+      "createStartMenuShortcut": true,
+      "include": "nsis/installer.nsh"
     },
     "deb": {
       "packageName": "opptrix",

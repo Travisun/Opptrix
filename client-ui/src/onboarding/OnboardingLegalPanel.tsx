@@ -5,7 +5,7 @@ import { OPPTRIX_PRIVACY_POLICY } from '../pages/settings/aboutLinks'
 import { openExternalUrl } from '../platform/openUrl'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ONBOARDING_COPY } from './manifest'
-import { OnboardingTextLink, useOnboardingShellStyles } from './OnboardingShell'
+import { OnboardingInlineLink, useOnboardingShellStyles } from './OnboardingShell'
 
 const useStyles = makeStyles({
   frame: {
@@ -157,9 +157,9 @@ export function OnboardingLegalPanel({
         <span className={shell.agreeText}>
           我已阅读并同意用户协议与
           {' '}
-          <OnboardingTextLink onClick={() => openExternalUrl(OPPTRIX_PRIVACY_POLICY)}>
+          <OnboardingInlineLink onClick={() => openExternalUrl(OPPTRIX_PRIVACY_POLICY)}>
             隐私政策
-          </OnboardingTextLink>
+          </OnboardingInlineLink>
         </span>
       </label>
       {finishError && (

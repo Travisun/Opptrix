@@ -503,6 +503,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.3': {
+    welcomeTitle: '投研助手，更懂替你守候',
+    welcomeSubtitle:
+      '这一版开箱就能扫码加入交流群；Windows 更新安装也更顺畅。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '一起交流',
+        title: '开箱就能加入交流群',
+        desc:
+          '引导里即可扫码入群，有问题一起聊，想反馈时也随时能找到我们。',
+        note: '现在不扫也没关系，设置里还能再开。',
+      },
+      {
+        kicker: '更顺畅',
+        title: 'Windows 更新安装更省心',
+        desc:
+          '覆盖安装时更少被后台计划任务挡住，更新后更快回到投研。',
+        note: '少卡顿，少折腾。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
@@ -557,6 +579,12 @@ export const ONBOARDING_COPY = {
     apiPlaceholder: '粘贴你的密钥',
     emptyKeyError: '请先填写密钥，或点「稍后配置」跳过',
     testFailedError: '密钥验证未通过，请检查是否复制完整',
+  },
+  community: {
+    title: '加入用户交流群',
+    desc: '扫码进群，有问题一起聊。需要帮助或想反馈时，群里随时都能找到我们。',
+    hint: '现在不扫也没关系，稍后可在设置里再次打开。',
+    qrFallback: '暂时无法显示二维码，请稍后再试，或点「稍后再说」继续。',
   },
   legal: {
     title: '开始使用前',

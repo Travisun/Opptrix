@@ -4,6 +4,7 @@ export type OnboardingPhase =
   | 'mcp'
   | 'data'
   | 'fuyao'
+  | 'community'
   | 'legal'
 
 export interface OnboardingNavStep {
@@ -17,6 +18,7 @@ export function buildOnboardingSteps(): OnboardingNavStep[] {
     { phase: 'mcp' },
     { phase: 'data' },
     { phase: 'fuyao' },
+    { phase: 'community' },
     { phase: 'legal' },
   ]
 }
@@ -27,6 +29,7 @@ export function stepLabel(step: OnboardingNavStep): string {
   if (step.phase === 'mcp') return '扩展服务'
   if (step.phase === 'data') return '行情'
   if (step.phase === 'fuyao') return '历史行情'
+  if (step.phase === 'community') return '交流群'
   return '协议'
 }
 
