@@ -96,6 +96,8 @@ const linuxAdapter = {
       return { ok: true, status: 'n/a', error: null }
     }
     try {
+      // 停 timer + 可能仍在跑的 oneshot，避免更新窗口期再拉起 AppImage
+      systemctl(['--user', 'stop', `${SERVICE_NAME}.service`])
       systemctl(['--user', 'disable', '--now', `${SERVICE_NAME}.timer`])
       if (fs.existsSync(timerPath())) fs.unlinkSync(timerPath())
       if (fs.existsSync(servicePath())) fs.unlinkSync(servicePath())

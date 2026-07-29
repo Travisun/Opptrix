@@ -81,10 +81,13 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 
 **更新安装防护（兼容托盘 / 计划任务）**：
 
-1. 安装前：`isUpdating` + `isQuitting` → 停 reconcile 轮询 → **暂停 OS tick**（launchd / 任务计划 / systemd-user）→ 销毁托盘 → 等待 sidecar 退出 → 销毁窗口（卸掉关窗进托盘）  
+1. 安装前：`isUpdating` + `isQuitting` → 停 reconcile 轮询 → **暂停 OS tick**（launchd / 任务计划 / systemd-user；Linux 会 `stop` oneshot + `disable --now` timer）→ 销毁托盘 → 等待 sidecar 退出 → 销毁窗口（卸掉关窗进托盘）→ **`killResidualAppProcessesForUpdate`**（`kill-app-for-update.cjs`）：三端按 **.app bundle / 安装目录 / AppImage·deb 路径** 强杀残留 PID（Helper、孤儿实例、sidecar 孙进程等），**始终排除当前主进程 `process.pid`**；Linux 另用 `/proc/*/exe`+cmdline 双通道并 **settle 后再扫一轮**（与 macOS/Windows 对等），再交给 `quitAndInstall`  
 2. 安装中：`second-instance`（含 `--schedule-tick`）一律忽略，避免第二实例拖住进程  
 3. OS tick 唤醒（`--schedule-tick`）**不**自动 `quitAndInstall`，等下次正常打开再装  
-4. `quitAndInstall` 后约 3s 仍未退出 → 强制 `app.exit`（防 ShipIt「App Still Running」）；约 12s 仍存活 → 清安装态并重建托盘/主窗口，再 `reconcileOsSchedule` 恢复 OS tick  
+4. `quitAndInstall` 后约 3s 仍未退出 → 强制 `app.exit`（防 macOS 安装器因应用仍在运行而卡住 / Linux AppImage 占锁）；约 12s 仍存活 → 清安装态、提示用户强制退出后重开即可继续安装，并重建托盘/主窗口，再 `reconcileOsSchedule` 恢复 OS tick  
+5. Windows 另有 NSIS（`nsis/installer.nsh`）在写文件前删 `OpptrixScheduleTick` 并 `taskkill` / 按 `$INSTDIR` 路径强杀；Electron 侧强杀是安装器唤起前的补强，语义对齐但不无差别先杀本进程  
+6. Linux 用户退出 / 短命 tick 结束时与 Windows 一样有短超时 `app.exit` 兜底，避免 AppImage 幽灵进程占住下一版安装  
+
 
 托盘图标源文件在仓库 `icons/tray/`，经 `prepare-icons.mjs` 同步到 `apps/desktop/build/icons/tray/`（已纳入 `electron-builder` `files`）：
 
@@ -102,7 +105,7 @@ The release app loads `http://127.0.0.1:8711` (UI + API same origin).
 | 参数 | 含义 |
 |------|------|
 | `--background` | 无 splash/主窗启动；macOS 隐藏 Dock；仍 spawn sidecar 并 reconcile OS 调度 |
-| `--schedule-tick` | 本次启动为 OS tick 唤醒：sidecar ready 后 `POST /api/schedule/tick`，然后保持后台（常与 `--background` 合用） |
+| `--schedule-tick` | 本次启动为 OS tick 唤醒：短命 worker（`runEphemeralScheduleTickWorker`）在 sidecar ready 后 `POST /api/schedule/tick`，然后退出（常与 `--background` 合用；不建托盘、不常驻） |
 
 OS 适配器写入的系统任务均带 `--background --schedule-tick`：
 

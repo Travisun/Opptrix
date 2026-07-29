@@ -84,7 +84,8 @@ function broadcast(channel, payload) {
 }
 
 function setStatus(patch) {
-  status = { ...status, ...patch }
+  // 默认清除手动安装引导；仅 blocked 分支显式置 true，避免标志残留刷屏
+  status = { ...status, manual_install_help: false, ...patch }
   broadcast('app-update-status', status)
 }
 
@@ -133,9 +134,8 @@ function hydrateReadyStatusFromDisk(currentVersion) {
     return null
   }
 
-  const blockReason = isInstallBlocked(pending.cacheKey)
-    ? getInstallBlockReason(pending.cacheKey)
-    : null
+  const blocked = isInstallBlocked(pending.cacheKey)
+  const blockReason = blocked ? getInstallBlockReason(pending.cacheKey) : null
 
   setStatus({
     state: 'ready',
@@ -144,6 +144,7 @@ function hydrateReadyStatusFromDisk(currentVersion) {
     percent: 100,
     message: blockReason
       ?? `新版本 ${pending.version} 已就绪，重启后即可完成更新`,
+    manual_install_help: blocked,
   })
   return pending
 }
@@ -314,7 +315,8 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
       currentVersion: status.currentVersion,
       version: targetVersion ?? status.version,
       percent: 100,
-      message: reason ?? '自动安装已暂停，请手动点击「重启更新」。',
+      message: reason ?? '自动更新多次未成功。可到官网下载最新安装包覆盖安装，或稍后再试。',
+      manual_install_help: true,
     })
     return Promise.resolve(false)
   }
@@ -369,7 +371,7 @@ function triggerInstall({ targetVersion, cacheKey, source }) {
 }
 
 /**
- * ShipIt 要求本进程真正退出，否则报 App Still Running。
+ * macOS ShipIt / Linux AppImage 替换要求本进程真正退出，否则报应用仍在运行或占锁失败。
  * 若 quitAndInstall 未退出，先强制 exit；仍卡住则恢复 UI，避免无窗口空壳。
  */
 function scheduleInstallExitGuards() {
@@ -392,6 +394,14 @@ function scheduleInstallExitGuards() {
     installExitWatchdogScheduled = false
     app.isUpdating = false
     app.isQuitting = false
+    setStatus({
+      state: 'ready',
+      currentVersion: status.currentVersion,
+      version: status.version,
+      percent: 100,
+      message:
+        '更新安装未完成。请强制退出本应用后重新打开，即可继续安装。',
+    })
     void Promise.resolve(onInstallStallRecover?.()).catch((err) => {
       console.error('[updater] install stall recovery failed:', err)
     })

@@ -108,7 +108,7 @@ function getInstallBlockReason(cacheKey) {
   const state = readGuardState()
   if (!state || state.cacheKey !== cacheKey) return null
   if (state.blockedUntil && Date.now() < Date.parse(state.blockedUntil)) {
-    return '自动安装多次未成功，请稍后再试，或在「关于 Opptrix」中手动点击「重启更新」。'
+    return '自动更新多次未成功。可到官网下载最新安装包覆盖安装，或稍后再试。'
   }
   return null
 }

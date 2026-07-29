@@ -46,11 +46,15 @@ export function buildAppUpdatePanel(
     case 'ready':
       return {
         visible: true,
-        title: status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪',
-        desc: status.message ?? '点击下方按钮重启并完成安装，对话与本地数据不会丢失。',
+        title: status.manual_install_help
+          ? (status.version ? `v${status.version} 需手动安装` : '更新需手动安装')
+          : (status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪'),
+        desc: status.message ?? (status.manual_install_help
+          ? '自动更新多次未成功。可到官网下载最新安装包覆盖安装。'
+          : '点击下方按钮重启并完成安装，对话与本地数据不会丢失。'),
         showProgress: false,
         percent: 100,
-        showInstall: true,
+        showInstall: !status.manual_install_help,
       }
     case 'installing':
       return {
@@ -108,6 +112,9 @@ export function getAppUpdateChromeHintLabel(status: AppUpdateStatus): string {
       }
       return status.version ? `下载 v${status.version}` : '正在下载更新'
     case 'ready':
+      if (status.manual_install_help) {
+        return status.version ? `v${status.version} 需手动安装` : '需手动安装'
+      }
       return status.version ? `v${status.version} 可更新` : '新版本可更新'
     case 'installing':
       return '正在安装…'

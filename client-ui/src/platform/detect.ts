@@ -177,6 +177,8 @@ export type AppUpdateStatus = {
   version?: string | null
   percent?: number
   message?: string | null
+  /** 自动安装反复失败后，引导官网覆盖安装 + 交流群求助 */
+  manual_install_help?: boolean
 }
 
 export type NotificationPermissionState = 'default' | 'granted' | 'denied'
