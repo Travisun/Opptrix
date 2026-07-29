@@ -22,6 +22,12 @@
 
 <p align="center"><sub>主界面：多会话聊天、Agent 工具链路、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
 
+<p align="center">
+  <a href="https://pan.quark.cn/s/68ed347a6992#/list/share"><img src="https://img.shields.io/badge/%E4%BB%8E%E5%A4%B8%E5%85%8B%E7%BD%91%E7%9B%98%E9%AB%98%E9%80%9F%E4%B8%8B%E8%BD%BD-0094FF?style=for-the-badge&logoColor=white" alt="从夸克网盘高速下载" height="48" /></a>
+  &nbsp;&nbsp;
+  <a href="https://opptrix.org/"><img src="https://img.shields.io/badge/%E4%BB%8E%E5%AE%98%E7%BD%91%E6%BA%90%E4%B8%8B%E8%BD%BD-FF2400?style=for-the-badge&logoColor=white" alt="从官网源下载" height="48" /></a>
+</p>
+
 ## 💬 技术交流与作者动态
 
 使用问题、功能建议、贡献讨论，欢迎扫码加入 **微信技术交流群**；也可扫码在 **抖音** 关注项目作者，获取产品与开发动态：
