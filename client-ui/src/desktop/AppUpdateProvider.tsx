@@ -4,10 +4,15 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type ReactNode,
 } from 'react'
 import { isElectron, type AppUpdateStatus } from '../platform/detect'
+import UpdateManualInstallDialog, {
+  hasShownManualInstallHelp,
+  markManualInstallHelpShown,
+} from './UpdateManualInstallDialog'
 
 const IDLE_STATUS: AppUpdateStatus = { state: 'idle' }
 
@@ -21,6 +26,8 @@ const AppUpdateContext = createContext<AppUpdateContextValue | null>(null)
 
 export function AppUpdateProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AppUpdateStatus>(IDLE_STATUS)
+  const [manualHelpOpen, setManualHelpOpen] = useState(false)
+  const openedHelpKeyRef = useRef<string | null>(null)
 
   useEffect(() => {
     if (!isElectron()) return
@@ -34,12 +41,23 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     return api.onAppUpdateStatus(next => setStatus(next))
   }, [])
 
+  useEffect(() => {
+    if (!status.manual_install_help) return
+    const key = status.version?.trim() || 'unknown'
+    if (openedHelpKeyRef.current === key) return
+    if (hasShownManualInstallHelp(status.version)) return
+    openedHelpKeyRef.current = key
+    markManualInstallHelpShown(status.version)
+    setManualHelpOpen(true)
+  }, [status.manual_install_help, status.version])
+
   const checkNow = useCallback(async () => {
     if (!isElectron()) return
     setStatus(prev => ({
       ...prev,
       state: 'checking',
       message: '正在检查更新…',
+      manual_install_help: false,
     }))
     try {
       const res = await window.electronAPI?.appUpdateCheck?.()
@@ -48,6 +66,7 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
       setStatus({
         state: 'error',
         message: '无法连接更新服务器',
+        manual_install_help: false,
       })
     }
   }, [])
@@ -65,6 +84,10 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
   return (
     <AppUpdateContext.Provider value={value}>
       {children}
+      <UpdateManualInstallDialog
+        open={manualHelpOpen}
+        onClose={() => setManualHelpOpen(false)}
+      />
     </AppUpdateContext.Provider>
   )
 }

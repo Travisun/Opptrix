@@ -94,14 +94,16 @@ export default function AppUpdateNotice() {
           <Text className={s.title} block>
             {status.state === 'installing'
               ? (status.version ? `正在安装 v${status.version}` : '正在安装更新')
-              : (status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪')}
+              : status.manual_install_help
+                ? (status.version ? `v${status.version} 需手动安装` : '更新需手动安装')
+                : (status.version ? `新版本 v${status.version} 已就绪` : '新版本已就绪')}
           </Text>
           <Text className={s.meta} block>
             {status.message ?? (status.state === 'installing'
               ? '应用即将退出并自动重启，请勿强制结束进程。'
               : '重启应用即可完成更新，当前对话与数据不会丢失。')}
           </Text>
-          {status.state === 'ready' && (
+          {status.state === 'ready' && !status.manual_install_help && (
             <div className={s.actions}>
               <OpptrixButton
                 className={mergeClasses(s.restartBtn, 'opptrix-focusable')}

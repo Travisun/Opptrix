@@ -38,6 +38,7 @@ const {
   reconcileOsSchedule,
   pauseOsScheduleForUpdateInstall,
 } = require('./schedule-bridge.cjs')
+const { killResidualAppProcessesForUpdate } = require('./kill-app-for-update.cjs')
 const {
   getTranslationStatus,
   getTranslationModels,
@@ -555,6 +556,12 @@ function prepareForUpdateInstall() {
         /* ignore */
       }
     }
+    // 5) 强杀同 bundle / 安装目录残留（Helper、孤儿实例、sidecar 孙进程等），排除 self
+    try {
+      await killResidualAppProcessesForUpdate()
+    } catch (err) {
+      console.warn('[updater] residual process cleanup failed:', err)
+    }
   })()
   return prepareForUpdateInstallPromise
 }
@@ -583,7 +590,8 @@ async function quitApp() {
     }
   }
   app.quit()
-  if (process.platform === 'win32') {
+  // Windows / Linux：托盘或 AppImage 更新后偶发不退；短超时强制 exit（更新路径另有 scheduleInstallExitGuards）
+  if (process.platform === 'win32' || process.platform === 'linux') {
     setTimeout(() => {
       if (app.isUpdating) return
       try {
@@ -893,7 +901,7 @@ async function exitAfterEphemeralScheduleTick() {
   destroyTray()
   await stopSidecarAndWait(2_500)
   app.quit()
-  if (process.platform === 'win32') {
+  if (process.platform === 'win32' || process.platform === 'linux') {
     setTimeout(() => {
       if (app.isUpdating) return
       try {

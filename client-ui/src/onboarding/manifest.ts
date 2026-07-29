@@ -562,6 +562,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.6': {
+    welcomeTitle: '版本更新，更少卡住',
+    welcomeSubtitle:
+      '这一版让各平台覆盖安装更顺畅；若自动更新多次未成功，会引导你到官网下载并加入交流群求助。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更顺畅',
+        title: '覆盖安装少卡住',
+        desc:
+          '安装新版本时更少因后台进程未退出而中断，更新后更快回到投研。',
+        note: '少卡顿，少折腾。',
+      },
+      {
+        kicker: '有帮手',
+        title: '更新失败可一键求助',
+        desc:
+          '自动更新多次未成功时，会提示到官网下载安装包，并可扫码加入交流群获取帮助。',
+        note: '卡住也能找到出路。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
