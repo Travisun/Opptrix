@@ -1,6 +1,14 @@
 /** @typedef {{ background: boolean; scheduleTick: boolean }} LaunchArgs */
 
 /**
+ * Parse desktop process argv.
+ *
+ * - `--background` alone: login-item / quiet start — tray stays, no main window.
+ * - `--background --schedule-tick` (OS schtasks/launchd/systemd): ephemeral tick
+ *   worker — cold-start main instance runs tick then exits; no tray, no reconcile poll.
+ * - `--schedule-tick` without `--background` on a second instance: forward tick to the
+ *   resident process (and may focus unless argv also has `--background`).
+ *
  * @param {string[] | undefined} [argv]
  * @returns {LaunchArgs}
  */

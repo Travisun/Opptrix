@@ -155,9 +155,21 @@ function createTray(opts) {
     void refreshTrayMenu(handlers)
   })
 
-  tray.on('double-click', () => handlers.onShowMainWindow())
+  // win32 单击 + 双击都会触发；短 debounce 避免连开两次
+  let lastShowAt = 0
+  const SHOW_DEBOUNCE_MS = 300
+  const showMainWindow = () => {
+    const now = Date.now()
+    if (now - lastShowAt < SHOW_DEBOUNCE_MS) return
+    lastShowAt = now
+    handlers.onShowMainWindow()
+  }
+
+  tray.on('double-click', showMainWindow)
   tray.on('click', () => {
-    if (process.platform === 'linux') handlers.onShowMainWindow()
+    // macOS 以菜单为主；Linux / Windows 单击唤起主窗
+    if (process.platform === 'darwin') return
+    showMainWindow()
   })
 
   return tray

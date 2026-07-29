@@ -474,6 +474,35 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.2': {
+    welcomeTitle: '投研助手，更懂替你守候',
+    welcomeSubtitle:
+      '这一版让 Windows 使用更省心：命令隔离状态更可信，退出更干净，从托盘唤回也更稳。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更可信',
+        title: '命令隔离已就绪，状态说得准',
+        desc:
+          'Windows 上装好命令隔离环境后，设置页会正确显示就绪，不再误报未就绪。',
+        note: '状态可信，少走冤枉路。',
+      },
+      {
+        kicker: '更干净',
+        title: '退出后，后台不留空壳',
+        desc:
+          '完全退出应用后，不再留下无效的后台图标；计划任务仍可按时执行，不打扰日常使用。',
+        note: '该退就退，该跑的任务照跑。',
+      },
+      {
+        kicker: '更顺手',
+        title: '托盘一点，窗口稳稳回来',
+        desc:
+          '关窗在后台运行后，从托盘唤回窗口更可靠，减少空白窗口。',
+        note: '后台守候，随时回到投研。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {

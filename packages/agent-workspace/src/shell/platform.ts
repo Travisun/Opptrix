@@ -8,6 +8,7 @@ import {
   type Platform,
 } from '@anthropic-ai/sandbox-runtime'
 import type { ShellPlatformStatus } from './types.js'
+import { isWindowsSandboxProvisioned } from './ensure-windows-sandbox.js'
 import { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 import { getLinuxSandboxInstallState, linuxCanAutoInstall } from './linux-sandbox-common.js'
 
@@ -87,12 +88,6 @@ function linuxHint(errors: string[], canAutoInstall: boolean): string | undefine
   return '命令隔离所需组件未就绪；请使用官方 deb 安装包，或重启应用后重试'
 }
 
-function windowsReady(
-  status: Awaited<ReturnType<typeof checkWindowsSandboxStatusAsync>>,
-): boolean {
-  return Boolean(status.user?.provisioned && status.wfp?.state === 'installed')
-}
-
 function windowsHint(canAutoInstall: boolean): string | undefined {
   if (canAutoInstall) {
     return '首次使用命令隔离需要一次系统授权；运行命令时将自动请求，也可稍后在设置中重试'
@@ -158,11 +153,12 @@ export async function getShellPlatformStatus(): Promise<ShellPlatformStatus> {
       const srtWinExe = resolveVendoredSrtWinExe()
       const srtWin = srtWinExe ? resolveSrtWin({ path: srtWinExe }) : undefined
       const win = await checkWindowsSandboxStatusAsync({ srtWin })
-      ready = ready && windowsReady(win)
-      needsWindowsInstall = !windowsReady(win)
+      const winReady = isWindowsSandboxProvisioned(win)
+      ready = ready && winReady
+      needsWindowsInstall = !winReady
       canAutoInstall = Boolean(srtWinExe) && needsWindowsInstall
       needsElevation = needsWindowsInstall && canAutoInstall
-      setupHint = windowsReady(win) ? undefined : windowsHint(canAutoInstall)
+      setupHint = winReady ? undefined : windowsHint(canAutoInstall)
       if (!ready && setupHint) message = setupHint
     } catch {
       ready = false
