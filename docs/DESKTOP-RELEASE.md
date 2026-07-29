@@ -130,7 +130,9 @@ git push origin desktop-v0.6.1
 2. **4 个并行 job** 打包（macOS x64 / arm64、Windows、Linux）
 3. 各 job 用 `gh release upload` 上传安装包（`electron-builder --publish never`，避免 CI 内自动 publish/签名冲突）
 4. **finalize-release** 合并 macOS 双架构 `latest-mac.yml` 并校验 yml 与 Release 附件一致
-5. **sync-r2** 将当前 Release 产物同步至 Cloudflare R2（purge 旧版 + 上传），供客户端加速更新
+5. **sync-r2** 将当前 Release 产物同步至 Cloudflare R2（先上传含 `*.opptrix-cms` 的完整产物，再删除过期对象），供客户端加速更新
+
+若仅需把已有 Release 重新同步到 R2（例如补传 Linux CMS），在 Actions 运行 **Resync Desktop R2**，输入标签如 `desktop-v1.2.6`。
 
 Sidecar 原生依赖由 `apps/desktop/scripts/stage-runtime.mjs` staging；`-dev` 标签默认跳过代码签名。
 
@@ -177,10 +179,10 @@ Release 正文由 CI 从 **`docs/releases/{version}.md`** 组装（含新功能/
 
 CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 
-1. 从 GitHub Release 下载当前标签的全部安装包与 `latest-*.yml`；
-2. **删除** R2 bucket 内 `desktop/` 前缀下的旧对象（仅保留最新一版）；
-3. 上传当前版本全部产物到 R2；
-4. 校验 `update.opptrix.org` 上 yml 可访问；
+1. 从 GitHub Release 下载当前标签的全部安装包、`latest-*.yml` 与 Linux `*.opptrix-cms`；
+2. **先上传** 到 R2（安装包 / CMS / blockmap 优先，最后覆盖三份 `latest-*.yml`，避免更新源空窗）；
+3. **再删除** `desktop/` 前缀下不属于本版的旧对象；
+4. 校验 `update.opptrix.org` 上 yml（及本版 CMS）可访问；
 5. **Purge** Cloudflare 边缘缓存中的三个 `latest-*.yml`（安装包文件名带版本号，无需 purge）。
 
 **远程专家市场（`experts/` 前缀，与 `desktop/` 隔离）**
@@ -203,7 +205,7 @@ CI 在 `finalize-release` 成功后执行 **`sync-r2`** job：
 | **Updater 组件** | `prebuild` → `stage-updater-deps.mjs` 写入 `build/updater-deps/packages/`（路径中 **不得** 含 `node_modules` 目录名） | electron-builder 会跳过名为 `node_modules` 的子目录；CI 打包后 `verify-packaged-updater.mjs` 校验 |
 | **Sidecar 依赖** | `stage-runtime.mjs` 安装后把 `runtime-stage/node_modules` **改名为** `runtime-stage/deps/`；主进程 `NODE_PATH` 指向 `deps` | 同理：`extraResources` 复制时相对路径恰为 `node_modules` 会被跳过，安装包会缺 Fastify 等；CI 用 `verify-packaged-runtime.mjs` 校验 |
 | **更新包签名** | 内置 `electron/certs/opptrix-update-root.pem`；Windows 用自签 Authenticode + 自定义 `verifyUpdateCodeSignature`；Linux 可选旁路 `*.opptrix-cms` | Secrets：`OPPTRIX_CODE_SIGNING_P12` / `_PASSWORD` / `_KEY_PEM`。**不依赖**系统信任库；SmartScreen 仍可能提示未知发布者 |
-| **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml | 旧客户端靠 semver 比较版本，不靠多通道 |
+| **R2 同步** | 仅保留最新一版；上传全部安装包 + 三份 yml + Linux `*.opptrix-cms` | 旧客户端靠 semver 比较版本，不靠多通道 |
 | **打包预检** | `audit-desktop-pack.mjs`（`npm run audit:desktop-pack`） | `ci.yml` 与 `release-desktop.yml` 在构建前必跑；本地打标签前 `OPPTRIX_AUDIT_STAGE_UPDATER=1` |
 
 **版本升级语义（electron-updater）**

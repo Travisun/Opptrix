@@ -1,0 +1,113 @@
+name: Resync Desktop R2
+
+# Re-upload an existing GitHub Release (desktop-v*) to Cloudflare R2 without rebuilding.
+# Use after fixing sync scripts, or when CDN/R2 is missing assets (e.g. *.opptrix-cms).
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Release tag (e.g. desktop-v1.2.6)
+        required: true
+        type: string
+
+concurrency:
+  group: resync-desktop-r2-${{ inputs.tag }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  sync-r2:
+    name: Sync release to Cloudflare R2
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Setup Node
+        uses: actions/setup-node@v5
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Verify release metadata policy
+        run: node apps/desktop/scripts/verify-release-metadata-policy.mjs
+
+      - name: Download release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          TAG="${{ inputs.tag }}"
+          if [[ ! "$TAG" =~ ^desktop-v ]]; then
+            echo "tag must start with desktop-v (got: $TAG)"
+            exit 1
+          fi
+          WORK="$RUNNER_TEMP/r2-sync"
+          mkdir -p "$WORK"
+          gh release download "$TAG" -D "$WORK"
+          echo "ASSET_DIR=$WORK" >> "$GITHUB_ENV"
+          echo "TAG=$TAG" >> "$GITHUB_ENV"
+          ls -la "$WORK"
+          echo "--- cms signatures ---"
+          ls -la "$WORK"/*.opptrix-cms 2>/dev/null || echo "(none in release — Linux CMS will stay optional)"
+
+      - name: Verify release coherence (tag, yml, assets)
+        run: node apps/desktop/scripts/verify-release-coherence.mjs "$TAG" "$ASSET_DIR"
+
+      - name: Verify R2 credentials
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+        run: node apps/desktop/scripts/verify-r2-credentials.mjs
+
+      - name: Sync to Cloudflare R2 (upload then prune obsolete)
+        shell: bash
+        env:
+          R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET: ${{ secrets.R2_BUCKET }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/sync-release-to-r2.mjs "$ASSET_DIR"
+
+      - name: Verify public update metadata + Linux CMS
+        shell: bash
+        env:
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: |
+          if [[ -z "${OPPTRIX_UPDATE_BASE_URL:-}" ]]; then
+            echo "OPPTRIX_UPDATE_BASE_URL not set — skip public verify"
+            exit 0
+          fi
+          BASE="${OPPTRIX_UPDATE_BASE_URL%/}/"
+          for yml in latest-mac.yml latest.yml latest-linux.yml; do
+            url="${BASE}${yml}"
+            echo "Checking $url"
+            curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
+          done
+          # Linux CMS must be reachable beside AppImage/deb when present in the release
+          shopt -s nullglob
+          for cms in "$ASSET_DIR"/*.opptrix-cms; do
+            name="$(basename "$cms")"
+            url="${BASE}${name}"
+            echo "Checking $url"
+            curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
+          done
+          echo "Public update metadata (+ CMS if any) reachable on R2"
+
+      - name: Purge Cloudflare CDN cache (latest-*.yml)
+        shell: bash
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ZONE_ID: ${{ secrets.CLOUDFLARE_ZONE_ID }}
+          OPPTRIX_UPDATE_BASE_URL: ${{ secrets.OPPTRIX_UPDATE_BASE_URL }}
+        run: node apps/desktop/scripts/purge-update-cdn-cache.mjs

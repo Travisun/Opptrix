@@ -458,7 +458,7 @@ jobs:
           R2_BUCKET: ${{ secrets.R2_BUCKET }}
         run: node apps/desktop/scripts/verify-r2-credentials.mjs
 
-      - name: Sync to Cloudflare R2 (purge old + upload current)
+      - name: Sync to Cloudflare R2 (upload then prune obsolete)
         shell: bash
         env:
           R2_ACCOUNT_ID: ${{ secrets.R2_ACCOUNT_ID }}
@@ -483,7 +483,14 @@ jobs:
             echo "Checking $url"
             curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
           done
-          echo "Public update metadata reachable on R2"
+          shopt -s nullglob
+          for cms in "$ASSET_DIR"/*.opptrix-cms; do
+            name="$(basename "$cms")"
+            url="${BASE}${name}"
+            echo "Checking $url"
+            curl -fsSL --retry 3 --retry-delay 2 "$url" -o /dev/null
+          done
+          echo "Public update metadata (+ CMS if any) reachable on R2"
 
       - name: Purge Cloudflare CDN cache (latest-*.yml)
         shell: bash

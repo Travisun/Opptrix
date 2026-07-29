@@ -126,10 +126,12 @@ export async function deleteObjectKeys(client, bucket, keys) {
 }
 
 export async function putObjectFile(client, bucket, key, filePath, contentType) {
+  const { size } = fs.statSync(filePath)
   await client.send(new PutObjectCommand({
     Bucket: bucket,
     Key: key,
-    Body: fs.readFileSync(filePath),
+    Body: fs.createReadStream(filePath),
+    ContentLength: size,
     ContentType: contentType,
   }))
 }
@@ -139,6 +141,7 @@ export function contentTypeForFileName(name) {
   if (lower.endsWith('.json')) return 'application/json; charset=utf-8'
   if (lower.endsWith('.yml')) return 'text/yaml; charset=utf-8'
   if (lower.endsWith('.blockmap')) return 'application/octet-stream'
+  if (lower.endsWith('.opptrix-cms')) return 'application/pkcs7-mime'
   if (lower.endsWith('.exe')) return 'application/vnd.microsoft.portable-executable'
   if (lower.endsWith('.dmg')) return 'application/x-apple-diskimage'
   if (lower.endsWith('.zip')) return 'application/zip'

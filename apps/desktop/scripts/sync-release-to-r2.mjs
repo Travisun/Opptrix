@@ -1,13 +1,17 @@
 #!/usr/bin/env node
 /**
- * Purge prior desktop release objects on Cloudflare R2, then upload the current
- * GitHub Release artifacts + latest-*.yml for electron-updater (generic provider).
+ * Upload current GitHub Release artifacts + latest-*.yml to Cloudflare R2 for
+ * electron-updater (generic provider), then remove obsolete keys under the feed prefix.
+ *
+ * Upload order: binaries / signatures first, then latest-*.yml — so the public feed
+ * never points at missing files, and the feed is not wiped before uploads finish.
  *
  * Env: R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET,
  *      OPPTRIX_UPDATE_BASE_URL (public CDN URL, e.g. https://pub-xxx.r2.dev/desktop/)
  */
 import fs from 'node:fs'
 import path from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { r2KeyPrefixFromFeedUrl, resolveUpdateFeedUrl } from './lib/update-feed-url.mjs'
 import { UPDATE_YML_PUBLIC } from './lib/release-metadata-policy.mjs'
 import {
@@ -21,21 +25,30 @@ import {
   explainR2Error,
 } from './lib/r2-client.mjs'
 
-const RELEASE_FILE = /\.(dmg|zip|exe|AppImage|deb|yml|blockmap)$/i
+/** Includes Linux detached CMS signatures (`*.opptrix-cms`). */
+const RELEASE_FILE = /\.(dmg|zip|exe|AppImage|deb|yml|blockmap|opptrix-cms)$/i
 
 function usage() {
   console.error('Usage: sync-release-to-r2.mjs <release-assets-dir>')
   process.exit(1)
 }
 
-function shouldUpload(name) {
+export function shouldUpload(name) {
   if (!RELEASE_FILE.test(name)) return false
   if (/^latest-mac-(arm64|x64)\.yml$/i.test(name)) return false
   return true
 }
 
+/** Binaries / CMS / blockmaps before public latest-*.yml. */
+export function compareUploadOrder(a, b) {
+  const aYml = /\.yml$/i.test(a)
+  const bYml = /\.yml$/i.test(b)
+  if (aYml !== bYml) return aYml ? 1 : -1
+  return a.localeCompare(b)
+}
+
 function collectUploadFiles(dir) {
-  const names = fs.readdirSync(dir).filter(shouldUpload).sort()
+  const names = fs.readdirSync(dir).filter(shouldUpload).sort(compareUploadOrder)
   if (names.length === 0) {
     throw new Error(`No release artifacts to upload under ${dir}`)
   }
@@ -74,6 +87,7 @@ async function main() {
   const client = createR2Client(r2Env)
   const files = collectUploadFiles(sourceDir)
   const totalBytes = files.reduce((sum, f) => sum + f.size, 0)
+  const keepKeys = new Set(files.map((f) => `${prefix}/${f.name}`))
 
   console.log(`[r2] feed URL: ${feedUrl}`)
   console.log(`[r2] bucket: ${r2Env.bucket}  prefix: ${prefix}/`)
@@ -81,12 +95,6 @@ async function main() {
 
   await verifyR2Credentials(client, r2Env.bucket)
   console.log('[r2] credentials OK')
-
-  const existingKeys = await listObjectKeys(client, r2Env.bucket, prefix)
-  if (existingKeys.length > 0) {
-    console.log(`[r2] purging ${existingKeys.length} existing object(s) under ${prefix}/`)
-    await deleteObjectKeys(client, r2Env.bucket, existingKeys)
-  }
 
   for (const file of files) {
     const key = `${prefix}/${file.name}`
@@ -100,13 +108,25 @@ async function main() {
     console.log(`[r2] uploaded ${key} (${formatBytes(file.size)})`)
   }
 
+  const existingKeys = await listObjectKeys(client, r2Env.bucket, prefix)
+  const obsolete = existingKeys.filter((key) => !keepKeys.has(key))
+  if (obsolete.length > 0) {
+    console.log(`[r2] removing ${obsolete.length} obsolete object(s) under ${prefix}/`)
+    await deleteObjectKeys(client, r2Env.bucket, obsolete)
+  }
+
   console.log('[r2] sync complete — clients should read update metadata from:')
   console.log(`  macOS:   ${feedUrl}latest-mac.yml`)
   console.log(`  Windows: ${feedUrl}latest.yml`)
   console.log(`  Linux:   ${feedUrl}latest-linux.yml`)
 }
 
-main().catch((err) => {
-  console.error('[r2] sync failed:', explainR2Error(err))
-  process.exit(1)
-})
+const isDirectRun = process.argv[1]
+  && path.resolve(process.argv[1]) === path.resolve(fileURLToPath(import.meta.url))
+
+if (isDirectRun) {
+  main().catch((err) => {
+    console.error('[r2] sync failed:', explainR2Error(err))
+    process.exit(1)
+  })
+}
