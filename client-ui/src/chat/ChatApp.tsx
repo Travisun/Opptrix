@@ -509,7 +509,7 @@ export default function ChatApp() {
       setAvailableModels(models)
       return models
     } catch {
-      setAvailableModels([])
+      // 失败时保留已有列表，避免首启超时把选择器清空
       return []
     }
   }, [])
@@ -521,8 +521,11 @@ export default function ChatApp() {
       const models = await refreshModels()
       if (health.llm_configured && models.length) {
         setLlmLabel(`${models.length} 个可用模型`)
+      } else if (health.llm_configured) {
+        // health 已表示有模型，但列表请求失败：保持文案，勿暗示「未配置」
+        setLlmLabel((prev) => (prev.includes('可用模型') ? prev : '模型已就绪'))
       } else {
-        setLlmLabel(health.llm_configured ? '模型已就绪' : '请先在设置中配置 AI 模型')
+        setLlmLabel('请先在设置中配置 AI 模型')
       }
     } catch {
       setBackendOk(false)
@@ -633,7 +636,9 @@ export default function ChatApp() {
 
   const handleExitSettings = useCallback(() => {
     navigate('chat')
-  }, [navigate])
+    // 设置页可能改过提供商/模型；退出时刷新，确保聊天下拉立刻可用
+    refreshHealth().catch(() => {})
+  }, [navigate, refreshHealth])
 
   const handleChromeGoBack = useCallback(() => {
     if (view === 'settings' && !canGoBack) {

@@ -193,5 +193,11 @@ export {
   type CompactResult,
 } from './context/compact.js'
 export { estimateTextTokens, estimateMessageTokens } from './context/token-estimate.js'
-export { createProvider, isConfigured, fetchOpenAiModelList, type LlmConfig } from './llm/provider.js'
+export {
+  createProvider,
+  isConfigured,
+  fetchOpenAiModelList,
+  joinOpenAiCompatibleUrl,
+  type LlmConfig,
+} from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'

@@ -52,7 +52,8 @@ const EXIT_ANIMATION_MS = 180
 const useStyles = makeStyles({
   viewport: {
     position: 'fixed',
-    zIndex: 1400,
+    /* 须高于 OnboardingShell(zIndex 2000)，引导内验证失败提示才能看见 */
+    zIndex: 2100,
     top: '12px',
     right: '16px',
     display: 'flex',

@@ -69,7 +69,8 @@ export async function extractImageWithRemoteLlm(
   }
 
   const prompt = buildImageDescribePrompt(articleTitle)
-  const url = `${llm.baseUrl.replace(/\/$/, '')}/chat/completions`
+  // 与 agent joinOpenAiCompatibleUrl 同契约：原样根地址 + 相对路径，不自动补 /v1
+  const url = `${llm.baseUrl.trim().replace(/\/+$/, '')}/chat/completions`
   const dataUrl = imageToDataUrl(imagePath)
 
   const resp = await fetch(url, {

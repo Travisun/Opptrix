@@ -4,7 +4,7 @@ import os from 'node:os'
 import path from 'node:path'
 import Fastify from 'fastify'
 import { createBrowserSessionManager, registerBrowserShutdownHooks } from '@opptrix/agent-browser'
-import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
+import { AgentEngine, buildAgentSafeProjectInfo, fetchOpenAiModelList, getModelsDevCatalog, initOutboundNetwork, type ChatProgressEvent, type SessionContextRef } from '@opptrix/agent'
 import { getWorkspaceService, assertAllowedShellArgv, getSessionSecretAccessStore } from '@opptrix/agent-workspace'
 import { getUserDataStore } from '@opptrix/user-store'
 import { ResearchHub } from '@opptrix/research-hub'
@@ -871,10 +871,25 @@ app.delete<{ Params: { id: string } }>('/api/providers/:id', async (req, reply) 
   return { status: 'deleted' }
 })
 
-app.get('/api/models/available', async () => ({
-  models: await agent.listAvailableModelsAsync(),
-  default_model: cfg.default_model ?? null,
-}))
+/**
+ * 聊天选模型列表：同步列表即可选；models.dev 富化（context/media）仅在缓存已热时附带。
+ * 禁止冷启动阻塞拉 models.dev（否则客户端 10s 超时清空下拉，表现为「要先进设置才可选」）。
+ */
+app.get('/api/models/available', async () => {
+  const sync = agent.listAvailableModels()
+  const default_model = cfg.default_model ?? null
+  try {
+    const enriched = await Promise.race([
+      agent.listAvailableModelsAsync(),
+      new Promise<null>((resolve) => {
+        setTimeout(() => resolve(null), 400)
+      }),
+    ])
+    return { models: enriched ?? sync, default_model }
+  } catch {
+    return { models: sync, default_model }
+  }
+})
 
 app.get('/api/templates', async () => ({ templates: listTemplates() }))
 
@@ -1516,6 +1531,9 @@ async function listenWithStaleCleanup(): Promise<void> {
 async function bootstrap() {
   await initOutboundNetwork()
   console.log('  Outbound network → IPv4-first, v6 fallback on connect failure')
+
+  // 后台预热 models.dev，避免首屏聊天下拉被富化请求拖死
+  void getModelsDevCatalog().catch(() => {})
 
   await registerNewsRoutes(app)
   registerSandboxSettingsRoutes(app)

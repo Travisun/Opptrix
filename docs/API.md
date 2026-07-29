@@ -121,7 +121,8 @@
 |------|------|------|
 | GET | `/api/config` | 公开配置（不含明文 API Key） |
 | POST | `/api/config` | 保存 LLM / 默认评分卡 |
-| GET | `/api/providers/presets` | 大模型提供商预置列表（有序：中国 → 海外 → 本地 Ollama → 自定义；`base_url` 优先 models.dev 缓存，否则静态 fallback；含 `region`） |
+| GET | `/api/providers/presets` | 大模型提供商预置列表（有序：中国 → 海外 → 本地 Ollama → 自定义；`base_url` 为完整兼容根，优先 models.dev 缓存否则静态 fallback，运行时不自动补 `/v1`；含 `region`） |
+| POST | `/api/providers/discover-models` | `{ base_url, api_key }`：对 `{base_url}/models` 探测拉模型（`base_url` 原样拼接，不补 `/v1`） |
 | GET | `/api/templates` | 评分卡模板列表 |
 | POST | `/api/chat` | `{ "message": "..." }` Agent 对话 |
 | POST | `/api/evaluate` | `{ "code", "scorecard?" }` |

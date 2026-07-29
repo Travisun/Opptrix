@@ -540,6 +540,28 @@ export const ONBOARDING_RELEASE_BY_VERSION: Record<string, OnboardingReleaseCont
       },
     ],
   },
+  '1.2.5': {
+    welcomeTitle: '模型配置，少绕一圈',
+    welcomeSubtitle:
+      '这一版让新装或更新后更快选好模型，配置大模型服务也更顺手。',
+    updateLine: '欢迎回来。你的会话、关注列表与配置都还在，可直接继续投研。',
+    features: [
+      {
+        kicker: '更快就绪',
+        title: '打开就能选模型',
+        desc:
+          '刚安装或更新后，聊天里更快就能选择模型，不必再先绕到设置里点一遍。',
+        note: '少等待，少折腾。',
+      },
+      {
+        kicker: '配置更顺',
+        title: '预置服务下一步更可靠',
+        desc:
+          '选好预置服务并填写密钥后可正常继续；服务地址按完整路径连接，适配更多接口。',
+        note: '填完就能往下走。',
+      },
+    ],
+  },
 }
 
 export function resolveOnboardingRelease(appVersion: string): OnboardingReleaseContent {
