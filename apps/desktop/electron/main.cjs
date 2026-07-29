@@ -440,15 +440,80 @@ function getMainWindow() {
   return null
 }
 
-function focusMainWindow() {
+/**
+ * 主窗 renderer 是否可安全 show（未崩溃、URL 落在 app 源上）。
+ * @param {import('electron').BrowserWindow | null | undefined} win
+ */
+function isMainWindowUiHealthy(win) {
+  if (!win || win.isDestroyed()) return false
+  const wc = win.webContents
+  if (!wc || wc.isDestroyed()) return false
+  if (typeof wc.isCrashed === 'function' && wc.isCrashed()) return false
+  let url = ''
+  try {
+    url = wc.getURL() || ''
+  } catch {
+    return false
+  }
+  if (!url || url === 'about:blank' || url === 'data:,') return false
+  if (url.startsWith('chrome-error://') || url.startsWith('chrome://') || url.startsWith('file:')) {
+    return false
+  }
+  try {
+    const expected = new URL(appUrl())
+    const actual = new URL(url)
+    return actual.origin === expected.origin
+  } catch {
+    return false
+  }
+}
+
+/**
+ * 托盘 / 菜单 / focus：健康窗则 restore+show；坏窗则重载；无窗则 bootstrap。
+ */
+async function ensureMainWindowVisible() {
   const win = getMainWindow()
   if (win) {
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
+    if (isMainWindowUiHealthy(win)) {
+      if (win.isMinimized()) win.restore()
+      win.show()
+      win.focus()
+      return
+    }
+    try {
+      await loadAppInMainWindow(win, { enforceMinSplash: false })
+      if (!win.isDestroyed()) {
+        if (win.isMinimized()) win.restore()
+        win.show()
+        win.focus()
+      }
+    } catch {
+      try {
+        if (!win.isDestroyed()) {
+          win.removeAllListeners('close')
+          win.destroy()
+        }
+      } catch {
+        /* ignore */
+      }
+      if (mainWindow === win) mainWindow = null
+      try {
+        await bootstrapApp({ withSplash: false })
+      } catch (bootErr) {
+        await reportBootstrapFailure(bootErr)
+      }
+    }
     return
   }
-  void openMainWindowFromMenu()
+  try {
+    await bootstrapApp({ withSplash: false })
+  } catch (err) {
+    await reportBootstrapFailure(err)
+  }
+}
+
+function focusMainWindow() {
+  void ensureMainWindowVisible()
 }
 
 function deliverProtocolPayload(payload) {
@@ -494,15 +559,40 @@ function prepareForUpdateInstall() {
   return prepareForUpdateInstallPromise
 }
 
-function quitApp() {
+/**
+ * 用户主动退出（托盘/菜单）。对齐更新路径：等 sidecar、拆托盘/窗；不设 isUpdating。
+ * Windows 加短超时 app.exit 兜底，防幽灵进程。
+ */
+async function quitApp() {
   if (isUpdateReady()) {
     void installPendingUpdate()
     return
   }
+  if (app.isUpdating) return
   app.isQuitting = true
-  stopSidecar()
+  stopScheduleReconcilePoll()
   destroyTray()
+  await stopSidecarAndWait(2_500)
+  for (const win of BrowserWindow.getAllWindows()) {
+    if (win.isDestroyed()) continue
+    try {
+      win.removeAllListeners('close')
+      win.destroy()
+    } catch {
+      /* ignore */
+    }
+  }
   app.quit()
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      if (app.isUpdating) return
+      try {
+        app.exit(0)
+      } catch {
+        process.exit(0)
+      }
+    }, 4_000)
+  }
 }
 
 setProtocolDeliverHandler(deliverProtocolPayload)
@@ -680,10 +770,28 @@ async function loadAppInMainWindow(win, { enforceMinSplash = true } = {}) {
 
   if (!win.isVisible()) {
     await new Promise((resolve) => {
-      win.once('ready-to-show', () => {
-        win.show()
+      let settled = false
+      const finish = () => {
+        if (settled) return
+        settled = true
+        clearTimeout(fallbackTimer)
+        win.removeListener('ready-to-show', onReady)
         resolve()
-      })
+      }
+      const showNow = () => {
+        if (!win.isDestroyed() && !win.isVisible()) {
+          win.show()
+        }
+        finish()
+      }
+      const onReady = () => showNow()
+      // 先挂 ready-to-show，再尝试立刻 show（did-finish-load 后事件可能已错过）
+      win.once('ready-to-show', onReady)
+      const fallbackTimer = setTimeout(showNow, 1_000)
+      // did-finish-load 后 ready-to-show 可能已错过：内容不在加载中则立刻 show
+      if (!win.webContents.isLoading()) {
+        setImmediate(showNow)
+      }
     })
   }
 }
@@ -769,14 +877,58 @@ async function bootstrapBackgroundApp() {
   await ensureSidecarReady()
   configureScheduleBridge({ host: API_HOST, port: API_PORT })
 
-  if (launchArgs.scheduleTick) {
-    await handleScheduleTickFromOs()
-  }
-
+  // schedule-tick 冷启动已在 continueDesktopBootstrap 走短命 worker，不会进入本路径
   await reconcileOsSchedule().catch((err) => {
     console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
   })
   startScheduleReconcilePoll()
+}
+
+/**
+ * OS 级 `--schedule-tick` 冷启动：短命 worker，不建托盘、不常驻 reconcile poll。
+ */
+async function exitAfterEphemeralScheduleTick() {
+  app.isQuitting = true
+  stopScheduleReconcilePoll()
+  destroyTray()
+  await stopSidecarAndWait(2_500)
+  app.quit()
+  if (process.platform === 'win32') {
+    setTimeout(() => {
+      if (app.isUpdating) return
+      try {
+        app.exit(0)
+      } catch {
+        process.exit(0)
+      }
+    }, 3_000)
+  }
+}
+
+/**
+ * 主实例冷启动跑 OS tick：ensureSidecar → tick → 可选一次 reconcile → 干净退出。
+ */
+async function runEphemeralScheduleTickWorker() {
+  if (process.platform === 'darwin') {
+    try {
+      app.dock.hide()
+    } catch {
+      /* ignore */
+    }
+  }
+
+  try {
+    await ensureSidecarReady()
+    configureScheduleBridge({ host: API_HOST, port: API_PORT })
+    await handleScheduleTickFromOs()
+    await reconcileOsSchedule().catch((err) => {
+      console.warn('[schedule] reconcile failed:', err instanceof Error ? err.message : err)
+    })
+  } catch (err) {
+    console.error('[bootstrap:schedule-tick]', err instanceof Error ? err.message : err)
+  } finally {
+    await exitAfterEphemeralScheduleTick()
+  }
 }
 
 async function bootstrapForegroundApp({ withSplash = true } = {}) {
@@ -803,29 +955,22 @@ function revealAppFromTray() {
       /* ignore */
     }
   }
-  // 与 focusMainWindow 一致：已有隐藏窗口则 show，否则再创建
-  focusMainWindow()
+  void ensureMainWindowVisible()
 }
 
 function createDesktopTray() {
   createTray({
     onShowMainWindow: revealAppFromTray,
-    onQuit: quitApp,
+    onQuit: () => {
+      void quitApp()
+    },
     onOpenScheduleStatus: revealAppFromTray,
     scheduleStatusProvider: buildTrayScheduleStatusItem,
   })
 }
 
 async function openMainWindowFromMenu() {
-  // 关窗进托盘后窗口仍在，只是 hide；仅 focus 无法唤出（尤其 macOS）
-  const win = getMainWindow()
-  if (win) {
-    if (win.isMinimized()) win.restore()
-    win.show()
-    win.focus()
-    return
-  }
-  await bootstrapApp({ withSplash: false })
+  await ensureMainWindowVisible()
 }
 
 function applyNativeThemeSource(source) {
@@ -1142,6 +1287,9 @@ if (!gotTheLock) {
       background: launchArgs.background,
     })
 
+    // 短命 tick worker 已退出路径，勿再挂 activate / 常驻逻辑
+    if (launchArgs.scheduleTick) return
+
     app.on('activate', async () => {
       if (launchArgs.background && !mainWindow) {
         return
@@ -1160,9 +1308,17 @@ if (!gotTheLock) {
 
   /**
    * 正常启动（及更新安装失败后的恢复）共用：托盘 → sidecar/窗口 → updater。
+   * `--schedule-tick` 冷启动走短命 worker：不建托盘、tick 后退出。
    * @param {{ withSplash?: boolean; background?: boolean }} [opts]
+   * @returns {Promise<boolean>} true = 常驻桌面已就绪；false = 短命 tick 已退出
    */
   async function continueDesktopBootstrap(opts = {}) {
+    // OS schtasks / launchd 冷启动：不建托盘，跑完 tick 干净退出
+    if (launchArgs.scheduleTick) {
+      await runEphemeralScheduleTickWorker()
+      return false
+    }
+
     const background = opts.background === true
     const withSplash = opts.withSplash !== false && !background
 
@@ -1174,11 +1330,11 @@ if (!gotTheLock) {
       } catch (err) {
         console.error('[bootstrap:background]', err instanceof Error ? err.message : err)
         app.quit()
-        return
+        return false
       }
     } else {
       const ok = await bootstrapForegroundApp({ withSplash })
-      if (!ok) return
+      if (!ok) return false
     }
 
     const launchUrl = findProtocolUrl()
@@ -1198,6 +1354,7 @@ if (!gotTheLock) {
       }
     })
     initUpdater({ version: VERSION })
+    return true
   }
 
   recoverDesktopAfterUpdateStall = async () => {
