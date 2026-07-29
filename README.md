@@ -72,8 +72,8 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
       </a>
     </td>
     <td align="center" width="120">
-      <img src="icons/sponsors/sponsor-744649315.jpg" width="72" height="72" alt="744649315" /><br />
-      <sub>744649315</sub>
+      <img src="icons/sponsors/sponsor-744649315.jpg" width="72" height="72" alt="Remielle" /><br />
+      <sub>Remielle</sub>
     </td>
   </tr>
 </table>
