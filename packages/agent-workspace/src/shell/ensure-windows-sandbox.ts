@@ -14,10 +14,23 @@ export interface WindowsSandboxEnsureResult {
 
 let autoInstallAttempted = false
 
-function windowsProvisioned(
-  status: Awaited<ReturnType<typeof checkWindowsSandboxStatusAsync>>,
-): boolean {
-  return Boolean(status.user?.provisioned && status.wfp?.state === 'installed')
+/**
+ * Windows sandbox ready check — aligned with upstream `interpretDependencyProbes`:
+ * - requires user.provisioned && user.credPresent
+ * - wfp `cannot-read` is NOT an error (unelevated process cannot enumerate BFE)
+ * - wfp `absent` means not installed; `installed` is OK
+ */
+export function isWindowsSandboxProvisioned(status: {
+  user?: { provisioned?: boolean; credPresent?: boolean }
+  wfp?: { state?: string }
+}): boolean {
+  const userOk = Boolean(status.user?.provisioned && status.user?.credPresent)
+  if (!userOk) return false
+  const wfpState = status.wfp?.state
+  // cannot-read = 非提升进程无法读 BFE；已安装时常见，不算未就绪
+  // absent = 过滤器确实不存在 → 未就绪
+  // installed = 可读且已装 → 就绪
+  return wfpState === 'installed' || wfpState === 'cannot-read'
 }
 
 /** Reset for tests only. */
@@ -41,7 +54,7 @@ export async function ensureWindowsSandboxReady(options?: {
   const srtWin = srtWinExe ? resolveSrtWin({ path: srtWinExe }) : undefined
 
   let status = await checkWindowsSandboxStatusAsync({ srtWin })
-  if (windowsProvisioned(status)) {
+  if (isWindowsSandboxProvisioned(status)) {
     return { ready: true }
   }
 
@@ -67,7 +80,7 @@ export async function ensureWindowsSandboxReady(options?: {
   }
 
   status = await checkWindowsSandboxStatusAsync({ srtWin })
-  if (windowsProvisioned(status)) {
+  if (isWindowsSandboxProvisioned(status)) {
     return { ready: true, attemptedInstall: true }
   }
 

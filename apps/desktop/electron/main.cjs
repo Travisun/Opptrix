@@ -875,7 +875,15 @@ async function installWindowsSandboxFromMain() {
       message: '未完成系统授权，命令隔离环境尚未就绪；可稍后在设置中重试',
     }
   }
-  const ready = Boolean(result.user?.provisioned && result.wfp?.state === 'installed')
+  const shellMod = await resolveAgentWorkspaceShellModule('shell/ensure-windows-sandbox.js')
+  // Align with isWindowsSandboxProvisioned — cannot-read is OK for unelevated probes
+  const ready = shellMod?.isWindowsSandboxProvisioned
+    ? shellMod.isWindowsSandboxProvisioned(result)
+    : Boolean(
+        result.user?.provisioned &&
+          result.user?.credPresent &&
+          (result.wfp?.state === 'installed' || result.wfp?.state === 'cannot-read'),
+      )
   return {
     ok: ready,
     message: ready ? '命令隔离环境已就绪' : '命令隔离环境尚未就绪，请稍后重试',

@@ -94,7 +94,11 @@ export {
   readUserNsRestrictedSync,
   resolveBwrapPathsForProfile,
 } from './linux-sandbox-common.js'
-export { ensureWindowsSandboxReady, resetWindowsSandboxAutoInstallAttempt } from './ensure-windows-sandbox.js'
+export {
+  ensureWindowsSandboxReady,
+  isWindowsSandboxProvisioned,
+  resetWindowsSandboxAutoInstallAttempt,
+} from './ensure-windows-sandbox.js'
 export { resolveBundledSandboxBinConfig, resolveVendoredSrtWinExe } from './resolve-sandbox-bins.js'
 export { resolveShellArgv, looksLikePythonBin, looksLikePipBin } from './resolve-shell-argv.js'
 export type { ResolveShellArgvResult } from './resolve-shell-argv.js'

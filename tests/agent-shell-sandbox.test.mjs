@@ -490,6 +490,47 @@ test('ensureLinuxSandboxReady is no-op on non-linux', async () => {
   assert.equal(result.ready, true)
 })
 
+test('isWindowsSandboxProvisioned treats cannot-read as ready when user is provisioned', async () => {
+  const { isWindowsSandboxProvisioned } = await import(
+    '../packages/agent-workspace/dist/shell/ensure-windows-sandbox.js'
+  )
+  assert.equal(
+    isWindowsSandboxProvisioned({
+      user: { provisioned: true, credPresent: true },
+      wfp: { state: 'cannot-read' },
+    }),
+    true,
+  )
+  assert.equal(
+    isWindowsSandboxProvisioned({
+      user: { provisioned: true, credPresent: true },
+      wfp: { state: 'installed' },
+    }),
+    true,
+  )
+  assert.equal(
+    isWindowsSandboxProvisioned({
+      user: { provisioned: true, credPresent: true },
+      wfp: { state: 'absent' },
+    }),
+    false,
+  )
+  assert.equal(
+    isWindowsSandboxProvisioned({
+      user: { provisioned: true, credPresent: false },
+      wfp: { state: 'cannot-read' },
+    }),
+    false,
+  )
+  assert.equal(
+    isWindowsSandboxProvisioned({
+      user: { provisioned: true },
+      wfp: { state: 'installed' },
+    }),
+    false,
+  )
+})
+
 test('linux AppArmor profile builder covers bwrap paths', async () => {
   const {
     buildAppArmorProfileContent,
