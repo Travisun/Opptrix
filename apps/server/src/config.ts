@@ -87,6 +87,7 @@ function isOpenAiCompatibleApi(api: string): boolean {
   return !lower.includes('/anthropic')
 }
 
+/** 仅 trim + 去尾斜杠；不补/不剥版本路径（/v1、/v4 等由预置或用户完整给出）。 */
 function normalizeBaseUrl(url: string): string {
   return url.trim().replace(/\/+$/, '')
 }
@@ -130,7 +131,8 @@ function migrateLegacy(file: Partial<AppConfig> & { llm?: LegacyLlmConfig }): St
     return [{
       id,
       name: llm?.provider ?? process.env.LLM_PROVIDER ?? 'DeepSeek',
-      base_url: llm?.base_url ?? process.env.LLM_BASE_URL ?? 'https://api.deepseek.com',
+      // 完整兼容根（含路径）；运行时不再自动补 /v1
+      base_url: llm?.base_url ?? process.env.LLM_BASE_URL ?? 'https://api.deepseek.com/v1',
       api_key: envKey || llm?.api_key || '',
       models: [model],
     }]

@@ -355,7 +355,7 @@ export class OpenAiCompatibleProvider implements LlmProvider {
         error: 'not_configured',
       }
     }
-    const url = `${this.cfg.baseUrl.replace(/\/$/, '')}/chat/completions`
+    const url = joinOpenAiCompatibleUrl(this.cfg.baseUrl, 'chat/completions')
     const buildBody = (stream: boolean): Record<string, unknown> => {
       const body: Record<string, unknown> = {
         model: this.cfg.model,
@@ -472,10 +472,27 @@ export class OpenAiCompatibleProvider implements LlmProvider {
   }
 }
 
-/** OpenAI-compatible GET /v1/models */
+/**
+ * 将用户/预置给出的 OpenAI 兼容根地址与相对资源路径拼接。
+ *
+ * 契约（硬性）：
+ * - baseUrl **原样**使用（仅 trim、去尾斜杠），**不**自动补 `/v1`，**不**剥任何路径段
+ * - 路径因提供商而异（`/v1`、`/paas/v4`、`/compatible-mode/v1`、`/openai`、无版本后缀等），由配置方填写完整根
+ * - relativePath 如 `models`、`chat/completions`；若 base 已以该相对路径结尾则不再重复拼接
+ */
+export function joinOpenAiCompatibleUrl(baseUrl: string, relativePath: string): string {
+  const root = baseUrl.trim().replace(/\/+$/, '')
+  const path = relativePath.trim().replace(/^\/+/, '')
+  if (!path) return root
+  if (!root) return `/${path}`
+  const escaped = path.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  if (new RegExp(`/${escaped}$`, 'i').test(root)) return root
+  return `${root}/${path}`
+}
+
+/** OpenAI 兼容 GET {baseUrl}/models — 见 {@link joinOpenAiCompatibleUrl}。 */
 export async function fetchOpenAiModelList(baseUrl: string, apiKey: string): Promise<string[]> {
-  const root = baseUrl.trim().replace(/\/$/, '').replace(/\/v1$/, '')
-  const url = `${root}/v1/models`
+  const url = joinOpenAiCompatibleUrl(baseUrl, 'models')
   const resp = await outboundFetch(url, {
     headers: { Authorization: `Bearer ${apiKey}` },
     signal: AbortSignal.timeout(30_000),

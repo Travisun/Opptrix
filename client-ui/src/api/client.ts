@@ -1230,12 +1230,19 @@ export async function getProviderPresets() {
   return jsonFetch<{ presets: ProviderPreset[] }>('/providers/presets')
 }
 
+/** 拉取模型列表：上游常需 10–30s，须长于默认 REQUEST_TIMEOUT */
+const DISCOVER_MODELS_TIMEOUT_MS = 45_000
+
 export async function discoverModels(base_url: string, api_key: string) {
-  return jsonFetch<{ models: string[] }>('/providers/discover-models', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ base_url, api_key }),
-  })
+  return jsonFetch<{ models: string[] }>(
+    '/providers/discover-models',
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ base_url, api_key }),
+    },
+    DISCOVER_MODELS_TIMEOUT_MS,
+  )
 }
 
 export async function createProvider(payload: {
@@ -1269,7 +1276,12 @@ export async function deleteProvider(id: string) {
 }
 
 export async function listAvailableModels() {
-  return jsonFetch<{ models: AvailableModel[]; default_model: string | null }>('/models/available')
+  // 服务端以同步列表为主，富化最多数百毫秒；仍略放宽超时以防冷启动偶发慢
+  return jsonFetch<{ models: AvailableModel[]; default_model: string | null }>(
+    '/models/available',
+    undefined,
+    15_000,
+  )
 }
 
 export async function listSessions() {

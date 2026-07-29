@@ -33,8 +33,9 @@ export interface AvailableModel {
   media?: ModelMediaCapabilities
 }
 
+/** 仅 trim + 去尾斜杠；不补/不剥 /v1 等路径段。 */
 export function normalizeBaseUrl(url: string): string {
-  return url.trim().replace(/\/$/, '')
+  return url.trim().replace(/\/+$/, '')
 }
 
 export class ProviderRegistry {

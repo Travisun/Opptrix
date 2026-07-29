@@ -438,8 +438,9 @@ export default function ProviderWizard({
     return [...promo, ...cn, ...global, custom]
   }, [presets])
 
-  const showPresetList = !isEdit && !customFormOpen
-  const showCustomForm = !isEdit && customFormOpen
+  /** 仅第 1 步展示预置列表；进密钥步后必须为 false，否则页脚会把「下一步」渲染成 null */
+  const showPresetList = !isEdit && !customFormOpen && step === 1
+  const showCustomForm = !isEdit && customFormOpen && step === 1
 
   const matchedPresetId = useMemo(
     () => resolvePresetId(presets, selectedPresetId, name, baseUrl),
@@ -466,13 +467,21 @@ export default function ProviderWizard({
 
   const runDiscover = async (): Promise<boolean> => {
     const url = baseUrl.trim()
-    if (!url || !apiKey.trim()) return false
+    const key = apiKey.trim()
+    if (!url) {
+      toast.showError('缺少服务地址，请返回上一步重新选择提供商')
+      return false
+    }
+    if (!key) {
+      toast.showError('请先填写密钥')
+      return false
+    }
     setDiscovering(true)
     setDiscoverHint('正在验证密钥并拉取模型…')
     setDiscovered([])
     setSelected(new Set())
     try {
-      const { models } = await discoverModels(url, apiKey.trim())
+      const { models } = await discoverModels(url, key)
       setDiscovered(models)
       if (models.length) {
         if (isEdit && provider) {
@@ -488,7 +497,15 @@ export default function ProviderWizard({
       return true
     } catch (e) {
       setDiscoverHint('')
-      toast.showError(e instanceof Error ? e.message : '密钥验证失败，请检查后重试')
+      const raw = e instanceof Error ? e.message : '密钥验证失败，请检查后重试'
+      const friendly = /超时|timeout|abort/i.test(raw)
+        ? '验证超时，请确认网络后重试'
+        : /HTTP\s*401|unauthorized|invalid.*key|incorrect.*api/i.test(raw)
+          ? '密钥无效或已过期，请检查后重试'
+          : /HTTP\s*404|not\s*found/i.test(raw)
+            ? '服务地址可能不正确，请返回重选提供商或改用自定义'
+            : raw
+      toast.showError(friendly)
       return false
     } finally {
       setDiscovering(false)
@@ -518,7 +535,10 @@ export default function ProviderWizard({
   }
 
   const canNextStep1 = Boolean(name.trim() && baseUrl.trim())
-  const canNextStep2 = isEdit || Boolean(apiKey.trim())
+  /** 新建须同时有地址与密钥；编辑可留空密钥沿用已存 */
+  const canNextStep2 = isEdit
+    ? true
+    : Boolean(baseUrl.trim() && apiKey.trim())
   const canSave = selected.size > 0
 
   const handleNext = async () => {
@@ -713,7 +733,10 @@ export default function ProviderWizard({
                     placeholder="例如 我的服务"
                   />
                 </OpptrixField>
-                <OpptrixField label="服务地址" hint="请填写完整地址（通常含 /v1 等路径）">
+                <OpptrixField
+                  label="服务地址"
+                  hint="填写完整兼容接口根地址；路径因服务而异（如 /v1、/v4、/openai），系统不会自动补全"
+                >
                   <OpptrixInput
                     value={baseUrl}
                     onChange={(_, d) => setBaseUrl(d.value || '')}
@@ -757,7 +780,9 @@ export default function ProviderWizard({
                     type="password"
                     value={apiKey}
                     onChange={(_, d) => setApiKey(d.value || '')}
+                    onInput={e => setApiKey((e.target as HTMLInputElement).value || '')}
                     placeholder={isEdit ? '留空不修改' : '粘贴密钥'}
+                    autoComplete="off"
                   />
                 </OpptrixField>
               </div>
