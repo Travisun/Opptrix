@@ -17,6 +17,7 @@ import {
   type OnboardingFuyaoNavState,
 } from './OnboardingFuyaoPanel'
 import { OnboardingIntroCarousel } from './OnboardingIntroCarousel'
+import { OnboardingCommunityPanel } from './OnboardingCommunityPanel'
 import { OnboardingLegalPanel } from './OnboardingLegalPanel'
 import { OnboardingLlmReadyPanel } from './OnboardingLlmReadyPanel'
 import { OnboardingMcpPanel } from './OnboardingMcpPanel'
@@ -349,6 +350,21 @@ export default function OnboardingWizard({
         </OpptrixButton>
       )
     }
+  } else if (current.phase === 'community') {
+    bodyFlush = true
+    contentWide = true
+    contentAlignStart = true
+    body = <OnboardingCommunityPanel />
+    footerSecondary = (
+      <OpptrixButton variant="ghost" onClick={goNext}>
+        稍后再说
+      </OpptrixButton>
+    )
+    footerPrimary = (
+      <OpptrixButton variant="primary" onClick={goNext}>
+        继续
+      </OpptrixButton>
+    )
   } else {
     bodyFlush = true
     contentWide = true

@@ -237,9 +237,18 @@ export const useOnboardingShellStyles = makeStyles({
   agreeRow: {
     display: 'flex',
     alignItems: 'center',
-    gap: '6px',
-    marginTop: 'clamp(24px, 4vh, 32px)',
+    flexWrap: 'nowrap',
+    gap: '8px',
+    marginTop: '14px',
     textAlign: 'left',
+    lineHeight: 1.4,
+    '& .fui-Checkbox': {
+      margin: 0,
+      flexShrink: 0,
+    },
+    '& .fui-Checkbox__indicator': {
+      margin: 0,
+    },
     '& .fui-Checkbox, & .fui-Checkbox *, & [class*="Checkbox"]:not(span), & [class*="Checkbox"] *': {
       outline: 'none !important',
       boxShadow: 'none !important',
@@ -256,9 +265,11 @@ export const useOnboardingShellStyles = makeStyles({
     },
   },
   agreeText: {
+    display: 'inline',
     fontSize: 'var(--opptrix-font-lg)',
     color: opptrixCssVars.textPrimary,
-    lineHeight: 1.65,
+    lineHeight: 1.4,
+    whiteSpace: 'nowrap',
   },
   link: {
     padding: 0,
@@ -269,6 +280,24 @@ export const useOnboardingShellStyles = makeStyles({
     fontWeight: 500,
     cursor: 'pointer',
     textDecoration: 'none',
+    ':hover': {
+      textDecoration: 'underline',
+    },
+  },
+  inlineLink: {
+    display: 'inline',
+    padding: 0,
+    margin: 0,
+    border: 'none',
+    background: 'transparent',
+    color: opptrixCssVars.accent,
+    fontSize: 'inherit',
+    fontWeight: 500,
+    fontFamily: 'inherit',
+    lineHeight: 'inherit',
+    cursor: 'pointer',
+    textDecoration: 'none',
+    verticalAlign: 'baseline',
     ':hover': {
       textDecoration: 'underline',
     },
@@ -534,5 +563,27 @@ export function OnboardingTextLink({
     >
       {children}
     </OpptrixButton>
+  )
+}
+
+/** 行内文字链接：无按钮 min-height/padding，用于协议同意行等紧凑横排 */
+export function OnboardingInlineLink({
+  children,
+  onClick,
+  className,
+}: {
+  children: ReactNode
+  onClick: () => void
+  className?: string
+}) {
+  const s = useOnboardingShellStyles()
+  return (
+    <button
+      type="button"
+      className={mergeClasses(s.inlineLink, className)}
+      onClick={onClick}
+    >
+      {children}
+    </button>
   )
 }

@@ -112,7 +112,7 @@ OS 适配器写入的系统任务均带 `--background --schedule-tick`：
 | **Windows** | 用户计划任务 `schtasks`，按分钟重复 | 任务名 `OpptrixScheduleTick` |
 | **Linux** | 用户 systemd timer `~/.config/systemd/user/opptrix-schedule-tick.timer` | `systemctl --user` |
 
-实现：`apps/desktop/electron/os-schedule/{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。
+实现：`apps/desktop/electron/os-schedule/{darwin,win32,linux}.cjs`；入口 `os-schedule/index.cjs`。Windows NSIS 安装器（`nsis/installer.nsh`）会在安装前移除 `OpptrixScheduleTick` 并结束运行中的 Opptrix，避免旧版定时拉起阻塞覆盖安装。
 
 单实例锁：若已有实例运行，带 `--schedule-tick` 的第二次启动只触发 `handleScheduleTickFromOs()`（经已有 sidecar），不重复开主窗（除非未带 `--background`）。
 
