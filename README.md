@@ -47,6 +47,41 @@
 
 ---
 
+## ❤️ 欢迎赞助我们
+
+Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可——你的支持会帮助我们把 Opptrix 发展得更加强大。
+
+<p align="center">
+  <a href="https://opptrix.org/sponsor"><strong>前往赞助页 → https://opptrix.org/sponsor</strong></a>
+</p>
+
+### 个人赞助者
+
+感谢每一位支持者（与 [官网赞助墙](https://opptrix.org/sponsor) 同步）：
+
+<table align="center">
+  <tr>
+    <td align="center" width="120">
+      <img src="icons/sponsors/sponsor-worldwithdreams.png" width="72" height="72" alt="WorldWithinDreams" /><br />
+      <sub>WorldWithinDreams</sub>
+    </td>
+    <td align="center" width="120">
+      <a href="https://github.com/LiberSeek">
+        <img src="icons/sponsors/sponsor-raven.png" width="72" height="72" alt="Raven" /><br />
+        <sub>Raven</sub>
+      </a>
+    </td>
+    <td align="center" width="120">
+      <img src="icons/sponsors/sponsor-744649315.jpg" width="72" height="72" alt="744649315" /><br />
+      <sub>744649315</sub>
+    </td>
+  </tr>
+</table>
+
+<p align="center"><sub>企业赞助席位虚位以待 — 详情见 <a href="https://opptrix.org/sponsor">赞助页</a></sub></p>
+
+---
+
 ## ⚠️ 重要风险提示与用户须知
 
 **请在使用前仔细阅读。使用本软件即表示你已理解并同意以下条款。**
