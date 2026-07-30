@@ -79,6 +79,12 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
       <img src="icons/sponsors/sponsor-N.jpg" width="72" height="72" alt="N" /><br />
       <sub>N</sub>
     </td>
+    <td align="center" width="120">
+      <a href="https://www.douyin.com/user/MS4wLjABAAAAmj0mJEXCyfheDFZyFVpeEKKaX_zWMlN3Ir6YcScCSAU">
+        <img src="icons/sponsors/sponsor-yexiaoying.jpg" width="72" height="72" alt="叶小莹" /><br />
+        <sub>叶小莹</sub>
+      </a>
+    </td>
   </tr>
 </table>
 
