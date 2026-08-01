@@ -233,7 +233,7 @@ export default function AgentSkillsSettingsSection() {
         <SettingsStaticBlock>
           <div className={s.sectionLabel}>导入技能</div>
           <div className={s.sectionDesc}>
-            粘贴完整技能说明（含标题元数据与步骤正文），导入后即可使用
+            粘贴完整技能说明（含标题区与步骤正文），导入后即可使用
           </div>
           <Textarea
             className={s.importBox}
