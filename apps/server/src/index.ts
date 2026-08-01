@@ -40,6 +40,7 @@ import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
+import { registerAgentSkillRoutes } from './agent-skill-routes.js'
 import { registerSpeechRoutes } from './speech-routes.js'
 import {
   startNewsFeedScheduler,
@@ -1541,6 +1542,7 @@ async function bootstrap() {
   registerPythonSettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
+  await registerAgentSkillRoutes(app)
   registerSearchRoutes(app, hub, agent)
   registerSessionAttachmentRoutes(app, agent)
   await registerSpeechRoutes(app)

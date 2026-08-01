@@ -447,6 +447,18 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
 | POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
 
+### 工作流技能 / Agent Skills
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/agent-skills` | `{ skills: [{ name, description, source, … }] }` |
+| GET | `/api/agent-skills/:name` | `{ skill }` 含正文 `body` |
+| POST | `/api/agent-skills` | 创建：`{ name, description, body }` |
+| POST | `/api/agent-skills/import` | `{ markdown }` 导入完整技能说明 |
+| DELETE | `/api/agent-skills/:name` | 删除用户技能（不可删内置） |
+
+详见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)。
+
 `PublicMcpServer` 含：`id`/`title`/`enabled`/`paused`/`sortOrder`/`transport`/`endpointPreview`/`secretsConfigured`/`capabilityBindings`/`health`/`toolCount` 等。
 
 订阅地址须为完整 `http(s)://` 链接。文章持久化在本地 SQLite，默认保留 **3 年内**按 `pub_date` 排序的文章；可在设置中调整保留年限与数量上限（不限上限时仅按年限清理）。写入超出策略时自动删除最旧文章。

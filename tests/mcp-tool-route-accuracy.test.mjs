@@ -30,6 +30,7 @@ import {
 
 /** D1 黄金用例：用户问句 → 必须命中的首推工具 */
 const PRIMARY_CASES = [
+  { message: '用工作流技能做早报', expectPrimary: 'list_agent_skills', intent: 'agent_skills' },
   { message: '茅台现价多少', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
   { message: '600519 最新价和涨跌幅', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
   { message: '帮我深度分析一下 600519', expectPrimary: 'get_instrument_snapshot', intent: 'depth_analysis' },

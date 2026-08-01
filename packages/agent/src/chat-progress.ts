@@ -191,6 +191,13 @@ const TOOL_LABELS: Record<string, string> = {
   get_notice_content: '读取公告正文',
   list_tool_packs: '列出可用工具包',
   activate_tool_pack: '激活工具包',
+  list_agent_skills: '列出工作流技能',
+  activate_agent_skill: '激活工作流技能',
+  get_agent_skill: '查看工作流技能',
+  get_agent_skill_file: '读取技能附件',
+  create_agent_skill: '创建工作流技能',
+  import_agent_skill: '导入工作流技能',
+  delete_agent_skill: '删除工作流技能',
   get_current_time: '获取当前时间',
   get_system_info: '读取运行环境信息',
   get_app_settings: '读取应用设置',
@@ -600,6 +607,15 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'activate_tool_pack': {
       const packs = packIdsHint(args)
       return packs ? `${base} · ${packs}` : base
+    }
+    case 'activate_agent_skill': {
+      const raw = args.skill_names ?? args.skillNames
+      const names = Array.isArray(raw)
+        ? raw.map(x => String(x)).filter(Boolean)
+        : typeof raw === 'string'
+          ? [raw]
+          : []
+      return names.length ? `${base} · ${names.slice(0, 3).join(', ')}` : base
     }
     case 'enable_mcp_server':
     case 'disable_mcp_server':

@@ -1999,6 +1999,51 @@ export async function removeMcpPreset(presetId: string) {
   })
 }
 
+/** 工作流技能（Agent Skills）公开视图 */
+export interface PublicAgentSkill {
+  name: string
+  description: string
+  source: 'builtin' | 'user' | 'imported' | 'agent_created'
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  body?: string
+}
+
+export async function listAgentSkills() {
+  return jsonFetch<{ skills: PublicAgentSkill[] }>('/agent-skills')
+}
+
+export async function getAgentSkill(name: string) {
+  return jsonFetch<{ skill: PublicAgentSkill }>(`/agent-skills/${encodeURIComponent(name)}`)
+}
+
+export async function importAgentSkill(markdown: string) {
+  return jsonFetch<{ skill: PublicAgentSkill }>('/agent-skills/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown }),
+  })
+}
+
+export async function createAgentSkill(input: {
+  name: string
+  description: string
+  body: string
+}) {
+  return jsonFetch<{ skill: PublicAgentSkill }>('/agent-skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteAgentSkill(name: string) {
+  return jsonFetch<{ ok: true; name: string }>(`/agent-skills/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
+  })
+}
+
 export async function getMcpServerInfo(id: string) {
   return jsonFetch<{
     version: { name: string; version: string } | null

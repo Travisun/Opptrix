@@ -124,6 +124,20 @@ const INTENT_RULES: IntentRule[] = [
     hint: '问组合暴露/因子分析 → 首选 analyze_portfolio',
   },
   {
+    intent: 'agent_skills',
+    priority: 91,
+    patterns: [
+      /工作流技能|技能目录|激活.*(?:工作流)?技能/,
+      /用(?:一下)?工作流/,
+      /list_agent_skills|activate_agent_skill/i,
+      /agent\s*skills?/i,
+    ],
+    preferredTools: ['list_agent_skills', 'activate_agent_skill', 'get_agent_skill'],
+    avoidTools: ['list_tool_packs', 'activate_tool_pack', 'get_morning_brief'],
+    confidence: 'high',
+    hint: '工作流技能 → list_agent_skills 再 activate_agent_skill；勿与工具包、专家「技能专长」或 get_morning_brief 硬编码早报混淆',
+  },
+  {
     intent: 'news_article',
     priority: 88,
     patterns: [/读.*(?:新闻|资讯|文章)|资讯正文|这篇(新闻|资讯)|公告全文|年报正文/],

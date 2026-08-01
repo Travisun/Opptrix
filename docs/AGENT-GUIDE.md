@@ -145,6 +145,7 @@ Opptrix/
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
   - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
   - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
+  - **工作流技能（Agent Skills）**：`@opptrix/agent-skills` + `list_agent_skills` / `activate_agent_skill` 等（meta）；与专家「技能专长」正交。规范见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)
   - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `AggregatingToolBroker`（内含本地 `McpToolBroker` + 外部 MCP 注册表）；激活后同轮刷新 tools
   - **外部 MCP（优先级故障转移）**：
     - 配置：`packages/shared/src/mcp-servers.ts`；持久化 user-store `mcp_servers`；设置页 **MCP 服务器** / REST `/api/mcp-servers*`

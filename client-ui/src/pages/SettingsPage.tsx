@@ -15,6 +15,7 @@ import type { SettingsSearchEntry } from './settings/settingsSearchIndex'
 import SettingsBackRow from './settings/SettingsBackRow'
 import DataProvidersSettingsSection from './settings/DataProvidersSettingsSection'
 import McpServersSettingsSection from './settings/McpServersSettingsSection'
+import AgentSkillsSettingsSection from './settings/AgentSkillsSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
@@ -700,6 +701,9 @@ function SettingsPageView({
 
       case 'mcp_servers':
         return <McpServersSettingsSection />
+
+      case 'agent_skills':
+        return <AgentSkillsSettingsSection />
 
       case 'news_feed':
         return <NewsFeedSettingsSection />

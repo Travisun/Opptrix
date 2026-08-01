@@ -46,8 +46,8 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
   {
     id: 'meta',
     title: '工具包管理',
-    description: '列出与按需激活其它工具包；管理外部 MCP Server（列表/启用/暂停/安装确认）',
-    whenToUse: '当前工具不足、需深挖专题，或管理用户外部 MCP 数据源时',
+    description: '列出与按需激活其它工具包与工作流技能；管理外部 MCP Server（列表/启用/暂停/安装确认）',
+    whenToUse: '当前工具不足、需深挖专题、启用工作流技能，或管理用户外部 MCP 数据源时',
     alwaysOn: true,
   },
   {
@@ -144,6 +144,13 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   // meta
   list_tool_packs: 'meta',
   activate_tool_pack: 'meta',
+  list_agent_skills: 'meta',
+  activate_agent_skill: 'meta',
+  get_agent_skill: 'meta',
+  get_agent_skill_file: 'meta',
+  create_agent_skill: 'meta',
+  import_agent_skill: 'meta',
+  delete_agent_skill: 'meta',
   list_mcp_servers: 'meta',
   enable_mcp_server: 'meta',
   disable_mcp_server: 'meta',
