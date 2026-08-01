@@ -18,6 +18,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   appUpdateGetStatus: () => ipcRenderer.invoke('app-update-get-status'),
   appUpdateCheck: () => ipcRenderer.invoke('app-update-check'),
   appUpdateInstall: () => ipcRenderer.invoke('app-update-install'),
+  appUpdateDownload: () => ipcRenderer.invoke('app-update-download'),
+  appUpdateGetAutoDownload: () => ipcRenderer.invoke('app-update-get-auto-download'),
+  appUpdateSetAutoDownload: (enabled) => ipcRenderer.invoke('app-update-set-auto-download', enabled),
   onAppUpdateStatus: (callback) => {
     const handler = (_event, status) => callback(status)
     ipcRenderer.on('app-update-status', handler)

@@ -1,5 +1,5 @@
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
-import { ArrowSyncRegular } from '@fluentui/react-icons'
+import { ArrowDownloadRegular, ArrowSyncRegular } from '@fluentui/react-icons'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
 import { useAppUpdate } from '../hooks/useAppUpdate'
 import { isElectron } from '../platform/detect'
@@ -63,11 +63,37 @@ const useStyles = makeStyles({
 
 export default function AppUpdateNotice() {
   const s = useStyles()
-  const { status, installUpdate } = useAppUpdate()
+  const { status, autoDownload, downloadUpdate, installUpdate } = useAppUpdate()
 
   if (!isElectron()) return null
   if (status.state === 'idle' || status.state === 'not-available' || status.state === 'checking') {
     return null
+  }
+
+  if (status.state === 'available' && !autoDownload) {
+    return (
+      <div className={s.wrap}>
+        <div className={s.card}>
+          <Text className={s.title} block>
+            {status.version ? `发现新版本 v${status.version}` : '发现新版本'}
+          </Text>
+          <Text className={s.meta} block>
+            {status.message ?? '确认后即可下载；下载完成后会提示你重启。'}
+          </Text>
+          <div className={s.actions}>
+            <OpptrixButton
+              className={mergeClasses(s.restartBtn, 'opptrix-focusable')}
+              variant="primary"
+              size="small"
+              icon={<ArrowDownloadRegular fontSize={13} />}
+              onClick={() => { void downloadUpdate() }}
+            >
+              下载更新
+            </OpptrixButton>
+          </div>
+        </div>
+      </div>
+    )
   }
 
   if (status.state === 'downloading' || status.state === 'available') {

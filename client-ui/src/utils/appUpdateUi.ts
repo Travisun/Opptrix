@@ -8,13 +8,15 @@ export type AppUpdatePanelModel = {
   /** 0–100；undefined 表示不确定进度 */
   percent?: number
   showInstall: boolean
+  /** 关自动下载时，available 态展示「下载更新」 */
+  showDownload: boolean
 }
 
 export function buildAppUpdatePanel(
   status: AppUpdateStatus,
-  opts: { checkedOnce: boolean },
+  opts: { checkedOnce: boolean; autoDownload?: boolean },
 ): AppUpdatePanelModel | null {
-  const { checkedOnce } = opts
+  const { checkedOnce, autoDownload = false } = opts
 
   switch (status.state) {
     case 'checking':
@@ -24,8 +26,19 @@ export function buildAppUpdatePanel(
         desc: status.message ?? '正在连接更新服务器，请稍候…',
         showProgress: false,
         showInstall: false,
+        showDownload: false,
       }
     case 'available':
+      if (!autoDownload) {
+        return {
+          visible: true,
+          title: status.version ? `发现新版本 v${status.version}` : '发现新版本',
+          desc: status.message ?? '确认后即可下载；下载完成后可重启安装。',
+          showProgress: false,
+          showInstall: false,
+          showDownload: true,
+        }
+      }
       return {
         visible: true,
         title: status.version ? `发现新版本 v${status.version}` : '发现新版本',
@@ -33,6 +46,7 @@ export function buildAppUpdatePanel(
         showProgress: true,
         percent: 0,
         showInstall: false,
+        showDownload: false,
       }
     case 'downloading':
       return {
@@ -42,6 +56,7 @@ export function buildAppUpdatePanel(
         showProgress: true,
         percent: status.percent ?? 0,
         showInstall: false,
+        showDownload: false,
       }
     case 'ready':
       return {
@@ -55,6 +70,7 @@ export function buildAppUpdatePanel(
         showProgress: false,
         percent: 100,
         showInstall: !status.manual_install_help,
+        showDownload: false,
       }
     case 'installing':
       return {
@@ -63,6 +79,7 @@ export function buildAppUpdatePanel(
         desc: status.message ?? '应用即将退出并自动重启，请勿强制结束进程。',
         showProgress: true,
         showInstall: false,
+        showDownload: false,
       }
     case 'error':
       return {
@@ -71,6 +88,7 @@ export function buildAppUpdatePanel(
         desc: status.message ?? '请检查网络后重试，或稍后再试。',
         showProgress: false,
         showInstall: false,
+        showDownload: false,
       }
     case 'not-available':
       if (!checkedOnce) return null
@@ -80,6 +98,7 @@ export function buildAppUpdatePanel(
         desc: status.message ?? '暂无可用更新。你可以稍后再检查，或到项目主页查看发布说明。',
         showProgress: false,
         showInstall: false,
+        showDownload: false,
       }
     default:
       return null
@@ -101,10 +120,18 @@ export function shouldShowAppUpdateChromeHint(status: AppUpdateStatus): boolean 
   )
 }
 
-export function getAppUpdateChromeHintLabel(status: AppUpdateStatus): string {
+export function getAppUpdateChromeHintLabel(
+  status: AppUpdateStatus,
+  opts?: { autoDownload?: boolean },
+): string {
+  const autoDownload = opts?.autoDownload ?? false
   switch (status.state) {
-    case 'downloading':
     case 'available':
+      if (!autoDownload) {
+        return status.version ? `发现 v${status.version}` : '发现新版本'
+      }
+      return status.version ? `下载 v${status.version}` : '正在下载更新'
+    case 'downloading':
       if (status.percent != null && status.percent > 0) {
         return status.version
           ? `下载 v${status.version} ${status.percent}%`

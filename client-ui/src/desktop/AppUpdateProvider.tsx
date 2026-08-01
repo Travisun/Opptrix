@@ -18,14 +18,19 @@ const IDLE_STATUS: AppUpdateStatus = { state: 'idle' }
 
 export interface AppUpdateContextValue {
   status: AppUpdateStatus
+  /** 是否自动下载更新包；缺省 false */
+  autoDownload: boolean
   checkNow: () => Promise<void>
+  downloadUpdate: () => Promise<boolean>
   installUpdate: () => Promise<boolean>
+  setAutoDownload: (enabled: boolean) => Promise<void>
 }
 
 const AppUpdateContext = createContext<AppUpdateContextValue | null>(null)
 
 export function AppUpdateProvider({ children }: { children: ReactNode }) {
   const [status, setStatus] = useState<AppUpdateStatus>(IDLE_STATUS)
+  const [autoDownload, setAutoDownloadState] = useState(false)
   const [manualHelpOpen, setManualHelpOpen] = useState(false)
   const openedHelpKeyRef = useRef<string | null>(null)
 
@@ -36,6 +41,10 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
 
     void api.appUpdateGetStatus?.().then(res => {
       if (res) setStatus(res)
+    }).catch(() => {})
+
+    void api.appUpdateGetAutoDownload?.().then(value => {
+      if (typeof value === 'boolean') setAutoDownloadState(value)
     }).catch(() => {})
 
     return api.onAppUpdateStatus(next => setStatus(next))
@@ -71,14 +80,39 @@ export function AppUpdateProvider({ children }: { children: ReactNode }) {
     }
   }, [])
 
+  const downloadUpdate = useCallback(async () => {
+    if (!isElectron()) return false
+    return Boolean(await window.electronAPI?.appUpdateDownload?.())
+  }, [])
+
   const installUpdate = useCallback(async () => {
     if (!isElectron()) return false
     return Boolean(await window.electronAPI?.appUpdateInstall?.())
   }, [])
 
+  const setAutoDownload = useCallback(async (enabled: boolean) => {
+    if (!isElectron()) {
+      setAutoDownloadState(enabled)
+      return
+    }
+    try {
+      const next = await window.electronAPI?.appUpdateSetAutoDownload?.(enabled)
+      setAutoDownloadState(typeof next === 'boolean' ? next : enabled)
+    } catch {
+      setAutoDownloadState(enabled)
+    }
+  }, [])
+
   const value = useMemo<AppUpdateContextValue>(
-    () => ({ status, checkNow, installUpdate }),
-    [status, checkNow, installUpdate],
+    () => ({
+      status,
+      autoDownload,
+      checkNow,
+      downloadUpdate,
+      installUpdate,
+      setAutoDownload,
+    }),
+    [status, autoDownload, checkNow, downloadUpdate, installUpdate, setAutoDownload],
   )
 
   return (

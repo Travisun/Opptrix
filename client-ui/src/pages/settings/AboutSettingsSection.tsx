@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { ProgressBar, Spinner, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
+import { ProgressBar, Spinner, Switch, Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
+  ArrowDownloadRegular,
   ArrowSyncRegular,
   ChevronRightRegular,
 } from '@fluentui/react-icons'
@@ -147,7 +148,14 @@ type AboutSettingsSectionProps = {
 
 export default function AboutSettingsSection({ contentFlush = false }: AboutSettingsSectionProps) {
   const s = useStyles()
-  const { status: updateStatus, checkNow, installUpdate } = useAppUpdate()
+  const {
+    status: updateStatus,
+    autoDownload,
+    checkNow,
+    downloadUpdate,
+    installUpdate,
+    setAutoDownload,
+  } = useAppUpdate()
   const [versionLabel, setVersionLabel] = useState<string | null>(null)
   const [checkedOnce, setCheckedOnce] = useState(false)
   const [notifyPermission, setNotifyPermission] = useState<NotificationPermissionState | null>(null)
@@ -172,6 +180,10 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
     void checkNow()
   }, [checkNow])
 
+  const handleAutoDownloadChange = useCallback((_: unknown, data: { checked: boolean | 'mixed' }) => {
+    void setAutoDownload(Boolean(data.checked))
+  }, [setAutoDownload])
+
   const handleOpenNotificationSettings = useCallback(() => {
     void window.electronAPI?.notificationOpenSettings?.()
   }, [])
@@ -185,7 +197,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
   const versionDesc = versionLabel ?? '读取版本中…'
   const showUpdateBlock = isElectron()
   const checkBusy = isAppUpdateCheckBusy(updateStatus)
-  const updatePanel = buildAppUpdatePanel(updateStatus, { checkedOnce })
+  const updatePanel = buildAppUpdatePanel(updateStatus, { checkedOnce, autoDownload })
   const showUpdateStatusRow = Boolean(updatePanel?.visible)
   const copyrightLine = useMemo(
     () => formatAboutCopyrightLine(typeof navigator !== 'undefined' ? navigator.language : undefined),
@@ -235,8 +247,25 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                 {checkBusy ? '检查中…' : '检查更新'}
               </OpptrixButton>
             ) : undefined}
-            last
+            last={!showUpdateBlock}
           />
+          {showUpdateBlock && (
+            <>
+              <SettingsDivider fullWidth />
+              <SettingsRow
+                title="自动下载更新"
+                desc="开启后发现新版本会在后台下载；关闭后仍会检查并提醒，需你确认后再下载"
+                control={(
+                  <Switch
+                    checked={autoDownload}
+                    onChange={handleAutoDownloadChange}
+                    aria-label="自动下载更新"
+                  />
+                )}
+                last={!showUpdateStatusRow}
+              />
+            </>
+          )}
           {showUpdateStatusRow && updatePanel && (
             <>
               <SettingsDivider fullWidth />
@@ -257,7 +286,7 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                         shape="rounded"
                       />
                       <Text className={s.progressMeta} block>
-                        {updateStatus.state === 'available'
+                        {updateStatus.state === 'available' && autoDownload
                           ? '正在连接下载…'
                           : updateStatus.state === 'installing'
                             ? '正在替换应用文件并准备重启…'
@@ -266,6 +295,19 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
                             : '正在准备下载…'}
                       </Text>
                     </>
+                  )}
+                  {updatePanel.showDownload && (
+                    <div className={s.updateActions}>
+                      <OpptrixButton
+                        className={s.restartBtn}
+                        variant="primary"
+                        size="small"
+                        icon={<ArrowDownloadRegular fontSize={14} />}
+                        onClick={() => { void downloadUpdate() }}
+                      >
+                        下载更新
+                      </OpptrixButton>
+                    </div>
                   )}
                   {updatePanel.showInstall && (
                     <div className={s.updateActions}>
