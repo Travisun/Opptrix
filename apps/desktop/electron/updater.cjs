@@ -17,6 +17,10 @@ const {
   readLastRunVersion,
   writeLastRunVersion,
 } = require('./update-guard.cjs')
+const {
+  getAutoDownloadPreference,
+  setAutoDownloadPreference,
+} = require('./app-update-prefs.cjs')
 
 const UPDATER_VENDOR_DIR = path.join(__dirname, '../build/updater-deps/packages')
 
@@ -151,7 +155,7 @@ function hydrateReadyStatusFromDisk(currentVersion) {
 
 function configureAutoUpdaterDefaults() {
   if (!autoUpdater) return
-  autoUpdater.autoDownload = true
+  autoUpdater.autoDownload = getAutoDownloadPreference()
   autoUpdater.autoInstallOnAppQuit = false
   autoUpdater.allowDowngrade = false
   autoUpdater.logger = null
@@ -184,9 +188,12 @@ function focusMainWindowForUpdate() {
 
 function notifyUpdateAvailable(version) {
   if (!version) return
+  const autoDownload = getAutoDownloadPreference()
   showLocalNotification({
     title: '发现 Opptrix 新版本',
-    body: `版本 ${version} 正在后台下载，完成后会通知你重启。`,
+    body: autoDownload
+      ? `版本 ${version} 正在后台下载，完成后会通知你重启。`
+      : `发现新版本 ${version}，打开应用后可确认下载。`,
     tag: 'app-update-available',
     onClick: focusMainWindowForUpdate,
   })
@@ -217,12 +224,15 @@ function bindAutoUpdaterEvents(currentVersion) {
 
   autoUpdater.on('update-available', (info) => {
     if (status.state === 'installing') return
+    const autoDownload = getAutoDownloadPreference()
     setStatus({
       state: 'available',
       currentVersion,
       version: info.version,
       percent: 0,
-      message: `发现新版本 ${info.version}`,
+      message: autoDownload
+        ? `发现新版本 ${info.version}`
+        : `发现新版本 ${info.version}，确认后即可下载`,
     })
     notifyUpdateAvailable(info.version)
   })
@@ -435,7 +445,17 @@ function waitForHydratedUpdate(currentVersion, timeoutMs = 20_000) {
     })
     autoUpdater.once('error', () => finish(null))
 
-    void autoUpdater.checkForUpdates().catch(() => finish(null))
+    // 自动下载关闭时，hydrate 待安装包须显式 downloadUpdate（resume / 安装前）
+    void (async () => {
+      try {
+        await autoUpdater.checkForUpdates()
+        if (!autoUpdater.autoDownload && !updatePackageHydrated && !settled) {
+          await autoUpdater.downloadUpdate()
+        }
+      } catch {
+        finish(null)
+      }
+    })()
   })
 }
 
@@ -551,11 +571,59 @@ async function installPendingUpdate() {
   return triggerInstall({ targetVersion, cacheKey, source: 'manual' })
 }
 
+/** 用户确认后下载（autoDownload 关闭时的显式路径） */
+async function downloadAvailableUpdate() {
+  if (!app.isPackaged || !autoUpdater) {
+    setStatus({
+      state: 'error',
+      message: '暂时无法下载更新，请稍后重试或到官网获取安装包。',
+    })
+    return false
+  }
+  if (status.state === 'downloading' || status.state === 'installing' || status.state === 'ready') {
+    return status.state === 'ready'
+  }
+  if (status.state !== 'available' && status.state !== 'error') {
+    return false
+  }
+
+  setStatus({
+    state: 'downloading',
+    currentVersion: status.currentVersion,
+    version: status.version,
+    percent: 0,
+    message: '正在准备下载…',
+  })
+
+  try {
+    await autoUpdater.downloadUpdate()
+    return true
+  } catch (err) {
+    setStatus({
+      state: 'error',
+      currentVersion: status.currentVersion,
+      version: status.version,
+      message: err instanceof Error ? err.message : '下载更新失败，请稍后重试。',
+    })
+    return false
+  }
+}
+
 function registerUpdaterIpc(ipcMain, deps = {}) {
   prepareForUpdateInstall = deps.prepareForUpdateInstall ?? null
   onInstallStallRecover = deps.onInstallStallRecover ?? null
 
   ipcMain.handle('app-update-get-status', async () => status)
+
+  ipcMain.handle('app-update-get-auto-download', async () => getAutoDownloadPreference())
+
+  ipcMain.handle('app-update-set-auto-download', async (_event, enabled) => {
+    const next = setAutoDownloadPreference(Boolean(enabled))
+    if (autoUpdater) {
+      autoUpdater.autoDownload = next
+    }
+    return next
+  })
 
   ipcMain.handle('app-update-check', async () => {
     if (!autoUpdater) {
@@ -586,6 +654,8 @@ function registerUpdaterIpc(ipcMain, deps = {}) {
     }
     return status
   })
+
+  ipcMain.handle('app-update-download', async () => downloadAvailableUpdate())
 
   ipcMain.handle('app-update-install', async () => {
     if (!isUpdateReady()) return false

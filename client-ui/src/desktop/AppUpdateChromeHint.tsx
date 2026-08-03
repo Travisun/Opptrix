@@ -43,13 +43,13 @@ export default function AppUpdateChromeHint({
   onToggleSidebar,
 }: AppUpdateChromeHintProps) {
   const s = useStyles()
-  const { status } = useAppUpdate()
+  const { status, autoDownload } = useAppUpdate()
 
   if (!isElectron() || sidebarOpen || !shouldShowAppUpdateChromeHint(status)) {
     return null
   }
 
-  const label = getAppUpdateChromeHintLabel(status)
+  const label = getAppUpdateChromeHintLabel(status, { autoDownload })
   if (!label) return null
 
   const handleClick = () => {

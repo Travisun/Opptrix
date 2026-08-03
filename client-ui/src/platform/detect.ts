@@ -27,6 +27,9 @@ declare global {
       appUpdateGetStatus?: () => Promise<AppUpdateStatus>
       appUpdateCheck?: () => Promise<AppUpdateStatus>
       appUpdateInstall?: () => Promise<boolean>
+      appUpdateDownload?: () => Promise<boolean>
+      appUpdateGetAutoDownload?: () => Promise<boolean>
+      appUpdateSetAutoDownload?: (enabled: boolean) => Promise<boolean>
       onAppUpdateStatus?: (callback: (status: AppUpdateStatus) => void) => () => void
       translationGetStatus?: () => Promise<TranslationEngineStatus>
       translationGetModels?: () => Promise<TranslationModelsResult>
