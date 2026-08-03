@@ -249,11 +249,6 @@ export const TOOL_SUFFICIENCY_SPECS: Record<string, ToolSufficiencySpec> = {
   },
 
   /* ---- 产业链 / 行业 ---- */
-  industry_mining: {
-    requiredFields: ['industry'],
-    supplementStrategy: 'replace',
-    supplementNote: '产业链叙事由外部提供，本地仅做替换',
-  },
   get_sector_constituents: {
     requiredFields: ['data'],
     minRecords: 1,

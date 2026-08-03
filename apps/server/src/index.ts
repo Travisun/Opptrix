@@ -40,6 +40,7 @@ import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
 import { registerMcpServerRoutes } from './mcp-server-routes.js'
+import { registerAgentSkillRoutes } from './agent-skill-routes.js'
 import { registerSpeechRoutes } from './speech-routes.js'
 import {
   startNewsFeedScheduler,
@@ -1414,14 +1415,6 @@ app.post<{ Body: { code: string } }>('/api/strategy/report', async (req, reply) 
   return r.data
 })
 
-app.post<{ Body: { industry: string } }>('/api/industry/mermaid', async (req, reply) => {
-  const { industry } = req.body ?? {}
-  if (!industry) return reply.code(400).send({ error: 'industry required' })
-  const r = await hub.dispatch('industry_mermaid', { industry })
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
 // Portfolio trade ledger (buy/sell records)
 app.get('/api/portfolio/trades', async (req) => {
   const q = req.query as { code?: string; market?: string }
@@ -1541,6 +1534,7 @@ async function bootstrap() {
   registerPythonSettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
+  await registerAgentSkillRoutes(app)
   registerSearchRoutes(app, hub, agent)
   registerSessionAttachmentRoutes(app, agent)
   await registerSpeechRoutes(app)

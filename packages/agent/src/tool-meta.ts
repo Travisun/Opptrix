@@ -98,8 +98,8 @@ export const TOOL_META: Record<string, ToolMeta> = {
   get_sector_list: {
     hubFeature: 'sector_list',
     miningEligible: true,
-    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事仍用 industry_mining。',
-    compliance: '只读；market/kind/plate_type 可选；勿与 industry_mining 混淆。',
+    usageGuide: '板块或行业目录；拿 board_key/industry_code 后再 get_sector_constituents；产业链叙事激活工作流技能 industry-chain。',
+    compliance: '只读；market/kind/plate_type 可选；勿与产业链技能混淆。',
   },
   get_sector_constituents: {
     hubFeature: 'sector_constituents',
@@ -317,30 +317,6 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '对已知代码列表做评分卡 IC 回测。',
     compliance: 'codes 必填；小样本验证；计算密集，非挖掘必经路径。',
   },
-  get_closing_report: {
-    hubFeature: 'market_report',
-    miningEligible: true,
-    usageGuide: '大盘收盘报告。',
-    compliance: '市场级；单股挖掘不必调用。',
-  },
-  get_morning_brief: {
-    hubFeature: 'market_report',
-    miningEligible: true,
-    usageGuide: '大盘早报。',
-    compliance: '市场级。',
-  },
-  industry_mining: {
-    hubFeature: 'industry_mining',
-    miningEligible: true,
-    usageGuide: '产业链透视、上下游代表公司；行业主题深度分析时使用，不依赖本地行业库。',
-    compliance: 'industry 名称需具体（如「半导体」「新能源车」）；不替代单股财务核实；代表公司可用 search_instruments → get_instrument_snapshot / evaluate_instrument 核实。',
-  },
-  industry_mermaid: {
-    hubFeature: 'industry_mermaid',
-    miningEligible: true,
-    usageGuide: '输出产业链 Mermaid mindmap 源码；用户需要可视化产业链结构时使用。',
-    compliance: '展示用；不依赖本地行业库；分析逻辑仍须 industry_mining 或单股工具支撑。',
-  },
   strategy_report: {
     hubFeature: 'strategy_report',
     miningEligible: true,
@@ -535,6 +511,41 @@ export const TOOL_META: Record<string, ToolMeta> = {
     packId: 'meta',
     usageGuide: '按需激活业务工具包，使本轮及后续轮次可调用该包内工具；当前 tools 不足时使用。',
     compliance: 'pack_ids 为字符串数组（如 ["news","instrument_analytics"]）；同会话累积激活；无效 id 会出现在 skipped。',
+  },
+  list_agent_skills: {
+    packId: 'meta',
+    usageGuide: '查看可用工作流技能目录（名称与说明）；需要固定投研流程（早报、财报速读、个股深度分析等）时先 list 再 activate。',
+    compliance: '只读；返回 skills 元数据与 active_skills；不含完整步骤正文。',
+  },
+  activate_agent_skill: {
+    packId: 'meta',
+    usageGuide: '激活工作流技能，将完整步骤注入本会话 system；用户提到早报/收盘报告/产业链/财报速读/深度分析流程时使用。技能正文中的 `@skill:依赖` 会自动递归激活。',
+    compliance: 'skill_names 为字符串数组；同会话最多 3 个；无效名或超额进入 skipped；循环依赖会被检测并跳过。',
+  },
+  get_agent_skill: {
+    packId: 'meta',
+    usageGuide: '预览单个工作流技能的完整说明；确认后再 activate_agent_skill。',
+    compliance: 'skill_name 必填；只读。',
+  },
+  get_agent_skill_file: {
+    packId: 'meta',
+    usageGuide: '按需读取技能目录内的附加文件（参考资料/脚本说明等）。',
+    compliance: 'skill_name + path 必填；路径须在技能根内，禁止 ..。',
+  },
+  create_agent_skill: {
+    packId: 'meta',
+    usageGuide: '为用户创建新的工作流技能；必须先 ask_user 确认，再 confirmed=true；可附 references/files。',
+    compliance: 'name/description/body 必填；files.path 须在 references|scripts|assets 下；未 confirmed 只返回摘要。',
+  },
+  import_agent_skill: {
+    packId: 'meta',
+    usageGuide: '从 Markdown 文本导入工作流技能；须 ask_user 后 confirmed=true。',
+    compliance: 'markdown 必填；未 confirmed 只返回摘要。',
+  },
+  delete_agent_skill: {
+    packId: 'meta',
+    usageGuide: '删除用户导入或创建的工作流技能；不可删内置；须 ask_user 后 confirmed=true。',
+    compliance: 'skill_name 必填；未 confirmed 只返回摘要。',
   },
   list_mcp_servers: {
     packId: 'meta',

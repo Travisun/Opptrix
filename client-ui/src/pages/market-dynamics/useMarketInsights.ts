@@ -1,11 +1,10 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { news, research } from '../../api/client'
-import type { FeedArticle, MarketReportData } from '../../types/schemas'
+import { news } from '../../api/client'
+import type { FeedArticle } from '../../types/schemas'
 
 const REFRESH_MS = 60_000
 
 export function useMarketInsights() {
-  const [report, setReport] = useState<MarketReportData | null>(null)
   const [articles, setArticles] = useState<FeedArticle[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
@@ -15,14 +14,8 @@ export function useMarketInsights() {
     if (!opts?.silent) setLoading(true)
     setError('')
     try {
-      const [reportResp, feedResp] = await Promise.all([
-        research.marketReport('morning').catch(() => research.marketReport('closing')),
-        news.getFeed({ limit: 10 }).catch(() => null),
-      ])
+      const feedResp = await news.getFeed({ limit: 10 }).catch(() => null)
       if (!mountedRef.current) return
-      if (reportResp.success && reportResp.data) {
-        setReport(reportResp.data)
-      }
       if (feedResp?.articles) {
         setArticles(feedResp.articles)
       }
@@ -44,5 +37,5 @@ export function useMarketInsights() {
     }
   }, [load])
 
-  return { report, articles, loading, error, refresh: () => load({ silent: true }) }
+  return { articles, loading, error, refresh: () => load({ silent: true }) }
 }

@@ -16,6 +16,16 @@ import {
   unloadedToolHint,
 } from './mcp/tool-pack-session.js'
 import {
+  AgentSkillSessionStore,
+  MAX_ACTIVATED_AGENT_SKILLS,
+} from './mcp/agent-skill-session.js'
+import {
+  buildSkillCatalogPrompt,
+  buildActivatedSkillsPrompt,
+  getSkill,
+  resolveSkillDependencies,
+} from '@opptrix/agent-skills'
+import {
   resolveToolRoutePlan,
   buildRoundRoutePlaybook,
   orderToolsByPreference,
@@ -129,6 +139,7 @@ export class AgentEngine {
   private registry = new ProviderRegistry()
   private settings: AgentSettings
   private readonly toolPackSessions = new ToolPackSessionStore()
+  private readonly agentSkillSessions = new AgentSkillSessionStore()
   /** 当前 chat 回合解析出的 active pack ids（供 list_tool_packs / 可观测性） */
   private lastRoundPackIds: import('@opptrix/shared').ToolPackId[] = []
   /** 当前 chat 用户消息（播种用） */
@@ -208,6 +219,7 @@ export class AgentEngine {
       contextRef: record?.contextRef ?? null,
     })
     const clock = getCurrentTime()
+    const activatedSkills = this.agentSkillSessions.getActivated(sessionId)
     return this.tools.systemPrompt({
       expert,
       sessionRolePersona: record?.rolePersona ?? null,
@@ -218,6 +230,8 @@ export class AgentEngine {
       routePlaybook: buildRoundRoutePlaybook(plan, activeNames),
       sessionClock: buildSessionClockPlaybook(clock),
       dataSourcingPolicy: this.buildDataSourcingPolicy(plan),
+      agentSkillCatalog: buildSkillCatalogPrompt(),
+      activatedAgentSkills: buildActivatedSkillsPrompt(activatedSkills),
     })
   }
 
@@ -354,6 +368,42 @@ export class AgentEngine {
           hint: skipped.length
             ? `部分 id 无效：${skipped.join(', ')}`
             : '已激活；本轮工具列表将立即刷新',
+        }
+      },
+    })
+  }
+
+  private bindSkillBridge(sessionId: string): number {
+    return this.tools.bindSkillSession({
+      sessionId,
+      getActivated: () => this.agentSkillSessions.getActivated(sessionId),
+      activateSkills: (skillNames: string[]) => {
+        const existing = new Set(skillNames.map(n => n.trim()).filter(Boolean))
+        const skippedUnknown: string[] = []
+        const valid: string[] = []
+        for (const name of existing) {
+          if (!getSkill(name)) skippedUnknown.push(name)
+          else valid.push(name)
+        }
+        const { activated, skipped, active, depNotes } = this.agentSkillSessions.activate(
+          sessionId,
+          valid,
+          { resolveDeps: (n) => resolveSkillDependencies(n) },
+        )
+        const allSkipped = [...skipped, ...skippedUnknown]
+        this.invalidateContextUsage(sessionId)
+        const hintParts = [allSkipped.length
+          ? `部分技能未激活：${allSkipped.join(', ')}（可能不存在或已达上限 ${MAX_ACTIVATED_AGENT_SKILLS}）`
+          : '已激活；完整步骤已注入本会话']
+        if (depNotes.length) hintParts.push(...depNotes)
+        return {
+          ok: true,
+          activated,
+          skipped: allSkipped,
+          active_skills: active,
+          max_activated: MAX_ACTIVATED_AGENT_SKILLS,
+          dep_notes: depNotes,
+          hint: hintParts.join('；'),
         }
       },
     })
@@ -651,6 +701,7 @@ export class AgentEngine {
   deleteSession(id: string) {
     this.userPromptBridge.cancelSession(id)
     this.toolPackSessions.clear(id)
+    this.agentSkillSessions.clear(id)
     this.workspaceService.clearSession(id)
     this.sessions.delete(id)
     this.invalidateContextUsage(id)
@@ -920,6 +971,7 @@ export class AgentEngine {
     })
     this.seedExpertDefaultPacks(sessionId, record)
     const packBridgeGen = this.bindPackBridge(sessionId)
+    const skillBridgeGen = this.bindSkillBridge(sessionId)
     const workspaceBridgeGen = this.bindWorkspaceBridge(sessionId, emit, signal)
     this.lastRoundPackIds = this.resolveRoundPackIds(sessionId)
     let activeNames = toolNamesForPacks(this.lastRoundPackIds)
@@ -1196,6 +1248,7 @@ export class AgentEngine {
     } finally {
       await broker.close().catch(() => {})
       this.tools.clearPackSession(sessionId, packBridgeGen)
+      this.tools.clearSkillSession(sessionId, skillBridgeGen)
       unbindWorkspaceToolBridge(sessionId, workspaceBridgeGen)
     }
     } catch (e) {

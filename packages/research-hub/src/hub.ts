@@ -19,7 +19,6 @@ import { resolveProvidersDir } from '@opptrix/shared'
 import type { IntradayTrendFetchResult, IntradayTrendSession } from '@opptrix/a-stock-layer'
 import type { StockListItem, FinancialSummary, StockKline } from '@opptrix/shared'
 import { ConsolidatedEngine, formatInstitutionReport } from '@opptrix/institutions'
-import { ClosingReport, IndustryMining, MorningBrief, mermaidIndustryChain } from '@opptrix/skills'
 import {
   EvaluationEngine, createScorecard, PortfolioAnalyzer,
   REGISTRY, BacktestEngine, SnapshotStore, IndustryNeutralizer,
@@ -173,9 +172,6 @@ export class ResearchHub {
   readonly institutions = new ConsolidatedEngine(this.de)
   readonly portfolio = new PortfolioAnalyzer(this.ee, this.de)
   readonly backtest = new BacktestEngine(this.ee, this.de)
-  readonly closingReport = new ClosingReport(this.de)
-  readonly morningBrief = new MorningBrief(this.de)
-  readonly industrySkill = new IndustryMining(this.de)
   get marketData() {
     return getMarketDataService()
   }
@@ -234,9 +230,6 @@ export class ResearchHub {
         }
         case 'strategy_verify_report': return this.strategyVerifyReport(params, t0)
         case 'portfolio_analysis': return this.portfolioAnalysis(params, t0)
-        case 'industry_mining': return this.industryMining(String(params.industry), t0)
-        case 'industry_mermaid': return this.industryMermaid(String(params.industry), t0)
-        case 'market_report': return this.marketReport(String(params.type ?? 'closing'), t0)
         case 'market_dynamics': return this.marketDynamics(t0)
         case 'search_stocks':
           return this.dispatchInstrumentCapability('search', { keyword: params.keyword, ...params }, t0)
@@ -769,25 +762,6 @@ export class ResearchHub {
     const holdings = (params.holdings as [string, number][]) ?? []
     const data = await this.portfolio.analyze(holdings, String(params.scorecard ?? '综合评估'))
     return ok(data, `组合 ${holdings.length} 只`, t0)
-  }
-
-  private async industryMining(industry: string, t0: number) {
-    const data = await this.industrySkill.analyze(industry)
-    return ok(data, `${industry} 产业透视`, t0)
-  }
-
-  private async industryMermaid(industry: string, t0: number) {
-    const mermaid = mermaidIndustryChain(industry)
-    return ok({ industry, mermaid }, `${industry} 产业链 Mermaid`, t0)
-  }
-
-  private async marketReport(type: string, t0: number) {
-    if (type === 'morning') {
-      const data = await this.morningBrief.generate()
-      return ok(data, data.title, t0)
-    }
-    const data = await this.closingReport.generate()
-    return ok(data, data.title, t0)
   }
 
   private async marketDynamics(t0: number) {
