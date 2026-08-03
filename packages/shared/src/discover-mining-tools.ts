@@ -28,7 +28,6 @@ const CN_EQUITY_ONLINE_TOOLS = [
   'get_market_regime',
   'search_instruments',
   'batch_instrument_snapshots',
-  'industry_mining',
   'get_instrument_institution_rating',
   ...UNIFIED_INSTRUMENT_MINING_TOOLS,
   'verify_instrument_strategy',

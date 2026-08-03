@@ -145,7 +145,11 @@ Opptrix/
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
   - 意图播种：`packages/agent/src/mcp/tool-pack-resolver.ts`（关键词/上下文 → ≤2 业务 pack）
   - 会话激活：`list_tool_packs` / `activate_tool_pack`；同 session 累积 active packs
-  - **工作流技能（Agent Skills）**：`@opptrix/agent-skills` + `list_agent_skills` / `activate_agent_skill` 等（meta）；与专家「技能专长」正交。规范见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)
+  - **工作流技能（Agent Skills）**：`@opptrix/agent-skills`（meta pack）；与专家「技能专长」persona、Tool Pack **正交**。规范见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)
+    - **Meta 工具**：`list_agent_skills` / `activate_agent_skill` / `get_agent_skill` / `get_agent_skill_file`；写操作 `create_agent_skill` / `import_agent_skill` / `delete_agent_skill`（须 `ask_user` + `confirmed=true`）
+    - **激活**：同会话最多 3 个；正文 `` `@skill:name` `` 引用会**依赖自动激活**（循环检测 + 超限记入 `depNotes`）
+    - **内置**：`equity-deep-dive`、`morning-market-brief`（v2 JSON）、`closing-market-brief`、`industry-chain`（`references/chain-knowledge.json`）、`earnings-quick-read`、`create-skill`（新建技能引导）
+    - **意图**：早报 / 收盘 / 产业链 → 激活对应工作流技能，再用 `market` / `fundamentals` 等 pack 取数；**新建/定制技能** → 先 `activate_agent_skill(create-skill)` 再 `create_agent_skill`；**勿**再调用已删除的 `get_morning_brief` / `get_closing_report` / `industry_mining` / `industry_mermaid`
   - 引擎每轮按 `core`+`meta`+播种+已激活 子集创建 `AggregatingToolBroker`（内含本地 `McpToolBroker` + 外部 MCP 注册表）；激活后同轮刷新 tools
   - **外部 MCP（优先级故障转移）**：
     - 配置：`packages/shared/src/mcp-servers.ts`；持久化 user-store `mcp_servers`；设置页 **MCP 服务器** / REST `/api/mcp-servers*`
@@ -301,10 +305,11 @@ Opptrix/
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer 已用/窗长估算）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`
 - **`ask_user`**：Agent 需用户确认/选择/填空时调用；SSE 推送 `user_prompt`。**confirm**：省略 `options`（或 `[]`）且未设 `mode=text`/`allow_custom=true` → 底部「拒绝/确认」（可用 `reject_label`/`confirm_label`；回传 id 固定 `reject`/`confirm`）。**choice**：预置选项 2–50。**text**：`mode:"text"` 或空 options + `allow_custom=true` → 仅开放填空，无授权双钮。禁止用 confirm 收集开放答案。`allow_custom`：confirm 默认关、choice 默认开。多选支持全选；prompt/label 勿用 emoji。作答经 `POST /api/sessions/:id/chat/user-prompt` 回传后继续工具链
-- **行业分析**：`industry_mining` / `industry_mermaid`（属 `industry` pack，需播种或 activate）→ 代表公司用 `search_instruments` + `get_instrument_*`
-- **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack
+- **行业 / 产业链**：激活工作流技能 `industry-chain`（读 `references/chain-knowledge.json`）→ 代表公司用 `get_sector_list` / `get_sector_constituents` / `search_instruments` + `get_instrument_*`
+- **早报 / 收盘**：激活 `morning-market-brief` / `closing-market-brief` → 用 `get_market_dynamics`、`get_limit_updown`、`get_watchlist` 等取数后按技能 Schema 输出 JSON
+- **市场宏观**：`get_market_regime` / `get_market_dynamics` / `get_trend_brief` 等属 `market` pack（提供事实表；开闭市叙事走工作流技能，非独立报告工具）
 - **跨市场搜索**：唯一入口 `search_instruments`（`core` pack，始终可用；`markets` 可过滤 CN/US/HK/CRYPTO）
-- 勿再调用已移除工具：`search_etfs` / `screen_*_universe` / `get_etf_scorecard` / `get_etf_snapshot` / `get_watchlist_radar` / `institution_rating` 等；统一用 `search_instruments` / `get_instrument_*` / `evaluate_instrument`
+- 勿再调用已移除工具：`get_morning_brief` / `get_closing_report` / `industry_mining` / `industry_mermaid` / `search_etfs` / `screen_*_universe` / `get_etf_scorecard` / `get_etf_snapshot` / `get_watchlist_radar` / `institution_rating` 等；统一用工作流技能 + `search_instruments` / `get_instrument_*` / `evaluate_instrument`
 - **A 股股票 Discover 自动选股策略已移除**；可用 A 股 ETF / 美港股 / Crypto 等在线初选策略，或直接指定代码研究
 - Discover 挖掘仍按 profile 固定工具子集（`discoverMiningToolNamesForProfile`）；与聊天 Tool Pack 共享 `TOOL_PACK_*` 常量，一期不强改 Discover 主路径
 

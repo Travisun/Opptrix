@@ -4,11 +4,12 @@ export type {
   AgentSkillIndexEntry,
   AgentSkillDetail,
   CreateSkillInput,
+  SkillAttachmentFile,
   ParseSkillResult,
 } from './types.js'
 export { AgentSkillError } from './types.js'
 
-export { isValidSkillName, validateDescription, validateCompatibility } from './validate.js'
+export { isValidSkillName, validateDescription, validateCompatibility, validateReferences, validateAttachmentPath, validateSkillAttachmentFiles, mergeSkillReferences } from './validate.js'
 export { parseSkillMarkdown, serializeSkillMarkdown } from './parse.js'
 export {
   sanitizeSkillMarkdown,
@@ -30,6 +31,9 @@ export {
   installSkillFromDir,
   installSkillFromZip,
   deleteUserSkill,
+  forkBuiltinSkill,
+  updateUserSkill,
+  resolveSkillDependencies,
   toPublicIndexEntry,
   toPublicDetail,
 } from './registry.js'

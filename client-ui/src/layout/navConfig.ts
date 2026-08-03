@@ -3,7 +3,6 @@ import {
   HomeRegular,
   DataTrendingRegular,
   BriefcaseRegular,
-  GlobeRegular,
   SettingsRegular,
 } from '@fluentui/react-icons'
 import type { FluentIcon } from '@fluentui/react-icons'
@@ -32,7 +31,6 @@ export const navGroups: NavGroup[] = [
     items: [
       { id: 'stock_research', label: '个股研究', icon: DataTrendingRegular, hint: '诊断 · 机构 · 策略 · 回测' },
       { id: 'portfolio_hub', label: '机会与组合', icon: BriefcaseRegular, hint: '组合 · 账本' },
-      { id: 'market_insight', label: '市场与产业', icon: GlobeRegular, hint: '日报 · 产业链' },
     ],
   },
 ]

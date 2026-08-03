@@ -13,10 +13,3 @@ export function industryMatchesFilter(industry: string, query: string): boolean 
     || industry.toLowerCase().includes(q)
   )
 }
-
-/** Query string for industry_mining API (e.g. "-" → 其他). */
-export function industryMiningQuery(industry: string): string {
-  const t = industry.trim()
-  if (!t || t === '-' || t === '未分类') return '其他'
-  return t
-}

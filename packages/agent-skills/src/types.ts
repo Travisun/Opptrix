@@ -10,6 +10,8 @@ export interface AgentSkillFrontmatter {
   metadata?: Record<string, string>
   /** Experimental: space-separated tool allowlist */
   allowedTools?: string
+  /** 技能内附加文件相对路径（references/、scripts/ 等），路径经 resolveConfinedPath 校验 */
+  references?: string[]
 }
 
 export interface AgentSkillIndexEntry {
@@ -22,6 +24,7 @@ export interface AgentSkillIndexEntry {
   compatibility?: string
   metadata?: Record<string, string>
   allowedTools?: string
+  references?: string[]
 }
 
 export interface AgentSkillDetail extends AgentSkillIndexEntry {
@@ -29,6 +32,12 @@ export interface AgentSkillDetail extends AgentSkillIndexEntry {
   body: string
   /** Full SKILL.md text */
   raw: string
+}
+
+/** 创建技能时可一并写入的附件（须在 references/、scripts/、assets/ 下） */
+export interface SkillAttachmentFile {
+  path: string
+  content: string
 }
 
 export interface CreateSkillInput {
@@ -39,6 +48,8 @@ export interface CreateSkillInput {
   compatibility?: string
   metadata?: Record<string, string>
   allowedTools?: string
+  references?: string[]
+  files?: SkillAttachmentFile[]
   source?: Extract<AgentSkillSource, 'user' | 'imported' | 'agent_created'>
 }
 

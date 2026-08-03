@@ -185,8 +185,6 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_market_regime: 'market',
   get_market_dynamics: 'market',
   get_trend_brief: 'market',
-  get_closing_report: 'market',
-  get_morning_brief: 'market',
   get_instrument_money_flow: 'market',
   get_market_session: 'market',
   get_cn_market_special: 'market',
@@ -210,8 +208,6 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   analyze_portfolio: 'portfolio',
 
   // industry
-  industry_mining: 'industry',
-  industry_mermaid: 'industry',
   get_sector_list: 'industry',
   get_sector_constituents: 'industry',
   get_index_constituents: 'industry',

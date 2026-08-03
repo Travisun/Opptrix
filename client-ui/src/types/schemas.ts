@@ -312,12 +312,6 @@ export interface IndustryStockItem {
   change_pct: number | null
 }
 
-export interface IndustryMiningData {
-  industry: string; summary: string
-  chain_overview: string; key_companies: number
-  mermaid?: string
-}
-
 export interface PortfolioTradeItem {
   id: number; code: string; name: string
   market?: string
@@ -341,11 +335,6 @@ export interface PortfolioSummaryData {
     marketValue: number; unrealizedPnl: number; unrealizedPnlPct: number
     realizedPnl?: number; totalPnl?: number; totalPnlPct?: number
   }[]
-}
-
-export interface MarketReportData {
-  report_type: string; title: string
-  summary: string; sections: { title: string; content: string }[]
 }
 
 export interface MarketIndexQuote {
@@ -602,7 +591,7 @@ export interface ApiResponse<T = any> {
 
 // ─── Feature routes ───
 export type FeatureRoute =
-  | 'dashboard' | 'stock_research' | 'portfolio_hub' | 'market_insight'
+  | 'dashboard' | 'stock_research' | 'portfolio_hub'
   | 'settings'
 
 export interface NavItem {

@@ -330,18 +330,6 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('portfolio_analysis', { holdings: a.holdings, scorecard: a.scorecard }),
       },
       {
-        name: 'get_closing_report', category: '报告',
-        description: '生成 A 股收盘市场报告',
-        parameters: S({}),
-        handler: () => d('market_report', { type: 'closing' }),
-      },
-      {
-        name: 'get_morning_brief', category: '报告',
-        description: '生成 A 股开盘早报',
-        parameters: S({}),
-        handler: () => d('market_report', { type: 'morning' }),
-      },
-      {
         name: 'run_backtest', category: '策略',
         description: '对指定股票列表做评分卡 IC 回测',
         parameters: S({
@@ -356,18 +344,6 @@ export class ToolRegistry {
         description: '单股 T 策略综合分析文本报告',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
         handler: (a: Record<string, unknown>) => d('strategy_report', { code: a.code }),
-      },
-      {
-        name: 'industry_mining', category: '报告',
-        description: '产业链透视与代表公司',
-        parameters: S({ industry: { type: 'string', description: '行业名称，如 半导体' } }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('industry_mining', { industry: a.industry }),
-      },
-      {
-        name: 'industry_mermaid', category: '报告',
-        description: '产业链 Mermaid mindmap 源码',
-        parameters: S({ industry: { type: 'string', description: '行业名称' } }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('industry_mermaid', { industry: a.industry }),
       },
       {
         name: 'get_news_center_status', category: '资讯中心',
@@ -774,7 +750,7 @@ export class ToolRegistry {
       {
         name: 'activate_agent_skill',
         category: '工作流技能',
-        description: '激活一个或多个工作流技能，将完整步骤注入本会话（最多 3 个）',
+        description: '激活一个或多个工作流技能，将完整步骤注入本会话（最多 3 个）；技能正文中的 `@skill:依赖` 会自动递归激活（带循环检测）',
         parameters: S({
           skill_names: {
             type: 'array',
@@ -848,19 +824,54 @@ export class ToolRegistry {
           name: { type: 'string', description: '技能 name（小写+连字符）' },
           description: { type: 'string', description: '何时使用与能力说明（1–1024 字）' },
           body: { type: 'string', description: '技能步骤正文（Markdown）' },
+          references: {
+            type: 'array',
+            description: '可选：frontmatter references 路径列表（如 references/notes.md）',
+            items: { type: 'string' },
+          },
+          files: {
+            type: 'array',
+            description: '可选：附件 { path, content }，path 须在 references/、scripts/、assets/ 下',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string' },
+                content: { type: 'string' },
+              },
+            },
+          },
           confirmed: { type: 'boolean', description: '用户已确认创建；缺省或 false 时仅返回确认摘要' },
         }, ['name', 'description', 'body']),
         handler: async (a: Record<string, unknown>) => {
           const name = String(a.name ?? '').trim()
           const description = String(a.description ?? '').trim()
           const body = String(a.body ?? '')
+          const references = Array.isArray(a.references)
+            ? a.references.filter((x): x is string => typeof x === 'string')
+            : undefined
+          const files = Array.isArray(a.files)
+            ? a.files
+                .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x))
+                .map(x => ({
+                  path: String(x.path ?? ''),
+                  content: String(x.content ?? ''),
+                }))
+                .filter(x => x.path.trim())
+            : undefined
           if (!name || !description) {
             return { error: '请补充技能名称与说明后再试' }
           }
           if (a.confirmed !== true) {
             return {
               needs_confirmation: true,
-              summary: { name, description, body_preview: body.slice(0, 200) },
+              summary: {
+                name,
+                description,
+                body_preview: body.slice(0, 200),
+                references_count: references?.length ?? 0,
+                files_count: files?.length ?? 0,
+                file_paths: files?.map(f => f.path).slice(0, 8),
+              },
               hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 create_agent_skill',
             }
           }
@@ -870,6 +881,8 @@ export class ToolRegistry {
               name,
               description,
               body,
+              references,
+              files,
               source: 'agent_created',
             })
             return { ok: true, skill: toPublicDetail(skill) }

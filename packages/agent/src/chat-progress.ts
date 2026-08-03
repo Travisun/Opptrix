@@ -162,12 +162,8 @@ const TOOL_LABELS: Record<string, string> = {
   get_watchlist: '读取关注列表',
   search_instruments: '搜索标的',
   analyze_portfolio: '分析组合因子暴露',
-  get_closing_report: '生成收盘市场报告',
-  get_morning_brief: '生成开盘早报',
   run_backtest: '运行因子回测',
   strategy_report: '生成策略分析报告',
-  industry_mining: '梳理产业链与代表公司',
-  industry_mermaid: '生成产业链图谱',
   get_portfolio_holdings: '读取实盘持仓',
   portfolio_trades: '查询交易流水',
   portfolio_summary: '汇总持仓盈亏',
@@ -556,11 +552,6 @@ export function formatToolLabel(tool: string, args: Record<string, unknown> = {}
     case 'run_backtest': {
       const n = codesCount(args)
       return n != null ? `对 ${n} 只股票运行回测` : '运行因子回测'
-    }
-    case 'industry_mining':
-    case 'industry_mermaid': {
-      const industry = typeof args.industry === 'string' ? args.industry.trim() : ''
-      return industry ? `${industry} · ${base}` : base
     }
     case 'ask_user': {
       const q = typeof args.prompt === 'string'
@@ -1001,13 +992,6 @@ function summarizeToolResult(tool: string, result: unknown): string | null {
         : []
       if (labels.length) return `已选择：${labels.join('、')}`
       return '已收到你的确认'
-    }
-    case 'industry_mining': {
-      const payload = envelope?.data ?? result
-      if (!payload || typeof payload !== 'object') return null
-      const p = payload as Record<string, unknown>
-      const name = typeof p.industry === 'string' ? p.industry : ''
-      return name ? `${name} 产业链分析完成` : '产业链分析完成'
     }
     case 'shell_run':
     case 'shell_install':

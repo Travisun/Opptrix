@@ -1415,14 +1415,6 @@ app.post<{ Body: { code: string } }>('/api/strategy/report', async (req, reply) 
   return r.data
 })
 
-app.post<{ Body: { industry: string } }>('/api/industry/mermaid', async (req, reply) => {
-  const { industry } = req.body ?? {}
-  if (!industry) return reply.code(400).send({ error: 'industry required' })
-  const r = await hub.dispatch('industry_mermaid', { industry })
-  if (!r.success) return reply.code(400).send({ error: r.message })
-  return r.data
-})
-
 // Portfolio trade ledger (buy/sell records)
 app.get('/api/portfolio/trades', async (req) => {
   const q = req.query as { code?: string; market?: string }

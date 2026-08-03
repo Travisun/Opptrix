@@ -15,7 +15,7 @@ shared ──► market-data-core / provider-sdk
     ┌─────────┼─────────┬──────────────┐
     ▼         ▼         ▼              ▼
 market-   stock-eval  institutions   news-feed
-data-     t-strategy    skills         article-enrichment
+data-     t-strategy  agent-skills   article-enrichment
 store
               │
               ▼
@@ -49,7 +49,7 @@ store
 | `@opptrix/stock-eval` | 40 因子、8 评分卡、筛选、回测、快照 |
 | `@opptrix/institutions` | 28 机构 config-driven evaluators |
 | `@opptrix/t-strategy` | 9 策略、`verifyStrategy`、组合权重 |
-| `@opptrix/skills` | 收盘报告、早报、产业透视、Mermaid |
+| `@opptrix/agent-skills` | 工作流技能（内置早报/收盘/产业链等 + 用户自定义 SKILL.md） |
 | `@opptrix/research-hub` | `dispatch(feature, params)` 统一入口 |
 | `@opptrix/search-hub` | 标的搜索 `searchInstruments` |
 
@@ -75,7 +75,7 @@ store
 
 ```
 stock_diagnosis · institution_rating · screening · strategy_signal
-portfolio_* · industry_mining · market_report · backtest
+portfolio_* · backtest
 instrument_* · discover_* · market_regime · market_dynamics
 ```
 

@@ -137,7 +137,7 @@ Electron main
 | `@opptrix/stock-eval` | 40 因子、8 评分卡、筛选、回测、快照 |
 | `@opptrix/t-strategy` | 9 种策略信号、`verifyStrategy`、组合权重 |
 | `@opptrix/institutions` | 28 evaluator，YAML 驱动机构共识评级 |
-| `@opptrix/skills` | 收盘/早报、产业透视、Mermaid |
+| `@opptrix/agent-skills` | 工作流技能（内置早报/收盘/产业链等 + 用户自定义 SKILL.md） |
 | `@opptrix/shared` · `market-regime` | 市况快照（发现页提示，非交易信号） |
 
 ## 扩展阅读

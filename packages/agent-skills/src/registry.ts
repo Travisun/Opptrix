@@ -8,7 +8,7 @@ import {
   resolveUserSkillsDir,
 } from './paths.js'
 import { sanitizeSkillMarkdown, skillContentHasInjection } from './sanitize.js'
-import { isValidSkillName } from './validate.js'
+import { isValidSkillName, mergeSkillReferences, validateSkillAttachmentFiles } from './validate.js'
 import {
   AgentSkillError,
   type AgentSkillDetail,
@@ -16,6 +16,7 @@ import {
   type AgentSkillIndexEntry,
   type AgentSkillSource,
   type CreateSkillInput,
+  type SkillAttachmentFile,
 } from './types.js'
 
 function readSkillFromDir(
@@ -43,6 +44,7 @@ function readSkillFromDir(
       compatibility: parsed.frontmatter.compatibility,
       metadata: parsed.frontmatter.metadata,
       allowedTools: parsed.frontmatter.allowedTools,
+      references: parsed.frontmatter.references,
       body: parsed.body,
       raw: parsed.raw,
     }
@@ -81,6 +83,7 @@ function listDirSkills(baseDir: string, source: AgentSkillSource): AgentSkillInd
       compatibility: detail.compatibility,
       metadata: detail.metadata,
       allowedTools: detail.allowedTools,
+      references: detail.references,
     })
   }
   return out
@@ -116,11 +119,21 @@ export function readSkillFile(name: string, relativePath: string): string {
   return fs.readFileSync(abs, 'utf8')
 }
 
+function writeSkillAttachments(rootDir: string, files: SkillAttachmentFile[]): void {
+  for (const file of files) {
+    const rel = file.path.replace(/\\/g, '/').replace(/^\/+/, '').trim()
+    const abs = resolveConfinedPath(rootDir, rel)
+    fs.mkdirSync(path.dirname(abs), { recursive: true })
+    fs.writeFileSync(abs, file.content, 'utf8')
+  }
+}
+
 function writeSkillDir(
   name: string,
   fm: AgentSkillFrontmatter,
   body: string,
   source: AgentSkillSource,
+  files?: SkillAttachmentFile[],
 ): AgentSkillDetail {
   if (skillContentHasInjection(`${fm.description}\n${body}`)) {
     throw new AgentSkillError('技能内容包含不允许的指令，请修改后重试', 'injection')
@@ -137,6 +150,7 @@ function writeSkillDir(
   fs.mkdirSync(rootDir, { recursive: true })
   const markdown = serializeSkillMarkdown(fm, sanitizedBody ?? body)
   fs.writeFileSync(path.join(rootDir, 'SKILL.md'), markdown, 'utf8')
+  if (files?.length) writeSkillAttachments(rootDir, files)
   const detail = readSkillFromDir(rootDir, source === 'builtin' ? 'user' : source, name)
   if (!detail) throw new AgentSkillError('写入后无法读取技能', 'invalid_frontmatter')
   return { ...detail, source }
@@ -156,6 +170,15 @@ export function createSkill(input: CreateSkillInput): AgentSkillDetail {
   if (fs.existsSync(existingUser)) {
     throw new AgentSkillError(`技能「${name}」已存在`, 'exists')
   }
+  const filesErr = validateSkillAttachmentFiles(input.files)
+  if (filesErr) throw new AgentSkillError(filesErr, 'invalid_frontmatter')
+  const filePaths = input.files?.map(f => f.path.replace(/\\/g, '/').replace(/^\/+/, '').trim()) ?? []
+  let mergedRefs: string[] | undefined
+  try {
+    mergedRefs = mergeSkillReferences(input.references, filePaths)
+  } catch (e) {
+    throw new AgentSkillError(e instanceof Error ? e.message : 'references 无效', 'invalid_frontmatter')
+  }
   const fm: AgentSkillFrontmatter = {
     name,
     description: String(input.description ?? '').trim(),
@@ -163,6 +186,7 @@ export function createSkill(input: CreateSkillInput): AgentSkillDetail {
     compatibility: input.compatibility,
     metadata: input.metadata,
     allowedTools: input.allowedTools,
+    references: mergedRefs,
   }
   // validate via serialize roundtrip
   const markdown = serializeSkillMarkdown(fm, input.body ?? '')
@@ -172,6 +196,7 @@ export function createSkill(input: CreateSkillInput): AgentSkillDetail {
     fm,
     input.body ?? '',
     input.source ?? 'user',
+    input.files,
   )
 }
 
@@ -241,6 +266,108 @@ export function deleteUserSkill(name: string): { ok: true; name: string } {
   return { ok: true, name: n }
 }
 
+/**
+ * Fork a builtin skill into the user directory, making it editable.
+ * The forked skill keeps the builtin body/references but is marked source='user'.
+ */
+export function forkBuiltinSkill(name: string): AgentSkillDetail {
+  const n = String(name ?? '').trim()
+  if (!isValidSkillName(n)) {
+    throw new AgentSkillError('技能名称无效', 'invalid_name')
+  }
+  const builtinRoot = path.join(resolveBuiltinSkillsDir(), n)
+  if (!fs.existsSync(path.join(builtinRoot, 'SKILL.md'))) {
+    throw new AgentSkillError(`未找到工作流技能「${n}」`, 'not_found')
+  }
+  const userRoot = path.join(resolveUserSkillsDir(), n)
+  if (fs.existsSync(userRoot)) {
+    throw new AgentSkillError(`技能「${n}」已存在`, 'exists')
+  }
+  fs.mkdirSync(userRoot, { recursive: true })
+  // copy SKILL.md and any references/scripts/assets subdirs
+  for (const entry of fs.readdirSync(builtinRoot, { withFileTypes: true })) {
+    if (entry.name === 'SKILL.md') {
+      fs.copyFileSync(path.join(builtinRoot, 'SKILL.md'), path.join(userRoot, 'SKILL.md'))
+    } else if (entry.isDirectory()) {
+      copyDirSafe(path.join(builtinRoot, entry.name), path.join(userRoot, entry.name))
+    }
+  }
+  const detail = readSkillFromDir(userRoot, 'user', n)
+  if (!detail) {
+    throw new AgentSkillError('写入后无法读取技能', 'invalid_frontmatter')
+  }
+  return detail
+}
+
+/**
+ * Overwrite an existing user/imported/agent_created skill with new content.
+ * Builtin skills cannot be edited — fork first.
+ */
+export function updateUserSkill(name: string, input: CreateSkillInput): AgentSkillDetail {
+  const n = String(name ?? '').trim()
+  if (!isValidSkillName(n)) {
+    throw new AgentSkillError('技能名称无效', 'invalid_name')
+  }
+  const builtinRoot = path.join(resolveBuiltinSkillsDir(), n)
+  const userRoot = path.join(resolveUserSkillsDir(), n)
+  if (!fs.existsSync(userRoot)) {
+    if (fs.existsSync(path.join(builtinRoot, 'SKILL.md'))) {
+      throw new AgentSkillError('内置工作流技能不可编辑，请先 fork 后再修改', 'builtin_readonly')
+    }
+    throw new AgentSkillError(`未找到工作流技能「${n}」`, 'not_found')
+  }
+  const existing = readSkillFromDir(userRoot, 'user', n)
+  const preservedSource = existing?.source === 'imported' || existing?.source === 'agent_created'
+    ? existing.source
+    : 'user'
+  // remove old contents (keep dir) then rewrite
+  for (const entry of fs.readdirSync(userRoot, { withFileTypes: true })) {
+    fs.rmSync(path.join(userRoot, entry.name), { recursive: true, force: true })
+  }
+  const fm: AgentSkillFrontmatter = {
+    name: n,
+    description: String(input.description ?? '').trim(),
+    license: input.license,
+    compatibility: input.compatibility,
+    metadata: input.metadata,
+    allowedTools: input.allowedTools,
+    references: input.references,
+  }
+  const sanitizedBody = sanitizeSkillMarkdown(input.body ?? '')
+  if (sanitizedBody == null && (input.body ?? '').trim()) {
+    throw new AgentSkillError('技能正文包含不允许的指令，请修改后重试', 'injection')
+  }
+  if (skillContentHasInjection(`${fm.description}\n${input.body ?? ''}`)) {
+    throw new AgentSkillError('技能内容包含不允许的指令，请修改后重试', 'injection')
+  }
+  const markdown = serializeSkillMarkdown(fm, sanitizedBody ?? input.body ?? '')
+  parseSkillMarkdown(markdown, { expectedDirName: n })
+  fs.writeFileSync(path.join(userRoot, 'SKILL.md'), markdown, 'utf8')
+  const detail = readSkillFromDir(userRoot, preservedSource, n)
+  if (!detail) {
+    throw new AgentSkillError('写入后无法读取技能', 'invalid_frontmatter')
+  }
+  return detail
+}
+
+/**
+ * Resolve `@skill:name` cross-references in a skill body.
+ * Returns the list of existing skill names referenced (deduped, excluding self).
+ */
+export function resolveSkillDependencies(name: string): string[] {
+  const skill = getSkill(name)
+  if (!skill) return []
+  const re = /`@skill:([\w-]+)`/g
+  const found = new Set<string>()
+  let m: RegExpExecArray | null
+  while ((m = re.exec(skill.body)) !== null) {
+    const dep = m[1]
+    if (!dep || dep === name) continue
+    if (getSkill(dep)) found.add(dep)
+  }
+  return [...found]
+}
+
 function copyDirSafe(src: string, dest: string) {
   fs.mkdirSync(dest, { recursive: true })
   for (const entry of fs.readdirSync(src, { withFileTypes: true })) {
@@ -260,6 +387,7 @@ export function toPublicIndexEntry(e: AgentSkillIndexEntry) {
     license: e.license,
     compatibility: e.compatibility,
     metadata: e.metadata,
+    references: e.references,
   }
 }
 

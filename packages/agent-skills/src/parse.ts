@@ -1,5 +1,5 @@
 import { AgentSkillError, type AgentSkillFrontmatter, type ParseSkillResult } from './types.js'
-import { isValidSkillName, validateDescription, validateCompatibility } from './validate.js'
+import { isValidSkillName, validateDescription, validateCompatibility, validateReferences } from './validate.js'
 
 const FRONTMATTER_RE = /^---\r?\n([\s\S]*?)\r?\n---\r?\n?([\s\S]*)$/
 
@@ -70,12 +70,20 @@ export function parseSkillMarkdown(raw: string, opts?: { expectedDirName?: strin
   if (typeof allowed === 'string' && allowed.trim()) {
     frontmatter.allowedTools = allowed.trim()
   }
+  if (Array.isArray(map.references)) {
+    const refsErr = validateReferences(map.references)
+    if (refsErr) throw new AgentSkillError(refsErr, 'invalid_frontmatter')
+    const refs = (map.references as unknown[])
+      .map(r => (typeof r === 'string' ? r.trim() : ''))
+      .filter(r => r.length > 0)
+    if (refs.length) frontmatter.references = refs
+  }
 
   return { frontmatter, body, raw: text }
 }
 
 type YamlScalar = string | number | boolean
-type YamlValue = YamlScalar | Record<string, YamlScalar>
+type YamlValue = YamlScalar | string[] | Record<string, YamlScalar>
 
 function parseSimpleYaml(block: string): Record<string, YamlValue> {
   const lines = block.split(/\r?\n/)
@@ -98,6 +106,39 @@ function parseSimpleYaml(block: string): Record<string, YamlValue> {
       continue
     }
     if (kv.value === null) {
+      // nested map or array — peek next non-blank line
+      let j = i + 1
+      while (j < lines.length) {
+        const peek = lines[j] ?? ''
+        if (!peek.trim() || peek.trim().startsWith('#')) {
+          j += 1
+          continue
+        }
+        break
+      }
+      const nextLine = lines[j] ?? ''
+      const nextTrim = nextLine.trimStart()
+      if (nextLine && leadingSpaces(nextLine) > 0 && nextTrim.startsWith('-')) {
+        // array: collect indented `- item` lines
+        const arr: string[] = []
+        i += 1
+        while (i < lines.length) {
+          const child = lines[i] ?? ''
+          if (!child.trim() || child.trim().startsWith('#')) {
+            i += 1
+            continue
+          }
+          const childIndent = leadingSpaces(child)
+          if (childIndent === 0) break
+          const childTrim = child.trimStart()
+          if (!childTrim.startsWith('-')) break
+          const item = childTrim.replace(/^-\s*/, '').trim()
+          arr.push(unquote(item))
+          i += 1
+        }
+        root[kv.key] = arr
+        continue
+      }
       // nested map
       const nested: Record<string, YamlScalar> = {}
       i += 1
@@ -154,6 +195,12 @@ export function serializeSkillMarkdown(fm: AgentSkillFrontmatter, body: string):
   if (fm.license) lines.push(`license: ${yamlQuote(fm.license)}`)
   if (fm.compatibility) lines.push(`compatibility: ${yamlQuote(fm.compatibility)}`)
   if (fm.allowedTools) lines.push(`allowed-tools: ${yamlQuote(fm.allowedTools)}`)
+  if (fm.references && fm.references.length) {
+    lines.push('references:')
+    for (const ref of fm.references) {
+      lines.push(`  - ${yamlQuote(ref)}`)
+    }
+  }
   if (fm.metadata && Object.keys(fm.metadata).length) {
     lines.push('metadata:')
     for (const [k, v] of Object.entries(fm.metadata)) {

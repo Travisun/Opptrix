@@ -13,7 +13,6 @@ export const MCP_SLOW_TOOL_CALL_TIMEOUT_MS = 900_000
 const SLOW_TOOLS = new Set([
   'get_market_dynamics',
   'run_backtest',
-  'industry_mining',
   'verify_instrument_strategy',
   'batch_instrument_snapshots',
   'evaluate_instrument',

@@ -23,6 +23,7 @@ import {
   buildSkillCatalogPrompt,
   buildActivatedSkillsPrompt,
   getSkill,
+  resolveSkillDependencies,
 } from '@opptrix/agent-skills'
 import {
   resolveToolRoutePlan,
@@ -384,18 +385,25 @@ export class AgentEngine {
           if (!getSkill(name)) skippedUnknown.push(name)
           else valid.push(name)
         }
-        const { activated, skipped, active } = this.agentSkillSessions.activate(sessionId, valid)
+        const { activated, skipped, active, depNotes } = this.agentSkillSessions.activate(
+          sessionId,
+          valid,
+          { resolveDeps: (n) => resolveSkillDependencies(n) },
+        )
         const allSkipped = [...skipped, ...skippedUnknown]
         this.invalidateContextUsage(sessionId)
+        const hintParts = [allSkipped.length
+          ? `部分技能未激活：${allSkipped.join(', ')}（可能不存在或已达上限 ${MAX_ACTIVATED_AGENT_SKILLS}）`
+          : '已激活；完整步骤已注入本会话']
+        if (depNotes.length) hintParts.push(...depNotes)
         return {
           ok: true,
           activated,
           skipped: allSkipped,
           active_skills: active,
           max_activated: MAX_ACTIVATED_AGENT_SKILLS,
-          hint: allSkipped.length
-            ? `部分技能未激活：${allSkipped.join(', ')}（可能不存在或已达上限 ${MAX_ACTIVATED_AGENT_SKILLS}）`
-            : '已激活；完整步骤已注入本会话',
+          dep_notes: depNotes,
+          hint: hintParts.join('；'),
         }
       },
     })

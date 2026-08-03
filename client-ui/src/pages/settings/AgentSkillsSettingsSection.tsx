@@ -1,14 +1,25 @@
-import { useCallback, useEffect, useState } from 'react'
-import { Spinner, Text, makeStyles, Textarea } from '@fluentui/react-components'
-import { DeleteRegular, DocumentArrowUpRegular, ArrowSyncRegular } from '@fluentui/react-icons'
+import { useCallback, useEffect, useState, type MouseEvent } from 'react'
+import { Spinner, Text, makeStyles, Textarea, mergeClasses } from '@fluentui/react-components'
+import {
+  DeleteRegular,
+  DocumentArrowUpRegular,
+  ArrowSyncRegular,
+  ChevronDownRegular,
+  ChevronRightRegular,
+  CopyAddRegular,
+} from '@fluentui/react-icons'
 import {
   listAgentSkills,
+  getAgentSkill,
   importAgentSkill,
   deleteAgentSkill,
+  forkAgentSkill,
   type PublicAgentSkill,
 } from '../../api/client'
 import OpptrixButton from '../../components/opptrix/OpptrixButton'
 import { useOpptrixDialogAlert } from '../../components/opptrix/OpptrixDialogAlert'
+import AgentSkillEditor from './AgentSkillEditor'
+import AgentSkillPreview from './AgentSkillPreview'
 import { SettingsGroup, SettingsRow, SettingsStaticBlock } from './SettingsPrimitives'
 import { useSettingsToast } from './SettingsToast'
 import { opptrixCssVars, opptrixTokens } from '../../theme/tokens'
@@ -33,12 +44,28 @@ const useStyles = makeStyles({
   },
   row: {
     display: 'flex',
+    flexDirection: 'column',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    ':last-child': { borderBottom: 'none' },
+  },
+  rowHeader: {
+    display: 'flex',
     alignItems: 'flex-start',
     justifyContent: 'space-between',
     gap: '12px',
     padding: '12px 14px',
-    borderBottom: `1px solid ${opptrixCssVars.separator}`,
-    ':last-child': { borderBottom: 'none' },
+    cursor: 'pointer',
+    backgroundColor: 'transparent',
+    border: 'none',
+    width: '100%',
+    textAlign: 'left',
+    boxSizing: 'border-box',
+    ':hover': {
+      backgroundColor: opptrixCssVars.canvasAlt,
+    },
+  },
+  rowHeaderExpanded: {
+    backgroundColor: opptrixCssVars.canvasAlt,
   },
   rowMain: {
     flex: 1,
@@ -46,6 +73,16 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     gap: '4px',
+  },
+  titleRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '6px',
+  },
+  chevron: {
+    color: opptrixCssVars.textTertiary,
+    flexShrink: 0,
+    marginTop: '2px',
   },
   title: {
     fontSize: 'var(--opptrix-font-md)',
@@ -60,6 +97,17 @@ const useStyles = makeStyles({
     fontSize: 'var(--opptrix-font-md)',
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
+  },
+  detail: {
+    padding: '0 14px 14px',
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '10px',
+  },
+  detailActions: {
+    display: 'flex',
+    gap: '8px',
+    flexWrap: 'wrap',
   },
   importBox: {
     width: '100%',
@@ -85,6 +133,11 @@ const useStyles = makeStyles({
     display: 'flex',
     justifyContent: 'center',
   },
+  detailLoading: {
+    padding: '16px 0',
+    display: 'flex',
+    justifyContent: 'center',
+  },
   sectionLabel: {
     fontSize: 'var(--opptrix-font-md)',
     fontWeight: 600,
@@ -96,6 +149,12 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textSecondary,
     lineHeight: 1.45,
     marginBottom: '10px',
+  },
+  headerActions: {
+    display: 'flex',
+    gap: '6px',
+    flexShrink: 0,
+    alignItems: 'flex-start',
   },
 })
 
@@ -112,6 +171,16 @@ function sourceLabel(source: PublicAgentSkill['source']): string {
   }
 }
 
+function isEditableSource(source: PublicAgentSkill['source']): boolean {
+  return source === 'user' || source === 'imported' || source === 'agent_created'
+}
+
+function mapSkillError(message: string, fallback: string): string {
+  if (/已存在|exists|同名/i.test(message)) return '已有同名副本'
+  if (/不允许的指令|injection/i.test(message)) return '内容包含不允许的指令'
+  return message.trim() || fallback
+}
+
 export default function AgentSkillsSettingsSection() {
   const s = useStyles()
   const { showToast } = useSettingsToast()
@@ -120,6 +189,10 @@ export default function AgentSkillsSettingsSection() {
   const [loading, setLoading] = useState(true)
   const [importText, setImportText] = useState('')
   const [importing, setImporting] = useState(false)
+  const [expandedName, setExpandedName] = useState<string | null>(null)
+  const [detail, setDetail] = useState<PublicAgentSkill | null>(null)
+  const [detailLoading, setDetailLoading] = useState(false)
+  const [forking, setForking] = useState(false)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -137,6 +210,33 @@ export default function AgentSkillsSettingsSection() {
     void load()
   }, [load])
 
+  const loadDetail = useCallback(async (name: string) => {
+    setDetailLoading(true)
+    setDetail(null)
+    try {
+      const { skill } = await getAgentSkill(name)
+      setDetail(skill)
+    } catch (e) {
+      showToast(
+        mapSkillError(e instanceof Error ? e.message : '', '暂时无法打开这份技能'),
+        'error',
+      )
+      setExpandedName(null)
+    } finally {
+      setDetailLoading(false)
+    }
+  }, [showToast])
+
+  const toggleExpand = (skill: PublicAgentSkill) => {
+    if (expandedName === skill.name) {
+      setExpandedName(null)
+      setDetail(null)
+      return
+    }
+    setExpandedName(skill.name)
+    void loadDetail(skill.name)
+  }
+
   const onImport = async () => {
     if (!importText.trim()) {
       showToast('请先粘贴技能说明', 'error')
@@ -149,13 +249,17 @@ export default function AgentSkillsSettingsSection() {
       showToast('工作流技能已导入', 'success')
       await load()
     } catch (e) {
-      showToast(e instanceof Error ? e.message : '导入失败，请检查内容后重试', 'error')
+      showToast(
+        mapSkillError(e instanceof Error ? e.message : '', '导入失败，请检查内容后重试'),
+        'error',
+      )
     } finally {
       setImporting(false)
     }
   }
 
-  const onDelete = async (skill: PublicAgentSkill) => {
+  const onDelete = async (skill: PublicAgentSkill, event?: React.MouseEvent) => {
+    event?.stopPropagation()
     if (skill.source === 'builtin') return
     const ok = await confirm({
       title: '删除工作流技能',
@@ -167,9 +271,34 @@ export default function AgentSkillsSettingsSection() {
     try {
       await deleteAgentSkill(skill.name)
       showToast(`已删除「${skill.name}」`, 'success')
+      if (expandedName === skill.name) {
+        setExpandedName(null)
+        setDetail(null)
+      }
       await load()
     } catch (e) {
-      showToast(e instanceof Error ? e.message : '删除失败，请稍后重试', 'error')
+      showToast(
+        mapSkillError(e instanceof Error ? e.message : '', '删除失败，请稍后重试'),
+        'error',
+      )
+    }
+  }
+
+  const onFork = async (skill: PublicAgentSkill) => {
+    setForking(true)
+    try {
+      const { skill: forked } = await forkAgentSkill(skill.name)
+      showToast(`已另存为我的副本「${forked.name}」`, 'success')
+      await load()
+      setExpandedName(forked.name)
+      setDetail(forked)
+    } catch (e) {
+      showToast(
+        mapSkillError(e instanceof Error ? e.message : '', '另存失败，请稍后重试'),
+        'error',
+      )
+    } finally {
+      setForking(false)
     }
   }
 
@@ -185,7 +314,7 @@ export default function AgentSkillsSettingsSection() {
           desc={loading ? '正在加载技能列表…' : `共 ${skills.length} 个`}
           control={(
             <OpptrixButton
-              appearance="secondary"
+              variant="secondary"
               size="small"
               icon={<ArrowSyncRegular />}
               onClick={() => void load()}
@@ -206,25 +335,84 @@ export default function AgentSkillsSettingsSection() {
               粘贴技能说明并导入后，即可在对话中启用。
             </div>
           ) : (
-            skills.map(skill => (
-              <div key={skill.name} className={s.row}>
-                <div className={s.rowMain}>
-                  <span className={s.title}>{skill.name}</span>
-                  <span className={s.meta}>{sourceLabel(skill.source)}</span>
-                  <span className={s.desc}>{skill.description}</span>
-                </div>
-                {skill.source !== 'builtin' ? (
-                  <OpptrixButton
-                    appearance="secondary"
-                    size="small"
-                    icon={<DeleteRegular />}
-                    onClick={() => void onDelete(skill)}
+            skills.map(skill => {
+              const expanded = expandedName === skill.name
+              const editable = isEditableSource(skill.source)
+              return (
+                <div key={skill.name} className={s.row}>
+                  <button
+                    type="button"
+                    className={mergeClasses(s.rowHeader, expanded && s.rowHeaderExpanded)}
+                    onClick={() => toggleExpand(skill)}
+                    aria-expanded={expanded}
                   >
-                    删除
-                  </OpptrixButton>
-                ) : null}
-              </div>
-            ))
+                    <div className={s.rowMain}>
+                      <div className={s.titleRow}>
+                        <span className={s.chevron} aria-hidden>
+                          {expanded
+                            ? <ChevronDownRegular fontSize={14} />
+                            : <ChevronRightRegular fontSize={14} />}
+                        </span>
+                        <span className={s.title}>{skill.name}</span>
+                      </div>
+                      <span className={s.meta}>{sourceLabel(skill.source)}</span>
+                      <span className={s.desc}>{skill.description}</span>
+                    </div>
+                    {editable ? (
+                      <div
+                        className={s.headerActions}
+                        onClick={e => e.stopPropagation()}
+                        onKeyDown={e => e.stopPropagation()}
+                      >
+                        <OpptrixButton
+                          variant="secondary"
+                          size="small"
+                          icon={<DeleteRegular />}
+                          onClick={e => void onDelete(skill, e)}
+                        >
+                          删除
+                        </OpptrixButton>
+                      </div>
+                    ) : null}
+                  </button>
+
+                  {expanded ? (
+                    <div className={s.detail}>
+                      {detailLoading || !detail || detail.name !== skill.name ? (
+                        <div className={s.detailLoading}>
+                          <Spinner size="tiny" label="正在打开技能…" />
+                        </div>
+                      ) : skill.source === 'builtin' ? (
+                        <>
+                          <AgentSkillPreview skill={detail} />
+                          <div className={s.detailActions}>
+                            <OpptrixButton
+                              variant="primary"
+                              size="small"
+                              icon={<CopyAddRegular />}
+                              onClick={() => void onFork(skill)}
+                              disabled={forking}
+                            >
+                              {forking ? '正在保存副本…' : '另存为我的副本'}
+                            </OpptrixButton>
+                          </div>
+                        </>
+                      ) : (
+                        <AgentSkillEditor
+                          skill={detail}
+                          onSaved={updated => {
+                            setDetail(updated)
+                            void load()
+                          }}
+                          onError={msg => showToast(msg, 'error')}
+                          onSuccess={msg => showToast(msg, 'success')}
+                        />
+                      )}
+                    </div>
+                  ) : null}
+                </div>
+              )
+            })
           )}
         </div>
       </SettingsGroup>
@@ -244,7 +432,7 @@ export default function AgentSkillsSettingsSection() {
           />
           <div className={s.actions}>
             <OpptrixButton
-              appearance="primary"
+              variant="primary"
               icon={<DocumentArrowUpRegular />}
               onClick={() => void onImport()}
               disabled={importing || !importText.trim()}
