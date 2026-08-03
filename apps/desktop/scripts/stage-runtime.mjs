@@ -500,10 +500,6 @@ for (const pkg of workspacePackages) {
   fs.mkdirSync(destRoot, { recursive: true })
   fs.copyFileSync(path.join(pkgRoot, 'package.json'), path.join(destRoot, 'package.json'))
   cpDir(path.join(pkgRoot, 'dist'), path.join(destRoot, 'dist'))
-  const skillsAsset = path.join(pkgRoot, 'dist', 'chain-knowledge.json')
-  if (fs.existsSync(skillsAsset)) {
-    fs.copyFileSync(skillsAsset, path.join(destRoot, 'dist', 'chain-knowledge.json'))
-  }
 }
 
 const deps = collectServerNpmDeps()

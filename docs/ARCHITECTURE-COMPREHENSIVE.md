@@ -105,6 +105,7 @@ server · (desktop 仅壳层 + 打包)
 | `@opptrix/research-hub` | `packages/research-hub` | Hub 调度（`feature` 字符串路由） |
 | `@opptrix/search-hub` | `packages/search-hub` | 跨市场标的搜索 |
 | `@opptrix/agent` | `packages/agent` | LLM + MCP 工具（40+ 工具） |
+| `@opptrix/agent-skills` | `packages/agent-skills` | Agent Skills（工作流技能）解析与 Registry |
 | `@opptrix/news-feed` | `packages/news-feed` | 新闻 RSS 与订阅 |
 | `@opptrix/article-enrichment` | `packages/article-enrichment` | 文章增强与摘要 |
 | `@opptrix/local-inference` | `packages/local-inference` | 桌面本地翻译/推理 |

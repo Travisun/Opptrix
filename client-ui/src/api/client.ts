@@ -77,7 +77,7 @@ export async function apiCall<T>(
 import type {
   StockDiagnosisData, InstitutionRatingData,
   StrategySignalData, StrategyVerifyData, TrendBriefData,
-  PortfolioAnalysisData, IndustryMiningData, MarketReportData,
+  PortfolioAnalysisData,
   SearchStocksData, BacktestResultData, LatestEvalData, ReportTextData,
 } from '../types/schemas'
 import { cnEquityRef, instrumentKey } from '../market/instrument'
@@ -277,14 +277,8 @@ export const research = {
   portfolioAnalysis: (holdings: [string, number][]) =>
     apiCall<PortfolioAnalysisData>('portfolio_analysis', { holdings }),
 
-  industryMining: (industry: string) =>
-    apiCall<IndustryMiningData>('industry_mining', { industry }),
-
   marketRegime: (scope: 'cn' | 'us' = 'cn') =>
     apiCall<import('../types/schemas').MarketRegimeData>('market_regime', { profile_scope: scope }),
-
-  marketReport: (type: 'morning' | 'closing') =>
-    apiCall<MarketReportData>('market_report', { type }),
 
   marketDynamics: () =>
     apiCall<import('../types/schemas').MarketDynamicsData>('market_dynamics', {}, undefined, 20000),
@@ -1996,6 +1990,93 @@ export async function removeMcpPreset(presetId: string) {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ presetId }),
+  })
+}
+
+/** 工作流技能公开视图 */
+export interface PublicAgentSkill {
+  name: string
+  description: string
+  source: 'builtin' | 'user' | 'imported' | 'agent_created'
+  license?: string
+  compatibility?: string
+  metadata?: Record<string, string>
+  /** 空格分隔的能力白名单 */
+  allowedTools?: string
+  references?: string[]
+  body?: string
+}
+
+export interface UpdateAgentSkillPayload {
+  name: string
+  description: string
+  body: string
+  license?: string
+  compatibility?: string
+  allowedTools?: string
+  references?: string[]
+}
+
+export async function listAgentSkills() {
+  return jsonFetch<{ skills: PublicAgentSkill[] }>('/agent-skills')
+}
+
+export async function getAgentSkill(name: string) {
+  return jsonFetch<{ skill: PublicAgentSkill }>(`/agent-skills/${encodeURIComponent(name)}`)
+}
+
+export async function forkAgentSkill(name: string) {
+  return jsonFetch<{ skill: PublicAgentSkill }>(
+    `/agent-skills/${encodeURIComponent(name)}/fork`,
+    { method: 'POST' },
+  )
+}
+
+export async function updateAgentSkill(name: string, payload: UpdateAgentSkillPayload) {
+  return jsonFetch<{ skill: PublicAgentSkill }>(
+    `/agent-skills/${encodeURIComponent(name)}`,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    },
+  )
+}
+
+export async function getAgentSkillFile(name: string, path: string) {
+  const qs = `?path=${encodeURIComponent(path)}`
+  return jsonFetch<{ skill_name: string; path: string; content: string }>(
+    `/agent-skills/${encodeURIComponent(name)}/file${qs}`,
+  )
+}
+
+export async function importAgentSkill(markdown: string) {
+  return jsonFetch<{ skill: PublicAgentSkill }>('/agent-skills/import', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ markdown }),
+  })
+}
+
+export async function createAgentSkill(input: {
+  name: string
+  description: string
+  body: string
+  license?: string
+  compatibility?: string
+  allowedTools?: string
+  references?: string[]
+}) {
+  return jsonFetch<{ skill: PublicAgentSkill }>('/agent-skills', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+  })
+}
+
+export async function deleteAgentSkill(name: string) {
+  return jsonFetch<{ ok: true; name: string }>(`/agent-skills/${encodeURIComponent(name)}`, {
+    method: 'DELETE',
   })
 }
 

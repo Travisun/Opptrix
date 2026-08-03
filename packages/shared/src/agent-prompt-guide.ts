@@ -239,21 +239,21 @@ export function buildMarketContextPlaybook(): string {
     '2d) 是否开盘/交易时段：get_market_session；精确休市用 get_trade_calendar',
     '3) 关注池：get_watchlist → 对重点标的 get_instrument_quotes / get_instrument_snapshot / evaluate_instrument',
     '4) A 股趋势一句话：get_trend_brief（code 必填，可选 holding_cost）→ 需要深度时 evaluate_instrument / get_instrument_chart',
-    '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用 industry_mining + search_instruments',
+    '5) 跨市场搜索：唯一入口 search_instruments（可用 markets 过滤 CN/US/HK/CRYPTO）；A 股主题扩池用工作流技能 industry-chain + search_instruments',
   ].join('\n')
 }
 
-/** 聊天 Agent — 行业分析路径（产业链 → 代表公司核实） */
+/** 聊天 Agent — 行业分析路径（产业链技能 → 代表公司核实） */
 export function buildIndustryAnalysisPlaybook(): string {
   return [
-    '【行业与板块 — industry_mining / get_sector_list / get_sector_constituents / get_index_constituents】',
-    '1) 产业链与代表公司叙事：industry_mining（industry 名称尽量具体，如「半导体」「新能源车」）',
+    '【行业与板块 — 工作流技能 industry-chain / get_sector_list / get_sector_constituents / get_index_constituents】',
+    '1) 产业链与代表公司叙事：激活工作流技能 industry-chain（含内置知识库 references/chain-knowledge.json），按行业名匹配上下游节点',
     '2) 板块/行业目录：get_sector_list（kind=industries|boards）→ 拿到 board_key / industry_code',
     '3) 板块成分：get_sector_constituents（须 board_key 或 industry_code）；勿用 ETF holdings 代替',
     '3b) 指数成分（沪深300/同花顺概念等）：get_index_constituents(index_code)',
-    '4) 需 mindmap：industry_mermaid；核实代表公司：search_instruments → snapshot / evaluate',
+    '4) 核实代表公司：search_instruments → get_instrument_snapshot / evaluate_instrument',
     '5) 宏观/板块背景：get_market_regime / get_market_dynamics',
-    '6) 不依赖本地行业库：本 playbook 仅用 industry_mining / get_sector_* / get_index_*，不调用任何已废弃的本地行业工具',
+    '6) 不依赖本地行业库：本 playbook 仅用 industry-chain 技能 / get_sector_* / get_index_*，不调用任何已废弃的本地行业工具',
   ].join('\n')
 }
 

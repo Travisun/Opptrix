@@ -59,9 +59,6 @@
 | `portfolio_analysis` | `holdings`, `scorecard?` | 组合因子分析 |
 | `portfolio_trades` | `code?` | 交易记录列表 |
 | `portfolio_summary` | — | 账本汇总 |
-| `industry_mining` | `industry` | 产业透视文本 |
-| `industry_mermaid` | `industry` | 产业链 Mermaid |
-| `market_report` | `type?` (`closing` / `morning`) | 市场报告 |
 | `search_stocks` | `keyword` | 股票搜索 |
 | `backtest` | 见 hub 实现 | 因子回测 |
 | `latest_evaluation` | `code`, `scorecard?`, `force?` | 最近评估；默认 `G=B+M`，返回 `gbm` B/M 子分 |
@@ -131,7 +128,6 @@
 | POST | `/api/search` | `{ "keyword" }` |
 | POST | `/api/signal` | `{ "code" }` |
 | POST | `/api/strategy/report` | `{ "code" }` |
-| POST | `/api/industry/mermaid` | `{ "industry" }` |
 | GET | `/api/portfolio/trades` | `?code=` 可选 |
 | GET | `/api/portfolio/summary` | 账本汇总 |
 | GET | `/api/watchlist` | 关注列表（含 `items`；新客户端只读合并 `groups` + `membership`） |
@@ -446,6 +442,23 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 | DELETE | `/api/mcp-servers/:id` | 删除配置并断开 |
 | POST | `/api/mcp-servers/:id/test` | 探活（`tools/list`）；超时较长 |
 | POST | `/api/mcp-servers/reorder` | `{ server_ids: string[] }` 重排优先级 |
+
+### 工作流技能 / Agent Skills
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/agent-skills` | `{ skills: [{ name, description, source, references?, … }] }` |
+| GET | `/api/agent-skills/:name` | `{ skill }` 含正文 `body` |
+| POST | `/api/agent-skills` | 创建：`{ name, description, body, references?, files?: [{ path, content }], … }` → 201 |
+| POST | `/api/agent-skills/import` | `{ markdown }` 导入完整技能说明 → 201 |
+| POST | `/api/agent-skills/:name/fork` | 将**内置**技能复制为用户可编辑副本（同名已存在 → 409）→ 201 |
+| PUT | `/api/agent-skills/:name` | 更新用户技能：`{ description, body, references?, … }`（内置只读 → 403，须先 fork） |
+| GET | `/api/agent-skills/:name/file?path=` | 预览附件：`{ skill_name, path, content }`（`path` 相对技能根，须 confine） |
+| DELETE | `/api/agent-skills/:name` | 删除用户技能（不可删内置） |
+
+早报 / 收盘 / 产业链等叙事由对话中激活内置工作流技能完成（见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)）；已移除 Hub feature `industry_mining` / `industry_mermaid` / `market_report` 与 `POST /api/industry/mermaid`。
+
+详见 [AGENT-SKILLS.md](./AGENT-SKILLS.md)。
 
 `PublicMcpServer` 含：`id`/`title`/`enabled`/`paused`/`sortOrder`/`transport`/`endpointPreview`/`secretsConfigured`/`capabilityBindings`/`health`/`toolCount` 等。
 

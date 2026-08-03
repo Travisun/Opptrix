@@ -81,6 +81,10 @@ export interface AssembleSystemPromptInput extends AgentSystemRulesOptions {
   sessionRolePersona?: string | null
   roleLabel?: string | null
   dataSourcingPolicy?: string
+  /** Agent Skills 短目录（name+description）；Layer0 之下、与角色正交 */
+  agentSkillCatalog?: string
+  /** 本会话已激活技能的正文块 */
+  activatedAgentSkills?: string
 }
 
 export function assembleSystemPrompt(input?: AssembleSystemPromptInput): string {
@@ -91,13 +95,18 @@ export function assembleSystemPrompt(input?: AssembleSystemPromptInput): string 
       ?? null,
     roleLabel: input?.roleLabel ?? input?.expert?.title ?? null,
   })
+  const skillParts = [
+    input?.agentSkillCatalog ?? '',
+    input?.activatedAgentSkills ?? '',
+  ].filter(Boolean)
   const layer2Parts = [
     '需要用户确认分析方向或偏好时，使用 ask_user 工具在界面展示选择题（含自行输入项），勿让用户在聊天里自行罗列选项。',
     '工具选择必须以「本轮工具选型卡」与 tools 列表为准：先调首选工具取证据，再按档位补维；勿调用未加载工具。',
+    '需要固定投研流程时：先看【工作流技能目录】，再 activate_agent_skill；勿与「技能专长」角色人设混淆。',
     '时效判断优先使用 system 中的【会话时钟】，无需每轮调用 get_current_time。',
     input?.dataSourcingPolicy ?? '',
     buildAgentSystemRules(input),
   ].filter(Boolean)
 
-  return [layer0, layer1, layer2Parts.join('\n')].join('\n\n')
+  return [layer0, layer1, ...skillParts, layer2Parts.join('\n')].filter(Boolean).join('\n\n')
 }

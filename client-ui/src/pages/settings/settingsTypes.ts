@@ -3,6 +3,7 @@ export type SettingsSection =
   | 'models'
   | 'data_providers'
   | 'mcp_servers'
+  | 'agent_skills'
   | 'news_feed'
   | 'sandbox'
   | 'schedule'
@@ -19,6 +20,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'translation',
   'multimodal',
   'mcp_servers',
+  'agent_skills',
   'sandbox',
   'schedule',
   'python',

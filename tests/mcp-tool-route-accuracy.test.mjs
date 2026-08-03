@@ -30,6 +30,10 @@ import {
 
 /** D1 黄金用例：用户问句 → 必须命中的首推工具 */
 const PRIMARY_CASES = [
+  { message: '帮我建一个工作流技能', expectPrimary: 'activate_agent_skill', intent: 'create_skill' },
+  { message: '新建工作流技能做财报速读', expectPrimary: 'activate_agent_skill', intent: 'create_skill' },
+  { message: '定制一个收盘复盘技能', expectPrimary: 'activate_agent_skill', intent: 'create_skill' },
+  { message: '用工作流技能做早报', expectPrimary: 'list_agent_skills', intent: 'agent_skills' },
   { message: '茅台现价多少', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
   { message: '600519 最新价和涨跌幅', expectPrimary: 'get_instrument_quotes', intent: 'price_only' },
   { message: '帮我深度分析一下 600519', expectPrimary: 'get_instrument_snapshot', intent: 'depth_analysis' },
@@ -88,15 +92,15 @@ const PRIMARY_CASES = [
   { message: '今天涨跌榜和龙虎榜', expectPrimary: 'get_market_dynamics', intent: 'market_dynamics' },
   { message: '最近几个月 CPI 同比多少', expectPrimary: 'get_macro_series', intent: 'macro_series' },
   { message: '现在是牛市还是熊市', expectPrimary: 'get_market_regime', intent: 'market_regime' },
-  { message: '梳理半导体产业链', expectPrimary: 'industry_mining', intent: 'industry' },
+  { message: '梳理半导体产业链', expectPrimary: 'activate_agent_skill', intent: 'industry' },
   { message: '看下筹码分布', expectPrimary: 'get_instrument_cyq', intent: 'cyq' },
   { message: '机构评级和目标价', expectPrimary: 'get_instrument_institution_rating', intent: 'institution' },
   { message: '给个交易信号', expectPrimary: 'get_instrument_strategy_signal', intent: 'strategy_signal' },
   { message: 'MACD 和 RSI 怎么样', expectPrimary: 'get_instrument_indicators', intent: 'indicators' },
   { message: '做一下评分卡回测', expectPrimary: 'run_backtest', intent: 'backtest' },
   { message: '搜一下浪潮信息代码', expectPrimary: 'search_instruments', intent: 'search' },
-  { message: '开盘早报', expectPrimary: 'get_morning_brief', intent: 'morning_brief' },
-  { message: '收盘报告', expectPrimary: 'get_closing_report', intent: 'closing_report' },
+  { message: '开盘早报', expectPrimary: 'activate_agent_skill', intent: 'morning_brief' },
+  { message: '收盘报告', expectPrimary: 'activate_agent_skill', intent: 'closing_report' },
   { message: '帮我创建一个每天收盘后分析大盘的计划任务', expectPrimary: 'create_scheduled_job', intent: 'schedule_create' },
   { message: '列出我的计划任务', expectPrimary: 'list_scheduled_jobs', intent: 'schedule_manage' },
   { message: '立刻执行一次计划任务', expectPrimary: 'run_scheduled_job_now', intent: 'schedule_run_now' },
@@ -206,7 +210,6 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
     routePlaybook: '【本轮工具选型卡】\n- 测试卡',
   })
   assert.match(slim, /本轮工具选型卡/)
-  assert.ok(!slim.includes('industry_mining') || slim.includes('工具包目录'), 'industry playbook body should be absent')
   assert.ok(!slim.includes('【资讯调阅'))
   assert.ok(!slim.includes('【数据源扩展'))
   assert.ok(!slim.includes('【基本面事实表'))

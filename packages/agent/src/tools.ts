@@ -117,6 +117,16 @@ export class ToolRegistry {
     gen: number
   }>()
   private packBridgeGenSeq = 0
+  /** 会话级 Agent Skills 激活桥接 */
+  private skillBridges = new Map<string, {
+    bridge: {
+      sessionId: string
+      activateSkills: (skillNames: string[]) => unknown
+      getActivated: () => readonly string[]
+    }
+    gen: number
+  }>()
+  private skillBridgeGenSeq = 0
 
   constructor(private hub: ResearchHub, appContext?: AgentAppContext) {
     this.appContext = appContext ?? createDefaultAppContext()
@@ -147,6 +157,23 @@ export class ToolRegistry {
     }
   }
 
+  bindSkillSession(bridge: {
+    sessionId: string
+    activateSkills: (skillNames: string[]) => unknown
+    getActivated: () => readonly string[]
+  }): number {
+    const gen = ++this.skillBridgeGenSeq
+    this.skillBridges.set(bridge.sessionId, { bridge, gen })
+    return gen
+  }
+
+  clearSkillSession(sessionId: string, gen: number): void {
+    const cur = this.skillBridges.get(sessionId)
+    if (cur && cur.gen === gen) {
+      this.skillBridges.delete(sessionId)
+    }
+  }
+
   private requirePackBridge(): {
     sessionId: string
     listPacks: () => unknown
@@ -155,6 +182,16 @@ export class ToolRegistry {
     const sessionId = currentToolSessionId()
     if (!sessionId) return null
     return this.packBridges.get(sessionId)?.bridge ?? null
+  }
+
+  private requireSkillBridge(): {
+    sessionId: string
+    activateSkills: (skillNames: string[]) => unknown
+    getActivated: () => readonly string[]
+  } | null {
+    const sessionId = currentToolSessionId()
+    if (!sessionId) return null
+    return this.skillBridges.get(sessionId)?.bridge ?? null
   }
 
   list() { return this.tools }
@@ -217,6 +254,8 @@ export class ToolRegistry {
     researchTier?: import('@opptrix/shared').ResearchTier
     sessionClock?: string
     dataSourcingPolicy?: string
+    agentSkillCatalog?: string
+    activatedAgentSkills?: string
   }) {
     return assembleSystemPrompt(opts)
   }
@@ -291,18 +330,6 @@ export class ToolRegistry {
         handler: (a: Record<string, unknown>) => d('portfolio_analysis', { holdings: a.holdings, scorecard: a.scorecard }),
       },
       {
-        name: 'get_closing_report', category: '报告',
-        description: '生成 A 股收盘市场报告',
-        parameters: S({}),
-        handler: () => d('market_report', { type: 'closing' }),
-      },
-      {
-        name: 'get_morning_brief', category: '报告',
-        description: '生成 A 股开盘早报',
-        parameters: S({}),
-        handler: () => d('market_report', { type: 'morning' }),
-      },
-      {
         name: 'run_backtest', category: '策略',
         description: '对指定股票列表做评分卡 IC 回测',
         parameters: S({
@@ -317,18 +344,6 @@ export class ToolRegistry {
         description: '单股 T 策略综合分析文本报告',
         parameters: S({ code: { type: 'string', description: '股票代码' } }, ['code']),
         handler: (a: Record<string, unknown>) => d('strategy_report', { code: a.code }),
-      },
-      {
-        name: 'industry_mining', category: '报告',
-        description: '产业链透视与代表公司',
-        parameters: S({ industry: { type: 'string', description: '行业名称，如 半导体' } }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('industry_mining', { industry: a.industry }),
-      },
-      {
-        name: 'industry_mermaid', category: '报告',
-        description: '产业链 Mermaid mindmap 源码',
-        parameters: S({ industry: { type: 'string', description: '行业名称' } }, ['industry']),
-        handler: (a: Record<string, unknown>) => d('industry_mermaid', { industry: a.industry }),
       },
       {
         name: 'get_news_center_status', category: '资讯中心',
@@ -709,6 +724,227 @@ export class ToolRegistry {
               ? [raw]
               : []
           return pack.activatePacks(packIds)
+        },
+      },
+      {
+        name: 'list_agent_skills',
+        category: '工作流技能',
+        description: '列出可用工作流技能（名称/说明/来源）；仅元数据，不含完整步骤正文',
+        parameters: S({}),
+        handler: async () => {
+          const {
+            listSkillIndex,
+            toPublicIndexEntry,
+          } = await import('@opptrix/agent-skills')
+          const skill = this.requireSkillBridge()
+          const active = skill ? [...skill.getActivated()] : []
+          return {
+            skills: listSkillIndex().map(e => ({
+              ...toPublicIndexEntry(e),
+              activated: active.includes(e.name),
+            })),
+            active_skills: active,
+          }
+        },
+      },
+      {
+        name: 'activate_agent_skill',
+        category: '工作流技能',
+        description: '激活一个或多个工作流技能，将完整步骤注入本会话（最多 3 个）；技能正文中的 `@skill:依赖` 会自动递归激活（带循环检测）',
+        parameters: S({
+          skill_names: {
+            type: 'array',
+            description: '技能 name 列表，如 ["morning-market-brief","equity-deep-dive"]',
+            items: { type: 'string' },
+          },
+        }, ['skill_names']),
+        handler: async (a: Record<string, unknown>) => {
+          const skill = this.requireSkillBridge()
+          if (!skill) {
+            return { error: 'activate_agent_skill 需在聊天会话中调用' }
+          }
+          const raw = a.skill_names ?? a.skillNames
+          const names = Array.isArray(raw)
+            ? raw.map(x => String(x))
+            : typeof raw === 'string'
+              ? [raw]
+              : []
+          return skill.activateSkills(names)
+        },
+      },
+      {
+        name: 'get_agent_skill',
+        category: '工作流技能',
+        description: '读取单个工作流技能的完整说明正文；也可用于预览后再 activate',
+        parameters: S({
+          skill_name: { type: 'string', description: '技能 name' },
+        }, ['skill_name']),
+        handler: async (a: Record<string, unknown>) => {
+          const { getSkill, toPublicDetail, AgentSkillError } = await import('@opptrix/agent-skills')
+          const name = String(a.skill_name ?? a.skillName ?? '').trim()
+          if (!name) return { error: 'skill_name 必填' }
+          try {
+            const detail = getSkill(name)
+            if (!detail) return { error: `未找到工作流技能「${name}」` }
+            return { skill: toPublicDetail(detail) }
+          } catch (e) {
+            if (e instanceof AgentSkillError) return { error: e.message }
+            return { error: '暂时无法读取该技能' }
+          }
+        },
+      },
+      {
+        name: 'get_agent_skill_file',
+        category: '工作流技能',
+        description: '按需读取已激活或已安装技能目录内的附加文件（相对路径）',
+        parameters: S({
+          skill_name: { type: 'string', description: '技能 name' },
+          path: { type: 'string', description: '相对技能根目录的路径，如 references/notes.md' },
+        }, ['skill_name', 'path']),
+        handler: async (a: Record<string, unknown>) => {
+          const { readSkillFile, AgentSkillError } = await import('@opptrix/agent-skills')
+          const name = String(a.skill_name ?? a.skillName ?? '').trim()
+          const rel = String(a.path ?? '').trim()
+          if (!name) return { error: 'skill_name 必填' }
+          if (!rel) return { error: 'path 必填' }
+          try {
+            const content = readSkillFile(name, rel)
+            return { skill_name: name, path: rel, content }
+          } catch (e) {
+            if (e instanceof AgentSkillError) return { error: e.message }
+            return { error: '暂时无法读取该文件' }
+          }
+        },
+      },
+      {
+        name: 'create_agent_skill',
+        category: '工作流技能',
+        description: '创建用户工作流技能。首次勿传 confirmed；ask_user 确认后再以 confirmed=true 重试',
+        parameters: S({
+          name: { type: 'string', description: '技能 name（小写+连字符）' },
+          description: { type: 'string', description: '何时使用与能力说明（1–1024 字）' },
+          body: { type: 'string', description: '技能步骤正文（Markdown）' },
+          references: {
+            type: 'array',
+            description: '可选：frontmatter references 路径列表（如 references/notes.md）',
+            items: { type: 'string' },
+          },
+          files: {
+            type: 'array',
+            description: '可选：附件 { path, content }，path 须在 references/、scripts/、assets/ 下',
+            items: {
+              type: 'object',
+              properties: {
+                path: { type: 'string' },
+                content: { type: 'string' },
+              },
+            },
+          },
+          confirmed: { type: 'boolean', description: '用户已确认创建；缺省或 false 时仅返回确认摘要' },
+        }, ['name', 'description', 'body']),
+        handler: async (a: Record<string, unknown>) => {
+          const name = String(a.name ?? '').trim()
+          const description = String(a.description ?? '').trim()
+          const body = String(a.body ?? '')
+          const references = Array.isArray(a.references)
+            ? a.references.filter((x): x is string => typeof x === 'string')
+            : undefined
+          const files = Array.isArray(a.files)
+            ? a.files
+                .filter((x): x is Record<string, unknown> => typeof x === 'object' && x !== null && !Array.isArray(x))
+                .map(x => ({
+                  path: String(x.path ?? ''),
+                  content: String(x.content ?? ''),
+                }))
+                .filter(x => x.path.trim())
+            : undefined
+          if (!name || !description) {
+            return { error: '请补充技能名称与说明后再试' }
+          }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: {
+                name,
+                description,
+                body_preview: body.slice(0, 200),
+                references_count: references?.length ?? 0,
+                files_count: files?.length ?? 0,
+                file_paths: files?.map(f => f.path).slice(0, 8),
+              },
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 create_agent_skill',
+            }
+          }
+          const { createSkill, AgentSkillError, toPublicDetail } = await import('@opptrix/agent-skills')
+          try {
+            const skill = createSkill({
+              name,
+              description,
+              body,
+              references,
+              files,
+              source: 'agent_created',
+            })
+            return { ok: true, skill: toPublicDetail(skill) }
+          } catch (e) {
+            if (e instanceof AgentSkillError) return { error: e.message }
+            return { error: '创建技能失败，请检查内容后重试' }
+          }
+        },
+      },
+      {
+        name: 'import_agent_skill',
+        category: '工作流技能',
+        description: '从 Markdown 文本导入工作流技能。须 confirmed=true；建议先 ask_user',
+        parameters: S({
+          markdown: { type: 'string', description: '完整技能说明文本（含元数据区块与正文）' },
+          confirmed: { type: 'boolean', description: '用户已确认导入' },
+        }, ['markdown']),
+        handler: async (a: Record<string, unknown>) => {
+          const markdown = String(a.markdown ?? '')
+          if (!markdown.trim()) return { error: '请粘贴完整的技能说明后再导入' }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: { markdown_preview: markdown.slice(0, 240) },
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 import_agent_skill',
+            }
+          }
+          const { installSkillFromMarkdown, AgentSkillError, toPublicDetail } = await import('@opptrix/agent-skills')
+          try {
+            const skill = installSkillFromMarkdown(markdown, { source: 'imported' })
+            return { ok: true, skill: toPublicDetail(skill) }
+          } catch (e) {
+            if (e instanceof AgentSkillError) return { error: e.message }
+            return { error: '导入失败，请检查技能说明格式后重试' }
+          }
+        },
+      },
+      {
+        name: 'delete_agent_skill',
+        category: '工作流技能',
+        description: '删除用户导入/创建的工作流技能（不可删内置）。须 confirmed=true',
+        parameters: S({
+          skill_name: { type: 'string', description: '技能 name' },
+          confirmed: { type: 'boolean', description: '用户已确认删除' },
+        }, ['skill_name']),
+        handler: async (a: Record<string, unknown>) => {
+          const name = String(a.skill_name ?? a.skillName ?? '').trim()
+          if (!name) return { error: 'skill_name 必填' }
+          if (a.confirmed !== true) {
+            return {
+              needs_confirmation: true,
+              summary: { skill_name: name },
+              hint: '请先用 ask_user 向用户确认；用户同意后以相同参数 + confirmed=true 再调用 delete_agent_skill',
+            }
+          }
+          const { deleteUserSkill, AgentSkillError } = await import('@opptrix/agent-skills')
+          try {
+            return deleteUserSkill(name)
+          } catch (e) {
+            if (e instanceof AgentSkillError) return { error: e.message }
+            return { error: '删除失败，请稍后重试' }
+          }
         },
       },
       {

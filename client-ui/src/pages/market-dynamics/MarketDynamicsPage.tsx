@@ -246,7 +246,6 @@ function MarketDynamicsContent({ electronChrome = false, chromeToolbarReserve = 
                 dragonTiger={data?.cn_dragon_tiger ?? []}
                 dragonTigerDate={data?.cn_dragon_tiger_date}
                 marketLoading={loading}
-                report={insights.report}
                 articles={insights.articles}
                 insightsLoading={insights.loading}
                 stacked={stacked}
