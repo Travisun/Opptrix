@@ -27,7 +27,6 @@ import {
 } from './aboutLinks'
 import {
   SettingsActionRow,
-  SettingsDivider,
   SettingsGroup,
   SettingsRow,
 } from './SettingsPrimitives'
@@ -250,81 +249,75 @@ export default function AboutSettingsSection({ contentFlush = false }: AboutSett
             last={!showUpdateBlock}
           />
           {showUpdateBlock && (
-            <>
-              <SettingsDivider fullWidth />
-              <SettingsRow
-                title="自动下载更新"
-                desc="开启后发现新版本会在后台下载；关闭后仍会检查并提醒，需你确认后再下载"
-                control={(
-                  <Switch
-                    checked={autoDownload}
-                    onChange={handleAutoDownloadChange}
-                    aria-label="自动下载更新"
-                  />
-                )}
-                last={!showUpdateStatusRow}
-              />
-            </>
+            <SettingsRow
+              title="自动下载更新"
+              desc="开启后发现新版本会在后台下载；关闭后仍会检查并提醒，需你确认后再下载"
+              control={(
+                <Switch
+                  checked={autoDownload}
+                  onChange={handleAutoDownloadChange}
+                  aria-label="自动下载更新"
+                />
+              )}
+              last={!showUpdateStatusRow}
+            />
           )}
           {showUpdateStatusRow && updatePanel && (
-            <>
-              <SettingsDivider fullWidth />
-              <div className={s.updateStatusBlock}>
-                <Text className={s.updateTitle} block>{updatePanel.title}</Text>
-                <div className={s.updatePanel}>
-                  <Text className={s.updateDesc} block>{updatePanel.desc}</Text>
-                  {updatePanel.showProgress && (
-                    <>
-                      <ProgressBar
-                        value={
-                          updatePanel.percent != null && updatePanel.percent > 0
-                            ? updatePanel.percent / 100
-                            : undefined
-                        }
-                        max={1}
-                        thickness="medium"
-                        shape="rounded"
-                      />
-                      <Text className={s.progressMeta} block>
-                        {updateStatus.state === 'available' && autoDownload
-                          ? '正在连接下载…'
-                          : updateStatus.state === 'installing'
-                            ? '正在替换应用文件并准备重启…'
-                          : updatePanel.percent != null && updatePanel.percent > 0
-                            ? `已完成 ${updatePanel.percent}%`
-                            : '正在准备下载…'}
-                      </Text>
-                    </>
-                  )}
-                  {updatePanel.showDownload && (
-                    <div className={s.updateActions}>
-                      <OpptrixButton
-                        className={s.restartBtn}
-                        variant="primary"
-                        size="small"
-                        icon={<ArrowDownloadRegular fontSize={14} />}
-                        onClick={() => { void downloadUpdate() }}
-                      >
-                        下载更新
-                      </OpptrixButton>
-                    </div>
-                  )}
-                  {updatePanel.showInstall && (
-                    <div className={s.updateActions}>
-                      <OpptrixButton
-                        className={s.restartBtn}
-                        variant="primary"
-                        size="small"
-                        icon={<ArrowSyncRegular fontSize={14} />}
-                        onClick={() => { void installUpdate() }}
-                      >
-                        重启更新
-                      </OpptrixButton>
-                    </div>
-                  )}
-                </div>
+            <div className={s.updateStatusBlock}>
+              <Text className={s.updateTitle} block>{updatePanel.title}</Text>
+              <div className={s.updatePanel}>
+                <Text className={s.updateDesc} block>{updatePanel.desc}</Text>
+                {updatePanel.showProgress && (
+                  <>
+                    <ProgressBar
+                      value={
+                        updatePanel.percent != null && updatePanel.percent > 0
+                          ? updatePanel.percent / 100
+                          : undefined
+                      }
+                      max={1}
+                      thickness="medium"
+                      shape="rounded"
+                    />
+                    <Text className={s.progressMeta} block>
+                      {updateStatus.state === 'available' && autoDownload
+                        ? '正在连接下载…'
+                        : updateStatus.state === 'installing'
+                          ? '正在替换应用文件并准备重启…'
+                        : updatePanel.percent != null && updatePanel.percent > 0
+                          ? `已完成 ${updatePanel.percent}%`
+                          : '正在准备下载…'}
+                    </Text>
+                  </>
+                )}
+                {updatePanel.showDownload && (
+                  <div className={s.updateActions}>
+                    <OpptrixButton
+                      className={s.restartBtn}
+                      variant="primary"
+                      size="small"
+                      icon={<ArrowDownloadRegular fontSize={14} />}
+                      onClick={() => { void downloadUpdate() }}
+                    >
+                      下载更新
+                    </OpptrixButton>
+                  </div>
+                )}
+                {updatePanel.showInstall && (
+                  <div className={s.updateActions}>
+                    <OpptrixButton
+                      className={s.restartBtn}
+                      variant="primary"
+                      size="small"
+                      icon={<ArrowSyncRegular fontSize={14} />}
+                      onClick={() => { void installUpdate() }}
+                    >
+                      重启更新
+                    </OpptrixButton>
+                  </div>
+                )}
               </div>
-            </>
+            </div>
           )}
         </SettingsGroup>
       </div>
