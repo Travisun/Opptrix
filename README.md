@@ -23,9 +23,9 @@
 <p align="center"><sub>主界面：多会话聊天、Agent 工具链路、右侧关注/个股面板；桌面与 Web 共用同一套 UI</sub></p>
 
 <p align="center">
-  <a href="https://pan.quark.cn/s/68ed347a6992#/list/share"><img src="icons/btn-download-quark.svg" alt="从夸克网盘高速下载" height="56" /></a>
+  <a href="https://pan.quark.cn/s/68ed347a6992#/list/share"><img src="icons/btn-download-quark.svg" alt="从夸克网盘高速下载" height="48" /></a>
   &nbsp;&nbsp;&nbsp;
-  <a href="https://opptrix.org/"><img src="icons/btn-download-official.svg" alt="从官网源下载" height="56" /></a>
+  <a href="https://opptrix.org/"><img src="icons/btn-download-official.svg" alt="从 Opptrix 官网下载" height="48" /></a>
 </p>
 
 ## 💬 技术交流与作者动态
