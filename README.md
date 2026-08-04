@@ -34,14 +34,18 @@
 
 <table align="center">
   <tr>
-    <td align="center" width="50%">
+    <td align="center" width="33%">
       <img src="https://opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
       <sub>微信 · Opptrix 技术交流群</sub>
       <!-- 维护备注：当前群二维码有效期至 2026-08-11，过期后替换官网 docs/public/images/wechat-group-qr.jpg -->
     </td>
-    <td align="center" width="50%">
+    <td align="center" width="33%">
       <img src="author/douyin-qr.jpg" alt="抖音扫码关注项目作者动态" width="220" /><br />
       <sub>抖音 · 关注项目作者动态</sub>
+    </td>
+    <td align="center" width="33%">
+      <img src="author/zanshang-weixin.webp" alt="微信扫码成为 Opptrix 赞助者" width="220" /><br />
+      <sub>微信扫码·成为Opptrix 赞助者</sub>
     </td>
   </tr>
 </table>
