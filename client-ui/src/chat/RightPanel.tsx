@@ -17,7 +17,14 @@ const useStyles = makeStyles({
     pointerEvents: 'none',
     display: 'flex',
     flexDirection: 'column',
-    alignItems: 'flex-end',
+    /**
+     * Keep content left-aligned inside the shell.
+     * The shell sits on the trailing edge and grows leftward (chat is flex:1),
+     * so left-aligned clip reads as one panel pulled from the right.
+     * flex-end would reveal the panel's right edge first and make inner content
+     * look like a second slide-in from the left (especially noticeable on macOS).
+     */
+    alignItems: 'flex-start',
     minHeight: 0,
     height: '100%',
     transitionProperty: 'width',

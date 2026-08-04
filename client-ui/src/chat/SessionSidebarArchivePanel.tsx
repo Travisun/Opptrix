@@ -17,6 +17,7 @@ import { ghostInteractive, motion, nativeIconInteractive, sidebarItemSelected } 
 import { OpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ThinkingDots from '../components/ThinkingDots'
 import ExpertSessionIcon from './ExpertSessionIcon'
+import HoverMarqueeText from './HoverMarqueeText'
 
 const useStyles = makeStyles({
   root: {
@@ -304,10 +305,6 @@ const useStyles = makeStyles({
     minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
-    overflow: 'hidden',
-    whiteSpace: 'nowrap',
-    maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
-    WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
   },
   sessionTrailing: {
     position: 'relative',
@@ -778,6 +775,7 @@ export default function SessionSidebarArchivePanel({
                             className={mergeClasses(
                               s.sessionItem,
                               'opptrix-archive-session-item',
+                              'opptrix-hover-marquee-host',
                               'opptrix-focusable',
                               active && s.sessionActive,
                               busy && 'opptrix-archive-session-item-busy',
@@ -789,7 +787,7 @@ export default function SessionSidebarArchivePanel({
                           >
                             <span className={s.sessionTitle}>
                               {(sess.expertId || sess.expertIcon) && <ExpertSessionIcon />}
-                              <span className={s.sessionTitleText}>{sess.title}</span>
+                              <HoverMarqueeText text={sess.title} className={s.sessionTitleText} />
                             </span>
                             <span className={mergeClasses(s.sessionTrailing, 'opptrix-archive-session-trailing')}>
                               {busy && <ThinkingDots className={s.sessionSpinner} label="" />}

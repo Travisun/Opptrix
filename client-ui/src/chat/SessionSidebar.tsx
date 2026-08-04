@@ -18,6 +18,7 @@ import AppUpdateNotice from '../desktop/AppUpdateNotice'
 import SessionArchiveFolderMenu from './SessionArchiveFolderMenu'
 import SessionSidebarArchivePanel, { type ArchiveFolderGroup } from './SessionSidebarArchivePanel'
 import ExpertSessionIcon from './ExpertSessionIcon'
+import HoverMarqueeText from './HoverMarqueeText'
 
 export type SidebarMode = 'panel' | 'drawer' | 'overlay'
 export type SidebarListTab = 'chat' | 'experts' | 'archive'
@@ -166,11 +167,7 @@ const useStyles = makeStyles({
     minWidth: 0,
     fontSize: 'var(--opptrix-font-base)',
     fontWeight: 500,
-    overflow: 'hidden',
-    whiteSpace: 'nowrap',
     color: 'inherit',
-    maskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
-    WebkitMaskImage: 'linear-gradient(to right, #000 calc(100% - 20px), transparent 100%)',
   },
   itemTrailing: {
     position: 'relative',
@@ -464,6 +461,7 @@ function SessionSidebar({
               key={sess.id}
               className={mergeClasses(
                 'opptrix-session-item',
+                'opptrix-hover-marquee-host',
                 'opptrix-focusable',
                 s.item,
                 active && s.itemActive,
@@ -477,7 +475,7 @@ function SessionSidebar({
             >
               <span className={s.itemTitle}>
                 {(sess.expertId || sess.expertIcon) && <ExpertSessionIcon />}
-                <span className={s.itemTitleText}>{sess.title}</span>
+                <HoverMarqueeText text={sess.title} className={s.itemTitleText} />
               </span>
               <span className={mergeClasses(s.itemTrailing, 'opptrix-session-trailing')}>
                 {busy && <ThinkingDots className={s.itemSpinner} label="" />}
