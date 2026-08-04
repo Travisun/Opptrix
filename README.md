@@ -62,28 +62,32 @@ Opptrix 坚持免费、开源。赞助不是购买，而是对理念的认可—
 <table align="center">
   <tr>
     <td align="center" width="120">
-      <img src="icons/sponsors/sponsor-worldwithdreams.png" width="72" height="72" alt="WorldWithinDreams" /><br />
+      <img src="icons/sponsors/sponsor-worldwithdreams.webp" width="72" height="72" alt="WorldWithinDreams" /><br />
       <sub>WorldWithinDreams</sub>
     </td>
     <td align="center" width="120">
       <a href="https://github.com/LiberSeek">
-        <img src="icons/sponsors/sponsor-raven.png" width="72" height="72" alt="Raven" /><br />
+        <img src="icons/sponsors/sponsor-raven.webp" width="72" height="72" alt="Raven" /><br />
         <sub>Raven</sub>
       </a>
     </td>
     <td align="center" width="120">
-      <img src="icons/sponsors/sponsor-744649315.jpg" width="72" height="72" alt="Remielle" /><br />
+      <img src="icons/sponsors/sponsor-744649315.webp" width="72" height="72" alt="Remielle" /><br />
       <sub>Remielle</sub>
     </td>
     <td align="center" width="120">
-      <img src="icons/sponsors/sponsor-N.jpg" width="72" height="72" alt="N" /><br />
+      <img src="icons/sponsors/sponsor-N.webp" width="72" height="72" alt="N" /><br />
       <sub>N</sub>
     </td>
     <td align="center" width="120">
       <a href="https://www.douyin.com/user/MS4wLjABAAAAmj0mJEXCyfheDFZyFVpeEKKaX_zWMlN3Ir6YcScCSAU">
-        <img src="icons/sponsors/sponsor-yexiaoying.jpg" width="72" height="72" alt="叶小莹" /><br />
+        <img src="icons/sponsors/sponsor-yexiaoying.webp" width="72" height="72" alt="叶小莹" /><br />
         <sub>叶小莹</sub>
       </a>
+    </td>
+    <td align="center" width="120">
+      <img src="icons/sponsors/sponsor-yueluocanheng.webp" width="72" height="72" alt="月落参横" /><br />
+      <sub>月落参横</sub>
     </td>
   </tr>
 </table>
