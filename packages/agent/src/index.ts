@@ -132,6 +132,8 @@ export {
 export {
   type MediaKind,
   type ChatAttachmentMeta,
+  type AttachmentExtractMeta,
+  type AttachmentExtractStatus,
   type AttachmentLimits,
   type ModelMediaCapabilities,
   mimeToMediaKind,
@@ -152,7 +154,25 @@ export {
   summarizePinnedLimits,
   parseNonNegativeIntHeader,
   resolveUploadMime,
+  schedulePdfExtract,
+  runPdfExtract,
+  waitForPdfExtractReady,
+  listSessionAttachmentMetas,
+  readExtractChunks,
+  readExtractMarkdown,
+  isPdfTextExtractReady,
 } from './chat-attachments.js'
+export {
+  extractPdfToMarkdown,
+  formatDocumentCatalogLine,
+  linesToMarkdownTable,
+  extractTablesFromPageText,
+} from './pdf-extract.js'
+export type {
+  PdfExtractResult,
+  PdfExtractPage,
+  PdfExtractChunk,
+} from './pdf-extract.js'
 export {
   buildUserContentParts,
   attachmentToContentPart,
@@ -201,3 +221,6 @@ export {
   type LlmConfig,
 } from './llm/provider.js'
 export { initOutboundNetwork, type OutboundConnectFamily, type OutboundNetworkStatus } from './llm/outbound-network.js'
+
+/** 注册 PDF → doc-library ingest hook */
+import './doc-library-bridge.js'

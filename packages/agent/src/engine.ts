@@ -81,7 +81,12 @@ import {
   resolveTurnUsage,
 } from './llm/usage-estimate.js'
 import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
-import { readAttachmentMeta, validateAttachmentAgainstCapabilities } from './chat-attachments.js'
+import {
+  isPdfTextExtractReady,
+  readAttachmentMeta,
+  validateAttachmentAgainstCapabilities,
+  waitForPdfExtractReady,
+} from './chat-attachments.js'
 import type { ChatAttachmentMeta } from './media-types.js'
 import { buildUserContentParts, chatMessageContentToText } from './content-parts.js'
 
@@ -830,7 +835,26 @@ export class AgentEngine {
 
     const activeModel = modelRef?.trim() || record.model
 
-    if (attachmentMetas.length) {
+    // PDF：发送前短等文本整理；ready 后文本模型可过校验
+    const resolvedAttachments: ChatAttachmentMeta[] = []
+    for (const meta of attachmentMetas) {
+      if (meta.kind !== 'pdf') {
+        resolvedAttachments.push(meta)
+        continue
+      }
+      const waited = await waitForPdfExtractReady(sessionId, meta.id)
+      if (!waited.ok) {
+        return {
+          reply: waited.message,
+          toolsUsed: [],
+          sessionId,
+          title: record.title,
+        }
+      }
+      resolvedAttachments.push(waited.meta)
+    }
+
+    if (resolvedAttachments.length) {
       const resolvedModel = this.registry.resolve(activeModel)
       const modelId = resolvedModel?.model
         ?? activeModel?.replace(/^[^:]+:/, '')
@@ -839,7 +863,13 @@ export class AgentEngine {
       const caps = await resolveModelMediaCapabilitiesAsync(modelId, providerId)
       let count = 0
       let total = 0
-      for (const meta of attachmentMetas) {
+      for (const meta of resolvedAttachments) {
+        // 已整理 PDF 不占原生 pdf 能力；其余媒体仍按 caps 校验
+        if (isPdfTextExtractReady(meta)) {
+          count += 1
+          total += meta.size
+          continue
+        }
         const validation = validateAttachmentAgainstCapabilities(
           meta.kind,
           meta.size,
@@ -865,8 +895,8 @@ export class AgentEngine {
       record.model = modelRef.trim()
     }
 
-    const userContent = attachmentMetas.length
-      ? buildUserContentParts(text, sessionId, attachmentMetas, this.apiBaseUrl)
+    const userContent = resolvedAttachments.length
+      ? buildUserContentParts(text, sessionId, resolvedAttachments, this.apiBaseUrl)
       : text
 
     record.messages.push({ role: 'user', content: userContent })
@@ -875,12 +905,12 @@ export class AgentEngine {
     record.turns.push({
       role: 'user',
       content: text || '（附件）',
-      attachments: attachmentMetas.length ? attachmentMetas : undefined,
+      attachments: resolvedAttachments.length ? resolvedAttachments : undefined,
       at: new Date().toISOString(),
     })
     const messagesBeforeAssistant = record.messages.length
     if (record.title === '新对话' || record.messages.filter(m => m.role === 'user').length === 1) {
-      const titleSeed = text || attachmentMetas[0]?.name || '新对话'
+      const titleSeed = text || resolvedAttachments[0]?.name || '新对话'
       record.title = titleSeed.slice(0, 28) + (titleSeed.length > 28 ? '…' : '')
     }
     this.sessions.save(record)

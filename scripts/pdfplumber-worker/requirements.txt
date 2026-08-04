@@ -1,0 +1,2 @@
+# Opptrix L1 版面增强侧车（MIT）— 禁止添加 PyMuPDF / fitz（AGPL）
+pdfplumber>=0.11.0,<0.12

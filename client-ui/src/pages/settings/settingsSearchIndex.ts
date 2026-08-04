@@ -29,6 +29,8 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
+  { section: 'multimodal', title: '语义检索', desc: '安装后在会话中更懂研报含义地查找内容', keywords: ['研报', '检索', '语义'] },
+  { section: 'multimodal', title: '版面增强', desc: '提升扫描或复杂版面研报的整理质量', keywords: ['深度整理', '研报'] },
   { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
   { section: 'agent_skills', title: '工作流技能', desc: '导入与管理投研流程说明', keywords: ['技能', '工作流', '早报', '财报', '流程', 'skill'] },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },

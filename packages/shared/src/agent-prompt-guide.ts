@@ -384,6 +384,10 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
     '- 仅使用当前会话已加载的 MCP 工具（见 tools 列表）；缺能力时 list_tool_packs → activate_tool_pack',
   ]
 
+  sections.push(
+    '【对话研报附件】用户拖入的 PDF 经本地整理后仅注入短目录；分析/对比时先 list_session_documents，再 search_document / read_document 按页取片段；引用须带文件名与页码；禁止臆造未读页内容。',
+  )
+
   if (opts?.sessionClock) {
     sections.push(opts.sessionClock)
   }

@@ -21,7 +21,8 @@ describe('resolveAttachmentLimits', () => {
   it('applies conservative defaults for unknown models', () => {
     const limits = resolveAttachmentLimits('unknown-model-xyz', ['text', 'image'])
     assert.equal(limits.maxBytesByKind.image, 10 * 1024 * 1024)
-    assert.equal(limits.maxBytesByKind.pdf, undefined)
+    // PDF 始终保留本地整理限额
+    assert.equal(limits.maxBytesByKind.pdf, 20 * 1024 * 1024)
   })
 
   it('applies Claude tier stricter image cap', () => {
@@ -123,10 +124,10 @@ describe('mime extension fallback', () => {
 })
 
 describe('modelAllowsAttachments', () => {
-  it('true when input has non-text modalities', async () => {
+  it('true when media loaded (PDF text path always available)', async () => {
     const { modelAllowsAttachments } = await import('../client-ui/src/chat/mediaCapabilities.ts')
     assert.equal(modelAllowsAttachments({ attachment: false, input: ['text', 'image'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 5, maxTotalBytes: 1e6 } }), true)
-    assert.equal(modelAllowsAttachments({ attachment: true, input: ['text'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 } }), false)
+    assert.equal(modelAllowsAttachments({ attachment: true, input: ['text'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 } }), true)
     assert.equal(modelAllowsAttachments(null), false)
   })
 })

@@ -139,7 +139,7 @@ Opptrix/
          ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `document-tools.ts`（会话研报 PDF：`list_session_documents` / `search_document` / `read_document`，属 `core`）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
 - **工具包路由（Tool Pack Router）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
@@ -300,7 +300,7 @@ Opptrix/
 - **会话上下文管理（长对话压缩）**：实现 `packages/agent/src/context/*` + `llm/model-context.ts`。
   - **双视图**：UI 仍渲染完整 `turns`；喂给模型的是 `sessionMemory`（结构化工作记忆）+ 近端 messages（`assembleModelView`）。
   - **窗长**：`resolveModelContextTokensAsync` 优先 models.dev（精确/大小写/去品牌前缀/规范化/子串/跨 provider），失败降级 `resolveModelContextTokens` 启发式（未知默认 128k）；`AvailableModel.contextTokens` 只读派生。预算预留输出与 system/tools；**soft 75%** → microcompact（压缩较早 tool 结果正文）；**hard 85%** → structuredCompact（独立一轮 LLM 写 `SessionMemory`，目标/约束神圣不可丢）。
-  - **多媒体**：`resolveModelMediaCapabilitiesAsync` 从 models.dev 读取 `modalities` / `attachment`；`resolveAttachmentLimits` 按模型族分档限额。用户附件经 `POST .../attachments` 落盘，聊天以 OpenAI 兼容 content parts 发送；模型原生输出（`image_url` / base64 file 等）解析落盘并挂到 assistant `turns[].attachments`。
+  - **多媒体**：`resolveModelMediaCapabilitiesAsync` 从 models.dev 读取 `modalities` / `attachment`；`resolveAttachmentLimits` 按模型族分档限额（PDF 限额始终保留，供本地整理）。用户附件经 `POST .../attachments` 落盘；**PDF 上传后经 Parse Router 异步整理**（默认 L0 文本层；弱文本且版面增强可用时升 L1 侧车；`deepParse`/`forceEngine` 且深度整理已安装时升 L2）→ 本地文档库（`@opptrix/doc-library`，`doc-library.db`）+ legacy extract 双写，`meta.extract.documentId` 镜像库内状态；引擎不可用则保留最佳结果。聊天侧对 `extract.status=ready` 的 PDF **仅注入短目录文本**（不灌 base64），纯文本模型可用；发送前短等整理（超时则提示稍后再问）。按需阅读用 `list_session_documents` / `search_document` / `read_document`（`core` pack，**库优先 `searchHybrid`（FTS ⊕ 向量 RRF）；未安装语义检索模型时自动降级纯 FTS；无库记录回退 legacy 文件**）。语义模型与整理引擎按需安装（不进安装包）；设置 API：`GET/POST /api/settings/semantic-model*`、`GET/POST /api/settings/parse-engines*`。图片等仍走 OpenAI 兼容 content parts；模型原生输出解析落盘并挂到 assistant `turns[].attachments`。许可与侧车说明见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
   - **触发**：每轮 `llm.chat` 前检查；上游 `context_length_exceeded` 等 → 强制 aggressive compact 后**重试 1 次**；`setSessionModel` 换模型后按新窗再检查。
   - **SSE**：`context_compact`（`level`: micro/structured/overflow_retry）；会话内轻提示「已整理较早对话要点…」。`done` 可含 `turn_usage`（本轮 LLM 累计用量，含 tool 循环与 structured 压缩）与 `context_usage`（Composer 已用/窗长估算）。测试：`tests/session-context-compact.test.mjs`、`tests/chat-token-usage.test.mjs`。
 - 系统提示与引擎：`packages/agent/src/engine.ts`；用户确认规则见 `packages/shared/src/agent-prompt-guide.ts` 中 `buildUserInteractionPlaybook`

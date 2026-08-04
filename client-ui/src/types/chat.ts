@@ -86,6 +86,17 @@ export interface AttachmentLimits {
 
 export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
 
+export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
+
+export interface AttachmentExtractMeta {
+  status: AttachmentExtractStatus
+  documentId?: string
+  error?: string
+  pageCount?: number
+  charCount?: number
+  readyAt?: string
+}
+
 export interface ChatAttachmentMeta {
   id: string
   kind: MediaKind
@@ -96,6 +107,7 @@ export interface ChatAttachmentMeta {
   width?: number
   height?: number
   duration?: number
+  extract?: AttachmentExtractMeta
 }
 
 export interface ModelMediaCapabilities {

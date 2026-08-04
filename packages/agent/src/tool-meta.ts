@@ -477,6 +477,21 @@ export const TOOL_META: Record<string, ToolMeta> = {
     usageGuide: '需要确认 Tushare 等外部集成是否已配置时调用。',
     compliance: '只读；不返回 Token/Secret。',
   },
+  list_session_documents: {
+    miningEligible: false,
+    usageGuide: '用户拖入研报 PDF 或要对比/分析附件研报时，先列出本对话已整理文档（attachment_id、页数、状态）。',
+    compliance: '只读；仅当前会话附件；未整理完成的 PDF status≠ready。',
+  },
+  search_document: {
+    miningEligible: false,
+    usageGuide: '在已整理研报中按关键词检索（评级、目标价、核心观点等），再按页码 read_document 精读。',
+    compliance: '只读；须 attachment_id + query；引用答复时带文件名与页码。',
+  },
+  read_document: {
+    miningEligible: false,
+    usageGuide: '按页范围或 search 返回的 chunk_id 读取研报 Markdown 片段；勿一次读全文灌进上下文。',
+    compliance: '只读；控制 max_chars；引用时标注页码。',
+  },
   ask_user: {
     miningEligible: false,
     usageGuide:

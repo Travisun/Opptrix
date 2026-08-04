@@ -1636,6 +1636,15 @@ export function sessionAttachmentUrl(sessionId: string, attachmentId: string): s
   return `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}`
 }
 
+export async function fetchSessionAttachmentMeta(
+  sessionId: string,
+  attachmentId: string,
+): Promise<ChatAttachmentMeta> {
+  return jsonFetch<{ attachment: ChatAttachmentMeta }>(
+    `/sessions/${sessionId}/attachments/${attachmentId}/meta`,
+  ).then(r => r.attachment)
+}
+
 export async function deleteSessionAttachment(sessionId: string, attachmentId: string) {
   return jsonFetch<{ ok: boolean }>(`/sessions/${sessionId}/attachments/${attachmentId}`, {
     method: 'DELETE',
@@ -2359,4 +2368,61 @@ export const pythonSettings = {
 
   getInstallJob: () =>
     jsonFetch<{ job: PythonInstallJobSnapshot }>('/settings/python/install'),
+}
+
+export type SemanticModelStatus = {
+  installed: boolean
+  label: string
+}
+
+export const semanticModelSettings = {
+  getStatus: () =>
+    jsonFetch<SemanticModelStatus>('/settings/semantic-model'),
+
+  install: () =>
+    jsonFetch<{ ok: boolean; installed: boolean; label: string; error?: string }>(
+      '/settings/semantic-model/install',
+      { method: 'POST' },
+    ),
+
+  uninstall: () =>
+    jsonFetch<{ ok: boolean; installed: boolean; label: string; error?: string }>(
+      '/settings/semantic-model/uninstall',
+      { method: 'POST' },
+    ),
+}
+
+export type ParseEnginesStatus = {
+  layout: { available: boolean; installed: boolean; label: string; hint: string }
+  deep: { available: boolean; installed: boolean; label: string; hint: string }
+  semantic: { installed: boolean; label: string }
+}
+
+export const parseEnginesSettings = {
+  getStatus: () =>
+    jsonFetch<ParseEnginesStatus>('/settings/parse-engines'),
+
+  prepareLayout: () =>
+    jsonFetch<{ ok: boolean; layout: ParseEnginesStatus['layout']; error?: string }>(
+      '/settings/parse-engines/layout/prepare',
+      { method: 'POST' },
+    ),
+
+  uninstallLayout: () =>
+    jsonFetch<{ ok: boolean; error?: string }>(
+      '/settings/parse-engines/layout/uninstall',
+      { method: 'POST' },
+    ),
+
+  prepareDeep: () =>
+    jsonFetch<{ ok: boolean; deep: ParseEnginesStatus['deep']; message?: string; error?: string }>(
+      '/settings/parse-engines/deep/prepare',
+      { method: 'POST' },
+    ),
+
+  uninstallDeep: () =>
+    jsonFetch<{ ok: boolean; error?: string }>(
+      '/settings/parse-engines/deep/uninstall',
+      { method: 'POST' },
+    ),
 }

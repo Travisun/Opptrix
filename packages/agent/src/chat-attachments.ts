@@ -2,15 +2,28 @@ import fs from 'node:fs'
 import path from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { resolveUserDataRoot } from '@opptrix/shared'
-import type { AttachmentLimits, ChatAttachmentMeta, MediaKind, ModelMediaCapabilities } from './media-types.js'
+import type {
+  AttachmentExtractMeta,
+  AttachmentLimits,
+  ChatAttachmentMeta,
+  MediaKind,
+  ModelMediaCapabilities,
+} from './media-types.js'
 import {
   formatBytesShort,
   mediaKindLabel,
   mimeToMediaKind,
   resolveMediaMime,
 } from './media-types.js'
+import { extractPdfToMarkdown, type PdfExtractChunk } from './pdf-extract.js'
 
 const META_FILENAME = 'meta.json'
+const EXTRACT_MD = 'extract.md'
+const EXTRACT_CHUNKS = 'extract-chunks.json'
+const DEFAULT_PDF_MAX_BYTES = 20 * 1024 * 1024
+const EXTRACT_WAIT_MS = 25_000
+const EXTRACT_POLL_MS = 400
+const MIN_USEFUL_CHARS = 24
 
 export interface SaveAttachmentInput {
   sessionId: string
@@ -25,6 +38,8 @@ export interface SaveAttachmentInput {
 export type AttachmentValidationResult =
   | { ok: true }
   | { ok: false; error: string }
+
+export interface ExtractChunkRecord extends PdfExtractChunk {}
 
 export function parseNonNegativeIntHeader(value: unknown): number {
   const raw = Array.isArray(value) ? value[0] : value
@@ -72,6 +87,14 @@ function dataPath(sessionId: string, attachmentId: string, name: string): string
   return path.join(attachmentDir(sessionId, attachmentId), `data${ext}`)
 }
 
+function extractMdPath(sessionId: string, attachmentId: string): string {
+  return path.join(attachmentDir(sessionId, attachmentId), EXTRACT_MD)
+}
+
+function extractChunksPath(sessionId: string, attachmentId: string): string {
+  return path.join(attachmentDir(sessionId, attachmentId), EXTRACT_CHUNKS)
+}
+
 function resolveSafeDataPath(sessionId: string, attachmentId: string, meta: ChatAttachmentMeta): string {
   const dir = attachmentDir(sessionId, attachmentId)
   const expected = path.resolve(dataPath(sessionId, attachmentId, meta.name))
@@ -79,6 +102,64 @@ function resolveSafeDataPath(sessionId: string, attachmentId: string, meta: Chat
     throw new Error('附件路径无效')
   }
   return expected
+}
+
+function writeMeta(sessionId: string, meta: ChatAttachmentMeta): void {
+  fs.writeFileSync(metaPath(sessionId, meta.id), JSON.stringify(meta, null, 0))
+}
+
+function patchExtract(sessionId: string, attachmentId: string, extract: AttachmentExtractMeta): ChatAttachmentMeta | null {
+  const meta = readAttachmentMeta(sessionId, attachmentId)
+  if (!meta) return null
+  const next: ChatAttachmentMeta = { ...meta, extract: { ...meta.extract, ...extract } }
+  writeMeta(sessionId, next)
+  return next
+}
+
+/** 对外：文档库解析完成后同步 meta.extract（合并 documentId） */
+export function applyAttachmentExtractMeta(
+  sessionId: string,
+  attachmentId: string,
+  extract: AttachmentExtractMeta,
+): ChatAttachmentMeta | null {
+  return patchExtract(sessionId, attachmentId, extract)
+}
+
+export interface LegacyExtractPayload {
+  pageCount: number
+  charCount: number
+  markdown: string
+  chunks: Array<{ id: string; page: number; offset: number; text: string }>
+}
+
+export type PdfIngestHook = (
+  sessionId: string,
+  attachmentId: string,
+  meta: ChatAttachmentMeta,
+  data: Buffer,
+) => void
+
+let pdfIngestHook: PdfIngestHook | null = null
+
+/** doc-library-bridge 注册；避免 chat-attachments ↔ bridge 循环依赖 */
+export function registerPdfIngestHook(hook: PdfIngestHook): void {
+  pdfIngestHook = hook
+}
+
+/** 双写 legacy extract.md + extract-chunks.json */
+export function writeLegacyExtractArtifacts(
+  sessionId: string,
+  attachmentId: string,
+  result: LegacyExtractPayload,
+): void {
+  const dir = attachmentDir(sessionId, attachmentId)
+  fs.mkdirSync(dir, { recursive: true })
+  fs.writeFileSync(extractMdPath(sessionId, attachmentId), result.markdown, 'utf8')
+  fs.writeFileSync(
+    extractChunksPath(sessionId, attachmentId),
+    JSON.stringify(result.chunks, null, 0),
+    'utf8',
+  )
 }
 
 export function readAttachmentMeta(sessionId: string, attachmentId: string): ChatAttachmentMeta | null {
@@ -99,6 +180,10 @@ export function resolveAttachmentFilePath(sessionId: string, attachmentId: strin
   return fs.existsSync(filePath) ? filePath : null
 }
 
+/**
+ * PDF 走本地文本整理，不要求模型原生支持 pdf；
+ * 其他媒体仍按 caps.input 校验。
+ */
 export function validateAttachmentAgainstCapabilities(
   kind: MediaKind,
   size: number,
@@ -109,32 +194,40 @@ export function validateAttachmentAgainstCapabilities(
   if (kind === 'text') {
     return { ok: false, error: '不支持此文件类型' }
   }
-  if (!caps.attachment && !caps.input.includes(kind)) {
-    return {
-      ok: false,
-      error: '当前模型不支持此类文件，可换模型或去掉附件',
+
+  const pdfTextPath = kind === 'pdf'
+  if (!pdfTextPath) {
+    if (!caps.attachment && !caps.input.includes(kind)) {
+      return {
+        ok: false,
+        error: '当前模型不支持此类文件，可换模型或去掉附件',
+      }
+    }
+    if (!caps.input.includes(kind)) {
+      return {
+        ok: false,
+        error: `当前模型不支持${mediaKindLabel(kind)}，可换模型或去掉附件`,
+      }
     }
   }
-  if (!caps.input.includes(kind)) {
-    return {
-      ok: false,
-      error: `当前模型不支持${mediaKindLabel(kind)}，可换模型或去掉附件`,
-    }
-  }
+
   const maxBytes = caps.limits.maxBytesByKind[kind]
+    ?? (pdfTextPath ? DEFAULT_PDF_MAX_BYTES : undefined)
   if (maxBytes && size > maxBytes) {
     return {
       ok: false,
       error: `${mediaKindLabel(kind)}过大（上限 ${formatBytesShort(maxBytes)}）`,
     }
   }
-  if (existingCount >= caps.limits.maxCount) {
-    return { ok: false, error: `附件数量已达上限（${caps.limits.maxCount} 个）` }
+  const maxCount = Math.max(caps.limits.maxCount || 0, pdfTextPath ? 5 : 0)
+  if (existingCount >= maxCount) {
+    return { ok: false, error: `附件数量已达上限（${maxCount} 个）` }
   }
-  if (existingTotalBytes + size > caps.limits.maxTotalBytes) {
+  const maxTotal = Math.max(caps.limits.maxTotalBytes || 0, pdfTextPath ? 80 * 1024 * 1024 : 0)
+  if (existingTotalBytes + size > maxTotal) {
     return {
       ok: false,
-      error: `附件总大小超出限制（上限 ${formatBytesShort(caps.limits.maxTotalBytes)}）`,
+      error: `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`,
     }
   }
   return { ok: true }
@@ -159,12 +252,165 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     ...(input.width ? { width: input.width } : {}),
     ...(input.height ? { height: input.height } : {}),
     ...(input.duration ? { duration: input.duration } : {}),
+    ...(kind === 'pdf' ? { extract: { status: 'pending' as const } } : {}),
   }
 
   const filePath = dataPath(input.sessionId, attachmentId, input.name)
   fs.writeFileSync(filePath, input.data)
-  fs.writeFileSync(metaPath(input.sessionId, attachmentId), JSON.stringify(meta, null, 0))
+  writeMeta(input.sessionId, meta)
+
+  if (kind === 'pdf') {
+    if (pdfIngestHook) {
+      pdfIngestHook(input.sessionId, attachmentId, meta, input.data)
+    } else {
+      schedulePdfExtract(input.sessionId, attachmentId)
+    }
+  }
   return meta
+}
+
+/** 异步抽取：不阻塞上传响应 */
+export function schedulePdfExtract(sessionId: string, attachmentId: string): void {
+  void runPdfExtract(sessionId, attachmentId).catch(() => {
+    patchExtract(sessionId, attachmentId, {
+      status: 'failed',
+      error: '未能整理该研报，请换可复制文本的电子版后再试',
+    })
+  })
+}
+
+async function waitForExtractMeta(
+  sessionId: string,
+  attachmentId: string,
+  timeoutMs = EXTRACT_WAIT_MS,
+): Promise<ChatAttachmentMeta | null> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    const meta = readAttachmentMeta(sessionId, attachmentId)
+    const status = meta?.extract?.status
+    if (status === 'ready' || status === 'failed') return meta
+    await new Promise(r => setTimeout(r, EXTRACT_POLL_MS))
+  }
+  return readAttachmentMeta(sessionId, attachmentId)
+}
+
+export async function runPdfExtract(sessionId: string, attachmentId: string): Promise<ChatAttachmentMeta | null> {
+  const meta = readAttachmentMeta(sessionId, attachmentId)
+  if (!meta || meta.kind !== 'pdf') return meta
+
+  if (pdfIngestHook && !meta.extract?.documentId) {
+    const buf = readAttachmentBuffer(sessionId, attachmentId)
+    if (buf) pdfIngestHook(sessionId, attachmentId, meta, buf)
+    return waitForExtractMeta(sessionId, attachmentId)
+  }
+
+  patchExtract(sessionId, attachmentId, { status: 'pending' })
+
+  const buf = readAttachmentBuffer(sessionId, attachmentId)
+  if (!buf) {
+    return patchExtract(sessionId, attachmentId, {
+      status: 'failed',
+      error: '研报文件不可用，请重新添加',
+    })
+  }
+
+  try {
+    const result = await extractPdfToMarkdown(buf)
+    if (result.charCount < MIN_USEFUL_CHARS) {
+      return patchExtract(sessionId, attachmentId, {
+        status: 'failed',
+        error: '未能从该研报提取到可复制文本，请换电子版后再试',
+        pageCount: result.pageCount,
+        charCount: result.charCount,
+      })
+    }
+
+    const dir = attachmentDir(sessionId, attachmentId)
+    fs.mkdirSync(dir, { recursive: true })
+    fs.writeFileSync(extractMdPath(sessionId, attachmentId), result.markdown, 'utf8')
+    fs.writeFileSync(
+      extractChunksPath(sessionId, attachmentId),
+      JSON.stringify(result.chunks, null, 0),
+      'utf8',
+    )
+
+    return patchExtract(sessionId, attachmentId, {
+      status: 'ready',
+      pageCount: result.pageCount,
+      charCount: result.charCount,
+      readyAt: new Date().toISOString(),
+    })
+  } catch {
+    return patchExtract(sessionId, attachmentId, {
+      status: 'failed',
+      error: '未能整理该研报，请换可复制文本的电子版后再试',
+    })
+  }
+}
+
+export function readExtractMarkdown(sessionId: string, attachmentId: string): string | null {
+  try {
+    return fs.readFileSync(extractMdPath(sessionId, attachmentId), 'utf8')
+  } catch {
+    return null
+  }
+}
+
+export function readExtractChunks(sessionId: string, attachmentId: string): ExtractChunkRecord[] | null {
+  try {
+    const raw = fs.readFileSync(extractChunksPath(sessionId, attachmentId), 'utf8')
+    const parsed = JSON.parse(raw) as ExtractChunkRecord[]
+    return Array.isArray(parsed) ? parsed : null
+  } catch {
+    return null
+  }
+}
+
+export function listSessionAttachmentMetas(sessionId: string): ChatAttachmentMeta[] {
+  const dir = sessionDir(sessionId)
+  if (!fs.existsSync(dir)) return []
+  const out: ChatAttachmentMeta[] = []
+  for (const name of fs.readdirSync(dir)) {
+    const meta = readAttachmentMeta(sessionId, name)
+    if (meta) out.push(meta)
+  }
+  return out.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+}
+
+export type WaitPdfExtractResult =
+  | { ok: true; meta: ChatAttachmentMeta }
+  | { ok: false; reason: 'pending' | 'failed' | 'missing'; message: string; meta?: ChatAttachmentMeta }
+
+/** 发送前短等 PDF 整理完成（有上限） */
+export async function waitForPdfExtractReady(
+  sessionId: string,
+  attachmentId: string,
+  timeoutMs = EXTRACT_WAIT_MS,
+): Promise<WaitPdfExtractResult> {
+  const deadline = Date.now() + timeoutMs
+  while (Date.now() <= deadline) {
+    const meta = readAttachmentMeta(sessionId, attachmentId)
+    if (!meta) return { ok: false, reason: 'missing', message: '附件不存在' }
+    if (meta.kind !== 'pdf') return { ok: true, meta }
+    const status = meta.extract?.status
+    if (status === 'ready') return { ok: true, meta }
+    if (status === 'failed') {
+      return {
+        ok: false,
+        reason: 'failed',
+        message: meta.extract?.error || '未能整理该研报，请换可复制文本的电子版后再试',
+        meta,
+      }
+    }
+    await new Promise(r => setTimeout(r, EXTRACT_POLL_MS))
+  }
+  const meta = readAttachmentMeta(sessionId, attachmentId) ?? undefined
+  return {
+    ok: false,
+    reason: 'pending',
+    message: '研报仍在整理，请稍后再问',
+    meta,
+  }
 }
 
 export function readAttachmentBuffer(sessionId: string, attachmentId: string): Buffer | null {
@@ -200,4 +446,9 @@ export function summarizePinnedLimits(limits: AttachmentLimits): string {
     if (max) parts.push(`${mediaKindLabel(kind)} ${formatBytesShort(max)}`)
   }
   return parts.join(' · ')
+}
+
+/** PDF 是否已整理为文本目录路径（无需原生 pdf 多模态） */
+export function isPdfTextExtractReady(meta: ChatAttachmentMeta): boolean {
+  return meta.kind === 'pdf' && meta.extract?.status === 'ready'
 }

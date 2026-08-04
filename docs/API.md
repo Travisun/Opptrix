@@ -429,6 +429,39 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
 
+### 语义检索模型（文档库）
+
+可选本地语义检索能力（提升研报混合检索）。**默认不随安装包分发权重**；未安装时 `search_document` / `searchHybrid` 自动降级为关键词检索。用户可见文案使用「语义检索模型」，勿暴露内部引擎名。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/semantic-model` | `{ installed, label }` |
+| POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量 |
+| POST | `/api/settings/semantic-model/uninstall` | 删除本机模型目录并卸载运行时后端 |
+
+**GET 响应示例**
+
+```json
+{ "installed": false, "label": "语义检索模型" }
+```
+
+### 研报整理引擎（Parse Router）
+
+级联：基础整理（L0）→ 弱文本时版面增强（L1 侧车）→ 用户深度整理且已安装时 L2。引擎不可用则保留最佳结果。用户文案用「版面增强」「深度整理」，勿暴露引擎专名 / 绝对路径。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/parse-engines` | `{ layout, deep, semantic }` 可用性（无路径字段给 UI） |
+| POST | `/api/settings/parse-engines/layout/prepare` | 准备版面增强目录与脚本（仍需本机按开发说明安装 Python 依赖） |
+| POST | `/api/settings/parse-engines/layout/uninstall` | 移除版面增强安装目录 |
+| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理目录与 stub（**不**下载大模型） |
+| POST | `/api/settings/parse-engines/deep/mark-ready` | 开发者在配置模型后标记深度整理可用 |
+| POST | `/api/settings/parse-engines/deep/uninstall` | 移除深度整理安装目录 |
+
+入库选项（服务层 `ingestFromAttachment`）：`deepParse?: boolean`、`forceEngine?: 'pdf-extract-l0' \| 'pdfplumber-l1' \| 'unlimited-ocr-l2'`。
+
+许可与侧车安装（开发者）：见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)、`scripts/pdfplumber-worker/README.md`、`scripts/unlimited-ocr/README.md`。
+
 ### 外部 MCP Server
 
 用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429、远程 outputSchema 校验失败（如 JSON-RPC `-32602`）、缺 API Key 等鉴权错误后 failover 至下一外部源或本地 ToolRegistry（最终兜底）；降级结果可含 `_mcp.configHint` 指向设置页补密钥。
@@ -790,8 +823,10 @@ Content-Type: application/json
 | GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
-| POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` + `X-Attachment-Name`）；校验当前会话模型 `media` 能力与限额；响应 `{ attachment: ChatAttachmentMeta }` |
+| POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` / `X-Attachment-Mime` + `X-Attachment-Name`）；PDF 始终可走本地文本整理（不要求模型原生 `pdf` 能力）；响应 `{ attachment: ChatAttachmentMeta }`（PDF 含 `extract.status=pending`，后台异步整理） |
 | GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；路径规范化防穿越） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，供 UI 轮询） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/extract` | 返回 `{ attachment_id, name, kind, extract }` 整理摘要（`extract` 同下表，含 `documentId?`） |
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
@@ -845,6 +880,19 @@ Content-Type: application/json
 | `kind` | `image` \| `pdf` \| `video` \| `audio` | 媒体种类 |
 | `mime` / `name` / `size` / `createdAt` | — | MIME、原始文件名、字节数、ISO 时间 |
 | `width` / `height` / `duration` | number | 可选元数据 |
+| `extract` | `AttachmentExtractMeta`（见下） | 仅 PDF：本地文本整理状态；非 PDF 通常无此字段 |
+
+**`AttachmentExtractMeta`（`ChatAttachmentMeta.extract`）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | `pending` \| `ready` \| `failed` | 整理进度 |
+| `documentId` | string | 可选；本地文档库（`@opptrix/doc-library`，`~/.opptrix/doc-library/doc-library.db`）内的 document id；与库内 parse 状态镜像，上传 ingest 后即写入，供 Agent 工具与跨附件去重 |
+| `error` | string | 可选；`failed` 时的原因摘要 |
+| `pageCount` / `charCount` | number | 可选；整理完成后的页数 / 字符数 |
+| `readyAt` | string | 可选；整理完成时间（ISO） |
+
+PDF 上传后经 Parse Router 异步整理（L0 → 弱文本升 L1 侧车 → 可选深度整理 L2）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
 
 **`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 

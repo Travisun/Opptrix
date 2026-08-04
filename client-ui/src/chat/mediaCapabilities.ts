@@ -59,30 +59,33 @@ export function resolveActiveModelMedia(
 }
 
 export function modelAllowsAttachments(media: ModelMediaCapabilities | null): boolean {
-  if (!media) return false
-  return media.input.some(k => k !== 'text')
+  // PDF 本地整理路径始终可用；有 media 对象即可展示附件入口
+  return media != null
 }
 
 export function buildAcceptForMedia(media: ModelMediaCapabilities | null): string {
-  if (!modelAllowsAttachments(media) || !media) return ''
-  const parts: string[] = []
+  if (!media) return 'application/pdf'
+  const parts: string[] = ['application/pdf']
   if (media.input.includes('image')) parts.push('image/*')
-  if (media.input.includes('pdf')) parts.push('application/pdf')
   if (media.input.includes('video')) parts.push('video/*')
   if (media.input.includes('audio')) parts.push('audio/*')
-  return parts.join(',')
+  return [...new Set(parts)].join(',')
 }
 
 export function modelMediaHint(media: ModelMediaCapabilities | null): string | null {
-  if (!media) return null
+  if (!media) return '支持研报 PDF'
   const kinds = media.input.filter(k => k !== 'text')
-  if (!kinds.length) return null
-  if (kinds.length === 1 && kinds[0] === 'image') return '支持图片'
-  return `支持${kinds.map(k => KIND_LABEL[k as Exclude<MediaKind, 'text'>] ?? k).join('、')}`
+  const labels = new Set<string>(['研报 PDF'])
+  for (const k of kinds) {
+    if (k === 'pdf') continue
+    labels.add(KIND_LABEL[k as Exclude<MediaKind, 'text'>] ?? k)
+  }
+  return `支持${[...labels].join('、')}`
 }
 
 export function isKindSupported(media: ModelMediaCapabilities | null, kind: MediaKind): boolean {
   if (kind === 'text') return true
+  if (kind === 'pdf') return true
   if (!media) return false
   return media.input.includes(kind)
 }
@@ -92,6 +95,8 @@ export function formatBytesShort(bytes: number): string {
   if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(bytes < 10_240 ? 1 : 0)} KB`
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
+
+const DEFAULT_PDF_MAX = 20 * 1024 * 1024
 
 export function mimeToKind(mime: string, filename?: string): MediaKind | null {
   const m = resolveFileMime({ type: mime, name: filename ?? '' }).toLowerCase().split(';')[0]?.trim() ?? ''
@@ -115,14 +120,17 @@ export function validateFileForModel(
     return '当前模型不支持此类文件，可换模型或去掉附件'
   }
   const maxBytes = media?.limits.maxBytesByKind[kind]
+    ?? (kind === 'pdf' ? DEFAULT_PDF_MAX : undefined)
   if (maxBytes && file.size > maxBytes) {
     return `文件过大（上限 ${formatBytesShort(maxBytes)}）`
   }
-  if (media && pinnedCount >= media.limits.maxCount) {
-    return `附件数量已达上限（${media.limits.maxCount} 个）`
+  const maxCount = Math.max(media?.limits.maxCount ?? 0, kind === 'pdf' ? 5 : 0)
+  if (media && pinnedCount >= maxCount) {
+    return `附件数量已达上限（${maxCount} 个）`
   }
-  if (media && pinnedTotal + file.size > media.limits.maxTotalBytes) {
-    return `附件总大小超出限制（上限 ${formatBytesShort(media.limits.maxTotalBytes)}）`
+  const maxTotal = Math.max(media?.limits.maxTotalBytes ?? 0, kind === 'pdf' ? 80 * 1024 * 1024 : 0)
+  if (media && pinnedTotal + file.size > maxTotal) {
+    return `附件总大小超出限制（上限 ${formatBytesShort(maxTotal)}）`
   }
   return null
 }

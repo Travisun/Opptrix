@@ -140,6 +140,9 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   get_app_settings: 'core',
   get_project_info: 'core',
   get_integration_status: 'core',
+  list_session_documents: 'core',
+  search_document: 'core',
+  read_document: 'core',
 
   // meta
   list_tool_packs: 'meta',

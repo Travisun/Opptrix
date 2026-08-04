@@ -58,6 +58,8 @@ const PRIMARY_CASES = [
   { message: 'A 股有哪些申万行业目录', expectPrimary: 'get_sector_list', intent: 'sector_list' },
   { message: '这个板块成分股列表有哪些', expectPrimary: 'get_sector_constituents', intent: 'sector_constituents' },
   { message: '这只 ETF 跟踪指数和费率档案', expectPrimary: 'get_etf_profile', intent: 'etf_profile' },
+  { message: '对比这两份研报的评级和目标价', expectPrimary: 'list_session_documents', intent: 'session_documents' },
+  { message: '分析一下附件里的研究报告', expectPrimary: 'list_session_documents', intent: 'session_documents' },
   { message: '现在开盘了吗交易时段', expectPrimary: 'get_market_session', intent: 'market_session' },
   { message: '这只 ETF 净值和溢价率', expectPrimary: 'get_etf_nav', intent: 'etf_nav' },
   { message: '看下 ETF 持仓权重成分', expectPrimary: 'get_etf_holdings', intent: 'etf_holdings' },

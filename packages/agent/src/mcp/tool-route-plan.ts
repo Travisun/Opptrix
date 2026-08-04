@@ -61,6 +61,21 @@ interface IntentRule {
  */
 const INTENT_RULES: IntentRule[] = [
   {
+    intent: 'session_documents',
+    priority: 97,
+    patterns: [
+      /研报|研究报告|券商报告/,
+      /对比.*(?:PDF|研报|报告)|(?:PDF|研报|报告).*对比/,
+      /(?:评级|目标价).*(?:研报|报告|PDF)|(?:研报|报告|PDF).*(?:评级|目标价)/,
+      /(?:阅读|分析|解读).*(?:这份|这两份|附件).*(?:研报|PDF|报告)/,
+      /list_session_documents|search_document|read_document/i,
+    ],
+    preferredTools: ['list_session_documents', 'search_document', 'read_document'],
+    avoidTools: ['workspace_read', 'browser_navigate', 'get_instrument_institution_report'],
+    confidence: 'high',
+    hint: '分析/对比对话附件研报 → 先 list_session_documents，再 search_document / read_document；引用时带文件名与页码；勿灌全文',
+  },
+  {
     intent: 'etf_profile',
     priority: 99,
     patterns: [/ETF.*(?:档案|概况|费率|跟踪指数|规模)|(?:档案|费率|跟踪指数).*ETF|基金档案|ETF.*(?:是什么|简介)/i],

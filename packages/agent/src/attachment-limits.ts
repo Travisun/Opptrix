@@ -70,6 +70,8 @@ function filterLimitsForModalities(
     const cap = base[kind] ?? DEFAULT_BY_KIND[kind]
     if (cap) out[kind] = cap
   }
+  // PDF 始终可走本地文本整理，限额独立保留
+  out.pdf = base.pdf ?? DEFAULT_BY_KIND.pdf
   return out
 }
 

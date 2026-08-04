@@ -1,6 +1,7 @@
-import type { ChatAttachmentMeta, MediaKind } from './media-types.js'
+import type { ChatAttachmentMeta } from './media-types.js'
 import { mimeToMediaKind } from './media-types.js'
-import { readAttachmentBuffer, saveAttachment } from './chat-attachments.js'
+import { isPdfTextExtractReady, readAttachmentBuffer, saveAttachment } from './chat-attachments.js'
+import { formatDocumentCatalogLine } from './pdf-extract.js'
 import type { ContentPart, ChatMessage } from './llm/provider.js'
 
 const DATA_URL_INLINE_MAX = 8 * 1024 * 1024
@@ -30,6 +31,24 @@ export function attachmentToContentPart(
   meta: ChatAttachmentMeta,
   apiBaseUrl: string,
 ): ContentPart {
+  if (meta.kind === 'pdf' && isPdfTextExtractReady(meta)) {
+    return { type: 'text', text: formatDocumentCatalogLine(meta) }
+  }
+
+  if (meta.kind === 'pdf' && meta.extract?.status === 'failed') {
+    return {
+      type: 'text',
+      text: `【研报未整理】${meta.name}：${meta.extract.error || '未能整理，请换可复制文本的电子版'}`,
+    }
+  }
+
+  if (meta.kind === 'pdf' && meta.extract?.status === 'pending') {
+    return {
+      type: 'text',
+      text: `【研报整理中】${meta.name}：仍在整理，暂不可阅读`,
+    }
+  }
+
   const buf = readAttachmentBuffer(sessionId, meta.id)
   if (!buf) {
     return { type: 'text', text: `[附件 ${meta.name} 不可用]` }
@@ -42,9 +61,10 @@ export function attachmentToContentPart(
   }
 
   if (meta.kind === 'pdf') {
+    // 无整理结果时不再灌入 base64（文本模型不可用且昂贵）；仅提示
     return {
-      type: 'file',
-      file: { filename: meta.name, file_data: buf.toString('base64') },
+      type: 'text',
+      text: `【研报】${meta.name}：尚未整理完成，请稍后再问`,
     }
   }
 

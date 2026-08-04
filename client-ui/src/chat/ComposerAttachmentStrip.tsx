@@ -87,6 +87,19 @@ function kindIcon(kind: MediaKind) {
   }
 }
 
+function attachmentStatusLabel(item: ChatAttachmentMeta): string {
+  if (item.kind === 'pdf') {
+    const status = item.extract?.status
+    if (status === 'pending') return '正在整理研报…'
+    if (status === 'ready') {
+      const pages = item.extract?.pageCount
+      return pages != null ? `已整理，共 ${pages} 页` : '已整理'
+    }
+    if (status === 'failed') return item.extract?.error || '整理失败，请换电子版'
+  }
+  return formatBytesShort(item.size)
+}
+
 interface Props {
   items: ChatAttachmentMeta[]
   sessionId?: string | null
@@ -141,7 +154,7 @@ export default function ComposerAttachmentStrip({
           )}
           <span className={s.meta}>
             <span className={s.name} title={item.name}>{item.name}</span>
-            <span className={s.size}>{formatBytesShort(item.size)}</span>
+            <span className={s.size}>{attachmentStatusLabel(item)}</span>
           </span>
           {onRemove ? (
             <button
@@ -181,7 +194,7 @@ export function MessageAttachmentStrip({
           <span className={s.iconBox}>{kindIcon(item.kind)}</span>
           <span className={s.meta}>
             <span className={s.name}>{item.name}</span>
-            <span className={s.size}>{formatBytesShort(item.size)}</span>
+            <span className={s.size}>{attachmentStatusLabel(item)}</span>
           </span>
         </button>
       ))}

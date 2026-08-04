@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatAttachmentMeta, ModelMediaCapabilities } from '../types/chat'
-import { uploadSessionAttachment, deleteSessionAttachment } from '../api/client'
+import { uploadSessionAttachment, deleteSessionAttachment, fetchSessionAttachmentMeta } from '../api/client'
 import { validateFileForModel, partitionPinsForModel } from './mediaCapabilities'
 
 export function useComposerAttachments(
@@ -25,6 +25,32 @@ export function useComposerAttachments(
     prevSessionIdRef.current = sessionId
     if (sessionId) effectiveSessionIdRef.current = sessionId
   }, [sessionId])
+
+  // 轮询 PDF 整理状态
+  useEffect(() => {
+    const pending = pinned.filter(p => p.kind === 'pdf' && (p.extract?.status ?? 'pending') === 'pending')
+    if (!pending.length) return
+    const sid = effectiveSessionIdRef.current ?? sessionId
+    if (!sid) return
+    let cancelled = false
+    const tick = async () => {
+      for (const item of pending) {
+        try {
+          const next = await fetchSessionAttachmentMeta(sid, item.id)
+          if (cancelled || !next) continue
+          setPinned(prev => prev.map(p => (p.id === next.id ? next : p)))
+        } catch {
+          /* ignore poll errors */
+        }
+      }
+    }
+    void tick()
+    const timer = window.setInterval(() => { void tick() }, 1200)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [pinned, sessionId])
 
   const clearToastLater = useCallback((msg: string) => {
     setToast(msg)

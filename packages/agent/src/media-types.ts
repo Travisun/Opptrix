@@ -1,6 +1,19 @@
 /** 媒体种类；text 不占附件配额 */
 export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
 
+/** PDF 文本整理状态（扫描件 OCR 本阶段不做） */
+export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
+
+export interface AttachmentExtractMeta {
+  status: AttachmentExtractStatus
+  /** 文档库 document_id；与库内 parse 状态镜像 */
+  documentId?: string
+  error?: string
+  pageCount?: number
+  charCount?: number
+  readyAt?: string
+}
+
 export interface ChatAttachmentMeta {
   id: string
   kind: MediaKind
@@ -11,6 +24,8 @@ export interface ChatAttachmentMeta {
   width?: number
   height?: number
   duration?: number
+  /** PDF 异步文本整理；非 PDF 通常无此字段 */
+  extract?: AttachmentExtractMeta
 }
 
 export interface AttachmentLimits {
