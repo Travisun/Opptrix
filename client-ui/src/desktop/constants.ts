@@ -1,21 +1,28 @@
 export const DESKTOP_TITLEBAR_HEIGHT = 43
 
 /**
- * Vertical nudge for custom toolbar + title.
- * macOS aligns with traffic lights; Windows sits slightly higher so panel
- * toggles share a line with min/max/close.
+ * Non-mac Electron: dedicated window-frame titlebar above content chrome.
+ * Hosts min/max/close; background matches the left sidebar glass strategy.
+ * macOS keeps system traffic lights in the content chrome band (hiddenInset).
+ */
+export const DESKTOP_FRAME_TITLEBAR_HEIGHT = 37
+
+/**
+ * Vertical nudge for custom toolbar + title inside the content chrome band.
+ * macOS aligns with traffic lights; Windows/Linux center in the content band
+ * (window controls live in DESKTOP_FRAME_TITLEBAR_HEIGHT above).
  */
 export const DESKTOP_CHROME_TOP_OFFSET = 5
-export const DESKTOP_CHROME_TOP_OFFSET_WIN = 2
+export const DESKTOP_CHROME_TOP_OFFSET_WIN = 5
 
 /** Usable band below the top inset inside the title bar (mac default). */
 export const DESKTOP_CHROME_BAND_HEIGHT = DESKTOP_TITLEBAR_HEIGHT - DESKTOP_CHROME_TOP_OFFSET
 
 /**
- * Windows: width of custom min/max/close cluster + tight gap before it.
- * 3×26 tools + 2×2 gaps + 6px end pad ≈ 88; +8px breathing room.
+ * @deprecated Window controls sit in the frame titlebar on non-mac; content
+ * chrome no longer reserves this width. Kept for any residual callers.
  */
-export const DESKTOP_WIN_WINDOW_CONTROLS_RESERVE = 96
+export const DESKTOP_WIN_WINDOW_CONTROLS_RESERVE = 12
 
 /** macOS native traffic-light zone before app toolbar (windowed) */
 export const DESKTOP_TRAFFIC_LIGHT_WIDTH = 80
@@ -27,7 +34,7 @@ export const DESKTOP_TOOL_GAP = 4
 /** Default toolbar glyph — tighter padding on sidebar toggle for a larger panel icon */
 export const DESKTOP_TOOL_ICON_SIZE = 15
 export const DESKTOP_TOOL_ICON_PADDING = 3
-export const DESKTOP_SIDEBAR_TOOL_ICON_SIZE = 17
+export const DESKTOP_SIDEBAR_TOOL_ICON_SIZE = 18
 export const DESKTOP_SIDEBAR_TOOL_ICON_PADDING = 1
 export const DESKTOP_TITLE_GAP = 12
 
@@ -57,8 +64,9 @@ export const DESKTOP_SIDEBAR_OVERLAY_THRESHOLD = SIDEBAR_DEFAULT_WIDTH * SIDEBAR
 export const DESKTOP_SIDEBAR_EXPAND_THRESHOLD = SIDEBAR_DEFAULT_WIDTH * SIDEBAR_EXPAND_MULTIPLIER
 
 /** Shared duration for inline panel width + title chrome when sidebar toggles */
-export const DESKTOP_SIDEBAR_LAYOUT_MS = 340
-export const DESKTOP_SIDEBAR_LAYOUT_EASE = 'cubic-bezier(0.32, 0.72, 0, 1)'
+export const DESKTOP_SIDEBAR_LAYOUT_MS = 480
+/** Even ease-in-out — avoids the snappy flash of strong ease-out curves */
+export const DESKTOP_SIDEBAR_LAYOUT_EASE = 'cubic-bezier(0.4, 0, 0.2, 1)'
 
 /** @deprecated alias */
 export const DESKTOP_SIDEBAR_COLLAPSE_WIDTH = DESKTOP_SIDEBAR_OVERLAY_THRESHOLD
@@ -104,7 +112,8 @@ export const WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH =
 /**
  * Title bar stacking (low → high). Keep in sync with client-ui-guidelines / DESKTOP.md.
  * 1100 title drag layer → 1150 overlay sidebar → 1200 panel title bands →
- * 1300 global toolbar + window controls → 1310 clickable session title.
+ * 1300 global toolbar → 1310 clickable session title →
+ * 2100 non-mac window-frame titlebar (min/max/close; above onboarding).
  */
 export const DESKTOP_Z_TITLE = 1100
 export const DESKTOP_Z_OVERLAY_SIDEBAR = 1150
@@ -119,4 +128,5 @@ export const DESKTOP_TITLE_BAR_ACTIONS_WIDTH = 60
 
 /** Clip global title-bar drag so news status + action buttons stay clickable */
 export const DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN = 240
-export const DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN = 380
+/** Non-mac: window controls live in the frame titlebar; clip only content actions */
+export const DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN = 240

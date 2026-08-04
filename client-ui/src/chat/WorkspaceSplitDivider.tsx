@@ -1,12 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars } from '../theme/tokens'
 import {
   DESKTOP_TITLEBAR_HEIGHT,
   WORKSPACE_SPLITTER_HIT_SLOP,
   WORKSPACE_SPLITTER_WIDTH,
   WORKSPACE_SPLITTER_Z_INDEX,
 } from '../desktop/constants'
+import { electronPlatform } from '../platform/detect'
 
 const FOCUS_FADE_PERCENT = 10
 
@@ -53,7 +54,8 @@ const useStyles = makeStyles({
     pointerEvents: 'auto',
     backgroundColor: 'transparent',
   },
-  dividerElectron: {
+  /** Extend into secondary content chrome (mac always; non-mac when requested). */
+  dividerElectronChrome: {
     marginTop: `-${DESKTOP_TITLEBAR_HEIGHT}px`,
     height: `calc(100% + ${DESKTOP_TITLEBAR_HEIGHT}px)`,
   },
@@ -61,6 +63,13 @@ const useStyles = makeStyles({
 
 interface Props {
   electronChrome?: boolean
+  /**
+   * Extend the split into the secondary content chrome (title band).
+   * - Left sidebar on non-mac: leave false so the line stops under the frame titlebar.
+   * - Chat / right panel: true so the line meets the secondary headers.
+   * Default: mac-only when `electronChrome` is set.
+   */
+  extendIntoSecondaryChrome?: boolean
   isDragging?: boolean
   onBeginDrag: (clientX: number) => void
   ariaLabel?: string
@@ -68,6 +77,7 @@ interface Props {
 
 export default function WorkspaceSplitDivider({
   electronChrome = false,
+  extendIntoSecondaryChrome,
   isDragging = false,
   onBeginDrag,
   ariaLabel = '调整聊天区与右侧面板宽度',
@@ -76,6 +86,8 @@ export default function WorkspaceSplitDivider({
   const dividerRef = useRef<HTMLDivElement>(null)
   const [focusRatio, setFocusRatio] = useState<number | null>(null)
   const active = focusRatio != null
+  const extendIntoChrome = extendIntoSecondaryChrome
+    ?? (electronChrome && electronPlatform() === 'darwin')
 
   const syncFocusFromClientY = useCallback((clientY: number) => {
     const el = dividerRef.current
@@ -110,7 +122,7 @@ export default function WorkspaceSplitDivider({
   return (
     <div
       ref={dividerRef}
-      className={mergeClasses(s.divider, electronChrome && s.dividerElectron)}
+      className={mergeClasses(s.divider, extendIntoChrome && s.dividerElectronChrome)}
       role="separator"
       aria-orientation="vertical"
       aria-label={ariaLabel}

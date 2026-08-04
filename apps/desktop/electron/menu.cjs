@@ -185,9 +185,61 @@ function installApplicationMenu(options) {
   return menu
 }
 
+/**
+ * Top-level application menu entries for custom non-mac titlebars.
+ * @returns {{ index: number, label: string }[]}
+ */
+function listApplicationMenuTopItems() {
+  const menu = Menu.getApplicationMenu()
+  if (!menu) return []
+  return menu.items
+    .map((item, index) => ({
+      index,
+      label: typeof item.label === 'string' ? item.label : '',
+      visible: item.visible !== false,
+      hasSubmenu: Boolean(item.submenu),
+    }))
+    .filter((item) => item.visible && item.label && item.hasSubmenu)
+    .map(({ index, label }) => ({ index, label }))
+}
+
+/**
+ * Popup a top-level application submenu at window content coordinates.
+ * Resolves when the submenu is dismissed so the renderer can clear open state.
+ * @param {number} index
+ * @param {{ window?: import('electron').BrowserWindow | null, x: number, y: number }} opts
+ * @returns {Promise<boolean>}
+ */
+function popupApplicationMenuAt(index, opts) {
+  const menu = Menu.getApplicationMenu()
+  const item = menu?.items?.[index]
+  if (!item?.submenu) return Promise.resolve(false)
+  const x = Number(opts.x)
+  const y = Number(opts.y)
+  if (!Number.isFinite(x) || !Number.isFinite(y)) return Promise.resolve(false)
+
+  return new Promise((resolve) => {
+    const submenu = item.submenu
+    const finish = () => resolve(true)
+    submenu.once('menu-will-close', finish)
+    try {
+      submenu.popup({
+        window: opts.window ?? undefined,
+        x: Math.round(x),
+        y: Math.round(y),
+      })
+    } catch {
+      submenu.removeListener('menu-will-close', finish)
+      resolve(false)
+    }
+  })
+}
+
 module.exports = {
   buildApplicationMenu,
   configureAboutPanel,
   installApplicationMenu,
+  listApplicationMenuTopItems,
+  popupApplicationMenuAt,
   showAboutDialog,
 }

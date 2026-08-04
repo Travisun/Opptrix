@@ -451,6 +451,11 @@ html.opptrix-electron .opptrix-right-panel {
   background: var(--opptrix-canvas) !important;
 }
 
+/* Non-mac window-frame titlebar — same glass recipe as left sidebar */
+html.opptrix-electron .opptrix-window-frame-titlebar {
+  border-bottom: 1px solid var(--opptrix-separator-strong);
+}
+
 /* ── Electron shell glass ──
  * 有原生毛玻璃（mac vibrancy / win acrylic）时侧栏透明穿透窗口层；
  * 否则（Linux 等）保留 CSS backdrop-filter 毛玻璃。
@@ -475,19 +480,20 @@ html.opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar {
   background: rgba(255, 255, 255, 0.62) !important;
 }
 
-[data-theme="dark"] html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar {
+/* data-theme lives on <html> — must be html[data-theme=...], not [data-theme] html */
+html[data-theme="dark"].opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar {
   background: var(--opptrix-canvas-alt) !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-[data-theme="dark"] html.opptrix-electron-vibrancy .opptrix-glass-sidebar {
+html[data-theme="dark"].opptrix-electron-vibrancy .opptrix-glass-sidebar {
   background: transparent !important;
   backdrop-filter: none !important;
   -webkit-backdrop-filter: none !important;
 }
 
-[data-theme="dark"] html.opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar {
+html[data-theme="dark"].opptrix-electron-vibrancy.opptrix-platform-win32 .opptrix-glass-sidebar {
   background: rgba(44, 44, 46, 0.72) !important;
 }
 
@@ -507,12 +513,12 @@ html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-settings-sidebar 
   -webkit-backdrop-filter: blur(28px) saturate(150%);
 }
 
-[data-theme="dark"] html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar.opptrix-settings-sidebar,
-[data-theme="dark"] html.opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-settings-sidebar {
+html[data-theme="dark"].opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-glass-sidebar.opptrix-settings-sidebar,
+html[data-theme="dark"].opptrix-electron:not(.opptrix-electron-vibrancy) .opptrix-settings-sidebar {
   background: color-mix(in srgb, var(--opptrix-canvas-alt) 85%, transparent) !important;
 }
 
-[data-theme="dark"] html:not(.opptrix-electron) .opptrix-settings-sidebar {
+html[data-theme="dark"]:not(.opptrix-electron) .opptrix-settings-sidebar {
   background: var(--opptrix-settings-sidebar-fill) !important;
 }
 
@@ -2346,6 +2352,19 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
     pointer-events: auto;
   }
 
+  /* Truncated session titles: marquee left while the row is hovered */
+  .opptrix-hover-marquee-host:hover .opptrix-hover-marquee--overflow {
+    mask-image: none !important;
+    -webkit-mask-image: none !important;
+  }
+
+  .opptrix-hover-marquee-host:hover .opptrix-hover-marquee--overflow .opptrix-hover-marquee__track {
+    animation-name: opptrix-hover-marquee-scroll;
+    animation-duration: var(--opptrix-marquee-duration, 4s);
+    animation-timing-function: linear;
+    animation-iteration-count: infinite;
+  }
+
   .opptrix-archive-folder-head:hover .opptrix-archive-folder-count {
     opacity: 0;
   }
@@ -2419,6 +2438,17 @@ html.opptrix-electron .opptrix-session-title-btn:disabled {
   .opptrix-follow-item:hover .opptrix-follow-actions {
     opacity: 1;
     pointer-events: auto;
+  }
+}
+
+@keyframes opptrix-hover-marquee-scroll {
+  from { transform: translateX(0); }
+  to { transform: translateX(calc(-1 * var(--opptrix-marquee-shift, 0px))); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .opptrix-hover-marquee-host:hover .opptrix-hover-marquee--overflow .opptrix-hover-marquee__track {
+    animation: none !important;
   }
 }
 

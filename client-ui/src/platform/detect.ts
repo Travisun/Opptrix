@@ -6,8 +6,14 @@ declare global {
       windowMinimize?: () => void
       windowMaximize?: () => void
       windowClose?: () => void
+      /** Non-mac custom titlebar: top-level application menu labels */
+      appMenuList?: () => Promise<Array<{ index: number; label: string }>>
+      /** Popup native submenu at window content coordinates */
+      appMenuPopup?: (payload: { index: number; x: number; y: number }) => Promise<boolean>
       getIsFullscreen?: () => Promise<boolean>
       getIsMaximized?: () => Promise<boolean>
+      /** Grow the Electron window so content width ≥ minWidth */
+      windowEnsureContentWidth?: (minWidth: number) => Promise<{ ok: boolean; width: number; reason?: string }>
       pickExportDirectory?: () => Promise<string | null>
       writeBinaryFile?: (payload: {
         dirPath: string

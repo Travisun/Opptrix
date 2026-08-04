@@ -7,6 +7,7 @@ import {
   WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH,
   WORKSPACE_SPLITTER_WIDTH,
 } from '../desktop/constants'
+import { ensureWindowContentWidth } from '../platform/ensureWindowContentWidth'
 
 interface Options {
   enabled?: boolean
@@ -33,11 +34,24 @@ export function useWorkspaceSplit({
   const savedRightWidthRef = useRef(defaultRightWidth)
   const rightPanelWidthRef = useRef(defaultRightWidth)
   const autoCollapsedByWidthRef = useRef(false)
+  /** Skip auto-collapse while we widen the window to fit an intentional open. */
+  const expandForOpenRef = useRef(false)
+  const expandForOpenTimerRef = useRef<number | null>(null)
   const dragRef = useRef<{ startX: number; startWidth: number } | null>(null)
+
+  const clearExpandForOpen = useCallback(() => {
+    expandForOpenRef.current = false
+    if (expandForOpenTimerRef.current != null) {
+      window.clearTimeout(expandForOpenTimerRef.current)
+      expandForOpenTimerRef.current = null
+    }
+  }, [])
 
   useEffect(() => {
     rightPanelWidthRef.current = rightPanelWidth
   }, [rightPanelWidth])
+
+  useEffect(() => () => clearExpandForOpen(), [clearExpandForOpen])
 
   useEffect(() => {
     if (!enabled) return
@@ -124,7 +138,12 @@ export function useWorkspaceSplit({
   useEffect(() => {
     if (!enabled || isDragging || workspaceWidth <= 0) return
 
+    if (expandForOpenRef.current && workspaceWidth >= WORKSPACE_CHAT_RIGHT_MIN_WIDTH) {
+      clearExpandForOpen()
+    }
+
     if (rightPanelOpen && workspaceWidth < WORKSPACE_CHAT_RIGHT_MIN_WIDTH) {
+      if (expandForOpenRef.current) return
       collapseRightPanel(true)
       return
     }
@@ -149,6 +168,7 @@ export function useWorkspaceSplit({
     }
   }, [
     chatVisible,
+    clearExpandForOpen,
     collapseRightPanel,
     commitWidth,
     defaultRightWidth,
@@ -161,17 +181,43 @@ export function useWorkspaceSplit({
 
   const toggleRightPanel = useCallback(() => {
     if (rightPanelOpen) {
+      clearExpandForOpen()
       savedRightWidthRef.current = rightPanelWidthRef.current
       autoCollapsedByWidthRef.current = false
       setRightPanelOpen(false)
       setChatVisible(true)
       return
     }
-    if (enabled && workspaceWidth > 0 && workspaceWidth < WORKSPACE_CHAT_RIGHT_MIN_WIDTH) return
-    autoCollapsedByWidthRef.current = false
-    setRightPanelWidth(savedRightWidthRef.current || defaultRightWidth)
-    setRightPanelOpen(true)
-  }, [defaultRightWidth, enabled, rightPanelOpen, workspaceWidth])
+
+    const targetRight = savedRightWidthRef.current || defaultRightWidth
+    const neededWorkspace =
+      WORKSPACE_CHAT_MIN_WIDTH + WORKSPACE_SPLITTER_WIDTH + targetRight
+
+    const openPanel = () => {
+      autoCollapsedByWidthRef.current = false
+      setRightPanelWidth(targetRight)
+      setRightPanelOpen(true)
+      setChatVisible(true)
+    }
+
+    if (enabled && workspaceWidth > 0 && workspaceWidth < neededWorkspace) {
+      const deficit = neededWorkspace - workspaceWidth
+      expandForOpenRef.current = true
+      if (expandForOpenTimerRef.current != null) {
+        window.clearTimeout(expandForOpenTimerRef.current)
+      }
+      // If resize is blocked (fullscreen / OS limits), stop shielding auto-collapse.
+      expandForOpenTimerRef.current = window.setTimeout(() => {
+        expandForOpenRef.current = false
+        expandForOpenTimerRef.current = null
+      }, 1000)
+
+      void ensureWindowContentWidth(window.innerWidth + deficit).finally(openPanel)
+      return
+    }
+
+    openPanel()
+  }, [clearExpandForOpen, defaultRightWidth, enabled, rightPanelOpen, workspaceWidth])
 
   const toggleChatColumn = useCallback(() => {
     if (!rightPanelOpen) return

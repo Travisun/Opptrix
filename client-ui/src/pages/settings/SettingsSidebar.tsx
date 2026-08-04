@@ -21,6 +21,7 @@ import { ghostInteractive, inputShellInteractive, motion, sidebarItemSelected, s
 import { isElectron, supportsNativeWindowVibrancy } from '../../platform/detect'
 import { useTheme } from '../../theme/ThemeContext'
 import { DESKTOP_TITLEBAR_HEIGHT } from '../../desktop/constants'
+import { desktopFrameTitlebarHeight } from '../../desktop/layout'
 import OverlaySidebarShell from '../../desktop/OverlaySidebarShell'
 import SettingsBackRow from './SettingsBackRow'
 import AppUpdateNotice from '../../desktop/AppUpdateNotice'
@@ -76,6 +77,12 @@ const useStyles = makeStyles({
   },
   sidebarTopElectron: {
     paddingTop: `${DESKTOP_TITLEBAR_HEIGHT + 4}px`,
+    boxSizing: 'border-box',
+    height: '100%',
+  },
+  /** Non-mac frame titlebar: no secondary chrome — keep 返回应用 near the top. */
+  sidebarTopElectronCompact: {
+    paddingTop: '10px',
     boxSizing: 'border-box',
     height: '100%',
   },
@@ -244,6 +251,8 @@ export default function SettingsSidebar({
   const { resolvedScheme } = useTheme()
   const isOverlay = mode === 'overlay'
   const electronChrome = isElectron() && !isMobile && !isOverlay
+  const compactFrameTop = desktopFrameTitlebarHeight() > 0
+  const topPadClass = compactFrameTop ? s.sidebarTopElectronCompact : s.sidebarTopElectron
   const nativeVibrancy = supportsNativeWindowVibrancy()
   const sidebarGlass = electronChrome && (nativeVibrancy || resolvedScheme !== 'dark')
   const sidebarSolidDark = electronChrome && !nativeVibrancy && resolvedScheme === 'dark'
@@ -392,7 +401,7 @@ export default function SettingsSidebar({
         width={opptrixTokens.settingsSidebarWidth}
         onClose={onClose}
       >
-        <div className={mergeClasses(s.sidebar, s.sidebarTopElectron, 'opptrix-settings-sidebar')}>
+        <div className={mergeClasses(s.sidebar, topPadClass, 'opptrix-settings-sidebar')}>
           {body}
         </div>
       </OverlaySidebarShell>
@@ -407,7 +416,7 @@ export default function SettingsSidebar({
         !electronChrome && !isMobile && s.sidebarWeb,
         electronChrome && s.sidebarElectron,
         sidebarSolidDark && s.sidebarElectronSolid,
-        electronChrome && s.sidebarTopElectron,
+        electronChrome && topPadClass,
         sidebarGlass && 'opptrix-glass-sidebar',
         'opptrix-settings-sidebar',
         'opptrix-sidebar-edge',

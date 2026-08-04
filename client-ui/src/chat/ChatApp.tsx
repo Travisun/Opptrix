@@ -65,7 +65,7 @@ import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 import { useDesktopShell } from '../hooks/useDesktopShell'
-import { isElectron } from '../platform/detect'
+import { electronPlatform, isElectron } from '../platform/detect'
 import {
   buildChatAskNotification,
   buildChatDoneNotification,
@@ -74,7 +74,7 @@ import {
   resolveWindowFocused,
 } from '../platform/chatNotifications'
 import { playChatCueSound } from '../platform/chatSound'
-import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
+import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -85,6 +85,10 @@ const useStyles = makeStyles({
   },
   rootElectron: {
     backgroundColor: 'transparent',
+  },
+  rootElectronFrameTitlebar: {
+    paddingTop: `${DESKTOP_FRAME_TITLEBAR_HEIGHT}px`,
+    boxSizing: 'border-box',
   },
   rootLayout: {
     display: 'flex',
@@ -119,7 +123,7 @@ const useStyles = makeStyles({
     display: 'flex',
     flexDirection: 'column',
     overflow: 'hidden',
-    transitionProperty: 'width, min-width, flex',
+    transitionProperty: 'width, min-width',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
   },
@@ -1510,7 +1514,12 @@ export default function ChatApp() {
           onToggleChatColumn={view === 'chat' && !isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
         />
       )}
-      <div className={mergeClasses(s.root, electronChrome && s.rootElectron, electronChrome && 'opptrix-app-shell')}>
+      <div className={mergeClasses(
+        s.root,
+        electronChrome && s.rootElectron,
+        electronChrome && electronPlatform() !== 'darwin' && s.rootElectronFrameTitlebar,
+        electronChrome && 'opptrix-app-shell',
+      )}>
         <div className={s.rootLayout}>
         {!isMobile && !isSettings && (
           <>
@@ -1683,11 +1692,21 @@ export default function ChatApp() {
                 electronChrome && s.chatColumnElectron,
                 isDragging && s.chatColumnDragging,
               )}
-              style={!isMobile ? {
-                flex: showSplitter ? '0 0 auto' : 1,
-                width: showSplitter ? chatWidth : undefined,
-                minWidth: showSplitter ? chatWidth : 0,
-              } : undefined}
+              style={!isMobile ? (
+                isDragging && showSplitter
+                  ? {
+                      flex: '0 0 auto',
+                      width: chatWidth,
+                      minWidth: chatWidth,
+                    }
+                  : {
+                      // Stay flexible while the right panel width animates so the panel
+                      // grows/shrinks from the window's right edge (not into a pre-reserved gap).
+                      flex: 1,
+                      width: undefined,
+                      minWidth: showSplitter ? WORKSPACE_CHAT_MIN_WIDTH : 0,
+                    }
+              ) : undefined}
             >
               {electronChrome && (
                 <div className={mergeClasses(s.chatTitleBar, 'opptrix-chat-title-bar')} aria-hidden />
@@ -1744,6 +1763,7 @@ export default function ChatApp() {
           {!isMobile && showSplitter && (
             <WorkspaceSplitDivider
               electronChrome={electronChrome}
+              extendIntoSecondaryChrome={electronChrome}
               isDragging={isDragging}
               onBeginDrag={beginDrag}
             />

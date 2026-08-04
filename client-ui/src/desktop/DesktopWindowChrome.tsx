@@ -11,6 +11,7 @@ import {
   DESKTOP_SIDEBAR_LAYOUT_MS,
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
+  DESKTOP_TITLE_GAP,
   DESKTOP_TITLEBAR_HEIGHT,
   DESKTOP_TOOL_GAP,
   DESKTOP_TOOL_ICON_SIZE,
@@ -33,6 +34,7 @@ import { opptrixCssVars } from '../theme/tokens'
 import {
   desktopChromeBandHeight,
   desktopChromeTopOffset,
+  desktopFrameTitlebarHeight,
   desktopTitleBarActionsRight,
   desktopTitleLeft,
   desktopTitleMaxWidth,
@@ -41,13 +43,11 @@ import {
 } from './layout'
 import ChromeToolButton from './ChromeToolButton'
 import AppUpdateChromeHint from './AppUpdateChromeHint'
-import WindowControls from './WindowControls'
 import { useElectronFullscreen } from '../hooks/useElectronFullscreen'
 
 const useStyles = makeStyles({
   chromeBar: {
     position: 'fixed',
-    top: 0,
     left: 0,
     right: 0,
     height: `${DESKTOP_TITLEBAR_HEIGHT}px`,
@@ -69,9 +69,28 @@ const useStyles = makeStyles({
     pointerEvents: 'auto',
     WebkitAppRegion: 'no-drag',
     zIndex: 4,
-    transitionProperty: 'left',
+    boxSizing: 'border-box',
+    transitionProperty: 'left, width, padding',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,
+  },
+  /** Frame titlebar + open sidebar: collapse left, back/forward right, space between */
+  toolbarSplitInSidebar: {
+    justifyContent: 'space-between',
+    gap: 0,
+  },
+  toolbarCluster: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: `${DESKTOP_TOOL_GAP}px`,
+    flexShrink: 0,
+  },
+  toolbarSpacer: {
+    flex: '1 1 auto',
+    minWidth: '12px',
+    alignSelf: 'stretch',
+    WebkitAppRegion: 'drag',
+    pointerEvents: 'auto',
   },
   title: {
     position: 'absolute',
@@ -230,10 +249,14 @@ export default function DesktopWindowChrome({
   const isMarket = viewMode === 'market'
   const isExperts = viewMode === 'experts'
   const isStandalonePanel = isNews || isMarket || isExperts
+  const frameTitlebarHeight = desktopFrameTitlebarHeight()
   const chromeTop = desktopChromeTopOffset()
   const chromeBand = desktopChromeBandHeight()
   const titleLeft = desktopTitleLeft(sidebarInline, viewMode, macFullscreen, sidebarWidth)
   const toolbarLeft = desktopToolbarLeft(macFullscreen)
+  const frameChrome = frameTitlebarHeight > 0
+  /** Primary frame titlebar + open sidebar: collapse |····| back/forward across the panel top. */
+  const toolbarSplitInSidebar = frameChrome && sidebarInline && sidebarOpen
   const titleBarActionsRight = desktopTitleBarActionsRight()
   const showTitleBarActions = !isSettings && !rightPanelOpen && Boolean(onToggleRightPanel || onToggleChatColumn)
   const titleMaxWidth = desktopTitleMaxWidth({
@@ -273,6 +296,8 @@ export default function DesktopWindowChrome({
   }, [interactiveTitle, title, titleMaxWidth, titleSlotWithLayout])
 
   if (!isElectron()) return null
+  // Non-mac settings: frame titlebar is enough — skip the empty secondary chrome band.
+  if (isSettings && frameTitlebarHeight > 0) return null
 
   /** 仅让出可点击标题的实际宽度，其余标题栏带仍可拖拽 */
   const dragResumeLeft = interactiveTitle
@@ -312,7 +337,11 @@ export default function DesktopWindowChrome({
 
   return createPortal(
     <>
-      <header className={s.chromeBar} aria-label="窗口标题栏">
+      <header
+        className={s.chromeBar}
+        style={{ top: `${frameTitlebarHeight}px` }}
+        aria-label="窗口标题栏"
+      >
         {interactiveTitle ? (
           <>
             <div
@@ -352,51 +381,98 @@ export default function DesktopWindowChrome({
         )}
 
         <div
-          className={s.toolbar}
+          className={mergeClasses(s.toolbar, toolbarSplitInSidebar && s.toolbarSplitInSidebar)}
           style={{
             top: `${chromeTop}px`,
             height: `${chromeBand}px`,
-            left: `${toolbarLeft}px`,
+            left: toolbarSplitInSidebar ? 0 : `${toolbarLeft}px`,
+            width: toolbarSplitInSidebar ? `${sidebarWidth}px` : undefined,
+            paddingLeft: toolbarSplitInSidebar ? `${DESKTOP_TITLE_GAP}px` : undefined,
+            paddingRight: toolbarSplitInSidebar ? `${DESKTOP_TITLE_GAP}px` : undefined,
             transitionDuration: chromeTransition,
           }}
         >
-          {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (
-            <ChromeToolButton
-              label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
-              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-              onMouseEnter={sidebarHoverReveal ? handleSidebarPointer : undefined}
-              onClick={handleSidebarClick}
-            >
-              {sidebarOpen
-                ? <PanelLeftContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
-            </ChromeToolButton>
+          {toolbarSplitInSidebar ? (
+            <>
+              <div className={s.toolbarCluster}>
+                {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (
+                  <ChromeToolButton
+                    label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
+                    iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                    onMouseEnter={sidebarHoverReveal ? handleSidebarPointer : undefined}
+                    onClick={handleSidebarClick}
+                  >
+                    {sidebarOpen
+                      ? <PanelLeftContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                      : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                  </ChromeToolButton>
+                )}
+                <AppUpdateChromeHint
+                  sidebarOpen={sidebarOpen}
+                  sidebarHoverReveal={sidebarHoverReveal}
+                  onRevealSidebar={onRevealSidebar}
+                  onToggleSidebar={onToggleSidebar}
+                />
+              </div>
+              <div className={s.toolbarSpacer} aria-hidden />
+              <div className={s.toolbarCluster}>
+                {onGoBack && (
+                  <ChromeToolButton
+                    label={isSettings ? '返回应用' : '后退'}
+                    disabled={!canGoBack}
+                    onClick={onGoBack}
+                  >
+                    <ArrowLeftRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                  </ChromeToolButton>
+                )}
+                {!isSettings && onGoForward && (
+                  <ChromeToolButton label="前进" disabled={!canGoForward} onClick={onGoForward}>
+                    <ArrowRightRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                  </ChromeToolButton>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              {showSidebarToggle && (onToggleSidebar || onRevealSidebar) && (
+                <ChromeToolButton
+                  label={sidebarOpen ? '收起侧栏' : '展开侧栏'}
+                  iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                  onMouseEnter={sidebarHoverReveal ? handleSidebarPointer : undefined}
+                  onClick={handleSidebarClick}
+                >
+                  {sidebarOpen
+                    ? <PanelLeftContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                    : <PanelLeftExpandRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+                </ChromeToolButton>
+              )}
+              {onGoBack && (
+                <ChromeToolButton
+                  label={isSettings ? '返回应用' : '后退'}
+                  disabled={!canGoBack}
+                  onClick={onGoBack}
+                >
+                  <ArrowLeftRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                </ChromeToolButton>
+              )}
+              {!isSettings && onGoForward && (
+                <ChromeToolButton label="前进" disabled={!canGoForward} onClick={onGoForward}>
+                  <ArrowRightRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                </ChromeToolButton>
+              )}
+              {!isSettings && onNewChat && !sidebarOpen && (
+                <ChromeToolButton label="新建对话" onClick={onNewChat}>
+                  <ChatAddRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+                </ChromeToolButton>
+              )}
+              <AppUpdateChromeHint
+                sidebarOpen={sidebarOpen}
+                sidebarHoverReveal={sidebarHoverReveal}
+                onRevealSidebar={onRevealSidebar}
+                onToggleSidebar={onToggleSidebar}
+              />
+            </>
           )}
-          {onGoBack && (
-            <ChromeToolButton
-              label={isSettings ? '返回应用' : '后退'}
-              disabled={!canGoBack}
-              onClick={onGoBack}
-            >
-              <ArrowLeftRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
-            </ChromeToolButton>
-          )}
-          {!isSettings && onGoForward && (
-            <ChromeToolButton label="前进" disabled={!canGoForward} onClick={onGoForward}>
-              <ArrowRightRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
-            </ChromeToolButton>
-          )}
-          {!isSettings && onNewChat && !sidebarOpen && (
-            <ChromeToolButton label="新建对话" onClick={onNewChat}>
-              <ChatAddRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
-            </ChromeToolButton>
-          )}
-          <AppUpdateChromeHint
-            sidebarOpen={sidebarOpen}
-            sidebarHoverReveal={sidebarHoverReveal}
-            onRevealSidebar={onRevealSidebar}
-            onToggleSidebar={onToggleSidebar}
-          />
         </div>
       </header>
 
@@ -404,7 +480,7 @@ export default function DesktopWindowChrome({
         <div
           className={s.titleBarActions}
           style={{
-            top: `${chromeTop}px`,
+            top: `${frameTitlebarHeight + chromeTop}px`,
             height: `${chromeBand}px`,
             right: `${titleBarActionsRight}px`,
           }}
@@ -432,8 +508,6 @@ export default function DesktopWindowChrome({
           )}
         </div>
       )}
-
-      <WindowControls />
     </>,
     document.body,
   )

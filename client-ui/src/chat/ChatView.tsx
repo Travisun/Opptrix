@@ -69,6 +69,12 @@ const useStyles = makeStyles({
     maxWidth: 'none',
     paddingInline: opptrixTokens.chatThreadPaddingXMobile,
   },
+  /** Fill the scroll viewport so empty-state welcome can sit on the Y center. */
+  threadColumnEmpty: {
+    minHeight: '100%',
+    display: 'flex',
+    flexDirection: 'column',
+  },
   contentColumn: {
     width: '100%',
     paddingTop: '8px',
@@ -84,6 +90,12 @@ const useStyles = makeStyles({
   contentColumnMobile: {
     paddingTop: '8px',
     gap: '5px',
+  },
+  contentColumnEmpty: {
+    flex: 1,
+    minHeight: '100%',
+    justifyContent: 'center',
+    paddingTop: 0,
   },
   composerDock: {
     position: 'absolute',
@@ -163,12 +175,12 @@ const useStyles = makeStyles({
     flexDirection: 'column',
     alignItems: 'center',
     gap: '10px',
-    padding: '48px 24px 20px',
+    padding: '20px 24px',
     textAlign: 'center',
     maxWidth: '440px',
   },
   welcomeBannerMobile: {
-    padding: '32px 16px 12px',
+    padding: '16px 16px',
   },
   welcomeEnter: {
     ...fadeInUp,
@@ -682,7 +694,11 @@ function ChatView({
     onSubmit(text, attachmentIds, attachmentMetas)
   }
 
-  const threadColumnClass = mergeClasses(s.threadColumn, isMobile && s.threadColumnMobile)
+  const threadColumnClass = mergeClasses(
+    s.threadColumn,
+    isMobile && s.threadColumnMobile,
+    isEmpty && s.threadColumnEmpty,
+  )
 
   return (
     <div className={s.root}>
@@ -768,6 +784,7 @@ function ChatView({
                 s.contentColumn,
                 isMobile && s.contentColumnMobile,
                 electronChrome && s.contentColumnElectron,
+                isEmpty && s.contentColumnEmpty,
               )}
               style={{ paddingBottom: `${threadScrollPadBottom}px` }}
             >

@@ -68,7 +68,7 @@ const useStyles = makeStyles({
     zIndex: 1,
   },
   titleBarElectronWin: {
-    paddingRight: '132px',
+    paddingRight: '12px',
   },
   titleBarElectronMac: {
     paddingRight: '12px',

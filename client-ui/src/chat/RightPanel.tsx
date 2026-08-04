@@ -17,6 +17,14 @@ const useStyles = makeStyles({
     pointerEvents: 'none',
     display: 'flex',
     flexDirection: 'column',
+    /**
+     * Keep content left-aligned inside the shell.
+     * The shell sits on the trailing edge and grows leftward (chat is flex:1),
+     * so left-aligned clip reads as one panel pulled from the right.
+     * flex-end would reveal the panel's right edge first and make inner content
+     * look like a second slide-in from the left (especially noticeable on macOS).
+     */
+    alignItems: 'flex-start',
     minHeight: 0,
     height: '100%',
     transitionProperty: 'width',
@@ -40,6 +48,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
+    boxSizing: 'border-box',
   },
 })
 
@@ -74,7 +83,6 @@ function RightPanel({
 }: Props) {
   const s = useStyles()
 
-  const contentWidth = fullWidth ? undefined : width
   const shellWidth = !visible
     ? 0
     : fullWidth
@@ -93,7 +101,9 @@ function RightPanel({
     >
       <aside
         className={mergeClasses(s.panel, 'opptrix-right-panel')}
-        style={contentWidth != null ? { width: `${contentWidth}px`, minWidth: `${contentWidth}px` } : { width: '100%' }}
+        style={fullWidth
+          ? { width: '100%' }
+          : { width: `${width}px`, minWidth: `${width}px` }}
         aria-label="行情与自选"
         aria-hidden={!visible}
       >

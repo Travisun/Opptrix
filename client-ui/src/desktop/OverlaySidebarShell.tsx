@@ -2,14 +2,13 @@ import type { CSSProperties, ReactNode } from 'react'
 import { createPortal } from 'react-dom'
 import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
-import { motion } from '../theme/mixins'
 import { DESKTOP_Z_OVERLAY_SIDEBAR } from './constants'
+import { desktopFrameTitlebarHeight } from './layout'
 import { OVERLAY_SIDEBAR_MS, useOverlaySidebarAnimation } from '../hooks/useOverlaySidebarAnimation'
 
 const useStyles = makeStyles({
   panel: {
     position: 'fixed',
-    top: 0,
     left: 0,
     bottom: 0,
     zIndex: DESKTOP_Z_OVERLAY_SIDEBAR,
@@ -20,7 +19,7 @@ const useStyles = makeStyles({
     transform: 'translateX(-100%)',
     transitionProperty: 'transform, opacity',
     transitionDuration: `${OVERLAY_SIDEBAR_MS}ms`,
-    transitionTimingFunction: 'cubic-bezier(0.32, 0.72, 0, 1)',
+    transitionTimingFunction: 'cubic-bezier(0.4, 0, 0.2, 1)',
     backgroundColor: opptrixCssVars.canvas,
     border: `1px solid ${opptrixCssVars.border}`,
     borderLeft: 'none',
@@ -54,7 +53,10 @@ export default function OverlaySidebarShell({
 
   if (!mounted) return null
 
-  const panelStyle = { width } as CSSProperties
+  const panelStyle = {
+    width,
+    top: `${desktopFrameTitlebarHeight()}px`,
+  } as CSSProperties
 
   return createPortal(
     <aside
