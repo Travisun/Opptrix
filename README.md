@@ -35,7 +35,7 @@
 <table align="center">
   <tr>
     <td align="center" width="33%">
-      <img src="https://opptrix.org/images/wechat-group-qr.jpg" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
+      <img src="https://opptrix.org/images/wechat-group-qr.jpg?v=20260811" alt="Opptrix 技术交流群 — 微信扫码加入" width="220" /><br />
       <sub>微信 · Opptrix 技术交流群</sub>
       <!-- 维护备注：当前群二维码有效期至 2026-08-11，过期后替换官网 docs/public/images/wechat-group-qr.jpg -->
     </td>
