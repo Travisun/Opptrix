@@ -46,6 +46,7 @@ import { opptrixTokens, opptrixCssVars, type ThemePreference } from '../theme/to
 import { useTheme } from '../theme/ThemeContext'
 import { isElectron } from '../platform/detect'
 import { WORKSPACE_CHAT_MIN_WIDTH } from '../desktop/constants'
+import { desktopFrameTitlebarHeight } from '../desktop/layout'
 import StandaloneElectronTitleBar from '../desktop/StandaloneElectronTitleBar'
 import { useDebouncedEffect } from '../hooks/useDebouncedEffect'
 import { useSidebarOverlayMode } from '../hooks/useBreakpoint'
@@ -398,6 +399,8 @@ function SettingsPageView({
   const scorecardBaseline = useRef<string | null>(null)
   const newsSearchLoaded = useRef(false)
   const electronChrome = isElectron() && !isMobile
+  /** Non-mac: primary frame titlebar replaces the secondary "设置" title band. */
+  const showSecondaryTitleBar = electronChrome && desktopFrameTitlebarHeight() === 0
   const searchActive = Boolean(search.trim()) && !isMobile
   const needsConfig = section === 'general' || section === 'models'
 
@@ -774,7 +777,7 @@ function SettingsPageView({
           'opptrix-settings-content',
         )}
       >
-        {electronChrome && (
+        {showSecondaryTitleBar && (
           <StandaloneElectronTitleBar
             title="设置"
             chromeToolbarReserve={titleChromeReserve}

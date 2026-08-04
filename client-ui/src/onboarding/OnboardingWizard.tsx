@@ -7,7 +7,7 @@ import { getConfig, getProviderCatalog, saveProviderConfig } from '../api/client
 import type { PublicProviderRuntime } from '../types/provider'
 import ProviderWizard, { type ProviderWizardNavState } from '../pages/ProviderWizard'
 import { SettingsToastProvider } from '../pages/settings/SettingsToast'
-import { isElectron } from '../platform/detect'
+import { electronPlatform, isElectron } from '../platform/detect'
 import { OnboardingDataList } from './OnboardingDataList'
 import {
   isTonghuashunConfigured,
@@ -415,8 +415,9 @@ function GateMessage({
   action?: ReactNode
 }) {
   const s = useOnboardingShellStyles()
+  const electronWin = isElectron() && electronPlatform() !== 'darwin'
   return (
-    <div className={mergeClasses(s.root, 'opptrix-onboarding-shell')}>
+    <div className={mergeClasses(s.root, electronWin && s.rootFrameTitlebar, 'opptrix-onboarding-shell')}>
       <div className={s.stage}>
         <div className={mergeClasses(s.scrollViewport, 'opptrix-onboarding-scroll')}>
           <div className={mergeClasses(s.scrollInner, s.scrollInnerDisplay)}>
@@ -501,8 +502,9 @@ export function OnboardingGate({ children }: { children: ReactNode }) {
   }, [version, priorState, loadError, loadingState])
 
   if (versionLoading || loadingState) {
+    const electronWin = isElectron() && electronPlatform() !== 'darwin'
     return (
-      <div className={mergeClasses(s.root, 'opptrix-onboarding-shell')}>
+      <div className={mergeClasses(s.root, electronWin && s.rootFrameTitlebar, 'opptrix-onboarding-shell')}>
         <div className={s.centerLoading}>
           <Spinner size="medium" label="正在准备…" />
         </div>

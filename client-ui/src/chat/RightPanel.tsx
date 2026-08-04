@@ -17,6 +17,7 @@ const useStyles = makeStyles({
     pointerEvents: 'none',
     display: 'flex',
     flexDirection: 'column',
+    alignItems: 'flex-end',
     minHeight: 0,
     height: '100%',
     transitionProperty: 'width',
@@ -40,6 +41,7 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     flexDirection: 'column',
+    boxSizing: 'border-box',
   },
 })
 
@@ -74,7 +76,6 @@ function RightPanel({
 }: Props) {
   const s = useStyles()
 
-  const contentWidth = fullWidth ? undefined : width
   const shellWidth = !visible
     ? 0
     : fullWidth
@@ -93,7 +94,9 @@ function RightPanel({
     >
       <aside
         className={mergeClasses(s.panel, 'opptrix-right-panel')}
-        style={contentWidth != null ? { width: `${contentWidth}px`, minWidth: `${contentWidth}px` } : { width: '100%' }}
+        style={fullWidth
+          ? { width: '100%' }
+          : { width: `${width}px`, minWidth: `${width}px` }}
         aria-label="行情与自选"
         aria-hidden={!visible}
       >

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
+import { DESKTOP_SIDEBAR_LAYOUT_MS } from '../desktop/constants'
 
-export const OVERLAY_SIDEBAR_MS = 340
+export const OVERLAY_SIDEBAR_MS = DESKTOP_SIDEBAR_LAYOUT_MS
 
 /** Keep overlay mounted through exit transition, then unmount. */
 export function useOverlaySidebarAnimation(open: boolean) {

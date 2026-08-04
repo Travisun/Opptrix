@@ -6,9 +6,13 @@ contextBridge.exposeInMainWorld('electronAPI', {
   windowMinimize: () => ipcRenderer.send('window-minimize'),
   windowMaximize: () => ipcRenderer.send('window-maximize'),
   windowClose: () => ipcRenderer.send('window-close'),
+  appMenuList: () => ipcRenderer.invoke('app-menu-list'),
+  appMenuPopup: (payload) => ipcRenderer.invoke('app-menu-popup', payload),
   getIsFullscreen: () => ipcRenderer.invoke('window-is-fullscreen'),
   getIsMaximized: () => ipcRenderer.invoke('window-is-maximized'),
   windowIsFocused: () => ipcRenderer.invoke('window-is-focused'),
+  /** Grow the window so content width is at least `minWidth` (no-op if already wide enough). */
+  windowEnsureContentWidth: (minWidth) => ipcRenderer.invoke('window-ensure-content-width', minWidth),
   pickExportDirectory: () => ipcRenderer.invoke('pick-export-directory'),
   writeBinaryFile: (payload) => ipcRenderer.invoke('write-binary-file', payload),
   pickSaveFile: (payload) => ipcRenderer.invoke('pick-save-file', payload),

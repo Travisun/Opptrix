@@ -1,10 +1,5 @@
 import { useCallback, useEffect, useMemo, useState, memo } from 'react'
-import { makeStyles, mergeClasses } from '@fluentui/react-components'
-import {
-  BriefcaseRegular,
-  DocumentBulletListRegular,
-  StarRegular,
-} from '@fluentui/react-icons'
+import { Tab, TabList, makeStyles, mergeClasses } from '@fluentui/react-components'
 import PortfolioTab from './PortfolioTab'
 import WatchlistTab from './WatchlistTab'
 import StockDetailTab from './StockDetailTab'
@@ -17,7 +12,8 @@ import { useWatchlist } from './useWatchlist'
 import { useWatchlistGroups } from './WatchlistGroupsContext'
 import { useFollowPortfolio } from './useFollowPortfolio'
 import type { WatchlistItem } from '../types/market'
-import { opptrixCssVars } from '../theme/tokens'
+import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import { ghostInteractive } from '../theme/mixins'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
@@ -72,10 +68,74 @@ const useStyles = makeStyles({
     zIndex: 1,
   },
   titleBarElectronWin: {
-    paddingRight: '132px',
+    paddingRight: '12px',
   },
   titleBarElectronMac: {
     paddingRight: '12px',
+  },
+  tabsWrap: {
+    flex: '0 0 auto',
+    minWidth: 0,
+    maxWidth: '100%',
+    paddingLeft: '15px',
+    overflowX: 'auto',
+    overflowY: 'hidden',
+    scrollbarWidth: 'none',
+    WebkitAppRegion: 'no-drag',
+    pointerEvents: 'auto',
+    '&::-webkit-scrollbar': { display: 'none' },
+  },
+  tabs: {
+    minHeight: 'unset',
+    flexWrap: 'nowrap',
+    width: 'max-content',
+    gap: '2px',
+    alignItems: 'center',
+  },
+  /** Text pill — same ghost / accentSoft language as ChromeToolButton (not 28×28 icon). */
+  tab: {
+    ...ghostInteractive,
+    minWidth: 'unset',
+    height: '28px',
+    padding: '0 10px',
+    margin: 0,
+    borderRadius: opptrixTokens.radiusMd,
+    backgroundColor: 'transparent',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-base)',
+    fontWeight: 400,
+    lineHeight: 1,
+    // Fluent pending (::before) + selected (::after) underline indicators
+    '::before': { display: 'none' },
+    ':hover::before': { display: 'none' },
+    ':active::before': { display: 'none' },
+    '::after': {
+      display: 'none',
+      content: '""',
+      height: '0',
+      width: '0',
+      backgroundColor: 'transparent',
+      border: 'none',
+    },
+    ':enabled:hover::after': { display: 'none' },
+    ':enabled:active::after': { display: 'none' },
+    // Content slot owns selected semibold — override to match ChromeToolButton
+    '& .fui-Tab__content': { fontWeight: 400 },
+    // Suppress Fluent Tabster focus box-shadow; keep ghostInteractive focusVisibleRing
+    '&[data-fui-focus-visible]': { boxShadow: 'none' },
+    ':hover': {
+      backgroundColor: opptrixCssVars.surfaceHover,
+      color: opptrixCssVars.textPrimary,
+    },
+    '&[aria-selected="true"]': {
+      backgroundColor: opptrixCssVars.accentSoft,
+      color: opptrixCssVars.accent,
+      '& .fui-Tab__content': { fontWeight: 400 },
+      ':hover': {
+        backgroundColor: opptrixCssVars.accentSoft,
+        color: opptrixCssVars.accent,
+      },
+    },
   },
   titleBarDragLead: {
     flex: '0 0 auto',
@@ -92,13 +152,8 @@ const useStyles = makeStyles({
     display: 'flex',
     alignItems: 'center',
     gap: '2px',
-    marginLeft: 'auto',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
-  },
-  /** Visual gap between market tabs and workspace chrome tools */
-  titleBarActionsSplit: {
-    marginLeft: '4px',
   },
   content: {
     flex: 1,
@@ -302,8 +357,7 @@ function RightMarketPanel({
     onFocusStockConsumed?.()
   }, [focusStockCode, handlePortfolioSelect, onFocusStockConsumed])
 
-  /** Show detail tab when a stock is selected (not only while already on detail). */
-  const showDetailTab = selected != null
+  const showDetailTab = tab === 'detail'
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone (not tab padding). */
   const titleBarDragLeadWidth = electronChrome
     && panelFullWidth
@@ -318,8 +372,8 @@ function RightMarketPanel({
     }
   }, [tab, selected])
 
-  const selectMarketTab = useCallback((next: MarketTab) => {
-    setTab(next)
+  const handleTabSelect = useCallback((_: unknown, data: { value: unknown }) => {
+    setTab(data.value as MarketTab)
   }, [])
 
   const showWorkspaceActions = Boolean(onToggleRightPanel || onToggleChatColumn)
@@ -341,74 +395,51 @@ function RightMarketPanel({
             aria-hidden
           />
         )}
-
-        <div
-          className={mergeClasses(
-            s.dragFill,
-            electronChrome ? 'opptrix-right-panel-title-drag' : undefined,
-          )}
-          aria-hidden
-        />
-
-        <div
-          className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}
-          role="toolbar"
-          aria-label="右侧面板"
-        >
-          {showDetailTab && (
-            <ChromeToolButton
-              label="详情"
-              iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-              active={tab === 'detail'}
-              onClick={() => selectMarketTab('detail')}
-            >
-              <DocumentBulletListRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-            </ChromeToolButton>
-          )}
-          <ChromeToolButton
-            label="关注"
-            iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-            active={tab === 'watchlist'}
-            onClick={() => selectMarketTab('watchlist')}
+        <div className={mergeClasses(s.tabsWrap, 'opptrix-panel-title-no-drag')}>
+          <TabList
+            className={s.tabs}
+            size="small"
+            selectedValue={tab}
+            onTabSelect={handleTabSelect}
           >
-            <StarRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-          </ChromeToolButton>
-          <ChromeToolButton
-            label="组合"
-            iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-            active={tab === 'portfolio'}
-            onClick={() => selectMarketTab('portfolio')}
-          >
-            <BriefcaseRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-          </ChromeToolButton>
-          {showWorkspaceActions && (
-            <>
-              {onToggleChatColumn && (
-                <ChromeToolButton
-                  className={s.titleBarActionsSplit}
-                  label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
-                  iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                  onClick={onToggleChatColumn}
-                >
-                  {chatColumnVisible
-                    ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                    : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
-                </ChromeToolButton>
-              )}
-              {onToggleRightPanel && (
-                <ChromeToolButton
-                  className={!onToggleChatColumn ? s.titleBarActionsSplit : undefined}
-                  label="收起右侧面板"
-                  iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
-                  active
-                  onClick={onToggleRightPanel}
-                >
-                  <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
-                </ChromeToolButton>
-              )}
-            </>
-          )}
+            <Tab className={s.tab} value="watchlist">关注</Tab>
+            <Tab className={s.tab} value="portfolio">组合</Tab>
+            {showDetailTab ? <Tab className={s.tab} value="detail">详情</Tab> : null}
+          </TabList>
         </div>
+
+        {electronChrome && (
+          <div
+            className={mergeClasses(s.dragFill, 'opptrix-right-panel-title-drag')}
+            aria-hidden
+          />
+        )}
+
+        {showWorkspaceActions && (
+          <div className={mergeClasses(s.titleBarActions, 'opptrix-panel-title-no-drag')}>
+            {onToggleChatColumn && (
+              <ChromeToolButton
+                label={chatColumnVisible ? '最大化右侧面板' : '恢复聊天区域'}
+                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                onClick={onToggleChatColumn}
+              >
+                {chatColumnVisible
+                  ? <ArrowMaximizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+                  : <ArrowMinimizeRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />}
+              </ChromeToolButton>
+            )}
+            {onToggleRightPanel && (
+              <ChromeToolButton
+                label="收起右侧面板"
+                iconPadding={DESKTOP_SIDEBAR_TOOL_ICON_PADDING}
+                active
+                onClick={onToggleRightPanel}
+              >
+                <PanelRightContractRegular fontSize={DESKTOP_SIDEBAR_TOOL_ICON_SIZE} />
+              </ChromeToolButton>
+            )}
+          </div>
+        )}
       </div>
 
       <div className={s.content}>

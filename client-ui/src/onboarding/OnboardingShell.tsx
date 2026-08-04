@@ -1,7 +1,7 @@
 import { type ReactNode } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import OpptrixButton from '../components/opptrix/OpptrixButton'
-import { DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
+import { DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT } from '../desktop/constants'
 import { electronPlatform, isElectron } from '../platform/detect'
 import { opptrixCssVars } from '../theme/tokens'
 import {
@@ -18,6 +18,10 @@ export const useOnboardingShellStyles = makeStyles({
     flexDirection: 'column',
     backgroundColor: opptrixCssVars.canvas,
     overflow: 'hidden',
+  },
+  rootFrameTitlebar: {
+    paddingTop: `${DESKTOP_FRAME_TITLEBAR_HEIGHT}px`,
+    boxSizing: 'border-box',
   },
   electronTitleBar: {
     position: 'relative',
@@ -36,9 +40,8 @@ export const useOnboardingShellStyles = makeStyles({
     paddingRight: '12px',
   },
   electronTitleBarWin: {
-    justifyContent: 'flex-start',
-    paddingLeft: '12px',
-    paddingRight: '132px',
+    justifyContent: 'flex-end',
+    paddingRight: '12px',
   },
   titleBarDragOverlay: {
     position: 'absolute',
@@ -462,7 +465,11 @@ export function OnboardingShell({
 
   return (
     <div
-      className={mergeClasses(s.root, 'opptrix-onboarding-shell')}
+      className={mergeClasses(
+        s.root,
+        electronWin && s.rootFrameTitlebar,
+        'opptrix-onboarding-shell',
+      )}
       role="dialog"
       aria-modal="true"
       aria-label="Opptrix 启动引导"

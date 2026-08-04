@@ -451,6 +451,11 @@ html.opptrix-electron .opptrix-right-panel {
   background: var(--opptrix-canvas) !important;
 }
 
+/* Non-mac window-frame titlebar — same glass recipe as left sidebar */
+html.opptrix-electron .opptrix-window-frame-titlebar {
+  border-bottom: 1px solid var(--opptrix-separator-strong);
+}
+
 /* ── Electron shell glass ──
  * 有原生毛玻璃（mac vibrancy / win acrylic）时侧栏透明穿透窗口层；
  * 否则（Linux 等）保留 CSS backdrop-filter 毛玻璃。

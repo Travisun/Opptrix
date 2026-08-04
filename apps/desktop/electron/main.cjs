@@ -6,7 +6,7 @@ const { pathToFileURL } = require('node:url')
 const { spawn } = require('node:child_process')
 const { APP_NAME, APP_TITLE, VERSION } = require('./app-meta.cjs')
 const { applyAppIcon, resolveAppIconPath } = require('./icon.cjs')
-const { configureAboutPanel, installApplicationMenu } = require('./menu.cjs')
+const { configureAboutPanel, installApplicationMenu, listApplicationMenuTopItems, popupApplicationMenuAt } = require('./menu.cjs')
 const { hardenWebContents, mainWindowWebPreferences } = require('./security.cjs')
 const { initUpdater, registerUpdaterIpc, resumePendingUpdateOnStartup, isUpdateReady, installPendingUpdate } = require('./updater.cjs')
 const {
@@ -1102,6 +1102,15 @@ function registerWindowIpc() {
   ipcMain.on('window-close', (event) => {
     BrowserWindow.fromWebContents(event.sender)?.close()
   })
+  ipcMain.handle('app-menu-list', () => listApplicationMenuTopItems())
+  ipcMain.handle('app-menu-popup', async (event, payload) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    const index = Number(payload?.index)
+    const x = Number(payload?.x)
+    const y = Number(payload?.y)
+    if (!Number.isInteger(index) || index < 0) return false
+    return popupApplicationMenuAt(index, { window: win, x, y })
+  })
   ipcMain.handle('window-is-fullscreen', (event) => {
     return BrowserWindow.fromWebContents(event.sender)?.isFullScreen() ?? false
   })
@@ -1112,6 +1121,56 @@ function registerWindowIpc() {
     const win = BrowserWindow.fromWebContents(event.sender)
     if (!win || win.isDestroyed()) return false
     return win.isFocused()
+  })
+
+  /**
+   * Ensure the window's content width is at least `minWidth`.
+   * Used when opening the right panel on a narrow window.
+   * Unmaximizes if needed; clamps to the current display work area.
+   */
+  ipcMain.handle('window-ensure-content-width', async (event, minWidth) => {
+    const win = BrowserWindow.fromWebContents(event.sender)
+    if (!win || win.isDestroyed()) return { ok: false, width: 0 }
+    const target = Math.round(Number(minWidth))
+    if (!Number.isFinite(target) || target <= 0) return { ok: false, width: 0 }
+
+    if (win.isFullScreen()) {
+      const [cw] = win.getContentSize()
+      return { ok: false, width: cw, reason: 'fullscreen' }
+    }
+
+    if (win.isMaximized()) {
+      win.unmaximize()
+    }
+
+    const [contentW, contentH] = win.getContentSize()
+    if (contentW >= target) return { ok: true, width: contentW }
+
+    const { screen } = require('electron')
+    const bounds = win.getBounds()
+    const display = screen.getDisplayMatching(bounds)
+    const work = display.workArea
+    const frameW = Math.max(0, bounds.width - contentW)
+    const maxOuterW = work.width
+    const maxContentW = Math.max(contentW, maxOuterW - frameW)
+    const nextContentW = Math.min(target, maxContentW)
+    const nextOuterW = nextContentW + frameW
+
+    let nextX = bounds.x
+    if (nextX + nextOuterW > work.x + work.width) {
+      nextX = work.x + work.width - nextOuterW
+    }
+    if (nextX < work.x) nextX = work.x
+
+    win.setBounds({
+      x: Math.round(nextX),
+      y: bounds.y,
+      width: Math.round(nextOuterW),
+      height: bounds.height,
+    })
+
+    const [finalW] = win.getContentSize()
+    return { ok: finalW >= Math.min(target, maxContentW), width: finalW }
   })
 
   ipcMain.handle('pick-export-directory', async (event) => {

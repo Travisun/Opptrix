@@ -1,13 +1,13 @@
 import { createPortal } from 'react-dom'
 import { makeStyles } from '@fluentui/react-components'
 import { DESKTOP_Z_OVERLAY_SIDEBAR } from './constants'
+import { desktopFrameTitlebarHeight } from './layout'
 
 const EDGE_WIDTH_PX = 8
 
 const useStyles = makeStyles({
   edge: {
     position: 'fixed',
-    top: 0,
     left: 0,
     bottom: 0,
     width: `${EDGE_WIDTH_PX}px`,
@@ -35,11 +35,10 @@ export default function OverlaySidebarEdgeTrigger({
   return createPortal(
     <div
       className={s.edge}
+      style={{ top: `${desktopFrameTitlebarHeight()}px` }}
       onMouseEnter={onReveal}
       aria-hidden
     />,
     document.body,
   )
 }
-
-export { EDGE_WIDTH_PX as OVERLAY_SIDEBAR_EDGE_WIDTH_PX }

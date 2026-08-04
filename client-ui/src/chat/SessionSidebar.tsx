@@ -49,7 +49,7 @@ const useStyles = makeStyles({
   sidebarPanel: {
     height: '100%',
     opacity: 0,
-    transform: 'translateX(-12px)',
+    transform: 'translateX(-8px)',
     transitionProperty: 'opacity, transform',
     transitionDuration: `${DESKTOP_SIDEBAR_LAYOUT_MS}ms`,
     transitionTimingFunction: DESKTOP_SIDEBAR_LAYOUT_EASE,

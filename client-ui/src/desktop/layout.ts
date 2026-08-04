@@ -2,6 +2,7 @@ import { electronPlatform } from '../platform/detect'
 import {
   DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_CHROME_TOP_OFFSET_WIN,
+  DESKTOP_FRAME_TITLEBAR_HEIGHT,
   DESKTOP_SETTINGS_SIDEBAR_WIDTH,
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
   DESKTOP_TITLE_GAP,
@@ -11,12 +12,17 @@ import {
   DESKTOP_TOOLBAR_TOOL_COUNT,
   DESKTOP_TRAFFIC_LIGHT_WIDTH,
   DESKTOP_TRAFFIC_LIGHT_WIDTH_FULLSCREEN,
-  DESKTOP_WIN_WINDOW_CONTROLS_RESERVE,
-  DESKTOP_Z_TITLE_INTERACTIVE,
   SIDEBAR_DEFAULT_WIDTH,
 } from './constants'
 
-/** Platform chrome inset — Windows sits higher to share a line with window buttons */
+/** Dedicated window-frame titlebar height (non-mac Electron only). */
+export function desktopFrameTitlebarHeight(): number {
+  const platform = electronPlatform()
+  if (platform === 'darwin' || platform == null) return 0
+  return DESKTOP_FRAME_TITLEBAR_HEIGHT
+}
+
+/** Platform chrome inset inside the content title band */
 export function desktopChromeTopOffset(): number {
   return electronPlatform() === 'win32' ? DESKTOP_CHROME_TOP_OFFSET_WIN : DESKTOP_CHROME_TOP_OFFSET
 }
@@ -25,10 +31,9 @@ export function desktopChromeBandHeight(): number {
   return DESKTOP_TITLEBAR_HEIGHT - desktopChromeTopOffset()
 }
 
-/** Right inset for chat/panel toggles — flush to Windows min/max/close cluster */
+/** Right inset for chat/panel toggles — window controls live in the frame titlebar on non-mac */
 export function desktopTitleBarActionsRight(): number {
-  if (electronPlatform() === 'darwin') return 12
-  return DESKTOP_WIN_WINDOW_CONTROLS_RESERVE
+  return 12
 }
 
 export function desktopToolbarLeft(fullscreen = false): number {

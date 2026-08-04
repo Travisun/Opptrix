@@ -31,7 +31,7 @@
 
 ```
 ┌─────────────┬──────────────────────────────┬──────────────────┐
-│  Session    │  Chat + 工具过程 + 输入区     │  关注/组合/详情   │
+│  Session    │  Chat + 工具过程 + 输入区     │  关注/发现/个股   │
 │  Sidebar    │  (flex 1)                    │  RightMarketPanel │
 │  可调宽     │                              │                   │
 └─────────────┴──────────────────────────────┴──────────────────┘
@@ -40,9 +40,10 @@
 - **默认宽度** 200px；拖拽范围约 196–360px，持久化至 `localStorage`（`opptrix-sidebar-width`）
 - **内联模式**：侧栏右缘可拖拽调宽（复用 `WorkspaceSplitDivider` 交互）
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
-- **右侧顶栏**：关注 / 组合 / 详情为靠右图标按钮（有选中标的时显示「详情」）；Windows 顶栏右侧预留系统窗控区
+- **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
+- **窗口标题栏**：macOS 沿用 `hiddenInset` 系统红绿灯；Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
 
-代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`。
+代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`。
 
 ### 1.2 新闻中心
 
