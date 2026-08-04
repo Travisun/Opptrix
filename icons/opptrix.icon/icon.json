@@ -1,37 +1,47 @@
 {
-  "color-space-for-untagged-svg-colors" : "display-p3",
   "fill" : {
-    "linear-gradient" : [
-      "extended-gray:1.00000,1.00000",
-      "extended-gray:0.75000,1.00000"
-    ]
+    "automatic-gradient" : "display-p3:0.91943,0.25000,0.14465,1.00000",
+    "orientation" : {
+      "start" : {
+        "x" : 0.5,
+        "y" : 0
+      },
+      "stop" : {
+        "x" : 0.5,
+        "y" : 0.7
+      }
+    }
   },
   "groups" : [
     {
       "layers" : [
         {
-          "image-name" : "5 - top-point.svg",
-          "name" : "5 - top-point"
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "6-Opptrix-new-logo 2.svg",
+          "name" : "6-Opptrix-new-logo 2"
         },
         {
-          "image-name" : "4 - top-point-bg2.svg",
-          "name" : "4 - top-point-bg2"
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "4-Opptrix-new-logo 2.svg",
+          "name" : "4-Opptrix-new-logo 2"
         },
         {
-          "image-name" : "3 - top-point-bg.svg",
-          "name" : "3 - top-point-bg"
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "1-Opptrix-new-logo 2.svg",
+          "name" : "1-Opptrix-new-logo 2"
         },
         {
-          "image-name" : "2 - Klines.svg",
-          "name" : "2 - Klines"
-        },
-        {
-          "blend-mode" : "plus-lighter",
-          "glass" : true,
-          "hidden" : false,
-          "image-name" : "1 - Klines-fill.svg",
-          "name" : "1 - Klines-fill",
-          "opacity" : 0.8
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "7-Opptrix-new-logo.svg",
+          "name" : "7-Opptrix-new-logo"
         }
       ],
       "shadow" : {
@@ -40,7 +50,75 @@
       },
       "translucency" : {
         "enabled" : true,
-        "value" : 0.3
+        "value" : 0.5
+      }
+    },
+    {
+      "blend-mode" : "normal",
+      "layers" : [
+        {
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "2-Opptrix-new-logo 2.svg",
+          "name" : "2-Opptrix-new-logo 2"
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "3-Opptrix-new-logo 2.svg",
+          "name" : "3-Opptrix-new-logo 2"
+        },
+        {
+          "fill" : {
+            "solid" : "extended-gray:1.00000,1.00000"
+          },
+          "image-name" : "5-Opptrix-new-logo 2.svg",
+          "name" : "5-Opptrix-new-logo 2"
+        }
+      ],
+      "lighting" : "individual",
+      "opacity" : 1,
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
+      }
+    },
+    {
+      "blur-material" : null,
+      "hidden" : true,
+      "layers" : [
+        {
+          "fill" : "automatic",
+          "glass" : true,
+          "hidden" : false,
+          "image-name" : "0-Opptrix-new-logo 2.svg",
+          "name" : "0-Opptrix-new-logo 2"
+        }
+      ],
+      "lighting" : "individual",
+      "opacity-specializations" : [
+        {
+          "value" : 0.3
+        },
+        {
+          "appearance" : "dark",
+          "value" : 0.3
+        }
+      ],
+      "shadow" : {
+        "kind" : "neutral",
+        "opacity" : 0.5
+      },
+      "specular" : true,
+      "translucency" : {
+        "enabled" : true,
+        "value" : 0.5
       }
     }
   ],
