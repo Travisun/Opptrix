@@ -5,6 +5,8 @@ import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(__dirname, '..')
+const brandIconsDir = path.join(repoRoot, 'icons')
 const clientPkg = JSON.parse(
   readFileSync(path.join(__dirname, 'package.json'), 'utf8'),
 ) as { version?: string }
@@ -15,6 +17,12 @@ const WEB_PORT = Number(process.env.WEB_PORT ?? 5173)
 export default defineConfig({
   plugins: [react()],
   base: '/',
+  resolve: {
+    alias: {
+      /** Repo brand PNGs (`icons/logo@*.png`) — single source for UI chrome marks. */
+      '@opptrix-icons': brandIconsDir,
+    },
+  },
   define: {
     __OPPTRIX_CLIENT_VERSION__: JSON.stringify(clientPkg.version ?? ''),
   },
@@ -38,6 +46,9 @@ export default defineConfig({
     host: '127.0.0.1',
     port: WEB_PORT,
     strictPort: true,
+    fs: {
+      allow: [repoRoot],
+    },
     proxy: {
       '/api': {
         target: API_TARGET,

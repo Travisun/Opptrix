@@ -188,6 +188,11 @@ stageIconComposerPackage()
 createMacIcns()
 copyFile(path.join(OUT_DIR, 'logo-app.png'), path.join(DESKTOP_ROOT, 'electron', 'about-logo.png'))
 copyFile(path.join(SOURCE_DIR, 'logo@128.png'), path.join(DESKTOP_ROOT, 'electron', 'splash-logo.png'))
+// Win/Linux frame titlebar + any static /app-icon.png consumers — keep in sync with logo@64.
+copyFile(
+  path.join(SOURCE_DIR, 'logo@64.png'),
+  path.join(REPO_ROOT, 'client-ui', 'public', 'app-icon.png'),
+)
 stageLinuxIcons()
 stageTrayIcons()
 await createWindowsIco()
@@ -195,4 +200,5 @@ console.log(`Desktop icons staged at ${OUT_DIR}`)
 console.log('  staged: icon.icon (mac App / Icon Composer)')
 console.log('  staged: icon.icns (DMG + Dock fallback)')
 console.log('  staged: tray/ (mac Template + Win/Linux color)')
+console.log('  synced: client-ui/public/app-icon.png ← logo@64.png')
 

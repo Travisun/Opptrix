@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="icons/opptrix-full-logo.webp" alt="Opptrix" height="98" />
+  <img src="icons/opptrix-full-logo.png" alt="Opptrix" height="98" />
 </p>
 
 # Opptrix — 全球多市场投研工作台

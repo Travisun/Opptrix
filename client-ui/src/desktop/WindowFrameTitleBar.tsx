@@ -7,6 +7,8 @@ import {
 } from './constants'
 import FrameAppMenu from './FrameAppMenu'
 import WindowControls from './WindowControls'
+/** Canonical brand mark (`icons/logo@64.png`) — CSS 16px @4x, lossless PNG. */
+import brandMarkUrl from '@opptrix-icons/logo@64.png?url'
 
 /** Above OnboardingShell (2000) so min/max/close stay clickable during setup. */
 const FRAME_TITLEBAR_Z = Math.max(DESKTOP_Z_CHROME_TOOLS + 20, 2100)
@@ -73,7 +75,7 @@ export default function WindowFrameTitleBar() {
       aria-label="窗口标题栏"
     >
       <div className={s.brand} aria-hidden>
-        <img className={s.brandIcon} src={`${import.meta.env.BASE_URL}app-icon.png`} alt="" draggable={false} />
+        <img className={s.brandIcon} src={brandMarkUrl} alt="" width={16} height={16} draggable={false} />
       </div>
       <FrameAppMenu />
       <div className={s.dragFill} aria-hidden />
