@@ -218,6 +218,14 @@ function sidecarEnv(root) {
   if (!isDev) {
     env.ELECTRON_RUN_AS_NODE = '1'
     env.OPPTRIX_RUNTIME_STAGE = root
+    // Sidecar 无 Electron resourcesPath 时仍能定位安装包内置 RAG 模型（与多模态同 llms）
+    env.OPPTRIX_E5_BUNDLED_DIR = path.join(process.resourcesPath, 'llms', 'multilingual-e5-small')
+    env.OPPTRIX_RAPIDOCR_BUNDLED_DIR = path.join(
+      process.resourcesPath,
+      'llms',
+      'rapidocr-ppocrv4-mobile',
+    )
+    env.OPPTRIX_RAG_ENGINES_BUNDLED_DIR = path.join(process.resourcesPath, 'engines')
     const { RUNTIME_DEPS_DIR } = require('./runtime-deps.cjs')
     const fs = require('node:fs')
     // afterPack restores deps → node_modules so ESM bare imports resolve.
@@ -232,6 +240,14 @@ function sidecarEnv(root) {
     if (fs.existsSync(browsersPath)) {
       env.PLAYWRIGHT_BROWSERS_PATH = browsersPath
     }
+  } else {
+    // 开发态 sidecar cwd 可能非 monorepo 根；与生产对称注入 bundled 路径
+    env.OPPTRIX_E5_BUNDLED_DIR = path.join(root, 'apps/desktop/resources/llms', 'multilingual-e5-small')
+    env.OPPTRIX_RAPIDOCR_BUNDLED_DIR = path.join(
+      root,
+      'apps/desktop/resources/llms',
+      'rapidocr-ppocrv4-mobile',
+    )
   }
 
   return env

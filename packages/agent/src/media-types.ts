@@ -1,7 +1,7 @@
-/** 媒体种类；text 不占附件配额 */
-export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
+/** 媒体种类；text 不占附件配额；document = 文本/Office 研报入库 */
+export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio'
 
-/** PDF 文本整理状态（扫描件 OCR 本阶段不做） */
+/** 附件文本整理状态（含 OCR） */
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
 
 export interface AttachmentExtractMeta {
@@ -24,7 +24,7 @@ export interface ChatAttachmentMeta {
   width?: number
   height?: number
   duration?: number
-  /** PDF 异步文本整理；非 PDF 通常无此字段 */
+  /** 异步文本整理（PDF / 文档 / 图片 OCR） */
   extract?: AttachmentExtractMeta
 }
 
@@ -54,6 +54,15 @@ const EXT_MIME: Record<string, string> = {
   '.bmp': 'image/bmp',
   '.svg': 'image/svg+xml',
   '.pdf': 'application/pdf',
+  '.txt': 'text/plain',
+  '.md': 'text/markdown',
+  '.markdown': 'text/markdown',
+  '.csv': 'text/csv',
+  '.json': 'application/json',
+  '.docx': 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  '.doc': 'application/msword',
+  '.pptx': 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  '.ppt': 'application/vnd.ms-powerpoint',
   '.mp4': 'video/mp4',
   '.webm': 'video/webm',
   '.mov': 'video/quicktime',
@@ -65,18 +74,39 @@ const EXT_MIME: Record<string, string> = {
   '.aac': 'audio/aac',
 }
 
+const DOCUMENT_MIME = new Set([
+  'text/plain',
+  'text/markdown',
+  'text/x-markdown',
+  'text/csv',
+  'application/json',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  'application/msword',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+  'application/vnd.ms-powerpoint',
+])
+
+const DOCUMENT_EXT = new Set([
+  '.txt', '.md', '.markdown', '.csv', '.json', '.docx', '.doc', '.pptx', '.ppt',
+])
+
 export function inferMimeFromFilename(filename: string): string | null {
   const dot = filename.lastIndexOf('.')
   if (dot < 0) return null
   return EXT_MIME[filename.slice(dot).toLowerCase()] ?? null
 }
 
-function kindFromNormalizedMime(normalized: string): MediaKind | null {
+function kindFromNormalizedMime(normalized: string, filename?: string): MediaKind | null {
   if (!normalized) return null
   if (normalized.startsWith(IMAGE_PREFIX)) return 'image'
   if (normalized === 'application/pdf') return 'pdf'
   if (normalized.startsWith(VIDEO_PREFIX)) return 'video'
   if (normalized.startsWith(AUDIO_PREFIX)) return 'audio'
+  if (DOCUMENT_MIME.has(normalized)) return 'document'
+  if (filename) {
+    const dot = filename.lastIndexOf('.')
+    if (dot >= 0 && DOCUMENT_EXT.has(filename.slice(dot).toLowerCase())) return 'document'
+  }
   return null
 }
 
@@ -92,7 +122,13 @@ export function resolveMediaMime(mime: string, filename?: string): string {
 }
 
 export function mimeToMediaKind(mime: string, filename?: string): MediaKind | null {
-  return kindFromNormalizedMime(resolveMediaMime(mime, filename))
+  const resolved = resolveMediaMime(mime, filename)
+  return kindFromNormalizedMime(resolved, filename)
+}
+
+/** 本地研报库入库路径（不依赖模型多模态） */
+export function isLibraryIngestKind(kind: MediaKind): boolean {
+  return kind === 'pdf' || kind === 'document' || kind === 'image'
 }
 
 export function formatBytesShort(bytes: number): string {
@@ -105,6 +141,7 @@ export function mediaKindLabel(kind: MediaKind): string {
   switch (kind) {
     case 'image': return '图片'
     case 'pdf': return 'PDF'
+    case 'document': return '文档'
     case 'video': return '视频'
     case 'audio': return '音频'
     default: return '文件'

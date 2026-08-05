@@ -141,6 +141,7 @@ export {
   resolveMediaMime,
   formatBytesShort,
   mediaKindLabel,
+  isLibraryIngestKind,
 } from './media-types.js'
 export { resolveAttachmentLimits } from './attachment-limits.js'
 export {
@@ -161,6 +162,9 @@ export {
   readExtractChunks,
   readExtractMarkdown,
   isPdfTextExtractReady,
+  isLibraryExtractReady,
+  registerDocumentIngestHook,
+  registerPdfIngestHook,
 } from './chat-attachments.js'
 export {
   extractPdfToMarkdown,
@@ -176,6 +180,7 @@ export type {
 export {
   buildUserContentParts,
   attachmentToContentPart,
+  attachmentToContentParts,
   chatMessageContentToText,
   parseAssistantResponseContent,
 } from './content-parts.js'

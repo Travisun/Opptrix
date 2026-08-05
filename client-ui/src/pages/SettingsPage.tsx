@@ -19,7 +19,7 @@ import AgentSkillsSettingsSection from './settings/AgentSkillsSettingsSection'
 import NewsFeedSettingsSection from './settings/NewsFeedSettingsSection'
 import TranslationSettingsSection from './settings/TranslationSettingsSection'
 import MultimodalSettingsSection from './settings/MultimodalSettingsSection'
-import SemanticSearchSettingsSection from './settings/SemanticSearchSettingsSection'
+import DocLibrarySettingsSection from './settings/DocLibrarySettingsSection'
 import SandboxSettingsSection from './settings/SandboxSettingsSection'
 import ScheduleSettingsSection from './settings/ScheduleSettingsSection'
 import PythonEnvironmentSettingsSection from './settings/PythonEnvironmentSettingsSection'
@@ -724,13 +724,11 @@ function SettingsPageView({
       case 'translation':
         return <TranslationSettingsSection />
 
+      case 'doc_library':
+        return <DocLibrarySettingsSection />
+
       case 'multimodal':
-        return (
-          <>
-            <SemanticSearchSettingsSection />
-            <MultimodalSettingsSection />
-          </>
-        )
+        return <MultimodalSettingsSection />
 
       case 'about':
         return <AboutSettingsSection contentFlush={contentFlush} />

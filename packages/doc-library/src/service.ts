@@ -2,9 +2,12 @@ import type Database from 'better-sqlite3'
 import type {
   ChunkReadResult,
   DocumentKind,
+  DocSearchOpts,
   FtsSearchHit,
   IngestFromAttachmentInput,
   IngestFromAttachmentResult,
+  IngestFromTextInput,
+  IngestFromTextResult,
   PageRangeReadResult,
   ParseRunner,
   ParseStatus,
@@ -16,6 +19,7 @@ import { newDocumentId, sha256Buffer } from './paths.js'
 import { EmbeddingService, getEmbeddingService } from './embedding.js'
 import { getVectorStore, type VectorStore } from './vector-store.js'
 import { searchHybridChunks } from './hybrid-search.js'
+import { extractTextL0, TEXT_L0_ENGINE_VERSION } from './engines/text-l0.js'
 
 export type LegacyExtractWriter = (
   sessionId: string,
@@ -133,6 +137,112 @@ export class DocLibraryService {
     }
   }
 
+  /**
+   * 纯文本入库（资讯等）：同步 text-l0 切块，再异步 embed。
+   * 以 external_id + sourceType 去重；正文变更则覆盖并重建 chunk。
+   */
+  ingestFromText(input: IngestFromTextInput): IngestFromTextResult | null {
+    const text = String(input.text ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
+    if (text.length < MIN_USEFUL_CHARS) return null
+
+    const externalId = String(input.externalId ?? '').trim()
+    if (!externalId) return null
+
+    const name = String(input.name ?? '').trim() || externalId
+    const mime = input.mime?.trim() || 'text/plain'
+    const data = Buffer.from(text, 'utf8')
+    const contentSha256 = sha256Buffer(data)
+    const parsed = extractTextL0(data)
+    if (parsed.charCount < MIN_USEFUL_CHARS || !parsed.chunks.length) return null
+
+    const byExternal = this.repo.findDocumentByExternalId(input.sourceType, externalId)
+    const bySha = this.repo.findDocumentBySha(contentSha256)
+
+    let documentId: string
+    let reused = false
+
+    if (byExternal) {
+      documentId = byExternal.id
+      reused = byExternal.content_sha256 === contentSha256
+      if (!reused) {
+        const blobPath = this.repo.writeBlob(contentSha256, data)
+        this.repo.updateDocumentContent(documentId, {
+          content_sha256: contentSha256,
+          name,
+          mime,
+          kind: 'text',
+          byte_size: data.length,
+          blob_path: blobPath,
+          source_type: input.sourceType,
+          external_id: externalId,
+        })
+      } else if (byExternal.name !== name) {
+        this.repo.updateDocumentContent(documentId, {
+          content_sha256: contentSha256,
+          name,
+          mime,
+          kind: 'text',
+          byte_size: data.length,
+          blob_path: byExternal.blob_path,
+          source_type: input.sourceType,
+          external_id: externalId,
+        })
+      }
+    } else if (bySha) {
+      documentId = bySha.id
+      reused = true
+      this.repo.updateDocumentContent(documentId, {
+        content_sha256: contentSha256,
+        name,
+        mime,
+        kind: 'text',
+        byte_size: data.length,
+        blob_path: bySha.blob_path,
+        source_type: input.sourceType,
+        external_id: externalId,
+      })
+    } else {
+      documentId = newDocumentId()
+      const blobPath = this.repo.writeBlob(contentSha256, data)
+      this.repo.insertDocument({
+        id: documentId,
+        content_sha256: contentSha256,
+        name,
+        mime,
+        kind: 'text',
+        byte_size: data.length,
+        blob_path: blobPath,
+        source_type: input.sourceType,
+        external_id: externalId,
+      })
+    }
+
+    const artifact = this.repo.getParseArtifact(documentId)
+    if (!(reused && artifact?.status === 'ready')) {
+      this.repo.markParseReady(documentId, {
+        pageCount: parsed.pageCount,
+        charCount: parsed.charCount,
+        markdown: parsed.markdown,
+        chunks: parsed.chunks,
+        engineId: 'text-l0',
+        engineVersion: TEXT_L0_ENGINE_VERSION,
+      })
+    }
+
+    void this.scheduleEmbed(documentId)
+
+    const ready = this.repo.getParseArtifact(documentId)
+    return {
+      documentId,
+      contentSha256,
+      reused,
+      parseStatus: ready?.status ?? 'ready',
+      pageCount: ready?.page_count ?? parsed.pageCount,
+      charCount: ready?.char_count ?? parsed.charCount,
+      readyAt: ready?.ready_at ?? undefined,
+    }
+  }
+
   private scheduleParse(
     contentSha256: string,
     documentId: string,
@@ -182,6 +292,9 @@ export class DocLibraryService {
       const result = await runner.run(blob, {
         deepParse: input.deepParse,
         forceEngine: input.forceEngine,
+        kind: input.kind,
+        mime: input.mime,
+        filename: input.name,
       })
       if (result.error && result.charCount < MIN_USEFUL_CHARS) {
         const err = result.error ?? '未能从该研报提取到可复制文本，请换电子版后再试'
@@ -190,7 +303,7 @@ export class DocLibraryService {
         return
       }
       if (result.charCount < MIN_USEFUL_CHARS) {
-        const err = '未能从该研报提取到可复制文本，可稍后尝试深度整理，或换电子版后再试'
+        const err = '未能从该研报提取到可复制文本，请换可读电子版后再试'
         this.repo.markParseFailed(documentId, err, { pageCount: result.pageCount, charCount: result.charCount })
         this.lifecycleHooks?.onFailed?.(input, err, { pageCount: result.pageCount, charCount: result.charCount })
         return
@@ -337,10 +450,12 @@ export class DocLibraryService {
   searchFts(
     sessionId: string,
     query: string,
-    opts: { attachmentId?: string; documentId?: string; limit?: number } = {},
+    opts: DocSearchOpts = {},
   ): FtsSearchHit[] {
     return searchFtsChunks(this.db, query, {
       sessionId,
+      scope: opts.scope,
+      sourceType: opts.sourceType,
       attachmentId: opts.attachmentId,
       documentId: opts.documentId,
       limit: opts.limit,
@@ -353,10 +468,12 @@ export class DocLibraryService {
   async searchHybrid(
     sessionId: string,
     query: string,
-    opts: { attachmentId?: string; documentId?: string; limit?: number } = {},
+    opts: DocSearchOpts = {},
   ): Promise<FtsSearchHit[]> {
     return searchHybridChunks(this.db, query, {
       sessionId,
+      scope: opts.scope,
+      sourceType: opts.sourceType,
       attachmentId: opts.attachmentId,
       documentId: opts.documentId,
       limit: opts.limit,
@@ -377,6 +494,19 @@ export class DocLibraryService {
   ): ChunkReadResult | PageRangeReadResult | { error: string } | null {
     const documentId = this.repo.resolveDocumentByAttachment(sessionId, attachmentId)
     if (!documentId) return null
+    return this.getChunkRangeByDocumentId(documentId, opts)
+  }
+
+  getChunkRangeByDocumentId(
+    documentId: string,
+    opts: {
+      chunkId?: string
+      pageFrom?: number
+      pageTo?: number
+      maxChars?: number
+    },
+  ): ChunkReadResult | PageRangeReadResult | { error: string } | null {
+    if (!this.repo.getDocument(documentId)) return null
 
     const maxChars = opts.maxChars ?? 6000
 

@@ -11,6 +11,7 @@ import type {
 } from './media-types.js'
 import {
   formatBytesShort,
+  isLibraryIngestKind,
   mediaKindLabel,
   mimeToMediaKind,
   resolveMediaMime,
@@ -21,7 +22,7 @@ const META_FILENAME = 'meta.json'
 const EXTRACT_MD = 'extract.md'
 const EXTRACT_CHUNKS = 'extract-chunks.json'
 const DEFAULT_PDF_MAX_BYTES = 20 * 1024 * 1024
-const EXTRACT_WAIT_MS = 25_000
+const EXTRACT_WAIT_MS = 90_000
 const EXTRACT_POLL_MS = 400
 const MIN_USEFUL_CHARS = 24
 
@@ -132,18 +133,26 @@ export interface LegacyExtractPayload {
   chunks: Array<{ id: string; page: number; offset: number; text: string }>
 }
 
-export type PdfIngestHook = (
+export type DocumentIngestHook = (
   sessionId: string,
   attachmentId: string,
   meta: ChatAttachmentMeta,
   data: Buffer,
 ) => void
 
-let pdfIngestHook: PdfIngestHook | null = null
+/** @deprecated 使用 DocumentIngestHook */
+export type PdfIngestHook = DocumentIngestHook
+
+let documentIngestHook: DocumentIngestHook | null = null
 
 /** doc-library-bridge 注册；避免 chat-attachments ↔ bridge 循环依赖 */
-export function registerPdfIngestHook(hook: PdfIngestHook): void {
-  pdfIngestHook = hook
+export function registerDocumentIngestHook(hook: DocumentIngestHook): void {
+  documentIngestHook = hook
+}
+
+/** @deprecated 使用 registerDocumentIngestHook */
+export function registerPdfIngestHook(hook: DocumentIngestHook): void {
+  registerDocumentIngestHook(hook)
 }
 
 /** 双写 legacy extract.md + extract-chunks.json */
@@ -181,7 +190,7 @@ export function resolveAttachmentFilePath(sessionId: string, attachmentId: strin
 }
 
 /**
- * PDF 走本地文本整理，不要求模型原生支持 pdf；
+ * PDF / 文档 / 图片走本地研报库整理，不要求模型原生支持；
  * 其他媒体仍按 caps.input 校验。
  */
 export function validateAttachmentAgainstCapabilities(
@@ -195,8 +204,8 @@ export function validateAttachmentAgainstCapabilities(
     return { ok: false, error: '不支持此文件类型' }
   }
 
-  const pdfTextPath = kind === 'pdf'
-  if (!pdfTextPath) {
+  const libraryPath = isLibraryIngestKind(kind)
+  if (!libraryPath) {
     if (!caps.attachment && !caps.input.includes(kind)) {
       return {
         ok: false,
@@ -212,18 +221,18 @@ export function validateAttachmentAgainstCapabilities(
   }
 
   const maxBytes = caps.limits.maxBytesByKind[kind]
-    ?? (pdfTextPath ? DEFAULT_PDF_MAX_BYTES : undefined)
+    ?? (libraryPath ? DEFAULT_PDF_MAX_BYTES : undefined)
   if (maxBytes && size > maxBytes) {
     return {
       ok: false,
       error: `${mediaKindLabel(kind)}过大（上限 ${formatBytesShort(maxBytes)}）`,
     }
   }
-  const maxCount = Math.max(caps.limits.maxCount || 0, pdfTextPath ? 5 : 0)
+  const maxCount = Math.max(caps.limits.maxCount || 0, libraryPath ? 5 : 0)
   if (existingCount >= maxCount) {
     return { ok: false, error: `附件数量已达上限（${maxCount} 个）` }
   }
-  const maxTotal = Math.max(caps.limits.maxTotalBytes || 0, pdfTextPath ? 80 * 1024 * 1024 : 0)
+  const maxTotal = Math.max(caps.limits.maxTotalBytes || 0, libraryPath ? 80 * 1024 * 1024 : 0)
   if (existingTotalBytes + size > maxTotal) {
     return {
       ok: false,
@@ -242,6 +251,7 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
   const dir = attachmentDir(input.sessionId, attachmentId)
   fs.mkdirSync(dir, { recursive: true })
 
+  const libraryIngest = isLibraryIngestKind(kind)
   const meta: ChatAttachmentMeta = {
     id: attachmentId,
     kind,
@@ -252,18 +262,23 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     ...(input.width ? { width: input.width } : {}),
     ...(input.height ? { height: input.height } : {}),
     ...(input.duration ? { duration: input.duration } : {}),
-    ...(kind === 'pdf' ? { extract: { status: 'pending' as const } } : {}),
+    ...(libraryIngest ? { extract: { status: 'pending' as const } } : {}),
   }
 
   const filePath = dataPath(input.sessionId, attachmentId, input.name)
   fs.writeFileSync(filePath, input.data)
   writeMeta(input.sessionId, meta)
 
-  if (kind === 'pdf') {
-    if (pdfIngestHook) {
-      pdfIngestHook(input.sessionId, attachmentId, meta, input.data)
-    } else {
+  if (libraryIngest) {
+    if (documentIngestHook) {
+      documentIngestHook(input.sessionId, attachmentId, meta, input.data)
+    } else if (kind === 'pdf') {
       schedulePdfExtract(input.sessionId, attachmentId)
+    } else {
+      patchExtract(input.sessionId, attachmentId, {
+        status: 'failed',
+        error: '暂时无法整理该文件，请稍后重试',
+      })
     }
   }
   return meta
@@ -298,9 +313,9 @@ export async function runPdfExtract(sessionId: string, attachmentId: string): Pr
   const meta = readAttachmentMeta(sessionId, attachmentId)
   if (!meta || meta.kind !== 'pdf') return meta
 
-  if (pdfIngestHook && !meta.extract?.documentId) {
+  if (documentIngestHook && !meta.extract?.documentId) {
     const buf = readAttachmentBuffer(sessionId, attachmentId)
-    if (buf) pdfIngestHook(sessionId, attachmentId, meta, buf)
+    if (buf) documentIngestHook(sessionId, attachmentId, meta, buf)
     return waitForExtractMeta(sessionId, attachmentId)
   }
 
@@ -381,7 +396,7 @@ export type WaitPdfExtractResult =
   | { ok: true; meta: ChatAttachmentMeta }
   | { ok: false; reason: 'pending' | 'failed' | 'missing'; message: string; meta?: ChatAttachmentMeta }
 
-/** 发送前短等 PDF 整理完成（有上限） */
+/** 发送前短等研报库整理完成（有上限；PDF / 文档 / 图片 OCR） */
 export async function waitForPdfExtractReady(
   sessionId: string,
   attachmentId: string,
@@ -391,14 +406,14 @@ export async function waitForPdfExtractReady(
   while (Date.now() <= deadline) {
     const meta = readAttachmentMeta(sessionId, attachmentId)
     if (!meta) return { ok: false, reason: 'missing', message: '附件不存在' }
-    if (meta.kind !== 'pdf') return { ok: true, meta }
+    if (!isLibraryIngestKind(meta.kind)) return { ok: true, meta }
     const status = meta.extract?.status
     if (status === 'ready') return { ok: true, meta }
     if (status === 'failed') {
       return {
         ok: false,
         reason: 'failed',
-        message: meta.extract?.error || '未能整理该研报，请换可复制文本的电子版后再试',
+        message: meta.extract?.error || '未能整理该文件，请换可读文件后重试',
         meta,
       }
     }
@@ -408,7 +423,7 @@ export async function waitForPdfExtractReady(
   return {
     ok: false,
     reason: 'pending',
-    message: '研报仍在整理，请稍后再问',
+    message: '整理尚未完成，请稍后再试或重新发送',
     meta,
   }
 }
@@ -441,7 +456,7 @@ export function isAttachmentReferenced(
 
 export function summarizePinnedLimits(limits: AttachmentLimits): string {
   const parts: string[] = []
-  for (const kind of ['image', 'pdf', 'video', 'audio'] as MediaKind[]) {
+  for (const kind of ['image', 'pdf', 'document', 'video', 'audio'] as MediaKind[]) {
     const max = limits.maxBytesByKind[kind]
     if (max) parts.push(`${mediaKindLabel(kind)} ${formatBytesShort(max)}`)
   }
@@ -451,4 +466,9 @@ export function summarizePinnedLimits(limits: AttachmentLimits): string {
 /** PDF 是否已整理为文本目录路径（无需原生 pdf 多模态） */
 export function isPdfTextExtractReady(meta: ChatAttachmentMeta): boolean {
   return meta.kind === 'pdf' && meta.extract?.status === 'ready'
+}
+
+/** 研报库入库整理是否已就绪（PDF / 文档 / 图片 OCR） */
+export function isLibraryExtractReady(meta: ChatAttachmentMeta): boolean {
+  return isLibraryIngestKind(meta.kind) && meta.extract?.status === 'ready'
 }

@@ -429,38 +429,55 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
 
+### 研报库设置（无图 Hybrid RAG）
+
+**当前主路径**：文档 parse + embed 就绪后，Agent 经 `search_library`（`searchHybrid`，FTS ⊕ 向量，`scope=library`）跨会话检索，再 `read_document(document_id)` 多跳精读；语义模型未就绪时自动降级关键词检索（FTS）。**无需建图、不依赖主题关联图**。
+
+**关联图已硬删（不再提供）**：主题关联图生成 / 进度看板 / 图检索与相关设置字段均已移除。下列端点与能力**不再提供**：
+
+| 已移除 | 说明 |
+|--------|------|
+| `GET` / `PATCH` `/api/settings/doc-library` | 含 `generateForReports` / `generateForNews` / `graph.modelRef` |
+| `GET` `/api/settings/doc-library/status` | 关联进度看板 |
+| `POST` `/api/settings/doc-library/association/requeue` | 深度关联重入队 |
+| `GET` `/api/doc-library/graph/search` | 主题社区图检索 |
+| SQLite 图表 | `entities` / `edges` / `graph_jobs` / `graph_communities` / `graph_community_*`（doc-library schema **v5 DROP**） |
+| 历史列 | `documents.llm_graph_at`（doc-library schema **v6 删除列**） |
+
+设置页无关联 UI。跨会话/全库检索请用 Agent 工具 `search_library` → `read_document`。
+
 ### 语义检索模型（文档库）
 
-可选本地语义检索能力（提升研报混合检索）。**默认不随安装包分发权重**；未安装时 `search_document` / `searchHybrid` 自动降级为关键词检索。用户可见文案使用「语义检索模型」，勿暴露内部引擎名。
+本地语义检索（Hybrid RAG 向量侧）。与桌面内置策略一致：**桌面安装包默认内置** multilingual-e5-small（`resources/llms/multilingual-e5-small/`）；运行时优先内置 → 用户目录 `~/.opptrix/llms/`（兼容旧 `~/.opptrix/models/`）→ 开发态按需下载。未就绪时 `search_document` / `searchHybrid` / `search_library` 自动降级为 FTS，不中断对话。用户可见文案使用「语义检索模型」，勿暴露内部引擎名。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/settings/semantic-model` | `{ installed, label }` |
+| GET | `/api/settings/semantic-model` | `{ installed, label, source?: 'bundled' \| 'user' \| 'missing' }` |
 | POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量 |
-| POST | `/api/settings/semantic-model/uninstall` | 删除本机模型目录并卸载运行时后端 |
+| POST | `/api/settings/semantic-model/uninstall` | 删除用户目录模型副本并卸载运行时后端（不删安装包内置） |
 
 **GET 响应示例**
 
 ```json
-{ "installed": false, "label": "语义检索模型" }
+{ "installed": true, "label": "语义检索模型", "source": "bundled" }
 ```
 
 ### 研报整理引擎（Parse Router）
 
-级联：基础整理（L0）→ 弱文本时版面增强（L1 侧车）→ 用户深度整理且已安装时 L2。引擎不可用则保留最佳结果。用户文案用「版面增强」「深度整理」，勿暴露引擎专名 / 绝对路径。
+按格式选引擎：文本（`text-l0`）/ Office（`office-l0`，`.docx` / `.doc` / `.pptx` / `.ppt`）/ PDF（`pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`）/ 图片直 OCR（`ocr-l2`；未就绪时友好失败）。引擎不可用则保留最佳结果。用户文案用「深度整理」，勿暴露引擎专名 / 绝对路径。支持扩展名：`.txt` `.md` `.docx` `.doc` `.pptx` `.ppt` 图片与 `.pdf`。
 
 | 方法 | 路径 | 说明 |
 |------|------|------|
-| GET | `/api/settings/parse-engines` | `{ layout, deep, semantic }` 可用性（无路径字段给 UI） |
-| POST | `/api/settings/parse-engines/layout/prepare` | 准备版面增强目录与脚本（仍需本机按开发说明安装 Python 依赖） |
-| POST | `/api/settings/parse-engines/layout/uninstall` | 移除版面增强安装目录 |
-| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理目录与 stub（**不**下载大模型） |
-| POST | `/api/settings/parse-engines/deep/mark-ready` | 开发者在配置模型后标记深度整理可用 |
-| POST | `/api/settings/parse-engines/deep/uninstall` | 移除深度整理安装目录 |
+| GET | `/api/settings/parse-engines` | `{ deep, semantic }` 可用性（无路径字段给 UI） |
+| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理（确保 PP-OCRv4 mobile ONNX 模型就绪；Node ONNX 路径） |
+| POST | `/api/settings/parse-engines/deep/mark-ready` | 等价于再跑一次 prepare（兼容旧客户端） |
+| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型） |
 
-入库选项（服务层 `ingestFromAttachment`）：`deepParse?: boolean`、`forceEngine?: 'pdf-extract-l0' \| 'pdfplumber-l1' \| 'unlimited-ocr-l2'`。
+`GET /api/settings/parse-engines` 的 `deep` 含 `source: 'bundled' \| 'user' \| 'missing'`（与语义模型一致）。旧 `layout/*` 路由仍可达但返回「已停用」。
 
-许可与侧车安装（开发者）：见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)、`scripts/pdfplumber-worker/README.md`、`scripts/unlimited-ocr/README.md`。
+入库选项（服务层 `ingestFromAttachment`）：`deepParse?: boolean`、`forceEngine?: 'text-l0' \| 'office-l0' \| 'pdf-extract-l0' \| 'ocr-l2' \| 'rapidocr-l2' \| 'unlimited-ocr-l2'`（后二者为兼容别名）。
+
+许可与依赖（开发者）：见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
 
 ### 外部 MCP Server
 
@@ -877,10 +894,10 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 附件 id（落盘 `~/.opptrix/chat-attachments/{sessionId}/{id}/`） |
-| `kind` | `image` \| `pdf` \| `video` \| `audio` | 媒体种类 |
+| `kind` | `image` \| `pdf` \| `document` \| `video` \| `audio` | 媒体种类；`document` = 文本 / Word / PPT |
 | `mime` / `name` / `size` / `createdAt` | — | MIME、原始文件名、字节数、ISO 时间 |
 | `width` / `height` / `duration` | number | 可选元数据 |
-| `extract` | `AttachmentExtractMeta`（见下） | 仅 PDF：本地文本整理状态；非 PDF 通常无此字段 |
+| `extract` | `AttachmentExtractMeta`（见下） | PDF / 文档 / 图片：本地文本整理（含 OCR）状态 |
 
 **`AttachmentExtractMeta`（`ChatAttachmentMeta.extract`）**
 
@@ -892,7 +909,7 @@ Content-Type: application/json
 | `pageCount` / `charCount` | number | 可选；整理完成后的页数 / 字符数 |
 | `readyAt` | string | 可选；整理完成时间（ISO） |
 
-PDF 上传后经 Parse Router 异步整理（L0 → 弱文本升 L1 侧车 → 可选深度整理 L2）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
+PDF / 文档 / 图片上传后经 Parse Router 异步整理（按格式选 `text-l0` / `office-l0` / `pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`；图片必经本地 OCR）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。`.pptx` / `.ppt` 尽量按幻灯片分 chunk（`page` = slide）；`.doc` 由产品侧抽取，无需用户先转。图片 `extract` ready 后 Agent 侧注入 OCR 目录文本（可辅以 vision）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
 
 **`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 

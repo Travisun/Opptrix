@@ -3,23 +3,30 @@ import { searchFtsChunks } from './fts.js'
 import { rrfFuse } from './rrf.js'
 import type { EmbeddingService } from './embedding.js'
 import type { VectorStore } from './vector-store.js'
-import type { FtsSearchHit } from './types.js'
+import type { DocSearchScope, DocumentSourceType, FtsSearchHit } from './types.js'
+
+export interface HybridSearchChunksOpts {
+  sessionId: string
+  scope?: DocSearchScope
+  sourceType?: DocumentSourceType
+  documentId?: string
+  attachmentId?: string
+  limit?: number
+  embedding: EmbeddingService
+  vectorStore: VectorStore
+}
 
 export async function searchHybridChunks(
   db: Database.Database,
   query: string,
-  opts: {
-    sessionId: string
-    documentId?: string
-    attachmentId?: string
-    limit?: number
-    embedding: EmbeddingService
-    vectorStore: VectorStore
-  },
+  opts: HybridSearchChunksOpts,
 ): Promise<FtsSearchHit[]> {
   const limit = Math.min(Math.max(opts.limit ?? 8, 1), 20)
+  const scope = opts.scope ?? 'session'
   const ftsHits = searchFtsChunks(db, query, {
     sessionId: opts.sessionId,
+    scope,
+    sourceType: opts.sourceType,
     documentId: opts.documentId,
     attachmentId: opts.attachmentId,
     limit,
@@ -44,8 +51,12 @@ export async function searchHybridChunks(
   let documentIds: string[] | undefined
   if (opts.documentId) {
     documentIds = [opts.documentId]
-  } else {
+  } else if (scope === 'session') {
     documentIds = listSessionDocumentIds(db, opts.sessionId, opts.attachmentId)
+    if (!documentIds.length) return ftsHits
+  } else if (scope === 'library') {
+    // library + 可选 source_type：预筛 documentIds，避免全表向量扫
+    documentIds = listLibraryDocumentIds(db, opts.sourceType)
     if (!documentIds.length) return ftsHits
   }
 
@@ -72,7 +83,10 @@ export async function searchHybridChunks(
   // 向量命中但 FTS 未覆盖时，从 SQLite 补全元数据
   const missing = fusedIds.filter(id => !byId.has(id))
   if (missing.length) {
-    for (const row of hydrateChunks(db, opts.sessionId, missing)) {
+    const hydrated = scope === 'library'
+      ? hydrateLibraryChunks(db, missing, opts.sourceType)
+      : hydrateSessionChunks(db, opts.sessionId, missing)
+    for (const row of hydrated) {
       byId.set(row.chunk_id, row)
     }
   }
@@ -104,7 +118,31 @@ function listSessionDocumentIds(
   return rows.map(r => r.document_id)
 }
 
-function hydrateChunks(
+/** library 范围：ready 文档；可选按 source_type 预筛 */
+function listLibraryDocumentIds(
+  db: Database.Database,
+  sourceType?: DocumentSourceType,
+): string[] {
+  if (sourceType) {
+    const rows = db.prepare(`
+      SELECT d.id AS document_id
+      FROM documents d
+      JOIN parse_artifacts pa ON pa.document_id = d.id
+      WHERE pa.status = 'ready'
+        AND COALESCE(d.source_type, 'report') = ?
+    `).all(sourceType) as Array<{ document_id: string }>
+    return rows.map(r => r.document_id)
+  }
+  const rows = db.prepare(`
+    SELECT d.id AS document_id
+    FROM documents d
+    JOIN parse_artifacts pa ON pa.document_id = d.id
+    WHERE pa.status = 'ready'
+  `).all() as Array<{ document_id: string }>
+  return rows.map(r => r.document_id)
+}
+
+function hydrateSessionChunks(
   db: Database.Database,
   sessionId: string,
   chunkIds: string[],
@@ -123,6 +161,52 @@ function hydrateChunks(
     WHERE sd.session_id = ?
       AND c.id IN (${placeholders})
   `).all(sessionId, ...chunkIds) as Array<{
+    chunk_id: string
+    document_id: string
+    attachment_id: string | null
+    page: number
+    excerpt: string
+  }>
+
+  return rows.map(r => ({
+    chunk_id: r.chunk_id,
+    document_id: r.document_id,
+    attachment_id: r.attachment_id,
+    page: r.page,
+    excerpt: r.excerpt,
+    rank: 0,
+  }))
+}
+
+function hydrateLibraryChunks(
+  db: Database.Database,
+  chunkIds: string[],
+  sourceType?: DocumentSourceType,
+): FtsSearchHit[] {
+  if (!chunkIds.length) return []
+  const placeholders = chunkIds.map(() => '?').join(', ')
+  const clauses = [
+    `c.id IN (${placeholders})`,
+    "pa.status = 'ready'",
+  ]
+  const params: Array<string | number> = [...chunkIds]
+  if (sourceType) {
+    clauses.push("COALESCE(d.source_type, 'report') = ?")
+    params.push(sourceType)
+  }
+
+  const rows = db.prepare(`
+    SELECT
+      c.id AS chunk_id,
+      c.document_id,
+      NULL AS attachment_id,
+      c.page,
+      substr(c.text, 1, 160) AS excerpt
+    FROM chunks c
+    JOIN documents d ON d.id = c.document_id
+    JOIN parse_artifacts pa ON pa.document_id = c.document_id
+    WHERE ${clauses.join(' AND ')}
+  `).all(...params) as Array<{
     chunk_id: string
     document_id: string
     attachment_id: string | null

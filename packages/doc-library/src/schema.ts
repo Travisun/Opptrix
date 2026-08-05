@@ -1,5 +1,5 @@
 /** doc-library.db schema 版本；与 MIGRATION_STEPS 步数一致 */
-export const DOC_LIBRARY_SCHEMA_VERSION = 2
+export const DOC_LIBRARY_SCHEMA_VERSION = 6
 
 export const MIGRATION_V1_SQL = `
   CREATE TABLE IF NOT EXISTS schema_meta (
@@ -71,4 +71,39 @@ export const MIGRATION_V1_SQL = `
 /** v2：chunk 级 embedded_at，标记已写入向量索引 */
 export const MIGRATION_V2_SQL = `
   ALTER TABLE chunks ADD COLUMN embedded_at TEXT;
+`
+
+/**
+ * v3：文档来源类型（研报/资讯）。
+ * 历史版本曾建关联图表；v5 起 DROP，本常量仅保留列 ALTER 供测试/文档引用。
+ */
+export const MIGRATION_V3_SQL = `
+  ALTER TABLE documents ADD COLUMN source_type TEXT NOT NULL DEFAULT 'report';
+  ALTER TABLE documents ADD COLUMN external_id TEXT;
+`
+
+/**
+ * v4：曾添加 llm_graph_at 列（历史建图标记）。
+ * v6 起 DROP；本常量仅保留供跃迁路径 / 测试引用。
+ */
+export const MIGRATION_V4_SQL = `
+  ALTER TABLE documents ADD COLUMN llm_graph_at TEXT;
+`
+
+/** v5：硬删关联图六表（entities / edges / graph_jobs / communities*） */
+export const MIGRATION_V5_SQL = `
+  DROP TABLE IF EXISTS graph_community_documents;
+  DROP TABLE IF EXISTS graph_community_members;
+  DROP TABLE IF EXISTS graph_communities;
+  DROP TABLE IF EXISTS edges;
+  DROP TABLE IF EXISTS graph_jobs;
+  DROP TABLE IF EXISTS entities;
+`
+
+/**
+ * v6：去掉 documents.llm_graph_at。
+ * 优先 ALTER TABLE … DROP COLUMN；不支持时由 schema-migrate 表重建。
+ */
+export const MIGRATION_V6_SQL = `
+  ALTER TABLE documents DROP COLUMN llm_graph_at;
 `

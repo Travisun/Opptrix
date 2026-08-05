@@ -10,15 +10,18 @@ import {
   type EmbeddingModelStatus,
 } from './model-downloader.js'
 import { getEmbeddingService } from './embedding.js'
+import type { EmbeddingModelSource } from './paths.js'
 
 export type SemanticModelUiStatus = {
-  /** 是否已就绪可用 */
+  /** 是否已就绪可用（含安装包内置） */
   installed: boolean
   /** 面向用户的模型名 */
   label: string
   /** 本地目录（仅供开发者日志，勿直接展示给用户） */
   dir: string
   missingFiles: string[]
+  /** bundled = 应用自带；user = 本机副本；missing = 未就绪 */
+  source: EmbeddingModelSource
 }
 
 export function getSemanticModelStatus(): SemanticModelUiStatus {
@@ -28,6 +31,7 @@ export function getSemanticModelStatus(): SemanticModelUiStatus {
     label: '语义检索模型',
     dir: s.dir,
     missingFiles: s.missingFiles,
+    source: s.source,
   }
 }
 
@@ -53,11 +57,14 @@ export async function installSemanticModel(opts: {
   return getSemanticModelStatus()
 }
 
-export async function uninstallSemanticModel(): Promise<void> {
+/** 仅清除用户目录副本；安装包内置不受影响，清除后若仍有内置则保持就绪。 */
+export async function uninstallSemanticModel(): Promise<SemanticModelUiStatus> {
   const embedding = getEmbeddingService()
   await embedding.getBackend()?.dispose?.()
   embedding.setBackend(null)
   await removeEmbeddingModel()
+  await embedding.tryEnableDefaultBackend()
+  return getSemanticModelStatus()
 }
 
 export { verifyEmbeddingModel, type EmbeddingModelStatus, type DownloadProgress }

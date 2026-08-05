@@ -103,6 +103,20 @@
         "filter": [
           "**/*.gguf"
         ]
+      },
+      {
+        "from": "resources/llms",
+        "to": "llms",
+        "filter": [
+          "**/*"
+        ]
+      },
+      {
+        "from": "resources/engines",
+        "to": "engines",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "mac": {

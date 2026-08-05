@@ -1,8 +1,9 @@
 /**
- * Parse Router：L0 →（弱文本）L1 →（仍弱 / deepParse）L2。
- * 引擎不可用则保留最佳结果；不把 AGPL 链入主进程。
+ * Parse Router：按 kind/mime 选首引擎；PDF：l0 →（弱文本 / deepParse）→ OCR。
+ * 已移除 pdfplumber L1 默认路径；不把 AGPL 链入主进程。
  */
-import type { ParseEngineId, ParseRunOpts, ParseRunResult, ParseRunner } from './types.js'
+import type { DocumentKind, ParseEngineId, ParseRunOpts, ParseRunResult, ParseRunner } from './types.js'
+import { isOcrEngineId } from './types.js'
 import {
   isWeakText,
   metricsFromParseResult,
@@ -16,42 +17,99 @@ export type SelectEngineInput = {
   tried: ReadonlySet<ParseEngineId> | readonly ParseEngineId[]
   deepParse?: boolean
   forceEngine?: ParseEngineId
-  l1Available: boolean
-  l2Available: boolean
+  kind?: DocumentKind
+  mime?: string
+  filename?: string
+  /** @deprecated L1 已移除；保留字段以免旧测试编译失败，恒视为 false */
+  l1Available?: boolean
+  ocrAvailable: boolean
+  /** @deprecated 使用 ocrAvailable */
+  l2Available?: boolean
 }
 
 function asTriedSet(tried: SelectEngineInput['tried']): Set<ParseEngineId> {
   return tried instanceof Set ? tried : new Set(tried)
 }
 
+function triedOcr(tried: Set<ParseEngineId>): boolean {
+  return tried.has('ocr-l2') || tried.has('rapidocr-l2') || tried.has('unlimited-ocr-l2')
+}
+
+function ocrAvailableOf(input: SelectEngineInput): boolean {
+  return input.ocrAvailable || input.l2Available === true
+}
+
+function resolveKind(input: SelectEngineInput): DocumentKind {
+  if (input.kind) return input.kind
+  const mime = (input.mime ?? '').toLowerCase()
+  const name = (input.filename ?? '').toLowerCase()
+  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
+  if (mime.startsWith('image/')) return 'image'
+  if (mime.includes('wordprocessingml') || name.endsWith('.docx')) return 'docx'
+  if (mime === 'application/msword' || name.endsWith('.doc')) return 'doc'
+  if (mime.includes('presentationml') || name.endsWith('.pptx')) return 'pptx'
+  if (mime.includes('ms-powerpoint') || name.endsWith('.ppt')) return 'ppt'
+  if (
+    mime.startsWith('text/')
+    || name.endsWith('.txt')
+    || name.endsWith('.md')
+    || name.endsWith('.markdown')
+  ) {
+    return 'text'
+  }
+  return 'pdf'
+}
+
 function available(engine: ParseEngineId, input: SelectEngineInput): boolean {
-  if (engine === 'pdf-extract-l0') return true
-  if (engine === 'pdfplumber-l1') return input.l1Available
-  if (engine === 'unlimited-ocr-l2') return input.l2Available
+  if (engine === 'text-l0' || engine === 'office-l0' || engine === 'pdf-extract-l0') return true
+  if (engine === 'pdfplumber-l1') return false
+  if (isOcrEngineId(engine)) return ocrAvailableOf(input)
   return false
 }
 
 /**
- * 纯函数：根据当前质量与可用性选择下一引擎；无下一档返回 null。
+ * 纯函数：根据 kind / 质量与可用性选择下一引擎；无下一档返回 null。
  *
  * 规则：
- * - forceEngine：若可用且未试过 → 该引擎；否则忽略强制并按默认升阶
- * - 默认从未试过 → L0
- * - L0 后弱文本且 L1 可用 → L1
- * - L1 后仍弱或 deepParse，且 L2 可用 → L2
+ * - forceEngine：若可用且未试过 → 该引擎
+ * - text → text-l0
+ * - docx/doc/pptx/ppt → office-l0
+ * - image → ocr-l2（不可用则无下一档）
+ * - pdf → pdf-extract-l0；弱文本或 deepParse 且 OCR 可用 → ocr-l2
  */
 export function selectEngine(input: SelectEngineInput): ParseEngineId | null {
   const tried = asTriedSet(input.tried)
+  const kind = resolveKind(input)
+  const ocrOk = ocrAvailableOf(input)
 
-  if (input.forceEngine && available(input.forceEngine, input) && !tried.has(input.forceEngine)) {
-    return input.forceEngine
+  if (input.forceEngine && available(input.forceEngine, input)) {
+    if (isOcrEngineId(input.forceEngine)) {
+      if (!triedOcr(tried)) return input.forceEngine
+    } else if (input.forceEngine !== 'pdfplumber-l1' && !tried.has(input.forceEngine)) {
+      return input.forceEngine
+    }
   }
 
+  if (kind === 'text') {
+    if (!tried.has('text-l0')) return 'text-l0'
+    return null
+  }
+
+  if (kind === 'docx' || kind === 'doc' || kind === 'pptx' || kind === 'ppt') {
+    if (!tried.has('office-l0')) return 'office-l0'
+    return null
+  }
+
+  if (kind === 'image') {
+    if (ocrOk && !triedOcr(tried)) return 'ocr-l2'
+    return null
+  }
+
+  // pdf / other → PDF 路径
   if (!tried.has('pdf-extract-l0') && !input.forceEngine) {
     return 'pdf-extract-l0'
   }
 
-  // force 且已试过 / 不可用：若尚未跑过 L0，仍可回落 L0
   if (input.forceEngine && !tried.has('pdf-extract-l0') && input.forceEngine !== 'pdf-extract-l0') {
     if (!available(input.forceEngine, input)) {
       return 'pdf-extract-l0'
@@ -59,25 +117,24 @@ export function selectEngine(input: SelectEngineInput): ParseEngineId | null {
   }
 
   const weak = input.current ? isWeakText(input.current) : true
-
-  if (weak && input.l1Available && !tried.has('pdfplumber-l1')) {
-    return 'pdfplumber-l1'
-  }
-
-  const wantL2 = weak || input.deepParse === true
-  if (wantL2 && input.l2Available && !tried.has('unlimited-ocr-l2')) {
-    // L2 须 deepParse 或 force（任务：L1 仍弱或 deepParse → L2；须已安装 + deepParse/force）
-    if (input.deepParse === true || input.forceEngine === 'unlimited-ocr-l2') {
-      return 'unlimited-ocr-l2'
-    }
+  const wantOcr = weak || input.deepParse === true
+  if (wantOcr && ocrOk && !triedOcr(tried)) {
+    return 'ocr-l2'
   }
 
   return null
 }
 
 export type ParseRouterDeps = {
-  l0: ParseRunner
+  text?: ParseRunner | null
+  office?: ParseRunner | null
+  pdf: ParseRunner
+  ocr?: ParseRunner | null
+  /** @deprecated 已忽略 */
+  l0?: ParseRunner
+  /** @deprecated 已忽略 */
   l1?: ParseRunner | null
+  /** @deprecated 使用 ocr */
   l2?: ParseRunner | null
 }
 
@@ -100,7 +157,7 @@ function withUsedEngine(result: ParseRunResult, runner: ParseRunner): ParseRunRe
  */
 export class ParseRouter implements ParseRunner {
   readonly engineId: ParseEngineId = 'pdf-extract-l0'
-  readonly engineVersion = 'router-1.0.0'
+  readonly engineVersion = 'router-2.0.0'
 
   constructor(private readonly deps: ParseRouterDeps) {}
 
@@ -108,49 +165,62 @@ export class ParseRouter implements ParseRunner {
     return true
   }
 
+  private pdfRunner(): ParseRunner {
+    return this.deps.pdf ?? this.deps.l0!
+  }
+
   private runnerFor(id: ParseEngineId): ParseRunner | null {
-    if (id === 'pdf-extract-l0') return this.deps.l0
-    if (id === 'pdfplumber-l1') return this.deps.l1 ?? null
-    if (id === 'unlimited-ocr-l2') return this.deps.l2 ?? null
+    if (id === 'text-l0') return this.deps.text ?? null
+    if (id === 'office-l0') return this.deps.office ?? null
+    if (id === 'pdf-extract-l0') return this.pdfRunner()
+    if (isOcrEngineId(id)) return this.deps.ocr ?? this.deps.l2 ?? null
     return null
   }
 
   async run(blob: Buffer, opts: ParseRunOpts = {}): Promise<ParseRunResult> {
-    const l1Available = await runnerAvailable(this.deps.l1)
-    const l2Available = await runnerAvailable(this.deps.l2)
+    const ocrRunner = this.deps.ocr ?? this.deps.l2
+    const ocrAvailable = await runnerAvailable(ocrRunner)
     const tried = new Set<ParseEngineId>()
     let best: ParseRunResult | null = null
     let lastError: string | undefined
 
-    // force 不可用时先记录友好提示，再走默认升阶
+    const selectBase = {
+      kind: opts.kind,
+      mime: opts.mime,
+      filename: opts.filename,
+      ocrAvailable,
+      l2Available: ocrAvailable,
+      deepParse: opts.deepParse,
+      forceEngine: opts.forceEngine,
+    }
+
     if (opts.forceEngine && !available(opts.forceEngine, {
       current: null,
       tried,
-      l1Available,
-      l2Available,
-      forceEngine: opts.forceEngine,
-      deepParse: opts.deepParse,
+      ...selectBase,
     })) {
-      lastError = opts.forceEngine === 'unlimited-ocr-l2'
-        ? '深度整理引擎尚未安装，已改用基础整理'
+      lastError = isOcrEngineId(opts.forceEngine)
+        ? '扫描件识别尚未安装，已改用基础整理'
         : opts.forceEngine === 'pdfplumber-l1'
-          ? '版面增强尚未就绪，已改用基础整理'
+          ? '指定整理方式已停用，已改用基础整理'
           : '指定整理方式不可用，已改用基础整理'
     }
 
-    for (let step = 0; step < 3; step++) {
+    for (let step = 0; step < 4; step++) {
       const next = selectEngine({
         current: best ? metricsFromParseResult(best) : null,
         tried,
-        deepParse: opts.deepParse,
-        forceEngine: opts.forceEngine,
-        l1Available,
-        l2Available,
+        ...selectBase,
       })
       if (!next) break
 
       const runner = this.runnerFor(next)
       tried.add(next)
+      if (isOcrEngineId(next)) {
+        tried.add('ocr-l2')
+        tried.add('rapidocr-l2')
+        tried.add('unlimited-ocr-l2')
+      }
       if (!runner) continue
 
       try {
@@ -168,29 +238,30 @@ export class ParseRouter implements ParseRunner {
     }
 
     if (!best) {
+      const imageNoOcr = selectBase.kind === 'image' || (selectBase.mime ?? '').startsWith('image/')
+      const fallbackError = imageNoOcr && !ocrAvailable
+        ? '暂时无法识别图片中的文字，请稍后重试或换更清晰的图片'
+        : (lastError ?? '未能整理该文件，请换可读文本后再试')
       return {
         pageCount: 0,
         charCount: 0,
         markdown: '',
         chunks: [],
-        error: lastError ?? '未能整理该研报，请换可复制文本的电子版后再试',
-        usedEngineId: 'pdf-extract-l0',
-        usedEngineVersion: this.deps.l0.engineVersion,
+        error: fallbackError,
+        usedEngineId: imageNoOcr ? 'ocr-l2' : 'pdf-extract-l0',
+        usedEngineVersion: imageNoOcr
+          ? (ocrRunner?.engineVersion ?? 'unavailable')
+          : this.pdfRunner().engineVersion,
       }
     }
 
-    // 仍弱且用户要深度整理但 L2 不可用：附带提示，不覆盖已有正文
     if (
       opts.deepParse
       && isWeakText(metricsFromParseResult(best))
-      && !l2Available
+      && !ocrAvailable
       && !best.error
     ) {
-      return {
-        ...best,
-        error: undefined,
-        // 不失败：保留最佳；提示走引擎状态 API / 设置
-      }
+      return { ...best, error: undefined }
     }
 
     if (lastError && best.charCount <= 0) {

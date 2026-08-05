@@ -5,6 +5,7 @@ const MB = 1024 * 1024
 const DEFAULT_BY_KIND: Partial<Record<MediaKind, number>> = {
   image: 10 * MB,
   pdf: 20 * MB,
+  document: 20 * MB,
   video: 50 * MB,
   audio: 25 * MB,
 }
@@ -22,31 +23,31 @@ interface LimitTier {
 const LIMIT_TIERS: LimitTier[] = [
   {
     test: id => /\bgpt-4o\b|\bgpt-4\.1\b|\bgpt-5/i.test(id) || /\bo[34](?:-mini)?\b/i.test(id),
-    maxBytesByKind: { image: 20 * MB, pdf: 32 * MB, video: 100 * MB, audio: 50 * MB },
+    maxBytesByKind: { image: 20 * MB, pdf: 32 * MB, document: 32 * MB, video: 100 * MB, audio: 50 * MB },
     maxCount: 10,
     maxTotalBytes: 150 * MB,
   },
   {
     test: id => /claude|anthropic/i.test(id),
-    maxBytesByKind: { image: 5 * MB, pdf: 32 * MB, video: 50 * MB, audio: 25 * MB },
+    maxBytesByKind: { image: 5 * MB, pdf: 32 * MB, document: 32 * MB, video: 50 * MB, audio: 25 * MB },
     maxCount: 5,
     maxTotalBytes: 60 * MB,
   },
   {
     test: id => /gemini/i.test(id),
-    maxBytesByKind: { image: 20 * MB, pdf: 50 * MB, video: 200 * MB, audio: 50 * MB },
+    maxBytesByKind: { image: 20 * MB, pdf: 50 * MB, document: 50 * MB, video: 200 * MB, audio: 50 * MB },
     maxCount: 10,
     maxTotalBytes: 250 * MB,
   },
   {
     test: id => /glm-v|glm-4\.5v|glm-4\.6v|glm-5v/i.test(id),
-    maxBytesByKind: { image: 10 * MB, pdf: 20 * MB, video: 100 * MB, audio: 25 * MB },
+    maxBytesByKind: { image: 10 * MB, pdf: 20 * MB, document: 20 * MB, video: 100 * MB, audio: 25 * MB },
     maxCount: 6,
     maxTotalBytes: 120 * MB,
   },
   {
     test: id => /qwen-vl|qwen3\.6|qwen3\.5|qwen-v|deepseek-vl/i.test(id),
-    maxBytesByKind: { image: 10 * MB, pdf: 20 * MB, video: 80 * MB, audio: 25 * MB },
+    maxBytesByKind: { image: 10 * MB, pdf: 20 * MB, document: 20 * MB, video: 80 * MB, audio: 25 * MB },
     maxCount: 6,
     maxTotalBytes: 100 * MB,
   },
@@ -70,8 +71,11 @@ function filterLimitsForModalities(
     const cap = base[kind] ?? DEFAULT_BY_KIND[kind]
     if (cap) out[kind] = cap
   }
-  // PDF 始终可走本地文本整理，限额独立保留
+  // PDF / 文档始终可走本地研报库整理，限额独立保留
   out.pdf = base.pdf ?? DEFAULT_BY_KIND.pdf
+  out.document = base.document ?? DEFAULT_BY_KIND.document
+  // 图片亦可 OCR 入库，保留默认限额
+  if (!out.image) out.image = base.image ?? DEFAULT_BY_KIND.image
   return out
 }
 

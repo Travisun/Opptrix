@@ -3,6 +3,7 @@ import path from 'node:path'
 import type Database from 'better-sqlite3'
 import type {
   ChunkRow,
+  DocumentKind,
   DocumentRow,
   ParseArtifactRow,
   ParseChunkInput,
@@ -18,25 +19,53 @@ export class DocLibraryRepository {
 
   findDocumentBySha(contentSha256: string): DocumentRow | null {
     const row = this.db.prepare(`
-      SELECT id, content_sha256, name, mime, kind, byte_size, blob_path, created_at, updated_at
+      SELECT id, content_sha256, name, mime, kind, byte_size, blob_path,
+             COALESCE(source_type, 'report') AS source_type, external_id,
+             created_at, updated_at
       FROM documents WHERE content_sha256 = ?
     `).get(contentSha256) as DocumentRow | undefined
     return row ?? null
   }
 
+  findDocumentByExternalId(
+    sourceType: DocumentRow['source_type'] | string,
+    externalId: string,
+  ): DocumentRow | null {
+    if (!externalId) return null
+    const row = this.db.prepare(`
+      SELECT id, content_sha256, name, mime, kind, byte_size, blob_path,
+             COALESCE(source_type, 'report') AS source_type, external_id,
+             created_at, updated_at
+      FROM documents
+      WHERE COALESCE(source_type, 'report') = ? AND external_id = ?
+      LIMIT 1
+    `).get(sourceType, externalId) as DocumentRow | undefined
+    return row ?? null
+  }
+
   getDocument(documentId: string): DocumentRow | null {
     const row = this.db.prepare(`
-      SELECT id, content_sha256, name, mime, kind, byte_size, blob_path, created_at, updated_at
+      SELECT id, content_sha256, name, mime, kind, byte_size, blob_path,
+             COALESCE(source_type, 'report') AS source_type, external_id,
+             created_at, updated_at
       FROM documents WHERE id = ?
     `).get(documentId) as DocumentRow | undefined
     return row ?? null
   }
 
-  insertDocument(row: Omit<DocumentRow, 'created_at' | 'updated_at'> & { created_at?: string; updated_at?: string }): void {
+  insertDocument(row: Omit<DocumentRow, 'created_at' | 'updated_at' | 'source_type' | 'external_id'> & {
+    created_at?: string
+    updated_at?: string
+    source_type?: DocumentRow['source_type']
+    external_id?: string | null
+  }): void {
     const now = new Date().toISOString()
     this.db.prepare(`
-      INSERT INTO documents(id, content_sha256, name, mime, kind, byte_size, blob_path, created_at, updated_at)
-      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO documents(
+        id, content_sha256, name, mime, kind, byte_size, blob_path,
+        source_type, external_id, created_at, updated_at
+      )
+      VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `).run(
       row.id,
       row.content_sha256,
@@ -45,8 +74,51 @@ export class DocLibraryRepository {
       row.kind,
       row.byte_size,
       row.blob_path,
+      row.source_type ?? 'report',
+      row.external_id ?? null,
       row.created_at ?? now,
       row.updated_at ?? now,
+    )
+  }
+
+  /** 更新资讯等正文变更：sha / 名 / blob / external 元数据 */
+  updateDocumentContent(
+    documentId: string,
+    patch: {
+      content_sha256: string
+      name: string
+      mime: string
+      kind: DocumentKind
+      byte_size: number
+      blob_path: string
+      source_type?: DocumentRow['source_type']
+      external_id?: string | null
+    },
+  ): void {
+    const now = new Date().toISOString()
+    this.db.prepare(`
+      UPDATE documents SET
+        content_sha256 = ?,
+        name = ?,
+        mime = ?,
+        kind = ?,
+        byte_size = ?,
+        blob_path = ?,
+        source_type = COALESCE(?, source_type),
+        external_id = COALESCE(?, external_id),
+        updated_at = ?
+      WHERE id = ?
+    `).run(
+      patch.content_sha256,
+      patch.name,
+      patch.mime,
+      patch.kind,
+      patch.byte_size,
+      patch.blob_path,
+      patch.source_type ?? null,
+      patch.external_id === undefined ? null : patch.external_id,
+      now,
+      documentId,
     )
   }
 

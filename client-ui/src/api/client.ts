@@ -2373,6 +2373,8 @@ export const pythonSettings = {
 export type SemanticModelStatus = {
   installed: boolean
   label: string
+  /** bundled = 应用自带；user = 本机副本；missing = 未就绪 */
+  source?: 'bundled' | 'user' | 'missing'
 }
 
 export const semanticModelSettings = {
@@ -2380,39 +2382,41 @@ export const semanticModelSettings = {
     jsonFetch<SemanticModelStatus>('/settings/semantic-model'),
 
   install: () =>
-    jsonFetch<{ ok: boolean; installed: boolean; label: string; error?: string }>(
+    jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
       '/settings/semantic-model/install',
       { method: 'POST' },
     ),
 
   uninstall: () =>
-    jsonFetch<{ ok: boolean; installed: boolean; label: string; error?: string }>(
+    jsonFetch<{ ok: boolean; installed: boolean; label: string; source?: string; error?: string }>(
       '/settings/semantic-model/uninstall',
       { method: 'POST' },
     ),
 }
 
 export type ParseEnginesStatus = {
-  layout: { available: boolean; installed: boolean; label: string; hint: string }
-  deep: { available: boolean; installed: boolean; label: string; hint: string }
-  semantic: { installed: boolean; label: string }
+  /** @deprecated 版面增强已停用；旧客户端可能仍读此字段 */
+  layout?: {
+    available: boolean
+    installed: boolean
+    label: string
+    hint: string
+    source?: 'bundled' | 'user' | 'missing'
+  }
+  deep: {
+    available: boolean
+    installed: boolean
+    label: string
+    hint: string
+    /** bundled = 应用自带；user = 本机准备；missing = 未就绪 */
+    source?: 'bundled' | 'user' | 'missing'
+  }
+  semantic: { installed: boolean; label: string; source?: 'bundled' | 'user' | 'missing' }
 }
 
 export const parseEnginesSettings = {
   getStatus: () =>
     jsonFetch<ParseEnginesStatus>('/settings/parse-engines'),
-
-  prepareLayout: () =>
-    jsonFetch<{ ok: boolean; layout: ParseEnginesStatus['layout']; error?: string }>(
-      '/settings/parse-engines/layout/prepare',
-      { method: 'POST' },
-    ),
-
-  uninstallLayout: () =>
-    jsonFetch<{ ok: boolean; error?: string }>(
-      '/settings/parse-engines/layout/uninstall',
-      { method: 'POST' },
-    ),
 
   prepareDeep: () =>
     jsonFetch<{ ok: boolean; deep: ParseEnginesStatus['deep']; message?: string; error?: string }>(

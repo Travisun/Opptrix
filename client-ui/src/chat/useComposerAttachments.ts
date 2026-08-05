@@ -26,9 +26,12 @@ export function useComposerAttachments(
     if (sessionId) effectiveSessionIdRef.current = sessionId
   }, [sessionId])
 
-  // 轮询 PDF 整理状态
+  // 轮询研报库整理状态（PDF / 文档 / 图片 OCR）
   useEffect(() => {
-    const pending = pinned.filter(p => p.kind === 'pdf' && (p.extract?.status ?? 'pending') === 'pending')
+    const pending = pinned.filter(p =>
+      (p.kind === 'pdf' || p.kind === 'document' || p.kind === 'image')
+      && (p.extract?.status ?? 'pending') === 'pending',
+    )
     if (!pending.length) return
     const sid = effectiveSessionIdRef.current ?? sessionId
     if (!sid) return

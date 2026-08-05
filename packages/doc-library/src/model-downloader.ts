@@ -1,11 +1,19 @@
 /**
- * multilingual-e5-small 按需下载：ModelScope → HF 镜像 → Hugging Face。
- * 权重不进安装包；日志不打印 URL token / Authorization。
+ * multilingual-e5-small：桌面安装包可内置；否则按需下载到用户目录。
+ * 查找顺序：bundled → llms 开发路径 → ~/.opptrix/llms/… → 旧 ~/.opptrix/models/…；
+ * 下载源 ModelScope → HF 镜像 → Hugging Face。
+ * 日志不打印 URL token / Authorization。
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { finished } from 'node:stream/promises'
-import { embeddingModelDir, EMBEDDING_MODEL_ID } from './paths.js'
+import {
+  embeddingModelDir,
+  EMBEDDING_MODEL_ID,
+  getBundledEmbeddingModelDir,
+  listEmbeddingModelSearchDirs,
+  type EmbeddingModelSource,
+} from './paths.js'
 
 const DOWNLOAD_USER_AGENT = 'Opptrix-Desktop/1.0'
 const DEFAULT_TIMEOUT_MS = 120_000
@@ -56,6 +64,7 @@ export type EmbeddingModelStatus = {
   modelId: string
   dir: string
   missingFiles: string[]
+  source: EmbeddingModelSource
 }
 
 function looksLikeHtmlBody(head: Uint8Array): boolean {
@@ -71,25 +80,71 @@ function sourcesFor(filename: string): Array<{ label: string; url: string }> {
   ]
 }
 
-export function getEmbeddingModelStatus(modelDir = embeddingModelDir()): EmbeddingModelStatus {
+function missingRequiredFiles(modelDir: string): string[] {
   const missingFiles: string[] = []
   for (const file of E5_MODEL_FILES) {
     if (OPTIONAL_FILES.has(file)) continue
     if (!fs.existsSync(path.join(modelDir, file))) missingFiles.push(file)
   }
+  return missingFiles
+}
+
+function sourceForDir(modelDir: string, repoRoot?: string): EmbeddingModelSource {
+  const bundled = getBundledEmbeddingModelDir(repoRoot)
+  if (bundled && path.resolve(modelDir) === path.resolve(bundled)) return 'bundled'
+  if (path.resolve(modelDir) === path.resolve(embeddingModelDir())) return 'user'
+  return 'user'
+}
+
+/** 在搜索目录中解析首个已就绪目录；都未就绪时回落用户目录。 */
+export function resolveEmbeddingModelDir(repoRoot?: string): {
+  dir: string
+  source: EmbeddingModelSource
+  missingFiles: string[]
+} {
+  for (const dir of listEmbeddingModelSearchDirs(repoRoot)) {
+    const missing = missingRequiredFiles(dir)
+    if (missing.length === 0) {
+      return { dir, source: sourceForDir(dir, repoRoot), missingFiles: [] }
+    }
+  }
+  const userDir = embeddingModelDir()
   return {
-    installed: missingFiles.length === 0,
-    modelId: EMBEDDING_MODEL_ID,
-    dir: modelDir,
-    missingFiles,
+    dir: userDir,
+    source: 'missing',
+    missingFiles: missingRequiredFiles(userDir),
   }
 }
 
-export function isEmbeddingModelInstalled(modelDir = embeddingModelDir()): boolean {
+export function getEmbeddingModelStatus(modelDir?: string): EmbeddingModelStatus {
+  if (modelDir !== undefined) {
+    const missingFiles = missingRequiredFiles(modelDir)
+    return {
+      installed: missingFiles.length === 0,
+      modelId: EMBEDDING_MODEL_ID,
+      dir: modelDir,
+      missingFiles,
+      source: missingFiles.length === 0 ? sourceForDir(modelDir) : 'missing',
+    }
+  }
+
+  const resolved = resolveEmbeddingModelDir()
+  return {
+    installed: resolved.source !== 'missing',
+    modelId: EMBEDDING_MODEL_ID,
+    dir: resolved.dir,
+    missingFiles: resolved.missingFiles,
+    source: resolved.source,
+  }
+}
+
+export function isEmbeddingModelInstalled(modelDir?: string): boolean {
   return getEmbeddingModelStatus(modelDir).installed
 }
 
-export function verifyEmbeddingModel(modelDir = embeddingModelDir()): { ok: true } | { ok: false; missingFiles: string[] } {
+export function verifyEmbeddingModel(
+  modelDir?: string,
+): { ok: true } | { ok: false; missingFiles: string[] } {
   const status = getEmbeddingModelStatus(modelDir)
   if (status.installed) return { ok: true }
   return { ok: false, missingFiles: status.missingFiles }
@@ -210,6 +265,10 @@ export async function downloadEmbeddingModel(opts: {
   timeoutMs?: number
   onProgress?: (p: DownloadProgress) => void
 } = {}): Promise<EmbeddingModelStatus> {
+  // 下载始终写入用户目录；bundled 已就绪时直接返回
+  if (!opts.modelDir && isEmbeddingModelInstalled()) {
+    return getEmbeddingModelStatus()
+  }
   const modelDir = opts.modelDir ?? embeddingModelDir()
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS
   await fs.promises.mkdir(modelDir, { recursive: true })
@@ -235,7 +294,11 @@ export async function downloadEmbeddingModel(opts: {
   return getEmbeddingModelStatus(modelDir)
 }
 
+/** 仅删除用户目录副本；永不删除安装包内置文件。 */
 export async function removeEmbeddingModel(modelDir = embeddingModelDir()): Promise<void> {
-  if (!fs.existsSync(modelDir)) return
-  await fs.promises.rm(modelDir, { recursive: true, force: true })
+  const userDir = path.resolve(embeddingModelDir())
+  const target = path.resolve(modelDir)
+  if (target !== userDir) return
+  if (!fs.existsSync(userDir)) return
+  await fs.promises.rm(userDir, { recursive: true, force: true })
 }

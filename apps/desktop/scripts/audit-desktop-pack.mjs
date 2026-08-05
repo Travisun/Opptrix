@@ -116,14 +116,179 @@ console.log('audit-desktop-pack: start')
     fail('stage-sensevoice.mjs must stage q8 model and VAD')
   } else ok('stage-sensevoice.mjs stages required GGUF files')
 
+  // ── Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST ──
+  const llmExtra = extra.find((e) => e?.from === 'resources/llms' && e?.to === 'llms')
+  if (!llmExtra) {
+    fail('Hybrid RAG: extraResources must copy resources/llms → llms (e5 + RapidOCR)')
+  } else {
+    ok('extraResources maps RAG / embedding model bundle under llms')
+  }
+
+  const e5Required = [
+    'config.json',
+    'tokenizer.json',
+    'tokenizer_config.json',
+    'onnx/model_quantized.onnx',
+  ]
+  for (const file of e5Required) {
+    const rel = path.join('resources/llms/multilingual-e5-small', file)
+    if (!exists(rel)) {
+      fail(
+        `Hybrid RAG: missing e5 ${rel} (need ONNX + tokenizer) — run node scripts/stage-e5.mjs before packaging`,
+      )
+    } else ok(`present ${rel}`)
+  }
+
+  const stageE5Src = read('scripts/stage-e5.mjs')
+  if (
+    !stageE5Src.includes('model_quantized.onnx')
+    || !stageE5Src.includes('tokenizer.json')
+    || !stageE5Src.includes('multilingual-e5-small')
+  ) {
+    fail('stage-e5.mjs must stage multilingual-e5-small ONNX + tokenizer layout')
+  } else ok('stage-e5.mjs stages required e5 files')
+
+  const rapidocrRequired = [
+    'ch_PP-OCRv4_det_mobile.onnx',
+    'ch_PP-OCRv4_rec_mobile.onnx',
+    'ch_ppocr_mobile_v2.0_cls_mobile.onnx',
+    'ppocr_keys_v1.txt',
+  ]
+  for (const file of rapidocrRequired) {
+    const rel = path.join('resources/llms/rapidocr-ppocrv4-mobile', file)
+    if (!exists(rel)) {
+      fail(
+        `Hybrid RAG: missing RapidOCR ${rel} (need det/rec/cls ONNX + keys) — run node scripts/stage-rapidocr.mjs before packaging`,
+      )
+    } else ok(`present ${rel}`)
+  }
+
+  const stageRapidocrSrc = read('scripts/stage-rapidocr.mjs')
+  if (
+    !stageRapidocrSrc.includes('ch_PP-OCRv4_det_mobile.onnx')
+    || !stageRapidocrSrc.includes('ch_PP-OCRv4_rec_mobile.onnx')
+    || !stageRapidocrSrc.includes('ch_ppocr_mobile_v2.0_cls_mobile.onnx')
+    || !stageRapidocrSrc.includes('ppocr_keys_v1.txt')
+    || !stageRapidocrSrc.includes('rapidocr-ppocrv4-mobile')
+    || !stageRapidocrSrc.includes('RapidAI/RapidOCR')
+  ) {
+    fail('stage-rapidocr.mjs must stage RapidOCR PP-OCRv4 mobile (3 ONNX + keys)')
+  } else ok('stage-rapidocr.mjs stages required RapidOCR files')
+
+  const enginesExtra = extra.find((e) => e?.from === 'resources/engines' && e?.to === 'engines')
+  if (!enginesExtra) {
+    fail('Hybrid RAG: extraResources must copy resources/engines → engines (MANIFEST compat)')
+  } else {
+    ok('extraResources maps engines stage dir')
+  }
+
+  const platformKey = `${process.platform}-${process.arch}`
+  const enginesManifestRel = path.join('resources/engines', platformKey, 'MANIFEST.json')
+  if (!exists(enginesManifestRel)) {
+    fail(
+      `Hybrid RAG: missing ${enginesManifestRel} — run node scripts/stage-rag-engines.mjs (writes MANIFEST; no Python wheels)`,
+    )
+  } else {
+    ok(`present ${enginesManifestRel}`)
+    try {
+      const manifest = JSON.parse(read(enginesManifestRel))
+      if (!Array.isArray(manifest.engines)) {
+        fail('engines MANIFEST.json must include engines array')
+      } else if (manifest.engines.length !== 0) {
+        fail(
+          `Hybrid RAG: engines MANIFEST.engines must be empty (got ${JSON.stringify(manifest.engines)}; no Python workers)`,
+        )
+      } else {
+        ok('engines MANIFEST.engines=[] (no Python workers)')
+      }
+      const note = String(manifest.note ?? '')
+      if (!/Node\s+(OCR|ONNX)/i.test(note)) {
+        fail('engines MANIFEST.note must document Node OCR (no Python wheels)')
+      } else {
+        ok('engines MANIFEST.note documents Node OCR')
+      }
+    } catch {
+      fail('engines MANIFEST.json is invalid JSON')
+    }
+  }
+
+  // Fail if leftover Python worker trees / wheels were staged under resources/engines
+  {
+    const enginesAbs = path.join(DESKTOP_ROOT, 'resources/engines')
+    const forbidden = []
+    if (fs.existsSync(enginesAbs)) {
+      const walk = (dir) => {
+        for (const ent of fs.readdirSync(dir, { withFileTypes: true })) {
+          const p = path.join(dir, ent.name)
+          if (ent.isDirectory()) {
+            if (ent.name === 'wheels' || /^(pdfplumber|rapidocr)-worker$/.test(ent.name)) {
+              forbidden.push(path.relative(DESKTOP_ROOT, p))
+            } else {
+              walk(p)
+            }
+          } else if (/\.(whl|tar\.gz)$/i.test(ent.name) || ent.name === 'worker.py') {
+            forbidden.push(path.relative(DESKTOP_ROOT, p))
+          }
+        }
+      }
+      walk(enginesAbs)
+    }
+    if (forbidden.length) {
+      fail(
+        `Hybrid RAG: resources/engines must not contain Python workers/wheels — found: ${forbidden.slice(0, 8).join(', ')}`,
+      )
+    } else {
+      ok('resources/engines has no Python worker/wheel leftovers')
+    }
+  }
+
+  if (!exists('scripts/stage-rag-engines.mjs')) {
+    fail('scripts/stage-rag-engines.mjs missing')
+  } else {
+    const stageEnginesSrc = read('scripts/stage-rag-engines.mjs')
+    const documentsNodeOcr = stageEnginesSrc.includes('Node OCR') || stageEnginesSrc.includes('Node ONNX')
+    const downloadsPythonWheels = /pip\s+download/.test(stageEnginesSrc)
+      || stageEnginesSrc.includes('downloadWheel')
+    if (!documentsNodeOcr) {
+      fail('stage-rag-engines.mjs must document Node OCR path (MANIFEST-only staging)')
+    } else if (downloadsPythonWheels) {
+      fail('stage-rag-engines.mjs must not download Python pdfplumber/rapidocr wheels')
+    } else if (!stageEnginesSrc.includes('pruneLegacyWorkers') && !stageEnginesSrc.includes('pdfplumber-worker')) {
+      fail('stage-rag-engines.mjs must prune legacy Python worker dirs')
+    } else {
+      ok('stage-rag-engines.mjs writes MANIFEST only (Node OCR; no pip wheels)')
+    }
+  }
+
+  const mainSrc = read('electron/main.cjs')
+  if (!mainSrc.includes('OPPTRIX_RAG_ENGINES_BUNDLED_DIR')) {
+    fail('main.cjs must inject OPPTRIX_RAG_ENGINES_BUNDLED_DIR for sidecar')
+  } else ok('main.cjs injects OPPTRIX_RAG_ENGINES_BUNDLED_DIR')
+
   if (!pkg.scripts?.['build']?.includes('prebuild.mjs')) {
-    warn('desktop build script should run prebuild.mjs (includes stage-sensevoice)')
+    warn('desktop build script should run prebuild.mjs (includes stage-sensevoice / stage-e5 / stage-rapidocr / stage-rag-engines)')
   }
 
   const prebuildSrc = read('scripts/prebuild.mjs')
-  if (!prebuildSrc.includes('stage-sensevoice.mjs')) {
-    fail('prebuild.mjs must run stage-sensevoice.mjs before audit-desktop-pack')
-  } else ok('prebuild runs stage-sensevoice')
+  const prebuildOrder = [
+    'stage-sensevoice.mjs',
+    'stage-e5.mjs',
+    'stage-rapidocr.mjs',
+    'stage-rag-engines.mjs',
+    'audit-desktop-pack.mjs',
+  ]
+  let lastIdx = -1
+  for (const name of prebuildOrder) {
+    const idx = prebuildSrc.indexOf(name)
+    if (idx < 0) {
+      fail(`prebuild.mjs must run ${name} before packaging`)
+    } else if (idx < lastIdx) {
+      fail(`prebuild.mjs must run ${name} after prior Hybrid RAG stage steps`)
+    } else {
+      lastIdx = idx
+      ok(`prebuild runs ${name}`)
+    }
+  }
 
   if (!pkg.build?.electronVersion) fail('build.electronVersion missing')
   else ok(`electronVersion=${pkg.build.electronVersion}`)
@@ -268,6 +433,20 @@ console.log('audit-desktop-pack: start')
   if (!ciWf.includes('audit-desktop-pack.mjs')) {
     fail('ci.yml must run audit-desktop-pack.mjs before build/test')
   } else ok('ci.yml runs audit-desktop-pack')
+  for (const [label, wf] of [
+    ['ci.yml', ciWf],
+    ['release-desktop.yml', releaseWf],
+  ]) {
+    if (/RAG engine wheels/i.test(wf)) {
+      fail(`${label} must not name stage-rag-engines as wheels (Node OCR MANIFEST only)`)
+    } else if (!wf.includes('stage-rag-engines.mjs')) {
+      fail(`${label} must run stage-rag-engines.mjs`)
+    } else if (!wf.includes('stage-e5.mjs') || !wf.includes('stage-rapidocr.mjs')) {
+      fail(`${label} must stage e5 + RapidOCR before audit`)
+    } else {
+      ok(`${label} Hybrid RAG stage order (e5 / RapidOCR / engines MANIFEST)`)
+    }
+  }
 
   for (const rel of [
     'scripts/verify-packaged-updater.mjs',

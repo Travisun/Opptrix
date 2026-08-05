@@ -60,6 +60,10 @@ const PRIMARY_CASES = [
   { message: '这只 ETF 跟踪指数和费率档案', expectPrimary: 'get_etf_profile', intent: 'etf_profile' },
   { message: '对比这两份研报的评级和目标价', expectPrimary: 'list_session_documents', intent: 'session_documents' },
   { message: '分析一下附件里的研究报告', expectPrimary: 'list_session_documents', intent: 'session_documents' },
+  { message: '对比这两份附件研报的评级', expectPrimary: 'list_session_documents', intent: 'session_documents' },
+  { message: '跨研报找一下宁德时代相关主题摘要', expectPrimary: 'search_library', intent: 'library_search' },
+  { message: '哪些研报提到宁德时代', expectPrimary: 'search_library', intent: 'library_search' },
+  { message: '跨研报找半导体相关主题', expectPrimary: 'search_library', intent: 'library_search' },
   { message: '现在开盘了吗交易时段', expectPrimary: 'get_market_session', intent: 'market_session' },
   { message: '这只 ETF 净值和溢价率', expectPrimary: 'get_etf_nav', intent: 'etf_nav' },
   { message: '看下 ETF 持仓权重成分', expectPrimary: 'get_etf_holdings', intent: 'etf_holdings' },
@@ -159,6 +163,11 @@ test('D3 confusion pairs — prefer wins over avoid in route plan', () => {
       prefer: 'get_market_regime',
       avoid: 'get_trend_brief',
     },
+    {
+      message: '哪些研报提到茅台',
+      prefer: 'search_library',
+      avoid: 'search_document',
+    },
   ]
 
   for (const c of cases) {
@@ -212,6 +221,8 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
     routePlaybook: '【本轮工具选型卡】\n- 测试卡',
   })
   assert.match(slim, /本轮工具选型卡/)
+  assert.match(slim, /search_library/)
+  assert.match(slim, /多跳/)
   assert.ok(!slim.includes('【资讯调阅'))
   assert.ok(!slim.includes('【数据源扩展'))
   assert.ok(!slim.includes('【基本面事实表'))

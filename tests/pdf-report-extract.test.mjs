@@ -78,6 +78,39 @@ describe('content parts for ready PDF', () => {
   })
 })
 
+describe('content parts for image OCR', () => {
+  it('ready image injects catalog text (OCR path)', () => {
+    const parts = buildUserContentParts('看图', 'sess', [{
+      id: 'img1',
+      kind: 'image',
+      mime: 'image/png',
+      name: 'scan.png',
+      size: 100,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      extract: { status: 'ready', pageCount: 1, charCount: 80 },
+    }], 'http://127.0.0.1:8787')
+    assert.ok(parts.some(p => p.type === 'text' && /研报已整理/.test(p.text)))
+  })
+
+  it('failed OCR emits clear error without relying on vision alone', () => {
+    const parts = buildUserContentParts('看图', 'sess', [{
+      id: 'img2',
+      kind: 'image',
+      mime: 'image/png',
+      name: 'scan.png',
+      size: 100,
+      createdAt: '2026-01-01T00:00:00.000Z',
+      extract: { status: 'failed', error: '文字识别尚未就绪' },
+    }], 'http://127.0.0.1:8787')
+    assert.equal(parts.length, 2)
+    assert.equal(parts[1].type, 'text')
+    if (parts[1].type === 'text') {
+      assert.match(parts[1].text, /识别失败|文字识别/)
+    }
+    assert.ok(!parts.some(p => p.type === 'image_url'))
+  })
+})
+
 describe('document tools pack membership', () => {
   it('belongs to core always-on pack', () => {
     assert.equal(packIdForTool('list_session_documents'), 'core')

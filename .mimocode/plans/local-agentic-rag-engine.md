@@ -12,10 +12,10 @@
 
 ## 非目标（本阶段）
 
-- 默认安装包内置 Unlimited-OCR / embedding 权重
 - Qdrant / 云端向量库
 - PyMuPDF（AGPL）默认路径
 - 跨设备同步云知识库
+- 主题关联图 / GraphRAG（已改为硬删，见附录）
 
 ## 架构
 
@@ -37,7 +37,7 @@ Agent tools → FTS ⊕ LanceDB → read chunks
 | 元数据 / SHA / 会话绑定 | SQLite | — |
 | 关键词 | FTS5 | — |
 | 向量库 | **LanceDB**（嵌入式） | Apache-2.0 |
-| Embedding | **multilingual-e5-small**（按需下载） | 遵循模型卡（商用友好） |
+| Embedding | **multilingual-e5-small**（桌面默认内置；否则按需下载） | 遵循模型卡（商用友好） |
 | L0 | 现有 pdf-parse / pdf.js | Apache-2.0 |
 | L1 | pdfplumber 侧车 | MIT |
 | L2 | Unlimited-OCR 可选本地包 | MIT |
@@ -79,11 +79,11 @@ Agent tools → FTS ⊕ LanceDB → read chunks
 
 ## 验收（总 AC）
 
-- [ ] 拖入 2 份电子版 PDF → 入库 → search/read 可回答并带页码
-- [ ] 同一文件再拖入 → SHA 命中秒级复用，不重跑 L0
-- [ ] 纯文本模型可用（不依赖 PDF 多模态）
-- [ ] 未装 embedding / L2 时功能降级可用
-- [ ] NOTICE/关于页列出第三方 License
+- [x] 拖入 2 份电子版 PDF → 入库 → search/read 可回答并带页码
+- [x] 同一文件再拖入 → SHA 命中秒级复用，不重跑 L0
+- [x] 纯文本模型可用（不依赖 PDF 多模态）
+- [x] 未装 embedding / L2 时功能降级可用
+- [x] NOTICE/关于页列出第三方 License
 - [ ] `build:packages` / 相关测试通过；有 UI 则 `check:ui`
 
 ## Subagent 分工
@@ -119,7 +119,7 @@ Phase A：`selectEngine` 恒 L0；升阶规则 Phase C 启用
 
 ### 模型下载（Phase B）
 
-`~/.opptrix/models/multilingual-e5-small/`；LanceDB：`~/.opptrix/lancedb/doc_chunks/`
+桌面：`resources/llms/multilingual-e5-small/` 内置 → `~/.opptrix/llms/…` → 按需下载；LanceDB：`~/.opptrix/lancedb/doc_chunks/`
 
 ### Explorer 接入要点
 
@@ -131,4 +131,56 @@ Phase A：`selectEngine` 恒 L0；升阶规则 Phase C 启用
 ### Phase A 文件清单
 
 见 Explorer 报告；核心新增 `packages/doc-library/**`，改造 `chat-attachments` / `document-tools` / meta 类型与测试。
+
+
+## 附录：无图 Agentic Hybrid RAG（定稿 2026-08-05；Graph **硬删** 2026-08-05）
+
+### 目标
+
+在 parse + embed 就绪后，**不依赖主题关联图**，由 Agent 经 Hybrid 检索 + 多跳精读完成跨会话/全库研报与资讯挖掘。
+
+### 检索主路径（Hybrid 多跳）
+
+1. **Hybrid 召回**：`searchHybrid`（FTS ⊕ 向量，RRF 融合）；`scope=session`（本会话）| `scope=library`（跨会话全库）
+2. **Agent 多跳**：`search_library` 找片段 → `read_document(document_id)` 精读 → 可换关键词重复直至信息足够（**无需先建图**）
+
+### Agent 工具
+
+| 场景 | 工具链 |
+|------|--------|
+| 本会话附件 | `list_session_documents` → `search_document` → `read_document` |
+| 跨会话/全库 | `search_library` → `read_document(document_id)` 多跳 |
+
+意图路由（`tool-route-plan.ts`）：跨研报/实体类问句 → intent **`library_search`**，首选 `search_library`；勿与 `search_document` / `list_session_documents` 混淆。
+
+### 关联图（**硬删**，非软停用）
+
+> 目标态：代码 / API / schema / UI **全部移除** GraphRAG，不是「字段保留 + no-op」。
+
+- **删除**：`packages/doc-library/src/graph/**`、`scheduleGraph` / `graph_jobs` worker / LLM 边 / 社区 tick
+- **删除 API**：`GET|PATCH /api/settings/doc-library`、`GET .../status`、`POST .../association/requeue`、`GET /api/doc-library/graph/search`
+- **schema v5**：`DROP` `entities` / `edges` / `graph_jobs` / `graph_communities` / `graph_community_members` / `graph_community_documents`
+- **schema v6**：删除列 `documents.llm_graph_at`（`DOC_LIBRARY_SCHEMA_VERSION` → 6，`MIGRATION_STEPS` 对齐）
+- **死代码清理**：移除 `search_knowledge_graph` 工具注册与别名处理；清理图相关 repository / types / worker 残留
+- **设置页**：无关联 UI（已移除）
+- embed 完成后**仅**向量索引，不入队任何图任务
+
+### 模型与降级
+
+- **向量** = multilingual-e5-small + LanceDB（**桌面默认内置** `resources/llms/` → 用户目录 → 按需下载；未就绪则 FTS-only）
+- **语义未就绪**：`searchHybrid` 自动降级 `searchFts`，不阻断对话
+
+### 入库与范围
+
+| 来源 | source_type | Hybrid 索引 |
+|------|-------------|-------------|
+| 研报附件 / 文档库 | `report` | ✅ |
+| 新闻（feed 正文入库） | `news` | ✅（仅 parse + embed，无建图） |
+
+### 验收（RAG AC）
+
+- [x] 跨会话：`search_library` 命中 chunk → `read_document` 带页码引用
+- [x] 未装 / 未就绪 embedding：FTS 降级仍可检索
+- [ ] Graph **硬删**：无 `graph_jobs` 入队；关联设置 / graph/search 端点已移除；schema v5 DROP 图表 + v6 删除 `llm_graph_at`；无 `search_knowledge_graph` 别名
+- [x] 路由黄金用例：跨研报问句首推 `search_library`（intent `library_search`）
 

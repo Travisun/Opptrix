@@ -81,6 +81,7 @@ const useStyles = makeStyles({
 function kindIcon(kind: MediaKind) {
   switch (kind) {
     case 'pdf': return <DocumentPdfRegular fontSize={18} />
+    case 'document': return <DocumentPdfRegular fontSize={18} />
     case 'video': return <VideoRegular fontSize={18} />
     case 'audio': return <MusicNote2Regular fontSize={18} />
     default: return <ImageRegular fontSize={18} />
@@ -88,14 +89,17 @@ function kindIcon(kind: MediaKind) {
 }
 
 function attachmentStatusLabel(item: ChatAttachmentMeta): string {
-  if (item.kind === 'pdf') {
+  if (item.kind === 'pdf' || item.kind === 'document' || item.kind === 'image') {
     const status = item.extract?.status
-    if (status === 'pending') return '正在整理研报…'
+    if (status === 'pending') {
+      if (item.kind === 'image') return '正在识别文字…'
+      return '正在整理…'
+    }
     if (status === 'ready') {
       const pages = item.extract?.pageCount
       return pages != null ? `已整理，共 ${pages} 页` : '已整理'
     }
-    if (status === 'failed') return item.extract?.error || '整理失败，请换电子版'
+    if (status === 'failed') return item.extract?.error || '整理失败，请换可读文件后重试'
   }
   return formatBytesShort(item.size)
 }

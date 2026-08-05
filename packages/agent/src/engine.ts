@@ -82,12 +82,13 @@ import {
 } from './llm/usage-estimate.js'
 import { mergeTokenUsage, emptyTokenUsage, type TokenUsage } from './llm/token-usage.js'
 import {
-  isPdfTextExtractReady,
+  isLibraryExtractReady,
   readAttachmentMeta,
   validateAttachmentAgainstCapabilities,
   waitForPdfExtractReady,
 } from './chat-attachments.js'
 import type { ChatAttachmentMeta } from './media-types.js'
+import { isLibraryIngestKind } from './media-types.js'
 import { buildUserContentParts, chatMessageContentToText } from './content-parts.js'
 
 export interface SessionContextUsage {
@@ -835,10 +836,10 @@ export class AgentEngine {
 
     const activeModel = modelRef?.trim() || record.model
 
-    // PDF：发送前短等文本整理；ready 后文本模型可过校验
+    // 研报库附件：发送前短等整理；ready 后文本模型可过校验
     const resolvedAttachments: ChatAttachmentMeta[] = []
     for (const meta of attachmentMetas) {
-      if (meta.kind !== 'pdf') {
+      if (!isLibraryIngestKind(meta.kind)) {
         resolvedAttachments.push(meta)
         continue
       }
@@ -864,8 +865,8 @@ export class AgentEngine {
       let count = 0
       let total = 0
       for (const meta of resolvedAttachments) {
-        // 已整理 PDF 不占原生 pdf 能力；其余媒体仍按 caps 校验
-        if (isPdfTextExtractReady(meta)) {
+        // 已整理的研报库附件不占原生多模态能力；图片仍可附带看图
+        if (isLibraryExtractReady(meta) && meta.kind !== 'image') {
           count += 1
           total += meta.size
           continue

@@ -84,7 +84,7 @@ export interface AttachmentLimits {
   maxTotalBytes: number
 }
 
-export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
+export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio'
 
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
 

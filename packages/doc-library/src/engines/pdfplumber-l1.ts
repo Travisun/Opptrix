@@ -1,47 +1,40 @@
 /**
  * L1 版面增强：pdfplumber Python 侧车（MIT）。
  * 安装目录：~/.opptrix/engines/pdfplumber-worker/
+ * 桌面内置 wheels：resources/engines/<plat-arch>/pdfplumber-worker/
  */
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
-import { fileURLToPath } from 'node:url'
-import { pdfplumberWorkerDir } from '../paths.js'
+import { getBundledEngineDir, pdfplumberWorkerDir } from '../paths.js'
 import type { ParseChunkInput, ParseRunResult, ParseRunner } from '../types.js'
 import { isRecord, spawnJsonLine } from './spawn-json.js'
+import {
+  ensureVenvDeps,
+  syncEngineWorkerFiles,
+  venvPythonBin,
+} from './venv-install.js'
 
 export const PDFPLUMBER_ENGINE_VERSION = '1.0.0'
 const DEFAULT_TIMEOUT_MS = 90_000
+const PING_TIMEOUT_MS = 15_000
 const MARKER = 'READY'
-
-function repoWorkerScript(): string | null {
-  // packages/doc-library/src/engines → repo root scripts/
-  try {
-    const here = path.dirname(fileURLToPath(import.meta.url))
-    // src/engines → packages/doc-library → packages → repo root
-    const candidate = path.resolve(here, '../../../../scripts/pdfplumber-worker/worker.py')
-    if (fs.existsSync(candidate)) return candidate
-  } catch {
-    /* ignore */
-  }
-  const fromCwd = path.resolve(process.cwd(), 'scripts/pdfplumber-worker/worker.py')
-  return fs.existsSync(fromCwd) ? fromCwd : null
-}
+const ENGINE_ID = 'pdfplumber-worker' as const
+const PYTHON_ENV_KEYS = ['OPPTRIX_PDFPLUMBER_PYTHON']
 
 export function pdfplumberWorkerScriptPath(installDir = pdfplumberWorkerDir()): string | null {
   const installed = path.join(installDir, 'worker.py')
   if (fs.existsSync(installed)) return installed
-  return repoWorkerScript()
+  const bundled = getBundledEngineDir(ENGINE_ID)
+  if (bundled) {
+    const p = path.join(bundled, 'worker.py')
+    if (fs.existsSync(p)) return p
+  }
+  return null
 }
 
 export function pdfplumberPythonBin(installDir = pdfplumberWorkerDir()): string {
-  const venvUnix = path.join(installDir, 'venv', 'bin', 'python')
-  const venvWin = path.join(installDir, 'venv', 'Scripts', 'python.exe')
-  if (fs.existsSync(venvUnix)) return venvUnix
-  if (fs.existsSync(venvWin)) return venvWin
-  return process.env.OPPTRIX_PDFPLUMBER_PYTHON?.trim()
-    || process.env.OPPTRIX_PYTHON?.trim()
-    || 'python3'
+  return venvPythonBin(installDir, PYTHON_ENV_KEYS)
 }
 
 export type PdfplumberStatus = {
@@ -51,6 +44,8 @@ export type PdfplumberStatus = {
   dir: string
   workerScript: string | null
   hint: string
+  /** bundled = 应用自带 wheels/脚本；user = 本机准备；missing = 未就绪 */
+  source: 'bundled' | 'user' | 'missing'
 }
 
 export function getPdfplumberStatus(installDir = pdfplumberWorkerDir()): PdfplumberStatus {
@@ -58,15 +53,25 @@ export function getPdfplumberStatus(installDir = pdfplumberWorkerDir()): Pdfplum
   const installed = fs.existsSync(marker)
   const workerScript = pdfplumberWorkerScriptPath(installDir)
   const available = installed && workerScript !== null
+  const hasBundled = getBundledEngineDir(ENGINE_ID) !== null
+
+  let hint: string
+  if (available) {
+    hint = hasBundled ? '版面增强已就绪，应用已自带' : '版面增强已就绪'
+  } else if (hasBundled) {
+    hint = '应用已自带版面增强；首次使用时会完成本机准备'
+  } else {
+    hint = '尚未准备版面增强。可先点「准备版面增强」，我们会完成本机准备'
+  }
+
   return {
     available,
     installed,
     label: '版面增强',
     dir: installDir,
     workerScript,
-    hint: available
-      ? '版面增强已就绪'
-      : '尚未安装版面增强。可先点「准备版面增强」，再按本机说明完成后续准备',
+    hint,
+    source: available ? (hasBundled ? 'bundled' : 'user') : (hasBundled ? 'bundled' : 'missing'),
   }
 }
 
@@ -75,53 +80,75 @@ export function isPdfplumberAvailable(installDir = pdfplumberWorkerDir()): boole
 }
 
 /**
- * 将仓库 worker 脚本同步到用户目录并写 READY（依赖需用户自行 pip install）。
- * 不自动 pip，避免静默网络与权限问题。
+ * 同步 worker、venv+pip（优先内置 wheels 离线安装）、ping 成功才写 READY。
  */
-export async function preparePdfplumberInstall(installDir = pdfplumberWorkerDir()): Promise<PdfplumberStatus> {
-  await fs.promises.mkdir(installDir, { recursive: true })
-  const src = repoWorkerScript()
-  if (!src) {
-    throw new Error('暂时无法准备版面增强，请确认应用完整后再试')
+export async function preparePdfplumberInstall(
+  installDir = pdfplumberWorkerDir(),
+): Promise<PdfplumberStatus> {
+  const synced = await syncEngineWorkerFiles(ENGINE_ID, installDir)
+  if ('error' in synced) {
+    throw new Error(synced.error)
   }
-  const dest = path.join(installDir, 'worker.py')
-  await fs.promises.copyFile(src, dest)
-  const reqSrc = path.join(path.dirname(src), 'requirements.txt')
-  if (fs.existsSync(reqSrc)) {
-    await fs.promises.copyFile(reqSrc, path.join(installDir, 'requirements.txt'))
-  }
+  const { workerDest } = synced
+
   await fs.promises.writeFile(
     path.join(installDir, 'INSTALL.md'),
     [
       '# 版面增强（开发者）',
       '',
+      '禁止 PyMuPDF / fitz（AGPL）。桌面安装包可内置 wheels，离线 pip 安装。',
+      '',
       '```bash',
       `cd "${installDir}"`,
       'python3 -m venv venv',
       'source venv/bin/activate  # Windows: venv\\Scripts\\activate',
-      'pip install -r requirements.txt',
+      'pip install --no-index --find-links wheels -r requirements.txt  # 有内置 wheels 时',
+      '# 或: pip install -r requirements.txt',
       '```',
-      '',
-      '依赖就绪后再次调用准备接口（或手动创建 READY）即可被 Opptrix 探测。',
       '',
     ].join('\n'),
     'utf8',
   )
 
-  // 仅在 ping 成功时写 READY，避免未 pip 却标可用
+  const deps = await ensureVenvDeps({
+    installDir,
+    engineId: ENGINE_ID,
+    envKeys: PYTHON_ENV_KEYS,
+    messages: {
+      noPython: '暂时无法完成本机准备，请确认本机已安装可用的运行环境后重试',
+      incomplete: '版面增强准备文件不完整，请确认应用完整后再试',
+      pipFailed: '版面增强依赖准备失败，请稍后重试',
+    },
+  })
+  if (!deps.ok) {
+    if (fs.existsSync(path.join(installDir, MARKER))) {
+      try {
+        await fs.promises.unlink(path.join(installDir, MARKER))
+      } catch {
+        /* ignore */
+      }
+    }
+    const status = getPdfplumberStatus(installDir)
+    return {
+      ...status,
+      available: false,
+      installed: false,
+      hint: deps.error ?? status.hint,
+    }
+  }
+
   const python = pdfplumberPythonBin(installDir)
   const ping = await spawnJsonLine({
     command: python,
-    args: [dest],
+    args: [workerDest],
     request: { op: 'ping' },
-    timeoutMs: 15_000,
+    timeoutMs: PING_TIMEOUT_MS,
     cwd: installDir,
   })
   const pingOk = isRecord(ping.data) && ping.data.ok === true
   if (pingOk) {
     await fs.promises.writeFile(path.join(installDir, MARKER), `${new Date().toISOString()}\n`, 'utf8')
   } else if (fs.existsSync(path.join(installDir, MARKER))) {
-    // ping 失败则撤掉误标
     try {
       await fs.promises.unlink(path.join(installDir, MARKER))
     } catch {
@@ -133,7 +160,7 @@ export async function preparePdfplumberInstall(installDir = pdfplumberWorkerDir(
   if (!status.available) {
     return {
       ...status,
-      hint: '文件已就位；请按本机说明完成后续准备后，再点一次「准备版面增强」',
+      hint: '文件已就位；请再点一次「准备版面增强」，或确认本机准备已完成',
     }
   }
   return status

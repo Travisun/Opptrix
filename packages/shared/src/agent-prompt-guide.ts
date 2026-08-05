@@ -385,7 +385,10 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   ]
 
   sections.push(
-    '【对话研报附件】用户拖入的 PDF 经本地整理后仅注入短目录；分析/对比时先 list_session_documents，再 search_document / read_document 按页取片段；引用须带文件名与页码；禁止臆造未读页内容。',
+    '【文档 RAG — 多跳检索】',
+    '1) 本会话附件：list_session_documents → search_document（可省略 attachment_id 搜全部）→ read_document 按页精读',
+    '2) 跨会话/全库：search_library 按关键词找片段 → read_document(document_id) 精读；可换词多跳直至信息足够',
+    '3) 引用须带文档名与页码；禁止臆造未读内容；勿一次灌全文',
   )
 
   if (opts?.sessionClock) {

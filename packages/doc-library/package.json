@@ -15,10 +15,18 @@
     "build": "tsc -p tsconfig.json"
   },
   "dependencies": {
+    "@gutenye/ocr-node": "^1.4.8",
     "@huggingface/transformers": "^3.8.1",
+    "@hyzyla/pdfium": "^2.1.13",
     "@lancedb/lancedb": "^0.33.0",
     "@opptrix/shared": "*",
-    "better-sqlite3": "^12.11.1"
+    "@opptrix/user-store": "*",
+    "better-sqlite3": "^12.11.1",
+    "jszip": "^3.10.1",
+    "mammoth": "^1.12.0",
+    "ppt-to-text": "^1.0.1",
+    "sharp": "^0.35.3",
+    "word-extractor": "^1.0.4"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.12"

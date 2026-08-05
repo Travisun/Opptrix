@@ -1,6 +1,10 @@
 import type { ChatAttachmentMeta } from './media-types.js'
 import { mimeToMediaKind } from './media-types.js'
-import { isPdfTextExtractReady, readAttachmentBuffer, saveAttachment } from './chat-attachments.js'
+import {
+  isLibraryExtractReady,
+  readAttachmentBuffer,
+  saveAttachment,
+} from './chat-attachments.js'
 import { formatDocumentCatalogLine } from './pdf-extract.js'
 import type { ContentPart, ChatMessage } from './llm/provider.js'
 
@@ -26,46 +30,69 @@ function guessNameFromMime(mime: string): string {
   return `model-output-${Date.now()}.${ext}`
 }
 
-export function attachmentToContentPart(
+export function attachmentToContentParts(
   sessionId: string,
   meta: ChatAttachmentMeta,
   apiBaseUrl: string,
-): ContentPart {
-  if (meta.kind === 'pdf' && isPdfTextExtractReady(meta)) {
-    return { type: 'text', text: formatDocumentCatalogLine(meta) }
+): ContentPart[] {
+  if ((meta.kind === 'pdf' || meta.kind === 'document') && isLibraryExtractReady(meta)) {
+    return [{ type: 'text', text: formatDocumentCatalogLine(meta) }]
   }
 
-  if (meta.kind === 'pdf' && meta.extract?.status === 'failed') {
-    return {
+  if ((meta.kind === 'pdf' || meta.kind === 'document') && meta.extract?.status === 'failed') {
+    return [{
       type: 'text',
-      text: `【研报未整理】${meta.name}：${meta.extract.error || '未能整理，请换可复制文本的电子版'}`,
-    }
+      text: `【未整理】${meta.name}：${meta.extract.error || '未能整理，请换可读文件后重试'}`,
+    }]
   }
 
-  if (meta.kind === 'pdf' && meta.extract?.status === 'pending') {
-    return {
+  if ((meta.kind === 'pdf' || meta.kind === 'document') && meta.extract?.status === 'pending') {
+    return [{
       type: 'text',
-      text: `【研报整理中】${meta.name}：仍在整理，暂不可阅读`,
+      text: `【整理中】${meta.name}：仍在整理，暂不可阅读`,
+    }]
+  }
+
+  if (meta.kind === 'image') {
+    // 图片一律以本地 OCR 文本为主（catalog + document tools）；多模态看图仅作补充
+    if (isLibraryExtractReady(meta)) {
+      const parts: ContentPart[] = [{ type: 'text', text: formatDocumentCatalogLine(meta) }]
+      const readyBuf = readAttachmentBuffer(sessionId, meta.id)
+      if (readyBuf) {
+        const b64 = readyBuf.toString('base64')
+        const url = `data:${meta.mime};base64,${b64}`
+        parts.push({ type: 'image_url', image_url: { url, detail: 'auto' } })
+      }
+      return parts
     }
+    if (meta.extract?.status === 'pending') {
+      return [{
+        type: 'text',
+        text: `【识别中】${meta.name}：正在识别文字，请稍后再问`,
+      }]
+    }
+    if (meta.extract?.status === 'failed') {
+      return [{
+        type: 'text',
+        text: `【识别失败】${meta.name}：${meta.extract.error || '未能识别图片中的文字，请稍后重试或换更清晰的图片'}`,
+      }]
+    }
+    return [{
+      type: 'text',
+      text: `【识别失败】${meta.name}：暂时无法识别图片中的文字，请稍后重试或换更清晰的图片`,
+    }]
   }
 
   const buf = readAttachmentBuffer(sessionId, meta.id)
   if (!buf) {
-    return { type: 'text', text: `[附件 ${meta.name} 不可用]` }
+    return [{ type: 'text', text: `[附件 ${meta.name} 不可用]` }]
   }
 
-  if (meta.kind === 'image') {
-    const b64 = buf.toString('base64')
-    const url = `data:${meta.mime};base64,${b64}`
-    return { type: 'image_url', image_url: { url, detail: 'auto' } }
-  }
-
-  if (meta.kind === 'pdf') {
-    // 无整理结果时不再灌入 base64（文本模型不可用且昂贵）；仅提示
-    return {
+  if (meta.kind === 'pdf' || meta.kind === 'document') {
+    return [{
       type: 'text',
-      text: `【研报】${meta.name}：尚未整理完成，请稍后再问`,
-    }
+      text: `【附件】${meta.name}：尚未整理完成，请稍后再问`,
+    }]
   }
 
   if (meta.kind === 'video' || meta.kind === 'audio') {
@@ -73,16 +100,26 @@ export function attachmentToContentPart(
       const b64 = buf.toString('base64')
       if (meta.kind === 'audio') {
         const fmt = meta.mime.split('/')[1]?.split(';')[0] ?? 'wav'
-        return { type: 'input_audio', input_audio: { data: b64, format: fmt } }
+        return [{ type: 'input_audio', input_audio: { data: b64, format: fmt } }]
       }
       const url = `data:${meta.mime};base64,${b64}`
-      return { type: 'image_url', image_url: { url } }
+      return [{ type: 'image_url', image_url: { url } }]
     }
     const url = `${apiBaseUrl.replace(/\/$/, '')}/sessions/${sessionId}/attachments/${meta.id}`
-    return { type: 'file', file: { filename: meta.name, file_data: url } }
+    return [{ type: 'file', file: { filename: meta.name, file_data: url } }]
   }
 
-  return { type: 'text', text: `[不支持的附件类型: ${meta.name}]` }
+  return [{ type: 'text', text: `[不支持的附件类型: ${meta.name}]` }]
+}
+
+/** @deprecated 使用 attachmentToContentParts */
+export function attachmentToContentPart(
+  sessionId: string,
+  meta: ChatAttachmentMeta,
+  apiBaseUrl: string,
+): ContentPart {
+  const parts = attachmentToContentParts(sessionId, meta, apiBaseUrl)
+  return parts[0] ?? { type: 'text', text: '' }
 }
 
 export function buildUserContentParts(
@@ -94,7 +131,7 @@ export function buildUserContentParts(
   const parts: ContentPart[] = []
   if (text.trim()) parts.push({ type: 'text', text: text.trim() })
   for (const meta of attachments) {
-    parts.push(attachmentToContentPart(sessionId, meta, apiBaseUrl))
+    parts.push(...attachmentToContentParts(sessionId, meta, apiBaseUrl))
   }
   return parts.length ? parts : [{ type: 'text', text: '' }]
 }

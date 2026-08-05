@@ -1,90 +1,128 @@
 /**
  * 设置 / 服务端：解析引擎与语义模型状态（用户文案不含引擎专名）。
+ * 已移除「版面增强」(pdfplumber)；深度整理 = OCR 可用性。
  */
 import {
-  getPdfplumberStatus,
-  preparePdfplumberInstall,
-  removePdfplumberInstall,
-  type PdfplumberStatus,
-} from './engines/pdfplumber-l1.js'
-import {
-  getUnlimitedOcrStatus,
-  markUnlimitedOcrReady,
-  prepareUnlimitedOcrInstall,
-  removeUnlimitedOcrInstall,
-  type UnlimitedOcrStatus,
-} from './engines/unlimited-ocr-l2.js'
+  getOcrL2Status,
+  prepareOcrL2Install,
+  removeOcrL2Install,
+  markOcrL2Ready,
+  type OcrEngineStatus,
+} from './engines/ocr-l2.js'
 import {
   getSemanticModelStatus,
   installSemanticModel,
   uninstallSemanticModel,
   type SemanticModelUiStatus,
 } from './embedding-api.js'
+import { getEmbeddingService } from './embedding.js'
+import type { RapidOcrModelSource } from './paths.js'
 
 export type ParseEnginesUiStatus = {
+  /** @deprecated 始终不可用；保留字段以免旧客户端炸 */
   layout: {
     available: boolean
     installed: boolean
     label: string
     hint: string
+    source: 'bundled' | 'user' | 'missing'
   }
   deep: {
     available: boolean
     installed: boolean
     label: string
     hint: string
+    source: RapidOcrModelSource
   }
   semantic: SemanticModelUiStatus
 }
 
-function toPublicLayout(s: PdfplumberStatus) {
+function toPublicDeep(s: OcrEngineStatus) {
   return {
     available: s.available,
     installed: s.installed,
     label: s.label,
     hint: s.hint,
+    source: s.source,
   }
 }
 
-function toPublicDeep(s: UnlimitedOcrStatus) {
+function retiredLayout() {
   return {
-    available: s.available,
-    installed: s.installed,
-    label: s.label,
-    hint: s.hint,
+    available: false,
+    installed: false,
+    label: '版面增强',
+    hint: '该能力已停用，基础整理与扫描件识别已覆盖常见研报',
+    source: 'missing' as const,
   }
 }
 
 export function getParseEnginesStatus(): ParseEnginesUiStatus {
   return {
-    layout: toPublicLayout(getPdfplumberStatus()),
-    deep: toPublicDeep(getUnlimitedOcrStatus()),
+    layout: retiredLayout(),
+    deep: toPublicDeep(getOcrL2Status()),
     semantic: getSemanticModelStatus(),
   }
 }
 
+/** @deprecated 版面增强已移除 */
 export async function prepareLayoutEngine(): Promise<ParseEnginesUiStatus['layout']> {
-  return toPublicLayout(await preparePdfplumberInstall())
+  return retiredLayout()
 }
 
+/** @deprecated */
 export async function uninstallLayoutEngine(): Promise<void> {
-  await removePdfplumberInstall()
+  /* no-op */
 }
 
 export async function prepareDeepEngine(): Promise<ParseEnginesUiStatus['deep']> {
-  return toPublicDeep(await prepareUnlimitedOcrInstall())
+  return toPublicDeep(await prepareOcrL2Install())
 }
 
 export async function markDeepEngineReady(): Promise<ParseEnginesUiStatus['deep']> {
-  return toPublicDeep(await markUnlimitedOcrReady())
+  return toPublicDeep(await markOcrL2Ready())
 }
 
 export async function uninstallDeepEngine(): Promise<void> {
-  await removeUnlimitedOcrInstall()
+  await removeOcrL2Install()
 }
 
 export {
   getSemanticModelStatus,
   installSemanticModel,
   uninstallSemanticModel,
+}
+
+/**
+ * 桌面首启：启用 embedding；OCR 模型内置时标记深度整理可用。
+ * 失败不抛；日志不含路径与密钥。
+ */
+export async function ensureBundledRagRuntime(): Promise<{
+  embedding: boolean
+  layout: boolean
+  deep: boolean
+}> {
+  const result = { embedding: false, layout: false, deep: false }
+
+  try {
+    result.embedding = await getEmbeddingService().tryEnableDefaultBackend()
+  } catch {
+    result.embedding = false
+  }
+
+  result.layout = false
+
+  try {
+    const status = getOcrL2Status()
+    if (status.available) {
+      result.deep = true
+    } else {
+      const prepared = await prepareOcrL2Install()
+      result.deep = prepared.available
+    }
+  } catch {
+    result.deep = false
+  }
+
+  return result
 }

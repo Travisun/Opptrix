@@ -16,7 +16,9 @@ pip install -r requirements.txt
 date -u +%Y-%m-%dT%H:%M:%SZ > READY
 ```
 
-或调用 API：`POST /api/settings/parse-engines/layout/prepare`（复制脚本并写 READY；仍需本机 pip 装依赖）。
+或调用 API：`POST /api/settings/parse-engines/layout/prepare`（同步脚本 → 创建 venv → pip；桌面内置 wheels 时离线 `--no-index --find-links`）。
+
+桌面打包：`apps/desktop/scripts/stage-rag-engines.mjs` → `resources/engines/<platform>-<arch>/pdfplumber-worker/wheels/`。
 
 ## 协议
 

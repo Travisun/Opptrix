@@ -31,7 +31,7 @@ alwaysApply: true
 | **测试** | `testing.mdc` | `tests/` |
 | **性能** | `performance.mdc` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | **文档** | `documentation.mdc` | `docs/` |
-| **多 Agent 编排** | `multi-agent-orchestration.mdc` | - |
+| **多 Agent 编排** | 拆分 → 派 2–4 subagent → Main 维护 ID 登记表 → 完成即停回收 → 主验收（`multi-agent-orchestration.mdc`） | - |
 
 ## 核心流程
 
@@ -61,11 +61,12 @@ alwaysApply: true
 ### 多 Agent 编排
 
 ```
-1. 拆解任务 → 角色阵容（4-6 agent）
-2. 写 briefing → 含自含上下文 + AC
-3. 派发 specialist → 并行优先
-4. Main Agent 审计 → AC 逐条验证
-5. 不通过 → 返工（最多 3 轮）→ 通过后交付
+1. 拆分可工作步骤 + AC（强制）
+2. 派 2–4 个执行 subagent（并行优先；含独立 Verifier）；**立刻写入 ID 登记表**
+3. 完成通知到达 → **同一回合停止并 `reclaimed`**（禁止后台空跑）
+4. 主 Agent 逐条验收审计
+5. 不通过 → 先回收无用者，再带反馈继续分派，直到可用
+6. 交付前清点登记表无 `running` → 交付
 ```
 
 ### 发布流程

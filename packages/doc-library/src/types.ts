@@ -1,9 +1,27 @@
-/** L0/L1/L2 解析引擎标识 */
-export type ParseEngineId = 'pdf-extract-l0' | 'pdfplumber-l1' | 'unlimited-ocr-l2'
+/** 解析引擎标识；`rapidocr-l2` / `unlimited-ocr-l2` / `pdfplumber-l1` 为兼容别名（读旧 artifact 不炸） */
+export type ParseEngineId =
+  | 'text-l0'
+  | 'office-l0'
+  | 'pdf-extract-l0'
+  | 'ocr-l2'
+  | 'pdfplumber-l1'
+  | 'rapidocr-l2'
+  | 'unlimited-ocr-l2'
 
 export type ParseStatus = 'pending' | 'ready' | 'failed'
 
-export type DocumentKind = 'pdf' | 'image' | 'other'
+export type DocumentKind =
+  | 'pdf'
+  | 'image'
+  | 'text'
+  | 'docx'
+  | 'doc'
+  | 'pptx'
+  | 'ppt'
+  | 'other'
+
+/** 文档来源：研报附件 vs 资讯 */
+export type DocumentSourceType = 'report' | 'news'
 
 export interface DocumentRow {
   id: string
@@ -13,6 +31,10 @@ export interface DocumentRow {
   kind: DocumentKind
   byte_size: number
   blob_path: string
+  /** 默认 report；资讯 ingest 写 news */
+  source_type: DocumentSourceType
+  /** 外部主键（如资讯 article id）；研报可空 */
+  external_id: string | null
   created_at: string
   updated_at: string
 }
@@ -68,15 +90,19 @@ export interface ParseRunResult {
   usedEngineVersion?: string
 }
 
-/** 单次解析选项（升阶 / 强制引擎） */
+/** 单次解析选项（升阶 / 强制引擎 / 路由上下文） */
 export interface ParseRunOpts {
-  /** 用户请求深度整理 → 允许升至 L2（须已安装） */
+  /** 用户请求深度整理 → 允许升至 OCR（须已就绪） */
   deepParse?: boolean
   /** 强制指定引擎；不可用时降级并带友好 error */
   forceEngine?: ParseEngineId
+  /** 文档类型（Router 按 kind 选首引擎） */
+  kind?: DocumentKind
+  mime?: string
+  filename?: string
 }
 
-/** 注入 L0/L1/L2 解析；由 agent 实现，避免 doc-library → agent 循环依赖 */
+/** 注入解析引擎；由 agent 组装 ParseRouter，避免 doc-library → agent 循环依赖 */
 export interface ParseRunner {
   engineId: ParseEngineId
   engineVersion: string
@@ -94,7 +120,7 @@ export interface IngestFromAttachmentInput {
   data: Buffer
   /** attachment 来源时双写 legacy extract */
   source: 'attachment' | 'import'
-  /** 深度整理（扫描件 / 版面增强路径） */
+  /** 深度整理（扫描件 OCR） */
   deepParse?: boolean
   /** 强制引擎；须已可用，否则保留最佳结果 */
   forceEngine?: ParseEngineId
@@ -111,6 +137,17 @@ export interface IngestFromAttachmentResult {
   readyAt?: string
 }
 
+/** 纯文本入库（资讯正文等）；source_type + external_id 去重 */
+export interface IngestFromTextInput {
+  text: string
+  name: string
+  sourceType: DocumentSourceType
+  externalId: string
+  mime?: string
+}
+
+export type IngestFromTextResult = IngestFromAttachmentResult
+
 export interface SessionDocumentView {
   document_id: string
   attachment_id: string | null
@@ -122,6 +159,17 @@ export interface SessionDocumentView {
   char_count: number | null
   error: string | null
   linked_at: string
+}
+
+/** 检索范围：会话附件 vs 全库（ready 文档） */
+export type DocSearchScope = 'session' | 'library'
+
+export interface DocSearchOpts {
+  scope?: DocSearchScope
+  sourceType?: DocumentSourceType
+  attachmentId?: string
+  documentId?: string
+  limit?: number
 }
 
 export interface FtsSearchHit {
@@ -147,4 +195,23 @@ export interface PageRangeReadResult {
   page_to: number
   text: string
   truncated: boolean
+}
+
+/** 将历史引擎 ID 规范为当前主 ID（写库用） */
+export function canonicalizeParseEngineId(id: ParseEngineId | string): ParseEngineId {
+  if (id === 'rapidocr-l2' || id === 'unlimited-ocr-l2') return 'ocr-l2'
+  if (
+    id === 'text-l0'
+    || id === 'office-l0'
+    || id === 'pdf-extract-l0'
+    || id === 'ocr-l2'
+    || id === 'pdfplumber-l1'
+  ) {
+    return id
+  }
+  return 'pdf-extract-l0'
+}
+
+export function isOcrEngineId(id: ParseEngineId | undefined): boolean {
+  return id === 'ocr-l2' || id === 'rapidocr-l2' || id === 'unlimited-ocr-l2'
 }

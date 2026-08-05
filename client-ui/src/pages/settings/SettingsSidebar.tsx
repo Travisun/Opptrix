@@ -5,6 +5,7 @@ import {
   ImageRegular,
   CodeRegular,
   InfoRegular,
+  LibraryRegular,
   NewsRegular,
   PeopleCommunityRegular,
   SearchRegular,
@@ -44,6 +45,7 @@ const NAV: { id: SettingsSection; label: string; icon: typeof SettingsRegular }[
   { id: 'data_providers', label: '数据源', icon: ServerRegular },
   // 内容与阅读
   { id: 'news_feed', label: '新闻订阅', icon: NewsRegular },
+  { id: 'doc_library', label: '研报库', icon: LibraryRegular },
   { id: 'translation', label: '翻译', icon: TranslateRegular },
   { id: 'multimodal', label: '多模态', icon: ImageRegular },
   // 扩展与运行环境
@@ -441,6 +443,8 @@ export function settingsSectionSubtitle(section: SettingsSection): string {
       return '管理行情与资讯数据来源'
     case 'news_feed':
       return '订阅源与更新频率'
+    case 'doc_library':
+      return '研报检索与语义查找'
     case 'translation':
       return '离线翻译与远程回退'
     case 'multimodal':

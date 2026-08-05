@@ -27,10 +27,9 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'models', title: '大模型', desc: '配置大模型提供商与可用模型', keywords: ['模型', 'LLM', 'AI'] },
   { section: 'data_providers', title: '数据源', desc: '管理行情与资讯数据提供商、拖拽回退顺序', keywords: ['priority', '回退', '拖拽', '排序'] },
   { section: 'news_feed', title: '新闻订阅', desc: '管理 RSS 订阅与资讯更新频率' },
+  { section: 'doc_library', title: '研报库', desc: '研报与资讯入库后，可在对话中按含义查找与整理', keywords: ['研报', '文档库', '检索', '语义检索', '研报检索'] },
   { section: 'translation', title: '翻译', desc: '配置新闻阅读的离线翻译与远程大模型回退' },
   { section: 'multimodal', title: '多模态', desc: '配置图片 OCR、语音转写与文章媒体自动提取策略' },
-  { section: 'multimodal', title: '语义检索', desc: '安装后在会话中更懂研报含义地查找内容', keywords: ['研报', '检索', '语义'] },
-  { section: 'multimodal', title: '版面增强', desc: '提升扫描或复杂版面研报的整理质量', keywords: ['深度整理', '研报'] },
   { section: 'mcp_servers', title: 'MCP 服务', desc: '外部 MCP 接入与优先级故障转移', keywords: ['mcp', 'stdio', 'http', '外部工具', 'MCP 服务器'] },
   { section: 'agent_skills', title: '工作流技能', desc: '导入与管理投研流程说明', keywords: ['技能', '工作流', '早报', '财报', '流程', 'skill'] },
   { section: 'sandbox', title: '沙盒', desc: '管理命令隔离环境的网络访问规则', keywords: ['沙盒环境'] },
@@ -93,6 +92,10 @@ export const SETTINGS_SEARCH_INDEX: SettingsSearchEntry[] = [
   { section: 'python', title: 'pip 镜像源', desc: '安装 Python 依赖时的镜像列表', keywords: ['镜像', 'pip', '依赖'] },
   { section: 'python', title: '优先使用 Opptrix 托管', desc: '托管 Python 优先于系统环境', keywords: ['托管', '系统'] },
 
+  // 研报库
+  { section: 'doc_library', group: '研报检索', title: '语义检索', desc: '按含义查找研报与资讯；未就绪时可安装', keywords: ['语义检索', '研报检索', '语义', '安装', '研报'] },
+  { section: 'doc_library', group: '研报检索', title: '扫描件文字识别', desc: '识别扫描件中的文字，便于入库与检索', keywords: ['扫描件', '文字识别', '识别', '研报'] },
+
   // 翻译
   { section: 'translation', group: '翻译服务', title: '服务类型', desc: '离线优先或远程大模型', keywords: ['离线', '远程', 'offline', 'remote'] },
   { section: 'translation', group: '离线翻译', title: '离线翻译模型', desc: '本地下载 HY-MT 等模型', keywords: ['HY-MT', 'GGUF', '下载', '腾讯'] },
@@ -117,6 +120,7 @@ const SECTION_LABEL: Record<SettingsSection, string> = {
   models: '大模型',
   data_providers: '数据源',
   news_feed: '新闻订阅',
+  doc_library: '研报库',
   translation: '翻译',
   multimodal: '多模态',
   mcp_servers: 'MCP 服务',

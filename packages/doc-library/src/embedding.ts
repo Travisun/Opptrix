@@ -2,8 +2,8 @@
  * multilingual-e5-small embedding：e5 惯例前缀 query: / passage:；未安装则 isReady=false。
  */
 import path from 'node:path'
-import { embeddingModelDir, EMBEDDING_DIM, EMBEDDING_MODEL_ID } from './paths.js'
-import { isEmbeddingModelInstalled } from './model-downloader.js'
+import { EMBEDDING_DIM, EMBEDDING_MODEL_ID } from './paths.js'
+import { isEmbeddingModelInstalled, resolveEmbeddingModelDir } from './model-downloader.js'
 
 export interface EmbeddingBackend {
   readonly dimensions: number
@@ -71,8 +71,8 @@ export class TransformersE5Backend implements EmbeddingBackend {
   private loadPromise: Promise<void> | null = null
   private readonly modelDir: string
 
-  constructor(modelDir = embeddingModelDir()) {
-    this.modelDir = modelDir
+  constructor(modelDir?: string) {
+    this.modelDir = modelDir ?? resolveEmbeddingModelDir().dir
   }
 
   isReady(): boolean {
@@ -156,11 +156,14 @@ export class EmbeddingService {
     return this.backend?.isReady() ?? false
   }
 
-  /** 尝试加载默认 ONNX 后端；失败不抛，返回 false */
+  /** 尝试加载默认后端（优先安装包内置）；失败不抛，返回 false */
   async tryEnableDefaultBackend(): Promise<boolean> {
     if (this.backend?.isReady()) return true
+    // 已显式注入后端（含「未就绪」假后端）时不自动升格，避免测试/关闭语义检索时仍加载本机模型
+    if (this.backend) return false
     if (!isEmbeddingModelInstalled()) return false
-    const backend = new TransformersE5Backend()
+    const { dir } = resolveEmbeddingModelDir()
+    const backend = new TransformersE5Backend(dir)
     const ok = await backend.ensureLoaded()
     if (!ok) return false
     this.backend = backend

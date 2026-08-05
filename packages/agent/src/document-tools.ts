@@ -11,6 +11,7 @@ import {
 } from './chat-attachments.js'
 import { ensureDocLibraryBridge } from './doc-library-bridge.js'
 import { currentToolSessionId } from './mcp/tool-session-context.js'
+import type { DocumentSourceType } from '@opptrix/doc-library'
 
 type JsonSchema = {
   type: 'object'
@@ -32,6 +33,18 @@ export interface DocumentToolDef {
   meta?: (typeof TOOL_META)[string]
 }
 
+type DocLibrarySvc = ReturnType<typeof ensureDocLibraryBridge>
+
+type LibraryHit = {
+  chunk_id: string
+  document_id: string
+  name?: string
+  attachment_id?: string
+  page: number
+  score: number
+  excerpt: string
+}
+
 function S(properties: JsonSchema['properties'], required?: string[]): JsonSchema {
   return { type: 'object', properties, required }
 }
@@ -39,6 +52,21 @@ function S(properties: JsonSchema['properties'], required?: string[]): JsonSchem
 function requireSessionId(): string | null {
   const id = currentToolSessionId()?.trim()
   return id || null
+}
+
+function parseLimit(raw: unknown, defaultVal = 8): number {
+  const limitRaw = Number(raw)
+  return Number.isFinite(limitRaw) ? Math.min(20, Math.max(1, Math.floor(limitRaw))) : defaultVal
+}
+
+function shortChunkId(chunkId: string): string {
+  return chunkId.includes(':') ? chunkId.split(':').pop() ?? chunkId : chunkId
+}
+
+function parseSourceType(raw: unknown): DocumentSourceType | undefined {
+  const s = typeof raw === 'string' ? raw.trim() : ''
+  if (s === 'report' || s === 'news') return s
+  return undefined
 }
 
 function scoreChunk(query: string, text: string): number {
@@ -74,6 +102,34 @@ function excerptAround(text: string, query: string, maxLen = 420): string {
   return `${prefix}${text.slice(start, end)}${suffix}`
 }
 
+function mapHybridHits(hits: Awaited<ReturnType<DocLibrarySvc['searchHybrid']>>, svc: DocLibrarySvc): LibraryHit[] {
+  return hits.map(h => {
+    const doc = svc.getRepository().getDocument(h.document_id)
+    return {
+      chunk_id: shortChunkId(h.chunk_id),
+      document_id: h.document_id,
+      name: doc?.name,
+      attachment_id: h.attachment_id ?? undefined,
+      page: h.page,
+      score: Math.abs(h.rank),
+      excerpt: h.excerpt,
+    }
+  })
+}
+
+async function searchLibraryHybrid(
+  svc: DocLibrarySvc,
+  query: string,
+  opts: { sourceType?: DocumentSourceType; limit?: number },
+): Promise<LibraryHit[]> {
+  const hits = await svc.searchHybrid('', query, {
+    scope: 'library',
+    sourceType: opts.sourceType,
+    limit: opts.limit,
+  })
+  return mapHybridHits(hits, svc)
+}
+
 export function buildDocumentTools(): DocumentToolDef[] {
   return [
     {
@@ -101,7 +157,7 @@ export function buildDocumentTools(): DocumentToolDef[] {
         }
 
         const docs = listSessionAttachmentMetas(sessionId)
-          .filter(m => m.kind === 'pdf')
+          .filter(m => m.kind === 'pdf' || m.kind === 'document' || m.kind === 'image')
           .map(m => ({
             attachment_id: m.id,
             document_id: m.extract?.documentId,
@@ -116,39 +172,74 @@ export function buildDocumentTools(): DocumentToolDef[] {
       meta: TOOL_META.list_session_documents,
     },
     {
+      name: 'search_library',
+      category: '研报',
+      description: '在本机研报库与资讯库中按关键词检索相关片段（跨会话），返回文档名、页码与摘录',
+      parameters: S({
+        query: { type: 'string', description: '检索关键词，如公司名、主题、评级' },
+        limit: { type: 'number', description: '最多返回条数，默认 8，上限 20' },
+        source_type: { type: 'string', description: '可选：report（研报）或 news（资讯）' },
+      }, ['query']),
+      handler: async (args) => {
+        const query = String(args.query ?? '').trim()
+        if (!query) return { error: '请提供 query' }
+        const limit = parseLimit(args.limit)
+        const sourceType = parseSourceType(args.source_type)
+
+        const svc = ensureDocLibraryBridge()
+        const hits = await searchLibraryHybrid(svc, query, { sourceType, limit })
+        return {
+          query,
+          source_type: sourceType,
+          hits,
+          hit_count: hits.length,
+          source: 'library' as const,
+        }
+      },
+      meta: TOOL_META.search_library,
+    },
+    {
       name: 'search_document',
       category: '研报',
-      description: '在已整理的研报中按关键词检索相关片段，返回页码与摘录',
+      description: '在本会话已链文档中按关键词检索相关片段；可指定 attachment_id，缺省搜全部已链文档',
       parameters: S({
-        attachment_id: { type: 'string', description: '研报附件 id（来自 list_session_documents）' },
         query: { type: 'string', description: '检索关键词，如评级、目标价、核心观点' },
+        attachment_id: { type: 'string', description: '可选：限定单份研报（来自 list_session_documents）' },
         limit: { type: 'number', description: '最多返回条数，默认 8，上限 20' },
-      }, ['attachment_id', 'query']),
+      }, ['query']),
       handler: async (args) => {
         const sessionId = requireSessionId()
         if (!sessionId) return { error: '当前无会话上下文' }
         const attachmentId = String(args.attachment_id ?? '').trim()
         const query = String(args.query ?? '').trim()
-        if (!attachmentId || !query) return { error: '请提供 attachment_id 与 query' }
-        const limitRaw = Number(args.limit)
-        const limit = Number.isFinite(limitRaw) ? Math.min(20, Math.max(1, Math.floor(limitRaw))) : 8
+        if (!query) return { error: '请提供 query' }
+        const limit = parseLimit(args.limit)
 
         const svc = ensureDocLibraryBridge()
-        const hybridHits = await svc.searchHybrid(sessionId, query, { attachmentId, limit })
+        const hybridHits = await svc.searchHybrid(sessionId, query, {
+          scope: 'session',
+          attachmentId: attachmentId || undefined,
+          limit,
+        })
         if (hybridHits.length) {
-          const ranked = hybridHits.map(h => ({
-            chunk_id: h.chunk_id.includes(':') ? h.chunk_id.split(':').pop() ?? h.chunk_id : h.chunk_id,
-            document_id: h.document_id,
-            page: h.page,
-            score: Math.abs(h.rank),
-            excerpt: h.excerpt,
-          }))
+          const ranked = mapHybridHits(hybridHits, svc)
           return {
-            attachment_id: attachmentId,
+            attachment_id: attachmentId || undefined,
             query,
             hits: ranked,
             hit_count: ranked.length,
             source: 'library' as const,
+          }
+        }
+
+        if (!attachmentId) {
+          return {
+            attachment_id: undefined,
+            query,
+            hits: [] as LibraryHit[],
+            hit_count: 0,
+            source: 'library' as const,
+            message: '本会话尚无已整理文档或未命中关键词；可 list_session_documents 确认，或改用 search_library 跨库检索',
           }
         }
 
@@ -159,6 +250,7 @@ export function buildDocumentTools(): DocumentToolDef[] {
         const ranked = chunks
           .map((c: ExtractChunkRecord) => ({
             chunk_id: c.id,
+            document_id: undefined,
             page: c.page,
             score: scoreChunk(query, c.text),
             excerpt: excerptAround(c.text, query),
@@ -179,19 +271,23 @@ export function buildDocumentTools(): DocumentToolDef[] {
     {
       name: 'read_document',
       category: '研报',
-      description: '按页码范围或 chunk 读取已整理研报的 Markdown 片段',
+      description: '按 document_id 或 attachment_id 精读已整理文档的 Markdown 片段（页码范围或 chunk）',
       parameters: S({
-        attachment_id: { type: 'string', description: '研报附件 id' },
+        document_id: { type: 'string', description: '文档 id（来自 search_library / search_document）' },
+        attachment_id: { type: 'string', description: '可选：本会话附件 id（与 document_id 二选一）' },
         page_from: { type: 'number', description: '起始页（含），默认 1' },
         page_to: { type: 'number', description: '结束页（含）；与 page_from 一起用' },
-        chunk_id: { type: 'string', description: '可选：直接读取 search_document 返回的 chunk_id' },
+        chunk_id: { type: 'string', description: '可选：直接读取 search 返回的 chunk_id' },
         max_chars: { type: 'number', description: '返回字符上限，默认 6000，上限 12000' },
-      }, ['attachment_id']),
+      }),
       handler: async (args) => {
         const sessionId = requireSessionId()
         if (!sessionId) return { error: '当前无会话上下文' }
+        const documentIdArg = String(args.document_id ?? '').trim()
         const attachmentId = String(args.attachment_id ?? '').trim()
-        if (!attachmentId) return { error: '请提供 attachment_id' }
+        if (!documentIdArg && !attachmentId) {
+          return { error: '请提供 document_id 或 attachment_id' }
+        }
         const maxRaw = Number(args.max_chars)
         const maxChars = Number.isFinite(maxRaw) ? Math.min(12_000, Math.max(500, Math.floor(maxRaw))) : 6000
 
@@ -204,25 +300,30 @@ export function buildDocumentTools(): DocumentToolDef[] {
           : pageFrom
 
         const svc = ensureDocLibraryBridge()
-        const documentId = svc.resolveDocumentId(sessionId, attachmentId)
+        const documentId = documentIdArg || svc.resolveDocumentId(sessionId, attachmentId)
         if (documentId) {
           const fullChunkId = chunkId && !chunkId.includes(':')
             ? `${documentId}:c${chunkId.replace(/^c/, '')}`
             : chunkId
-          const libResult = svc.getChunkRange(sessionId, attachmentId, {
-            chunkId: fullChunkId || undefined,
-            pageFrom,
-            pageTo,
-            maxChars,
-          })
+          const libResult = documentIdArg
+            ? svc.getChunkRangeByDocumentId(documentId, {
+              chunkId: fullChunkId || undefined,
+              pageFrom,
+              pageTo,
+              maxChars,
+            })
+            : svc.getChunkRange(sessionId, attachmentId, {
+              chunkId: fullChunkId || undefined,
+              pageFrom,
+              pageTo,
+              maxChars,
+            })
           if (libResult && !('error' in libResult)) {
             if ('chunk_id' in libResult) {
               return {
-                attachment_id: attachmentId,
+                attachment_id: attachmentId || undefined,
                 document_id: documentId,
-                chunk_id: libResult.chunk_id.includes(':')
-                  ? libResult.chunk_id.split(':').pop()
-                  : libResult.chunk_id,
+                chunk_id: shortChunkId(libResult.chunk_id),
                 page: libResult.page,
                 text: libResult.text,
                 truncated: libResult.truncated,
@@ -230,7 +331,7 @@ export function buildDocumentTools(): DocumentToolDef[] {
               }
             }
             return {
-              attachment_id: attachmentId,
+              attachment_id: attachmentId || undefined,
               document_id: documentId,
               page_from: libResult.page_from,
               page_to: libResult.page_to,
@@ -242,6 +343,10 @@ export function buildDocumentTools(): DocumentToolDef[] {
           if (libResult && 'error' in libResult) {
             return { error: libResult.error }
           }
+        }
+
+        if (!attachmentId) {
+          return { error: '找不到该 document_id 对应文档' }
         }
 
         const chunks = readExtractChunks(sessionId, attachmentId)

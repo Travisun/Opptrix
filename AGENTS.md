@@ -109,14 +109,16 @@ codegraph explore "<问题或符号>"
 
 ### R7. 多 Agent 编排与审计
 
-**任何非 trivial 任务强制 4-6 agent 协作；Main Agent 纯调度审计不动手；最多 3 轮返工。**
+**任何非豁免任务：先拆分步骤 → 派 2–4 个执行 subagent → 主 Agent 验收；不合格继续分派直至可用；维护 ID 表并完成后即时回收。**
 
-- **Main Agent = 调度员 + 审计员**：拆解任务 → 写 briefing（含 AC）→ 派发 → 逐条验 AC → 冲突仲裁 → 交付。禁止直接改代码、跑命令
-- **基础阵容 4 agents**：Main + Explorer（探索）+ Implementer（实现）+ Verifier（验证）
-- **按需扩展至 6**：+ Architect（架构设计）+ Documenter（文档同步）
-- **独立制衡**：Implementer 与 Verifier 不合并，避免自我确认偏差
-- **返工循环**：AC 不通过最多返工 3 轮；每次返工反馈必须含具体文件:行号 + 改进方向；3 轮仍不达标上报用户
+- **Main Agent = 调度员 + 审计员**：拆分 → briefing（含 AC）→ 派发 → 逐条验 AC → 冲突仲裁 → 回收 → 交付。禁止直接改业务代码、替代 Verifier
+- **执行层 2～4 个 subagent**：小改 2（Implementer+Verifier）；标准 3（+Explorer）；较大 4（+Architect/Documenter）。禁止一次超过 4、禁止只派 1 个全包
+- **独立制衡**：Implementer 与 Verifier 不合并
+- **返工**：AC 不通过则带文件:行号反馈继续分派，直到可用；连续 2 轮无增量须上报用户
+- **Subagent ID 登记表（硬性）**：每次派发必须记录 `agent_id`/`task_id`（running）；**一收到完成/失败通知必须立刻停止并标 `reclaimed`**，禁止后台空跑、禁止无意义 `resume`
+- **回收**：完成即停 + 交付前清点登记表无 `running`；清理卡死 / 不可用者
 - **豁免**：纯问答、单行 typo、读文件回答问题 → Main Agent 直接处理
+- **细则**：`.cursor/rules/multi-agent-orchestration.mdc`
 
 ### R8. 审查与审计
 
@@ -256,5 +258,5 @@ npm run check:ui   # typecheck:ui + lint:ui + audit:ui
 | Provider 实现 | `provider-docs` | `docs/PROVIDER-STANDARD-API.md` |
 | 架构设计 | `architecture` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
 | 质量保证 / 审计 | `quality-assurance` | `docs/ARCHITECTURE-COMPREHENSIVE.md` |
-| 多 Agent 编排（非 trivial 任务） | `multi-agent-orchestration.mdc` | `task-management` |
+| 多 Agent 编排（拆分 → 2–4 subagent → ID 登记 → 完成即停 → 主验收） | `multi-agent-orchestration.mdc` | `task-management` |
 | UI 文案规范 | `ui-copy-standard.mdc` | `docs/UI-DESIGN-SYSTEM.md` |
