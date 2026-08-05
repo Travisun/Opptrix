@@ -84,7 +84,30 @@ export interface AttachmentLimits {
   maxTotalBytes: number
 }
 
-export type MediaKind = 'text' | 'image' | 'pdf' | 'video' | 'audio'
+export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio'
+
+export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
+
+/** 整理子阶段（可选；旧客户端可忽略） */
+export type AttachmentExtractPhase =
+  | 'converting'
+  | 'extracting'
+  | 'ocr'
+  | 'ready'
+  | 'failed'
+
+export interface AttachmentExtractMeta {
+  status: AttachmentExtractStatus
+  documentId?: string
+  error?: string
+  pageCount?: number
+  charCount?: number
+  readyAt?: string
+  phase?: AttachmentExtractPhase
+  ocrDone?: number
+  ocrTotal?: number
+  message?: string
+}
 
 export interface ChatAttachmentMeta {
   id: string
@@ -96,6 +119,7 @@ export interface ChatAttachmentMeta {
   width?: number
   height?: number
   duration?: number
+  extract?: AttachmentExtractMeta
 }
 
 export interface ModelMediaCapabilities {

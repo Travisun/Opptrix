@@ -13,6 +13,7 @@ import type { SessionStreamSnapshot } from './sessionStreamRuntime'
 import type { QueuedPrompt } from './sessionPromptQueue'
 import MobileTopBar from './MobileTopBar'
 import ChatComposer from './ChatComposer'
+import type { ChatComposerHandle } from './ChatComposer'
 import ChatMessageItem from './ChatMessageItem'
 import ChatProcessTrace from './ChatProcessTrace'
 import MessageSelectionToolbar from './MessageSelectionToolbar'
@@ -48,6 +49,11 @@ const useStyles = makeStyles({
     flex: 1,
     minHeight: 0,
     overflow: 'hidden',
+  },
+  bodyShellDragging: {
+    outline: `1.5px dashed ${opptrixCssVars.borderStrong}`,
+    outlineOffset: '-6px',
+    backgroundColor: 'color-mix(in srgb, var(--opptrix-canvas-alt) 55%, transparent)',
   },
   scrollViewport: {
     position: 'absolute',
@@ -409,6 +415,9 @@ function ChatView({
   const chatBoxRef = useRef<HTMLDivElement>(null)
   const bodyShellRef = useRef<HTMLDivElement>(null)
   const composerInnerRef = useRef<HTMLDivElement>(null)
+  const composerRef = useRef<ChatComposerHandle>(null)
+  const fileDragDepthRef = useRef(0)
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false)
   const stickToBottomRef = useRef(true)
   const prevLoadingRef = useRef(false)
   const [scrollbarHalfOffset, setScrollbarHalfOffset] = useState(0)
@@ -694,6 +703,37 @@ function ChatView({
     onSubmit(text, attachmentIds, attachmentMetas)
   }
 
+  const isFileDrag = (e: React.DragEvent) =>
+    Array.from(e.dataTransfer.types).includes('Files')
+
+  const handleBodyDragEnter = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    fileDragDepthRef.current += 1
+    setIsDraggingFiles(true)
+  }, [])
+
+  const handleBodyDragLeave = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(e)) return
+    fileDragDepthRef.current = Math.max(0, fileDragDepthRef.current - 1)
+    if (fileDragDepthRef.current === 0) setIsDraggingFiles(false)
+  }, [])
+
+  const handleBodyDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    if (!isFileDrag(e)) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'copy'
+  }, [])
+
+  const handleBodyDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault()
+    fileDragDepthRef.current = 0
+    setIsDraggingFiles(false)
+    if (e.dataTransfer.files?.length) {
+      composerRef.current?.addDroppedFiles(e.dataTransfer.files)
+    }
+  }, [])
+
   const threadColumnClass = mergeClasses(
     s.threadColumn,
     isMobile && s.threadColumnMobile,
@@ -757,7 +797,14 @@ function ChatView({
         </div>
       ) : null}
 
-      <div className={s.bodyShell} ref={bodyShellRef}>
+      <div
+        className={mergeClasses(s.bodyShell, isDraggingFiles && s.bodyShellDragging)}
+        ref={bodyShellRef}
+        onDragEnter={handleBodyDragEnter}
+        onDragLeave={handleBodyDragLeave}
+        onDragOver={handleBodyDragOver}
+        onDrop={handleBodyDrop}
+      >
         {overlaySlot}
         {pinnedToolbar && onQuoteSelection && onEphemeralAsk && (
           <MessageSelectionToolbar
@@ -870,6 +917,7 @@ function ChatView({
               : undefined}
           >
             <ChatComposer
+              ref={composerRef}
               sessionId={sessionId}
               draftSync={composerDraft}
               loading={loading}

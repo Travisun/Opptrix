@@ -36,6 +36,8 @@ import { registerNewsRoutes } from './news-routes.js'
 import { registerSandboxSettingsRoutes } from './sandbox-settings-routes.js'
 import { registerScheduleRoutes } from './schedule-routes.js'
 import { registerPythonSettingsRoutes } from './python-settings-routes.js'
+import { registerDocLibrarySettingsRoutes } from './doc-library-settings-routes.js'
+import { ingestNewsArticleToDocLibrary } from './news-doc-ingest.js'
 import { registerEnrichmentRoutes } from './enrichment-routes.js'
 import { registerSearchRoutes } from './search-routes.js'
 import { registerSessionAttachmentRoutes } from './session-attachment-routes.js'
@@ -102,6 +104,7 @@ setSessionPersistHooks({
 
 setNewsArticlePersistHook(article => {
   syncNewsSearchIndex(article, getEnrichmentStore().get(article.id))
+  ingestNewsArticleToDocLibrary(article)
 })
 
 setEnrichmentPersistHook(doc => {
@@ -1532,6 +1535,7 @@ async function bootstrap() {
   registerSandboxSettingsRoutes(app)
   registerScheduleRoutes(app, scheduleService)
   registerPythonSettingsRoutes(app)
+  await registerDocLibrarySettingsRoutes(app)
   await registerEnrichmentRoutes(app)
   await registerMcpServerRoutes(app)
   await registerAgentSkillRoutes(app)
@@ -1540,6 +1544,19 @@ async function bootstrap() {
   await registerSpeechRoutes(app)
   startNewsFeedScheduler()
   startEnrichmentScheduler(90_000, resolveProjectRoot())
+  // e5 就绪时回填未嵌入文档（无图 Hybrid RAG）
+  void import('@opptrix/doc-library').then(async (mod) => {
+    try {
+      const embedding = mod.getEmbeddingService()
+      const ready = embedding.isReady() || await embedding.tryEnableDefaultBackend()
+      if (!ready) return
+      const svc = mod.getDocLibraryService()
+      svc.setEmbeddingService(embedding)
+      await svc.embedPendingDocuments()
+    } catch {
+      /* background */
+    }
+  }).catch(() => {})
   scheduleService.start()
   void maybeBootstrapTranslationModel(getNewsSettings().translation).catch(() => {})
   serveUi = shouldServeUi()
@@ -1561,6 +1578,18 @@ async function bootstrap() {
   } else {
     console.log(`  Web UI → npm run dev → http://127.0.0.1:5173\n`)
   }
+
+  // 桌面/有内置资源时后台启用语义检索并尽量准备 L1/L2（失败不崩）
+  void import('@opptrix/doc-library')
+    .then(async (mod) => {
+      const r = await mod.ensureBundledRagRuntime()
+      console.log(
+        `  RAG runtime: embedding=${r.embedding ? 'ready' : 'skip'} layout=${r.layout ? 'ready' : 'skip'} deep=${r.deep ? 'ready' : 'skip'}`,
+      )
+    })
+    .catch(() => {
+      console.log('  RAG runtime: skip (prepare deferred)')
+    })
 
   // UI 就绪后再启动 L0 自动同步；无 UI 时立即触发；桌面端 60s 兜底
   const isDesktopUi = process.env.OPPTRIX_DESKTOP === '1' && serveUi

@@ -94,6 +94,36 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
   )
 
   app.get<{ Params: { id: string; attachmentId: string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/extract',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta) return reply.code(404).send({ error: 'attachment not found' })
+
+      return {
+        attachment_id: meta.id,
+        name: meta.name,
+        kind: meta.kind,
+        extract: meta.extract ?? null,
+      }
+    },
+  )
+
+  app.get<{ Params: { id: string; attachmentId: string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/meta',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta) return reply.code(404).send({ error: 'attachment not found' })
+      return { attachment: meta }
+    },
+  )
+
+  app.get<{ Params: { id: string; attachmentId: string } }>(
     '/api/sessions/:id/attachments/:attachmentId',
     async (req, reply) => {
       const session = agent.getSession(req.params.id)

@@ -141,7 +141,7 @@ npm run test        # 或 CI 等价：npm run build && npm run test:ci
 
 ## 7. 许可证
 
-本仓库采用 **[Apache License 2.0](../LICENSE)**。向本仓库贡献即表示你同意在相同许可证下授权你的贡献。若你提交的代码衍生自其他项目，请在 PR 中注明出处与许可证兼容性。
+本仓库采用 **[Apache License 2.0](../LICENSE)**。向本仓库贡献即表示你同意在相同许可证下授权你的贡献。若你提交的代码衍生自其他项目，请在 PR 中注明出处与许可证兼容性。功能相关第三方许可摘要（如 Document Library Phase A）见 **[THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)**。
 
 ---
 

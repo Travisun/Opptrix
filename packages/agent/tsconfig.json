@@ -1,6 +1,6 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": { "outDir": "dist", "rootDir": "src" },
-  "references": [{ "path": "../agent-browser" }, { "path": "../agent-workspace" }, { "path": "../agent-skills" }, { "path": "../research-hub" }],
+  "references": [{ "path": "../shared" }, { "path": "../doc-library" }, { "path": "../agent-browser" }, { "path": "../agent-workspace" }, { "path": "../agent-skills" }, { "path": "../research-hub" }],
   "include": ["src/**/*"]
 }

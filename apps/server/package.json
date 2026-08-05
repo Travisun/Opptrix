@@ -28,6 +28,7 @@
     "@opptrix/agent": "*",
     "@opptrix/agent-browser": "*",
     "@opptrix/article-enrichment": "*",
+    "@opptrix/doc-library": "*",
     "@opptrix/local-inference": "*",
     "@opptrix/market-data-store": "*",
     "@opptrix/news-feed": "*",

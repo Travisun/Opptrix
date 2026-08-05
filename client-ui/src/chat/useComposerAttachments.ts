@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { ChatAttachmentMeta, ModelMediaCapabilities } from '../types/chat'
-import { uploadSessionAttachment, deleteSessionAttachment } from '../api/client'
+import { uploadSessionAttachment, deleteSessionAttachment, fetchSessionAttachmentMeta } from '../api/client'
 import { validateFileForModel, partitionPinsForModel } from './mediaCapabilities'
 
 export function useComposerAttachments(
@@ -25,6 +25,35 @@ export function useComposerAttachments(
     prevSessionIdRef.current = sessionId
     if (sessionId) effectiveSessionIdRef.current = sessionId
   }, [sessionId])
+
+  // 轮询研报库整理状态（PDF / 文档 / 图片 OCR）
+  useEffect(() => {
+    const pending = pinned.filter(p =>
+      (p.kind === 'pdf' || p.kind === 'document' || p.kind === 'image')
+      && (p.extract?.status ?? 'pending') === 'pending',
+    )
+    if (!pending.length) return
+    const sid = effectiveSessionIdRef.current ?? sessionId
+    if (!sid) return
+    let cancelled = false
+    const tick = async () => {
+      for (const item of pending) {
+        try {
+          const next = await fetchSessionAttachmentMeta(sid, item.id)
+          if (cancelled || !next) continue
+          setPinned(prev => prev.map(p => (p.id === next.id ? next : p)))
+        } catch {
+          /* ignore poll errors */
+        }
+      }
+    }
+    void tick()
+    const timer = window.setInterval(() => { void tick() }, 1200)
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [pinned, sessionId])
 
   const clearToastLater = useCallback((msg: string) => {
     setToast(msg)
@@ -51,14 +80,16 @@ export function useComposerAttachments(
     files: FileList | File[],
     media: ModelMediaCapabilities | null,
   ) => {
+    // 必须在任何 await 之前固化：file input 清空或 drop 结束后 live FileList 会变空
+    const list = Array.from(files)
+    if (!list.length) return
+
     const sid = await resolveSessionId()
     if (!sid) {
       clearToastLater('暂时无法添加附件，请稍后再试')
       return
     }
 
-    const list = Array.from(files)
-    if (!list.length) return
     setUploading(true)
     try {
       let next = [...pinned]

@@ -32,8 +32,19 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Hybrid RAG (no-image): e5 ONNX + RapidOCR ONNX + engines MANIFEST (Node OCR; no Python wheels).
       - name: Stage bundled SenseVoice models
         run: node apps/desktop/scripts/stage-sensevoice.mjs
+
+      - name: Stage bundled e5 embedding model
+        run: node apps/desktop/scripts/stage-e5.mjs
+
+      - name: Stage bundled RapidOCR models
+        run: node apps/desktop/scripts/stage-rapidocr.mjs
+
+      # Writes resources/engines/<plat-arch>/MANIFEST.json for audit / prebuild compat (no pip download).
+      - name: Stage RAG engines MANIFEST (Node OCR)
+        run: node apps/desktop/scripts/stage-rag-engines.mjs
 
       - name: Audit desktop packaging preflight
         run: OPPTRIX_AUDIT_STAGE_UPDATER=1 node apps/desktop/scripts/audit-desktop-pack.mjs
@@ -41,6 +52,9 @@ jobs:
       - name: Build packages and client UI
         run: npm run build
 
+      # run-tests.mjs runs all tests/*.test.mjs — includes document-library, e5-bundled-paths,
+      # rapidocr-bundled-paths, rag-engines-bundled, parse-router, mcp-tool-route-accuracy.
+      # Do not add a second node --test step for those (duplicate wall time).
       - name: Run smoke and integration tests
         run: npm run test:ci
         env:

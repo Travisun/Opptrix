@@ -429,6 +429,56 @@ Shell 运行时出站确认（`sandboxAskCallback` / `confirmation.kind === "net
 
 `POST /api/settings/python/install` 在安装进行中再次调用时返回当前 job（幂等）。
 
+### 研报库设置（无图 Hybrid RAG）
+
+**当前主路径**：文档 parse + embed 就绪后，Agent 经 `search_library`（`searchHybrid`，FTS ⊕ 向量，`scope=library`）跨会话检索，再 `read_document(document_id)` 多跳精读；语义模型未就绪时自动降级关键词检索（FTS）。**无需建图、不依赖主题关联图**。
+
+**关联图已硬删（不再提供）**：主题关联图生成 / 进度看板 / 图检索与相关设置字段均已移除。下列端点与能力**不再提供**：
+
+| 已移除 | 说明 |
+|--------|------|
+| `GET` / `PATCH` `/api/settings/doc-library` | 含 `generateForReports` / `generateForNews` / `graph.modelRef` |
+| `GET` `/api/settings/doc-library/status` | 关联进度看板 |
+| `POST` `/api/settings/doc-library/association/requeue` | 深度关联重入队 |
+| `GET` `/api/doc-library/graph/search` | 主题社区图检索 |
+| SQLite 图表 | `entities` / `edges` / `graph_jobs` / `graph_communities` / `graph_community_*`（doc-library schema **v5 DROP**） |
+| 历史列 | `documents.llm_graph_at`（doc-library schema **v6 删除列**） |
+
+设置页无关联 UI。跨会话/全库检索请用 Agent 工具 `search_library` → `read_document`。
+
+### 语义检索模型（文档库）
+
+本地语义检索（Hybrid RAG 向量侧）。与桌面内置策略一致：**桌面安装包默认内置** multilingual-e5-small（`resources/llms/multilingual-e5-small/`）；运行时优先内置 → 用户目录 `~/.opptrix/llms/`（兼容旧 `~/.opptrix/models/`）→ 开发态按需下载。未就绪时 `search_document` / `searchHybrid` / `search_library` 自动降级为 FTS，不中断对话。用户可见文案使用「语义检索模型」，勿暴露内部引擎名。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/semantic-model` | `{ installed, label, source?: 'bundled' \| 'user' \| 'missing' }` |
+| POST | `/api/settings/semantic-model/install` | 下载并校验模型；成功后尝试回填已整理文档向量 |
+| POST | `/api/settings/semantic-model/uninstall` | 删除用户目录模型副本并卸载运行时后端（不删安装包内置） |
+
+**GET 响应示例**
+
+```json
+{ "installed": true, "label": "语义检索模型", "source": "bundled" }
+```
+
+### 研报整理引擎（Parse Router）
+
+按格式选引擎：文本（`text-l0`）/ Office（`office-l0`，`.docx` / `.doc` / `.pptx` / `.ppt`）/ PDF（`pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`）/ 图片直 OCR（`ocr-l2`；未就绪时友好失败）。引擎不可用则保留最佳结果。用户文案用「深度整理」，勿暴露引擎专名 / 绝对路径。支持扩展名：`.txt` `.md` `.docx` `.doc` `.pptx` `.ppt` 图片与 `.pdf`。
+
+| 方法 | 路径 | 说明 |
+|------|------|------|
+| GET | `/api/settings/parse-engines` | `{ deep, semantic }` 可用性（无路径字段给 UI） |
+| POST | `/api/settings/parse-engines/deep/prepare` | 准备深度整理（确保 PP-OCRv4 mobile ONNX 模型就绪；Node ONNX 路径） |
+| POST | `/api/settings/parse-engines/deep/mark-ready` | 等价于再跑一次 prepare（兼容旧客户端） |
+| POST | `/api/settings/parse-engines/deep/uninstall` | 移除用户目录深度整理模型副本（不删安装包内置模型） |
+
+`GET /api/settings/parse-engines` 的 `deep` 含 `source: 'bundled' \| 'user' \| 'missing'`（与语义模型一致）。旧 `layout/*` 路由仍可达但返回「已停用」。
+
+入库选项（服务层 `ingestFromAttachment`）：`deepParse?: boolean`、`forceEngine?: 'text-l0' \| 'office-l0' \| 'pdf-extract-l0' \| 'ocr-l2' \| 'rapidocr-l2' \| 'unlimited-ocr-l2'`（后二者为兼容别名）。
+
+许可与依赖（开发者）：见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
+
 ### 外部 MCP Server
 
 用户可配置的外部 MCP（stdio / Streamable HTTP）。列表与写操作**永不回传明文密钥**（仅 `secretsConfigured` 布尔掩码）。执行路由：已启用且未 pause 的外部源按 `sortOrder` 优先；熔断/超时/429、远程 outputSchema 校验失败（如 JSON-RPC `-32602`）、缺 API Key 等鉴权错误后 failover 至下一外部源或本地 ToolRegistry（最终兜底）；降级结果可含 `_mcp.configHint` 指向设置页补密钥。
@@ -790,8 +840,10 @@ Content-Type: application/json
 | GET | `/api/sessions/:id` | 会话详情 + 消息列表（当前 `session` 子对象不含 `expertId`；专家绑定以列表或创建响应为准） |
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
-| POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` + `X-Attachment-Name`）；校验当前会话模型 `media` 能力与限额；响应 `{ attachment: ChatAttachmentMeta }` |
+| POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` / `X-Attachment-Mime` + `X-Attachment-Name`）；PDF 始终可走本地文本整理（不要求模型原生 `pdf` 能力）；响应 `{ attachment: ChatAttachmentMeta }`（PDF 含 `extract.status=pending`，后台异步整理） |
 | GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；路径规范化防穿越） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，供 UI 轮询） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/extract` | 返回 `{ attachment_id, name, kind, extract }` 整理摘要（`extract` 同下表，含 `documentId?`） |
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |
@@ -842,9 +894,22 @@ Content-Type: application/json
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | `id` | string | 附件 id（落盘 `~/.opptrix/chat-attachments/{sessionId}/{id}/`） |
-| `kind` | `image` \| `pdf` \| `video` \| `audio` | 媒体种类 |
+| `kind` | `image` \| `pdf` \| `document` \| `video` \| `audio` | 媒体种类；`document` = 文本 / Word / PPT |
 | `mime` / `name` / `size` / `createdAt` | — | MIME、原始文件名、字节数、ISO 时间 |
 | `width` / `height` / `duration` | number | 可选元数据 |
+| `extract` | `AttachmentExtractMeta`（见下） | PDF / 文档 / 图片：本地文本整理（含 OCR）状态 |
+
+**`AttachmentExtractMeta`（`ChatAttachmentMeta.extract`）**
+
+| 字段 | 类型 | 说明 |
+|------|------|------|
+| `status` | `pending` \| `ready` \| `failed` | 整理进度 |
+| `documentId` | string | 可选；本地文档库（`@opptrix/doc-library`，`~/.opptrix/doc-library/doc-library.db`）内的 document id；与库内 parse 状态镜像，上传 ingest 后即写入，供 Agent 工具与跨附件去重 |
+| `error` | string | 可选；`failed` 时的原因摘要 |
+| `pageCount` / `charCount` | number | 可选；整理完成后的页数 / 字符数 |
+| `readyAt` | string | 可选；整理完成时间（ISO） |
+
+PDF / 文档 / 图片上传后经 Parse Router 异步整理（按格式选 `text-l0` / `office-l0` / `pdf-extract-l0`，弱文本或深度整理时升 `ocr-l2`；图片必经本地 OCR）→ **文档库 + legacy 双写**（`extract.md` / `extract-chunks.json` 仍落在附件目录）。`.pptx` / `.ppt` 尽量按幻灯片分 chunk（`page` = slide）；`.doc` 由产品侧抽取，无需用户先转。图片 `extract` ready 后 Agent 侧注入 OCR 目录文本（可辅以 vision）。Agent 按需阅读工具见 [AGENT-GUIDE §4.2](./AGENT-GUIDE.md#42-agent-与-mcp)（`list_session_documents` / `search_document` / `read_document`）。第三方依赖许可见 [THIRD-PARTY-NOTICES.md](./THIRD-PARTY-NOTICES.md)。
 
 **`AvailableModel.contextTokens`**：`GET /api/models/available` 等列表项附带上下文窗口（优先 models.dev 异步查询 + 模糊匹配，失败降级启发式；只读派生，无需用户配置）。
 

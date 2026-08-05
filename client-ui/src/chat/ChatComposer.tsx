@@ -1,4 +1,4 @@
-import { useRef, useEffect, useCallback, useState, useMemo } from 'react'
+import { useRef, useEffect, useCallback, useState, useMemo, forwardRef, useImperativeHandle } from 'react'
 import { Text, makeStyles, mergeClasses } from '@fluentui/react-components'
 import { ArrowUpRegular, AttachRegular, MicFilled, MicRegular, PauseFilled } from '@fluentui/react-icons'
 import ModelSelector from './ModelSelector'
@@ -43,8 +43,9 @@ import { opptrixTokens, opptrixCssVars } from '../theme/tokens'
 import { motion, primaryInteractive, interactiveTransition, fadeInUp } from '../theme/mixins'
 import ComposerAttachmentStrip from './ComposerAttachmentStrip'
 import { useComposerAttachments } from './useComposerAttachments'
-import { resolveActiveModelMedia, modelAllowsAttachments, buildAcceptForMedia } from './mediaCapabilities'
+import { resolveActiveModelMedia, modelAllowsAttachments, buildAcceptForMedia, isLegacyOfficeAttachment } from './mediaCapabilities'
 import { listRowKey } from '../utils/listRowKey'
+import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 
 const LINE_HEIGHT = 1.5
 const FONT_SIZE = 14
@@ -327,7 +328,12 @@ interface ChatComposerProps {
   onPromptQueueRunNow?: (id: string) => void
 }
 
-export default function ChatComposer({
+/** 供 ChatView 在消息区 drop 时调用，避免重复 pin 状态 */
+export type ChatComposerHandle = {
+  addDroppedFiles: (files: FileList | File[]) => void
+}
+
+const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function ChatComposer({
   draftSync,
   sessionId = null,
   loading,
@@ -352,7 +358,7 @@ export default function ChatComposer({
   promptQueue = [],
   onPromptQueueRemove,
   onPromptQueueRunNow,
-}: ChatComposerProps) {
+}, ref) {
   const s = useStyles()
   const editorRef = useRef<HTMLDivElement>(null)
   const mentionAnchorRef = useRef<HTMLSpanElement>(null)
@@ -376,6 +382,8 @@ export default function ChatComposer({
     attachmentIds,
   } = useComposerAttachments(sessionId, ensureSession)
 
+  const { confirm } = useOpptrixDialogAlert()
+
   const activeMedia = useMemo(
     () => resolveActiveModelMedia(availableModels, sessionModel),
     [availableModels, sessionModel],
@@ -383,6 +391,25 @@ export default function ChatComposer({
 
   const acceptTypes = useMemo(() => buildAcceptForMedia(activeMedia), [activeMedia])
   const attachmentsAllowed = modelAllowsAttachments(activeMedia)
+
+  /** 选文件/拖拽上传前：旧格式确认；取消则跳过 .doc/.ppt，其余继续 */
+  const offerFiles = useCallback(async (files: FileList | File[]) => {
+    const list = Array.from(files)
+    if (!list.length) return
+    const hasLegacy = list.some(isLegacyOfficeAttachment)
+    if (!hasLegacy) {
+      await addFiles(list, activeMedia)
+      return
+    }
+    const ok = await confirm({
+      title: '格式较旧',
+      message: '这份文件格式较旧，请将其转换为PDF/DOCX格式后上传，否则文中的图片无法被识别。',
+      confirmLabel: '仍要上传',
+      cancelLabel: '取消',
+    })
+    const toUpload = ok ? list : list.filter(f => !isLegacyOfficeAttachment(f))
+    if (toUpload.length) await addFiles(toUpload, activeMedia)
+  }, [activeMedia, addFiles, confirm])
 
   useEffect(() => {
     reconcileWithModel(activeMedia)
@@ -574,17 +601,12 @@ export default function ChatComposer({
     syncMention()
   }, [activeMedia, addFiles, refreshContentState, syncMention])
 
-  const handleDrop = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-    if (composerLocked || uploading) return
-    if (e.dataTransfer.files?.length) {
-      void addFiles(e.dataTransfer.files, activeMedia)
-    }
-  }, [activeMedia, addFiles, composerLocked, uploading])
-
-  const handleDragOver = useCallback((e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault()
-  }, [])
+  useImperativeHandle(ref, () => ({
+    addDroppedFiles: (files) => {
+      if (composerLocked || uploading) return
+      void offerFiles(files)
+    },
+  }), [composerLocked, offerFiles, uploading])
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
     if (composingRef.current) return
@@ -693,8 +715,6 @@ export default function ChatComposer({
         )}
         <div
           className={mergeClasses(s.panel, 'opptrix-composer-shell')}
-          onDrop={handleDrop}
-          onDragOver={handleDragOver}
         >
           {promptQueue.length > 0 && onPromptQueueRemove && onPromptQueueRunNow && (
             <ComposerPromptQueuePanel
@@ -735,8 +755,9 @@ export default function ChatComposer({
             multiple
             accept={acceptTypes || undefined}
             onChange={(e) => {
-              if (e.target.files?.length) void addFiles(e.target.files, activeMedia)
+              const picked = e.target.files ? Array.from(e.target.files) : []
               e.target.value = ''
+              if (picked.length) void offerFiles(picked)
             }}
           />
           <div className={s.inputRow}>
@@ -869,4 +890,6 @@ export default function ChatComposer({
       />
     </div>
   )
-}
+})
+
+export default ChatComposer

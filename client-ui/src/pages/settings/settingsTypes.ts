@@ -9,6 +9,7 @@ export type SettingsSection =
   | 'schedule'
   | 'python'
   | 'translation'
+  | 'doc_library'
   | 'multimodal'
   | 'about'
 
@@ -17,6 +18,7 @@ const SETTINGS_SECTION_IDS: readonly SettingsSection[] = [
   'models',
   'data_providers',
   'news_feed',
+  'doc_library',
   'translation',
   'multimodal',
   'mcp_servers',

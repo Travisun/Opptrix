@@ -252,6 +252,31 @@ Renderer：若展示返回失败且权限为 `denied`，聊天页温和提示一
 
 **默认引擎**：SenseVoice。Composer 语音输入与新闻音视频转写均使用本机 SenseVoice 模型；安装包内置 q8 模型与 VAD，优先加载内置资源，其次用户目录，缺失时再下载。
 
+### 文档库语义检索与解析引擎（桌面内置 / 离线）
+
+Hybrid RAG 使用的 **multilingual-e5-small** 权重默认打进桌面安装包（与 SenseVoice 同为 `extraResources`）：
+
+| 项 | 说明 |
+|----|------|
+| Stage | `apps/desktop/scripts/stage-e5.mjs` → `resources/llms/multilingual-e5-small/` |
+| 打包 | `extraResources`：`resources/llms` → `llms`（与多模态 GGUF 同根） |
+| 运行时 | 优先内置 → 开发 `OPPTRIX_LLM_DIR` / `apps/server/llms` / `llms` → `~/.opptrix/llms/multilingual-e5-small/` → 旧 `~/.opptrix/models/…` → 按需下载（开发态） |
+| 覆盖 | `OPPTRIX_E5_BUNDLED_DIR`（测试 / sidecar 注入）；可选 `OPPTRIX_LLM_DIR` |
+| 卸载 | 设置页「卸下」仅清用户目录副本，不删安装包内置 |
+| 首启 | sidecar 启动后后台 `tryEnableDefaultBackend()`；内置齐全即就绪，设置页显示「应用自带」无需再装 |
+
+深度整理（OCR，`ocr-l2` / `@gutenye/ocr-node`）ONNX 与语义检索模型默认内置（`resources/llms/<id>/`，用户副本 `~/.opptrix/llms/<id>/`）。**不依赖** Python 侧车；`pdfplumber` L1 已从默认路径与设置页移除。
+
+| 项 | 说明 |
+|----|------|
+| OCR 模型 Stage | `apps/desktop/scripts/stage-rapidocr.mjs` → `resources/llms/rapidocr-ppocrv4-mobile/`（PP-OCRv4 mobile ONNX） |
+| engines Stage | `apps/desktop/scripts/stage-rag-engines.mjs` → `resources/engines/<platform>-<arch>/MANIFEST.json`（仅写 MANIFEST / 兼容 prebuild+audit；**不再**下载 pdfplumber / rapidocr Python wheels）。CI / release 步骤名：`Stage RAG engines MANIFEST (Node OCR)` |
+| 打包 | `extraResources`：`resources/llms` → `llms`；`resources/engines` → `engines`（兼容旧探测） |
+| 运行时 | Node ONNX OCR；`OPPTRIX_RAG_ENGINES_BUNDLED_DIR` 仍可由 `main.cjs` 注入 |
+| 首启 | 后台 `ensureBundledRagRuntime()`：启用 embedding；OCR 模型齐全则深度整理可用 |
+
+禁止默认路径纳入 PyMuPDF（AGPL）。研报入库支持 `.pdf` / `.txt` / `.md` / `.docx` / `.pptx` / 图片；`.pptx` 按幻灯片分 chunk。
+
 ### 交互
 
 - 点按开始：空闲 → 正在聆听 → **说完静音约 2.8 秒自动结束并识别**；也可再点一次手动结束；`Escape` 取消当前录音。

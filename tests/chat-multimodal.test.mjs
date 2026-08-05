@@ -21,7 +21,8 @@ describe('resolveAttachmentLimits', () => {
   it('applies conservative defaults for unknown models', () => {
     const limits = resolveAttachmentLimits('unknown-model-xyz', ['text', 'image'])
     assert.equal(limits.maxBytesByKind.image, 10 * 1024 * 1024)
-    assert.equal(limits.maxBytesByKind.pdf, undefined)
+    // PDF 始终保留本地整理限额
+    assert.equal(limits.maxBytesByKind.pdf, 20 * 1024 * 1024)
   })
 
   it('applies Claude tier stricter image cap', () => {
@@ -123,11 +124,11 @@ describe('mime extension fallback', () => {
 })
 
 describe('modelAllowsAttachments', () => {
-  it('true when input has non-text modalities', async () => {
+  it('always true (library ingest path available even when media unloaded)', async () => {
     const { modelAllowsAttachments } = await import('../client-ui/src/chat/mediaCapabilities.ts')
     assert.equal(modelAllowsAttachments({ attachment: false, input: ['text', 'image'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 5, maxTotalBytes: 1e6 } }), true)
-    assert.equal(modelAllowsAttachments({ attachment: true, input: ['text'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 } }), false)
-    assert.equal(modelAllowsAttachments(null), false)
+    assert.equal(modelAllowsAttachments({ attachment: true, input: ['text'], output: ['text'], limits: { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 } }), true)
+    assert.equal(modelAllowsAttachments(null), true)
   })
 })
 
@@ -140,7 +141,7 @@ describe('partitionPinsForModel', () => {
     assert.deepEqual(removedIds, [])
   })
 
-  it('removes incompatible pins for text-only model', async () => {
+  it('keeps library-ingest pins and removes non-ingest kinds for text-only model', async () => {
     const { partitionPinsForModel } = await import('../client-ui/src/chat/mediaCapabilities.ts')
     const media = {
       attachment: false,
@@ -148,10 +149,14 @@ describe('partitionPinsForModel', () => {
       output: ['text'],
       limits: { maxBytesByKind: {}, maxCount: 0, maxTotalBytes: 0 },
     }
-    const pinned = [{ id: 'a1', kind: 'image', name: 'x.png', mime: 'image/png', size: 100, createdAt: '2026-01-01T00:00:00.000Z' }]
+    const pinned = [
+      { id: 'a1', kind: 'image', name: 'x.png', mime: 'image/png', size: 100, createdAt: '2026-01-01T00:00:00.000Z' },
+      { id: 'a2', kind: 'video', name: 'clip.mp4', mime: 'video/mp4', size: 200, createdAt: '2026-01-01T00:00:00.000Z' },
+    ]
     const { kept, removedIds } = partitionPinsForModel(pinned, media)
-    assert.equal(kept.length, 0)
-    assert.deepEqual(removedIds, ['a1'])
+    assert.equal(kept.length, 1)
+    assert.equal(kept[0].id, 'a1')
+    assert.deepEqual(removedIds, ['a2'])
   })
 })
 

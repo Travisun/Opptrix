@@ -81,10 +81,39 @@ const useStyles = makeStyles({
 function kindIcon(kind: MediaKind) {
   switch (kind) {
     case 'pdf': return <DocumentPdfRegular fontSize={18} />
+    case 'document': return <DocumentPdfRegular fontSize={18} />
     case 'video': return <VideoRegular fontSize={18} />
     case 'audio': return <MusicNote2Regular fontSize={18} />
     default: return <ImageRegular fontSize={18} />
   }
+}
+
+function attachmentStatusLabel(item: ChatAttachmentMeta): string {
+  if (item.kind === 'pdf' || item.kind === 'document' || item.kind === 'image') {
+    const status = item.extract?.status
+    if (status === 'pending') {
+      if (item.kind === 'image') return '正在识别文字…'
+      const phase = item.extract?.phase
+      if (phase === 'converting') return '正在转换文档…'
+      if (phase === 'ocr') {
+        const done = item.extract?.ocrDone
+        const total = item.extract?.ocrTotal
+        if (typeof done === 'number' && typeof total === 'number' && total > 0) {
+          return `正在识别图片文字（${done}/${total}）…`
+        }
+        return '正在识别图片文字…'
+      }
+      const msg = item.extract?.message?.trim()
+      if (msg) return msg
+      return '正在整理…'
+    }
+    if (status === 'ready') {
+      const pages = item.extract?.pageCount
+      return pages != null ? `已整理，共 ${pages} 页` : '已整理'
+    }
+    if (status === 'failed') return item.extract?.error || '整理失败，请换可读文件后重试'
+  }
+  return formatBytesShort(item.size)
 }
 
 interface Props {
@@ -141,7 +170,7 @@ export default function ComposerAttachmentStrip({
           )}
           <span className={s.meta}>
             <span className={s.name} title={item.name}>{item.name}</span>
-            <span className={s.size}>{formatBytesShort(item.size)}</span>
+            <span className={s.size}>{attachmentStatusLabel(item)}</span>
           </span>
           {onRemove ? (
             <button
@@ -181,7 +210,7 @@ export function MessageAttachmentStrip({
           <span className={s.iconBox}>{kindIcon(item.kind)}</span>
           <span className={s.meta}>
             <span className={s.name}>{item.name}</span>
-            <span className={s.size}>{formatBytesShort(item.size)}</span>
+            <span className={s.size}>{attachmentStatusLabel(item)}</span>
           </span>
         </button>
       ))}

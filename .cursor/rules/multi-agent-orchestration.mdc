@@ -1,89 +1,122 @@
 ---
-description: 多 Agent 编排与审计 — 任何非 trivial 任务强制 4-6 agent 协作；Main Agent 纯调度审计不动手；最多 3 轮返工
+description: 多 Agent 编排 — 拆分后派 2–4 subagent；Main 维护 subagent ID 登记表；完成后即时停止回收；禁止后台僵尸空跑
 alwaysApply: true
 ---
 
-# 多 Agent 编排与审计（硬性规则，替代 task-delegation.mdc）
+# 多 Agent 编排与审计（硬性规则）
 
 ## 核心信条
 
-1. **Main Agent 是调度员 + 审计员，不是搬砖工** — 禁止直接改代码、跑命令、替 subagent 执行工作
-2. **拆到可验证** — 每个 subagent 的 briefing 必须含自含上下文 + 明确完成标准（AC）
-3. **独立制衡** — Implementer 与 Verifier 不合并，避免自我确认偏差
-4. **快速迭代，有限返工** — AC 不通过最多返工 3 轮，仍不达标上报用户
-5. **并行优先** — 独立 subagent 同时派发，有依赖时串联
+1. **先拆分，再动手** — 任何非豁免任务，Main Agent 必须先把工作拆成多个可独立验证的步骤（含 AC），禁止一上来就改代码或只派一个「全能」subagent
+2. **2–4 个执行 subagent** — 执行层固定 **2～4 个** subagent（含探索/实现/验证等角色组合）；Main Agent 本身不计入此数
+3. **主 Agent = 调度 + 验收审计** — 禁止 Main 直接改业务代码、替代 Verifier 跑门禁；只写 briefing、派发、验 AC、仲裁、回收
+4. **不合格继续分派** — 验收不通过则带具体反馈再派 subagent 修复，**直到 AC 全过且确认可用**；禁止「差不多就交付」
+5. **ID 登记 + 即时回收** — 每次派发必须登记 subagent ID；**一收到完成/失败通知就必须立刻停止该 subagent 并标为已回收**，禁止后台一直空跑占资源
 
 ## 触发条件
 
 ### 强制触发（满足任一）
 
-- 改动 ≥2 个文件
-- 跨 ≥2 个架构层级
-- 新增 feature / Provider / Hub feature / Agent tool
-- 需要同时 check:ui + build:packages
-- 用户明确说「设计/实现/重构/接入」
-- 任务涉及行情 / 数据层 / Provider / 架构变更
+- 用户提出需要**完成/实现/修复/重构/接入/设计落地**的任务（几乎所有工程任务）
+- 改动 ≥2 个文件，或跨 ≥2 个架构层级
+- 新增 feature / Provider / Hub feature / Agent tool / Schema
+- 需要 check:ui / build:packages / 相关测试
+- 涉及行情 / 数据层 / Agent / 桌面打包
 
-### 豁免（Main Agent 直接处理）
+### 豁免（Main Agent 可直接处理，仍建议用 1～2 句话说明「豁免原因」）
 
-- 纯问答/解释（不涉及代码改动）
-- 单行 typo / 文案修正（仅注释或文档）
-- 读文件回答问题
-- 非代码的 `.md` 内容编辑
+- 纯问答 / 解释 / 方案讨论（**不改仓库**）
+- 单行 typo / 仅注释或纯文案（≤1 文件且无逻辑变更）
+- 只读查文件回答问题
+- 用户明确说「不要分派 subagent / 你直接改」
 
-## Agent 角色定义
+> 豁免**不适用于**「顺手改一下多处」——一旦超出豁免边界，必须进入完整编排。
 
-### 基础阵容（4 agents）
-
-| Agent | 类型 | 职责 | Main Agent 派发动作 |
-|-------|------|------|---------------------|
-| **Main Agent** | — | 需求确认(如需) → 拆解 → 写 briefing → 派发 → 审计 → 冲突仲裁 → 交付 | 调度 + 审计，**不直接执行** |
-| **Explorer** | `explore` | CodeGraph 探索、调用链分析、影响范围评估、已有模式识别 | 任务前期派发 |
-| **Implementer** | `general` | 代码实现、bug 修复、测试编写、遵循项目约定 | 收到探索结果后派发 |
-| **Verifier** | `explore` | check:ui / build:packages / 类型检查 / 逻辑审查 / AC 逐项验证 | 收到实现结果后派发 |
-
-### 扩展角色（按需 +2 → 最多 6）
-
-| Agent | 类型 | 何时启用 | 职责 |
-|-------|------|----------|------|
-| **Architect** | `explore` | 涉及新模块设计、跨层接口定义、多方案权衡 | 方案设计、接口契约定义、分层合规审查 |
-| **Documenter** | `general` | 新/改 Hub feature、Provider、Agent tool、UI 组件 | docs/ 同步、JSDoc、custom-method-docs |
-
-### 扩展决策表
-
-| 任务特征 | 是否加 Architect | 是否加 Documenter |
-|----------|-----------------|-------------------|
-| 新增 Provider / Hub feature | ✅ | ✅ |
-| 修改 API 路由 | 视复杂度 | ✅ |
-| 新增 UI 组件 | 否 | ✅ (更新 UI-DESIGN-SYSTEM.md) |
-| 修改 Schema / 存储 | ✅ | ✅ |
-| 纯 bug 修复 | 否 | 否 |
-| 文案/内容调整 | 否 | 仅当改 docs/ |
-
-## 四阶段工作流
-
-### Phase 1 — DECOMPOSE（拆解）
+## 强制工作流（每次任务）
 
 ```
-┌─────────────────────────────────────────────────────┐
-│ 1. 是否需要需求澄清？                                   │
-│    是 → 按 requirement-clarification.mdc 向用户提问    │
-│    否 → 继续                                           │
-│ 2. 任务拆解为 3-5 个独立子任务（DAG 分析依赖关系）        │
-│ 3. 每个子任务定义明确 AC（可验证的完成标准）              │
-│ 4. 确定角色阵容（基础 4 或扩展 5-6）                     │
-│ 5. 创建 task 列表追踪                                   │
-└─────────────────────────────────────────────────────┘
+Phase 0  CLARIFY（如需）→ 需求确认
+Phase 1  DECOMPOSE     → 拆成多个可工作步骤 + AC + DAG
+Phase 2  DISPATCH      → 派 2–4 个 subagent 执行
+Phase 3  AUDIT         → 主 Agent 逐条验收
+         ├─ 不通过 → 返工分派（更新 briefing）→ 回到 Phase 2/3
+         └─ 通过且可用 → Phase 4
+Phase 4  RECLAIM + DELIVER → 回收僵尸 subagent → 向用户交付
 ```
 
-**拆解原则：**
-- 每个子任务必须可独立验证（有明确 AC）
-- 有上下游依赖的任务串行，否则并行
-- 涉及行情 / 数据层的子任务，briefing 必须引用 `data-layer-standard-api.mdc`
+### Phase 1 — DECOMPOSE（拆分，硬性）
 
-### Phase 2 — DISPATCH（派发）
+Main Agent **必须先**输出（可简短，但不可省略）：
 
-每个 subagent 的 briefing 模板：
+1. 步骤列表（建议 3～6 步，每步可独立验收）
+2. 依赖关系（哪些可并行、哪些串行）
+3. 本轮拟派的 **2～4 个** subagent 角色与职责
+4. 每步 / 每 subagent 的 **可验证 AC**
+5. TodoWrite 追踪（至少覆盖拆分出的步骤）
+
+**拆分原则：**
+
+- 一步一事；禁止「探索+实现+验证」塞进同一个 subagent
+- Implementer 与 Verifier **不得合并**
+- 涉及行情 / 数据层的步骤，briefing 须引用 `data-layer-standard-api.mdc`
+- 涉及 UI 的步骤须引用 client-ui / ui-copy 相关规则
+
+### Phase 2 — DISPATCH（2–4 个 subagent）
+
+#### 规模约束
+
+| 规模 | 执行 subagent 数 | 典型组合 |
+|------|------------------|----------|
+| 小改（2～3 文件） | **2** | Implementer + Verifier |
+| 标准 | **3** | Explorer + Implementer + Verifier |
+| 较大 / 跨层 | **4** | Explorer/Architect + Implementer(+Documenter) + Verifier |
+
+- **最少 2**：至少「实现」与「独立验收」分离
+- **最多 4**：超出则拆成多轮编排（本轮 ≤4，下一轮再派），禁止一次堆 5+ 个执行 subagent
+- 可并行的独立步骤 **必须并行派发**
+- 每次 `Task` / 派发调用返回后，**立刻**把 agent/task ID 写入下方「登记表」（见 Phase 2.1）
+
+### Phase 2.1 — Subagent 登记表（硬性，主进程维护）
+
+Main Agent 在本会话内必须维护一份**活跃 subagent 登记表**（可用 TodoWrite、回复内表格或固定便签；**不得只记在脑子里**）。
+
+| 字段 | 要求 |
+|------|------|
+| `id` | Task 返回的 `agent_id` / `task_id`（完整 UUID） |
+| `role` | Explorer / Implementer / Verifier / … |
+| `dispatched_at` | 派发时刻（或回合序号） |
+| `status` | `running` \| `completed` \| `failed` \| `reclaimed` |
+| `reclaimed_at` | 回收时刻；未回收则留空 |
+
+**派发时（强制）**
+
+1. 发起 `Task`（可并行）
+2. 拿到返回的 ID 后，**同一回合内**把该行以 `status=running` 写入登记表
+3. 禁止「先派一堆、回头再补登记」
+
+**完成时（强制 — 即时停止回收）**
+
+一旦出现任一信号：
+
+- 系统 `system_notification` / 子任务完成回调（`status: success|error|failed`）
+- `Await` / 轮询确认该 agent 已结束
+- Subagent 回报已含最终 **Status** 且本轮不再依赖它
+
+Main **必须立刻**（同一回合、优先于新派发）：
+
+1. 在登记表将该 ID 标为 `completed`/`failed`，再标 `reclaimed`（或一步写成 `reclaimed`）
+2. **停止继续依赖该会话**：禁止无意义 `resume`；禁止为「看看还在不在」再唤醒
+3. 若平台提供取消/停止/关闭后台 Task 的能力，**优先调用**结束该 subagent 会话以释放 UI/资源
+4. 仅当需要**返工同一上下文**时才允许对该 ID `resume`；返工结束后再次执行本条即时回收
+5. 向用户的中途汇报可一句带过「已回收 {role} `{id短码}`」，避免底部 Tasks 堆积成僵尸
+
+**交付前清点（强制）**
+
+- 登记表中不得残留 `status=running`
+- 本任务派过的每一行最终必须是 `reclaimed`（或已明确 `failed` + `reclaimed`）
+- 若 UI 仍显示已回收的 Tasks 卡片：在交付说明中提示用户可手动关掉；**不得**用再次 `resume` 去「清卡片」
+
+#### Briefing 模板（硬性）
 
 ```
 ## 任务
@@ -92,139 +125,110 @@ alwaysApply: true
 ## 背景
 - 整体目标：{项目标}
 - 本子任务定位：{在整体中的角色}
-- 上游输入：{来自哪个前置子任务的输出，无则省略}
+- 上游输入：{前置 subagent 输出，无则省略}
 
 ## 约束
 - 范围：{只改哪些文件/目录}
-- 分层规则：{禁止跨层调用、使用标准 API}
-- 代码风格：{async/await、函数组件、错误处理策略}
-- 禁止：{不要做的事，如"不要重构无关代码"}
+- 分层 / 风格 / 禁止项
 
 ## 完成标准（AC）
-- [ ] {可验证条件 1，如"npm run check:ui 退出码 0"}
-- [ ] {可验证条件 2，如"无 any 类型"}
-- [ ] {可验证条件 3，如"不改其他文件"}
+- [ ] {可验证条件 1}
+- [ ] {可验证条件 2}
 
 ## 输出格式
 **Status**: success | partial | failed | blocked
-**Summary**: 一句话总结
-{交付物正文}
-**Files touched**: 文件列表
-**Findings**: 发现的问题或建议
+**Summary**:
+**Files touched**:
+**Findings**:
 ```
 
-**并行规则：**
-- Explorer 始终第一个派发
-- Implementer 依赖 Explorer 输出 → 串行
-- Verifier 依赖 Implementer 输出 → 串行
-- Architect 可与 Explorer 并行（如需要设计输入）
-- Documenter 在所有实现完成后派发
+### Phase 3 — AUDIT（主 Agent 验收，硬性）
 
-### Phase 3 — AUDIT（审计）
+收到回报后 Main **必须**：
 
-Main Agent 收到 subagent 返回后，**逐条验 AC**：
+1. 逐条对照 AC（✅/❌），禁止只看 Summary
+2. 检查跨 subagent 冲突（接口、文件重叠、语义矛盾）
+3. 确认「可用」：相关 build / 测试 / check:ui（由 Verifier 跑；Main 审计其结果与证据）
+4. **任一条未过 → 不得交付**；写明未过 AC + 文件:行号/证据 → 返工分派
+5. 返工 briefing 顶部必须带「返工指示」块（问题 / 期望 / 改进方向）
 
-```
-┌─────────────────────────────────────────────────────┐
-│ 1. 逐条对照 AC 检查                                   │
-│ 2. 跨 subagent 冲突检查（接口签名、文件重叠、语义矛盾）  │
-│ 3. 全通过 → Phase 4 DELIVER                          │
-│ 4. 不通过 → 判断返工対象                               │
-│    - 单 subagent 问题 → 返工该 subagent                │
-│    - 多 subagent 冲突 → 返工相关 subagent + 仲裁       │
-│    - AC 定义不清 → 更新 AC 后重新派发                   │
-└─────────────────────────────────────────────────────┘
-```
+#### 返工策略
 
-### Phase 4 — DELIVER（交付）
+- **继续分派直至 AC 全过且可用**（用户未叫停则不得放弃）
+- 每轮必须相对上一轮有**可观察增量**（新 diff / 新测试绿 / 明确修复点）
+- 连续 **2 轮无增量**（同一 AC 原地打转）→ 向用户上报阻塞分析，询问是否调整 AC/方案；**不得静默放弃**
+- 用户回复继续后，从更新后的 AC 再进入派发循环
 
-```
-┌─────────────────────────────────────────────────────┐
-│ 1. 集成冲突仲裁（如有）                                 │
-│ 2. 整体 AC 最终验证                                    │
-│ 3. 整理交付物 + 汇报用户                               │
-│ 4. 更新 task 状态为 done                              │
-└─────────────────────────────────────────────────────┘
-```
+### Phase 4 — RECLAIM + DELIVER
 
-## 返工循环机制
+#### 回收（硬性：完成即停 + 每轮审计后 + 最终交付前）
 
-```
-Round 1: 分派 → 执行 → 审计
-  └─ 不通过 →
-Round 2: 带具体反馈重新分派（相同角色，更新 briefing）
-  └─ 不通过 →
-Round 3: 带详细 remediation 信息的最后机会
-  └─ 仍不通过 → 上报用户 + 阻塞分析报告
-```
+> **默认时机**：完成通知到达的**同一回合**就回收（见 Phase 2.1），不要攒到交付才清。
 
-### 返工反馈格式（硬性）
+Main Agent **必须**清理：
 
-每次返工的 briefing 必须在顶部附加：
+| 状态 | 动作 |
+|------|------|
+| 已完成且结果已采纳 | 登记表 → `reclaimed`；**禁止**再 `resume`；释放对该 ID 的一切等待 |
+| 已失败 / 部分完成且本轮不再用 | 同上即时 `reclaimed`；需要修复则**新派**或带返工指示 `resume`（二选一写清），结束后再回收 |
+| 未在运行 / 已结束但无有效交付 | `reclaimed` / 丢弃，不纳入审计结论 |
+| 卡死、超时无输出、反复失败且不可用 | **停止继续 resume**；改派新 subagent；登记表标记 `reclaimed`；向用户简要说明 |
+| 后台仍挂着但本任务不再需要 | **立即**按完成态回收；禁止空等、禁止「挂着备用」 |
 
-```
-## ⚠️ 返工指示（第 N 次，共 3 次机会）
+工具层：对 Task 返回的 agent ID，**完成审计的下一动作必须是回收登记**，而不是开新话题或空转；禁止让已完成的 subagent 在后台 Tasks 条里长期占位却无人收口。
 
-### 上次未通过的 AC
-- [ ] {具体哪条 AC 未通过}
-  - 问题：{文件:行号 + 问题描述}
-  - 期望：{具体目标状态 + 对比}
+#### 交付
 
-### 改进方向
-{具体建议 + 反例/正例}
-```
+1. 核对登记表：全部 `reclaimed`，无 `running`
+2. 整体 AC 最终核对
+3. 向用户汇报：做了什么、如何验证、已知限制、已回收的 subagent 数量
+4. Todo 全部收口（完成 / 取消）
 
-### 3 轮失败后的上报格式
+## 角色参考（在 2–4 名额内组合）
 
-```
-## 任务阻塞报告
+| 角色 | 建议类型 | 职责 |
+|------|----------|------|
+| Explorer | generalPurpose / explore | CodeGraph 探索、影响面 |
+| Architect | generalPurpose | 仅复杂接口/跨层时占用一名额 |
+| Implementer | generalPurpose | 实现 / 修复 |
+| Documenter | generalPurpose | docs 同步（可与 Implementer 串行，仍占名额） |
+| Verifier | generalPurpose | 门禁与 AC 独立验收（**每轮实现后必有**） |
 
-**子任务**: {任务名}
-**已尝试**: 3 次
-**阻塞原因**: {为什么持续失败}
-**已完成部分**: {哪些 AC 已通过}
-**未通过 AC**: {列出 + 具体问题}
-**建议**:
-- 方案 A: {如降低 AC 标准}
-- 方案 B: {如手动介入}
-- 方案 C: {如更换实现方案}
-
-请确认如何处理。
-```
+**Main Agent** 不占 2–4 名额，专责拆分、派发、审计、回收、交付。
 
 ## 与其他规则的协同
 
-| 现有规则 | 协同方式 |
-|----------|----------|
-| `requirement-clarification.mdc` | Phase 1 由 Main Agent 执行 |
-| `codegraph.mdc` | Explorer 代为执行，Main Agent 不直接 CodeGraph |
-| `review-audit.mdc` | Phase 3 审计直接引用其审查清单 |
-| `doc-sync.mdc` | Documenter 代为执行 |
-| `post-edit-verification.mdc` | Verifier 代为执行 check:ui / build:packages |
-| `data-layer-standard-api.mdc` | 涉及行情时 briefing 必须引用 |
-| `backward-compatibility.mdc` | 涉及 Schema 时 briefing 必须引用 |
+| 规则 | 协同 |
+|------|------|
+| `requirement-clarification.mdc` | Phase 0/1 由 Main 执行 |
+| `codegraph.mdc` | Explorer briefing 强制先 CodeGraph |
+| `review-audit.mdc` | 审计清单 |
+| `post-edit-verification.mdc` | Verifier 跑 check:ui / build |
+| `doc-sync.mdc` | Documenter 或 Implementer AC 含文档 |
 
 ## 反模式（禁止）
 
-- ❌ Main Agent 亲自 Edit/Write 代码替代 subagent
-- ❌ Main Agent 亲自跑 check:ui / build 替代 Verifier
-- ❌ briefing 不含 AC（subagent 不知道完成标准）
-- ❌ AC 模糊（如"代码质量好"→ 必须可量化/可验证）
-- ❌ 返工反馈只写"不对，重做"
-- ❌ Implementer 和 Verifier 合并（自我确认偏差）
-- ❌ 豁免任务也分派（浪费资源）
-- ❌ 超过 3 轮仍不上线，无限循环
+- ❌ 不拆分就开写 / 只派 1 个「全包」subagent
+- ❌ 一次派发超过 4 个执行 subagent
+- ❌ Main 亲自改业务代码或替代 Verifier
+- ❌ Implementer 与 Verifier 合并
+- ❌ AC 模糊或验收只看「Status: success」
+- ❌ 未过 AC 就向用户报完成
+- ❌ **派发后不登记 agent/task ID**
+- ❌ **收到完成通知却不回收**，任由 Tasks 条堆积 / 后台空跑
+- ❌ 对已完成 subagent 无意义 `resume`「刷存在感」
+- ❌ 留下卡死/无用的 subagent 不管
+- ❌ 豁免任务却硬拆 4 个浪费配额
 
 ## 快速决策树
 
 ```
-用户请求 → 是否 trivial（问答/单行/纯阅读）？
-  ├─ 是 → Main Agent 直接处理
-  └─ 否 → 是否需需求澄清？
-            ├─ 是 → 向用户提问 → 确认后继续
-            └─ 否 → 拆解任务 → 角色阵容（4-6）
-                      → Phase 1 DECOMPOSE
-                      → Phase 2 DISPATCH
-                      → Phase 3 AUDIT
-                      → Phase 4 DELIVER
+用户请求
+  → 豁免？ → Main 直接答/改
+  → 否 → Phase 1 拆分步骤 + AC
+       → Phase 2 派 2–4 subagent（立刻写入 ID 登记表 status=running）
+       → 完成通知 → 同一回合登记表 → reclaimed（即时停止，禁止空跑）
+       → Phase 3 主验收
+            → 不过 → 返工分派（先回收无用者）→ Phase 2/3
+            → 通过且可用 → Phase 4 清点登记表全 reclaimed + 交付
 ```

@@ -1,0 +1,120 @@
+import { describe, it } from 'node:test'
+import assert from 'node:assert/strict'
+import JSZip from 'jszip'
+import {
+  extractTextL0,
+  extractDocxL0,
+  extractDocL0,
+  extractPptxL0,
+  extractPptL0,
+  createOfficeL0Runner,
+  documentKindFromMime,
+} from '../packages/doc-library/dist/index.js'
+
+describe('text-l0 extract', () => {
+  it('extracts utf8 plain text as one page', () => {
+    const result = extractTextL0(Buffer.from('第一行\n第二行', 'utf8'))
+    assert.equal(result.pageCount, 1)
+    assert.ok(result.charCount > 0)
+    assert.ok(result.markdown.includes('第一行'))
+    assert.equal(result.chunks.length, 1)
+    assert.equal(result.chunks[0].page, 1)
+  })
+
+  it('strips utf8 BOM', () => {
+    const result = extractTextL0(Buffer.from('\uFEFF标题\n正文', 'utf8'))
+    assert.ok(result.markdown.includes('标题'))
+    assert.ok(!result.error)
+  })
+})
+
+describe('office-l0 pptx', () => {
+  it('chunks by slide (page = slide index)', async () => {
+    const zip = new JSZip()
+    zip.file(
+      'ppt/slides/slide1.xml',
+      `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><a:t>第一页标题</a:t></p:sld>`,
+    )
+    zip.file(
+      'ppt/slides/slide2.xml',
+      `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:p="http://schemas.openxmlformats.org/presentationml/2006/main"><a:t>第二页内容</a:t><a:t>补充</a:t></p:sld>`,
+    )
+    zip.file('[Content_Types].xml', '<?xml version="1.0"?><Types/>')
+    const buf = await zip.generateAsync({ type: 'nodebuffer' })
+
+    const result = await extractPptxL0(buf)
+    assert.equal(result.pageCount, 2)
+    assert.ok(result.markdown.includes('<!-- page:1 -->'))
+    assert.ok(result.markdown.includes('<!-- page:2 -->'))
+    assert.ok(result.chunks.some(c => c.page === 1 && c.text.includes('第一页')))
+    assert.ok(result.chunks.some(c => c.page === 2 && c.text.includes('第二页')))
+  })
+})
+
+describe('office-l0 docx via runner', () => {
+  it('returns friendly error for non-office zip', async () => {
+    const zip = new JSZip()
+    zip.file('readme.txt', 'hi')
+    const buf = await zip.generateAsync({ type: 'nodebuffer' })
+    const runner = createOfficeL0Runner()
+    const result = await runner.run(buf, { kind: 'docx', filename: 'x.docx' })
+    // mammoth may fail or return empty — either way should not throw
+    assert.ok(typeof result.charCount === 'number')
+    assert.ok(Array.isArray(result.chunks))
+  })
+})
+
+describe('office-l0 docx extract helper', () => {
+  it('extractDocxL0 handles empty/invalid buffer without throw', async () => {
+    const result = await extractDocxL0(Buffer.from('not-a-docx'))
+    assert.equal(result.pageCount, 0)
+    assert.ok(result.error)
+  })
+})
+
+describe('documentKindFromMime legacy office', () => {
+  it('maps .doc / .ppt mime and extension', () => {
+    assert.equal(documentKindFromMime('application/msword', 'a.doc'), 'doc')
+    assert.equal(documentKindFromMime('application/octet-stream', 'a.doc'), 'doc')
+    assert.equal(documentKindFromMime('application/vnd.ms-powerpoint', 'b.ppt'), 'ppt')
+    assert.equal(documentKindFromMime('application/octet-stream', 'b.ppt'), 'ppt')
+    assert.equal(
+      documentKindFromMime(
+        'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        'a.docx',
+      ),
+      'docx',
+    )
+    assert.equal(
+      documentKindFromMime(
+        'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        'b.pptx',
+      ),
+      'pptx',
+    )
+  })
+})
+
+describe('office-l0 legacy doc/ppt', () => {
+  it('extractDocL0 returns friendly error for invalid buffer', async () => {
+    const result = await extractDocL0(Buffer.from('not-a-doc'))
+    assert.equal(result.pageCount, 0)
+    assert.ok(result.error)
+  })
+
+  it('extractPptL0 returns friendly error for invalid buffer', async () => {
+    const result = await extractPptL0(Buffer.from('not-a-ppt'))
+    assert.equal(result.pageCount, 0)
+    assert.ok(result.error)
+  })
+
+  it('runner routes kind=doc and kind=ppt without throw', async () => {
+    const runner = createOfficeL0Runner()
+    const doc = await runner.run(Buffer.from('x'), { kind: 'doc', filename: 'a.doc' })
+    assert.ok(typeof doc.charCount === 'number')
+    assert.ok(Array.isArray(doc.chunks))
+    const ppt = await runner.run(Buffer.from('x'), { kind: 'ppt', filename: 'a.ppt' })
+    assert.ok(typeof ppt.charCount === 'number')
+    assert.ok(Array.isArray(ppt.chunks))
+  })
+})

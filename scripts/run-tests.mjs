@@ -6,6 +6,11 @@
  * Default suite stays offline-fast. Opt into real upstream probes with:
  *   OPPTRIX_LIVE_NETWORK_TESTS=1 npm run test:ci
  * or: npm run test:live-network
+ *
+ * Coverage note (Hybrid RAG / desktop pack): every tests/*.test.mjs is run,
+ * including document-library, e5-bundled-paths, rapidocr-bundled-paths,
+ * rag-engines-bundled, parse-router, mcp-tool-route-accuracy. CI must not add
+ * a duplicate node --test step for those after npm run test:ci.
  */
 import { readdirSync } from 'node:fs'
 import path from 'node:path'
