@@ -142,6 +142,9 @@ export {
   sha256Of,
   IMAGE_OCR_MARKER,
   MAX_EMBEDDED_IMAGES,
+  MIN_IMAGE_BYTES,
+  MIN_IMAGE_EDGE,
+  EMBEDDED_OCR_TIMEOUT_MS,
 } from './engines/embedded-images/index.js'
 export type {
   EmbeddedMedia,

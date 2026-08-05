@@ -93,6 +93,18 @@ function attachmentStatusLabel(item: ChatAttachmentMeta): string {
     const status = item.extract?.status
     if (status === 'pending') {
       if (item.kind === 'image') return '正在识别文字…'
+      const phase = item.extract?.phase
+      if (phase === 'converting') return '正在转换文档…'
+      if (phase === 'ocr') {
+        const done = item.extract?.ocrDone
+        const total = item.extract?.ocrTotal
+        if (typeof done === 'number' && typeof total === 'number' && total > 0) {
+          return `正在识别图片文字（${done}/${total}）…`
+        }
+        return '正在识别图片文字…'
+      }
+      const msg = item.extract?.message?.trim()
+      if (msg) return msg
       return '正在整理…'
     }
     if (status === 'ready') {

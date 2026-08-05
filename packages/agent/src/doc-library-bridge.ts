@@ -30,17 +30,25 @@ const ENGINE_VERSION = '1.0.0'
 const pdfExtractL0Runner: ParseRunner = {
   engineId: 'pdf-extract-l0',
   engineVersion: ENGINE_VERSION,
-  async run(blob) {
+  async run(blob, opts) {
+    opts?.onProgress?.({ phase: 'extracting', message: '正在整理…' })
     const result = await extractPdfToMarkdown(blob)
     const pages = result.pages.map(p => ({
       page: p.page,
       text: [p.text, ...p.tablesMd].filter(Boolean).join('\n\n').trim(),
     }))
-    // L0 内联：可复制文本 + 页内嵌图 OCR；失败/超时不丢正文
-    const enhanced = await enhancePagesWithEmbeddedImageOcr(blob, pages, { format: 'pdf' })
+    // L0 内联：可复制文本 + 页内嵌图 OCR；失败不丢正文
+    const enhanced = await enhancePagesWithEmbeddedImageOcr(blob, pages, {
+      format: 'pdf',
+      onProgress: opts?.onProgress,
+    })
     const rebuilt = pagesToParseResult(enhanced)
     if (rebuilt.charCount > 0) {
-      return rebuilt
+      // 保留 extractPdfToMarkdown 的 numpages 页数，避免 splitPages 回退时 pages.length 盖掉真实页数
+      return {
+        ...rebuilt,
+        pageCount: Math.max(rebuilt.pageCount, result.pageCount),
+      }
     }
     const emptyPages = result.pages.filter(p => !p.text.trim() && p.tablesMd.length === 0).length
     const emptyPageRatio = result.pageCount > 0 ? emptyPages / result.pageCount : 1
@@ -72,10 +80,14 @@ const legacyExtractWriter: LegacyExtractWriter = (sessionId, attachmentId, resul
   const existing = readAttachmentMeta(sessionId, attachmentId)
   applyAttachmentExtractMeta(sessionId, attachmentId, {
     status: 'ready',
+    phase: 'ready',
     documentId: existing?.extract?.documentId,
     pageCount: result.pageCount,
     charCount: result.charCount,
     readyAt: new Date().toISOString(),
+    ocrDone: undefined,
+    ocrTotal: undefined,
+    message: undefined,
   })
 }
 
@@ -91,10 +103,25 @@ export function ensureDocLibraryBridge(): ReturnType<typeof getDocLibraryService
         const existing = readAttachmentMeta(input.sessionId, input.attachmentId)
         applyAttachmentExtractMeta(input.sessionId, input.attachmentId, {
           status: 'failed',
+          phase: 'failed',
           documentId: existing?.extract?.documentId,
           error,
           pageCount: partial?.pageCount,
           charCount: partial?.charCount,
+          ocrDone: undefined,
+          ocrTotal: undefined,
+          message: undefined,
+        })
+      },
+      onProgress(input, progress) {
+        const existing = readAttachmentMeta(input.sessionId, input.attachmentId)
+        applyAttachmentExtractMeta(input.sessionId, input.attachmentId, {
+          status: 'pending',
+          documentId: existing?.extract?.documentId,
+          phase: progress.phase,
+          ocrDone: progress.ocrDone,
+          ocrTotal: progress.ocrTotal,
+          message: progress.message,
         })
       },
     })
@@ -179,6 +206,7 @@ export function syncFailedExtractMeta(
 ): void {
   applyAttachmentExtractMeta(sessionId, attachmentId, {
     status: 'failed',
+    phase: 'failed',
     error,
     pageCount: partial?.pageCount,
     charCount: partial?.charCount,
@@ -213,10 +241,14 @@ export function syncReadyExtractFromLibrary(
   })
   applyAttachmentExtractMeta(sessionId, attachmentId, {
     status: 'ready',
+    phase: 'ready',
     documentId,
     pageCount: status.pageCount,
     charCount: status.charCount,
     readyAt: status.readyAt,
+    ocrDone: undefined,
+    ocrTotal: undefined,
+    message: undefined,
   })
 }
 

@@ -96,10 +96,36 @@ function splitPages(rawText: string): string[] {
   if (normalized.includes('\f')) {
     return normalized.split('\f').map(p => p.trim()).filter(Boolean)
   }
-  // pdf-parse 有时用多重换行近似分页
+  // pdf-parse 有时用多重换行近似分页（仅作 pagerender 失败时的回退）
   const soft = normalized.split(/\n{4,}/).map(p => p.trim()).filter(Boolean)
   if (soft.length > 1) return soft
   return normalized.trim() ? [normalized.trim()] : []
+}
+
+/** 与 pdf-parse 默认 pagerender 等价：按 Y 坐标拼行。 */
+async function renderPdfPageText(pageData: {
+  getTextContent: (opts: {
+    normalizeWhitespace: boolean
+    disableCombineTextItems: boolean
+  }) => Promise<{ items: Array<{ str?: string; transform?: number[] }> }>
+}): Promise<string> {
+  const textContent = await pageData.getTextContent({
+    normalizeWhitespace: false,
+    disableCombineTextItems: false,
+  })
+  let lastY: number | undefined
+  let text = ''
+  for (const item of textContent.items) {
+    const str = typeof item.str === 'string' ? item.str : ''
+    const y = Array.isArray(item.transform) ? item.transform[5] : undefined
+    if (lastY === y || lastY === undefined) {
+      text += str
+    } else {
+      text += `\n${str}`
+    }
+    lastY = y
+  }
+  return text
 }
 
 function buildChunks(pages: PdfExtractPage[]): PdfExtractChunk[] {
@@ -138,34 +164,73 @@ function buildChunks(pages: PdfExtractPage[]): PdfExtractChunk[] {
   return chunks
 }
 
+function toPdfExtractPages(pageTexts: string[]): PdfExtractPage[] {
+  return pageTexts.map((pageText, idx) => {
+    const normalized = pageText.replace(/\r\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim()
+    const { prose, tablesMd } = extractTablesFromPageText(normalized)
+    return {
+      page: idx + 1,
+      text: prose || normalized,
+      tablesMd,
+    }
+  })
+}
+
 export async function extractPdfToMarkdown(data: Buffer | Uint8Array): Promise<PdfExtractResult> {
   // pdf-parse 子路径无官方类型；运行时与 sinafinance/pdf-text 相同
   const mod = await import(
     /* @vite-ignore */
     'pdf-parse/lib/pdf-parse.js' as string
-  ) as { default: (buf: Buffer) => Promise<{ text?: string; numpages?: number }> }
+  ) as {
+    default: (
+      buf: Buffer,
+      options?: {
+        pagerender?: (pageData: {
+          getTextContent: (opts: {
+            normalizeWhitespace: boolean
+            disableCombineTextItems: boolean
+          }) => Promise<{ items: Array<{ str?: string; transform?: number[] }> }>
+        }) => Promise<string>
+      },
+    ) => Promise<{ text?: string; numpages?: number; numrender?: number }>
+  }
   const pdfParse = mod.default
-  const result = await pdfParse(Buffer.from(data))
-  const raw = String(result.text ?? '')
-    .replace(/\r\n/g, '\n')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim()
 
-  const pageTexts = splitPages(raw)
-  const pages: PdfExtractPage[] = pageTexts.map((pageText, idx) => {
-    const { prose, tablesMd } = extractTablesFromPageText(pageText)
-    return {
-      page: idx + 1,
-      text: prose || pageText.trim(),
-      tablesMd,
-    }
+  // 优先用 pagerender 按真实页收集正文（默认实现把各页用 \n\n 拼成整文，splitPages 常拆不出多页）
+  const collectedPageTexts: string[] = []
+  const result = await pdfParse(Buffer.from(data), {
+    pagerender: async pageData => {
+      const pageText = await renderPdfPageText(pageData)
+      collectedPageTexts.push(pageText)
+      return pageText
+    },
   })
 
-  // pdf-parse numpages 可能与拆页数不一致；以拆页为准，至少 1
-  const pageCount = Math.max(pages.length, Number(result.numpages) || 0, pages.length ? 1 : 0)
-  if (pages.length === 0 && pageCount > 0) {
-    pages.push({ page: 1, text: '', tablesMd: [] })
+  const numpages = Number(result.numpages)
+  // pageCount 以 pdf-parse numpages 为准；禁止用「仅成功拆出的页数」覆盖真实页数
+  const pageCount =
+    Number.isFinite(numpages) && numpages > 0
+      ? Math.floor(numpages)
+      : Math.max(collectedPageTexts.length, 1)
+
+  let pageTexts: string[]
+  if (collectedPageTexts.length > 0) {
+    pageTexts = [...collectedPageTexts]
+    // pagerender 次数应等于 numpages；若偶发少收集，用空页补齐以保持 page 序号对齐
+    while (pageTexts.length < pageCount) pageTexts.push('')
+  } else {
+    // 回退：整文拆页。若仍拆不出多页，chunks 可能全标 page=1，但 pageCount 仍用 numpages
+    const raw = String(result.text ?? '')
+      .replace(/\r\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim()
+    pageTexts = splitPages(raw)
+    if (pageTexts.length === 0 && pageCount > 0) {
+      pageTexts = ['']
+    }
   }
+
+  const pages = toPdfExtractPages(pageTexts)
 
   const mdParts: string[] = []
   for (const page of pages) {
@@ -179,7 +244,7 @@ export async function extractPdfToMarkdown(data: Buffer | Uint8Array): Promise<P
   const markdown = mdParts.join('\n').trim()
   const chunks = buildChunks(pages)
   return {
-    pageCount: pages.length || pageCount,
+    pageCount,
     charCount: markdown.length,
     markdown,
     pages,

@@ -134,6 +134,7 @@ export {
   type ChatAttachmentMeta,
   type AttachmentExtractMeta,
   type AttachmentExtractStatus,
+  type AttachmentExtractPhase,
   type AttachmentLimits,
   type ModelMediaCapabilities,
   mimeToMediaKind,

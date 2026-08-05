@@ -1,6 +1,6 @@
 /**
  * L0 内嵌图 OCR 增强：从 docx/pptx/pdf 抽图 → 本地 OCR → 合并进对应页。
- * OCR 未就绪或超时：静默保留已有正文，不阻断入库。
+ * OCR 未就绪：静默保留已有正文，不阻断入库。整份 parse 在后台跑完再 ready。
  */
 import { isOcrL2Available, ocrImageBuffer } from '../ocr-l2.js'
 import { extractDocxEmbeddedImages, extractPptxEmbeddedImages } from './ooxml-media.js'
@@ -8,14 +8,13 @@ import { extractPdfEmbeddedImages } from './pdf-media.js'
 import { ocrEmbeddedMediaBatch } from './ocr-batch.js'
 import { mergeImageOcrIntoPages, pagesToParseResult } from './merge.js'
 import {
-  EMBEDDED_OCR_TIMEOUT_MS,
   OCR_CONCURRENCY,
   type EmbeddedImageFormat,
   type EmbeddedMedia,
   type OcrImageFn,
   type PageText,
 } from './types.js'
-import type { ParseRunResult } from '../../types.js'
+import type { ParseProgress, ParseRunResult } from '../../types.js'
 
 export {
   IMAGE_OCR_MARKER,
@@ -49,19 +48,23 @@ export type EnhanceEmbeddedOcrOpts = {
   format: EmbeddedImageFormat
   /** 测试可注入；默认走 ocr-l2.ocrImageBuffer */
   ocrFn?: OcrImageFn
+  /**
+   * @deprecated 默认不再硬超时；仅测试传入正数时启用 Promise.race 截断。
+   */
   timeoutMs?: number
   concurrency?: number
+  onProgress?: (progress: ParseProgress) => void
 }
 
 /**
- * 对已有页文本做内嵌图 OCR 合并。失败/超时/OCR 未就绪 → 返回原 pages。
+ * 对已有页文本做内嵌图 OCR 合并。失败/OCR 未就绪 → 返回原 pages。
+ * 默认跑完全部内嵌图再返回（依赖外层 scheduleParse + UI 轮询）。
  */
 export async function enhancePagesWithEmbeddedImageOcr(
   blob: Buffer,
   pages: PageText[],
   opts: EnhanceEmbeddedOcrOpts,
 ): Promise<PageText[]> {
-  const timeoutMs = opts.timeoutMs ?? EMBEDDED_OCR_TIMEOUT_MS
   const ocrFn = opts.ocrFn ?? ocrImageBuffer
   // 默认路径：模型未就绪则跳过抽图，不阻断正文入库
   if (!opts.ocrFn && !(await isOcrL2Available())) return pages
@@ -72,6 +75,17 @@ export async function enhancePagesWithEmbeddedImageOcr(
       if (!media.length) return pages
       const pageOcr = await ocrEmbeddedMediaBatch(media, ocrFn, {
         concurrency: opts.concurrency ?? OCR_CONCURRENCY,
+        onProgress: (done, total) => {
+          opts.onProgress?.({
+            phase: 'ocr',
+            ocrDone: done,
+            ocrTotal: total,
+            message:
+              total > 0
+                ? `正在识别图片文字（${done}/${total}）…`
+                : '正在识别图片文字…',
+          })
+        },
       })
       if (!pageOcr.size) return pages
       return mergeImageOcrIntoPages(pages, pageOcr)
@@ -80,7 +94,9 @@ export async function enhancePagesWithEmbeddedImageOcr(
     }
   })()
 
-  if (!timeoutMs || timeoutMs <= 0) return work
+  // 仅显式传入正数 timeoutMs 时截断（测试）；生产默认等 OCR 跑完
+  const timeoutMs = opts.timeoutMs
+  if (timeoutMs == null || timeoutMs <= 0) return work
 
   let timer: ReturnType<typeof setTimeout> | undefined
   try {

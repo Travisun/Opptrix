@@ -17,7 +17,12 @@ export function sha256Of(buf: Buffer): string {
 export async function ocrEmbeddedMediaBatch(
   media: EmbeddedMedia[],
   ocrFn: OcrImageFn,
-  opts: { concurrency?: number; maxImages?: number } = {},
+  opts: {
+    concurrency?: number
+    maxImages?: number
+    /** 按「唯一图」完成数汇报；done/total 基于去重后的张数 */
+    onProgress?: (done: number, total: number) => void
+  } = {},
 ): Promise<Map<number, string[]>> {
   const maxImages = opts.maxImages ?? MAX_EMBEDDED_IMAGES
   const concurrency = Math.max(1, Math.min(opts.concurrency ?? OCR_CONCURRENCY, 4))
@@ -34,6 +39,9 @@ export async function ocrEmbeddedMediaBatch(
 
   const shaToText = new Map<string, string>()
   let next = 0
+  let done = 0
+  const total = uniqueShas.length
+  if (total > 0) opts.onProgress?.(0, total)
 
   async function worker(): Promise<void> {
     while (next < uniqueShas.length) {
@@ -48,6 +56,9 @@ export async function ocrEmbeddedMediaBatch(
         if (text) shaToText.set(sha, text)
       } catch {
         /* 单项失败静默 */
+      } finally {
+        done += 1
+        opts.onProgress?.(done, total)
       }
     }
   }

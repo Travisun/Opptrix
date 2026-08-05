@@ -80,14 +80,16 @@ export function useComposerAttachments(
     files: FileList | File[],
     media: ModelMediaCapabilities | null,
   ) => {
+    // 必须在任何 await 之前固化：file input 清空或 drop 结束后 live FileList 会变空
+    const list = Array.from(files)
+    if (!list.length) return
+
     const sid = await resolveSessionId()
     if (!sid) {
       clearToastLater('暂时无法添加附件，请稍后再试')
       return
     }
 
-    const list = Array.from(files)
-    if (!list.length) return
     setUploading(true)
     try {
       let next = [...pinned]

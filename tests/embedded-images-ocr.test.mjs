@@ -150,7 +150,7 @@ describe('ocr batch + enhance (mock OCR)', () => {
     assert.ok(result.chunks.some(c => c.text.includes('图内识别结果')))
   })
 
-  it('timeout keeps existing page text', async () => {
+  it('optional timeoutMs still aborts early for tests; default waits for OCR', async () => {
     const img = makePngFixture(0x66)
     const zip = new JSZip()
     zip.file(
@@ -165,7 +165,8 @@ describe('ocr batch + enhance (mock OCR)', () => {
     const buf = await zip.generateAsync({ type: 'nodebuffer' })
 
     const pages = [{ page: 1, text: '保留正文' }]
-    const enhanced = await enhancePagesWithEmbeddedImageOcr(buf, pages, {
+    // 显式短超时：测试兼容路径
+    const timedOut = await enhancePagesWithEmbeddedImageOcr(buf, pages, {
       format: 'pptx',
       timeoutMs: 30,
       ocrFn: async () => {
@@ -173,8 +174,57 @@ describe('ocr batch + enhance (mock OCR)', () => {
         return '不应出现'
       },
     })
-    assert.equal(enhanced[0].text, '保留正文')
-    assert.ok(!enhanced[0].text.includes('不应出现'))
+    assert.equal(timedOut[0].text, '保留正文')
+    assert.ok(!timedOut[0].text.includes('不应出现'))
+
+    // 默认无硬截断：等 OCR 完成
+    const completed = await enhancePagesWithEmbeddedImageOcr(buf, pages, {
+      format: 'pptx',
+      ocrFn: async () => {
+        await new Promise(r => setTimeout(r, 80))
+        return '延迟图文'
+      },
+    })
+    assert.ok(completed[0].text.includes('保留正文'))
+    assert.ok(completed[0].text.includes('延迟图文'))
+  })
+
+  it('reports ocr progress via onProgress', async () => {
+    const img1 = makePngFixture(0x71)
+    const img2 = makePngFixture(0x72)
+    const zip = new JSZip()
+    zip.file(
+      'ppt/slides/slide1.xml',
+      `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><a:blip r:embed="rId2"/><a:t>P1</a:t></p:sld>`,
+    )
+    zip.file(
+      'ppt/slides/_rels/slide1.xml.rels',
+      `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image1.png"/></Relationships>`,
+    )
+    zip.file(
+      'ppt/slides/slide2.xml',
+      `<?xml version="1.0"?><p:sld xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><a:blip r:embed="rId2"/><a:t>P2</a:t></p:sld>`,
+    )
+    zip.file(
+      'ppt/slides/_rels/slide2.xml.rels',
+      `<?xml version="1.0"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="../media/image2.png"/></Relationships>`,
+    )
+    zip.file('ppt/media/image1.png', img1)
+    zip.file('ppt/media/image2.png', img2)
+    const buf = await zip.generateAsync({ type: 'nodebuffer' })
+
+    const phases = []
+    await enhancePagesWithEmbeddedImageOcr(
+      buf,
+      [{ page: 1, text: 'P1' }, { page: 2, text: 'P2' }],
+      {
+        format: 'pptx',
+        ocrFn: async () => 'x',
+        onProgress: p => phases.push({ phase: p.phase, done: p.ocrDone, total: p.ocrTotal }),
+      },
+    )
+    assert.ok(phases.some(p => p.phase === 'ocr'))
+    assert.ok(phases.some(p => p.done === p.total && p.total === 2))
   })
 
   it('OCR throw keeps existing page text (no fail)', async () => {

@@ -4,6 +4,14 @@ export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio
 /** 附件文本整理状态（含 OCR） */
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
 
+/** 整理子阶段（可选；旧客户端可忽略，仅看 status） */
+export type AttachmentExtractPhase =
+  | 'converting'
+  | 'extracting'
+  | 'ocr'
+  | 'ready'
+  | 'failed'
+
 export interface AttachmentExtractMeta {
   status: AttachmentExtractStatus
   /** 文档库 document_id；与库内 parse 状态镜像 */
@@ -12,6 +20,14 @@ export interface AttachmentExtractMeta {
   pageCount?: number
   charCount?: number
   readyAt?: string
+  /** 进行中阶段；pending 时 UI 可显示更细进度 */
+  phase?: AttachmentExtractPhase
+  /** 内嵌图 OCR 已完成张数（去重后） */
+  ocrDone?: number
+  /** 内嵌图 OCR 总张数（去重后） */
+  ocrTotal?: number
+  /** 用户可见短句（可选） */
+  message?: string
 }
 
 export interface ChatAttachmentMeta {

@@ -9,6 +9,7 @@ import type {
   IngestFromTextInput,
   IngestFromTextResult,
   PageRangeReadResult,
+  ParseProgress,
   ParseRunner,
   ParseStatus,
   SessionDocumentView,
@@ -37,6 +38,11 @@ export interface ParseLifecycleHooks {
     input: IngestFromAttachmentInput,
     error: string,
     partial?: { pageCount?: number; charCount?: number },
+  ) => void
+  /** 转换 / 抽正文 / 内嵌 OCR 中间进度（status 仍为 pending） */
+  onProgress?: (
+    input: IngestFromAttachmentInput,
+    progress: ParseProgress,
   ) => void
 }
 
@@ -295,6 +301,9 @@ export class DocLibraryService {
         kind: input.kind,
         mime: input.mime,
         filename: input.name,
+        onProgress: progress => {
+          this.lifecycleHooks?.onProgress?.(input, progress)
+        },
       })
       if (result.error && result.charCount < MIN_USEFUL_CHARS) {
         const err = result.error ?? '未能从该研报提取到可复制文本，请换电子版后再试'

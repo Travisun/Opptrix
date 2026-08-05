@@ -90,6 +90,17 @@ export interface ParseRunResult {
   usedEngineVersion?: string
 }
 
+/** 解析过程阶段（附件 meta / UI 轮询） */
+export type ParseProgressPhase = 'converting' | 'extracting' | 'ocr' | 'ready' | 'failed'
+
+export interface ParseProgress {
+  phase: ParseProgressPhase
+  ocrDone?: number
+  ocrTotal?: number
+  /** 用户可见短句（可选） */
+  message?: string
+}
+
 /** 单次解析选项（升阶 / 强制引擎 / 路由上下文） */
 export interface ParseRunOpts {
   /** 用户请求深度整理 → 允许升至 OCR（须已就绪） */
@@ -100,6 +111,8 @@ export interface ParseRunOpts {
   kind?: DocumentKind
   mime?: string
   filename?: string
+  /** 异步整理进度（转换 / 抽正文 / 内嵌 OCR） */
+  onProgress?: (progress: ParseProgress) => void
 }
 
 /** 注入解析引擎；由 agent 组装 ParseRouter，避免 doc-library → agent 循环依赖 */

@@ -80,9 +80,9 @@ export function resolveActiveModelMedia(
   return null
 }
 
-export function modelAllowsAttachments(media: ModelMediaCapabilities | null): boolean {
-  // 研报库本地整理路径始终可用；有 media 对象即可展示附件入口
-  return media != null
+export function modelAllowsAttachments(_media: ModelMediaCapabilities | null): boolean {
+  // 研报/文档/图片入库路径始终可用（与 buildAcceptForMedia 一致）；media 仅影响额外类型与限额
+  return true
 }
 
 export function buildAcceptForMedia(media: ModelMediaCapabilities | null): string {
@@ -147,6 +147,22 @@ export function mimeToKind(mime: string, filename?: string): MediaKind | null {
   if (m.startsWith('video/')) return 'video'
   if (m.startsWith('audio/')) return 'audio'
   return null
+}
+
+/** 旧版 Office：`.doc` / `.ppt`（勿误伤 `.docx` / `.pptx`） */
+const LEGACY_OFFICE_MIME = new Set([
+  'application/msword',
+  'application/vnd.ms-powerpoint',
+])
+
+export function isLegacyOfficeAttachment(file: Pick<File, 'type' | 'name'>): boolean {
+  const name = file.name.toLowerCase()
+  const dot = name.lastIndexOf('.')
+  const ext = dot >= 0 ? name.slice(dot) : ''
+  if (ext === '.doc' || ext === '.ppt') return true
+  if (ext === '.docx' || ext === '.pptx') return false
+  const mime = resolveFileMime(file).toLowerCase().split(';')[0]?.trim() ?? ''
+  return LEGACY_OFFICE_MIME.has(mime)
 }
 
 export function validateFileForModel(

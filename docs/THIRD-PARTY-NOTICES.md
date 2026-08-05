@@ -17,7 +17,7 @@
 | **mammoth** | `.docx` 纯文本抽取（`office-l0`） | BSD-2-Clause | OOXML Word |
 | **word-extractor** | `.doc`（OLE）纯文本抽取（`office-l0`） | MIT | 用户无需自行转换 |
 | **jszip** | `.pptx` 读 slide XML `<a:t>`；docx/pptx 抽内嵌图（`office-l0` + embedded-images） | MIT | 按幻灯片分 chunk；图内文字并入对应页 |
-| **ppt-to-text** | `.ppt`（97–2003）文本抽取（`office-l0` fallback） | Apache-2.0 | 纯 Node；可选本机 `soffice` 先转 `.pptx` 再走 jszip 路径（**非强制捆绑** LibreOffice）；无图路径可接受 |
+| **ppt-to-text** | `.ppt`（97–2003）文本抽取（`office-l0`） | Apache-2.0 | 纯 Node 正文抽取；不认图、无格式转换 |
 | **@gutenye/ocr-node** + **onnxruntime-node** | Node ONNX OCR（`ocr-l2`）；内嵌图复用 `ocrImageBuffer` | Apache-2.0 / MIT（见上游） | **默认深度整理路径**；复用 PP-OCRv4 mobile ONNX；含图内文字 |
 | **@hyzyla/pdfium** | PDF 页栅格化 + 页内图像对象导出（供 OCR，非 AGPL） | 遵循上游 PDFium 声明 | 配合 sharp 出 PNG；禁 PyMuPDF |
 | **sharp** | OCR 前图像编码 | Apache-2.0 | |

@@ -1,14 +1,10 @@
 /**
  * office-l0：
- * - .docx（mammoth）/ .doc（word-extractor）
- * - .pptx（jszip 读 slide XML `<a:t>`）/ .ppt（ppt-to-text；可选 soffice→pptx）
+ * - .docx（mammoth）/ .doc（word-extractor，仅正文，不认图）
+ * - .pptx（jszip 读 slide XML `<a:t>`）/ .ppt（ppt-to-text，仅正文，不认图）
  * 不恢复版面；pptx/ppt 尽量按幻灯片分 chunk（page = slide）。
+ * docx/pptx 走内嵌图 OCR；旧版 .doc/.ppt 无转换、无内嵌图路径。
  */
-import { execFile } from 'node:child_process'
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
-import { tmpdir } from 'node:os'
-import { join } from 'node:path'
-import { promisify } from 'node:util'
 import { createRequire } from 'node:module'
 import JSZip from 'jszip'
 import mammoth from 'mammoth'
@@ -21,7 +17,7 @@ import {
 } from './embedded-images/index.js'
 import type { PptToTextModule } from 'ppt-to-text'
 
-export const OFFICE_L0_ENGINE_VERSION = '1.2.0'
+export const OFFICE_L0_ENGINE_VERSION = '1.4.0'
 
 type WordExtractorDocument = {
   getBody(): string
@@ -40,9 +36,7 @@ const require = createRequire(import.meta.url)
 const pptToText = require('ppt-to-text') as PptToTextModule
 const WordExtractor = require('word-extractor') as WordExtractorCtor
 
-const execFileAsync = promisify(execFile)
 const A_T_RE = /<a:t[^>]*>([\s\S]*?)<\/a:t>/gi
-const SOFFICE_TIMEOUT_MS = 45_000
 
 type OfficeKind = Extract<DocumentKind, 'docx' | 'doc' | 'pptx' | 'ppt'>
 
@@ -107,14 +101,18 @@ function pagesToResult(pages: Array<{ page: number; text: string }>): ParseRunRe
   }
 }
 
-export async function extractDocxL0(blob: Buffer): Promise<ParseRunResult> {
+export async function extractDocxL0(
+  blob: Buffer,
+  opts?: ParseRunOpts,
+): Promise<ParseRunResult> {
   try {
+    opts?.onProgress?.({ phase: 'extracting', message: '正在整理…' })
     const result = await mammoth.extractRawText({ buffer: blob })
     const text = (result.value ?? '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').trim()
     const pages = await enhancePagesWithEmbeddedImageOcr(
       blob,
       [{ page: 1, text }],
-      { format: 'docx' },
+      { format: 'docx', onProgress: opts?.onProgress },
     )
     const rebuilt = pagesToParseResult(pages)
     if (rebuilt.charCount <= 0) {
@@ -126,8 +124,8 @@ export async function extractDocxL0(blob: Buffer): Promise<ParseRunResult> {
   }
 }
 
-/** 旧版 .doc（OLE）— word-extractor（MIT） */
-export async function extractDocL0(blob: Buffer): Promise<ParseRunResult> {
+/** 旧版 .doc 正文回退 — word-extractor（MIT）；无内嵌图 OCR */
+async function extractDocViaWordExtractor(blob: Buffer): Promise<ParseRunResult> {
   try {
     const extractor = new WordExtractor()
     const doc = await extractor.extract(blob)
@@ -158,8 +156,21 @@ export async function extractDocL0(blob: Buffer): Promise<ParseRunResult> {
   }
 }
 
-export async function extractPptxL0(blob: Buffer): Promise<ParseRunResult> {
+/** 旧版 .doc — 仅 word-extractor 正文（不认图、无格式转换） */
+export async function extractDocL0(
+  blob: Buffer,
+  opts?: ParseRunOpts,
+): Promise<ParseRunResult> {
+  opts?.onProgress?.({ phase: 'extracting', message: '正在整理…' })
+  return extractDocViaWordExtractor(blob)
+}
+
+export async function extractPptxL0(
+  blob: Buffer,
+  opts?: ParseRunOpts,
+): Promise<ParseRunResult> {
   try {
+    opts?.onProgress?.({ phase: 'extracting', message: '正在整理…' })
     const zip = await JSZip.loadAsync(blob)
     const slides: Array<{ page: number; text: string }> = []
     const entries = Object.keys(zip.files)
@@ -176,7 +187,10 @@ export async function extractPptxL0(blob: Buffer): Promise<ParseRunResult> {
 
     // 无 slide XML 时仍尝试内嵌图 OCR（罕见）
     const base = slides.length ? slides : [{ page: 1, text: '' }]
-    const enhanced = await enhancePagesWithEmbeddedImageOcr(blob, base, { format: 'pptx' })
+    const enhanced = await enhancePagesWithEmbeddedImageOcr(blob, base, {
+      format: 'pptx',
+      onProgress: opts?.onProgress,
+    })
     const rebuilt = pagesToParseResult(enhanced)
     if (rebuilt.charCount <= 0) {
       return emptyOfficeError('未能从该演示文稿提取到可读文本')
@@ -184,29 +198,6 @@ export async function extractPptxL0(blob: Buffer): Promise<ParseRunResult> {
     return rebuilt
   } catch {
     return emptyOfficeError('暂时无法读取该演示文稿，请换一份文件后重试')
-  }
-}
-
-/** 可选：本机 soffice 将 .ppt 转为 .pptx，走高质量 slide 路径；无则返回 null */
-async function trySofficeConvertToPptx(blob: Buffer): Promise<Buffer | null> {
-  let workDir: string | null = null
-  try {
-    workDir = await mkdtemp(join(tmpdir(), 'opptrix-ppt-'))
-    const inputPath = join(workDir, 'input.ppt')
-    await writeFile(inputPath, blob)
-    await execFileAsync(
-      'soffice',
-      ['--headless', '--norestore', '--convert-to', 'pptx', '--outdir', workDir, inputPath],
-      { timeout: SOFFICE_TIMEOUT_MS, maxBuffer: 32 * 1024 * 1024 },
-    )
-    const outPath = join(workDir, 'input.pptx')
-    return await readFile(outPath)
-  } catch {
-    return null
-  } finally {
-    if (workDir) {
-      await rm(workDir, { recursive: true, force: true }).catch(() => undefined)
-    }
   }
 }
 
@@ -238,13 +229,12 @@ function extractPptViaNode(blob: Buffer): ParseRunResult {
   }
 }
 
-/** 旧版 .ppt — 优先 soffice→pptx；否则 ppt-to-text（Apache-2.0 纯 Node） */
-export async function extractPptL0(blob: Buffer): Promise<ParseRunResult> {
-  const converted = await trySofficeConvertToPptx(blob)
-  if (converted) {
-    const viaPptx = await extractPptxL0(converted)
-    if (viaPptx.charCount > 0 && !viaPptx.error) return viaPptx
-  }
+/** 旧版 .ppt — 仅 ppt-to-text 正文（Apache-2.0 纯 Node；不认图、无格式转换） */
+export async function extractPptL0(
+  blob: Buffer,
+  opts?: ParseRunOpts,
+): Promise<ParseRunResult> {
+  opts?.onProgress?.({ phase: 'extracting', message: '正在整理…' })
   return extractPptViaNode(blob)
 }
 
@@ -287,20 +277,20 @@ export function createOfficeL0Runner(): ParseRunner {
     engineVersion: OFFICE_L0_ENGINE_VERSION,
     async run(blob, opts) {
       const kind = resolveOfficeKind(opts)
-      if (kind === 'docx') return extractDocxL0(blob)
-      if (kind === 'doc') return extractDocL0(blob)
-      if (kind === 'pptx') return extractPptxL0(blob)
-      if (kind === 'ppt') return extractPptL0(blob)
+      if (kind === 'docx') return extractDocxL0(blob, opts)
+      if (kind === 'doc') return extractDocL0(blob, opts)
+      if (kind === 'pptx') return extractPptxL0(blob, opts)
+      if (kind === 'ppt') return extractPptL0(blob, opts)
 
       // 魔数：OOXML ZIP
       if (blob.length >= 4 && blob[0] === 0x50 && blob[1] === 0x4b) {
         try {
           const zip = await JSZip.loadAsync(blob)
           if (Object.keys(zip.files).some(n => /word\/document\.xml$/i.test(n))) {
-            return extractDocxL0(blob)
+            return extractDocxL0(blob, opts)
           }
           if (Object.keys(zip.files).some(n => /ppt\/slides\/slide\d+\.xml$/i.test(n))) {
-            return extractPptxL0(blob)
+            return extractPptxL0(blob, opts)
           }
         } catch {
           /* fall through */
@@ -309,9 +299,9 @@ export function createOfficeL0Runner(): ParseRunner {
 
       // OLE 复合文档：按文件名/MIME 已失败时，优先尝试 .doc，再 .ppt
       if (isOleCompound(blob)) {
-        const asDoc = await extractDocL0(blob)
+        const asDoc = await extractDocL0(blob, opts)
         if (asDoc.charCount > 0 && !asDoc.error) return asDoc
-        const asPpt = await extractPptL0(blob)
+        const asPpt = await extractPptL0(blob, opts)
         if (asPpt.charCount > 0 && !asPpt.error) return asPpt
         return asDoc.error ? asDoc : asPpt
       }
