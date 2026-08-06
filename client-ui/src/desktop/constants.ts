@@ -79,6 +79,9 @@ export const WORKSPACE_CHAT_MIN_WIDTH = 350
 /** Default right panel width — slightly narrower than 2× sidebar */
 export const WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH = 360
 export const WORKSPACE_RIGHT_PANEL_MIN_WIDTH = 200
+/** Default right-side file-preview panel width — wider than market info panel */
+export const WORKSPACE_PREVIEW_PANEL_DEFAULT_WIDTH = 520
+export const WORKSPACE_PREVIEW_PANEL_MIN_WIDTH = 460
 export const WORKSPACE_SPLITTER_WIDTH = 1
 /** Invisible drag padding on each side of the 1px splitter line (overlay; no layout gap) */
 export const WORKSPACE_SPLITTER_HIT_SLOP = 1

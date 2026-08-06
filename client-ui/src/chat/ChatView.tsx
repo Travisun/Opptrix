@@ -318,6 +318,7 @@ interface ChatViewProps {
   onToggleSidebar?: () => void
   rightPanelOpen?: boolean
   onToggleRightPanel?: () => void
+  onOpenFilePreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
   chatColumnVisible?: boolean
   onToggleChatColumn?: () => void
   onStreamError?: (message: string) => void
@@ -338,6 +339,7 @@ function ChatView({
   onOpenSidebar, onNewChat, onOpenSettings,
   rightPanelOpen = false,
   onToggleRightPanel,
+  onOpenFilePreview,
   chatColumnVisible = true,
   onToggleChatColumn,
   onStreamError,
@@ -880,6 +882,7 @@ function ChatView({
                   sessionId={sessionId}
                   isMobile={isMobile}
                   onFork={onForkMessage ? () => onForkMessage(i) : undefined}
+                  onOpenPreview={onOpenFilePreview}
                 />
               ))}
 
@@ -942,6 +945,7 @@ function ChatView({
               promptQueue={promptQueue}
               onPromptQueueRemove={onPromptQueueRemove}
               onPromptQueueRunNow={onPromptQueueRunNow}
+              onOpenPreview={onOpenFilePreview}
             />
           </div>
         </div>

@@ -21,6 +21,7 @@ import { EmbeddingService, getEmbeddingService } from './embedding.js'
 import { getVectorStore, type VectorStore } from './vector-store.js'
 import { searchHybridChunks } from './hybrid-search.js'
 import { extractTextL0, TEXT_L0_ENGINE_VERSION } from './engines/text-l0.js'
+import { isPlainTextDocument } from './document-kind.js'
 
 export type LegacyExtractWriter = (
   sessionId: string,
@@ -95,6 +96,7 @@ export class DocLibraryService {
     let documentId: string
     let reused = false
     const forceReparse = Boolean(input.deepParse || input.forceEngine)
+    const textLike = input.kind === 'text' || isPlainTextDocument(input.mime, input.name)
 
     if (existing) {
       documentId = existing.id
@@ -107,16 +109,21 @@ export class DocLibraryService {
         content_sha256: contentSha256,
         name: input.name,
         mime: input.mime,
-        kind: input.kind,
+        kind: textLike ? 'text' : input.kind,
         byte_size: input.data.length,
         blob_path: blobPath,
       })
-      if (this.parseRunner) {
+      if (this.parseRunner && !textLike) {
         this.repo.upsertParsePending(documentId, this.parseRunner.engineId, this.parseRunner.engineVersion)
       }
     }
 
     this.repo.linkSession(input.sessionId, documentId, input.attachmentId)
+
+    // 纯文本：同步 text-l0 → ready/legacy → 异步 embed（跳过 PDF 异步队列）
+    if (textLike) {
+      return this.finishTextAttachmentSync(documentId, contentSha256, input, reused, forceReparse)
+    }
 
     const artifact = this.repo.getParseArtifact(documentId)
     const parseStatus: ParseStatus = artifact?.status ?? 'pending'
@@ -140,6 +147,110 @@ export class DocLibraryService {
       charCount: artifact?.char_count ?? undefined,
       error: artifact?.error ?? undefined,
       readyAt: artifact?.ready_at ?? undefined,
+    }
+  }
+
+  /**
+   * 附件纯文本快路径：同步切块入库，立刻可预览；向量仍异步。
+   */
+  private finishTextAttachmentSync(
+    documentId: string,
+    contentSha256: string,
+    input: IngestFromAttachmentInput,
+    reused: boolean,
+    forceReparse: boolean,
+  ): IngestFromAttachmentResult {
+    const artifact = this.repo.getParseArtifact(documentId)
+    if (reused && artifact?.status === 'ready' && !forceReparse) {
+      if (input.source === 'attachment' && this.legacyWriter) {
+        const chunks = this.repo.getChunks(documentId)
+        const md = this.repo.readMarkdown(documentId)
+        if (md && chunks.length) {
+          this.legacyWriter(input.sessionId, input.attachmentId, {
+            pageCount: artifact.page_count ?? 1,
+            charCount: artifact.char_count ?? md.length,
+            markdown: md,
+            chunks: chunks.map(r => ({
+              id: `c${r.seq}`,
+              page: r.page,
+              offset: r.offset,
+              text: r.text,
+            })),
+          })
+        }
+      }
+      return {
+        documentId,
+        contentSha256,
+        reused,
+        parseStatus: 'ready',
+        pageCount: artifact.page_count ?? undefined,
+        charCount: artifact.char_count ?? undefined,
+        readyAt: artifact.ready_at ?? undefined,
+      }
+    }
+
+    const parsed = extractTextL0(input.data)
+    if (parsed.charCount < MIN_USEFUL_CHARS || !parsed.chunks.length) {
+      const err = parsed.error
+        ?? (parsed.charCount > 0
+          ? '内容过短，暂时无法加入检索；你仍可预览原文'
+          : '文件似乎没有可读内容，请确认后重试')
+      this.repo.upsertParsePending(documentId, 'text-l0', TEXT_L0_ENGINE_VERSION)
+      this.repo.markParseFailed(documentId, err, {
+        pageCount: parsed.pageCount,
+        charCount: parsed.charCount,
+      })
+      this.lifecycleHooks?.onFailed?.(input, err, {
+        pageCount: parsed.pageCount,
+        charCount: parsed.charCount,
+      })
+      return {
+        documentId,
+        contentSha256,
+        reused,
+        parseStatus: 'failed',
+        pageCount: parsed.pageCount || undefined,
+        charCount: parsed.charCount || undefined,
+        error: err,
+      }
+    }
+
+    this.repo.upsertParsePending(documentId, 'text-l0', TEXT_L0_ENGINE_VERSION)
+    const chunkRows = this.repo.markParseReady(documentId, {
+      pageCount: parsed.pageCount,
+      charCount: parsed.charCount,
+      markdown: parsed.markdown,
+      chunks: parsed.chunks,
+      engineId: 'text-l0',
+      engineVersion: TEXT_L0_ENGINE_VERSION,
+    })
+
+    if (input.source === 'attachment' && this.legacyWriter) {
+      this.legacyWriter(input.sessionId, input.attachmentId, {
+        pageCount: parsed.pageCount,
+        charCount: parsed.charCount,
+        markdown: parsed.markdown,
+        chunks: chunkRows.map(r => ({
+          id: `c${r.seq}`,
+          page: r.page,
+          offset: r.offset,
+          text: r.text,
+        })),
+      })
+    }
+
+    void this.scheduleEmbed(documentId)
+
+    const ready = this.repo.getParseArtifact(documentId)
+    return {
+      documentId,
+      contentSha256,
+      reused,
+      parseStatus: ready?.status ?? 'ready',
+      pageCount: ready?.page_count ?? parsed.pageCount,
+      charCount: ready?.char_count ?? parsed.charCount,
+      readyAt: ready?.ready_at ?? undefined,
     }
   }
 

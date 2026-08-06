@@ -8,12 +8,15 @@ import {
   saveAttachment,
   deleteAttachment,
   readAttachmentMeta,
+  readAttachmentBuffer,
+  readExtractMarkdown,
   resolveAttachmentFilePath,
   validateAttachmentAgainstCapabilities,
   isAttachmentReferenced,
   parseNonNegativeIntHeader,
   resolveUploadMime,
 } from '@opptrix/agent'
+import { decodeTextBuffer, isPlainTextDocument } from '@opptrix/doc-library'
 
 function sanitizeFilename(name: string): string {
   const base = path.basename(name.trim() || 'file')
@@ -138,6 +141,53 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
       reply.header('Content-Type', meta.mime)
       reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(meta.name)}"`)
       return reply.send(fs.createReadStream(filePath))
+    },
+  )
+
+  app.get<{ Params: { id: string; attachmentId: string } }>(
+    '/api/sessions/:id/attachments/:attachmentId/extract/text',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta) return reply.code(404).send({ error: 'attachment not found' })
+
+      const md = readExtractMarkdown(req.params.id, req.params.attachmentId)
+      if (md) {
+        // Buffer 发送，避免 Fastify 对 string 走 JSON 序列化坑
+        return reply
+          .type('text/markdown; charset=utf-8')
+          .send(Buffer.from(md, 'utf8'))
+      }
+
+      // 纯文本：无 extract.md 时直接读原文（上传侧多为 kind=document）
+      const plainText =
+        meta.kind === 'text'
+        || isPlainTextDocument(meta.mime, meta.name)
+        || (meta.kind === 'document' && isPlainTextDocument(meta.mime, meta.name))
+      if (plainText) {
+        const buffer = readAttachmentBuffer(req.params.id, req.params.attachmentId)
+        if (buffer) {
+          const text = decodeTextBuffer(buffer)
+          return reply
+            .type('text/plain; charset=utf-8')
+            .send(Buffer.from(text, 'utf8'))
+        }
+      }
+
+      if (meta.extract?.status === 'pending') {
+        return reply.code(202).send({ status: 'pending' })
+      }
+
+      if (meta.extract?.status === 'failed') {
+        return reply.code(422).send({
+          status: 'failed',
+          message: meta.extract?.error ?? '未能整理该文件',
+        })
+      }
+
+      return reply.code(422).send({ status: 'failed', message: '暂不支持预览此文件' })
     },
   )
 

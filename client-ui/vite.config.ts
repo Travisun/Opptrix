@@ -36,6 +36,7 @@ export default defineConfig({
       'rehype-sanitize',
       'katex',
       'mermaid',
+      'pdfjs-dist',
     ],
   },
   build: {

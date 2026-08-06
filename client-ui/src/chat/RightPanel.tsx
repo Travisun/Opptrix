@@ -7,6 +7,7 @@ import {
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
 } from '../desktop/constants'
 import RightMarketPanel from '../market/RightMarketPanel'
+import FilePreviewPanel, { type FilePreviewTarget } from './FilePreviewPanel'
 import type { StockDiscussPayload } from '../market/StockDecisionCard'
 
 const useStyles = makeStyles({
@@ -65,6 +66,8 @@ interface Props {
   onToggleRightPanel?: () => void
   onToggleChatColumn?: () => void
   onDiscussInChat?: (payload: StockDiscussPayload) => void
+  preview?: FilePreviewTarget | null
+  onClosePreview?: () => void
 }
 
 function RightPanel({
@@ -80,6 +83,8 @@ function RightPanel({
   onToggleRightPanel,
   onToggleChatColumn,
   onDiscussInChat,
+  preview = null,
+  onClosePreview,
 }: Props) {
   const s = useStyles()
 
@@ -107,18 +112,31 @@ function RightPanel({
         aria-label="行情与自选"
         aria-hidden={!visible}
       >
-        <RightMarketPanel
-          panelVisible={visible}
-          electronChrome={electronChrome}
-          chatColumnVisible={chatColumnVisible}
-          chromeToolbarReserve={chromeToolbarReserve}
-          panelFullWidth={fullWidth}
-          focusStockCode={focusStockCode}
-          onFocusStockConsumed={onFocusStockConsumed}
-          onToggleRightPanel={visible ? onToggleRightPanel : undefined}
-          onToggleChatColumn={visible ? onToggleChatColumn : undefined}
-          onDiscussInChat={visible ? onDiscussInChat : undefined}
-        />
+        {preview ? (
+          <FilePreviewPanel
+            sessionId={preview.sessionId}
+            attachment={preview.attachment}
+            panelVisible={visible}
+            onClose={onClosePreview ?? (() => {})}
+            electronChrome={electronChrome}
+            chatColumnVisible={chatColumnVisible}
+            chromeToolbarReserve={chromeToolbarReserve}
+            panelFullWidth={fullWidth}
+          />
+        ) : (
+          <RightMarketPanel
+            panelVisible={visible}
+            electronChrome={electronChrome}
+            chatColumnVisible={chatColumnVisible}
+            chromeToolbarReserve={chromeToolbarReserve}
+            panelFullWidth={fullWidth}
+            focusStockCode={focusStockCode}
+            onFocusStockConsumed={onFocusStockConsumed}
+            onToggleRightPanel={visible ? onToggleRightPanel : undefined}
+            onToggleChatColumn={visible ? onToggleChatColumn : undefined}
+            onDiscussInChat={visible ? onDiscussInChat : undefined}
+          />
+        )}
       </aside>
     </div>
   )

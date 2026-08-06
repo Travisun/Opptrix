@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import JSZip from 'jszip'
 import {
   extractTextL0,
+  decodeTextBuffer,
   extractDocxL0,
   extractDocL0,
   extractPptxL0,
@@ -25,6 +26,39 @@ describe('text-l0 extract', () => {
     const result = extractTextL0(Buffer.from('\uFEFF标题\n正文', 'utf8'))
     assert.ok(result.markdown.includes('标题'))
     assert.ok(!result.error)
+  })
+
+  it('decodes GBK Chinese without BOM (你好 = C4 E3 BA C3)', () => {
+    const gbkNiHao = Buffer.from([0xc4, 0xe3, 0xba, 0xc3])
+    assert.equal(decodeTextBuffer(gbkNiHao), '你好')
+    const result = extractTextL0(gbkNiHao)
+    assert.ok(result.markdown.includes('你好'))
+    assert.ok(!result.error)
+  })
+
+  it('decodes GB18030 Chinese without BOM', () => {
+    // 「中文」GB18030/GBK：D6 D0 CE C4
+    const buf = Buffer.from([0xd6, 0xd0, 0xce, 0xc4])
+    assert.equal(decodeTextBuffer(buf), '中文')
+    const result = extractTextL0(buf)
+    assert.ok(result.markdown.includes('中文'))
+    assert.ok(!result.error)
+  })
+
+  it('keeps UTF-8 Chinese preferred over GBK mis-decode', () => {
+    const utf8 = Buffer.from('你好世界', 'utf8')
+    assert.equal(decodeTextBuffer(utf8), '你好世界')
+  })
+
+  it('decodes UTF-16 LE BOM', () => {
+    const le = Buffer.from([0xff, 0xfe, 0x60, 0x4f, 0x7d, 0x59]) // 你好
+    assert.equal(decodeTextBuffer(le), '你好')
+    const result = extractTextL0(le)
+    assert.ok(result.markdown.includes('你好'))
+  })
+
+  it('keeps pure ASCII as UTF-8', () => {
+    assert.equal(decodeTextBuffer(Buffer.from('hello\nworld', 'utf8')), 'hello\nworld')
   })
 })
 
@@ -92,6 +126,14 @@ describe('documentKindFromMime legacy office', () => {
       ),
       'pptx',
     )
+  })
+
+  it('maps txt/md/csv/json to text', () => {
+    assert.equal(documentKindFromMime('text/plain', 'a.txt'), 'text')
+    assert.equal(documentKindFromMime('text/markdown', 'a.md'), 'text')
+    assert.equal(documentKindFromMime('text/csv', 'a.csv'), 'text')
+    assert.equal(documentKindFromMime('application/json', 'a.json'), 'text')
+    assert.equal(documentKindFromMime('application/octet-stream', 'notes.txt'), 'text')
   })
 })
 

@@ -42,8 +42,9 @@
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
 - **窗口标题栏**：macOS 沿用 `hiddenInset` 系统红绿灯；Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
+- **附件 PDF 预览**：右侧面板内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度），目录默认收起，可手动展开跳页
 
-代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`。
+代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`、`client-ui/src/chat/FilePreviewPanel.tsx`、`client-ui/src/chat/PdfPreviewViewer.tsx`。
 
 ### 1.2 新闻中心
 

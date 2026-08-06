@@ -120,6 +120,8 @@ export interface ChatAttachmentMeta {
   height?: number
   duration?: number
   extract?: AttachmentExtractMeta
+  /** 前端乐观插入标记；服务端不会返回此字段 */
+  optimistic?: boolean
 }
 
 export interface ModelMediaCapabilities {

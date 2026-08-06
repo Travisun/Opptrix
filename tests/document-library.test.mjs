@@ -425,6 +425,33 @@ describe('doc-library ingest + FTS + session filter', () => {
     assert.equal(second.parseStatus, 'ready')
   })
 
+  it('sync text-l0 for txt/csv/json without waiting async parse', () => {
+    for (const [name, mime, body] of [
+      ['notes.txt', 'text/plain', '纯文本附件正文足够长用于入库预览与检索'],
+      ['table.csv', 'text/csv', 'col1,col2\na,b\nc,d\nenough_chars_here_ok'],
+      ['data.json', 'application/json', '{"title":"demo","body":"enough characters for useful text"}'],
+    ]) {
+      const data = Buffer.from(body, 'utf8')
+      const ing = svc.ingestFromAttachment({
+        sessionId: `sess-text-${name}`,
+        attachmentId: `att-${name}`,
+        name,
+        mime,
+        kind: 'other',
+        data,
+        source: 'import',
+      })
+      assert.equal(ing.parseStatus, 'ready', name)
+      assert.ok((ing.charCount ?? 0) >= 24, name)
+      const st = svc.getParseStatus(ing.documentId)
+      assert.equal(st?.status, 'ready', name)
+      const artifact = svc.getRepository().getParseArtifact(ing.documentId)
+      assert.equal(artifact?.engine_id, 'text-l0', name)
+      const md = svc.getRepository().readMarkdown(ing.documentId)
+      assert.ok(md && md.includes(body.slice(0, 8)), name)
+    }
+  })
+
   it('FTS search respects session filter', async () => {
     const dataA = Buffer.from('ALPHATERM999-only-in-session-a')
     const dataB = Buffer.from('BETATERM888-only-in-session-b')

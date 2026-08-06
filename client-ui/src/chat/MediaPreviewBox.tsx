@@ -1,9 +1,10 @@
 import { useEffect, useRef } from 'react'
-import { makeStyles } from '@fluentui/react-components'
+import { makeStyles, mergeClasses } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { ChatAttachmentMeta } from '../types/chat'
 import { sessionAttachmentUrl } from '../api/client'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import PdfPreviewViewer from './PdfPreviewViewer'
 
 const useStyles = makeStyles({
   backdrop: {
@@ -55,15 +56,16 @@ const useStyles = makeStyles({
     padding: '16px',
     overflow: 'auto',
   },
+  bodyPdf: {
+    padding: 0,
+    overflow: 'hidden',
+    alignItems: 'stretch',
+    height: '78vh',
+  },
   image: {
     maxWidth: '100%',
     maxHeight: '78vh',
     objectFit: 'contain',
-  },
-  pdf: {
-    width: '100%',
-    height: '78vh',
-    border: 'none',
   },
   media: {
     width: '100%',
@@ -94,6 +96,7 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
   if (!open || !attachment) return null
 
   const url = sessionAttachmentUrl(sessionId, attachment.id)
+  const isPdf = attachment.kind === 'pdf'
 
   return (
     <div
@@ -113,11 +116,11 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
             <DismissRegular fontSize={18} />
           </button>
         </div>
-        <div className={s.body}>
+        <div className={mergeClasses(s.body, isPdf && s.bodyPdf)}>
           {attachment.kind === 'image' ? (
             <img src={url} alt={attachment.name} className={s.image} />
-          ) : attachment.kind === 'pdf' ? (
-            <iframe src={url} title={attachment.name} className={s.pdf} />
+          ) : isPdf ? (
+            <PdfPreviewViewer url={url} panelVisible={open} />
           ) : attachment.kind === 'video' ? (
             <video src={url} controls className={s.media} />
           ) : attachment.kind === 'audio' ? (

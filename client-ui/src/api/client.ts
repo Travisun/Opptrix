@@ -17,6 +17,7 @@ import {
   pickExportDestination,
   saveMarketPackageBlob,
 } from '../platform/saveMarketPackage'
+import { decodeTextBufferBytes } from '../utils/decodeTextBuffer'
 
 /** Vite dev/preview proxies /api → backend (default :8711). */
 const API_BASE = import.meta.env.VITE_API_BASE || '/api'
@@ -1643,6 +1644,52 @@ export async function fetchSessionAttachmentMeta(
   return jsonFetch<{ attachment: ChatAttachmentMeta }>(
     `/sessions/${sessionId}/attachments/${attachmentId}/meta`,
   ).then(r => r.attachment)
+}
+
+export type AttachmentPreviewTextResult =
+  | { ok: true; text: string }
+  | { ok: false; status: 'pending' | 'failed'; message?: string }
+
+export async function fetchAttachmentPreviewText(
+  sessionId: string,
+  attachmentId: string,
+): Promise<AttachmentPreviewTextResult> {
+  const resp = await fetchWithTimeout(
+    `${API_BASE}/sessions/${sessionId}/attachments/${attachmentId}/extract/text`,
+    { method: 'GET' },
+  )
+
+  if (resp.ok) {
+    return { ok: true, text: await resp.text() }
+  }
+
+  if (resp.status === 202) {
+    return { ok: false, status: 'pending' }
+  }
+
+  if (resp.status === 422) {
+    const data = await resp.json().catch(() => ({})) as { message?: string }
+    return { ok: false, status: 'failed', message: data.message }
+  }
+
+  throw new Error(`提取预览文本失败 (${resp.status})`)
+}
+
+/** 直读附件原文并本地解码（纯文本预览回退，不依赖 extract） */
+export async function fetchAttachmentRawText(
+  sessionId: string,
+  attachmentId: string,
+): Promise<{ ok: true; text: string } | { ok: false }> {
+  const resp = await fetchWithTimeout(sessionAttachmentUrl(sessionId, attachmentId), {
+    method: 'GET',
+  })
+  if (!resp.ok) return { ok: false }
+  try {
+    const buf = await resp.arrayBuffer()
+    return { ok: true, text: decodeTextBufferBytes(buf) }
+  } catch {
+    return { ok: false }
+  }
 }
 
 export async function deleteSessionAttachment(sessionId: string, attachmentId: string) {
