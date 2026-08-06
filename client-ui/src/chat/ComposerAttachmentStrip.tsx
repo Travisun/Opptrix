@@ -18,11 +18,11 @@ const useStyles = makeStyles({
   chip: {
     display: 'inline-flex',
     alignItems: 'center',
-    gap: '6px',
-    width: `${CHIP_WIDTH}px`,
+    gap: '2px',
+    width: 'fit-content',
     maxWidth: `${CHIP_WIDTH}px`,
     boxSizing: 'border-box',
-    padding: '3px 4px 3px 3px',
+    padding: '3px 5px',
     borderRadius: opptrixTokens.radiusMd,
     border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.canvasAlt,
@@ -38,18 +38,33 @@ const useStyles = makeStyles({
     backgroundColor: opptrixCssVars.canvas,
   },
   iconBox: {
-    width: '26px',
-    height: '26px',
+    width: '18px',
+    height: '18px',
     borderRadius: opptrixTokens.radiusSm,
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
     flexShrink: 0,
-    backgroundColor: opptrixCssVars.canvas,
     color: opptrixCssVars.textTertiary,
   },
+  /** processing：无底色方块，尺寸贴合文字行高 */
+  spinnerSlot: {
+    width: '16px',
+    height: '16px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexShrink: 0,
+    // Fluent Spinner：color = 旋转弧，backgroundColor = 轨道
+    '& .fui-Spinner__spinner': {
+      width: '12px',
+      height: '12px',
+      color: opptrixCssVars.textPrimary,
+      backgroundColor: opptrixCssVars.separator,
+    },
+  },
   name: {
-    flex: 1,
+    flex: '0 1 auto',
     minWidth: 0,
     overflow: 'hidden',
     whiteSpace: 'nowrap',
@@ -105,16 +120,18 @@ function AttachmentIcon({
   item,
   thumbUrl,
   iconBoxClass,
+  spinnerSlotClass,
   thumbClass,
 }: {
   item: ChatAttachmentMeta
   thumbUrl?: string
   iconBoxClass: string
+  spinnerSlotClass: string
   thumbClass: string
 }) {
   if (isAttachmentProcessing(item)) {
     return (
-      <span className={iconBoxClass} aria-label="正在处理">
+      <span className={spinnerSlotClass} aria-label="正在处理">
         <Spinner size="tiny" />
       </span>
     )
@@ -202,6 +219,7 @@ export default function ComposerAttachmentStrip({
             item={item}
             thumbUrl={thumbUrls[item.id]}
             iconBoxClass={s.iconBox}
+            spinnerSlotClass={s.spinnerSlot}
             thumbClass={s.thumb}
           />
           <span className={s.name} title={attachmentTitle(item)}>
@@ -249,6 +267,7 @@ export function MessageAttachmentStrip({
           <AttachmentIcon
             item={item}
             iconBoxClass={s.iconBox}
+            spinnerSlotClass={s.spinnerSlot}
             thumbClass={s.thumb}
           />
           <span className={s.name}>{middleEllipsisFilename(item.name)}</span>
