@@ -4,6 +4,7 @@
  */
 import type { DocumentKind, ParseEngineId, ParseRunOpts, ParseRunResult, ParseRunner } from './types.js'
 import { isOcrEngineId } from './types.js'
+import { documentKindFromMime } from './document-kind.js'
 import {
   isWeakText,
   metricsFromParseResult,
@@ -40,24 +41,13 @@ function ocrAvailableOf(input: SelectEngineInput): boolean {
 }
 
 function resolveKind(input: SelectEngineInput): DocumentKind {
-  if (input.kind) return input.kind
-  const mime = (input.mime ?? '').toLowerCase()
-  const name = (input.filename ?? '').toLowerCase()
-  if (mime === 'application/pdf' || name.endsWith('.pdf')) return 'pdf'
-  if (mime.startsWith('image/')) return 'image'
-  if (mime.includes('wordprocessingml') || name.endsWith('.docx')) return 'docx'
-  if (mime === 'application/msword' || name.endsWith('.doc')) return 'doc'
-  if (mime.includes('presentationml') || name.endsWith('.pptx')) return 'pptx'
-  if (mime.includes('ms-powerpoint') || name.endsWith('.ppt')) return 'ppt'
-  if (
-    mime.startsWith('text/')
-    || name.endsWith('.txt')
-    || name.endsWith('.md')
-    || name.endsWith('.markdown')
-  ) {
-    return 'text'
-  }
-  return 'pdf'
+  const fromMime = documentKindFromMime(input.mime ?? '', input.filename)
+  // 硬性：mime/扩展名像纯文本时绝不能落到 PDF
+  if (fromMime === 'text' || input.kind === 'text') return 'text'
+  if (input.kind && input.kind !== 'other') return input.kind
+  if (fromMime !== 'other') return fromMime
+  // other / 未知：保持 PDF 路径（与历史行为一致）
+  return input.kind === 'other' ? 'other' : 'pdf'
 }
 
 function available(engine: ParseEngineId, input: SelectEngineInput): boolean {

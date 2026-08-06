@@ -2,6 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import {
   WORKSPACE_CHAT_MIN_WIDTH,
   WORKSPACE_CHAT_RIGHT_MIN_WIDTH,
+  WORKSPACE_PREVIEW_PANEL_DEFAULT_WIDTH,
+  WORKSPACE_PREVIEW_PANEL_MIN_WIDTH,
   WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
   WORKSPACE_RIGHT_PANEL_MIN_WIDTH,
   WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH,
@@ -12,27 +14,33 @@ import { ensureWindowContentWidth } from '../platform/ensureWindowContentWidth'
 interface Options {
   enabled?: boolean
   defaultRightWidth?: number
+  previewDefaultWidth?: number
+  previewMinWidth?: number
 }
 
-function clampRightWidth(width: number, wsWidth: number): number {
+function clampRightWidth(width: number, wsWidth: number, minWidth: number): number {
   const maxRight = wsWidth - WORKSPACE_CHAT_MIN_WIDTH - WORKSPACE_SPLITTER_WIDTH
-  const minRight = WORKSPACE_RIGHT_PANEL_MIN_WIDTH
-  if (maxRight < minRight) return minRight
-  return Math.max(minRight, Math.min(width, maxRight))
+  if (maxRight < minWidth) return minWidth
+  return Math.max(minWidth, Math.min(width, maxRight))
 }
 
 export function useWorkspaceSplit({
   enabled = true,
   defaultRightWidth = WORKSPACE_RIGHT_PANEL_DEFAULT_WIDTH,
+  previewDefaultWidth = WORKSPACE_PREVIEW_PANEL_DEFAULT_WIDTH,
+  previewMinWidth = WORKSPACE_PREVIEW_PANEL_MIN_WIDTH,
 }: Options = {}) {
   const workspaceRef = useRef<HTMLDivElement>(null)
   const [workspaceWidth, setWorkspaceWidth] = useState(0)
   const [rightPanelOpen, setRightPanelOpen] = useState(true)
   const [chatVisible, setChatVisible] = useState(true)
   const [rightPanelWidth, setRightPanelWidth] = useState(defaultRightWidth)
+  const [mode, setMode] = useState<'market' | 'preview'>('market')
   const [isDragging, setIsDragging] = useState(false)
   const savedRightWidthRef = useRef(defaultRightWidth)
+  const savedPreviewWidthRef = useRef(0)
   const rightPanelWidthRef = useRef(defaultRightWidth)
+  const modeRef = useRef<'market' | 'preview'>('market')
   const autoCollapsedByWidthRef = useRef(false)
   /** Skip auto-collapse while we widen the window to fit an intentional open. */
   const expandForOpenRef = useRef(false)
@@ -50,6 +58,10 @@ export function useWorkspaceSplit({
   useEffect(() => {
     rightPanelWidthRef.current = rightPanelWidth
   }, [rightPanelWidth])
+
+  useEffect(() => {
+    modeRef.current = mode
+  }, [mode])
 
   useEffect(() => () => clearExpandForOpen(), [clearExpandForOpen])
 
@@ -76,18 +88,36 @@ export function useWorkspaceSplit({
   const canFitRightPanel = workspaceWidth <= 0 || workspaceWidth >= WORKSPACE_CHAT_RIGHT_MIN_WIDTH
 
   const commitWidth = useCallback((nextWidth: number, wsWidth: number) => {
-    const clamped = clampRightWidth(nextWidth, wsWidth)
-    savedRightWidthRef.current = clamped
+    const minWidth =
+      modeRef.current === 'preview' ? previewMinWidth : WORKSPACE_RIGHT_PANEL_MIN_WIDTH
+    const clamped = clampRightWidth(nextWidth, wsWidth, minWidth)
+    if (modeRef.current === 'preview') {
+      savedPreviewWidthRef.current = clamped
+    } else {
+      savedRightWidthRef.current = clamped
+    }
     setRightPanelWidth(clamped)
-  }, [])
+  }, [previewMinWidth])
 
   const collapseRightPanel = useCallback((markAuto = true) => {
     if (!rightPanelOpen) return
-    savedRightWidthRef.current = rightPanelWidthRef.current
+    if (modeRef.current === 'preview') {
+      savedPreviewWidthRef.current = rightPanelWidthRef.current
+    } else {
+      savedRightWidthRef.current = rightPanelWidthRef.current
+    }
     if (markAuto) autoCollapsedByWidthRef.current = true
     setRightPanelOpen(false)
     setChatVisible(true)
   }, [rightPanelOpen])
+
+  const closePreview = useCallback(() => {
+    if (modeRef.current === 'preview') {
+      savedPreviewWidthRef.current = rightPanelWidthRef.current
+      setMode('market')
+    }
+    collapseRightPanel()
+  }, [collapseRightPanel])
 
   const beginDrag = useCallback((clientX: number) => {
     if (!enabled || !chatVisible || !rightPanelOpen) return
@@ -113,7 +143,9 @@ export function useWorkspaceSplit({
       if (!drag || !ws) return
 
       const delta = drag.startX - e.clientX
-      const next = clampRightWidth(drag.startWidth + delta, ws.clientWidth)
+      const minWidth =
+        modeRef.current === 'preview' ? previewMinWidth : WORKSPACE_RIGHT_PANEL_MIN_WIDTH
+      const next = clampRightWidth(drag.startWidth + delta, ws.clientWidth, minWidth)
       setRightPanelWidth(next)
     }
 
@@ -133,7 +165,7 @@ export function useWorkspaceSplit({
       window.removeEventListener('mouseup', onUp)
       endDrag()
     }
-  }, [commitWidth, enabled, endDrag])
+  }, [commitWidth, enabled, endDrag, previewMinWidth])
 
   useEffect(() => {
     if (!enabled || isDragging || workspaceWidth <= 0) return
@@ -154,7 +186,11 @@ export function useWorkspaceSplit({
       && workspaceWidth >= WORKSPACE_RIGHT_PANEL_RESTORE_WIDTH
     ) {
       autoCollapsedByWidthRef.current = false
-      setRightPanelWidth(savedRightWidthRef.current || defaultRightWidth)
+      const restored =
+        modeRef.current === 'preview'
+          ? savedPreviewWidthRef.current || previewDefaultWidth
+          : savedRightWidthRef.current || defaultRightWidth
+      setRightPanelWidth(restored)
       setRightPanelOpen(true)
       setChatVisible(true)
       return
@@ -162,7 +198,11 @@ export function useWorkspaceSplit({
 
     if (!rightPanelOpen || !chatVisible) return
 
-    const clamped = clampRightWidth(rightPanelWidth, workspaceWidth)
+    const clamped = clampRightWidth(
+      rightPanelWidth,
+      workspaceWidth,
+      mode === 'preview' ? previewMinWidth : WORKSPACE_RIGHT_PANEL_MIN_WIDTH,
+    )
     if (clamped !== rightPanelWidth) {
       commitWidth(clamped, workspaceWidth)
     }
@@ -174,28 +214,21 @@ export function useWorkspaceSplit({
     defaultRightWidth,
     enabled,
     isDragging,
+    mode,
+    previewDefaultWidth,
+    previewMinWidth,
     rightPanelOpen,
     rightPanelWidth,
     workspaceWidth,
   ])
 
-  const toggleRightPanel = useCallback(() => {
-    if (rightPanelOpen) {
-      clearExpandForOpen()
-      savedRightWidthRef.current = rightPanelWidthRef.current
-      autoCollapsedByWidthRef.current = false
-      setRightPanelOpen(false)
-      setChatVisible(true)
-      return
-    }
-
-    const targetRight = savedRightWidthRef.current || defaultRightWidth
+  const openWithWidth = useCallback((targetWidth: number) => {
     const neededWorkspace =
-      WORKSPACE_CHAT_MIN_WIDTH + WORKSPACE_SPLITTER_WIDTH + targetRight
+      WORKSPACE_CHAT_MIN_WIDTH + WORKSPACE_SPLITTER_WIDTH + targetWidth
 
     const openPanel = () => {
       autoCollapsedByWidthRef.current = false
-      setRightPanelWidth(targetRight)
+      setRightPanelWidth(targetWidth)
       setRightPanelOpen(true)
       setChatVisible(true)
     }
@@ -217,18 +250,62 @@ export function useWorkspaceSplit({
     }
 
     openPanel()
-  }, [clearExpandForOpen, defaultRightWidth, enabled, rightPanelOpen, workspaceWidth])
+  }, [enabled, workspaceWidth])
+
+  const toggleRightPanel = useCallback(() => {
+    if (mode === 'preview') {
+      savedPreviewWidthRef.current = rightPanelWidthRef.current
+      setMode('market')
+      openWithWidth(savedRightWidthRef.current || defaultRightWidth)
+      return
+    }
+
+    if (rightPanelOpen) {
+      clearExpandForOpen()
+      savedRightWidthRef.current = rightPanelWidthRef.current
+      autoCollapsedByWidthRef.current = false
+      setRightPanelOpen(false)
+      setChatVisible(true)
+      return
+    }
+
+    openWithWidth(savedRightWidthRef.current || defaultRightWidth)
+  }, [clearExpandForOpen, defaultRightWidth, mode, openWithWidth, rightPanelOpen])
+
+  const openPreview = useCallback(() => {
+    if (mode === 'market') {
+      savedRightWidthRef.current = rightPanelWidthRef.current
+    }
+    setMode('preview')
+    openWithWidth(savedPreviewWidthRef.current || previewDefaultWidth)
+  }, [mode, openWithWidth, previewDefaultWidth])
+
+  const openMarket = useCallback(() => {
+    if (mode === 'preview') {
+      savedPreviewWidthRef.current = rightPanelWidthRef.current
+    }
+    setMode('market')
+    openWithWidth(savedRightWidthRef.current || defaultRightWidth)
+  }, [defaultRightWidth, mode, openWithWidth])
 
   const toggleChatColumn = useCallback(() => {
     if (!rightPanelOpen) return
     if (chatVisible) {
-      savedRightWidthRef.current = rightPanelWidthRef.current
+      if (modeRef.current === 'preview') {
+        savedPreviewWidthRef.current = rightPanelWidthRef.current
+      } else {
+        savedRightWidthRef.current = rightPanelWidthRef.current
+      }
       setChatVisible(false)
       return
     }
-    setRightPanelWidth(savedRightWidthRef.current || defaultRightWidth)
+    const restored =
+      modeRef.current === 'preview'
+        ? savedPreviewWidthRef.current || previewDefaultWidth
+        : savedRightWidthRef.current || defaultRightWidth
+    setRightPanelWidth(restored)
     setChatVisible(true)
-  }, [chatVisible, defaultRightWidth, rightPanelOpen])
+  }, [chatVisible, defaultRightWidth, previewDefaultWidth, rightPanelOpen])
 
   const canToggleChatColumn = rightPanelOpen
 
@@ -238,6 +315,7 @@ export function useWorkspaceSplit({
     rightPanelOpen,
     chatVisible,
     rightPanelWidth,
+    mode,
     showSplitter,
     chatWidth,
     isDragging,
@@ -245,7 +323,10 @@ export function useWorkspaceSplit({
     canFitRightPanel,
     beginDrag,
     collapseRightPanel,
+    closePreview,
     toggleRightPanel,
     toggleChatColumn,
+    openPreview,
+    openMarket,
   }
 }

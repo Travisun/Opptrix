@@ -205,13 +205,33 @@ export default function ChatApp() {
     canToggleChatColumn,
     beginDrag,
     collapseRightPanel,
+    closePreview,
     toggleRightPanel: handleToggleRightPanel,
     toggleChatColumn: handleToggleChatColumn,
+    mode,
+    openPreview,
+    openMarket,
   } = useWorkspaceSplit({ enabled: splitEnabled })
 
   const workspaceMinWidth = splitEnabled && rightPanelVisible
     ? WORKSPACE_CHAT_RIGHT_MIN_WIDTH
     : WORKSPACE_CHAT_MIN_WIDTH
+
+  const [preview, setPreview] = useState<{ sessionId: string; attachment: ChatAttachmentMeta } | null>(null)
+
+  useEffect(() => {
+    if (mode === 'market') setPreview(null)
+  }, [mode])
+
+  const handleOpenFilePreview = useCallback((sessionId: string, attachment: ChatAttachmentMeta) => {
+    setPreview({ sessionId, attachment })
+    openPreview()
+  }, [openPreview])
+
+  const handleClosePreview = useCallback(() => {
+    setPreview(null)
+    closePreview()
+  }, [closePreview])
 
   const {
     width: sidebarWidth,
@@ -927,7 +947,7 @@ export default function ChatApp() {
     if (action.type === 'stock') {
       restoreChatColumn()
       setFocusStockCode(normalizeWatchlistItem({ code: action.code, name: action.name }).code)
-      if (!rightPanelVisible) handleToggleRightPanel()
+      openMarket()
       if (view !== 'chat') navigate('chat')
       return
     }
@@ -940,8 +960,7 @@ export default function ChatApp() {
     navigate,
     restoreChatColumn,
     closeDrawer,
-    rightPanelVisible,
-    handleToggleRightPanel,
+    openMarket,
     view,
   ])
 
@@ -1752,6 +1771,7 @@ export default function ChatApp() {
                   chatColumnVisible={chatVisible}
                   onToggleRightPanel={!isMobile ? handleToggleRightPanel : undefined}
                   onToggleChatColumn={!isMobile && canToggleChatColumn ? handleToggleChatColumn : undefined}
+                  onOpenFilePreview={!isMobile ? handleOpenFilePreview : undefined}
                   onStreamError={handleStreamError}
                   resolveStreamSnapshot={resolveStreamSnapshot}
                   onClearPendingUserPrompt={clearPendingUserPrompt}
@@ -1783,6 +1803,8 @@ export default function ChatApp() {
               onToggleRightPanel={handleToggleRightPanel}
               onToggleChatColumn={canToggleChatColumn ? handleToggleChatColumn : undefined}
               onDiscussInChat={handleStockDiscuss}
+              preview={preview}
+              onClosePreview={handleClosePreview}
             />
           )}
         </div>

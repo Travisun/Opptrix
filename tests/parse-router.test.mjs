@@ -83,6 +83,53 @@ describe('parse-router selectEngine', () => {
     assert.equal(next, 'text-l0')
   })
 
+  it('routes csv/json/txt mime or ext to text-l0 even when kind is other', () => {
+    assert.equal(selectEngine({
+      current: null,
+      tried: [],
+      kind: 'other',
+      mime: 'text/csv',
+      filename: 'data.csv',
+      ocrAvailable: false,
+    }), 'text-l0')
+    assert.equal(selectEngine({
+      current: null,
+      tried: [],
+      kind: 'other',
+      mime: 'application/json',
+      filename: 'notes.json',
+      ocrAvailable: false,
+    }), 'text-l0')
+    assert.equal(selectEngine({
+      current: null,
+      tried: [],
+      mime: 'application/octet-stream',
+      filename: 'readme.txt',
+      ocrAvailable: false,
+    }), 'text-l0')
+    assert.equal(selectEngine({
+      current: null,
+      tried: [],
+      mime: 'text/markdown',
+      filename: 'note.md',
+      ocrAvailable: false,
+    }), 'text-l0')
+  })
+
+  it('never routes plain text filename to pdf-extract', () => {
+    const next = selectEngine({
+      current: null,
+      tried: [],
+      kind: 'other',
+      filename: 'plain.txt',
+      mime: 'application/octet-stream',
+      ocrAvailable: true,
+      deepParse: true,
+    })
+    assert.equal(next, 'text-l0')
+    assert.notEqual(next, 'pdf-extract-l0')
+  })
+
   it('routes docx/doc/pptx/ppt to office-l0', () => {
     for (const kind of ['docx', 'doc', 'pptx', 'ppt']) {
       assert.equal(selectEngine({
@@ -334,6 +381,42 @@ describe('parse-router run cascade', () => {
       },
     })
     const result = await router.run(Buffer.from('hello'), { kind: 'text' })
+    assert.equal(result.usedEngineId, 'text-l0')
+    assert.ok(result.markdown.includes('hello'))
+  })
+
+  it('other+json mime uses text runner, not pdf', async () => {
+    let pdfCalls = 0
+    const router = new ParseRouter({
+      text: {
+        engineId: 'text-l0',
+        engineVersion: 't',
+        async run(blob) {
+          return {
+            pageCount: 1,
+            charCount: blob.length + 20,
+            markdown: `<!-- page:1 -->\n${blob.toString('utf8')}`,
+            chunks: [{ page: 1, offset: 0, text: blob.toString('utf8') }],
+            emptyPageRatio: 0,
+          }
+        },
+      },
+      pdf: {
+        engineId: 'pdf-extract-l0',
+        engineVersion: 't',
+        async run() {
+          pdfCalls += 1
+          throw new Error('Invalid PDF structure')
+        },
+      },
+    })
+    const body = Buffer.from('{"hello":"world","enough_chars_for_preview":true}')
+    const result = await router.run(body, {
+      kind: 'other',
+      mime: 'application/json',
+      filename: 'data.json',
+    })
+    assert.equal(pdfCalls, 0)
     assert.equal(result.usedEngineId, 'text-l0')
     assert.ok(result.markdown.includes('hello'))
   })

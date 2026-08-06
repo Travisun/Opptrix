@@ -326,6 +326,7 @@ interface ChatComposerProps {
   promptQueue?: QueuedPrompt[]
   onPromptQueueRemove?: (id: string) => void
   onPromptQueueRunNow?: (id: string) => void
+  onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
 }
 
 /** 供 ChatView 在消息区 drop 时调用，避免重复 pin 状态 */
@@ -358,6 +359,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
   promptQueue = [],
   onPromptQueueRemove,
   onPromptQueueRunNow,
+  onOpenPreview,
 }, ref) {
   const s = useStyles()
   const editorRef = useRef<HTMLDivElement>(null)
@@ -771,6 +773,7 @@ const ChatComposer = forwardRef<ChatComposerHandle, ChatComposerProps>(function 
               items={pinned}
               sessionId={sessionId}
               onRemove={removePinned}
+              onPreview={onOpenPreview && sessionId ? (item) => onOpenPreview(sessionId, item) : undefined}
             />
             <div className={s.editorRow}>
               <span ref={mentionAnchorRef} className={s.mentionAnchor} aria-hidden />

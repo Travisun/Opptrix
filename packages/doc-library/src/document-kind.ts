@@ -57,3 +57,8 @@ export function documentKindFromMime(mime: string, filename?: string): DocumentK
   }
   return 'other'
 }
+
+/** 是否应按纯文本路径处理（预览直读 / text-l0，禁止走 PDF） */
+export function isPlainTextDocument(mime: string, filename?: string): boolean {
+  return documentKindFromMime(mime, filename) === 'text'
+}

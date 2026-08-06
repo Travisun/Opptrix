@@ -146,9 +146,10 @@ interface Props {
   sessionId?: string | null
   isMobile?: boolean
   onFork?: () => void
+  onOpenPreview?: (sessionId: string, attachment: ChatAttachmentMeta) => void
 }
 
-function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }: Props) {
+function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, onOpenPreview }: Props) {
   const s = useStyles()
   const [copied, setCopied] = useState(false)
   const [previewAttachment, setPreviewAttachment] = useState<ChatAttachmentMeta | null>(null)
@@ -247,7 +248,13 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork }
         {message.attachments && message.attachments.length > 0 && (
           <MessageAttachmentStrip
             items={message.attachments}
-            onOpen={setPreviewAttachment}
+            onOpen={(item) => {
+              if (isMobile || !onOpenPreview) {
+                setPreviewAttachment(item)
+                return
+              }
+              if (sessionId) onOpenPreview(sessionId, item)
+            }}
           />
         )}
         {isUser

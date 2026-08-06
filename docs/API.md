@@ -844,6 +844,7 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；路径规范化防穿越） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，供 UI 轮询） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/extract` | 返回 `{ attachment_id, name, kind, extract }` 整理摘要（`extract` 同下表，含 `documentId?`） |
+| GET | `/api/sessions/:id/attachments/:attachmentId/extract/text` | 返回整理后的文本/Markdown（`text/markdown`）；整理中 202 `{ status: 'pending' }`；失败 422 `{ status: 'failed', message? }`；供右侧文件预览面板渲染 Word/PPT/Markdown/Txt |
 | DELETE | `/api/sessions/:id/attachments/:attachmentId` | 删除未入 turns 引用的附件；已引用 → 409 |
 | POST | `/api/sessions/:id/chat/stream` | SSE 聊天；body `{ message, model?, attachments?: string[] }`（`attachments` 为已上传附件 id 列表） |
 | POST | `/api/sessions/:id/chat` | 同步聊天；body 同上 |

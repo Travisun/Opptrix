@@ -20,7 +20,7 @@ export {
 export { DOC_LIBRARY_SCHEMA_VERSION as SCHEMA_VERSION } from './schema.js'
 export type { SchemaMigrationStep } from './schema-migrate.js'
 export * from './types.js'
-export { documentKindFromMime, extOfFilename } from './document-kind.js'
+export { documentKindFromMime, extOfFilename, isPlainTextDocument } from './document-kind.js'
 export { DocLibraryRepository } from './repository.js'
 export { DocLibraryService } from './service.js'
 export type { LegacyExtractWriter, ParseLifecycleHooks } from './service.js'
@@ -96,6 +96,7 @@ export {
   createTextL0Runner,
   TEXT_L0_ENGINE_VERSION,
   extractTextL0,
+  decodeTextBuffer,
 } from './engines/text-l0.js'
 export {
   createOfficeL0Runner,
