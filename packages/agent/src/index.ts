@@ -130,23 +130,12 @@ export {
   type ModelsDevProviderMeta,
 } from './llm/models-dev-context.js'
 export {
-  type MediaKind,
-  type ChatAttachmentMeta,
-  type AttachmentExtractMeta,
-  type AttachmentExtractStatus,
-  type AttachmentExtractPhase,
-  type AttachmentLimits,
-  type ModelMediaCapabilities,
-  mimeToMediaKind,
-  inferMimeFromFilename,
-  resolveMediaMime,
-  formatBytesShort,
-  mediaKindLabel,
-  isLibraryIngestKind,
-} from './media-types.js'
-export { resolveAttachmentLimits } from './attachment-limits.js'
-export {
   saveAttachment,
+  saveCanvasAttachment,
+  saveMindmapAttachment,
+  updateCanvasAttachment,
+  updateMindmapAttachment,
+  readAttachmentText,
   readAttachmentMeta,
   readAttachmentBuffer,
   deleteAttachment,
@@ -166,7 +155,33 @@ export {
   isLibraryExtractReady,
   registerDocumentIngestHook,
   registerPdfIngestHook,
+  ARTIFACT_SOURCE_MAX_CHARS,
 } from './chat-attachments.js'
+export {
+  type MediaKind,
+  type ChatAttachmentMeta,
+  type CanvasAttachmentMeta,
+  type CanvasPageSpec,
+  type MindmapAttachmentMeta,
+  type AttachmentExtractMeta,
+  type AttachmentExtractStatus,
+  type AttachmentExtractPhase,
+  type AttachmentLimits,
+  type ModelMediaCapabilities,
+  mimeToMediaKind,
+  inferMimeFromFilename,
+  resolveMediaMime,
+  formatBytesShort,
+  mediaKindLabel,
+  isLibraryIngestKind,
+  CANVAS_MIME,
+  CANVAS_EXT,
+  CANVAS_DATA_FILE,
+  MINDMAP_MIME,
+  MINDMAP_EXT,
+  MINDMAP_DATA_FILE,
+} from './media-types.js'
+export { resolveAttachmentLimits } from './attachment-limits.js'
 export {
   extractPdfToMarkdown,
   formatDocumentCatalogLine,

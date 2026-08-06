@@ -20,6 +20,7 @@ export const TOOL_PACK_IDS = [
   'strategy_extra',
   'provider_ext',
   'automation',
+  'artifacts',
 ] as const
 
 export type ToolPackId = (typeof TOOL_PACK_IDS)[number]
@@ -123,6 +124,12 @@ export const TOOL_PACK_DEFS: readonly ToolPackDef[] = [
     title: '计划任务',
     description: '创建与管理定时智能体任务与受控脚本',
     whenToUse: '定时提醒、定期分析、自动执行重复投研流程',
+  },
+  {
+    id: 'artifacts',
+    title: '画布与脑图',
+    description: '创建/更新/读取可预览的投研画布与脑图制品',
+    whenToUse: '可视化报告、画布排版、脑图/思维导图、结构化主题树',
   },
 ] as const
 
@@ -290,6 +297,14 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   delete_scheduled_job: 'automation',
   run_scheduled_job_now: 'automation',
   list_scheduled_job_runs: 'automation',
+
+  // artifacts
+  create_canvas: 'artifacts',
+  update_canvas: 'artifacts',
+  read_canvas: 'artifacts',
+  create_mindmap: 'artifacts',
+  update_mindmap: 'artifacts',
+  read_mindmap: 'artifacts',
 }
 
 export function isToolPackId(value: string): value is ToolPackId {

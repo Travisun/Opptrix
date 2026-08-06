@@ -1,5 +1,41 @@
-/** 媒体种类；text 不占附件配额；document = 文本/Office 研报入库 */
-export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio'
+/** 媒体种类；text 不占附件配额；document = 文本/Office 研报入库；canvas/mindmap = Agent 制品 */
+export type MediaKind =
+  | 'text'
+  | 'image'
+  | 'pdf'
+  | 'document'
+  | 'video'
+  | 'audio'
+  | 'canvas'
+  | 'mindmap'
+
+/** Agent 画布 MIME / 固定存盘名 */
+export const CANVAS_MIME = 'application/vnd.opptrix.canvas+tsx'
+export const CANVAS_DATA_FILE = 'data.canvas.tsx'
+export const CANVAS_EXT = '.canvas.tsx'
+
+/** Agent 脑图 MIME / 固定存盘名 */
+export const MINDMAP_MIME = 'application/vnd.opptrix.mindmap+json'
+export const MINDMAP_DATA_FILE = 'data.mindmap.json'
+export const MINDMAP_EXT = '.mindmap.json'
+
+/** Optional print dimensions; ignored for fluid mode. Legacy preset may appear on old attachments. */
+export type CanvasPageSpec =
+  | { preset: string }
+  | { widthMm: number; heightMm: number }
+  | { widthPx: number; heightPx: number }
+
+export interface CanvasAttachmentMeta {
+  /** Default `fluid` (responsive Surface). `print` is optional / legacy. */
+  mode: 'fluid' | 'print'
+  /** Optional; ignored for fluid. May be present on legacy attachments. */
+  page?: CanvasPageSpec
+  pageCount?: number
+}
+
+export interface MindmapAttachmentMeta {
+  rootId: string
+}
 
 /** 附件文本整理状态（含 OCR） */
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
@@ -42,6 +78,10 @@ export interface ChatAttachmentMeta {
   duration?: number
   /** 异步文本整理（PDF / 文档 / 图片 OCR） */
   extract?: AttachmentExtractMeta
+  /** 画布制品元数据（kind=canvas） */
+  canvas?: CanvasAttachmentMeta
+  /** 脑图制品元数据（kind=mindmap） */
+  mindmap?: MindmapAttachmentMeta
 }
 
 export interface AttachmentLimits {
@@ -88,6 +128,8 @@ const EXT_MIME: Record<string, string> = {
   '.m4a': 'audio/mp4',
   '.ogg': 'audio/ogg',
   '.aac': 'audio/aac',
+  [CANVAS_EXT]: CANVAS_MIME,
+  [MINDMAP_EXT]: MINDMAP_MIME,
 }
 
 const DOCUMENT_MIME = new Set([
@@ -107,6 +149,9 @@ const DOCUMENT_EXT = new Set([
 ])
 
 export function inferMimeFromFilename(filename: string): string | null {
+  const lower = filename.toLowerCase()
+  if (lower.endsWith(CANVAS_EXT)) return CANVAS_MIME
+  if (lower.endsWith(MINDMAP_EXT)) return MINDMAP_MIME
   const dot = filename.lastIndexOf('.')
   if (dot < 0) return null
   return EXT_MIME[filename.slice(dot).toLowerCase()] ?? null
@@ -114,12 +159,17 @@ export function inferMimeFromFilename(filename: string): string | null {
 
 function kindFromNormalizedMime(normalized: string, filename?: string): MediaKind | null {
   if (!normalized) return null
+  if (normalized === CANVAS_MIME) return 'canvas'
+  if (normalized === MINDMAP_MIME) return 'mindmap'
   if (normalized.startsWith(IMAGE_PREFIX)) return 'image'
   if (normalized === 'application/pdf') return 'pdf'
   if (normalized.startsWith(VIDEO_PREFIX)) return 'video'
   if (normalized.startsWith(AUDIO_PREFIX)) return 'audio'
   if (DOCUMENT_MIME.has(normalized)) return 'document'
   if (filename) {
+    const lower = filename.toLowerCase()
+    if (lower.endsWith(CANVAS_EXT)) return 'canvas'
+    if (lower.endsWith(MINDMAP_EXT)) return 'mindmap'
     const dot = filename.lastIndexOf('.')
     if (dot >= 0 && DOCUMENT_EXT.has(filename.slice(dot).toLowerCase())) return 'document'
   }
@@ -160,6 +210,8 @@ export function mediaKindLabel(kind: MediaKind): string {
     case 'document': return '文档'
     case 'video': return '视频'
     case 'audio': return '音频'
+    case 'canvas': return '画布'
+    case 'mindmap': return '脑图'
     default: return '文件'
   }
 }

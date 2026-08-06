@@ -212,6 +212,52 @@ export function buildLocalDataCatalogIndexPrompt(): string {
   ].join('\n')
 }
 
+/** 画布 / 脑图制品 — artifacts pack 已加载时注入 */
+export function buildArtifactsPlaybook(): string {
+  return [
+    '【画布与脑图 — create_canvas / create_mindmap】',
+    '- 可视化报告、投研画布 → create_canvas；脑图/思维导图/主题树 → create_mindmap；改内容用 update_*，先读用 read_*',
+    '- 【默认版式 = 机构调研报告】封面级 H1 + 副题/截至说明 → 开篇导语（介绍文字必写）→ 分章 H2 → 节内 H3 → 正文 Text 与 Chart/Table/Stat 穿插 → 图注/表注/方法说明（说明文字必写）。禁止默认做成「分析仪表盘 / 面板墙」',
+    '- 【禁止面板分割章节】不要用 Card / CardHeader 把每一章包成一块面板；章节靠 H1/H2/H3 + Stack 间距 + Divider（可选）建立层级。Card / Callout 仅用于极少数要点框或风险提示，全文最多 0–2 个，且不得替代标题层级',
+    '- 【不得省略文字】每个主要章节至少一段介绍/解读 Text；图表前后要有引导句或结论句；Stat/Table/Chart 旁须有说明（caption/旁注/Callout 二选一）；禁止「只有数字块、没有叙述」',
+    '- 【标题层级】H1 全文唯一报告标题；H2 章；H3 节；禁止用 Card title 充当章节标题；禁止跳级',
+    '- 【图文/图表结合】优先 Stack 纵向叙事；关键指标可用 Row/Grid 放 Stat，但前后要有文字；Chart 与 Table 嵌入叙事流，不要单独堆一排无说明的组件',
+    '- 【例外】仅当用户明确要求「面板 / 仪表盘 / dashboard / 看板 / 卡片墙」等时，才可采用更密的面板型布局；否则一律报告型',
+    '- 画布 source 为 TSX：用 @opptrix/canvas 公开导出（Surface / Stack / Row / Grid / H1–H3 / Text / Stat / Table / Chart / Divider / Spacer / Card / Callout / Pill / Button / Code / Link 等）',
+    '- 根容器默认用流体宽度 Surface（max ~880）；字阶：H1 24/30、H2 18/24、H3 16/22、Text body 14/20、small 12/16；Stat 为大数字在上、小标签在下',
+    "- 仅允许：import … from 'react' 与 import { … } from '@opptrix/canvas'（公开导出）；禁止其它 npm / 依赖；勿用 workspace_write 代替制品工具",
+    '- 禁止渐变、大阴影；颜色用 useCanvasTheme()（含 text/bg/fill/stroke/accent 分组）或组件语义色，勿硬编码花哨色值',
+    '- 【硬性】画布 TSX 任意可见文案（标题、Stat value/label/hint、表格 header/cell、Callout、Pill、Button、Code、Link、节点相关文案等）禁止使用 emoji / 表情符号 / 装饰性符号图标',
+    '- 【硬性】用文字或组件语义（Pill tone、Text tone、Callout tone、Stat tone）表达状态与强调，勿用符号代替',
+    '- 【硬性】脑图节点 label / note 同样禁止 emoji / 表情符号 / 装饰性符号图标',
+    '- 最短示例（报告型骨架，无 Card 墙）：',
+    "  import { Surface, Stack, H1, H2, Text, Stat, Grid, Table } from '@opptrix/canvas'",
+    '  export default function Report() {',
+    '    return (',
+    '      <Surface>',
+    '        <Stack gap="28px">',
+    '          <H1>某某股份深度调研</H1>',
+    '          <Text tone="secondary" size="small">机构调研报告 · 数据截至 2026-03-31</Text>',
+    '          <Text>本报告梳理公司近四季经营与盈利质量，并对照同业估值给出观察结论。</Text>',
+    '          <H2>一、经营概览</H2>',
+    '          <Text>营收同比改善，毛利率回升，主因需求回暖与产品结构优化。</Text>',
+    '          <Grid columns={2}>',
+    '            <Stat value="12.4 亿" label="营收" hint="同比 +8.2%" />',
+    '            <Stat value="18.6%" label="净利率" hint="较上年同期 +1.1pt" />',
+    '          </Grid>',
+    '          <Text size="small" tone="secondary">关键指标摘自最近财报；同比口径与披露一致。</Text>',
+    '          <Table framed headers={["指标", "本期", "同比"]} rows={[["毛利率", "42.1%", "+2.3pt"]]} />',
+    '          <Text size="small" tone="secondary">表注：口径与公司定期报告一致。</Text>',
+    '          <H2>二、结论与风险</H2>',
+    '          <Text>短期景气偏暖，仍须关注原材料成本与下游需求波动。</Text>',
+    '        </Stack>',
+    '      </Surface>',
+    '    )',
+    '  }',
+    '- 返回的 attachment 供用户在消息中点击预览；勿声称只能写文件无法预览',
+  ].join('\n')
+}
+
 /** 聊天 Agent — 用户交互确认（ask_user 工具） */
 export function buildUserInteractionPlaybook(): string {
   return [
@@ -434,6 +480,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   }
   if (packLoaded(packs, 'provider_ext')) {
     sections.push(buildProviderCustomMethodPlaybook())
+  }
+  if (packLoaded(packs, 'artifacts')) {
+    sections.push(buildArtifactsPlaybook())
   }
   sections.push(buildUserInteractionPlaybook())
   if (packLoaded(packs, 'news')) {

@@ -413,6 +413,32 @@ const INTENT_RULES: IntentRule[] = [
     hint: '已打开的外部网页 → browser_snapshot；勿用 get_instrument_snapshot',
   },
   {
+    intent: 'create_canvas',
+    priority: 88,
+    patterns: [
+      /画布|可视化报告|报告可视化|分页报告|投研画布|create_canvas/i,
+      /(?:做成|生成|创建).*(?:可视化|画布|可预览).*(?:报告|版面|卡片)/,
+      /(?:可视化|画布).*(?:做成|生成|创建)/,
+    ],
+    preferredTools: ['create_canvas', 'update_canvas', 'read_canvas'],
+    avoidTools: ['workspace_write', 'create_mindmap'],
+    confidence: 'high',
+    hint: '画布/报告可视化 → create_canvas；勿用 workspace_write 代替；用户可在消息中点击预览',
+  },
+  {
+    intent: 'create_mindmap',
+    priority: 88,
+    patterns: [
+      /脑图|思维导图|主题树|知识树|create_mindmap/i,
+      /(?:做成|生成|创建).*(?:脑图|思维导图)/,
+      /(?:脑图|思维导图).*(?:做成|生成|创建)/,
+    ],
+    preferredTools: ['create_mindmap', 'update_mindmap', 'read_mindmap'],
+    avoidTools: ['workspace_write', 'create_canvas'],
+    confidence: 'high',
+    hint: '脑图/思维导图 → create_mindmap；勿用 workspace_write 代替',
+  },
+  {
     intent: 'python_env',
     priority: 92,
     patterns: [
@@ -1060,6 +1086,8 @@ const L1_INTENTS = new Set([
   'etf_nav',
   'etf_holdings',
   'web_snapshot_only',
+  'create_canvas',
+  'create_mindmap',
 ])
 
 const L3_INTENTS = new Set([

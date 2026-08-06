@@ -3,6 +3,8 @@ import { makeStyles, mergeClasses, Spinner } from '@fluentui/react-components'
 import { DismissRegular } from '@fluentui/react-icons'
 import type { ChatAttachmentMeta } from '../types/chat'
 import { attachmentKindIcon } from './attachmentKindIcon'
+import CanvasInlineCard from './CanvasInlineCard'
+import MindmapInlineCard from './MindmapInlineCard'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 
 const CHIP_WIDTH = 168
@@ -14,6 +16,9 @@ const useStyles = makeStyles({
     flexWrap: 'wrap',
     gap: '6px',
     padding: '0 2px 4px',
+  },
+  stripBlock: {
+    width: '100%',
   },
   chip: {
     display: 'inline-flex',
@@ -246,33 +251,57 @@ export default function ComposerAttachmentStrip({
 
 export function MessageAttachmentStrip({
   items,
+  sessionId,
   onOpen,
 }: {
   items: ChatAttachmentMeta[]
+  sessionId?: string | null
   onOpen: (item: ChatAttachmentMeta) => void
 }) {
   const s = useStyles()
   if (!items.length) return null
   return (
-    <div className={s.strip}>
-      {items.map(item => (
-        <button
-          key={item.id}
-          type="button"
-          className={s.chip}
-          onClick={() => onOpen(item)}
-          title={attachmentTitle(item)}
-          aria-label={`查看 ${item.name}`}
-        >
-          <AttachmentIcon
-            item={item}
-            iconBoxClass={s.iconBox}
-            spinnerSlotClass={s.spinnerSlot}
-            thumbClass={s.thumb}
-          />
-          <span className={s.name}>{middleEllipsisFilename(item.name)}</span>
-        </button>
-      ))}
+    <div className={mergeClasses(s.strip, s.stripBlock)}>
+      {items.map(item => {
+        if (item.kind === 'mindmap' && sessionId) {
+          return (
+            <MindmapInlineCard
+              key={item.id}
+              sessionId={sessionId}
+              attachment={item}
+              onOpen={() => onOpen(item)}
+            />
+          )
+        }
+        if (item.kind === 'canvas' && sessionId) {
+          return (
+            <CanvasInlineCard
+              key={item.id}
+              sessionId={sessionId}
+              attachment={item}
+              onOpen={() => onOpen(item)}
+            />
+          )
+        }
+        return (
+          <button
+            key={item.id}
+            type="button"
+            className={s.chip}
+            onClick={() => onOpen(item)}
+            title={attachmentTitle(item)}
+            aria-label={`查看 ${item.name}`}
+          >
+            <AttachmentIcon
+              item={item}
+              iconBoxClass={s.iconBox}
+              spinnerSlotClass={s.spinnerSlot}
+              thumbClass={s.thumb}
+            />
+            <span className={s.name}>{middleEllipsisFilename(item.name)}</span>
+          </button>
+        )
+      })}
     </div>
   )
 }

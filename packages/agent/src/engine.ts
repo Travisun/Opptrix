@@ -925,7 +925,19 @@ export class AgentEngine {
 
     const toolsUsed: string[] = []
     const toolSteps: ChatToolStep[] = []
+    const createdAttachments: ChatAttachmentMeta[] = []
     let chatUsage = createEmptyChatUsage()
+
+    const mergeAssistantAttachments = (
+      outputAttachments?: ChatAttachmentMeta[],
+    ): ChatAttachmentMeta[] | undefined => {
+      const byId = new Map<string, ChatAttachmentMeta>()
+      for (const a of [...(outputAttachments ?? []), ...createdAttachments]) {
+        if (a?.id) byId.set(a.id, a)
+      }
+      const list = [...byId.values()]
+      return list.length ? list : undefined
+    }
 
     const emitDone = async (payload: {
       reply: string
@@ -1225,6 +1237,18 @@ export class AgentEngine {
             result = { error: e instanceof Error ? e.message : String(e) }
           }
 
+          if (result && typeof result === 'object' && !Array.isArray(result)) {
+            const att = (result as Record<string, unknown>).attachment
+            if (
+              att
+              && typeof att === 'object'
+              && typeof (att as ChatAttachmentMeta).id === 'string'
+              && typeof (att as ChatAttachmentMeta).kind === 'string'
+            ) {
+              createdAttachments.push(att as ChatAttachmentMeta)
+            }
+          }
+
           const doneStep = enrichStepFromResult(runningStep, result)
           toolSteps[toolSteps.length - 1] = doneStep
           emit({ type: 'tool_done', step: doneStep })
@@ -1260,7 +1284,7 @@ export class AgentEngine {
         toolSteps,
         chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
         chatUsage.estimated,
-        outputAttachments,
+        mergeAssistantAttachments(outputAttachments),
       )
       void emitDone({ reply })
       return { reply, toolsUsed, sessionId, title: record.title }
@@ -1273,6 +1297,7 @@ export class AgentEngine {
       toolSteps,
       chatUsage.usage.totalTokens > 0 ? chatUsage.usage : undefined,
       chatUsage.estimated,
+      mergeAssistantAttachments(),
     )
     void emitDone({ reply })
     return { reply, toolsUsed, sessionId, title: record.title }

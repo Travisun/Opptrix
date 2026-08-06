@@ -6,6 +6,8 @@ const KIND_LABEL: Record<Exclude<MediaKind, 'text'>, string> = {
   document: '文档',
   video: '视频',
   audio: '音频',
+  canvas: '画布',
+  mindmap: '脑图',
 }
 
 const EXT_MIME: Record<string, string> = {

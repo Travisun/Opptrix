@@ -139,7 +139,7 @@ Opptrix/
          ToolRegistry / External MCP Client → ResearchHub / MarketDataService
 ```
 
-- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `document-tools.ts`（会话研报库：`list_session_documents` / `search_document` / `read_document` / `search_library`，属 `core`；支持 PDF / 文本 / Word / PPT / 图片 OCR 文本；**跨会话/全库**混合检索主路径 `search_library`（FTS ⊕ 向量，`scope=library`）→ `read_document` 多跳精读——意图 `library_search`：跨研报/全库问句首选 `search_library`，勿与本会话 `search_document` 混淆）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
+- 工具定义：`packages/agent/src/tools.ts`（MCP 投研工具）+ `document-tools.ts`（会话研报库：`list_session_documents` / `search_document` / `read_document` / `search_library`，属 `core`；支持 PDF / 文本 / Word / PPT / 图片 OCR 文本；**跨会话/全库**混合检索主路径 `search_library`（FTS ⊕ 向量，`scope=library`）→ `read_document` 多跳精读——意图 `library_search`：跨研报/全库问句首选 `search_library`，勿与本会话 `search_document` 混淆）+ `canvas-tools.ts`（画布/脑图制品，属 `artifacts` pack）+ `mcp/workspace-tools.ts`（工作区）+ `mcp/browser-tools.ts`（网页）+ 内置 `ask_user` / 工具包元工具 / 外部 MCP 运维工具
 - 工具元数据（何时使用、调用规范、`packId`）：`packages/agent/src/tool-meta.ts`
 - **工具包路由（Tool Pack Router）**：
   - 包定义：`packages/shared/src/tool-packs.ts`（`TOOL_PACK_DEFS` / `TOOL_PACK_MEMBERSHIP`）
@@ -167,6 +167,13 @@ Opptrix/
   - **分层精排**：`resolveToolRoutePlan` 将用户意图映射为首选工具顺序与研究档位（L1 事实快答 / L2 结构化解读 / L3 深度备忘录），注入「本轮工具选型卡」与证据纪律/输出骨架，并把首选工具排到 tools schema 前列
   - **投研完备性闭环（`buildResearchCompletenessLoop`，仅 L2/L3 注入）**：出报告前强制「缺口自检 → 针对性补齐（换源重试 / activate_tool_pack / 远程重试降级项）→ 重新纳入分析 → 收敛输出」；同一缺口最多补 1 轮，取不到则如实标注缺口。L1 事实快答不注入，避免过度拉数
   - 默认角色为**投研研究员**：事实与推断分层、标注时效、工具失败不编造、L3 声明数据缺口；配合 MCP 取证后按档位写结论
+  - **画布与脑图（`artifacts` pack）**：实现 `packages/agent/src/canvas-tools.ts`；非 always-on，意图播种（可视化报告/画布/脑图/思维导图）或 `activate_tool_pack({ pack_ids: ["artifacts"] })`
+    - **工具**：`create_canvas` / `update_canvas` / `read_canvas` / `create_mindmap` / `update_mindmap` / `read_mindmap`
+    - **何时用**：用户要可预览的可视化报告、投研画布 → `create_canvas`；脑图/思维导图/结构化主题树 → `create_mindmap`；更新先 `read_*` 再 `update_*`
+    - **画布源码约束**：`source` 为 TSX 字符串。**UI**：使用 `@opptrix/canvas` curated 组件（`Surface` / `Stack` / `H1`–`H3` / `Text` / `Stat` / `Table` / `Chart` 等）；颜色用 `useCanvasTheme` 或组件默认；禁止渐变、大阴影、装饰 emoji。**版面**：默认流体宽度 `Surface`；**默认机构调研报告版式**（H1→导语→H2 分章 + 正文与图表穿插；须含介绍/说明文字；勿用 Card 墙做面板分割；仅用户明确要面板/仪表盘时例外）。**仅允许** `import … from 'react'` 与 `import { … } from '@opptrix/canvas'`（公开导出）；禁止其它依赖。返回 `attachment`（`kind=canvas`）供消息内点击预览。playbook：`buildArtifactsPlaybook()`
+    - **脑图**：`rootId` + `nodes[{id,parentId,label,note?}]`；返回 `kind=mindmap` 附件
+    - **意图精排**：`create_canvas` → 首选 `create_canvas`；`create_mindmap` → 首选 `create_mindmap`；勿用 `workspace_write` 代替制品工具
+    - **REST**：列表/下载见会话附件 API；预览写回见 `PUT /api/sessions/:id/attachments/:attachmentId`（仅 canvas/mindmap）
   - **基本面事实表（`fundamentals` pack）**：`get_instrument_profile` / `get_instrument_financials` / `get_instrument_income_statement` / `get_instrument_balance_sheet` / `get_instrument_cash_flow` / `get_instrument_financial_indicators` / `get_instrument_shareholders` / `get_instrument_institution_holdings` / `get_instrument_dividend`
   - **市场（`market` pack）**：`get_market_dynamics`（全景）；`get_macro_series`（中国/国外/行业/油价宏观序列，可翻页）；专项 `get_dragon_tiger` / `get_limit_updown` / `get_market_sentiment`；同花顺独有 `get_cn_market_special`；`get_trade_calendar` / `get_market_session`；`get_instrument_money_flow`
   - **资讯与订阅（`news` pack）**：

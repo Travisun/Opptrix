@@ -5,15 +5,23 @@ import { resolveUserDataRoot } from '@opptrix/shared'
 import type {
   AttachmentExtractMeta,
   AttachmentLimits,
+  CanvasAttachmentMeta,
   ChatAttachmentMeta,
   MediaKind,
+  MindmapAttachmentMeta,
   ModelMediaCapabilities,
 } from './media-types.js'
 import {
+  CANVAS_DATA_FILE,
+  CANVAS_EXT,
+  CANVAS_MIME,
   formatBytesShort,
   isLibraryIngestKind,
   mediaKindLabel,
   mimeToMediaKind,
+  MINDMAP_DATA_FILE,
+  MINDMAP_EXT,
+  MINDMAP_MIME,
   resolveMediaMime,
 } from './media-types.js'
 import { extractPdfToMarkdown, type PdfExtractChunk } from './pdf-extract.js'
@@ -25,6 +33,7 @@ const DEFAULT_PDF_MAX_BYTES = 20 * 1024 * 1024
 const EXTRACT_WAIT_MS = 90_000
 const EXTRACT_POLL_MS = 400
 const MIN_USEFUL_CHARS = 24
+export const ARTIFACT_SOURCE_MAX_CHARS = 200_000
 
 export interface SaveAttachmentInput {
   sessionId: string
@@ -34,6 +43,40 @@ export interface SaveAttachmentInput {
   width?: number
   height?: number
   duration?: number
+  /** 显式 kind 时跳过 MIME 推断（用于 canvas/mindmap 等） */
+  kind?: MediaKind
+  canvas?: CanvasAttachmentMeta
+  mindmap?: MindmapAttachmentMeta
+}
+
+export interface SaveCanvasAttachmentInput {
+  sessionId: string
+  name: string
+  source: string
+  canvas: CanvasAttachmentMeta
+}
+
+export interface SaveMindmapAttachmentInput {
+  sessionId: string
+  name: string
+  tree: unknown
+  mindmap: MindmapAttachmentMeta
+}
+
+export interface UpdateCanvasAttachmentInput {
+  sessionId: string
+  attachmentId: string
+  source: string
+  canvas?: CanvasAttachmentMeta
+  name?: string
+}
+
+export interface UpdateMindmapAttachmentInput {
+  sessionId: string
+  attachmentId: string
+  tree: unknown
+  mindmap?: MindmapAttachmentMeta
+  name?: string
 }
 
 export type AttachmentValidationResult =
@@ -83,9 +126,16 @@ function metaPath(sessionId: string, attachmentId: string): string {
   return path.join(attachmentDir(sessionId, attachmentId), META_FILENAME)
 }
 
-function dataPath(sessionId: string, attachmentId: string, name: string): string {
+function dataFileBasename(name: string, kind?: MediaKind): string {
+  const lower = name.toLowerCase()
+  if (kind === 'canvas' || lower.endsWith(CANVAS_EXT)) return CANVAS_DATA_FILE
+  if (kind === 'mindmap' || lower.endsWith(MINDMAP_EXT)) return MINDMAP_DATA_FILE
   const ext = path.extname(name) || ''
-  return path.join(attachmentDir(sessionId, attachmentId), `data${ext}`)
+  return `data${ext}`
+}
+
+function dataPath(sessionId: string, attachmentId: string, name: string, kind?: MediaKind): string {
+  return path.join(attachmentDir(sessionId, attachmentId), dataFileBasename(name, kind))
 }
 
 function extractMdPath(sessionId: string, attachmentId: string): string {
@@ -98,11 +148,29 @@ function extractChunksPath(sessionId: string, attachmentId: string): string {
 
 function resolveSafeDataPath(sessionId: string, attachmentId: string, meta: ChatAttachmentMeta): string {
   const dir = attachmentDir(sessionId, attachmentId)
-  const expected = path.resolve(dataPath(sessionId, attachmentId, meta.name))
+  const expected = path.resolve(dataPath(sessionId, attachmentId, meta.name, meta.kind))
   if (!expected.startsWith(path.resolve(dir) + path.sep) && expected !== path.resolve(dir)) {
     throw new Error('附件路径无效')
   }
   return expected
+}
+
+function ensureArtifactSourceLength(source: string): void {
+  if (source.length > ARTIFACT_SOURCE_MAX_CHARS) {
+    throw new Error(`内容过长（上限 ${ARTIFACT_SOURCE_MAX_CHARS} 字符）`)
+  }
+}
+
+function ensureDisplayName(raw: string, fallbackExt: string): string {
+  const trimmed = raw.trim() || '未命名'
+  const base = path.basename(trimmed).replace(/[^\w.\-()\u4e00-\u9fff]+/g, '_').slice(0, 160) || '未命名'
+  if (fallbackExt === CANVAS_EXT && !base.toLowerCase().endsWith(CANVAS_EXT)) {
+    return `${base.replace(/\.(tsx|ts|jsx|js)$/i, '')}${CANVAS_EXT}`
+  }
+  if (fallbackExt === MINDMAP_EXT && !base.toLowerCase().endsWith(MINDMAP_EXT)) {
+    return `${base.replace(/\.json$/i, '')}${MINDMAP_EXT}`
+  }
+  return base
 }
 
 function writeMeta(sessionId: string, meta: ChatAttachmentMeta): void {
@@ -244,7 +312,7 @@ export function validateAttachmentAgainstCapabilities(
 
 export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
   const resolvedMime = resolveMediaMime(input.mime, input.name)
-  const kind = mimeToMediaKind(resolvedMime, input.name)
+  const kind = input.kind ?? mimeToMediaKind(resolvedMime, input.name)
   if (!kind) throw new Error('不支持此文件类型')
 
   const attachmentId = randomUUID()
@@ -262,10 +330,12 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     ...(input.width ? { width: input.width } : {}),
     ...(input.height ? { height: input.height } : {}),
     ...(input.duration ? { duration: input.duration } : {}),
+    ...(input.canvas ? { canvas: input.canvas } : {}),
+    ...(input.mindmap ? { mindmap: input.mindmap } : {}),
     ...(libraryIngest ? { extract: { status: 'pending' as const } } : {}),
   }
 
-  const filePath = dataPath(input.sessionId, attachmentId, input.name)
+  const filePath = dataPath(input.sessionId, attachmentId, input.name, kind)
   fs.writeFileSync(filePath, input.data)
   writeMeta(input.sessionId, meta)
 
@@ -282,6 +352,74 @@ export function saveAttachment(input: SaveAttachmentInput): ChatAttachmentMeta {
     }
   }
   return meta
+}
+
+export function saveCanvasAttachment(input: SaveCanvasAttachmentInput): ChatAttachmentMeta {
+  ensureArtifactSourceLength(input.source)
+  const name = ensureDisplayName(input.name, CANVAS_EXT)
+  return saveAttachment({
+    sessionId: input.sessionId,
+    name,
+    mime: CANVAS_MIME,
+    data: Buffer.from(input.source, 'utf8'),
+    kind: 'canvas',
+    canvas: input.canvas,
+  })
+}
+
+export function saveMindmapAttachment(input: SaveMindmapAttachmentInput): ChatAttachmentMeta {
+  const json = `${JSON.stringify(input.tree, null, 2)}\n`
+  ensureArtifactSourceLength(json)
+  const name = ensureDisplayName(input.name, MINDMAP_EXT)
+  return saveAttachment({
+    sessionId: input.sessionId,
+    name,
+    mime: MINDMAP_MIME,
+    data: Buffer.from(json, 'utf8'),
+    kind: 'mindmap',
+    mindmap: input.mindmap,
+  })
+}
+
+export function updateCanvasAttachment(input: UpdateCanvasAttachmentInput): ChatAttachmentMeta | null {
+  const meta = readAttachmentMeta(input.sessionId, input.attachmentId)
+  if (!meta || meta.kind !== 'canvas') return null
+  ensureArtifactSourceLength(input.source)
+  const next: ChatAttachmentMeta = {
+    ...meta,
+    name: input.name ? ensureDisplayName(input.name, CANVAS_EXT) : meta.name,
+    size: Buffer.byteLength(input.source, 'utf8'),
+    mime: CANVAS_MIME,
+    canvas: input.canvas ?? meta.canvas,
+  }
+  const filePath = resolveSafeDataPath(input.sessionId, input.attachmentId, next)
+  fs.writeFileSync(filePath, input.source, 'utf8')
+  writeMeta(input.sessionId, next)
+  return next
+}
+
+export function updateMindmapAttachment(input: UpdateMindmapAttachmentInput): ChatAttachmentMeta | null {
+  const meta = readAttachmentMeta(input.sessionId, input.attachmentId)
+  if (!meta || meta.kind !== 'mindmap') return null
+  const json = `${JSON.stringify(input.tree, null, 2)}\n`
+  ensureArtifactSourceLength(json)
+  const next: ChatAttachmentMeta = {
+    ...meta,
+    name: input.name ? ensureDisplayName(input.name, MINDMAP_EXT) : meta.name,
+    size: Buffer.byteLength(json, 'utf8'),
+    mime: MINDMAP_MIME,
+    mindmap: input.mindmap ?? meta.mindmap,
+  }
+  const filePath = resolveSafeDataPath(input.sessionId, input.attachmentId, next)
+  fs.writeFileSync(filePath, json, 'utf8')
+  writeMeta(input.sessionId, next)
+  return next
+}
+
+export function readAttachmentText(sessionId: string, attachmentId: string): string | null {
+  const buffer = readAttachmentBuffer(sessionId, attachmentId)
+  if (!buffer) return null
+  return buffer.toString('utf8')
 }
 
 /** 异步抽取：不阻塞上传响应 */

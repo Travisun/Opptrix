@@ -4,6 +4,22 @@
 
 > 状态：按功能分节追加。桌面安装包级完整归因表可在发版流程中再汇总。
 
+## Agent Canvas 预览（@opptrix/canvas）
+
+画布预览宿主加载 `@opptrix/canvas/styles.css`，渲染 Agent TSX 中从 `@opptrix/canvas` 公开导出的 curated 组件（流体 `Surface`、版式与数据展示组件）。主题经预览根 `data-theme`（light/dark）与 `useCanvasTheme` 解析。
+
+| 组件 | 用途 | 许可（声明） | 备注 |
+|------|------|--------------|------|
+| **@opptrix/canvas** | Agent 分析面板组件与语义主题 | 与本仓库主体一致（Apache-2.0） | 工作区内包；无额外第三方 UI 框架 |
+
+## 脑图预览 / 编辑（mind-elixir）
+
+右侧附件预览与弹层中的脑图编辑器使用开源 **mind-elixir**（框架无关核心）。会话附件存盘格式仍为 Opptrix 扁平 JSON（`version` / `rootId` / `nodes`），经 `mindmapElixirBridge` 与 mind-elixir 树形 `nodeData` 互转；消息内缩略卡不嵌入完整编辑器。
+
+| 组件 | 用途 | 许可（声明） | 备注 |
+|------|------|--------------|------|
+| **mind-elixir** | 脑图布局、编辑、缩放、PNG 导出 | MIT | `client-ui` 依赖；主题跟随应用 light/dark（`THEME` / `DARK_THEME`） |
+
 ## Document Library（Phase A + B + C）
 
 本地会话研报库（`@opptrix/doc-library`）：多格式附件 ingest（文本 / `.doc` / `.docx` / `.ppt` / `.pptx` / 图片 / PDF）→ Parse Router → SQLite 元数据 / 正文 chunk + FTS；语义向量索引（LanceDB + e5-small，**桌面默认内置**）与混合检索（FTS ⊕ 向量 RRF；未就绪降级 FTS）。Agent 侧经 `list_session_documents` / `search_document` / `read_document` / `search_library`（跨库 Hybrid 多跳）按需阅读。**无主题关联图**。附件 meta 镜像字段见 [API.md · AttachmentExtractMeta](./API.md)（`extract.documentId`）。
