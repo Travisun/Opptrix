@@ -9,7 +9,7 @@ import type {
   ValidateFeedResult,
 } from '../types/schemas'
 import type { ChatProgressEvent } from '../types/chatProgress'
-import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel, ChatAttachmentMeta } from '../types/chat'
+import type { ChatDisplayMessage, ChatContextUsage, EphemeralAskTurn, SessionContextRef, SessionMeta, AvailableModel, ChatAttachmentMeta, SessionAttachmentListItem } from '../types/chat'
 import { resolveFileMime } from '../chat/mediaCapabilities'
 import type { ExportDestination, ExportPackageResult } from '../platform/saveMarketPackage'
 import {
@@ -1606,6 +1606,15 @@ export async function submitUserPromptResponse(
       ...answer,
     }),
   }, CHAT_REQUEST_TIMEOUT)
+}
+
+export async function listSessionAttachments(
+  sessionId: string,
+): Promise<SessionAttachmentListItem[]> {
+  const data = await jsonFetch<{ attachments: SessionAttachmentListItem[] }>(
+    `/sessions/${sessionId}/attachments`,
+  )
+  return data.attachments
 }
 
 export async function uploadSessionAttachment(

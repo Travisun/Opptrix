@@ -20,6 +20,7 @@ import {
   DESKTOP_NEWS_TITLE_DRAG_CLIP_WIN,
   SIDEBAR_DEFAULT_WIDTH,
   DESKTOP_TITLE_BAR_ACTIONS_WIDTH,
+  WORKSPACE_SPLITTER_WIDTH,
 } from './constants'
 import {
   PanelLeftContractRegular,
@@ -257,7 +258,10 @@ export default function DesktopWindowChrome({
   const frameChrome = frameTitlebarHeight > 0
   /** Primary frame titlebar + open sidebar: collapse |····| back/forward across the panel top. */
   const toolbarSplitInSidebar = frameChrome && sidebarInline && sidebarOpen
-  const titleBarActionsRight = desktopTitleBarActionsRight()
+  /** 右侧面板展开时：trailing 落在聊天列右缘（分割线左），与 chatTitleBar padding 对齐 */
+  const titleBarActionsRight = rightPanelOpen && titleBarTrailing && rightPanelWidth > 0
+    ? rightPanelWidth + WORKSPACE_SPLITTER_WIDTH + DESKTOP_TITLE_GAP
+    : desktopTitleBarActionsRight()
   const showTitleBarActions = !isSettings && !rightPanelOpen && Boolean(onToggleRightPanel || onToggleChatColumn)
   const titleMaxWidth = desktopTitleMaxWidth({
     titleLeft,

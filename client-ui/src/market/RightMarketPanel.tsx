@@ -16,9 +16,11 @@ import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
 import { ghostInteractive } from '../theme/mixins'
 import ChromeToolButton from '../desktop/ChromeToolButton'
 import {
+  DESKTOP_CHROME_TOP_OFFSET,
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
   DESKTOP_TITLEBAR_HEIGHT,
+  DESKTOP_TOOL_GAP,
   DESKTOP_Z_PANEL_TITLE,
 } from '../desktop/constants'
 import {
@@ -67,6 +69,13 @@ const useStyles = makeStyles({
     height: '40px',
     zIndex: 1,
   },
+  /**
+   * Match DesktopWindowChrome tool band: top inset + center within remaining
+   * chromeBand so tabs / actions share the file-box vertical midline.
+   */
+  titleBarElectron: {
+    paddingTop: `${DESKTOP_CHROME_TOP_OFFSET}px`,
+  },
   titleBarElectronWin: {
     paddingRight: '12px',
   },
@@ -75,8 +84,11 @@ const useStyles = makeStyles({
   },
   tabsWrap: {
     flex: '0 0 auto',
+    display: 'flex',
+    alignItems: 'center',
     minWidth: 0,
     maxWidth: '100%',
+    height: '28px',
     paddingLeft: '15px',
     overflowX: 'auto',
     overflowY: 'hidden',
@@ -87,16 +99,23 @@ const useStyles = makeStyles({
   },
   tabs: {
     minHeight: 'unset',
+    height: '28px',
     flexWrap: 'nowrap',
     width: 'max-content',
-    gap: '2px',
+    gap: `${DESKTOP_TOOL_GAP}px`,
     alignItems: 'center',
   },
-  /** Text pill — same ghost / accentSoft language as ChromeToolButton (not 28×28 icon). */
+  /** Text pill — same hit height as ChromeToolButton md (28×28), ghost / accentSoft. */
   tab: {
     ...ghostInteractive,
+    boxSizing: 'border-box',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
     minWidth: 'unset',
     height: '28px',
+    minHeight: '28px',
+    maxHeight: '28px',
     padding: '0 10px',
     margin: 0,
     borderRadius: opptrixTokens.radiusMd,
@@ -119,8 +138,14 @@ const useStyles = makeStyles({
     },
     ':enabled:hover::after': { display: 'none' },
     ':enabled:active::after': { display: 'none' },
-    // Content slot owns selected semibold — override to match ChromeToolButton
-    '& .fui-Tab__content': { fontWeight: 400 },
+    // Content slot — flatten Fluent line-box so visual height matches 28px tool
+    '& .fui-Tab__content': {
+      fontWeight: 400,
+      display: 'inline-flex',
+      alignItems: 'center',
+      lineHeight: 1,
+      height: '100%',
+    },
     // Suppress Fluent Tabster focus box-shadow; keep ghostInteractive focusVisibleRing
     '&[data-fui-focus-visible]': { boxShadow: 'none' },
     ':hover': {
@@ -151,7 +176,8 @@ const useStyles = makeStyles({
     flexShrink: 0,
     display: 'flex',
     alignItems: 'center',
-    gap: '2px',
+    gap: `${DESKTOP_TOOL_GAP}px`,
+    height: '28px',
     WebkitAppRegion: 'no-drag',
     pointerEvents: 'auto',
   },
@@ -384,6 +410,7 @@ function RightMarketPanel({
         className={mergeClasses(
           s.titleBar,
           !electronChrome && s.titleBarWeb,
+          electronChrome && s.titleBarElectron,
           electronChrome && 'opptrix-right-panel-title-bar',
           electronChrome && (electronWin ? s.titleBarElectronWin : s.titleBarElectronMac),
         )}

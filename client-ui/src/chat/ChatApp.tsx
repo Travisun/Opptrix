@@ -56,10 +56,12 @@ import { useWorkspaceSplit } from '../hooks/useWorkspaceSplit'
 import { useSessionSidebarWidth } from '../hooks/useSessionSidebarWidth'
 import { useAppNavigation } from '../hooks/useAppNavigation'
 import DesktopWindowChrome from '../desktop/DesktopWindowChrome'
+import ChromeToolButton from '../desktop/ChromeToolButton'
 import OverlaySidebarEdgeTrigger from '../desktop/OverlaySidebarEdgeTrigger'
 import { useOpptrixDialogAlert } from '../components/opptrix/OpptrixDialogAlert'
 import ChatSessionTitleTools from './ChatSessionTitleTools'
 import SessionRolePersonaDrawer from './SessionRolePersonaDrawer'
+import { BoxRegular } from '@fluentui/react-icons'
 import { sessionToMarkdown } from './sessionExportMarkdown'
 import { saveTextFileWithDialog } from '../platform/saveTextFile'
 import { desktopChromeToolbarReserve } from '../desktop/layout'
@@ -74,7 +76,17 @@ import {
   resolveWindowFocused,
 } from '../platform/chatNotifications'
 import { playChatCueSound } from '../platform/chatSound'
-import { DESKTOP_SIDEBAR_LAYOUT_MS, DESKTOP_SIDEBAR_LAYOUT_EASE, DESKTOP_FRAME_TITLEBAR_HEIGHT, DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_TITLE, SIDEBAR_DEFAULT_WIDTH, WORKSPACE_CHAT_MIN_WIDTH, WORKSPACE_CHAT_RIGHT_MIN_WIDTH } from '../desktop/constants'
+import {
+  DESKTOP_SIDEBAR_LAYOUT_MS,
+  DESKTOP_SIDEBAR_LAYOUT_EASE,
+  DESKTOP_FRAME_TITLEBAR_HEIGHT,
+  DESKTOP_TITLEBAR_HEIGHT,
+  DESKTOP_TOOL_ICON_SIZE,
+  DESKTOP_Z_TITLE,
+  SIDEBAR_DEFAULT_WIDTH,
+  WORKSPACE_CHAT_MIN_WIDTH,
+  WORKSPACE_CHAT_RIGHT_MIN_WIDTH,
+} from '../desktop/constants'
 
 const useStyles = makeStyles({
   root: {
@@ -520,6 +532,11 @@ export default function ChatApp() {
   const [chatScrollEpoch, setChatScrollEpoch] = useState(0)
   const [searchOpen, setSearchOpen] = useState(false)
   const [rolePersonaOpen, setRolePersonaOpen] = useState(false)
+  const [attachmentsDrawerOpen, setAttachmentsDrawerOpen] = useState(false)
+
+  useEffect(() => {
+    setAttachmentsDrawerOpen(false)
+  }, [activeId])
   const [contextHintBanner, setContextHintBanner] = useState('')
 
   const [focusStockCode, setFocusStockCode] = useState<string | null>(null)
@@ -1395,6 +1412,20 @@ export default function ChatApp() {
       onOpenChange={setRolePersonaOpen}
     />
   )
+
+  /** Electron：始终挂到 DesktopWindowChrome titleBarTrailing，与拖拽层同级可点 */
+  const attachmentsChatTitleButton = electronChrome && view === 'chat' && !isStandaloneView && !isMobile ? (
+    <ChromeToolButton
+      label="本对话附件"
+      active={attachmentsDrawerOpen}
+      disabled={!activeId}
+      data-attachments-toggle
+      aria-controls="session-attachments-drawer"
+      onClick={() => setAttachmentsDrawerOpen(open => !open)}
+    >
+      <BoxRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+    </ChromeToolButton>
+  ) : null
   const sidebarSessions = useMemo(() => {
     if (sidebarListTab === 'experts') return sessions.filter(s => !!s.expertId)
     if (sidebarListTab === 'chat') return sessions.filter(s => !s.expertId)
@@ -1508,6 +1539,7 @@ export default function ChatApp() {
         <DesktopWindowChrome
           title={chromeTitle}
           titleSlot={sessionTitleTools}
+          titleBarTrailing={attachmentsChatTitleButton ?? undefined}
           viewMode={chromeViewMode}
           sidebarOpen={isSettings ? settingsSidebarVisible : sidebarVisible}
           sidebarInline={isSettings
@@ -1775,6 +1807,8 @@ export default function ChatApp() {
                   onStreamError={handleStreamError}
                   resolveStreamSnapshot={resolveStreamSnapshot}
                   onClearPendingUserPrompt={clearPendingUserPrompt}
+                  attachmentsDrawerOpen={!isMobile && attachmentsDrawerOpen}
+                  onAttachmentsDrawerOpenChange={!isMobile ? setAttachmentsDrawerOpen : undefined}
                 />
               </div>
             </div>

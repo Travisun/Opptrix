@@ -24,7 +24,10 @@ const layoutTokens = {
   panelWidth: '380px',
 
   chatThreadMaxWidth: '820px',
+  /** Desktop right inset; left uses chatThreadPaddingLeft for the outline rail. */
   chatThreadPaddingX: '15px',
+  /** Desktop left inset — clears the ~22px message outline rail + breathing room. */
+  chatThreadPaddingLeft: '32px',
   chatThreadPaddingXMobile: '15px',
   chatComposerPadding: '12px',
   chatComposerBottomInset: '25px',

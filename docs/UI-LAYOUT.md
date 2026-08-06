@@ -43,8 +43,10 @@
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
 - **窗口标题栏**：macOS 沿用 `hiddenInset` 系统红绿灯；Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
 - **附件 PDF 预览**：右侧面板内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度），目录默认收起，可手动展开跳页
+- **消息目录轨**（桌面）：`bodyShell` 左侧中部比例时间轴（宽约 22px；线程/composer 左侧留白 `chatThreadPaddingLeft`≈32px，避免正文压住轨）；**仅收录助手有正文的消息**（user 不进轨）；节点默认约 5px（深灰 `textSecondary`），hover/focus 当前节点放大至约 11px（`motion.fast`；active/hot 为 `textPrimary` 黑系，不用 accent）；当前进度以轨上 `textPrimary` 填充同步滚动高亮；hover/focus 节点右侧气泡预览开头（「助手」+ 友好时间 + 约 80 字）；点击跳转对应消息；不劫持滚轮。mobile 隐藏
+- **本对话附件抽屉**（桌面）：顶栏文件箱按钮切换开合（无抽屉内标题栏/关闭按钮；Escape 可关）；自右侧滑入（z-index 低于输入区）；底边留白对齐 `threadScrollPadBottom`；已引用附件不可删除。mobile 隐藏
 
-代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`、`client-ui/src/chat/FilePreviewPanel.tsx`、`client-ui/src/chat/PdfPreviewViewer.tsx`。
+代码：`client-ui/src/chat/ChatApp.tsx`、`client-ui/src/chat/ChatView.tsx`、`client-ui/src/chat/MessageOutlineRail.tsx`、`client-ui/src/chat/SessionAttachmentsDrawer.tsx`、`client-ui/src/market/RightMarketPanel.tsx`、`client-ui/src/desktop/WindowFrameTitleBar.tsx`、`client-ui/src/chat/FilePreviewPanel.tsx`、`client-ui/src/chat/PdfPreviewViewer.tsx`。
 
 ### 1.2 新闻中心
 
