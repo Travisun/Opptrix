@@ -13,6 +13,7 @@ import {
   resolveAttachmentFilePath,
   validateAttachmentAgainstCapabilities,
   isAttachmentReferenced,
+  listSessionAttachmentMetas,
   parseNonNegativeIntHeader,
   resolveUploadMime,
 } from '@opptrix/agent'
@@ -41,6 +42,21 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
     'application/octet-stream',
     { parseAs: 'buffer' },
     (_req, body, done) => { done(null, body) },
+  )
+
+  app.get<{ Params: { id: string } }>(
+    '/api/sessions/:id/attachments',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const metas = listSessionAttachmentMetas(req.params.id)
+      const attachments = metas.map(meta => ({
+        ...meta,
+        referenced: isAttachmentReferenced(meta.id, session.turns),
+      }))
+      return { attachments }
+    },
   )
 
   app.post<{ Params: { id: string } }>(

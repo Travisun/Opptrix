@@ -841,6 +841,7 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/role-persona` | `{ rolePersona, expertId }`；旧会话空值会惰性回填并持久化 |
 | PUT | `/api/sessions/:id/role-persona` | body `{ rolePersona }` → `sanitizeExpertPersona`；成功写回并返回 `{ rolePersona, expertId }` |
 | POST | `/api/sessions/:id/attachments` | 上传附件（raw body + `Content-Type` / `X-Attachment-Mime` + `X-Attachment-Name`）；PDF 始终可走本地文本整理（不要求模型原生 `pdf` 能力）；响应 `{ attachment: ChatAttachmentMeta }`（PDF 含 `extract.status=pending`，后台异步整理） |
+| GET | `/api/sessions/:id/attachments` | 列出会话附件元数据；响应 `{ attachments: Array<ChatAttachmentMeta & { referenced: boolean }> }`（`referenced`：是否已被 turns 引用，与 DELETE 409 判定一致；按 `createdAt` 升序） |
 | GET | `/api/sessions/:id/attachments/:attachmentId` | 流式返回附件二进制（`Content-Type` 来自元数据；路径规范化防穿越） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/meta` | 返回最新 `{ attachment: ChatAttachmentMeta }`（含 PDF `extract` 整理状态与可选 `documentId`，供 UI 轮询） |
 | GET | `/api/sessions/:id/attachments/:attachmentId/extract` | 返回 `{ attachment_id, name, kind, extract }` 整理摘要（`extract` 同下表，含 `documentId?`） |

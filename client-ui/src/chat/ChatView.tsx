@@ -28,11 +28,15 @@ import {
   ArrowMaximizeRegular,
   ArrowMinimizeRegular,
 } from './chatIcons'
+import { BoxRegular } from '@fluentui/react-icons'
 import {
   DESKTOP_SIDEBAR_TOOL_ICON_PADDING,
   DESKTOP_SIDEBAR_TOOL_ICON_SIZE,
+  DESKTOP_TOOL_ICON_SIZE,
 } from '../desktop/constants'
 import { pickWelcomeVariant } from './chatWelcomeVariants'
+import MessageOutlineRail from './MessageOutlineRail'
+import SessionAttachmentsDrawer from './SessionAttachmentsDrawer'
 
 const useStyles = makeStyles({
   root: {
@@ -68,12 +72,14 @@ const useStyles = makeStyles({
     width: '100%',
     maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingInline: opptrixTokens.chatThreadPaddingX,
+    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
+    paddingRight: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
   },
   threadColumnMobile: {
     maxWidth: 'none',
-    paddingInline: opptrixTokens.chatThreadPaddingXMobile,
+    paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
+    paddingRight: opptrixTokens.chatThreadPaddingXMobile,
   },
   /** Fill the scroll viewport so empty-state welcome can sit on the Y center. */
   threadColumnEmpty: {
@@ -118,14 +124,16 @@ const useStyles = makeStyles({
     width: '100%',
     maxWidth: opptrixTokens.chatThreadMaxWidth,
     marginInline: 'auto',
-    paddingInline: opptrixTokens.chatThreadPaddingX,
+    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
+    paddingRight: opptrixTokens.chatThreadPaddingX,
     paddingBottom: opptrixTokens.chatComposerBottomInset,
     boxSizing: 'border-box',
     pointerEvents: 'auto',
   },
   composerInnerMobile: {
     maxWidth: 'none',
-    paddingInline: opptrixTokens.chatThreadPaddingXMobile,
+    paddingLeft: opptrixTokens.chatThreadPaddingXMobile,
+    paddingRight: opptrixTokens.chatThreadPaddingXMobile,
     paddingBottom: `max(${opptrixTokens.chatComposerBottomInset}, env(safe-area-inset-bottom))`,
   },
   header: {
@@ -144,7 +152,7 @@ const useStyles = makeStyles({
     height: '100%',
     margin: '0 auto',
     minWidth: 0,
-    paddingLeft: opptrixTokens.chatThreadPaddingX,
+    paddingLeft: opptrixTokens.chatThreadPaddingLeft,
     paddingRight: opptrixTokens.chatThreadPaddingX,
     boxSizing: 'border-box',
     display: 'flex',
@@ -324,6 +332,9 @@ interface ChatViewProps {
   onStreamError?: (message: string) => void
   resolveStreamSnapshot?: (sessionId: string | null) => SessionStreamSnapshot | null
   onClearPendingUserPrompt?: (sessionId: string | null) => void
+  /** 本对话附件抽屉（状态由 ChatApp 持有；Electron 始终在 chrome titleBarTrailing；Web 在 headerActions） */
+  attachmentsDrawerOpen?: boolean
+  onAttachmentsDrawerOpenChange?: (open: boolean) => void
 }
 
 function ChatView({
@@ -345,6 +356,8 @@ function ChatView({
   onStreamError,
   resolveStreamSnapshot,
   onClearPendingUserPrompt,
+  attachmentsDrawerOpen = false,
+  onAttachmentsDrawerOpenChange,
 }: ChatViewProps) {
   const s = useStyles()
   const [liveTrace, setLiveTrace] = useState<ChatLiveTrace | null>(null)
@@ -570,6 +583,19 @@ function ChatView({
     ? (expertSummary ?? '')
     : welcome.subtitle
   const electronChrome = isElectron() && !isMobile
+  const showDesktopChromeExtras = !isMobile
+  const attachmentsToggle = showDesktopChromeExtras && onAttachmentsDrawerOpenChange ? (
+    <ChromeToolButton
+      label="本对话附件"
+      active={attachmentsDrawerOpen}
+      disabled={!sessionId}
+      data-attachments-toggle
+      aria-controls="session-attachments-drawer"
+      onClick={() => onAttachmentsDrawerOpenChange(!attachmentsDrawerOpen)}
+    >
+      <BoxRegular fontSize={DESKTOP_TOOL_ICON_SIZE} />
+    </ChromeToolButton>
+  ) : null
 
   const syncScrollbarHalfOffset = useCallback(() => {
     const el = chatBoxRef.current
@@ -764,8 +790,9 @@ function ChatView({
             <div className={s.headerTitleSlot}>
               {titleSlot ?? <Text className={s.title}>{title || '新对话'}</Text>}
             </div>
-            {(headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
+            {(attachmentsToggle || headerTrailing || (!rightPanelOpen && (onToggleRightPanel || onToggleChatColumn))) && (
               <div className={s.headerActions}>
+                {attachmentsToggle}
                 {headerTrailing}
                 {!rightPanelOpen && onToggleChatColumn && (
                   <ChromeToolButton
@@ -821,6 +848,24 @@ function ChatView({
             onExpandedChange={setToolbarExpanded}
           />
         )}
+
+        {showDesktopChromeExtras ? (
+          <MessageOutlineRail
+            messages={messages}
+            scrollContainerRef={chatBoxRef}
+            onJump={index => scrollToMessageStart(index, 'smooth')}
+          />
+        ) : null}
+
+        {showDesktopChromeExtras && onAttachmentsDrawerOpenChange ? (
+          <SessionAttachmentsDrawer
+            open={attachmentsDrawerOpen}
+            sessionId={sessionId}
+            composerPadBottom={threadScrollPadBottom}
+            onClose={() => onAttachmentsDrawerOpenChange(false)}
+            onOpen={(sid, attachment) => onOpenFilePreview?.(sid, attachment)}
+          />
+        ) : null}
 
         <div
           ref={chatBoxRef}

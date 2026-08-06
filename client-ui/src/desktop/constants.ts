@@ -126,8 +126,8 @@ export const DESKTOP_Z_CHROME_TOOLS = 1300
 /** Clickable session title — above chrome tools hit layer when overlapping */
 export const DESKTOP_Z_TITLE_INTERACTIVE = 1310
 
-/** Reserve for chat title-bar panel toggle buttons (2 × tool + gap) */
-export const DESKTOP_TITLE_BAR_ACTIONS_WIDTH = 60
+/** Reserve for chat title-bar trailing actions (附件 + 最大化 + 展开；3 × tool + gaps) */
+export const DESKTOP_TITLE_BAR_ACTIONS_WIDTH = 86
 
 /** Clip global title-bar drag so news status + action buttons stay clickable */
 export const DESKTOP_NEWS_TITLE_DRAG_CLIP_DARWIN = 240
