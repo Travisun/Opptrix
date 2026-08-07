@@ -217,6 +217,7 @@ export function buildArtifactsPlaybook(): string {
   return [
     '【画布与脑图 — create_canvas / create_mindmap】',
     '- 可视化报告、投研画布 → create_canvas；脑图/思维导图/主题树 → create_mindmap；改内容用 update_*，先读用 read_*',
+    '- 【正文插图 vs 完整报告】消息正文只需插一张图 → Markdown ```chart / ```opptrix-chart JSON 围栏（无需本 pack）；完整机构报告 → create_canvas',
     '- 【报告优先模式】用户已确认要可视化投研报告（或本轮已明确点名报告/画布）后：本任务以 create_canvas 为主交付机构调研报告版式，不要只用长文代替；直至交付完成保持报告优先',
     '- 【默认版式 = 机构调研报告】封面级 H1 + 副题/截至说明 → 开篇导语（介绍文字必写）→ 分章 H2 → 节内 H3 → 正文 Text 与 Chart/Table/Stat 穿插 → 图注/表注/方法说明（说明文字必写）。禁止默认做成「分析仪表盘 / 面板墙」',
     '- 【禁止面板分割章节】不要用 Card / CardHeader 把每一章包成一块面板；章节仅靠 H1/H2/H3 标题层级与 Stack gap 建立层级与留白。Card / Callout 仅用于极少数要点框或风险提示（Callout 全文最多 0–2），Quote 用于摘录/口径；均不得替代标题层级',
@@ -337,6 +338,13 @@ export function buildResearchEpistemicPlaybook(): string {
     '5) 证据类型标签（书写时区分）：价量事实 / 模型评分或技术指标 / 机构观点 / 新闻叙事 / 宏观背景。宏观是背景不是个股因果证明。',
     '6) 不确定性：深度结论用条件句或概率口吻（「在…前提下更支持…」）；给出至少一条否证/风险条件。',
     '7) 合规：不给出具体买卖点、仓位或「必涨/必跌」判断；可做情景对照（上/下/震荡）与数据解读。',
+    '【消息正文插图 — 无需 artifacts】',
+    '- 正文里插一张对比/趋势/占比图：用 Markdown 围栏 ```chart 或 ```opptrix-chart，内容为 JSON（非 TSX），例如：',
+    '  ```chart',
+    '  {"type":"bar","title":"营收对比","data":[{"label":"Q1","value":10.2},{"label":"Q2","value":12.4}]}',
+    '  ```',
+    '- 完整机构调研报告仍用 create_canvas（需 artifacts）；正文插图用围栏即可，二者勿混淆',
+    '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–40 项；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
   ].join('\n')
 }
 

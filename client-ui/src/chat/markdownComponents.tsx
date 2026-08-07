@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react'
 import type { Components } from 'react-markdown'
 import { openExternalUrl } from '../platform/openUrl'
+import ChartBlock from './ChartBlock'
 import MermaidBlock from './MermaidBlock'
 import MarkdownTable from './MarkdownTable'
 
@@ -12,10 +13,14 @@ export function createMarkdownComponents(): Components {
   return {
     code({ className: cn, children, ...props }) {
       const text = extractCodeText(children)
-      const lang = /language-(\w+)/.exec(cn || '')?.[1]?.toLowerCase()
+      const lang = /language-([\w-]+)/.exec(cn || '')?.[1]?.toLowerCase()
 
       if (lang === 'mermaid') {
         return <MermaidBlock code={text} />
+      }
+
+      if (lang === 'chart' || lang === 'opptrix-chart') {
+        return <ChartBlock code={text} />
       }
 
       const isBlock = cn?.includes('language-') || text.includes('\n')

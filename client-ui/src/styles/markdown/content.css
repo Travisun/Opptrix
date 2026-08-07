@@ -293,6 +293,35 @@
   height: auto;
 }
 
+.opptrix-md-chart {
+  margin: var(--opptrix-md-block-gap) auto;
+  max-width: 380px;
+  width: 100%;
+  text-align: center;
+  overflow-x: auto;
+}
+
+.opptrix-md-chart--error {
+  max-width: 320px;
+  padding: 10px 12px;
+  border-radius: var(--opptrix-md-radius-mermaid);
+  border: 1px solid var(--opptrix-md-error-border);
+  background: var(--opptrix-md-mermaid-bg);
+  text-align: left;
+}
+
+.opptrix-md-chart-err {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--opptrix-md-error);
+}
+
+.opptrix-md-chart-err-reason {
+  font-weight: 400;
+  opacity: 0.85;
+}
+
 .opptrix-md-table-wrap {
   overflow-x: auto;
   margin: var(--opptrix-md-block-gap) 0;

@@ -1,14 +1,15 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { makeStyles, mergeClasses, Spinner } from '@fluentui/react-components'
 import { OpenRegular } from '@fluentui/react-icons'
+import MindElixir, { type MindElixirInstance } from 'mind-elixir'
+import 'mind-elixir/style.css'
 import { fetchAttachmentRawText } from '../api/client'
 import type { ChatAttachmentMeta } from '../types/chat'
+import { ghostInteractive } from '../theme/mixins'
+import { useTheme } from '../theme/ThemeContext'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
-import {
-  buildTree,
-  parseMindmapJson,
-  type MindmapTreeNode,
-} from './mindmapDocument'
+import { parseMindmapJson, type MindmapDoc } from './mindmapDocument'
+import { mindmapDocToElixir } from './mindmapElixirBridge'
 
 export interface MindmapInlineCardProps {
   sessionId: string
@@ -18,48 +19,27 @@ export interface MindmapInlineCardProps {
 
 type LoadState =
   | { phase: 'loading' }
-  | { phase: 'error'; message: string }
-  | { phase: 'ready'; root: MindmapTreeNode; totalNodes: number }
+  | { phase: 'error' }
+  | { phase: 'ready'; doc: MindmapDoc }
 
-const MAX_DEPTH = 2
-const MAX_VISIBLE = 12
-
-type PreviewRow = { id: string; label: string; depth: number }
-
-function collectPreviewRows(
-  root: MindmapTreeNode,
-  maxDepth: number,
-  maxVisible: number,
-): { rows: PreviewRow[]; shown: number } {
-  const rows: PreviewRow[] = []
-  const walk = (node: MindmapTreeNode, depth: number) => {
-    if (rows.length >= maxVisible) return
-    rows.push({ id: node.id, label: node.label, depth })
-    if (depth >= maxDepth) return
-    for (const child of node.children) {
-      if (rows.length >= maxVisible) return
-      walk(child, depth + 1)
-    }
-  }
-  walk(root, 0)
-  return { rows, shown: rows.length }
-}
+const FIT_PADDING = 0.92
+const RESIZE_FIT_DEBOUNCE_MS = 150
 
 const useStyles = makeStyles({
   card: {
+    ...ghostInteractive,
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
     width: '100%',
     maxWidth: '420px',
     minHeight: '120px',
-    maxHeight: '200px',
+    maxHeight: '240px',
     boxSizing: 'border-box',
     padding: '10px 12px',
     borderRadius: opptrixTokens.radiusMd,
     border: `1px solid ${opptrixCssVars.border}`,
     backgroundColor: opptrixCssVars.canvasAlt,
-    cursor: 'pointer',
     textAlign: 'left',
     color: opptrixCssVars.textPrimary,
     transitionProperty: 'border-color, background-color',
@@ -67,10 +47,6 @@ const useStyles = makeStyles({
     transitionTimingFunction: 'ease',
     ':hover': {
       backgroundColor: opptrixCssVars.canvas,
-    },
-    ':focus-visible': {
-      outline: `2px solid rgba(0, 122, 255, 0.35)`,
-      outlineOffset: '2px',
     },
   },
   header: {
@@ -104,7 +80,6 @@ const useStyles = makeStyles({
     overflow: 'hidden',
     display: 'flex',
     flexDirection: 'column',
-    gap: '2px',
   },
   center: {
     flex: 1,
@@ -114,25 +89,31 @@ const useStyles = makeStyles({
     color: opptrixCssVars.textTertiary,
     fontSize: 'var(--opptrix-font-sm)',
   },
-  row: {
-    display: 'block',
+  previewClip: {
+    flex: 1,
+    minHeight: 0,
     overflow: 'hidden',
-    textOverflow: 'ellipsis',
-    whiteSpace: 'nowrap',
-    fontSize: 'var(--opptrix-font-sm)',
-    lineHeight: 1.45,
-    color: opptrixCssVars.textSecondary,
+    borderRadius: '6px',
+    backgroundColor: opptrixCssVars.surface,
+    pointerEvents: 'none',
   },
-  rowRoot: {
-    fontWeight: 600,
-    color: opptrixCssVars.textPrimary,
-  },
-  more: {
-    marginTop: '2px',
-    fontSize: 'var(--opptrix-font-sm)',
-    color: opptrixCssVars.textTertiary,
+  mapHost: {
+    width: '100%',
+    height: '100%',
+    minHeight: '100px',
+    // Hide leftover mind-elixir chrome if any plugin injects it.
+    '& .mind-elixir-toolbar': {
+      display: 'none',
+    },
   },
 })
+
+function fitMindScale(mind: MindElixirInstance): void {
+  mind.scaleFit()
+  const fitted = Math.max(0.1, mind.scaleVal * FIT_PADDING)
+  mind.scale(fitted)
+  mind.toCenter()
+}
 
 export default function MindmapInlineCard({
   sessionId,
@@ -140,49 +121,111 @@ export default function MindmapInlineCard({
   onOpen,
 }: MindmapInlineCardProps) {
   const s = useStyles()
+  const { resolvedScheme } = useTheme()
+  const mapElRef = useRef<HTMLDivElement>(null)
+  const mindRef = useRef<MindElixirInstance | null>(null)
+  const seedDocRef = useRef<MindmapDoc | null>(null)
+  const resizeFitTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [state, setState] = useState<LoadState>({ phase: 'loading' })
 
   useEffect(() => {
     let cancelled = false
     setState({ phase: 'loading' })
+    seedDocRef.current = null
     void (async () => {
       const result = await fetchAttachmentRawText(sessionId, attachment.id)
       if (cancelled) return
       if (!result.ok) {
-        setState({ phase: 'error', message: '暂时读不出这份脑图' })
+        setState({ phase: 'error' })
         return
       }
       const parsed = parseMindmapJson(result.text)
       if (cancelled) return
       if ('error' in parsed) {
-        setState({ phase: 'error', message: parsed.error })
+        setState({ phase: 'error' })
         return
       }
-      const root = buildTree(parsed)
-      if (!root) {
-        setState({ phase: 'error', message: '暂时无法展示脑图结构' })
-        return
-      }
-      setState({ phase: 'ready', root, totalNodes: parsed.nodes.length })
+      seedDocRef.current = parsed
+      setState({ phase: 'ready', doc: parsed })
     })()
     return () => {
       cancelled = true
     }
   }, [sessionId, attachment.id])
 
-  const preview =
-    state.phase === 'ready'
-      ? collectPreviewRows(state.root, MAX_DEPTH, MAX_VISIBLE)
-      : null
-  const remaining =
-    state.phase === 'ready' && preview
-      ? Math.max(0, state.totalNodes - preview.shown)
-      : 0
+  useEffect(() => {
+    if (state.phase !== 'ready') return
+    const el = mapElRef.current
+    const seed = seedDocRef.current
+    if (!el || !seed) return
+
+    const theme =
+      resolvedScheme === 'dark' ? MindElixir.DARK_THEME : MindElixir.THEME
+    const mind = new MindElixir({
+      el,
+      direction: MindElixir.SIDE,
+      editable: false,
+      toolBar: false,
+      keypress: false,
+      allowUndo: false,
+      locale: 'zh_CN',
+      theme,
+      alignment: 'nodes',
+    })
+    const initErr = mind.init(mindmapDocToElixir(seed))
+    if (initErr) {
+      setState({ phase: 'error' })
+      mind.destroy()
+      return undefined
+    }
+    mindRef.current = mind
+
+    let cancelled = false
+    requestAnimationFrame(() => {
+      requestAnimationFrame(() => {
+        if (cancelled || mindRef.current !== mind) return
+        fitMindScale(mind)
+      })
+    })
+
+    const onResize = () => {
+      if (resizeFitTimer.current) clearTimeout(resizeFitTimer.current)
+      resizeFitTimer.current = setTimeout(() => {
+        resizeFitTimer.current = null
+        if (cancelled || mindRef.current !== mind) return
+        fitMindScale(mind)
+      }, RESIZE_FIT_DEBOUNCE_MS)
+    }
+    const ro = new ResizeObserver(onResize)
+    ro.observe(el)
+
+    return () => {
+      cancelled = true
+      if (resizeFitTimer.current) {
+        clearTimeout(resizeFitTimer.current)
+        resizeFitTimer.current = null
+      }
+      ro.disconnect()
+      mind.destroy()
+      mindRef.current = null
+    }
+    // Init once per attachment/load; theme applied in a separate effect.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- seed via seedDocRef
+  }, [state.phase, sessionId, attachment.id])
+
+  useEffect(() => {
+    const mind = mindRef.current
+    if (!mind) return
+    mind.changeTheme(
+      resolvedScheme === 'dark' ? MindElixir.DARK_THEME : MindElixir.THEME,
+    )
+  }, [resolvedScheme])
 
   return (
     <button
       type="button"
-      className={s.card}
+      className={mergeClasses(s.card)}
+      style={{ cursor: 'pointer' }}
       onClick={onOpen}
       title={`打开 ${attachment.name}`}
       aria-label={`打开脑图 ${attachment.name}`}
@@ -200,22 +243,15 @@ export default function MindmapInlineCard({
             <Spinner size="tiny" label="正在加载脑图…" />
           </div>
         ) : state.phase === 'error' ? (
-          <div className={s.center}>{state.message}</div>
-        ) : preview ? (
-          <>
-            {preview.rows.map((row) => (
-              <span
-                key={row.id}
-                className={mergeClasses(s.row, row.depth === 0 && s.rowRoot)}
-                style={{ paddingLeft: `${row.depth * 12}px` }}
-              >
-                {row.label}
-              </span>
-            ))}
-            {remaining > 0 ? (
-              <span className={s.more}>还有 {remaining} 个节点</span>
-            ) : null}
-          </>
+          <div className={s.center}>脑图暂时无法预览</div>
+        ) : state.phase === 'ready' ? (
+          <div className={s.previewClip}>
+            <div
+              ref={mapElRef}
+              className={s.mapHost}
+              data-opptrix-mindmap-inline-preview=""
+            />
+          </div>
         ) : null}
       </div>
     </button>

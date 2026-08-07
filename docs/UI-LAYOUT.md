@@ -42,7 +42,7 @@
 - **浮层模式**：窗口宽度 &lt; 当前侧栏宽度 × 2.5 时侧栏浮于内容之上；≥ × 3 时窗口放大可自动展开内联侧栏
 - **右侧顶栏**：关注 / 组合 / 详情为文字 Tab；进入详情时显示「详情」Tab
 - **窗口标题栏**：macOS 沿用 `hiddenInset` 系统红绿灯；Windows / Linux 在窗口最顶部额外一条与左侧栏同色毛玻璃的 frame titlebar：左侧 App 图标 + 模拟原生菜单（文件 / 编辑 / 视图 / 窗口 / 帮助），右侧为 Win11 风格 caption 按钮（高满条、宽 46px；关闭 hover 红底白标，其余灰底深色标）。左侧栏分割线不向上贯穿该 frame titlebar。
-- **附件预览**（右侧文件预览面板）：PDF 内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度，目录默认收起可展开跳页）；**画布**（`kind=canvas`）由 `CanvasPreviewHost` 以 `@opptrix/canvas` curated 组件（流体 `Surface` + `Stack` / `Stat` / `Table` 等）渲染 Agent TSX；**脑图**（`kind=mindmap`）由 `MindmapPreviewHost` 以开源 **mind-elixir** 编辑器展示与编辑（存盘仍为扁平 `{ version, rootId, nodes }`；消息内 `MindmapInlineCard` 仍用 `buildTree` 只读缩略）；消息内画布/脑图均为缩略卡，点击打开右侧面板（桌面）或弹层（移动）；均可从消息附件芯片/卡片或文件箱打开
+- **附件预览**（右侧文件预览面板）：PDF 内嵌紧凑阅读器（翻页 / 缩放 / 适合宽度，目录默认收起可展开跳页）；**画布**（`kind=canvas`）由 `CanvasPreviewHost` 以 `@opptrix/canvas` curated 组件（流体 `Surface` + `Stack` / `Stat` / `Table` 等）渲染 Agent TSX；**脑图**（`kind=mindmap`）由 `MindmapPreviewHost` 以开源 **mind-elixir** 编辑器展示与编辑（存盘仍为扁平 `{ version, rootId, nodes }`；消息内脑图为 mind-elixir 只读缩略）；消息内画布/脑图均为缩略卡，点击打开右侧面板（桌面）或弹层（移动）；均可从消息附件芯片/卡片或文件箱打开
 - **消息目录轨**（桌面）：`bodyShell` 左侧中部比例时间轴（宽约 22px；线程/composer 左侧留白 `chatThreadPaddingLeft`≈32px，避免正文压住轨）；**仅收录助手有正文的消息**（user 不进轨）；节点默认约 5px（深灰 `textSecondary`），hover/focus 当前节点放大至约 11px（`motion.fast`；active/hot 为 `textPrimary` 黑系，不用 accent）；当前进度以轨上 `textPrimary` 填充同步滚动高亮；hover/focus 节点右侧气泡预览开头（「助手」+ 友好时间 + 约 80 字）；点击跳转对应消息；不劫持滚轮。mobile 隐藏
 - **本对话附件抽屉 / 文件箱**（桌面）：顶栏文件箱按钮切换开合（无抽屉内标题栏/关闭按钮；Escape 可关）；自右侧滑入（z-index 低于输入区）；底边留白对齐 `threadScrollPadBottom`；已引用附件不可删除。种类文案含：图片 / PDF / 文档 / 视频 / 音频 / **画布** / **脑图**（与 `mediaCapabilities` 标签一致）。mobile 隐藏
 
