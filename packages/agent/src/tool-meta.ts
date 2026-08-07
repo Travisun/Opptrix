@@ -500,6 +500,43 @@ export const TOOL_META: Record<string, ToolMeta> = {
       '按 document_id（跨库命中）或 attachment_id（本会话）+ 页范围/chunk_id 精读片段；search_library 多跳后的第二步。',
     compliance: '只读；控制 max_chars；引用时标注文档名与页码。',
   },
+  create_canvas: {
+    miningEligible: false,
+    usageGuide:
+      '投研/数据分析先 ask 是否出报告；同意后优先本工具；图表勿全宽拉满。用户要可预览的可视化报告/投研画布时创建；默认机构调研报告版式（H1→导语→H2 分章→正文与 Chart/Table/Stat 穿插）；定量对比/变化/构成/强弱矩阵优先 Chart（bar/line/pie/heatmap）+ 主题配色，Table/Stat 作明细与 KPI；Chart 默认居中、max-width bar/line~320 pie~230 heatmap~380，勿写 width:100% / 超大 height；图注用 Chart caption（与图居中对齐），勿全宽左对齐旁白；Chart 已含轴/网格/数值标注，勿手写假坐标；避免 Divider；章节靠标题与 Stack；仅用户明确要求时例外；勿用 Card 墙做面板分割；须含介绍与说明文字；仅用户明确要面板/仪表盘时才用密面板布局；语义配色：文字层级用 Text tone（primary/secondary/tertiary）；涨跌默认红涨绿跌（danger/success）；tips/风险用 Callout（tone+可选 variant）；原文/口径摘录用 Quote（cite 来源），勿用 Callout 冒充引用；行内 Pill/Code/Link；可见文案禁止 emoji；返回 attachment 供消息内预览。',
+    compliance:
+      'title+source 必填；source 为 TSX：仅可 import react 与 @opptrix/canvas 公开导出；禁止其它 npm（含 echarts）；≤200000 字符；mode 默认 fluid；默认报告型（禁 Card 墙分章；避免 Divider，仅用户明确要求时例外）；定量对比/变化/强弱矩阵优先 Chart type=bar|line|pie|heatmap（heatmap data 含 row/col/value）；Chart 勿拉满 Surface（默认居中；bar/line~320 pie~230 heatmap~380）；图注用 Chart caption 与图居中；禁止渐变/大阴影；任意可见文案（标题/Stat/表格/Callout/Quote/Pill 等）禁止 emoji/表情符号/装饰性符号图标，用 Pill/Text tone 表达状态；语义配色：正文/副题/脚注分层 Text tone；涨跌红涨绿跌用 danger/success；警示 Callout（最多 0–2）、摘录 Quote；颜色用 useCanvasTheme（含 chart1–5 / success/danger；heatmap 主题连续色阶）或组件默认，勿硬编码花哨 hex；勿用 workspace_write 代替。',
+  },
+  update_canvas: {
+    miningEligible: false,
+    usageGuide:
+      '修改已创建画布；仍默认报告型版式（勿改成 Card 墙面板分割；避免 Divider；章节靠标题与 Stack；仅用户明确要求时例外；定量对比/变化/强弱矩阵优先 Chart bar/line/pie/heatmap + 主题配色；保留介绍与说明文字；语义配色同 create_canvas：Text 层级 tone、涨跌红涨绿跌 danger/success、警示 Callout、摘录 Quote）；仅 react/@opptrix/canvas；可见文案禁止 emoji；attachment_id 来自 create_canvas / read_canvas。',
+    compliance:
+      'attachment_id+source 必填；仅更新本会话 canvas 附件；source 约束同 create_canvas（禁其它 npm；默认报告型；定量对比优先 Chart bar|line|pie|heatmap；语义配色：Text tone 层级、涨跌 danger/success、警示 Callout、摘录 Quote；禁止 emoji）。',
+  },
+  read_canvas: {
+    miningEligible: false,
+    usageGuide: '读取已有画布源码与元数据后再 update_canvas。',
+    compliance: '只读；attachment_id 必填。',
+  },
+  create_mindmap: {
+    miningEligible: false,
+    usageGuide:
+      '用户要脑图、思维导图、结构化主题树时创建；nodes 含 id/parentId/label；节点 label/note 禁止 emoji；返回 attachment 供预览。',
+    compliance:
+      'title+rootId+nodes 必填；rootId 须在 nodes 中；节点 label/note 禁止 emoji/表情符号/装饰性符号图标；勿用 workspace_write 代替。',
+  },
+  update_mindmap: {
+    miningEligible: false,
+    usageGuide: '更新已有脑图的完整节点树；节点 label/note 禁止 emoji。',
+    compliance:
+      'attachment_id+rootId+nodes 必填；仅更新本会话 mindmap 附件；节点 label/note 禁止 emoji/表情符号/装饰性符号图标。',
+  },
+  read_mindmap: {
+    miningEligible: false,
+    usageGuide: '读取已有脑图树后再 update_mindmap。',
+    compliance: '只读；attachment_id 必填。',
+  },
   ask_user: {
     miningEligible: false,
     usageGuide:

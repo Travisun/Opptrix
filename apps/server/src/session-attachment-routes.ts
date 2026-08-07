@@ -16,6 +16,8 @@ import {
   listSessionAttachmentMetas,
   parseNonNegativeIntHeader,
   resolveUploadMime,
+  updateCanvasAttachment,
+  updateMindmapAttachment,
 } from '@opptrix/agent'
 import { decodeTextBuffer, isPlainTextDocument } from '@opptrix/doc-library'
 
@@ -41,6 +43,21 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
   app.addContentTypeParser(
     'application/octet-stream',
     { parseAs: 'buffer' },
+    (_req, body, done) => { done(null, body) },
+  )
+  app.addContentTypeParser(
+    'text/plain',
+    { parseAs: 'string' },
+    (_req, body, done) => { done(null, body) },
+  )
+  app.addContentTypeParser(
+    'application/vnd.opptrix.canvas+tsx',
+    { parseAs: 'string' },
+    (_req, body, done) => { done(null, body) },
+  )
+  app.addContentTypeParser(
+    'application/vnd.opptrix.mindmap+json',
+    { parseAs: 'string' },
     (_req, body, done) => { done(null, body) },
   )
 
@@ -154,9 +171,88 @@ export function registerSessionAttachmentRoutes(app: FastifyInstance, agent: Age
       const filePath = resolveAttachmentFilePath(req.params.id, req.params.attachmentId)
       if (!filePath) return reply.code(404).send({ error: 'attachment not found' })
 
-      reply.header('Content-Type', meta.mime)
+      // canvas/mindmap 等使用 meta.mime（如 application/vnd.opptrix.*）
+      reply.header('Content-Type', meta.mime || 'application/octet-stream')
       reply.header('Content-Disposition', `inline; filename="${encodeURIComponent(meta.name)}"`)
       return reply.send(fs.createReadStream(filePath))
+    },
+  )
+
+  app.put<{ Params: { id: string; attachmentId: string } }>(
+    '/api/sessions/:id/attachments/:attachmentId',
+    async (req, reply) => {
+      const session = agent.getSession(req.params.id)
+      if (!session) return reply.code(404).send({ error: 'session not found' })
+
+      const meta = readAttachmentMeta(req.params.id, req.params.attachmentId)
+      if (!meta) return reply.code(404).send({ error: 'attachment not found' })
+
+      if (meta.kind !== 'canvas' && meta.kind !== 'mindmap') {
+        return reply.code(400).send({ error: '仅支持更新画布或脑图附件' })
+      }
+
+      try {
+        if (meta.kind === 'canvas') {
+          let source = ''
+          if (typeof req.body === 'string') {
+            source = req.body
+          } else if (Buffer.isBuffer(req.body)) {
+            source = req.body.toString('utf8')
+          } else if (req.body && typeof req.body === 'object' && 'source' in (req.body as object)) {
+            source = String((req.body as { source?: unknown }).source ?? '')
+          } else {
+            return reply.code(400).send({ error: '请提供画布源码（text/plain 或 JSON.source）' })
+          }
+          if (!source.trim()) return reply.code(400).send({ error: '画布源码不能为空' })
+          const updated = updateCanvasAttachment({
+            sessionId: req.params.id,
+            attachmentId: req.params.attachmentId,
+            source,
+          })
+          if (!updated) return reply.code(404).send({ error: 'attachment not found' })
+          return { attachment: updated }
+        }
+
+        // mindmap
+        let tree: unknown
+        if (typeof req.body === 'string') {
+          try {
+            tree = JSON.parse(req.body) as unknown
+          } catch {
+            return reply.code(400).send({ error: '脑图内容须为有效 JSON' })
+          }
+        } else if (Buffer.isBuffer(req.body)) {
+          try {
+            tree = JSON.parse(req.body.toString('utf8')) as unknown
+          } catch {
+            return reply.code(400).send({ error: '脑图内容须为有效 JSON' })
+          }
+        } else if (req.body && typeof req.body === 'object') {
+          const body = req.body as Record<string, unknown>
+          tree = body.tree ?? body
+        } else {
+          return reply.code(400).send({ error: '请提供脑图 JSON' })
+        }
+
+        const rootIdFromTree = (() => {
+          if (!tree || typeof tree !== 'object') return meta.mindmap?.rootId
+          const row = tree as Record<string, unknown>
+          const rid = row.rootId
+          return typeof rid === 'string' && rid.trim() ? rid.trim() : meta.mindmap?.rootId
+        })()
+
+        const updated = updateMindmapAttachment({
+          sessionId: req.params.id,
+          attachmentId: req.params.attachmentId,
+          tree,
+          mindmap: rootIdFromTree ? { rootId: rootIdFromTree } : meta.mindmap,
+        })
+        if (!updated) return reply.code(404).send({ error: 'attachment not found' })
+        return { attachment: updated }
+      } catch (e) {
+        const message = e instanceof Error ? e.message : '更新失败'
+        return reply.code(400).send({ error: message })
+      }
     },
   )
 

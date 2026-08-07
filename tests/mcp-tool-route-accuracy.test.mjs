@@ -110,6 +110,12 @@ const PRIMARY_CASES = [
   { message: '帮我创建一个每天收盘后分析大盘的计划任务', expectPrimary: 'create_scheduled_job', intent: 'schedule_create' },
   { message: '列出我的计划任务', expectPrimary: 'list_scheduled_jobs', intent: 'schedule_manage' },
   { message: '立刻执行一次计划任务', expectPrimary: 'run_scheduled_job_now', intent: 'schedule_run_now' },
+  { message: '做一份可视化报告', expectPrimary: 'create_canvas', intent: 'create_canvas' },
+  { message: '做一份画布', expectPrimary: 'create_canvas', intent: 'create_canvas' },
+  { message: '帮我生成可视化报告版面', expectPrimary: 'create_canvas', intent: 'create_canvas' },
+  { message: '画个脑图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
+  { message: '画个思维导图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
+  { message: '帮我做一份思维导图', expectPrimary: 'create_mindmap', intent: 'create_mindmap' },
 ]
 
 test('D1 primary tool precision across intent goldens', () => {
@@ -167,6 +173,16 @@ test('D3 confusion pairs — prefer wins over avoid in route plan', () => {
       message: '哪些研报提到茅台',
       prefer: 'search_library',
       avoid: 'search_document',
+    },
+    {
+      message: '做一份可视化报告',
+      prefer: 'create_canvas',
+      avoid: 'create_mindmap',
+    },
+    {
+      message: '画个脑图',
+      prefer: 'create_mindmap',
+      avoid: 'create_canvas',
     },
   ]
 
@@ -226,6 +242,7 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
   assert.ok(!slim.includes('【资讯调阅'))
   assert.ok(!slim.includes('【数据源扩展'))
   assert.ok(!slim.includes('【基本面事实表'))
+  assert.ok(!slim.includes('【画布与脑图'))
 
   const withNews = buildAgentSystemRules({
     activePacks: ['core', 'meta', 'news'],
@@ -238,6 +255,17 @@ test('D5 conditional playbooks — unloaded packs omitted from system rules', ()
     routePlaybook: '【本轮工具选型卡】\n- fund',
   })
   assert.match(withFund, /【基本面事实表/)
+
+  const withArtifacts = buildAgentSystemRules({
+    activePacks: ['core', 'meta', 'artifacts'],
+    routePlaybook: '【本轮工具选型卡】\n- artifacts',
+  })
+  assert.match(withArtifacts, /【画布与脑图/)
+  assert.match(withArtifacts, /@opptrix\/canvas/)
+  assert.match(withArtifacts, /Surface/)
+  assert.match(withArtifacts, /useCanvasTheme/)
+  assert.match(withArtifacts, /Stack/)
+  assert.match(withArtifacts, /禁止.*emoji/)
 })
 
 test('D6 over-seed suppression on greeting', () => {

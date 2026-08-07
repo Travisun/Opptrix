@@ -1701,6 +1701,44 @@ export async function fetchAttachmentRawText(
   }
 }
 
+/** 写回脑图附件内容（后写覆盖） */
+export async function putSessionMindmapAttachment(
+  sessionId: string,
+  attachmentId: string,
+  tree: { version: number; rootId: string; nodes: unknown[] },
+): Promise<ChatAttachmentMeta> {
+  const resp = await fetchWithTimeout(sessionAttachmentUrl(sessionId, attachmentId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/vnd.opptrix.mindmap+json' },
+    body: JSON.stringify(tree),
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `保存失败 (${resp.status})`)
+  }
+  const data = await resp.json() as { attachment: ChatAttachmentMeta }
+  return data.attachment
+}
+
+/** 写回画布附件源码（后写覆盖） */
+export async function putSessionCanvasAttachment(
+  sessionId: string,
+  attachmentId: string,
+  source: string,
+): Promise<ChatAttachmentMeta> {
+  const resp = await fetchWithTimeout(sessionAttachmentUrl(sessionId, attachmentId), {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/vnd.opptrix.canvas+tsx' },
+    body: source,
+  })
+  if (!resp.ok) {
+    const err = await resp.json().catch(() => ({})) as { error?: string }
+    throw new Error(err.error || `保存失败 (${resp.status})`)
+  }
+  const data = await resp.json() as { attachment: ChatAttachmentMeta }
+  return data.attachment
+}
+
 export async function deleteSessionAttachment(sessionId: string, attachmentId: string) {
   return jsonFetch<{ ok: boolean }>(`/sessions/${sessionId}/attachments/${attachmentId}`, {
     method: 'DELETE',

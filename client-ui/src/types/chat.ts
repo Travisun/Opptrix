@@ -84,7 +84,25 @@ export interface AttachmentLimits {
   maxTotalBytes: number
 }
 
-export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio'
+export type MediaKind = 'text' | 'image' | 'pdf' | 'document' | 'video' | 'audio' | 'canvas' | 'mindmap'
+
+/** Optional print dimensions; ignored for fluid mode. Legacy preset may appear on old attachments. */
+export type CanvasPageSpec =
+  | { preset: string }
+  | { widthMm: number; heightMm: number }
+  | { widthPx: number; heightPx: number }
+
+export interface CanvasAttachmentMeta {
+  /** Default `fluid` (responsive Surface). `print` is optional / legacy. */
+  mode: 'fluid' | 'print'
+  /** Optional; ignored for fluid. May be present on legacy attachments. */
+  page?: CanvasPageSpec
+  pageCount?: number
+}
+
+export interface MindmapAttachmentMeta {
+  rootId: string
+}
 
 export type AttachmentExtractStatus = 'pending' | 'ready' | 'failed'
 
@@ -120,6 +138,8 @@ export interface ChatAttachmentMeta {
   height?: number
   duration?: number
   extract?: AttachmentExtractMeta
+  canvas?: CanvasAttachmentMeta
+  mindmap?: MindmapAttachmentMeta
   /** 前端乐观插入标记；服务端不会返回此字段 */
   optimistic?: boolean
   /** 列表 API：是否已被会话 turns 引用（可选，仅 GET list 返回） */

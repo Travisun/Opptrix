@@ -212,11 +212,79 @@ export function buildLocalDataCatalogIndexPrompt(): string {
   ].join('\n')
 }
 
+/** 画布 / 脑图制品 — artifacts pack 已加载时注入 */
+export function buildArtifactsPlaybook(): string {
+  return [
+    '【画布与脑图 — create_canvas / create_mindmap】',
+    '- 可视化报告、投研画布 → create_canvas；脑图/思维导图/主题树 → create_mindmap；改内容用 update_*，先读用 read_*',
+    '- 【正文插图 vs 完整报告】消息正文只需插一张图 → Markdown ```chart / ```opptrix-chart JSON 围栏（无需本 pack）；完整机构报告 → create_canvas',
+    '- 【报告优先模式】用户已确认要可视化投研报告（或本轮已明确点名报告/画布）后：本任务以 create_canvas 为主交付机构调研报告版式，不要只用长文代替；直至交付完成保持报告优先',
+    '- 【默认版式 = 机构调研报告】封面级 H1 + 副题/截至说明 → 开篇导语（介绍文字必写）→ 分章 H2 → 节内 H3 → 正文 Text 与 Chart/Table/Stat 穿插 → 图注/表注/方法说明（说明文字必写）。禁止默认做成「分析仪表盘 / 面板墙」',
+    '- 【禁止面板分割章节】不要用 Card / CardHeader 把每一章包成一块面板；章节仅靠 H1/H2/H3 标题层级与 Stack gap 建立层级与留白。Card / Callout 仅用于极少数要点框或风险提示（Callout 全文最多 0–2），Quote 用于摘录/口径；均不得替代标题层级',
+    '- 【避免分割线】报告排版不要使用 Divider（也不要用手写 <hr> / 边框冒充分割线）；章节与留白只靠 H1/H2/H3 + Stack gap。唯一例外：用户明确要求加分割线时才可用 Divider',
+    '- 【不得省略文字】每个主要章节至少一段介绍/解读 Text；图表前后要有引导句或结论句；Stat/Table/Chart 旁须有说明（caption/旁注/Callout 二选一）；禁止「只有数字块、没有叙述」',
+    '- 【标题层级】H1 全文唯一报告标题；H2 章；H3 节；禁止用 Card title 充当章节标题；禁止跳级',
+    '- 【图表优先】有可对比、变化、范围/区间、构成占比的定量数据时，优先用 Chart 可视化，不要只堆 Table/Stat；Table 作明细补充，Stat 作关键 KPI 摘要；图前后仍须有引导/结论 Text（与「不得省略文字」一致）',
+    '- 【图表尺寸】Chart 不要拉满 Surface 全宽；独立行 Chart 由组件默认居中（margin-inline: auto）；依赖默认 max-width（bar/line ~320、pie ~220–240、heatmap ~360–400）；勿写 style={{ width: \'100%\' }} 覆盖宽度破坏居中，勿写超大 height；默认 height 约 140–180；饼图尤忌撑满。Chart 已含专业坐标轴/网格/数值标注，勿再手写假坐标或假轴。最短示例：Chart 不设 width，依赖默认尺寸与居中',
+    '- 【图注须与图居中对齐】图注优先 Chart caption="…" 或 caption={…}（渲染在 plot/legend 下方，与图同宽居中）；勿把图注做成全宽左对齐旁白 Text。表注：全宽表可左对齐或 Text align="center"；图注硬性居中',
+    '- 【图种选用】Chart 支持 type="bar" | "line" | "pie" | "heatmap"：趋势/变化/时间序列 → line；对比/分布/直方类离散比较 → bar（可称柱状/直方，实现用 bar）；构成/占比 → pie；强弱矩阵 / 多维截面强度 → heatmap，data 用 { label, row, col, value }（可选 color 覆盖单格）；次选可用 Table + rowTone / 单元格语义色背景（Table 无独立 cellBg API）；禁止乱编花哨硬编码色',
+    '- 【图表配色】默认不传 color，走主题 chart1…chart5（Chart 自动解析）；heatmap 用主题连续色阶（低 fillSubtle/accentSoft → 高 chart1/accent）；涨跌方向见【语义配色】（用 tokens.danger/success 写入 data[].color）；多类别用主题色轮转；禁止彩虹乱配与高饱和硬编码；深浅模式跟随 Surface / data-theme',
+    '- 【图文/图表结合】优先 Stack 纵向叙事；关键指标可用 Row/Grid 放 Stat，但前后要有文字；Chart 与 Table 嵌入叙事流，不要单独堆一排无说明的组件',
+    '- 【例外】仅当用户明确要求「面板 / 仪表盘 / dashboard / 看板 / 卡片墙」等时，才可采用更密的面板型布局；否则一律报告型',
+    '- 【语义配色】',
+    '  · 文字层级：主要结论/正文 → Text 默认或 tone="primary"；副题/截至/图注表注/次要引导 → tone="secondary"（常配 size="small"）；脚注/口径/次要提示 → tone="tertiary" 或 muted。禁止全文同一灰；禁止滥用 accent 当正文色',
+    '  · 状态/注意/安全（非价格方向）：改善/安全/积极 → success（Stat/Pill/Callout）；需关注/谨慎 → warning；风险/警告/恶化 → danger；中性补充 → info。tips/风险/注意用 Callout（tone + 可选 variant soft|outline|bar）；全文最多 0–2 个，不替代标题',
+    '  · 原文摘录/研报摘句/数据口径引用 → Quote（cite 写来源，如「出处 · 年报」）；勿用 Callout 冒充引用',
+    '  · 行内标签 → Pill；行内代码 → Code；外链 → Link',
+    '  · 涨跌色（默认 A 股/港股：红涨绿跌）：上涨/正涨跌幅/净流入为正 → danger（红）：Stat/Pill tone="danger"，Chart data[].color 取 useCanvasTheme().tokens.danger；下跌/负涨跌幅/净流出 → success（绿）；平盘/无方向 → 默认正文色。仅当用户明确要求「国际惯例绿涨红跌」时才对调',
+    '  · 价格方向色 ≠ 好坏叙事：叙事好坏仍用 success/warning/danger Callout/Stat，可与涨跌色并存但勿混淆',
+    '  · 禁止硬编码花哨 hex；优先组件 tone / useCanvasTheme() tokens',
+    '- 画布 source 为 TSX：用 @opptrix/canvas 公开导出（Surface / Stack / Row / Grid / H1–H3 / Text / Stat / Table / Chart / Spacer / Card / Callout / Quote / Pill / Button / Code / Link 等；避免 Divider）',
+    '- 根容器默认用流体宽度 Surface（max ~880）；字阶：H1 24/30、H2 18/24、H3 16/22、Text body 14/20、small 12/16；Stat 为大数字在上、小标签在下',
+    "- 仅允许：import … from 'react' 与 import { … } from '@opptrix/canvas'（公开导出）；禁止其它 npm / 依赖；勿用 workspace_write 代替制品工具",
+    '- 禁止渐变、大阴影；颜色用 useCanvasTheme()（含 text/bg/fill/stroke/accent 分组与 chart1–5）或组件语义色，勿硬编码花哨色值',
+    '- 【硬性】画布 TSX 任意可见文案（标题、Stat value/label/hint、表格 header/cell、Callout、Quote、Pill、Button、Code、Link、节点相关文案等）禁止使用 emoji / 表情符号 / 装饰性符号图标',
+    '- 【硬性】用文字或组件语义（Pill tone、Text tone、Callout tone、Quote、Stat tone）表达状态与强调，勿用符号代替',
+    '- 【硬性】脑图节点 label / note 同样禁止 emoji / 表情符号 / 装饰性符号图标',
+    '- 最短示例（报告型骨架，含 Chart 与语义 tone，无 Card/Divider 墙；Chart 不设 width）：',
+    "  import { Surface, Stack, H1, H2, Text, Stat, Grid, Table, Chart, Callout, Quote } from '@opptrix/canvas'",
+    '  export default function Report() {',
+    '    return (',
+    '      <Surface>',
+    '        <Stack gap="28px">',
+    '          <H1>某某股份深度调研</H1>',
+    '          <Text tone="secondary" size="small">机构调研报告 · 数据截至 2026-03-31</Text>',
+    '          <Text>本报告梳理公司近四季经营与盈利质量，并对照同业估值给出观察结论。</Text>',
+    '          <H2>一、经营概览</H2>',
+    '          <Text>营收同比改善，毛利率回升，主因需求回暖与产品结构优化。</Text>',
+    '          <Grid columns={2}>',
+    '            <Stat tone="danger" value="12.4 亿" label="营收" hint="同比 +8.2%" />',
+    '            <Stat value="18.6%" label="净利率" hint="较上年同期 +1.1pt" />',
+    '          </Grid>',
+    '          <Text>当日涨幅 <Text as="span" tone="danger">+2.3%</Text>，量能温和放大。</Text>',
+    '          <Text size="small" tone="secondary">关键指标摘自最近财报；同比口径与披露一致。</Text>',
+    '          <Text>近四季营收呈回升态势，三季度起增速明显加快。</Text>',
+    '          <Chart type="line" title="近四季营收（亿元）" data={[{ label: "Q1", value: 10.2 }, { label: "Q2", value: 10.8 }, { label: "Q3", value: 11.5 }, { label: "Q4", value: 12.4 }]} caption="图注：季度营收取自公司定期报告。" />',
+    '          <Table framed headers={["指标", "本期", "同比"]} rows={[["毛利率", "42.1%", "+2.3pt"]]} />',
+    '          <Text size="small" tone="secondary">表注：口径与公司定期报告一致。（全宽表可左对齐；需居中时用 align="center"）</Text>',
+    '          <H2>二、结论与风险</H2>',
+    '          <Text>短期景气偏暖，仍须关注原材料成本与下游需求波动。</Text>',
+    '          <Quote cite="出处 · 公司年报">主营收入按地区披露，境外占比同比提升。</Quote>',
+    '          <Callout tone="warning" title="风险提示">原材料价格与下游需求波动可能影响毛利率。</Callout>',
+    '        </Stack>',
+    '      </Surface>',
+    '    )',
+    '  }',
+    '- 返回的 attachment 供用户在消息中点击预览；勿声称只能写文件无法预览',
+  ].join('\n')
+}
+
 /** 聊天 Agent — 用户交互确认（ask_user 工具） */
 export function buildUserInteractionPlaybook(): string {
   return [
     '【用户确认 — ask_user 内置交互工具】',
     '- 当分析方向、标的范围、时间窗口、偏好（短线/中线、是否含资讯等）存在多种合理路径且无法从上下文推断时，调用 ask_user 而非在正文里罗列选项让用户打字回复',
+    '- 【投研/数据分析 → 是否出报告】个股/市场/板块投研或数据分析解读（非 L1 事实快答、非用户已点名只要口头结论）时：优先 ask_user 询问是否生成可视化投研报告（详见研究输出 playbook）；prompt/选项面向用户、自然语言，勿暴露工具名',
     '- 三种 mode（亦可用参数别名 interaction）：',
     '  · confirm：授权/是否继续/危险操作 → mode:"confirm"，或省略 options（空/[]）且不设 mode=text、不设 allow_custom=true；底部「拒绝/确认」；回传 id 固定 reject/confirm；可用 reject_label/confirm_label',
     '  · choice：有限选项 → options 2–50（id 英文/数字，label 中文简短），mode:"choice"；allow_multiple 仅在可多选时为 true；allow_custom 默认 true',
@@ -270,6 +338,13 @@ export function buildResearchEpistemicPlaybook(): string {
     '5) 证据类型标签（书写时区分）：价量事实 / 模型评分或技术指标 / 机构观点 / 新闻叙事 / 宏观背景。宏观是背景不是个股因果证明。',
     '6) 不确定性：深度结论用条件句或概率口吻（「在…前提下更支持…」）；给出至少一条否证/风险条件。',
     '7) 合规：不给出具体买卖点、仓位或「必涨/必跌」判断；可做情景对照（上/下/震荡）与数据解读。',
+    '【消息正文插图 — 无需 artifacts】',
+    '- 正文里插一张对比/趋势/占比图：用 Markdown 围栏 ```chart 或 ```opptrix-chart，内容为 JSON（非 TSX），例如：',
+    '  ```chart',
+    '  {"type":"bar","title":"营收对比","data":[{"label":"Q1","value":10.2},{"label":"Q2","value":12.4}]}',
+    '  ```',
+    '- 完整机构调研报告仍用 create_canvas（需 artifacts）；正文插图用围栏即可，二者勿混淆',
+    '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–40 项；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
   ].join('\n')
 }
 
@@ -295,12 +370,20 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '5) 数据缺口：列出仍缺的维度或未加载工具包',
       '- 每一维最多一个主证据工具；「全面」不等于堆砌重复工具',
       '- 声称全面分析前：缺 fundamentals/market/news 等能力时先 activate_tool_pack，或明示缺口',
+      '- 【可视化报告确认】个股/市场/板块投研或数据分析解读：在取证/形成结论前后，优先 ask_user 询问是否生成可视化投研报告。可用 confirm（确认=生成报告 / 拒绝=仅文字答复；可用 confirm_label/reject_label 如「生成报告」「仅文字答复」），或 choice（option id：generate_report / text_only，label 面向用户如「生成可视化报告」「只要文字结论」）。prompt 自然语言，勿暴露工具名',
+      '- 【跳过询问】用户已明确要求「报告/画布/可视化报告/create_canvas」、或只要一句事实快答（L1）、或本轮已确认过 → 勿再问',
+      '- 【同意后】若未加载 artifacts → activate_tool_pack([\'artifacts\'])；然后优先 create_canvas 出机构调研报告版式（不要只写长文代替）；此后本任务保持「报告优先」直到交付',
+      '- 【拒绝后】仅文字答复，勿强行 create_canvas',
     ].join('\n')
   }
   return [
     '【答复档位 L2 — 结构化解读】',
     '- 结构：结论摘要 → 事实依据（工具+时点）→ 简短解读 → 主要风险一句',
     '- 工具：首选路径取证据后停止；用户未要求则不升维到 L3 全备忘录',
+    '- 【可视化报告确认】个股/市场/板块投研或数据分析解读（非单纯报价、非用户已点名只要口头结论）：在取证/形成结论前后，优先 ask_user 询问是否生成可视化投研报告。可用 confirm（确认=生成报告 / 拒绝=仅文字；confirm_label/reject_label 如「生成报告」「仅文字答复」），或 choice（id：generate_report / text_only，label 面向用户）。prompt 自然语言，勿暴露工具名',
+    '- 【跳过询问】用户已明确要求「报告/画布/可视化报告/create_canvas」、或 L1 事实快答、或本轮已确认过 → 勿再问',
+    '- 【同意后】若未加载 artifacts → activate_tool_pack([\'artifacts\'])；然后优先 create_canvas 出机构调研报告版式（不要只写长文代替）；此后本任务保持「报告优先」直到交付',
+    '- 【拒绝后】仅文字答复，勿强行 create_canvas',
   ].join('\n')
 }
 
@@ -434,6 +517,9 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   }
   if (packLoaded(packs, 'provider_ext')) {
     sections.push(buildProviderCustomMethodPlaybook())
+  }
+  if (packLoaded(packs, 'artifacts')) {
+    sections.push(buildArtifactsPlaybook())
   }
   sections.push(buildUserInteractionPlaybook())
   if (packLoaded(packs, 'news')) {

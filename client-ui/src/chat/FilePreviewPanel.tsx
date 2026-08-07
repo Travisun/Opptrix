@@ -9,7 +9,9 @@ import {
   sessionAttachmentUrl,
 } from '../api/client'
 import { attachmentKindIcon } from './attachmentKindIcon'
+import CanvasPreviewHost from './CanvasPreviewHost'
 import MarkdownMessage from './MarkdownMessage'
+import MindmapPreviewHost from './MindmapPreviewHost'
 import PdfPreviewViewer from './PdfPreviewViewer'
 import { formatBytesShort } from './mediaCapabilities'
 import { DESKTOP_TITLEBAR_HEIGHT, DESKTOP_Z_PANEL_TITLE } from '../desktop/constants'
@@ -26,6 +28,8 @@ const KIND_LABEL: Record<MediaKind, string> = {
   document: '文档',
   video: '视频',
   audio: '音频',
+  canvas: '画布',
+  mindmap: '脑图',
 }
 
 const useStyles = makeStyles({
@@ -125,6 +129,23 @@ const useStyles = makeStyles({
   bodyFlush: {
     padding: 0,
     overflow: 'hidden',
+  },
+  artifactHost: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: '12px 16px 16px',
+    boxSizing: 'border-box',
+  },
+  /** Canvas preview: flush to edges (no inset padding). */
+  artifactHostFlush: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: 0,
+    boxSizing: 'border-box',
   },
   imageWrap: {
     flex: 1,
@@ -384,6 +405,9 @@ export default function FilePreviewPanel({
   const s = useStyles()
   const url = sessionAttachmentUrl(sessionId, attachment.id)
   const isPdf = attachment.kind === 'pdf'
+  const isCanvas = attachment.kind === 'canvas'
+  const isMindmap = attachment.kind === 'mindmap'
+  const bodyFlush = isPdf || isCanvas || isMindmap
   const electronWin = electronChrome && electronPlatform() !== 'darwin'
   /** Full-width panel: reserve global toolbar band as a dedicated drag zone. */
   const titleBarDragLeadWidth = electronChrome
@@ -434,13 +458,31 @@ export default function FilePreviewPanel({
           <DismissRegular fontSize={18} />
         </button>
       </div>
-      <div className={mergeClasses(s.body, isPdf && s.bodyFlush)}>
+      <div className={mergeClasses(s.body, bodyFlush && s.bodyFlush)}>
         {attachment.kind === 'image' ? (
           <div className={s.imageWrap}>
             <img src={url} alt={attachment.name} className={s.image} />
           </div>
         ) : isPdf ? (
           <PdfPreviewViewer url={url} panelVisible={panelVisible} />
+        ) : isCanvas ? (
+          <div className={s.artifactHostFlush}>
+            <CanvasPreviewHost
+              sessionId={sessionId}
+              attachmentId={attachment.id}
+              name={attachment.name}
+              panelVisible={panelVisible}
+            />
+          </div>
+        ) : isMindmap ? (
+          <div className={s.artifactHostFlush}>
+            <MindmapPreviewHost
+              sessionId={sessionId}
+              attachmentId={attachment.id}
+              name={attachment.name}
+              panelVisible={panelVisible}
+            />
+          </div>
         ) : attachment.kind === 'document' ? (
           <DocumentPreview
             sessionId={sessionId}

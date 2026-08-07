@@ -4,6 +4,8 @@ import { DismissRegular } from '@fluentui/react-icons'
 import type { ChatAttachmentMeta } from '../types/chat'
 import { sessionAttachmentUrl } from '../api/client'
 import { opptrixCssVars, opptrixTokens } from '../theme/tokens'
+import CanvasPreviewHost from './CanvasPreviewHost'
+import MindmapPreviewHost from './MindmapPreviewHost'
 import PdfPreviewViewer from './PdfPreviewViewer'
 
 const useStyles = makeStyles({
@@ -62,6 +64,13 @@ const useStyles = makeStyles({
     alignItems: 'stretch',
     height: '78vh',
   },
+  bodyArtifact: {
+    padding: '12px',
+    overflow: 'hidden',
+    alignItems: 'stretch',
+    minHeight: '70vh',
+    height: '78vh',
+  },
   image: {
     maxWidth: '100%',
     maxHeight: '78vh',
@@ -97,6 +106,7 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
 
   const url = sessionAttachmentUrl(sessionId, attachment.id)
   const isPdf = attachment.kind === 'pdf'
+  const isArtifact = attachment.kind === 'mindmap' || attachment.kind === 'canvas'
 
   return (
     <div
@@ -116,7 +126,11 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
             <DismissRegular fontSize={18} />
           </button>
         </div>
-        <div className={mergeClasses(s.body, isPdf && s.bodyPdf)}>
+        <div className={mergeClasses(
+          s.body,
+          isPdf && s.bodyPdf,
+          isArtifact && s.bodyArtifact,
+        )}>
           {attachment.kind === 'image' ? (
             <img src={url} alt={attachment.name} className={s.image} />
           ) : isPdf ? (
@@ -125,6 +139,20 @@ export default function MediaPreviewBox({ open, sessionId, attachment, onClose }
             <video src={url} controls className={s.media} />
           ) : attachment.kind === 'audio' ? (
             <audio src={url} controls className={s.media} />
+          ) : attachment.kind === 'mindmap' ? (
+            <MindmapPreviewHost
+              sessionId={sessionId}
+              attachmentId={attachment.id}
+              name={attachment.name}
+              panelVisible={open}
+            />
+          ) : attachment.kind === 'canvas' ? (
+            <CanvasPreviewHost
+              sessionId={sessionId}
+              attachmentId={attachment.id}
+              name={attachment.name}
+              panelVisible={open}
+            />
           ) : null}
         </div>
       </div>

@@ -248,6 +248,7 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
         {message.attachments && message.attachments.length > 0 && (
           <MessageAttachmentStrip
             items={message.attachments}
+            sessionId={sessionId}
             onOpen={(item) => {
               if (isMobile || !onOpenPreview) {
                 setPreviewAttachment(item)

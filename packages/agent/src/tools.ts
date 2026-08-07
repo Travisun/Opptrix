@@ -20,6 +20,7 @@ import { buildBrowserTools } from './mcp/browser-tools.js'
 import { buildWorkspaceTools } from './mcp/workspace-tools.js'
 import { buildScheduleTools } from './mcp/schedule-tools.js'
 import { buildDocumentTools } from './document-tools.js'
+import { buildCanvasTools } from './canvas-tools.js'
 import { currentToolSessionId } from './mcp/tool-session-context.js'
 import { buildRsshubTools } from './rsshub/rsshub-tools.js'
 import { resolveInstrumentFromParams, resolveOpptrixAppVersion } from '@opptrix/shared'
@@ -136,6 +137,7 @@ export class ToolRegistry {
       ...this.buildBasicTools(),
       ...this.buildMetaTools(),
       ...buildDocumentTools(),
+      ...buildCanvasTools(),
       ...buildBrowserTools(),
       ...buildWorkspaceTools(),
       ...buildScheduleTools(),

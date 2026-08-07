@@ -18,6 +18,8 @@ const KIND_LABEL: Record<MediaKind, string> = {
   document: '文档',
   video: '视频',
   audio: '音频',
+  canvas: '画布',
+  mindmap: '脑图',
 }
 
 const useStyles = makeStyles({

@@ -8,6 +8,8 @@ import {
   MusicNote2Regular,
   SlideTextRegular,
   VideoRegular,
+  DocumentOnePageRegular,
+  DiagramRegular,
 } from '@fluentui/react-icons'
 import type { MediaKind } from '../types/chat'
 
@@ -48,6 +50,10 @@ export function attachmentKindIcon(
       return <VideoRegular fontSize={fontSize} />
     case 'audio':
       return <MusicNote2Regular fontSize={fontSize} />
+    case 'canvas':
+      return <DocumentOnePageRegular fontSize={fontSize} />
+    case 'mindmap':
+      return <DiagramRegular fontSize={fontSize} />
     case 'document':
     case 'text':
       return documentIconByExt(extOfFilename(name), fontSize)
