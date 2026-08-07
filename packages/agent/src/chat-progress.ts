@@ -263,6 +263,7 @@ const TOOL_LABELS: Record<string, string> = {
   http_fetch: '获取网页内容',
   request_folder_access: '请求授权文件夹',
   list_workspace_grants: '查看可访问目录',
+  resolve_workspace_path_uri: '生成消息文件引用',
   list_local_data_apis: '查看本地数据目录',
   get_local_data_catalog: '查阅数据调用说明',
   prepare_fuyao_dump: '准备离线数据包',

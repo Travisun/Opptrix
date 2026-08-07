@@ -841,6 +841,7 @@ function ChatView({
               top: pinnedToolbar.anchor.top,
               left: pinnedToolbar.anchor.left,
             }}
+            sessionId={sessionId}
             selection={pinnedToolbar.selection}
             onQuote={handleQuote}
             onEphemeralAsk={handleEphemeralAsk}

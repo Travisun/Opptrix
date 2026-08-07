@@ -260,7 +260,7 @@ function ChatMessageItem({ message, index, sessionId, isMobile = false, onFork, 
         )}
         {isUser
           ? message.content
-          : <MarkdownMessage content={message.content} />}
+          : <MarkdownMessage content={message.content} sessionId={sessionId} />}
         {message.toolSteps && message.toolSteps.length > 0 && (
           <div style={{ marginTop: 12 }}>
             <ChatProcessTrace steps={message.toolSteps} />

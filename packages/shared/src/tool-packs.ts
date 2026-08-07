@@ -262,6 +262,7 @@ export const TOOL_PACK_MEMBERSHIP: Readonly<Record<string, ToolPackId>> = {
   http_fetch: 'workspace',
   request_folder_access: 'workspace',
   list_workspace_grants: 'workspace',
+  resolve_workspace_path_uri: 'workspace',
 
   shell_platform_status: 'workspace',
   shell_run: 'workspace',
@@ -350,7 +351,7 @@ export function buildToolPackCatalogPrompt(): string {
     '- 缺能力：先判断是否有业务 pack 可 activate；若标准工具仍覆盖不了 → activate_tool_pack([\'workspace\'])，用 shell_run / ensure_python / workspace_* 编程实现，勿空转反复 activate 无关 pack，勿直接声称无法完成',
   )
   lines.push(
-    '- 可结合：先用标准投研工具取数，再在沙盒里计算/汇总/出图（若需要）',
+    '- 可结合：先用标准投研工具取数，再在沙盒里计算/汇总；消息内图表用 ```chart```（→ @opptrix/canvas Chart），禁止沙盒出图代替围栏',
   )
   lines.push(
     '- 目标 pack 已加载、或选型卡首选工具已在本轮 tools 中时：禁止仅为「开工」再 activate_tool_pack',

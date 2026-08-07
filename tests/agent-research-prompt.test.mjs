@@ -11,7 +11,10 @@ import {
   buildWorkspaceAccessPlaybook,
   buildLocalProgrammingPlaybook,
   buildLocalDataCatalogIndexPrompt,
+  buildUserInteractionPlaybook,
+  buildArtifactsPlaybook,
 } from '../packages/shared/dist/agent-prompt-guide.js'
+import { buildToolPackCatalogPrompt } from '../packages/shared/dist/tool-packs.js'
 import {
   resolveToolRoutePlan,
   resolveResearchTier,
@@ -51,6 +54,13 @@ test('session clock playbook embeds authoritative local time', () => {
   assert.match(rules, /优先使用.*会话时钟|以其为「截至」基准/)
 })
 
+test('tool pack catalog forbids sandbox plotting as chat charts', () => {
+  const catalog = buildToolPackCatalogPrompt()
+  assert.match(catalog, /计算\/汇总/)
+  assert.match(catalog, /```chart|禁止沙盒出图/)
+  assert.ok(!catalog.includes('计算/汇总/出图'))
+})
+
 test('epistemic playbook prefers session clock over mandatory get_current_time', () => {
   const text = buildResearchEpistemicPlaybook()
   assert.match(text, /事实层/)
@@ -58,6 +68,18 @@ test('epistemic playbook prefers session clock over mandatory get_current_time',
   assert.match(text, /会话时钟/)
   assert.match(text, /否证|风险/)
   assert.match(text, /不给出具体买卖/)
+})
+
+test('epistemic playbook treats inline chart as default data expression', () => {
+  const text = buildResearchEpistemicPlaybook()
+  assert.match(text, /正文插图/)
+  assert.match(text, /```chart/)
+  assert.match(text, /@opptrix\/canvas/)
+  assert.match(text, /默认数据表达|无需询问|无需 activate artifacts/)
+  assert.match(text, /勿为插图去 ask_user|禁止误当成 create_canvas/)
+  assert.match(text, /禁止.*matplotlib|禁止旁路|禁止用 shell_run/)
+  assert.match(text, /matplotlib|seaborn|plotly/)
+  assert.ok(!text.includes('仅文字答复'))
 })
 
 test('output playbooks differ by research tier', () => {
@@ -69,6 +91,38 @@ test('output playbooks differ by research tier', () => {
   assert.match(l2, /结构化解读/)
   assert.match(l3, /深度投研备忘录/)
   assert.match(l3, /数据缺口/)
+})
+
+test('L2/L3 output playbooks prefer inline chart; no ask_user report gate', () => {
+  for (const tier of /** @type {const} */ (['L2', 'L3'])) {
+    const text = buildResearchOutputPlaybook(tier)
+    assert.match(text, /正文插图/)
+    assert.match(text, /```chart/)
+    assert.match(text, /禁止.*shell\/python|禁止 shell\/python|matplotlib/)
+    assert.match(text, /禁止.*ask_user|禁止为此先 ask_user/)
+    assert.match(text, /完整可视化报告/)
+    assert.match(text, /自感应|明确点名/)
+    assert.ok(!text.includes('可视化报告确认'))
+    assert.ok(!text.includes('跳过询问'))
+    assert.ok(!text.includes('同意后'))
+    assert.ok(!text.includes('拒绝后'))
+    assert.ok(!text.includes('仅文字答复'))
+    assert.ok(!/优先 ask_user 询问是否生成可视化/.test(text))
+  }
+})
+
+test('user interaction playbook forbids ask_user for report or chart authorization', () => {
+  const text = buildUserInteractionPlaybook()
+  assert.match(text, /禁止用 ask_user 询问是否生成可视化报告|是否画图/)
+  assert.ok(!text.includes('是否出报告'))
+  assert.ok(!/优先 ask_user 询问是否生成可视化/.test(text))
+})
+
+test('artifacts playbook report-priority without prior ask confirmation', () => {
+  const text = buildArtifactsPlaybook()
+  assert.match(text, /明确点名|自感应/)
+  assert.match(text, /正文插图/)
+  assert.ok(!text.includes('用户已确认要可视化投研报告'))
 })
 
 test('system rules always include epistemic + tier skeleton', () => {
@@ -171,6 +225,7 @@ test('workspace playbook requires get_system_info and network egress policy', ()
   assert.match(playbook, /node_ready|内嵌运行时/)
   assert.match(playbook, /shell_install/)
   assert.match(playbook, /activate_tool_pack\(\['workspace'\]\)/)
+  assert.match(playbook, /```chart|禁止.*出图|matplotlib/)
   assert.ok(!playbook.includes('禁止 Shell 执行'))
   assert.ok(!playbook.includes('说明当前无法完成'))
 
@@ -185,6 +240,7 @@ test('workspace playbook requires get_system_info and network egress policy', ()
   assert.match(rules, /禁止声称.*禁止执行 Shell/)
   assert.match(rules, /禁 TCP 出站|默认禁/)
   assert.match(rules, /标准投研 API 不够时主动用沙盒|沙盒编程补齐/)
+  assert.match(rules, /禁止沙盒.*出图|matplotlib.*代替|```chart/)
 
   const noShell = buildAgentSystemRules({
     activePacks: ['core', 'meta'],

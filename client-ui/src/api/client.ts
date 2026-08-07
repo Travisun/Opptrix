@@ -1430,6 +1430,15 @@ export async function removeWorkspaceGrant(sessionId: string, grantId: string) {
   })
 }
 
+/** Authorized workspace file stream URL for markdown media / links. */
+export function sessionWorkspaceFileUrl(sessionId: string, rootId: string, relPath: string): string {
+  const qs = new URLSearchParams({
+    root_id: rootId,
+    path: relPath,
+  })
+  return `${API_BASE}/sessions/${encodeURIComponent(sessionId)}/workspace/file?${qs.toString()}`
+}
+
 export async function listSessionArchiveFolders() {
   return jsonFetch<{ folders: import('../types/chat').SessionArchiveFolder[] }>('/sessions/archive-folders')
 }

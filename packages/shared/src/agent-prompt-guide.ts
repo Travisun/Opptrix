@@ -155,6 +155,11 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- 本对话工作区 root_id=default；公共复用区 root_id=shared（packages/data/docs，会话结束不删）；额外目录需界面授权或 request_folder_access',
     '- 运行 python/node 脚本、pip/npm 安装依赖 → 必须经 shell_run / shell_install（系统隔离环境）；勿声称可读写未授权路径',
     '',
+    '【消息内引用工作区文件】',
+    '- 聊天消息中展示图片/视频/音频/文件链接时，必须使用 opptrix-ws://{root_id}/{相对路径}（例：opptrix-ws://shared/charts/a.png、opptrix-ws://default/out/x.mp4）',
+    '- 可先调用 resolve_workspace_path_uri(root_id, path) 得到规范 uri 与 exists/kind_hint；路径合法且已授权即返回 uri（文件尚未写出时 exists=false 亦可先引用）',
+    '- 禁止在消息中使用 file:// 或本机绝对路径；禁止向用户/消息朗读绝对路径',
+    '',
     '【沙盒 node / python / npm — 先确认就绪】',
     '- 桌面端 node 由应用内嵌运行时提供（Electron-as-Node）；勿因 PATH 无 node 声称无法执行',
     '- 运行 shell_run 前先 get_system_info（或 python_env_status 查 Python）；确认 node_ready / npm_ready / python_ready / python_priority 与 platform',
@@ -175,6 +180,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '- python/node 等无明确目标时不弹全网确认；禁网运行，若因出站受限失败则返回需确认的域名',
     '- 本轮已加载 shell_run / workspace_* 时：须用这些工具完成本地命令与工作区文件操作；禁止再说「出于安全规范禁止执行 Shell」；标准 API 不够时主动用沙盒补齐计算/处理，勿推诿',
     '- 未加载 shell_run / workspace_* 时：勿声称已具备本地命令或工作区能力；需要时 activate_tool_pack([\'workspace\']) 后再用沙盒工具',
+    '- 沙盒用于数值计算/清洗/汇总；消息内要展示图表 → 写 ```chart``` 围栏（→ @opptrix/canvas Chart），禁止默认用沙盒 matplotlib/seaborn/plotly 等「出图」当聊天插图（用户明确要求导出图像文件到工作区时除外）',
     '',
     '【密钥保险箱】',
     '- 需要第三方密钥/口令时：禁止让用户在聊天正文粘贴；禁止 ask_user 普通选项收集密钥；必须 request_secret 写入保险箱（密码框录入，明文永不进模型）',
@@ -184,7 +190,7 @@ export function buildWorkspaceAccessPlaybook(): string {
     '',
     '【能力不足时的沙盒兜底】',
     '- 内置/已匹配工具无法完成、或没有匹配工具时：若尚未加载 workspace → activate_tool_pack([\'workspace\'])，再用 shell_run / ensure_python / workspace_write 等编程实现',
-    '- 可先用标准投研工具取数，再在沙盒计算/汇总；禁止空转反复 activate 无关 pack，禁止直接声称无法完成',
+    '- 可先用标准投研工具取数，再在沙盒计算/汇总；算完把数字写入 ```chart``` 展示，禁止沙盒出图代替围栏；禁止空转反复 activate 无关 pack，禁止直接声称无法完成',
     '- 标准投研 API 已能覆盖的任务禁止先上沙盒；目标 pack / 首选工具已在本轮 tools 中时勿仪式化重复 activate',
   ].join('\n')
 }
@@ -200,6 +206,7 @@ export function buildLocalProgrammingPlaybook(): string {
     '5. 离线大数据 → prepare_fuyao_dump；行情优先标准工具；禁止明文密钥进沙盒（经保险箱 + secret_refs 注入 sentinel）；勿引导 sync/dailyDump',
     '6. 沙盒前判断联网/局域网；需 LAN → request_session_lan_access / ask_user(allow_lan_session)',
     '7. 第三方密钥：list_vault_secrets → 已有 grant_session_secret / 没有 request_secret；shell_run 用 secret_refs 传名字',
+    '8. 沙盒做计算/清洗/汇总；聊天展示图用 ```chart``` / ```opptrix-chart```（→ @opptrix/canvas Chart），禁止默认沙盒出图代替围栏',
   ].join('\n')
 }
 
@@ -217,8 +224,8 @@ export function buildArtifactsPlaybook(): string {
   return [
     '【画布与脑图 — create_canvas / create_mindmap】',
     '- 可视化报告、投研画布 → create_canvas；脑图/思维导图/主题树 → create_mindmap；改内容用 update_*，先读用 read_*',
-    '- 【正文插图 vs 完整报告】消息正文只需插一张图 → Markdown ```chart / ```opptrix-chart JSON 围栏（无需本 pack）；完整机构报告 → create_canvas',
-    '- 【报告优先模式】用户已确认要可视化投研报告（或本轮已明确点名报告/画布）后：本任务以 create_canvas 为主交付机构调研报告版式，不要只用长文代替；直至交付完成保持报告优先',
+    '- 【正文插图 vs 完整报告】日常对比/趋势/占比图 → Markdown ```chart / ```opptrix-chart JSON 围栏（无需本 pack）；完整机构报告 → create_canvas',
+    '- 【报告优先模式】用户已明确点名报告/画布，或本轮已自感应决定交付完整报告后：本任务以 create_canvas 为主交付机构调研报告版式，不要只用长文代替；直至交付完成保持报告优先。已进入报告优先后仍可在消息中插 chart；勿把「只要一张图」的新请求擅自扩成多余报告（若上下文已是报告任务则继续报告）',
     '- 【默认版式 = 机构调研报告】封面级 H1 + 副题/截至说明 → 开篇导语（介绍文字必写）→ 分章 H2 → 节内 H3 → 正文 Text 与 Chart/Table/Stat 穿插 → 图注/表注/方法说明（说明文字必写）。禁止默认做成「分析仪表盘 / 面板墙」',
     '- 【禁止面板分割章节】不要用 Card / CardHeader 把每一章包成一块面板；章节仅靠 H1/H2/H3 标题层级与 Stack gap 建立层级与留白。Card / Callout 仅用于极少数要点框或风险提示（Callout 全文最多 0–2），Quote 用于摘录/口径；均不得替代标题层级',
     '- 【避免分割线】报告排版不要使用 Divider（也不要用手写 <hr> / 边框冒充分割线）；章节与留白只靠 H1/H2/H3 + Stack gap。唯一例外：用户明确要求加分割线时才可用 Divider',
@@ -284,7 +291,7 @@ export function buildUserInteractionPlaybook(): string {
   return [
     '【用户确认 — ask_user 内置交互工具】',
     '- 当分析方向、标的范围、时间窗口、偏好（短线/中线、是否含资讯等）存在多种合理路径且无法从上下文推断时，调用 ask_user 而非在正文里罗列选项让用户打字回复',
-    '- 【投研/数据分析 → 是否出报告】个股/市场/板块投研或数据分析解读（非 L1 事实快答、非用户已点名只要口头结论）时：优先 ask_user 询问是否生成可视化投研报告（详见研究输出 playbook）；prompt/选项面向用户、自然语言，勿暴露工具名',
+    '- 禁止用 ask_user 询问是否生成可视化报告或是否画图（完整报告由用户点名或你自感应启动；正文插图直接画，勿先问授权）',
     '- 三种 mode（亦可用参数别名 interaction）：',
     '  · confirm：授权/是否继续/危险操作 → mode:"confirm"，或省略 options（空/[]）且不设 mode=text、不设 allow_custom=true；底部「拒绝/确认」；回传 id 固定 reject/confirm；可用 reject_label/confirm_label',
     '  · choice：有限选项 → options 2–50（id 英文/数字，label 中文简短），mode:"choice"；allow_multiple 仅在可多选时为 true；allow_custom 默认 true',
@@ -338,13 +345,18 @@ export function buildResearchEpistemicPlaybook(): string {
     '5) 证据类型标签（书写时区分）：价量事实 / 模型评分或技术指标 / 机构观点 / 新闻叙事 / 宏观背景。宏观是背景不是个股因果证明。',
     '6) 不确定性：深度结论用条件句或概率口吻（「在…前提下更支持…」）；给出至少一条否证/风险条件。',
     '7) 合规：不给出具体买卖点、仓位或「必涨/必跌」判断；可做情景对照（上/下/震荡）与数据解读。',
-    '【消息正文插图 — 无需 artifacts】',
-    '- 正文里插一张对比/趋势/占比图：用 Markdown 围栏 ```chart 或 ```opptrix-chart，内容为 JSON（非 TSX），例如：',
+    '【消息正文插图 — 默认数据表达（无需 artifacts）】',
+    '- 渲染栈（唯一路径）：助手回复写 Markdown ```chart / ```opptrix-chart JSON 围栏 → 客户端用 @opptrix/canvas 的 Chart（与画布同源）渲染；无需询问、无需 activate artifacts',
+    '- L2/L3 有对比、趋势、构成占比、强弱矩阵等定量数据时：直接用上述围栏表达',
+    '- 「画个图 / 柱状图 / 对比一下」→ 正文插图，禁止误当成 create_canvas；勿为插图去 ask_user',
+    '- 【硬性禁止旁路】禁止用 shell_run + Python（matplotlib/seaborn/plotly/PIL 等）存 png/jpg/svg，再经 workspace 附件当聊天插图；禁止「先 activate workspace 再 python 画图」代替围栏。沙盒可算数/清洗/汇总，算完把数字写入 chart JSON 展示，不要在沙盒里「出图」',
+    '- 窄例外：仅当用户明确要求「导出一张 png/jpg/svg 文件到工作区」等文件交付时，才可用沙盒生成图像文件；默认投研展示禁止',
+    '- 示例：',
     '  ```chart',
     '  {"type":"bar","title":"营收对比","data":[{"label":"Q1","value":10.2},{"label":"Q2","value":12.4}]}',
     '  ```',
-    '- 完整机构调研报告仍用 create_canvas（需 artifacts）；正文插图用围栏即可，二者勿混淆',
     '- type 可选 bar|line|pie|heatmap（默认 bar）；data 1–40 项；涨跌色：data[].color 用红涨绿跌语义（如 #E5484D / #30A46C 或等价 rgba），勿编造花哨色',
+    '- 完整机构调研报告（可视化报告/画布）才用 create_canvas（需 artifacts；画布内亦可 Chart）；插图 ≠ 报告；勿用 python 画报告图',
   ].join('\n')
 }
 
@@ -357,6 +369,7 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '【答复档位 L1 — 事实快答】',
       '- 结构：直接答案（1–3 句）→ 关键数字与截至时间 → 一句边界（未覆盖的不展开）',
       '- 工具：沿选型卡最短路径，通常 1–2 次调用即停；勿主动评价「值不值得」',
+      '- 可选：极简有助理解时可插一张 ```chart，不强制；勿主动 create_canvas',
     ].join('\n')
   }
   if (tier === 'L3') {
@@ -370,20 +383,20 @@ export function buildResearchOutputPlaybook(tier: ResearchTier = 'L2'): string {
       '5) 数据缺口：列出仍缺的维度或未加载工具包',
       '- 每一维最多一个主证据工具；「全面」不等于堆砌重复工具',
       '- 声称全面分析前：缺 fundamentals/market/news 等能力时先 activate_tool_pack，或明示缺口',
-      '- 【可视化报告确认】个股/市场/板块投研或数据分析解读：在取证/形成结论前后，优先 ask_user 询问是否生成可视化投研报告。可用 confirm（确认=生成报告 / 拒绝=仅文字答复；可用 confirm_label/reject_label 如「生成报告」「仅文字答复」），或 choice（option id：generate_report / text_only，label 面向用户如「生成可视化报告」「只要文字结论」）。prompt 自然语言，勿暴露工具名',
-      '- 【跳过询问】用户已明确要求「报告/画布/可视化报告/create_canvas」、或只要一句事实快答（L1）、或本轮已确认过 → 勿再问',
-      '- 【同意后】若未加载 artifacts → activate_tool_pack([\'artifacts\'])；然后优先 create_canvas 出机构调研报告版式（不要只写长文代替）；此后本任务保持「报告优先」直到交付',
-      '- 【拒绝后】仅文字答复，勿强行 create_canvas',
+      '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
+      '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
+      '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas',
+      '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas',
     ].join('\n')
   }
   return [
     '【答复档位 L2 — 结构化解读】',
     '- 结构：结论摘要 → 事实依据（工具+时点）→ 简短解读 → 主要风险一句',
     '- 工具：首选路径取证据后停止；用户未要求则不升维到 L3 全备忘录',
-    '- 【可视化报告确认】个股/市场/板块投研或数据分析解读（非单纯报价、非用户已点名只要口头结论）：在取证/形成结论前后，优先 ask_user 询问是否生成可视化投研报告。可用 confirm（确认=生成报告 / 拒绝=仅文字；confirm_label/reject_label 如「生成报告」「仅文字答复」），或 choice（id：generate_report / text_only，label 面向用户）。prompt 自然语言，勿暴露工具名',
-    '- 【跳过询问】用户已明确要求「报告/画布/可视化报告/create_canvas」、或 L1 事实快答、或本轮已确认过 → 勿再问',
-    '- 【同意后】若未加载 artifacts → activate_tool_pack([\'artifacts\'])；然后优先 create_canvas 出机构调研报告版式（不要只写长文代替）；此后本任务保持「报告优先」直到交付',
-    '- 【拒绝后】仅文字答复，勿强行 create_canvas',
+    '- 【正文插图（默认）】有可对比/趋势/占比/强弱矩阵等定量事实 → 在答复中灵活插入 ```chart / ```opptrix-chart（→ @opptrix/canvas Chart）；无需授权、无需 activate artifacts；禁止 shell/python（matplotlib 等）绘图代替围栏',
+    '- 【完整可视化报告】仅当用户明确点名报告/画布/可视化报告/机构调研报告版式/create_canvas，或你判断本轮值得交付完整多章节图文报告（深度/全面/系统解读且多维证据齐全）时：activate_tool_pack([\'artifacts\']) → create_canvas；禁止为此先 ask_user；勿用 python 画报告图',
+    '- 【自感应边界】单纯报价、一问一答事实、用户只要口头结论、或一两张图即可表达 → 只用正文 chart + 文字，勿主动 create_canvas',
+    '- 【勿混淆】插图 ≠ 报告；用户说「画个图/柱状图/对比一下」用围栏；「可视化报告/画布」才 create_canvas',
   ].join('\n')
 }
 
@@ -544,7 +557,7 @@ export function buildAgentSystemRules(opts?: AgentSystemRulesOptions): string {
   if (hasShellTools) {
     sections.push(
       '- 本轮已加载 shell_run / workspace_*：用户请求的运行本地命令、读写工作区、网络探测须用已加载工具完成；禁止声称「出于安全规范禁止执行 Shell」',
-      '- 标准投研 API 不够时主动用沙盒编程补齐（计算/清洗/汇总），勿推诿；标准工具能做的禁止先上沙盒',
+      '- 标准投研 API 不够时主动用沙盒编程补齐（计算/清洗/汇总），勿推诿；标准工具能做的禁止先上沙盒；消息内图表用 ```chart```（→ @opptrix/canvas Chart），禁止沙盒 matplotlib 等出图代替围栏（用户明确要求导出图像文件除外）',
       '- shell_run 前须 get_system_info（或本轮已有 platform）确认 node_ready/python_ready/python_priority；桌面端 node 由应用内嵌运行时提供',
       '- shell_run argv 只用字面量 node/python/npm/pip；禁止手写系统/托管绝对路径；依赖用 shell_install(pip|npm)；install 与 run 同一解释器与 .opptrix-packages；禁止 powershell/cmd/bash -c 整串绕过；darwin/linux ping 用 -c，win32 用 -n 且 tracert 替代 traceroute',
       '- 测网站连通性或 HTTP 延迟优先 http_fetch；用户明确要求 ICMP ping 时用 shell_run',

@@ -383,7 +383,7 @@ function DocumentPreview({
     )
   }
   if (isMarkdown(attachment.name)) {
-    return <MarkdownMessage content={text} />
+    return <MarkdownMessage content={text} sessionId={sessionId} />
   }
   return (
     <pre className={mergeClasses(s.pre, isMonospaceText(attachment.name) && s.preMono)}>

@@ -1023,7 +1023,7 @@ Content-Type: application/json
 
 常用 slash 命令（在 message 中）：`/diagnose`, `/screen`, `/institution`, `/signal`, `/portfolio`, `/writer` 等，详见 `packages/agent/src/engine.ts`。
 
-工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区，Agent **勿**用 `market sync` / `dailyDump` 作主路径。
+工作区文件工具（`workspace` pack：`workspace_*` / `http_fetch` / `download_file` / `shell_platform_status` / `shell_run` / `shell_install` / `list_workspace_grants` / `resolve_workspace_path_uri` / `list_local_data_apis` / `get_local_data_catalog` / `prepare_fuyao_dump` / `request_session_lan_access` 等；多数**无 REST**，经聊天 MCP）与会话文件夹授权见 [AGENT-GUIDE.md · 工作区编程](./AGENT-GUIDE.md#工作区编程本地数据目录与扶摇-dump) 与下方 grants / file 路由。扶摇 Parquet 由 `prepare_fuyao_dump` 在服务端鉴权落盘公共区，Agent **勿**用 `market sync` / `dailyDump` 作主路径。
 
 **Shell（系统隔离）**：无独立 REST；经聊天 MCP 工具调用。`shell_run` / `shell_install` 在 OS 级沙箱中执行，路径仍受本会话 grants 约束。首次 `shell_run` / `shell_install` 需用户确认运行命令（`confirmation.kind === "shell_run"`，选项 `allow_once` / `allow_session` / `cancel`）；选 `allow_session` 后本会话内跳过重复运行确认（内存，会话删除失效）。`pip`/`npm` 安装**另**需用户确认联网（`confirmation.kind === "network_install"`，选项 `once` / `sticky` / `cancel`）；选 `sticky` 后本会话内跳过重复联网确认。出站访问未在永久白名单（`OPPTRIX_SHELL_ALLOWED_DOMAINS` ∪ 设置页白名单，见上文「沙盒环境设置」）且本会话未 grant 时，SRT `sandboxAskCallback` 触发 `confirmation.kind === "network_egress"`（选项 `allow_host_once` / `allow_host_session` / `cancel`）；`ping` / 路由探测与运行命令可合并为一次确认。`shell_platform_status` 无需确认，可在运行前探测 `ready` / `setup_hint` / `needs_elevation` / `can_auto_install` / `needs_linux_install` / `userns_restricted`（Linux deb 自动依赖、Ubuntu 一次 pkexec、Windows 一次 UAC、AppImage 内置组件等，见 [DESKTOP.md](./DESKTOP.md#命令隔离agent-shell)）。
 
@@ -1036,8 +1036,9 @@ Content-Type: application/json
 | GET | `/api/sessions/:id/workspace/grants` | `{ grants: WorkspaceGrant[] }` |
 | POST | `/api/sessions/:id/workspace/grants` | 新增授权；body 见下 |
 | DELETE | `/api/sessions/:id/workspace/grants/:grantId` | 按 grant `id` 移除；默认根返回 404 |
+| GET | `/api/sessions/:id/workspace/file` | 流式读取已授权文件（见下） |
 
-**POST body**
+**POST body（grants）**
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
@@ -1045,7 +1046,20 @@ Content-Type: application/json
 | `mode` | `"ro"` \| `"rw"` | 默认 `"ro"`；其它值按只读处理 |
 | `label` | string | 可选显示名；缺省时用目录名 |
 
-**成功响应示例**
+### Workspace file（消息内媒体流）
+
+供聊天 Markdown 渲染 `opptrix-ws://` 引用。仅服务**本会话已授权**的 `root_id`；路径经 `resolveSafePath` 防穿越。
+
+| Query | 类型 | 说明 |
+|-------|------|------|
+| `root_id` | string | **必填**：`default` / `shared` / `grant_*` |
+| `path` | string | **必填**：相对路径（禁止 `..` / 绝对路径） |
+
+成功：`Content-Type`（按扩展名）、`Content-Length`、文件流。失败：会话不存在 404；未授权 / 穿越 403；文件不存在 404。错误文案不暴露系统绝对路径。
+
+**Agent 协议**：消息内写 `opptrix-ws://{root_id}/{relPath}`，或先调 MCP `resolve_workspace_path_uri`。
+
+**成功响应示例（grants）**
 
 ```json
 {
