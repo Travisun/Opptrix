@@ -11,6 +11,7 @@
 | 组件 | 用途 | 许可（声明） | 备注 |
 |------|------|--------------|------|
 | **@opptrix/canvas** | Agent 分析面板组件与语义主题 | 与本仓库主体一致（Apache-2.0） | 工作区内包；无额外第三方 UI 框架 |
+| **Apache ECharts**（`echarts`） | `@opptrix/canvas` 的 `Chart`（bar/line/pie/heatmap）渲染 | Apache-2.0 | 仅经 canvas 封装；Agent 画布 TSX **禁止**直接 `import echarts` |
 
 ## 脑图预览 / 编辑（mind-elixir）
 

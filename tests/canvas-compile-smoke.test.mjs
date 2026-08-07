@@ -12,6 +12,7 @@ import {
   Stat,
   Table,
   Card,
+  Chart,
   H1,
   Code,
   Link,
@@ -21,6 +22,7 @@ import {
   Text,
   useCanvasTheme,
 } from '../packages/canvas-kit/dist/index.js'
+import { compileCanvasSource } from '../client-ui/src/chat/compileCanvasSource.ts'
 import {
   parseMindmapJson,
   serializeMindmapDoc,
@@ -36,12 +38,13 @@ const canvasDist = path.resolve(
 )
 
 describe('canvas-kit curated exports', () => {
-  it('exports Surface / Stack / Stat / Table / Card / H1 / Code / Link / useCanvasTheme', () => {
+  it('exports Surface / Stack / Stat / Table / Card / Chart / H1 / Code / Link / useCanvasTheme', () => {
     assert.equal(typeof Surface, 'function')
     assert.equal(typeof Stack, 'function')
     assert.equal(typeof Stat, 'function')
     assert.equal(typeof Table, 'function')
     assert.equal(typeof Card, 'function')
+    assert.equal(typeof Chart, 'function')
     assert.equal(typeof H1, 'function')
     assert.equal(typeof Code, 'function')
     assert.equal(typeof Link, 'function')
@@ -56,6 +59,65 @@ describe('canvas-kit curated exports', () => {
     assert.ok(existsSync(path.join(canvasDist, 'styles.css')), 'styles.css')
     const cssFiles = readdirSync(canvasDist).filter((n) => n.endsWith('.css'))
     assert.deepEqual(cssFiles, ['styles.css'])
+  })
+
+  it('compiles Chart type=heatmap with row/col data', () => {
+    const source = `
+import { Surface, Chart } from '@opptrix/canvas'
+export default function Report() {
+  return (
+    <Surface>
+      <Chart
+        type="heatmap"
+        title="强度矩阵"
+        data={[
+          { label: 'a', row: '北', col: 'Q1', value: 1 },
+          { label: 'b', row: '北', col: 'Q2', value: 3 },
+          { label: 'c', row: '南', col: 'Q1', value: 2 },
+          { label: 'd', row: '南', col: 'Q2', value: 4 },
+        ]}
+      />
+    </Surface>
+  )
+}
+`
+    const result = compileCanvasSource(source)
+    assert.equal(result.ok, true, result.ok ? '' : result.error)
+  })
+
+  it('compiles Chart bar/line/pie with professional annotation props', () => {
+    const source = `
+import { Surface, Stack, Chart } from '@opptrix/canvas'
+export default function Report() {
+  const data = [
+    { label: 'Q1', value: 10.2 },
+    { label: 'Q2', value: 12.4 },
+  ]
+  return (
+    <Surface>
+      <Stack gap="16px">
+        <Chart type="bar" data={data} showValues showAxis showGrid showTooltip />
+        <Chart type="line" data={data} />
+        <Chart type="pie" data={data} showLegend={false} />
+      </Stack>
+    </Surface>
+  )
+}
+`
+    const result = compileCanvasSource(source)
+    assert.equal(result.ok, true, result.ok ? '' : result.error)
+  })
+
+  it('rejects direct echarts import in canvas source', () => {
+    const source = `
+import { Surface } from '@opptrix/canvas'
+import * as echarts from 'echarts'
+export default function Report() {
+  return <Surface>{String(!!echarts)}</Surface>
+}
+`
+    const result = compileCanvasSource(source)
+    assert.equal(result.ok, false)
   })
 })
 

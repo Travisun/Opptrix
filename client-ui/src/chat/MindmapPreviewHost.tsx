@@ -8,10 +8,10 @@ import {
   Spinner,
 } from '@fluentui/react-components'
 import {
-  AddRegular,
   ArrowDownloadRegular,
   DocumentPdfRegular,
-  SubtractRegular,
+  ZoomInRegular,
+  ZoomOutRegular,
 } from '@fluentui/react-icons'
 import MindElixir, {
   type MindElixirInstance,
@@ -66,60 +66,90 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '4px',
   },
   toolbar: {
     flexShrink: 0,
+    height: '34px',
+    boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
     gap: '2px',
-    justifyContent: 'flex-end',
-    minHeight: '22px',
+    padding: '0 8px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
   },
   toolBtn: {
     ...ghostInteractive,
-    height: '22px',
-    minHeight: '22px',
-    minWidth: '22px',
-    padding: '0 4px',
+    width: '28px',
+    height: '28px',
+    minWidth: '28px',
+    minHeight: '28px',
     display: 'inline-flex',
     alignItems: 'center',
     justifyContent: 'center',
-    gap: '2px',
+    padding: 0,
+    color: opptrixCssVars.textSecondary,
+    cursor: 'pointer',
+    ':disabled': {
+      opacity: 0.35,
+      cursor: 'default',
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+    },
+  },
+  toolBtnText: {
+    ...ghostInteractive,
+    height: '28px',
+    minHeight: '28px',
+    minWidth: '28px',
+    padding: '0 8px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: '4px',
     color: opptrixCssVars.textSecondary,
     fontSize: 'var(--opptrix-font-sm)',
-    WebkitAppRegion: 'no-drag',
+    cursor: 'pointer',
+    ':disabled': {
+      opacity: 0.35,
+      cursor: 'default',
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+    },
   },
   scaleLabel: {
-    color: opptrixCssVars.textTertiary,
-    fontSize: '11px',
-    minWidth: '36px',
+    flexShrink: 0,
+    minWidth: '52px',
     textAlign: 'center',
-    lineHeight: '22px',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontVariantNumeric: 'tabular-nums',
+    userSelect: 'none',
+  },
+  spacer: {
+    flex: 1,
+    minWidth: '4px',
   },
   statusHint: {
-    marginRight: 'auto',
+    flexShrink: 0,
     color: opptrixCssVars.textTertiary,
-    fontSize: '11px',
-    lineHeight: '22px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   statusError: {
-    marginRight: 'auto',
+    flexShrink: 0,
     color: opptrixCssVars.error,
-    fontSize: '11px',
-    lineHeight: '22px',
+    fontSize: 'var(--opptrix-font-sm)',
   },
   stage: {
     flex: 1,
     minHeight: 0,
     minWidth: 0,
-    height: '100%',
     display: 'flex',
     flexDirection: 'column',
-    backgroundColor: opptrixCssVars.surface,
-    borderRadius: '8px',
-    border: `1px solid ${opptrixCssVars.separator}`,
     overflow: 'hidden',
+    backgroundColor: opptrixCssVars.canvas,
     // Hide leftover mind-elixir chrome if any plugin injects it.
     '& .mind-elixir-toolbar': {
       display: 'none',
@@ -454,7 +484,11 @@ export default function MindmapPreviewHost({
 
   return (
     <div className={s.root}>
-      <div className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}>
+      <div
+        className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+        role="toolbar"
+        aria-label="脑图预览"
+      >
         {saveError ? (
           <span className={s.statusError}>{saveError}</span>
         ) : exportError ? (
@@ -462,44 +496,49 @@ export default function MindmapPreviewHost({
         ) : statusText ? (
           <span className={s.statusHint}>{statusText}</span>
         ) : null}
+        <span className={s.spacer} />
         <button
           type="button"
           className={s.toolBtn}
           onClick={() => applyScale(scale - SCALE_STEP)}
+          disabled={scale <= MIN_SCALE}
           aria-label="缩小"
           title="缩小"
         >
-          <SubtractRegular fontSize={14} />
+          <ZoomOutRegular fontSize={16} />
         </button>
         <span className={s.scaleLabel}>{Math.round(scale * 100)}%</span>
         <button
           type="button"
           className={s.toolBtn}
           onClick={() => applyScale(scale + SCALE_STEP)}
+          disabled={scale >= MAX_SCALE}
           aria-label="放大"
           title="放大"
         >
-          <AddRegular fontSize={14} />
+          <ZoomInRegular fontSize={16} />
         </button>
         <button
           type="button"
-          className={s.toolBtn}
+          className={s.toolBtnText}
           onClick={() => void onExportPng()}
           disabled={exporting}
           aria-label="下载图片"
           title="下载图片"
         >
-          <ArrowDownloadRegular fontSize={14} />
+          <ArrowDownloadRegular fontSize={16} />
+          图片
         </button>
         <button
           type="button"
-          className={s.toolBtn}
+          className={s.toolBtnText}
           onClick={() => void onExportPdf()}
           disabled={exporting}
           aria-label="下载 PDF"
           title="下载 PDF"
         >
-          <DocumentPdfRegular fontSize={14} />
+          <DocumentPdfRegular fontSize={16} />
+          PDF
         </button>
       </div>
       <div className={s.stage}>

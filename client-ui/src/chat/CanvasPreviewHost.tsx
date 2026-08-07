@@ -14,10 +14,10 @@ import {
 } from 'react'
 import { Spinner, makeStyles, mergeClasses } from '@fluentui/react-components'
 import {
-  AddRegular,
   ArrowDownloadRegular,
   DocumentPdfRegular,
-  SubtractRegular,
+  ZoomInRegular,
+  ZoomOutRegular,
 } from '@fluentui/react-icons'
 import '@opptrix/canvas/styles.css'
 import { fetchAttachmentRawText } from '../api/client'
@@ -69,43 +69,80 @@ const useStyles = makeStyles({
     minHeight: 0,
     display: 'flex',
     flexDirection: 'column',
-    gap: '8px',
   },
   toolbar: {
     flexShrink: 0,
+    height: '34px',
+    boxSizing: 'border-box',
     display: 'flex',
     alignItems: 'center',
-    gap: '4px',
-    justifyContent: 'flex-end',
+    gap: '2px',
+    padding: '0 8px',
+    borderBottom: `1px solid ${opptrixCssVars.separator}`,
+    backgroundColor: opptrixCssVars.canvas,
   },
   toolBtn: {
     ...ghostInteractive,
+    width: '28px',
+    height: '28px',
+    minWidth: '28px',
+    minHeight: '28px',
+    display: 'inline-flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 0,
+    color: opptrixCssVars.textSecondary,
+    cursor: 'pointer',
+    ':disabled': {
+      opacity: 0.35,
+      cursor: 'default',
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+    },
+  },
+  toolBtnText: {
+    ...ghostInteractive,
     height: '28px',
     minHeight: '28px',
+    minWidth: '28px',
     padding: '0 8px',
     display: 'inline-flex',
     alignItems: 'center',
+    justifyContent: 'center',
     gap: '4px',
     color: opptrixCssVars.textSecondary,
     fontSize: 'var(--opptrix-font-sm)',
-    WebkitAppRegion: 'no-drag',
+    cursor: 'pointer',
+    ':disabled': {
+      opacity: 0.35,
+      cursor: 'default',
+      ':hover': {
+        backgroundColor: 'transparent',
+      },
+    },
   },
   scaleLabel: {
-    color: opptrixCssVars.textTertiary,
-    fontSize: 'var(--opptrix-font-sm)',
-    minWidth: '40px',
+    flexShrink: 0,
+    minWidth: '52px',
     textAlign: 'center',
+    color: opptrixCssVars.textSecondary,
+    fontSize: 'var(--opptrix-font-sm)',
+    fontVariantNumeric: 'tabular-nums',
+    userSelect: 'none',
+  },
+  spacer: {
+    flex: 1,
+    minWidth: '4px',
   },
   stage: {
     flex: 1,
     minHeight: 0,
     overflow: 'auto',
-    backgroundColor: opptrixCssVars.surface,
-    borderRadius: '8px',
-    border: `1px solid ${opptrixCssVars.separator}`,
+    /* light = pure white via --opptrix-canvas; dark follows app theme */
+    backgroundColor: opptrixCssVars.canvas,
   },
   stageInner: {
-    padding: '16px',
     width: '100%',
     boxSizing: 'border-box',
     transformOrigin: 'top left',
@@ -233,29 +270,36 @@ export default function CanvasPreviewHost({
 
   return (
     <div className={s.root}>
-      <div className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}>
+      <div
+        className={mergeClasses(s.toolbar, 'opptrix-panel-title-no-drag')}
+        role="toolbar"
+        aria-label="画布预览"
+      >
+        <span className={s.spacer} />
         <button
           type="button"
           className={s.toolBtn}
           onClick={() => setScale((v) => clampScale(v - SCALE_STEP))}
+          disabled={scale <= MIN_SCALE}
           aria-label="缩小"
           title="缩小"
         >
-          <SubtractRegular fontSize={16} />
+          <ZoomOutRegular fontSize={16} />
         </button>
         <span className={s.scaleLabel}>{Math.round(scale * 100)}%</span>
         <button
           type="button"
           className={s.toolBtn}
           onClick={() => setScale((v) => clampScale(v + SCALE_STEP))}
+          disabled={scale >= MAX_SCALE}
           aria-label="放大"
           title="放大"
         >
-          <AddRegular fontSize={16} />
+          <ZoomInRegular fontSize={16} />
         </button>
         <button
           type="button"
-          className={s.toolBtn}
+          className={s.toolBtnText}
           onClick={() => void onExportPng()}
           disabled={exporting}
           aria-label="下载图片"
@@ -266,7 +310,7 @@ export default function CanvasPreviewHost({
         </button>
         <button
           type="button"
-          className={s.toolBtn}
+          className={s.toolBtnText}
           onClick={() => void onExportPdf()}
           disabled={exporting}
           aria-label="下载 PDF"

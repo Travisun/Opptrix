@@ -1,6 +1,6 @@
 # `@opptrix/canvas`
 
-Agent 分析面板用的 curated React 组件库：语义 token、流体排版、轻量 SVG 图。
+Agent 分析面板用的 curated React 组件库：语义 token、流体排版、ECharts 封装的 `Chart`。
 
 ## 设计原则
 
@@ -36,6 +36,7 @@ export default function Report() {
             { label: 'Q3', value: 12 },
           ]}
         />
+        {/* type: bar | line | pie | heatmap；heatmap 需 row/col */}
         <Text size="small">
           详见 <Link href="https://example.com">披露原文</Link>，代码 <Code>REV</Code>
         </Text>

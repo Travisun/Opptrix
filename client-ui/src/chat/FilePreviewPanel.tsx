@@ -138,6 +138,15 @@ const useStyles = makeStyles({
     padding: '12px 16px 16px',
     boxSizing: 'border-box',
   },
+  /** Canvas preview: flush to edges (no inset padding). */
+  artifactHostFlush: {
+    flex: 1,
+    minHeight: 0,
+    display: 'flex',
+    flexDirection: 'column',
+    padding: 0,
+    boxSizing: 'border-box',
+  },
   imageWrap: {
     flex: 1,
     minHeight: 0,
@@ -457,7 +466,7 @@ export default function FilePreviewPanel({
         ) : isPdf ? (
           <PdfPreviewViewer url={url} panelVisible={panelVisible} />
         ) : isCanvas ? (
-          <div className={s.artifactHost}>
+          <div className={s.artifactHostFlush}>
             <CanvasPreviewHost
               sessionId={sessionId}
               attachmentId={attachment.id}
@@ -466,7 +475,7 @@ export default function FilePreviewPanel({
             />
           </div>
         ) : isMindmap ? (
-          <div className={s.artifactHost}>
+          <div className={s.artifactHostFlush}>
             <MindmapPreviewHost
               sessionId={sessionId}
               attachmentId={attachment.id}

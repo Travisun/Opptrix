@@ -269,7 +269,7 @@ function withTypeAndSpace(
   }
 }
 
-/** Light panel — near-white chrome, deep ink, blue emphasis (~#3685BF). */
+/** Light panel — pure white paper, deep ink, blue emphasis (~#3685BF). */
 export const canvasTokensLight: CanvasSemanticTokens = withTypeAndSpace({
   accent: '#3685BF',
   accentHover: '#2A6FA3',
@@ -277,7 +277,7 @@ export const canvasTokensLight: CanvasSemanticTokens = withTypeAndSpace({
   accentMuted: 'rgba(54, 133, 191, 0.22)',
   accentForeground: '#FFFFFF',
 
-  bg: '#F7F7F8',
+  bg: '#FFFFFF',
   bgAlt: '#FFFFFF',
   bgMuted: '#EEEEF0',
   bgChrome: '#F0F0F2',

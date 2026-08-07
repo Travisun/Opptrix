@@ -61,7 +61,7 @@ export { Row, type RowProps } from './components/Row.js'
 export { Grid, type GridProps } from './components/Grid.js'
 export { Spacer, type SpacerProps } from './components/Spacer.js'
 export { Divider, type DividerProps } from './components/Divider.js'
-export { Text, type TextProps, type TextTone, type TextSize } from './components/Text.js'
+export { Text, type TextProps, type TextTone, type TextSize, type TextAlign } from './components/Text.js'
 export { H1, type HeadingProps as H1Props } from './components/H1.js'
 export { H2, type HeadingProps as H2Props } from './components/H2.js'
 export { H3, type HeadingProps as H3Props } from './components/H3.js'
@@ -76,7 +76,19 @@ export {
   type TableColumnAlign,
   type TableRowTone,
 } from './components/Table.js'
-export { Callout, type CalloutProps, type CalloutTone } from './components/Callout.js'
+export {
+  Callout,
+  type CalloutProps,
+  type CalloutTone,
+  type CalloutVariant,
+  type CalloutSize,
+} from './components/Callout.js'
+export {
+  Quote,
+  type QuoteProps,
+  type QuoteTone,
+  type QuoteSize,
+} from './components/Quote.js'
 export { Pill, type PillProps, type PillTone, type PillSize } from './components/Pill.js'
 export { Button, type ButtonProps, type ButtonVariant } from './components/Button.js'
 export { Code, type CodeProps } from './components/Code.js'
